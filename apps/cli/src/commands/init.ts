@@ -1,12 +1,15 @@
 import { Command } from "commander";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { resolve, join } from "node:path";
+import { existsSync, mkdirSync, writeFileSync, cpSync } from "node:fs";
+import { resolve, join, dirname } from "node:path";
 import { execSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { validateStage } from "../config.js";
 import { getAwsIdentity } from "../aws.js";
 import { printHeader, printSuccess, printError, printWarning } from "../ui.js";
 import { createInterface } from "node:readline";
 import chalk from "chalk";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function ask(prompt: string, defaultVal = ""): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -31,6 +34,26 @@ function generateSecret(length = 32): string {
   globalThis.crypto.getRandomValues(bytes);
   for (const b of bytes) result += chars[b % chars.length];
   return result;
+}
+
+/**
+ * Resolve the bundled Terraform modules directory.
+ * When installed via npm: <pkg>/dist/terraform/
+ * When running from repo: <repo>/terraform/
+ */
+function findBundledTerraform(): string {
+  // Check npm package bundle first (dist/terraform/)
+  const bundled = resolve(__dirname, "..", "terraform");
+  if (existsSync(join(bundled, "modules"))) return bundled;
+
+  // Fallback: repo root (for development)
+  const repoTf = resolve(__dirname, "..", "..", "..", "..", "terraform");
+  if (existsSync(join(repoTf, "modules"))) return repoTf;
+
+  throw new Error(
+    "Terraform modules not found. The CLI package may be incomplete.\n" +
+    "Try reinstalling: npm install -g thinkwork-cli@latest"
+  );
 }
 
 function buildTfvars(config: Record<string, string>): string {
@@ -88,7 +111,7 @@ export function registerInitCommand(program: Command): void {
     .command("init")
     .description("Initialize a new Thinkwork environment")
     .requiredOption("-s, --stage <name>", "Stage name (e.g. dev, staging, prod)")
-    .option("-d, --dir <path>", "Directory to initialize in", ".")
+    .option("-d, --dir <path>", "Target directory", ".")
     .option("--defaults", "Skip interactive prompts, use all defaults")
     .action(async (opts: { stage: string; dir: string; defaults?: boolean }) => {
       const stageCheck = validateStage(opts.stage);
@@ -105,8 +128,10 @@ export function registerInitCommand(program: Command): void {
         process.exit(1);
       }
 
-      const rootDir = resolve(opts.dir);
-      const tfDir = join(rootDir, "terraform", "examples", "greenfield");
+      // ── Resolve target directory ───────────────────────────────────
+
+      const targetDir = resolve(opts.dir);
+      const tfDir = join(targetDir, "terraform");
       const tfvarsPath = join(tfDir, "terraform.tfvars");
 
       if (existsSync(tfvarsPath)) {
@@ -139,28 +164,21 @@ export function registerInitCommand(program: Command): void {
       } else {
         console.log(chalk.bold("  Configure your Thinkwork environment\n"));
 
-        // Region
         const defaultRegion = identity.region !== "unknown" ? identity.region : "us-east-1";
         config.region = await ask("AWS Region", defaultRegion);
 
         console.log("");
         console.log(chalk.dim("  ── Database ──"));
-
-        // Database engine
         config.database_engine = await choose("Database engine", ["aurora-serverless", "rds-postgres"], "aurora-serverless");
 
         console.log("");
         console.log(chalk.dim("  ── Memory ──"));
-
-        // Memory engine
         console.log(chalk.dim("  managed    = Built-in AgentCore memory (remember/recall/forget)"));
         console.log(chalk.dim("  hindsight  = ECS Fargate service with semantic + graph retrieval"));
         config.memory_engine = await choose("Memory engine", ["managed", "hindsight"], "managed");
 
         console.log("");
         console.log(chalk.dim("  ── Auth ──"));
-
-        // Google OAuth
         const useGoogle = await ask("Enable Google OAuth login? (y/N)", "N");
         if (useGoogle.toLowerCase() === "y") {
           config.google_oauth_client_id = await ask("Google OAuth Client ID");
@@ -172,11 +190,7 @@ export function registerInitCommand(program: Command): void {
 
         console.log("");
         console.log(chalk.dim("  ── Frontend URLs ──"));
-
-        // Admin UI URL
         config.admin_url = await ask("Admin UI URL", "http://localhost:5174");
-
-        // Mobile scheme
         config.mobile_scheme = await ask("Mobile app URL scheme", "thinkwork");
 
         console.log("");
@@ -185,17 +199,123 @@ export function registerInitCommand(program: Command): void {
         console.log(chalk.dim(`  API auth secret: ${config.api_auth_secret.slice(0, 16)}...`));
       }
 
-      // ── Write terraform.tfvars ─────────────────────────────────────
+      // ── Scaffold Terraform files ───────────────────────────────────
 
-      if (!existsSync(tfDir)) {
-        mkdirSync(tfDir, { recursive: true });
+      console.log("");
+      console.log("  Scaffolding Terraform modules...");
+
+      let bundledTf: string;
+      try {
+        bundledTf = findBundledTerraform();
+      } catch (err) {
+        printError(String(err));
+        process.exit(1);
       }
 
+      // Copy modules + examples + schema into target directory
+      mkdirSync(tfDir, { recursive: true });
+
+      const copyDirs = ["modules", "examples"];
+      for (const dir of copyDirs) {
+        const src = join(bundledTf, dir);
+        const dst = join(tfDir, dir);
+        if (existsSync(src) && !existsSync(dst)) {
+          cpSync(src, dst, { recursive: true });
+        }
+      }
+
+      // Copy schema.graphql
+      const schemaPath = join(bundledTf, "schema.graphql");
+      if (existsSync(schemaPath) && !existsSync(join(tfDir, "schema.graphql"))) {
+        cpSync(schemaPath, join(tfDir, "schema.graphql"));
+      }
+
+      // Write terraform.tfvars at the root terraform/ dir (flat layout)
       const tfvars = buildTfvars(config);
       writeFileSync(tfvarsPath, tfvars);
 
-      console.log("");
-      console.log(`  Wrote ${chalk.cyan(tfvarsPath)}`);
+      // Also write a main.tf that sources the composite module
+      const mainTfPath = join(tfDir, "main.tf");
+      if (!existsSync(mainTfPath)) {
+        writeFileSync(mainTfPath, `################################################################################
+# Thinkwork — ${config.stage}
+# Generated by: thinkwork init -s ${config.stage}
+################################################################################
+
+terraform {
+  required_version = ">= 1.5"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.0"
+    }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = var.region
+}
+
+variable "stage" { type = string }
+variable "region" { type = string; default = "us-east-1" }
+variable "account_id" { type = string }
+variable "db_password" { type = string; sensitive = true }
+variable "database_engine" { type = string; default = "aurora-serverless" }
+variable "memory_engine" { type = string; default = "managed" }
+variable "google_oauth_client_id" { type = string; default = "" }
+variable "google_oauth_client_secret" { type = string; sensitive = true; default = "" }
+variable "pre_signup_lambda_zip" { type = string; default = "" }
+variable "lambda_zips_dir" { type = string; default = "" }
+variable "api_auth_secret" { type = string; sensitive = true; default = "" }
+variable "admin_callback_urls" { type = list(string); default = ["http://localhost:5174", "http://localhost:5174/auth/callback"] }
+variable "admin_logout_urls" { type = list(string); default = ["http://localhost:5174"] }
+variable "mobile_callback_urls" { type = list(string); default = ["exp://localhost:8081", "thinkwork://", "thinkwork://auth/callback"] }
+variable "mobile_logout_urls" { type = list(string); default = ["exp://localhost:8081", "thinkwork://"] }
+
+module "thinkwork" {
+  source = "./modules/thinkwork"
+
+  stage      = var.stage
+  region     = var.region
+  account_id = var.account_id
+
+  db_password                = var.db_password
+  database_engine            = var.database_engine
+  memory_engine              = var.memory_engine
+  google_oauth_client_id     = var.google_oauth_client_id
+  google_oauth_client_secret = var.google_oauth_client_secret
+  pre_signup_lambda_zip      = var.pre_signup_lambda_zip
+  lambda_zips_dir            = var.lambda_zips_dir
+  api_auth_secret            = var.api_auth_secret
+  admin_callback_urls        = var.admin_callback_urls
+  admin_logout_urls          = var.admin_logout_urls
+  mobile_callback_urls       = var.mobile_callback_urls
+  mobile_logout_urls         = var.mobile_logout_urls
+}
+
+output "api_endpoint"       { value = module.thinkwork.api_endpoint }
+output "user_pool_id"       { value = module.thinkwork.user_pool_id }
+output "admin_client_id"    { value = module.thinkwork.admin_client_id }
+output "mobile_client_id"   { value = module.thinkwork.mobile_client_id }
+output "bucket_name"        { value = module.thinkwork.bucket_name }
+output "db_cluster_endpoint" { value = module.thinkwork.db_cluster_endpoint }
+output "db_secret_arn"      { value = module.thinkwork.db_secret_arn; sensitive = true }
+output "ecr_repository_url" { value = module.thinkwork.ecr_repository_url }
+output "memory_engine"      { value = module.thinkwork.memory_engine }
+output "hindsight_endpoint"  { value = module.thinkwork.hindsight_endpoint }
+`);
+      }
+
+      console.log(`  Wrote ${chalk.cyan(tfDir + "/")}`);
 
       // ── Summary ────────────────────────────────────────────────────
 
@@ -207,6 +327,7 @@ export function registerInitCommand(program: Command): void {
       console.log(`  ${chalk.bold("Database:")}        ${config.database_engine}`);
       console.log(`  ${chalk.bold("Memory:")}          ${config.memory_engine}`);
       console.log(`  ${chalk.bold("Google OAuth:")}    ${config.google_oauth_client_id ? "enabled" : "disabled"}`);
+      console.log(`  ${chalk.bold("Directory:")}       ${tfDir}`);
       console.log(chalk.dim("  ─────────────────────────────────────"));
 
       // ── Terraform init ─────────────────────────────────────────────
@@ -223,7 +344,7 @@ export function registerInitCommand(program: Command): void {
       console.log("");
       console.log("  Next steps:");
       console.log(`    ${chalk.cyan("1.")} thinkwork plan -s ${opts.stage}        ${chalk.dim("# Review infrastructure plan")}`);
-      console.log(`    ${chalk.cyan("2.")} thinkwork deploy -s ${opts.stage}       ${chalk.dim("# Deploy to AWS")}`);
+      console.log(`    ${chalk.cyan("2.")} thinkwork deploy -s ${opts.stage}       ${chalk.dim("# Deploy to AWS (~5 min)")}`);
       console.log(`    ${chalk.cyan("3.")} thinkwork bootstrap -s ${opts.stage}    ${chalk.dim("# Seed workspace files + skills")}`);
       console.log(`    ${chalk.cyan("4.")} thinkwork outputs -s ${opts.stage}      ${chalk.dim("# Show API URL, Cognito IDs, etc.")}`);
       console.log("");
