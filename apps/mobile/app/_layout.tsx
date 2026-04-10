@@ -240,9 +240,6 @@ function RootLayoutNav() {
         <Stack.Screen name="agents/[id]/file-view" />
         <Stack.Screen name="agents/[id]/skills" />
         <Stack.Screen name="agents/[id]/model" />
-        <Stack.Screen name="places/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="opportunities/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="leads/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="artifacts/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="memory/index" options={{ headerShown: false }} />
         <Stack.Screen name="memory/list" options={{ headerShown: false }} />
