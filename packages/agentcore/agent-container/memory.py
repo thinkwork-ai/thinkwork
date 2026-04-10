@@ -229,7 +229,7 @@ def search_memories(
     Returns list of dicts with {text, score, strategy}.
     """
     try:
-        import hindsight_client
+        import hs_urllib_client as hindsight_client
         if not hindsight_client.is_available():
             logger.debug("memory.search skipped: HINDSIGHT_ENDPOINT not set")
             return []
