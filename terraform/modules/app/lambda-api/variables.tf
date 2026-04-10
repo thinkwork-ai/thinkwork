@@ -1,0 +1,103 @@
+variable "stage" {
+  description = "Deployment stage"
+  type        = string
+}
+
+variable "account_id" {
+  description = "AWS account ID"
+  type        = string
+}
+
+variable "region" {
+  description = "AWS region"
+  type        = string
+}
+
+variable "lambda_artifact_bucket" {
+  description = "S3 bucket containing Lambda deployment artifacts"
+  type        = string
+}
+
+variable "lambda_artifact_prefix" {
+  description = "S3 key prefix for Lambda artifacts (e.g. v0.1.0/lambdas)"
+  type        = string
+  default     = "latest/lambdas"
+}
+
+# ---------------------------------------------------------------------------
+# Dependencies from other tiers
+# ---------------------------------------------------------------------------
+
+variable "db_cluster_arn" {
+  description = "Aurora cluster ARN"
+  type        = string
+}
+
+variable "graphql_db_secret_arn" {
+  description = "Secrets Manager ARN for DB credentials"
+  type        = string
+}
+
+variable "database_name" {
+  description = "Aurora database name"
+  type        = string
+  default     = "thinkwork"
+}
+
+variable "bucket_name" {
+  description = "Primary S3 bucket name"
+  type        = string
+}
+
+variable "bucket_arn" {
+  description = "Primary S3 bucket ARN"
+  type        = string
+}
+
+variable "user_pool_id" {
+  description = "Cognito user pool ID"
+  type        = string
+}
+
+variable "user_pool_arn" {
+  description = "Cognito user pool ARN"
+  type        = string
+}
+
+variable "hive_client_id" {
+  description = "Cognito web admin client ID"
+  type        = string
+}
+
+variable "hive_app_client_id" {
+  description = "Cognito mobile client ID"
+  type        = string
+}
+
+variable "appsync_api_url" {
+  description = "AppSync subscriptions endpoint URL"
+  type        = string
+}
+
+variable "appsync_api_key" {
+  description = "AppSync API key"
+  type        = string
+  sensitive   = true
+}
+
+variable "kb_service_role_arn" {
+  description = "Bedrock Knowledge Base service role ARN"
+  type        = string
+}
+
+variable "certificate_arn" {
+  description = "ACM certificate ARN for custom API domain"
+  type        = string
+  default     = ""
+}
+
+variable "custom_domain" {
+  description = "Custom domain for the API (e.g. api.thinkwork.ai). Leave empty to skip."
+  type        = string
+  default     = ""
+}
