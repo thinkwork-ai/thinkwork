@@ -1,7 +1,7 @@
 /**
  * PRD-09 Batch 2: Workflow config resolution with deep merge.
  *
- * Queries tenant default + hive override from workflow_configs table,
+ * Queries tenant default + team override from workflow_configs table,
  * merges with hardcoded defaults.
  */
 
@@ -121,7 +121,7 @@ export async function resolveWorkflowConfig(
 	teamId?: string,
 ): Promise<ResolvedWorkflowConfig> {
 	try {
-		// Query tenant default + optional hive override in one shot
+		// Query tenant default + optional team override in one shot
 		const result = await db.execute(sql`
 			SELECT
 				dispatch, concurrency, retry, turn_loop, workspace,
@@ -138,7 +138,7 @@ export async function resolveWorkflowConfig(
 		let merged = { ...DEFAULTS };
 
 		for (const row of rows) {
-			// Apply each layer (tenant default first, then hive override)
+			// Apply each layer (tenant default first, then team override)
 			if (row.orchestration) {
 				merged.orchestration = deepMerge(
 					merged.orchestration,

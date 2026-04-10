@@ -195,7 +195,7 @@ describe("resolveWorkflowConfig — session compaction", () => {
 		mockExecute.mockResolvedValueOnce({
 			rows: [{
 				session_compaction: { maxSessionRuns: 100, maxSessionAgeHours: 24 },
-				hive_id: null,
+				team_id: null,
 			}],
 		});
 
@@ -209,7 +209,7 @@ describe("resolveWorkflowConfig — session compaction", () => {
 
 	it("disables compaction via override", async () => {
 		mockExecute.mockResolvedValueOnce({
-			rows: [{ session_compaction: { enabled: false }, hive_id: null }],
+			rows: [{ session_compaction: { enabled: false }, team_id: null }],
 		});
 
 		const config = await resolveWorkflowConfig("tenant-1");

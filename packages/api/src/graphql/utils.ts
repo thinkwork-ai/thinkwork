@@ -23,7 +23,7 @@ import {
 	// Messages
 	messages,
 	messageArtifacts,
-	// Hives
+	// Teams
 	teams,
 	teamAgents,
 	teamUsers,

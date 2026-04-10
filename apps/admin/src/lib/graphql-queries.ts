@@ -1,0 +1,1544 @@
+import { graphql } from "@/gql";
+import { gql } from "@urql/core";
+
+// ---------------------------------------------------------------------------
+// Agents
+// ---------------------------------------------------------------------------
+
+export const AgentsListQuery = graphql(`
+  query AgentsList($tenantId: ID!) {
+    agents(tenantId: $tenantId) {
+      id
+      name
+      slug
+      role
+      type
+      status
+      templateId
+      agentTemplate {
+        id
+        name
+        slug
+        model
+      }
+      avatarUrl
+      lastHeartbeatAt
+      adapterType
+      humanPairId
+      humanPair {
+        id
+        name
+        email
+      }
+      budgetPolicy {
+        id
+        limitUsd
+        actionOnExceed
+      }
+      createdAt
+    }
+    modelCatalog {
+      modelId
+      displayName
+    }
+  }
+`);
+
+export const AgentDetailQuery = gql`
+  query AgentDetail($id: ID!) {
+    agent(id: $id) {
+      id
+      tenantId
+      name
+      slug
+      role
+      type
+      status
+      templateId
+      agentTemplate {
+        id
+        name
+        slug
+        model
+        guardrailId
+        blockedTools
+      }
+      systemPrompt
+      avatarUrl
+      lastHeartbeatAt
+      runtimeConfig
+      adapterType
+      adapterConfig
+      humanPairId
+      humanPair {
+        id
+        name
+        email
+      }
+      version
+      capabilities {
+        id
+        capability
+        enabled
+      }
+      skills {
+        id
+        skillId
+        enabled
+        config
+      }
+      budgetPolicy {
+        id
+        limitUsd
+        actionOnExceed
+        enabled
+      }
+      parentAgentId
+      subAgents {
+        id
+        name
+        slug
+        role
+        status
+      }
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+export const CreateAgentMutation = graphql(`
+  mutation CreateAgent($input: CreateAgentInput!) {
+    createAgent(input: $input) {
+      id
+      name
+      role
+      type
+      status
+      templateId
+      createdAt
+    }
+  }
+`);
+
+// Agent knowledge bases — uses gql (not codegen) since the schema types are new
+export const AgentKnowledgeBasesQuery = gql`
+  query AgentKnowledgeBases($id: ID!) {
+    agent(id: $id) {
+      knowledgeBases {
+        id
+        knowledgeBaseId
+        enabled
+        knowledgeBase {
+          id
+          name
+          description
+          status
+        }
+      }
+    }
+  }
+`;
+
+export const UpdateAgentMutation = graphql(`
+  mutation UpdateAgent($id: ID!, $input: UpdateAgentInput!) {
+    updateAgent(id: $id, input: $input) {
+      id
+      name
+      role
+      type
+      templateId
+      systemPrompt
+      adapterType
+      updatedAt
+    }
+  }
+`);
+
+export const DeleteAgentMutation = graphql(`
+  mutation DeleteAgent($id: ID!) {
+    deleteAgent(id: $id)
+  }
+`);
+
+export const UpdateAgentStatusMutation = graphql(`
+  mutation UpdateAgentStatus($id: ID!, $status: AgentStatus!) {
+    updateAgentStatus(id: $id, status: $status) {
+      id
+      status
+      updatedAt
+    }
+  }
+`);
+
+export const SetAgentCapabilitiesMutation = graphql(`
+  mutation SetAgentCapabilities($agentId: ID!, $capabilities: [AgentCapabilityInput!]!) {
+    setAgentCapabilities(agentId: $agentId, capabilities: $capabilities) {
+      id
+      capability
+      enabled
+    }
+  }
+`);
+
+export const SetAgentSkillsMutation = graphql(`
+  mutation SetAgentSkills($agentId: ID!, $skills: [AgentSkillInput!]!) {
+    setAgentSkills(agentId: $agentId, skills: $skills) {
+      id
+      skillId
+      enabled
+      config
+    }
+  }
+`);
+
+export const SetAgentBudgetPolicyMutation = graphql(`
+  mutation SetAgentBudgetPolicy($agentId: ID!, $input: AgentBudgetPolicyInput!) {
+    setAgentBudgetPolicy(agentId: $agentId, input: $input) {
+      id
+      limitUsd
+      actionOnExceed
+      enabled
+    }
+  }
+`);
+
+export const DeleteAgentBudgetPolicyMutation = graphql(`
+  mutation DeleteAgentBudgetPolicy($agentId: ID!) {
+    deleteAgentBudgetPolicy(agentId: $agentId)
+  }
+`);
+
+export const ModelCatalogQuery = graphql(`
+  query ModelCatalog {
+    modelCatalog {
+      id
+      modelId
+      displayName
+      provider
+      inputCostPerMillion
+      outputCostPerMillion
+    }
+  }
+`);
+
+// ---------------------------------------------------------------------------
+// Email Channel (PRD-14)
+// ---------------------------------------------------------------------------
+
+export const AgentEmailCapabilityQuery = gql`
+  query AgentEmailCapability($agentId: ID!) {
+    agentEmailCapability(agentId: $agentId) {
+      id
+      agentId
+      enabled
+      emailAddress
+      vanityAddress
+      allowedSenders
+    }
+  }
+`;
+
+export const UpdateAgentEmailAllowlistMutation = gql`
+  mutation UpdateAgentEmailAllowlist($agentId: ID!, $allowedSenders: [String!]!) {
+    updateAgentEmailAllowlist(agentId: $agentId, allowedSenders: $allowedSenders) {
+      id
+      config
+      enabled
+    }
+  }
+`;
+
+export const ToggleAgentEmailChannelMutation = gql`
+  mutation ToggleAgentEmailChannel($agentId: ID!, $enabled: Boolean!) {
+    toggleAgentEmailChannel(agentId: $agentId, enabled: $enabled) {
+      id
+      enabled
+    }
+  }
+`;
+
+export const ClaimVanityEmailAddressMutation = gql`
+  mutation ClaimVanityEmailAddress($agentId: ID!, $localPart: String!) {
+    claimVanityEmailAddress(agentId: $agentId, localPart: $localPart) {
+      id
+      config
+    }
+  }
+`;
+
+export const ReleaseVanityEmailAddressMutation = gql`
+  mutation ReleaseVanityEmailAddress($agentId: ID!) {
+    releaseVanityEmailAddress(agentId: $agentId) {
+      id
+      config
+    }
+  }
+`;
+
+// ---------------------------------------------------------------------------
+// Knowledge Bases (PRD-13)
+// ---------------------------------------------------------------------------
+
+export const KnowledgeBasesListQuery = gql`
+  query KnowledgeBasesList($tenantId: ID!) {
+    knowledgeBases(tenantId: $tenantId) {
+      id
+      tenantId
+      name
+      slug
+      description
+      status
+      documentCount
+      lastSyncAt
+      lastSyncStatus
+      errorMessage
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+export const KnowledgeBaseDetailQuery = gql`
+  query KnowledgeBaseDetail($id: ID!) {
+    knowledgeBase(id: $id) {
+      id
+      tenantId
+      name
+      slug
+      description
+      embeddingModel
+      chunkingStrategy
+      chunkSizeTokens
+      chunkOverlapPercent
+      status
+      awsKbId
+      lastSyncAt
+      lastSyncStatus
+      documentCount
+      errorMessage
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+export const CreateKnowledgeBaseMutation = gql`
+  mutation CreateKnowledgeBase($input: CreateKnowledgeBaseInput!) {
+    createKnowledgeBase(input: $input) {
+      id
+      name
+      slug
+      status
+      createdAt
+    }
+  }
+`;
+
+export const UpdateKnowledgeBaseMutation = gql`
+  mutation UpdateKnowledgeBase($id: ID!, $input: UpdateKnowledgeBaseInput!) {
+    updateKnowledgeBase(id: $id, input: $input) {
+      id
+      name
+      description
+      updatedAt
+    }
+  }
+`;
+
+export const DeleteKnowledgeBaseMutation = gql`
+  mutation DeleteKnowledgeBase($id: ID!) {
+    deleteKnowledgeBase(id: $id)
+  }
+`;
+
+export const SyncKnowledgeBaseMutation = gql`
+  mutation SyncKnowledgeBase($id: ID!) {
+    syncKnowledgeBase(id: $id) {
+      id
+      status
+      lastSyncStatus
+      updatedAt
+    }
+  }
+`;
+
+export const SetAgentKnowledgeBasesMutation = gql`
+  mutation SetAgentKnowledgeBases($agentId: ID!, $knowledgeBases: [AgentKnowledgeBaseInput!]!) {
+    setAgentKnowledgeBases(agentId: $agentId, knowledgeBases: $knowledgeBases) {
+      id
+      knowledgeBaseId
+      enabled
+      knowledgeBase {
+        id
+        name
+        description
+        status
+      }
+    }
+  }
+`;
+
+// ---------------------------------------------------------------------------
+// Threads
+// ---------------------------------------------------------------------------
+
+export const ThreadsListQuery = graphql(`
+  query ThreadsList($tenantId: ID!, $status: ThreadStatus, $search: String, $type: ThreadType, $priority: ThreadPriority, $parentId: ID) {
+    threads(tenantId: $tenantId, status: $status, search: $search, type: $type, priority: $priority, parentId: $parentId) {
+      id
+      number
+      identifier
+      title
+      status
+      priority
+      type
+      parentId
+      assigneeType
+      assigneeId
+      agentId
+      agent {
+        id
+        name
+        avatarUrl
+      }
+      checkoutRunId
+      channel
+      commentCount
+      childCount
+      costSummary
+      lastActivityAt
+      lastTurnCompletedAt
+      lastReadAt
+      archivedAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const ThreadsPagedQuery = gql`
+  query ThreadsPaged($tenantId: ID!, $statuses: [String!], $priorities: [String!], $search: String, $showArchived: Boolean, $sortField: String, $sortDir: String, $limit: Int, $offset: Int) {
+    threadsPaged(tenantId: $tenantId, statuses: $statuses, priorities: $priorities, search: $search, showArchived: $showArchived, sortField: $sortField, sortDir: $sortDir, limit: $limit, offset: $offset) {
+      items {
+        id
+        number
+        identifier
+        title
+        status
+        priority
+        type
+        parentId
+        assigneeType
+        assigneeId
+        agentId
+        agent {
+          id
+          name
+          avatarUrl
+        }
+        checkoutRunId
+        channel
+        commentCount
+        childCount
+        costSummary
+        lastActivityAt
+        lastTurnCompletedAt
+        lastReadAt
+        archivedAt
+        createdAt
+        updatedAt
+      }
+      totalCount
+    }
+  }
+`;
+
+export const ThreadDetailQuery = graphql(`
+  query ThreadDetail($id: ID!) {
+    thread(id: $id) {
+      id
+      tenantId
+      number
+      identifier
+      title
+      description
+      status
+      priority
+      type
+      parentId
+      children {
+        id
+        identifier
+        title
+        status
+        priority
+      }
+      assigneeType
+      assigneeId
+      agentId
+      agent {
+        id
+        name
+        avatarUrl
+      }
+      channel
+      messages(limit: 50) {
+        edges {
+          node {
+            id
+            threadId
+            tenantId
+            role
+            content
+            senderType
+            senderId
+            toolCalls
+            toolResults
+            metadata
+            tokenCount
+            createdAt
+            durableArtifact {
+              id
+              title
+              type
+              status
+            }
+          }
+        }
+      }
+      costSummary
+      checkoutRunId
+      checkoutVersion
+      billingCode
+      labels
+      metadata
+      dueAt
+      startedAt
+      completedAt
+      cancelledAt
+      closedAt
+      createdByType
+      createdById
+      commentCount
+      childCount
+      comments {
+        id
+        authorType
+        authorId
+        content
+        createdAt
+      }
+      attachments {
+        id
+        threadId
+        name
+        s3Key
+        mimeType
+        sizeBytes
+        uploadedBy
+        createdAt
+      }
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const UpdateThreadMutation = graphql(`
+  mutation UpdateThread($id: ID!, $input: UpdateThreadInput!) {
+    updateThread(id: $id, input: $input) {
+      id
+      status
+      priority
+      type
+      title
+      assigneeType
+      assigneeId
+      billingCode
+      dueAt
+      updatedAt
+    }
+  }
+`);
+
+export const DeleteThreadMutation = graphql(`
+  mutation DeleteThread($id: ID!) {
+    deleteThread(id: $id)
+  }
+`);
+
+export const CheckoutThreadMutation = graphql(`
+  mutation CheckoutThread($id: ID!, $input: CheckoutThreadInput!) {
+    checkoutThread(id: $id, input: $input) {
+      id
+      checkoutRunId
+      checkoutVersion
+    }
+  }
+`);
+
+export const ReleaseThreadMutation = graphql(`
+  mutation ReleaseThread($id: ID!, $input: ReleaseThreadInput!) {
+    releaseThread(id: $id, input: $input) {
+      id
+      checkoutRunId
+      status
+    }
+  }
+`);
+
+// ---------------------------------------------------------------------------
+// Teams
+// ---------------------------------------------------------------------------
+
+export const TeamsListQuery = graphql(`
+  query TeamsList($tenantId: ID!) {
+    teams(tenantId: $tenantId) {
+      id
+      name
+      description
+      type
+      status
+      budgetMonthlyCents
+      agents {
+        id
+        agentId
+        agent {
+          id
+          name
+          status
+          avatarUrl
+        }
+        role
+      }
+      users {
+        id
+        userId
+        role
+      }
+      createdAt
+    }
+  }
+`);
+
+export const TeamDetailQuery = graphql(`
+  query TeamDetail($id: ID!) {
+    team(id: $id) {
+      id
+      tenantId
+      name
+      description
+      type
+      status
+      budgetMonthlyCents
+      metadata
+      agents {
+        id
+        agentId
+        agent {
+          id
+          name
+          role
+          status
+          avatarUrl
+        }
+        role
+        createdAt
+      }
+      users {
+        id
+        userId
+        user {
+          id
+          name
+          email
+        }
+        role
+        createdAt
+      }
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+// ---------------------------------------------------------------------------
+// Routines
+// ---------------------------------------------------------------------------
+
+export const RoutinesListQuery = graphql(`
+  query RoutinesList($tenantId: ID!) {
+    routines(tenantId: $tenantId) {
+      id
+      name
+      description
+      type
+      status
+      schedule
+      lastRunAt
+      nextRunAt
+      agentId
+      agent {
+        id
+        name
+      }
+      createdAt
+    }
+  }
+`);
+
+export const RoutineDetailQuery = graphql(`
+  query RoutineDetail($id: ID!) {
+    routine(id: $id) {
+      id
+      tenantId
+      name
+      description
+      type
+      status
+      schedule
+      config
+      lastRunAt
+      nextRunAt
+      agentId
+      agent {
+        id
+        name
+        avatarUrl
+      }
+      teamId
+      team {
+        id
+        name
+      }
+      runs {
+        id
+        status
+        startedAt
+        completedAt
+        error
+        createdAt
+      }
+      triggers {
+        id
+        triggerType
+        config
+        enabled
+      }
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+// ---------------------------------------------------------------------------
+// Inbox Items
+// ---------------------------------------------------------------------------
+
+export const InboxItemsListQuery = graphql(`
+  query InboxItemsList($tenantId: ID!, $status: InboxItemStatus) {
+    inboxItems(tenantId: $tenantId, status: $status) {
+      id
+      type
+      status
+      title
+      description
+      requesterType
+      requesterId
+      entityType
+      entityId
+      revision
+      expiresAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const InboxItemDetailQuery = graphql(`
+  query InboxItemDetail($id: ID!) {
+    inboxItem(id: $id) {
+      id
+      tenantId
+      type
+      status
+      title
+      description
+      requesterType
+      requesterId
+      entityType
+      entityId
+      config
+      revision
+      reviewNotes
+      decidedBy
+      decidedAt
+      expiresAt
+      comments {
+        id
+        authorType
+        authorId
+        content
+        createdAt
+      }
+      links {
+        id
+        linkedType
+        linkedId
+      }
+      linkedThreads {
+        id
+        number
+        identifier
+        title
+        status
+        priority
+      }
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const ApproveInboxItemMutation = graphql(`
+  mutation ApproveInboxItem($id: ID!, $input: ApproveInboxItemInput) {
+    approveInboxItem(id: $id, input: $input) {
+      id
+      status
+      reviewNotes
+      decidedAt
+      updatedAt
+    }
+  }
+`);
+
+export const RejectInboxItemMutation = graphql(`
+  mutation RejectInboxItem($id: ID!, $input: RejectInboxItemInput) {
+    rejectInboxItem(id: $id, input: $input) {
+      id
+      status
+      reviewNotes
+      decidedAt
+      updatedAt
+    }
+  }
+`);
+
+export const RequestRevisionMutation = graphql(`
+  mutation RequestRevision($id: ID!, $input: RequestRevisionInput!) {
+    requestRevision(id: $id, input: $input) {
+      id
+      status
+      reviewNotes
+      updatedAt
+    }
+  }
+`);
+
+export const ResubmitInboxItemMutation = graphql(`
+  mutation ResubmitInboxItem($id: ID!, $input: ResubmitInboxItemInput) {
+    resubmitInboxItem(id: $id, input: $input) {
+      id
+      status
+      revision
+      updatedAt
+    }
+  }
+`);
+
+export const AddInboxItemCommentMutation = graphql(`
+  mutation AddInboxItemComment($input: AddInboxItemCommentInput!) {
+    addInboxItemComment(input: $input) {
+      id
+      authorType
+      authorId
+      content
+      createdAt
+    }
+  }
+`);
+
+export const ActivityLogQuery = graphql(`
+  query ActivityLog($tenantId: ID!, $entityType: String, $entityId: ID, $limit: Int) {
+    activityLog(tenantId: $tenantId, entityType: $entityType, entityId: $entityId, limit: $limit) {
+      id
+      actorType
+      actorId
+      action
+      entityType
+      entityId
+      changes
+      createdAt
+    }
+  }
+`);
+
+// ---------------------------------------------------------------------------
+// Tenant
+// ---------------------------------------------------------------------------
+
+export const TenantDetailQuery = graphql(`
+  query TenantDetail($id: ID!) {
+    tenant(id: $id) {
+      id
+      name
+      slug
+      plan
+      issuePrefix
+      issueCounter
+      settings {
+        id
+        defaultModel
+        budgetMonthlyCents
+        autoCloseThreadMinutes
+        maxAgents
+        features
+      }
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+// ---------------------------------------------------------------------------
+// Tenant Members (Humans)
+// ---------------------------------------------------------------------------
+
+export const TenantMembersListQuery = graphql(`
+  query TenantMembersList($tenantId: ID!) {
+    tenantMembers(tenantId: $tenantId) {
+      id
+      tenantId
+      principalType
+      principalId
+      role
+      status
+      user {
+        id
+        name
+        email
+        image
+      }
+      agent {
+        id
+        name
+        status
+        avatarUrl
+      }
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const InviteMemberMutation = graphql(`
+  mutation InviteMember($tenantId: ID!, $input: InviteMemberInput!) {
+    inviteMember(tenantId: $tenantId, input: $input) {
+      id
+      tenantId
+      principalType
+      principalId
+      role
+      status
+      user {
+        id
+        name
+        email
+      }
+      createdAt
+    }
+  }
+`);
+
+// ---------------------------------------------------------------------------
+// Subscriptions
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Agent API Keys (admin management, still via GraphQL)
+// ---------------------------------------------------------------------------
+
+export const AgentApiKeysQuery = graphql(`
+  query AgentApiKeys($agentId: ID!) {
+    agentApiKeys(agentId: $agentId) {
+      id
+      tenantId
+      agentId
+      name
+      keyPrefix
+      lastUsedAt
+      revokedAt
+      createdAt
+    }
+  }
+`);
+
+export const CreateAgentApiKeyMutation = graphql(`
+  mutation CreateAgentApiKey($input: CreateAgentApiKeyInput!) {
+    createAgentApiKey(input: $input) {
+      apiKey {
+        id
+        agentId
+        name
+        keyPrefix
+        createdAt
+      }
+      plainTextKey
+    }
+  }
+`);
+
+export const RevokeAgentApiKeyMutation = graphql(`
+  mutation RevokeAgentApiKey($id: ID!) {
+    revokeAgentApiKey(id: $id) {
+      id
+      revokedAt
+    }
+  }
+`);
+
+// ---------------------------------------------------------------------------
+// Subscriptions
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Cost Management (PRD-02)
+// ---------------------------------------------------------------------------
+
+// Cost queries use `gql` directly (not codegen `graphql()`) because the
+// AppSync schema types are new and codegen hasn't been regenerated yet.
+// Once codegen runs with the deployed schema, these can switch to `graphql()`.
+
+export const CostSummaryQuery = gql`
+  query CostSummary($tenantId: ID!, $from: AWSDateTime, $to: AWSDateTime) {
+    costSummary(tenantId: $tenantId, from: $from, to: $to) {
+      totalUsd
+      llmUsd
+      computeUsd
+      toolsUsd
+      evalUsd
+      totalInputTokens
+      totalOutputTokens
+      eventCount
+      periodStart
+      periodEnd
+    }
+  }
+`;
+
+export const CostByAgentQuery = gql`
+  query CostByAgent($tenantId: ID!, $from: AWSDateTime, $to: AWSDateTime) {
+    costByAgent(tenantId: $tenantId, from: $from, to: $to) {
+      agentId
+      agentName
+      totalUsd
+      eventCount
+    }
+  }
+`;
+
+export const CostByModelQuery = gql`
+  query CostByModel($tenantId: ID!, $from: AWSDateTime, $to: AWSDateTime) {
+    costByModel(tenantId: $tenantId, from: $from, to: $to) {
+      model
+      totalUsd
+      inputTokens
+      outputTokens
+    }
+  }
+`;
+
+export const CostTimeSeriesQuery = gql`
+  query CostTimeSeries($tenantId: ID!, $days: Int) {
+    costTimeSeries(tenantId: $tenantId, days: $days) {
+      day
+      totalUsd
+      llmUsd
+      computeUsd
+      toolsUsd
+      eventCount
+    }
+  }
+`;
+
+export const BudgetStatusQuery = gql`
+  query BudgetStatus($tenantId: ID!) {
+    budgetStatus(tenantId: $tenantId) {
+      policy {
+        id
+        tenantId
+        agentId
+        scope
+        period
+        limitUsd
+        actionOnExceed
+        enabled
+      }
+      spentUsd
+      remainingUsd
+      percentUsed
+      status
+    }
+  }
+`;
+
+export const UpsertBudgetPolicyMutation = gql`
+  mutation UpsertBudgetPolicy($tenantId: ID!, $input: UpsertBudgetPolicyInput!) {
+    upsertBudgetPolicy(tenantId: $tenantId, input: $input) {
+      id
+      scope
+      limitUsd
+      actionOnExceed
+      enabled
+    }
+  }
+`;
+
+export const DeleteBudgetPolicyMutation = gql`
+  mutation DeleteBudgetPolicy($id: ID!) {
+    deleteBudgetPolicy(id: $id)
+  }
+`;
+
+export const UnpauseAgentMutation = gql`
+  mutation UnpauseAgent($agentId: ID!) {
+    unpauseAgent(agentId: $agentId) {
+      id
+      name
+    }
+  }
+`;
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+export const NotifyAgentStatusMutation = graphql(`
+  mutation NotifyAgentStatus($agentId: ID!, $tenantId: ID!, $status: String!, $name: String!) {
+    notifyAgentStatus(agentId: $agentId, tenantId: $tenantId, status: $status, name: $name) {
+      agentId
+      tenantId
+      status
+      name
+      updatedAt
+    }
+  }
+`);
+
+export const OnAgentStatusChangedSubscription = graphql(`
+  subscription OnAgentStatusChanged($tenantId: ID!) {
+    onAgentStatusChanged(tenantId: $tenantId) {
+      agentId
+      tenantId
+      status
+      name
+      updatedAt
+    }
+  }
+`);
+
+export const OnThreadUpdatedSubscription = graphql(`
+  subscription OnThreadUpdated($tenantId: ID!) {
+    onThreadUpdated(tenantId: $tenantId) {
+      threadId
+      tenantId
+      status
+      title
+      updatedAt
+    }
+  }
+`);
+
+export const OnInboxItemStatusChangedSubscription = graphql(`
+  subscription OnInboxItemStatusChanged($tenantId: ID!) {
+    onInboxItemStatusChanged(tenantId: $tenantId) {
+      inboxItemId
+      tenantId
+      status
+      title
+      updatedAt
+    }
+  }
+`);
+
+export const ThreadTurnsQuery = graphql(`
+  query ThreadTurns($tenantId: ID!, $limit: Int) {
+    threadTurns(tenantId: $tenantId, limit: $limit) {
+      id
+      tenantId
+      triggerId
+      threadId
+      agentId
+      invocationSource
+      triggerDetail
+      status
+      startedAt
+      finishedAt
+      error
+      resultJson
+      usageJson
+      triggerName
+      totalCost
+      createdAt
+    }
+  }
+`);
+
+export const ThreadTurnsForThreadQuery = graphql(`
+  query ThreadTurnsForThread($tenantId: ID!, $threadId: ID!, $limit: Int) {
+    threadTurns(tenantId: $tenantId, threadId: $threadId, limit: $limit) {
+      id
+      tenantId
+      agentId
+      invocationSource
+      triggerDetail
+      triggerName
+      threadId
+      turnNumber
+      status
+      startedAt
+      finishedAt
+      error
+      resultJson
+      usageJson
+      totalCost
+      retryAttempt
+      originTurnId
+      createdAt
+    }
+  }
+`);
+
+export const ThreadTurnEventsQuery = graphql(`
+  query ThreadTurnEvents($runId: ID!, $limit: Int) {
+    threadTurnEvents(runId: $runId, limit: $limit) {
+      id
+      runId
+      agentId
+      seq
+      eventType
+      stream
+      level
+      message
+      payload
+      createdAt
+    }
+  }
+`);
+
+export const OnThreadTurnUpdatedSubscription = graphql(`
+  subscription OnThreadTurnUpdated($tenantId: ID!) {
+    onThreadTurnUpdated(tenantId: $tenantId) {
+      runId
+      triggerId
+      tenantId
+      threadId
+      agentId
+      status
+      triggerName
+      updatedAt
+    }
+  }
+`);
+
+export const ActiveTurnsQuery = gql`
+  query ActiveTurns($tenantId: ID!) {
+    running: threadTurns(tenantId: $tenantId, status: "running") {
+      id
+      tenantId
+      threadId
+      agentId
+      status
+      startedAt
+    }
+    queued: threadTurns(tenantId: $tenantId, status: "queued") {
+      id
+      tenantId
+      threadId
+      agentId
+      status
+      startedAt
+    }
+    queuedWakeups(tenantId: $tenantId) {
+      id
+      tenantId
+      agentId
+      source
+      triggerDetail
+      status
+    }
+  }
+`;
+
+export const OnNewMessageSubscription = graphql(`
+  subscription OnNewMessage($threadId: ID!) {
+    onNewMessage(threadId: $threadId) {
+      messageId
+      threadId
+      tenantId
+      role
+      content
+      senderType
+      senderId
+      createdAt
+    }
+  }
+`);
+
+// ---------------------------------------------------------------------------
+// Artifacts
+// ---------------------------------------------------------------------------
+
+export const ArtifactsListQuery = gql`
+  query ArtifactsList($tenantId: ID!, $threadId: ID, $agentId: ID, $type: ArtifactType, $status: ArtifactStatus, $limit: Int) {
+    artifacts(tenantId: $tenantId, threadId: $threadId, agentId: $agentId, type: $type, status: $status, limit: $limit) {
+      id
+      tenantId
+      agentId
+      threadId
+      title
+      type
+      status
+      summary
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+export const ArtifactDetailQuery = gql`
+  query ArtifactDetail($id: ID!) {
+    artifact(id: $id) {
+      id
+      title
+      type
+      status
+      content
+      summary
+      agentId
+      threadId
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+// ---------------------------------------------------------------------------
+// Memory
+// ---------------------------------------------------------------------------
+
+export const MemoryRecordsQuery = graphql(`
+  query MemoryRecords($assistantId: ID!, $namespace: String!) {
+    memoryRecords(assistantId: $assistantId, namespace: $namespace) {
+      memoryRecordId
+      content { text }
+      createdAt updatedAt
+      namespace strategyId strategy
+      agentSlug factType confidence
+      eventDate occurredStart occurredEnd mentionedAt
+      tags accessCount proofCount context
+    }
+  }
+`);
+
+export const DeleteMemoryRecordMutation = graphql(`
+  mutation DeleteMemoryRecord($memoryRecordId: ID!) {
+    deleteMemoryRecord(memoryRecordId: $memoryRecordId)
+  }
+`);
+
+export const UpdateMemoryRecordMutation = graphql(`
+  mutation UpdateMemoryRecord($memoryRecordId: ID!, $content: String!) {
+    updateMemoryRecord(memoryRecordId: $memoryRecordId, content: $content)
+  }
+`);
+
+export const MemorySearchQuery = graphql(`
+  query MemorySearch($assistantId: ID!, $query: String!, $strategy: MemoryStrategy, $limit: Int) {
+    memorySearch(assistantId: $assistantId, query: $query, strategy: $strategy, limit: $limit) {
+      records {
+        memoryRecordId
+        content { text }
+        score
+        namespace
+        strategy
+        createdAt
+      }
+      totalCount
+    }
+  }
+`);
+
+// ---------------------------------------------------------------------------
+// Agent Templates
+// ---------------------------------------------------------------------------
+
+export const AgentTemplatesListQuery = graphql(`
+  query AgentTemplatesList($tenantId: ID!) {
+    agentTemplates(tenantId: $tenantId) {
+      id
+      tenantId
+      name
+      slug
+      description
+      category
+      icon
+      source
+      model
+      guardrailId
+      blockedTools
+      config
+      skills
+      knowledgeBaseIds
+      isPublished
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const AgentTemplateDetailQuery = graphql(`
+  query AgentTemplateDetail($id: ID!) {
+    agentTemplate(id: $id) {
+      id
+      tenantId
+      name
+      slug
+      description
+      category
+      icon
+      source
+      model
+      guardrailId
+      blockedTools
+      config
+      skills
+      knowledgeBaseIds
+      isPublished
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const CreateAgentTemplateMutation = graphql(`
+  mutation CreateAgentTemplate($input: CreateAgentTemplateInput!) {
+    createAgentTemplate(input: $input) {
+      id
+      name
+      slug
+    }
+  }
+`);
+
+export const UpdateAgentTemplateMutation = graphql(`
+  mutation UpdateAgentTemplate($id: ID!, $input: UpdateAgentTemplateInput!) {
+    updateAgentTemplate(id: $id, input: $input) {
+      id
+      name
+      slug
+      model
+      guardrailId
+      blockedTools
+      config
+      skills
+      knowledgeBaseIds
+      updatedAt
+    }
+  }
+`);
+
+export const DeleteAgentTemplateMutation = graphql(`
+  mutation DeleteAgentTemplate($id: ID!) {
+    deleteAgentTemplate(id: $id)
+  }
+`);
+
+export const CreateAgentFromTemplateMutation = graphql(`
+  mutation CreateAgentFromTemplate($input: CreateAgentFromTemplateInput!) {
+    createAgentFromTemplate(input: $input) {
+      id
+      name
+      slug
+    }
+  }
+`);
+
+// ---------------------------------------------------------------------------
+// Template → Agent sync + rollback
+// ---------------------------------------------------------------------------
+
+export const LinkedAgentsForTemplateQuery = graphql(`
+  query LinkedAgentsForTemplate($templateId: ID!) {
+    linkedAgentsForTemplate(templateId: $templateId) {
+      id
+      name
+      slug
+      role
+      status
+      updatedAt
+    }
+  }
+`);
+
+export const TemplateSyncDiffQuery = graphql(`
+  query TemplateSyncDiff($templateId: ID!, $agentId: ID!) {
+    templateSyncDiff(templateId: $templateId, agentId: $agentId) {
+      roleChange { current target }
+      skillsAdded
+      skillsRemoved
+      skillsChanged
+      kbsAdded
+      kbsRemoved
+      filesAdded
+      filesModified
+      filesSame
+    }
+  }
+`);
+
+export const AgentVersionsQuery = graphql(`
+  query AgentVersionsList($agentId: ID!, $limit: Int) {
+    agentVersions(agentId: $agentId, limit: $limit) {
+      id
+      agentId
+      versionNumber
+      label
+      createdBy
+      createdAt
+    }
+  }
+`);
+
+export const SyncTemplateToAgentMutation = graphql(`
+  mutation SyncTemplateToAgent($templateId: ID!, $agentId: ID!) {
+    syncTemplateToAgent(templateId: $templateId, agentId: $agentId) {
+      id
+      name
+      role
+      updatedAt
+    }
+  }
+`);
+
+export const SyncTemplateToAllAgentsMutation = graphql(`
+  mutation SyncTemplateToAllAgents($templateId: ID!) {
+    syncTemplateToAllAgents(templateId: $templateId) {
+      agentsSynced
+      agentsFailed
+      errors
+    }
+  }
+`);
+
+export const RollbackAgentVersionMutation = graphql(`
+  mutation RollbackAgentVersion($agentId: ID!, $versionId: ID!) {
+    rollbackAgentVersion(agentId: $agentId, versionId: $versionId) {
+      id
+      name
+      role
+      updatedAt
+    }
+  }
+`);

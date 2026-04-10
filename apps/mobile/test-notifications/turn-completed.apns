@@ -1,0 +1,13 @@
+{
+  "Simulator Target Bundle": "ai.maniflow.hive",
+  "aps": {
+    "alert": {
+      "title": "Marco",
+      "body": "Here are the last 5 opportunities in your CRM: Border Tire is in the 10-Prospect stage..."
+    },
+    "sound": "default",
+    "badge": 1
+  },
+  "ticketId": "de9a706e-75c0-4d74-afec-629d32f36414",
+  "type": "turn_completed"
+}
