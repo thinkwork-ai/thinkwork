@@ -38,6 +38,12 @@ variable "graphql_db_secret_arn" {
   type        = string
 }
 
+variable "db_cluster_endpoint" {
+  description = "Aurora cluster endpoint (hostname)"
+  type        = string
+  default     = ""
+}
+
 variable "database_name" {
   description = "Aurora database name"
   type        = string

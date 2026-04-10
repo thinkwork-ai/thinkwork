@@ -124,7 +124,14 @@ input InviteMemberInput {
   role: String
 }
 
+type BootstrapResult {
+  user: User!
+  tenant: Tenant!
+  isNew: Boolean!
+}
+
 extend type Mutation {
+  bootstrapUser: BootstrapResult!
   createTenant(input: CreateTenantInput!): Tenant!
   updateTenant(id: ID!, input: UpdateTenantInput!): Tenant!
   updateTenantSettings(tenantId: ID!, input: UpdateTenantSettingsInput!): TenantSettings!
