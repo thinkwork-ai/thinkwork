@@ -141,6 +141,7 @@ describe("GraphQL Schema Contract", () => {
 			"onInboxItemStatusChanged",
 			"onThreadTurnUpdated",
 			"onOrgUpdated",
+			"onCostRecorded",
 		];
 
 		for (const s of expectedSubscriptions) {
@@ -151,7 +152,6 @@ describe("GraphQL Schema Contract", () => {
 
 		const cutSubscriptions = [
 			"onEvalRunUpdated",
-			"onCostRecorded",
 		];
 
 		for (const s of cutSubscriptions) {

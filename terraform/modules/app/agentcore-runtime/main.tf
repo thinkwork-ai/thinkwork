@@ -132,6 +132,12 @@ resource "aws_iam_role_policy" "agentcore" {
         Action   = ["ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage", "ecr:GetAuthorizationToken"]
         Resource = "*"
       },
+      {
+        Sid      = "SSMParameterAccess"
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter", "ssm:PutParameter"]
+        Resource = "arn:aws:ssm:${var.region}:${var.account_id}:parameter/thinkwork/${var.stage}/agentcore/*"
+      },
     ]
   })
 }
