@@ -145,3 +145,9 @@ variable "hindsight_endpoint" {
   type        = string
   default     = ""
 }
+
+variable "agentcore_function_name" {
+  description = "AgentCore Lambda function name (for direct SDK invoke instead of Function URL)"
+  type        = string
+  default     = ""
+}
