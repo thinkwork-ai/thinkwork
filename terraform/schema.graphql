@@ -1,0 +1,194 @@
+# Base schema definition for AWS AppSync.
+# Type files in types/ extend Query, Mutation, and Subscription.
+# All .graphql files are concatenated by infra/appsync.ts before deployment.
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+
+scalar AWSDateTime
+scalar AWSJSON
+scalar AWSURL
+
+# Shared pagination type used across domains
+type PageInfo {
+  hasNextPage: Boolean!
+  endCursor: String
+}
+
+type Query {
+  _empty: String
+}
+
+type Mutation {
+  _empty: String
+}
+
+type Subscription {
+  _empty: String
+}
+
+# AppSync Subscriptions — real-time event streams
+#
+# Each subscription filters by tenantId (or threadId) and is triggered
+# by its corresponding notification mutation via @aws_subscribe.
+
+# ────────────────────────────────────────────────────────────────────
+# Event payload types
+# ────────────────────────────────────────────────────────────────────
+
+type AgentStatusEvent {
+  agentId: ID!
+  tenantId: ID!
+  status: String!
+  name: String!
+  updatedAt: AWSDateTime!
+}
+
+type NewMessageEvent {
+  messageId: ID!
+  threadId: ID!
+  tenantId: ID!
+  role: String!
+  content: String
+  senderType: String
+  senderId: ID
+  createdAt: AWSDateTime!
+}
+
+type HeartbeatActivityEvent {
+  heartbeatId: ID!
+  tenantId: ID!
+  status: String!
+  message: String
+  createdAt: AWSDateTime!
+}
+
+type ThreadUpdateEvent {
+  threadId: ID!
+  tenantId: ID!
+  status: String!
+  title: String!
+  updatedAt: AWSDateTime!
+}
+
+type InboxItemStatusEvent {
+  inboxItemId: ID!
+  tenantId: ID!
+  status: String!
+  title: String
+  updatedAt: AWSDateTime!
+}
+
+type ThreadTurnUpdateEvent {
+  runId: ID!
+  triggerId: ID
+  tenantId: ID!
+  threadId: ID
+  agentId: ID
+  status: String!
+  triggerName: String
+  updatedAt: AWSDateTime!
+}
+
+type OrgUpdateEvent {
+  tenantId: ID!
+  changeType: String!
+  entityType: String
+  entityId: ID
+  updatedAt: AWSDateTime!
+}
+
+# ────────────────────────────────────────────────────────────────────
+# Notification mutations
+#
+# These are called by Lambda resolvers (not clients) to trigger the
+# corresponding subscriptions. @aws_subscribe binds each subscription
+# to the mutation(s) whose return type matches the event payload.
+# ────────────────────────────────────────────────────────────────────
+
+extend type Mutation {
+  notifyAgentStatus(
+    agentId: ID!
+    tenantId: ID!
+    status: String!
+    name: String!
+  ): AgentStatusEvent
+
+  notifyNewMessage(
+    messageId: ID!
+    threadId: ID!
+    tenantId: ID!
+    role: String!
+    content: String
+    senderType: String
+    senderId: ID
+  ): NewMessageEvent
+
+  notifyHeartbeatActivity(
+    heartbeatId: ID!
+    tenantId: ID!
+    status: String!
+    message: String
+  ): HeartbeatActivityEvent
+
+  notifyThreadUpdate(
+    threadId: ID!
+    tenantId: ID!
+    status: String!
+    title: String!
+  ): ThreadUpdateEvent
+
+  notifyInboxItemUpdate(
+    inboxItemId: ID!
+    tenantId: ID!
+    status: String!
+    title: String
+  ): InboxItemStatusEvent
+
+  notifyThreadTurnUpdate(
+    runId: ID!
+    triggerId: ID
+    tenantId: ID!
+    threadId: ID
+    agentId: ID
+    status: String!
+    triggerName: String
+  ): ThreadTurnUpdateEvent
+
+  notifyOrgUpdate(
+    tenantId: ID!
+    changeType: String!
+    entityType: String
+    entityId: ID
+  ): OrgUpdateEvent
+}
+
+# ────────────────────────────────────────────────────────────────────
+# Subscriptions
+# ────────────────────────────────────────────────────────────────────
+
+extend type Subscription {
+  onAgentStatusChanged(tenantId: ID!): AgentStatusEvent
+    @aws_subscribe(mutations: ["notifyAgentStatus"])
+
+  onNewMessage(threadId: ID!): NewMessageEvent
+    @aws_subscribe(mutations: ["notifyNewMessage"])
+
+  onHeartbeatActivity(tenantId: ID!): HeartbeatActivityEvent
+    @aws_subscribe(mutations: ["notifyHeartbeatActivity"])
+
+  onThreadUpdated(tenantId: ID!): ThreadUpdateEvent
+    @aws_subscribe(mutations: ["notifyThreadUpdate"])
+
+  onInboxItemStatusChanged(tenantId: ID!): InboxItemStatusEvent
+    @aws_subscribe(mutations: ["notifyInboxItemUpdate"])
+
+  onThreadTurnUpdated(tenantId: ID!): ThreadTurnUpdateEvent
+    @aws_subscribe(mutations: ["notifyThreadTurnUpdate"])
+
+  onOrgUpdated(tenantId: ID!): OrgUpdateEvent
+    @aws_subscribe(mutations: ["notifyOrgUpdate"])
+}

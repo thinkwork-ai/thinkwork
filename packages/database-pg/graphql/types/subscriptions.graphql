@@ -1,6 +1,5 @@
 # AppSync Subscriptions — real-time event streams
 #
-# Tasks 8.8–8.13 from PRD prd-00-platform-migration.md
 # Each subscription filters by tenantId (or threadId) and is triggered
 # by its corresponding notification mutation via @aws_subscribe.
 
@@ -70,29 +69,6 @@ type OrgUpdateEvent {
   updatedAt: AWSDateTime!
 }
 
-type CostRecordedEvent {
-  tenantId: ID!
-  agentId: ID
-  agentName: String
-  eventType: String!
-  amountUsd: Float!
-  model: String
-  updatedAt: AWSDateTime!
-}
-
-type EvalRunProgressEvent {
-  runId: ID!
-  tenantId: ID!
-  status: String!
-  totalTests: Int
-  passed: Int
-  failed: Int
-  passRate: Float
-  regression: Boolean
-  errorMessage: String
-  updatedAt: AWSDateTime!
-}
-
 # ────────────────────────────────────────────────────────────────────
 # Notification mutations
 #
@@ -156,27 +132,6 @@ extend type Mutation {
     entityType: String
     entityId: ID
   ): OrgUpdateEvent
-
-  notifyCostRecorded(
-    tenantId: ID!
-    agentId: ID
-    agentName: String
-    eventType: String!
-    amountUsd: Float!
-    model: String
-  ): CostRecordedEvent
-
-  notifyEvalRunUpdate(
-    runId: ID!
-    tenantId: ID!
-    status: String!
-    totalTests: Int
-    passed: Int
-    failed: Int
-    passRate: Float
-    regression: Boolean
-    errorMessage: String
-  ): EvalRunProgressEvent
 }
 
 # ────────────────────────────────────────────────────────────────────
@@ -204,10 +159,4 @@ extend type Subscription {
 
   onOrgUpdated(tenantId: ID!): OrgUpdateEvent
     @aws_subscribe(mutations: ["notifyOrgUpdate"])
-
-  onCostRecorded(tenantId: ID!): CostRecordedEvent
-    @aws_subscribe(mutations: ["notifyCostRecorded"])
-
-  onEvalRunUpdated(tenantId: ID!): EvalRunProgressEvent
-    @aws_subscribe(mutations: ["notifyEvalRunUpdate"])
 }
