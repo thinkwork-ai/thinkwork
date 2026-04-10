@@ -16,13 +16,17 @@ locals {
     DATABASE_CLUSTER_ARN   = var.db_cluster_arn
     DATABASE_SECRET_ARN    = var.graphql_db_secret_arn
     DATABASE_NAME          = var.database_name
-    BUCKET_NAME            = var.bucket_name
-    USER_POOL_ID           = var.user_pool_id
-    ADMIN_CLIENT_ID        = var.admin_client_id
-    MOBILE_CLIENT_ID       = var.mobile_client_id
-    APPSYNC_ENDPOINT       = var.appsync_api_url
-    APPSYNC_API_KEY        = var.appsync_api_key
-    API_AUTH_SECRET         = var.api_auth_secret
+    BUCKET_NAME                = var.bucket_name
+    USER_POOL_ID               = var.user_pool_id
+    COGNITO_USER_POOL_ID       = var.user_pool_id
+    ADMIN_CLIENT_ID            = var.admin_client_id
+    MOBILE_CLIENT_ID           = var.mobile_client_id
+    COGNITO_APP_CLIENT_IDS     = "${var.admin_client_id},${var.mobile_client_id}"
+    APPSYNC_ENDPOINT           = var.appsync_api_url
+    APPSYNC_API_KEY            = var.appsync_api_key
+    GRAPHQL_API_KEY            = var.appsync_api_key
+    API_AUTH_SECRET             = var.api_auth_secret
+    THINKWORK_API_SECRET        = var.api_auth_secret
     NODE_OPTIONS           = "--enable-source-maps"
   }
 }
