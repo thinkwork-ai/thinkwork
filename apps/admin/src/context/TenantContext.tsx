@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useState,
+  useRef,
   type ReactNode,
 } from "react";
 import { useAuth } from "@/context/AuthContext";
@@ -39,12 +40,14 @@ const TenantContext = createContext<TenantContextValue | null>(null);
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
+const GRAPHQL_URL = import.meta.env.VITE_GRAPHQL_HTTP_URL || `${API_URL}/graphql`;
 
 export function TenantProvider({ children }: { children: ReactNode }) {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, getToken } = useAuth();
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const bootstrapAttempted = useRef(false);
 
   const tenantId = user?.tenantId ?? null;
 
@@ -88,9 +91,65 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  /**
+   * Auto-bootstrap: when authenticated but no tenantId in token,
+   * call the bootstrapUser mutation to auto-provision tenant + user,
+   * then refresh the Cognito session to pick up the new custom:tenant_id.
+   */
+  async function autoBootstrap() {
+    if (bootstrapAttempted.current) return;
+    bootstrapAttempted.current = true;
+
+    try {
+      setIsLoading(true);
+      const token = await getToken();
+      if (!token) return;
+
+      console.log("[TenantContext] No tenantId — calling bootstrapUser...");
+
+      const res = await fetch(GRAPHQL_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          query: `mutation { bootstrapUser { user { id email name } tenant { id name slug plan } isNew } }`,
+        }),
+      });
+
+      const result = await res.json();
+      const bootstrap = result?.data?.bootstrapUser;
+
+      if (bootstrap?.tenant) {
+        console.log("[TenantContext] Bootstrap complete:", bootstrap.tenant.name);
+        setTenant({
+          id: bootstrap.tenant.id,
+          name: bootstrap.tenant.name,
+          slug: bootstrap.tenant.slug,
+          plan: bootstrap.tenant.plan,
+        });
+
+        // Note: the Cognito session will pick up custom:tenant_id on next sign-in.
+        // For now, we use the tenant from the bootstrap response directly.
+      } else {
+        console.error("[TenantContext] Bootstrap failed:", result?.errors);
+        setError("Failed to create workspace");
+      }
+    } catch (err) {
+      console.error("[TenantContext] Bootstrap error:", err);
+      setError(err instanceof Error ? err.message : "Bootstrap failed");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   useEffect(() => {
     if (isAuthenticated && tenantId) {
       fetchTenant();
+    } else if (isAuthenticated && !tenantId) {
+      // New user — no tenant yet. Auto-bootstrap.
+      autoBootstrap();
     } else {
       setTenant(null);
       setIsLoading(false);
@@ -102,7 +161,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     <TenantContext.Provider
       value={{
         tenant,
-        tenantId,
+        tenantId: tenantId || tenant?.id || null,
         isLoading,
         error,
         refetch: fetchTenant,
@@ -119,6 +178,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
 
 export function useTenant() {
   const ctx = useContext(TenantContext);
-  if (!ctx) throw new Error("useTenant must be used within TenantProvider");
+  if (!ctx)
+    throw new Error("useTenant must be used within a TenantProvider");
   return ctx;
 }

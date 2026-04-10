@@ -1,0 +1,47 @@
+# User Quick Actions — per-user saved prompt shortcuts
+
+type UserQuickAction {
+  id: ID!
+  userId: ID!
+  tenantId: ID!
+  title: String!
+  prompt: String!
+  workspaceAgentId: ID
+  sortOrder: Int!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input CreateQuickActionInput {
+  title: String!
+  prompt: String!
+  workspaceAgentId: ID
+  sortOrder: Int
+}
+
+input UpdateQuickActionInput {
+  title: String
+  prompt: String
+  workspaceAgentId: ID
+  sortOrder: Int
+}
+
+input ReorderQuickActionsInput {
+  items: [ReorderQuickActionItem!]!
+}
+
+input ReorderQuickActionItem {
+  id: ID!
+  sortOrder: Int!
+}
+
+extend type Query {
+  userQuickActions(tenantId: ID!): [UserQuickAction!]!
+}
+
+extend type Mutation {
+  createQuickAction(input: CreateQuickActionInput!): UserQuickAction!
+  updateQuickAction(id: ID!, input: UpdateQuickActionInput!): UserQuickAction!
+  deleteQuickAction(id: ID!): Boolean!
+  reorderQuickActions(input: ReorderQuickActionsInput!): [UserQuickAction!]!
+}

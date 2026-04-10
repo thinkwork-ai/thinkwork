@@ -10,7 +10,8 @@
     "web:dev": "npm run css:watch & expo start --web",
     "css": "tailwindcss -i ./global.css -o ./public/styles.css --minify",
     "css:watch": "tailwindcss -i ./global.css -o ./public/styles.css --watch",
-    "build:web": "npm run css && expo export --platform web"
+    "build:web": "npm run css && expo export --platform web",
+    "codegen": "graphql-codegen --config codegen.ts"
   },
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.2.8",
