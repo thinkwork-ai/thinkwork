@@ -113,39 +113,9 @@ module "bedrock_kb" {
 # App Tier
 ################################################################################
 
-# Subscription-only schema for AppSync (v1 events only)
+# Subscription-only schema for AppSync — typed event payloads (from schema:build)
 locals {
-  subscription_schema = <<-GRAPHQL
-    type Query {
-      _placeholder: String
-    }
-
-    type Mutation {
-      notifyAgentStatus(input: AWSJSON!): AWSJSON @aws_api_key @aws_cognito_user_pools @aws_iam
-      notifyNewMessage(input: AWSJSON!): AWSJSON @aws_api_key @aws_cognito_user_pools @aws_iam
-      notifyHeartbeatActivity(input: AWSJSON!): AWSJSON @aws_api_key @aws_cognito_user_pools @aws_iam
-      notifyThreadUpdate(input: AWSJSON!): AWSJSON @aws_api_key @aws_cognito_user_pools @aws_iam
-      notifyInboxItemUpdate(input: AWSJSON!): AWSJSON @aws_api_key @aws_cognito_user_pools @aws_iam
-      notifyThreadTurnUpdate(input: AWSJSON!): AWSJSON @aws_api_key @aws_cognito_user_pools @aws_iam
-      notifyOrgUpdate(input: AWSJSON!): AWSJSON @aws_api_key @aws_cognito_user_pools @aws_iam
-    }
-
-    type Subscription {
-      onAgentStatusChanged: AWSJSON @aws_subscribe(mutations: ["notifyAgentStatus"]) @aws_api_key @aws_cognito_user_pools @aws_iam
-      onNewMessage: AWSJSON @aws_subscribe(mutations: ["notifyNewMessage"]) @aws_api_key @aws_cognito_user_pools @aws_iam
-      onHeartbeatActivity: AWSJSON @aws_subscribe(mutations: ["notifyHeartbeatActivity"]) @aws_api_key @aws_cognito_user_pools @aws_iam
-      onThreadUpdated: AWSJSON @aws_subscribe(mutations: ["notifyThreadUpdate"]) @aws_api_key @aws_cognito_user_pools @aws_iam
-      onInboxItemStatusChanged: AWSJSON @aws_subscribe(mutations: ["notifyInboxItemUpdate"]) @aws_api_key @aws_cognito_user_pools @aws_iam
-      onThreadTurnUpdated: AWSJSON @aws_subscribe(mutations: ["notifyThreadTurnUpdate"]) @aws_api_key @aws_cognito_user_pools @aws_iam
-      onOrgUpdated: AWSJSON @aws_subscribe(mutations: ["notifyOrgUpdate"]) @aws_api_key @aws_cognito_user_pools @aws_iam
-    }
-
-    schema {
-      query: Query
-      mutation: Mutation
-      subscription: Subscription
-    }
-  GRAPHQL
+  subscription_schema = file("${path.module}/../../schema.graphql")
 }
 
 module "appsync" {
