@@ -1,0 +1,30 @@
+{
+  "name": "thinkwork",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Production-grade agent platform for teams that already live on AWS",
+  "license": "MIT",
+  "homepage": "https://thinkwork.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thinkwork-ai/thinkwork.git"
+  },
+  "bugs": {
+    "url": "https://github.com/thinkwork-ai/thinkwork/issues"
+  },
+  "author": "thinkwork-ai",
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\""
+  },
+  "devDependencies": {}
+}

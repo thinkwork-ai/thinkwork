@@ -1,0 +1,37 @@
+[project]
+name = "thinkwork"
+version = "0.0.0"
+description = "Production-grade agent platform for teams that already live on AWS"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "thinkwork-ai" }]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = [
+  "packages/agentcore-strands",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = [
+  ".venv",
+  "node_modules",
+  "dist",
+  "build",
+  "__pycache__",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "W", "UP"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["packages"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

@@ -137,3 +137,106 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# ---------------------------------------------------------------------------
+# Thinkwork additions
+# ---------------------------------------------------------------------------
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# IDEs
+.idea/
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json.example
+*.swp
+*.swo
+
+# pnpm / monorepo tooling
+.pnpm-store/
+.turbo/
+.nx/cache
+
+# Python (Strands agent runtime side)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.python-version
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.tox/
+
+# uv (Python package manager — keep uv.lock tracked, ignore caches)
+.uv-cache/
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Expo / React Native
+.expo/
+.expo-shared/
+*.ipa
+*.apk
+*.aab
+ios/Pods/
+android/.gradle/
+android/app/build/
+android/build/
+*.jks
+*.p12
+*.key
+*.mobileprovision
+
+# AWS
+.aws-sam/
+samconfig.toml
+
+# Build artifacts
+*.zip
+!**/__fixtures__/**/*.zip
+lambda-build/
+artifacts/
+*.tar.gz
+!**/__fixtures__/**/*.tar.gz
+
+# Generated GraphQL types and codegen
+**/*.generated.ts
+**/__generated__/
+**/generated/
+
+# Local environment overrides
+.env.local
+.env.*.local
+
+# Test outputs
+test-results/
+playwright-report/
+playwright/.cache/
+
