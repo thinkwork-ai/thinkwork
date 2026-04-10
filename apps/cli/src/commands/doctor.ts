@@ -1,7 +1,9 @@
 import { Command } from "commander";
+import chalk from "chalk";
 import { execSync } from "node:child_process";
 import { validateStage } from "../config.js";
 import { getAwsIdentity } from "../aws.js";
+import { printHeader, printError } from "../ui.js";
 
 interface Check {
   name: string;
@@ -56,7 +58,7 @@ function checkBedrockAccess(): Check {
     run: () => {
       try {
         execSync(
-          'aws bedrock get-foundation-model --model-identifier anthropic.claude-3-haiku-20240307-v1:0 --output json',
+          'aws bedrock get-foundation-model --model-identifier anthropic.claude-3-haiku-20240307-v1:0 --output json --region us-east-1',
           { encoding: "utf-8", timeout: 10000, stdio: ["pipe", "pipe", "pipe"] }
         );
         return { pass: true, detail: "anthropic.claude-3-haiku accessible" };
@@ -79,11 +81,11 @@ export function registerDoctorCommand(program: Command): void {
     .action((opts: { stage: string }) => {
       const stageCheck = validateStage(opts.stage);
       if (!stageCheck.valid) {
-        console.error(`Error: ${stageCheck.error}`);
+        printError(stageCheck.error!);
         process.exit(1);
       }
 
-      console.log(`\n  Thinkwork Doctor — stage: ${opts.stage}\n`);
+      printHeader("doctor", opts.stage);
 
       const checks: Check[] = [
         checkAwsCli(),
@@ -95,12 +97,17 @@ export function registerDoctorCommand(program: Command): void {
       let allPass = true;
       for (const check of checks) {
         const result = check.run();
-        const icon = result.pass ? "✓" : "✗";
-        console.log(`  ${icon} ${check.name}: ${result.detail}`);
+        const icon = result.pass ? chalk.green("✓") : chalk.red("✗");
+        const detail = result.pass ? chalk.dim(result.detail) : chalk.yellow(result.detail);
+        console.log(`  ${icon} ${check.name}  ${detail}`);
         if (!result.pass) allPass = false;
       }
 
-      console.log(allPass ? "\n  All checks passed." : "\n  Some checks failed. Fix the issues above before deploying.");
+      if (allPass) {
+        console.log(`\n  ${chalk.green.bold("All checks passed.")}`);
+      } else {
+        console.log(`\n  ${chalk.yellow.bold("Some checks failed.")} Fix the issues above before deploying.`);
+      }
       process.exit(allPass ? 0 : 1);
     });
 }
