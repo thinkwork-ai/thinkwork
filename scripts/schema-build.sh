@@ -54,4 +54,15 @@ $SUBSCRIPTION_FIELDS
 }
 SCHEMA
 
+# Add AppSync auth directives to all mutation and subscription fields
+# Every field needs @aws_api_key @aws_cognito_user_pools @aws_iam for multi-auth
+AUTH="@aws_api_key @aws_cognito_user_pools @aws_iam"
+
+# Add to mutation return types (lines with "): XxxEvent")
+sed -i '' "s/): \([A-Za-z]*Event\)$/): \1 ${AUTH}/" "$DST"
+
+# Add to subscription fields — on the line with the return type (before @aws_subscribe)
+# Pattern: "  onXxx(tenantId: ID!): XxxEvent"
+sed -i '' "s/): \([A-Za-z]*Event\)$/): \1 ${AUTH}/" "$DST"
+
 echo "Done — $(wc -l < "$DST" | tr -d ' ') lines written"

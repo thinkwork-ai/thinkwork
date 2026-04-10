@@ -101,7 +101,7 @@ type Mutation {
     tenantId: ID!
     status: String!
     name: String!
-  ): AgentStatusEvent
+  ): AgentStatusEvent @aws_api_key @aws_cognito_user_pools @aws_iam
 
   notifyNewMessage(
     messageId: ID!
@@ -111,28 +111,28 @@ type Mutation {
     content: String
     senderType: String
     senderId: ID
-  ): NewMessageEvent
+  ): NewMessageEvent @aws_api_key @aws_cognito_user_pools @aws_iam
 
   notifyHeartbeatActivity(
     heartbeatId: ID!
     tenantId: ID!
     status: String!
     message: String
-  ): HeartbeatActivityEvent
+  ): HeartbeatActivityEvent @aws_api_key @aws_cognito_user_pools @aws_iam
 
   notifyThreadUpdate(
     threadId: ID!
     tenantId: ID!
     status: String!
     title: String!
-  ): ThreadUpdateEvent
+  ): ThreadUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
 
   notifyInboxItemUpdate(
     inboxItemId: ID!
     tenantId: ID!
     status: String!
     title: String
-  ): InboxItemStatusEvent
+  ): InboxItemStatusEvent @aws_api_key @aws_cognito_user_pools @aws_iam
 
   notifyThreadTurnUpdate(
     runId: ID!
@@ -142,36 +142,36 @@ type Mutation {
     agentId: ID
     status: String!
     triggerName: String
-  ): ThreadTurnUpdateEvent
+  ): ThreadTurnUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
 
   notifyOrgUpdate(
     tenantId: ID!
     changeType: String!
     entityType: String
     entityId: ID
-  ): OrgUpdateEvent
+  ): OrgUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
 }
 
 type Subscription {
   _empty: String
-  onAgentStatusChanged(tenantId: ID!): AgentStatusEvent
+  onAgentStatusChanged(tenantId: ID!): AgentStatusEvent @aws_api_key @aws_cognito_user_pools @aws_iam
     @aws_subscribe(mutations: ["notifyAgentStatus"])
 
-  onNewMessage(threadId: ID!): NewMessageEvent
+  onNewMessage(threadId: ID!): NewMessageEvent @aws_api_key @aws_cognito_user_pools @aws_iam
     @aws_subscribe(mutations: ["notifyNewMessage"])
 
-  onHeartbeatActivity(tenantId: ID!): HeartbeatActivityEvent
+  onHeartbeatActivity(tenantId: ID!): HeartbeatActivityEvent @aws_api_key @aws_cognito_user_pools @aws_iam
     @aws_subscribe(mutations: ["notifyHeartbeatActivity"])
 
-  onThreadUpdated(tenantId: ID!): ThreadUpdateEvent
+  onThreadUpdated(tenantId: ID!): ThreadUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
     @aws_subscribe(mutations: ["notifyThreadUpdate"])
 
-  onInboxItemStatusChanged(tenantId: ID!): InboxItemStatusEvent
+  onInboxItemStatusChanged(tenantId: ID!): InboxItemStatusEvent @aws_api_key @aws_cognito_user_pools @aws_iam
     @aws_subscribe(mutations: ["notifyInboxItemUpdate"])
 
-  onThreadTurnUpdated(tenantId: ID!): ThreadTurnUpdateEvent
+  onThreadTurnUpdated(tenantId: ID!): ThreadTurnUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
     @aws_subscribe(mutations: ["notifyThreadTurnUpdate"])
 
-  onOrgUpdated(tenantId: ID!): OrgUpdateEvent
+  onOrgUpdated(tenantId: ID!): OrgUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
     @aws_subscribe(mutations: ["notifyOrgUpdate"])
 }
