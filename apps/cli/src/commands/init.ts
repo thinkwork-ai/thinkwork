@@ -5,6 +5,7 @@ import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { validateStage } from "../config.js";
 import { getAwsIdentity } from "../aws.js";
+import { saveEnvironment } from "../environments.js";
 import { printHeader, printSuccess, printError, printWarning } from "../ui.js";
 import { createInterface } from "node:readline";
 import chalk from "chalk";
@@ -339,6 +340,20 @@ output "hindsight_endpoint"  { value = module.thinkwork.hindsight_endpoint }
         printWarning("Terraform init failed. Run `thinkwork doctor -s " + opts.stage + "` to check prerequisites.");
         return;
       }
+
+      // ── Save environment config ────────────────────────────────────
+
+      const now = new Date().toISOString();
+      saveEnvironment({
+        stage: config.stage,
+        region: config.region,
+        accountId: config.account_id,
+        terraformDir: tfDir,
+        databaseEngine: config.database_engine,
+        memoryEngine: config.memory_engine,
+        createdAt: now,
+        updatedAt: now,
+      });
 
       printSuccess(`Environment "${opts.stage}" initialized`);
       console.log("");
