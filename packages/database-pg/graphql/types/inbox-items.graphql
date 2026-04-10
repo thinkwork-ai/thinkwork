@@ -1,0 +1,152 @@
+# Inbox item domain types: InboxItem, InboxItemComment, InboxItemLink
+# and related enums/inputs.
+
+enum InboxItemStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVISION_REQUESTED
+  EXPIRED
+  CANCELLED
+}
+
+type InboxItem {
+  id: ID!
+  tenantId: ID!
+  requesterType: String
+  requesterId: ID
+  recipientId: ID
+  type: String!
+  status: InboxItemStatus!
+  title: String
+  description: String
+  entityType: String
+  entityId: ID
+  config: AWSJSON
+  revision: Int!
+  reviewNotes: String
+  decidedBy: ID
+  decidedAt: AWSDateTime
+  expiresAt: AWSDateTime
+  comments: [InboxItemComment!]!
+  links: [InboxItemLink!]!
+  linkedThreads: [LinkedThread!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type InboxItemComment {
+  id: ID!
+  inboxItemId: ID!
+  tenantId: ID!
+  authorType: String
+  authorId: ID
+  content: String!
+  createdAt: AWSDateTime!
+}
+
+type InboxItemLink {
+  id: ID!
+  inboxItemId: ID!
+  tenantId: ID!
+  linkedType: String
+  linkedId: ID
+  createdAt: AWSDateTime!
+}
+
+type LinkedThread {
+  id: ID!
+  number: Int!
+  identifier: String
+  title: String!
+  status: String!
+  priority: String
+}
+
+type ActivityLogEntry {
+  id: ID!
+  tenantId: ID!
+  actorType: String!
+  actorId: ID!
+  action: String!
+  entityType: String
+  entityId: ID
+  changes: AWSJSON
+  metadata: AWSJSON
+  createdAt: AWSDateTime!
+}
+
+# --- Inputs ---
+
+input CreateInboxItemInput {
+  tenantId: ID!
+  requesterType: String
+  requesterId: ID
+  recipientId: ID
+  type: String!
+  title: String
+  description: String
+  entityType: String
+  entityId: ID
+  config: AWSJSON
+  expiresAt: AWSDateTime
+}
+
+input InboxItemDecisionInput {
+  status: InboxItemStatus!
+  comment: String
+}
+
+input ApproveInboxItemInput {
+  reviewNotes: String
+}
+
+input RejectInboxItemInput {
+  reviewNotes: String
+}
+
+input RequestRevisionInput {
+  reviewNotes: String!
+}
+
+input ResubmitInboxItemInput {
+  title: String
+  description: String
+  config: AWSJSON
+}
+
+input AddInboxItemCommentInput {
+  inboxItemId: ID!
+  content: String!
+  authorType: String
+  authorId: ID
+}
+
+input AddInboxItemLinkInput {
+  inboxItemId: ID!
+  linkedType: String!
+  linkedId: ID!
+}
+
+# --- Query / Mutation extensions ---
+
+extend type Query {
+  inboxItems(tenantId: ID!, status: InboxItemStatus, entityType: String, entityId: ID, recipientId: ID): [InboxItem!]!
+  inboxItem(id: ID!): InboxItem
+  activityLog(tenantId: ID!, entityType: String, entityId: ID, actorType: String, actorId: ID, action: String, after: AWSDateTime, before: AWSDateTime, limit: Int): [ActivityLogEntry!]!
+}
+
+extend type Mutation {
+  createInboxItem(input: CreateInboxItemInput!): InboxItem!
+  decideInboxItem(id: ID!, input: InboxItemDecisionInput!): InboxItem!
+  cancelInboxItem(id: ID!): InboxItem!
+
+  approveInboxItem(id: ID!, input: ApproveInboxItemInput): InboxItem!
+  rejectInboxItem(id: ID!, input: RejectInboxItemInput): InboxItem!
+  requestRevision(id: ID!, input: RequestRevisionInput!): InboxItem!
+  resubmitInboxItem(id: ID!, input: ResubmitInboxItemInput): InboxItem!
+
+  addInboxItemComment(input: AddInboxItemCommentInput!): InboxItemComment!
+  addInboxItemLink(input: AddInboxItemLinkInput!): InboxItemLink!
+  removeInboxItemLink(id: ID!): Boolean!
+}

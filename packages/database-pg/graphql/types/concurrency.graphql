@@ -1,0 +1,22 @@
+# Concurrency governance types (PRD-09 §9.3).
+
+type StatusCount {
+  status: String!
+  count: Int!
+}
+
+type AgentCount {
+  agentId: ID!
+  agentName: String
+  count: Int!
+}
+
+type ConcurrencySnapshot {
+  totalActive: Int!
+  byStatus: [StatusCount!]!
+  byAgent: [AgentCount!]!
+}
+
+extend type Query {
+  concurrencySnapshot(tenantId: ID!): ConcurrencySnapshot!
+}

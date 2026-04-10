@@ -1,0 +1,69 @@
+# Knowledge Base domain types for document-backed RAG via Bedrock KB.
+
+type KnowledgeBase {
+  id: ID!
+  tenantId: ID!
+  name: String!
+  slug: String!
+  description: String
+  embeddingModel: String!
+  chunkingStrategy: String!
+  chunkSizeTokens: Int
+  chunkOverlapPercent: Int
+  status: String!
+  awsKbId: String
+  lastSyncAt: AWSDateTime
+  lastSyncStatus: String
+  documentCount: Int
+  errorMessage: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type AgentKnowledgeBase {
+  id: ID!
+  agentId: ID!
+  knowledgeBaseId: ID!
+  knowledgeBase: KnowledgeBase
+  enabled: Boolean!
+  searchConfig: AWSJSON
+  createdAt: AWSDateTime!
+}
+
+input CreateKnowledgeBaseInput {
+  tenantId: ID!
+  name: String!
+  description: String
+  embeddingModel: String
+  chunkingStrategy: String
+  chunkSizeTokens: Int
+  chunkOverlapPercent: Int
+}
+
+input UpdateKnowledgeBaseInput {
+  name: String
+  description: String
+}
+
+input AgentKnowledgeBaseInput {
+  knowledgeBaseId: ID!
+  enabled: Boolean
+  searchConfig: AWSJSON
+}
+
+extend type Query {
+  knowledgeBases(tenantId: ID!): [KnowledgeBase!]!
+  knowledgeBase(id: ID!): KnowledgeBase
+}
+
+extend type Mutation {
+  createKnowledgeBase(input: CreateKnowledgeBaseInput!): KnowledgeBase!
+  updateKnowledgeBase(id: ID!, input: UpdateKnowledgeBaseInput!): KnowledgeBase!
+  deleteKnowledgeBase(id: ID!): Boolean!
+  syncKnowledgeBase(id: ID!): KnowledgeBase!
+  setAgentKnowledgeBases(agentId: ID!, knowledgeBases: [AgentKnowledgeBaseInput!]!): [AgentKnowledgeBase!]!
+}
+
+extend type Agent {
+  knowledgeBases: [AgentKnowledgeBase!]!
+}

@@ -1,0 +1,89 @@
+# Hive domain types: Hive, HiveAgent, HiveUser, HivePolicy and related inputs.
+
+type Hive {
+  id: ID!
+  tenantId: ID!
+  name: String!
+  slug: String
+  description: String
+  type: String!
+  status: String!
+  budgetMonthlyCents: Int
+  metadata: AWSJSON
+  agents: [HiveAgent!]!
+  users: [HiveUser!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type HiveAgent {
+  id: ID!
+  hiveId: ID!
+  agentId: ID!
+  tenantId: ID!
+  agent: Agent
+  role: String!
+  joinedAt: AWSDateTime
+  createdAt: AWSDateTime!
+}
+
+type HiveUser {
+  id: ID!
+  hiveId: ID!
+  userId: ID!
+  tenantId: ID!
+  user: User
+  role: String!
+  joinedAt: AWSDateTime
+  createdAt: AWSDateTime!
+}
+
+# --- Inputs ---
+
+input CreateHiveInput {
+  tenantId: ID!
+  name: String!
+  description: String
+  type: String
+  budgetMonthlyCents: Int
+  metadata: AWSJSON
+}
+
+input UpdateHiveInput {
+  name: String
+  description: String
+  type: String
+  status: String
+  budgetMonthlyCents: Int
+  metadata: AWSJSON
+}
+
+input AddHiveAgentInput {
+  agentId: ID!
+  role: String
+}
+
+input AddHiveUserInput {
+  userId: ID!
+  role: String
+}
+
+# --- Query / Mutation extensions ---
+
+extend type Query {
+  hives(tenantId: ID!): [Hive!]!
+  hive(id: ID!): Hive
+}
+
+extend type Mutation {
+  createHive(input: CreateHiveInput!): Hive!
+  updateHive(id: ID!, input: UpdateHiveInput!): Hive!
+  deleteHive(id: ID!): Boolean!
+
+  addHiveAgent(hiveId: ID!, input: AddHiveAgentInput!): HiveAgent!
+  removeHiveAgent(hiveId: ID!, agentId: ID!): Boolean!
+
+  addHiveUser(hiveId: ID!, input: AddHiveUserInput!): HiveUser!
+  removeHiveUser(hiveId: ID!, userId: ID!): Boolean!
+
+}

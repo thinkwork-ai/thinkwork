@@ -1,0 +1,224 @@
+# Agent domain types: Agent, AgentCapability, AgentSkill,
+# AgentBudgetPolicy, and related enums/inputs.
+
+enum AgentType {
+  AGENT
+  GATEWAY
+  SUPERVISOR
+}
+
+enum AgentStatus {
+  IDLE
+  BUSY
+  OFFLINE
+  ERROR
+}
+
+type Agent {
+  id: ID!
+  tenantId: ID!
+  name: String!
+  slug: String
+  role: String
+  type: AgentType!
+  source: String
+  status: AgentStatus!
+  systemPrompt: String
+  reportsTo: Agent
+  reportsToId: ID
+  humanPairId: ID
+  humanPair: User
+  parentAgentId: ID
+  subAgents: [Agent!]
+  adapterType: String
+  adapterConfig: AWSJSON
+  runtimeConfig: AWSJSON
+  lastHeartbeatAt: AWSDateTime
+  avatarUrl: String
+  templateId: ID!
+  agentTemplate: AgentTemplate
+  version: Int!
+  capabilities: [AgentCapability!]!
+  skills: [AgentSkill!]!
+  budgetPolicy: AgentBudgetPolicy
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type AgentCapability {
+  id: ID!
+  agentId: ID!
+  tenantId: ID!
+  capability: String!
+  config: AWSJSON
+  enabled: Boolean!
+  createdAt: AWSDateTime!
+}
+
+type AgentSkill {
+  id: ID!
+  agentId: ID!
+  tenantId: ID!
+  skillId: String!
+  config: AWSJSON
+  permissions: AWSJSON
+  rateLimitRpm: Int
+  modelOverride: String
+  enabled: Boolean!
+  createdAt: AWSDateTime!
+}
+
+type AgentBudgetPolicy {
+  id: ID!
+  agentId: ID!
+  tenantId: ID!
+  scope: String!
+  period: String!
+  limitUsd: Float!
+  actionOnExceed: String!
+  enabled: Boolean!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+# --- Agent Email Capability (PRD-14) ---
+
+type AgentEmailCapability {
+  id: ID!
+  agentId: ID!
+  enabled: Boolean!
+  emailAddress: String
+  vanityAddress: String
+  allowedSenders: [String!]!
+  replyTokensEnabled: Boolean!
+  maxReplyTokenAgeDays: Int!
+  maxReplyTokenUses: Int!
+  rateLimitPerHour: Int!
+}
+
+# --- Agent API Keys (admin management) ---
+
+type AgentApiKey {
+  id: ID!
+  tenantId: ID!
+  agentId: ID!
+  name: String
+  keyPrefix: String!
+  lastUsedAt: AWSDateTime
+  revokedAt: AWSDateTime
+  createdAt: AWSDateTime!
+}
+
+type CreateAgentApiKeyResult {
+  apiKey: AgentApiKey!
+  plainTextKey: String!
+}
+
+# --- Inputs ---
+
+input CreateAgentInput {
+  tenantId: ID!
+  templateId: ID!
+  name: String!
+  role: String
+  type: AgentType
+  systemPrompt: String
+  reportsTo: ID
+  humanPairId: ID
+  parentAgentId: ID
+  adapterType: String
+  adapterConfig: AWSJSON
+  runtimeConfig: AWSJSON
+  avatarUrl: String
+}
+
+input UpdateAgentInput {
+  name: String
+  role: String
+  type: AgentType
+  templateId: ID
+  systemPrompt: String
+  reportsTo: ID
+  humanPairId: ID
+  parentAgentId: ID
+  adapterType: String
+  adapterConfig: AWSJSON
+  runtimeConfig: AWSJSON
+  avatarUrl: String
+}
+
+input AgentCapabilityInput {
+  capability: String!
+  config: AWSJSON
+  enabled: Boolean
+}
+
+input AgentSkillInput {
+  skillId: String!
+  config: AWSJSON
+  permissions: AWSJSON
+  rateLimitRpm: Int
+  modelOverride: String
+  enabled: Boolean
+}
+
+input AgentBudgetPolicyInput {
+  period: String!
+  limitUsd: Float!
+  actionOnExceed: String
+}
+
+input CreateAgentApiKeyInput {
+  agentId: ID!
+  name: String
+}
+
+# --- Query / Mutation extensions ---
+
+type ModelCatalogEntry {
+  id: ID!
+  modelId: String!
+  provider: String!
+  displayName: String!
+  inputCostPerMillion: Float
+  outputCostPerMillion: Float
+  contextWindow: Int
+  maxOutputTokens: Int
+  supportsVision: Boolean
+  supportsTools: Boolean
+}
+
+type AgentWorkspace {
+  slug: String!
+  name: String!
+  purpose: String
+}
+
+extend type Query {
+  agents(tenantId: ID!, status: AgentStatus, type: AgentType, humanPairId: ID, includeSystem: Boolean): [Agent!]!
+  agent(id: ID!): Agent
+  agentWorkspaces(agentId: ID!): [AgentWorkspace!]!
+  agentApiKeys(agentId: ID!): [AgentApiKey!]!
+  agentEmailCapability(agentId: ID!): AgentEmailCapability
+  modelCatalog: [ModelCatalogEntry!]!
+}
+
+extend type Mutation {
+  createAgent(input: CreateAgentInput!): Agent!
+  updateAgent(id: ID!, input: UpdateAgentInput!): Agent!
+  deleteAgent(id: ID!): Boolean!
+  updateAgentStatus(id: ID!, status: AgentStatus!): Agent!
+
+  setAgentCapabilities(agentId: ID!, capabilities: [AgentCapabilityInput!]!): [AgentCapability!]!
+  setAgentSkills(agentId: ID!, skills: [AgentSkillInput!]!): [AgentSkill!]!
+  setAgentBudgetPolicy(agentId: ID!, input: AgentBudgetPolicyInput!): AgentBudgetPolicy!
+  deleteAgentBudgetPolicy(agentId: ID!): Boolean!
+
+  createAgentApiKey(input: CreateAgentApiKeyInput!): CreateAgentApiKeyResult!
+  revokeAgentApiKey(id: ID!): AgentApiKey!
+
+  updateAgentEmailAllowlist(agentId: ID!, allowedSenders: [String!]!): AgentCapability!
+  toggleAgentEmailChannel(agentId: ID!, enabled: Boolean!): AgentCapability!
+  claimVanityEmailAddress(agentId: ID!, localPart: String!): AgentCapability!
+  releaseVanityEmailAddress(agentId: ID!): AgentCapability!
+}

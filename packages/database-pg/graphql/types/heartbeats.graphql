@@ -1,0 +1,108 @@
+# Thread turn types + agent wakeup requests.
+#
+# HeartbeatRun/HeartbeatRunEvent removed — replaced by ThreadTurn/ThreadTurnEvent
+# in scheduled-jobs.graphql.
+
+enum WakeupRequestStatus {
+  QUEUED
+  CLAIMED
+  COALESCED
+  SKIPPED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+type AgentWakeupRequest {
+  id: ID!
+  tenantId: ID!
+  agentId: ID!
+  agent: Agent
+  source: String!
+  triggerDetail: String
+  reason: String
+  payload: AWSJSON
+  status: String!
+  coalescedCount: Int!
+  idempotencyKey: String
+  requestedByActorType: String
+  requestedByActorId: String
+  runId: ID
+  requestedAt: AWSDateTime!
+  claimedAt: AWSDateTime
+  finishedAt: AWSDateTime
+  createdAt: AWSDateTime!
+}
+
+# --- Inputs ---
+
+input CreateWakeupRequestInput {
+  tenantId: ID!
+  agentId: ID!
+  source: String!
+  triggerDetail: String
+  reason: String
+  payload: AWSJSON
+  idempotencyKey: String
+  requestedByActorType: String
+  requestedByActorId: String
+}
+
+# --- Thread Turns (query/mutation) ---
+
+type ThreadTurn {
+  id: ID!
+  tenantId: ID!
+  triggerId: ID
+  agentId: ID
+  routineId: ID
+  invocationSource: String!
+  triggerDetail: String
+  wakeupRequestId: ID
+  threadId: ID
+  turnNumber: Int
+  status: String!
+  startedAt: AWSDateTime
+  finishedAt: AWSDateTime
+  error: String
+  errorCode: String
+  usageJson: AWSJSON
+  resultJson: AWSJSON
+  contextSnapshot: AWSJSON
+  sessionIdBefore: String
+  sessionIdAfter: String
+  externalRunId: String
+  triggerName: String
+  totalCost: Float
+  lastActivityAt: AWSDateTime
+  retryAttempt: Int
+  originTurnId: ID
+  createdAt: AWSDateTime!
+}
+
+type ThreadTurnEvent {
+  id: ID!
+  tenantId: ID!
+  runId: ID!
+  agentId: ID
+  seq: Int!
+  eventType: String!
+  stream: String
+  level: String
+  color: String
+  message: String
+  payload: AWSJSON
+  createdAt: AWSDateTime!
+}
+
+extend type Query {
+  threadTurns(tenantId: ID!, agentId: ID, routineId: ID, triggerId: ID, threadId: ID, status: String, limit: Int): [ThreadTurn!]!
+  threadTurn(id: ID!): ThreadTurn
+  threadTurnEvents(runId: ID!, afterSeq: Int, limit: Int): [ThreadTurnEvent!]!
+  queuedWakeups(tenantId: ID!): [AgentWakeupRequest!]!
+}
+
+extend type Mutation {
+  cancelThreadTurn(id: ID!): ThreadTurn!
+  createWakeupRequest(input: CreateWakeupRequestInput!): AgentWakeupRequest!
+}

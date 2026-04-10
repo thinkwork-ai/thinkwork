@@ -1,0 +1,54 @@
+# Recipes: saved executable MCP queries (PRD-26)
+
+type Recipe {
+  id: ID!
+  tenantId: ID!
+  agentId: ID
+  threadId: ID
+  title: String!
+  summary: String
+  server: String!
+  tool: String!
+  params: AWSJSON!
+  genuiType: String!
+  templates: AWSJSON
+  cachedResult: AWSJSON
+  lastRefreshed: AWSDateTime
+  lastError: String
+  sourceMessageId: ID
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input CreateRecipeInput {
+  tenantId: ID!
+  agentId: ID
+  threadId: ID
+  title: String!
+  summary: String
+  server: String!
+  tool: String!
+  params: AWSJSON!
+  genuiType: String!
+  templates: AWSJSON
+  sourceMessageId: ID
+}
+
+input UpdateRecipeInput {
+  title: String
+  summary: String
+  params: AWSJSON
+  templates: AWSJSON
+}
+
+extend type Query {
+  recipes(tenantId: ID!, threadId: ID, agentId: ID, limit: Int, cursor: String): [Recipe!]!
+  recipe(id: ID!): Recipe
+}
+
+extend type Mutation {
+  createRecipe(input: CreateRecipeInput!): Recipe!
+  updateRecipe(id: ID!, input: UpdateRecipeInput!): Recipe!
+  deleteRecipe(id: ID!): Boolean!
+  refreshGenUI(messageId: ID!, toolIndex: Int!): Message
+}

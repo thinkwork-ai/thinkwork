@@ -1,0 +1,77 @@
+# Message domain types: Message, MessageArtifact, pagination types,
+# and related enums/inputs.
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+  TOOL
+}
+
+type Message {
+  id: ID!
+  threadId: ID!
+  tenantId: ID!
+  role: MessageRole!
+  content: String
+  senderType: String
+  senderId: ID
+  toolCalls: AWSJSON
+  toolResults: AWSJSON
+  metadata: AWSJSON
+  tokenCount: Int
+  artifacts: [MessageArtifact!]!
+  durableArtifact: Artifact
+  createdAt: AWSDateTime!
+}
+
+type MessageArtifact {
+  id: ID!
+  messageId: ID!
+  threadId: ID!
+  tenantId: ID!
+  artifactType: String!
+  name: String
+  content: String
+  s3Key: String
+  mimeType: String
+  sizeBytes: Int
+  metadata: AWSJSON
+  createdAt: AWSDateTime!
+}
+
+# --- Pagination ---
+
+type MessageConnection {
+  edges: [MessageEdge!]!
+  pageInfo: PageInfo!
+}
+
+type MessageEdge {
+  node: Message!
+  cursor: String!
+}
+
+# --- Inputs ---
+
+input SendMessageInput {
+  threadId: ID!
+  role: MessageRole!
+  content: String
+  senderType: String
+  senderId: ID
+  toolCalls: AWSJSON
+  toolResults: AWSJSON
+  metadata: AWSJSON
+}
+
+# --- Query / Mutation extensions ---
+
+extend type Query {
+  messages(threadId: ID!, limit: Int, cursor: String): MessageConnection!
+}
+
+extend type Mutation {
+  sendMessage(input: SendMessageInput!): Message!
+  deleteMessage(id: ID!): Boolean!
+}

@@ -1,0 +1,144 @@
+# Core domain types: Tenant, User, TenantSettings, TenantMember, UserProfile
+
+type Tenant {
+  id: ID!
+  name: String!
+  slug: String!
+  plan: String!
+  issuePrefix: String
+  issueCounter: Int!
+  settings: TenantSettings
+  members: [TenantMember!]!
+  agents: [Agent!]!
+  hives: [Hive!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type TenantSettings {
+  id: ID!
+  tenantId: ID!
+  defaultModel: String
+  budgetMonthlyCents: Int
+  autoCloseThreadMinutes: Int
+  maxAgents: Int
+  features: AWSJSON
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type TenantMember {
+  id: ID!
+  tenantId: ID!
+  principalType: String!
+  principalId: ID!
+  role: String!
+  status: String!
+  user: User
+  agent: Agent
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type User {
+  id: ID!
+  tenantId: ID!
+  email: String!
+  name: String
+  image: String
+  phone: String
+  profile: UserProfile
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type UserProfile {
+  id: ID!
+  userId: ID!
+  tenantId: ID!
+  displayName: String
+  theme: String
+  notificationPreferences: AWSJSON
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+# --- Inputs ---
+
+input CreateTenantInput {
+  name: String!
+  slug: String!
+  plan: String
+}
+
+input UpdateTenantInput {
+  name: String
+  plan: String
+  issuePrefix: String
+}
+
+input UpdateTenantSettingsInput {
+  defaultModel: String
+  budgetMonthlyCents: Int
+  autoCloseThreadMinutes: Int
+  maxAgents: Int
+  features: AWSJSON
+}
+
+input AddTenantMemberInput {
+  principalType: String!
+  principalId: ID!
+  role: String
+}
+
+input UpdateTenantMemberInput {
+  role: String
+  status: String
+}
+
+input UpdateUserInput {
+  name: String
+  image: String
+  phone: String
+}
+
+input UpdateUserProfileInput {
+  displayName: String
+  theme: String
+  notificationPreferences: AWSJSON
+}
+
+# --- Query / Mutation extensions ---
+
+extend type Query {
+  tenant(id: ID!): Tenant
+  tenantBySlug(slug: String!): Tenant
+  me: User
+  user(id: ID!): User
+  tenantMembers(tenantId: ID!): [TenantMember!]!
+}
+
+input InviteMemberInput {
+  email: String!
+  name: String
+  role: String
+}
+
+extend type Mutation {
+  createTenant(input: CreateTenantInput!): Tenant!
+  updateTenant(id: ID!, input: UpdateTenantInput!): Tenant!
+  updateTenantSettings(tenantId: ID!, input: UpdateTenantSettingsInput!): TenantSettings!
+  addTenantMember(tenantId: ID!, input: AddTenantMemberInput!): TenantMember!
+  updateTenantMember(id: ID!, input: UpdateTenantMemberInput!): TenantMember!
+  removeTenantMember(id: ID!): Boolean!
+  inviteMember(tenantId: ID!, input: InviteMemberInput!): TenantMember!
+  updateUser(id: ID!, input: UpdateUserInput!): User!
+  updateUserProfile(userId: ID!, input: UpdateUserProfileInput!): UserProfile!
+  registerPushToken(input: RegisterPushTokenInput!): Boolean!
+  unregisterPushToken(token: String!): Boolean!
+}
+
+input RegisterPushTokenInput {
+  token: String!
+  platform: String!
+}
