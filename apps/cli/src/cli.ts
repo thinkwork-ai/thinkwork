@@ -15,7 +15,20 @@ program
   .description(
     "Thinkwork CLI — deploy, manage, and interact with your Thinkwork stack"
   )
-  .version(VERSION, "-v, --version", "Print the CLI version");
+  .version(VERSION, "-v, --version", "Print the CLI version")
+  .option(
+    "-p, --profile <name>",
+    "AWS profile to use (sets AWS_PROFILE for Terraform and AWS CLI)"
+  );
+
+// Apply --profile globally before any command runs
+program.hook("preAction", (_thisCommand, actionCommand) => {
+  const profile =
+    actionCommand.opts().profile ?? program.opts().profile;
+  if (profile) {
+    process.env.AWS_PROFILE = profile;
+  }
+});
 
 // Phase 1.5: deploy-focused commands
 registerPlanCommand(program);

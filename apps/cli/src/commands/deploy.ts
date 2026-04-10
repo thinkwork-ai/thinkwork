@@ -8,6 +8,7 @@ export function registerDeployCommand(program: Command): void {
   program
     .command("deploy")
     .description("Run terraform apply for a stage")
+    .option("-p, --profile <name>", "AWS profile")
     .requiredOption("-s, --stage <name>", "Deployment stage")
     .option("-c, --component <tier>", "Component tier (foundation|data|app|all)", "all")
     .option("-y, --yes", "Skip interactive confirmation (for CI)")
