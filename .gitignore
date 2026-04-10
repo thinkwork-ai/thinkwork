@@ -222,7 +222,7 @@ samconfig.toml
 *.zip
 !**/__fixtures__/**/*.zip
 lambda-build/
-artifacts/
+/artifacts/
 *.tar.gz
 !**/__fixtures__/**/*.tar.gz
 
