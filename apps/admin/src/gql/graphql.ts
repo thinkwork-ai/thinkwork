@@ -347,6 +347,13 @@ export enum ArtifactType {
   Report = 'REPORT'
 }
 
+export type BootstrapResult = {
+  __typename?: 'BootstrapResult';
+  isNew: Scalars['Boolean']['output'];
+  tenant: Tenant;
+  user: User;
+};
+
 export type BudgetPolicy = {
   __typename?: 'BudgetPolicy';
   actionOnExceed: Scalars['String']['output'];
@@ -498,6 +505,13 @@ export type CreateKnowledgeBaseInput = {
   embeddingModel?: InputMaybe<Scalars['String']['input']>;
   name: Scalars['String']['input'];
   tenantId: Scalars['ID']['input'];
+};
+
+export type CreateQuickActionInput = {
+  prompt: Scalars['String']['input'];
+  sortOrder?: InputMaybe<Scalars['Int']['input']>;
+  title: Scalars['String']['input'];
+  workspaceAgentId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 export type CreateRecipeInput = {
@@ -876,6 +890,7 @@ export type Mutation = {
   addThreadDependency: ThreadDependency;
   approveInboxItem: InboxItem;
   assignThreadLabel: ThreadLabelAssignment;
+  bootstrapUser: BootstrapResult;
   cancelInboxItem: InboxItem;
   cancelThreadTurn: ThreadTurn;
   checkoutThread: Thread;
@@ -887,6 +902,7 @@ export type Mutation = {
   createArtifact: Artifact;
   createInboxItem: InboxItem;
   createKnowledgeBase: KnowledgeBase;
+  createQuickAction: UserQuickAction;
   createRecipe: Recipe;
   createRoutine: Routine;
   createScheduledJob: ScheduledJob;
@@ -906,6 +922,7 @@ export type Mutation = {
   deleteKnowledgeBase: Scalars['Boolean']['output'];
   deleteMemoryRecord: Scalars['Boolean']['output'];
   deleteMessage: Scalars['Boolean']['output'];
+  deleteQuickAction: Scalars['Boolean']['output'];
   deleteRecipe: Scalars['Boolean']['output'];
   deleteRoutine: Scalars['Boolean']['output'];
   deleteRoutineTrigger: Scalars['Boolean']['output'];
@@ -935,6 +952,7 @@ export type Mutation = {
   removeTenantMember: Scalars['Boolean']['output'];
   removeThreadDependency: Scalars['Boolean']['output'];
   removeThreadLabel: Scalars['Boolean']['output'];
+  reorderQuickActions: Array<UserQuickAction>;
   requestRevision: InboxItem;
   resubmitInboxItem: InboxItem;
   revokeAgentApiKey: AgentApiKey;
@@ -959,6 +977,7 @@ export type Mutation = {
   updateArtifact: Artifact;
   updateKnowledgeBase: KnowledgeBase;
   updateMemoryRecord: Scalars['Boolean']['output'];
+  updateQuickAction: UserQuickAction;
   updateRecipe: Recipe;
   updateRoutine: Routine;
   updateTeam: Team;
@@ -1083,6 +1102,11 @@ export type MutationCreateKnowledgeBaseArgs = {
 };
 
 
+export type MutationCreateQuickActionArgs = {
+  input: CreateQuickActionInput;
+};
+
+
 export type MutationCreateRecipeArgs = {
   input: CreateRecipeInput;
 };
@@ -1175,6 +1199,11 @@ export type MutationDeleteMemoryRecordArgs = {
 
 
 export type MutationDeleteMessageArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type MutationDeleteQuickActionArgs = {
   id: Scalars['ID']['input'];
 };
 
@@ -1359,6 +1388,11 @@ export type MutationRemoveThreadLabelArgs = {
 };
 
 
+export type MutationReorderQuickActionsArgs = {
+  input: ReorderQuickActionsInput;
+};
+
+
 export type MutationRequestRevisionArgs = {
   id: Scalars['ID']['input'];
   input: RequestRevisionInput;
@@ -1493,6 +1527,12 @@ export type MutationUpdateKnowledgeBaseArgs = {
 export type MutationUpdateMemoryRecordArgs = {
   content: Scalars['String']['input'];
   memoryRecordId: Scalars['ID']['input'];
+};
+
+
+export type MutationUpdateQuickActionArgs = {
+  id: Scalars['ID']['input'];
+  input: UpdateQuickActionInput;
 };
 
 
@@ -1656,6 +1696,7 @@ export type Query = {
   threads: Array<Thread>;
   threadsPaged: ThreadsPage;
   user?: Maybe<User>;
+  userQuickActions: Array<UserQuickAction>;
   webhook?: Maybe<Webhook>;
   webhooks: Array<Webhook>;
 };
@@ -1994,6 +2035,11 @@ export type QueryUserArgs = {
 };
 
 
+export type QueryUserQuickActionsArgs = {
+  tenantId: Scalars['ID']['input'];
+};
+
+
 export type QueryWebhookArgs = {
   id: Scalars['ID']['input'];
 };
@@ -2039,6 +2085,15 @@ export type RejectInboxItemInput = {
 export type ReleaseThreadInput = {
   runId: Scalars['String']['input'];
   status?: InputMaybe<ThreadStatus>;
+};
+
+export type ReorderQuickActionItem = {
+  id: Scalars['ID']['input'];
+  sortOrder: Scalars['Int']['input'];
+};
+
+export type ReorderQuickActionsInput = {
+  items: Array<ReorderQuickActionItem>;
 };
 
 export type RequestRevisionInput = {
@@ -2602,6 +2657,13 @@ export type UpdateKnowledgeBaseInput = {
   name?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type UpdateQuickActionInput = {
+  prompt?: InputMaybe<Scalars['String']['input']>;
+  sortOrder?: InputMaybe<Scalars['Int']['input']>;
+  title?: InputMaybe<Scalars['String']['input']>;
+  workspaceAgentId?: InputMaybe<Scalars['ID']['input']>;
+};
+
 export type UpdateRecipeInput = {
   params?: InputMaybe<Scalars['AWSJSON']['input']>;
   summary?: InputMaybe<Scalars['String']['input']>;
@@ -2726,6 +2788,19 @@ export type UserProfile = {
   theme?: Maybe<Scalars['String']['output']>;
   updatedAt: Scalars['AWSDateTime']['output'];
   userId: Scalars['ID']['output'];
+};
+
+export type UserQuickAction = {
+  __typename?: 'UserQuickAction';
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  prompt: Scalars['String']['output'];
+  sortOrder: Scalars['Int']['output'];
+  tenantId: Scalars['ID']['output'];
+  title: Scalars['String']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+  userId: Scalars['ID']['output'];
+  workspaceAgentId?: Maybe<Scalars['ID']['output']>;
 };
 
 export enum WakeupRequestStatus {
