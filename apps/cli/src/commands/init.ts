@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { validateStage } from "../config.js";
 import { getAwsIdentity } from "../aws.js";
 import { saveEnvironment } from "../environments.js";
+import { ensurePrerequisites } from "../prerequisites.js";
 import { printHeader, printSuccess, printError, printWarning } from "../ui.js";
 import { createInterface } from "node:readline";
 import chalk from "chalk";
@@ -123,6 +124,12 @@ export function registerInitCommand(program: Command): void {
 
       const identity = getAwsIdentity();
       printHeader("init", opts.stage, identity);
+
+      // Auto-install AWS CLI + Terraform if missing
+      const prereqsOk = await ensurePrerequisites();
+      if (!prereqsOk) {
+        process.exit(1);
+      }
 
       if (!identity) {
         printError("AWS credentials not configured. Run `thinkwork login` first.");
