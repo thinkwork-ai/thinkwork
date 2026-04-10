@@ -87,7 +87,7 @@ def remember(fact: str, category: str = "general") -> str:
                      actor_id, category, fact[:80])
 
         # Parallel: also retain in Hindsight (PRD-41B spike)
-        import hindsight_client
+        import hs_urllib_client as hindsight_client
         if hindsight_client.is_available():
             try:
                 hs_bank = os.environ.get("_INSTANCE_ID", "") or actor_id
@@ -167,7 +167,7 @@ def recall(query: str, scope: str = "memory", strategy: str = "") -> str:
             logger.debug("KB retrieval in recall failed: %s", e)
 
     # Parallel: also recall from Hindsight (PRD-41B spike)
-    import hindsight_client
+    import hs_urllib_client as hindsight_client
     if hindsight_client.is_available() and scope in ("all", "graph", "memory"):
         try:
             hs_bank = os.environ.get("_INSTANCE_ID", "") or actor_id

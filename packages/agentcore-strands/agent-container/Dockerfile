@@ -41,7 +41,7 @@ COPY packages/agentcore/agent-container/install_skills.py .
 COPY packages/agentcore/agent-container/router_parser.py .
 COPY packages/agentcore/agent-container/context_parser.py .
 COPY packages/agentcore/agent-container/kb_search_server.py .
-COPY packages/agentcore/agent-container/hindsight_client.py .
+COPY packages/agentcore/agent-container/hindsight_client.py ./hs_urllib_client.py
 
 # Copy auth-agent module
 RUN mkdir -p /app/auth-agent
