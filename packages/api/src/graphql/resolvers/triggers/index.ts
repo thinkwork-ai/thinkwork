@@ -1,0 +1,22 @@
+import { routines_ as routines } from "./routines.query.js";
+import { routine } from "./routine.query.js";
+import { routineRun } from "./routineRun.query.js";
+import { routineRuns } from "./routineRuns.query.js";
+import { threadTurns_ as threadTurns } from "./threadTurns.query.js";
+import { threadTurn } from "./threadTurn.query.js";
+import { threadTurnEvents_ as threadTurnEvents } from "./threadTurnEvents.query.js";
+import { scheduledJobs_ as scheduledJobs } from "./scheduledJobs.query.js";
+import { scheduledJob } from "./scheduledJob.query.js";
+import { createRoutine } from "./createRoutine.mutation.js";
+import { updateRoutine } from "./updateRoutine.mutation.js";
+import { deleteRoutine } from "./deleteRoutine.mutation.js";
+import { triggerRoutineRun } from "./triggerRoutineRun.mutation.js";
+import { setRoutineTrigger } from "./setRoutineTrigger.mutation.js";
+import { deleteRoutineTrigger } from "./deleteRoutineTrigger.mutation.js";
+import { cancelThreadTurn } from "./cancelThreadTurn.mutation.js";
+import { createWakeupRequest } from "./createWakeupRequest.mutation.js";
+import { createScheduledJob } from "./createScheduledJob.mutation.js";
+import { queuedWakeups } from "./queuedWakeups.query.js";
+
+export const triggerQueries = { routines, routine, routineRun, routineRuns, threadTurns, threadTurn, threadTurnEvents, scheduledJobs, scheduledJob, queuedWakeups };
+export const triggerMutations = { createRoutine, updateRoutine, deleteRoutine, triggerRoutineRun, setRoutineTrigger, deleteRoutineTrigger, cancelThreadTurn, createWakeupRequest, createScheduledJob };

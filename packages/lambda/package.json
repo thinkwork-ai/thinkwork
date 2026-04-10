@@ -1,0 +1,17 @@
+{
+  "name": "@thinkwork/lambda",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@thinkwork/database-pg": "workspace:*",
+    "@octokit/auth-app": "^8.2.0",
+    "@octokit/rest": "^22.0.1",
+    "drizzle-orm": "^0.39.0",
+    "p-limit": "^6.2.0"
+  }
+}
