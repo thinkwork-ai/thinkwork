@@ -1,0 +1,21 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# Placeholder — will be fleshed out before v0.1.0 ships.
+# Expected responsibilities:
+# 1. Build Lambda artifacts and upload to S3
+# 2. Publish @thinkwork/cli to npm
+# 3. Publish Terraform modules to the registry
+# 4. Build and deploy the docs site
+# 5. Create a GitHub Release with notes
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "Release pipeline placeholder — tag ${{ github.ref_name }}"

@@ -1,0 +1,29 @@
+name: Feature Request
+description: Suggest a feature for Thinkwork
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening: Thinkwork is AWS-native by design. Requests that assume a non-AWS substrate will be declined.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the use case, not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How you'd like it to work.
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you've thought about or tried.
+    validations:
+      required: false
