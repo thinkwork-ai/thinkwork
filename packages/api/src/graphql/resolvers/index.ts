@@ -1,6 +1,6 @@
 import { agentQueries } from "./agents/index.js";
 import { coreQueries } from "./core/index.js";
-import { hiveQueries } from "./hives/index.js";
+import { teamQueries } from "./hives/index.js";
 import { threadQueries } from "./threads/index.js";
 import { inboxQueries } from "./inbox/index.js";
 import { triggerQueries } from "./triggers/index.js";
@@ -18,7 +18,7 @@ import { templateQueries, templateMutations } from "./templates/index.js";
 import { agentMutations } from "./agents/index.js";
 import { coreMutations } from "./core/index.js";
 import { messageMutations } from "./messages/index.js";
-import { hiveMutations } from "./hives/index.js";
+import { teamMutations } from "./hives/index.js";
 import { triggerMutations } from "./triggers/index.js";
 import { threadMutations } from "./threads/index.js";
 import { inboxMutations } from "./inbox/index.js";
@@ -32,7 +32,7 @@ export const queryResolvers: Record<string, any> = {
 	_empty: () => null,
 	...agentQueries,
 	...coreQueries,
-	...hiveQueries,
+	...teamQueries,
 	...threadQueries,
 	...inboxQueries,
 	...triggerQueries,
@@ -54,7 +54,7 @@ export const mutationResolvers: Record<string, any> = {
 	...agentMutations,
 	...coreMutations,
 	...messageMutations,
-	...hiveMutations,
+	...teamMutations,
 	...triggerMutations,
 	...threadMutations,
 	...inboxMutations,

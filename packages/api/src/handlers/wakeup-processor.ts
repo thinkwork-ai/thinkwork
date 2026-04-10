@@ -275,6 +275,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 					skillId: "agent-email-send",
 					s3Key: "skills/catalog/agent-email-send",
 					secretRef: undefined,
+					mcpServer: undefined,
 					envOverrides: {
 						AGENT_EMAIL_ADDRESS: emailAddress,
 						AGENT_ID: wakeup.agent_id,
@@ -489,6 +490,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 				skillId: "agent-thread-management",
 				s3Key: "skills/catalog/agent-thread-management",
 				secretRef: undefined,
+				mcpServer: undefined,
 				envOverrides: {
 					MANIFLOW_API_URL: APPSYNC_ENDPOINT,
 					MANIFLOW_API_SECRET: APPSYNC_API_KEY,
@@ -1005,7 +1007,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 					await notifyNewMessage({
 						messageId: assistantMsg.id,
 						threadId: runThreadId,
-				traceId,
 						tenantId: wakeup.tenant_id,
 						role: "assistant",
 						content: responseText,

@@ -439,7 +439,7 @@ async function approveJoinRequest(
 
 	// Find the CEO / root agent to set as reportsTo
 	const existingAgents = await db
-		.select({ id: agents.id, reports_to: agents.reports_to, status: agents.status })
+		.select({ id: agents.id, reports_to: agents.reports_to, status: agents.status, template_id: agents.template_id })
 		.from(agents)
 		.where(eq(agents.tenant_id, tenantId));
 
@@ -452,6 +452,7 @@ async function approveJoinRequest(
 		.values({
 			tenant_id: tenantId,
 			name: jr.agent_name,
+			template_id: (jr as any).template_id || ceoAgent?.template_id,
 			type: "agent",
 			status: "idle",
 			adapter_type: jr.adapter_type,

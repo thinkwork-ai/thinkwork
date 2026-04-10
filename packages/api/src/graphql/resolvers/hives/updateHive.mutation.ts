@@ -1,7 +1,7 @@
 import type { GraphQLContext } from "../../context.js";
 import {
 	db, eq,
-	hives,
+	teams,
 	snakeToCamel,
 } from "../../utils.js";
 
@@ -14,7 +14,7 @@ export const updateHive = async (_parent: any, args: any, ctx: GraphQLContext) =
 	if (i.status !== undefined) updates.status = i.status;
 	if (i.budgetMonthlyCents !== undefined) updates.budget_monthly_cents = i.budgetMonthlyCents;
 	if (i.metadata !== undefined) updates.metadata = JSON.parse(i.metadata);
-	const [row] = await db.update(hives).set(updates).where(eq(hives.id, args.id)).returning();
-	if (!row) throw new Error("Hive not found");
+	const [row] = await db.update(teams).set(updates).where(eq(teams.id, args.id)).returning();
+	if (!row) throw new Error("Team not found");
 	return snakeToCamel(row);
 };

@@ -8,7 +8,7 @@ export const upsertWorkflowConfig = async (_parent: any, args: any, ctx: GraphQL
 	const i = args.input;
 	const values: Record<string, unknown> = {
 		tenant_id: args.tenantId,
-		hive_id: i.hiveId || null,
+		team_id: i.teamId || null,
 		updated_at: new Date(),
 	};
 	const parseJsonField = (v: unknown) => {
@@ -29,15 +29,15 @@ export const upsertWorkflowConfig = async (_parent: any, args: any, ctx: GraphQL
 	if (i.source !== undefined) values.source = i.source;
 	if (i.sourceRef !== undefined) values.source_ref = i.sourceRef;
 
-	const hiveId = i.hiveId || null;
-	const onConflict = hiveId
-		? sql`(tenant_id, hive_id) WHERE hive_id IS NOT NULL`
-		: sql`(tenant_id) WHERE hive_id IS NULL`;
+	const teamId = i.teamId || null;
+	const onConflict = teamId
+		? sql`(tenant_id, team_id) WHERE team_id IS NOT NULL`
+		: sql`(tenant_id) WHERE team_id IS NULL`;
 	const result = await db.execute(sql`
-		INSERT INTO workflow_configs (tenant_id, hive_id, dispatch, concurrency, retry, turn_loop, workspace, stall_detection, orchestration, session_compaction, prompt_template, source, source_ref)
+		INSERT INTO workflow_configs (tenant_id, team_id, dispatch, concurrency, retry, turn_loop, workspace, stall_detection, orchestration, session_compaction, prompt_template, source, source_ref)
 		VALUES (
 			${args.tenantId}::uuid,
-			${hiveId}::uuid,
+			${teamId}::uuid,
 			${values.dispatch ? JSON.stringify(values.dispatch) : null}::jsonb,
 			${values.concurrency ? JSON.stringify(values.concurrency) : null}::jsonb,
 			${values.retry ? JSON.stringify(values.retry) : null}::jsonb,

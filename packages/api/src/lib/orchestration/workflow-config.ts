@@ -118,7 +118,7 @@ function deepMerge<T>(
 
 export async function resolveWorkflowConfig(
 	tenantId: string,
-	hiveId?: string,
+	teamId?: string,
 ): Promise<ResolvedWorkflowConfig> {
 	try {
 		// Query tenant default + optional hive override in one shot
@@ -126,11 +126,11 @@ export async function resolveWorkflowConfig(
 			SELECT
 				dispatch, concurrency, retry, turn_loop, workspace,
 				stall_detection, orchestration, session_compaction,
-				prompt_template, hive_id
+				prompt_template, team_id
 			FROM workflow_configs
 			WHERE tenant_id = ${tenantId}::uuid
-			  AND (hive_id IS NULL ${hiveId ? sql`OR hive_id = ${hiveId}::uuid` : sql``})
-			ORDER BY hive_id NULLS FIRST
+			  AND (team_id IS NULL ${teamId ? sql`OR team_id = ${teamId}::uuid` : sql``})
+			ORDER BY team_id NULLS FIRST
 		`);
 
 		const rows = (result.rows || []) as Array<Record<string, unknown>>;

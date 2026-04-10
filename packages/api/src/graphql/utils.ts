@@ -24,9 +24,9 @@ import {
 	messages,
 	messageArtifacts,
 	// Hives
-	hives,
-	hiveAgents,
-	hiveUsers,
+	teams,
+	teamAgents,
+	teamUsers,
 	// Routines
 	routines,
 	// Wakeup queue
@@ -80,7 +80,7 @@ export {
 	tenants, tenantMembers, tenantSettings, users, userProfiles,
 	agents, agentCapabilities, agentSkills, modelCatalog,
 	messages, messageArtifacts,
-	hives, hiveAgents, hiveUsers,
+	teams, teamAgents, teamUsers,
 	routines, agentWakeupRequests,
 	scheduledJobs, threadTurns, threadTurnEvents,
 	threads, threadComments, threadLabels, threadAttachments, threadLabelAssignments,

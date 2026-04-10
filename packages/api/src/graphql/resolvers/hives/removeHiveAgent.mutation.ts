@@ -1,16 +1,16 @@
 import type { GraphQLContext } from "../../context.js";
 import {
 	db, eq, and,
-	hiveAgents,
+	teamAgents,
 } from "../../utils.js";
 
 export const removeHiveAgent = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const [row] = await db
-		.delete(hiveAgents)
+		.delete(teamAgents)
 		.where(
 			and(
-				eq(hiveAgents.hive_id, args.hiveId),
-				eq(hiveAgents.agent_id, args.agentId),
+				eq(teamAgents.team_id, args.teamId),
+				eq(teamAgents.agent_id, args.agentId),
 			),
 		)
 		.returning();

@@ -100,11 +100,11 @@ export async function createAgentFromTemplate(_parent: any, args: any, _ctx: Gra
 	}
 
 	// 8. Add to hive if specified
-	if (i.hiveId) {
+	if (i.teamId) {
 		try {
-			const { hiveAgents: hiveAgentsTable } = await import("../../utils.js");
-			await db.insert(hiveAgentsTable).values({
-				hive_id: i.hiveId,
+			const { teamAgents: teamAgentsTable } = await import("../../utils.js");
+			await db.insert(teamAgentsTable).values({
+				team_id: i.teamId,
 				agent_id: agent.id,
 				tenant_id: agentTemplate.tenant_id!,
 			});

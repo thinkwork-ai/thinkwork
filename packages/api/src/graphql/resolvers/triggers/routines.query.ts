@@ -7,7 +7,7 @@ import {
 
 export const routines_ = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const conditions = [eq(routines.tenant_id, args.tenantId)];
-	if (args.hiveId) conditions.push(eq(routines.hive_id, args.hiveId));
+	if (args.teamId) conditions.push(eq(routines.team_id, args.teamId));
 	if (args.agentId) conditions.push(eq(routines.agent_id, args.agentId));
 	if (args.status) conditions.push(eq(routines.status, args.status.toLowerCase()));
 	const rows = await db

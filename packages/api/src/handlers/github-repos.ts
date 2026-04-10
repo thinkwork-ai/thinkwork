@@ -19,7 +19,7 @@ import {
 	repoExists,
 	commitFiles,
 	type GitHubWorkspaceConfig,
-} from "../../../lambda/github-workspace";
+} from "@thinkwork/lambda/github-workspace";
 
 // ---------------------------------------------------------------------------
 // Router

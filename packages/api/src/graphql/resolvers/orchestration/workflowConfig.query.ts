@@ -8,7 +8,7 @@ export const workflowConfig = async (_parent: any, args: any, ctx: GraphQLContex
 	const result = await db.execute(sql`
 		SELECT * FROM workflow_configs
 		WHERE tenant_id = ${args.tenantId}::uuid
-		  AND ${args.hiveId ? sql`hive_id = ${args.hiveId}::uuid` : sql`hive_id IS NULL`}
+		  AND ${args.teamId ? sql`team_id = ${args.teamId}::uuid` : sql`team_id IS NULL`}
 		LIMIT 1
 	`);
 	const row = (result.rows || [])[0] as Record<string, unknown> | undefined;

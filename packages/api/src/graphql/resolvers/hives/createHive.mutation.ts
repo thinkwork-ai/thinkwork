@@ -1,14 +1,14 @@
 import type { GraphQLContext } from "../../context.js";
 import {
 	db,
-	hives,
+	teams,
 	snakeToCamel, generateSlug,
 } from "../../utils.js";
 
 export const createHive = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const i = args.input;
 	const [row] = await db
-		.insert(hives)
+		.insert(teams)
 		.values({
 			tenant_id: i.tenantId,
 			name: i.name,

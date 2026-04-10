@@ -4,7 +4,7 @@ import type {
 } from "aws-lambda";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
-import { hives } from "@thinkwork/database-pg/schema";
+import { teams } from "@thinkwork/database-pg/schema";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
 import { json, error, notFound, unauthorized } from "../lib/response.js";
 
@@ -79,17 +79,17 @@ export async function handler(
 async function listHives(tenantId: string) {
 	const rows = await db
 		.select()
-		.from(hives)
-		.where(eq(hives.tenant_id, tenantId));
+		.from(teams)
+		.where(eq(teams.tenant_id, tenantId));
 	return json(rows);
 }
 
 async function getHive(tenantId: string, id: string) {
 	const [row] = await db
 		.select()
-		.from(hives)
-		.where(and(eq(hives.id, id), eq(hives.tenant_id, tenantId)));
-	if (!row) return notFound("Hive not found");
+		.from(teams)
+		.where(and(eq(teams.id, id), eq(teams.tenant_id, tenantId)));
+	if (!row) return notFound("Team not found");
 	return json(row);
 }
 
@@ -101,7 +101,7 @@ async function createHive(
 	if (!body.name) return error("name is required");
 
 	const [row] = await db
-		.insert(hives)
+		.insert(teams)
 		.values({
 			tenant_id: tenantId,
 			name: body.name as string,
@@ -139,20 +139,20 @@ async function updateHive(
 	}
 
 	const [row] = await db
-		.update(hives)
+		.update(teams)
 		.set(updates)
-		.where(and(eq(hives.id, id), eq(hives.tenant_id, tenantId)))
+		.where(and(eq(teams.id, id), eq(teams.tenant_id, tenantId)))
 		.returning();
-	if (!row) return notFound("Hive not found");
+	if (!row) return notFound("Team not found");
 	return json(row);
 }
 
 async function archiveHive(tenantId: string, id: string) {
 	const [row] = await db
-		.update(hives)
+		.update(teams)
 		.set({ status: "archived", updated_at: new Date() })
-		.where(and(eq(hives.id, id), eq(hives.tenant_id, tenantId)))
+		.where(and(eq(teams.id, id), eq(teams.tenant_id, tenantId)))
 		.returning();
-	if (!row) return notFound("Hive not found");
+	if (!row) return notFound("Team not found");
 	return json(row);
 }

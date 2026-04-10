@@ -178,7 +178,8 @@ describe("identifier generation", () => {
 	});
 
 	it("defaults to MF when prefix is null", () => {
-		const prefix = null || "MF";
+		const nullPrefix: string | null = null;
+		const prefix = nullPrefix || "MF";
 		const counter = 100;
 		const identifier = `${prefix}-${counter}`;
 		expect(identifier).toBe("MF-100");

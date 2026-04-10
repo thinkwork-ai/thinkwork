@@ -1,17 +1,17 @@
 import type { GraphQLContext } from "../../context.js";
 import {
 	db, eq,
-	hives, hiveAgents, hiveUsers,
+	teams, teamAgents, teamUsers,
 	snakeToCamel,
 } from "../../utils.js";
 
 export const hive = async (_parent: any, args: any, ctx: GraphQLContext) => {
-	const [row] = await db.select().from(hives).where(eq(hives.id, args.id));
+	const [row] = await db.select().from(teams).where(eq(teams.id, args.id));
 	if (!row) return null;
-	const hiveId = row.id;
+	const teamId = row.id;
 	const [agentRows, userRows] = await Promise.all([
-		db.select().from(hiveAgents).where(eq(hiveAgents.hive_id, hiveId)),
-		db.select().from(hiveUsers).where(eq(hiveUsers.hive_id, hiveId)),
+		db.select().from(teamAgents).where(eq(teamAgents.team_id, teamId)),
+		db.select().from(teamUsers).where(eq(teamUsers.team_id, teamId)),
 	]);
 
 	// Resolve nested agent and user objects via DataLoaders

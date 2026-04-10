@@ -111,7 +111,7 @@ async function migrateSubAgentsToWorkspaces(): Promise<number> {
       name: agents.name,
       slug: agents.slug,
       role: agents.role,
-      model: agents.model,
+      template_id: agents.template_id,
       parent_agent_id: agents.parent_agent_id,
     })
     .from(agents)
@@ -170,7 +170,7 @@ async function migrateSubAgentsToWorkspaces(): Promise<number> {
     const contextMd = generateContextMd({
       name: sub.name,
       role: sub.role || `Specialized in ${sub.name}`,
-      model: sub.model || "",
+      model: "",
       skills,
     });
 

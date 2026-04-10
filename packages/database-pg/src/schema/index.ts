@@ -2,8 +2,8 @@
  * Thinkwork database schema definitions.
  *
  * v0.1 — only tables needed for the Thinkwork launch.
- * Cut tables (autoresearch, eval, ontology, places, quick-actions,
- * workflow-configs, usage) stay in maniflow.
+ * Cut tables (autoresearch, eval, ontology, places,
+ * workflow-configs, usage-records) stay in maniflow.
  */
 
 export * from "./core";
@@ -29,3 +29,5 @@ export * from "./recipes";
 export * from "./skills";
 export * from "./guardrails";
 export * from "./agent-templates";
+export * from "./activity-log";
+export * from "./quick-actions";

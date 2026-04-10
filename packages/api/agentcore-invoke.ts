@@ -162,8 +162,8 @@ async function invokeAgentCore(
   const bodyBytes =
     typeof response.response?.transformToByteArray === "function"
       ? await response.response.transformToByteArray()
-      : typeof response.response?.read === "function"
-        ? response.response.read()
+      : typeof (response.response as any)?.read === "function"
+        ? (response.response as any).read()
         : response.response;
 
   const bodyStr =

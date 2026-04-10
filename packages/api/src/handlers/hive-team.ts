@@ -5,8 +5,8 @@ import type {
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
-	hiveAgents,
-	hiveUsers,
+	teamAgents,
+	teamUsers,
 } from "@thinkwork/database-pg/schema";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
 import { json, error, notFound, unauthorized } from "../lib/response.js";
@@ -28,7 +28,7 @@ function parsePath(rawPath: string) {
 		.split("/")
 		.filter(Boolean);
 	return {
-		hiveId: segments[0] || null,
+		teamId: segments[0] || null,
 		sub: segments[1] || null, // "agents" | "users"
 		subId: segments[2] || null,
 	};
@@ -57,16 +57,16 @@ export async function handler(
 	if (!tenantId) return error("Missing x-tenant-id header");
 
 	const method = event.requestContext.http.method;
-	const { hiveId, sub, subId } = parsePath(event.rawPath);
+	const { teamId, sub, subId } = parsePath(event.rawPath);
 
-	if (!hiveId) return error("Missing hive ID");
+	if (!teamId) return error("Missing hive ID");
 
 	try {
 		switch (sub) {
 			case "agents":
-				return handleAgents(method, tenantId, hiveId, subId, event);
+				return handleAgents(method, tenantId, teamId, subId, event);
 			case "users":
-				return handleUsers(method, tenantId, hiveId, subId, event);
+				return handleUsers(method, tenantId, teamId, subId, event);
 			default:
 				return notFound("Route not found");
 		}
@@ -83,7 +83,7 @@ export async function handler(
 async function handleAgents(
 	method: string,
 	tenantId: string,
-	hiveId: string,
+	teamId: string,
 	subId: string | null,
 	event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
@@ -91,11 +91,11 @@ async function handleAgents(
 		case "GET": {
 			const rows = await db
 				.select()
-				.from(hiveAgents)
+				.from(teamAgents)
 				.where(
 					and(
-						eq(hiveAgents.hive_id, hiveId),
-						eq(hiveAgents.tenant_id, tenantId),
+						eq(teamAgents.team_id, teamId),
+						eq(teamAgents.tenant_id, tenantId),
 					),
 				);
 			return json(rows);
@@ -104,9 +104,9 @@ async function handleAgents(
 			const body = parseBody(event);
 			if (!body.agent_id) return error("agent_id is required");
 			const [row] = await db
-				.insert(hiveAgents)
+				.insert(teamAgents)
 				.values({
-					hive_id: hiveId,
+					team_id: teamId,
 					agent_id: body.agent_id as string,
 					tenant_id: tenantId,
 					role: (body.role as string) ?? "member",
@@ -120,13 +120,13 @@ async function handleAgents(
 			const body = parseBody(event);
 			if (!body.role) return error("role is required");
 			const [row] = await db
-				.update(hiveAgents)
+				.update(teamAgents)
 				.set({ role: body.role as string })
 				.where(
 					and(
-						eq(hiveAgents.agent_id, subId),
-						eq(hiveAgents.hive_id, hiveId),
-						eq(hiveAgents.tenant_id, tenantId),
+						eq(teamAgents.agent_id, subId),
+						eq(teamAgents.team_id, teamId),
+						eq(teamAgents.tenant_id, tenantId),
 					),
 				)
 				.returning();
@@ -136,12 +136,12 @@ async function handleAgents(
 		case "DELETE": {
 			if (!subId) return error("Missing agent ID");
 			const [row] = await db
-				.delete(hiveAgents)
+				.delete(teamAgents)
 				.where(
 					and(
-						eq(hiveAgents.agent_id, subId),
-						eq(hiveAgents.hive_id, hiveId),
-						eq(hiveAgents.tenant_id, tenantId),
+						eq(teamAgents.agent_id, subId),
+						eq(teamAgents.team_id, teamId),
+						eq(teamAgents.tenant_id, tenantId),
 					),
 				)
 				.returning();
@@ -160,7 +160,7 @@ async function handleAgents(
 async function handleUsers(
 	method: string,
 	tenantId: string,
-	hiveId: string,
+	teamId: string,
 	subId: string | null,
 	event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
@@ -168,11 +168,11 @@ async function handleUsers(
 		case "GET": {
 			const rows = await db
 				.select()
-				.from(hiveUsers)
+				.from(teamUsers)
 				.where(
 					and(
-						eq(hiveUsers.hive_id, hiveId),
-						eq(hiveUsers.tenant_id, tenantId),
+						eq(teamUsers.team_id, teamId),
+						eq(teamUsers.tenant_id, tenantId),
 					),
 				);
 			return json(rows);
@@ -181,9 +181,9 @@ async function handleUsers(
 			const body = parseBody(event);
 			if (!body.user_id) return error("user_id is required");
 			const [row] = await db
-				.insert(hiveUsers)
+				.insert(teamUsers)
 				.values({
-					hive_id: hiveId,
+					team_id: teamId,
 					user_id: body.user_id as string,
 					tenant_id: tenantId,
 					role: (body.role as string) ?? "member",
@@ -197,13 +197,13 @@ async function handleUsers(
 			const body = parseBody(event);
 			if (!body.role) return error("role is required");
 			const [row] = await db
-				.update(hiveUsers)
+				.update(teamUsers)
 				.set({ role: body.role as string })
 				.where(
 					and(
-						eq(hiveUsers.user_id, subId),
-						eq(hiveUsers.hive_id, hiveId),
-						eq(hiveUsers.tenant_id, tenantId),
+						eq(teamUsers.user_id, subId),
+						eq(teamUsers.team_id, teamId),
+						eq(teamUsers.tenant_id, tenantId),
 					),
 				)
 				.returning();
@@ -213,12 +213,12 @@ async function handleUsers(
 		case "DELETE": {
 			if (!subId) return error("Missing user ID");
 			const [row] = await db
-				.delete(hiveUsers)
+				.delete(teamUsers)
 				.where(
 					and(
-						eq(hiveUsers.user_id, subId),
-						eq(hiveUsers.hive_id, hiveId),
-						eq(hiveUsers.tenant_id, tenantId),
+						eq(teamUsers.user_id, subId),
+						eq(teamUsers.team_id, teamId),
+						eq(teamUsers.tenant_id, tenantId),
 					),
 				)
 				.returning();

@@ -10,7 +10,7 @@ import {
 	getOctokit,
 	syncPushToS3,
 	type GitHubWorkspaceConfig,
-} from "../lambda/github-workspace";
+} from "@thinkwork/lambda/github-workspace";
 
 interface APIGatewayProxyEventV2 {
 	headers?: Record<string, string | undefined>;
