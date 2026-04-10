@@ -8,6 +8,7 @@ import { registerDestroyCommand } from "./commands/destroy.js";
 import { registerDoctorCommand } from "./commands/doctor.js";
 import { registerOutputsCommand } from "./commands/outputs.js";
 import { registerConfigCommand } from "./commands/config.js";
+import { registerBootstrapCommand } from "./commands/bootstrap.js";
 
 const program = new Command();
 
@@ -38,6 +39,7 @@ registerDestroyCommand(program);
 registerDoctorCommand(program);
 registerOutputsCommand(program);
 registerConfigCommand(program);
+registerBootstrapCommand(program);
 
 // Phase 7 will add: init, agents, threads, skills
 
