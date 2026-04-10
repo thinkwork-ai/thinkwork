@@ -6,7 +6,7 @@ import { eq, and } from "drizzle-orm";
 import { schema } from "@thinkwork/database-pg";
 import { db } from "../lib/db.js";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
-import { json, error, notFound, unauthorized } from "../lib/response.js";
+import { handleCors, json, error, notFound, unauthorized } from "../lib/response.js";
 
 const { tenants, tenantMembers, tenantSettings } = schema;
 

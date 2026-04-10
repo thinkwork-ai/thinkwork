@@ -19,7 +19,7 @@ import {
 	agentWakeupRequests,
 } from "@thinkwork/database-pg/schema";
 import { db } from "../lib/db.js";
-import { json, error, notFound } from "../lib/response.js";
+import { handleCors, json, error, notFound } from "../lib/response.js";
 import { ensureThreadForWork } from "../lib/thread-helpers.js";
 
 // ---------------------------------------------------------------------------

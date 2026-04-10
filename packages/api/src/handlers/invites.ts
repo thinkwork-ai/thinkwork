@@ -27,7 +27,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import { db } from "../lib/db.js";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
-import { json, error, notFound, unauthorized, forbidden } from "../lib/response.js";
+import { handleCors, json, error, notFound, unauthorized, forbidden } from "../lib/response.js";
 
 // ---------------------------------------------------------------------------
 // Token helpers (Paperclip-aligned)

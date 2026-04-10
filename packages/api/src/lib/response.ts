@@ -1,4 +1,27 @@
-import type { APIGatewayProxyStructuredResultV2 } from "aws-lambda";
+import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
+
+const CORS_HEADERS = {
+	"Access-Control-Allow-Origin": "*",
+	"Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+	"Access-Control-Allow-Headers": "Content-Type, Authorization, x-tenant-id, x-api-key",
+	"Access-Control-Max-Age": "3600",
+};
+
+/** Returns true + sends 204 if this is an OPTIONS preflight. Use at top of handler. */
+export function handleCors(event: APIGatewayProxyEventV2): APIGatewayProxyStructuredResultV2 | null {
+	if (event.requestContext.http.method === "OPTIONS") {
+		return cors();
+	}
+	return null;
+}
+
+export function cors(): APIGatewayProxyStructuredResultV2 {
+	return {
+		statusCode: 204,
+		headers: CORS_HEADERS,
+		body: "",
+	};
+}
 
 export function json(
 	body: unknown,
@@ -6,7 +29,7 @@ export function json(
 ): APIGatewayProxyStructuredResultV2 {
 	return {
 		statusCode,
-		headers: { "Content-Type": "application/json" },
+		headers: { "Content-Type": "application/json", ...CORS_HEADERS },
 		body: JSON.stringify(body),
 	};
 }

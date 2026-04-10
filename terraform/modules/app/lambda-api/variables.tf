@@ -114,6 +114,19 @@ variable "lambda_zips_dir" {
   default     = ""
 }
 
+variable "db_password" {
+  description = "Database password (used to construct DATABASE_URL for Lambda)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "db_username" {
+  description = "Database username"
+  type        = string
+  default     = "thinkwork_admin"
+}
+
 variable "api_auth_secret" {
   description = "Shared secret for inter-service API authentication"
   type        = string

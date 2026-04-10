@@ -1,6 +1,9 @@
-# Base schema definition for AWS AppSync.
-# Type files in types/ extend Query, Mutation, and Subscription.
-# All .graphql files are concatenated by infra/appsync.ts before deployment.
+# Auto-generated AppSync subscription-only schema.
+# DO NOT EDIT — regenerate with: pnpm schema:build
+#
+# Source: packages/database-pg/graphql/types/subscriptions.graphql
+
+scalar AWSDateTime
 
 schema {
   query: Query
@@ -8,25 +11,7 @@ schema {
   subscription: Subscription
 }
 
-scalar AWSDateTime
-scalar AWSJSON
-scalar AWSURL
-
-# Shared pagination type used across domains
-type PageInfo {
-  hasNextPage: Boolean!
-  endCursor: String
-}
-
 type Query {
-  _empty: String
-}
-
-type Mutation {
-  _empty: String
-}
-
-type Subscription {
   _empty: String
 }
 
@@ -109,7 +94,8 @@ type OrgUpdateEvent {
 # to the mutation(s) whose return type matches the event payload.
 # ────────────────────────────────────────────────────────────────────
 
-extend type Mutation {
+type Mutation {
+  _empty: String
   notifyAgentStatus(
     agentId: ID!
     tenantId: ID!
@@ -166,11 +152,8 @@ extend type Mutation {
   ): OrgUpdateEvent
 }
 
-# ────────────────────────────────────────────────────────────────────
-# Subscriptions
-# ────────────────────────────────────────────────────────────────────
-
-extend type Subscription {
+type Subscription {
+  _empty: String
   onAgentStatusChanged(tenantId: ID!): AgentStatusEvent
     @aws_subscribe(mutations: ["notifyAgentStatus"])
 

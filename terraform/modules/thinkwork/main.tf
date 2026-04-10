@@ -157,6 +157,7 @@ module "api" {
 
   lambda_zips_dir = var.lambda_zips_dir
   api_auth_secret = var.api_auth_secret
+  db_password     = var.db_password
 }
 
 module "agentcore" {
