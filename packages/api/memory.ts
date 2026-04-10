@@ -42,19 +42,11 @@ function authToken(headers?: Record<string, string | undefined>) {
 }
 
 async function queryHindsightDB(sqlText: string, params: any[]): Promise<any[]> {
-  const { RDSDataClient, ExecuteStatementCommand } = await import("@aws-sdk/client-rds-data");
-  const rds = new RDSDataClient({ region: process.env.AWS_REGION || "us-east-1" });
-
-  const result = await rds.send(
-    new ExecuteStatementCommand({
-      resourceArn: process.env.DATABASE_CLUSTER_ARN!,
-      secretArn: process.env.DATABASE_SECRET_ARN!,
-      database: process.env.DATABASE_NAME || "thinkwork",
-      sql: sqlText,
-      parameters: params,
-    }),
-  );
-  return result.records ?? [];
+  const { getDb } = await import("@thinkwork/database-pg");
+  const db = getDb();
+  const { sql } = await import("drizzle-orm");
+  const result = await (db as any).execute(sql.raw(sqlText));
+  return result.rows ?? [];
 }
 
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {

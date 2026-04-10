@@ -168,6 +168,7 @@ module "api" {
   lambda_artifact_prefix = var.lambda_artifact_prefix
 
   db_cluster_arn        = module.database.db_cluster_arn
+  db_cluster_endpoint   = module.database.cluster_endpoint
   graphql_db_secret_arn = module.database.graphql_db_secret_arn
   database_name         = var.database_name
 

@@ -13,8 +13,8 @@ locals {
   # Common environment variables shared by all API handlers
   common_env = {
     STAGE                  = var.stage
-    DATABASE_CLUSTER_ARN   = var.db_cluster_arn
     DATABASE_SECRET_ARN    = var.graphql_db_secret_arn
+    DATABASE_HOST          = var.db_cluster_endpoint
     DATABASE_NAME          = var.database_name
     BUCKET_NAME                = var.bucket_name
     USER_POOL_ID               = var.user_pool_id

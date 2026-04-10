@@ -14,6 +14,7 @@ import { updateUserProfile } from "./updateUserProfile.mutation.js";
 import { inviteMember } from "./inviteMember.mutation.js";
 import { registerPushToken } from "./registerPushToken.mutation.js";
 import { unregisterPushToken } from "./unregisterPushToken.mutation.js";
+import { bootstrapUser } from "./bootstrapUser.mutation.js";
 
 export const coreQueries = { tenant, tenantBySlug, me, user, tenantMembers };
-export const coreMutations = { createTenant, updateTenant, updateTenantSettings, addTenantMember, updateTenantMember, removeTenantMember, inviteMember, updateUser, updateUserProfile, registerPushToken, unregisterPushToken };
+export const coreMutations = { bootstrapUser, createTenant, updateTenant, updateTenantSettings, addTenantMember, updateTenantMember, removeTenantMember, inviteMember, updateUser, updateUserProfile, registerPushToken, unregisterPushToken };

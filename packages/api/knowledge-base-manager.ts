@@ -51,10 +51,10 @@ async function resolveKbInfo(kbId: string) {
 }
 
 async function createVectorTable(tableName: string): Promise<void> {
-  // Create the pgvector table Bedrock KB expects, using RDS Data API
-  const { RDSDataClient, ExecuteStatementCommand } = await import("@aws-sdk/client-rds-data");
-  const rds = new RDSDataClient({ region: AWS_REGION });
-  const secretArn = await getBedrockKbSecretArn();
+  // Create the pgvector table Bedrock KB expects, using direct pg connection
+  const { getDb } = await import("@thinkwork/database-pg");
+  const db = getDb();
+  const { sql } = await import("drizzle-orm");
 
   const statements = [
     `CREATE SCHEMA IF NOT EXISTS bedrock_kb`,
@@ -63,13 +63,8 @@ async function createVectorTable(tableName: string): Promise<void> {
     `CREATE INDEX IF NOT EXISTS ${tableName}_chunks_idx ON bedrock_kb.${tableName} USING gin (to_tsvector('simple', chunks))`,
   ];
 
-  for (const sql of statements) {
-    await rds.send(new ExecuteStatementCommand({
-      resourceArn: DB_CLUSTER_ARN,
-      secretArn,
-      database: DB_NAME,
-      sql,
-    }));
+  for (const stmt of statements) {
+    await (db as any).execute(sql.raw(stmt));
   }
   console.log(`[kb-manager] Created vector table: ${tableName}`);
 }

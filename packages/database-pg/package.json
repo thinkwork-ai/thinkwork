@@ -17,11 +17,12 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@aws-sdk/client-rds-data": "^3.917.0",
-    "drizzle-orm": "^0.39.0"
+    "drizzle-orm": "^0.39.0",
+    "pg": "^8.16.3"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
+    "@types/pg": "^8.18.0",
     "drizzle-kit": "^0.31.10",
     "postgres": "^3.4.8",
     "tsx": "^4.21.0",
