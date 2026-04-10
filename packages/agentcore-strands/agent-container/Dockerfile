@@ -12,22 +12,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install Python dependencies (includes strands-agents)
+# Install Python dependencies (includes strands-agents + hindsight-strands)
 COPY packages/agentcore-strands/agent-container/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
     playwright install chromium --with-deps 2>/dev/null || true && \
     find /usr/local/lib/python3.12 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
-# Copy runtime server + skill runner (memory tools come from hindsight-strands
-# package installed via requirements.txt, PRD-41B Phase 7 item 1).
-# hindsight_usage_capture.py monkey-patches the HindsightClient to capture
-# token usage for cost attribution (PRD-41B Phase 7 item 2).
+# Copy runtime server + skill runner
 COPY packages/agentcore-strands/agent-container/server.py .
 COPY packages/agentcore-strands/agent-container/skill_runner.py .
+
+# Memory engine: managed (AgentCore) or hindsight (external service)
+# - memory_tools.py: remember/recall/forget for managed engine
+# - hindsight_usage_capture.py: cost attribution for hindsight engine
+# - hindsight_recall_filter.py: post-recall entity-aware filter for hindsight
+COPY packages/agentcore-strands/agent-container/memory_tools.py .
 COPY packages/agentcore-strands/agent-container/hindsight_usage_capture.py .
-# PRD-42 follow-up: post-recall filter (entity-aware + observation-preferred dedup
-# + lexical near-dup collapse + hard cap). Imported by server.py hindsight_recall
-# tool. Pure stdlib so no requirements.txt change needed.
 COPY packages/agentcore-strands/agent-container/hindsight_recall_filter.py .
 
 # Copy shared Agent Container modules
@@ -41,6 +41,7 @@ COPY packages/agentcore/agent-container/install_skills.py .
 COPY packages/agentcore/agent-container/router_parser.py .
 COPY packages/agentcore/agent-container/context_parser.py .
 COPY packages/agentcore/agent-container/kb_search_server.py .
+COPY packages/agentcore/agent-container/hindsight_client.py .
 
 # Copy auth-agent module
 RUN mkdir -p /app/auth-agent
@@ -60,7 +61,11 @@ ENV PORT=8080
 ENV HOME=/home/strandsuser
 ENV AWS_REGION=us-east-1
 ENV AGENTCORE_FILES_BUCKET=""
-ENV AGENTCORE_MEMORY_ID=thinkwork_memory-0NB7y1DcXl
+# Memory engine: "managed" (AgentCore built-in) or "hindsight" (ECS service)
+# Set via Terraform memory_engine variable
+ENV MEMORY_ENGINE=managed
+# AgentCore Memory ID (only used when MEMORY_ENGINE=managed)
+ENV AGENTCORE_MEMORY_ID=""
 
 EXPOSE 8080
 

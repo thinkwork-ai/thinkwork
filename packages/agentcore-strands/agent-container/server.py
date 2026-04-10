@@ -504,9 +504,29 @@ def _call_strands_agent(system_prompt: str, messages: list,
     # 3. Build tool list: memory tools + Nova Act browser + file_read + script skills
     tools = []
 
-    # Add Hindsight memory tools (hindsight_retain/recall/reflect) via the
-    # native hindsight-strands package (PRD-41B Phase 7, item 1). Replaces
-    # the old custom `remember`/`recall`/`forget` wrappers that sat on top of
+    # Memory engine selection: "managed" (AgentCore built-in) or "hindsight" (external service).
+    # Controlled by MEMORY_ENGINE env var, set via Terraform memory_engine variable.
+    _memory_engine = os.environ.get("MEMORY_ENGINE", "managed").lower()
+
+    if _memory_engine == "managed":
+        # AgentCore managed memory: remember/recall/forget tools backed by
+        # the native AgentCore Memory API (4 strategies: semantic facts,
+        # user preferences, session summaries, episodic).
+        try:
+            from memory_tools import remember, recall, forget
+            tools.extend([remember, recall, forget])
+            logger.info("Managed memory tools registered: remember, recall, forget (engine=managed)")
+        except Exception as e:
+            logger.warning("Managed memory tools registration failed: %s", e)
+
+    elif _memory_engine == "hindsight":
+        # Hindsight memory: retain/recall/reflect tools backed by the
+        # Hindsight ECS service (semantic + BM25 + entity graph + temporal
+        # retrieval with cross-encoder reranking).
+        #
+        # Add Hindsight memory tools (hindsight_retain/recall/reflect) via the
+        # native hindsight-strands package (PRD-41B Phase 7, item 1). Replaces
+        # the old custom `remember`/`recall`/`forget` wrappers that sat on top of
     # a stdlib urllib client. The native package gives us the @tool-decorated
     # functions, a proper client, and — crucially — a `tags` parameter that
     # is attached to every retain call, which we use in item 2 to attribute
@@ -599,7 +619,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
                     customer, product, location, or event.
 
                 DO NOT use `search_users` for these — that tool only finds
-                Maniflow platform teammates (people with login accounts on
+                Thinkwork platform teammates (people with login accounts on
                 this app), not people you have learned about in
                 conversations.
 
@@ -703,6 +723,9 @@ def _call_strands_agent(system_prompt: str, messages: list,
                            "set" if hs_endpoint else "MISSING", hs_bank or "MISSING")
     except Exception as e:
         logger.warning("Hindsight tools registration failed: %s", e)
+
+    else:
+        logger.warning("Unknown MEMORY_ENGINE '%s', no memory tools loaded. Expected 'managed' or 'hindsight'.", _memory_engine)
 
     # Add file_read tool for skill resource access
     try:
