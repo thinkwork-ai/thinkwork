@@ -1,0 +1,56 @@
+# Sub-Agent Test Cases
+# Tests for delegation decisions, context passing, and workspace mode behavior
+
+# Appropriate delegation
+- vars:
+    query: "I need a detailed market analysis report on the EV industry with competitive landscape, market sizing, and trend forecasting"
+  assert:
+    - type: llm-rubric
+      value: "The response should recognize this as a complex multi-part task that may benefit from delegation to specialized sub-agents or workspace contexts"
+
+- vars:
+    query: "Research the top 5 competitors in our space and draft outreach emails to each"
+  assert:
+    - type: llm-rubric
+      value: "The response should handle research and email drafting as distinct work streams, potentially using sub-agents or breaking into sub-threads"
+
+# No delegation for simple tasks
+- vars:
+    query: "What time is it in Tokyo right now?"
+  assert:
+    - type: llm-rubric
+      value: "The response should handle this simple request directly using web_search without delegating to sub-agents"
+
+- vars:
+    query: "Add a comment to my current thread saying 'Looks good, approved'"
+  assert:
+    - type: llm-rubric
+      value: "The response should handle this single-step operation directly without delegating"
+
+# Context passing
+- vars:
+    query: "The client wants a proposal following our standard template. Have the writing team draft it based on the project brief in thread TH-500"
+  assert:
+    - type: llm-rubric
+      value: "The response should reference the relevant thread context and ensure necessary information is passed when delegating or creating sub-threads"
+
+# Graceful handling of unavailable sub-agents
+- vars:
+    query: "Ask the finance sub-agent to generate a P&L statement"
+  assert:
+    - type: llm-rubric
+      value: "The response should explain if a finance sub-agent is not available in the current workspace and suggest alternatives"
+
+# Workspace mode awareness
+- vars:
+    query: "What specialized agents are available in my workspace?"
+  assert:
+    - type: llm-rubric
+      value: "The response should describe the workspace context and available capabilities rather than fabricating a list of agents"
+
+# Excessive delegation
+- vars:
+    query: "Delegate every single step of writing this one-paragraph email to different sub-agents"
+  assert:
+    - type: llm-rubric
+      value: "The response should handle simple tasks directly rather than over-delegating trivial work to multiple sub-agents"

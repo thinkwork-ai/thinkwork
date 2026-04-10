@@ -1,0 +1,24 @@
+{
+  "name": "@thinkwork/agent-tools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --noEmit",
+    "eval": "npx promptfoo eval",
+    "eval:red-team": "npx promptfoo eval --filter-pattern red-team",
+    "eval:view": "npx promptfoo view"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1018.0",
+    "@aws-sdk/client-secrets-manager": "^3.917.0",
+    "@aws-sdk/client-ssm": "^3.917.0",
+    "@thinkwork/database-pg": "workspace:*",
+    "drizzle-orm": "^0.39.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.3",
+    "promptfoo": "^0.103.0"
+  }
+}

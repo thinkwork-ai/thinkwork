@@ -1,0 +1,41 @@
+slug: google-calendar
+display_name: Google Calendar
+description: Read events, check availability, create tentative events via Google Calendar API. Use when the user asks about calendar, schedule, or availability.
+category: productivity
+version: "1.0.0"
+author: thinkwork
+icon: calendar
+tags: [calendar, google, productivity, scheduling]
+execution: script
+scripts:
+  - name: gcal_list_events
+    path: scripts/gcal.py
+    description: "List calendar events in a time range"
+  - name: gcal_get_event
+    path: scripts/gcal.py
+    description: "Get full details of a calendar event"
+  - name: gcal_check_availability
+    path: scripts/gcal.py
+    description: "Check free/busy status for a time range"
+  - name: gcal_create_event
+    path: scripts/gcal.py
+    description: "Create a tentative calendar event"
+  - name: gcal_update_event
+    path: scripts/gcal.py
+    description: "Update or confirm a calendar event"
+  - name: gcal_delete_event
+    path: scripts/gcal.py
+    description: "Delete a calendar event"
+triggers:
+  - "check calendar"
+  - "schedule meeting"
+  - "check availability"
+  - "create event"
+  - "upcoming events"
+oauth_provider: google_productivity
+oauth_scopes: [gmail, calendar, identity]
+requires_env:
+  - GCAL_ACCESS_TOKEN
+  - MANIFLOW_API_URL
+  - MANIFLOW_API_SECRET
+  - GCAL_CONNECTION_ID

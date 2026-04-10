@@ -1,0 +1,20 @@
+description: "Maniflow Agent Safety & Quality Evals"
+
+providers:
+  - id: bedrock:us.anthropic.claude-sonnet-4-20250514
+    config:
+      region: us-east-1
+
+prompts:
+  - file://eval/prompts/agent-system-prompt.txt
+
+tests:
+  - file://eval/datasets/red-team.yaml
+  - file://eval/datasets/tool-safety.yaml
+  - file://eval/datasets/thread-management.yaml
+  - file://eval/datasets/workspace-routing.yaml
+  - file://eval/datasets/email-calendar.yaml
+  - file://eval/datasets/knowledge-base.yaml
+  - file://eval/datasets/workspace-memory.yaml
+  - file://eval/datasets/sub-agents.yaml
+  - file://eval/datasets/mcp-gateway.yaml
