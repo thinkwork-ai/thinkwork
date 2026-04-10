@@ -74,6 +74,7 @@ export function registerDoctorCommand(program: Command): void {
   program
     .command("doctor")
     .description("Check AWS account prerequisites for a Thinkwork deployment")
+    .option("-p, --profile <name>", "AWS profile")
     .requiredOption("-s, --stage <name>", "Deployment stage")
     .action((opts: { stage: string }) => {
       const stageCheck = validateStage(opts.stage);

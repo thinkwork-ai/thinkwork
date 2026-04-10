@@ -7,6 +7,7 @@ export function registerPlanCommand(program: Command): void {
   program
     .command("plan")
     .description("Run terraform plan for a stage")
+    .option("-p, --profile <name>", "AWS profile")
     .requiredOption("-s, --stage <name>", "Deployment stage")
     .option("-c, --component <tier>", "Component tier (foundation|data|app|all)", "all")
     .action(async (opts: { stage: string; component: string }) => {

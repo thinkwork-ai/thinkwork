@@ -6,6 +6,7 @@ export function registerOutputsCommand(program: Command): void {
   program
     .command("outputs")
     .description("Show terraform outputs for a stage")
+    .option("-p, --profile <name>", "AWS profile")
     .requiredOption("-s, --stage <name>", "Deployment stage")
     .option("-c, --component <tier>", "Component tier (foundation|data|app|all)", "all")
     .action(async (opts: { stage: string; component: string }) => {
