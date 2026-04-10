@@ -115,6 +115,10 @@ module "bedrock_kb" {
 # Subscription-only schema for AppSync (v1 events only)
 locals {
   subscription_schema = <<-GRAPHQL
+    type Query {
+      _placeholder: String
+    }
+
     type Mutation {
       notifyAgentStatus(input: AWSJSON!): AWSJSON @aws_api_key @aws_cognito_user_pools @aws_iam
       notifyNewMessage(input: AWSJSON!): AWSJSON @aws_api_key @aws_cognito_user_pools @aws_iam
@@ -136,6 +140,7 @@ locals {
     }
 
     schema {
+      query: Query
       mutation: Mutation
       subscription: Subscription
     }
