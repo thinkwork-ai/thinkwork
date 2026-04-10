@@ -67,7 +67,7 @@ describe("checkConcurrencyLimits", () => {
 	const agentId = "agent-1";
 
 	it("no config → allowed", async () => {
-		// Hive lookup returns no metadata
+		// Team lookup returns no metadata
 		mockExecute.mockResolvedValueOnce({ rows: [] });
 		const result = await checkConcurrencyLimits(tenantId, agentId);
 		expect(result).toEqual({ allowed: true });
@@ -82,7 +82,7 @@ describe("checkConcurrencyLimits", () => {
 	});
 
 	it("under maxPerAgent limit → allowed", async () => {
-		// Hive config with maxPerAgent = 3
+		// Team config with maxPerAgent = 3
 		mockExecute.mockResolvedValueOnce({
 			rows: [{ metadata: { concurrency: { maxPerAgent: 3 } } }],
 		});
@@ -180,7 +180,7 @@ describe("checkConcurrencyLimits", () => {
 
 		const result = await checkConcurrencyLimits(tenantId, agentId);
 		expect(result).toEqual({ allowed: true });
-		// 1 hive lookup + 1 maxPerAgent + 1 maxConcurrentAgents + 2 maxByStatus
+		// 1 team lookup + 1 maxPerAgent + 1 maxConcurrentAgents + 2 maxByStatus
 		expect(mockExecute).toHaveBeenCalledTimes(5);
 	});
 });

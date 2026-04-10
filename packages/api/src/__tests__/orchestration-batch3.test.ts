@@ -106,7 +106,7 @@ describe("resolveWorkflowConfig — turn loop", () => {
 		mockExecute.mockResolvedValueOnce({
 			rows: [{
 				turn_loop: { enabled: true, maxTurns: 5 },
-				hive_id: null,
+				team_id: null,
 			}],
 		});
 
@@ -117,19 +117,19 @@ describe("resolveWorkflowConfig — turn loop", () => {
 		expect(config.turnLoop.continueOnToolUse).toBe(false); // default preserved
 	});
 
-	it("applies hive override on top of tenant turn loop config", async () => {
+	it("applies team override on top of tenant turn loop config", async () => {
 		mockExecute.mockResolvedValueOnce({
 			rows: [
-				{ turn_loop: { enabled: true, maxTurns: 5 }, hive_id: null },
-				{ turn_loop: { maxTurns: 10, continueOnToolUse: true }, hive_id: "hive-1" },
+				{ turn_loop: { enabled: true, maxTurns: 5 }, team_id: null },
+				{ turn_loop: { maxTurns: 10, continueOnToolUse: true }, team_id: "team-1" },
 			],
 		});
 
-		const config = await resolveWorkflowConfig("tenant-1", "hive-1");
+		const config = await resolveWorkflowConfig("tenant-1", "team-1");
 
 		expect(config.turnLoop.enabled).toBe(true); // from tenant
-		expect(config.turnLoop.maxTurns).toBe(10); // hive override
-		expect(config.turnLoop.continueOnToolUse).toBe(true); // hive override
+		expect(config.turnLoop.maxTurns).toBe(10); // team override
+		expect(config.turnLoop.continueOnToolUse).toBe(true); // team override
 	});
 
 	it("handles database error with turn loop defaults", async () => {
@@ -167,7 +167,7 @@ describe("resolveWorkflowConfig — workspace", () => {
 		mockExecute.mockResolvedValueOnce({
 			rows: [{
 				workspace: { isolateByThread: true },
-				hive_id: null,
+				team_id: null,
 			}],
 		});
 
@@ -184,7 +184,7 @@ describe("resolveWorkflowConfig — workspace", () => {
 					isolateByThread: false,
 					prefixTemplate: "custom/{tenantSlug}/{agentSlug}/files/",
 				},
-				hive_id: null,
+				team_id: null,
 			}],
 		});
 

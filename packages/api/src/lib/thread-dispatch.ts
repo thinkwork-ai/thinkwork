@@ -25,23 +25,23 @@ export async function isThreadBlocked(threadId: string): Promise<boolean> {
 }
 
 /**
- * Check concurrency limits from hive metadata config.
+ * Check concurrency limits from team metadata config.
  * Returns { allowed: true } or { allowed: false, reason: string }.
  */
 export async function checkConcurrencyLimits(
 	tenantId: string,
 	agentId: string,
 ): Promise<{ allowed: boolean; reason?: string }> {
-	// Look up hive config for this agent's hive
-	const hiveResult = await db.execute(sql`
+	// Look up team config for this agent's team
+	const teamResult = await db.execute(sql`
 		SELECT h.metadata FROM teams h
-		JOIN hive_agents ha ON ha.team_id = h.id
+		JOIN team_agents ha ON ha.team_id = h.id
 		WHERE ha.agent_id = ${agentId}::uuid
 		LIMIT 1
 	`);
 
-	const hiveRow = (hiveResult.rows || [])[0] as { metadata: Record<string, unknown> | null } | undefined;
-	const metadata = hiveRow?.metadata;
+	const teamRow = (teamResult.rows || [])[0] as { metadata: Record<string, unknown> | null } | undefined;
+	const metadata = teamRow?.metadata;
 	if (!metadata) return { allowed: true };
 
 	const concurrency = metadata.concurrency as Record<string, unknown> | undefined;

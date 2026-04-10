@@ -33,7 +33,7 @@ describe("parseProcessTemplate", () => {
 		});
 
 		it("extracts step IDs and titles", () => {
-			const result = parseProcessTemplate(EXAMPLE_TEMPLATE);
+			const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
 
 			expect(result.steps[0].id).toBe("step-1");
 			expect(result.steps[0].title).toBe("Send Welcome Email");
@@ -42,7 +42,7 @@ describe("parseProcessTemplate", () => {
 		});
 
 		it("parses step dependencies", () => {
-			const result = parseProcessTemplate(EXAMPLE_TEMPLATE);
+			const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
 
 			expect(result.steps[0].dependsOn).toEqual([]);
 			expect(result.steps[1].dependsOn).toEqual([]);
@@ -52,7 +52,7 @@ describe("parseProcessTemplate", () => {
 		});
 
 		it("parses gate types", () => {
-			const result = parseProcessTemplate(EXAMPLE_TEMPLATE);
+			const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
 
 			expect(result.steps[0].gate).toBe("none");
 			expect(result.steps[2].gate).toBe("human");
@@ -60,27 +60,27 @@ describe("parseProcessTemplate", () => {
 		});
 
 		it("parses priorities", () => {
-			const result = parseProcessTemplate(EXAMPLE_TEMPLATE);
+			const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
 
 			expect(result.steps[0].priority).toBe("high");
 			expect(result.steps[3].priority).toBe("medium");
 		});
 
 		it("parses assignee template variables", () => {
-			const result = parseProcessTemplate(EXAMPLE_TEMPLATE);
+			const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
 
 			expect(result.steps[0].assignee).toBe("{{current_agent}}");
 		});
 
 		it("parses multi-line instructions", () => {
-			const result = parseProcessTemplate(EXAMPLE_TEMPLATE);
+			const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
 
 			expect(result.steps[0].instructions).toContain("Draft and send a personalized welcome email");
 			expect(result.steps[0].instructions).toContain("Mark this thread DONE");
 		});
 
 		it("dedents instructions consistently", () => {
-			const result = parseProcessTemplate(EXAMPLE_TEMPLATE);
+			const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
 
 			// Instructions should not have leading whitespace from the markdown indentation
 			const firstLine = result.steps[0].instructions.split("\n")[0];

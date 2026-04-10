@@ -69,7 +69,7 @@ interface CreateJobBody {
 	triggerId?: string;            // If provided, row already exists (REST handler created it)
 	agentId?: string;
 	routineId?: string;
-	hiveId?: string;
+	teamId?: string;
 	name: string;
 	description?: string;
 	prompt?: string;
@@ -199,7 +199,7 @@ async function createJob(body: CreateJobBody): Promise<Record<string, unknown>> 
 			trigger_type: body.triggerType,
 			agent_id: body.agentId || null,
 			routine_id: body.routineId || null,
-			team_id: body.hiveId || null,
+			team_id: body.teamId || null,
 			name: body.name,
 			description: body.description,
 			prompt: body.prompt,

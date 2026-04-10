@@ -99,7 +99,7 @@ export async function createAgentFromTemplate(_parent: any, args: any, _ctx: Gra
 		console.warn("[createAgentFromTemplate] workspace-map-generator not available:", err);
 	}
 
-	// 8. Add to hive if specified
+	// 8. Add to team if specified
 	if (i.teamId) {
 		try {
 			const { teamAgents: teamAgentsTable } = await import("../../utils.js");
@@ -109,7 +109,7 @@ export async function createAgentFromTemplate(_parent: any, args: any, _ctx: Gra
 				tenant_id: agentTemplate.tenant_id!,
 			});
 		} catch (err) {
-			console.warn(`[createAgentFromTemplate] Failed to add agent to hive:`, err);
+			console.warn(`[createAgentFromTemplate] Failed to add agent to team:`, err);
 		}
 	}
 
