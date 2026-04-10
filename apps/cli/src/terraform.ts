@@ -31,8 +31,22 @@ export function resolveTierDir(terraformDir: string, stage: string, tier: string
   if (existsSync(envDir)) {
     return envDir;
   }
-  // Fall back to greenfield example (single-state, all tiers)
-  return path.join(terraformDir, "examples", "greenfield");
+  // Check for greenfield example (repo layout)
+  const greenfield = path.join(terraformDir, "examples", "greenfield");
+  if (existsSync(greenfield)) {
+    return greenfield;
+  }
+  // Flat layout (scaffolded by `thinkwork init`): terraform/ in CWD with main.tf
+  const flat = path.join(terraformDir);
+  if (existsSync(path.join(flat, "main.tf"))) {
+    return flat;
+  }
+  // Check CWD/terraform/ (user ran `thinkwork init` and is in the project root)
+  const cwdTf = path.join(process.cwd(), "terraform");
+  if (existsSync(path.join(cwdTf, "main.tf"))) {
+    return cwdTf;
+  }
+  return terraformDir;
 }
 
 /**
