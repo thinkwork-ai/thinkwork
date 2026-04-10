@@ -96,7 +96,8 @@ module "database" {
   subnet_ids  = module.vpc.public_subnet_ids
   db_password = var.db_password
 
-  database_name = var.database_name
+  database_name   = var.database_name
+  database_engine = var.database_engine
 }
 
 module "bedrock_kb" {

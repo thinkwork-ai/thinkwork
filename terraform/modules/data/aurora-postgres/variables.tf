@@ -66,26 +66,49 @@ variable "database_name" {
   default     = "thinkwork"
 }
 
+variable "database_engine" {
+  description = "Database engine: 'aurora-serverless' (production, serverless v2) or 'rds-postgres' (dev/test, cheaper, single instance)"
+  type        = string
+  default     = "aurora-serverless"
+
+  validation {
+    condition     = contains(["aurora-serverless", "rds-postgres"], var.database_engine)
+    error_message = "database_engine must be 'aurora-serverless' or 'rds-postgres'"
+  }
+}
+
 variable "engine_version" {
-  description = "Aurora PostgreSQL engine version"
+  description = "PostgreSQL engine version"
   type        = string
   default     = "15.10"
 }
 
 variable "min_capacity" {
-  description = "Minimum ACU capacity for serverless v2"
+  description = "Minimum ACU capacity for Aurora serverless v2 (ignored for rds-postgres)"
   type        = number
   default     = 0.5
 }
 
 variable "max_capacity" {
-  description = "Maximum ACU capacity for serverless v2"
+  description = "Maximum ACU capacity for Aurora serverless v2 (ignored for rds-postgres)"
   type        = number
   default     = 2
 }
 
+variable "rds_instance_class" {
+  description = "Instance class for rds-postgres engine (ignored for aurora-serverless)"
+  type        = string
+  default     = "db.t4g.micro"
+}
+
+variable "rds_allocated_storage" {
+  description = "Allocated storage in GB for rds-postgres engine (ignored for aurora-serverless)"
+  type        = number
+  default     = 20
+}
+
 variable "deletion_protection" {
-  description = "Enable deletion protection"
+  description = "Enable deletion protection (defaults to true for aurora-serverless, false for rds-postgres)"
   type        = bool
-  default     = true
+  default     = null
 }

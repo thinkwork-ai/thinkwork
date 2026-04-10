@@ -62,6 +62,12 @@ variable "db_password" {
   sensitive   = true
 }
 
+variable "database_engine" {
+  description = "Database engine: 'aurora-serverless' (production) or 'rds-postgres' (dev/test, cheaper)"
+  type        = string
+  default     = "aurora-serverless"
+}
+
 variable "google_oauth_client_id" {
   description = "Google OAuth client ID (optional — leave empty to skip Google login)"
   type        = string
@@ -89,6 +95,7 @@ module "thinkwork" {
   account_id = var.account_id
 
   db_password                = var.db_password
+  database_engine            = var.database_engine
   google_oauth_client_id     = var.google_oauth_client_id
   google_oauth_client_secret = var.google_oauth_client_secret
   pre_signup_lambda_zip      = var.pre_signup_lambda_zip

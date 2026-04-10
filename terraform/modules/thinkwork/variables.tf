@@ -132,6 +132,12 @@ variable "existing_db_security_group_id" {
   default = null
 }
 
+variable "database_engine" {
+  description = "Database engine: 'aurora-serverless' (production) or 'rds-postgres' (dev/test, cheaper)"
+  type        = string
+  default     = "aurora-serverless"
+}
+
 # ---------------------------------------------------------------------------
 # Naming / Buckets
 # ---------------------------------------------------------------------------
