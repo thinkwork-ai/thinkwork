@@ -68,6 +68,12 @@ variable "database_engine" {
   default     = "aurora-serverless"
 }
 
+variable "memory_engine" {
+  description = "Memory engine: 'managed' (AgentCore built-in, default) or 'hindsight' (ECS+ALB, opt-in)"
+  type        = string
+  default     = "managed"
+}
+
 variable "google_oauth_client_id" {
   description = "Google OAuth client ID (optional — leave empty to skip Google login)"
   type        = string
@@ -96,6 +102,7 @@ module "thinkwork" {
 
   db_password                = var.db_password
   database_engine            = var.database_engine
+  memory_engine              = var.memory_engine
   google_oauth_client_id     = var.google_oauth_client_id
   google_oauth_client_secret = var.google_oauth_client_secret
   pre_signup_lambda_zip      = var.pre_signup_lambda_zip

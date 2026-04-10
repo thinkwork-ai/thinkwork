@@ -210,6 +210,18 @@ module "job_triggers" {
   region     = var.region
 }
 
+module "hindsight" {
+  count  = var.memory_engine == "hindsight" ? 1 : 0
+  source = "../app/hindsight-memory"
+
+  stage                = var.stage
+  vpc_id               = module.vpc.vpc_id
+  subnet_ids           = module.vpc.public_subnet_ids
+  db_security_group_id = module.database.db_security_group_id
+  database_url         = module.database.database_url
+  image_tag            = var.hindsight_image_tag
+}
+
 module "ses" {
   source = "../app/ses-email"
 
