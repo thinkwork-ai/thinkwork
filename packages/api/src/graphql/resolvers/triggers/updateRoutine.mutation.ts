@@ -14,7 +14,7 @@ export const updateRoutine = async (_parent: any, args: any, ctx: GraphQLContext
 	if (i.status !== undefined) updates.status = i.status;
 	if (i.schedule !== undefined) updates.schedule = i.schedule;
 	if (i.config !== undefined) updates.config = JSON.parse(i.config);
-	if (i.hiveId !== undefined) updates.hive_id = i.hiveId;
+	if (i.teamId !== undefined) updates.team_id = i.teamId;
 	if (i.agentId !== undefined) updates.agent_id = i.agentId;
 	const [row] = await db.update(routines).set(updates).where(eq(routines.id, args.id)).returning();
 	if (!row) throw new Error("Routine not found");

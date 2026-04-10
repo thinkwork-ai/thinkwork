@@ -228,7 +228,7 @@ async function createScheduledJob(
 			trigger_type: body.trigger_type as string,
 			agent_id: (body.agent_id as string) || null,
 			routine_id: (body.routine_id as string) || null,
-			hive_id: (body.hive_id as string) || null,
+			team_id: (body.team_id as string) || null,
 			name: body.name as string,
 			description: (body.description as string) || null,
 			prompt: (body.prompt as string) || null,

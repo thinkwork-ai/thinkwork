@@ -119,15 +119,16 @@ async function createAgent(
 ) {
 	const body = parseBody(event);
 	if (!body.name) return error("name is required");
+	if (!body.template_id) return error("template_id is required");
 
 	const [row] = await db
 		.insert(agents)
 		.values({
 			tenant_id: tenantId,
 			name: body.name as string,
+			template_id: body.template_id as string,
 			role: body.role as string | undefined,
 			type: (body.type as string) ?? "agent",
-			model: body.model as string | undefined,
 			system_prompt: body.system_prompt as string | undefined,
 			adapter_type: (body.adapter_type as string) || "sdk",
 			adapter_config: body.adapter_config ?? undefined,

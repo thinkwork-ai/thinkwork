@@ -17,7 +17,7 @@ export const createRoutine = async (_parent: any, args: any, ctx: GraphQLContext
 			schedule: i.schedule,
 			config: i.config ? JSON.parse(i.config) : undefined,
 			agent_id: i.agentId,
-			hive_id: i.hiveId,
+			team_id: i.teamId,
 		})
 		.returning();
 	return snakeToCamel(row);

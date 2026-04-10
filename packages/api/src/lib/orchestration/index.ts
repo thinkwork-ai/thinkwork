@@ -1,7 +1,7 @@
 /**
  * PRD-22: Orchestration barrel export.
  */
-export { checkAndFireUnblockWakeups, releaseThreadWithSignal } from "./thread-release.js";
+export { checkAndFireUnblockWakeups } from "./thread-release.js";
 export { resolveWorkflowConfig } from "./workflow-config.js";
 export type { ResolvedWorkflowConfig, OrchestrationConfig, TurnLoopConfig, WorkspaceConfig, SessionCompactionConfig } from "./workflow-config.js";
 export { renderPromptTemplate } from "./prompt-template.js";

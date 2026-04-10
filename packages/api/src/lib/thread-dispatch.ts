@@ -34,8 +34,8 @@ export async function checkConcurrencyLimits(
 ): Promise<{ allowed: boolean; reason?: string }> {
 	// Look up hive config for this agent's hive
 	const hiveResult = await db.execute(sql`
-		SELECT h.metadata FROM hives h
-		JOIN hive_agents ha ON ha.hive_id = h.id
+		SELECT h.metadata FROM teams h
+		JOIN hive_agents ha ON ha.team_id = h.id
 		WHERE ha.agent_id = ${agentId}::uuid
 		LIMIT 1
 	`);

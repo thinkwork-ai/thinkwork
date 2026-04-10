@@ -66,6 +66,7 @@ async function ensureScheduleGroup(): Promise<void> {
 interface CreateJobBody {
 	tenantId: string;
 	triggerType: string;           // agent_heartbeat | agent_reminder | agent_scheduled | routine_schedule | routine_one_time
+	triggerId?: string;            // If provided, row already exists (REST handler created it)
 	agentId?: string;
 	routineId?: string;
 	hiveId?: string;
@@ -198,7 +199,7 @@ async function createJob(body: CreateJobBody): Promise<Record<string, unknown>> 
 			trigger_type: body.triggerType,
 			agent_id: body.agentId || null,
 			routine_id: body.routineId || null,
-			hive_id: body.hiveId || null,
+			team_id: body.hiveId || null,
 			name: body.name,
 			description: body.description,
 			prompt: body.prompt,
@@ -240,7 +241,7 @@ async function createJob(body: CreateJobBody): Promise<Record<string, unknown>> 
 			Target: target,
 			FlexibleTimeWindow: { Mode: "OFF" },
 			State: body.enabled !== false ? ScheduleState.ENABLED : ScheduleState.DISABLED,
-			Description: `Maniflow ${triggerType}: ${body.name || jobId}`,
+			Description: `Thinkwork ${triggerType}: ${body.name || jobId}`,
 			...(isOneTime ? { ActionAfterCompletion: "DELETE" } : {}),
 		}),
 	);
@@ -279,7 +280,7 @@ async function updateJob(body: UpdateJobBody): Promise<Record<string, unknown>> 
 	if (body.timezone !== undefined) updates.timezone = body.timezone;
 	if (body.enabled !== undefined) updates.enabled = body.enabled;
 
-	let expression = current.schedule_expression;
+	let expression: string = current.schedule_expression || "";
 	if (body.scheduleExpression) {
 		expression = normalizeExpression(body.scheduleExpression);
 		updates.schedule_expression = expression;
@@ -301,7 +302,7 @@ async function updateJob(body: UpdateJobBody): Promise<Record<string, unknown>> 
 		try {
 			await schedulerClient.send(
 				new DeleteScheduleCommand({
-					Name: current.eb_schedule_name,
+					Name: current.eb_schedule_name!,
 					GroupName: SCHEDULE_GROUP,
 				}),
 			);
@@ -333,11 +334,11 @@ async function updateJob(body: UpdateJobBody): Promise<Record<string, unknown>> 
 					Name: scheduleName,
 					GroupName: SCHEDULE_GROUP,
 					ScheduleExpression: expression,
-					ScheduleExpressionTimezone: body.timezone || current.timezone || "UTC",
+					ScheduleExpressionTimezone: body.timezone ?? current.timezone ?? undefined,
 					Target: target,
 					FlexibleTimeWindow: { Mode: "OFF" },
 					State: ScheduleState.ENABLED,
-					Description: `Maniflow ${current.trigger_type}: ${current.name || current.id}`,
+					Description: `Thinkwork ${current.trigger_type}: ${current.name || current.id}`,
 					...(current.schedule_type === "at" ? { ActionAfterCompletion: "DELETE" } : {}),
 				}),
 			);
@@ -361,17 +362,17 @@ async function updateJob(body: UpdateJobBody): Promise<Record<string, unknown>> 
 				agentId: current.agent_id,
 				routineId: current.routine_id,
 				prompt: body.prompt !== undefined ? body.prompt : current.prompt,
-				scheduleName: current.eb_schedule_name,
+				scheduleName: current.eb_schedule_name!,
 				oneTime: current.schedule_type === "at",
 			}),
 		};
 		try {
 			await schedulerClient.send(
 				new UpdateScheduleCommand({
-					Name: current.eb_schedule_name,
+					Name: current.eb_schedule_name!,
 					GroupName: SCHEDULE_GROUP,
 					ScheduleExpression: expression,
-					ScheduleExpressionTimezone: body.timezone || current.timezone,
+					ScheduleExpressionTimezone: body.timezone ?? current.timezone ?? undefined,
 					Target: target,
 					FlexibleTimeWindow: { Mode: "OFF" },
 					State: ScheduleState.ENABLED,
@@ -389,7 +390,7 @@ async function updateJob(body: UpdateJobBody): Promise<Record<string, unknown>> 
 async function deleteJob(body: DeleteJobBody): Promise<void> {
 	// Use the schedule name passed directly (avoids race with DB clear)
 	// or fall back to reading from DB
-	let scheduleName = (body as Record<string, unknown>).ebScheduleName as string | undefined;
+	let scheduleName = (body as unknown as Record<string, unknown>).ebScheduleName as string | undefined;
 
 	if (!scheduleName) {
 		const db = getDb();

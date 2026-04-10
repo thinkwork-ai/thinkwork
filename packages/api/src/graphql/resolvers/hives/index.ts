@@ -1,4 +1,4 @@
-import { hives_ as hives } from "./hives.query.js";
+import { hives_ as teams } from "./hives.query.js";
 import { hive } from "./hive.query.js";
 import { createHive } from "./createHive.mutation.js";
 import { updateHive } from "./updateHive.mutation.js";
@@ -8,5 +8,5 @@ import { removeHiveAgent } from "./removeHiveAgent.mutation.js";
 import { addHiveUser } from "./addHiveUser.mutation.js";
 import { removeHiveUser } from "./removeHiveUser.mutation.js";
 
-export const hiveQueries = { hives, hive };
-export const hiveMutations = { createHive, updateHive, deleteHive, addHiveAgent, removeHiveAgent, addHiveUser, removeHiveUser };
+export const teamQueries = { teams, hive };
+export const teamMutations = { createHive, updateHive, deleteHive, addHiveAgent, removeHiveAgent, addHiveUser, removeHiveUser };

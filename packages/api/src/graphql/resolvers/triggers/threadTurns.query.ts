@@ -10,7 +10,7 @@ export const threadTurns_ = async (_parent: any, args: any, ctx: GraphQLContext)
 	if (args.agentId) conditions.push(eq(threadTurns.agent_id, args.agentId));
 	if (args.routineId) conditions.push(eq(threadTurns.routine_id, args.routineId));
 	if (args.threadId) conditions.push(eq(threadTurns.thread_id, args.threadId));
-	if (args.jobId) conditions.push(eq(threadTurns.job_id, args.jobId));
+	if (args.jobId) conditions.push(eq(threadTurns.trigger_id, args.jobId));
 	if (args.status) conditions.push(eq(threadTurns.status, args.status.toLowerCase()));
 	const limit = Math.min(args.limit || 50, 200);
 	const rows = await db

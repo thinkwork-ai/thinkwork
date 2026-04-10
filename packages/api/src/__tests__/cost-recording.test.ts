@@ -164,8 +164,8 @@ describe("estimateTokens", () => {
 
 describe("estimation vs real token selection", () => {
 	it("should NOT estimate when real tokens are provided", () => {
-		const inputTokens = 1500;
-		const outputTokens = 300;
+		const inputTokens: number = 1500;
+		const outputTokens: number = 300;
 		// This mirrors the logic in recordCostEvents
 		const shouldEstimate = inputTokens === 0 && outputTokens === 0;
 		expect(shouldEstimate).toBe(false);

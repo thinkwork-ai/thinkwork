@@ -14,7 +14,7 @@ export const createScheduledJob = async (_parent: any, args: any, ctx: GraphQLCo
 			trigger_type: i.jobType,
 			agent_id: i.agentId || null,
 			routine_id: i.routineId || null,
-			hive_id: i.hiveId || null,
+			team_id: i.teamId || null,
 			name: i.name,
 			description: i.description || null,
 			prompt: i.prompt || null,

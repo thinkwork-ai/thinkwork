@@ -49,16 +49,16 @@ const BUCKET = process.env.WORKSPACE_BUCKET || "";
 interface SkillInfo {
   skillId: string;
   name: string;
-  description: string;
+  description: string | null;
   mcpServer?: string;
   /** PRD-31: Trigger phrases for progressive disclosure tier-1 matching */
   triggers?: string[];
   /** PRD-31: Reference file names available in this skill */
   references?: string[];
   /** PRD-31: Execution type (script, mcp, context) */
-  execution?: string;
+  execution?: string | null;
   /** PRD-38: Skill execution mode — 'tool' (direct parent tools) or 'agent' (sub-agent) */
-  mode?: string;
+  mode?: string | null;
   /** Workspace slugs that use this skill (parsed from workspace CONTEXT.md files) */
   usedIn: string[];
 }
@@ -271,8 +271,8 @@ export async function regenerateWorkspaceMap(agentId: string): Promise<void> {
 
   // 5. Build skill catalog with "Used In" mapping + PRD-31 metadata from DB
   const catalogLookup = new Map<string, {
-    name: string; description: string; mcp_server: string | null;
-    triggers: string[] | null; execution: string | null; mode: string | null;
+    name: string; description: string | null; mcp_server: string | null;
+    triggers: string[] | null; execution: string; mode: string;
   }>();
   try {
     const { skillCatalog } = await import("@thinkwork/database-pg/schema");

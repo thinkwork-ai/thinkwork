@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./github-workspace": "./github-workspace.ts"
+  },
   "scripts": {
     "build": "tsc --build",
     "typecheck": "tsc --noEmit"
@@ -13,5 +16,13 @@
     "@octokit/rest": "^22.0.1",
     "drizzle-orm": "^0.39.0",
     "p-limit": "^6.2.0"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-cloudwatch-logs": "^3.917.0",
+    "@aws-sdk/client-s3": "^3.1018.0",
+    "@aws-sdk/client-scheduler": "^3.917.0",
+    "@aws-sdk/client-ssm": "^3.917.0",
+    "@types/node": "^25.3.3",
+    "typescript": "^5.7.0"
   }
 }

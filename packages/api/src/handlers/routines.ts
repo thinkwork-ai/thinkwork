@@ -108,8 +108,8 @@ async function listRoutines(
 	const params = event.queryStringParameters || {};
 	if (params.status) conditions.push(eq(routines.status, params.status));
 	if (params.type) conditions.push(eq(routines.type, params.type));
-	if (params.hive_id)
-		conditions.push(eq(routines.hive_id, params.hive_id));
+	if (params.team_id)
+		conditions.push(eq(routines.team_id, params.team_id));
 	if (params.agent_id)
 		conditions.push(eq(routines.agent_id, params.agent_id));
 
@@ -152,7 +152,7 @@ async function createRoutine(
 			schedule: body.schedule,
 			config: body.config,
 			agent_id: body.agent_id,
-			hive_id: body.hive_id,
+			team_id: body.team_id,
 		})
 		.returning();
 
@@ -173,7 +173,7 @@ async function updateRoutine(
 	if (body.config !== undefined) updates.config = body.config;
 	if (body.agent_id !== undefined)
 		updates.agent_id = body.agent_id;
-	if (body.hive_id !== undefined) updates.hive_id = body.hive_id;
+	if (body.team_id !== undefined) updates.team_id = body.team_id;
 
 	if (Object.keys(updates).length === 0) {
 		return error("No valid fields to update");
@@ -344,11 +344,11 @@ async function deleteTrigger(
 			and(
 				eq(triggers.id, triggerId),
 				eq(triggers.routine_id, routineId),
-				eq(triggers.routine_id, routineId),
 				eq(triggers.trigger_type, "routine_schedule"),
 				eq(triggers.enabled, true),
 			),
-		);
+		)
+		.returning();
 
 	return json(deleted);
 }
