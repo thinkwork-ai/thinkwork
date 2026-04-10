@@ -155,9 +155,10 @@ module "api" {
 
   kb_service_role_arn = module.bedrock_kb.kb_service_role_arn
 
-  lambda_zips_dir = var.lambda_zips_dir
-  api_auth_secret = var.api_auth_secret
-  db_password     = var.db_password
+  lambda_zips_dir      = var.lambda_zips_dir
+  api_auth_secret      = var.api_auth_secret
+  db_password          = var.db_password
+  agentcore_invoke_url = module.agentcore.agentcore_invoke_url
 }
 
 module "agentcore" {

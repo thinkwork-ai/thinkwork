@@ -3,14 +3,12 @@
 
 -- Model Catalog (Bedrock models available for agent configuration)
 INSERT INTO model_catalog (model_id, provider, display_name, input_cost_per_million, output_cost_per_million, context_window, max_output_tokens, supports_vision, supports_tools) VALUES
-  ('us.anthropic.claude-sonnet-4-20250514-v1:0', 'anthropic', 'Claude Sonnet 4', 3.00, 15.00, 200000, 64000, true, true),
+  ('us.anthropic.claude-sonnet-4-6', 'anthropic', 'Claude Sonnet 4.6', 3.00, 15.00, 200000, 64000, true, true),
+  ('us.anthropic.claude-opus-4-6-v1', 'anthropic', 'Claude Opus 4.6', 15.00, 75.00, 200000, 32000, true, true),
   ('us.anthropic.claude-haiku-4-5-20251001-v1:0', 'anthropic', 'Claude Haiku 4.5', 0.80, 4.00, 200000, 64000, true, true),
-  ('us.anthropic.claude-opus-4-20250514-v1:0', 'anthropic', 'Claude Opus 4', 15.00, 75.00, 200000, 32000, true, true),
-  ('us.amazon.nova-pro-v1:0', 'amazon', 'Amazon Nova Pro', 0.80, 3.20, 300000, 5000, true, true),
-  ('us.amazon.nova-lite-v1:0', 'amazon', 'Amazon Nova Lite', 0.06, 0.24, 300000, 5000, true, true),
-  ('us.amazon.nova-micro-v1:0', 'amazon', 'Amazon Nova Micro', 0.035, 0.14, 128000, 5000, false, true),
-  ('us.meta.llama3-3-70b-instruct-v1:0', 'meta', 'Llama 3.3 70B', 0.72, 0.72, 128000, 4096, false, true),
-  ('us.deepseek.r1-v1:0', 'deepseek', 'DeepSeek R1', 1.35, 5.40, 128000, 8192, false, true)
+  ('moonshotai.kimi-k2.5', 'moonshot', 'Kimi K2.5', 1.00, 4.00, 128000, 8192, false, true),
+  ('openai.gpt-oss-20b-1:0', 'openai', 'GPT OSS 20B', 0.50, 2.00, 128000, 16384, false, true),
+  ('openai.gpt-oss-120b-1:0', 'openai', 'GPT OSS 120B', 2.00, 8.00, 128000, 16384, false, true)
 ON CONFLICT (model_id) DO NOTHING;
 
 -- Connect Providers (OAuth integration templates)

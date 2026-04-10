@@ -16,7 +16,7 @@ AWS_REGION = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "
 logger = logging.getLogger(__name__)
 
 AGENTCORE_FILES_BUCKET = os.environ.get("AGENTCORE_FILES_BUCKET", "")
-SKILLS_DIR = "/app/skills"
+SKILLS_DIR = "/tmp/skills"
 
 
 def install_skills():
@@ -25,7 +25,7 @@ def install_skills():
     logger.info("Skills directory ready: %s (loaded per-request from tenant S3 prefix)", SKILLS_DIR)
 
 
-WORKSPACE_DIR = "/app/workspace"
+WORKSPACE_DIR = "/tmp/workspace"
 
 # ETag cache for manifest-based incremental sync
 _etag_cache: dict[str, str] = {}
@@ -159,7 +159,7 @@ def install_workspace(tenant_id: str, assistant_id: str,
                     count, bucket, prefix, target_dir)
 
 
-SYSTEM_WORKSPACE_DIR = "/app/system-workspace"
+SYSTEM_WORKSPACE_DIR = "/tmp/system-workspace"
 _system_workspace_loaded = False
 
 

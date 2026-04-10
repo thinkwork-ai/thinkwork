@@ -28,6 +28,9 @@ locals {
     GRAPHQL_API_KEY            = var.appsync_api_key
     API_AUTH_SECRET             = var.api_auth_secret
     THINKWORK_API_SECRET        = var.api_auth_secret
+    MANIFLOW_API_SECRET         = var.api_auth_secret
+    AGENTCORE_INVOKE_URL        = var.agentcore_invoke_url
+    WORKSPACE_BUCKET            = var.bucket_name
     NODE_OPTIONS           = "--enable-source-maps"
   }
 }
@@ -82,7 +85,7 @@ resource "aws_lambda_function" "handler" {
   role          = aws_iam_role.lambda.arn
   handler       = "index.handler"
   runtime       = local.runtime
-  timeout       = each.key == "wakeup-processor" ? 120 : each.key == "chat-agent-invoke" ? 300 : 30
+  timeout       = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : 30
   memory_size   = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : 256
 
   filename         = "${var.lambda_zips_dir}/${each.key}.zip"
