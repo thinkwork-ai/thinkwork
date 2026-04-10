@@ -1,0 +1,46 @@
+{
+  "name": "@thinkwork/cli",
+  "version": "0.0.0",
+  "description": "Thinkwork CLI — deploy, manage, and interact with your Thinkwork stack",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "thinkwork": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/cli.ts --format esm --dts --clean",
+    "dev": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src __tests__"
+  },
+  "dependencies": {
+    "commander": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thinkwork-ai/thinkwork.git",
+    "directory": "apps/cli"
+  },
+  "homepage": "https://thinkwork.ai",
+  "keywords": [
+    "thinkwork",
+    "aws",
+    "agents",
+    "terraform",
+    "cli"
+  ]
+}
