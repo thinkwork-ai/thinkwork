@@ -1,7 +1,8 @@
 import { Command } from "commander";
 import { validateStage, validateComponent, expandComponent, type Component } from "../config.js";
-import { getAwsIdentity, formatIdentity } from "../aws.js";
+import { getAwsIdentity } from "../aws.js";
 import { resolveTierDir, ensureInit, ensureWorkspace, runTerraform } from "../terraform.js";
+import { printHeader, printTierHeader, printSuccess, printError, printSummary } from "../ui.js";
 
 export function registerPlanCommand(program: Command): void {
   program
@@ -11,30 +12,30 @@ export function registerPlanCommand(program: Command): void {
     .requiredOption("-s, --stage <name>", "Deployment stage")
     .option("-c, --component <tier>", "Component tier (foundation|data|app|all)", "all")
     .action(async (opts: { stage: string; component: string }) => {
+      const startTime = Date.now();
+
       const stageCheck = validateStage(opts.stage);
       if (!stageCheck.valid) {
-        console.error(`Error: ${stageCheck.error}`);
+        printError(stageCheck.error!);
         process.exit(1);
       }
 
       const compCheck = validateComponent(opts.component);
       if (!compCheck.valid) {
-        console.error(`Error: ${compCheck.error}`);
+        printError(compCheck.error!);
         process.exit(1);
       }
 
       const identity = getAwsIdentity();
-      if (identity) {
-        console.log(`\n  ${formatIdentity(identity)}`);
-      } else {
-        console.warn("\n  Warning: could not resolve AWS identity. Is the AWS CLI configured?");
-      }
+      printHeader("plan", opts.stage, identity);
 
       const terraformDir = process.env.THINKWORK_TERRAFORM_DIR || process.cwd();
       const tiers = expandComponent(opts.component as Component);
 
-      for (const tier of tiers) {
-        console.log(`\n━━━ plan: ${opts.stage} / ${tier} ━━━`);
+      for (let i = 0; i < tiers.length; i++) {
+        const tier = tiers[i];
+        printTierHeader(tier, i, tiers.length);
+
         const cwd = resolveTierDir(terraformDir, opts.stage, tier);
         await ensureInit(cwd);
         await ensureWorkspace(cwd, opts.stage);
@@ -44,11 +45,12 @@ export function registerPlanCommand(program: Command): void {
           `-var=stage=${opts.stage}`,
         ]);
         if (code !== 0) {
-          console.error(`\nPlan failed for ${tier} (exit ${code})`);
+          printError(`Plan failed for ${tier} (exit ${code})`);
           process.exit(code);
         }
       }
 
-      console.log("\n✓ Plan complete");
+      printSuccess("Plan complete");
+      printSummary("plan", opts.stage, tiers, startTime);
     });
 }
