@@ -138,6 +138,23 @@ variable "database_engine" {
   default     = "aurora-serverless"
 }
 
+variable "memory_engine" {
+  description = "Memory engine: 'managed' (AgentCore built-in, default) or 'hindsight' (ECS+ALB service, opt-in)"
+  type        = string
+  default     = "managed"
+
+  validation {
+    condition     = contains(["managed", "hindsight"], var.memory_engine)
+    error_message = "memory_engine must be 'managed' or 'hindsight'"
+  }
+}
+
+variable "hindsight_image_tag" {
+  description = "Hindsight Docker image tag (only used when memory_engine = 'hindsight')"
+  type        = string
+  default     = "0.4.22"
+}
+
 # ---------------------------------------------------------------------------
 # Naming / Buckets
 # ---------------------------------------------------------------------------

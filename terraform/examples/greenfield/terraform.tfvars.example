@@ -12,6 +12,11 @@ account_id = "123456789012"  # your AWS account ID
 #   "rds-postgres"      — Standard RDS PostgreSQL (dev/test, cheaper, deletion protection off)
 database_engine = "rds-postgres"
 
+# Memory engine:
+#   "managed"   — AgentCore built-in long-term memory (default, no extra infra)
+#   "hindsight" — Hindsight ECS+ALB service (opt-in, adds retain/recall/reflect tools)
+memory_engine = "managed"
+
 # Database master password — use a strong password
 db_password = "CHANGE_ME_strong_password_here"
 

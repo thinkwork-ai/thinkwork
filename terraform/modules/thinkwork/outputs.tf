@@ -65,3 +65,13 @@ output "appsync_api_key" {
 output "ecr_repository_url" {
   value = module.agentcore.ecr_repository_url
 }
+
+output "memory_engine" {
+  description = "Which memory engine is active (managed or hindsight)"
+  value       = var.memory_engine
+}
+
+output "hindsight_endpoint" {
+  description = "Hindsight API endpoint (only when memory_engine = hindsight)"
+  value       = var.memory_engine == "hindsight" ? module.hindsight[0].hindsight_endpoint : null
+}
