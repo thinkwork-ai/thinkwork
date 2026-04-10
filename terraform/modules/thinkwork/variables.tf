@@ -155,6 +155,12 @@ variable "hindsight_image_tag" {
   default     = "0.4.22"
 }
 
+variable "agentcore_memory_id" {
+  description = "AgentCore Memory resource ID (only used when memory_engine = 'managed')"
+  type        = string
+  default     = ""
+}
+
 # ---------------------------------------------------------------------------
 # Naming / Buckets
 # ---------------------------------------------------------------------------

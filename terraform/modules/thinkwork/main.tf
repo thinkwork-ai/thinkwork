@@ -192,6 +192,10 @@ module "agentcore" {
   account_id  = var.account_id
   region      = var.region
   bucket_name = module.s3.bucket_name
+
+  memory_engine       = var.memory_engine
+  hindsight_endpoint  = var.memory_engine == "hindsight" ? module.hindsight[0].hindsight_endpoint : ""
+  agentcore_memory_id = var.agentcore_memory_id
 }
 
 module "crons" {

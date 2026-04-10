@@ -26,6 +26,24 @@ variable "bucket_name" {
   type        = string
 }
 
+variable "memory_engine" {
+  description = "Memory engine: 'managed' or 'hindsight'. Passed as MEMORY_ENGINE env var to the container."
+  type        = string
+  default     = "managed"
+}
+
+variable "hindsight_endpoint" {
+  description = "Hindsight API endpoint (only used when memory_engine = 'hindsight')"
+  type        = string
+  default     = ""
+}
+
+variable "agentcore_memory_id" {
+  description = "AgentCore Memory resource ID (only used when memory_engine = 'managed')"
+  type        = string
+  default     = ""
+}
+
 ################################################################################
 # ECR Repository
 ################################################################################
