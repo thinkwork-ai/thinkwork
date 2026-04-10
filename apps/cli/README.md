@@ -1,17 +1,17 @@
-# @thinkwork/cli
+# @thinkwork-ai/cli
 
 Deploy and manage Thinkwork AI agent stacks on AWS.
 
 ## Install
 
 ```bash
-npm install -g @thinkwork/cli
+npm install -g @thinkwork-ai/cli
 ```
 
 Or run without installing:
 
 ```bash
-npx @thinkwork/cli --help
+npx @thinkwork-ai/cli --help
 ```
 
 ## Quick Start
