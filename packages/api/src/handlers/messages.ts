@@ -25,6 +25,7 @@ import {
 export async function handler(
 	event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
+	if (event.requestContext.http.method === "OPTIONS") return { statusCode: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "*", "Access-Control-Allow-Headers": "*" }, body: "" };
 	const token = extractBearerToken(event);
 	if (!token || !validateApiSecret(token)) return unauthorized();
 
