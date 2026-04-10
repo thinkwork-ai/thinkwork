@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { execSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { getAwsIdentity } from "../aws.js";
+import { ensureAwsCli } from "../prerequisites.js";
 import { printHeader, printSuccess, printError, printWarning } from "../ui.js";
 
 function ask(prompt: string): Promise<string> {
@@ -22,6 +23,12 @@ export function registerLoginCommand(program: Command): void {
     .option("--sso", "Use AWS SSO (Identity Center) login")
     .action(async (opts: { profile: string; sso?: boolean }) => {
       printHeader("login", opts.profile);
+
+      // Auto-install AWS CLI if missing
+      const awsOk = await ensureAwsCli();
+      if (!awsOk) {
+        process.exit(1);
+      }
 
       // Check if already authenticated
       const existing = getAwsIdentity();
