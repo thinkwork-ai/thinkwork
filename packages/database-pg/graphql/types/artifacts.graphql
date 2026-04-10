@@ -1,0 +1,68 @@
+# Artifacts: durable, markdown-first agent output.
+
+type Artifact {
+  id: ID!
+  tenantId: ID!
+  agentId: ID
+  threadId: ID
+  title: String!
+  type: ArtifactType!
+  status: ArtifactStatus!
+  content: String
+  s3Key: String
+  summary: String
+  sourceMessageId: ID
+  metadata: AWSJSON
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+enum ArtifactType {
+  DATA_VIEW
+  NOTE
+  REPORT
+  PLAN
+  DRAFT
+  DIGEST
+}
+
+enum ArtifactStatus {
+  DRAFT
+  FINAL
+  SUPERSEDED
+}
+
+input CreateArtifactInput {
+  tenantId: ID!
+  agentId: ID
+  threadId: ID
+  title: String!
+  type: ArtifactType!
+  status: ArtifactStatus
+  content: String
+  s3Key: String
+  summary: String
+  sourceMessageId: ID
+  metadata: AWSJSON
+}
+
+input UpdateArtifactInput {
+  title: String
+  type: ArtifactType
+  status: ArtifactStatus
+  content: String
+  s3Key: String
+  summary: String
+  metadata: AWSJSON
+}
+
+extend type Query {
+  artifacts(tenantId: ID!, threadId: ID, agentId: ID, type: ArtifactType, status: ArtifactStatus, limit: Int, cursor: String): [Artifact!]!
+  artifact(id: ID!): Artifact
+}
+
+extend type Mutation {
+  createArtifact(input: CreateArtifactInput!): Artifact!
+  updateArtifact(id: ID!, input: UpdateArtifactInput!): Artifact!
+  deleteArtifact(id: ID!): Boolean!
+}

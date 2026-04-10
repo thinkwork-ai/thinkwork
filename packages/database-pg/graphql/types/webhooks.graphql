@@ -1,0 +1,58 @@
+# Webhooks — externally-triggered endpoints for agent/routine dispatch (PRD-19).
+
+type Webhook {
+  id: ID!
+  tenantId: ID!
+  name: String!
+  description: String
+  token: String!
+  targetType: String!
+  agentId: ID
+  routineId: ID
+  prompt: String
+  config: AWSJSON
+  enabled: Boolean!
+  rateLimit: Int
+  lastInvokedAt: AWSDateTime
+  invocationCount: Int!
+  createdByType: String
+  createdById: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input CreateWebhookInput {
+  tenantId: ID!
+  name: String!
+  description: String
+  targetType: String!
+  agentId: ID
+  routineId: ID
+  prompt: String
+  config: AWSJSON
+  rateLimit: Int
+}
+
+input UpdateWebhookInput {
+  name: String
+  description: String
+  targetType: String
+  agentId: ID
+  routineId: ID
+  prompt: String
+  config: AWSJSON
+  enabled: Boolean
+  rateLimit: Int
+}
+
+extend type Query {
+  webhooks(tenantId: ID!, targetType: String, enabled: Boolean, limit: Int): [Webhook!]!
+  webhook(id: ID!): Webhook
+}
+
+extend type Mutation {
+  createWebhook(input: CreateWebhookInput!): Webhook!
+  updateWebhook(id: ID!, input: UpdateWebhookInput!): Webhook!
+  deleteWebhook(id: ID!): Boolean!
+  regenerateWebhookToken(id: ID!): Webhook
+}

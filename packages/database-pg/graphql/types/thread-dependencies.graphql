@@ -1,0 +1,21 @@
+# Thread dependency types (PRD-09 §9.1): blocking relationships.
+
+type ThreadDependency {
+  id: ID!
+  tenantId: ID!
+  threadId: ID!
+  blockedByThreadId: ID!
+  blockedByThread: Thread
+  createdAt: AWSDateTime!
+}
+
+extend type Thread {
+  blockedBy: [ThreadDependency!]!
+  blocks: [ThreadDependency!]!
+  isBlocked: Boolean!
+}
+
+extend type Mutation {
+  addThreadDependency(threadId: ID!, blockedByThreadId: ID!): ThreadDependency!
+  removeThreadDependency(threadId: ID!, blockedByThreadId: ID!): Boolean!
+}

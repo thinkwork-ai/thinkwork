@@ -1,0 +1,51 @@
+# Scheduled Jobs — unified scheduled job definitions and run tracking.
+
+type ScheduledJob {
+  id: ID!
+  tenantId: ID!
+  triggerType: String!
+  agentId: ID
+  routineId: ID
+  hiveId: ID
+  name: String!
+  description: String
+  prompt: String
+  config: AWSJSON
+  scheduleType: String
+  scheduleExpression: String
+  timezone: String!
+  enabled: Boolean!
+  ebScheduleName: String
+  lastRunAt: AWSDateTime
+  nextRunAt: AWSDateTime
+  createdByType: String
+  createdById: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input CreateScheduledJobInput {
+  tenantId: ID!
+  triggerType: String!
+  agentId: ID
+  routineId: ID
+  hiveId: ID
+  name: String!
+  description: String
+  prompt: String
+  config: AWSJSON
+  scheduleType: String
+  scheduleExpression: String
+  timezone: String
+  createdByType: String
+  createdById: String
+}
+
+extend type Query {
+  scheduledJobs(tenantId: ID!, agentId: ID, routineId: ID, triggerType: String, enabled: Boolean, limit: Int): [ScheduledJob!]!
+  scheduledJob(id: ID!): ScheduledJob
+}
+
+extend type Mutation {
+  createScheduledJob(input: CreateScheduledJobInput!): ScheduledJob!
+}

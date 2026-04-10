@@ -1,0 +1,31 @@
+# Base schema definition for AWS AppSync.
+# Type files in types/ extend Query, Mutation, and Subscription.
+# All .graphql files are concatenated by infra/appsync.ts before deployment.
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+
+scalar AWSDateTime
+scalar AWSJSON
+scalar AWSURL
+
+# Shared pagination type used across domains
+type PageInfo {
+  hasNextPage: Boolean!
+  endCursor: String
+}
+
+type Query {
+  _empty: String
+}
+
+type Mutation {
+  _empty: String
+}
+
+type Subscription {
+  _empty: String
+}

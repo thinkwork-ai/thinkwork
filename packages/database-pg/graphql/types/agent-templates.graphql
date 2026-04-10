@@ -1,0 +1,124 @@
+# Agent Templates — security & capability boundary types
+# A template defines the full capability and security posture for agents
+# it creates: model, guardrail, blocked tools, skills, knowledge bases.
+
+type AgentTemplate {
+  id: ID!
+  tenantId: ID
+  name: String!
+  slug: String!
+  description: String
+  category: String
+  icon: String
+  source: String!
+  model: String
+  guardrailId: ID
+  blockedTools: AWSJSON
+  config: AWSJSON
+  skills: AWSJSON
+  knowledgeBaseIds: AWSJSON
+  isPublished: Boolean!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type AgentVersion {
+  id: ID!
+  tenantId: ID!
+  agentId: ID!
+  versionNumber: Int!
+  label: String
+  configSnapshot: AWSJSON
+  workspaceSnapshot: AWSJSON
+  skillsSnapshot: AWSJSON
+  knowledgeBasesSnapshot: AWSJSON
+  guardrailSnapshot: AWSJSON
+  createdBy: ID
+  createdAt: AWSDateTime!
+  isActive: Boolean!
+}
+
+# --- Sync diff types ---
+
+type RoleChange {
+  current: String
+  target: String
+}
+
+type TemplateSyncDiff {
+  roleChange: RoleChange
+  skillsAdded: [String!]!
+  skillsRemoved: [String!]!
+  skillsChanged: [String!]!
+  kbsAdded: [String!]!
+  kbsRemoved: [String!]!
+  filesAdded: [String!]!
+  filesModified: [String!]!
+  filesSame: [String!]!
+}
+
+type SyncSummary {
+  agentsSynced: Int!
+  agentsFailed: Int!
+  errors: [String!]!
+}
+
+# --- Inputs ---
+
+input CreateAgentTemplateInput {
+  tenantId: ID!
+  name: String!
+  slug: String!
+  description: String
+  category: String
+  icon: String
+  model: String
+  guardrailId: ID
+  blockedTools: AWSJSON
+  config: AWSJSON
+  skills: AWSJSON
+  knowledgeBaseIds: AWSJSON
+  isPublished: Boolean
+}
+
+input UpdateAgentTemplateInput {
+  name: String
+  slug: String
+  description: String
+  category: String
+  icon: String
+  model: String
+  guardrailId: ID
+  blockedTools: AWSJSON
+  config: AWSJSON
+  skills: AWSJSON
+  knowledgeBaseIds: AWSJSON
+  isPublished: Boolean
+}
+
+input CreateAgentFromTemplateInput {
+  templateId: ID!
+  name: String!
+  slug: String!
+  hiveId: ID
+}
+
+# --- Query / Mutation extensions ---
+
+extend type Query {
+  agentTemplates(tenantId: ID!): [AgentTemplate!]!
+  agentTemplate(id: ID!): AgentTemplate
+  agentVersions(agentId: ID!, limit: Int): [AgentVersion!]!
+  linkedAgentsForTemplate(templateId: ID!): [Agent!]!
+  templateSyncDiff(templateId: ID!, agentId: ID!): TemplateSyncDiff!
+}
+
+extend type Mutation {
+  createAgentTemplate(input: CreateAgentTemplateInput!): AgentTemplate!
+  updateAgentTemplate(id: ID!, input: UpdateAgentTemplateInput!): AgentTemplate!
+  deleteAgentTemplate(id: ID!): Boolean!
+  createAgentFromTemplate(input: CreateAgentFromTemplateInput!): Agent!
+  syncTemplateToAgent(templateId: ID!, agentId: ID!): Agent!
+  syncTemplateToAllAgents(templateId: ID!): SyncSummary!
+  rollbackAgentVersion(agentId: ID!, versionId: ID!): Agent!
+}

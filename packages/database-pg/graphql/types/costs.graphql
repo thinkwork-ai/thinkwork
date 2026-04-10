@@ -1,0 +1,102 @@
+# PRD-02: Cost Management types
+
+type CostEvent {
+  id: ID!
+  tenantId: ID!
+  agentId: ID
+  requestId: String!
+  eventType: String!
+  amountUsd: Float!
+  model: String
+  provider: String
+  inputTokens: Int
+  outputTokens: Int
+  cachedReadTokens: Int
+  durationMs: Int
+  createdAt: AWSDateTime!
+}
+
+type CostSummary {
+  totalUsd: Float!
+  llmUsd: Float!
+  computeUsd: Float!
+  toolsUsd: Float!
+  evalUsd: Float
+  totalInputTokens: Int!
+  totalOutputTokens: Int!
+  eventCount: Int!
+  periodStart: AWSDateTime!
+  periodEnd: AWSDateTime!
+}
+
+type AgentCostSummary {
+  agentId: ID
+  agentName: String!
+  totalUsd: Float!
+  eventCount: Int!
+}
+
+type ModelCostSummary {
+  model: String!
+  totalUsd: Float!
+  inputTokens: Int!
+  outputTokens: Int!
+}
+
+type DailyCostPoint {
+  day: String!
+  totalUsd: Float!
+  llmUsd: Float!
+  computeUsd: Float!
+  toolsUsd: Float!
+  eventCount: Int!
+}
+
+type BudgetPolicy {
+  id: ID!
+  tenantId: ID!
+  agentId: ID
+  scope: String!
+  period: String!
+  limitUsd: Float!
+  actionOnExceed: String!
+  enabled: Boolean!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type BudgetStatus {
+  policy: BudgetPolicy!
+  spentUsd: Float!
+  remainingUsd: Float!
+  percentUsed: Float!
+  status: String!
+}
+
+# --- Inputs ---
+
+input UpsertBudgetPolicyInput {
+  scope: String!
+  agentId: ID
+  limitUsd: Float!
+  actionOnExceed: String
+  period: String
+}
+
+# --- Query / Mutation extensions ---
+
+extend type Query {
+  costSummary(tenantId: ID!, from: AWSDateTime, to: AWSDateTime): CostSummary!
+  costByAgent(tenantId: ID!, from: AWSDateTime, to: AWSDateTime): [AgentCostSummary!]!
+  costByModel(tenantId: ID!, from: AWSDateTime, to: AWSDateTime): [ModelCostSummary!]!
+  costTimeSeries(tenantId: ID!, days: Int): [DailyCostPoint!]!
+  budgetPolicies(tenantId: ID!): [BudgetPolicy!]!
+  budgetStatus(tenantId: ID!): [BudgetStatus!]!
+  agentBudgetStatus(agentId: ID!): BudgetStatus
+}
+
+extend type Mutation {
+  upsertBudgetPolicy(tenantId: ID!, input: UpsertBudgetPolicyInput!): BudgetPolicy!
+  deleteBudgetPolicy(id: ID!): Boolean!
+  unpauseAgent(agentId: ID!): Agent!
+}

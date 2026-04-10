@@ -1,0 +1,267 @@
+# Thread domain types (PRD-01): Thread, ThreadComment, ThreadLabel,
+# ThreadAttachment and related enums/inputs.
+
+enum ThreadStatus {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  BLOCKED
+  DONE
+  CANCELLED
+}
+
+enum ThreadPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+  CRITICAL
+}
+
+enum ThreadType {
+  TASK
+  BUG
+  FEATURE
+  QUESTION
+}
+
+enum ThreadChannel {
+  CHAT
+  EMAIL
+  SCHEDULE
+  MANUAL
+  WEBHOOK
+  API
+  TASK
+}
+
+type Thread {
+  id: ID!
+  tenantId: ID!
+  agentId: ID
+  agent: Agent
+  messages(limit: Int, cursor: String): MessageConnection!
+  number: Int!
+  identifier: String
+  title: String!
+  description: String
+  status: ThreadStatus!
+  priority: ThreadPriority!
+  type: ThreadType!
+  channel: ThreadChannel!
+  parentId: ID
+  children: [Thread!]!
+  assigneeType: String
+  assigneeId: ID
+  assignee: User
+  reporterId: ID
+  reporter: User
+  checkoutRunId: String
+  checkoutVersion: Int!
+  billingCode: String
+  labels: AWSJSON
+  metadata: AWSJSON
+  dueAt: AWSDateTime
+  startedAt: AWSDateTime
+  completedAt: AWSDateTime
+  cancelledAt: AWSDateTime
+  closedAt: AWSDateTime
+  archivedAt: AWSDateTime
+  lastTurnCompletedAt: AWSDateTime
+  lastResponsePreview: String
+  lastReadAt: AWSDateTime
+  createdByType: String
+  createdById: String
+  comments: [ThreadComment!]!
+  attachments: [ThreadAttachment!]!
+  commentCount: Int!
+  childCount: Int!
+  costSummary: Float
+  lastActivityAt: AWSDateTime
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type ThreadsPage {
+  items: [Thread!]!
+  totalCount: Int!
+}
+
+type ThreadComment {
+  id: ID!
+  threadId: ID!
+  tenantId: ID!
+  authorType: String
+  authorId: ID
+  content: String!
+  metadata: AWSJSON
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type ThreadLabel {
+  id: ID!
+  tenantId: ID!
+  name: String!
+  color: String
+  description: String
+  createdAt: AWSDateTime!
+}
+
+type ThreadAttachment {
+  id: ID!
+  threadId: ID!
+  tenantId: ID!
+  name: String
+  s3Key: String
+  mimeType: String
+  sizeBytes: Int
+  uploadedBy: ID
+  createdAt: AWSDateTime!
+}
+
+type ThreadLabelAssignment {
+  id: ID!
+  threadId: ID!
+  labelId: ID!
+  tenantId: ID!
+  label: ThreadLabel
+  createdAt: AWSDateTime!
+}
+
+# --- Inputs ---
+
+input CreateThreadInput {
+  tenantId: ID!
+  agentId: ID
+  title: String!
+  description: String
+  priority: ThreadPriority
+  type: ThreadType
+  channel: ThreadChannel
+  parentId: ID
+  assigneeType: String
+  assigneeId: ID
+  billingCode: String
+  labels: AWSJSON
+  metadata: AWSJSON
+  dueAt: AWSDateTime
+  createdByType: String
+  createdById: String
+}
+
+input UpdateThreadInput {
+  title: String
+  description: String
+  status: ThreadStatus
+  priority: ThreadPriority
+  type: ThreadType
+  channel: ThreadChannel
+  assigneeType: String
+  assigneeId: ID
+  billingCode: String
+  labels: AWSJSON
+  metadata: AWSJSON
+  dueAt: AWSDateTime
+  archivedAt: AWSDateTime
+  lastReadAt: AWSDateTime
+}
+
+input AddThreadCommentInput {
+  threadId: ID!
+  content: String!
+  authorType: String
+  authorId: ID
+  metadata: AWSJSON
+}
+
+input CreateThreadLabelInput {
+  tenantId: ID!
+  name: String!
+  color: String
+  description: String
+}
+
+input UpdateThreadLabelInput {
+  name: String
+  color: String
+  description: String
+}
+
+input CheckoutThreadInput {
+  runId: String!
+}
+
+input ReleaseThreadInput {
+  runId: String!
+  status: ThreadStatus
+}
+
+# --- Query / Mutation extensions ---
+
+extend type Query {
+  threads(
+    tenantId: ID!
+    status: ThreadStatus
+    priority: ThreadPriority
+    type: ThreadType
+    channel: ThreadChannel
+    agentId: ID
+    assigneeId: ID
+    parentId: ID
+    search: String
+    limit: Int
+    cursor: String
+  ): [Thread!]!
+  threadsPaged(
+    tenantId: ID!
+    statuses: [String!]
+    priorities: [String!]
+    search: String
+    showArchived: Boolean
+    sortField: String
+    sortDir: String
+    limit: Int
+    offset: Int
+  ): ThreadsPage!
+  thread(id: ID!): Thread
+  threadByNumber(tenantId: ID!, number: Int!): Thread
+  threadLabels(tenantId: ID!): [ThreadLabel!]!
+}
+
+extend type Mutation {
+  createThread(input: CreateThreadInput!): Thread!
+  updateThread(id: ID!, input: UpdateThreadInput!): Thread!
+  deleteThread(id: ID!): Boolean!
+
+  checkoutThread(id: ID!, input: CheckoutThreadInput!): Thread!
+  releaseThread(id: ID!, input: ReleaseThreadInput!): Thread!
+
+  addThreadComment(input: AddThreadCommentInput!): ThreadComment!
+  updateThreadComment(id: ID!, content: String!): ThreadComment!
+  deleteThreadComment(id: ID!): Boolean!
+
+  createThreadLabel(input: CreateThreadLabelInput!): ThreadLabel!
+  updateThreadLabel(id: ID!, input: UpdateThreadLabelInput!): ThreadLabel!
+  deleteThreadLabel(id: ID!): Boolean!
+
+  assignThreadLabel(threadId: ID!, labelId: ID!): ThreadLabelAssignment!
+  removeThreadLabel(threadId: ID!, labelId: ID!): Boolean!
+
+  escalateThread(input: EscalateThreadInput!): Thread!
+  delegateThread(input: DelegateThreadInput!): Thread!
+}
+
+input EscalateThreadInput {
+  threadId: ID!
+  reason: String!
+  agentId: ID!
+}
+
+input DelegateThreadInput {
+  threadId: ID!
+  assigneeId: ID!
+  reason: String
+  agentId: ID!
+}

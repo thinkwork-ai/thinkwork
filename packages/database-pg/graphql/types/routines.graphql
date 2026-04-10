@@ -1,0 +1,128 @@
+# Routine domain types: Routine, RoutineRun, RoutineStep,
+# RoutineTrigger and related enums/inputs.
+
+enum RoutineStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum RoutineRunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+type Routine {
+  id: ID!
+  tenantId: ID!
+  hiveId: ID
+  hive: Hive
+  agentId: ID
+  agent: Agent
+  name: String!
+  description: String
+  type: String!
+  status: String!
+  schedule: String
+  config: AWSJSON
+  lastRunAt: AWSDateTime
+  nextRunAt: AWSDateTime
+  runs: [RoutineRun!]!
+  triggers: [RoutineTrigger!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type RoutineRun {
+  id: ID!
+  routineId: ID!
+  tenantId: ID!
+  status: String!
+  startedAt: AWSDateTime
+  completedAt: AWSDateTime
+  error: String
+  metadata: AWSJSON
+  steps: [RoutineStep!]!
+  createdAt: AWSDateTime!
+}
+
+type RoutineStep {
+  id: ID!
+  runId: ID!
+  routineId: ID!
+  tenantId: ID!
+  stepIndex: Int!
+  name: String!
+  status: String!
+  input: AWSJSON
+  output: AWSJSON
+  startedAt: AWSDateTime
+  completedAt: AWSDateTime
+  error: String
+  createdAt: AWSDateTime!
+}
+
+type RoutineTrigger {
+  id: ID!
+  routineId: ID!
+  tenantId: ID!
+  triggerType: String!
+  config: AWSJSON
+  enabled: Boolean!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+# --- Inputs ---
+
+input CreateRoutineInput {
+  tenantId: ID!
+  hiveId: ID
+  agentId: ID
+  name: String!
+  description: String
+  type: String
+  schedule: String
+  config: AWSJSON
+}
+
+input UpdateRoutineInput {
+  name: String
+  description: String
+  type: String
+  status: String
+  schedule: String
+  config: AWSJSON
+  hiveId: ID
+  agentId: ID
+}
+
+input RoutineTriggerInput {
+  triggerType: String!
+  config: AWSJSON
+  enabled: Boolean
+}
+
+# --- Query / Mutation extensions ---
+
+extend type Query {
+  routines(tenantId: ID!, hiveId: ID, agentId: ID, status: RoutineStatus): [Routine!]!
+  routine(id: ID!): Routine
+  routineRun(id: ID!): RoutineRun
+  routineRuns(routineId: ID!, limit: Int, cursor: String): [RoutineRun!]!
+
+}
+
+extend type Mutation {
+  createRoutine(input: CreateRoutineInput!): Routine!
+  updateRoutine(id: ID!, input: UpdateRoutineInput!): Routine!
+  deleteRoutine(id: ID!): Boolean!
+  triggerRoutineRun(routineId: ID!): RoutineRun!
+
+  setRoutineTrigger(routineId: ID!, input: RoutineTriggerInput!): RoutineTrigger!
+  deleteRoutineTrigger(id: ID!): Boolean!
+
+}
