@@ -69,4 +69,10 @@ ENV AGENTCORE_MEMORY_ID=""
 
 EXPOSE 8080
 
+# Lambda Web Adapter — bridges Lambda invoke events ↔ HTTP server.
+# Auto-detects Lambda vs local mode, so the container still works standalone.
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt/extensions/lambda-adapter
+ENV AWS_LWA_PORT=8080
+ENV AWS_LWA_READINESS_CHECK_PATH=/ping
+
 CMD ["python", "server.py"]

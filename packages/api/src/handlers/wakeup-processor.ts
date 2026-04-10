@@ -45,6 +45,7 @@ import { resolveWorkflowConfig, renderPromptTemplate } from "../lib/orchestratio
 import type { PromptTemplateContext } from "../lib/orchestration/index.js";
 
 const AGENTCORE_INVOKE_URL = process.env.AGENTCORE_INVOKE_URL || "";
+const AGENTCORE_FUNCTION_NAME = process.env.AGENTCORE_FUNCTION_NAME || "";
 const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
 const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
 const MANIFLOW_API_SECRET = process.env.MANIFLOW_API_SECRET || "";
@@ -56,6 +57,52 @@ const MANIFLOW_API_URL = process.env.MANIFLOW_API_URL || process.env.MCP_BASE_UR
 const EXA_API_KEY = process.env.EXA_API_KEY || "";
 const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
 const BATCH_SIZE = 10;
+
+/**
+ * Invoke AgentCore via Lambda SDK (direct invoke) or HTTP fetch (Function URL).
+ * Uses AGENTCORE_FUNCTION_NAME for Lambda SDK, falls back to AGENTCORE_INVOKE_URL for HTTP.
+ */
+async function invokeAgentCore(payload: Record<string, unknown>): Promise<{ ok: boolean; status: number; result: Record<string, unknown> }> {
+	if (AGENTCORE_FUNCTION_NAME) {
+		const { LambdaClient, InvokeCommand } = await import("@aws-sdk/client-lambda");
+		const lambda = new LambdaClient({ region: process.env.AWS_REGION || "us-east-1" });
+		const lambdaPayload = JSON.stringify({
+			requestContext: { http: { method: "POST", path: "/invocations" } },
+			rawPath: "/invocations",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify(payload),
+			isBase64Encoded: false,
+		});
+		const resp = await lambda.send(new InvokeCommand({
+			FunctionName: AGENTCORE_FUNCTION_NAME,
+			InvocationType: "RequestResponse",
+			Payload: new TextEncoder().encode(lambdaPayload),
+		}));
+		const respBody = resp.Payload ? new TextDecoder().decode(resp.Payload) : "{}";
+		const parsed = JSON.parse(respBody) as Record<string, unknown>;
+		// Lambda Web Adapter returns {statusCode, body, headers}
+		const statusCode = (parsed.statusCode as number) || 200;
+		const bodyStr = (parsed.body as string) || respBody;
+		const result = JSON.parse(bodyStr) as Record<string, unknown>;
+		return { ok: statusCode >= 200 && statusCode < 300, status: statusCode, result };
+	}
+
+	// Fallback to HTTP fetch
+	const resp = await fetch(AGENTCORE_INVOKE_URL, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			...(MANIFLOW_API_SECRET ? { Authorization: `Bearer ${MANIFLOW_API_SECRET}` } : {}),
+		},
+		body: JSON.stringify(payload),
+	});
+	if (!resp.ok) {
+		const errText = await resp.text();
+		return { ok: false, status: resp.status, result: { error: errText } };
+	}
+	const result = await resp.json() as Record<string, unknown>;
+	return { ok: true, status: 200, result };
+}
 
 const db = getDb();
 
@@ -813,49 +860,41 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
 		console.log(`[wakeup-processor] Invoking AgentCore for agent=${wakeup.agent_id} runtime=${runtimeType} mcp=${mcpServers.join(",")} source=${wakeup.source} traceId=${traceId}`);
 
-		const invokeResponse = await fetch(AGENTCORE_INVOKE_URL, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				...(MANIFLOW_API_SECRET ? { Authorization: `Bearer ${MANIFLOW_API_SECRET}` } : {}),
-			},
-			body: JSON.stringify({
-				tenant_id: wakeup.tenant_id,
-				assistant_id: wakeup.agent_id,
-				thread_id: resolvedThreadId,
-				user_id: agent.human_pair_id || undefined,
-				trace_id: traceId,
-				message: agentMessage,
-				use_memory: true,
-				tenant_slug: tenantSlug || undefined,
-				instance_id: agentSlug || undefined,
-				agent_name: agent.name,
-				human_name: humanName || undefined,
-				workspace_bucket: WORKSPACE_BUCKET || undefined,
-				workspace_prefix: workspacePrefix,
-				hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
-				runtime_type: runtimeType,
-				model: agent.model,
-				skills: skillsConfig.length > 0 ? skillsConfig : undefined,
-				knowledge_bases: knowledgeBasesConfig,
-				guardrail_config: guardrailPayload || undefined,
-				mcp_servers: mcpServers,
-				mcp_base_url: MCP_BASE_URL || undefined,
-				mcp_auth_secret: MCP_AUTH_SECRET || undefined,
-				gateway_url: AGENTCORE_GATEWAY_URL || undefined,
-				session_key: triggerId || `wakeup-${wakeup.source}`,
-				trigger_channel: triggerChannel || undefined,
-			}),
+		const invokeResponse = await invokeAgentCore({
+			tenant_id: wakeup.tenant_id,
+			assistant_id: wakeup.agent_id,
+			thread_id: resolvedThreadId,
+			user_id: agent.human_pair_id || undefined,
+			trace_id: traceId,
+			message: agentMessage,
+			use_memory: true,
+			tenant_slug: tenantSlug || undefined,
+			instance_id: agentSlug || undefined,
+			agent_name: agent.name,
+			human_name: humanName || undefined,
+			workspace_bucket: WORKSPACE_BUCKET || undefined,
+			workspace_prefix: workspacePrefix,
+			hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
+			runtime_type: runtimeType,
+			model: agent.model,
+			skills: skillsConfig.length > 0 ? skillsConfig : undefined,
+			knowledge_bases: knowledgeBasesConfig,
+			guardrail_config: guardrailPayload || undefined,
+			mcp_servers: mcpServers,
+			mcp_base_url: MCP_BASE_URL || undefined,
+			mcp_auth_secret: MCP_AUTH_SECRET || undefined,
+			gateway_url: AGENTCORE_GATEWAY_URL || undefined,
+			session_key: triggerId || `wakeup-${wakeup.source}`,
+			trigger_channel: triggerChannel || undefined,
 		});
 
 		const durationMs = Date.now() - startMs;
 
 		if (!invokeResponse.ok) {
-			const errText = await invokeResponse.text();
-			throw new Error(`AgentCore invoke failed: ${invokeResponse.status} ${errText}`);
+			throw new Error(`AgentCore invoke failed: ${invokeResponse.status} ${JSON.stringify(invokeResponse.result)}`);
 		}
 
-		const invokeResult = await invokeResponse.json() as Record<string, unknown>;
+		const invokeResult = invokeResponse.result;
 		const rawResponseText = extractResponseText(invokeResult.response || invokeResult);
 
 		// PRD-22: Use response directly (signal protocol removed)
@@ -1150,38 +1189,31 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 					.set({ last_activity_at: new Date() })
 					.where(eq(threadTurns.id, run.id));
 
-				const loopResponse = await fetch(AGENTCORE_INVOKE_URL, {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						...(MANIFLOW_API_SECRET ? { Authorization: `Bearer ${MANIFLOW_API_SECRET}` } : {}),
-					},
-					body: JSON.stringify({
-						tenant_id: wakeup.tenant_id,
-						assistant_id: wakeup.agent_id,
-						thread_id: resolvedThreadId,
-						user_id: agent.human_pair_id || undefined,
-						message: `Continue working. Previous response:\n${loopMessage.slice(0, 2000)}`,
-						use_memory: true,
-						tenant_slug: tenantSlug || undefined,
-						instance_id: agentSlug || undefined,
-						agent_name: agent.name,
-						human_name: humanName || undefined,
-						workspace_bucket: WORKSPACE_BUCKET || undefined,
-						workspace_prefix: workspacePrefix,
-						hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
-						runtime_type: runtimeType,
-						model: agent.model,
-						skills: skillsConfig.length > 0 ? skillsConfig : undefined,
-						knowledge_bases: knowledgeBasesConfig,
-						guardrail_config: guardrailPayload || undefined,
-						mcp_servers: mcpServers,
-						mcp_base_url: MCP_BASE_URL || undefined,
-						mcp_auth_secret: MCP_AUTH_SECRET || undefined,
-						gateway_url: AGENTCORE_GATEWAY_URL || undefined,
-						session_key: triggerId || `wakeup-${wakeup.source}`,
-						trigger_channel: threadContext?.channel || wakeup.source || undefined,
-					}),
+				const loopResponse = await invokeAgentCore({
+					tenant_id: wakeup.tenant_id,
+					assistant_id: wakeup.agent_id,
+					thread_id: resolvedThreadId,
+					user_id: agent.human_pair_id || undefined,
+					message: `Continue working. Previous response:\n${loopMessage.slice(0, 2000)}`,
+					use_memory: true,
+					tenant_slug: tenantSlug || undefined,
+					instance_id: agentSlug || undefined,
+					agent_name: agent.name,
+					human_name: humanName || undefined,
+					workspace_bucket: WORKSPACE_BUCKET || undefined,
+					workspace_prefix: workspacePrefix,
+					hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
+					runtime_type: runtimeType,
+					model: agent.model,
+					skills: skillsConfig.length > 0 ? skillsConfig : undefined,
+					knowledge_bases: knowledgeBasesConfig,
+					guardrail_config: guardrailPayload || undefined,
+					mcp_servers: mcpServers,
+					mcp_base_url: MCP_BASE_URL || undefined,
+					mcp_auth_secret: MCP_AUTH_SECRET || undefined,
+					gateway_url: AGENTCORE_GATEWAY_URL || undefined,
+					session_key: triggerId || `wakeup-${wakeup.source}`,
+					trigger_channel: threadContext?.channel || wakeup.source || undefined,
 				});
 
 				if (!loopResponse.ok) {
@@ -1189,7 +1221,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 					break;
 				}
 
-				const loopResult = await loopResponse.json() as Record<string, unknown>;
+				const loopResult = loopResponse.result;
 				const rawLoop = extractResponseText(loopResult.response || loopResult);
 				loopMessage = rawLoop;
 				loopResponseText = rawLoop;

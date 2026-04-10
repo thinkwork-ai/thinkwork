@@ -150,6 +150,43 @@ resource "aws_cloudwatch_log_group" "agentcore" {
 }
 
 ################################################################################
+# Lambda Container Image
+################################################################################
+
+resource "aws_lambda_function" "agentcore" {
+  function_name = "thinkwork-${var.stage}-agentcore"
+  role          = aws_iam_role.agentcore.arn
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.agentcore.repository_url}:latest"
+  timeout       = 900
+  memory_size   = 2048
+
+  environment {
+    variables = {
+      PORT                   = "8080"
+      AWS_LWA_PORT           = "8080"
+      MEMORY_ENGINE          = var.memory_engine
+      AGENTCORE_MEMORY_ID    = var.agentcore_memory_id
+      AGENTCORE_FILES_BUCKET = var.bucket_name
+    }
+  }
+
+  logging_config {
+    log_group  = aws_cloudwatch_log_group.agentcore.name
+    log_format = "Text"
+  }
+
+  tags = {
+    Name = "thinkwork-${var.stage}-agentcore"
+  }
+}
+
+resource "aws_lambda_function_url" "agentcore" {
+  function_name      = aws_lambda_function.agentcore.function_name
+  authorization_type = "NONE"
+}
+
+################################################################################
 # Outputs
 ################################################################################
 
@@ -161,4 +198,9 @@ output "ecr_repository_url" {
 output "execution_role_arn" {
   description = "IAM role ARN for AgentCore execution"
   value       = aws_iam_role.agentcore.arn
+}
+
+output "agentcore_invoke_url" {
+  description = "Lambda Function URL for the AgentCore container"
+  value       = aws_lambda_function_url.agentcore.function_url
 }

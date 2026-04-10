@@ -133,3 +133,9 @@ variable "api_auth_secret" {
   sensitive   = true
   default     = ""
 }
+
+variable "agentcore_invoke_url" {
+  description = "Lambda Function URL for AgentCore container invocation"
+  type        = string
+  default     = ""
+}
