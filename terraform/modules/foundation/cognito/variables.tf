@@ -30,13 +30,13 @@ variable "existing_user_pool_arn" {
   default     = null
 }
 
-variable "existing_hive_client_id" {
+variable "existing_admin_client_id" {
   description = "App client ID for the web admin client (required when create_cognito = false)"
   type        = string
   default     = null
 }
 
-variable "existing_hive_app_client_id" {
+variable "existing_mobile_client_id" {
   description = "App client ID for the mobile client (required when create_cognito = false)"
   type        = string
   default     = null
@@ -87,7 +87,7 @@ variable "pre_signup_lambda_zip" {
 # Callback URLs (configurable per deployment)
 # ---------------------------------------------------------------------------
 
-variable "hive_callback_urls" {
+variable "admin_callback_urls" {
   description = "OAuth callback URLs for the web admin client"
   type        = list(string)
   default = [
@@ -96,7 +96,7 @@ variable "hive_callback_urls" {
   ]
 }
 
-variable "hive_logout_urls" {
+variable "admin_logout_urls" {
   description = "OAuth logout URLs for the web admin client"
   type        = list(string)
   default = [

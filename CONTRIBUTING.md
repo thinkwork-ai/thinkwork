@@ -34,7 +34,7 @@ If you want a generic self-hosted agent framework, there are several great proje
 ## Repo layout
 
 ```
-apps/        # runnable products (hive, mobile, cli)
+apps/        # runnable products (admin, mobile, cli)
 packages/    # shared libraries
 terraform/   # IaC modules + reference examples
 examples/    # runnable reference packs

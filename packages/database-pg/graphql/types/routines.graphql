@@ -18,8 +18,8 @@ enum RoutineRunStatus {
 type Routine {
   id: ID!
   tenantId: ID!
-  hiveId: ID
-  hive: Hive
+  teamId: ID
+  team: Team
   agentId: ID
   agent: Agent
   name: String!
@@ -80,7 +80,7 @@ type RoutineTrigger {
 
 input CreateRoutineInput {
   tenantId: ID!
-  hiveId: ID
+  teamId: ID
   agentId: ID
   name: String!
   description: String
@@ -96,7 +96,7 @@ input UpdateRoutineInput {
   status: String
   schedule: String
   config: AWSJSON
-  hiveId: ID
+  teamId: ID
   agentId: ID
 }
 
@@ -109,7 +109,7 @@ input RoutineTriggerInput {
 # --- Query / Mutation extensions ---
 
 extend type Query {
-  routines(tenantId: ID!, hiveId: ID, agentId: ID, status: RoutineStatus): [Routine!]!
+  routines(tenantId: ID!, teamId: ID, agentId: ID, status: RoutineStatus): [Routine!]!
   routine(id: ID!): Routine
   routineRun(id: ID!): RoutineRun
   routineRuns(routineId: ID!, limit: Int, cursor: String): [RoutineRun!]!

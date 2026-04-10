@@ -115,14 +115,14 @@ output "user_pool_id" {
   value       = module.thinkwork.user_pool_id
 }
 
-output "hive_client_id" {
+output "admin_client_id" {
   description = "Cognito app client ID for web admin"
-  value       = module.thinkwork.hive_client_id
+  value       = module.thinkwork.admin_client_id
 }
 
-output "hive_app_client_id" {
+output "mobile_client_id" {
   description = "Cognito app client ID for mobile"
-  value       = module.thinkwork.hive_app_client_id
+  value       = module.thinkwork.mobile_client_id
 }
 
 output "ecr_repository_url" {

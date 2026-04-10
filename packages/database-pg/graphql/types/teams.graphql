@@ -1,6 +1,6 @@
-# Hive domain types: Hive, HiveAgent, HiveUser, HivePolicy and related inputs.
+# Team domain types: Team, TeamAgent, TeamUser and related inputs.
 
-type Hive {
+type Team {
   id: ID!
   tenantId: ID!
   name: String!
@@ -10,15 +10,15 @@ type Hive {
   status: String!
   budgetMonthlyCents: Int
   metadata: AWSJSON
-  agents: [HiveAgent!]!
-  users: [HiveUser!]!
+  agents: [TeamAgent!]!
+  users: [TeamUser!]!
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
 }
 
-type HiveAgent {
+type TeamAgent {
   id: ID!
-  hiveId: ID!
+  teamId: ID!
   agentId: ID!
   tenantId: ID!
   agent: Agent
@@ -27,9 +27,9 @@ type HiveAgent {
   createdAt: AWSDateTime!
 }
 
-type HiveUser {
+type TeamUser {
   id: ID!
-  hiveId: ID!
+  teamId: ID!
   userId: ID!
   tenantId: ID!
   user: User
@@ -40,7 +40,7 @@ type HiveUser {
 
 # --- Inputs ---
 
-input CreateHiveInput {
+input CreateTeamInput {
   tenantId: ID!
   name: String!
   description: String
@@ -49,7 +49,7 @@ input CreateHiveInput {
   metadata: AWSJSON
 }
 
-input UpdateHiveInput {
+input UpdateTeamInput {
   name: String
   description: String
   type: String
@@ -58,12 +58,12 @@ input UpdateHiveInput {
   metadata: AWSJSON
 }
 
-input AddHiveAgentInput {
+input AddTeamAgentInput {
   agentId: ID!
   role: String
 }
 
-input AddHiveUserInput {
+input AddTeamUserInput {
   userId: ID!
   role: String
 }
@@ -71,19 +71,18 @@ input AddHiveUserInput {
 # --- Query / Mutation extensions ---
 
 extend type Query {
-  hives(tenantId: ID!): [Hive!]!
-  hive(id: ID!): Hive
+  teams(tenantId: ID!): [Team!]!
+  team(id: ID!): Team
 }
 
 extend type Mutation {
-  createHive(input: CreateHiveInput!): Hive!
-  updateHive(id: ID!, input: UpdateHiveInput!): Hive!
-  deleteHive(id: ID!): Boolean!
+  createTeam(input: CreateTeamInput!): Team!
+  updateTeam(id: ID!, input: UpdateTeamInput!): Team!
+  deleteTeam(id: ID!): Boolean!
 
-  addHiveAgent(hiveId: ID!, input: AddHiveAgentInput!): HiveAgent!
-  removeHiveAgent(hiveId: ID!, agentId: ID!): Boolean!
+  addTeamAgent(teamId: ID!, input: AddTeamAgentInput!): TeamAgent!
+  removeTeamAgent(teamId: ID!, agentId: ID!): Boolean!
 
-  addHiveUser(hiveId: ID!, input: AddHiveUserInput!): HiveUser!
-  removeHiveUser(hiveId: ID!, userId: ID!): Boolean!
-
+  addTeamUser(teamId: ID!, input: AddTeamUserInput!): TeamUser!
+  removeTeamUser(teamId: ID!, userId: ID!): Boolean!
 }

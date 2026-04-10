@@ -1,7 +1,7 @@
 ################################################################################
 # Static Site — App Module
 #
-# S3 + CloudFront distribution for static web apps (apps/hive, docs site).
+# S3 + CloudFront distribution for static web apps (apps/admin, docs site).
 # Reusable for any static frontend that needs a CDN + custom domain.
 ################################################################################
 
@@ -11,7 +11,7 @@ variable "stage" {
 }
 
 variable "site_name" {
-  description = "Identifier for the site (e.g. hive, docs)"
+  description = "Identifier for the site (e.g. admin, docs)"
   type        = string
 }
 

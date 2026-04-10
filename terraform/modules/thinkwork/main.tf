@@ -50,16 +50,16 @@ module "cognito" {
   create_cognito              = var.create_cognito
   existing_user_pool_id       = var.existing_user_pool_id
   existing_user_pool_arn      = var.existing_user_pool_arn
-  existing_hive_client_id     = var.existing_hive_client_id
-  existing_hive_app_client_id = var.existing_hive_app_client_id
+  existing_admin_client_id     = var.existing_admin_client_id
+  existing_mobile_client_id = var.existing_mobile_client_id
   existing_identity_pool_id   = var.existing_identity_pool_id
 
   google_oauth_client_id     = var.google_oauth_client_id
   google_oauth_client_secret = var.google_oauth_client_secret
   pre_signup_lambda_zip      = var.pre_signup_lambda_zip
 
-  hive_callback_urls   = var.hive_callback_urls
-  hive_logout_urls     = var.hive_logout_urls
+  admin_callback_urls   = var.admin_callback_urls
+  admin_logout_urls     = var.admin_logout_urls
   mobile_callback_urls = var.mobile_callback_urls
   mobile_logout_urls   = var.mobile_logout_urls
 }
@@ -175,8 +175,8 @@ module "api" {
 
   user_pool_id       = module.cognito.user_pool_id
   user_pool_arn      = module.cognito.user_pool_arn
-  hive_client_id     = module.cognito.hive_client_id
-  hive_app_client_id = module.cognito.hive_app_client_id
+  admin_client_id     = module.cognito.admin_client_id
+  mobile_client_id = module.cognito.mobile_client_id
 
   appsync_api_url = module.appsync.graphql_api_url
   appsync_api_key = module.appsync.graphql_api_key
