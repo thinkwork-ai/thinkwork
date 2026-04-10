@@ -1,0 +1,196 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      skip_container:
+        description: "Skip container build"
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  STAGE: dev
+
+jobs:
+  # ── Detect what changed ──────────────────────────────────────────
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      lambdas: ${{ steps.filter.outputs.lambdas }}
+      container: ${{ steps.filter.outputs.container }}
+      terraform: ${{ steps.filter.outputs.terraform }}
+      skills: ${{ steps.filter.outputs.skills }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            lambdas:
+              - 'packages/api/**'
+              - 'packages/database-pg/**'
+            container:
+              - 'packages/agentcore-strands/**'
+              - 'packages/agentcore/**'
+            terraform:
+              - 'terraform/**'
+            skills:
+              - 'packages/skill-catalog/**'
+              - 'packages/memory-templates/**'
+              - 'packages/system-workspace/**'
+
+  # ── Build Lambda zips ────────────────────────────────────────────
+  build-lambdas:
+    name: Build Lambdas
+    needs: detect-changes
+    if: >-
+      needs.detect-changes.outputs.lambdas == 'true' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: bash scripts/build-lambdas.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lambda-zips
+          path: dist/lambdas/
+          retention-days: 1
+
+  # ── Build + push AgentCore container ─────────────────────────────
+  build-container:
+    name: Build Container
+    needs: detect-changes
+    if: >-
+      needs.detect-changes.outputs.container == 'true' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push to ECR
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/agentcore-strands/agent-container/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:latest
+            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Update Lambda function code
+        run: |
+          aws lambda update-function-code \
+            --function-name thinkwork-${{ env.STAGE }}-agentcore \
+            --image-uri ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }} \
+            --region ${{ env.AWS_REGION }}
+          aws lambda wait function-updated \
+            --function-name thinkwork-${{ env.STAGE }}-agentcore \
+            --region ${{ env.AWS_REGION }}
+
+  # ── Terraform apply ──────────────────────────────────────────────
+  terraform-apply:
+    name: Terraform Apply
+    needs: [build-lambdas, build-container]
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: lambda-zips
+          path: dist/lambdas/
+        continue-on-error: true
+
+      - name: Terraform Init
+        working-directory: terraform/examples/greenfield
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: terraform/examples/greenfield
+        run: |
+          LAMBDA_DIR=""
+          if [ -d "${{ github.workspace }}/dist/lambdas" ]; then
+            LAMBDA_DIR="${{ github.workspace }}/dist/lambdas"
+          fi
+          terraform apply -auto-approve \
+            -var "lambda_zips_dir=$LAMBDA_DIR" \
+            -var "stage=${{ env.STAGE }}"
+
+  # ── Bootstrap workspace + skills ─────────────────────────────────
+  bootstrap:
+    name: Bootstrap
+    needs: [terraform-apply]
+    if: >-
+      needs.detect-changes.outputs.skills == 'true' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get deploy outputs
+        id: outputs
+        working-directory: terraform/examples/greenfield
+        run: |
+          terraform init
+          echo "bucket=$(terraform output -raw bucket_name)" >> "$GITHUB_OUTPUT"
+          echo "db_endpoint=$(terraform output -raw db_cluster_endpoint)" >> "$GITHUB_OUTPUT"
+          echo "db_secret_arn=$(terraform output -raw db_secret_arn)" >> "$GITHUB_OUTPUT"
+
+      - name: Run bootstrap
+        run: |
+          DB_PASS=$(aws secretsmanager get-secret-value --secret-id "${{ steps.outputs.outputs.db_secret_arn }}" --query SecretString --output text | jq -r .password)
+          DB_URL="postgresql://thinkwork_admin:${DB_PASS}@${{ steps.outputs.outputs.db_endpoint }}:5432/thinkwork?sslmode=no-verify"
+          bash scripts/bootstrap-workspace.sh ${{ env.STAGE }} ${{ steps.outputs.outputs.bucket }} "$DB_URL"

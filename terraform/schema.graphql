@@ -86,6 +86,16 @@ type OrgUpdateEvent {
   updatedAt: AWSDateTime!
 }
 
+type CostRecordedEvent {
+  tenantId: ID!
+  agentId: ID
+  agentName: String
+  eventType: String!
+  amountUsd: Float!
+  model: String
+  updatedAt: AWSDateTime!
+}
+
 # ────────────────────────────────────────────────────────────────────
 # Notification mutations
 #
@@ -150,6 +160,15 @@ type Mutation {
     entityType: String
     entityId: ID
   ): OrgUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+
+  notifyCostRecorded(
+    tenantId: ID!
+    agentId: ID
+    agentName: String
+    eventType: String!
+    amountUsd: Float!
+    model: String
+  ): CostRecordedEvent @aws_api_key @aws_cognito_user_pools @aws_iam
 }
 
 type Subscription {
@@ -174,4 +193,7 @@ type Subscription {
 
   onOrgUpdated(tenantId: ID!): OrgUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
     @aws_subscribe(mutations: ["notifyOrgUpdate"])
+
+  onCostRecorded(tenantId: ID!): CostRecordedEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+    @aws_subscribe(mutations: ["notifyCostRecorded"])
 }
