@@ -49,7 +49,7 @@ export const bootstrapUser = async (_parent: unknown, _args: unknown, ctx: Graph
 
 	// Create tenant
 	const tenantName = `${name}'s Workspace`;
-	const tenantSlug = generateSlug(name);
+	const tenantSlug = generateSlug();
 
 	const [tenant] = await db
 		.insert(tenants)
