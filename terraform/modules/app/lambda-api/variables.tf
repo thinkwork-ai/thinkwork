@@ -64,12 +64,12 @@ variable "user_pool_arn" {
   type        = string
 }
 
-variable "hive_client_id" {
+variable "admin_client_id" {
   description = "Cognito web admin client ID"
   type        = string
 }
 
-variable "hive_app_client_id" {
+variable "mobile_client_id" {
   description = "Cognito mobile client ID"
   type        = string
 }

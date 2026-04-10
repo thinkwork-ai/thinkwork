@@ -6,7 +6,7 @@ type ScheduledJob {
   triggerType: String!
   agentId: ID
   routineId: ID
-  hiveId: ID
+  teamId: ID
   name: String!
   description: String
   prompt: String
@@ -29,7 +29,7 @@ input CreateScheduledJobInput {
   triggerType: String!
   agentId: ID
   routineId: ID
-  hiveId: ID
+  teamId: ID
   name: String!
   description: String
   prompt: String

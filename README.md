@@ -13,7 +13,7 @@ If you're not on AWS, this isn't the right tool for you — and that's the point
 ## What ships in v1
 
 - **Six product modules:** Agents, Threads, Connectors, Automations, Control, Knowledge
-- **Two clients:** an admin/operator web app (`apps/hive`) and a mobile client (`apps/mobile`, Expo)
+- **Two clients:** an admin/operator web app (`apps/admin`) and a mobile client (`apps/mobile`, Expo)
 - **A real CLI** (`@thinkwork/cli`) for `init`, `deploy`, `doctor`, agent invoke, and skill publishing
 - **Three connectors at launch:** Slack, GitHub, Google Workspace
 - **Agentic Tasks** and **Question Cards** for structured task intake and execution
@@ -41,7 +41,7 @@ thinkwork agents invoke my-first-agent "Hello"
 
 ```
 thinkwork/
-  apps/        # runnable products: hive (admin web), mobile (Expo), cli
+  apps/        # runnable products: admin (web), mobile (Expo), cli
   packages/    # shared libraries
   terraform/   # IaC modules (registry-shaped) and reference examples
   examples/    # runnable reference packs: skill-pack, eval-pack, connector-recipe

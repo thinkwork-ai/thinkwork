@@ -11,12 +11,12 @@ output "user_pool_id" {
   value = module.cognito.user_pool_id
 }
 
-output "hive_client_id" {
-  value = module.cognito.hive_client_id
+output "admin_client_id" {
+  value = module.cognito.admin_client_id
 }
 
-output "hive_app_client_id" {
-  value = module.cognito.hive_app_client_id
+output "mobile_client_id" {
+  value = module.cognito.mobile_client_id
 }
 
 output "identity_pool_id" {

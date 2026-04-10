@@ -1,5 +1,8 @@
 /**
- * Hive domain tables: hives, hive_agents, hive_users.
+ * Team domain tables: teams, team_agents, team_users.
+ *
+ * Teams are organizational groupings within a tenant, with their own
+ * budget controls and agent/user membership.
  */
 
 import {
@@ -17,11 +20,11 @@ import { tenants, users } from "./core";
 import { agents } from "./agents";
 
 // ---------------------------------------------------------------------------
-// 3.1 — hives
+// teams
 // ---------------------------------------------------------------------------
 
-export const hives = pgTable(
-	"hives",
+export const teams = pgTable(
+	"teams",
 	{
 		id: uuid("id")
 			.primaryKey()
@@ -43,21 +46,21 @@ export const hives = pgTable(
 			.notNull()
 			.default(sql`now()`),
 	},
-	(table) => [index("idx_hives_tenant_id").on(table.tenant_id)],
+	(table) => [index("idx_teams_tenant_id").on(table.tenant_id)],
 );
 
 // ---------------------------------------------------------------------------
-// 3.2 — hive_agents
+// team_agents
 // ---------------------------------------------------------------------------
 
-export const hiveAgents = pgTable(
-	"hive_agents",
+export const teamAgents = pgTable(
+	"team_agents",
 	{
 		id: uuid("id")
 			.primaryKey()
 			.default(sql`gen_random_uuid()`),
-		hive_id: uuid("hive_id")
-			.references(() => hives.id)
+		team_id: uuid("team_id")
+			.references(() => teams.id)
 			.notNull(),
 		agent_id: uuid("agent_id")
 			.references(() => agents.id)
@@ -72,25 +75,25 @@ export const hiveAgents = pgTable(
 			.default(sql`now()`),
 	},
 	(table) => [
-		uniqueIndex("uq_hive_agents_hive_agent").on(
-			table.hive_id,
+		uniqueIndex("uq_team_agents_team_agent").on(
+			table.team_id,
 			table.agent_id,
 		),
 	],
 );
 
 // ---------------------------------------------------------------------------
-// 3.3 — hive_users
+// team_users
 // ---------------------------------------------------------------------------
 
-export const hiveUsers = pgTable(
-	"hive_users",
+export const teamUsers = pgTable(
+	"team_users",
 	{
 		id: uuid("id")
 			.primaryKey()
 			.default(sql`gen_random_uuid()`),
-		hive_id: uuid("hive_id")
-			.references(() => hives.id)
+		team_id: uuid("team_id")
+			.references(() => teams.id)
 			.notNull(),
 		user_id: uuid("user_id")
 			.references(() => users.id)
@@ -105,56 +108,55 @@ export const hiveUsers = pgTable(
 			.default(sql`now()`),
 	},
 	(table) => [
-		uniqueIndex("uq_hive_users_hive_user").on(
-			table.hive_id,
+		uniqueIndex("uq_team_users_team_user").on(
+			table.team_id,
 			table.user_id,
 		),
 	],
 );
 
 // ---------------------------------------------------------------------------
-// Relations (for Drizzle query builder)
+// Relations
 // ---------------------------------------------------------------------------
 
-export const hivesRelations = relations(hives, ({ one, many }) => ({
+export const teamsRelations = relations(teams, ({ one, many }) => ({
 	tenant: one(tenants, {
-		fields: [hives.tenant_id],
+		fields: [teams.tenant_id],
 		references: [tenants.id],
 	}),
-	agents: many(hiveAgents),
-	users: many(hiveUsers),
+	agents: many(teamAgents),
+	users: many(teamUsers),
 }));
 
-export const hiveAgentsRelations = relations(
-	hiveAgents,
+export const teamAgentsRelations = relations(
+	teamAgents,
 	({ one }) => ({
-		hive: one(hives, {
-			fields: [hiveAgents.hive_id],
-			references: [hives.id],
+		team: one(teams, {
+			fields: [teamAgents.team_id],
+			references: [teams.id],
 		}),
 		agent: one(agents, {
-			fields: [hiveAgents.agent_id],
+			fields: [teamAgents.agent_id],
 			references: [agents.id],
 		}),
 		tenant: one(tenants, {
-			fields: [hiveAgents.tenant_id],
+			fields: [teamAgents.tenant_id],
 			references: [tenants.id],
 		}),
 	}),
 );
 
-export const hiveUsersRelations = relations(hiveUsers, ({ one }) => ({
-	hive: one(hives, {
-		fields: [hiveUsers.hive_id],
-		references: [hives.id],
+export const teamUsersRelations = relations(teamUsers, ({ one }) => ({
+	team: one(teams, {
+		fields: [teamUsers.team_id],
+		references: [teams.id],
 	}),
 	user: one(users, {
-		fields: [hiveUsers.user_id],
+		fields: [teamUsers.user_id],
 		references: [users.id],
 	}),
 	tenant: one(tenants, {
-		fields: [hiveUsers.tenant_id],
+		fields: [teamUsers.tenant_id],
 		references: [tenants.id],
 	}),
 }));
-

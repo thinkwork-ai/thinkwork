@@ -91,12 +91,12 @@ variable "existing_user_pool_arn" {
   default = null
 }
 
-variable "existing_hive_client_id" {
+variable "existing_admin_client_id" {
   type    = string
   default = null
 }
 
-variable "existing_hive_app_client_id" {
+variable "existing_mobile_client_id" {
   type    = string
   default = null
 }
@@ -168,12 +168,12 @@ variable "lambda_artifact_prefix" {
 # Cognito Callback URLs (configurable per deployment)
 # ---------------------------------------------------------------------------
 
-variable "hive_callback_urls" {
+variable "admin_callback_urls" {
   type    = list(string)
   default = ["http://localhost:5174", "http://localhost:5174/auth/callback"]
 }
 
-variable "hive_logout_urls" {
+variable "admin_logout_urls" {
   type    = list(string)
   default = ["http://localhost:5174"]
 }

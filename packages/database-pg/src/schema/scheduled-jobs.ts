@@ -26,7 +26,7 @@ import {
 import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core";
 import { agents } from "./agents";
-import { hives } from "./hives";
+import { teams } from "./teams";
 import { routines } from "./routines";
 import { webhooks } from "./webhooks";
 
@@ -46,7 +46,7 @@ export const scheduledJobs = pgTable(
 		trigger_type: text("trigger_type").notNull(), // agent_heartbeat | agent_reminder | agent_scheduled | routine_schedule | routine_one_time | manual | webhook | event
 		agent_id: uuid("agent_id").references(() => agents.id),
 		routine_id: uuid("routine_id").references(() => routines.id),
-		hive_id: uuid("hive_id").references(() => hives.id),
+		team_id: uuid("team_id").references(() => teams.id),
 		name: text("name").notNull(),
 		description: text("description"),
 		prompt: text("prompt"), // null for heartbeats; set for reminders/scheduled
@@ -198,9 +198,9 @@ export const scheduledJobsRelations = relations(
 			fields: [scheduledJobs.routine_id],
 			references: [routines.id],
 		}),
-		hive: one(hives, {
-			fields: [scheduledJobs.hive_id],
-			references: [hives.id],
+		team: one(teams, {
+			fields: [scheduledJobs.team_id],
+			references: [teams.id],
 		}),
 		runs: many(threadTurns),
 	}),

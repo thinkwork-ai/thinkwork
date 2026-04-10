@@ -100,7 +100,7 @@ input CreateAgentFromTemplateInput {
   templateId: ID!
   name: String!
   slug: String!
-  hiveId: ID
+  teamId: ID
 }
 
 # --- Query / Mutation extensions ---

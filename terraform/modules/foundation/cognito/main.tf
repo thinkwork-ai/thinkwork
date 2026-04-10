@@ -12,8 +12,8 @@ locals {
 
   user_pool_id       = local.create ? aws_cognito_user_pool.main[0].id : var.existing_user_pool_id
   user_pool_arn      = local.create ? aws_cognito_user_pool.main[0].arn : var.existing_user_pool_arn
-  hive_client_id     = local.create ? aws_cognito_user_pool_client.hive[0].id : var.existing_hive_client_id
-  hive_app_client_id = local.create ? aws_cognito_user_pool_client.hive_app[0].id : var.existing_hive_app_client_id
+  admin_client_id     = local.create ? aws_cognito_user_pool_client.admin[0].id : var.existing_admin_client_id
+  mobile_client_id = local.create ? aws_cognito_user_pool_client.mobile[0].id : var.existing_mobile_client_id
   identity_pool_id   = local.create ? aws_cognito_identity_pool.main[0].id : var.existing_identity_pool_id
 }
 
@@ -195,12 +195,12 @@ locals {
 }
 
 ################################################################################
-# App Client — Hive (Web Admin)
+# App Client — Admin (Web)
 ################################################################################
 
-resource "aws_cognito_user_pool_client" "hive" {
+resource "aws_cognito_user_pool_client" "admin" {
   count        = local.create ? 1 : 0
-  name         = "Hive"
+  name         = "ThinkworkAdmin"
   user_pool_id = aws_cognito_user_pool.main[0].id
 
   allowed_oauth_flows_user_pool_client = true
@@ -209,8 +209,8 @@ resource "aws_cognito_user_pool_client" "hive" {
 
   supported_identity_providers = local.identity_providers
 
-  callback_urls = var.hive_callback_urls
-  logout_urls   = var.hive_logout_urls
+  callback_urls = var.admin_callback_urls
+  logout_urls   = var.admin_logout_urls
 
   access_token_validity  = 1
   id_token_validity      = 1
@@ -242,7 +242,7 @@ resource "aws_cognito_user_pool_client" "hive" {
 # App Client — Mobile
 ################################################################################
 
-resource "aws_cognito_user_pool_client" "hive_app" {
+resource "aws_cognito_user_pool_client" "mobile" {
   count        = local.create ? 1 : 0
   name         = "ThinkworkMobile"
   user_pool_id = aws_cognito_user_pool.main[0].id
@@ -298,13 +298,13 @@ resource "aws_cognito_identity_pool" "main" {
   allow_unauthenticated_identities = false
 
   cognito_identity_providers {
-    client_id               = aws_cognito_user_pool_client.hive[0].id
+    client_id               = aws_cognito_user_pool_client.admin[0].id
     provider_name           = "cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.main[0].id}"
     server_side_token_check = false
   }
 
   cognito_identity_providers {
-    client_id               = aws_cognito_user_pool_client.hive_app[0].id
+    client_id               = aws_cognito_user_pool_client.mobile[0].id
     provider_name           = "cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.main[0].id}"
     server_side_token_check = false
   }

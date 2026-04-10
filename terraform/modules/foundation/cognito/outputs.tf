@@ -8,14 +8,14 @@ output "user_pool_arn" {
   value       = local.user_pool_arn
 }
 
-output "hive_client_id" {
+output "admin_client_id" {
   description = "App client ID for the web admin client (created or existing)"
-  value       = local.hive_client_id
+  value       = local.admin_client_id
 }
 
-output "hive_app_client_id" {
+output "mobile_client_id" {
   description = "App client ID for the mobile client (created or existing)"
-  value       = local.hive_app_client_id
+  value       = local.mobile_client_id
 }
 
 output "identity_pool_id" {
