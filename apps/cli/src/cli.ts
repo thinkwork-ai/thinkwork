@@ -9,6 +9,8 @@ import { registerDoctorCommand } from "./commands/doctor.js";
 import { registerOutputsCommand } from "./commands/outputs.js";
 import { registerConfigCommand } from "./commands/config.js";
 import { registerBootstrapCommand } from "./commands/bootstrap.js";
+import { registerLoginCommand } from "./commands/login.js";
+import { registerInitCommand } from "./commands/init.js";
 
 const program = new Command();
 
@@ -32,15 +34,19 @@ program.hook("preAction", (_thisCommand, actionCommand) => {
   }
 });
 
-// Phase 1.5: deploy-focused commands
+// Setup
+registerLoginCommand(program);
+registerInitCommand(program);
+registerDoctorCommand(program);
+
+// Deploy
 registerPlanCommand(program);
 registerDeployCommand(program);
+registerBootstrapCommand(program);
 registerDestroyCommand(program);
-registerDoctorCommand(program);
+
+// Manage
 registerOutputsCommand(program);
 registerConfigCommand(program);
-registerBootstrapCommand(program);
-
-// Phase 7 will add: init, agents, threads, skills
 
 program.parse();
