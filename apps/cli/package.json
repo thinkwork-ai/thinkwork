@@ -1,5 +1,5 @@
 {
-  "name": "@thinkwork-ai/cli",
+  "name": "thinkwork-cli",
   "version": "0.1.0",
   "description": "Thinkwork CLI — deploy, manage, and interact with your Thinkwork stack",
   "license": "MIT",
