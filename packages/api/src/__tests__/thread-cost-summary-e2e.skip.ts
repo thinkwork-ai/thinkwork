@@ -25,11 +25,7 @@ let sampleThreadId: string;
 
 beforeAll(async () => {
 	process.env.AWS_REGION = "us-east-1";
-	db = createDb({
-		resourceArn: CLUSTER_ARN,
-		secretArn: SECRET_ARN,
-		database: DATABASE,
-	});
+	db = createDb(process.env.DATABASE_URL || `postgresql://thinkwork_admin:password@localhost:5432/${DATABASE}`);
 
 	// Grab a real thread ID to use in sub-field queries
 	const rows = await db.select({ id: threads.id }).from(threads).limit(1);
