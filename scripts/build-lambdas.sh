@@ -45,8 +45,15 @@ build_handler() {
     --banner:js="import{createRequire}from'module';const require=createRequire(import.meta.url);" \
     2>/dev/null
 
-  # Create zip
-  (cd "$out_dir" && zip -qr "$DIST/$name.zip" index.mjs index.mjs.map 2>/dev/null || zip -qr "$DIST/$name.zip" index.mjs)
+  # For graphql-http: include the .graphql schema files (loaded at runtime via readFileSync)
+  if [ "$name" = "graphql-http" ]; then
+    mkdir -p "$out_dir/packages/database-pg/graphql/types"
+    cp "$REPO_ROOT/packages/database-pg/graphql/schema.graphql" "$out_dir/packages/database-pg/graphql/"
+    cp "$REPO_ROOT/packages/database-pg/graphql/types/"*.graphql "$out_dir/packages/database-pg/graphql/types/"
+  fi
+
+  # Create zip (exclude source maps to keep bundle small)
+  (cd "$out_dir" && zip -qr "$DIST/$name.zip" . -x '*.map' -x '__MACOSX/*')
   rm -rf "$out_dir"
 
   echo "  ✓ $name"

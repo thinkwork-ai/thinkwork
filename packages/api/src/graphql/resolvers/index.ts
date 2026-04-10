@@ -10,9 +10,7 @@ import { artifactQueries } from "./artifacts/index.js";
 import { orchestrationQueries } from "./orchestration/index.js";
 import { messageQueries } from "./messages/index.js";
 import { webhookQueries } from "./webhooks/index.js";
-import { observabilityQueries } from "./observability/index.js";
 import { memoryQueries, memoryMutations } from "./memory/index.js";
-import { quickActionQueries, quickActionMutations } from "./quick-actions/index.js";
 import { recipeQueries, recipeMutations } from "./recipes/index.js";
 import { templateQueries, templateMutations } from "./templates/index.js";
 import { agentMutations } from "./agents/index.js";
@@ -42,9 +40,7 @@ export const queryResolvers: Record<string, any> = {
 	...orchestrationQueries,
 	...messageQueries,
 	...webhookQueries,
-	...observabilityQueries,
 	...memoryQueries,
-	...quickActionQueries,
 	...recipeQueries,
 	...templateQueries,
 };
@@ -64,7 +60,6 @@ export const mutationResolvers: Record<string, any> = {
 	...orchestrationMutations,
 	...webhookMutations,
 	...memoryMutations,
-	...quickActionMutations,
 	...recipeMutations,
 	...templateMutations,
 };

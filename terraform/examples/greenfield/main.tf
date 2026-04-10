@@ -93,6 +93,19 @@ variable "pre_signup_lambda_zip" {
   default     = ""
 }
 
+variable "lambda_zips_dir" {
+  description = "Local directory containing Lambda zip artifacts (from pnpm build:lambdas)"
+  type        = string
+  default     = ""
+}
+
+variable "api_auth_secret" {
+  description = "Shared secret for inter-service API authentication"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 module "thinkwork" {
   source = "../../modules/thinkwork"
 
@@ -106,6 +119,8 @@ module "thinkwork" {
   google_oauth_client_id     = var.google_oauth_client_id
   google_oauth_client_secret = var.google_oauth_client_secret
   pre_signup_lambda_zip      = var.pre_signup_lambda_zip
+  lambda_zips_dir            = var.lambda_zips_dir
+  api_auth_secret            = var.api_auth_secret
 
   # Greenfield: create everything (all defaults are true)
 }
