@@ -183,6 +183,9 @@ module "api" {
   appsync_api_key = module.appsync.graphql_api_key
 
   kb_service_role_arn = module.bedrock_kb.kb_service_role_arn
+
+  lambda_zips_dir = var.lambda_zips_dir
+  api_auth_secret = var.api_auth_secret
 }
 
 module "agentcore" {
