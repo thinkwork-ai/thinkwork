@@ -101,3 +101,16 @@ variable "custom_domain" {
   type        = string
   default     = ""
 }
+
+variable "lambda_zips_dir" {
+  description = "Local directory containing Lambda zip artifacts (from scripts/build-lambdas.sh). Set to enable real handlers."
+  type        = string
+  default     = ""
+}
+
+variable "api_auth_secret" {
+  description = "Shared secret for inter-service API authentication"
+  type        = string
+  sensitive   = true
+  default     = ""
+}

@@ -193,6 +193,19 @@ variable "lambda_artifact_prefix" {
   default     = "latest/lambdas"
 }
 
+variable "lambda_zips_dir" {
+  description = "Local directory containing Lambda zip artifacts (from scripts/build-lambdas.sh). Enables real handlers when set."
+  type        = string
+  default     = ""
+}
+
+variable "api_auth_secret" {
+  description = "Shared secret for inter-service API authentication"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 # ---------------------------------------------------------------------------
 # Cognito Callback URLs (configurable per deployment)
 # ---------------------------------------------------------------------------
