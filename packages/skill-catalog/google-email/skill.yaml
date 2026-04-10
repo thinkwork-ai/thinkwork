@@ -1,0 +1,38 @@
+slug: google-email
+display_name: Google Email (Gmail)
+description: Read inbox, triage messages, draft replies via Gmail API. Use when the user asks about email, inbox, or Gmail.
+category: productivity
+version: "1.0.0"
+author: thinkwork
+icon: mail
+tags: [email, gmail, google, productivity, triage]
+execution: script
+scripts:
+  - name: gmail_list_messages
+    path: scripts/gmail.py
+    description: "List messages in the Gmail inbox"
+  - name: gmail_get_message
+    path: scripts/gmail.py
+    description: "Get full details of a Gmail message"
+  - name: gmail_search_messages
+    path: scripts/gmail.py
+    description: "Search Gmail with query syntax"
+  - name: gmail_modify_labels
+    path: scripts/gmail.py
+    description: "Add or remove labels on a message (archive, mark read, etc)"
+  - name: gmail_create_draft
+    path: scripts/gmail.py
+    description: "Create a Gmail draft (user reviews and sends)"
+triggers:
+  - "read email"
+  - "check inbox"
+  - "triage inbox"
+  - "draft reply"
+  - "search gmail"
+oauth_provider: google_productivity
+oauth_scopes: [gmail, calendar, identity]
+requires_env:
+  - GMAIL_ACCESS_TOKEN
+  - MANIFLOW_API_URL
+  - MANIFLOW_API_SECRET
+  - GMAIL_CONNECTION_ID

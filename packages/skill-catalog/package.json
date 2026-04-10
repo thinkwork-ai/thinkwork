@@ -1,0 +1,6 @@
+{
+  "name": "@thinkwork/skill-catalog",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Base skill catalog — markdown-based skills synced to S3 on deploy"
+}

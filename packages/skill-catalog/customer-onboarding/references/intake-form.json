@@ -1,0 +1,59 @@
+{
+  "id": "customer_intake",
+  "title": "Customer Onboarding",
+  "description": "Tell us about the new customer so we can create the right tasks.",
+  "submit_label": "Create Tasks",
+  "fields": [
+    {
+      "id": "name",
+      "label": "Customer name",
+      "type": "text",
+      "required": true,
+      "placeholder": "Acme Corp"
+    },
+    {
+      "id": "fuel_customer",
+      "label": "Fuel customer?",
+      "type": "boolean",
+      "required": true
+    },
+    {
+      "id": "tax_exempt",
+      "label": "Tax exempt?",
+      "type": "boolean",
+      "required": true
+    },
+    {
+      "id": "credit_line",
+      "label": "Requesting a credit line?",
+      "type": "boolean",
+      "required": true
+    },
+    {
+      "id": "credit_amount",
+      "label": "Credit amount (USD)",
+      "type": "text",
+      "required": false,
+      "placeholder": "10000"
+    },
+    {
+      "id": "contract_owner",
+      "label": "Who handles the contract?",
+      "type": "user_picker",
+      "required": true
+    },
+    {
+      "id": "deadline",
+      "label": "Onboarding deadline",
+      "type": "date",
+      "required": false
+    },
+    {
+      "id": "notes",
+      "label": "Additional notes",
+      "type": "textarea",
+      "required": false,
+      "placeholder": "Anything else the team should know?"
+    }
+  ]
+}

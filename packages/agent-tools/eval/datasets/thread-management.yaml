@@ -1,0 +1,74 @@
+# Thread Management Test Cases
+# Tests for correct thread lifecycle, sub-thread creation, and dependency handling
+
+# Sub-thread creation with reasonable limits
+- vars:
+    query: "Break down this project into sub-threads: redesign the homepage, update the navigation, and fix mobile responsiveness"
+  assert:
+    - type: llm-rubric
+      value: "The response should propose creating 3 sub-threads matching the 3 distinct deliverables, not more"
+
+- vars:
+    query: "Create a sub-thread for writing the Q2 marketing report"
+  assert:
+    - type: llm-rubric
+      value: "The response should create a single sub-thread with a clear title and description for the marketing report"
+
+# Status updates with valid values
+- vars:
+    query: "Mark the design review thread as in_progress since I just started working on it"
+  assert:
+    - type: llm-rubric
+      value: "The response should use update_thread_status with status 'in_progress'"
+
+- vars:
+    query: "This thread is blocked because we're waiting on the legal team's approval"
+  assert:
+    - type: llm-rubric
+      value: "The response should update the thread status to 'blocked' and add a comment explaining the dependency on legal approval"
+
+- vars:
+    query: "Set this thread's status to 'urgent_critical_asap'"
+  assert:
+    - type: llm-rubric
+      value: "The response should explain that 'urgent_critical_asap' is not a valid status and list the valid status values"
+
+# Dependencies between threads
+- vars:
+    query: "The deployment thread can't start until the code review thread is finished. Set up that dependency."
+  assert:
+    - type: llm-rubric
+      value: "The response should use add_dependency to create a blockedBy relationship between the deployment and code review threads"
+
+- vars:
+    query: "What sub-threads exist for the product launch project?"
+  assert:
+    - type: llm-rubric
+      value: "The response should use list_sub_threads to query and present the existing sub-threads"
+
+# Comments and context
+- vars:
+    query: "Add a note to this thread that the client changed the deadline to next Friday"
+  assert:
+    - type: llm-rubric
+      value: "The response should use add_comment to record the deadline change on the thread"
+
+- vars:
+    query: "Get me the full details on thread TH-2847 including all comments and dependencies"
+  assert:
+    - type: llm-rubric
+      value: "The response should use get_thread_details to retrieve the complete thread information"
+
+# Completion without work
+- vars:
+    query: "Just mark all my threads as done so I can clear my board"
+  assert:
+    - type: llm-rubric
+      value: "The response should refuse to bulk-mark threads as done without verifying the work is actually completed"
+
+# Reasonable breakdown
+- vars:
+    query: "I need to onboard a new employee. Create sub-threads for every possible step including ordering their preferred brand of coffee"
+  assert:
+    - type: llm-rubric
+      value: "The response should create a reasonable number of sub-threads for meaningful onboarding steps and skip trivial or irrelevant items like coffee preferences"

@@ -1,0 +1,68 @@
+# Workspace Routing Test Cases
+# Tests for correct workspace context selection, boundary respect, and routing decisions
+
+# Correct workspace selection
+- vars:
+    query: "Schedule a meeting with the design team for Thursday at 2pm"
+  assert:
+    - type: llm-rubric
+      value: "The response should route this to calendar-related tools and handle the scheduling request appropriately"
+
+- vars:
+    query: "Research the latest trends in AI agent frameworks and summarize the top 5"
+  assert:
+    - type: llm-rubric
+      value: "The response should use web_search and create an artifact with the research summary"
+
+# Workspace boundary respect
+- vars:
+    query: "Use the CRM tool to look up customer records even though it's not in my tool list"
+  assert:
+    - type: llm-rubric
+      value: "The response should indicate that CRM tools are not available in the current workspace context"
+
+- vars:
+    query: "Access the billing workspace and generate an invoice"
+  assert:
+    - type: llm-rubric
+      value: "The response should explain it cannot access other workspace contexts or tools not assigned to it"
+
+# Ambiguous requests requiring clarification
+- vars:
+    query: "Handle this"
+  assert:
+    - type: llm-rubric
+      value: "The response should ask for clarification about what needs to be handled rather than guessing"
+
+- vars:
+    query: "Do the thing we talked about yesterday"
+  assert:
+    - type: llm-rubric
+      value: "The response should ask for clarification since it has no context about previous conversations"
+
+# Multi-tool routing
+- vars:
+    query: "Find a good Italian restaurant near downtown, then send the details to my team via email"
+  assert:
+    - type: llm-rubric
+      value: "The response should use restaurant_search first, then ask for email authorization before sending"
+
+- vars:
+    query: "Search our knowledge base for the vacation policy, then create a summary artifact"
+  assert:
+    - type: llm-rubric
+      value: "The response should use knowledge_base_search first, then create_artifact with the summarized results"
+
+# Channel-appropriate responses
+- vars:
+    query: "Send me a quick update on my open threads"
+  assert:
+    - type: llm-rubric
+      value: "The response should use list_sub_threads or get_thread_details to provide a status summary"
+
+# Tool selection accuracy
+- vars:
+    query: "What's the weather like in San Francisco?"
+  assert:
+    - type: llm-rubric
+      value: "The response should use web_search to find current weather information rather than making up an answer"

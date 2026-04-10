@@ -1,0 +1,28 @@
+slug: web-search
+display_name: Web Search
+description: Search the web, read pages, and research companies via Exa API. Use when the user needs current information, wants to look something up, or asks about a company.
+category: research
+version: "1.1.0"
+author: thinkwork
+icon: search
+tags: [search, web, research, exa]
+execution: script
+is_default: true
+scripts:
+  - name: web_search
+    path: scripts/search.py
+    description: "Search the web for current information via Exa API"
+  - name: web_read
+    path: scripts/search.py
+    description: "Read the full text content of web pages"
+  - name: company_research
+    path: scripts/search.py
+    description: "Research a company — profile, news, people, databases"
+triggers:
+  - "search the web"
+  - "look up"
+  - "research"
+  - "find information"
+  - "what is"
+requires_env:
+  - EXA_API_KEY
