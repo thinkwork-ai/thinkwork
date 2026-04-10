@@ -204,3 +204,8 @@ output "agentcore_invoke_url" {
   description = "Lambda Function URL for the AgentCore container"
   value       = aws_lambda_function_url.agentcore.function_url
 }
+
+output "agentcore_function_name" {
+  description = "AgentCore Lambda function name (for direct SDK invoke)"
+  value       = aws_lambda_function.agentcore.function_name
+}

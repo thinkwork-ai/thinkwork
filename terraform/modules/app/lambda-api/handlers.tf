@@ -30,6 +30,7 @@ locals {
     THINKWORK_API_SECRET        = var.api_auth_secret
     MANIFLOW_API_SECRET         = var.api_auth_secret
     AGENTCORE_INVOKE_URL        = var.agentcore_invoke_url
+    AGENTCORE_FUNCTION_NAME     = var.agentcore_function_name
     WORKSPACE_BUCKET            = var.bucket_name
     HINDSIGHT_ENDPOINT          = var.hindsight_endpoint
     NODE_OPTIONS           = "--enable-source-maps"
