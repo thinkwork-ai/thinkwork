@@ -7,7 +7,8 @@
 ################################################################################
 
 locals {
-  create = var.create_cognito
+  create             = var.create_cognito
+  create_pre_signup  = local.create && var.pre_signup_lambda_zip != ""
 
   user_pool_id       = local.create ? aws_cognito_user_pool.main[0].id : var.existing_user_pool_id
   user_pool_arn      = local.create ? aws_cognito_user_pool.main[0].arn : var.existing_user_pool_arn
@@ -23,7 +24,7 @@ data "aws_caller_identity" "current" {}
 ################################################################################
 
 resource "aws_iam_role" "pre_signup" {
-  count = local.create ? 1 : 0
+  count = local.create_pre_signup ? 1 : 0
   name  = "thinkwork-${var.stage}-cognito-pre-signup-role"
 
   assume_role_policy = jsonencode({
@@ -37,13 +38,13 @@ resource "aws_iam_role" "pre_signup" {
 }
 
 resource "aws_iam_role_policy_attachment" "pre_signup_basic" {
-  count      = local.create ? 1 : 0
+  count      = local.create_pre_signup ? 1 : 0
   role       = aws_iam_role.pre_signup[0].name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 resource "aws_iam_role_policy" "pre_signup_cognito" {
-  count = local.create ? 1 : 0
+  count = local.create_pre_signup ? 1 : 0
   name  = "cognito-access"
   role  = aws_iam_role.pre_signup[0].id
 
@@ -63,7 +64,7 @@ resource "aws_iam_role_policy" "pre_signup_cognito" {
 }
 
 resource "aws_lambda_function" "pre_signup" {
-  count         = local.create ? 1 : 0
+  count         = local.create_pre_signup ? 1 : 0
   function_name = "thinkwork-${var.stage}-cognito-pre-signup"
   filename      = var.pre_signup_lambda_zip
   handler       = "index.handler"
@@ -75,7 +76,7 @@ resource "aws_lambda_function" "pre_signup" {
 }
 
 resource "aws_lambda_permission" "cognito_pre_signup" {
-  count         = local.create ? 1 : 0
+  count         = local.create_pre_signup ? 1 : 0
   statement_id  = "AllowCognitoInvoke"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.pre_signup[0].function_name
@@ -134,8 +135,11 @@ resource "aws_cognito_user_pool" "main" {
     }
   }
 
-  lambda_config {
-    pre_sign_up = aws_lambda_function.pre_signup[0].arn
+  dynamic "lambda_config" {
+    for_each = local.create_pre_signup ? [1] : []
+    content {
+      pre_sign_up = aws_lambda_function.pre_signup[0].arn
+    }
   }
 
   tags = {
