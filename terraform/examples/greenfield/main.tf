@@ -154,6 +154,16 @@ output "db_cluster_endpoint" {
   value       = module.thinkwork.db_cluster_endpoint
 }
 
+output "db_secret_arn" {
+  description = "Secrets Manager ARN for database credentials"
+  value       = module.thinkwork.db_secret_arn
+}
+
+output "database_name" {
+  description = "Database name"
+  value       = module.thinkwork.database_name
+}
+
 output "memory_engine" {
   description = "Active memory engine (managed or hindsight)"
   value       = module.thinkwork.memory_engine

@@ -36,6 +36,16 @@ output "db_cluster_endpoint" {
   value = module.database.cluster_endpoint
 }
 
+output "db_secret_arn" {
+  description = "Secrets Manager ARN for database credentials"
+  value       = module.database.graphql_db_secret_arn
+}
+
+output "database_name" {
+  description = "Database name"
+  value       = var.database_name
+}
+
 output "bucket_name" {
   value = module.s3.bucket_name
 }
