@@ -13,6 +13,7 @@ locals {
   # Common environment variables shared by all API handlers
   common_env = {
     STAGE                  = var.stage
+    DATABASE_URL           = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
     DATABASE_SECRET_ARN    = var.graphql_db_secret_arn
     DATABASE_HOST          = var.db_cluster_endpoint
     DATABASE_NAME          = var.database_name

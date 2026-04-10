@@ -6,7 +6,7 @@ import { eq, and, desc, gte, lte } from "drizzle-orm";
 import { schema } from "@thinkwork/database-pg";
 import { db } from "../lib/db.js";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
-import { json, error, unauthorized } from "../lib/response.js";
+import { handleCors, json, error, unauthorized } from "../lib/response.js";
 
 const { activityLog } = schema;
 

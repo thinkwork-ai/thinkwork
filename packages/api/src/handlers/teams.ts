@@ -6,7 +6,7 @@ import { eq, and } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { teams } from "@thinkwork/database-pg/schema";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
-import { json, error, notFound, unauthorized } from "../lib/response.js";
+import { handleCors, json, error, notFound, unauthorized } from "../lib/response.js";
 
 const db = getDb();
 

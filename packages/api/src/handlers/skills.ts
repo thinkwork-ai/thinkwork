@@ -22,7 +22,7 @@ import { getDb } from "@thinkwork/database-pg";
 import { agentSkills, skillCatalog, tenantSkills } from "@thinkwork/database-pg/schema";
 import { parse as parseYaml } from "yaml";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
-import { json, error, notFound, unauthorized } from "../lib/response.js";
+import { handleCors, json, error, notFound, unauthorized } from "../lib/response.js";
 
 const s3 = new S3Client({});
 const sm = new SecretsManagerClient({});

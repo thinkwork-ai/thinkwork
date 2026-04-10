@@ -30,7 +30,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import { db } from "../lib/db.js";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
-import { json, error, notFound, unauthorized } from "../lib/response.js";
+import { handleCors, json, error, notFound, unauthorized } from "../lib/response.js";
 import { ensureThreadForWork } from "../lib/thread-helpers.js";
 
 function generateToken(): string {
