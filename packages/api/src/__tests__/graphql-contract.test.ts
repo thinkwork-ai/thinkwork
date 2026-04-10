@@ -24,7 +24,9 @@ const TF_SCHEMA = join(REPO_ROOT, "terraform/schema.graphql");
 const APPSYNC_DIRECTIVES = `
 directive @aws_subscribe(mutations: [String!]!) on FIELD_DEFINITION
 directive @aws_auth(cognito_groups: [String!]!) on FIELD_DEFINITION
-directive @aws_cognito_user_pools(cognito_groups: [String!]!) on FIELD_DEFINITION | OBJECT
+directive @aws_api_key on FIELD_DEFINITION | OBJECT
+directive @aws_iam on FIELD_DEFINITION | OBJECT
+directive @aws_cognito_user_pools(cognito_groups: [String!]) on FIELD_DEFINITION | OBJECT
 `;
 
 function loadFullSchema(): string {
