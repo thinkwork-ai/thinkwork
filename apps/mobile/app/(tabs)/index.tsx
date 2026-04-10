@@ -51,10 +51,12 @@ export default function ThreadsScreen() {
 
   const visibleAgents = useMemo(() => {
     const all = (agents as any[]).filter((a: any) => a.type !== "local");
-    const uid = user?.sub;
-    if (!uid) return [];
-    return all.filter((a: any) => a.humanPairId === uid);
-  }, [agents, user?.sub]);
+    // Show agents paired to this user (by DB user id), or all agents if none are paired
+    const uid = currentUser?.id || user?.sub;
+    if (!uid) return all;
+    const paired = all.filter((a: any) => a.humanPairId === uid);
+    return paired.length > 0 ? paired : all;
+  }, [agents, currentUser?.id, user?.sub]);
 
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
