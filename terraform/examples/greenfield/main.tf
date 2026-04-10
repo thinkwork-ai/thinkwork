@@ -153,3 +153,13 @@ output "db_cluster_endpoint" {
   description = "Aurora cluster endpoint"
   value       = module.thinkwork.db_cluster_endpoint
 }
+
+output "memory_engine" {
+  description = "Active memory engine (managed or hindsight)"
+  value       = module.thinkwork.memory_engine
+}
+
+output "hindsight_endpoint" {
+  description = "Hindsight API endpoint (null when memory_engine = managed)"
+  value       = module.thinkwork.hindsight_endpoint
+}
