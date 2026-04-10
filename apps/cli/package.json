@@ -1,6 +1,6 @@
 {
   "name": "@thinkwork/cli",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Thinkwork CLI — deploy, manage, and interact with your Thinkwork stack",
   "license": "MIT",
   "type": "module",
@@ -15,7 +15,8 @@
     "dev": "tsx src/cli.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "echo 'lint: skipped (eslint not configured)'"
+    "lint": "echo 'lint: skipped (eslint not configured)'",
+    "prepublishOnly": "npm run build && npm run typecheck"
   },
   "dependencies": {
     "chalk": "^5.6.2",
