@@ -151,3 +151,9 @@ variable "agentcore_function_name" {
   type        = string
   default     = ""
 }
+
+variable "cors_allowed_origins" {
+  description = "Allowed CORS origins for the API Gateway. Use [\"*\"] for development."
+  type        = list(string)
+  default     = ["*"]
+}

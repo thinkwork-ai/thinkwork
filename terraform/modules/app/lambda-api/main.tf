@@ -27,9 +27,9 @@ resource "aws_apigatewayv2_api" "main" {
   protocol_type = "HTTP"
 
   cors_configuration {
-    allow_headers = ["*"]
-    allow_methods = ["*"]
-    allow_origins = ["*"]
+    allow_headers = ["Content-Type", "Authorization", "x-api-key", "x-tenant-id", "x-tenant-slug", "x-principal-id"]
+    allow_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    allow_origins = var.cors_allowed_origins
     max_age       = 3600
   }
 
@@ -175,7 +175,7 @@ resource "aws_iam_role_policy" "lambda_bedrock" {
     Statement = [{
       Effect   = "Allow"
       Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
-      Resource = "*"
+      Resource = "arn:aws:bedrock:${var.region}::foundation-model/*"
     }]
   })
 }
