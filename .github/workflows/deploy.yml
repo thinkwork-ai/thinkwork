@@ -152,7 +152,9 @@ jobs:
 
       - name: Terraform Init
         working-directory: terraform/examples/greenfield
-        run: terraform init
+        run: |
+          terraform init
+          terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
 
       - name: Terraform Apply
         working-directory: terraform/examples/greenfield
@@ -196,7 +198,9 @@ jobs:
 
       - name: Terraform init
         working-directory: terraform/examples/greenfield
-        run: terraform init
+        run: |
+          terraform init
+          terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
 
       - name: Build & deploy
         run: bash scripts/build-admin.sh ${{ env.STAGE }}
@@ -234,7 +238,9 @@ jobs:
 
       - name: Terraform init
         working-directory: terraform/examples/greenfield
-        run: terraform init
+        run: |
+          terraform init
+          terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
 
       - name: Build & deploy
         run: bash scripts/build-docs.sh ${{ env.STAGE }}
@@ -268,6 +274,7 @@ jobs:
         working-directory: terraform/examples/greenfield
         run: |
           terraform init
+          terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
           echo "bucket=$(terraform output -raw bucket_name)" >> "$GITHUB_OUTPUT"
           echo "db_endpoint=$(terraform output -raw db_cluster_endpoint)" >> "$GITHUB_OUTPUT"
           echo "db_secret_arn=$(terraform output -raw db_secret_arn)" >> "$GITHUB_OUTPUT"
@@ -299,7 +306,9 @@ jobs:
 
       - name: Terraform init
         working-directory: terraform/examples/greenfield
-        run: terraform init
+        run: |
+          terraform init
+          terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
 
       - name: Show deployment URLs
         working-directory: terraform/examples/greenfield
