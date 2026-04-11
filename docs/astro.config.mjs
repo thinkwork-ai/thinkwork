@@ -2,7 +2,7 @@ import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 
 export default defineConfig({
-  site: "https://docs.thinkwork.ai",
+  // site: "https://docs.thinkwork.ai",  // uncomment when custom domain is live
   integrations: [
     starlight({
       title: "Thinkwork",
