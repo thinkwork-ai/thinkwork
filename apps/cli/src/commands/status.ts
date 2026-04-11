@@ -15,7 +15,9 @@ interface DiscoveredStage {
   hindsightEndpoint?: string;
   adminUrl?: string;
   docsUrl?: string;
+  appsyncApiUrl?: string;
   dbEndpoint?: string;
+  ecrUrl?: string;
   memoryEngine?: string;
   hindsightHealth?: string;
   agentcoreStatus?: string;
@@ -72,11 +74,16 @@ function discoverAwsStages(region: string): Map<string, Partial<DiscoveredStage>
     );
     if (apiRaw && apiRaw !== "None") info.apiEndpoint = apiRaw;
 
-    // AppSync
+    // AppSync (both realtime WS and HTTP API URL)
     const appsyncRaw = runAws(
       `appsync list-graphql-apis --region ${region} --query "graphqlApis[?name=='thinkwork-${stage}-subscriptions'].uris.REALTIME|[0]" --output text`
     );
     if (appsyncRaw && appsyncRaw !== "None") info.appsyncUrl = appsyncRaw;
+
+    const appsyncApiRaw = runAws(
+      `appsync list-graphql-apis --region ${region} --query "graphqlApis[?name=='thinkwork-${stage}-subscriptions'].uris.GRAPHQL|[0]" --output text`
+    );
+    if (appsyncApiRaw && appsyncApiRaw !== "None") info.appsyncApiUrl = appsyncApiRaw;
 
     // AgentCore Lambda
     const acRaw = runAws(
@@ -112,17 +119,31 @@ function discoverAwsStages(region: string): Map<string, Partial<DiscoveredStage>
       info.memoryEngine = "managed";
     }
 
-    // Admin CloudFront
-    const cfRaw = runAws(
-      `cloudfront list-distributions --query "DistributionList.Items[?Origins.Items[0].DomainName=='thinkwork-${stage}-admin.s3.${region}.amazonaws.com'].DomainName|[0]" --output text`
+    // Database (RDS/Aurora)
+    const dbRaw = runAws(
+      `rds describe-db-clusters --region ${region} --query "DBClusters[?starts_with(DBClusterIdentifier, 'thinkwork-${stage}')].Endpoint|[0]" --output text`
     );
-    if (cfRaw && cfRaw !== "None" && cfRaw !== "") info.adminUrl = `https://${cfRaw}`;
+    if (dbRaw && dbRaw !== "None") info.dbEndpoint = dbRaw;
 
-    // Docs CloudFront
-    const docsCfRaw = runAws(
-      `cloudfront list-distributions --query "DistributionList.Items[?Origins.Items[0].DomainName=='thinkwork-${stage}-docs.s3.${region}.amazonaws.com'].DomainName|[0]" --output text`
+    // ECR
+    const ecrRaw = runAws(
+      `ecr describe-repositories --region ${region} --query "repositories[?repositoryName=='thinkwork-${stage}-agentcore'].repositoryUri|[0]" --output text`
     );
-    if (docsCfRaw && docsCfRaw !== "None" && docsCfRaw !== "") info.docsUrl = `https://${docsCfRaw}`;
+    if (ecrRaw && ecrRaw !== "None") info.ecrUrl = ecrRaw;
+
+    // CloudFront distributions (admin + docs in one call)
+    const cfJson = runAws(
+      `cloudfront list-distributions --query "DistributionList.Items[?contains(Origins.Items[0].DomainName, 'thinkwork-${stage}-')].{Origin:Origins.Items[0].DomainName,Domain:DomainName}" --output json`
+    );
+    if (cfJson) {
+      try {
+        const dists = JSON.parse(cfJson) as { Origin: string; Domain: string }[];
+        for (const d of dists) {
+          if (d.Origin.includes(`thinkwork-${stage}-admin`)) info.adminUrl = `https://${d.Domain}`;
+          if (d.Origin.includes(`thinkwork-${stage}-docs`)) info.docsUrl = `https://${d.Domain}`;
+        }
+      } catch { /* ignore parse errors */ }
+    }
   }
 
   return stages;
@@ -189,11 +210,14 @@ export function registerStatusCommand(program: Command): void {
         console.log(`  ${chalk.bold("Memory:")}          ${info.memoryEngine || "unknown"}`);
         if (info.hindsightHealth) console.log(`  ${chalk.bold("Hindsight:")}       ${info.hindsightHealth}`);
         if (info.bucketName) console.log(`  ${chalk.bold("S3 bucket:")}       ${info.bucketName}`);
+        if (info.dbEndpoint) console.log(`  ${chalk.bold("Database:")}        ${info.dbEndpoint}`);
+        if (info.ecrUrl) console.log(`  ${chalk.bold("ECR:")}             ${info.ecrUrl}`);
         console.log("");
         console.log(chalk.bold("  URLs:"));
         if (info.adminUrl) console.log(`    Admin:     ${link(info.adminUrl)}`);
         if (info.docsUrl) console.log(`    Docs:      ${link(info.docsUrl)}`);
         if (info.apiEndpoint) console.log(`    API:       ${link(info.apiEndpoint)}`);
+        if (info.appsyncApiUrl) console.log(`    AppSync:   ${link(info.appsyncApiUrl)}`);
         if (info.appsyncUrl) console.log(`    WebSocket: ${link(info.appsyncUrl)}`);
         if (info.hindsightEndpoint) console.log(`    Hindsight: ${link(info.hindsightEndpoint)}`);
         console.log(chalk.dim("  ─────────────────────────────────────────"));
