@@ -227,3 +227,16 @@ module "admin_site" {
   stage     = var.stage
   site_name = "admin"
 }
+
+################################################################################
+# Docs Static Site
+################################################################################
+
+module "docs_site" {
+  source = "../app/static-site"
+
+  stage           = var.stage
+  site_name       = "docs"
+  custom_domain   = var.docs_domain
+  certificate_arn = var.docs_certificate_arn
+}

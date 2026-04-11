@@ -1,0 +1,52 @@
+---
+title: Thinkwork
+description: Production-grade agent platform for teams that already live on AWS.
+template: splash
+hero:
+  tagline: Open infrastructure for AI work. Threads run the work, controls keep it safe, managed and connected agents plug into the same system — and the whole thing drops into your existing AWS account via Terraform.
+  actions:
+    - text: Getting Started
+      link: /getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/thinkwork-ai/thinkwork
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Six product modules, one deploy
+
+<CardGrid>
+  <Card title="Agents" icon="rocket">
+    Managed agents powered by Bedrock, connected agents that bring their own runtime. Agent Templates for fleet-wide configuration. Skill packs for reusable capabilities.
+  </Card>
+  <Card title="Threads" icon="document">
+    The universal work container. Every conversation, task, automation, and email lands in a thread with full history, context, and audit trail.
+  </Card>
+  <Card title="Connectors" icon="puzzle">
+    Slack, GitHub, Google Workspace at launch. Credential vault for secure token management. Connector recipes for building your own.
+  </Card>
+  <Card title="Automations" icon="setting">
+    Scheduled jobs, event-driven triggers, and routines that run on your schedule. Step Functions under the hood.
+  </Card>
+  <Card title="Control" icon="approve-check">
+    Guardrails, budgets, and usage tracking. Know what your agents are doing, how much they cost, and where the boundaries are.
+  </Card>
+  <Card title="Knowledge" icon="open-book">
+    Document-backed RAG via Bedrock Knowledge Bases. Upload documents, agents retrieve what they need inline.
+  </Card>
+</CardGrid>
+
+## Quick start
+
+```bash
+npm install -g @thinkwork/cli
+thinkwork login
+thinkwork init -s dev
+thinkwork deploy -s dev
+thinkwork doctor -s dev
+```
+
+That's it. Five commands, one AWS account, production-grade agent infrastructure.

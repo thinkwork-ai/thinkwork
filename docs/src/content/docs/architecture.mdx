@@ -1,0 +1,188 @@
+---
+title: Architecture
+description: Three-tier AWS infrastructure model. Foundation, Data, and App tiers. Data flow, state locations, and what gets deployed where.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Thinkwork is organized into three infrastructure tiers that are deployed in dependency order. Every resource lives in your AWS account. There is no shared infrastructure, no callbacks to external control planes, and no telemetry sent outside your account.
+
+## Three-tier model
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  App Tier                                                    │
+│  AppSync · API Gateway · AgentCore Lambda · Crons · SES     │
+│  CloudFront · Connector Lambdas · Step Functions            │
+├─────────────────────────────────────────────────────────────┤
+│  Data Tier                                                   │
+│  Aurora Postgres · S3 (skills, KB, logs) · Bedrock KB       │
+│  OpenSearch Serverless · Secrets Manager                    │
+├─────────────────────────────────────────────────────────────┤
+│  Foundation Tier                                             │
+│  VPC · Subnets · Cognito · KMS · Route53 · ACM · SES Setup  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Foundation tier
+
+The foundation tier provides identity, networking, and encryption. It changes rarely and is the most stable part of the deployment.
+
+| Resource | Purpose |
+|----------|---------|
+| VPC + subnets | Isolated network with public and private subnets across 2 AZs |
+| NAT Gateway | Outbound internet access for private subnet resources |
+| Cognito User Pool | User authentication and JWT issuance |
+| Cognito Identity Pool | Maps Cognito users to IAM roles for direct AWS resource access |
+| KMS keys | Encryption at rest for app data, audit logs, and credential vault |
+| Route53 records | DNS for admin app, API, and email |
+| ACM certificates | TLS for CloudFront and API Gateway custom domains |
+| SES domain identity | Verified sending domain for outbound email |
+
+### Data tier
+
+The data tier holds all persistent state. It depends on the foundation tier for network access and KMS encryption.
+
+| Resource | Purpose |
+|----------|---------|
+| Aurora Postgres | Primary data store: agents, threads, messages, automations, connectors, users |
+| S3 — skill catalog | `skills/catalog/*.md` — skill packs loaded at invoke time |
+| S3 — knowledge docs | Source documents for Bedrock Knowledge Bases |
+| S3 — audit logs | Append-only log of every agent invoke (NDJSON, partitioned by date) |
+| S3 — assets | Admin and end-user app static files |
+| Bedrock Knowledge Base | Vector-indexed document store for inline RAG |
+| OpenSearch Serverless | Vector index backend for the Bedrock KB |
+| Secrets Manager | DB credentials, OAuth client secrets |
+
+### App tier
+
+The app tier is where computation happens. It depends on both lower tiers.
+
+| Resource | Purpose |
+|----------|---------|
+| AppSync GraphQL API | Real-time subscriptions (WebSocket), used for streaming responses |
+| API Gateway v2 | HTTP queries and mutations, connector webhook ingress |
+| AgentCore Lambda | Container-based agent runtime (Python/Strands + Bedrock) |
+| Connector Lambdas | One per connector (Slack, GitHub, Google) — handles inbound events |
+| Step Functions | Automation runner, routine executor |
+| EventBridge | Triggers for scheduled automations |
+| ECS Fargate (optional) | Hindsight memory engine (if `memory_engine = "hindsight"`) |
+| CloudFront | CDN for admin app, end-user app static files |
+| SES (sending) | Outbound email from agent responses |
+
+## Data flow: agent invoke
+
+A full round trip from user message to agent response:
+
+```
+1. User sends message
+   └─ POST /graphql (API Gateway)
+      └─ JWT validated by Cognito authorizer
+      └─ createMessage resolver → Aurora (writes message record)
+      └─ Triggers AgentCore Lambda invocation (async via SQS)
+
+2. AgentCore Lambda receives event
+   └─ Reads thread history from Aurora
+   └─ Downloads assigned skill packs from S3
+   └─ Queries Bedrock Knowledge Base (if assigned) → retrieves relevant chunks
+   └─ Reads memories from Aurora (managed) or Hindsight (ECS) 
+   └─ Builds context: system prompt + skills instructions + memories + KB chunks + history
+
+3. Bedrock inference
+   └─ Strands sends context + message to Bedrock (Claude)
+   └─ Model may request tool calls
+   └─ Tools execute (SQL, S3, HTTP, skill-defined functions)
+   └─ Tool results injected, model generates final response
+
+4. Response delivery
+   └─ AgentCore writes response message to Aurora
+   └─ Publishes AppSync mutation → NewMessageEvent subscription
+   └─ Stream chunks published in real time via AppSync
+   └─ Thread status updated in Aurora
+
+5. Client receives response
+   └─ AppSync WebSocket delivers StreamChunkEvent chunks
+   └─ Final NewMessageEvent marks completion
+```
+
+## Data flow: connector inbound
+
+```
+External service (Slack, GitHub, etc.)
+    → POST /connectors/<id>/webhook (API Gateway)
+    → Connector Lambda
+        └─ Validates signature
+        └─ Writes thread record to Aurora (channel=SLACK, metadata={...})
+        └─ Invokes AgentCore (same path as user message above)
+    → Agent response
+        → Outbound skill tool: posts reply back to Slack/GitHub/etc.
+```
+
+## Data flow: automation
+
+```
+EventBridge scheduled rule (cron)
+    → Step Functions state machine starts
+    → Creates AUTO- thread in Aurora
+    → Invokes AgentCore with configured prompt
+    → (same agent loop as above)
+    → Step Functions records execution result
+    → Thread marked closed (or failed)
+```
+
+## Where state lives
+
+| What | Where | Backup |
+|------|-------|--------|
+| Agents, threads, messages | Aurora Postgres | Automated daily snapshots (7-day retention) |
+| User accounts | Cognito User Pool | Cognito-managed, multi-AZ |
+| Skill packs | S3 (skill catalog bucket) | S3 versioning enabled |
+| Knowledge documents | S3 (knowledge bucket) | S3 versioning enabled |
+| Audit logs | S3 (audit log bucket) | S3 versioning + lifecycle to Glacier after 90d |
+| Memories (managed) | Aurora Postgres | Same as above |
+| Memories (Hindsight) | Aurora Postgres + ECS in-flight | Same as above |
+| OAuth tokens / API keys | SSM Parameter Store (SecureString, KMS) | SSM-managed |
+| Terraform state | S3 (tfstate bucket) + DynamoDB (lock table) | S3 versioning enabled |
+| Vector index | OpenSearch Serverless | OpenSearch-managed snapshots |
+
+<Aside type="note">
+The only state that is NOT in Aurora is the vector index (OpenSearch) and binary assets (S3). If you restore from an Aurora snapshot, agents, threads, and memories are fully recovered. You would need to re-trigger a Knowledge Base sync to rebuild the vector index.
+</Aside>
+
+## Multi-tenancy
+
+Thinkwork is multi-tenant within a single deployment. Every Aurora table has a `tenant_id` column and all queries are tenant-scoped. The Cognito identity pool maps users to tenants at login time.
+
+Row-level security (Postgres RLS) enforces tenant isolation at the database level — even if application code has a bug, a query cannot return data from another tenant.
+
+```sql
+-- RLS policy (applied automatically by Thinkwork migrations)
+CREATE POLICY tenant_isolation ON threads
+  USING (tenant_id = current_setting('app.current_tenant_id')::uuid);
+```
+
+## Security model
+
+| Boundary | Enforcement |
+|----------|-------------|
+| External → API | Cognito JWT (API Gateway authorizer) |
+| API → Aurora | IAM auth + VPC security groups |
+| AgentCore → Bedrock | IAM role (least privilege) |
+| AgentCore → S3 | IAM role (read skills, read KB docs, write audit logs) |
+| AgentCore → SSM | IAM role (read credentials for assigned connectors) |
+| Tenant isolation | Postgres RLS on all tables |
+| Secrets at rest | KMS encryption (dedicated key per secret category) |
+| Audit trail | Append-only S3 bucket (no delete permissions on Lambda role) |
+
+## AgentCore container
+
+AgentCore is deployed as a Lambda container image stored in ECR. The image is built from the Thinkwork base image and includes:
+
+- Python 3.12
+- [Strands](https://strandsagents.com) agent framework
+- Boto3 (Bedrock, S3, SSM, Secrets Manager clients)
+- httpx (for skill HTTP tools)
+- psycopg3 (Aurora connection)
+- The Thinkwork runtime library (tool registration, memory read/write, context assembly)
+
+The container is 512MB compressed. Lambda allocates 3GB memory (configurable), which maps to approximately 2 vCPUs. Cold start time is 3–5 seconds for the first invocation after a period of inactivity; warm invocations start in under 100ms.

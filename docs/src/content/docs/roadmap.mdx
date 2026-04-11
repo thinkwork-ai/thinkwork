@@ -1,0 +1,122 @@
+---
+title: Roadmap
+description: What's in v1, what's not yet, and what's planned. Honest about scope — Thinkwork v1 is a solid foundation, not a finished product.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Thinkwork v1 is a working, production-deployable agent platform. It is not a finished product. This page is honest about what's in scope for v1, what's explicitly out of scope, and what the roadmap looks like.
+
+## What's in v1
+
+These features are complete and supported in v1:
+
+| Feature | Status |
+|---------|--------|
+| Managed agents (AgentCore + Bedrock) | Stable |
+| Connected agents (BYO runtime webhook) | Stable |
+| Agent Templates (fleet model/guardrail config) | Stable |
+| Skill packs (SKILL.md → S3 → invoke-time loading) | Stable |
+| Threads + channels (CHAT, AUTO, EMAIL, SLACK, GITHUB) | Stable |
+| Managed memory (Aurora-backed retain/recall) | Stable |
+| Hindsight memory engine (ECS Fargate) | Beta |
+| Knowledge Bases (Bedrock KB + document upload) | Stable |
+| Slack connector | Stable |
+| GitHub connector | Stable |
+| Google Workspace connector (Gmail + Calendar) | Beta |
+| Connector credential vault (SSM + KMS) | Stable |
+| Scheduled automations (EventBridge + Step Functions) | Stable |
+| Event-driven automations | Beta |
+| Guardrails (Bedrock Guardrails integration) | Stable |
+| Budgets and usage tracking (turn-level) | Stable |
+| Audit logging (S3 NDJSON) | Stable |
+| Admin web app (React/Vite) | Beta |
+| CLI (`@thinkwork/cli`) | Beta |
+| Terraform module (`thinkwork-ai/thinkwork/aws`) | Beta |
+| BYO VPC, database, Cognito | Stable |
+| Eval packs (code-first evals via CLI) | Beta |
+| Multi-tenancy (Postgres RLS) | Stable |
+
+<Aside type="note">
+"Beta" means the feature works and is deployed in production by early users, but the API or configuration interface may change before v1.0 is declared stable.
+</Aside>
+
+## What's NOT in v1
+
+These features are explicitly not in scope for v1. They're on the roadmap but don't have committed timelines yet.
+
+### Knowledge Graph + Ontology Studio
+
+A Postgres-backed knowledge graph with entity extraction, relationship modeling, and an ontology editor UI. This would complement Knowledge Bases (unstructured document RAG) with structured entity graphs for precise, relationship-aware retrieval.
+
+**Not in v1 because:** The RAG + Knowledge Base path covers 90% of use cases. The graph data model needs more design work before we commit to a schema.
+
+### AutoResearch
+
+A multi-step research automation that uses Step Functions loops to iteratively search, synthesize, and refine findings. Includes GitHub workspace integration for persisting research artifacts and pluggable measurement functions for evaluating research quality.
+
+**Not in v1 because:** The single-turn agent loop in v1 handles most research tasks adequately. AutoResearch adds orchestration complexity that requires more production testing.
+
+### Eval UI
+
+A visual interface in the admin app for viewing eval run results, comparing runs across agent versions, and drilling into individual test case failures.
+
+**Not in v1 because:** Eval packs are fully functional via CLI and S3 JSON output. The UI is a quality-of-life improvement, not a blocker.
+
+### Holistic cost tracking
+
+Per-tenant, per-agent, per-thread cost tracking with dashboards, cost attribution, and chargeback reports. The current implementation tracks token counts and estimates costs per turn but doesn't aggregate them into a reporting-friendly data model.
+
+**Not in v1 because:** Turn-level tracking is sufficient for most v1 use cases. The reporting layer requires Aurora schema additions and an analytics query layer.
+
+### Places service
+
+A location intelligence service with Aurora pgvector for geospatial embeddings, Amazon Titan for location embeddings, and a combined SQL + vector search API. Useful for building agents that reason about physical locations, travel, or logistics.
+
+**Not in v1 because:** It's a specialized capability that doesn't belong in the core platform. It'll ship as an optional module.
+
+### Web end-user client
+
+A consumer-facing web client for end users to interact with agents (as opposed to the current admin app, which is for platform operators). This would be a white-label React app deployed to CloudFront.
+
+**Not in v1 because:** Most v1 users are integrating Thinkwork into their own apps via the GraphQL API or the Slack/GitHub connectors. The end-user client is a future UX layer.
+
+### Eval agent with browser automation
+
+An evaluation agent that can perform end-to-end tests using a browser (Nova Act or similar) to test agent-driven workflows that involve web interfaces.
+
+**Not in v1 because:** Requires browser automation infrastructure (headless Chrome on ECS) and a more sophisticated eval harness. Post-v1 priority.
+
+## What's next (active development)
+
+These are the highest-priority items being actively worked on:
+
+1. **Eval UI** — Admin app integration for viewing and comparing eval runs
+2. **Cost tracking** — Aggregated cost reports by tenant, agent, and time period
+3. **Places module** — Location intelligence as an optional Terraform module
+4. **AutoResearch** — Step Functions-based iterative research loop
+5. **End-user web client** — White-label React app for end users
+
+## Contributing
+
+Thinkwork is MIT licensed and open source. Contributions are welcome, especially for:
+
+- New connector implementations
+- Skill pack library additions
+- Terraform module improvements
+- Test coverage
+- Documentation fixes
+
+See `CONTRIBUTING.md` in the [GitHub repository](https://github.com/thinkwork-ai/thinkwork) for development setup and contribution guidelines.
+
+## Versioning and stability
+
+Thinkwork follows [Semantic Versioning](https://semver.org) for the CLI and Terraform module.
+
+- **Patch releases** (1.0.x) — Bug fixes, documentation updates, no breaking changes
+- **Minor releases** (1.x.0) — New features, backwards-compatible. GraphQL schema additions only (no field removals).
+- **Major releases** (x.0.0) — Breaking changes, with a migration guide
+
+The Terraform module's input variable interface is considered stable after v1.0. Variables will not be renamed or removed in minor releases — only added.
+
+The GraphQL schema follows the same policy: fields may be added in minor releases but not removed or renamed without a major version bump and a deprecation period of at least 2 minor releases.

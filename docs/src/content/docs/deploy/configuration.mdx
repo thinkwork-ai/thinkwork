@@ -1,0 +1,181 @@
+---
+title: Configuration Reference
+description: All Terraform variables for a Thinkwork deployment. Required fields, optional overrides, and defaults.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+This page documents all Terraform variables for the `thinkwork-ai/thinkwork/aws` module. Variables are grouped by category.
+
+## Required variables
+
+These must be set in every deployment. There are no defaults.
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `stage` | string | Deployment stage name (e.g. `dev`, `staging`, `prod`). Used as a prefix for all resource names. |
+| `region` | string | AWS region (e.g. `us-east-1`). Must match your `AWS_REGION` environment. |
+| `account_id` | string | AWS account ID (12-digit string). Used in IAM policies and resource ARNs. |
+| `db_password` | string | Master password for the Aurora Postgres database. Minimum 16 characters. Stored in Secrets Manager. |
+
+## Core options
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `database_engine` | string | `"aurora-serverless"` | `aurora-serverless` (Aurora Serverless v2) or `rds-postgres` (provisioned RDS). Use `aurora-serverless` for dev/staging and variable workloads. |
+| `memory_engine` | string | `"managed"` | `managed` (Aurora-backed, built-in) or `hindsight` (ECS Fargate, full memory lifecycle). |
+| `default_model_id` | string | `"anthropic.claude-3-5-sonnet-20241022-v2:0"` | Bedrock model ID for the default Agent Template created on first deploy. |
+| `log_retention_days` | number | `30` | CloudWatch log group retention in days. Set to `0` for never expire (not recommended for production). |
+
+## Networking
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `create_vpc` | bool | `true` | Whether to create a new VPC. Set `false` to use an existing VPC. |
+| `vpc_cidr` | string | `"10.0.0.0/16"` | CIDR block for the new VPC. Ignored if `create_vpc = false`. |
+| `availability_zones` | list(string) | `[]` | AZs to use. Defaults to the first 2 AZs in the region. |
+| `existing_vpc_id` | string | `""` | Required if `create_vpc = false`. |
+| `existing_private_subnet_ids` | list(string) | `[]` | Required if `create_vpc = false`. Minimum 2 subnets. |
+| `existing_public_subnet_ids` | list(string) | `[]` | Required if `create_vpc = false`. Minimum 2 subnets. |
+| `create_vpc_endpoints` | bool | `false` | Create VPC Interface endpoints for AWS services. Recommended for production or no-NAT configurations. |
+| `single_nat_gateway` | bool | `true` | Use one NAT gateway for all AZs (cost optimization). Set `false` for HA in production. |
+
+## Database
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `create_database` | bool | `true` | Whether to create a new database. |
+| `db_name` | string | `"thinkwork"` | Database name. |
+| `db_username` | string | `"thinkwork"` | Master username. |
+| `aurora_min_capacity` | number | `0.5` | Minimum ACUs for Aurora Serverless v2. Set `0.5` for dev (scales to zero when idle after 5 min). |
+| `aurora_max_capacity` | number | `16` | Maximum ACUs for Aurora Serverless v2. |
+| `rds_instance_class` | string | `"db.t3.medium"` | Instance class when `database_engine = "rds-postgres"`. |
+| `rds_allocated_storage` | number | `20` | Initial storage in GB when `database_engine = "rds-postgres"`. |
+| `existing_db_host` | string | `""` | Required if `create_database = false`. |
+| `existing_db_port` | number | `5432` | Database port. Used if `create_database = false`. |
+| `existing_db_name` | string | `""` | Database name. Required if `create_database = false`. |
+| `existing_db_username` | string | `""` | Database username. Required if `create_database = false`. |
+| `existing_db_security_group_id` | string | `""` | SG to allow Lambda access. Required if `create_database = false`. |
+
+<Aside type="tip">
+For development, set `aurora_min_capacity = 0.5`. Aurora Serverless v2 pauses after 5 minutes of inactivity and the first query after a pause takes ~3 seconds to resume. This eliminates idle database costs during nights and weekends.
+</Aside>
+
+## Auth (Cognito)
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `create_cognito` | bool | `true` | Whether to create a new Cognito User Pool and Identity Pool. |
+| `cognito_domain_prefix` | string | `""` | Cognito hosted UI domain prefix (e.g. `thinkwork-dev` → `thinkwork-dev.auth.us-east-1.amazoncognito.com`). Defaults to `thinkwork-{stage}`. |
+| `cognito_callback_urls` | list(string) | `[]` | OAuth callback URLs for the Cognito app client. Add your admin app and end-user app URLs. |
+| `cognito_logout_urls` | list(string) | `[]` | OAuth logout URLs. |
+| `google_oauth_client_id` | string | `""` | Google OAuth client ID for Google identity provider. Leave empty to disable Google sign-in. |
+| `google_oauth_client_secret` | string | `""` | Google OAuth client secret. Stored in Secrets Manager. |
+| `existing_user_pool_id` | string | `""` | Required if `create_cognito = false`. |
+| `existing_user_pool_arn` | string | `""` | Required if `create_cognito = false`. |
+| `existing_identity_pool_id` | string | `""` | Required if `create_cognito = false`. |
+| `mfa_configuration` | string | `"OFF"` | Cognito MFA setting: `OFF`, `OPTIONAL`, or `ON`. |
+
+## Domain and DNS
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `domain_name` | string | `""` | Root domain for the deployment (e.g. `thinkwork.example.com`). Leave empty to use CloudFront domains. |
+| `hosted_zone_id` | string | `""` | Route53 hosted zone ID for `domain_name`. Required if `domain_name` is set. |
+| `admin_app_subdomain` | string | `"app"` | Subdomain for the admin app (e.g. `app.thinkwork.example.com`). |
+| `api_subdomain` | string | `"api"` | Subdomain for API Gateway (e.g. `api.thinkwork.example.com`). |
+
+## Memory engine
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `memory_engine` | string | `"managed"` | `managed` or `hindsight`. |
+| `hindsight_retain_interval_hours` | number | `1` | How often (hours) Hindsight runs the retain step. Only used if `memory_engine = "hindsight"`. |
+| `hindsight_reflect_interval_hours` | number | `24` | How often (hours) Hindsight runs the reflect/synthesis step. |
+| `hindsight_task_cpu` | number | `512` | ECS Fargate CPU units for Hindsight tasks. |
+| `hindsight_task_memory` | number | `1024` | ECS Fargate memory (MB) for Hindsight tasks. |
+
+## Email (SES)
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `ses_from_address` | string | `""` | From address for outbound email (e.g. `agents@thinkwork.example.com`). Must be verified in SES. |
+| `ses_configuration_set` | string | `"thinkwork-{stage}"` | SES configuration set name for email event tracking. |
+| `ses_inbound_enabled` | bool | `false` | Whether to configure SES inbound email (creates EMAIL- threads from inbound mail). |
+| `ses_inbound_domain` | string | `""` | Domain to receive inbound email (e.g. `mail.thinkwork.example.com`). Required if `ses_inbound_enabled = true`. |
+
+## Knowledge Base
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `create_knowledge_base` | bool | `true` | Whether to create the default Bedrock Knowledge Base and OpenSearch Serverless collection. Set `false` to skip (saves ~$345/month if not using Knowledge module). |
+| `knowledge_base_embedding_model` | string | `"amazon.titan-embed-text-v2:0"` | Bedrock embedding model for KB indexing. |
+| `opensearch_standby_replicas` | string | `"DISABLED"` | OpenSearch Serverless standby replicas. Set `"ENABLED"` for production HA (doubles cost). |
+
+## AgentCore
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `agentcore_memory_mb` | number | `3008` | Lambda memory for AgentCore. Increasing memory also increases vCPU allocation. |
+| `agentcore_timeout_seconds` | number | `900` | Lambda timeout (max 900 = 15 min). |
+| `agentcore_reserved_concurrency` | number | `-1` | Reserved concurrency for AgentCore Lambda. `-1` means unreserved (uses account limit). Set a value to cap concurrent invocations. |
+| `agentcore_container_tag` | string | `"latest"` | ECR image tag for the AgentCore container. Override to pin to a specific version. |
+
+## Tags
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `tags` | map(string) | `{}` | Additional tags applied to all resources. Merged with Thinkwork's default tags (`Stage`, `ManagedBy: thinkwork`). |
+
+## Example: minimal dev config
+
+```hcl
+stage      = "dev"
+region     = "us-east-1"
+account_id = "123456789012"
+db_password = "dev-password-change-me"
+```
+
+## Example: production config
+
+```hcl
+stage      = "prod"
+region     = "us-east-1"
+account_id = "123456789012"
+db_password = var.db_password   # From CI secret
+
+domain_name    = "agents.example.com"
+hosted_zone_id = "Z1234567890ABC"
+
+database_engine   = "aurora-serverless"
+aurora_min_capacity = 1
+aurora_max_capacity = 32
+
+memory_engine = "hindsight"
+
+single_nat_gateway = false   # HA: one NAT per AZ
+
+create_vpc_endpoints = true
+
+cognito_callback_urls = [
+  "https://app.agents.example.com/callback",
+  "https://agents.example.com/callback"
+]
+
+google_oauth_client_id     = "abc.apps.googleusercontent.com"
+google_oauth_client_secret = var.google_oauth_secret
+
+ses_from_address    = "agents@agents.example.com"
+ses_inbound_enabled = true
+ses_inbound_domain  = "mail.agents.example.com"
+
+opensearch_standby_replicas = "ENABLED"
+
+agentcore_reserved_concurrency = 50
+
+tags = {
+  Team        = "platform"
+  CostCenter  = "engineering"
+  Environment = "production"
+}
+```
