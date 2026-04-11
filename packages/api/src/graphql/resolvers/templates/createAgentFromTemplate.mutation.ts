@@ -5,6 +5,7 @@ import {
 	agentCapabilities,
 	agentToCamel, generateSlug,
 } from "../../utils.js";
+import { agentMcpServers } from "@thinkwork/database-pg/schema";
 
 export async function createAgentFromTemplate(_parent: any, args: any, _ctx: GraphQLContext) {
 	const i = args.input;
@@ -57,6 +58,19 @@ export async function createAgentFromTemplate(_parent: any, args: any, _ctx: Gra
 				tenant_id: agentTemplate.tenant_id!,
 				knowledge_base_id: kbId,
 				enabled: true,
+			})),
+		);
+	}
+
+	// 4b. Assign MCP servers from template
+	const templateMcpServers = (agentTemplate.mcp_servers as Array<{ mcp_server_id: string; enabled: boolean }>) || [];
+	if (templateMcpServers.length > 0) {
+		await db.insert(agentMcpServers).values(
+			templateMcpServers.map((m) => ({
+				agent_id: agent.id,
+				tenant_id: agentTemplate.tenant_id!,
+				mcp_server_id: m.mcp_server_id,
+				enabled: m.enabled ?? true,
 			})),
 		);
 	}
