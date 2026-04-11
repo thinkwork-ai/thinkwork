@@ -65,7 +65,10 @@ function AgentTemplatesPage() {
   });
 
   const [, createFromTemplate] = useMutation(CreateAgentFromTemplateMutation);
-  if (result.fetching || !result.data) return <PageSkeleton />;
+  if (result.fetching && !result.data) return <PageSkeleton />;
+  if (result.error) {
+    console.error("Agent templates query error:", result.error.message);
+  }
 
   const templates: TemplateRow[] = (result.data?.agentTemplates ?? []) as TemplateRow[];
 
