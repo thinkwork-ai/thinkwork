@@ -160,8 +160,8 @@ jobs:
             LAMBDA_DIR="${{ github.workspace }}/dist/lambdas"
           fi
           terraform apply -auto-approve \
-            -var "lambda_zips_dir=$LAMBDA_DIR" \
-            -var "stage=${{ env.STAGE }}"
+            -var-file=terraform.tfvars \
+            -var "lambda_zips_dir=$LAMBDA_DIR"
 
   # ── Build & deploy admin app ─────────────────────────────────────
   build-admin:
