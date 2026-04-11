@@ -36,20 +36,28 @@ export const memoryRecords = async (_parent: any, args: any, ctx: GraphQLContext
 	}
 
 	const bankIdList = sql.join(bankIds.map((b) => sql`${b}`), sql`, `);
-	const result = await db.execute(sql`
-		SELECT
-			id, bank_id, text, context, fact_type,
-			confidence_score, event_date, occurred_start, occurred_end,
-			mentioned_at, tags, access_count, proof_count,
-			metadata, created_at, updated_at
-		FROM hindsight.memory_units
-		WHERE bank_id IN (${bankIdList})
-		ORDER BY created_at DESC
-		LIMIT 500
-	`);
+	let result: any;
+	try {
+		result = await db.execute(sql`
+			SELECT
+				id, bank_id, text, context, fact_type,
+				event_date, occurred_start, occurred_end,
+				mentioned_at, tags, access_count, proof_count,
+				metadata, created_at, updated_at
+			FROM hindsight.memory_units
+			WHERE bank_id IN (${bankIdList})
+			ORDER BY created_at DESC
+			LIMIT 500
+		`);
+	} catch {
+		// Hindsight schema may not exist (managed memory engine)
+		return [];
+	}
 
 	return (result.rows || []).map((r: any) => {
 		const strategy = factTypeToStrategy(r.fact_type);
+		let meta: any = {};
+		try { meta = typeof r.metadata === "string" ? JSON.parse(r.metadata) : (r.metadata || {}); } catch {}
 		return {
 			memoryRecordId: String(r.id),
 			content: { text: String(r.text || "") },
@@ -59,10 +67,10 @@ export const memoryRecords = async (_parent: any, args: any, ctx: GraphQLContext
 			namespace: r.bank_id || "",
 			strategyId: r.fact_type || strategy,
 			strategy,
-			score: r.confidence_score ?? null,
+			score: meta.confidence ?? null,
 			agentSlug: r.bank_id || null,
 			factType: r.fact_type || null,
-			confidence: r.confidence_score ?? null,
+			confidence: meta.confidence ?? null,
 			eventDate: toISO(r.event_date),
 			occurredStart: toISO(r.occurred_start),
 			occurredEnd: toISO(r.occurred_end),

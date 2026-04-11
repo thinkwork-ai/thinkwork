@@ -137,7 +137,7 @@ function MemoryPage() {
   const [selectedAgentId, setSelectedAgentId] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
-  const [view, setView] = useState<"memories" | "graph">("graph");
+  const [view, setView] = useState<"memories" | "graph">("memories");
   const graphRef = useRef<MemoryGraphHandle>(null);
 
 
