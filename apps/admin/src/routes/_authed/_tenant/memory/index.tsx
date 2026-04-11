@@ -137,7 +137,7 @@ function MemoryPage() {
   const [selectedAgentId, setSelectedAgentId] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
-  const [view, setView] = useState<"memories" | "graph">("memories");
+  const [view, setView] = useState<"memories" | "graph">("graph");
   const graphRef = useRef<MemoryGraphHandle>(null);
 
 
@@ -317,7 +317,7 @@ function MemoryPage() {
 
   return (
     <div className="flex flex-col -m-6 h-[calc(100%+48px)] min-w-0">
-      <div className="shrink-0 px-4 pt-3 pb-3">
+      <div className="shrink-0 px-4 pt-3 pb-3 relative z-10">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <h1 className="text-lg font-semibold">Memories</h1>
@@ -343,7 +343,7 @@ function MemoryPage() {
         </div>
       </div>
 
-      <div className="flex items-center gap-4 pb-3 px-4 shrink-0">
+      <div className="flex items-center gap-4 pb-3 px-4 shrink-0 relative z-10">
         <div className="relative" style={{ width: "16rem" }}>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
