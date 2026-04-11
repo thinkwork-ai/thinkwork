@@ -31,9 +31,13 @@ terraform {
     }
   }
 
-  # For the example, use local state. Production deployments should
-  # use S3 + DynamoDB backend — see the docs for configuration.
-  # backend "s3" { ... }
+  backend "s3" {
+    bucket         = "thinkwork-terraform-state"
+    key            = "thinkwork/dev/terraform.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "thinkwork-terraform-locks"
+    encrypt        = true
+  }
 }
 
 provider "aws" {
