@@ -38,9 +38,7 @@ import {
   registerMcpServer,
   deleteMcpServer,
   testMcpServer,
-  listOAuthProviders,
   type McpServer,
-  type OAuthProvider,
 } from "@/lib/mcp-api";
 
 export const Route = createFileRoute("/_authed/_tenant/mcp-servers")({
@@ -219,20 +217,12 @@ function AddServerDialog({
   const [transport, setTransport] = useState("streamable-http");
   const [authType, setAuthType] = useState("none");
   const [apiKey, setApiKey] = useState("");
-  const [oauthProvider, setOauthProvider] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
-  const [providers, setProviders] = useState<OAuthProvider[]>([]);
-
-  useEffect(() => {
-    if (open) {
-      listOAuthProviders().then((r) => setProviders(r.providers || [])).catch(console.error);
-    }
-  }, [open]);
 
   const reset = () => {
     setName(""); setUrl(""); setTransport("streamable-http");
-    setAuthType("none"); setApiKey(""); setOauthProvider(""); setErr("");
+    setAuthType("none"); setApiKey(""); setErr("");
   };
 
   const handleSave = async () => {
@@ -245,7 +235,6 @@ function AddServerDialog({
         transport,
         authType: authType !== "none" ? authType : undefined,
         apiKey: authType === "tenant_api_key" ? apiKey : undefined,
-        oauthProvider: authType === "per_user_oauth" ? oauthProvider : undefined,
       });
       reset();
       onOpenChange(false);
@@ -258,9 +247,7 @@ function AddServerDialog({
   };
 
   const isValid = name.trim() && url.trim() &&
-    (authType === "none" ? true :
-     authType === "tenant_api_key" ? apiKey.trim() :
-     authType === "per_user_oauth" ? oauthProvider.trim() : true);
+    (authType === "none" || authType === "per_user_oauth" ? true : apiKey.trim());
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
@@ -310,22 +297,7 @@ function AddServerDialog({
             </div>
           )}
           {authType === "per_user_oauth" && (
-            <div className="space-y-1">
-              <Label>OAuth Provider</Label>
-              {providers.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-2">No OAuth providers configured. Set up an OAuth provider first.</p>
-              ) : (
-                <Select value={oauthProvider} onValueChange={setOauthProvider}>
-                  <SelectTrigger><SelectValue placeholder="Select provider..." /></SelectTrigger>
-                  <SelectContent>
-                    {providers.map((p) => (
-                      <SelectItem key={p.name} value={p.name}>{p.displayName}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              <p className="text-xs text-muted-foreground">Each user will need to connect their own account from the mobile app before the agent can use this server.</p>
-            </div>
+            <p className="text-xs text-muted-foreground px-1">Each user will need to connect their own account from the mobile app before the agent can use this server.</p>
           )}
           {err && (
             <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
