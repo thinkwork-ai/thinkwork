@@ -158,9 +158,63 @@ function SkillsPage() {
     }
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const readEntryRecursive = async (
+    entry: FileSystemEntry,
+    basePath: string,
+  ): Promise<File[]> => {
+    if (entry.isFile) {
+      return new Promise((resolve) => {
+        (entry as FileSystemFileEntry).file((f) => {
+          // Attach relative path via Object.defineProperty since File.webkitRelativePath is read-only
+          Object.defineProperty(f, "webkitRelativePath", { value: basePath + f.name });
+          resolve([f]);
+        });
+      });
+    }
+    if (entry.isDirectory) {
+      const reader = (entry as FileSystemDirectoryEntry).createReader();
+      const entries = await new Promise<FileSystemEntry[]>((resolve) => {
+        const all: FileSystemEntry[] = [];
+        const readBatch = () => {
+          reader.readEntries((batch) => {
+            if (batch.length === 0) { resolve(all); return; }
+            all.push(...batch);
+            readBatch();
+          });
+        };
+        readBatch();
+      });
+      const files: File[] = [];
+      for (const child of entries) {
+        files.push(...await readEntryRecursive(child, basePath + entry.name + "/"));
+      }
+      return files;
+    }
+    return [];
+  };
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
+
+    // Try DataTransfer items first (supports folders)
+    const items = e.dataTransfer.items;
+    if (items && items.length > 0) {
+      const entries: FileSystemEntry[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const entry = items[i].webkitGetAsEntry?.();
+        if (entry) entries.push(entry);
+      }
+      if (entries.some((e) => e.isDirectory)) {
+        const allFiles: File[] = [];
+        for (const entry of entries) {
+          allFiles.push(...await readEntryRecursive(entry, ""));
+        }
+        if (allFiles.length > 0) { processFiles(allFiles); return; }
+      }
+    }
+
+    // Fallback to regular files
     if (e.dataTransfer.files.length > 0) processFiles(e.dataTransfer.files);
   }, [processFiles]);
 
@@ -429,29 +483,53 @@ function SkillsPage() {
 
           {/* Drop zone */}
           <div
-            className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+            className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
               dragOver ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-muted-foreground/50"
             }`}
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={handleDrop}
-            onClick={() => {
-              const input = document.createElement("input");
-              input.type = "file";
-              input.multiple = true;
-              input.accept = ".zip,.md,.yaml,.yml,.py,.txt,.json,.sh";
-              input.onchange = () => { if (input.files) processFiles(input.files); };
-              input.click();
-            }}
           >
             {uploadFiles.length === 0 ? (
               <>
                 <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">
-                  Drop files here or click to browse
+                  Drag a skill folder, zip file, or individual files here
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  .zip file or individual skill files (SKILL.md, scripts/, etc.)
+                <div className="flex items-center justify-center gap-2 mt-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    onClick={() => {
+                      const input = document.createElement("input");
+                      input.type = "file";
+                      input.multiple = true;
+                      input.accept = ".zip,.md,.yaml,.yml,.py,.txt,.json,.sh";
+                      input.onchange = () => { if (input.files) processFiles(input.files); };
+                      input.click();
+                    }}
+                  >
+                    Browse Files
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    onClick={() => {
+                      const input = document.createElement("input");
+                      input.type = "file";
+                      // @ts-expect-error webkitdirectory is non-standard but widely supported
+                      input.webkitdirectory = true;
+                      input.onchange = () => { if (input.files) processFiles(input.files); };
+                      input.click();
+                    }}
+                  >
+                    Browse Folder
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Supports the <a href="https://agentskills.io/specification" target="_blank" rel="noopener" className="underline">Agent Skills spec</a> — SKILL.md, scripts/, references/, assets/
                 </p>
               </>
             ) : (
