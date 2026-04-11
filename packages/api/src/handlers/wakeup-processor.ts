@@ -32,8 +32,6 @@ import {
 	costEvents,
 	tenantMcpServers,
 	agentMcpServers,
-	connections,
-	connectProviders,
 } from "@thinkwork/database-pg/schema";
 import {
 	extractUsage,
@@ -860,13 +858,13 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
 	const mcpRows = await db
 		.select({
+			mcp_server_id: tenantMcpServers.id,
 			name: tenantMcpServers.name,
 			slug: tenantMcpServers.slug,
 			url: tenantMcpServers.url,
 			transport: tenantMcpServers.transport,
 			auth_type: tenantMcpServers.auth_type,
 			auth_config: tenantMcpServers.auth_config,
-			oauth_provider: tenantMcpServers.oauth_provider,
 			server_enabled: tenantMcpServers.enabled,
 			assignment_enabled: agentMcpServers.enabled,
 			assignment_config: agentMcpServers.config,
@@ -883,33 +881,28 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 		if (mcp.auth_type === "tenant_api_key") {
 			const authCfg = (mcp.auth_config as Record<string, unknown>) || {};
 			token = authCfg.token as string | undefined;
-		} else if (mcp.auth_type === "per_user_oauth" && mcp.oauth_provider) {
-			// Look up the human_pair's active connection for this oauth_provider
+		} else if (mcp.auth_type === "oauth" || mcp.auth_type === "per_user_oauth") {
+			// Look up the user's MCP token from user_mcp_tokens table
 			const humanPairId = agent.human_pair_id;
 			if (humanPairId) {
 				try {
-					const [conn] = await db
-						.select({ id: connections.id, provider_id: connections.provider_id })
-						.from(connections)
-						.innerJoin(connectProviders, eq(connections.provider_id, connectProviders.id))
+					const { userMcpTokens } = await import("@thinkwork/database-pg/schema");
+					const [userToken] = await db
+						.select({ access_token: userMcpTokens.access_token, status: userMcpTokens.status })
+						.from(userMcpTokens)
 						.where(and(
-							eq(connections.user_id, humanPairId),
-							eq(connections.tenant_id, wakeup.tenant_id),
-							eq(connectProviders.name, mcp.oauth_provider),
-							eq(connections.status, "active"),
+							eq(userMcpTokens.user_id, humanPairId),
+							eq(userMcpTokens.mcp_server_id, mcp.mcp_server_id),
+							eq(userMcpTokens.status, "active"),
 						))
 						.limit(1);
-					if (conn) {
-						const resolved = await resolveOAuthToken(conn.id, wakeup.tenant_id, conn.provider_id).catch((err) => {
-							console.warn(`[wakeup-processor] MCP OAuth resolution failed for ${mcp.slug}:`, err);
-							return null;
-						});
-						if (resolved) token = resolved;
+					if (userToken) {
+						token = userToken.access_token;
 					} else {
-						console.warn(`[wakeup-processor] No active ${mcp.oauth_provider} connection for user ${humanPairId} (MCP: ${mcp.slug})`);
+						console.warn(`[wakeup-processor] No active MCP token for user ${humanPairId} (MCP: ${mcp.slug})`);
 					}
 				} catch (err) {
-					console.warn(`[wakeup-processor] MCP OAuth lookup failed for ${mcp.slug}:`, err);
+					console.warn(`[wakeup-processor] MCP token lookup failed for ${mcp.slug}:`, err);
 				}
 			}
 		}
@@ -919,8 +912,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 			console.warn(`[wakeup-processor] Skipping MCP ${mcp.slug}: tenant API key not configured`);
 			continue;
 		}
-		if (mcp.auth_type === "per_user_oauth" && !token) {
-			console.warn(`[wakeup-processor] Skipping MCP ${mcp.slug}: user OAuth not connected`);
+		if ((mcp.auth_type === "oauth" || mcp.auth_type === "per_user_oauth") && !token) {
+			console.warn(`[wakeup-processor] Skipping MCP ${mcp.slug}: user has not completed OAuth`);
 			continue;
 		}
 

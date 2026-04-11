@@ -71,9 +71,15 @@ export default function McpServersScreen() {
     setRefreshing(false);
   };
 
-  const handleConnect = async (oauthProvider: string) => {
+  const handleConnect = async (mcpServer: McpServerRow) => {
     if (!tenant?.id || !user?.id) return;
-    const url = `${API_BASE}/api/oauth/authorize?provider=${oauthProvider}&userId=${user.id}&tenantId=${tenant.id}`;
+    // TODO: Implement RFC 9728 OAuth discovery flow
+    // 1. Fetch /.well-known/oauth-protected-resource from the MCP server
+    // 2. Extract authorization_server URL
+    // 3. Open OAuth flow in browser
+    // 4. Store resulting token in user_mcp_tokens via API
+    // For now, direct the user to the MCP server's auth URL
+    const url = `${mcpServer.url}/login?userId=${user.id}&tenantId=${tenant.id}&callbackUrl=${encodeURIComponent(`${API_BASE}/api/mcp-oauth/callback`)}`;
     await WebBrowser.openBrowserAsync(url);
     await fetchServers();
   };
@@ -90,8 +96,8 @@ export default function McpServersScreen() {
     );
   }
 
-  const oauthServers = (servers || []).filter((s) => s.authType === "per_user_oauth");
-  const readyServers = (servers || []).filter((s) => s.authType !== "per_user_oauth" || s.authStatus === "active");
+  const oauthServers = (servers || []).filter((s) => s.authType === "oauth");
+  const readyServers = (servers || []).filter((s) => s.authType !== "oauth" || s.authStatus === "active");
   const needsAction = oauthServers.filter((s) => s.authStatus !== "active");
 
   return (
@@ -121,7 +127,7 @@ export default function McpServersScreen() {
                 {needsAction.map((server, idx) => (
                   <Pressable
                     key={server.id}
-                    onPress={() => server.oauthProvider && handleConnect(server.oauthProvider)}
+                    onPress={() => handleConnect(server)}
                     className={`flex-row items-center px-4 py-3 active:bg-neutral-50 dark:active:bg-neutral-800 ${idx < needsAction.length - 1 ? "border-b border-neutral-100 dark:border-neutral-800" : ""}`}
                   >
                     <View className="w-9 h-9 rounded-lg bg-neutral-100 dark:bg-neutral-800 items-center justify-center">

@@ -79,7 +79,7 @@ const columns: ColumnDef<McpServer>[] = [
       const t = row.original.authType;
       return (
         <span className="text-sm text-muted-foreground">
-          {t === "per_user_oauth" ? `OAuth (${row.original.oauthProvider})` : t === "tenant_api_key" ? "API Key" : "None"}
+          {t === "oauth" ? "OAuth" : t === "tenant_api_key" ? "API Key" : "None"}
         </span>
       );
     },
@@ -247,7 +247,7 @@ function AddServerDialog({
   };
 
   const isValid = name.trim() && url.trim() &&
-    (authType === "none" || authType === "per_user_oauth" ? true : apiKey.trim());
+    (authType === "none" || authType === "oauth" ? true : apiKey.trim());
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
@@ -285,7 +285,7 @@ function AddServerDialog({
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
                   <SelectItem value="tenant_api_key">Tenant API Key</SelectItem>
-                  <SelectItem value="per_user_oauth">Per-User OAuth</SelectItem>
+                  <SelectItem value="oauth">OAuth (server-managed)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -296,7 +296,7 @@ function AddServerDialog({
               <Input id="mcp-apikey" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="API key or bearer token" />
             </div>
           )}
-          {authType === "per_user_oauth" && (
+          {authType === "oauth" && (
             <p className="text-xs text-muted-foreground px-1">Each user will need to connect their own account from the mobile app before the agent can use this server.</p>
           )}
           {err && (
@@ -377,7 +377,7 @@ function ServerDetailDialog({
             </div>
             <div>
               <span className="text-muted-foreground">Auth:</span>{" "}
-              {server.authType === "per_user_oauth" ? `OAuth (${server.oauthProvider})` : server.authType === "tenant_api_key" ? "API Key" : "None"}
+              {server.authType === "oauth" ? "OAuth" : server.authType === "tenant_api_key" ? "API Key" : "None"}
             </div>
           </div>
 
