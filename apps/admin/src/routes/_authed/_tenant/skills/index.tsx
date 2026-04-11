@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Search, Check, Download, Loader2, Plus, Upload } from "lucide-react";
+import { Search, Check, Download, Loader2, Plus, Upload, FileText, X } from "lucide-react";
 import { toast } from "sonner";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -12,7 +12,14 @@ import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   listCatalog,
   listTenantSkills,
@@ -91,86 +98,96 @@ function SkillsPage() {
     }
   };
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // ── Upload Skill dialog state ──────────────────────────────────
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadName, setUploadName] = useState("");
+  const [uploadDesc, setUploadDesc] = useState("");
+  const [uploadFiles, setUploadFiles] = useState<{ path: string; content: string }[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
-  const handleUpload = async (files: FileList | null) => {
-    if (!files || files.length === 0 || !tenantSlug) return;
+  const resetUpload = () => {
+    setUploadName("");
+    setUploadDesc("");
+    setUploadFiles([]);
+    setUploading(false);
+    setDragOver(false);
+  };
+
+  const processFiles = useCallback(async (files: FileList | File[]) => {
+    const entries: { path: string; content: string }[] = [];
+
+    const fileArray = Array.from(files);
+    if (fileArray.length === 1 && fileArray[0].name.endsWith(".zip")) {
+      const JSZip = (await import("jszip")).default;
+      const zip = await JSZip.loadAsync(fileArray[0]);
+      for (const [relativePath, entry] of Object.entries(zip.files)) {
+        if (entry.dir) continue;
+        const content = await entry.async("string");
+        entries.push({ path: relativePath, content });
+      }
+    } else {
+      for (const file of fileArray) {
+        const content = await file.text();
+        const path = file.webkitRelativePath
+          ? file.webkitRelativePath.split("/").slice(1).join("/")
+          : file.name;
+        entries.push({ path, content });
+      }
+    }
+
+    // Strip common root directory prefix
+    if (entries.length > 1) {
+      const first = entries[0].path;
+      const prefix = first.includes("/") ? first.split("/").slice(0, -1).join("/") : "";
+      if (prefix && entries.every((f) => f.path.startsWith(prefix + "/"))) {
+        for (const e of entries) e.path = e.path.slice(prefix.length + 1);
+      }
+    }
+
+    setUploadFiles(entries);
+
+    // Auto-fill name/description from SKILL.md if present
+    const skillMd = entries.find((f) => f.path === "SKILL.md");
+    if (skillMd) {
+      const fm = skillMd.content.match(/^---\n([\s\S]*?)\n---/);
+      const name = fm?.[1]?.match(/^name:\s*(.+)$/m)?.[1]?.trim();
+      const desc = fm?.[1]?.match(/^description:\s*(.+)$/m)?.[1]?.trim();
+      if (name) setUploadName(name);
+      if (desc) setUploadDesc(desc);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files.length > 0) processFiles(e.dataTransfer.files);
+  }, [processFiles]);
+
+  const handleUploadConfirm = async () => {
+    if (!tenantSlug || !uploadName.trim() || uploadFiles.length === 0) return;
     setUploading(true);
     try {
-      const fileEntries: { path: string; content: string }[] = [];
-
-      // Check if it's a single zip file
-      if (files.length === 1 && files[0].name.endsWith(".zip")) {
-        const JSZip = (await import("jszip")).default;
-        const zip = await JSZip.loadAsync(files[0]);
-        for (const [relativePath, entry] of Object.entries(zip.files)) {
-          if (entry.dir) continue;
-          // Strip leading directory if all files share a common root
-          const content = await entry.async("string");
-          fileEntries.push({ path: relativePath, content });
-        }
-      } else {
-        // Multiple files — read each one
-        for (const file of Array.from(files)) {
-          const content = await file.text();
-          // Use webkitRelativePath for folder uploads, or just filename
-          const path = file.webkitRelativePath
-            ? file.webkitRelativePath.split("/").slice(1).join("/")
-            : file.name;
-          fileEntries.push({ path, content });
-        }
-      }
-
-      // Find SKILL.md to extract name/slug
-      const skillMd = fileEntries.find(
-        (f) => f.path === "SKILL.md" || f.path.endsWith("/SKILL.md"),
-      );
-      if (!skillMd) {
-        toast.error("No SKILL.md found — every skill pack must include a SKILL.md file");
-        return;
-      }
-
-      // Parse frontmatter for name
-      const fmMatch = skillMd.content.match(/^---\n([\s\S]*?)\n---/);
-      const nameMatch = fmMatch?.[1]?.match(/^name:\s*(.+)$/m);
-      const descMatch = fmMatch?.[1]?.match(/^description:\s*(.+)$/m);
-      const skillName = nameMatch?.[1]?.trim();
-      if (!skillName) {
-        toast.error("SKILL.md frontmatter must include a 'name' field");
-        return;
-      }
-
-      // Strip common root directory prefix from paths
-      const commonPrefix = fileEntries.length > 1
-        ? fileEntries[0].path.split("/").slice(0, -1).join("/")
-        : "";
-      const allSharePrefix = commonPrefix && fileEntries.every((f) => f.path.startsWith(commonPrefix + "/"));
-      const normalize = (p: string) =>
-        allSharePrefix ? p.slice(commonPrefix.length + 1) : p;
-
-      // Create the skill in the catalog
       const result = await createTenantSkill(tenantSlug, {
-        name: skillName,
-        slug: skillName,
-        description: descMatch?.[1]?.trim(),
+        name: uploadName.trim(),
+        slug: uploadName.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-"),
+        description: uploadDesc.trim() || undefined,
       });
 
-      // Upload all files
-      for (const entry of fileEntries) {
-        const normalizedPath = normalize(entry.path);
-        if (!normalizedPath) continue;
-        await createTenantFile(tenantSlug, result.slug, normalizedPath, entry.content);
+      for (const entry of uploadFiles) {
+        if (!entry.path) continue;
+        await createTenantFile(tenantSlug, result.slug, entry.path, entry.content);
       }
 
-      toast.success(`Skill "${skillName}" uploaded (${fileEntries.length} files)`);
+      toast.success(`Skill "${uploadName}" uploaded (${uploadFiles.length} files)`);
+      setUploadOpen(false);
+      resetUpload();
       navigate({ to: "/skills/$slug", params: { slug: result.slug } });
     } catch (err) {
       console.error("Upload failed:", err);
       toast.error(err instanceof Error ? err.message : "Failed to upload skill");
     } finally {
       setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -324,6 +341,7 @@ function SkillsPage() {
   ];
 
   return (
+    <>
     <PageLayout
       header={
         <>
@@ -333,20 +351,11 @@ function SkillsPage() {
               <p className="text-xs text-muted-foreground">Browse and install skills for your agents</p>
             </div>
             <div className="flex items-center gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".zip,.md,.yaml,.yml,.py,.txt,.json"
-                multiple
-                className="hidden"
-                onChange={(e) => handleUpload(e.target.files)}
-              />
               <Button
                 variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
+                onClick={() => { resetUpload(); setUploadOpen(true); }}
               >
-                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                <Upload className="h-4 w-4" />
                 Upload Skill
               </Button>
               <Button onClick={() => navigate({ to: "/skills/builder" })}>
@@ -386,5 +395,109 @@ function SkillsPage() {
         }
       />
     </PageLayout>
+
+    {/* Upload Skill Dialog */}
+    <Dialog open={uploadOpen} onOpenChange={(open) => { setUploadOpen(open); if (!open) resetUpload(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Upload Skill Pack</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 pt-2">
+          <div className="space-y-2">
+            <Label htmlFor="upload-name">Skill Name</Label>
+            <Input
+              id="upload-name"
+              placeholder="my-skill"
+              value={uploadName}
+              onChange={(e) => setUploadName(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Lowercase letters, numbers, and hyphens. Auto-filled from SKILL.md if present.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="upload-desc">Description</Label>
+            <Input
+              id="upload-desc"
+              placeholder="What this skill does and when to use it"
+              value={uploadDesc}
+              onChange={(e) => setUploadDesc(e.target.value)}
+            />
+          </div>
+
+          {/* Drop zone */}
+          <div
+            className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+              dragOver ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-muted-foreground/50"
+            }`}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+            onClick={() => {
+              const input = document.createElement("input");
+              input.type = "file";
+              input.multiple = true;
+              input.accept = ".zip,.md,.yaml,.yml,.py,.txt,.json,.sh";
+              input.onchange = () => { if (input.files) processFiles(input.files); };
+              input.click();
+            }}
+          >
+            {uploadFiles.length === 0 ? (
+              <>
+                <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  Drop files here or click to browse
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  .zip file or individual skill files (SKILL.md, scripts/, etc.)
+                </p>
+              </>
+            ) : (
+              <div className="text-left space-y-1">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium">{uploadFiles.length} file(s) ready</p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => { e.stopPropagation(); setUploadFiles([]); setUploadName(""); setUploadDesc(""); }}
+                  >
+                    <X className="h-3 w-3" />
+                    Clear
+                  </Button>
+                </div>
+                <div className="max-h-32 overflow-y-auto space-y-0.5">
+                  {uploadFiles.map((f) => (
+                    <div key={f.path} className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <FileText className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{f.path}</span>
+                      <span className="text-muted-foreground/50 shrink-0">
+                        {f.content.length > 1024 ? `${(f.content.length / 1024).toFixed(1)}KB` : `${f.content.length}B`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setUploadOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUploadConfirm}
+              disabled={uploading || !uploadName.trim() || uploadFiles.length === 0}
+            >
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Upload className="h-4 w-4 mr-1.5" />}
+              Upload Skill
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
