@@ -306,84 +306,66 @@ async function mcpOAuthAuthorize(
 		return error("mcpServerId, userId, tenantId are required", 400);
 	}
 
-	// Look up MCP server URL
+	// Look up MCP server + auth config
 	const [server] = await db
-		.select({ url: tenantMcpServers.url, slug: tenantMcpServers.slug })
+		.select({ url: tenantMcpServers.url, slug: tenantMcpServers.slug, auth_config: tenantMcpServers.auth_config })
 		.from(tenantMcpServers)
 		.where(eq(tenantMcpServers.id, mcpServerId));
 	if (!server) return error("MCP server not found", 404);
 
-	// 1. Discover protected resource metadata (RFC 9728)
-	const mcpBaseUrl = server.url.replace(/\/+$/, "");
-	const serverPath = new URL(mcpBaseUrl).pathname.replace(/^\//, "");
-	const wellKnownUrl = `${new URL(mcpBaseUrl).origin}/.well-known/oauth-protected-resource/${serverPath}`;
-
-	const resourceRes = await fetch(wellKnownUrl, { signal: AbortSignal.timeout(10000) });
-	if (!resourceRes.ok) return error(`Failed to discover OAuth metadata: ${resourceRes.status}`, 502);
-	const resourceMeta = await resourceRes.json() as { authorization_servers?: string[] };
-
-	const authServerUrl = resourceMeta.authorization_servers?.[0];
-	if (!authServerUrl) return error("No authorization server in resource metadata", 502);
-
-	// 2. Get authorization server metadata (OIDC discovery)
-	const authMetaRes = await fetch(`${authServerUrl}/.well-known/oauth-authorization-server`, { signal: AbortSignal.timeout(10000) })
-		.catch(() => null);
-	const oidcRes = authMetaRes?.ok ? authMetaRes : await fetch(`${authServerUrl}/.well-known/openid-configuration`, { signal: AbortSignal.timeout(10000) });
-	if (!oidcRes.ok) return error("Failed to discover auth server endpoints", 502);
-	const authMeta = await oidcRes.json() as {
-		authorization_endpoint: string;
-		token_endpoint: string;
-		registration_endpoint?: string;
-	};
-
-	// 3. Dynamic client registration (if endpoint available)
+	const authConfig = (server.auth_config as Record<string, string>) || {};
 	const apiBaseUrl = `https://${event.headers.host || ""}`;
 	const callbackUrl = `${apiBaseUrl}/api/skills/mcp-oauth/callback`;
-	let clientId = "";
 
-	if (authMeta.registration_endpoint) {
-		const regRes = await fetch(authMeta.registration_endpoint, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				client_name: `Thinkwork (${STAGE})`,
-				redirect_uris: [callbackUrl],
-				grant_types: ["authorization_code"],
-				response_types: ["code"],
-				token_endpoint_auth_method: "none",
-			}),
-			signal: AbortSignal.timeout(10000),
-		});
-		if (regRes.ok) {
-			const regData = await regRes.json() as { client_id: string };
-			clientId = regData.client_id;
-		}
+	// Resolve OAuth endpoints: use auth_config if pre-configured, otherwise discover via RFC 9728
+	let authorizeEndpoint = authConfig.authorize_endpoint || "";
+	let tokenEndpoint = authConfig.token_endpoint || "";
+	let clientId = authConfig.client_id || "";
+
+	if (!authorizeEndpoint || !tokenEndpoint) {
+		// Discover via RFC 9728
+		const mcpBaseUrl = server.url.replace(/\/+$/, "");
+		const serverPath = new URL(mcpBaseUrl).pathname.replace(/^\//, "");
+		const wellKnownUrl = `${new URL(mcpBaseUrl).origin}/.well-known/oauth-protected-resource/${serverPath}`;
+
+		const resourceRes = await fetch(wellKnownUrl, { signal: AbortSignal.timeout(10000) });
+		if (!resourceRes.ok) return error(`Failed to discover OAuth metadata: ${resourceRes.status}`, 502);
+		const resourceMeta = await resourceRes.json() as { authorization_servers?: string[] };
+
+		const authServerUrl = resourceMeta.authorization_servers?.[0];
+		if (!authServerUrl) return error("No authorization server in resource metadata", 502);
+
+		// Get OIDC config
+		const authMetaRes = await fetch(`${authServerUrl}/.well-known/oauth-authorization-server`, { signal: AbortSignal.timeout(10000) })
+			.catch(() => null);
+		const oidcRes = authMetaRes?.ok ? authMetaRes : await fetch(`${authServerUrl}/.well-known/openid-configuration`, { signal: AbortSignal.timeout(10000) });
+		if (!oidcRes.ok) return error("Failed to discover auth server endpoints", 502);
+		const authMeta = await oidcRes.json() as { authorization_endpoint: string; token_endpoint: string };
+
+		if (!authorizeEndpoint) authorizeEndpoint = authMeta.authorization_endpoint;
+		if (!tokenEndpoint) tokenEndpoint = authMeta.token_endpoint;
 	}
 
-	if (!clientId) {
-		// Fallback: use a pre-configured client_id from MCP server auth_config
-		const [serverFull] = await db.select({ auth_config: tenantMcpServers.auth_config }).from(tenantMcpServers).where(eq(tenantMcpServers.id, mcpServerId));
-		clientId = (serverFull?.auth_config as any)?.client_id || "";
-		if (!clientId) return error("Could not register OAuth client and no client_id configured", 502);
-	}
+	if (!clientId) return error("No client_id configured. Set client_id in the MCP server's auth config.", 400);
+	if (!authorizeEndpoint) return error("Could not resolve authorize endpoint", 502);
 
-	// 4. Generate PKCE code_verifier + code_challenge (required for public clients)
+	// Generate PKCE code_verifier + code_challenge (required for public clients)
 	const { randomBytes, createHash } = await import("crypto");
 	const codeVerifier = randomBytes(32).toString("base64url");
 	const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
 
-	// 5. Build state (encode context for callback, including PKCE verifier)
+	// Build state (encode context for callback, including PKCE verifier)
 	const state = Buffer.from(JSON.stringify({
 		mcpServerId,
 		userId,
 		tenantId,
-		tokenEndpoint: authMeta.token_endpoint,
+		tokenEndpoint,
 		clientId,
 		codeVerifier,
 	})).toString("base64url");
 
-	// 6. Redirect to authorize
-	const authorizeUrl = new URL(authMeta.authorization_endpoint);
+	// Redirect to authorize
+	const authorizeUrl = new URL(authorizeEndpoint);
 	authorizeUrl.searchParams.set("client_id", clientId);
 	authorizeUrl.searchParams.set("redirect_uri", callbackUrl);
 	authorizeUrl.searchParams.set("response_type", "code");
