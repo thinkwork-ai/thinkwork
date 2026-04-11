@@ -73,13 +73,9 @@ export default function McpServersScreen() {
 
   const handleConnect = async (mcpServer: McpServerRow) => {
     if (!tenant?.id || !user?.id) return;
-    // TODO: Implement RFC 9728 OAuth discovery flow
-    // 1. Fetch /.well-known/oauth-protected-resource from the MCP server
-    // 2. Extract authorization_server URL
-    // 3. Open OAuth flow in browser
-    // 4. Store resulting token in user_mcp_tokens via API
-    // For now, direct the user to the MCP server's auth URL
-    const url = `${mcpServer.url}/login?userId=${user.id}&tenantId=${tenant.id}&callbackUrl=${encodeURIComponent(`${API_BASE}/api/mcp-oauth/callback`)}`;
+    // RFC 9728 OAuth flow — the API handles discovery, registration, and token exchange.
+    // We just open the authorize URL which redirects through the MCP server's OAuth proxy.
+    const url = `${API_BASE}/api/skills/mcp-oauth/authorize?mcpServerId=${mcpServer.id}&userId=${user.id}&tenantId=${tenant.id}`;
     await WebBrowser.openBrowserAsync(url);
     await fetchServers();
   };
