@@ -54,15 +54,11 @@ jobs:
               - 'docs/**'
 
   # ── Build Lambda zips ────────────────────────────────────────────
-  # Always build when terraform changes too — TF needs the zips to
-  # keep API Gateway routes intact even if handler code didn't change.
+  # Always build — TF needs the zips to keep API Gateway routes intact.
+  # Only ~50s with esbuild, cheaper than debugging empty-handler destroys.
   build-lambdas:
     name: Build Lambdas
     needs: detect-changes
-    if: >-
-      needs.detect-changes.outputs.lambdas == 'true' ||
-      needs.detect-changes.outputs.terraform == 'true' ||
-      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -170,11 +166,7 @@ jobs:
   # ── Build & deploy admin app ─────────────────────────────────────
   build-admin:
     name: Build & Deploy Admin
-    needs: [detect-changes, terraform-apply]
-    if: >-
-      needs.detect-changes.outputs.admin == 'true' ||
-      needs.detect-changes.outputs.terraform == 'true' ||
-      github.event_name == 'workflow_dispatch'
+    needs: [terraform-apply]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -210,11 +202,7 @@ jobs:
   # ── Build & deploy docs site ────────────────────────────────────
   build-docs:
     name: Build & Deploy Docs
-    needs: [detect-changes, terraform-apply]
-    if: >-
-      needs.detect-changes.outputs.docs == 'true' ||
-      needs.detect-changes.outputs.terraform == 'true' ||
-      github.event_name == 'workflow_dispatch'
+    needs: [terraform-apply]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
