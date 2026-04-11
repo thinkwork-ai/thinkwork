@@ -72,6 +72,11 @@ output "appsync_api_key" {
   sensitive = true
 }
 
+output "auth_domain" {
+  description = "Cognito hosted UI domain"
+  value       = module.cognito.auth_domain
+}
+
 output "ecr_repository_url" {
   value = module.agentcore.ecr_repository_url
 }
@@ -84,4 +89,20 @@ output "memory_engine" {
 output "hindsight_endpoint" {
   description = "Hindsight API endpoint (only when memory_engine = hindsight)"
   value       = var.memory_engine == "hindsight" ? module.hindsight[0].hindsight_endpoint : null
+}
+
+# Admin static site
+output "admin_distribution_id" {
+  description = "CloudFront distribution ID for the admin app"
+  value       = module.admin_site.distribution_id
+}
+
+output "admin_distribution_domain" {
+  description = "CloudFront domain for the admin app"
+  value       = module.admin_site.distribution_domain
+}
+
+output "admin_bucket_name" {
+  description = "S3 bucket for admin app assets"
+  value       = module.admin_site.bucket_name
 }

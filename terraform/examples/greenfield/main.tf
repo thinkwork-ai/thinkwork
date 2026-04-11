@@ -134,9 +134,25 @@ output "api_endpoint" {
   value       = module.thinkwork.api_endpoint
 }
 
+output "appsync_api_url" {
+  description = "AppSync GraphQL URL"
+  value       = module.thinkwork.appsync_api_url
+}
+
 output "appsync_realtime_url" {
   description = "AppSync realtime WebSocket URL (for frontend subscription clients)"
   value       = module.thinkwork.appsync_realtime_url
+}
+
+output "appsync_api_key" {
+  description = "AppSync API key"
+  value       = module.thinkwork.appsync_api_key
+  sensitive   = true
+}
+
+output "auth_domain" {
+  description = "Cognito hosted UI domain"
+  value       = module.thinkwork.auth_domain
 }
 
 output "user_pool_id" {
@@ -187,4 +203,19 @@ output "memory_engine" {
 output "hindsight_endpoint" {
   description = "Hindsight API endpoint (null when memory_engine = managed)"
   value       = module.thinkwork.hindsight_endpoint
+}
+
+output "admin_url" {
+  description = "Admin app URL"
+  value       = "https://${module.thinkwork.admin_distribution_domain}"
+}
+
+output "admin_distribution_id" {
+  description = "CloudFront distribution ID for admin (for cache invalidation)"
+  value       = module.thinkwork.admin_distribution_id
+}
+
+output "admin_bucket_name" {
+  description = "S3 bucket for admin app assets"
+  value       = module.thinkwork.admin_bucket_name
 }
