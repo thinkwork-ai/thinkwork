@@ -55,6 +55,22 @@ cd "$REPO_ROOT"
 pnpm -C packages/database-pg exec tsx "$REPO_ROOT/packages/skill-catalog/scripts/sync-catalog-db.ts"
 echo ""
 
+# ── 2b. Upload skill catalog files to S3 ────────────────────────────────────
+# Each skill directory (SKILL.md, skill.yaml, scripts/, etc.) is uploaded to
+# skills/catalog/<slug>/ so the admin UI can display and edit them, and
+# AgentCore can download them at invoke time.
+
+echo "── Uploading skill catalog files to S3 ──"
+for skill_dir in "$REPO_ROOT/packages/skill-catalog"/*/; do
+  [ -d "$skill_dir" ] || continue
+  slug=$(basename "$skill_dir")
+  [ "$slug" = "scripts" ] && continue  # skip the sync scripts dir
+  aws s3 sync "$skill_dir" "s3://$BUCKET/skills/catalog/$slug/" --quiet
+  file_count=$(find "$skill_dir" -type f | wc -l | tr -d ' ')
+  echo "  ✓ $slug ($file_count files)"
+done
+echo ""
+
 # ── 3. Seed per-tenant defaults ──────────────────────────────────────────────
 # For each tenant that has agents but missing workspace defaults in S3,
 # upload the default files.
