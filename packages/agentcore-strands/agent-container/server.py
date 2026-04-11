@@ -3,6 +3,7 @@ AgentCore Strands — Multi-model runtime powered by Strands Agent SDK.
 
 Supports any Bedrock model (Claude, Nova, Llama, Mistral) via the Strands
 Agent SDK. Tools are loaded via script-based skills (skill_runner.py).
+MCP tool servers connected via MCPClient (streamable HTTP transport).
 Pure Python — no Node.js dependency.
 """
 import json
