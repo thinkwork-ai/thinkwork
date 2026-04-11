@@ -65,6 +65,8 @@ import {
 import {
   listMcpServers,
   getTemplateMcpServers,
+  assignMcpToTemplate,
+  unassignMcpFromTemplate,
   type McpServer,
 } from "@/lib/mcp-api";
 import { TemplateSyncDialog } from "./-components/TemplateSyncDialog";
@@ -469,13 +471,35 @@ function TemplateEditorPage() {
     (s) => !templateMcpServers.some((ts) => ts.mcp_server_id === s.id),
   );
 
-  const addMcpServer = (serverId: string) => {
-    setTemplateMcpServers([...templateMcpServers, { mcp_server_id: serverId, enabled: true }]);
+  const refreshTemplateMcp = useCallback(() => {
+    if (!isNew && templateId) {
+      getTemplateMcpServers(templateId)
+        .then((r) => {
+          setTemplateMcpServers((r.mcpServers || []).map((m) => ({ mcp_server_id: m.mcp_server_id, enabled: m.enabled })));
+        })
+        .catch(console.error);
+    }
+  }, [templateId, isNew]);
+
+  const addMcpServer = async (serverId: string) => {
+    if (!templateId || isNew) return;
+    try {
+      await assignMcpToTemplate(templateId, serverId);
+      refreshTemplateMcp();
+    } catch (err) {
+      console.error("Failed to assign MCP server:", err);
+    }
     setAddMcpDialogOpen(false);
   };
 
-  const removeMcpServer = (serverId: string) => {
-    setTemplateMcpServers(templateMcpServers.filter((s) => s.mcp_server_id !== serverId));
+  const removeMcpServer = async (serverId: string) => {
+    if (!templateId || isNew) return;
+    try {
+      await unassignMcpFromTemplate(templateId, serverId);
+      refreshTemplateMcp();
+    } catch (err) {
+      console.error("Failed to unassign MCP server:", err);
+    }
   };
 
   const toggleBlockedTool = (toolId: string) => {
@@ -494,7 +518,6 @@ function TemplateEditorPage() {
     const config = JSON.stringify({});
 
     const skillsJson = JSON.stringify(templateSkills);
-    const mcpServersJson = JSON.stringify(templateMcpServers);
 
     try {
       if (isNew) {
@@ -508,7 +531,7 @@ function TemplateEditorPage() {
             icon: icon || undefined,
             config,
             skills: skillsJson,
-            mcpServers: mcpServersJson,
+
             model: model || undefined,
             guardrailId: guardrailId || undefined,
             blockedTools: JSON.stringify(blockedTools.length > 0 ? blockedTools : []),
@@ -532,7 +555,7 @@ function TemplateEditorPage() {
             icon: icon || undefined,
             config,
             skills: skillsJson,
-            mcpServers: mcpServersJson,
+
             model: model || undefined,
             guardrailId: guardrailId || undefined,
             blockedTools: JSON.stringify(blockedTools.length > 0 ? blockedTools : []),

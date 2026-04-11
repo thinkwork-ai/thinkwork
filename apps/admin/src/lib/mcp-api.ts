@@ -113,6 +113,25 @@ export function getTemplateMcpServers(
   return apiFetch(`/api/skills/templates/${templateId}/mcp-servers`);
 }
 
+export function assignMcpToTemplate(
+  templateId: string,
+  mcpServerId: string,
+): Promise<{ id: string }> {
+  return apiFetch(`/api/skills/templates/${templateId}/mcp-servers`, {
+    method: "POST",
+    body: JSON.stringify({ mcpServerId }),
+  });
+}
+
+export function unassignMcpFromTemplate(
+  templateId: string,
+  mcpServerId: string,
+): Promise<{ ok: boolean }> {
+  return apiFetch(`/api/skills/templates/${templateId}/mcp-servers/${mcpServerId}`, {
+    method: "DELETE",
+  });
+}
+
 // ---------------------------------------------------------------------------
 // OAuth providers (for admin registration dropdown)
 // ---------------------------------------------------------------------------

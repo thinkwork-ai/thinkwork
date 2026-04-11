@@ -105,6 +105,38 @@ export const agentMcpServers = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// agent_template_mcp_servers — template-level MCP assignment (replaces JSONB)
+// ---------------------------------------------------------------------------
+
+export const agentTemplateMcpServers = pgTable(
+	"agent_template_mcp_servers",
+	{
+		id: uuid("id")
+			.primaryKey()
+			.default(sql`gen_random_uuid()`),
+		template_id: uuid("template_id").notNull(),
+		tenant_id: uuid("tenant_id")
+			.references(() => tenants.id)
+			.notNull(),
+		mcp_server_id: uuid("mcp_server_id")
+			.references(() => tenantMcpServers.id)
+			.notNull(),
+		enabled: boolean("enabled").notNull().default(true),
+		config: jsonb("config"),
+		created_at: timestamp("created_at", { withTimezone: true })
+			.notNull()
+			.default(sql`now()`),
+		updated_at: timestamp("updated_at", { withTimezone: true })
+			.notNull()
+			.default(sql`now()`),
+	},
+	(table) => [
+		uniqueIndex("uq_agent_template_mcp_servers").on(table.template_id, table.mcp_server_id),
+		index("idx_agent_template_mcp_servers_template").on(table.template_id),
+	],
+);
+
+// ---------------------------------------------------------------------------
 // user_mcp_tokens — per-user OAuth tokens from MCP server auth flows
 // ---------------------------------------------------------------------------
 
@@ -168,6 +200,20 @@ export const agentMcpServersRelations = relations(
 		}),
 		mcpServer: one(tenantMcpServers, {
 			fields: [agentMcpServers.mcp_server_id],
+			references: [tenantMcpServers.id],
+		}),
+	}),
+);
+
+export const agentTemplateMcpServersRelations = relations(
+	agentTemplateMcpServers,
+	({ one }) => ({
+		tenant: one(tenants, {
+			fields: [agentTemplateMcpServers.tenant_id],
+			references: [tenants.id],
+		}),
+		mcpServer: one(tenantMcpServers, {
+			fields: [agentTemplateMcpServers.mcp_server_id],
 			references: [tenantMcpServers.id],
 		}),
 	}),
