@@ -1,6 +1,6 @@
 ---
 title: Commands Reference
-description: All 10 CLI commands with syntax, options, and examples. login, init, doctor, plan, deploy, bootstrap, destroy, status, outputs, config.
+description: All CLI commands with syntax, options, and examples. login, init, doctor, plan, deploy, bootstrap, destroy, status, outputs, config, mcp.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -399,3 +399,103 @@ thinkwork config set -s dev aurora_max_capacity 32
 <Aside type="note">
 `config set` only updates `terraform.tfvars`. It does not apply the change — run `thinkwork deploy -s <stage>` to apply the updated configuration.
 </Aside>
+
+---
+
+## mcp
+
+Manage MCP (Model Context Protocol) servers for your tenant. MCP servers expose external tools that agents can call during conversations.
+
+```bash
+thinkwork mcp <subcommand> [options]
+```
+
+### mcp list
+
+List all registered MCP servers for a tenant.
+
+```bash
+thinkwork mcp list --tenant <slug> -s <stage>
+```
+
+### mcp add
+
+Register a new MCP server.
+
+```bash
+thinkwork mcp add <name> --url <url> --tenant <slug> -s <stage> [options]
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--url <url>` | MCP server endpoint URL (required) |
+| `--tenant <slug>` | Tenant slug (required) |
+| `--transport <type>` | Transport: `streamable-http` (default) or `sse` |
+| `--auth-type <type>` | Auth: `none` (default), `tenant_api_key`, or `per_user_oauth` |
+| `--api-key <token>` | API key or bearer token (for `tenant_api_key`) |
+| `--oauth-provider <name>` | OAuth provider name (for `per_user_oauth`) |
+
+**Examples:**
+
+```bash
+# Register with API key auth
+thinkwork mcp add my-tools \
+  --url https://mcp.example.com/sse \
+  --auth-type tenant_api_key \
+  --api-key sk-abc123 \
+  --tenant my-tenant -s dev
+
+# Register with per-user OAuth (e.g., Lastmile)
+thinkwork mcp add lastmile-crm \
+  --url https://mcp.lastmile-tei.com/crm/sse \
+  --auth-type per_user_oauth \
+  --oauth-provider lastmile \
+  --tenant my-tenant -s dev
+```
+
+### mcp remove
+
+Remove a registered MCP server. Also removes all agent assignments.
+
+```bash
+thinkwork mcp remove <server-id> --tenant <slug> -s <stage>
+```
+
+### mcp test
+
+Test connection to an MCP server and discover available tools.
+
+```bash
+thinkwork mcp test <server-id> --tenant <slug> -s <stage>
+```
+
+**Example output:**
+
+```
+  ✓ Connection successful.
+
+  Discovered tools (4):
+
+    search_contacts - Search CRM contacts by name or email
+    get_account - Get account details by ID
+    create_task - Create a new task
+    list_opportunities - List open opportunities
+```
+
+### mcp assign
+
+Assign a registered MCP server to an agent.
+
+```bash
+thinkwork mcp assign <mcp-server-id> --agent <agent-id> -s <stage>
+```
+
+### mcp unassign
+
+Remove an MCP server from an agent.
+
+```bash
+thinkwork mcp unassign <mcp-server-id> --agent <agent-id> -s <stage>
+```
