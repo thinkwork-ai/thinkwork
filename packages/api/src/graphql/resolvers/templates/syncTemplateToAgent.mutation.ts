@@ -19,7 +19,7 @@ import {
 	agentToCamel,
 	sql,
 } from "../../utils.js";
-import { agentMcpServers } from "@thinkwork/database-pg/schema";
+import { agentMcpServers, agentTemplateMcpServers } from "@thinkwork/database-pg/schema";
 import { snapshotAgent } from "../../../lib/agent-snapshot.js";
 import { overlayTemplateWorkspace } from "../../../lib/workspace-copy.js";
 
@@ -83,12 +83,15 @@ export async function syncTemplateToAgent(_parent: any, args: any, ctx: GraphQLC
 		);
 	}
 
-	// 6b. Replace agent_mcp_servers from template.mcp_servers JSONB
-	const templateMcpServers = (agentTemplate.mcp_servers as Array<{ mcp_server_id: string; enabled: boolean }>) || [];
+	// 6b. Replace agent_mcp_servers from agent_template_mcp_servers join table
+	const templateMcpRows = await db
+		.select({ mcp_server_id: agentTemplateMcpServers.mcp_server_id, enabled: agentTemplateMcpServers.enabled })
+		.from(agentTemplateMcpServers)
+		.where(eq(agentTemplateMcpServers.template_id, templateId));
 	await db.delete(agentMcpServers).where(eq(agentMcpServers.agent_id, agentId));
-	if (templateMcpServers.length > 0) {
+	if (templateMcpRows.length > 0) {
 		await db.insert(agentMcpServers).values(
-			templateMcpServers.map((m) => ({
+			templateMcpRows.map((m) => ({
 				agent_id: agentId,
 				tenant_id: agent.tenant_id!,
 				mcp_server_id: m.mcp_server_id,

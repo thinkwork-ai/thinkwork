@@ -19,7 +19,7 @@ import {
 } from "@aws-sdk/client-secrets-manager";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
-import { agentSkills, skillCatalog, tenantSkills, tenantMcpServers, agentMcpServers } from "@thinkwork/database-pg/schema";
+import { agentSkills, skillCatalog, tenantSkills, tenantMcpServers, agentMcpServers, agentTemplateMcpServers } from "@thinkwork/database-pg/schema";
 import { parse as parseYaml } from "yaml";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
 import { handleCors, json, error, notFound, unauthorized } from "../lib/response.js";
@@ -234,10 +234,21 @@ export async function handler(
 			return mcpListOAuthProviders();
 		}
 
-		// GET /api/skills/templates/:templateId/mcp-servers — get template's MCP server assignments
+		// GET /api/skills/templates/:templateId/mcp-servers — list template's MCP servers
 		const templateMcpMatch = path.match(/^\/api\/skills\/templates\/([^/]+)\/mcp-servers$/);
 		if (templateMcpMatch && method === "GET") {
 			return mcpGetTemplateMcpServers(templateMcpMatch[1]);
+		}
+
+		// POST /api/skills/templates/:templateId/mcp-servers — assign MCP server to template
+		if (templateMcpMatch && method === "POST") {
+			return mcpAssignToTemplate(templateMcpMatch[1], event);
+		}
+
+		// DELETE /api/skills/templates/:templateId/mcp-servers/:mcpServerId — unassign
+		const templateMcpDeleteMatch = path.match(/^\/api\/skills\/templates\/([^/]+)\/mcp-servers\/([^/]+)$/);
+		if (templateMcpDeleteMatch && method === "DELETE") {
+			return mcpUnassignFromTemplate(templateMcpDeleteMatch[1], templateMcpDeleteMatch[2]);
 		}
 
 		// GET /api/skills/user-mcp-servers — list MCP servers for the current user (for mobile app)
@@ -1272,37 +1283,85 @@ async function mcpUnassignFromAgent(
 async function mcpGetTemplateMcpServers(
 	templateId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const { agentTemplates } = await import("@thinkwork/database-pg/schema");
-	const [template] = await db
-		.select({ mcp_servers: agentTemplates.mcp_servers })
-		.from(agentTemplates)
-		.where(eq(agentTemplates.id, templateId));
-	if (!template) return notFound("Template not found");
-
-	const mcpList = (template.mcp_servers as Array<{ mcp_server_id: string; enabled: boolean }>) || [];
-	if (mcpList.length === 0) return json({ mcpServers: [] });
-
-	// Enrich with server details
-	const serverIds = mcpList.map((m) => m.mcp_server_id);
-	const servers = await db
-		.select()
-		.from(tenantMcpServers)
-		.where(inArray(tenantMcpServers.id, serverIds));
-	const serverMap = new Map(servers.map((s) => [s.id, s]));
+	const rows = await db
+		.select({
+			id: agentTemplateMcpServers.id,
+			mcp_server_id: agentTemplateMcpServers.mcp_server_id,
+			enabled: agentTemplateMcpServers.enabled,
+			name: tenantMcpServers.name,
+			slug: tenantMcpServers.slug,
+			url: tenantMcpServers.url,
+			auth_type: tenantMcpServers.auth_type,
+		})
+		.from(agentTemplateMcpServers)
+		.innerJoin(tenantMcpServers, eq(agentTemplateMcpServers.mcp_server_id, tenantMcpServers.id))
+		.where(eq(agentTemplateMcpServers.template_id, templateId));
 
 	return json({
-		mcpServers: mcpList.map((m) => {
-			const s = serverMap.get(m.mcp_server_id);
-			return {
-				mcp_server_id: m.mcp_server_id,
-				enabled: m.enabled,
-				name: s?.name,
-				slug: s?.slug,
-				url: s?.url,
-				authType: s?.auth_type,
-			};
-		}),
+		mcpServers: rows.map((r) => ({
+			mcp_server_id: r.mcp_server_id,
+			enabled: r.enabled,
+			name: r.name,
+			slug: r.slug,
+			url: r.url,
+			authType: r.auth_type,
+		})),
 	});
+}
+
+async function mcpAssignToTemplate(
+	templateId: string,
+	event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const body = JSON.parse(event.body || "{}");
+	const { mcpServerId } = body;
+	if (!mcpServerId) return error("mcpServerId is required", 400);
+
+	// Resolve tenant_id from template
+	const { agentTemplates } = await import("@thinkwork/database-pg/schema");
+	const [template] = await db
+		.select({ tenant_id: agentTemplates.tenant_id })
+		.from(agentTemplates)
+		.where(eq(agentTemplates.id, templateId));
+	if (!template) return error("Template not found", 404);
+
+	// Upsert
+	const [existing] = await db
+		.select({ id: agentTemplateMcpServers.id })
+		.from(agentTemplateMcpServers)
+		.where(and(eq(agentTemplateMcpServers.template_id, templateId), eq(agentTemplateMcpServers.mcp_server_id, mcpServerId)));
+
+	if (existing) {
+		await db
+			.update(agentTemplateMcpServers)
+			.set({ enabled: true, updated_at: new Date() })
+			.where(eq(agentTemplateMcpServers.id, existing.id));
+		return json({ id: existing.id, updated: true });
+	}
+
+	const [inserted] = await db
+		.insert(agentTemplateMcpServers)
+		.values({
+			template_id: templateId,
+			tenant_id: template.tenant_id!,
+			mcp_server_id: mcpServerId,
+		})
+		.returning({ id: agentTemplateMcpServers.id });
+
+	return json({ id: inserted.id, created: true });
+}
+
+async function mcpUnassignFromTemplate(
+	templateId: string,
+	mcpServerId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const deleted = await db
+		.delete(agentTemplateMcpServers)
+		.where(and(eq(agentTemplateMcpServers.template_id, templateId), eq(agentTemplateMcpServers.mcp_server_id, mcpServerId)))
+		.returning({ id: agentTemplateMcpServers.id });
+
+	if (deleted.length === 0) return notFound("MCP server not assigned to template");
+	return json({ ok: true });
 }
 
 async function mcpListOAuthProviders(): Promise<APIGatewayProxyStructuredResultV2> {

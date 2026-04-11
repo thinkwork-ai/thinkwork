@@ -25,9 +25,6 @@ export async function updateAgentTemplate(_parent: any, args: any, _ctx: GraphQL
 	if (i.knowledgeBaseIds !== undefined) {
 		set.knowledge_base_ids = typeof i.knowledgeBaseIds === "string" ? JSON.parse(i.knowledgeBaseIds) : i.knowledgeBaseIds;
 	}
-	if (i.mcpServers !== undefined) {
-		set.mcp_servers = typeof i.mcpServers === "string" ? JSON.parse(i.mcpServers) : i.mcpServers;
-	}
 
 	const [row] = await db
 		.update(agentTemplates)
