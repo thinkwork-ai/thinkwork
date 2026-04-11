@@ -172,6 +172,7 @@ jobs:
   build-admin:
     name: Build & Deploy Admin
     needs: [terraform-apply]
+    if: always() && needs.terraform-apply.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -208,6 +209,7 @@ jobs:
   build-docs:
     name: Build & Deploy Docs
     needs: [terraform-apply]
+    if: always() && needs.terraform-apply.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -243,8 +245,10 @@ jobs:
     name: Bootstrap
     needs: [detect-changes, terraform-apply]
     if: >-
-      needs.detect-changes.outputs.skills == 'true' ||
-      github.event_name == 'workflow_dispatch'
+      always() && needs.terraform-apply.result == 'success' && (
+        needs.detect-changes.outputs.skills == 'true' ||
+        github.event_name == 'workflow_dispatch'
+      )
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
