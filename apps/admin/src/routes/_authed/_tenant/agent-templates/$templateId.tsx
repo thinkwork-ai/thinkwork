@@ -720,6 +720,7 @@ function TemplateEditorPage() {
 
         {/* Skills Tab */}
         {activeTab === "skills" && (
+          <>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-sm">Assigned Skills</CardTitle>
@@ -905,6 +906,7 @@ function TemplateEditorPage() {
               </DialogContent>
             </Dialog>
           </Card>
+          </>
         )}
 
         {/* Workspace Tab */}
