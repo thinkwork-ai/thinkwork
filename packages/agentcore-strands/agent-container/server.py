@@ -976,13 +976,21 @@ def _call_strands_agent(system_prompt: str, messages: list,
     # Clients are context-managed: __enter__ discovers tools, __exit__ cleans up.
     mcp_clients = []
     _mcp_tool_to_server: dict[str, str] = {}  # tool_name → server name (for tracking)
+    logger.info("MCP configs received: %d servers, raw=%s",
+                len(mcp_configs or []),
+                json.dumps([{k: (v[:20] + "...") if k == "auth" and isinstance(v, dict) else v
+                             for k, v in cfg.items()} for cfg in (mcp_configs or [])], default=str))
     for cfg in (mcp_configs or []):
         url = cfg.get("url", "")
         if not url:
+            logger.warning("MCP config has no url, skipping: %s", cfg)
             continue
         server_name = cfg.get("name", url)
         headers = {}
         auth = cfg.get("auth") or {}
+        has_token = bool(auth.get("token"))
+        logger.info("MCP connecting: name=%s url=%s has_auth=%s auth_type=%s",
+                     server_name, url, has_token, auth.get("type", "none"))
         if auth.get("token"):
             auth_type = auth.get("type", "bearer")
             if auth_type == "bearer":
@@ -992,18 +1000,23 @@ def _call_strands_agent(system_prompt: str, messages: list,
         try:
             from strands.tools.mcp import MCPClient
             from mcp.client.streamable_http import streamablehttp_client
+            logger.info("MCP creating client for %s with %d headers", server_name, len(headers))
             client = MCPClient(lambda u=url, h=headers: streamablehttp_client(url=u, headers=h))
+            logger.info("MCP client created for %s, calling __enter__...", server_name)
             client.__enter__()
+            logger.info("MCP client __enter__ complete for %s, tools type=%s", server_name, type(client.tools).__name__)
             # Map each tool name back to its server for invocation tracking
+            tool_names = []
             for t in (client.tools or []):
                 tool_name = getattr(t, "name", None) or (t.get("name") if isinstance(t, dict) else None)
                 if tool_name:
                     _mcp_tool_to_server[tool_name] = server_name
+                    tool_names.append(tool_name)
             mcp_clients.append(client)
-            tool_count = len(client.tools) if client.tools else 0
-            logger.info("MCP connected: %s url=%s tools=%d", server_name, url, tool_count)
+            logger.info("MCP connected: %s url=%s tools=%d names=%s", server_name, url, len(tool_names), tool_names)
         except Exception as e:
-            logger.warning("MCP connection failed for %s (%s): %s", server_name, url, e)
+            import traceback
+            logger.error("MCP connection FAILED for %s (%s): %s\n%s", server_name, url, e, traceback.format_exc())
 
     if mcp_clients:
         tools.extend(mcp_clients)
