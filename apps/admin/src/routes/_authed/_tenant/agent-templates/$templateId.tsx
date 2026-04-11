@@ -448,6 +448,16 @@ function TemplateEditorPage() {
     }
   };
 
+  const refreshTemplateMcp = useCallback(() => {
+    if (!isNew && templateId) {
+      getTemplateMcpServers(templateId)
+        .then((r) => {
+          setTemplateMcpServers((r.mcpServers || []).map((m) => ({ mcp_server_id: m.mcp_server_id, enabled: m.enabled })));
+        })
+        .catch(console.error);
+    }
+  }, [templateId, isNew]);
+
   if (!isNew && result.fetching) return <PageSkeleton />;
 
   // Skills helpers
@@ -470,16 +480,6 @@ function TemplateEditorPage() {
   const unassignedMcpServers = availableMcpServers.filter(
     (s) => !templateMcpServers.some((ts) => ts.mcp_server_id === s.id),
   );
-
-  const refreshTemplateMcp = useCallback(() => {
-    if (!isNew && templateId) {
-      getTemplateMcpServers(templateId)
-        .then((r) => {
-          setTemplateMcpServers((r.mcpServers || []).map((m) => ({ mcp_server_id: m.mcp_server_id, enabled: m.enabled })));
-        })
-        .catch(console.error);
-    }
-  }, [templateId, isNew]);
 
   const addMcpServer = async (serverId: string) => {
     if (!templateId || isNew) return;
