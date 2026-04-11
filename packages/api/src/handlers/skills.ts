@@ -39,15 +39,32 @@ export async function handler(
 	event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
 	if (event.requestContext.http.method === "OPTIONS") return { statusCode: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "*", "Access-Control-Allow-Headers": "*" }, body: "" };
+
+	const method = event.requestContext.http.method;
+	const path = event.rawPath;
+
+	// MCP OAuth endpoints are public (browser redirects, no Bearer token)
+	if (path.startsWith("/api/skills/mcp-oauth/")) {
+		try {
+			if (path === "/api/skills/mcp-oauth/authorize" && method === "GET") {
+				return mcpOAuthAuthorize(event);
+			}
+			if (path === "/api/skills/mcp-oauth/callback" && method === "GET") {
+				return mcpOAuthCallback(event);
+			}
+			return notFound("Route not found");
+		} catch (err) {
+			console.error("MCP OAuth error:", err);
+			return error("Internal server error", 500);
+		}
+	}
+
 	// Accept Bearer token (admin UI), x-api-key (mobile app), or AppSync API key
 	const token = extractBearerToken(event) || event.headers["x-api-key"] || "";
 	const apiSecret = process.env.API_AUTH_SECRET || "";
 	const appsyncKey = process.env.APPSYNC_API_KEY || process.env.GRAPHQL_API_KEY || "";
 	const isAuthed = (apiSecret && token === apiSecret) || (appsyncKey && token === appsyncKey);
 	if (!token || !isAuthed) return unauthorized();
-
-	const method = event.requestContext.http.method;
-	const path = event.rawPath;
 
 	try {
 		// --- Catalog routes ---
@@ -264,6 +281,221 @@ export async function handler(
 		console.error("Skills handler error:", err);
 		return error("Internal server error", 500);
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Catalog routes
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// MCP OAuth — RFC 9728 discovery + proxy authorize/callback
+// ---------------------------------------------------------------------------
+
+/**
+ * Step 1: Browser redirect. Discovers the MCP server's OAuth endpoints,
+ * registers a client (or uses cached), and redirects to the authorize URL.
+ *
+ * GET /api/skills/mcp-oauth/authorize?mcpServerId=X&userId=Y&tenantId=Z
+ */
+async function mcpOAuthAuthorize(
+	event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const qs = event.queryStringParameters || {};
+	const { mcpServerId, userId, tenantId } = qs;
+	if (!mcpServerId || !userId || !tenantId) {
+		return error("mcpServerId, userId, tenantId are required", 400);
+	}
+
+	// Look up MCP server URL
+	const [server] = await db
+		.select({ url: tenantMcpServers.url, slug: tenantMcpServers.slug })
+		.from(tenantMcpServers)
+		.where(eq(tenantMcpServers.id, mcpServerId));
+	if (!server) return error("MCP server not found", 404);
+
+	// 1. Discover protected resource metadata (RFC 9728)
+	const mcpBaseUrl = server.url.replace(/\/+$/, "");
+	const serverPath = new URL(mcpBaseUrl).pathname.replace(/^\//, "");
+	const wellKnownUrl = `${new URL(mcpBaseUrl).origin}/.well-known/oauth-protected-resource/${serverPath}`;
+
+	const resourceRes = await fetch(wellKnownUrl, { signal: AbortSignal.timeout(10000) });
+	if (!resourceRes.ok) return error(`Failed to discover OAuth metadata: ${resourceRes.status}`, 502);
+	const resourceMeta = await resourceRes.json() as { authorization_servers?: string[] };
+
+	const authServerUrl = resourceMeta.authorization_servers?.[0];
+	if (!authServerUrl) return error("No authorization server in resource metadata", 502);
+
+	// 2. Get authorization server metadata (OIDC discovery)
+	const authMetaRes = await fetch(`${authServerUrl}/.well-known/oauth-authorization-server`, { signal: AbortSignal.timeout(10000) })
+		.catch(() => null);
+	const oidcRes = authMetaRes?.ok ? authMetaRes : await fetch(`${authServerUrl}/.well-known/openid-configuration`, { signal: AbortSignal.timeout(10000) });
+	if (!oidcRes.ok) return error("Failed to discover auth server endpoints", 502);
+	const authMeta = await oidcRes.json() as {
+		authorization_endpoint: string;
+		token_endpoint: string;
+		registration_endpoint?: string;
+	};
+
+	// 3. Dynamic client registration (if endpoint available)
+	const apiBaseUrl = `https://${event.headers.host || ""}`;
+	const callbackUrl = `${apiBaseUrl}/api/skills/mcp-oauth/callback`;
+	let clientId = "";
+
+	if (authMeta.registration_endpoint) {
+		const regRes = await fetch(authMeta.registration_endpoint, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				client_name: `Thinkwork (${STAGE})`,
+				redirect_uris: [callbackUrl],
+				grant_types: ["authorization_code"],
+				response_types: ["code"],
+				token_endpoint_auth_method: "none",
+			}),
+			signal: AbortSignal.timeout(10000),
+		});
+		if (regRes.ok) {
+			const regData = await regRes.json() as { client_id: string };
+			clientId = regData.client_id;
+		}
+	}
+
+	if (!clientId) {
+		// Fallback: use a pre-configured client_id from MCP server auth_config
+		const [serverFull] = await db.select({ auth_config: tenantMcpServers.auth_config }).from(tenantMcpServers).where(eq(tenantMcpServers.id, mcpServerId));
+		clientId = (serverFull?.auth_config as any)?.client_id || "";
+		if (!clientId) return error("Could not register OAuth client and no client_id configured", 502);
+	}
+
+	// 4. Build state (encode context for callback)
+	const state = Buffer.from(JSON.stringify({
+		mcpServerId,
+		userId,
+		tenantId,
+		tokenEndpoint: authMeta.token_endpoint,
+		clientId,
+	})).toString("base64url");
+
+	// 5. Redirect to authorize
+	const authorizeUrl = new URL(authMeta.authorization_endpoint);
+	authorizeUrl.searchParams.set("client_id", clientId);
+	authorizeUrl.searchParams.set("redirect_uri", callbackUrl);
+	authorizeUrl.searchParams.set("response_type", "code");
+	authorizeUrl.searchParams.set("scope", "openid email profile offline_access");
+	authorizeUrl.searchParams.set("state", state);
+
+	return {
+		statusCode: 302,
+		headers: { Location: authorizeUrl.toString() },
+		body: "",
+	};
+}
+
+/**
+ * Step 2: OAuth callback. Exchanges auth code for tokens, stores in SM.
+ *
+ * GET /api/skills/mcp-oauth/callback?code=X&state=Y
+ */
+async function mcpOAuthCallback(
+	event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const qs = event.queryStringParameters || {};
+	const { code, state: stateParam } = qs;
+	if (!code || !stateParam) return error("code and state are required", 400);
+
+	// Decode state
+	let state: { mcpServerId: string; userId: string; tenantId: string; tokenEndpoint: string; clientId: string };
+	try {
+		state = JSON.parse(Buffer.from(stateParam, "base64url").toString());
+	} catch {
+		return error("Invalid state parameter", 400);
+	}
+
+	const apiBaseUrl = `https://${event.headers.host || ""}`;
+	const callbackUrl = `${apiBaseUrl}/api/skills/mcp-oauth/callback`;
+
+	// Exchange code for tokens
+	const tokenRes = await fetch(state.tokenEndpoint, {
+		method: "POST",
+		headers: { "Content-Type": "application/x-www-form-urlencoded" },
+		body: new URLSearchParams({
+			grant_type: "authorization_code",
+			code,
+			redirect_uri: callbackUrl,
+			client_id: state.clientId,
+		}).toString(),
+		signal: AbortSignal.timeout(10000),
+	});
+
+	if (!tokenRes.ok) {
+		const errBody = await tokenRes.text().catch(() => "");
+		console.error(`[mcp-oauth] Token exchange failed: ${tokenRes.status} ${errBody}`);
+		return error(`Token exchange failed: ${tokenRes.status}`, 502);
+	}
+
+	const tokenData = await tokenRes.json() as {
+		access_token: string;
+		refresh_token?: string;
+		token_type?: string;
+		expires_in?: number;
+	};
+
+	// Store in Secrets Manager
+	const secretName = `thinkwork/${STAGE}/mcp-tokens/${state.userId}/${state.mcpServerId}`;
+	const secretValue = JSON.stringify({
+		access_token: tokenData.access_token,
+		refresh_token: tokenData.refresh_token || null,
+		token_type: tokenData.token_type || "Bearer",
+		obtained_at: new Date().toISOString(),
+	});
+
+	try {
+		await sm.send(new UpdateSecretCommand({ SecretId: secretName, SecretString: secretValue }));
+	} catch (err: any) {
+		if (err instanceof ResourceNotFoundException) {
+			await sm.send(new CreateSecretCommand({ Name: secretName, SecretString: secretValue }));
+		} else {
+			throw err;
+		}
+	}
+
+	// Upsert user_mcp_tokens row
+	const { userMcpTokens } = await import("@thinkwork/database-pg/schema");
+	const expiresAt = tokenData.expires_in
+		? new Date(Date.now() + tokenData.expires_in * 1000)
+		: null;
+
+	const [existing] = await db
+		.select({ id: userMcpTokens.id })
+		.from(userMcpTokens)
+		.where(and(eq(userMcpTokens.user_id, state.userId), eq(userMcpTokens.mcp_server_id, state.mcpServerId)));
+
+	if (existing) {
+		await db.update(userMcpTokens).set({
+			secret_ref: secretName,
+			expires_at: expiresAt,
+			status: "active",
+			updated_at: new Date(),
+		}).where(eq(userMcpTokens.id, existing.id));
+	} else {
+		await db.insert(userMcpTokens).values({
+			user_id: state.userId,
+			tenant_id: state.tenantId,
+			mcp_server_id: state.mcpServerId,
+			secret_ref: secretName,
+			expires_at: expiresAt,
+			status: "active",
+		});
+	}
+
+	console.log(`[mcp-oauth] Token stored for user ${state.userId}, MCP server ${state.mcpServerId}`);
+
+	// Return a simple success page that closes the browser
+	return {
+		statusCode: 200,
+		headers: { "Content-Type": "text/html" },
+		body: `<!DOCTYPE html><html><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#111;color:#fff"><div style="text-align:center"><h2>Connected!</h2><p>You can close this window.</p></div></body></html>`,
+	};
 }
 
 // ---------------------------------------------------------------------------
