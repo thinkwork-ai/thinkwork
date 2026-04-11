@@ -104,6 +104,16 @@ export function testMcpServer(
 }
 
 // ---------------------------------------------------------------------------
+// Template MCP assignments
+// ---------------------------------------------------------------------------
+
+export function getTemplateMcpServers(
+  templateId: string,
+): Promise<{ mcpServers: Array<{ mcp_server_id: string; enabled: boolean; name?: string; url?: string; authType?: string }> }> {
+  return apiFetch(`/api/skills/templates/${templateId}/mcp-servers`);
+}
+
+// ---------------------------------------------------------------------------
 // OAuth providers (for admin registration dropdown)
 // ---------------------------------------------------------------------------
 
