@@ -32,3 +32,4 @@ export * from "./agent-templates";
 export * from "./activity-log";
 export * from "./quick-actions";
 export * from "./workflow-configs";
+export * from "./mcp-servers";

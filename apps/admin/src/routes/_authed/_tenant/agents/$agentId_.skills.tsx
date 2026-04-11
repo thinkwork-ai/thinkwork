@@ -32,12 +32,8 @@ import {
   listCatalog,
   installSkillToAgent,
   saveSkillCredentials,
-  listMcpServers,
-  removeMcpServer,
   type CatalogSkill,
-  type McpServer,
 } from "@/lib/skills-api";
-import { AddMcpServerDialog } from "@/components/agents/AddMcpServerDialog";
 
 export const Route = createFileRoute("/_authed/_tenant/agents/$agentId_/skills")({
   component: AgentSkillsPage,
@@ -202,32 +198,6 @@ function AgentSkillsPage() {
   const [oauthConnecting, setOauthConnecting] = useState(false);
   const [oauthConnected, setOauthConnected] = useState(false);
 
-  // MCP Servers
-  const [mcpDialogOpen, setMcpDialogOpen] = useState(false);
-  const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
-  const [mcpDeleting, setMcpDeleting] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (agentId) {
-      listMcpServers(agentId).then((r) => setMcpServers(r.servers || [])).catch(console.error);
-    }
-  }, [agentId]);
-
-  const refreshMcpServers = useCallback(() => {
-    listMcpServers(agentId).then((r) => setMcpServers(r.servers || [])).catch(console.error);
-  }, [agentId]);
-
-  const handleRemoveMcpServer = async (name: string) => {
-    setMcpDeleting(name);
-    try {
-      await removeMcpServer(agentId, name);
-      refreshMcpServers();
-    } catch (err) {
-      console.error("Failed to remove MCP server:", err);
-    } finally {
-      setMcpDeleting(null);
-    }
-  };
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
@@ -397,16 +367,10 @@ function AgentSkillsPage() {
           <h1 className="text-2xl font-bold tracking-tight leading-tight text-foreground">
             Skills
           </h1>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setMcpDialogOpen(true)}>
-              <Plus className="h-3.5 w-3.5 mr-1.5" />
-              Add MCP Server
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setAddDialogOpen(true)}>
-              <Plus className="h-3.5 w-3.5 mr-1.5" />
-              Add Skill
-            </Button>
-          </div>
+          <Button variant="outline" size="sm" onClick={() => setAddDialogOpen(true)}>
+            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            Add Skill
+          </Button>
         </div>
       }
     >
@@ -463,63 +427,6 @@ function AgentSkillsPage() {
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* MCP Servers section */}
-      {mcpServers.length > 0 && (
-        <div className="mt-8">
-          <h2 className="text-lg font-semibold mb-3">MCP Servers</h2>
-          <div className="space-y-2">
-            {mcpServers.map((server) => (
-              <div
-                key={server.id}
-                className="flex items-center justify-between px-4 py-3 border rounded-md"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{server.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {server.url}
-                    {server.authType && server.authType !== "none" ? ` (${server.authType})` : ""}
-                  </p>
-                  {server.tools && server.tools.length > 0 && (
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Tools: {server.tools.join(", ")}
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 ml-3">
-                  <Badge
-                    variant="secondary"
-                    className={`text-xs ${server.enabled ? "bg-green-500/15 text-green-600 dark:text-green-400" : "bg-muted text-muted-foreground"}`}
-                  >
-                    {server.enabled ? "Enabled" : "Disabled"}
-                  </Badge>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:text-destructive h-7 px-2"
-                    onClick={() => handleRemoveMcpServer(server.name)}
-                    disabled={mcpDeleting === server.name}
-                  >
-                    {mcpDeleting === server.name ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <XCircle className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Add MCP Server dialog */}
-      <AddMcpServerDialog
-        agentId={agentId}
-        open={mcpDialogOpen}
-        onOpenChange={setMcpDialogOpen}
-        onAdded={refreshMcpServers}
-      />
 
       {/* Edit / Credential / OAuth dialog */}
       <Dialog

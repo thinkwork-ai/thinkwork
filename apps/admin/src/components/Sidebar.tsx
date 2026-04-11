@@ -19,6 +19,7 @@ import {
   CalendarClock,
   BookOpen,
   LayoutTemplate,
+  Cable,
 } from "lucide-react";
 import { useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
@@ -166,6 +167,7 @@ export function AppSidebar() {
     { to: "/agents", icon: Bot, label: "Agents", badge: agentCount },
     { to: "/agent-templates", icon: LayoutTemplate, label: "Agent Templates" },
     { to: "/skills", icon: Puzzle, label: "Skills Catalog" },
+    { to: "/mcp-servers", icon: Cable, label: "MCP Servers" },
     { to: "/security", icon: Shield, label: "Security Center" },
   ];
 

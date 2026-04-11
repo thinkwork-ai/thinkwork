@@ -18,6 +18,7 @@ import { Route as AuthedTenantRouteImport } from './routes/_authed/_tenant'
 import { Route as AuthedTenantSettingsRouteImport } from './routes/_authed/_tenant/settings'
 import { Route as AuthedTenantPerformanceRouteImport } from './routes/_authed/_tenant/performance'
 import { Route as AuthedTenantOrgRouteImport } from './routes/_authed/_tenant/org'
+import { Route as AuthedTenantMcpServersRouteImport } from './routes/_authed/_tenant/mcp-servers'
 import { Route as AuthedTenantDashboardRouteImport } from './routes/_authed/_tenant/dashboard'
 import { Route as AuthedTenantCostsRouteImport } from './routes/_authed/_tenant/costs'
 import { Route as AuthedTenantActivityRouteImport } from './routes/_authed/_tenant/activity'
@@ -98,6 +99,11 @@ const AuthedTenantPerformanceRoute = AuthedTenantPerformanceRouteImport.update({
 const AuthedTenantOrgRoute = AuthedTenantOrgRouteImport.update({
   id: '/org',
   path: '/org',
+  getParentRoute: () => AuthedTenantRoute,
+} as any)
+const AuthedTenantMcpServersRoute = AuthedTenantMcpServersRouteImport.update({
+  id: '/mcp-servers',
+  path: '/mcp-servers',
   getParentRoute: () => AuthedTenantRoute,
 } as any)
 const AuthedTenantDashboardRoute = AuthedTenantDashboardRouteImport.update({
@@ -327,6 +333,7 @@ export interface FileRoutesByFullPath {
   '/activity': typeof AuthedTenantActivityRoute
   '/costs': typeof AuthedTenantCostsRoute
   '/dashboard': typeof AuthedTenantDashboardRoute
+  '/mcp-servers': typeof AuthedTenantMcpServersRoute
   '/org': typeof AuthedTenantOrgRoute
   '/performance': typeof AuthedTenantPerformanceRoute
   '/settings': typeof AuthedTenantSettingsRoute
@@ -374,6 +381,7 @@ export interface FileRoutesByTo {
   '/activity': typeof AuthedTenantActivityRoute
   '/costs': typeof AuthedTenantCostsRoute
   '/dashboard': typeof AuthedTenantDashboardRoute
+  '/mcp-servers': typeof AuthedTenantMcpServersRoute
   '/org': typeof AuthedTenantOrgRoute
   '/performance': typeof AuthedTenantPerformanceRoute
   '/settings': typeof AuthedTenantSettingsRoute
@@ -424,6 +432,7 @@ export interface FileRoutesById {
   '/_authed/_tenant/activity': typeof AuthedTenantActivityRoute
   '/_authed/_tenant/costs': typeof AuthedTenantCostsRoute
   '/_authed/_tenant/dashboard': typeof AuthedTenantDashboardRoute
+  '/_authed/_tenant/mcp-servers': typeof AuthedTenantMcpServersRoute
   '/_authed/_tenant/org': typeof AuthedTenantOrgRoute
   '/_authed/_tenant/performance': typeof AuthedTenantPerformanceRoute
   '/_authed/_tenant/settings': typeof AuthedTenantSettingsRoute
@@ -473,6 +482,7 @@ export interface FileRouteTypes {
     | '/activity'
     | '/costs'
     | '/dashboard'
+    | '/mcp-servers'
     | '/org'
     | '/performance'
     | '/settings'
@@ -520,6 +530,7 @@ export interface FileRouteTypes {
     | '/activity'
     | '/costs'
     | '/dashboard'
+    | '/mcp-servers'
     | '/org'
     | '/performance'
     | '/settings'
@@ -569,6 +580,7 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/activity'
     | '/_authed/_tenant/costs'
     | '/_authed/_tenant/dashboard'
+    | '/_authed/_tenant/mcp-servers'
     | '/_authed/_tenant/org'
     | '/_authed/_tenant/performance'
     | '/_authed/_tenant/settings'
@@ -680,6 +692,13 @@ declare module '@tanstack/react-router' {
       path: '/org'
       fullPath: '/org'
       preLoaderRoute: typeof AuthedTenantOrgRouteImport
+      parentRoute: typeof AuthedTenantRoute
+    }
+    '/_authed/_tenant/mcp-servers': {
+      id: '/_authed/_tenant/mcp-servers'
+      path: '/mcp-servers'
+      fullPath: '/mcp-servers'
+      preLoaderRoute: typeof AuthedTenantMcpServersRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
     '/_authed/_tenant/dashboard': {
@@ -955,6 +974,7 @@ interface AuthedTenantRouteChildren {
   AuthedTenantActivityRoute: typeof AuthedTenantActivityRoute
   AuthedTenantCostsRoute: typeof AuthedTenantCostsRoute
   AuthedTenantDashboardRoute: typeof AuthedTenantDashboardRoute
+  AuthedTenantMcpServersRoute: typeof AuthedTenantMcpServersRoute
   AuthedTenantOrgRoute: typeof AuthedTenantOrgRoute
   AuthedTenantPerformanceRoute: typeof AuthedTenantPerformanceRoute
   AuthedTenantSettingsRoute: typeof AuthedTenantSettingsRoute
@@ -999,6 +1019,7 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantActivityRoute: AuthedTenantActivityRoute,
   AuthedTenantCostsRoute: AuthedTenantCostsRoute,
   AuthedTenantDashboardRoute: AuthedTenantDashboardRoute,
+  AuthedTenantMcpServersRoute: AuthedTenantMcpServersRoute,
   AuthedTenantOrgRoute: AuthedTenantOrgRoute,
   AuthedTenantPerformanceRoute: AuthedTenantPerformanceRoute,
   AuthedTenantSettingsRoute: AuthedTenantSettingsRoute,

@@ -30,6 +30,10 @@ import {
 	tenants,
 	users,
 	costEvents,
+	tenantMcpServers,
+	agentMcpServers,
+	connections,
+	connectProviders,
 } from "@thinkwork/database-pg/schema";
 import {
 	extractUsage,
@@ -842,9 +846,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 		mcpServers.push("restaurant");
 	}
 
-	// Build rich MCP configs for direct HTTP streaming connections.
-	// Skills with mcpUrl in their config connect directly from the agent container
-	// (no gateway). OAuth tokens are resolved fresh via resolveOAuthToken().
+	// Build MCP configs from agent_mcp_servers + tenant_mcp_servers.
+	// Auth resolution: tenant_api_key → read token from auth_config,
+	// per_user_oauth → look up human_pair's connection for the oauth_provider.
 	interface McpServerConfig {
 		name: string;
 		url: string;
@@ -853,30 +857,70 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 		tools?: string[];
 	}
 	const mcpConfigs: McpServerConfig[] = [];
-	for (const skill of skillRows) {
-		const config = (skill.config as Record<string, unknown>) || {};
-		const mcpUrl = config.mcpUrl as string | undefined;
-		if (!mcpUrl) continue;
+
+	const mcpRows = await db
+		.select({
+			name: tenantMcpServers.name,
+			slug: tenantMcpServers.slug,
+			url: tenantMcpServers.url,
+			transport: tenantMcpServers.transport,
+			auth_type: tenantMcpServers.auth_type,
+			auth_config: tenantMcpServers.auth_config,
+			oauth_provider: tenantMcpServers.oauth_provider,
+			server_enabled: tenantMcpServers.enabled,
+			assignment_enabled: agentMcpServers.enabled,
+			assignment_config: agentMcpServers.config,
+		})
+		.from(agentMcpServers)
+		.innerJoin(tenantMcpServers, eq(agentMcpServers.mcp_server_id, tenantMcpServers.id))
+		.where(and(eq(agentMcpServers.agent_id, wakeup.agent_id), eq(agentMcpServers.enabled, true)));
+
+	for (const mcp of mcpRows) {
+		if (!mcp.server_enabled) continue;
 
 		let token: string | undefined;
-		const connectionId = config.connectionId as string | undefined;
-		const providerId = config.providerId as string | undefined;
-		if (connectionId && providerId) {
-			const resolved = await resolveOAuthToken(connectionId, wakeup.tenant_id, providerId).catch((err) => {
-				console.warn(`[wakeup-processor] MCP OAuth token resolution failed for ${skill.skill_id}:`, err);
-				return null;
-			});
-			if (resolved) token = resolved;
-		} else if (config.mcpAuthToken) {
-			token = config.mcpAuthToken as string;
+
+		if (mcp.auth_type === "tenant_api_key") {
+			const authCfg = (mcp.auth_config as Record<string, unknown>) || {};
+			token = authCfg.token as string | undefined;
+		} else if (mcp.auth_type === "per_user_oauth" && mcp.oauth_provider) {
+			// Look up the human_pair's active connection for this oauth_provider
+			const humanPairId = agent.human_pair_id;
+			if (humanPairId) {
+				try {
+					const [conn] = await db
+						.select({ id: connections.id, provider_id: connections.provider_id })
+						.from(connections)
+						.innerJoin(connectProviders, eq(connections.provider_id, connectProviders.id))
+						.where(and(
+							eq(connections.user_id, humanPairId),
+							eq(connections.tenant_id, wakeup.tenant_id),
+							eq(connectProviders.name, mcp.oauth_provider),
+							eq(connections.status, "active"),
+						))
+						.limit(1);
+					if (conn) {
+						const resolved = await resolveOAuthToken(conn.id, wakeup.tenant_id, conn.provider_id).catch((err) => {
+							console.warn(`[wakeup-processor] MCP OAuth resolution failed for ${mcp.slug}:`, err);
+							return null;
+						});
+						if (resolved) token = resolved;
+					} else {
+						console.warn(`[wakeup-processor] No active ${mcp.oauth_provider} connection for user ${humanPairId} (MCP: ${mcp.slug})`);
+					}
+				} catch (err) {
+					console.warn(`[wakeup-processor] MCP OAuth lookup failed for ${mcp.slug}:`, err);
+				}
+			}
 		}
 
+		const assignCfg = (mcp.assignment_config as Record<string, unknown>) || {};
 		mcpConfigs.push({
-			name: skill.skill_id,
-			url: mcpUrl,
-			transport: (config.mcpTransport as "streamable-http" | "sse") || "streamable-http",
-			auth: token ? { type: (config.mcpAuthType as string) || "bearer", token } : undefined,
-			tools: Array.isArray(config.mcpTools) ? config.mcpTools as string[] : undefined,
+			name: mcp.slug,
+			url: mcp.url,
+			transport: (mcp.transport as "streamable-http" | "sse") || "streamable-http",
+			auth: token ? { type: "bearer", token } : undefined,
+			tools: Array.isArray(assignCfg.toolAllowlist) ? assignCfg.toolAllowlist as string[] : undefined,
 		});
 	}
 	if (mcpConfigs.length > 0) {
