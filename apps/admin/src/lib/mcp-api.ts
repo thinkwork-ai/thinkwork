@@ -104,6 +104,21 @@ export function testMcpServer(
 }
 
 // ---------------------------------------------------------------------------
+// OAuth providers (for admin registration dropdown)
+// ---------------------------------------------------------------------------
+
+export type OAuthProvider = {
+  id: string;
+  name: string;
+  displayName: string;
+  providerType: string;
+};
+
+export function listOAuthProviders(): Promise<{ providers: OAuthProvider[] }> {
+  return apiFetch("/api/skills/oauth-providers");
+}
+
+// ---------------------------------------------------------------------------
 // Agent-level MCP assignment
 // ---------------------------------------------------------------------------
 

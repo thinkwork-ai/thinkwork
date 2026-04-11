@@ -1,15 +1,42 @@
 ---
 title: Connectors
-description: Slack, GitHub, and Google Workspace connectors with a credential vault for secure token management. Build custom connectors with connector recipes.
+description: Connect Thinkwork to external channels, event sources, and tool systems. Use built-in connectors for Slack, GitHub, and Google Workspace, or add MCP-based tool connectors and custom recipes.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Connectors wire external services into the Thinkwork thread system. When a Slack message arrives, a GitHub issue is filed, or a Google Calendar event triggers — a connector turns that external event into a thread and routes it to the right agent.
+Connectors are how Thinkwork interfaces with the outside world. They bring external systems into the thread model and let agents act back on those systems in a controlled way.
 
-Connectors are bidirectional: agents can also send messages, create issues, reply to emails, and post updates back to the originating system through the same connector.
+In practice, Thinkwork uses connectors in two broad ways:
 
-## Built-in connectors
+1. **Channel and event connectors** turn inbound messages, webhooks, and app events into threads.
+2. **Tool connectors** give agents access to external capabilities they can call during work, including MCP-based tool servers.
+
+Both fit the same architectural story: Thinkwork keeps threads, agents, controls, and auditability in one system while connectors handle integration boundaries.
+
+## Connector types
+
+### Channel and event connectors
+
+These connectors route communications and app events into Thinkwork. When a Slack message arrives, a GitHub issue is filed, or a Google Calendar event triggers, the connector turns that external event into a thread and routes it to the right agent.
+
+They are bidirectional: agents can also send messages, create issues, reply to emails, and post updates back to the originating system through the same connector.
+
+### Tool connectors
+
+Tool connectors let agents call external systems during a turn. In practice, this often means connecting to remote tool servers such as MCP.
+
+Use tool connectors when the capability already exists outside Thinkwork and you want agents to use it without rebuilding that logic inside Thinkwork.
+
+Common examples include:
+
+- CRM lookups and account updates
+- Task and ticket operations
+- Internal API actions
+- Search or retrieval against external systems
+- Database or business-system queries exposed through an MCP server
+
+## Built-in channel and event connectors
 
 ### Slack
 
@@ -61,6 +88,19 @@ Setup uses OAuth 2.0. The connector handles the OAuth flow and stores tokens in 
 <Aside type="note">
 Google OAuth requires a verified domain and an approved OAuth app for production use. For development, you can use test users and an unverified app with the appropriate disclaimer.
 </Aside>
+
+## MCP as a connector pattern
+
+Thinkwork supports MCP (Model Context Protocol) as a **tool connector** pattern, not as a separate top-level product module.
+
+That means MCP sits under the broader Connectors model:
+
+- **Threads** are still the unit of work
+- **Agents** still decide what to do in the thread
+- **Connectors** bring in outside systems, whether they are communication channels or tool servers
+- **Controls** still govern what agents can access and how usage is tracked
+
+If you want agents to call remote tools through MCP, see [MCP tool connectors](/concepts/mcp-servers/).
 
 ## Credential vault
 
@@ -131,7 +171,7 @@ For simple deployments, set a default agent on each connector and skip routing r
 </Aside>
 
 <Aside type="note">
-Looking to connect agents to external **tool servers** (MCP)? See [MCP Servers](/concepts/mcp-servers/) for connecting agents to third-party MCP servers that expose tools like CRM lookups, task management, and more.
+Need agents to use external tools instead of inbound channels? See [MCP tool connectors](/concepts/mcp-servers/) for the Thinkwork pattern for connecting remote tool servers through the Connectors layer.
 </Aside>
 
 ## Thread metadata from connectors

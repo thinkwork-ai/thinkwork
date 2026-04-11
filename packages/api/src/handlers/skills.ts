@@ -17,7 +17,7 @@ import {
 	UpdateSecretCommand,
 	ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { agentSkills, skillCatalog, tenantSkills, tenantMcpServers, agentMcpServers } from "@thinkwork/database-pg/schema";
 import { parse as parseYaml } from "yaml";
@@ -223,6 +223,19 @@ export async function handler(
 		const agentMcpDeleteMatch = path.match(/^\/api\/skills\/agents\/([^/]+)\/mcp-servers\/([^/]+)$/);
 		if (agentMcpDeleteMatch && method === "DELETE") {
 			return mcpUnassignFromAgent(agentMcpDeleteMatch[1], agentMcpDeleteMatch[2]);
+		}
+
+		// GET /api/skills/oauth-providers — list configured OAuth providers (for admin dropdown)
+		if (path === "/api/skills/oauth-providers" && method === "GET") {
+			return mcpListOAuthProviders();
+		}
+
+		// GET /api/skills/user-mcp-servers — list MCP servers for the current user (for mobile app)
+		if (path === "/api/skills/user-mcp-servers" && method === "GET") {
+			const tenantId = event.headers["x-tenant-id"];
+			const userId = event.headers["x-principal-id"];
+			if (!tenantId || !userId) return error("x-tenant-id and x-principal-id headers required", 400);
+			return mcpListUserServers(tenantId, userId);
 		}
 
 		return notFound("Route not found");
@@ -1240,6 +1253,123 @@ async function mcpUnassignFromAgent(
 
 	if (deleted.length === 0) return notFound("MCP server assignment not found");
 	return json({ ok: true });
+}
+
+// ---------------------------------------------------------------------------
+// MCP Server — OAuth Providers + User View
+// ---------------------------------------------------------------------------
+
+async function mcpListOAuthProviders(): Promise<APIGatewayProxyStructuredResultV2> {
+	const { connectProviders } = await import("@thinkwork/database-pg/schema");
+	const rows = await db
+		.select({
+			id: connectProviders.id,
+			name: connectProviders.name,
+			display_name: connectProviders.display_name,
+			provider_type: connectProviders.provider_type,
+			is_available: connectProviders.is_available,
+		})
+		.from(connectProviders)
+		.where(eq(connectProviders.is_available, true));
+
+	return json({
+		providers: rows.map((r) => ({
+			id: r.id,
+			name: r.name,
+			displayName: r.display_name,
+			providerType: r.provider_type,
+		})),
+	});
+}
+
+async function mcpListUserServers(
+	tenantId: string,
+	userId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const { agents, connections, connectProviders } = await import("@thinkwork/database-pg/schema");
+
+	// Find all agents paired with this user
+	const userAgents = await db
+		.select({ id: agents.id, name: agents.name })
+		.from(agents)
+		.where(and(eq(agents.tenant_id, tenantId), eq(agents.human_pair_id, userId)));
+
+	if (userAgents.length === 0) {
+		return json({ servers: [] });
+	}
+
+	const agentIds = userAgents.map((a) => a.id);
+
+	// Get all MCP servers assigned to these agents
+	const rows = await db
+		.select({
+			assignment_id: agentMcpServers.id,
+			agent_id: agentMcpServers.agent_id,
+			mcp_server_id: agentMcpServers.mcp_server_id,
+			enabled: agentMcpServers.enabled,
+			name: tenantMcpServers.name,
+			slug: tenantMcpServers.slug,
+			url: tenantMcpServers.url,
+			auth_type: tenantMcpServers.auth_type,
+			oauth_provider: tenantMcpServers.oauth_provider,
+			tools: tenantMcpServers.tools,
+			server_enabled: tenantMcpServers.enabled,
+		})
+		.from(agentMcpServers)
+		.innerJoin(tenantMcpServers, eq(agentMcpServers.mcp_server_id, tenantMcpServers.id))
+		.where(inArray(agentMcpServers.agent_id, agentIds));
+
+	// For per_user_oauth servers, check if user has an active connection
+	const oauthProviders = [...new Set(rows.filter((r) => r.auth_type === "per_user_oauth" && r.oauth_provider).map((r) => r.oauth_provider!))];
+
+	const userConnections = oauthProviders.length > 0
+		? await db
+			.select({
+				provider_name: connectProviders.name,
+				status: connections.status,
+				connection_id: connections.id,
+			})
+			.from(connections)
+			.innerJoin(connectProviders, eq(connections.provider_id, connectProviders.id))
+			.where(and(
+				eq(connections.user_id, userId),
+				eq(connections.tenant_id, tenantId),
+			))
+		: [];
+
+	const connectionByProvider = new Map(userConnections.map((c) => [c.provider_name, c]));
+
+	// Deduplicate MCP servers (same server may be assigned to multiple agents)
+	const seen = new Set<string>();
+	const servers = rows
+		.filter((r) => {
+			if (seen.has(r.mcp_server_id)) return false;
+			seen.add(r.mcp_server_id);
+			return true;
+		})
+		.map((r) => {
+			let authStatus: "active" | "not_connected" | "expired" = "active";
+			if (r.auth_type === "per_user_oauth" && r.oauth_provider) {
+				const conn = connectionByProvider.get(r.oauth_provider);
+				if (!conn) authStatus = "not_connected";
+				else if (conn.status !== "active") authStatus = "expired";
+			}
+			const agentName = userAgents.find((a) => a.id === r.agent_id)?.name;
+			return {
+				id: r.mcp_server_id,
+				name: r.name,
+				slug: r.slug,
+				url: r.url,
+				authType: r.auth_type,
+				oauthProvider: r.oauth_provider,
+				tools: r.tools,
+				enabled: r.enabled && r.server_enabled,
+				authStatus,
+				agentName,
+			};
+		});
+
+	return json({ servers });
 }
 
 // ---------------------------------------------------------------------------

@@ -18,8 +18,13 @@ export default defineConfig({
           items: [
             { label: "Agents", slug: "concepts/agents" },
             { label: "Threads", slug: "concepts/threads" },
-            { label: "Connectors", slug: "concepts/connectors" },
-            { label: "MCP Servers", slug: "concepts/mcp-servers" },
+            {
+              label: "Connectors",
+              items: [
+                { label: "Overview", slug: "concepts/connectors" },
+                { label: "MCP Tool Connectors", slug: "concepts/mcp-servers" },
+              ],
+            },
             { label: "Automations", slug: "concepts/automations" },
             { label: "Control", slug: "concepts/control" },
             { label: "Knowledge", slug: "concepts/knowledge" },
