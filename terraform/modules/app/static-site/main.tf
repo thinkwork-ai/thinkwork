@@ -70,6 +70,31 @@ resource "aws_cloudfront_origin_access_control" "site" {
 }
 
 ################################################################################
+# CloudFront Function — rewrite directory URIs to index.html
+#
+# S3 with OAC doesn't auto-serve index.html for subdirectory requests.
+# /getting-started/ → /getting-started/index.html
+################################################################################
+
+resource "aws_cloudfront_function" "rewrite" {
+  name    = "thinkwork-${var.stage}-${var.site_name}-rewrite"
+  runtime = "cloudfront-js-2.0"
+  publish = true
+  code    = <<-EOF
+    function handler(event) {
+      var request = event.request;
+      var uri = request.uri;
+      if (uri.endsWith('/')) {
+        request.uri += 'index.html';
+      } else if (!uri.includes('.')) {
+        request.uri += '/index.html';
+      }
+      return request;
+    }
+  EOF
+}
+
+################################################################################
 # CloudFront Distribution
 ################################################################################
 
@@ -92,6 +117,11 @@ resource "aws_cloudfront_distribution" "site" {
     cached_methods         = ["GET", "HEAD"]
     compress               = true
 
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.rewrite.arn
+    }
+
     forwarded_values {
       query_string = false
       cookies {
@@ -100,16 +130,17 @@ resource "aws_cloudfront_distribution" "site" {
     }
   }
 
+  # Fallback for true 404s (e.g. deleted pages) — serve the 404 page
   custom_error_response {
     error_code         = 404
-    response_code      = 200
-    response_page_path = "/index.html"
+    response_code      = 404
+    response_page_path = "/404.html"
   }
 
   custom_error_response {
     error_code         = 403
-    response_code      = 200
-    response_page_path = "/index.html"
+    response_code      = 404
+    response_page_path = "/404.html"
   }
 
   restrictions {
