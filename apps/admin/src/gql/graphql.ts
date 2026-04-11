@@ -405,6 +405,17 @@ export type CostEvent = {
   tenantId: Scalars['ID']['output'];
 };
 
+export type CostRecordedEvent = {
+  __typename?: 'CostRecordedEvent';
+  agentId?: Maybe<Scalars['ID']['output']>;
+  agentName?: Maybe<Scalars['String']['output']>;
+  amountUsd: Scalars['Float']['output'];
+  eventType: Scalars['String']['output'];
+  model?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
 export type CostSummary = {
   __typename?: 'CostSummary';
   computeUsd: Scalars['Float']['output'];
@@ -765,6 +776,31 @@ export type MemoryContent = {
   text?: Maybe<Scalars['String']['output']>;
 };
 
+export type MemoryGraph = {
+  __typename?: 'MemoryGraph';
+  edges: Array<MemoryGraphEdge>;
+  nodes: Array<MemoryGraphNode>;
+};
+
+export type MemoryGraphEdge = {
+  __typename?: 'MemoryGraphEdge';
+  label?: Maybe<Scalars['String']['output']>;
+  source: Scalars['String']['output'];
+  target: Scalars['String']['output'];
+  type: Scalars['String']['output'];
+  weight: Scalars['Float']['output'];
+};
+
+export type MemoryGraphNode = {
+  __typename?: 'MemoryGraphNode';
+  edgeCount: Scalars['Int']['output'];
+  entityType?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  label: Scalars['String']['output'];
+  strategy?: Maybe<Scalars['String']['output']>;
+  type: Scalars['String']['output'];
+};
+
 export type MemoryRecord = {
   __typename?: 'MemoryRecord';
   accessCount?: Maybe<Scalars['Int']['output']>;
@@ -934,6 +970,7 @@ export type Mutation = {
   escalateThread: Thread;
   inviteMember: TenantMember;
   notifyAgentStatus?: Maybe<AgentStatusEvent>;
+  notifyCostRecorded?: Maybe<CostRecordedEvent>;
   notifyHeartbeatActivity?: Maybe<HeartbeatActivityEvent>;
   notifyInboxItemUpdate?: Maybe<InboxItemStatusEvent>;
   notifyNewMessage?: Maybe<NewMessageEvent>;
@@ -1263,6 +1300,16 @@ export type MutationNotifyAgentStatusArgs = {
   agentId: Scalars['ID']['input'];
   name: Scalars['String']['input'];
   status: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type MutationNotifyCostRecordedArgs = {
+  agentId?: InputMaybe<Scalars['ID']['input']>;
+  agentName?: InputMaybe<Scalars['String']['input']>;
+  amountUsd: Scalars['Float']['input'];
+  eventType: Scalars['String']['input'];
+  model?: InputMaybe<Scalars['String']['input']>;
   tenantId: Scalars['ID']['input'];
 };
 
@@ -1668,6 +1715,7 @@ export type Query = {
   knowledgeBases: Array<KnowledgeBase>;
   linkedAgentsForTemplate: Array<Agent>;
   me?: Maybe<User>;
+  memoryGraph: MemoryGraph;
   memoryRecords: Array<MemoryRecord>;
   memorySearch: MemorySearchResult;
   messages: MessageConnection;
@@ -1849,6 +1897,11 @@ export type QueryKnowledgeBasesArgs = {
 
 export type QueryLinkedAgentsForTemplateArgs = {
   templateId: Scalars['ID']['input'];
+};
+
+
+export type QueryMemoryGraphArgs = {
+  assistantId: Scalars['ID']['input'];
 };
 
 
@@ -2243,6 +2296,7 @@ export type Subscription = {
   __typename?: 'Subscription';
   _empty?: Maybe<Scalars['String']['output']>;
   onAgentStatusChanged?: Maybe<AgentStatusEvent>;
+  onCostRecorded?: Maybe<CostRecordedEvent>;
   onHeartbeatActivity?: Maybe<HeartbeatActivityEvent>;
   onInboxItemStatusChanged?: Maybe<InboxItemStatusEvent>;
   onNewMessage?: Maybe<NewMessageEvent>;
@@ -2253,6 +2307,11 @@ export type Subscription = {
 
 
 export type SubscriptionOnAgentStatusChangedArgs = {
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type SubscriptionOnCostRecordedArgs = {
   tenantId: Scalars['ID']['input'];
 };
 
@@ -3617,6 +3676,13 @@ export type RollbackAgentVersionMutationVariables = Exact<{
 
 export type RollbackAgentVersionMutation = { __typename?: 'Mutation', rollbackAgentVersion: { __typename?: 'Agent', id: string, name: string, role?: string | null, updatedAt: any } };
 
+export type MemoryGraphQueryVariables = Exact<{
+  assistantId: Scalars['ID']['input'];
+}>;
+
+
+export type MemoryGraphQuery = { __typename?: 'Query', memoryGraph: { __typename?: 'MemoryGraph', nodes: Array<{ __typename?: 'MemoryGraphNode', id: string, label: string, type: string, strategy?: string | null, entityType?: string | null, edgeCount: number }>, edges: Array<{ __typename?: 'MemoryGraphEdge', source: string, target: string, type: string, label?: string | null, weight: number }> } };
+
 
 export const CreateSubAgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateSubAgent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateAgentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createAgent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}}]}}]}}]} as unknown as DocumentNode<CreateSubAgentMutation, CreateSubAgentMutationVariables>;
 export const DeleteSubAgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteSubAgent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteAgent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<DeleteSubAgentMutation, DeleteSubAgentMutationVariables>;
@@ -3720,3 +3786,4 @@ export const AgentVersionsListDocument = {"kind":"Document","definitions":[{"kin
 export const SyncTemplateToAgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SyncTemplateToAgent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"templateId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"syncTemplateToAgent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"templateId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"templateId"}}},{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SyncTemplateToAgentMutation, SyncTemplateToAgentMutationVariables>;
 export const SyncTemplateToAllAgentsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SyncTemplateToAllAgents"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"templateId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"syncTemplateToAllAgents"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"templateId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"templateId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agentsSynced"}},{"kind":"Field","name":{"kind":"Name","value":"agentsFailed"}},{"kind":"Field","name":{"kind":"Name","value":"errors"}}]}}]}}]} as unknown as DocumentNode<SyncTemplateToAllAgentsMutation, SyncTemplateToAllAgentsMutationVariables>;
 export const RollbackAgentVersionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RollbackAgentVersion"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"versionId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"rollbackAgentVersion"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"versionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"versionId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<RollbackAgentVersionMutation, RollbackAgentVersionMutationVariables>;
+export const MemoryGraphDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MemoryGraph"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"assistantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"memoryGraph"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"assistantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"assistantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"strategy"}},{"kind":"Field","name":{"kind":"Name","value":"entityType"}},{"kind":"Field","name":{"kind":"Name","value":"edgeCount"}}]}},{"kind":"Field","name":{"kind":"Name","value":"edges"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"weight"}}]}}]}}]}}]} as unknown as DocumentNode<MemoryGraphQuery, MemoryGraphQueryVariables>;

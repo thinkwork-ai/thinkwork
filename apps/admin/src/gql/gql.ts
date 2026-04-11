@@ -116,6 +116,7 @@ type Documents = {
     "\n  mutation SyncTemplateToAgent($templateId: ID!, $agentId: ID!) {\n    syncTemplateToAgent(templateId: $templateId, agentId: $agentId) {\n      id\n      name\n      role\n      updatedAt\n    }\n  }\n": typeof types.SyncTemplateToAgentDocument,
     "\n  mutation SyncTemplateToAllAgents($templateId: ID!) {\n    syncTemplateToAllAgents(templateId: $templateId) {\n      agentsSynced\n      agentsFailed\n      errors\n    }\n  }\n": typeof types.SyncTemplateToAllAgentsDocument,
     "\n  mutation RollbackAgentVersion($agentId: ID!, $versionId: ID!) {\n    rollbackAgentVersion(agentId: $agentId, versionId: $versionId) {\n      id\n      name\n      role\n      updatedAt\n    }\n  }\n": typeof types.RollbackAgentVersionDocument,
+    "\n  query MemoryGraph($assistantId: ID!) {\n    memoryGraph(assistantId: $assistantId) {\n      nodes { id label type strategy entityType edgeCount }\n      edges { source target type label weight }\n    }\n  }\n": typeof types.MemoryGraphDocument,
 };
 const documents: Documents = {
     "\n  mutation CreateSubAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      slug\n    }\n  }\n": types.CreateSubAgentDocument,
@@ -220,6 +221,7 @@ const documents: Documents = {
     "\n  mutation SyncTemplateToAgent($templateId: ID!, $agentId: ID!) {\n    syncTemplateToAgent(templateId: $templateId, agentId: $agentId) {\n      id\n      name\n      role\n      updatedAt\n    }\n  }\n": types.SyncTemplateToAgentDocument,
     "\n  mutation SyncTemplateToAllAgents($templateId: ID!) {\n    syncTemplateToAllAgents(templateId: $templateId) {\n      agentsSynced\n      agentsFailed\n      errors\n    }\n  }\n": types.SyncTemplateToAllAgentsDocument,
     "\n  mutation RollbackAgentVersion($agentId: ID!, $versionId: ID!) {\n    rollbackAgentVersion(agentId: $agentId, versionId: $versionId) {\n      id\n      name\n      role\n      updatedAt\n    }\n  }\n": types.RollbackAgentVersionDocument,
+    "\n  query MemoryGraph($assistantId: ID!) {\n    memoryGraph(assistantId: $assistantId) {\n      nodes { id label type strategy entityType edgeCount }\n      edges { source target type label weight }\n    }\n  }\n": types.MemoryGraphDocument,
 };
 
 /**
@@ -644,6 +646,10 @@ export function graphql(source: "\n  mutation SyncTemplateToAllAgents($templateI
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation RollbackAgentVersion($agentId: ID!, $versionId: ID!) {\n    rollbackAgentVersion(agentId: $agentId, versionId: $versionId) {\n      id\n      name\n      role\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  mutation RollbackAgentVersion($agentId: ID!, $versionId: ID!) {\n    rollbackAgentVersion(agentId: $agentId, versionId: $versionId) {\n      id\n      name\n      role\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query MemoryGraph($assistantId: ID!) {\n    memoryGraph(assistantId: $assistantId) {\n      nodes { id label type strategy entityType edgeCount }\n      edges { source target type label weight }\n    }\n  }\n"): (typeof documents)["\n  query MemoryGraph($assistantId: ID!) {\n    memoryGraph(assistantId: $assistantId) {\n      nodes { id label type strategy entityType edgeCount }\n      edges { source target type label weight }\n    }\n  }\n"];
 
 export function graphql(source: string) {
   return (documents as any)[source] ?? {};
