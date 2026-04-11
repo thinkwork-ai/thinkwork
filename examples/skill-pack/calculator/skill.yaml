@@ -1,0 +1,10 @@
+slug: calculator
+display_name: Calculator
+description: Perform arithmetic calculations. A minimal example of a Thinkwork skill.
+category: utilities
+version: "1.0.0"
+author: thinkwork
+icon: calculator
+tags: [math, calculator, utilities]
+execution: context
+is_default: false

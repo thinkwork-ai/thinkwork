@@ -1,0 +1,20 @@
+name: example-eval-pack
+version: "1.0.0"
+description: Reference eval pack demonstrating built-in and custom scorers
+agent_id: "${AGENT_ID}"
+dataset: dataset.jsonl
+scorers:
+  - type: built_in
+    name: contains_answer
+  - type: built_in
+    name: no_refusal
+  - type: built_in
+    name: latency_sla
+    config:
+      threshold_ms: 10000
+  - type: custom
+    name: relevance
+    module: scorers.relevance
+    function: score_relevance
+concurrency: 5
+timeout: 30000

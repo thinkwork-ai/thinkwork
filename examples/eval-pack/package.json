@@ -1,0 +1,9 @@
+{
+  "name": "@thinkwork/example-eval-pack",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Example eval pack for Thinkwork — reference for code-first agent evaluation",
+  "scripts": {
+    "test": "node test.mjs"
+  }
+}

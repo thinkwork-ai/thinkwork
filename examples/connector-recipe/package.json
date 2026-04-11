@@ -1,0 +1,9 @@
+{
+  "name": "@thinkwork/example-connector-recipe",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Example connector recipe for Thinkwork — template for building custom connectors",
+  "scripts": {
+    "test": "node test.mjs"
+  }
+}
