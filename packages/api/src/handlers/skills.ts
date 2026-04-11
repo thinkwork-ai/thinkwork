@@ -1018,7 +1018,7 @@ async function addMcpServer(
 	if (existing) {
 		await db
 			.update(agentSkills)
-			.set({ config, enabled: true, updated_at: new Date() })
+			.set({ config, enabled: true })
 			.where(eq(agentSkills.id, existing.id));
 		return json({ id: existing.id, skillId, updated: true });
 	}
