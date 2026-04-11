@@ -75,17 +75,29 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
     const [multiFetching, setMultiFetching] = useState(false);
 
     const fetchAllAgents = useCallback(async () => {
-      if (!agentIds || agentIds.length === 0) return;
+      if (!agentIds || agentIds.length === 0) {
+        setMultiFetching(false);
+        return;
+      }
       setMultiFetching(true);
-      const results: Record<string, any> = {};
-      await Promise.all(
-        agentIds.map(async (id) => {
-          const res = await client.query(MemoryGraphQuery, { assistantId: id }).toPromise();
-          results[id] = res.data?.memoryGraph;
-        })
-      );
-      setMultiResults(results);
-      setMultiFetching(false);
+      try {
+        const results: Record<string, any> = {};
+        await Promise.all(
+          agentIds.map(async (id) => {
+            try {
+              const res = await client.query(MemoryGraphQuery, { assistantId: id }).toPromise();
+              results[id] = res.data?.memoryGraph;
+            } catch {
+              results[id] = { nodes: [], edges: [] };
+            }
+          })
+        );
+        setMultiResults(results);
+      } catch {
+        // Fallback to empty
+      } finally {
+        setMultiFetching(false);
+      }
     }, [agentIds, client]);
 
     useEffect(() => {
