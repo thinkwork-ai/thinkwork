@@ -7,7 +7,9 @@
  * Auth patterns:
  *   - 'none': no auth headers
  *   - 'tenant_api_key': shared API key stored in Secrets Manager (via auth_config.secretRef)
- *   - 'per_user_oauth': per-user OAuth via existing connections table (oauth_provider links to connect_providers)
+ *   - 'oauth': server-managed OAuth per RFC 9728; the MCP server advertises its own
+ *     auth requirements via /.well-known/oauth-protected-resource. Per-user tokens
+ *     stored in user_mcp_tokens after the user completes the OAuth flow.
  */
 
 import {
@@ -45,11 +47,11 @@ export const tenantMcpServers = pgTable(
 		url: text("url").notNull(),
 		/** Transport type: 'streamable-http' | 'sse' */
 		transport: text("transport").notNull().default("streamable-http"),
-		/** Auth pattern: 'none' | 'tenant_api_key' | 'per_user_oauth' */
+		/** Auth pattern: 'none' | 'tenant_api_key' | 'oauth' */
 		auth_type: text("auth_type").notNull().default("none"),
 		/** For tenant_api_key: { secretRef: "arn:..." }. For other types: null */
 		auth_config: jsonb("auth_config"),
-		/** For per_user_oauth: provider name (e.g., "lastmile") matching connect_providers.name */
+		/** @deprecated — use RFC 9728 discovery instead. Kept for migration compat. */
 		oauth_provider: text("oauth_provider"),
 		/** Cached tool list from discovery: [{ name: string, description?: string }] */
 		tools: jsonb("tools"),
@@ -103,6 +105,46 @@ export const agentMcpServers = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// user_mcp_tokens — per-user OAuth tokens from MCP server auth flows
+// ---------------------------------------------------------------------------
+
+export const userMcpTokens = pgTable(
+	"user_mcp_tokens",
+	{
+		id: uuid("id")
+			.primaryKey()
+			.default(sql`gen_random_uuid()`),
+		user_id: uuid("user_id").notNull(),
+		tenant_id: uuid("tenant_id")
+			.references(() => tenants.id)
+			.notNull(),
+		mcp_server_id: uuid("mcp_server_id")
+			.references(() => tenantMcpServers.id)
+			.notNull(),
+		/** Encrypted access token */
+		access_token: text("access_token").notNull(),
+		/** Encrypted refresh token (if provided by the MCP server) */
+		refresh_token: text("refresh_token"),
+		/** Token type (typically "Bearer") */
+		token_type: text("token_type").notNull().default("Bearer"),
+		/** When the access token expires */
+		expires_at: timestamp("expires_at", { withTimezone: true }),
+		/** Status: 'active' | 'expired' | 'revoked' */
+		status: text("status").notNull().default("active"),
+		created_at: timestamp("created_at", { withTimezone: true })
+			.notNull()
+			.default(sql`now()`),
+		updated_at: timestamp("updated_at", { withTimezone: true })
+			.notNull()
+			.default(sql`now()`),
+	},
+	(table) => [
+		uniqueIndex("uq_user_mcp_tokens").on(table.user_id, table.mcp_server_id),
+		index("idx_user_mcp_tokens_user").on(table.user_id),
+	],
+);
+
+// ---------------------------------------------------------------------------
 // Relations
 // ---------------------------------------------------------------------------
 
@@ -130,6 +172,20 @@ export const agentMcpServersRelations = relations(
 		}),
 		mcpServer: one(tenantMcpServers, {
 			fields: [agentMcpServers.mcp_server_id],
+			references: [tenantMcpServers.id],
+		}),
+	}),
+);
+
+export const userMcpTokensRelations = relations(
+	userMcpTokens,
+	({ one }) => ({
+		tenant: one(tenants, {
+			fields: [userMcpTokens.tenant_id],
+			references: [tenants.id],
+		}),
+		mcpServer: one(tenantMcpServers, {
+			fields: [userMcpTokens.mcp_server_id],
 			references: [tenantMcpServers.id],
 		}),
 	}),

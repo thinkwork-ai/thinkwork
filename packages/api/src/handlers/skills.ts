@@ -1286,7 +1286,7 @@ async function mcpListUserServers(
 	tenantId: string,
 	userId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const { agents, connections, connectProviders } = await import("@thinkwork/database-pg/schema");
+	const { agents, userMcpTokens } = await import("@thinkwork/database-pg/schema");
 
 	// Find all agents paired with this user
 	const userAgents = await db
@@ -1311,7 +1311,6 @@ async function mcpListUserServers(
 			slug: tenantMcpServers.slug,
 			url: tenantMcpServers.url,
 			auth_type: tenantMcpServers.auth_type,
-			oauth_provider: tenantMcpServers.oauth_provider,
 			tools: tenantMcpServers.tools,
 			server_enabled: tenantMcpServers.enabled,
 		})
@@ -1319,25 +1318,23 @@ async function mcpListUserServers(
 		.innerJoin(tenantMcpServers, eq(agentMcpServers.mcp_server_id, tenantMcpServers.id))
 		.where(inArray(agentMcpServers.agent_id, agentIds));
 
-	// For per_user_oauth servers, check if user has an active connection
-	const oauthProviders = [...new Set(rows.filter((r) => r.auth_type === "per_user_oauth" && r.oauth_provider).map((r) => r.oauth_provider!))];
+	// For OAuth servers, check if user has an active token in user_mcp_tokens
+	const oauthServerIds = rows.filter((r) => r.auth_type === "oauth" || r.auth_type === "per_user_oauth").map((r) => r.mcp_server_id);
 
-	const userConnections = oauthProviders.length > 0
+	const userTokens = oauthServerIds.length > 0
 		? await db
 			.select({
-				provider_name: connectProviders.name,
-				status: connections.status,
-				connection_id: connections.id,
+				mcp_server_id: userMcpTokens.mcp_server_id,
+				status: userMcpTokens.status,
 			})
-			.from(connections)
-			.innerJoin(connectProviders, eq(connections.provider_id, connectProviders.id))
+			.from(userMcpTokens)
 			.where(and(
-				eq(connections.user_id, userId),
-				eq(connections.tenant_id, tenantId),
+				eq(userMcpTokens.user_id, userId),
+				eq(userMcpTokens.tenant_id, tenantId),
 			))
 		: [];
 
-	const connectionByProvider = new Map(userConnections.map((c) => [c.provider_name, c]));
+	const tokenByServer = new Map(userTokens.map((t) => [t.mcp_server_id, t]));
 
 	// Deduplicate MCP servers (same server may be assigned to multiple agents)
 	const seen = new Set<string>();
@@ -1349,10 +1346,10 @@ async function mcpListUserServers(
 		})
 		.map((r) => {
 			let authStatus: "active" | "not_connected" | "expired" = "active";
-			if (r.auth_type === "per_user_oauth" && r.oauth_provider) {
-				const conn = connectionByProvider.get(r.oauth_provider);
-				if (!conn) authStatus = "not_connected";
-				else if (conn.status !== "active") authStatus = "expired";
+			if (r.auth_type === "oauth" || r.auth_type === "per_user_oauth") {
+				const tok = tokenByServer.get(r.mcp_server_id);
+				if (!tok) authStatus = "not_connected";
+				else if (tok.status !== "active") authStatus = "expired";
 			}
 			const agentName = userAgents.find((a) => a.id === r.agent_id)?.name;
 			return {
@@ -1361,7 +1358,6 @@ async function mcpListUserServers(
 				slug: r.slug,
 				url: r.url,
 				authType: r.auth_type,
-				oauthProvider: r.oauth_provider,
 				tools: r.tools,
 				enabled: r.enabled && r.server_enabled,
 				authStatus,
