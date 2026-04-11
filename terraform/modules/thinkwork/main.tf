@@ -58,8 +58,14 @@ module "cognito" {
   google_oauth_client_secret = var.google_oauth_client_secret
   pre_signup_lambda_zip      = var.pre_signup_lambda_zip
 
-  admin_callback_urls   = var.admin_callback_urls
-  admin_logout_urls     = var.admin_logout_urls
+  admin_callback_urls = concat(
+    var.admin_callback_urls,
+    ["https://${module.admin_site.distribution_domain}", "https://${module.admin_site.distribution_domain}/auth/callback"]
+  )
+  admin_logout_urls = concat(
+    var.admin_logout_urls,
+    ["https://${module.admin_site.distribution_domain}"]
+  )
   mobile_callback_urls = var.mobile_callback_urls
   mobile_logout_urls   = var.mobile_logout_urls
 }
@@ -209,4 +215,15 @@ module "ses" {
 
   stage      = var.stage
   account_id = var.account_id
+}
+
+################################################################################
+# Admin Static Site
+################################################################################
+
+module "admin_site" {
+  source = "../app/static-site"
+
+  stage     = var.stage
+  site_name = "admin"
 }

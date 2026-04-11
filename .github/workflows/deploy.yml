@@ -28,6 +28,7 @@ jobs:
       container: ${{ steps.filter.outputs.container }}
       terraform: ${{ steps.filter.outputs.terraform }}
       skills: ${{ steps.filter.outputs.skills }}
+      admin: ${{ steps.filter.outputs.admin }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -46,6 +47,8 @@ jobs:
               - 'packages/skill-catalog/**'
               - 'packages/memory-templates/**'
               - 'packages/system-workspace/**'
+            admin:
+              - 'apps/admin/**'
 
   # ── Build Lambda zips ────────────────────────────────────────────
   build-lambdas:
@@ -155,6 +158,44 @@ jobs:
           terraform apply -auto-approve \
             -var "lambda_zips_dir=$LAMBDA_DIR" \
             -var "stage=${{ env.STAGE }}"
+
+  # ── Build & deploy admin app ─────────────────────────────────────
+  build-admin:
+    name: Build & Deploy Admin
+    needs: [detect-changes, terraform-apply]
+    if: >-
+      needs.detect-changes.outputs.admin == 'true' ||
+      needs.detect-changes.outputs.terraform == 'true' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: terraform/examples/greenfield
+        run: terraform init
+
+      - name: Build & deploy
+        run: bash scripts/build-admin.sh ${{ env.STAGE }}
+        env:
+          API_AUTH_SECRET: ${{ secrets.API_AUTH_SECRET }}
 
   # ── Bootstrap workspace + skills ─────────────────────────────────
   bootstrap:

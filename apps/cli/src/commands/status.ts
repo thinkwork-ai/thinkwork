@@ -13,6 +13,7 @@ interface DiscoveredStage {
   apiEndpoint?: string;
   appsyncUrl?: string;
   hindsightEndpoint?: string;
+  adminUrl?: string;
   dbEndpoint?: string;
   memoryEngine?: string;
   hindsightHealth?: string;
@@ -109,6 +110,12 @@ function discoverAwsStages(region: string): Map<string, Partial<DiscoveredStage>
     } else {
       info.memoryEngine = "managed";
     }
+
+    // Admin CloudFront
+    const cfRaw = runAws(
+      `cloudfront list-distributions --query "DistributionList.Items[?Origins.Items[0].DomainName=='thinkwork-${stage}-admin.s3.${region}.amazonaws.com'].DomainName|[0]" --output text`
+    );
+    if (cfRaw && cfRaw !== "None" && cfRaw !== "") info.adminUrl = `https://${cfRaw}`;
   }
 
   return stages;
@@ -177,6 +184,7 @@ export function registerStatusCommand(program: Command): void {
         if (info.bucketName) console.log(`  ${chalk.bold("S3 bucket:")}       ${info.bucketName}`);
         console.log("");
         console.log(chalk.bold("  URLs:"));
+        if (info.adminUrl) console.log(`    Admin:     ${link(info.adminUrl)}`);
         if (info.apiEndpoint) console.log(`    API:       ${link(info.apiEndpoint)}`);
         if (info.appsyncUrl) console.log(`    WebSocket: ${link(info.appsyncUrl)}`);
         if (info.hindsightEndpoint) console.log(`    Hindsight: ${link(info.hindsightEndpoint)}`);
@@ -244,9 +252,10 @@ export function registerStatusCommand(program: Command): void {
 
         // Build URL lines
         const urls: string[] = [];
-        if (info.apiEndpoint) urls.push(`API: ${link(info.apiEndpoint, info.apiEndpoint)}`);
-        if (info.appsyncUrl) urls.push(`WS:  ${link(info.appsyncUrl, info.appsyncUrl.replace("wss://", "").split(".")[0] + "...")}`);
-        if (info.hindsightEndpoint) urls.push(`Mem: ${link(info.hindsightEndpoint, info.hindsightEndpoint)}`);
+        if (info.adminUrl) urls.push(`Admin: ${link(info.adminUrl, info.adminUrl)}`);
+        if (info.apiEndpoint) urls.push(`API:   ${link(info.apiEndpoint, info.apiEndpoint)}`);
+        if (info.appsyncUrl) urls.push(`WS:    ${link(info.appsyncUrl, info.appsyncUrl.replace("wss://", "").split(".")[0] + "...")}`);
+        if (info.hindsightEndpoint) urls.push(`Mem:   ${link(info.hindsightEndpoint, info.hindsightEndpoint)}`);
 
         if (urls.length === 0) {
           console.log(prefix + acStatus.padEnd(22) + memBadge.padEnd(22) + chalk.dim("—"));
