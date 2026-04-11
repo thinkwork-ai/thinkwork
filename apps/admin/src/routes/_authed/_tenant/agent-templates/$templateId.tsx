@@ -322,11 +322,13 @@ function TemplateEditorPage() {
         setTemplateSkills(skills);
       }
 
-      // MCP servers
-      const mcpSvrs =
-        typeof t.mcpServers === "string" ? JSON.parse(t.mcpServers) : t.mcpServers;
-      if (Array.isArray(mcpSvrs)) {
-        setTemplateMcpServers(mcpSvrs);
+      // MCP servers — load from template data if available
+      const rawMcp = (t as any).mcpServers;
+      if (rawMcp) {
+        const mcpSvrs = typeof rawMcp === "string" ? JSON.parse(rawMcp) : rawMcp;
+        if (Array.isArray(mcpSvrs)) {
+          setTemplateMcpServers(mcpSvrs);
+        }
       }
     }
   }, [result.data]);
