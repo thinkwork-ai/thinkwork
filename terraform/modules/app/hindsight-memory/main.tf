@@ -34,7 +34,7 @@ variable "database_url" {
 variable "image_tag" {
   description = "Hindsight Docker image tag (ghcr.io/vectorize-io/hindsight:<tag>)"
   type        = string
-  default     = "0.4.22"
+  default     = "0.5.0"
 }
 
 data "aws_region" "current" {}

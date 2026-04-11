@@ -152,7 +152,7 @@ variable "memory_engine" {
 variable "hindsight_image_tag" {
   description = "Hindsight Docker image tag (only used when memory_engine = 'hindsight')"
   type        = string
-  default     = "0.4.22"
+  default     = "0.5.0"
 }
 
 variable "agentcore_memory_id" {

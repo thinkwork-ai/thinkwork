@@ -11,6 +11,7 @@ import { registerConfigCommand } from "./commands/config.js";
 import { registerBootstrapCommand } from "./commands/bootstrap.js";
 import { registerLoginCommand } from "./commands/login.js";
 import { registerInitCommand } from "./commands/init.js";
+import { registerStatusCommand } from "./commands/status.js";
 
 const program = new Command();
 
@@ -46,6 +47,7 @@ registerBootstrapCommand(program);
 registerDestroyCommand(program);
 
 // Manage
+registerStatusCommand(program);
 registerOutputsCommand(program);
 registerConfigCommand(program);
 
