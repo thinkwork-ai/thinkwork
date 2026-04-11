@@ -205,7 +205,7 @@ export async function snapshotAgent(
 				enabled: k.enabled,
 			})),
 			guardrail_snapshot: null, // guardrail is template-owned, not agent-owned
-			created_by: createdBy,
+			created_by: null, // Cognito sub may not match users.id FK — store null for now
 		})
 		.returning({ id: agentVersions.id, version_number: agentVersions.version_number });
 
