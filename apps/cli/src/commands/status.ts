@@ -149,6 +149,38 @@ function discoverAwsStages(region: string): Map<string, Partial<DiscoveredStage>
   return stages;
 }
 
+function printStageDetail(info: DiscoveredStage): void {
+  console.log(chalk.bold.cyan(`  ⬡ ${info.stage}`));
+  console.log(chalk.dim("  ─────────────────────────────────────────"));
+  console.log(`  ${chalk.bold("Source:")}          ${info.source === "both" ? "AWS + local config" : info.source === "aws" ? "AWS (no local config)" : "local only (not in AWS)"}`);
+  console.log(`  ${chalk.bold("Region:")}          ${info.region}`);
+  console.log(`  ${chalk.bold("Account:")}         ${info.accountId}`);
+  console.log(`  ${chalk.bold("Lambda fns:")}      ${info.lambdaCount || "—"}`);
+  console.log(`  ${chalk.bold("AgentCore:")}       ${info.agentcoreStatus || "unknown"}`);
+  console.log(`  ${chalk.bold("Memory:")}          ${info.memoryEngine || "unknown"}`);
+  if (info.hindsightHealth) console.log(`  ${chalk.bold("Hindsight:")}       ${info.hindsightHealth}`);
+  if (info.bucketName) console.log(`  ${chalk.bold("S3 bucket:")}       ${info.bucketName}`);
+  if (info.dbEndpoint) console.log(`  ${chalk.bold("Database:")}        ${info.dbEndpoint}`);
+  if (info.ecrUrl) console.log(`  ${chalk.bold("ECR:")}             ${info.ecrUrl}`);
+  console.log("");
+  console.log(chalk.bold("  URLs:"));
+  if (info.adminUrl) console.log(`    Admin:     ${link(info.adminUrl)}`);
+  if (info.docsUrl) console.log(`    Docs:      ${link(info.docsUrl)}`);
+  if (info.apiEndpoint) console.log(`    API:       ${link(info.apiEndpoint)}`);
+  if (info.appsyncApiUrl) console.log(`    AppSync:   ${link(info.appsyncApiUrl)}`);
+  if (info.appsyncUrl) console.log(`    WebSocket: ${link(info.appsyncUrl)}`);
+  if (info.hindsightEndpoint) console.log(`    Hindsight: ${link(info.hindsightEndpoint)}`);
+  console.log(chalk.dim("  ─────────────────────────────────────────"));
+
+  const local = loadEnvironment(info.stage);
+  if (local) {
+    console.log(chalk.dim(`  Terraform dir: ${local.terraformDir}`));
+  } else {
+    console.log(chalk.dim(`  No local config. Run: thinkwork init -s ${info.stage}`));
+  }
+  console.log("");
+}
+
 export function registerStatusCommand(program: Command): void {
   program
     .command("status")
@@ -193,46 +225,15 @@ export function registerStatusCommand(program: Command): void {
       }
 
       if (opts.stage) {
-        // ── Detail view ──────────────────────────────────────────────
         const info = merged.get(opts.stage);
         if (!info) {
           printError(`No environment "${opts.stage}" found in AWS or local config.`);
           process.exit(1);
         }
-
-        console.log(chalk.bold.cyan(`  ⬡ ${info.stage}`));
-        console.log(chalk.dim("  ─────────────────────────────────────────"));
-        console.log(`  ${chalk.bold("Source:")}          ${info.source === "both" ? "AWS + local config" : info.source === "aws" ? "AWS (no local config)" : "local only (not in AWS)"}`);
-        console.log(`  ${chalk.bold("Region:")}          ${info.region}`);
-        console.log(`  ${chalk.bold("Account:")}         ${info.accountId}`);
-        console.log(`  ${chalk.bold("Lambda fns:")}      ${info.lambdaCount || "—"}`);
-        console.log(`  ${chalk.bold("AgentCore:")}       ${info.agentcoreStatus || "unknown"}`);
-        console.log(`  ${chalk.bold("Memory:")}          ${info.memoryEngine || "unknown"}`);
-        if (info.hindsightHealth) console.log(`  ${chalk.bold("Hindsight:")}       ${info.hindsightHealth}`);
-        if (info.bucketName) console.log(`  ${chalk.bold("S3 bucket:")}       ${info.bucketName}`);
-        if (info.dbEndpoint) console.log(`  ${chalk.bold("Database:")}        ${info.dbEndpoint}`);
-        if (info.ecrUrl) console.log(`  ${chalk.bold("ECR:")}             ${info.ecrUrl}`);
-        console.log("");
-        console.log(chalk.bold("  URLs:"));
-        if (info.adminUrl) console.log(`    Admin:     ${link(info.adminUrl)}`);
-        if (info.docsUrl) console.log(`    Docs:      ${link(info.docsUrl)}`);
-        if (info.apiEndpoint) console.log(`    API:       ${link(info.apiEndpoint)}`);
-        if (info.appsyncApiUrl) console.log(`    AppSync:   ${link(info.appsyncApiUrl)}`);
-        if (info.appsyncUrl) console.log(`    WebSocket: ${link(info.appsyncUrl)}`);
-        if (info.hindsightEndpoint) console.log(`    Hindsight: ${link(info.hindsightEndpoint)}`);
-        console.log(chalk.dim("  ─────────────────────────────────────────"));
-
-        const local = loadEnvironment(opts.stage);
-        if (local) {
-          console.log(chalk.dim(`  Terraform dir: ${local.terraformDir}`));
-        } else {
-          console.log(chalk.dim(`  No local config. Run: thinkwork init -s ${opts.stage}`));
-        }
-        console.log("");
+        printStageDetail(info);
         return;
       }
 
-      // ── Table view ─────────────────────────────────────────────────
       if (merged.size === 0) {
         console.log("  No Thinkwork environments found.");
         console.log(`  Run ${chalk.cyan("thinkwork init -s <stage>")} to create one.`);
@@ -240,77 +241,8 @@ export function registerStatusCommand(program: Command): void {
         return;
       }
 
-      const COL1 = 16; // stage
-      const COL2 = 10; // source
-      const COL3 = 10; // lambdas
-      const COL4 = 14; // agentcore
-      const COL5 = 14; // memory
-      const pad = " ".repeat(2 + 2 + COL1 + COL2 + COL3 + COL4 + COL5);
-
-      console.log(chalk.bold("  Environments"));
-      console.log(chalk.dim("  ──────────────────────────────────────────────────────────────────────────"));
-      console.log(
-        chalk.dim("  ") +
-        "Stage".padEnd(COL1) +
-        "Source".padEnd(COL2) +
-        "Lambdas".padEnd(COL3) +
-        "AgentCore".padEnd(COL4) +
-        "Memory".padEnd(COL5) +
-        "URLs"
-      );
-      console.log(chalk.dim("  ──────────────────────────────────────────────────────────────────────────"));
-
       for (const [, info] of [...merged].sort((a, b) => a[0].localeCompare(b[0]))) {
-        const sourceBadge = info.source === "both" ? chalk.green("●")
-          : info.source === "aws" ? chalk.yellow("●")
-          : chalk.dim("○");
-
-        const acStatus = info.agentcoreStatus === "Active"
-          ? chalk.green("active")
-          : info.agentcoreStatus === "not deployed"
-          ? chalk.dim("—")
-          : chalk.yellow(info.agentcoreStatus || "—");
-
-        const memBadge = info.memoryEngine === "hindsight"
-          ? (info.hindsightHealth === "healthy" ? chalk.magenta("hindsight ✓") : chalk.yellow("hindsight ?"))
-          : chalk.dim(info.memoryEngine || "—");
-
-        // First row: stage info + API URL
-        const prefix =
-          `  ${sourceBadge} ` +
-          chalk.bold(info.stage.padEnd(COL1 - 1)) + " " +
-          (info.source === "both" ? "aws+cli" : info.source).padEnd(COL2) +
-          String(info.lambdaCount || "—").padEnd(COL3);
-
-        // Build URL lines
-        const urls: string[] = [];
-        if (info.adminUrl) urls.push(`Admin: ${link(info.adminUrl, info.adminUrl)}`);
-        if (info.docsUrl) urls.push(`Docs:  ${link(info.docsUrl, info.docsUrl)}`);
-        if (info.apiEndpoint) urls.push(`API:   ${link(info.apiEndpoint, info.apiEndpoint)}`);
-        if (info.appsyncUrl) urls.push(`WS:    ${link(info.appsyncUrl, info.appsyncUrl.replace("wss://", "").split(".")[0] + "...")}`);
-        if (info.hindsightEndpoint) urls.push(`Mem:   ${link(info.hindsightEndpoint, info.hindsightEndpoint)}`);
-
-        if (urls.length === 0) {
-          console.log(prefix + acStatus.padEnd(22) + memBadge.padEnd(22) + chalk.dim("—"));
-        } else {
-          // First URL on the same line as the stage
-          console.log(prefix + acStatus.padEnd(22) + memBadge.padEnd(22) + chalk.dim(urls[0]));
-          // Remaining URLs on continuation lines
-          for (let i = 1; i < urls.length; i++) {
-            console.log(pad + chalk.dim(urls[i]));
-          }
-        }
+        printStageDetail(info);
       }
-
-      console.log(chalk.dim("  ──────────────────────────────────────────────────────────────────────────"));
-      console.log(
-        chalk.dim(`  ${merged.size} environment(s)  `) +
-        chalk.green("●") + chalk.dim(" aws+cli  ") +
-        chalk.yellow("●") + chalk.dim(" aws only  ") +
-        chalk.dim("○ local only")
-      );
-      console.log("");
-      console.log(`  Details: ${chalk.cyan("thinkwork status -s <stage>")}`);
-      console.log("");
     });
 }
