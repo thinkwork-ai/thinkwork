@@ -53,6 +53,8 @@ export const agentTemplates = pgTable(
 		skills: jsonb("skills"),
 		/** KB UUIDs to assign on creation */
 		knowledge_base_ids: jsonb("knowledge_base_ids"),
+		/** MCP server assignments: [{ mcp_server_id, enabled, config? }] */
+		mcp_servers: jsonb("mcp_servers"),
 		is_published: boolean("is_published").notNull().default(true),
 		created_at: timestamp("created_at", { withTimezone: true })
 			.notNull()

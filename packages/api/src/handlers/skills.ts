@@ -19,7 +19,7 @@ import {
 } from "@aws-sdk/client-secrets-manager";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
-import { agentSkills, skillCatalog, tenantSkills } from "@thinkwork/database-pg/schema";
+import { agentSkills, skillCatalog, tenantSkills, tenantMcpServers, agentMcpServers } from "@thinkwork/database-pg/schema";
 import { parse as parseYaml } from "yaml";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
 import { handleCors, json, error, notFound, unauthorized } from "../lib/response.js";
@@ -172,29 +172,57 @@ export async function handler(
 			return saveSkillCredentials(credMatch[1], credMatch[2], event);
 		}
 
-		// --- MCP Server routes ---
+		// --- MCP Server routes (tenant-level registry) ---
 
-		// GET /api/skills/agent/:agentId/mcp-servers — list MCP servers for agent
-		const mcpListMatch = path.match(/^\/api\/skills\/agent\/([^/]+)\/mcp-servers$/);
-		if (mcpListMatch && method === "GET") {
-			return listMcpServers(mcpListMatch[1]);
+		// GET /api/skills/mcp-servers — list tenant's MCP servers
+		if (path === "/api/skills/mcp-servers" && method === "GET") {
+			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			return mcpListTenantServers(tenantSlug);
 		}
 
-		// POST /api/skills/agent/:agentId/mcp-servers — register MCP server
-		if (mcpListMatch && method === "POST") {
-			return addMcpServer(mcpListMatch[1], event);
+		// POST /api/skills/mcp-servers — register MCP server
+		if (path === "/api/skills/mcp-servers" && method === "POST") {
+			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			return mcpRegisterServer(tenantSlug, event);
 		}
 
-		// DELETE /api/skills/agent/:agentId/mcp-servers/:serverId — remove MCP server
-		const mcpDeleteMatch = path.match(/^\/api\/skills\/agent\/([^/]+)\/mcp-servers\/([^/]+)$/);
-		if (mcpDeleteMatch && method === "DELETE") {
-			return removeMcpServer(mcpDeleteMatch[1], mcpDeleteMatch[2]);
+		// PUT /api/skills/mcp-servers/:id — update MCP server
+		const mcpUpdateMatch = path.match(/^\/api\/skills\/mcp-servers\/([^/]+)$/);
+		if (mcpUpdateMatch && method === "PUT") {
+			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			return mcpUpdateServer(tenantSlug, mcpUpdateMatch[1], event);
 		}
 
-		// POST /api/skills/agent/:agentId/mcp-servers/:serverId/test — test MCP connection
-		const mcpTestMatch = path.match(/^\/api\/skills\/agent\/([^/]+)\/mcp-servers\/([^/]+)\/test$/);
+		// DELETE /api/skills/mcp-servers/:id — remove MCP server
+		if (mcpUpdateMatch && method === "DELETE") {
+			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			return mcpDeleteServer(tenantSlug, mcpUpdateMatch[1]);
+		}
+
+		// POST /api/skills/mcp-servers/:id/test — test connection + cache tools
+		const mcpTestMatch = path.match(/^\/api\/skills\/mcp-servers\/([^/]+)\/test$/);
 		if (mcpTestMatch && method === "POST") {
-			return testMcpServer(mcpTestMatch[1], mcpTestMatch[2]);
+			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			return mcpTestConnection(tenantSlug, mcpTestMatch[1]);
+		}
+
+		// --- MCP Server routes (agent-level assignment) ---
+
+		// GET /api/skills/agents/:agentId/mcp-servers — list agent's assigned MCP servers
+		const agentMcpListMatch = path.match(/^\/api\/skills\/agents\/([^/]+)\/mcp-servers$/);
+		if (agentMcpListMatch && method === "GET") {
+			return mcpListAgentServers(agentMcpListMatch[1]);
+		}
+
+		// POST /api/skills/agents/:agentId/mcp-servers — assign MCP server to agent
+		if (agentMcpListMatch && method === "POST") {
+			return mcpAssignToAgent(agentMcpListMatch[1], event);
+		}
+
+		// DELETE /api/skills/agents/:agentId/mcp-servers/:mcpServerId — unassign
+		const agentMcpDeleteMatch = path.match(/^\/api\/skills\/agents\/([^/]+)\/mcp-servers\/([^/]+)$/);
+		if (agentMcpDeleteMatch && method === "DELETE") {
+			return mcpUnassignFromAgent(agentMcpDeleteMatch[1], agentMcpDeleteMatch[2]);
 		}
 
 		return notFound("Route not found");
@@ -899,82 +927,57 @@ async function saveSkillCredentials(
 }
 
 // ---------------------------------------------------------------------------
-// MCP Server CRUD
+// MCP Server — Tenant Registry (uses tenant_mcp_servers table)
 // ---------------------------------------------------------------------------
 
-const MCP_SKILL_PREFIX = "mcp-";
-
-async function listMcpServers(
-	agentId: string,
+async function mcpListTenantServers(
+	tenantSlug: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
+	const tenantId = await resolveTenantId(tenantSlug);
+	if (!tenantId) return error("Tenant not found", 404);
+
 	const rows = await db
-		.select({
-			id: agentSkills.id,
-			skill_id: agentSkills.skill_id,
-			config: agentSkills.config,
-			enabled: agentSkills.enabled,
-		})
-		.from(agentSkills)
-		.where(
-			and(
-				eq(agentSkills.agent_id, agentId),
-			),
-		);
+		.select()
+		.from(tenantMcpServers)
+		.where(eq(tenantMcpServers.tenant_id, tenantId));
 
-	const mcpRows = rows.filter((r) => r.skill_id.startsWith(MCP_SKILL_PREFIX));
-	const servers = mcpRows.map((r) => {
-		const config = (r.config as Record<string, unknown>) || {};
-		return {
+	return json({
+		servers: rows.map((r) => ({
 			id: r.id,
-			name: r.skill_id.slice(MCP_SKILL_PREFIX.length),
-			skillId: r.skill_id,
-			url: config.mcpUrl as string || "",
-			transport: config.mcpTransport as string || "streamable-http",
-			authType: config.mcpAuthType as string || "none",
-			connectionId: config.connectionId as string || undefined,
-			tools: config.mcpTools as string[] || undefined,
+			name: r.name,
+			slug: r.slug,
+			url: r.url,
+			transport: r.transport,
+			authType: r.auth_type,
+			oauthProvider: r.oauth_provider,
+			tools: r.tools,
 			enabled: r.enabled,
-		};
+			createdAt: r.created_at,
+		})),
 	});
-
-	return json({ servers });
 }
 
-async function addMcpServer(
-	agentId: string,
+async function mcpRegisterServer(
+	tenantSlug: string,
 	event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const body = JSON.parse(event.body || "{}");
-	const { name, url, transport, authType, apiKey, connectionId, providerId, tools } = body;
+	const tenantId = await resolveTenantId(tenantSlug);
+	if (!tenantId) return error("Tenant not found", 404);
 
-	if (!name || !url) {
-		return error("name and url are required", 400);
-	}
-	if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
+	const body = JSON.parse(event.body || "{}");
+	const { name, url, transport, authType, apiKey, oauthProvider } = body;
+
+	if (!name || !url) return error("name and url are required", 400);
+
+	const slug = name.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+	if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) {
 		return error("name must be lowercase alphanumeric with hyphens", 400);
 	}
 
-	const skillId = `${MCP_SKILL_PREFIX}${name}`;
-
-	// Build config JSONB
-	const config: Record<string, unknown> = {
-		mcpUrl: url,
-		mcpTransport: transport || "streamable-http",
-		mcpAuthType: authType || "none",
-	};
-
-	if (connectionId) {
-		config.connectionId = connectionId;
-		if (providerId) config.providerId = providerId;
-	}
-
-	if (tools && Array.isArray(tools)) {
-		config.mcpTools = tools;
-	}
-
 	// Store API key in Secrets Manager if provided
-	if (apiKey && authType === "api-key") {
-		const secretName = `thinkwork/${STAGE}/mcp-servers/${agentId}/${name}`;
+	let authConfig: Record<string, unknown> | null = null;
+	if (authType === "tenant_api_key" && apiKey) {
+		const secretName = `thinkwork/${STAGE}/mcp/${tenantId}/${slug}`;
 		const secretValue = JSON.stringify({ type: "mcpApiKey", token: apiKey });
 		try {
 			await sm.send(new UpdateSecretCommand({ SecretId: secretName, SecretString: secretValue }));
@@ -985,45 +988,206 @@ async function addMcpServer(
 				throw err;
 			}
 		}
-		config.mcpAuthToken = apiKey; // Also store inline for direct passthrough
-		config.secretRef = secretName;
-	} else if (authType === "bearer" && apiKey) {
-		// Static bearer token — store same way
-		const secretName = `thinkwork/${STAGE}/mcp-servers/${agentId}/${name}`;
-		const secretValue = JSON.stringify({ type: "mcpBearerToken", token: apiKey });
-		try {
-			await sm.send(new UpdateSecretCommand({ SecretId: secretName, SecretString: secretValue }));
-		} catch (err: any) {
-			if (err instanceof ResourceNotFoundException) {
-				await sm.send(new CreateSecretCommand({ Name: secretName, SecretString: secretValue }));
-			} else {
-				throw err;
-			}
-		}
-		config.mcpAuthToken = apiKey;
-		config.secretRef = secretName;
+		authConfig = { secretRef: secretName, token: apiKey };
 	}
 
-	// Upsert agent_skills row
+	// Check for existing
 	const [existing] = await db
-		.select({ id: agentSkills.id })
-		.from(agentSkills)
-		.where(
-			and(
-				eq(agentSkills.agent_id, agentId),
-				eq(agentSkills.skill_id, skillId),
-			),
-		);
+		.select({ id: tenantMcpServers.id })
+		.from(tenantMcpServers)
+		.where(and(eq(tenantMcpServers.tenant_id, tenantId), eq(tenantMcpServers.slug, slug)));
 
 	if (existing) {
 		await db
-			.update(agentSkills)
-			.set({ config, enabled: true })
-			.where(eq(agentSkills.id, existing.id));
-		return json({ id: existing.id, skillId, updated: true });
+			.update(tenantMcpServers)
+			.set({
+				name,
+				url,
+				transport: transport || "streamable-http",
+				auth_type: authType || "none",
+				auth_config: authConfig,
+				oauth_provider: oauthProvider || null,
+				updated_at: new Date(),
+			})
+			.where(eq(tenantMcpServers.id, existing.id));
+		return json({ id: existing.id, slug, updated: true });
 	}
 
-	// Resolve tenant_id from agent
+	const [inserted] = await db
+		.insert(tenantMcpServers)
+		.values({
+			tenant_id: tenantId,
+			name,
+			slug,
+			url,
+			transport: transport || "streamable-http",
+			auth_type: authType || "none",
+			auth_config: authConfig,
+			oauth_provider: oauthProvider || null,
+		})
+		.returning({ id: tenantMcpServers.id });
+
+	return json({ id: inserted.id, slug, created: true });
+}
+
+async function mcpUpdateServer(
+	tenantSlug: string,
+	serverId: string,
+	event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const tenantId = await resolveTenantId(tenantSlug);
+	if (!tenantId) return error("Tenant not found", 404);
+
+	const body = JSON.parse(event.body || "{}");
+	const updates: Record<string, unknown> = { updated_at: new Date() };
+	if (body.name !== undefined) updates.name = body.name;
+	if (body.url !== undefined) updates.url = body.url;
+	if (body.transport !== undefined) updates.transport = body.transport;
+	if (body.enabled !== undefined) updates.enabled = body.enabled;
+
+	const result = await db
+		.update(tenantMcpServers)
+		.set(updates)
+		.where(and(eq(tenantMcpServers.id, serverId), eq(tenantMcpServers.tenant_id, tenantId)))
+		.returning({ id: tenantMcpServers.id });
+
+	if (result.length === 0) return notFound("MCP server not found");
+	return json({ ok: true, id: serverId });
+}
+
+async function mcpDeleteServer(
+	tenantSlug: string,
+	serverId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const tenantId = await resolveTenantId(tenantSlug);
+	if (!tenantId) return error("Tenant not found", 404);
+
+	// Delete agent assignments first (cascade)
+	await db
+		.delete(agentMcpServers)
+		.where(eq(agentMcpServers.mcp_server_id, serverId));
+
+	const deleted = await db
+		.delete(tenantMcpServers)
+		.where(and(eq(tenantMcpServers.id, serverId), eq(tenantMcpServers.tenant_id, tenantId)))
+		.returning({ id: tenantMcpServers.id });
+
+	if (deleted.length === 0) return notFound("MCP server not found");
+	return json({ ok: true, deleted: serverId });
+}
+
+async function mcpTestConnection(
+	tenantSlug: string,
+	serverId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const tenantId = await resolveTenantId(tenantSlug);
+	if (!tenantId) return error("Tenant not found", 404);
+
+	const [row] = await db
+		.select()
+		.from(tenantMcpServers)
+		.where(and(eq(tenantMcpServers.id, serverId), eq(tenantMcpServers.tenant_id, tenantId)));
+
+	if (!row) return notFound("MCP server not found");
+
+	// Build auth headers
+	const headers: Record<string, string> = { "Content-Type": "application/json" };
+	if (row.auth_type === "tenant_api_key") {
+		const authCfg = (row.auth_config as Record<string, unknown>) || {};
+		const token = authCfg.token as string;
+		if (token) headers["Authorization"] = `Bearer ${token}`;
+	}
+
+	try {
+		const response = await fetch(row.url, {
+			method: "POST",
+			headers,
+			body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+			signal: AbortSignal.timeout(10000),
+		});
+
+		if (!response.ok) {
+			return json({ ok: false, error: `MCP server returned ${response.status}` }, 502);
+		}
+
+		const result = await response.json() as {
+			result?: { tools?: Array<{ name: string; description?: string }> };
+			error?: unknown;
+		};
+		if (result.error) {
+			return json({ ok: false, error: result.error }, 502);
+		}
+
+		const tools = (result.result?.tools || []).map((t) => ({
+			name: t.name,
+			description: t.description,
+		}));
+
+		// Cache discovered tools in DB
+		await db
+			.update(tenantMcpServers)
+			.set({ tools, updated_at: new Date() })
+			.where(eq(tenantMcpServers.id, serverId));
+
+		return json({ ok: true, tools });
+	} catch (err: any) {
+		return json({ ok: false, error: err.message || "Connection failed" }, 502);
+	}
+}
+
+// ---------------------------------------------------------------------------
+// MCP Server — Agent Assignment (uses agent_mcp_servers table)
+// ---------------------------------------------------------------------------
+
+async function mcpListAgentServers(
+	agentId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const rows = await db
+		.select({
+			id: agentMcpServers.id,
+			mcp_server_id: agentMcpServers.mcp_server_id,
+			enabled: agentMcpServers.enabled,
+			config: agentMcpServers.config,
+			name: tenantMcpServers.name,
+			slug: tenantMcpServers.slug,
+			url: tenantMcpServers.url,
+			transport: tenantMcpServers.transport,
+			auth_type: tenantMcpServers.auth_type,
+			oauth_provider: tenantMcpServers.oauth_provider,
+			tools: tenantMcpServers.tools,
+			server_enabled: tenantMcpServers.enabled,
+		})
+		.from(agentMcpServers)
+		.innerJoin(tenantMcpServers, eq(agentMcpServers.mcp_server_id, tenantMcpServers.id))
+		.where(eq(agentMcpServers.agent_id, agentId));
+
+	return json({
+		servers: rows.map((r) => ({
+			id: r.id,
+			mcpServerId: r.mcp_server_id,
+			name: r.name,
+			slug: r.slug,
+			url: r.url,
+			transport: r.transport,
+			authType: r.auth_type,
+			oauthProvider: r.oauth_provider,
+			tools: r.tools,
+			enabled: r.enabled && r.server_enabled,
+			config: r.config,
+		})),
+	});
+}
+
+async function mcpAssignToAgent(
+	agentId: string,
+	event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const body = JSON.parse(event.body || "{}");
+	const { mcpServerId, config } = body;
+
+	if (!mcpServerId) return error("mcpServerId is required", 400);
+
+	// Resolve agent's tenant_id
 	const { agents } = await import("@thinkwork/database-pg/schema");
 	const [agentRow] = await db
 		.select({ tenant_id: agents.tenant_id })
@@ -1031,107 +1195,51 @@ async function addMcpServer(
 		.where(eq(agents.id, agentId));
 	if (!agentRow) return error("Agent not found", 404);
 
+	// Verify MCP server belongs to same tenant
+	const [server] = await db
+		.select({ id: tenantMcpServers.id })
+		.from(tenantMcpServers)
+		.where(and(eq(tenantMcpServers.id, mcpServerId), eq(tenantMcpServers.tenant_id, agentRow.tenant_id)));
+	if (!server) return error("MCP server not found in this tenant", 404);
+
+	// Upsert
+	const [existing] = await db
+		.select({ id: agentMcpServers.id })
+		.from(agentMcpServers)
+		.where(and(eq(agentMcpServers.agent_id, agentId), eq(agentMcpServers.mcp_server_id, mcpServerId)));
+
+	if (existing) {
+		await db
+			.update(agentMcpServers)
+			.set({ enabled: true, config: config || null, updated_at: new Date() })
+			.where(eq(agentMcpServers.id, existing.id));
+		return json({ id: existing.id, updated: true });
+	}
+
 	const [inserted] = await db
-		.insert(agentSkills)
+		.insert(agentMcpServers)
 		.values({
 			agent_id: agentId,
 			tenant_id: agentRow.tenant_id,
-			skill_id: skillId,
-			config,
-			enabled: true,
+			mcp_server_id: mcpServerId,
+			config: config || null,
 		})
-		.returning({ id: agentSkills.id });
+		.returning({ id: agentMcpServers.id });
 
-	return json({ id: inserted.id, skillId, created: true });
+	return json({ id: inserted.id, created: true });
 }
 
-async function removeMcpServer(
+async function mcpUnassignFromAgent(
 	agentId: string,
-	serverId: string,
+	mcpServerId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	// serverId can be the skill_id suffix (name) or the row UUID
-	const skillId = serverId.startsWith(MCP_SKILL_PREFIX) ? serverId : `${MCP_SKILL_PREFIX}${serverId}`;
-
 	const deleted = await db
-		.delete(agentSkills)
-		.where(
-			and(
-				eq(agentSkills.agent_id, agentId),
-				eq(agentSkills.skill_id, skillId),
-			),
-		)
-		.returning({ id: agentSkills.id });
+		.delete(agentMcpServers)
+		.where(and(eq(agentMcpServers.agent_id, agentId), eq(agentMcpServers.mcp_server_id, mcpServerId)))
+		.returning({ id: agentMcpServers.id });
 
-	if (deleted.length === 0) return notFound("MCP server not found");
-	return json({ ok: true, deleted: skillId });
-}
-
-async function testMcpServer(
-	agentId: string,
-	serverId: string,
-): Promise<APIGatewayProxyStructuredResultV2> {
-	const skillId = serverId.startsWith(MCP_SKILL_PREFIX) ? serverId : `${MCP_SKILL_PREFIX}${serverId}`;
-
-	const [row] = await db
-		.select({ config: agentSkills.config })
-		.from(agentSkills)
-		.where(
-			and(
-				eq(agentSkills.agent_id, agentId),
-				eq(agentSkills.skill_id, skillId),
-			),
-		);
-
-	if (!row) return notFound("MCP server not found");
-
-	const config = (row.config as Record<string, unknown>) || {};
-	const mcpUrl = config.mcpUrl as string;
-	if (!mcpUrl) return error("No MCP URL configured", 400);
-
-	// Build auth headers
-	const headers: Record<string, string> = { "Content-Type": "application/json" };
-	const authType = config.mcpAuthType as string || "none";
-	const token = config.mcpAuthToken as string;
-	if (token && authType === "bearer") {
-		headers["Authorization"] = `Bearer ${token}`;
-	} else if (token && authType === "api-key") {
-		headers["x-api-key"] = token;
-	}
-
-	// Call MCP tools/list via JSON-RPC
-	try {
-		const response = await fetch(mcpUrl, {
-			method: "POST",
-			headers,
-			body: JSON.stringify({
-				jsonrpc: "2.0",
-				id: 1,
-				method: "tools/list",
-				params: {},
-			}),
-			signal: AbortSignal.timeout(10000),
-		});
-
-		if (!response.ok) {
-			return json({
-				ok: false,
-				error: `MCP server returned ${response.status}: ${await response.text().catch(() => "")}`,
-			}, 502);
-		}
-
-		const result = await response.json() as { result?: { tools?: Array<{ name: string; description?: string }> }; error?: unknown };
-		if (result.error) {
-			return json({ ok: false, error: result.error }, 502);
-		}
-
-		const tools = result.result?.tools || [];
-		return json({
-			ok: true,
-			tools: tools.map((t) => ({ name: t.name, description: t.description })),
-		});
-	} catch (err: any) {
-		return json({ ok: false, error: err.message || "Connection failed" }, 502);
-	}
+	if (deleted.length === 0) return notFound("MCP server assignment not found");
+	return json({ ok: true });
 }
 
 // ---------------------------------------------------------------------------
