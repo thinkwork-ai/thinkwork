@@ -12,6 +12,9 @@ export async function createAgentTemplate(_parent: any, args: any, _ctx: GraphQL
 	const blockedTools = i.blockedTools
 		? (typeof i.blockedTools === "string" ? JSON.parse(i.blockedTools) : i.blockedTools)
 		: undefined;
+	const mcpServers = i.mcpServers
+		? (typeof i.mcpServers === "string" ? JSON.parse(i.mcpServers) : i.mcpServers)
+		: undefined;
 
 	const [row] = await db
 		.insert(agentTemplates)
@@ -28,6 +31,7 @@ export async function createAgentTemplate(_parent: any, args: any, _ctx: GraphQL
 			config,
 			skills,
 			knowledge_base_ids: knowledgeBaseIds,
+			mcp_servers: mcpServers,
 			is_published: i.isPublished ?? true,
 		})
 		.returning();

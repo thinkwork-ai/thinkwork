@@ -1415,6 +1415,7 @@ export const AgentTemplateDetailQuery = graphql(`
       config
       skills
       knowledgeBaseIds
+      mcpServers
       isPublished
       createdAt
       updatedAt
