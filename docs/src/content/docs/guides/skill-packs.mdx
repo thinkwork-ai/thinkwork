@@ -1,0 +1,266 @@
+---
+title: Skill Packs
+description: Write a SKILL.md file, upload it to your S3 skill catalog, and make it available to managed agents at invoke time.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Skill packs are the primary way to extend managed agents with new capabilities. A skill pack is a single `SKILL.md` file that defines tools (Python functions the agent can call), instructions (additions to the system prompt), and static context (reference data injected into every turn).
+
+Skill packs are stored in S3 and loaded by AgentCore at invoke time. You don't need to rebuild or redeploy the AgentCore Lambda to add new skills — just upload a new `SKILL.md` and assign it to an agent.
+
+## How it works
+
+```
+1. Author SKILL.md
+2. Upload to S3: skills/catalog/<skill-name>.md
+3. Assign skill to agent (admin app or GraphQL API)
+4. At invoke time: AgentCore downloads SKILL.md, parses it, injects tools + instructions
+5. Agent can now call the tool during the Strands agent loop
+```
+
+## SKILL.md format
+
+A `SKILL.md` file has three sections, each separated by a level-2 heading.
+
+### Minimal example
+
+A `SKILL.md` file has up to three sections. Here's a complete example for a Jira skill:
+
+**Header and description** (`jira.md`, line 1–3):
+
+```text
+# jira
+
+A skill for reading and writing Jira issues.
+```
+
+**Instructions section** — injected into the system prompt:
+
+```text
+## Instructions
+
+You have access to Jira. When a user asks about issues, tickets, or tasks,
+use the Jira tools to look up real data instead of guessing. Always include
+the issue key (e.g., ENG-1234) when referencing issues.
+```
+
+**Tools section** — Python functions exposed as agent tools:
+
+```python
+## Tools
+
+import httpx
+import os
+
+JIRA_BASE_URL = os.environ["JIRA_BASE_URL"]
+JIRA_TOKEN = os.environ["JIRA_TOKEN"]
+JIRA_EMAIL = os.environ["JIRA_EMAIL"]
+
+def search_issues(jql: str, max_results: int = 20) -> dict:
+    """
+    Search Jira issues using JQL.
+
+    Args:
+        jql: JQL query string (e.g., 'project=ENG AND status=Open')
+        max_results: Maximum number of results to return (default 20, max 100)
+
+    Returns:
+        dict with 'issues' list, each containing id, key, summary, status, assignee
+    """
+    response = httpx.get(
+        f"{JIRA_BASE_URL}/rest/api/3/search",
+        headers={
+            "Authorization": f"Basic {JIRA_EMAIL}:{JIRA_TOKEN}",
+            "Content-Type": "application/json"
+        },
+        params={"jql": jql, "maxResults": max_results}
+    )
+    response.raise_for_status()
+    data = response.json()
+    return {
+        "issues": [
+            {
+                "id": issue["id"],
+                "key": issue["key"],
+                "summary": issue["fields"]["summary"],
+                "status": issue["fields"]["status"]["name"],
+                "assignee": issue["fields"].get("assignee", {}).get("displayName", "Unassigned")
+            }
+            for issue in data["issues"]
+        ]
+    }
+
+def create_issue(project_key: str, summary: str, description: str, issue_type: str = "Task") -> dict:
+    """
+    Create a new Jira issue.
+
+    Args:
+        project_key: Jira project key (e.g., 'ENG')
+        summary: Issue title/summary
+        description: Issue description (plain text)
+        issue_type: Issue type (Task, Bug, Story, Epic) — defaults to Task
+
+    Returns:
+        dict with 'id', 'key', and 'url' of the created issue
+    """
+    response = httpx.post(
+        f"{JIRA_BASE_URL}/rest/api/3/issue",
+        headers={
+            "Authorization": f"Basic {JIRA_EMAIL}:{JIRA_TOKEN}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "fields": {
+                "project": {"key": project_key},
+                "summary": summary,
+                "description": {
+                    "type": "doc", "version": 1,
+                    "content": [{"type": "paragraph", "content": [{"type": "text", "text": description}]}]
+                },
+                "issuetype": {"name": issue_type}
+            }
+        }
+    )
+    response.raise_for_status()
+    data = response.json()
+    return {
+        "id": data["id"],
+        "key": data["key"],
+        "url": f"{JIRA_BASE_URL}/browse/{data['key']}"
+    }
+```
+
+**Context section** — static text injected into every turn's context window:
+
+```text
+## Context
+
+Supported Jira issue types: Task, Bug, Story, Epic, Subtask
+Valid JQL operators: =, !=, IN, NOT IN, ~, IS, IS NOT, <, >, <=, >=
+Common JQL fields: project, status, assignee, reporter, priority, labels, created, updated
+```
+
+### Section reference
+
+| Section | Required | Purpose |
+|---------|----------|---------|
+| `# <name>` + description | Yes | Skill name and one-line description. The name is used as the skill ID. |
+| `## Instructions` | No | Text injected into the system prompt for this skill. Keep it concise — this is added to every turn. |
+| `## Tools` | No | Python code block defining functions. Each `def` with a docstring becomes a tool. |
+| `## Context` | No | Static text injected into the context window on every turn. Good for reference tables, enum values, and constants. |
+
+<Aside type="note">
+The `## Tools` section must be a fenced Python code block (` ```python ... ``` `). Functions without docstrings are treated as helpers and are not exposed to the agent as tools. Type hints in the function signature are used to generate the tool schema.
+</Aside>
+
+## Environment variables in tools
+
+Tools run inside the AgentCore Lambda container. They have access to environment variables set on the Lambda function. Use this for credentials and configuration:
+
+```python
+import os
+
+JIRA_TOKEN = os.environ["JIRA_TOKEN"]     # Set on AgentCore Lambda
+JIRA_BASE_URL = os.environ["JIRA_BASE_URL"]
+```
+
+Set Lambda environment variables via Terraform:
+
+```hcl
+# In your terraform.tfvars or a .tfvars override:
+agentcore_environment = {
+  JIRA_BASE_URL = "https://yourorg.atlassian.net"
+  JIRA_EMAIL    = "bot@yourorg.com"
+  JIRA_TOKEN    = "your-api-token"
+}
+```
+
+For sensitive values, use Secrets Manager and fetch at cold start:
+
+```python
+import boto3
+import json
+
+_secrets_client = boto3.client("secretsmanager")
+_jira_secret = None
+
+def _get_jira_secret():
+    global _jira_secret
+    if _jira_secret is None:
+        response = _secrets_client.get_secret_value(SecretId="thinkwork/jira-credentials")
+        _jira_secret = json.loads(response["SecretString"])
+    return _jira_secret
+```
+
+## Uploading a skill pack
+
+```bash
+# Get your skill catalog bucket name
+BUCKET=$(thinkwork outputs -s dev --key s3_skill_bucket)
+
+# Upload
+aws s3 cp jira.md "s3://$BUCKET/skills/catalog/jira.md"
+```
+
+The skill is immediately available to assign to agents — no Lambda redeployment needed.
+
+## Assigning skills to agents
+
+```graphql
+mutation AddSkill {
+  updateAgent(id: "agent-support", input: {
+    skillPackIds: ["jira", "confluence", "slack"]
+  }) {
+    id
+    skillPackIds
+  }
+}
+```
+
+Skill IDs correspond to the filename without `.md`: `skills/catalog/jira.md` → skill ID `jira`.
+
+## Listing available skills
+
+```graphql
+query ListSkillPacks {
+  listSkillPacks {
+    id         # e.g. "jira"
+    name       # From the # heading in SKILL.md
+    description
+    toolCount
+    uploadedAt
+  }
+}
+```
+
+## Skill loading at invoke time
+
+When AgentCore receives a message for an agent with skill packs assigned:
+
+1. Downloads each `SKILL.md` from S3 in parallel (cached in Lambda `/tmp` for the container lifetime)
+2. Parses tool definitions using the Python AST
+3. Registers tools with the Strands agent loop
+4. Appends instructions to the system prompt
+5. Appends context to the turn's context block
+
+The total latency for skill loading on a warm container is ~20ms (cache hit). On a cold start, it depends on the number and size of skill files, but typically 100–500ms.
+
+<Aside type="tip">
+Keep skill files small. The S3 download and parse happens in the Lambda hot path. If a skill's Python code is complex, consider splitting it into multiple focused skills rather than one large file.
+</Aside>
+
+## Example skill pack library
+
+The `examples/skill-pack/` directory in the Thinkwork repo contains ready-to-use skill packs:
+
+| Skill | Description |
+|-------|-------------|
+| `github.md` | Search issues, PRs, and code. Create issues and comments. |
+| `jira.md` | Search and create Jira issues. Transition issue status. |
+| `confluence.md` | Search Confluence pages. Create and update pages. |
+| `slack.md` | Post messages and look up channel history. |
+| `sql.md` | Run read-only SQL queries against the Aurora database. |
+| `calculator.md` | Math and unit conversion tools. |
+| `datetime.md` | Date parsing, formatting, and timezone conversion. |
+| `http.md` | Make HTTP requests to external APIs. |

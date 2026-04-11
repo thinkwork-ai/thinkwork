@@ -1,0 +1,203 @@
+---
+title: Knowledge
+description: Document-backed RAG via Bedrock Knowledge Bases. Upload documents, let agents retrieve what they need inline using S3-backed vector search.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The Knowledge module gives your agents access to your organization's documents. Upload PDFs, Markdown files, Word documents, and HTML pages — Thinkwork indexes them into a Bedrock Knowledge Base and makes them available for inline retrieval on every agent turn.
+
+Agents don't need to be explicitly told to "search the knowledge base." Retrieval happens automatically before each response: AgentCore queries the Knowledge Base with the current message, retrieves the most relevant passages, and injects them into the context window.
+
+## How it works
+
+```
+Document upload (admin app or API)
+    → S3: thinkwork-{stage}-knowledge-{kb-id}/
+    → Bedrock Knowledge Base sync job
+    → Titan Embeddings (text-embedding-v2)
+    → OpenSearch Serverless vector index
+
+Agent turn:
+    → User message arrives
+    → AgentCore: embed message via Titan
+    → Query OpenSearch for top-K relevant chunks
+    → Inject retrieved passages into context
+    → Bedrock (Claude) generates response with grounding
+```
+
+## Creating a knowledge base
+
+```graphql
+mutation CreateKnowledgeBase {
+  createKnowledgeBase(input: {
+    name: "Product Documentation"
+    description: "Official product docs, FAQs, and runbooks"
+    chunkingStrategy: FIXED_SIZE    # or HIERARCHICAL, SEMANTIC
+    chunkSize: 512
+    chunkOverlap: 64
+  }) {
+    id
+    name
+    status      # creating, active, updating
+    s3BucketUri
+  }
+}
+```
+
+## Uploading documents
+
+### Via admin app
+
+Navigate to **Knowledge → [KB Name] → Documents → Upload**. Drag and drop files or select from your computer. Supported formats:
+
+| Format | Notes |
+|--------|-------|
+| PDF | Text extracted, images skipped |
+| Markdown (`.md`) | Full fidelity |
+| Plain text (`.txt`) | Full fidelity |
+| Word (`.docx`) | Text extracted |
+| HTML | Text extracted, navigation stripped |
+| CSV | Each row treated as a chunk |
+
+### Via API
+
+```graphql
+mutation UploadDocument {
+  createKnowledgeBaseDocument(input: {
+    knowledgeBaseId: "kb-abc123"
+    filename: "runbook-incident-response.md"
+    contentType: "text/markdown"
+    presignedUploadUrl: true    # Returns a pre-signed S3 URL
+  }) {
+    documentId
+    uploadUrl     # PUT your file content here
+    expiresAt
+  }
+}
+```
+
+After uploading to the pre-signed URL, trigger a sync:
+
+```graphql
+mutation SyncKnowledgeBase {
+  syncKnowledgeBase(id: "kb-abc123") {
+    syncJobId
+    status    # started
+  }
+}
+```
+
+Sync jobs typically complete in 30–120 seconds depending on document count and size.
+
+## Document status
+
+```graphql
+query DocumentStatus {
+  listKnowledgeBaseDocuments(knowledgeBaseId: "kb-abc123") {
+    items {
+      id
+      filename
+      status      # pending, indexing, indexed, failed
+      chunkCount  # How many chunks were created
+      sizeBytes
+      indexedAt
+      error       # Set if status=failed
+    }
+  }
+}
+```
+
+## Assigning a knowledge base to an agent
+
+```graphql
+mutation AssignKB {
+  updateAgent(id: "agent-support", input: {
+    knowledgeBaseId: "kb-support-docs"
+    retrievalConfig: {
+      topK: 5                 # Number of chunks to retrieve per turn
+      minScore: 0.7           # Minimum relevance score (0–1)
+      includeMetadata: true   # Include source filename in context
+    }
+  }) {
+    id
+    knowledgeBaseId
+  }
+}
+```
+
+An agent can be assigned to one knowledge base at a time. If you need an agent to access multiple document collections, create a knowledge base that contains all the relevant documents, or use multiple knowledge bases with a routing skill.
+
+## Retrieval in practice
+
+When an agent has a knowledge base assigned, every turn follows this pattern:
+
+1. The user's message is embedded using Amazon Titan Embeddings
+2. The top-K most semantically similar chunks are retrieved from the vector index
+3. Retrieved chunks are injected into the context with source attribution
+4. Claude generates a response, grounded in the retrieved content
+
+Example of what the agent sees:
+
+```
+[Retrieved from: runbook-incident-response.md]
+"When a P1 incident is declared, the on-call engineer should:
+1. Post to #incidents with the incident number and initial assessment
+2. Create a Zoom bridge using /zoom incident
+3. Update the status page within 15 minutes..."
+
+[Retrieved from: incident-severity-guide.md]
+"P1 definition: Complete service outage or data loss affecting >10% of users..."
+```
+
+The agent uses this grounded context to answer questions accurately without hallucinating procedures or policies.
+
+<Aside type="tip">
+Set `includeMetadata: true` on retrieval config so the agent can cite its sources. Users trust answers more when they see "according to runbook-incident-response.md."
+</Aside>
+
+## Chunking strategies
+
+| Strategy | Best for |
+|----------|----------|
+| `FIXED_SIZE` | General documents, most use cases. Splits at token boundaries. |
+| `HIERARCHICAL` | Long documents with clear section structure. Preserves parent context. |
+| `SEMANTIC` | Narrative content where meaning spans paragraphs. Slower to index. |
+
+The chunking strategy is set at knowledge base creation time and cannot be changed without recreating the KB. When in doubt, start with `FIXED_SIZE` at 512 tokens with 64 token overlap.
+
+## Keeping documents up to date
+
+Documents don't auto-sync when the S3 source changes. You must trigger a sync after uploading new or updated documents. For automated workflows, use an EventBridge rule or an automation:
+
+```graphql
+mutation CreateSyncAutomation {
+  createAutomation(input: {
+    name: "Daily KB sync"
+    type: SCHEDULED
+    schedule: "cron(0 2 * * ? *)"   # 2am UTC daily
+    agentId: null                    # System automation, no agent needed
+    action: {
+      type: SYNC_KNOWLEDGE_BASE
+      knowledgeBaseId: "kb-support-docs"
+    }
+    enabled: true
+  }) {
+    id
+  }
+}
+```
+
+## Storage and costs
+
+Knowledge Base documents are stored in S3 in your account (`s3://thinkwork-{stage}-knowledge-{kb-id}/`). The vector index lives in an OpenSearch Serverless collection — also in your account.
+
+Approximate costs for a 1,000-document knowledge base:
+- S3 storage: negligible (< $1/month for typical document sizes)
+- Titan Embeddings (indexing): ~$0.02 per 1M tokens (one-time on upload)
+- OpenSearch Serverless: ~$0.24/OCU-hour (minimum 2 OCUs = ~$345/month)
+- Titan Embeddings (retrieval): ~$0.02 per 1M tokens (per-query)
+
+<Aside type="caution">
+OpenSearch Serverless has a minimum cost of approximately $345/month regardless of usage (2 OCU minimum for indexing + search). If cost is a constraint, consider whether your use case justifies a dedicated Knowledge Base or whether a simple S3 + keyword search approach is sufficient for your document volume.
+</Aside>

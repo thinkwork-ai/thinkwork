@@ -219,3 +219,18 @@ output "admin_bucket_name" {
   description = "S3 bucket for admin app assets"
   value       = module.thinkwork.admin_bucket_name
 }
+
+output "docs_url" {
+  description = "Docs site URL"
+  value       = "https://${module.thinkwork.docs_distribution_domain}"
+}
+
+output "docs_distribution_id" {
+  description = "CloudFront distribution ID for docs (for cache invalidation)"
+  value       = module.thinkwork.docs_distribution_id
+}
+
+output "docs_bucket_name" {
+  description = "S3 bucket for docs site assets"
+  value       = module.thinkwork.docs_bucket_name
+}

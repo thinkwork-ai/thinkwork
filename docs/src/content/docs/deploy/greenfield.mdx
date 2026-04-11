@@ -1,0 +1,248 @@
+---
+title: Greenfield AWS Deploy
+description: Step-by-step Terraform deploy of Thinkwork from scratch into a new AWS account or region. What gets created, how long it takes, and how to validate.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+This guide walks through a full Thinkwork deployment into a fresh AWS account with no existing infrastructure. At the end, you'll have ~260 AWS resources running across three tiers, accessible via the admin app and GraphQL API.
+
+## What gets deployed
+
+Thinkwork is organized into three infrastructure tiers that deploy in order:
+
+**Foundation tier** — Networking, identity, and encryption
+- VPC with public and private subnets across 2 AZs
+- NAT Gateway (single, for cost)
+- Cognito User Pool + Identity Pool
+- KMS keys (app data, audit logs, credential vault)
+- Route53 hosted zone + ACM certificates
+- SES identity (verified domain for outbound email)
+
+**Data tier** — Storage and AI services
+- Aurora Postgres (serverless v2 by default, 0.5–16 ACUs)
+- S3 buckets: skill catalog, knowledge documents, audit logs, assets
+- Bedrock Knowledge Base + OpenSearch Serverless collection
+- Secrets Manager secret for DB credentials
+
+**App tier** — Compute and APIs
+- AppSync GraphQL API (real-time subscriptions)
+- API Gateway v2 HTTP API
+- AgentCore Lambda (container image, 3GB memory, 15min timeout)
+- Connector Lambda functions (Slack, GitHub, Google)
+- Step Functions state machines (automations, routine runner)
+- CloudFront distributions (admin app, end-user app)
+- ECS Fargate (if `memory_engine = "hindsight"`)
+
+## Prerequisites
+
+- AWS account with Administrator access (or a scoped IAM role — see IAM requirements below)
+- AWS CLI configured: `aws sts get-caller-identity` should return your account
+- Terraform 1.6+ installed: `terraform --version`
+- Node.js 20+ for the CLI: `node --version`
+- Bedrock model access enabled in your target region
+
+### Enable Bedrock model access
+
+In the AWS console:
+1. Navigate to Amazon Bedrock → Model access
+2. Click **Manage model access**
+3. Enable at minimum: `Claude 3.5 Sonnet v2` and `Titan Text Embeddings v2`
+4. Wait for access to be approved (usually instant for Claude models)
+
+<Aside type="tip">
+Enable model access before running deploy. If models aren't enabled, the deploy will succeed but agent invokes will fail with a Bedrock `AccessDeniedException`.
+</Aside>
+
+## Step-by-step deploy
+
+<Steps>
+
+1. **Install the CLI**
+
+   ```bash
+   npm install -g @thinkwork/cli
+   thinkwork --version
+   ```
+
+2. **Configure AWS credentials**
+
+   ```bash
+   # Option A: AWS profile
+   export AWS_PROFILE=my-profile
+
+   # Option B: Environment variables
+   export AWS_ACCESS_KEY_ID=...
+   export AWS_SECRET_ACCESS_KEY=...
+   export AWS_REGION=us-east-1
+   ```
+
+3. **Login and create an environment**
+
+   ```bash
+   thinkwork login
+   # Enter environment name: dev
+   # Enter region: us-east-1
+   # Enter AWS profile: default (or your profile name)
+   ```
+
+4. **Initialize a deployment directory**
+
+   ```bash
+   mkdir thinkwork-deploy && cd thinkwork-deploy
+   thinkwork init -s dev
+   ```
+
+5. **Edit terraform.tfvars**
+
+   ```hcl
+   # terraform.tfvars — required fields
+
+   stage      = "dev"
+   region     = "us-east-1"
+   account_id = "123456789012"
+
+   # Database
+   db_password = "a-strong-password-32-chars-minimum"
+
+   # Domain (optional — if you have a Route53 hosted zone)
+   # domain_name    = "thinkwork.example.com"
+   # hosted_zone_id = "Z1234567890ABC"
+
+   # Memory engine
+   memory_engine = "managed"   # start here, upgrade to hindsight later
+
+   # Database engine
+   database_engine = "aurora-serverless"   # recommended for dev
+
+   # Bedrock model for default agent template
+   default_model_id = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+   ```
+
+6. **Run the deploy**
+
+   ```bash
+   thinkwork deploy -s dev
+   ```
+
+   The CLI will print progress as each tier completes. First deploy output:
+
+   ```
+   Initializing Terraform providers...
+   Downloading thinkwork-ai/thinkwork/aws v1.0.0...
+
+   Planning...
+   + 264 resources to add
+
+   Applying foundation tier...
+   ✓ VPC and subnets (1m 12s)
+   ✓ Cognito user pool (0m 34s)
+   ✓ KMS keys (0m 18s)
+   ✓ ACM certificates (2m 05s) — waiting for DNS validation
+
+   Applying data tier...
+   ✓ Aurora cluster (4m 22s)
+   ✓ S3 buckets (0m 08s)
+   ✓ OpenSearch Serverless collection (3m 15s)
+   ✓ Bedrock Knowledge Base (0m 45s)
+
+   Applying app tier...
+   ✓ AppSync API (0m 22s)
+   ✓ API Gateway (0m 15s)
+   ✓ AgentCore Lambda (1m 33s) — building container image
+   ✓ Step Functions (0m 11s)
+   ✓ CloudFront distributions (2m 44s)
+
+   Deploy complete in 17m 24s.
+   ```
+
+7. **Run doctor**
+
+   ```bash
+   thinkwork doctor -s dev
+   ```
+
+   All checks should pass. If any fail, see the Troubleshooting section below.
+
+8. **Get your endpoints**
+
+   ```bash
+   thinkwork outputs -s dev
+   ```
+
+   ```
+   AppSync API:     https://abc.appsync-api.us-east-1.amazonaws.com/graphql
+   API Gateway:     https://xyz.execute-api.us-east-1.amazonaws.com
+   Admin App:       https://d1234.cloudfront.net
+   Cognito Pool ID: us-east-1_ABC123
+   Cognito Client:  1abc2def3ghi
+   ```
+
+9. **Create your first Cognito user**
+
+   ```bash
+   aws cognito-idp admin-create-user \
+     --user-pool-id us-east-1_ABC123 \
+     --username admin@example.com \
+     --temporary-password "Temp1234!" \
+     --message-action SUPPRESS
+
+   aws cognito-idp admin-set-user-password \
+     --user-pool-id us-east-1_ABC123 \
+     --username admin@example.com \
+     --password "YourPermanentPassword!" \
+     --permanent
+   ```
+
+10. **Sign in to the admin app**
+
+    Navigate to the Admin App URL, sign in with your Cognito user, and create your first agent.
+
+</Steps>
+
+## Resource count breakdown
+
+| Category | Count | Key resources |
+|----------|-------|---------------|
+| Networking | 22 | VPC, subnets, route tables, NAT gateway, IGW, security groups |
+| IAM | 38 | Roles and policies for each Lambda, ECS task, AppSync data source |
+| Cognito | 6 | User pool, identity pool, app client, domain, groups |
+| KMS | 4 | App data, audit logs, credential vault, Bedrock |
+| Aurora | 12 | Cluster, instance, subnet group, parameter groups, security groups |
+| S3 | 8 | Skill catalog, KB docs, audit logs, assets, CF logs, Lambda artifacts |
+| Lambda | 18 | AgentCore, connector handlers, auth triggers, migration runner |
+| AppSync | 14 | API, schema, resolvers, data sources, functions |
+| API Gateway | 8 | HTTP API, routes, integrations, stage |
+| CloudFront | 6 | Admin dist, end-user dist, OAC policies, cache behaviors |
+| Step Functions | 4 | State machines for automations, routine runner |
+| EventBridge | 3 | Scheduled automation rules, event bus |
+| SES | 5 | Identity, config set, event destination, suppression list |
+| OpenSearch | 6 | Serverless collection, access policy, data access, encryption |
+| Secrets Manager | 4 | DB credentials, Cognito secrets, connector secrets |
+| Route53 / ACM | 8 | Hosted zone records, certificates, validation records |
+| Misc | 18 | CloudWatch log groups, SSM parameters, ECR repo |
+| **Total** | **~264** | |
+
+## Subsequent deploys
+
+After the first deploy, re-running `thinkwork deploy -s dev` is fast (2–4 minutes) for application changes. Terraform only applies changes.
+
+Operations that take longer:
+- Aurora scaling parameter changes: 5–10 min (no downtime)
+- CloudFront distribution changes: 3–8 min (no downtime)
+- Container image updates: 2–3 min (no downtime, Lambda blue/green)
+- OpenSearch collection changes: 10–20 min
+
+## Troubleshooting
+
+**ACM certificate stuck in PENDING_VALIDATION**
+DNS validation records weren't created. If you provided a `hosted_zone_id`, check that the Route53 zone matches your domain. If you're using an external DNS provider, manually add the CNAME records shown in the ACM console.
+
+**Aurora cluster creation timeout**
+Aurora serverless v2 creation occasionally takes longer than Terraform's default timeout. Re-run `thinkwork deploy -s dev` — Terraform will pick up where it left off.
+
+**AgentCore Lambda fails doctor check**
+The container image may still be building. Wait 2 minutes and re-run `thinkwork doctor -s dev`. If it still fails, check the Lambda function's CloudWatch logs for the error.
+
+**Bedrock AccessDeniedException**
+You haven't enabled model access. Go to Amazon Bedrock → Model access in the AWS console and enable the required models.

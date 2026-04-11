@@ -1,0 +1,139 @@
+---
+title: CLI Overview
+description: The @thinkwork/cli npm package. Install, configure, and manage Thinkwork deployments from the command line.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The Thinkwork CLI (`@thinkwork/cli`) is the primary way to deploy and manage Thinkwork. It wraps Terraform with a developer-friendly interface, manages named environment profiles, and provides health-check and diagnostic commands.
+
+## Installation
+
+```bash
+npm install -g @thinkwork/cli
+```
+
+Verify the installation:
+
+```bash
+thinkwork --version
+# 1.0.0
+
+thinkwork --help
+# Usage: thinkwork <command> [options]
+# ...
+```
+
+### Requirements
+
+- Node.js 20+
+- Terraform 1.6+ (must be on your `$PATH`)
+- AWS credentials (via `~/.aws/credentials`, environment variables, or EC2/ECS instance role)
+
+The CLI checks for Terraform on startup and prints a clear error if it's missing:
+
+```
+✗ Terraform not found. Install from https://developer.hashicorp.com/terraform/install
+```
+
+## Architecture
+
+The CLI is a Commander.js application that:
+
+1. **Manages environment profiles** — Named environments stored in `~/.thinkwork/environments/` as JSON files. Each profile holds the AWS region, profile name, and a pointer to the deployment directory.
+
+2. **Wraps Terraform** — `deploy`, `plan`, `destroy`, and `outputs` shell out to `terraform` with the correct working directory, variable files, and backend configuration.
+
+3. **Validates deployments** — `doctor` runs a suite of health checks against the deployed infrastructure (Cognito reachable, Lambda responding, Aurora available, etc.)
+
+4. **Bootstraps state storage** — `bootstrap` creates the S3 bucket and DynamoDB table used for Terraform remote state before the first deploy.
+
+## Environment profiles
+
+An environment profile is a named configuration that maps to a Thinkwork deployment. Profiles are stored at `~/.thinkwork/environments/<name>.json`.
+
+```json
+{
+  "name": "dev",
+  "region": "us-east-1",
+  "awsProfile": "default",
+  "deploymentDir": "/Users/alice/thinkwork-deploy",
+  "createdAt": "2024-04-01T10:00:00Z"
+}
+```
+
+You can have multiple profiles pointing at different AWS accounts, regions, or directories:
+
+```bash
+thinkwork login   # Creates "dev" profile → us-east-1, account 111111111111
+thinkwork login   # Creates "prod" profile → us-east-1, account 222222222222
+thinkwork login   # Creates "eu-staging" profile → eu-west-1, account 111111111111
+```
+
+Then use `-s <name>` (or `--stage <name>`) to select the profile for each command:
+
+```bash
+thinkwork deploy -s dev
+thinkwork doctor -s prod
+thinkwork outputs -s eu-staging
+```
+
+## Stage vs environment
+
+The CLI uses two related concepts:
+
+- **Stage** — The name of your deployment (e.g. `dev`, `prod`). This becomes the prefix for all AWS resource names (`dev-thinkwork-agentcore`, `prod-thinkwork-aurora`). Set in `terraform.tfvars` as `stage`.
+
+- **Environment** — The CLI profile name. By convention, the environment name matches the stage name, but they're independent. You can have an environment named `alice-dev` pointing at a stage named `dev`.
+
+Use `--stage` (or `-s`) in all CLI commands to select the environment profile.
+
+## Configuration files
+
+The CLI looks for configuration in this order:
+
+1. `~/.thinkwork/environments/<name>.json` — Profile file (created by `thinkwork login`)
+2. `terraform.tfvars` — Terraform variables (in the deployment directory)
+3. `.thinkwork/stage.json` — Local metadata in the deployment directory
+
+You can view the resolved configuration for a stage:
+
+```bash
+thinkwork config list -s dev
+```
+
+## Remote state
+
+Thinkwork uses S3 + DynamoDB for Terraform remote state. The `bootstrap` command creates these resources before the first deploy:
+
+```bash
+thinkwork bootstrap -s dev
+```
+
+This creates:
+- S3 bucket: `thinkwork-{stage}-tfstate-{account_id}` (versioning enabled, encryption at rest)
+- DynamoDB table: `thinkwork-{stage}-tfstate-lock` (PAY_PER_REQUEST billing)
+
+The `terraform.tfvars` file is updated with the backend configuration after `bootstrap` runs.
+
+<Aside type="note">
+`thinkwork deploy` automatically runs `bootstrap` if remote state hasn't been configured yet. You only need to run `bootstrap` explicitly if you want to set up state storage before your first deploy (e.g., in a CI pipeline that runs `plan` before `apply`).
+</Aside>
+
+## Using the CLI in CI
+
+For CI/CD pipelines, use environment variables instead of the interactive `login` command:
+
+```bash
+# Set credentials via environment
+export AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+export AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+export AWS_REGION=us-east-1
+
+# Non-interactive deploy (skips confirmation prompt)
+thinkwork deploy -s prod --auto-approve
+```
+
+Or use an IAM role with `aws sts assume-role` before running deploy.
+
+See [Commands Reference](/cli/commands/) for the full syntax and options for every command.

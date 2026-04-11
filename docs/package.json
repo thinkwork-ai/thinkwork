@@ -1,0 +1,15 @@
+{
+  "name": "@thinkwork/docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.34.8",
+    "astro": "^5.5.0",
+    "sharp": "^0.33.0"
+  }
+}

@@ -1,0 +1,167 @@
+---
+title: Agents
+description: Managed agents powered by AgentCore and Bedrock, connected agents that bring their own runtime, Agent Templates for fleet-wide configuration, and skill packs.
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+An agent in Thinkwork is a named entity that receives messages in a thread and produces responses. Agents come in two flavors: **managed** (Thinkwork runs the runtime) and **connected** (you bring your own runtime).
+
+## Managed agents
+
+Managed agents run on **AgentCore** — a Python Lambda container built on the [Strands](https://strandsagents.com) framework. Strands handles the agent loop, tool invocation, memory reads/writes, and streaming. AgentCore is deployed as an AWS Lambda container image in your account.
+
+```
+Thread message → API Gateway → AgentCore Lambda → Strands agent loop
+                                                 ↓
+                                         Bedrock (Claude)
+                                                 ↓
+                                     Tools: SQL, S3, MCP, skills
+                                                 ↓
+                               AppSync subscription → client
+```
+
+Every managed agent has:
+
+- A **model** (Bedrock model ID, set via Agent Template)
+- A **system prompt** (stored in the agent record)
+- An optional set of **skill packs** (loaded from S3 at invoke time)
+- An optional **knowledge base** (Bedrock KB for document RAG)
+- A **memory engine** (managed or Hindsight)
+
+### Creating a managed agent
+
+Use the admin app or the GraphQL API:
+
+```graphql
+mutation CreateAgent {
+  createAgent(input: {
+    name: "Support Bot"
+    description: "Handles tier-1 customer support questions"
+    systemPrompt: "You are a helpful support agent for Acme Corp. Be concise and accurate."
+    templateId: "tpl-claude-sonnet"
+    skillPackIds: ["sp-jira", "sp-confluence"]
+    knowledgeBaseId: "kb-support-docs"
+  }) {
+    id
+    name
+    status
+  }
+}
+```
+
+## Connected agents
+
+Connected agents let you plug an existing runtime (your own Python service, a LangChain app, a custom container) into the Thinkwork thread and control plane. Thinkwork handles auth, thread persistence, real-time updates, and the admin UI — you provide the inference logic.
+
+Connected agents register a **webhook endpoint**. When a message arrives in a thread assigned to a connected agent, Thinkwork POSTs the thread context to your endpoint and expects a response in the standard message format.
+
+<Aside type="note">
+Connected agents are useful when you already have agent infrastructure and want Thinkwork's thread system, connectors, and admin app on top of it — without migrating your runtime.
+</Aside>
+
+## Agent Templates
+
+Agent Templates define fleet-wide defaults for model selection, guardrails, and tool configuration. Rather than setting these per-agent, you set them once on a template and assign agents to that template.
+
+A template specifies:
+
+| Field | Description |
+|-------|-------------|
+| `modelId` | Bedrock model ID (e.g. `anthropic.claude-3-5-sonnet-20241022-v2:0`) |
+| `guardrailId` | Bedrock Guardrail ID to apply on every invoke |
+| `maxTokens` | Maximum output tokens per turn |
+| `temperature` | Sampling temperature (0.0–1.0) |
+| `toolConfig` | Which tool categories are enabled (SQL, S3, MCP, web) |
+| `memoryConfig` | Memory engine settings (retain/recall/reflect intervals) |
+
+### Example templates
+
+```graphql
+mutation CreateTemplate {
+  createAgentTemplate(input: {
+    name: "Claude Sonnet — Standard"
+    modelId: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    maxTokens: 8192
+    temperature: 0.3
+    guardrailId: "gr-default-safe"
+    toolConfig: {
+      sqlEnabled: true
+      s3Enabled: true
+      mcpEnabled: false
+      webEnabled: false
+    }
+  }) {
+    id
+    name
+  }
+}
+```
+
+When you update a template, every agent assigned to it picks up the change on the next invoke — no per-agent updates needed. This is the primary mechanism for rotating models across your fleet.
+
+## Model selection
+
+Thinkwork uses Amazon Bedrock for all managed agent inference. Any model available in your region through Bedrock can be used, but you must [request model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html) in the AWS console first.
+
+Recommended starting models:
+
+| Use case | Model ID |
+|----------|----------|
+| General purpose (recommended) | `anthropic.claude-3-5-sonnet-20241022-v2:0` |
+| High throughput / lower cost | `anthropic.claude-3-haiku-20240307-v1:0` |
+| Complex reasoning | `anthropic.claude-3-5-sonnet-20241022-v2:0` with extended thinking |
+| Long context | `anthropic.claude-3-5-sonnet-20241022-v2:0` (200k context) |
+
+Model IDs are set at the **Agent Template** level, not per-agent. To switch all agents on a template to a new model, update the template's `modelId`.
+
+## Skill packs
+
+Skill packs are the primary extension mechanism for managed agents. A skill pack is a `SKILL.md` file stored in your S3 skill catalog bucket. At invoke time, AgentCore downloads the skill packs assigned to the agent, parses them, and injects their capabilities into the Strands agent loop.
+
+A skill can provide:
+
+- **Tools** — Python function definitions that the agent can call
+- **Instructions** — Additions to the system prompt
+- **Context** — Static reference data injected into the context window
+
+```
+S3: skills/catalog/jira.md
+              ↓  (at invoke time)
+        AgentCore reads SKILL.md
+              ↓
+        Strands loads tool definitions
+              ↓
+        Agent can call create_issue, search_issues, etc.
+```
+
+See [Authoring Guide: Skill Packs](/guides/skill-packs/) for the full SKILL.md format, upload instructions, and examples.
+
+## Memory
+
+Managed agents have access to two memory engines:
+
+**Managed memory** is the default. Memories are stored in the Aurora database alongside thread data. Recall happens via semantic search at the start of each turn. This requires no additional infrastructure.
+
+**Hindsight** is the advanced memory engine. It runs on ECS Fargate and provides three operations:
+
+- **Retain** — Store a piece of information from a conversation
+- **Recall** — Retrieve relevant memories before generating a response
+- **Reflect** — Periodically synthesize and compress stored memories
+
+Hindsight is enabled by setting `memory_engine = "hindsight"` in your `terraform.tfvars`. See [Configuration Reference](/deploy/configuration/) for details.
+
+<Aside type="tip">
+Start with managed memory. Upgrade to Hindsight when you need longer retention windows, cross-thread memory synthesis, or fine-grained control over what gets remembered.
+</Aside>
+
+## Agent lifecycle
+
+```
+created → active → suspended → archived
+```
+
+- **created** — Agent exists but has never been invoked
+- **active** — Agent is accepting messages
+- **suspended** — Agent is paused (e.g. budget limit hit)
+- **archived** — Agent is retired and read-only

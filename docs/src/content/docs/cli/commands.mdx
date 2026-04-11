@@ -1,0 +1,401 @@
+---
+title: Commands Reference
+description: All 10 CLI commands with syntax, options, and examples. login, init, doctor, plan, deploy, bootstrap, destroy, status, outputs, config.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+All commands follow the pattern:
+
+```bash
+thinkwork <command> [options]
+```
+
+The `-s` / `--stage` flag selects the named environment profile. It's required for most commands.
+
+---
+
+## login
+
+Create or update a named environment profile.
+
+```bash
+thinkwork login [options]
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--name <name>` | Environment name (skips the prompt) |
+| `--region <region>` | AWS region (skips the prompt) |
+| `--profile <profile>` | AWS credentials profile (skips the prompt) |
+
+**Interactive example:**
+
+```bash
+thinkwork login
+# ? Environment name: dev
+# ? AWS region: us-east-1
+# ? AWS credentials profile: default
+# ✓ Environment "dev" saved to ~/.thinkwork/environments/dev.json
+```
+
+**Non-interactive example (for scripting):**
+
+```bash
+thinkwork login --name prod --region us-east-1 --profile prod-role
+```
+
+---
+
+## init
+
+Scaffold a new Thinkwork deployment directory.
+
+```bash
+thinkwork init [options] [directory]
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `-s, --stage <name>` | Stage name (required) |
+| `--template <name>` | Starter template: `default`, `minimal`, `enterprise` |
+| `--no-git` | Skip creating `.gitignore` entries |
+
+**Example:**
+
+```bash
+mkdir my-deploy && cd my-deploy
+thinkwork init -s dev
+```
+
+Creates in the current directory:
+```
+terraform.tfvars          # Pre-filled with your AWS account ID and region
+.terraform.lock.hcl       # Provider version lock
+.gitignore                # Ignores .terraform/, *.tfstate, terraform.tfvars
+.thinkwork/
+  stage.json              # Links this directory to the "dev" environment
+```
+
+**Templates:**
+
+- `default` — Full deployment with all modules (recommended)
+- `minimal` — Agents and Threads only, no Connectors or Automations
+- `enterprise` — Full deployment with multi-AZ HA and Hindsight memory
+
+---
+
+## plan
+
+Preview Terraform changes without applying them.
+
+```bash
+thinkwork plan -s <stage> [options]
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `-s, --stage <name>` | Stage name (required) |
+| `--out <file>` | Save plan to file (for use with `deploy --plan-file`) |
+| `--target <resource>` | Limit plan to a specific resource (passed to `terraform plan -target`) |
+
+**Example:**
+
+```bash
+thinkwork plan -s dev
+```
+
+```
+Planning changes for stage: dev (us-east-1)
+
+~ 3 resources to update
++ 1 resource to add
+- 0 resources to destroy
+
+  ~ aws_lambda_function.agentcore — container_image_uri changed
+  ~ aws_appsync_graphql_api.api — log_config changed
+  ~ aws_cloudfront_distribution.admin — viewer_certificate changed
+  + aws_ssm_parameter.new_setting
+
+Plan saved. Run `thinkwork deploy -s dev` to apply.
+```
+
+---
+
+## deploy
+
+Apply the Terraform plan and deploy Thinkwork.
+
+```bash
+thinkwork deploy -s <stage> [options]
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `-s, --stage <name>` | Stage name (required) |
+| `--auto-approve` | Skip the confirmation prompt (for CI) |
+| `--plan-file <file>` | Apply a saved plan from `thinkwork plan --out` |
+| `--target <resource>` | Apply only a specific resource |
+
+**Example — interactive:**
+
+```bash
+thinkwork deploy -s dev
+# Shows plan summary, prompts: "Apply? (yes/no)"
+```
+
+**Example — CI (non-interactive):**
+
+```bash
+thinkwork deploy -s prod --auto-approve
+```
+
+**Example — targeted deploy:**
+
+```bash
+thinkwork deploy -s dev --target aws_lambda_function.agentcore
+```
+
+<Aside type="caution">
+`--auto-approve` bypasses the confirmation prompt. Do not use in scripts that run against production without gating on a manual approval step in your CI pipeline.
+</Aside>
+
+---
+
+## bootstrap
+
+Create the S3 bucket and DynamoDB table for Terraform remote state.
+
+```bash
+thinkwork bootstrap -s <stage> [options]
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `-s, --stage <name>` | Stage name (required) |
+| `--bucket-name <name>` | Override the default bucket name |
+| `--table-name <name>` | Override the default DynamoDB table name |
+
+**Example:**
+
+```bash
+thinkwork bootstrap -s prod
+# ✓ Created S3 bucket: thinkwork-prod-tfstate-123456789012
+# ✓ Created DynamoDB table: thinkwork-prod-tfstate-lock
+# ✓ Updated terraform.tfvars with backend configuration
+```
+
+Run this before the first `deploy` in a new environment. `deploy` runs `bootstrap` automatically if remote state isn't configured, but running it explicitly is useful in CI to separate state setup from apply.
+
+---
+
+## doctor
+
+Run health checks against a deployed Thinkwork environment.
+
+```bash
+thinkwork doctor -s <stage> [options]
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `-s, --stage <name>` | Stage name (required) |
+| `--check <name>` | Run only a specific check (e.g. `aurora`, `bedrock`, `appsync`) |
+| `--verbose` | Print full check output including response bodies |
+
+**Example:**
+
+```bash
+thinkwork doctor -s dev
+```
+
+**Checks performed:**
+
+| Check | What it tests |
+|-------|---------------|
+| `terraform-state` | Remote state bucket is readable |
+| `aurora` | Database cluster status is `available`, migrations are current |
+| `cognito` | User pool is `Active`, app client is configured |
+| `appsync` | API endpoint returns 200 on introspection |
+| `api-gateway` | Health endpoint returns 200 |
+| `agentcore` | Lambda invoke returns 200 (warm ping) |
+| `bedrock` | Default model is accessible in the region |
+| `s3-skills` | Skill catalog bucket is accessible |
+| `ses` | Sending identity is verified |
+| `knowledge-base` | Bedrock KB status is `ACTIVE` (if created) |
+
+---
+
+## destroy
+
+Destroy all Thinkwork infrastructure for a stage.
+
+```bash
+thinkwork destroy -s <stage> [options]
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `-s, --stage <name>` | Stage name (required) |
+| `--auto-approve` | Skip the confirmation prompt |
+| `--target <resource>` | Destroy only a specific resource |
+
+**Example:**
+
+```bash
+thinkwork destroy -s dev
+# ⚠ This will destroy ALL resources for stage "dev".
+# Type the stage name to confirm: dev
+# Destroying...
+```
+
+<Aside type="caution">
+`destroy` deletes your Aurora database, all S3 data, and all application infrastructure. This is irreversible. Aurora deletion protection is enabled by default — if `protect_aurora = true` (the default), you must manually disable deletion protection in the AWS console before `destroy` will proceed.
+</Aside>
+
+---
+
+## status
+
+Show the current status of all Thinkwork resources for a stage.
+
+```bash
+thinkwork status -s <stage>
+```
+
+**Example:**
+
+```bash
+thinkwork status -s dev
+```
+
+```
+Stage: dev (us-east-1)
+Last deployed: 2024-04-10 09:23 UTC
+
+Resource status:
+  Aurora cluster:    available
+  AgentCore Lambda:  active (last invoked: 2m ago)
+  AppSync API:       active
+  API Gateway:       active
+  CloudFront (admin): deployed
+  Step Functions:    0 running executions
+
+Agent summary:
+  3 agents active
+  12 threads open
+  847 total turns (last 30 days)
+```
+
+---
+
+## outputs
+
+Print the Terraform outputs for a deployed stage.
+
+```bash
+thinkwork outputs -s <stage> [options]
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `-s, --stage <name>` | Stage name (required) |
+| `--json` | Output as JSON (useful for scripting) |
+| `--key <name>` | Print only a specific output value |
+
+**Example:**
+
+```bash
+thinkwork outputs -s dev
+```
+
+```
+appsync_api_url:      https://abc123.appsync-api.us-east-1.amazonaws.com/graphql
+api_gateway_url:      https://xyz789.execute-api.us-east-1.amazonaws.com
+admin_app_url:        https://d1234567.cloudfront.net
+cognito_pool_id:      us-east-1_ABC123XYZ
+cognito_client_id:    1abc2def3ghi4jkl
+aurora_cluster_id:    dev-thinkwork-aurora
+s3_skill_bucket:      dev-thinkwork-skills
+audit_log_bucket:     dev-thinkwork-audit-logs
+```
+
+**Scripting example:**
+
+```bash
+API_URL=$(thinkwork outputs -s dev --key api_gateway_url)
+curl -H "Authorization: Bearer $TOKEN" "$API_URL/health"
+```
+
+---
+
+## config
+
+View and edit CLI configuration for a stage.
+
+```bash
+thinkwork config <subcommand> [options]
+```
+
+### config list
+
+```bash
+thinkwork config list -s dev
+```
+
+Prints all configuration values for the stage (environment profile + terraform.tfvars parsed values).
+
+### config get
+
+```bash
+thinkwork config get -s dev <key>
+```
+
+**Example:**
+
+```bash
+thinkwork config get -s dev region
+# us-east-1
+
+thinkwork config get -s dev default_model_id
+# anthropic.claude-3-5-sonnet-20241022-v2:0
+```
+
+### config set
+
+```bash
+thinkwork config set -s dev <key> <value>
+```
+
+Updates a value in `terraform.tfvars` for the specified stage. The key must be a valid Terraform variable.
+
+**Example:**
+
+```bash
+thinkwork config set -s dev memory_engine hindsight
+# ✓ Updated terraform.tfvars: memory_engine = "hindsight"
+# Run `thinkwork deploy -s dev` to apply.
+
+thinkwork config set -s dev aurora_max_capacity 32
+# ✓ Updated terraform.tfvars: aurora_max_capacity = 32
+```
+
+<Aside type="note">
+`config set` only updates `terraform.tfvars`. It does not apply the change — run `thinkwork deploy -s <stage>` to apply the updated configuration.
+</Aside>

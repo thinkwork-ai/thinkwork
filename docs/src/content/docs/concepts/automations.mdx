@@ -1,0 +1,211 @@
+---
+title: Automations
+description: Scheduled jobs, event-driven triggers, and multi-step routines that run in your AWS account. Step Functions under the hood.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Automations are how you make agents do work without a human in the loop. A scheduled digest, a nightly data pull, an on-demand pipeline triggered by a webhook — all of these are automations in Thinkwork.
+
+Every automation run creates an `AUTO-` thread, so you have a full audit trail of what the agent did, which tools it used, and what it produced.
+
+## Automation types
+
+### Scheduled automations
+
+A scheduled automation runs on a cron expression. It creates an `AUTO-` thread, sends a configured prompt to the agent, and records the full response.
+
+```graphql
+mutation CreateAutomation {
+  createAutomation(input: {
+    name: "Weekly Engineering Digest"
+    type: SCHEDULED
+    schedule: "cron(0 9 ? * MON *)"   # 9am UTC every Monday
+    agentId: "agent-engineering-bot"
+    prompt: "Summarize all GitHub issues and PRs from the past 7 days. Group by repository and priority."
+    threadChannel: AUTO
+    enabled: true
+  }) {
+    id
+    name
+    nextRunAt
+  }
+}
+```
+
+Schedules use [AWS EventBridge cron syntax](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-schedule-expressions.html).
+
+Common patterns:
+
+| Schedule | Cron expression |
+|----------|-----------------|
+| Every hour | `cron(0 * * * ? *)` |
+| Daily at 8am UTC | `cron(0 8 * * ? *)` |
+| Weekdays at 9am UTC | `cron(0 9 ? * MON-FRI *)` |
+| First of month | `cron(0 0 1 * ? *)` |
+| Every 15 minutes | `rate(15 minutes)` |
+
+### Event-driven automations
+
+An event-driven automation runs when a specific event occurs in Thinkwork or an external system:
+
+| Event source | Example trigger |
+|--------------|-----------------|
+| Thread created | New `EMAIL-` thread → auto-triage agent |
+| Thread status changed | Thread moved to `waiting` → notify Slack |
+| Connector event | GitHub issue labeled `needs-review` → review agent |
+| Custom webhook | POST to `/automations/<id>/trigger` |
+
+```graphql
+mutation CreateEventAutomation {
+  createAutomation(input: {
+    name: "Auto-triage inbound email"
+    type: EVENT_DRIVEN
+    trigger: {
+      eventType: THREAD_CREATED
+      filter: { channel: EMAIL }
+    }
+    agentId: "agent-triage"
+    prompt: "Triage this email: classify it, assign a priority, and draft an initial response."
+    enabled: true
+  }) {
+    id
+  }
+}
+```
+
+### Routines
+
+A routine is a multi-step automation that chains multiple agent invocations, conditional branches, and external API calls. Routines are defined as a series of steps:
+
+```json
+{
+  "name": "Incident response routine",
+  "steps": [
+    {
+      "id": "triage",
+      "type": "agent_invoke",
+      "agentId": "agent-triage",
+      "prompt": "Analyze this incident report and determine severity.",
+      "outputKey": "severity"
+    },
+    {
+      "id": "route",
+      "type": "branch",
+      "condition": "$.severity == 'critical'",
+      "then": "escalate",
+      "else": "standard_response"
+    },
+    {
+      "id": "escalate",
+      "type": "agent_invoke",
+      "agentId": "agent-oncall",
+      "prompt": "This is a critical incident. Page the on-call engineer and draft a status page update."
+    },
+    {
+      "id": "standard_response",
+      "type": "agent_invoke",
+      "agentId": "agent-support",
+      "prompt": "Handle this incident with standard SLA response time."
+    }
+  ]
+}
+```
+
+## Step Functions under the hood
+
+All automations are backed by AWS Step Functions. When an automation runs:
+
+1. EventBridge (scheduled) or API Gateway (webhook/event) triggers the Step Functions state machine
+2. The state machine creates the `AUTO-` thread and invokes AgentCore
+3. Each step in a routine becomes a state in the state machine
+4. The final state marks the thread as `closed` (or `failed` on error)
+
+You can see the raw Step Functions execution in the AWS console for debugging. Each execution includes the full input/output at every state transition.
+
+<Aside type="note">
+Step Functions usage costs approximately $0.025 per 1,000 state transitions. For most automations, this is negligible compared to Bedrock inference costs.
+</Aside>
+
+## Automation runs
+
+Every automation run is recorded:
+
+```graphql
+query GetAutomationRuns {
+  listAutomationRuns(automationId: "auto-abc123", limit: 10) {
+    items {
+      id
+      automationId
+      threadId      # The AUTO- thread created for this run
+      status        # succeeded, failed, running
+      startedAt
+      completedAt
+      durationMs
+      error         # Set if status=failed
+    }
+  }
+}
+```
+
+Failed runs include the error message and the Step Functions execution ARN for debugging.
+
+## Retry and error handling
+
+Automations have configurable retry behavior:
+
+```graphql
+mutation CreateAutomationWithRetry {
+  createAutomation(input: {
+    name: "Daily data pull"
+    type: SCHEDULED
+    schedule: "cron(0 6 * * ? *)"
+    agentId: "agent-data"
+    prompt: "Pull and summarize yesterday's metrics from the database."
+    retryPolicy: {
+      maxAttempts: 3
+      backoffRate: 2.0
+      intervalSeconds: 30
+    }
+    onFailure: NOTIFY_SLACK   # or: IGNORE, RETRY_ONLY, CREATE_INCIDENT
+  }) {
+    id
+  }
+}
+```
+
+## Enabling and disabling automations
+
+```graphql
+mutation DisableAutomation {
+  updateAutomation(id: "auto-abc123", input: { enabled: false }) {
+    id
+    enabled
+    nextRunAt   # null when disabled
+  }
+}
+```
+
+Disabled automations do not run on schedule and do not fire on events. Existing in-progress runs complete normally.
+
+## Manual triggers
+
+Any automation can be triggered manually, regardless of its schedule:
+
+```graphql
+mutation TriggerNow {
+  triggerAutomation(id: "auto-abc123", input: {
+    promptOverride: "Run the weekly digest for the last 14 days instead of 7."
+  }) {
+    runId
+    threadId
+    status
+  }
+}
+```
+
+The `promptOverride` field replaces the automation's configured prompt for this run only.
+
+<Aside type="tip">
+Manual triggers are useful for testing new automations before enabling them on their schedule, and for ad-hoc runs when something goes wrong and you need to re-run immediately.
+</Aside>

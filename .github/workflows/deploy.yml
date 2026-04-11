@@ -29,6 +29,7 @@ jobs:
       terraform: ${{ steps.filter.outputs.terraform }}
       skills: ${{ steps.filter.outputs.skills }}
       admin: ${{ steps.filter.outputs.admin }}
+      docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -49,13 +50,18 @@ jobs:
               - 'packages/system-workspace/**'
             admin:
               - 'apps/admin/**'
+            docs:
+              - 'docs/**'
 
   # ── Build Lambda zips ────────────────────────────────────────────
+  # Always build when terraform changes too — TF needs the zips to
+  # keep API Gateway routes intact even if handler code didn't change.
   build-lambdas:
     name: Build Lambdas
     needs: detect-changes
     if: >-
       needs.detect-changes.outputs.lambdas == 'true' ||
+      needs.detect-changes.outputs.terraform == 'true' ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -126,7 +132,7 @@ jobs:
     needs: [build-lambdas, build-container]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -197,10 +203,46 @@ jobs:
         env:
           API_AUTH_SECRET: ${{ secrets.API_AUTH_SECRET }}
 
+  # ── Build & deploy docs site ────────────────────────────────────
+  build-docs:
+    name: Build & Deploy Docs
+    needs: [detect-changes, terraform-apply]
+    if: >-
+      needs.detect-changes.outputs.docs == 'true' ||
+      needs.detect-changes.outputs.terraform == 'true' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: terraform/examples/greenfield
+        run: terraform init
+
+      - name: Build & deploy
+        run: bash scripts/build-docs.sh ${{ env.STAGE }}
+
   # ── Bootstrap workspace + skills ─────────────────────────────────
   bootstrap:
     name: Bootstrap
-    needs: [terraform-apply]
+    needs: [detect-changes, terraform-apply]
     if: >-
       needs.detect-changes.outputs.skills == 'true' ||
       github.event_name == 'workflow_dispatch'
@@ -235,3 +277,51 @@ jobs:
           DB_PASS=$(aws secretsmanager get-secret-value --secret-id "${{ steps.outputs.outputs.db_secret_arn }}" --query SecretString --output text | jq -r .password)
           DB_URL="postgresql://thinkwork_admin:${DB_PASS}@${{ steps.outputs.outputs.db_endpoint }}:5432/thinkwork?sslmode=no-verify"
           bash scripts/bootstrap-workspace.sh ${{ env.STAGE }} ${{ steps.outputs.outputs.bucket }} "$DB_URL"
+
+  # ── Deploy summary ──────────────────────────────────────────────
+  summary:
+    name: Deploy Summary
+    needs: [terraform-apply, build-admin, build-docs, bootstrap]
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: terraform/examples/greenfield
+        run: terraform init
+
+      - name: Show deployment URLs
+        working-directory: terraform/examples/greenfield
+        run: |
+          echo "╔══════════════════════════════════════════════════════════════╗"
+          echo "║                    DEPLOYMENT SUMMARY                       ║"
+          echo "╠══════════════════════════════════════════════════════════════╣"
+          echo "║ Stage: ${{ env.STAGE }}"
+          echo "║"
+          echo "║ Admin App:  $(terraform output -raw admin_url 2>/dev/null || echo 'N/A')"
+          echo "║ Docs Site:  $(terraform output -raw docs_url 2>/dev/null || echo 'N/A')"
+          echo "║ API:        $(terraform output -raw api_endpoint 2>/dev/null || echo 'N/A')"
+          echo "║ AppSync:    $(terraform output -raw appsync_api_url 2>/dev/null || echo 'N/A')"
+          echo "║ Hindsight:  $(terraform output -raw hindsight_endpoint 2>/dev/null || echo 'N/A')"
+          echo "║ S3 Bucket:  $(terraform output -raw bucket_name 2>/dev/null || echo 'N/A')"
+          echo "║ Database:   $(terraform output -raw db_cluster_endpoint 2>/dev/null || echo 'N/A')"
+          echo "║ ECR:        $(terraform output -raw ecr_repository_url 2>/dev/null || echo 'N/A')"
+          echo "║ Memory:     $(terraform output -raw memory_engine 2>/dev/null || echo 'N/A')"
+          echo "║"
+          echo "║ Job Results:"
+          echo "║   Terraform Apply: ${{ needs.terraform-apply.result }}"
+          echo "║   Build Admin:     ${{ needs.build-admin.result }}"
+          echo "║   Build Docs:      ${{ needs.build-docs.result }}"
+          echo "║   Bootstrap:       ${{ needs.bootstrap.result }}"
+          echo "╚══════════════════════════════════════════════════════════════╝"

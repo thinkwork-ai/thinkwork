@@ -1,0 +1,379 @@
+---
+title: GraphQL Schema
+description: AppSync real-time subscriptions, API Gateway queries and mutations. Full schema overview with subscription event types, key queries, and mutations.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Thinkwork exposes a GraphQL API with two endpoints:
+
+- **API Gateway** — Queries and mutations. HTTP POST. Protected by Cognito JWT.
+- **AppSync** — Real-time subscriptions. WebSocket. Protected by Cognito JWT.
+
+Both endpoints share the same schema. Use API Gateway for most operations, and connect to AppSync when you need live updates (streaming agent responses, thread status changes).
+
+## Endpoints
+
+```bash
+# From CLI outputs:
+thinkwork outputs -s dev
+
+# API Gateway (queries + mutations)
+POST https://<id>.execute-api.<region>.amazonaws.com/graphql
+
+# AppSync (subscriptions)
+wss://<id>.appsync-realtime-api.<region>.amazonaws.com/graphql
+# HTTP (for queries/mutations via AppSync if preferred)
+https://<id>.appsync-api.<region>.amazonaws.com/graphql
+```
+
+## Authentication
+
+All API calls require a Cognito JWT in the Authorization header:
+
+```bash
+curl -X POST https://<api-gw-url>/graphql \
+  -H "Authorization: Bearer <cognito-id-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "{ listAgents { items { id name } } }"}'
+```
+
+Obtain a token by signing in to Cognito:
+
+```bash
+aws cognito-idp initiate-auth \
+  --auth-flow USER_PASSWORD_AUTH \
+  --client-id <cognito-client-id> \
+  --auth-parameters USERNAME=user@example.com,PASSWORD=password \
+  --query 'AuthenticationResult.IdToken' \
+  --output text
+```
+
+## Core types
+
+### Agent
+
+```graphql
+type Agent {
+  id: ID!
+  name: String!
+  description: String
+  status: AgentStatus!       # created | active | suspended | archived
+  systemPrompt: String
+  templateId: ID
+  template: AgentTemplate
+  skillPackIds: [ID!]
+  knowledgeBaseId: ID
+  rateLimits: RateLimits
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+```
+
+### Thread
+
+```graphql
+type Thread {
+  id: ID!                    # e.g. "CHAT-0042"
+  threadUUID: ID!            # Internal UUID
+  prefix: String!            # e.g. "CHAT"
+  channel: ThreadChannel!    # CHAT | AUTO | EMAIL | SLACK | GITHUB | TASK | EVAL
+  status: ThreadStatus!      # open | closed | failed | waiting
+  title: String
+  agentId: ID!
+  agent: Agent
+  messages(limit: Int, nextToken: String): MessageConnection!
+  metadata: AWSJSON
+  tokenCount: Int            # Approximate total tokens in thread
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+```
+
+### Message
+
+```graphql
+type Message {
+  id: ID!
+  threadId: ID!
+  role: MessageRole!          # user | assistant | system | tool
+  body: String!               # Markdown text
+  toolCalls: [ToolCall!]
+  toolResults: [ToolResult!]
+  tokenCount: Int
+  model: String               # Bedrock model ID (assistant messages only)
+  createdAt: AWSDateTime!
+}
+```
+
+## Key queries
+
+### Agents
+
+```graphql
+# List all active agents
+query ListAgents {
+  listAgents(filter: { status: active }, limit: 20) {
+    items {
+      id
+      name
+      status
+      template {
+        modelId
+      }
+    }
+    nextToken
+  }
+}
+
+# Get a single agent
+query GetAgent {
+  getAgent(id: "agent-abc123") {
+    id
+    name
+    systemPrompt
+    skillPackIds
+    knowledgeBaseId
+    rateLimits {
+      turnsPerMinute
+      turnsPerHour
+      turnsPerDay
+    }
+  }
+}
+```
+
+### Threads
+
+```graphql
+# List threads
+query ListThreads {
+  listThreads(filter: {
+    channel: CHAT
+    status: open
+    agentId: "agent-abc123"
+  }, limit: 20) {
+    items {
+      id
+      title
+      status
+      updatedAt
+    }
+    nextToken
+  }
+}
+
+# Get thread with messages
+query GetThread {
+  getThread(id: "CHAT-0042") {
+    id
+    title
+    status
+    channel
+    metadata
+    messages(limit: 50) {
+      items {
+        id
+        role
+        body
+        createdAt
+        tokenCount
+      }
+    }
+  }
+}
+```
+
+## Key mutations
+
+### Threads and messages
+
+```graphql
+# Create a thread
+mutation CreateThread {
+  createThread(input: {
+    channel: CHAT
+    title: "Support request"
+    agentId: "agent-support"
+    metadata: "{\"source\": \"web\"}"
+  }) {
+    id
+    prefix
+    status
+  }
+}
+
+# Send a message (triggers agent invoke)
+mutation SendMessage {
+  sendMessage(input: {
+    threadId: "CHAT-0042"
+    body: "How do I reset my password?"
+  }) {
+    id
+    role
+    body
+    createdAt
+  }
+}
+
+# Close a thread
+mutation CloseThread {
+  updateThread(id: "CHAT-0042", input: { status: closed }) {
+    id
+    status
+    updatedAt
+  }
+}
+```
+
+### Agents
+
+```graphql
+mutation CreateAgent {
+  createAgent(input: {
+    name: "Support Bot"
+    systemPrompt: "You are a helpful support agent."
+    templateId: "tpl-claude-sonnet"
+    skillPackIds: ["sp-jira", "sp-confluence"]
+    knowledgeBaseId: "kb-support"
+  }) {
+    id
+    status
+  }
+}
+
+mutation UpdateAgent {
+  updateAgent(id: "agent-abc123", input: {
+    systemPrompt: "Updated system prompt."
+    skillPackIds: ["sp-jira"]
+  }) {
+    id
+    updatedAt
+  }
+}
+```
+
+## Subscriptions
+
+Connect to AppSync WebSocket to receive real-time events. All subscriptions require Cognito JWT authentication via the `header` connection parameter.
+
+### Subscribe to a thread
+
+```graphql
+subscription OnThreadEvent {
+  onThreadEvent(threadId: "CHAT-0042") {
+    ... on NewMessageEvent {
+      message {
+        id
+        role
+        body
+        createdAt
+      }
+    }
+    ... on AgentStatusEvent {
+      agentId
+      status       # thinking | calling_tool | streaming | idle
+      activity     # Human-readable activity description
+    }
+    ... on ThreadUpdateEvent {
+      thread {
+        id
+        status
+        updatedAt
+      }
+    }
+    ... on StreamChunkEvent {
+      messageId
+      chunk        # Partial text chunk (for streaming responses)
+      done         # True when streaming is complete
+    }
+  }
+}
+```
+
+### Subscribe to agent activity
+
+```graphql
+subscription OnAgentActivity {
+  onAgentActivity(agentId: "agent-support") {
+    threadId
+    status
+    activity
+    timestamp
+  }
+}
+```
+
+## Subscription event types
+
+| Event | Payload | When emitted |
+|-------|---------|-------------|
+| `NewMessageEvent` | Full message object | When a message is added to the thread (user or agent) |
+| `AgentStatusEvent` | agentId, status, activity | When agent state changes (thinking, tool call, done) |
+| `ThreadUpdateEvent` | Thread object | When thread status, title, or metadata changes |
+| `StreamChunkEvent` | messageId, chunk, done | As the agent streams each text chunk |
+
+### AgentStatus values
+
+| Status | Meaning |
+|--------|---------|
+| `idle` | Agent is not processing |
+| `thinking` | Agent is waiting for Bedrock response |
+| `calling_tool` | Agent is executing a tool call |
+| `streaming` | Agent is streaming the final response |
+| `error` | Agent encountered an error |
+
+<Aside type="tip">
+Subscribe before sending a message to avoid missing early stream chunks. The AppSync connection is established synchronously, but message delivery is eventually consistent — there's a small window where a fast agent response could arrive before the subscription is acknowledged.
+</Aside>
+
+## Pagination
+
+List queries return a `Connection` type with `items` and `nextToken`:
+
+```graphql
+type ThreadConnection {
+  items: [Thread!]!
+  nextToken: String    # Pass to next request to get the next page
+}
+```
+
+Pass `nextToken` to paginate:
+
+```graphql
+query ListThreadsPage2 {
+  listThreads(limit: 20, nextToken: "eyJpZCI6Ikc...") {
+    items { id title }
+    nextToken   # null when no more pages
+  }
+}
+```
+
+## Error handling
+
+GraphQL errors follow the standard format:
+
+```json
+{
+  "errors": [
+    {
+      "message": "Thread CHAT-9999 not found",
+      "errorType": "NotFound",
+      "locations": [{ "line": 2, "column": 3 }],
+      "path": ["getThread"]
+    }
+  ]
+}
+```
+
+Common error types:
+
+| errorType | HTTP status | Meaning |
+|-----------|-------------|---------|
+| `Unauthorized` | 401 | Missing or invalid JWT |
+| `Forbidden` | 403 | JWT valid but insufficient permissions |
+| `NotFound` | 404 | Resource doesn't exist |
+| `ValidationError` | 400 | Input validation failed |
+| `RateLimitExceeded` | 429 | Agent rate limit hit |
+| `BudgetExceeded` | 429 | Agent budget exceeded |
+| `InternalError` | 500 | Unexpected server error |

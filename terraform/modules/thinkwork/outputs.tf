@@ -106,3 +106,19 @@ output "admin_bucket_name" {
   description = "S3 bucket for admin app assets"
   value       = module.admin_site.bucket_name
 }
+
+# Docs static site
+output "docs_distribution_id" {
+  description = "CloudFront distribution ID for the docs site"
+  value       = module.docs_site.distribution_id
+}
+
+output "docs_distribution_domain" {
+  description = "CloudFront domain for the docs site"
+  value       = module.docs_site.distribution_domain
+}
+
+output "docs_bucket_name" {
+  description = "S3 bucket for docs site assets"
+  value       = module.docs_site.bucket_name
+}
