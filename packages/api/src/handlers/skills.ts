@@ -367,22 +367,30 @@ async function mcpOAuthAuthorize(
 		if (!clientId) return error("Could not register OAuth client and no client_id configured", 502);
 	}
 
-	// 4. Build state (encode context for callback)
+	// 4. Generate PKCE code_verifier + code_challenge (required for public clients)
+	const { randomBytes, createHash } = await import("crypto");
+	const codeVerifier = randomBytes(32).toString("base64url");
+	const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
+
+	// 5. Build state (encode context for callback, including PKCE verifier)
 	const state = Buffer.from(JSON.stringify({
 		mcpServerId,
 		userId,
 		tenantId,
 		tokenEndpoint: authMeta.token_endpoint,
 		clientId,
+		codeVerifier,
 	})).toString("base64url");
 
-	// 5. Redirect to authorize
+	// 6. Redirect to authorize
 	const authorizeUrl = new URL(authMeta.authorization_endpoint);
 	authorizeUrl.searchParams.set("client_id", clientId);
 	authorizeUrl.searchParams.set("redirect_uri", callbackUrl);
 	authorizeUrl.searchParams.set("response_type", "code");
 	authorizeUrl.searchParams.set("scope", "openid email profile offline_access");
 	authorizeUrl.searchParams.set("state", state);
+	authorizeUrl.searchParams.set("code_challenge", codeChallenge);
+	authorizeUrl.searchParams.set("code_challenge_method", "S256");
 
 	return {
 		statusCode: 302,
@@ -404,7 +412,7 @@ async function mcpOAuthCallback(
 	if (!code || !stateParam) return error("code and state are required", 400);
 
 	// Decode state
-	let state: { mcpServerId: string; userId: string; tenantId: string; tokenEndpoint: string; clientId: string };
+	let state: { mcpServerId: string; userId: string; tenantId: string; tokenEndpoint: string; clientId: string; codeVerifier: string };
 	try {
 		state = JSON.parse(Buffer.from(stateParam, "base64url").toString());
 	} catch {
@@ -414,7 +422,7 @@ async function mcpOAuthCallback(
 	const apiBaseUrl = `https://${event.headers.host || ""}`;
 	const callbackUrl = `${apiBaseUrl}/api/skills/mcp-oauth/callback`;
 
-	// Exchange code for tokens
+	// Exchange code for tokens (public client — PKCE, no client_secret)
 	const tokenRes = await fetch(state.tokenEndpoint, {
 		method: "POST",
 		headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -423,6 +431,7 @@ async function mcpOAuthCallback(
 			code,
 			redirect_uri: callbackUrl,
 			client_id: state.clientId,
+			code_verifier: state.codeVerifier,
 		}).toString(),
 		signal: AbortSignal.timeout(10000),
 	});
