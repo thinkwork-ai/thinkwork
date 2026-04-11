@@ -7,6 +7,7 @@
 
 import { createYoga } from "graphql-yoga";
 import { useDepthLimit } from "@envelop/depth-limit";
+import { useDisableIntrospection } from "@graphql-yoga/plugin-disable-introspection";
 import { makeExecutableSchema } from "@graphql-tools/schema";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -106,8 +107,9 @@ export const yoga = createYoga<GraphQLContext>({
 	context: createContext,
 	plugins: [
 		// Reject queries deeper than 7 levels
-		// (covers Ticket → messages → edges → node → durableArtifact → type)
 		useDepthLimit({ maxDepth: 7 }),
+		// Disable introspection in production (prevents schema discovery)
+		...(IS_PROD ? [useDisableIntrospection()] : []),
 	],
 	// GraphiQL explorer in dev, disabled in prod
 	graphiql: !IS_PROD,

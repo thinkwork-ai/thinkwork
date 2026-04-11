@@ -20,6 +20,12 @@ variable "bucket_name" {
   type        = string
 }
 
+variable "cors_allowed_origins" {
+  description = "Allowed CORS origins. Use [\"*\"] for development."
+  type        = list(string)
+  default     = ["*"]
+}
+
 resource "aws_s3_bucket" "main" {
   bucket = var.bucket_name
 
@@ -33,9 +39,9 @@ resource "aws_s3_bucket_cors_configuration" "main" {
   bucket = aws_s3_bucket.main.id
 
   cors_rule {
-    allowed_headers = ["*"]
-    allowed_methods = ["GET", "PUT", "POST", "HEAD"]
-    allowed_origins = ["*"]
+    allowed_headers = ["Content-Type", "Authorization", "x-amz-*"]
+    allowed_methods = ["GET", "PUT", "HEAD"]
+    allowed_origins = var.cors_allowed_origins
     expose_headers  = ["ETag"]
     max_age_seconds = 3000
   }

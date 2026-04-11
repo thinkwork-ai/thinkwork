@@ -118,18 +118,24 @@ resource "aws_iam_role_policy" "agentcore" {
         Sid      = "BedrockInvoke"
         Effect   = "Allow"
         Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream", "bedrock:InvokeAgent"]
-        Resource = "*"
+        Resource = "arn:aws:bedrock:${var.region}::foundation-model/*"
       },
       {
         Sid      = "CloudWatchLogs"
         Effect   = "Allow"
         Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
-        Resource = "arn:aws:logs:${var.region}:${var.account_id}:*"
+        Resource = "arn:aws:logs:${var.region}:${var.account_id}:log-group:/aws/lambda/thinkwork-${var.stage}-*"
       },
       {
         Sid      = "ECRPull"
         Effect   = "Allow"
-        Action   = ["ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage", "ecr:GetAuthorizationToken"]
+        Action   = ["ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"]
+        Resource = "arn:aws:ecr:${var.region}:${var.account_id}:repository/thinkwork-${var.stage}-*"
+      },
+      {
+        Sid      = "ECRAuth"
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
         Resource = "*"
       },
       {
