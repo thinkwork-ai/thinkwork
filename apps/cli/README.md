@@ -64,6 +64,8 @@ No repo clone required — `thinkwork init` scaffolds all Terraform modules from
 
 | Command | Description |
 |---------|-------------|
+| `thinkwork status` | Discover all deployed environments in AWS (clickable URLs) |
+| `thinkwork status -s <stage>` | Detailed view for one environment |
 | `thinkwork outputs -s <stage>` | Show deployment outputs (API URL, Cognito IDs, etc.) |
 | `thinkwork config list` | List all initialized environments |
 | `thinkwork config list -s <stage>` | Show full config for an environment (secrets masked) |
@@ -109,6 +111,25 @@ All initialized environments are saved to `~/.thinkwork/environments/<stage>/con
 - **Inspect any stage** — `thinkwork config list -s dev` shows full config
 
 ## Examples
+
+### Check all environments
+
+```bash
+thinkwork status
+```
+
+```
+  Environments
+  ──────────────────────────────────────────────────────────────────────
+  Stage           Source    Lambdas   AgentCore     Memory        URLs
+  ──────────────────────────────────────────────────────────────────────
+  ● dev           aws+cli  42        active        hindsight ✓   API: https://ho7oy...
+                                                                 WS:  dcrs2r...
+                                                                 Mem: http://tw-dev...
+  ──────────────────────────────────────────────────────────────────────
+```
+
+URLs are clickable in supported terminals (iTerm2, Windows Terminal, VS Code, etc.).
 
 ### Switch memory engine
 
