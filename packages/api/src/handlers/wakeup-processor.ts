@@ -882,13 +882,13 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 			const authCfg = (mcp.auth_config as Record<string, unknown>) || {};
 			token = authCfg.token as string | undefined;
 		} else if (mcp.auth_type === "oauth" || mcp.auth_type === "per_user_oauth") {
-			// Look up the user's MCP token from user_mcp_tokens table
+			// Look up the user's MCP token from user_mcp_tokens → Secrets Manager
 			const humanPairId = agent.human_pair_id;
 			if (humanPairId) {
 				try {
 					const { userMcpTokens } = await import("@thinkwork/database-pg/schema");
 					const [userToken] = await db
-						.select({ access_token: userMcpTokens.access_token, status: userMcpTokens.status })
+						.select({ secret_ref: userMcpTokens.secret_ref, status: userMcpTokens.status })
 						.from(userMcpTokens)
 						.where(and(
 							eq(userMcpTokens.user_id, humanPairId),
@@ -896,8 +896,15 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 							eq(userMcpTokens.status, "active"),
 						))
 						.limit(1);
-					if (userToken) {
-						token = userToken.access_token;
+					if (userToken?.secret_ref) {
+						// Read token from Secrets Manager
+						const { SecretsManagerClient, GetSecretValueCommand } = await import("@aws-sdk/client-secrets-manager");
+						const sm = new SecretsManagerClient({ region: process.env.AWS_REGION || "us-east-1" });
+						const secret = await sm.send(new GetSecretValueCommand({ SecretId: userToken.secret_ref }));
+						if (secret.SecretString) {
+							const parsed = JSON.parse(secret.SecretString);
+							token = parsed.access_token;
+						}
 					} else {
 						console.warn(`[wakeup-processor] No active MCP token for user ${humanPairId} (MCP: ${mcp.slug})`);
 					}
