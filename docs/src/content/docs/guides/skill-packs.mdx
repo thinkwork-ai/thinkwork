@@ -5,9 +5,13 @@ description: Write a SKILL.md file, upload it to your S3 skill catalog, and make
 
 import { Aside } from '@astrojs/starlight/components';
 
-Skill packs are the primary way to extend managed agents with new capabilities. A skill pack is a single `SKILL.md` file that defines tools (Python functions the agent can call), instructions (additions to the system prompt), and static context (reference data injected into every turn).
+Thinkwork implements the [Agent Skills specification](https://agentskills.io/specification) — an open standard for portable, agent-readable skill definitions. A skill pack is a directory containing a `SKILL.md` file (with optional `scripts/`, `references/`, and `assets/` directories) that defines tools, instructions, and context for managed agents.
 
-Skill packs are stored in S3 and loaded by AgentCore at invoke time. You don't need to rebuild or redeploy the AgentCore Lambda to add new skills — just upload a new `SKILL.md` and assign it to an agent.
+Skill packs are stored in S3 and loaded by AgentCore at invoke time. You don't need to rebuild or redeploy the AgentCore Lambda to add new skills — upload a skill pack and assign it to an agent.
+
+<Aside type="tip">
+  The [Agent Skills spec](https://agentskills.io/specification) defines the `SKILL.md` format, naming conventions, and directory structure. Thinkwork follows this standard, so skills you write are portable across any platform that implements the spec.
+</Aside>
 
 ## How it works
 
@@ -19,21 +23,39 @@ Skill packs are stored in S3 and loaded by AgentCore at invoke time. You don't n
 5. Agent can now call the tool during the Strands agent loop
 ```
 
+## Directory structure
+
+A skill follows the [Agent Skills directory structure](https://agentskills.io/specification):
+
+```
+my-skill/
+├── SKILL.md          # Required: metadata + instructions
+├── scripts/          # Optional: executable code
+├── references/       # Optional: additional documentation
+├── assets/           # Optional: templates, data files
+└── skill.yaml        # Optional: Thinkwork catalog metadata
+```
+
+The only required file is `SKILL.md`. The `skill.yaml` file is a Thinkwork extension for catalog metadata (display name, icon, category, triggers).
+
 ## SKILL.md format
 
-A `SKILL.md` file has three sections, each separated by a level-2 heading.
+Per the [Agent Skills spec](https://agentskills.io/specification), `SKILL.md` has YAML frontmatter followed by markdown content.
 
 ### Minimal example
 
-A `SKILL.md` file has up to three sections. Here's a complete example for a Jira skill:
+```markdown
+---
+name: my-skill
+description: What this skill does and when to use it.
+---
 
-**Header and description** (`jira.md`, line 1–3):
-
-```text
-# jira
-
-A skill for reading and writing Jira issues.
+Your instructions here.
 ```
+
+### Full example
+
+Here's a Jira skill with all sections:
 
 **Instructions section** — injected into the system prompt:
 
