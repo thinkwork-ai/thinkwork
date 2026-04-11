@@ -1,7 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Search, Check, Download, Loader2, Plus } from "lucide-react";
+import { Search, Check, Download, Loader2, Plus, Upload } from "lucide-react";
+import { toast } from "sonner";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageLayout } from "@/components/PageLayout";
@@ -17,6 +18,8 @@ import {
   listTenantSkills,
   installSkill,
   checkUpgradeable,
+  createTenantSkill,
+  createTenantFile,
   type CatalogSkill,
   type InstalledSkill,
 } from "@/lib/skills-api";
@@ -85,6 +88,89 @@ function SkillsPage() {
       console.error("Failed to install skill:", err);
     } finally {
       setInstallingSlug(null);
+    }
+  };
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0 || !tenantSlug) return;
+    setUploading(true);
+    try {
+      const fileEntries: { path: string; content: string }[] = [];
+
+      // Check if it's a single zip file
+      if (files.length === 1 && files[0].name.endsWith(".zip")) {
+        const JSZip = (await import("jszip")).default;
+        const zip = await JSZip.loadAsync(files[0]);
+        for (const [relativePath, entry] of Object.entries(zip.files)) {
+          if (entry.dir) continue;
+          // Strip leading directory if all files share a common root
+          const content = await entry.async("string");
+          fileEntries.push({ path: relativePath, content });
+        }
+      } else {
+        // Multiple files — read each one
+        for (const file of Array.from(files)) {
+          const content = await file.text();
+          // Use webkitRelativePath for folder uploads, or just filename
+          const path = file.webkitRelativePath
+            ? file.webkitRelativePath.split("/").slice(1).join("/")
+            : file.name;
+          fileEntries.push({ path, content });
+        }
+      }
+
+      // Find SKILL.md to extract name/slug
+      const skillMd = fileEntries.find(
+        (f) => f.path === "SKILL.md" || f.path.endsWith("/SKILL.md"),
+      );
+      if (!skillMd) {
+        toast.error("No SKILL.md found — every skill pack must include a SKILL.md file");
+        return;
+      }
+
+      // Parse frontmatter for name
+      const fmMatch = skillMd.content.match(/^---\n([\s\S]*?)\n---/);
+      const nameMatch = fmMatch?.[1]?.match(/^name:\s*(.+)$/m);
+      const descMatch = fmMatch?.[1]?.match(/^description:\s*(.+)$/m);
+      const skillName = nameMatch?.[1]?.trim();
+      if (!skillName) {
+        toast.error("SKILL.md frontmatter must include a 'name' field");
+        return;
+      }
+
+      // Strip common root directory prefix from paths
+      const commonPrefix = fileEntries.length > 1
+        ? fileEntries[0].path.split("/").slice(0, -1).join("/")
+        : "";
+      const allSharePrefix = commonPrefix && fileEntries.every((f) => f.path.startsWith(commonPrefix + "/"));
+      const normalize = (p: string) =>
+        allSharePrefix ? p.slice(commonPrefix.length + 1) : p;
+
+      // Create the skill in the catalog
+      const result = await createTenantSkill(tenantSlug, {
+        name: skillName,
+        slug: skillName,
+        description: descMatch?.[1]?.trim(),
+      });
+
+      // Upload all files
+      for (const entry of fileEntries) {
+        const normalizedPath = normalize(entry.path);
+        if (!normalizedPath) continue;
+        await createTenantFile(tenantSlug, result.slug, normalizedPath, entry.content);
+      }
+
+      toast.success(`Skill "${skillName}" uploaded (${fileEntries.length} files)`);
+      navigate({ to: "/skills/$slug", params: { slug: result.slug } });
+    } catch (err) {
+      console.error("Upload failed:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to upload skill");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -247,6 +333,22 @@ function SkillsPage() {
               <p className="text-xs text-muted-foreground">Browse and install skills for your agents</p>
             </div>
             <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".zip,.md,.yaml,.yml,.py,.txt,.json"
+                multiple
+                className="hidden"
+                onChange={(e) => handleUpload(e.target.files)}
+              />
+              <Button
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+              >
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                Upload Skill
+              </Button>
               <Button onClick={() => navigate({ to: "/skills/builder" })}>
                 <Plus className="h-4 w-4" />
                 Create Skill

@@ -39,6 +39,7 @@
     "date-fns": "^4.1.0",
     "graphql": "^16.10.0",
     "graphql-ws": "^6.0.4",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.574.0",
     "radix-ui": "^1.4.3",
     "react": "^19.0.0",
