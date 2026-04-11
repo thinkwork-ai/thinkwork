@@ -121,12 +121,8 @@ export const userMcpTokens = pgTable(
 		mcp_server_id: uuid("mcp_server_id")
 			.references(() => tenantMcpServers.id)
 			.notNull(),
-		/** Encrypted access token */
-		access_token: text("access_token").notNull(),
-		/** Encrypted refresh token (if provided by the MCP server) */
-		refresh_token: text("refresh_token"),
-		/** Token type (typically "Bearer") */
-		token_type: text("token_type").notNull().default("Bearer"),
+		/** Secrets Manager ARN: thinkwork/{stage}/mcp-tokens/{userId}/{mcpServerId} */
+		secret_ref: text("secret_ref").notNull(),
 		/** When the access token expires */
 		expires_at: timestamp("expires_at", { withTimezone: true }),
 		/** Status: 'active' | 'expired' | 'revoked' */
