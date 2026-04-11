@@ -1,0 +1,9 @@
+{
+  "name": "@thinkwork/example-skill-pack",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Example skill pack for Thinkwork — reference for building custom skills",
+  "scripts": {
+    "test": "node test.mjs"
+  }
+}

@@ -1,0 +1,28 @@
+slug: github-issues
+display_name: GitHub Issues
+description: Search, create, and manage GitHub issues. Requires a GitHub personal access token.
+category: integrations
+version: "1.0.0"
+author: thinkwork
+icon: github
+tags: [github, issues, project-management]
+execution: script
+is_default: false
+requires_env:
+  - GITHUB_TOKEN
+oauth_provider: github
+oauth_scopes: ["repo"]
+scripts:
+  - name: list_issues
+    path: scripts/github.py
+    description: "List issues for a repository"
+  - name: create_issue
+    path: scripts/github.py
+    description: "Create a new issue"
+  - name: get_issue
+    path: scripts/github.py
+    description: "Get issue details"
+triggers:
+  - "list github issues"
+  - "create a github issue"
+  - "check issues"
