@@ -5,17 +5,160 @@ on:
     tags:
       - "v*"
 
-# Placeholder — will be fleshed out before v0.1.0 ships.
-# Expected responsibilities:
-# 1. Build Lambda artifacts and upload to S3
-# 2. Publish @thinkwork/cli to npm
-# 3. Publish Terraform modules to the registry
-# 4. Build and deploy the docs site
-# 5. Create a GitHub Release with notes
+env:
+  AWS_REGION: us-east-1
 
 jobs:
-  release:
+  # ── Build + test ────────────────────────────────────────────────
+  verify:
+    name: Verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: echo "Release pipeline placeholder — tag ${{ github.ref_name }}"
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm lint
+
+  # ── Publish CLI to npm ──────────────────────────────────────────
+  publish-npm:
+    name: Publish to npm
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Set version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cd apps/cli
+          npm version "$VERSION" --no-git-tag-version
+          echo "CLI_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Build CLI
+        run: pnpm --filter thinkwork-cli build
+
+      - name: Publish
+        run: cd apps/cli && npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ── Update Homebrew tap ─────────────────────────────────────────
+  publish-homebrew:
+    name: Update Homebrew Tap
+    needs: publish-npm
+    if: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for npm propagation
+        run: sleep 30
+
+      - name: Get tarball URL and SHA
+        id: meta
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          URL="https://registry.npmjs.org/thinkwork-cli/-/thinkwork-cli-${VERSION}.tgz"
+          # Wait for the package to be available
+          for i in 1 2 3 4 5; do
+            SHA=$(curl -sL "$URL" | shasum -a 256 | cut -d' ' -f1)
+            if [ -n "$SHA" ] && [ "$SHA" != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]; then
+              break
+            fi
+            sleep 10
+          done
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          repository: thinkwork-ai/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update formula
+        run: |
+          cat > homebrew-tap/Formula/thinkwork.rb << 'RUBY'
+          class Thinkwork < Formula
+            desc "CLI for deploying and managing Thinkwork agent infrastructure on AWS"
+            homepage "https://github.com/thinkwork-ai/thinkwork"
+            url "${{ steps.meta.outputs.url }}"
+            sha256 "${{ steps.meta.outputs.sha256 }}"
+            license "MIT"
+
+            depends_on "node@20"
+
+            def install
+              system "npm", "install", *std_npm_args
+              bin.install_symlink libexec/"bin/thinkwork"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/thinkwork --version")
+            end
+          end
+          RUBY
+
+      - name: Push formula update
+        run: |
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/thinkwork.rb
+          git commit -m "thinkwork ${{ steps.meta.outputs.version }}"
+          git push
+
+  # ── Create GitHub Release ───────────────────────────────────────
+  github-release:
+    name: GitHub Release
+    needs: [publish-npm, publish-homebrew]
+    if: always() && needs.publish-npm.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          PREV_TAG=$(git tag --sort=-v:refname | head -2 | tail -1 || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..${VERSION}"
+          else
+            RANGE="${VERSION}"
+          fi
+          echo "## What's Changed" > notes.md
+          echo "" >> notes.md
+          git log "$RANGE" --pretty=format:"- %s" --no-merges >> notes.md
+          echo "" >> notes.md
+          echo "---" >> notes.md
+          echo "" >> notes.md
+          echo "**Install:**" >> notes.md
+          echo '```bash' >> notes.md
+          echo "npm install -g thinkwork-cli@${VERSION#v}" >> notes.md
+          echo "# or" >> notes.md
+          echo "brew install thinkwork-ai/tap/thinkwork" >> notes.md
+          echo '```' >> notes.md
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: notes.md
+          generate_release_notes: false
