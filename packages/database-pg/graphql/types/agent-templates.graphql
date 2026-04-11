@@ -17,6 +17,7 @@ type AgentTemplate {
   config: AWSJSON
   skills: AWSJSON
   knowledgeBaseIds: AWSJSON
+  mcpServers: AWSJSON
   isPublished: Boolean!
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
@@ -78,6 +79,7 @@ input CreateAgentTemplateInput {
   config: AWSJSON
   skills: AWSJSON
   knowledgeBaseIds: AWSJSON
+  mcpServers: AWSJSON
   isPublished: Boolean
 }
 
@@ -93,6 +95,7 @@ input UpdateAgentTemplateInput {
   config: AWSJSON
   skills: AWSJSON
   knowledgeBaseIds: AWSJSON
+  mcpServers: AWSJSON
   isPublished: Boolean
 }
 
