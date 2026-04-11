@@ -172,6 +172,31 @@ export async function handler(
 			return saveSkillCredentials(credMatch[1], credMatch[2], event);
 		}
 
+		// --- MCP Server routes ---
+
+		// GET /api/skills/agent/:agentId/mcp-servers — list MCP servers for agent
+		const mcpListMatch = path.match(/^\/api\/skills\/agent\/([^/]+)\/mcp-servers$/);
+		if (mcpListMatch && method === "GET") {
+			return listMcpServers(mcpListMatch[1]);
+		}
+
+		// POST /api/skills/agent/:agentId/mcp-servers — register MCP server
+		if (mcpListMatch && method === "POST") {
+			return addMcpServer(mcpListMatch[1], event);
+		}
+
+		// DELETE /api/skills/agent/:agentId/mcp-servers/:serverId — remove MCP server
+		const mcpDeleteMatch = path.match(/^\/api\/skills\/agent\/([^/]+)\/mcp-servers\/([^/]+)$/);
+		if (mcpDeleteMatch && method === "DELETE") {
+			return removeMcpServer(mcpDeleteMatch[1], mcpDeleteMatch[2]);
+		}
+
+		// POST /api/skills/agent/:agentId/mcp-servers/:serverId/test — test MCP connection
+		const mcpTestMatch = path.match(/^\/api\/skills\/agent\/([^/]+)\/mcp-servers\/([^/]+)\/test$/);
+		if (mcpTestMatch && method === "POST") {
+			return testMcpServer(mcpTestMatch[1], mcpTestMatch[2]);
+		}
+
 		return notFound("Route not found");
 	} catch (err) {
 		console.error("Skills handler error:", err);
@@ -871,6 +896,242 @@ async function saveSkillCredentials(
 		.where(eq(agentSkills.id, existing.id));
 
 	return json({ ok: true, secretRef: secretArn });
+}
+
+// ---------------------------------------------------------------------------
+// MCP Server CRUD
+// ---------------------------------------------------------------------------
+
+const MCP_SKILL_PREFIX = "mcp-";
+
+async function listMcpServers(
+	agentId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const rows = await db
+		.select({
+			id: agentSkills.id,
+			skill_id: agentSkills.skill_id,
+			config: agentSkills.config,
+			enabled: agentSkills.enabled,
+		})
+		.from(agentSkills)
+		.where(
+			and(
+				eq(agentSkills.agent_id, agentId),
+			),
+		);
+
+	const mcpRows = rows.filter((r) => r.skill_id.startsWith(MCP_SKILL_PREFIX));
+	const servers = mcpRows.map((r) => {
+		const config = (r.config as Record<string, unknown>) || {};
+		return {
+			id: r.id,
+			name: r.skill_id.slice(MCP_SKILL_PREFIX.length),
+			skillId: r.skill_id,
+			url: config.mcpUrl as string || "",
+			transport: config.mcpTransport as string || "streamable-http",
+			authType: config.mcpAuthType as string || "none",
+			connectionId: config.connectionId as string || undefined,
+			tools: config.mcpTools as string[] || undefined,
+			enabled: r.enabled,
+		};
+	});
+
+	return json({ servers });
+}
+
+async function addMcpServer(
+	agentId: string,
+	event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const body = JSON.parse(event.body || "{}");
+	const { name, url, transport, authType, apiKey, connectionId, providerId, tools } = body;
+
+	if (!name || !url) {
+		return error("name and url are required", 400);
+	}
+	if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
+		return error("name must be lowercase alphanumeric with hyphens", 400);
+	}
+
+	const skillId = `${MCP_SKILL_PREFIX}${name}`;
+
+	// Build config JSONB
+	const config: Record<string, unknown> = {
+		mcpUrl: url,
+		mcpTransport: transport || "streamable-http",
+		mcpAuthType: authType || "none",
+	};
+
+	if (connectionId) {
+		config.connectionId = connectionId;
+		if (providerId) config.providerId = providerId;
+	}
+
+	if (tools && Array.isArray(tools)) {
+		config.mcpTools = tools;
+	}
+
+	// Store API key in Secrets Manager if provided
+	if (apiKey && authType === "api-key") {
+		const secretName = `thinkwork/${STAGE}/mcp-servers/${agentId}/${name}`;
+		const secretValue = JSON.stringify({ type: "mcpApiKey", token: apiKey });
+		try {
+			await sm.send(new UpdateSecretCommand({ SecretId: secretName, SecretString: secretValue }));
+		} catch (err: any) {
+			if (err instanceof ResourceNotFoundException) {
+				await sm.send(new CreateSecretCommand({ Name: secretName, SecretString: secretValue }));
+			} else {
+				throw err;
+			}
+		}
+		config.mcpAuthToken = apiKey; // Also store inline for direct passthrough
+		config.secretRef = secretName;
+	} else if (authType === "bearer" && apiKey) {
+		// Static bearer token — store same way
+		const secretName = `thinkwork/${STAGE}/mcp-servers/${agentId}/${name}`;
+		const secretValue = JSON.stringify({ type: "mcpBearerToken", token: apiKey });
+		try {
+			await sm.send(new UpdateSecretCommand({ SecretId: secretName, SecretString: secretValue }));
+		} catch (err: any) {
+			if (err instanceof ResourceNotFoundException) {
+				await sm.send(new CreateSecretCommand({ Name: secretName, SecretString: secretValue }));
+			} else {
+				throw err;
+			}
+		}
+		config.mcpAuthToken = apiKey;
+		config.secretRef = secretName;
+	}
+
+	// Upsert agent_skills row
+	const [existing] = await db
+		.select({ id: agentSkills.id })
+		.from(agentSkills)
+		.where(
+			and(
+				eq(agentSkills.agent_id, agentId),
+				eq(agentSkills.skill_id, skillId),
+			),
+		);
+
+	if (existing) {
+		await db
+			.update(agentSkills)
+			.set({ config, enabled: true, updated_at: new Date() })
+			.where(eq(agentSkills.id, existing.id));
+		return json({ id: existing.id, skillId, updated: true });
+	}
+
+	// Resolve tenant_id from agent
+	const { agents } = await import("@thinkwork/database-pg/schema");
+	const [agentRow] = await db
+		.select({ tenant_id: agents.tenant_id })
+		.from(agents)
+		.where(eq(agents.id, agentId));
+	if (!agentRow) return error("Agent not found", 404);
+
+	const [inserted] = await db
+		.insert(agentSkills)
+		.values({
+			agent_id: agentId,
+			tenant_id: agentRow.tenant_id,
+			skill_id: skillId,
+			config,
+			enabled: true,
+		})
+		.returning({ id: agentSkills.id });
+
+	return json({ id: inserted.id, skillId, created: true });
+}
+
+async function removeMcpServer(
+	agentId: string,
+	serverId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	// serverId can be the skill_id suffix (name) or the row UUID
+	const skillId = serverId.startsWith(MCP_SKILL_PREFIX) ? serverId : `${MCP_SKILL_PREFIX}${serverId}`;
+
+	const deleted = await db
+		.delete(agentSkills)
+		.where(
+			and(
+				eq(agentSkills.agent_id, agentId),
+				eq(agentSkills.skill_id, skillId),
+			),
+		)
+		.returning({ id: agentSkills.id });
+
+	if (deleted.length === 0) return notFound("MCP server not found");
+	return json({ ok: true, deleted: skillId });
+}
+
+async function testMcpServer(
+	agentId: string,
+	serverId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const skillId = serverId.startsWith(MCP_SKILL_PREFIX) ? serverId : `${MCP_SKILL_PREFIX}${serverId}`;
+
+	const [row] = await db
+		.select({ config: agentSkills.config })
+		.from(agentSkills)
+		.where(
+			and(
+				eq(agentSkills.agent_id, agentId),
+				eq(agentSkills.skill_id, skillId),
+			),
+		);
+
+	if (!row) return notFound("MCP server not found");
+
+	const config = (row.config as Record<string, unknown>) || {};
+	const mcpUrl = config.mcpUrl as string;
+	if (!mcpUrl) return error("No MCP URL configured", 400);
+
+	// Build auth headers
+	const headers: Record<string, string> = { "Content-Type": "application/json" };
+	const authType = config.mcpAuthType as string || "none";
+	const token = config.mcpAuthToken as string;
+	if (token && authType === "bearer") {
+		headers["Authorization"] = `Bearer ${token}`;
+	} else if (token && authType === "api-key") {
+		headers["x-api-key"] = token;
+	}
+
+	// Call MCP tools/list via JSON-RPC
+	try {
+		const response = await fetch(mcpUrl, {
+			method: "POST",
+			headers,
+			body: JSON.stringify({
+				jsonrpc: "2.0",
+				id: 1,
+				method: "tools/list",
+				params: {},
+			}),
+			signal: AbortSignal.timeout(10000),
+		});
+
+		if (!response.ok) {
+			return json({
+				ok: false,
+				error: `MCP server returned ${response.status}: ${await response.text().catch(() => "")}`,
+			}, 502);
+		}
+
+		const result = await response.json() as { result?: { tools?: Array<{ name: string; description?: string }> }; error?: unknown };
+		if (result.error) {
+			return json({ ok: false, error: result.error }, 502);
+		}
+
+		const tools = result.result?.tools || [];
+		return json({
+			ok: true,
+			tools: tools.map((t) => ({ name: t.name, description: t.description })),
+		});
+	} catch (err: any) {
+		return json({ ok: false, error: err.message || "Connection failed" }, 502);
+	}
 }
 
 // ---------------------------------------------------------------------------

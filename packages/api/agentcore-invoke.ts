@@ -246,6 +246,7 @@ export async function handler(event: LambdaEvent): Promise<LambdaResult> {
     if (body.mcp_auth_secret) payload.mcp_auth_secret = body.mcp_auth_secret;
     if (body.gateway_url) payload.gateway_url = body.gateway_url;
     if (body.gateway_mcp_servers) payload.gateway_mcp_servers = body.gateway_mcp_servers;
+    if (body.mcp_configs) payload.mcp_configs = body.mcp_configs;
     if (body.agent_name) payload.agent_name = body.agent_name;
     if (body.human_name) payload.human_name = body.human_name;
     if (body.workspace_bucket) payload.workspace_bucket = body.workspace_bucket;

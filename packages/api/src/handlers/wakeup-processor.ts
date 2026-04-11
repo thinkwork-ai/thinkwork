@@ -37,7 +37,7 @@ import {
 	checkBudgetAndPause,
 	notifyCostRecorded,
 } from "../lib/cost-recording.js";
-import { buildSkillEnvOverrides } from "../lib/oauth-token.js";
+import { buildSkillEnvOverrides, resolveOAuthToken } from "../lib/oauth-token.js";
 import { ensureThreadForWork } from "../lib/thread-helpers.js";
 import { isThreadBlocked, checkConcurrencyLimits } from "../lib/thread-dispatch.js";
 import { promoteNextDeferredWakeup } from "../lib/wakeup-defer.js";
@@ -842,6 +842,47 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 		mcpServers.push("restaurant");
 	}
 
+	// Build rich MCP configs for direct HTTP streaming connections.
+	// Skills with mcpUrl in their config connect directly from the agent container
+	// (no gateway). OAuth tokens are resolved fresh via resolveOAuthToken().
+	interface McpServerConfig {
+		name: string;
+		url: string;
+		transport: "streamable-http" | "sse";
+		auth?: { type: string; token: string };
+		tools?: string[];
+	}
+	const mcpConfigs: McpServerConfig[] = [];
+	for (const skill of skillRows) {
+		const config = (skill.config as Record<string, unknown>) || {};
+		const mcpUrl = config.mcpUrl as string | undefined;
+		if (!mcpUrl) continue;
+
+		let token: string | undefined;
+		const connectionId = config.connectionId as string | undefined;
+		const providerId = config.providerId as string | undefined;
+		if (connectionId && providerId) {
+			const resolved = await resolveOAuthToken(connectionId, wakeup.tenant_id, providerId).catch((err) => {
+				console.warn(`[wakeup-processor] MCP OAuth token resolution failed for ${skill.skill_id}:`, err);
+				return null;
+			});
+			if (resolved) token = resolved;
+		} else if (config.mcpAuthToken) {
+			token = config.mcpAuthToken as string;
+		}
+
+		mcpConfigs.push({
+			name: skill.skill_id,
+			url: mcpUrl,
+			transport: (config.mcpTransport as "streamable-http" | "sse") || "streamable-http",
+			auth: token ? { type: (config.mcpAuthType as string) || "bearer", token } : undefined,
+			tools: Array.isArray(config.mcpTools) ? config.mcpTools as string[] : undefined,
+		});
+	}
+	if (mcpConfigs.length > 0) {
+		console.log(`[wakeup-processor] MCP configs built: ${mcpConfigs.length} servers (${mcpConfigs.map((c) => c.name).join(", ")})`);
+	}
+
 	const startMs = Date.now();
 	// Generate trace ID for observability correlation (PRD-20)
 	const xrayTraceId = process.env._X_AMZN_TRACE_ID;
@@ -884,6 +925,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 			mcp_base_url: MCP_BASE_URL || undefined,
 			mcp_auth_secret: MCP_AUTH_SECRET || undefined,
 			gateway_url: AGENTCORE_GATEWAY_URL || undefined,
+			mcp_configs: mcpConfigs.length > 0 ? mcpConfigs : undefined,
 			session_key: triggerId || `wakeup-${wakeup.source}`,
 			trigger_channel: triggerChannel || undefined,
 		});
@@ -1212,6 +1254,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 					mcp_base_url: MCP_BASE_URL || undefined,
 					mcp_auth_secret: MCP_AUTH_SECRET || undefined,
 					gateway_url: AGENTCORE_GATEWAY_URL || undefined,
+					mcp_configs: mcpConfigs.length > 0 ? mcpConfigs : undefined,
 					session_key: triggerId || `wakeup-${wakeup.source}`,
 					trigger_channel: threadContext?.channel || wakeup.source || undefined,
 				});
