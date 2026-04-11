@@ -446,7 +446,8 @@ def _ensure_workspace_ready(workspace_tenant_id: str, assistant_id: str,
 def _call_strands_agent(system_prompt: str, messages: list,
                         model: str = "",
                         skills_config: list | None = None,
-                        guardrail_config: dict | None = None) -> tuple[str, dict]:
+                        guardrail_config: dict | None = None,
+                        mcp_configs: list | None = None) -> tuple[str, dict]:
     """Invoke Strands Agent SDK.
 
     Returns (response_text, usage_dict).
@@ -969,6 +970,46 @@ def _call_strands_agent(system_prompt: str, messages: list,
         except ImportError:
             logger.warning("AgentSkills not available in this strands version")
 
+    # ── MCP client connections ────────────────────────────────────────────
+    # Connect to HTTP streaming MCP servers passed in the invocation payload.
+    # Each config: {name, url, transport?, auth?: {type, token}, tools?: [...]}
+    # Clients are context-managed: __enter__ discovers tools, __exit__ cleans up.
+    mcp_clients = []
+    _mcp_tool_to_server: dict[str, str] = {}  # tool_name → server name (for tracking)
+    for cfg in (mcp_configs or []):
+        url = cfg.get("url", "")
+        if not url:
+            continue
+        server_name = cfg.get("name", url)
+        headers = {}
+        auth = cfg.get("auth") or {}
+        if auth.get("token"):
+            auth_type = auth.get("type", "bearer")
+            if auth_type == "bearer":
+                headers["Authorization"] = f"Bearer {auth['token']}"
+            elif auth_type == "api-key":
+                headers["x-api-key"] = auth["token"]
+        try:
+            from strands.tools.mcp import MCPClient
+            from mcp.client.streamable_http import streamablehttp_client
+            client = MCPClient(lambda u=url, h=headers: streamablehttp_client(url=u, headers=h))
+            client.__enter__()
+            # Map each tool name back to its server for invocation tracking
+            for t in (client.tools or []):
+                tool_name = getattr(t, "name", None) or (t.get("name") if isinstance(t, dict) else None)
+                if tool_name:
+                    _mcp_tool_to_server[tool_name] = server_name
+            mcp_clients.append(client)
+            tool_count = len(client.tools) if client.tools else 0
+            logger.info("MCP connected: %s url=%s tools=%d", server_name, url, tool_count)
+        except Exception as e:
+            logger.warning("MCP connection failed for %s (%s): %s", server_name, url, e)
+
+    if mcp_clients:
+        tools.extend(mcp_clients)
+        logger.info("MCP clients added to tool list: %d servers, %d tools mapped",
+                     len(mcp_clients), len(_mcp_tool_to_server))
+
     agent = Agent(
         model=bedrock_model,
         system_prompt=system_prompt,
@@ -986,7 +1027,17 @@ def _call_strands_agent(system_prompt: str, messages: list,
         except Exception as e:
             logger.warning("Failed to install Bedrock request tracker: %s", e)
     reset_captured_request_ids()
-    result = agent(current_msg)
+    try:
+        result = agent(current_msg)
+    finally:
+        # Clean up MCP client connections (must happen even on error)
+        for _mcp_c in mcp_clients:
+            try:
+                _mcp_c.__exit__(None, None, None)
+            except Exception as _mcp_err:
+                logger.warning("MCP client cleanup error: %s", _mcp_err)
+        if mcp_clients:
+            logger.info("MCP clients cleaned up: %d", len(mcp_clients))
     bedrock_request_ids = get_captured_request_ids()
 
     # 5. Extract response and usage
@@ -1041,14 +1092,25 @@ def _call_strands_agent(system_prompt: str, messages: list,
                     else:
                         input_preview = str(tool_input)[:5000]
 
+                    # Classify tool type: sub_agent, mcp_server (external MCP), or mcp_tool (script/built-in)
+                    if tool_name in sub_agent_tool_names:
+                        tool_type = "sub_agent"
+                    elif tool_name in _mcp_tool_to_server:
+                        tool_type = "mcp_server"
+                    else:
+                        tool_type = "mcp_tool"
+
                     invocation = {
                         "sequence": seq,
                         "tool_name": tool_name,
-                        "type": "sub_agent" if tool_name in sub_agent_tool_names else "mcp_tool",
+                        "type": tool_type,
                         "input_preview": input_preview,
                         "output_preview": "",
                         "status": "pending",
                     }
+                    # Tag external MCP tool calls with their server name for UI display
+                    if tool_name in _mcp_tool_to_server:
+                        invocation["mcp_server"] = _mcp_tool_to_server[tool_name]
                     pending_tools[tool_use_id] = invocation
                     tool_invocations.append(invocation)
                     seq += 1
@@ -1076,9 +1138,9 @@ def _call_strands_agent(system_prompt: str, messages: list,
                                 import json as _json
                                 parsed = _json.loads(full_output)
                                 if isinstance(parsed, dict):
-                                    # Only inject _source for direct MCP tool calls (not sub-agents)
+                                    # Inject _source for MCP tool calls (not sub-agents)
                                     _source = None
-                                    if inv.get("type") == "mcp_tool":
+                                    if inv.get("type") in ("mcp_tool", "mcp_server"):
                                         preview = inv.get("input_preview", "")
                                         _source = {
                                             "tool": inv.get("tool_name", ""),
@@ -1284,6 +1346,11 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
         agent_name = payload.get("agent_name") or ""
         human_name = payload.get("human_name") or ""
         guardrail_config = payload.get("guardrail_config")
+        mcp_configs = payload.get("mcp_configs") or []
+        if mcp_configs:
+            logger.info("MCP configs received: %d servers (%s)",
+                        len(mcp_configs),
+                        ", ".join(c.get("name", c.get("url", "?")) for c in mcp_configs))
 
         # Set workspace bucket from payload (injected by SST)
         workspace_bucket = payload.get("workspace_bucket") or ""
@@ -1401,6 +1468,7 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                     system_prompt, messages, model=request_model,
                     skills_config=skills_config,
                     guardrail_config=guardrail_config,
+                    mcp_configs=mcp_configs if mcp_configs else None,
                 )
 
                 duration_ms = int(time.time() * 1000) - start_ms

@@ -12,6 +12,7 @@ import { registerBootstrapCommand } from "./commands/bootstrap.js";
 import { registerLoginCommand } from "./commands/login.js";
 import { registerInitCommand } from "./commands/init.js";
 import { registerStatusCommand } from "./commands/status.js";
+import { registerMcpCommand } from "./commands/mcp.js";
 
 const program = new Command();
 
@@ -50,5 +51,6 @@ registerDestroyCommand(program);
 registerStatusCommand(program);
 registerOutputsCommand(program);
 registerConfigCommand(program);
+registerMcpCommand(program);
 
 program.parse();
