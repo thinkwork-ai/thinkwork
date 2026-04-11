@@ -160,7 +160,12 @@ jobs:
             LAMBDA_DIR="${{ github.workspace }}/dist/lambdas"
           fi
           terraform apply -auto-approve \
-            -var-file=terraform.tfvars \
+            -var "stage=${{ env.STAGE }}" \
+            -var "region=${{ env.AWS_REGION }}" \
+            -var "account_id=${{ secrets.AWS_ACCOUNT_ID }}" \
+            -var "db_password=${{ secrets.DB_PASSWORD }}" \
+            -var "database_engine=aurora-serverless" \
+            -var "memory_engine=hindsight" \
             -var "lambda_zips_dir=$LAMBDA_DIR"
 
   # ── Build & deploy admin app ─────────────────────────────────────
