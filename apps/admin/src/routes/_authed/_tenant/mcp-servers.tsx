@@ -139,6 +139,7 @@ function McpServersPage() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  if (!tenantSlug) return <PageSkeleton />;
   if (loading && servers.length === 0) return <PageSkeleton />;
 
   return (
