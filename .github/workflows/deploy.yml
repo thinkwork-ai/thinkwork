@@ -166,6 +166,7 @@ jobs:
             -var "db_password=${{ secrets.DB_PASSWORD }}" \
             -var "database_engine=aurora-serverless" \
             -var "memory_engine=hindsight" \
+            -var "api_auth_secret=${{ secrets.API_AUTH_SECRET }}" \
             -var "lambda_zips_dir=$LAMBDA_DIR"
 
   # ── Build & deploy admin app ─────────────────────────────────────

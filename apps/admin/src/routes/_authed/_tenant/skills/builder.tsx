@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { toast } from "sonner";
 import {
   Loader2,
   Zap,
@@ -268,7 +269,10 @@ function SkillBuilderPage() {
   const goBack = () => setStep((s) => Math.max(s - 1, 1));
 
   const handleCreate = async () => {
-    if (!tenantSlug || !name.trim()) return;
+    if (!tenantSlug || !name.trim()) {
+      toast.error("Missing tenant or skill name");
+      return;
+    }
     setCreating(true);
     try {
       // 1. Create the skill (generates skill.yaml + SKILL.md from template)
@@ -306,6 +310,7 @@ function SkillBuilderPage() {
       navigate({ to: "/skills/$slug", params: { slug: result.slug } });
     } catch (err) {
       console.error("Failed to create skill:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to create skill");
     } finally {
       setCreating(false);
     }
