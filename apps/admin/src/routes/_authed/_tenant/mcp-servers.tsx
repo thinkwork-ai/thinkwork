@@ -38,7 +38,9 @@ import {
   registerMcpServer,
   deleteMcpServer,
   testMcpServer,
+  listOAuthProviders,
   type McpServer,
+  type OAuthProvider,
 } from "@/lib/mcp-api";
 
 export const Route = createFileRoute("/_authed/_tenant/mcp-servers")({
@@ -220,6 +222,13 @@ function AddServerDialog({
   const [oauthProvider, setOauthProvider] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [providers, setProviders] = useState<OAuthProvider[]>([]);
+
+  useEffect(() => {
+    if (open) {
+      listOAuthProviders().then((r) => setProviders(r.providers || [])).catch(console.error);
+    }
+  }, [open]);
 
   const reset = () => {
     setName(""); setUrl(""); setTransport("streamable-http");
@@ -249,7 +258,9 @@ function AddServerDialog({
   };
 
   const isValid = name.trim() && url.trim() &&
-    (authType === "none" || authType === "per_user_oauth" ? true : apiKey.trim());
+    (authType === "none" ? true :
+     authType === "tenant_api_key" ? apiKey.trim() :
+     authType === "per_user_oauth" ? oauthProvider.trim() : true);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
@@ -300,9 +311,20 @@ function AddServerDialog({
           )}
           {authType === "per_user_oauth" && (
             <div className="space-y-1">
-              <Label htmlFor="mcp-oauth">OAuth Provider</Label>
-              <Input id="mcp-oauth" value={oauthProvider} onChange={(e) => setOauthProvider(e.target.value)} placeholder="e.g. lastmile" />
-              <p className="text-xs text-muted-foreground">Must match a configured OAuth provider name. Users will need to connect their account before the agent can use this server.</p>
+              <Label>OAuth Provider</Label>
+              {providers.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">No OAuth providers configured. Set up an OAuth provider first.</p>
+              ) : (
+                <Select value={oauthProvider} onValueChange={setOauthProvider}>
+                  <SelectTrigger><SelectValue placeholder="Select provider..." /></SelectTrigger>
+                  <SelectContent>
+                    {providers.map((p) => (
+                      <SelectItem key={p.name} value={p.name}>{p.displayName}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <p className="text-xs text-muted-foreground">Each user will need to connect their own account from the mobile app before the agent can use this server.</p>
             </div>
           )}
           {err && (

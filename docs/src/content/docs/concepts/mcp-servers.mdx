@@ -1,13 +1,19 @@
 ---
-title: MCP Servers
-description: Connect external MCP (Model Context Protocol) servers to give agents access to third-party tools and data sources.
+title: MCP Tool Connectors
+description: Use MCP (Model Context Protocol) as a connector pattern for exposing external tools and data sources to Thinkwork agents.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-MCP (Model Context Protocol) servers expose tools that agents can call during conversations. By registering an MCP server, you give agents access to external capabilities — CRM lookups, task management, database queries, or any operation the server exposes — without writing custom skill code.
+MCP (Model Context Protocol) servers are one way to implement **tool connectors** in Thinkwork. They expose tools that agents can call during conversations, such as CRM lookups, task management actions, database queries, or internal API operations.
 
-Thinkwork connects to MCP servers using HTTP streaming (Streamable HTTP or SSE transport). The agent container establishes a direct connection to the MCP server at invocation time, discovers available tools, and makes them available alongside built-in tools.
+In the open source Thinkwork architecture, MCP is not a separate product layer. It sits under **Connectors**, alongside channel and event integrations like Slack, GitHub, and Google Workspace.
+
+Thinkwork connects to MCP servers using HTTP streaming (Streamable HTTP or SSE transport). The agent container establishes a direct connection to the MCP server at invocation time, discovers available tools, and makes them available alongside built-in tools and skill packs.
+
+<Aside type="note">
+For the broader integration model, start with [Concepts: Connectors](/concepts/connectors/). This page is the detailed guide for the MCP-based tool connector path.
+</Aside>
 
 ## How it works
 
@@ -26,11 +32,11 @@ Admin registers MCP server (URL, auth)
 
 ## Registration
 
-MCP servers are registered at the **tenant level** — once registered, any agent template in the tenant can use them.
+MCP tool connectors are registered at the **tenant level**. Once registered, any agent template in the tenant can use them.
 
 ### Admin UI
 
-Navigate to **MCP Servers** in the sidebar. Click **Register Server** and provide:
+Navigate to **Connectors → MCP Tool Connectors** in the sidebar. Click **Register Server** and provide:
 
 | Field | Description |
 |-------|-------------|
@@ -83,7 +89,7 @@ When configured:
 3. At invocation time, the agent's `human_pair` user's OAuth token is resolved
 4. The fresh access token is sent as a `Bearer` token
 
-This is the same pattern used by Google Workspace and Microsoft 365 connectors.
+This is the same OAuth pattern used by other Thinkwork connectors.
 
 <Aside type="note">
 Per-user OAuth requires that the human paired with the agent has an active OAuth connection for the MCP server's provider. If no connection exists, the MCP server is skipped for that invocation (other tools still work).
@@ -91,7 +97,7 @@ Per-user OAuth requires that the human paired with the agent has an active OAuth
 
 ## Assigning to agents
 
-MCP servers are assigned to **agent templates**, then synced to individual agents — the same pattern as skills and knowledge bases.
+MCP tool connectors are assigned to **agent templates**, then synced to individual agents, the same pattern used for skill packs and knowledge bases.
 
 ### Via Admin UI
 
@@ -134,7 +140,7 @@ If an MCP server is unreachable at invocation time, it's logged as a warning and
 
 ## Tool invocation tracking
 
-MCP tool calls appear in the thread timeline alongside regular tool calls. Each MCP tool invocation includes:
+MCP tool calls appear in the thread timeline alongside regular tool calls. This keeps MCP usage visible inside the same thread and controls model as the rest of Thinkwork. Each MCP tool invocation includes:
 
 - Tool name
 - MCP server name (for attribution)

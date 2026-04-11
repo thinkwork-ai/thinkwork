@@ -914,6 +914,16 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 			}
 		}
 
+		// Only inject MCP servers where auth is fully resolved
+		if (mcp.auth_type === "tenant_api_key" && !token) {
+			console.warn(`[wakeup-processor] Skipping MCP ${mcp.slug}: tenant API key not configured`);
+			continue;
+		}
+		if (mcp.auth_type === "per_user_oauth" && !token) {
+			console.warn(`[wakeup-processor] Skipping MCP ${mcp.slug}: user OAuth not connected`);
+			continue;
+		}
+
 		const assignCfg = (mcp.assignment_config as Record<string, unknown>) || {};
 		mcpConfigs.push({
 			name: mcp.slug,

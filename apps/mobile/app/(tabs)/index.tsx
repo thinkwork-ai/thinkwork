@@ -20,7 +20,7 @@ import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { COLORS } from "@/lib/theme";
-import { ListTodo, Bot, Settings, LogOut, RefreshCw, Filter, ChevronDown, ChevronRight, X, Zap, Check, CheckSquare, ListChecks, Circle, AlertCircle, Clock } from "lucide-react-native";
+import { ListTodo, Bot, Settings, LogOut, RefreshCw, Filter, ChevronDown, ChevronRight, X, Zap, Check, CheckSquare, ListChecks, Circle, AlertCircle, Clock, Cable } from "lucide-react-native";
 import { ThreadChannel } from "@/lib/gql/graphql";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { useThreadReadState } from "@/lib/hooks/use-thread-read-state";
@@ -429,6 +429,7 @@ export default function ThreadsScreen() {
               items={[
                 { label: "Agent Config", icon: Bot, onPress: () => router.push("/settings/agent-config") },
                 { label: "Automations", icon: Zap, onPress: () => router.push("/settings/automations") },
+                { label: "MCP Servers", icon: Cable, onPress: () => router.push("/settings/mcp-servers") },
                 { label: "User Settings", icon: Settings, onPress: () => router.push("/settings/user-settings") },
                 ...(Platform.OS !== "web" ? [{
                   label: "Check for Updates",

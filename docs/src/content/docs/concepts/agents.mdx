@@ -16,7 +16,7 @@ Thread message → API Gateway → AgentCore Lambda → Strands agent loop
                                                  ↓
                                          Bedrock (Claude)
                                                  ↓
-                                     Tools: SQL, S3, MCP, skills
+                     Tools: SQL, S3, web, skill packs, MCP connectors
                                                  ↓
                                AppSync subscription → client
 ```
@@ -57,7 +57,7 @@ Connected agents let you plug an existing runtime (your own Python service, a La
 Connected agents register a **webhook endpoint**. When a message arrives in a thread assigned to a connected agent, Thinkwork POSTs the thread context to your endpoint and expects a response in the standard message format.
 
 <Aside type="note">
-Connected agents are useful when you already have agent infrastructure and want Thinkwork's thread system, connectors, and admin app on top of it — without migrating your runtime.
+Connected agents are useful when you already have agent infrastructure and want Thinkwork's thread system, connectors, and admin app on top of it, without migrating your runtime.
 </Aside>
 
 ## Agent Templates
@@ -72,7 +72,7 @@ A template specifies:
 | `guardrailId` | Bedrock Guardrail ID to apply on every invoke |
 | `maxTokens` | Maximum output tokens per turn |
 | `temperature` | Sampling temperature (0.0–1.0) |
-| `toolConfig` | Which tool categories are enabled (SQL, S3, MCP, web) |
+| `toolConfig` | Which tool categories are enabled (SQL, S3, web, and connector-provided tools such as MCP) |
 | `memoryConfig` | Memory engine settings (retain/recall/reflect intervals) |
 
 ### Example templates
@@ -118,6 +118,8 @@ Model IDs are set at the **Agent Template** level, not per-agent. To switch all 
 ## Skill packs
 
 Skill packs are the primary extension mechanism for managed agents. A skill pack is a `SKILL.md` file stored in your S3 skill catalog bucket. At invoke time, AgentCore downloads the skill packs assigned to the agent, parses them, and injects their capabilities into the Strands agent loop.
+
+Managed agents can also receive external tools through connectors, including MCP-based tool connectors configured at the tenant and template level. Use skill packs when you want to package logic inside Thinkwork, and use connector-managed tool systems when you want agents to call out to existing external services.
 
 A skill can provide:
 
