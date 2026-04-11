@@ -1542,3 +1542,12 @@ export const RollbackAgentVersionMutation = graphql(`
     }
   }
 `);
+
+export const MemoryGraphQuery = graphql(`
+  query MemoryGraph($assistantId: ID!) {
+    memoryGraph(assistantId: $assistantId) {
+      nodes { id label type strategy entityType edgeCount }
+      edges { source target type label weight }
+    }
+  }
+`);

@@ -1,8 +1,8 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Loader2, Trash2, Brain, Search, RefreshCw, X } from "lucide-react";
+import { Loader2, Trash2, Brain, Search, RefreshCw, X, ArrowLeft } from "lucide-react";
 import {
   AgentDetailQuery,
   MemoryRecordsQuery,
@@ -12,13 +12,13 @@ import {
 } from "@/lib/graphql-queries";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageSkeleton } from "@/components/PageSkeleton";
-import { PageHeader } from "@/components/PageHeader";
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { MemoryGraph, type MemoryGraphHandle, type MemoryGraphNode } from "@/components/MemoryGraph";
 import {
   Sheet,
   SheetContent,
@@ -149,7 +149,9 @@ function AgentMemoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
   const [strategyFilter, setStrategyFilter] = useState("");
+  const [view, setView] = useState<string>("memories");
 
+  const graphRef = useRef<MemoryGraphHandle>(null);
 
   const [agentResult] = useQuery({
     query: AgentDetailQuery,
@@ -186,6 +188,12 @@ function AgentMemoryPage() {
   const [editValue, setEditValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Graph node detail sheet
+  const [graphNode, setGraphNode] = useState<MemoryGraphNode | null>(null);
+  const [graphNodeEdges, setGraphNodeEdges] = useState<{ label: string; targetLabel: string; targetType: string; targetId: string }[]>([]);
+  const [graphSheetOpen, setGraphSheetOpen] = useState(false);
+  const [graphNodeHistory, setGraphNodeHistory] = useState<{ node: MemoryGraphNode; edges: { label: string; targetLabel: string; targetType: string; targetId: string }[] }[]>([]);
 
   useBreadcrumbs([
     { label: "Agents", href: "/agents" },
@@ -284,12 +292,25 @@ function AgentMemoryPage() {
                     : `${rows.length} memor${rows.length !== 1 ? "ies" : "y"}`}
               </p>
             </div>
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              size="sm"
+              value={view}
+              onValueChange={(val) => { if (val) setView(val); }}
+            >
+              <ToggleGroupItem value="graph" className="h-7 text-xs px-3">Knowledge Graph</ToggleGroupItem>
+              <ToggleGroupItem value="memories" className="h-7 text-xs px-3">Memories</ToggleGroupItem>
+            </ToggleGroup>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => refetchMemory({ requestPolicy: "network-only" })}
+              onClick={() => {
+                if (view === "graph") graphRef.current?.refetch();
+                else refetchMemory({ requestPolicy: "network-only" });
+              }}
             >
               <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
               Refresh
@@ -298,75 +319,92 @@ function AgentMemoryPage() {
         </div>
       </div>
 
-      {/* Search + filters */}
-      <div className="flex items-center gap-2 pb-3 shrink-0">
-        <div className="relative max-w-md" style={{ width: "22rem" }}>
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            placeholder="Search memories..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            className="pl-8 pr-7 h-9 text-sm"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => { setSearchQuery(""); setActiveSearch(""); }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-3 w-3" />
-            </button>
+      {/* Search + filters — only shown in memories view */}
+      {view === "memories" && (
+        <div className="flex items-center gap-2 pb-3 shrink-0">
+          <div className="relative max-w-md" style={{ width: "22rem" }}>
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search memories..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              className="pl-8 pr-7 h-9 text-sm"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => { setSearchQuery(""); setActiveSearch(""); }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            value={strategyFilter}
+            onValueChange={(val) => {
+              setStrategyFilter(val);
+              if (activeSearch) setActiveSearch(searchQuery.trim());
+            }}
+          >
+            {STRATEGY_FILTERS.map((f) => (
+              <ToggleGroupItem
+                key={f.value}
+                value={f.value}
+                className="h-7 text-xs px-3"
+              >
+                {f.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </div>
+      )}
+
+      {view === "memories" ? (
+        <div className="flex-1 min-h-0">
+          {isLoading ? (
+            <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading memories...
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-16 text-center">
+              <Brain className="h-12 w-12 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">
+                {activeSearch
+                  ? "No memories match your search."
+                  : "No memories yet. Memories are created automatically as the agent interacts with users."}
+              </p>
+            </div>
+          ) : (
+            <DataTable
+              columns={columns}
+              data={rows}
+              onRowClick={handleRowClick}
+              scrollable
+              pageSize={25}
+              tableClassName="table-fixed"
+            />
           )}
         </div>
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          size="sm"
-          value={strategyFilter}
-          onValueChange={(val) => {
-            setStrategyFilter(val);
-            if (activeSearch) setActiveSearch(searchQuery.trim());
-          }}
-        >
-          {STRATEGY_FILTERS.map((f) => (
-            <ToggleGroupItem
-              key={f.value}
-              value={f.value}
-              className="h-7 text-xs px-3"
-            >
-              {f.label}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-      </div>
-
-      <div className="flex-1 min-h-0">
-        {isLoading ? (
-          <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading memories...
-          </div>
-        ) : rows.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <Brain className="h-12 w-12 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">
-              {activeSearch
-                ? "No memories match your search."
-                : "No memories yet. Memories are created automatically as the agent interacts with users."}
-            </p>
-          </div>
-        ) : (
-          <DataTable
-            columns={columns}
-            data={rows}
-            onRowClick={handleRowClick}
-            scrollable
-            pageSize={25}
-            tableClassName="table-fixed"
+      ) : (
+        <div className="flex-1 min-h-0 relative border border-muted rounded-lg overflow-hidden">
+          <MemoryGraph
+            ref={graphRef}
+            agentId={agentId}
+            onNodeClick={(node, edges) => {
+              setGraphNode(node);
+              setGraphNodeEdges(edges);
+              setGraphNodeHistory([]);
+              setGraphSheetOpen(true);
+            }}
           />
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Detail sheet */}
+      {/* Memory detail sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
         <SheetContent className="sm:max-w-lg flex flex-col">
           <SheetHeader className="p-6 pb-0">
@@ -466,6 +504,98 @@ function AgentMemoryPage() {
         </SheetContent>
       </Sheet>
 
+      {/* Graph node detail sheet */}
+      <Sheet open={graphSheetOpen} onOpenChange={setGraphSheetOpen}>
+        <SheetContent className="sm:max-w-lg flex flex-col">
+          <SheetHeader className="p-6 pb-0">
+            <SheetTitle className="flex items-center gap-2">
+              {graphNodeHistory.length > 0 && (
+                <button
+                  onClick={() => {
+                    const prev = graphNodeHistory[graphNodeHistory.length - 1];
+                    setGraphNodeHistory((h) => h.slice(0, -1));
+                    setGraphNode(prev.node);
+                    setGraphNodeEdges(prev.edges);
+                  }}
+                  className="text-muted-foreground hover:text-foreground -ml-1 mr-1"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+              )}
+              {graphNode?.nodeType === "memory" ? "Memory" : graphNode?.label}
+              <Badge
+                className={`font-normal text-xs ${
+                  graphNode?.nodeType === "memory"
+                    ? "bg-pink-500/20 text-pink-400"
+                    : "bg-sky-500/20 text-sky-400"
+                }`}
+              >
+                {graphNode?.nodeType === "memory"
+                  ? graphNode?.strategy ?? "memory"
+                  : graphNode?.entityType ?? "entity"}
+              </Badge>
+            </SheetTitle>
+            <SheetDescription>
+              {graphNode?.nodeType === "memory"
+                ? `Memory node — ${graphNodeEdges.length} connection${graphNodeEdges.length !== 1 ? "s" : ""}`
+                : `Entity — ${graphNodeEdges.length} mention${graphNodeEdges.length !== 1 ? "s" : ""}`}
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="flex-1 overflow-y-auto px-6 pt-4 space-y-4">
+            {graphNode?.nodeType === "memory" && (
+              <MemoryContent text={graphNode.label} />
+            )}
+
+            {graphNodeEdges.length > 0 && (
+              <div>
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                  {graphNode?.nodeType === "memory" ? "Mentions" : "Mentioned by"}
+                </h4>
+                <div className="space-y-2">
+                  {graphNodeEdges.map((edge, i) => (
+                    <div
+                      key={i}
+                      className="flex items-start gap-2 text-sm rounded-md bg-muted/30 px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => {
+                        const result = graphRef.current?.getNodeWithEdges(edge.targetId);
+                        if (result && graphNode) {
+                          setGraphNodeHistory((h) => [...h, { node: graphNode, edges: graphNodeEdges }]);
+                          setGraphNode(result.node);
+                          setGraphNodeEdges(result.edges);
+                        }
+                      }}
+                    >
+                      <Badge
+                        variant="outline"
+                        className={`shrink-0 text-[10px] mt-0.5 ${
+                          edge.targetType === "memory"
+                            ? "border-pink-500/30 text-pink-400"
+                            : "border-sky-500/30 text-sky-400"
+                        }`}
+                      >
+                        {edge.targetType === "memory" ? "Memory" : "Entity"}
+                      </Badge>
+                      <div className="min-w-0">
+                        <p className="font-medium text-foreground truncate">{stripTopicTags(edge.targetLabel)}</p>
+                        {edge.label && (
+                          <p className="text-xs text-muted-foreground">{edge.label}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {graphNodeEdges.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No connections found for this node.
+              </p>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
