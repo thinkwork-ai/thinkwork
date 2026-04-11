@@ -19,6 +19,7 @@ import {
 	agentToCamel,
 	sql,
 } from "../../utils.js";
+import { agentMcpServers } from "@thinkwork/database-pg/schema";
 import { snapshotAgent } from "../../../lib/agent-snapshot.js";
 import { overlayTemplateWorkspace } from "../../../lib/workspace-copy.js";
 
@@ -78,6 +79,20 @@ export async function syncTemplateToAgent(_parent: any, args: any, ctx: GraphQLC
 				tenant_id: agent.tenant_id!,
 				knowledge_base_id: kbId,
 				enabled: true,
+			})),
+		);
+	}
+
+	// 6b. Replace agent_mcp_servers from template.mcp_servers JSONB
+	const templateMcpServers = (agentTemplate.mcp_servers as Array<{ mcp_server_id: string; enabled: boolean }>) || [];
+	await db.delete(agentMcpServers).where(eq(agentMcpServers.agent_id, agentId));
+	if (templateMcpServers.length > 0) {
+		await db.insert(agentMcpServers).values(
+			templateMcpServers.map((m) => ({
+				agent_id: agentId,
+				tenant_id: agent.tenant_id!,
+				mcp_server_id: m.mcp_server_id,
+				enabled: m.enabled ?? true,
 			})),
 		);
 	}
