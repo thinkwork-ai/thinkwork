@@ -343,8 +343,31 @@ function MemoryPage() {
         </div>
       </div>
 
-      {view === "graph" ? (
-        <div className="flex-1 min-h-0 px-4">
+      {view === "memories" && (
+        <div className="flex items-center gap-4 pb-3 px-4 shrink-0">
+          <div className="relative" style={{ width: "16rem" }}>
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search memories..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              className="pl-9"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => { setSearchQuery(""); setActiveSearch(""); }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="flex-1 min-h-0 px-4">
+        {view === "graph" ? (
           <div className="h-full border border-border rounded-lg overflow-hidden">
             <MemoryGraph
               ref={graphRef}
@@ -353,57 +376,30 @@ function MemoryPage() {
               agentNames={agentNames}
             />
           </div>
-        </div>
-      ) : (
-        <>
-          <div className="flex items-center gap-4 pb-3 px-4 shrink-0">
-            <div className="relative" style={{ width: "16rem" }}>
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search memories..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                className="pl-9"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => { setSearchQuery(""); setActiveSearch(""); }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
+        ) : isLoading ? (
+          <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading memories...
           </div>
-
-          <div className="flex-1 min-h-0 px-4">
-            {isLoading ? (
-              <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading memories...
-              </div>
-            ) : rows.length === 0 ? (
-              <div className="flex flex-col items-center gap-3 py-16 text-center">
-                <Brain className="h-12 w-12 text-muted-foreground/40" />
-                <p className="text-sm text-muted-foreground">
-                  {activeSearch
-                    ? "No memories match your search."
-                    : "No memories yet."}
-                </p>
-              </div>
-            ) : (
-              <DataTable
-                columns={columns}
-                data={rows}
-                onRowClick={handleRowClick}
-                scrollable
-                pageSize={25}
-                tableClassName="table-fixed"
-              />
-            )}
+        ) : rows.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-16 text-center">
+            <Brain className="h-12 w-12 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">
+              {activeSearch
+                ? "No memories match your search."
+                : "No memories yet."}
+            </p>
           </div>
-        </>
-      )}
+        ) : (
+          <DataTable
+            columns={columns}
+            data={rows}
+            onRowClick={handleRowClick}
+            scrollable
+            pageSize={25}
+            tableClassName="table-fixed"
+          />
+        )}
+      </div>
 
       {/* Detail sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
