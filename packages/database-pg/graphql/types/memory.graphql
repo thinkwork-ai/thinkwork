@@ -38,9 +38,32 @@ type MemorySearchResult {
   totalCount: Int!
 }
 
+type MemoryGraphNode {
+  id: ID!
+  label: String!
+  type: String!
+  strategy: String
+  entityType: String
+  edgeCount: Int!
+}
+
+type MemoryGraphEdge {
+  source: String!
+  target: String!
+  type: String!
+  label: String
+  weight: Float!
+}
+
+type MemoryGraph {
+  nodes: [MemoryGraphNode!]!
+  edges: [MemoryGraphEdge!]!
+}
+
 extend type Query {
   memoryRecords(assistantId: ID!, namespace: String!): [MemoryRecord!]!
   memorySearch(assistantId: ID!, query: String!, strategy: MemoryStrategy, limit: Int): MemorySearchResult!
+  memoryGraph(assistantId: ID!): MemoryGraph!
 }
 
 extend type Mutation {
