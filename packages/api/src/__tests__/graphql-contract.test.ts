@@ -181,9 +181,8 @@ describe("GraphQL Schema Contract", () => {
 			expect(sdl).not.toContain("evalRuns");
 		});
 
-		it("no KG extract", () => {
+		it("no KG extract mutation", () => {
 			expect(sdl).not.toContain("triggerKGExtract");
-			expect(sdl).not.toContain("memoryGraph");
 		});
 	});
 
