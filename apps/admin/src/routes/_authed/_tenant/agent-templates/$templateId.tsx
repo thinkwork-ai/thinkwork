@@ -64,9 +64,7 @@ import {
 } from "@/lib/skills-api";
 import {
   listMcpServers,
-  assignMcpToAgent,
-  unassignMcpFromAgent,
-  listAgentMcpServers,
+  getTemplateMcpServers,
   type McpServer,
 } from "@/lib/mcp-api";
 import { TemplateSyncDialog } from "./-components/TemplateSyncDialog";
@@ -322,18 +320,10 @@ function TemplateEditorPage() {
         setTemplateSkills(skills);
       }
 
-      // MCP servers — load from template data if available
-      const rawMcp = (t as any).mcpServers;
-      if (rawMcp) {
-        const mcpSvrs = typeof rawMcp === "string" ? JSON.parse(rawMcp) : rawMcp;
-        if (Array.isArray(mcpSvrs)) {
-          setTemplateMcpServers(mcpSvrs);
-        }
-      }
     }
   }, [result.data]);
 
-  // Load available MCP servers for the tenant
+  // Load MCP servers: template assignments + tenant registry
   useEffect(() => {
     if (tenantSlug) {
       listMcpServers(tenantSlug)
@@ -341,6 +331,18 @@ function TemplateEditorPage() {
         .catch(console.error);
     }
   }, [tenantSlug]);
+
+  useEffect(() => {
+    if (!isNew && templateId) {
+      getTemplateMcpServers(templateId)
+        .then((r) => {
+          if (r.mcpServers?.length) {
+            setTemplateMcpServers(r.mcpServers.map((m) => ({ mcp_server_id: m.mcp_server_id, enabled: m.enabled })));
+          }
+        })
+        .catch(console.error);
+    }
+  }, [templateId, isNew]);
 
   // Load workspace files when switching to workspace tab
   const loadWorkspaceFiles = useCallback(async () => {

@@ -39,8 +39,12 @@ export async function handler(
 	event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
 	if (event.requestContext.http.method === "OPTIONS") return { statusCode: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "*", "Access-Control-Allow-Headers": "*" }, body: "" };
-	const token = extractBearerToken(event);
-	if (!token || !validateApiSecret(token)) return unauthorized();
+	// Accept Bearer token (admin UI), x-api-key (mobile app), or AppSync API key
+	const token = extractBearerToken(event) || event.headers["x-api-key"] || "";
+	const apiSecret = process.env.API_AUTH_SECRET || "";
+	const appsyncKey = process.env.APPSYNC_API_KEY || process.env.GRAPHQL_API_KEY || "";
+	const isAuthed = (apiSecret && token === apiSecret) || (appsyncKey && token === appsyncKey);
+	if (!token || !isAuthed) return unauthorized();
 
 	const method = event.requestContext.http.method;
 	const path = event.rawPath;
@@ -228,6 +232,12 @@ export async function handler(
 		// GET /api/skills/oauth-providers — list configured OAuth providers (for admin dropdown)
 		if (path === "/api/skills/oauth-providers" && method === "GET") {
 			return mcpListOAuthProviders();
+		}
+
+		// GET /api/skills/templates/:templateId/mcp-servers — get template's MCP server assignments
+		const templateMcpMatch = path.match(/^\/api\/skills\/templates\/([^/]+)\/mcp-servers$/);
+		if (templateMcpMatch && method === "GET") {
+			return mcpGetTemplateMcpServers(templateMcpMatch[1]);
 		}
 
 		// GET /api/skills/user-mcp-servers — list MCP servers for the current user (for mobile app)
@@ -1258,6 +1268,42 @@ async function mcpUnassignFromAgent(
 // ---------------------------------------------------------------------------
 // MCP Server — OAuth Providers + User View
 // ---------------------------------------------------------------------------
+
+async function mcpGetTemplateMcpServers(
+	templateId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const { agentTemplates } = await import("@thinkwork/database-pg/schema");
+	const [template] = await db
+		.select({ mcp_servers: agentTemplates.mcp_servers })
+		.from(agentTemplates)
+		.where(eq(agentTemplates.id, templateId));
+	if (!template) return notFound("Template not found");
+
+	const mcpList = (template.mcp_servers as Array<{ mcp_server_id: string; enabled: boolean }>) || [];
+	if (mcpList.length === 0) return json({ mcpServers: [] });
+
+	// Enrich with server details
+	const serverIds = mcpList.map((m) => m.mcp_server_id);
+	const servers = await db
+		.select()
+		.from(tenantMcpServers)
+		.where(inArray(tenantMcpServers.id, serverIds));
+	const serverMap = new Map(servers.map((s) => [s.id, s]));
+
+	return json({
+		mcpServers: mcpList.map((m) => {
+			const s = serverMap.get(m.mcp_server_id);
+			return {
+				mcp_server_id: m.mcp_server_id,
+				enabled: m.enabled,
+				name: s?.name,
+				slug: s?.slug,
+				url: s?.url,
+				authType: s?.auth_type,
+			};
+		}),
+	});
+}
 
 async function mcpListOAuthProviders(): Promise<APIGatewayProxyStructuredResultV2> {
 	const { connectProviders } = await import("@thinkwork/database-pg/schema");
