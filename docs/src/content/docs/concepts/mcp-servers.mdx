@@ -1,0 +1,167 @@
+---
+title: MCP Servers
+description: Connect external MCP (Model Context Protocol) servers to give agents access to third-party tools and data sources.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+MCP (Model Context Protocol) servers expose tools that agents can call during conversations. By registering an MCP server, you give agents access to external capabilities — CRM lookups, task management, database queries, or any operation the server exposes — without writing custom skill code.
+
+Thinkwork connects to MCP servers using HTTP streaming (Streamable HTTP or SSE transport). The agent container establishes a direct connection to the MCP server at invocation time, discovers available tools, and makes them available alongside built-in tools.
+
+## How it works
+
+```
+Admin registers MCP server (URL, auth)
+    → Assigns to agent template
+    → Template syncs to agents
+    → At invocation time:
+        1. Wakeup processor resolves auth (API key or OAuth token)
+        2. MCP config passed to agent container
+        3. Container connects via MCPClient
+        4. Tools discovered and added to agent's tool list
+        5. Agent calls tools as needed during conversation
+        6. Connection cleaned up after invocation
+```
+
+## Registration
+
+MCP servers are registered at the **tenant level** — once registered, any agent template in the tenant can use them.
+
+### Admin UI
+
+Navigate to **MCP Servers** in the sidebar. Click **Register Server** and provide:
+
+| Field | Description |
+|-------|-------------|
+| Name | Display name (e.g., "Lastmile CRM") |
+| URL | MCP endpoint URL |
+| Transport | `streamable-http` (recommended) or `sse` |
+| Authentication | None, Tenant API Key, or Per-User OAuth |
+
+After registering, use **Test Connection** to verify connectivity and discover available tools. Discovered tools are cached for display in the UI.
+
+### CLI
+
+```bash
+# Register a server with an API key
+thinkwork mcp add "my-server" \
+  --url https://mcp.example.com/sse \
+  --auth-type tenant_api_key \
+  --api-key sk-xxx \
+  --tenant my-tenant \
+  -s dev
+
+# List registered servers
+thinkwork mcp list --tenant my-tenant -s dev
+
+# Test connection and discover tools
+thinkwork mcp test <server-id> --tenant my-tenant -s dev
+```
+
+## Authentication
+
+MCP servers support three authentication patterns:
+
+### None
+
+No authentication headers are sent. Use for MCP servers on private networks or servers that handle auth differently.
+
+### Tenant API Key
+
+A shared API key or bearer token stored in AWS Secrets Manager. All agents in the tenant use the same key.
+
+Set the API key during registration — it's encrypted and stored securely. The key is resolved at invocation time and sent as a `Bearer` token in the `Authorization` header.
+
+### Per-User OAuth
+
+For MCP servers that need to know which user is making the request (e.g., a CRM that scopes data by user). Uses the existing OAuth connection system.
+
+When configured:
+1. The MCP server specifies an `oauth_provider` (e.g., `lastmile`)
+2. Each user connects their account via OAuth on the Settings page
+3. At invocation time, the agent's `human_pair` user's OAuth token is resolved
+4. The fresh access token is sent as a `Bearer` token
+
+This is the same pattern used by Google Workspace and Microsoft 365 connectors.
+
+<Aside type="note">
+Per-user OAuth requires that the human paired with the agent has an active OAuth connection for the MCP server's provider. If no connection exists, the MCP server is skipped for that invocation (other tools still work).
+</Aside>
+
+## Assigning to agents
+
+MCP servers are assigned to **agent templates**, then synced to individual agents — the same pattern as skills and knowledge bases.
+
+### Via Admin UI
+
+On the agent template detail page, select which MCP servers to enable.
+
+### Via CLI
+
+```bash
+# Assign an MCP server to an agent
+thinkwork mcp assign <mcp-server-id> --agent <agent-id> -s dev
+
+# Remove assignment
+thinkwork mcp unassign <mcp-server-id> --agent <agent-id> -s dev
+```
+
+## Tool discovery
+
+When you click **Test Connection** in the Admin UI or run `thinkwork mcp test`, the system:
+
+1. Connects to the MCP server
+2. Calls `tools/list` via JSON-RPC
+3. Caches the discovered tools in the database
+4. Displays tool names and descriptions
+
+At runtime, tools are re-discovered on each invocation to ensure the agent always sees the latest tool set. The cached list is for UI display only.
+
+## Runtime behavior
+
+During an agent invocation:
+
+1. The wakeup processor queries `agent_mcp_servers` joined with `tenant_mcp_servers`
+2. For each enabled server, auth tokens are resolved (API key from Secrets Manager, or OAuth token via `resolveOAuthToken`)
+3. MCP configs are passed to the agent container in the invocation payload
+4. The container creates `MCPClient` instances using the Strands Agent SDK
+5. Each client connects via `streamablehttp_client`, discovering available tools
+6. Tools are added to the agent's tool list alongside built-in tools and skills
+7. After the agent completes, all MCP connections are cleaned up in a `finally` block
+
+If an MCP server is unreachable at invocation time, it's logged as a warning and skipped — the agent continues with its other tools.
+
+## Tool invocation tracking
+
+MCP tool calls appear in the thread timeline alongside regular tool calls. Each MCP tool invocation includes:
+
+- Tool name
+- MCP server name (for attribution)
+- Input/output previews
+- Execution status
+
+This provides full observability into which external tools the agent used and what data flowed through them.
+
+<Aside type="tip">
+Use tool allowlists in the agent MCP assignment config to restrict which tools from an MCP server the agent can access. This is useful when an MCP server exposes many tools but you only want the agent to use a subset.
+</Aside>
+
+## Data model
+
+| Table | Scope | Purpose |
+|-------|-------|---------|
+| `tenant_mcp_servers` | Tenant | Registry of available MCP servers |
+| `agent_mcp_servers` | Agent | Per-agent enablement and config overrides |
+| `agent_templates.mcp_servers` | Template | JSONB array of server assignments |
+
+## Supported transports
+
+| Transport | Description |
+|-----------|-------------|
+| Streamable HTTP | Modern HTTP-based MCP transport (recommended) |
+| SSE | Server-Sent Events transport (legacy, still widely supported) |
+
+<Aside type="note">
+Stdio-based MCP servers are not currently supported. HTTP streaming covers most remote MCP servers. Stdio support can be added in the future for servers that need to run inside the agent container.
+</Aside>
