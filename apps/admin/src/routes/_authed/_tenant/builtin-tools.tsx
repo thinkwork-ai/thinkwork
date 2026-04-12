@@ -347,7 +347,9 @@ function ConfigureDialog({
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder={
-                existing?.hasSecret ? "••••••••" : `Paste your ${provider} API key`
+                existing?.hasSecret
+                  ? "••••••••••••••••••••••••••••••••"
+                  : `Paste your ${provider} API key`
               }
             />
           </div>

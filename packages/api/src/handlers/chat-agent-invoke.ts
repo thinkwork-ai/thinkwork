@@ -299,7 +299,14 @@ export async function handler(event: InvokeEvent): Promise<void> {
     try {
       const builtinTools = await loadTenantBuiltinTools(tenantId);
       for (const bt of builtinTools) {
-        if (skillsConfig.some((s) => s.skillId === bt.toolSlug)) continue;
+        // If an agent_skills row already added this tool, overlay our env
+        // overrides so the tenant-configured provider + key still win.
+        const existing = skillsConfig.find((s) => s.skillId === bt.toolSlug);
+        if (existing) {
+          existing.envOverrides = { ...(existing.envOverrides || {}), ...bt.envOverrides };
+          console.log(`[chat-agent-invoke] Overlaid env for built-in tool '${bt.toolSlug}' (provider=${bt.provider})`);
+          continue;
+        }
         skillsConfig.push({
           skillId: bt.toolSlug,
           s3Key: `skills/catalog/${bt.toolSlug}`,
