@@ -86,6 +86,10 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
+          path: thinkwork
+
+      - uses: actions/checkout@v4
+        with:
           repository: thinkwork-ai/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: homebrew-tap
@@ -94,7 +98,7 @@ jobs:
         run: |
           URL="${{ steps.meta.outputs.url }}"
           SHA="${{ steps.meta.outputs.sha256 }}"
-          sed "s|__URL__|${URL}|g; s|__SHA__|${SHA}|g" .github/homebrew-formula.rb.template > homebrew-tap/Formula/thinkwork.rb
+          sed "s|__URL__|${URL}|g; s|__SHA__|${SHA}|g" thinkwork/.github/homebrew-formula.rb.template > homebrew-tap/Formula/thinkwork.rb
 
       - name: Push formula update
         run: |
