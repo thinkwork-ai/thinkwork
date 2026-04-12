@@ -18,7 +18,7 @@ interface DiscoveredStage {
   appsyncApiUrl?: string;
   dbEndpoint?: string;
   ecrUrl?: string;
-  memoryEngine?: string;
+  hindsightEnabled?: boolean;
   hindsightHealth?: string;
   agentcoreStatus?: string;
   bucketName?: string;
@@ -97,12 +97,13 @@ function discoverAwsStages(region: string): Map<string, Partial<DiscoveredStage>
     );
     info.bucketName = bucketRaw ? `thinkwork-${stage}-storage` : undefined;
 
-    // Hindsight ECS
+    // Hindsight ECS (optional add-on). Managed memory is always on so we
+    // don't probe for it — we just report "managed" in the output.
     const ecsRaw = runAws(
       `ecs describe-services --cluster thinkwork-${stage}-cluster --services thinkwork-${stage}-hindsight --region ${region} --query "services[0].runningCount" --output text 2>/dev/null`
     );
     if (ecsRaw && ecsRaw !== "None" && ecsRaw !== "0") {
-      info.memoryEngine = "hindsight";
+      info.hindsightEnabled = true;
       const albRaw = runAws(
         `elbv2 describe-load-balancers --region ${region} --query "LoadBalancers[?contains(LoadBalancerName, 'tw-${stage}-hindsight')].DNSName|[0]" --output text`
       );
@@ -116,7 +117,7 @@ function discoverAwsStages(region: string): Map<string, Partial<DiscoveredStage>
         }
       }
     } else {
-      info.memoryEngine = "managed";
+      info.hindsightEnabled = false;
     }
 
     // Database (RDS/Aurora)
@@ -157,8 +158,13 @@ function printStageDetail(info: DiscoveredStage): void {
   console.log(`  ${chalk.bold("Account:")}         ${info.accountId}`);
   console.log(`  ${chalk.bold("Lambda fns:")}      ${info.lambdaCount || "—"}`);
   console.log(`  ${chalk.bold("AgentCore:")}       ${info.agentcoreStatus || "unknown"}`);
-  console.log(`  ${chalk.bold("Memory:")}          ${info.memoryEngine || "unknown"}`);
-  if (info.hindsightHealth) console.log(`  ${chalk.bold("Hindsight:")}       ${info.hindsightHealth}`);
+  console.log(`  ${chalk.bold("Memory:")}          managed (always on)`);
+  const hindsightLabel = info.hindsightEnabled === undefined
+    ? "unknown"
+    : info.hindsightEnabled
+      ? (info.hindsightHealth || "running")
+      : "disabled";
+  console.log(`  ${chalk.bold("Hindsight:")}       ${hindsightLabel}`);
   if (info.bucketName) console.log(`  ${chalk.bold("S3 bucket:")}       ${info.bucketName}`);
   if (info.dbEndpoint) console.log(`  ${chalk.bold("Database:")}        ${info.dbEndpoint}`);
   if (info.ecrUrl) console.log(`  ${chalk.bold("ECR:")}             ${info.ecrUrl}`);

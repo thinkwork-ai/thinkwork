@@ -74,7 +74,9 @@ function buildTfvars(config: Record<string, string>): string {
     `db_password     = "${config.db_password}"`,
     ``,
     `# ── Memory ────────────────────────────────────────────────────────`,
-    `memory_engine = "${config.memory_engine}"`,
+    `# AgentCore managed memory is always on (automatic retention).`,
+    `# Hindsight is an optional add-on for semantic + graph retrieval.`,
+    `enable_hindsight = ${config.enable_hindsight === "true"}`,
     ``,
     `# ── Auth ──────────────────────────────────────────────────────────`,
     `api_auth_secret = "${config.api_auth_secret}"`,
@@ -164,7 +166,7 @@ export function registerInitCommand(program: Command): void {
       if (opts.defaults) {
         config.region = identity.region !== "unknown" ? identity.region : "us-east-1";
         config.database_engine = "aurora-serverless";
-        config.memory_engine = "managed";
+        config.enable_hindsight = "false";
         config.google_oauth_client_id = "";
         config.google_oauth_client_secret = "";
         config.admin_url = "http://localhost:5174";
@@ -181,9 +183,11 @@ export function registerInitCommand(program: Command): void {
 
         console.log("");
         console.log(chalk.dim("  ── Memory ──"));
-        console.log(chalk.dim("  managed    = Built-in AgentCore memory (remember/recall/forget)"));
-        console.log(chalk.dim("  hindsight  = ECS Fargate service with semantic + graph retrieval"));
-        config.memory_engine = await choose("Memory engine", ["managed", "hindsight"], "managed");
+        console.log(chalk.dim("  AgentCore managed memory is always on (automatic retention)."));
+        console.log(chalk.dim("  Hindsight is an optional add-on: ECS Fargate service for"));
+        console.log(chalk.dim("  semantic + entity-graph retrieval (~$75/mo)."));
+        const hindsightAnswer = await ask("Enable Hindsight long-term memory add-on? (y/N)", "N");
+        config.enable_hindsight = hindsightAnswer.toLowerCase() === "y" ? "true" : "false";
 
         console.log("");
         console.log(chalk.dim("  ── Auth ──"));
@@ -278,7 +282,7 @@ variable "region" { type = string; default = "us-east-1" }
 variable "account_id" { type = string }
 variable "db_password" { type = string; sensitive = true }
 variable "database_engine" { type = string; default = "aurora-serverless" }
-variable "memory_engine" { type = string; default = "managed" }
+variable "enable_hindsight" { type = bool; default = false }
 variable "google_oauth_client_id" { type = string; default = "" }
 variable "google_oauth_client_secret" { type = string; sensitive = true; default = "" }
 variable "pre_signup_lambda_zip" { type = string; default = "" }
@@ -298,7 +302,7 @@ module "thinkwork" {
 
   db_password                = var.db_password
   database_engine            = var.database_engine
-  memory_engine              = var.memory_engine
+  enable_hindsight           = var.enable_hindsight
   google_oauth_client_id     = var.google_oauth_client_id
   google_oauth_client_secret = var.google_oauth_client_secret
   pre_signup_lambda_zip      = var.pre_signup_lambda_zip
@@ -317,9 +321,10 @@ output "mobile_client_id"   { value = module.thinkwork.mobile_client_id }
 output "bucket_name"        { value = module.thinkwork.bucket_name }
 output "db_cluster_endpoint" { value = module.thinkwork.db_cluster_endpoint }
 output "db_secret_arn"      { value = module.thinkwork.db_secret_arn; sensitive = true }
-output "ecr_repository_url" { value = module.thinkwork.ecr_repository_url }
-output "memory_engine"      { value = module.thinkwork.memory_engine }
+output "ecr_repository_url"  { value = module.thinkwork.ecr_repository_url }
+output "hindsight_enabled"   { value = module.thinkwork.hindsight_enabled }
 output "hindsight_endpoint"  { value = module.thinkwork.hindsight_endpoint }
+output "agentcore_memory_id" { value = module.thinkwork.agentcore_memory_id }
 `);
       }
 
@@ -333,7 +338,7 @@ output "hindsight_endpoint"  { value = module.thinkwork.hindsight_endpoint }
       console.log(`  ${chalk.bold("Region:")}          ${config.region}`);
       console.log(`  ${chalk.bold("Account:")}         ${config.account_id}`);
       console.log(`  ${chalk.bold("Database:")}        ${config.database_engine}`);
-      console.log(`  ${chalk.bold("Memory:")}          ${config.memory_engine}`);
+      console.log(`  ${chalk.bold("Memory:")}          managed (always on)${config.enable_hindsight === "true" ? " + hindsight" : ""}`);
       console.log(`  ${chalk.bold("Google OAuth:")}    ${config.google_oauth_client_id ? "enabled" : "disabled"}`);
       console.log(`  ${chalk.bold("Directory:")}       ${tfDir}`);
       console.log(chalk.dim("  ─────────────────────────────────────"));
@@ -357,7 +362,7 @@ output "hindsight_endpoint"  { value = module.thinkwork.hindsight_endpoint }
         accountId: config.account_id,
         terraformDir: tfDir,
         databaseEngine: config.database_engine,
-        memoryEngine: config.memory_engine,
+        enableHindsight: config.enable_hindsight === "true",
         createdAt: now,
         updatedAt: now,
       });
