@@ -39,9 +39,9 @@ type McpServerRow = {
   transport?: string;
 };
 
-function InfoRow({ label, value, color }: { label: string; value: string; color?: string }) {
+function InfoRow({ label, value, color, last }: { label: string; value: string; color?: string; last?: boolean }) {
   return (
-    <View className="flex-row items-center justify-between py-2.5 border-b border-neutral-100 dark:border-neutral-800">
+    <View className={`flex-row items-center justify-between py-2.5 ${last ? "" : "border-b border-neutral-100 dark:border-neutral-800"}`}>
       <Muted className="text-sm">{label}</Muted>
       <Text className="text-sm" style={color ? { color } : undefined}>{value}</Text>
     </View>
@@ -187,26 +187,12 @@ export default function McpServerDetailScreen() {
         <View style={{ maxWidth: 600, gap: 20 }}>
           {/* Status card */}
           <View className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-4 py-3">
-            <View className="flex-row items-center gap-3 mb-3">
-              <View className="w-10 h-10 rounded-lg bg-neutral-100 dark:bg-neutral-800 items-center justify-center">
-                {isConnected
-                  ? <CheckCircle2 size={20} color="#22c55e" />
-                  : server.authStatus === "expired"
-                    ? <AlertTriangle size={20} color="#eab308" />
-                    : <Cable size={20} color={colors.mutedForeground} />}
-              </View>
-              <View className="flex-1">
-                <Text className="font-semibold text-base">{server.name}</Text>
-                <Text className="text-xs" style={{ color: statusColor }}>{statusLabel}</Text>
-              </View>
-            </View>
-
             <InfoRow label="Status" value={statusLabel} color={statusColor} />
             <InfoRow label="Auth" value={authLabel} />
             <InfoRow label="URL" value={server.url} />
             {server.transport && <InfoRow label="Transport" value={server.transport} />}
             <InfoRow label="Tools" value={`${toolCount} tool${toolCount !== 1 ? "s" : ""}`} />
-            <InfoRow label="Enabled" value={server.enabled ? "Yes" : "No"} />
+            <InfoRow label="Enabled" value={server.enabled ? "Yes" : "No"} last />
           </View>
 
           {/* Tools list */}
