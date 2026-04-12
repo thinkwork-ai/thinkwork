@@ -116,9 +116,10 @@ export default function ThreadDetailRoute() {
     const interval = setInterval(() => {
       reexecuteTurns({ requestPolicy: "network-only" });
       reexecuteThread({ requestPolicy: "network-only" });
+      reexecuteMessages({ requestPolicy: "network-only" });
     }, 3000);
     return () => clearInterval(interval);
-  }, [hasRunningTurn, reexecuteTurns, reexecuteThread]);
+  }, [hasRunningTurn, reexecuteTurns, reexecuteThread, reexecuteMessages]);
 
   // ── Subscriptions (deferred to avoid setState-during-render warnings) ──
   const [{ data: threadEvent }] = useThreadUpdatedSubscription(tenantId);
@@ -127,6 +128,7 @@ export default function ThreadDetailRoute() {
       setTimeout(() => {
         reexecuteThread({ requestPolicy: "network-only" });
         reexecuteTurns({ requestPolicy: "network-only" });
+        reexecuteMessages({ requestPolicy: "network-only" });
       }, 0);
     }
   }, [threadEvent?.onThreadUpdated?.updatedAt]);
@@ -134,7 +136,10 @@ export default function ThreadDetailRoute() {
   const [{ data: msgEvent }] = useNewMessageSubscription(threadId);
   useEffect(() => {
     if (msgEvent?.onNewMessage) {
-      setTimeout(() => reexecuteThread({ requestPolicy: "network-only" }), 0);
+      setTimeout(() => {
+        reexecuteThread({ requestPolicy: "network-only" });
+        reexecuteMessages({ requestPolicy: "network-only" });
+      }, 0);
       if (threadId && msgEvent.onNewMessage.role === "assistant") {
         clearThreadActive(threadId);
       }
@@ -275,7 +280,9 @@ export default function ThreadDetailRoute() {
     markThreadActive(threadId);
     // Re-fetch immediately so the new message appears and auto-scroll kicks in
     reexecuteThread({ requestPolicy: "network-only" });
-  }, [messageText, threadId, currentUser?.id, executeSendMessage, reexecuteThread, markThreadActive]);
+    reexecuteMessages({ requestPolicy: "network-only" });
+    reexecuteTurns({ requestPolicy: "network-only" });
+  }, [messageText, threadId, currentUser?.id, executeSendMessage, reexecuteThread, reexecuteMessages, reexecuteTurns, markThreadActive]);
 
   // Don't render stale content — wait until the correct thread is loaded
   const isLoaded = thread && thread.id === threadId;
@@ -428,6 +435,8 @@ export default function ThreadDetailRoute() {
               }).then(() => {
                 markThreadActive(threadId);
                 reexecuteThread({ requestPolicy: "network-only" });
+                reexecuteMessages({ requestPolicy: "network-only" });
+                reexecuteTurns({ requestPolicy: "network-only" });
               });
             }
           }, 50);

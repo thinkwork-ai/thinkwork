@@ -4,9 +4,12 @@ Mobile app for ThinkWork.
 
 ## EAS Account
 
-- **Account:** <your-eas-account>
-- **Project:** @thinkwork/agent
+- **Account:** thinkwork-ai
+- **Project:** @thinkwork-ai/thinkwork-mobile
 - **Bundle ID:** ai.thinkwork.agent
+- **App Store Connect App ID:** 6762098524
+
+> The `production` and `preview` profiles in `eas.json` pin `node` to `20.19.5`. The root `.npmrc` has `engine-strict=true` and a transitive dep (`sitemap` via `expo-router`) requires Node >=20.19.5, so the default EAS runner Node will fail `pnpm install --frozen-lockfile`. Don't remove the pin without bumping the root Node engine floor.
 
 ## Deployment
 

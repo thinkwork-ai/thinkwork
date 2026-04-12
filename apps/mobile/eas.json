@@ -44,8 +44,8 @@
     "production": {
       "ios": {
         "appleId": "eric@maniflow.ai",
-        "ascAppId": "REPLACE_WITH_NUMERIC_APP_ID",
-        "appleTeamId": "REPLACE_WITH_TEAM_ID"
+        "ascAppId": "6762098524",
+        "appleTeamId": "AU45U8Z4GF"
       }
     }
   }
