@@ -84,9 +84,6 @@ const columns: ColumnDef<Row>[] = [
     cell: ({ row }) => (
       <div className="pl-3">
         <span className="font-medium">{row.original.name}</span>
-        <div className="text-xs text-muted-foreground truncate max-w-[260px]">
-          {row.original.description}
-        </div>
       </div>
     ),
   },
@@ -204,7 +201,7 @@ function BuiltinToolsPage() {
         columns={columns}
         data={rows}
         pageSize={0}
-        tableClassName="table-fixed [&_tbody_tr]:h-14"
+        tableClassName="table-fixed [&_tbody_tr]:h-10"
         onRowClick={(r) => setActiveRow(r)}
       />
 
