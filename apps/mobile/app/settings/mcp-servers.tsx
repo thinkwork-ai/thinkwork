@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { View, ScrollView, Pressable, RefreshControl } from "react-native";
 import { useColorScheme } from "nativewind";
 import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import * as WebBrowser from "expo-web-browser";
 import { Cable, CheckCircle2, AlertTriangle, Link2, RefreshCw, ChevronRight } from "lucide-react-native";
 import { DetailLayout } from "@/components/layout/detail-layout";
@@ -63,9 +64,11 @@ export default function McpServersScreen() {
     }
   }, [tenant?.id, user?.id]);
 
-  useEffect(() => {
-    void fetchServers();
-  }, [fetchServers]);
+  useFocusEffect(
+    useCallback(() => {
+      void fetchServers();
+    }, [fetchServers])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -128,14 +131,7 @@ export default function McpServersScreen() {
                     onPress={() => router.push({ pathname: "/settings/mcp-server-detail", params: { id: server.id } })}
                     className={`flex-row items-center px-4 py-3 active:bg-neutral-50 dark:active:bg-neutral-800 ${idx < needsAction.length - 1 ? "border-b border-neutral-100 dark:border-neutral-800" : ""}`}
                   >
-                    <View className="w-9 h-9 rounded-lg bg-neutral-100 dark:bg-neutral-800 items-center justify-center">
-                      {server.authStatus === "expired" ? (
-                        <AlertTriangle size={18} color={colors.destructive} />
-                      ) : (
-                        <Cable size={18} color={colors.primary} />
-                      )}
-                    </View>
-                    <View className="flex-1 ml-3">
+                    <View className="flex-1">
                       <Text className="font-medium text-neutral-900 dark:text-neutral-100">
                         {server.name}
                       </Text>
@@ -171,10 +167,7 @@ export default function McpServersScreen() {
                     onPress={() => router.push({ pathname: "/settings/mcp-server-detail", params: { id: server.id } })}
                     className={`flex-row items-center px-4 py-3 active:bg-neutral-50 dark:active:bg-neutral-800 ${idx < readyServers.length - 1 ? "border-b border-neutral-100 dark:border-neutral-800" : ""}`}
                   >
-                    <View className="w-9 h-9 rounded-lg bg-neutral-100 dark:bg-neutral-800 items-center justify-center">
-                      <CheckCircle2 size={18} color="#22c55e" />
-                    </View>
-                    <View className="flex-1 ml-3">
+                    <View className="flex-1">
                       <Text className="font-medium text-neutral-900 dark:text-neutral-100">
                         {server.name}
                       </Text>
