@@ -18,9 +18,9 @@ CLI_PKG="apps/cli/package.json"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-# Ensure clean working tree
-if [ -n "$(git status --porcelain -- apps/cli/ packages/ .github/)" ]; then
-  echo "Error: working tree has uncommitted changes in apps/cli/, packages/, or .github/"
+# Ensure CLI package is clean
+if [ -n "$(git status --porcelain -- apps/cli/)" ]; then
+  echo "Error: working tree has uncommitted changes in apps/cli/"
   echo "Commit or stash them first."
   exit 1
 fi
