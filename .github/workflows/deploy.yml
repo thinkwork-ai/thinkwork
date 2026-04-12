@@ -159,6 +159,10 @@ jobs:
           if [ -d "${{ github.workspace }}/dist/lambdas" ]; then
             LAMBDA_DIR="${{ github.workspace }}/dist/lambdas"
           fi
+          PRE_SIGNUP_ZIP=""
+          if [ -f "$LAMBDA_DIR/cognito-pre-signup.zip" ]; then
+            PRE_SIGNUP_ZIP="$LAMBDA_DIR/cognito-pre-signup.zip"
+          fi
           terraform apply -auto-approve \
             -var "stage=${{ env.STAGE }}" \
             -var "region=${{ env.AWS_REGION }}" \
@@ -169,7 +173,8 @@ jobs:
             -var "api_auth_secret=${{ secrets.API_AUTH_SECRET }}" \
             -var "google_oauth_client_id=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}" \
             -var "google_oauth_client_secret=${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}" \
-            -var "lambda_zips_dir=$LAMBDA_DIR"
+            -var "lambda_zips_dir=$LAMBDA_DIR" \
+            -var "pre_signup_lambda_zip=$PRE_SIGNUP_ZIP"
 
   # ── Build & deploy admin app ─────────────────────────────────────
   build-admin:
