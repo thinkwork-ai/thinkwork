@@ -56,9 +56,15 @@ fi
 # for update-memory's addMemoryStrategies list, so we can reuse the same
 # shape for drift correction. `episodes` uses the built-in
 # `episodicMemoryStrategy` type (NOT customMemoryStrategy — that was the
-# bug that silently dropped episodes on the first deploy). The reflection
-# block gives it cross-session retrieval so stored episodes are reachable
-# by actor, not just by session.
+# bug that silently dropped episodes on the first deploy).
+#
+# IMPORTANT: episodicMemoryStrategy REQUIRES a reflectionConfiguration whose
+# namespace is a prefix of the episodic namespace. If omitted, the API
+# synthesizes a default reflection namespace of
+# `/strategies/{memoryStrategyId}/actors/{actorId}/` which is NOT a prefix
+# of our flat `episodes_{actorId}/{sessionId}` template, and update-memory
+# fails with ValidationException. We set it to `episodes_{actorId}/` which
+# IS a prefix and gives cross-session reflection records a stable home.
 # ---------------------------------------------------------------------------
 
 strategies_json='[
@@ -83,7 +89,10 @@ strategies_json='[
   {
     "episodicMemoryStrategy": {
       "name": "episodes",
-      "namespaces": ["episodes_{actorId}/{sessionId}"]
+      "namespaces": ["episodes_{actorId}/{sessionId}"],
+      "reflectionConfiguration": {
+        "namespaces": ["episodes_{actorId}/"]
+      }
     }
   }
 ]'
