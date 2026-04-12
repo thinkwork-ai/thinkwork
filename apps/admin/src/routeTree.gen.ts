@@ -21,6 +21,7 @@ import { Route as AuthedTenantOrgRouteImport } from './routes/_authed/_tenant/or
 import { Route as AuthedTenantMcpServersRouteImport } from './routes/_authed/_tenant/mcp-servers'
 import { Route as AuthedTenantDashboardRouteImport } from './routes/_authed/_tenant/dashboard'
 import { Route as AuthedTenantCostsRouteImport } from './routes/_authed/_tenant/costs'
+import { Route as AuthedTenantBuiltinToolsRouteImport } from './routes/_authed/_tenant/builtin-tools'
 import { Route as AuthedTenantActivityRouteImport } from './routes/_authed/_tenant/activity'
 import { Route as AuthedTenantWebhooksIndexRouteImport } from './routes/_authed/_tenant/webhooks/index'
 import { Route as AuthedTenantThreadsIndexRouteImport } from './routes/_authed/_tenant/threads/index'
@@ -116,6 +117,12 @@ const AuthedTenantCostsRoute = AuthedTenantCostsRouteImport.update({
   path: '/costs',
   getParentRoute: () => AuthedTenantRoute,
 } as any)
+const AuthedTenantBuiltinToolsRoute =
+  AuthedTenantBuiltinToolsRouteImport.update({
+    id: '/builtin-tools',
+    path: '/builtin-tools',
+    getParentRoute: () => AuthedTenantRoute,
+  } as any)
 const AuthedTenantActivityRoute = AuthedTenantActivityRouteImport.update({
   id: '/activity',
   path: '/activity',
@@ -331,6 +338,7 @@ export interface FileRoutesByFullPath {
   '/auth/callback': typeof AuthCallbackRoute
   '/invite/$token': typeof InviteTokenRoute
   '/activity': typeof AuthedTenantActivityRoute
+  '/builtin-tools': typeof AuthedTenantBuiltinToolsRoute
   '/costs': typeof AuthedTenantCostsRoute
   '/dashboard': typeof AuthedTenantDashboardRoute
   '/mcp-servers': typeof AuthedTenantMcpServersRoute
@@ -379,6 +387,7 @@ export interface FileRoutesByTo {
   '/auth/callback': typeof AuthCallbackRoute
   '/invite/$token': typeof InviteTokenRoute
   '/activity': typeof AuthedTenantActivityRoute
+  '/builtin-tools': typeof AuthedTenantBuiltinToolsRoute
   '/costs': typeof AuthedTenantCostsRoute
   '/dashboard': typeof AuthedTenantDashboardRoute
   '/mcp-servers': typeof AuthedTenantMcpServersRoute
@@ -430,6 +439,7 @@ export interface FileRoutesById {
   '/auth/callback': typeof AuthCallbackRoute
   '/invite/$token': typeof InviteTokenRoute
   '/_authed/_tenant/activity': typeof AuthedTenantActivityRoute
+  '/_authed/_tenant/builtin-tools': typeof AuthedTenantBuiltinToolsRoute
   '/_authed/_tenant/costs': typeof AuthedTenantCostsRoute
   '/_authed/_tenant/dashboard': typeof AuthedTenantDashboardRoute
   '/_authed/_tenant/mcp-servers': typeof AuthedTenantMcpServersRoute
@@ -480,6 +490,7 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/invite/$token'
     | '/activity'
+    | '/builtin-tools'
     | '/costs'
     | '/dashboard'
     | '/mcp-servers'
@@ -528,6 +539,7 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/invite/$token'
     | '/activity'
+    | '/builtin-tools'
     | '/costs'
     | '/dashboard'
     | '/mcp-servers'
@@ -578,6 +590,7 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/invite/$token'
     | '/_authed/_tenant/activity'
+    | '/_authed/_tenant/builtin-tools'
     | '/_authed/_tenant/costs'
     | '/_authed/_tenant/dashboard'
     | '/_authed/_tenant/mcp-servers'
@@ -713,6 +726,13 @@ declare module '@tanstack/react-router' {
       path: '/costs'
       fullPath: '/costs'
       preLoaderRoute: typeof AuthedTenantCostsRouteImport
+      parentRoute: typeof AuthedTenantRoute
+    }
+    '/_authed/_tenant/builtin-tools': {
+      id: '/_authed/_tenant/builtin-tools'
+      path: '/builtin-tools'
+      fullPath: '/builtin-tools'
+      preLoaderRoute: typeof AuthedTenantBuiltinToolsRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
     '/_authed/_tenant/activity': {
@@ -972,6 +992,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthedTenantRouteChildren {
   AuthedTenantActivityRoute: typeof AuthedTenantActivityRoute
+  AuthedTenantBuiltinToolsRoute: typeof AuthedTenantBuiltinToolsRoute
   AuthedTenantCostsRoute: typeof AuthedTenantCostsRoute
   AuthedTenantDashboardRoute: typeof AuthedTenantDashboardRoute
   AuthedTenantMcpServersRoute: typeof AuthedTenantMcpServersRoute
@@ -1017,6 +1038,7 @@ interface AuthedTenantRouteChildren {
 
 const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantActivityRoute: AuthedTenantActivityRoute,
+  AuthedTenantBuiltinToolsRoute: AuthedTenantBuiltinToolsRoute,
   AuthedTenantCostsRoute: AuthedTenantCostsRoute,
   AuthedTenantDashboardRoute: AuthedTenantDashboardRoute,
   AuthedTenantMcpServersRoute: AuthedTenantMcpServersRoute,

@@ -13,6 +13,7 @@ import { registerLoginCommand } from "./commands/login.js";
 import { registerInitCommand } from "./commands/init.js";
 import { registerStatusCommand } from "./commands/status.js";
 import { registerMcpCommand } from "./commands/mcp.js";
+import { registerToolsCommand } from "./commands/tools.js";
 import { registerUpdateCommand } from "./commands/update.js";
 
 const program = new Command();
@@ -53,6 +54,7 @@ registerStatusCommand(program);
 registerOutputsCommand(program);
 registerConfigCommand(program);
 registerMcpCommand(program);
+registerToolsCommand(program);
 registerUpdateCommand(program);
 
 program.parse();
