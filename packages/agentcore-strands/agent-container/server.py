@@ -979,7 +979,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
     _mcp_tool_to_server: dict[str, str] = {}  # tool_name → server name (for tracking)
     logger.info("MCP configs received: %d servers, raw=%s",
                 len(mcp_configs or []),
-                json.dumps([{k: (v[:20] + "...") if k == "auth" and isinstance(v, dict) else v
+                json.dumps([{k: ("***" if k == "auth" else v)
                              for k, v in cfg.items()} for cfg in (mcp_configs or [])], default=str))
     for cfg in (mcp_configs or []):
         url = cfg.get("url", "")
@@ -1003,18 +1003,10 @@ def _call_strands_agent(system_prompt: str, messages: list,
             from mcp.client.streamable_http import streamablehttp_client
             logger.info("MCP creating client for %s with %d headers", server_name, len(headers))
             client = MCPClient(lambda u=url, h=headers: streamablehttp_client(url=u, headers=h))
-            logger.info("MCP client created for %s, calling __enter__...", server_name)
-            client.__enter__()
-            logger.info("MCP client __enter__ complete for %s, tools type=%s", server_name, type(client.tools).__name__)
-            # Map each tool name back to its server for invocation tracking
-            tool_names = []
-            for t in (client.tools or []):
-                tool_name = getattr(t, "name", None) or (t.get("name") if isinstance(t, dict) else None)
-                if tool_name:
-                    _mcp_tool_to_server[tool_name] = server_name
-                    tool_names.append(tool_name)
+            # Don't call start() — the Agent will start the client and load tools automatically.
+            # Just register the client as a tool provider.
             mcp_clients.append(client)
-            logger.info("MCP connected: %s url=%s tools=%d names=%s", server_name, url, len(tool_names), tool_names)
+            logger.info("MCP client registered: %s url=%s (tools will be discovered by Agent)", server_name, url)
         except Exception as e:
             import traceback
             logger.error("MCP connection FAILED for %s (%s): %s\n%s", server_name, url, e, traceback.format_exc())
@@ -1047,7 +1039,8 @@ def _call_strands_agent(system_prompt: str, messages: list,
         # Clean up MCP client connections (must happen even on error)
         for _mcp_c in mcp_clients:
             try:
-                _mcp_c.__exit__(None, None, None)
+                if hasattr(_mcp_c, '_session') and _mcp_c._session:
+                    _mcp_c.stop()
             except Exception as _mcp_err:
                 logger.warning("MCP client cleanup error: %s", _mcp_err)
         if mcp_clients:
