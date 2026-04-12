@@ -52,9 +52,48 @@ variable "region" {
   type        = string
 }
 
+variable "account_id" {
+  description = "AWS account ID"
+  type        = string
+  default     = ""
+}
+
 locals {
   memory_name = "${replace(var.name_prefix, "-", "_")}_${replace(var.stage, "-", "_")}"
   bootstrap   = var.existing_memory_id == ""
+}
+
+################################################################################
+# IAM Role for custom memory strategies
+################################################################################
+
+resource "aws_iam_role" "memory_execution" {
+  count = local.bootstrap ? 1 : 0
+  name  = "thinkwork-${var.stage}-memory-execution"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "bedrock-agentcore.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "memory_execution" {
+  count = local.bootstrap ? 1 : 0
+  name  = "memory-execution"
+  role  = aws_iam_role.memory_execution[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+      Resource = "arn:aws:bedrock:${var.region}::foundation-model/*"
+    }]
+  })
 }
 
 ################################################################################
@@ -71,8 +110,9 @@ data "external" "memory" {
   program = ["bash", "${path.module}/scripts/create_or_find_memory.sh"]
 
   query = {
-    name   = local.memory_name
-    region = var.region
+    name              = local.memory_name
+    region            = var.region
+    execution_role_arn = aws_iam_role.memory_execution[0].arn
   }
 }
 

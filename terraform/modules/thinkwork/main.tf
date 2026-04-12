@@ -188,6 +188,7 @@ module "agentcore_memory" {
 
   stage              = var.stage
   region             = var.region
+  account_id         = var.account_id
   existing_memory_id = var.agentcore_memory_id
 }
 

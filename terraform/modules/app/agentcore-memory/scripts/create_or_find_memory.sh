@@ -26,6 +26,7 @@ set -euo pipefail
 input="$(cat)"
 name="$(echo "$input" | jq -r '.name // empty')"
 region="$(echo "$input" | jq -r '.region // empty')"
+execution_role_arn="$(echo "$input" | jq -r '.execution_role_arn // empty')"
 
 if [[ -z "$name" || -z "$region" ]]; then
   echo '{"error": "name and region are required"}' >&2
@@ -79,12 +80,18 @@ strategies_json='[
   }
 ]'
 
+role_arg=""
+if [[ -n "$execution_role_arn" ]]; then
+  role_arg="--memory-execution-role-arn $execution_role_arn"
+fi
+
 create_output="$(
   aws bedrock-agentcore-control create-memory \
     --region "$region" \
     --name "$name" \
     --memory-strategies "$strategies_json" \
     --event-expiry-duration 365 \
+    $role_arg \
     --output json
 )"
 
