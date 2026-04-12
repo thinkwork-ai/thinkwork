@@ -14,6 +14,7 @@ import { eq, and, ne, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { agents, agentTemplates, agentSkills, messages, threads, tenants, tenantSkills, users, agentKnowledgeBases, knowledgeBases, threadTurns, costEvents, guardrails, guardrailBlocks } from "@thinkwork/database-pg/schema";
 import { randomBytes } from "crypto";
+import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import {
   extractUsage,
   recordCostEvents,
@@ -40,7 +41,7 @@ function getTraceId(): string {
   return randomBytes(16).toString("hex");
 }
 
-const AGENTCORE_INVOKE_URL = process.env.AGENTCORE_INVOKE_URL || "";
+const AGENTCORE_FUNCTION_NAME = process.env.AGENTCORE_FUNCTION_NAME || "";
 const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
 const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
 const MANIFLOW_API_SECRET = process.env.MANIFLOW_API_SECRET || "";
@@ -51,6 +52,7 @@ const MANIFLOW_API_URL = process.env.MANIFLOW_API_URL || process.env.MCP_BASE_UR
 const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
 
 const db = getDb();
+const lambdaClient = new LambdaClient({});
 
 /** Extract plain text from AgentCore response (handles ChatCompletion, raw text, etc.) */
 function extractResponseText(data: unknown): string {
@@ -430,51 +432,85 @@ export async function handler(event: InvokeEvent): Promise<void> {
 
     console.log(`[chat-agent-invoke] Loaded ${messagesHistory.length} prior messages for thread=${threadId}`);
 
-    // 2d. Call AgentCore Invoke Lambda Function URL
+    // 2d. Call AgentCore Lambda directly via the SDK (no Function URL).
     console.log(`[chat-agent-invoke] Invoking AgentCore runtime=${runtimeType} model=${agentModel} skills=${skillsConfig.length}`);
 
+    if (!AGENTCORE_FUNCTION_NAME) {
+      throw new Error("AGENTCORE_FUNCTION_NAME env var not set");
+    }
+
     const invokeStart = Date.now();
-    const invokeResponse = await fetch(AGENTCORE_INVOKE_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(MANIFLOW_API_SECRET ? { Authorization: `Bearer ${MANIFLOW_API_SECRET}` } : {}),
-      },
-      body: JSON.stringify({
-        tenant_id: tenantId,
-        assistant_id: agentId,
-        thread_id: threadId,
-        user_id: agent.human_pair_id || undefined,
-        trace_id: traceId,
-        message: userMessage,
-        messages_history: messagesHistory,
-        use_memory: true,
-        tenant_slug: tenantSlug || undefined,
-        instance_id: agentSlug || undefined,
-        agent_name: agent.name,
-        human_name: humanName || undefined,
-        workspace_bucket: WORKSPACE_BUCKET || undefined,
-        hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
-        runtime_type: runtimeType,
-        model: agentModel,
-        skills: skillsConfig.length > 0 ? skillsConfig : undefined,
-        knowledge_bases: knowledgeBasesConfig,
-        trigger_channel: "chat",
-        guardrail_config: guardrailPayload || undefined,
-      }),
+    const invokePayload = {
+      tenant_id: tenantId,
+      assistant_id: agentId,
+      thread_id: threadId,
+      user_id: agent.human_pair_id || undefined,
+      trace_id: traceId,
+      message: userMessage,
+      messages_history: messagesHistory,
+      use_memory: true,
+      tenant_slug: tenantSlug || undefined,
+      instance_id: agentSlug || undefined,
+      agent_name: agent.name,
+      human_name: humanName || undefined,
+      workspace_bucket: WORKSPACE_BUCKET || undefined,
+      hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
+      runtime_type: runtimeType,
+      model: agentModel,
+      skills: skillsConfig.length > 0 ? skillsConfig : undefined,
+      knowledge_bases: knowledgeBasesConfig,
+      trigger_channel: "chat",
+      guardrail_config: guardrailPayload || undefined,
+    };
+
+    // The agentcore container runs an HTTP server behind Lambda Web Adapter;
+    // POSTs must be wrapped in an API Gateway v2-style event targeting /invocations.
+    const lambdaEventPayload = JSON.stringify({
+      requestContext: { http: { method: "POST", path: "/invocations" } },
+      rawPath: "/invocations",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(invokePayload),
+      isBase64Encoded: false,
     });
 
-    if (!invokeResponse.ok) {
-      const errText = await invokeResponse.text();
-      console.error(`[chat-agent-invoke] AgentCore invoke failed: ${invokeResponse.status} ${errText}`);
-      // Mark turn as failed
+    const invokeRes = await lambdaClient.send(new InvokeCommand({
+      FunctionName: AGENTCORE_FUNCTION_NAME,
+      InvocationType: "RequestResponse",
+      Payload: new TextEncoder().encode(lambdaEventPayload),
+    }));
+
+    const rawPayload = invokeRes.Payload ? new TextDecoder().decode(invokeRes.Payload) : "{}";
+
+    if (invokeRes.FunctionError) {
+      const errMsgText = `AgentCore Lambda ${invokeRes.FunctionError}: ${rawPayload.slice(0, 500)}`;
+      console.error(`[chat-agent-invoke] ${errMsgText}`);
       if (turnId) {
         try {
-          await db.update(threadTurns).set({ status: "failed", finished_at: new Date(), error: `AgentCore ${invokeResponse.status}: ${errText.slice(0, 500)}` }).where(eq(threadTurns.id, turnId));
+          await db.update(threadTurns).set({ status: "failed", finished_at: new Date(), error: errMsgText }).where(eq(threadTurns.id, turnId));
           await notifyThreadTurnUpdate({ runId: turnId, tenantId, threadId, agentId, status: "failed", triggerName: "Chat" });
         } catch {}
       }
-      // Insert error message so the user sees feedback
+      const errMsg = await insertAssistantMessage(threadId, tenantId, agentId, `I'm sorry, I encountered an error processing your request. Please try again.`);
+      if (errMsg) {
+        await notifyNewMessage({ messageId: errMsg.id, threadId, tenantId, role: "assistant", content: "I'm sorry, I encountered an error processing your request. Please try again.", senderType: "agent", senderId: agentId });
+      }
+      return;
+    }
+
+    // Lambda Web Adapter returns {statusCode, body, headers}
+    const adapterResp = JSON.parse(rawPayload) as Record<string, unknown>;
+    const adapterStatus = (adapterResp.statusCode as number) || 200;
+    const adapterBodyStr = (adapterResp.body as string) || rawPayload;
+
+    if (adapterStatus < 200 || adapterStatus >= 300) {
+      const errMsgText = `AgentCore ${adapterStatus}: ${adapterBodyStr.slice(0, 500)}`;
+      console.error(`[chat-agent-invoke] ${errMsgText}`);
+      if (turnId) {
+        try {
+          await db.update(threadTurns).set({ status: "failed", finished_at: new Date(), error: errMsgText }).where(eq(threadTurns.id, turnId));
+          await notifyThreadTurnUpdate({ runId: turnId, tenantId, threadId, agentId, status: "failed", triggerName: "Chat" });
+        } catch {}
+      }
       const errMsg = await insertAssistantMessage(threadId, tenantId, agentId, `I'm sorry, I encountered an error processing your request. Please try again.`);
       if (errMsg) {
         await notifyNewMessage({ messageId: errMsg.id, threadId, tenantId, role: "assistant", content: "I'm sorry, I encountered an error processing your request. Please try again.", senderType: "agent", senderId: agentId });
@@ -483,7 +519,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
     }
 
     const durationMs = Date.now() - invokeStart;
-    const invokeResult = await invokeResponse.json() as Record<string, any>;
+    const invokeResult = JSON.parse(adapterBodyStr) as Record<string, any>;
     console.log(`[chat-agent-invoke] AgentCore response received in ${durationMs}ms`);
 
     // Extract response text from AgentCore result
