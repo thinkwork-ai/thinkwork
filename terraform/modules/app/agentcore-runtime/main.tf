@@ -92,7 +92,7 @@ resource "aws_iam_role" "agentcore" {
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
-      Principal = { Service = ["ecs-tasks.amazonaws.com", "lambda.amazonaws.com"] }
+      Principal = { Service = ["ecs-tasks.amazonaws.com", "lambda.amazonaws.com", "bedrock-agentcore.amazonaws.com"] }
       Action    = "sts:AssumeRole"
     }]
   })
