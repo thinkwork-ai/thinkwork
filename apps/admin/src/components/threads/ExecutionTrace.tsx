@@ -14,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { formatCost } from "@/lib/activity-utils";
-import { ThreadTurnsForThreadQuery, ThreadTurnEventsQuery, OnThreadTurnUpdatedSubscription } from "@/lib/graphql-queries";
+import { ThreadTurnsForThreadQuery, ThreadTurnEventsQuery, TurnInvocationLogsQuery, OnThreadTurnUpdatedSubscription } from "@/lib/graphql-queries";
 import { formatDateTime, relativeTime } from "@/lib/utils";
 import {
   Activity,
@@ -126,6 +126,435 @@ function EventBadge({ type, level }: { type: string; level?: string }) {
   );
 }
 
+// ─── Execution Timeline (unified LLM calls + tool calls) ─────────────────────
+
+type TimelineEvent = {
+  type: "llm" | "tool_call" | "tool_result" | "response";
+  timestamp: string;
+  branch: string; // "parent" | "sub-agent:<name>" | "sub-agent"
+  // LLM fields
+  modelId?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  costUsd?: number;
+  requestId?: string;
+  inputPreview?: string;
+  outputPreview?: string;
+  toolUses?: string[];
+  hasToolResult?: boolean;
+  // Tool fields
+  toolName?: string;
+  toolType?: string;
+  toolInput?: string;
+  toolOutput?: string;
+  // Response
+  responseText?: string;
+};
+
+function normalizeName(name: string): string {
+  return name.replace(/[-\s]/g, "_");
+}
+
+function getSubAgentName(branch: string): string | null {
+  if (branch.startsWith("sub-agent:")) return branch.slice("sub-agent:".length);
+  if (branch === "sub-agent") return "unknown";
+  return null;
+}
+
+function isSubAgentBranch(branch: string): boolean {
+  return branch.startsWith("sub-agent");
+}
+
+type BranchSpan = {
+  name: string;
+  laneIndex: number;
+  color: string;
+  forkIdx: number;
+  mergeIdx: number;
+  eventIndices: number[];
+};
+
+function buildTimeline(
+  invocations: any[],
+  toolInvocations: any[],
+  userMessage: string,
+  responseText: string,
+): TimelineEvent[] {
+  const events: TimelineEvent[] = [];
+
+  for (const inv of invocations) {
+    const branch: string = inv.branch || "parent";
+
+    events.push({
+      type: "llm",
+      timestamp: inv.timestamp,
+      branch,
+      modelId: inv.modelId,
+      inputTokens: inv.inputTokenCount,
+      outputTokens: inv.outputTokenCount,
+      cacheReadTokens: inv.cacheReadTokenCount,
+      costUsd: inv.costUsd,
+      requestId: inv.requestId,
+      inputPreview: inv.inputPreview,
+      outputPreview: inv.outputPreview,
+      toolUses: inv.toolUses,
+      hasToolResult: inv.hasToolResult,
+    });
+
+    if (inv.toolUses?.length > 0) {
+      for (const toolName of inv.toolUses) {
+        const matchingTool = toolInvocations.find((ti: any) => ti.tool_name === toolName);
+
+        let toolInput = matchingTool?.input_preview || "";
+        if (!toolInput && inv.outputPreview) {
+          const toolUseMatch = inv.outputPreview.match(
+            new RegExp(`\\[tool_use:\\s*${toolName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\((.+?)\\)\\]`)
+          );
+          if (toolUseMatch) toolInput = toolUseMatch[1];
+        }
+
+        let toolOutput = matchingTool?.output_preview || "";
+        if (!toolOutput) {
+          const invIdx = invocations.indexOf(inv);
+          for (let j = invIdx + 1; j < invocations.length; j++) {
+            const nextInv = invocations[j];
+            if (nextInv.inputPreview?.includes("tool_result")) {
+              const resultMatch = nextInv.inputPreview.match(/\[tool_result:\s*([\s\S]*?)(?:\]$|\[(?:Assistant|User|Tools)\])/);
+              if (resultMatch) {
+                toolOutput = resultMatch[1].trim();
+                break;
+              }
+            }
+          }
+        }
+
+        const toolBranch = matchingTool?.type === "sub_agent"
+          ? `sub-agent:${toolName.toLowerCase()}`
+          : branch;
+
+        events.push({
+          type: "tool_call",
+          timestamp: inv.timestamp,
+          branch: toolBranch,
+          toolName,
+          toolType: matchingTool?.type || "mcp_tool",
+          toolInput,
+          toolOutput,
+        });
+      }
+    }
+  }
+
+  if (responseText) {
+    events.push({
+      type: "response",
+      timestamp: "",
+      branch: "parent",
+      responseText,
+    });
+  }
+
+  reparentSubAgentEvents(events);
+
+  return events;
+}
+
+function reparentSubAgentEvents(events: TimelineEvent[]): void {
+  for (let i = 0; i < events.length; i++) {
+    const ev = events[i];
+    if (ev.type !== "tool_call" || ev.toolType !== "sub_agent") continue;
+
+    const subBranch = ev.branch;
+    let pendingTools = 0;
+
+    for (let j = i + 1; j < events.length; j++) {
+      const inner = events[j];
+
+      if (inner.type === "tool_call" && inner.toolType === "sub_agent") break;
+      if (isSubAgentBranch(inner.branch)) break;
+
+      if (inner.type === "llm") {
+        if (inner.hasToolResult) {
+          pendingTools--;
+          if (pendingTools < 0) break;
+        }
+        if (inner.toolUses?.length) pendingTools += inner.toolUses.length;
+        inner.branch = subBranch;
+      } else if (inner.type === "tool_call") {
+        inner.branch = subBranch;
+      } else {
+        break;
+      }
+    }
+  }
+}
+
+const MAIN_COLOR = "rgb(234, 179, 8)";
+const BRANCH_COLORS = [
+  "rgb(168, 85, 247)",
+  "rgb(59, 130, 246)",
+  "rgb(236, 72, 153)",
+  "rgb(20, 184, 166)",
+  "rgb(249, 115, 22)",
+];
+
+const ROW_H = 30;
+const NODE_R = 4;
+const MAIN_X = 10;
+const BRANCH_X = 22;
+const LANE_GAP = 12;
+
+function laneX(laneIndex: number): number {
+  return BRANCH_X + laneIndex * LANE_GAP;
+}
+
+function buildBranches(events: TimelineEvent[]): BranchSpan[] {
+  const branches: BranchSpan[] = [];
+  const activeLanes = new Set<number>();
+
+  for (let i = 0; i < events.length; i++) {
+    const ev = events[i];
+    if (ev.type !== "tool_call" || ev.toolType !== "sub_agent") continue;
+
+    const name = ev.toolName?.toLowerCase() || "unknown";
+
+    const eventIndices = [i];
+    for (let j = i + 1; j < events.length; j++) {
+      const subName = getSubAgentName(events[j].branch);
+      if (subName && normalizeName(subName) === normalizeName(name)) {
+        eventIndices.push(j);
+      }
+    }
+
+    const lastBranchIdx = eventIndices[eventIndices.length - 1];
+    let mergeIdx = events.length - 1;
+    for (let j = lastBranchIdx + 1; j < events.length; j++) {
+      if (!isSubAgentBranch(events[j].branch)) {
+        mergeIdx = j;
+        break;
+      }
+    }
+
+    let lane = 0;
+    while (activeLanes.has(lane)) lane++;
+    activeLanes.add(lane);
+
+    branches.push({
+      name,
+      laneIndex: lane,
+      color: BRANCH_COLORS[branches.length % BRANCH_COLORS.length],
+      forkIdx: i,
+      mergeIdx,
+      eventIndices,
+    });
+  }
+
+  return branches;
+}
+
+function getBranchForEvent(eventIdx: number, branches: BranchSpan[]): BranchSpan | null {
+  return branches.find(b => b.eventIndices.includes(eventIdx)) ?? null;
+}
+
+function ExecutionTimeline({ turnId, toolInvocations, responseText, onViewDetail }: {
+  turnId: string;
+  toolInvocations: any[];
+  responseText: string;
+  onViewDetail: (title: string, content: string) => void;
+}) {
+  const { tenantId } = useTenant();
+  const [result] = useQuery({
+    query: TurnInvocationLogsQuery,
+    variables: { tenantId: tenantId!, turnId },
+    pause: !tenantId,
+  });
+
+  const invocations = (result.data as any)?.turnInvocationLogs ?? [];
+  if (result.fetching) return <p className="text-[10px] text-muted-foreground px-3">Loading timeline...</p>;
+  if (invocations.length === 0) return null;
+
+  const events = buildTimeline(invocations, toolInvocations, "", responseText);
+  const totalCost = invocations.reduce((sum: number, inv: any) => sum + (inv.costUsd || 0), 0);
+  const totalInputTokens = invocations.reduce((sum: number, inv: any) => sum + (inv.inputTokenCount || 0), 0);
+  const totalOutputTokens = invocations.reduce((sum: number, inv: any) => sum + (inv.outputTokenCount || 0), 0);
+  const svgHeight = events.length * ROW_H;
+
+  const branches = buildBranches(events);
+  const hasBranches = branches.length > 0;
+  const maxLane = hasBranches ? Math.max(...branches.map(b => b.laneIndex)) : -1;
+  const svgWidth = hasBranches ? laneX(maxLane) + 12 : 52;
+  const contentPadding = hasBranches ? laneX(maxLane) + 14 : 34;
+
+  const firstFork = hasBranches ? Math.min(...branches.map(b => b.forkIdx)) : -1;
+  const lastMerge = hasBranches ? Math.max(...branches.map(b => b.mergeIdx)) : -1;
+
+  let lastParentBeforeFork = 0;
+  if (hasBranches) {
+    for (let i = firstFork - 1; i >= 0; i--) {
+      if (!isSubAgentBranch(events[i].branch)) { lastParentBeforeFork = i; break; }
+    }
+  }
+
+  return (
+    <div className="px-3 space-y-2">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+        Execution ({events.length} steps) · {formatTokens(totalInputTokens)} in + {formatTokens(totalOutputTokens)} out · {formatCost(totalCost)}
+      </p>
+      <div className="relative" style={{ paddingLeft: contentPadding }}>
+        {/* SVG branch lines */}
+        <svg
+          className="absolute left-0 top-0"
+          width={svgWidth}
+          height={svgHeight}
+          style={{ overflow: "visible" }}
+        >
+          {!hasBranches ? (
+            <line x1={MAIN_X} y1={ROW_H / 2} x2={MAIN_X} y2={svgHeight - ROW_H / 2} stroke={MAIN_COLOR} strokeWidth={2.5} strokeOpacity={0.5} />
+          ) : (
+            <>
+              <line x1={MAIN_X} y1={ROW_H / 2} x2={MAIN_X} y2={firstFork * ROW_H + ROW_H / 2} stroke={MAIN_COLOR} strokeWidth={2.5} strokeOpacity={0.5} />
+              <line x1={MAIN_X} y1={firstFork * ROW_H + ROW_H / 2} x2={MAIN_X} y2={lastMerge * ROW_H + ROW_H / 2} stroke={MAIN_COLOR} strokeWidth={2.5} strokeOpacity={0.3} />
+              <line x1={MAIN_X} y1={lastMerge * ROW_H + ROW_H / 2} x2={MAIN_X} y2={svgHeight - ROW_H / 2} stroke={MAIN_COLOR} strokeWidth={2.5} strokeOpacity={0.5} />
+
+              {branches.map((branch) => {
+                const bx = laneX(branch.laneIndex);
+                const departY = lastParentBeforeFork * ROW_H + ROW_H / 2;
+                const mergeY = branch.mergeIdx * ROW_H + ROW_H / 2;
+                const forkEndY = departY + ROW_H;
+                const mergeStartY = mergeY - ROW_H;
+                const lineTopY = Math.min(forkEndY, branch.forkIdx * ROW_H + ROW_H / 2);
+                const lineBottomY = Math.max(mergeStartY, branch.eventIndices[branch.eventIndices.length - 1] * ROW_H + ROW_H / 2);
+
+                return (
+                  <g key={branch.name}>
+                    <path
+                      d={`M ${MAIN_X} ${departY} C ${MAIN_X} ${departY + ROW_H * 0.6} ${bx} ${forkEndY - ROW_H * 0.4} ${bx} ${forkEndY}`}
+                      fill="none" stroke={branch.color} strokeWidth={2.5} strokeOpacity={0.5}
+                    />
+                    {lineTopY < lineBottomY && (
+                      <line
+                        x1={bx} y1={lineTopY}
+                        x2={bx} y2={lineBottomY}
+                        stroke={branch.color} strokeWidth={2.5} strokeOpacity={0.5}
+                      />
+                    )}
+                    <path
+                      d={`M ${bx} ${mergeStartY} C ${bx} ${mergeStartY + ROW_H * 0.6} ${MAIN_X} ${mergeY - ROW_H * 0.4} ${MAIN_X} ${mergeY}`}
+                      fill="none" stroke={branch.color} strokeWidth={2.5} strokeOpacity={0.5}
+                    />
+                  </g>
+                );
+              })}
+            </>
+          )}
+
+          {events.map((ev, i) => {
+            const branch = getBranchForEvent(i, branches);
+            const cx = branch ? laneX(branch.laneIndex) : MAIN_X;
+            const cy = i * ROW_H + ROW_H / 2;
+            const color = branch ? branch.color : MAIN_COLOR;
+            return (
+              <circle key={i} cx={cx} cy={cy} r={NODE_R} fill={color} />
+            );
+          })}
+        </svg>
+
+        {/* Event rows */}
+        {events.map((ev, i) => {
+          const branch = getBranchForEvent(i, branches);
+          const isOnBranch = !!branch;
+
+          let icon: React.ReactNode;
+          let label = "";
+          let rightDetail: React.ReactNode = null;
+          let clickTitle = "";
+          let clickContent = "";
+
+          if (ev.type === "llm") {
+            icon = <Cpu className="h-3.5 w-3.5 text-muted-foreground" />;
+            label = ev.modelId || "LLM";
+            rightDetail = (
+              <span className="text-[11px] text-muted-foreground tabular-nums">
+                {formatTokens(ev.inputTokens || 0)}→{formatTokens(ev.outputTokens || 0)}
+                {ev.cacheReadTokens ? <span className="text-green-500 ml-1">({formatTokens(ev.cacheReadTokens)} cached)</span> : null}
+                {" "}{formatCost(ev.costUsd || 0)}
+              </span>
+            );
+            const parts: string[] = [];
+            parts.push(`Request: ${ev.requestId}  ·  ${ev.timestamp}  ·  ${ev.inputTokens} in → ${ev.outputTokens} out  ·  ${formatCost(ev.costUsd || 0)}`);
+            if (ev.inputPreview) parts.push(`── INPUT ──\n\n${ev.inputPreview}`);
+            if (ev.outputPreview) parts.push(`── OUTPUT ──\n\n${ev.outputPreview}`);
+            clickTitle = `${ev.modelId}${isOnBranch ? ` (${branch!.name})` : ""}`;
+            clickContent = parts.join("\n\n");
+          } else if (ev.type === "tool_call") {
+            const isSub = ev.toolType === "sub_agent";
+            icon = isSub
+              ? <Bot className="h-3.5 w-3.5" style={{ color: branch?.color || "rgb(168, 85, 247)" }} />
+              : <Zap className="h-3.5 w-3.5 text-amber-400" />;
+            label = ev.toolName || "tool";
+
+            if (isSub && branch) {
+              const branchEvents = branch.eventIndices
+                .map(idx => events[idx])
+                .filter(e => e.type === "llm");
+              const branchIn = branchEvents.reduce((s, e) => s + (e.inputTokens || 0), 0);
+              const branchOut = branchEvents.reduce((s, e) => s + (e.outputTokens || 0), 0);
+              const branchCost = branchEvents.reduce((s, e) => s + (e.costUsd || 0), 0);
+              rightDetail = (
+                <span className="flex items-center gap-2">
+                  <span className="text-[11px] tabular-nums" style={{ color: branch.color }}>
+                    {formatTokens(branchIn)}→{formatTokens(branchOut)} {formatCost(branchCost)}
+                  </span>
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground">sub-agent</Badge>
+                </span>
+              );
+            } else {
+              rightDetail = (
+                <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground">
+                  {isSub ? "sub-agent" : "tool"}
+                </Badge>
+              );
+            }
+            const parts: string[] = [];
+            parts.push(`${isSub ? "Sub-Agent" : "MCP Tool"}  ·  ${ev.toolName}`);
+            if (ev.toolInput) parts.push(`── INPUT ──\n\n${ev.toolInput}`);
+            if (ev.toolOutput) parts.push(`── OUTPUT ──\n\n${ev.toolOutput}`);
+            clickTitle = `${ev.toolName}${isSub ? " (sub-agent)" : ""}`;
+            clickContent = parts.join("\n\n");
+          } else if (ev.type === "response") {
+            icon = <MessageSquare className="h-3.5 w-3.5 text-green-400" />;
+            label = "Response";
+            rightDetail = (
+              <span className="text-[11px] text-muted-foreground truncate max-w-[250px]">
+                {(ev.responseText || "").slice(0, 60)}...
+              </span>
+            );
+            clickTitle = "Response";
+            clickContent = ev.responseText || "";
+          }
+
+          return (
+            <button
+              key={i}
+              type="button"
+              className="w-full flex items-center gap-2 hover:bg-accent/20 transition-colors rounded text-left"
+              style={{ height: ROW_H }}
+              onClick={() => onViewDetail(clickTitle, clickContent)}
+            >
+              {icon}
+              <span className="text-sm font-medium truncate">{label}</span>
+              <span className="flex-1" />
+              {rightDetail}
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Single Turn Row ────────────────────────────────────────────────────────
 
 function TurnRow({ turn }: { turn: any }) {
@@ -209,6 +638,15 @@ function TurnRow({ turn }: { turn: any }) {
             </div>
           )}
 
+          {/* Unified execution timeline — LLM calls, tool calls, response in chronological order */}
+          {turn.status !== "queued" && turn.status !== "running" && (
+            <ExecutionTimeline
+              turnId={turn.id}
+              toolInvocations={(usage?.tool_invocations || []) as any[]}
+              responseText={result?.response ? String(result.response) : ""}
+              onViewDetail={(t, c) => setDetailDialog({ title: t, content: c })}
+            />
+          )}
         </div>
       </CollapsibleContent>
 

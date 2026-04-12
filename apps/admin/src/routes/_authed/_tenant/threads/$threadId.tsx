@@ -49,6 +49,8 @@ import {
 import { ThreadFormDialog } from "@/components/threads/CreateThreadDialog";
 import { ArtifactViewDialog } from "@/components/threads/ArtifactViewDialog";
 import { ExecutionTrace } from "@/components/threads/ExecutionTrace";
+import { ThreadTraces } from "@/components/threads/ThreadTraces";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ArtifactsListQuery, ArtifactDetailQuery } from "@/lib/graphql-queries";
 import { useClient } from "urql";
 
@@ -516,6 +518,14 @@ function ThreadDetailPage() {
           />
         </div>
 
+        {/* ── Traces ───────────────────────────────────────────────── */}
+        {tenantId && (
+          <>
+            <Separator />
+            <TracesSection threadId={threadId} tenantId={tenantId} />
+          </>
+        )}
+
       </div>
 
       {/* ── Right sidebar ─────────────────────────────────────────── */}
@@ -797,5 +807,27 @@ function PropRow({
       <span className="text-muted-foreground">{label}</span>
       <span>{children}</span>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Traces section
+// ---------------------------------------------------------------------------
+
+function TracesSection({ threadId, tenantId }: { threadId: string; tenantId: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger className="w-full">
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors py-1">
+          {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          Traces
+        </div>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <ThreadTraces threadId={threadId} tenantId={tenantId} />
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

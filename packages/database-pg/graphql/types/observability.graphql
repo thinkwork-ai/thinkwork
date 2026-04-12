@@ -1,0 +1,60 @@
+# PRD-20: Observability types
+
+type TraceEvent {
+  traceId: String!
+  threadId: ID
+  agentId: ID
+  agentName: String
+  model: String
+  inputTokens: Int
+  outputTokens: Int
+  durationMs: Int
+  costUsd: Float
+  estimated: Boolean
+  createdAt: AWSDateTime!
+}
+
+type AgentPerformance {
+  agentId: ID!
+  agentName: String!
+  invocationCount: Int!
+  errorCount: Int!
+  avgDurationMs: Float!
+  p95DurationMs: Float!
+  totalInputTokens: Int!
+  totalOutputTokens: Int!
+  totalCostUsd: Float!
+}
+
+type PerformanceTimeSeries {
+  day: String!
+  invocationCount: Int!
+  avgDurationMs: Float!
+  errorCount: Int!
+  totalCostUsd: Float!
+}
+
+type ModelInvocation {
+  requestId: String!
+  modelId: String!
+  timestamp: AWSDateTime!
+  inputTokenCount: Int!
+  outputTokenCount: Int!
+  cacheReadTokenCount: Int!
+  inputPreview: String
+  outputPreview: String
+  toolCount: Int
+  costUsd: Float
+  toolUses: [String!]
+  hasToolResult: Boolean
+  branch: String
+}
+
+extend type Query {
+  threadTraces(threadId: ID!, tenantId: ID!): [TraceEvent!]!
+  agentPerformance(tenantId: ID!, from: AWSDateTime, to: AWSDateTime): [AgentPerformance!]!
+  performanceTimeSeries(tenantId: ID!, agentId: ID, days: Int): [PerformanceTimeSeries!]!
+  singleAgentPerformance(agentId: ID!, tenantId: ID!): AgentPerformance
+  agentCostBreakdown(agentId: ID!, tenantId: ID!, from: AWSDateTime, to: AWSDateTime): CostSummary!
+  turnInvocationLogs(tenantId: ID!, turnId: ID!): [ModelInvocation!]!
+}

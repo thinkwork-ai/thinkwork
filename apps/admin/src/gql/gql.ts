@@ -118,6 +118,8 @@ type Documents = {
     "\n  mutation SyncTemplateToAllAgents($templateId: ID!) {\n    syncTemplateToAllAgents(templateId: $templateId) {\n      agentsSynced\n      agentsFailed\n      errors\n    }\n  }\n": typeof types.SyncTemplateToAllAgentsDocument,
     "\n  mutation RollbackAgentVersion($agentId: ID!, $versionId: ID!) {\n    rollbackAgentVersion(agentId: $agentId, versionId: $versionId) {\n      id\n      name\n      role\n      updatedAt\n    }\n  }\n": typeof types.RollbackAgentVersionDocument,
     "\n  query MemoryGraph($assistantId: ID!) {\n    memoryGraph(assistantId: $assistantId) {\n      nodes { id label type strategy entityType edgeCount }\n      edges { source target type label weight }\n    }\n  }\n": typeof types.MemoryGraphDocument,
+    "\n  query ThreadTraces($threadId: ID!, $tenantId: ID!) {\n    threadTraces(threadId: $threadId, tenantId: $tenantId) {\n      traceId\n      threadId\n      agentId\n      agentName\n      model\n      inputTokens\n      outputTokens\n      durationMs\n      costUsd\n      estimated\n      createdAt\n    }\n  }\n": typeof types.ThreadTracesDocument,
+    "\n  query TurnInvocationLogs($tenantId: ID!, $turnId: ID!) {\n    turnInvocationLogs(tenantId: $tenantId, turnId: $turnId) {\n      requestId\n      modelId\n      timestamp\n      inputTokenCount\n      outputTokenCount\n      cacheReadTokenCount\n      inputPreview\n      outputPreview\n      toolCount\n      costUsd\n      toolUses\n      hasToolResult\n      branch\n    }\n  }\n": typeof types.TurnInvocationLogsDocument,
 };
 const documents: Documents = {
     "\n  mutation CreateSubAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      slug\n    }\n  }\n": types.CreateSubAgentDocument,
@@ -224,6 +226,8 @@ const documents: Documents = {
     "\n  mutation SyncTemplateToAllAgents($templateId: ID!) {\n    syncTemplateToAllAgents(templateId: $templateId) {\n      agentsSynced\n      agentsFailed\n      errors\n    }\n  }\n": types.SyncTemplateToAllAgentsDocument,
     "\n  mutation RollbackAgentVersion($agentId: ID!, $versionId: ID!) {\n    rollbackAgentVersion(agentId: $agentId, versionId: $versionId) {\n      id\n      name\n      role\n      updatedAt\n    }\n  }\n": types.RollbackAgentVersionDocument,
     "\n  query MemoryGraph($assistantId: ID!) {\n    memoryGraph(assistantId: $assistantId) {\n      nodes { id label type strategy entityType edgeCount }\n      edges { source target type label weight }\n    }\n  }\n": types.MemoryGraphDocument,
+    "\n  query ThreadTraces($threadId: ID!, $tenantId: ID!) {\n    threadTraces(threadId: $threadId, tenantId: $tenantId) {\n      traceId\n      threadId\n      agentId\n      agentName\n      model\n      inputTokens\n      outputTokens\n      durationMs\n      costUsd\n      estimated\n      createdAt\n    }\n  }\n": types.ThreadTracesDocument,
+    "\n  query TurnInvocationLogs($tenantId: ID!, $turnId: ID!) {\n    turnInvocationLogs(tenantId: $tenantId, turnId: $turnId) {\n      requestId\n      modelId\n      timestamp\n      inputTokenCount\n      outputTokenCount\n      cacheReadTokenCount\n      inputPreview\n      outputPreview\n      toolCount\n      costUsd\n      toolUses\n      hasToolResult\n      branch\n    }\n  }\n": types.TurnInvocationLogsDocument,
 };
 
 /**
@@ -656,6 +660,14 @@ export function graphql(source: "\n  mutation RollbackAgentVersion($agentId: ID!
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query MemoryGraph($assistantId: ID!) {\n    memoryGraph(assistantId: $assistantId) {\n      nodes { id label type strategy entityType edgeCount }\n      edges { source target type label weight }\n    }\n  }\n"): (typeof documents)["\n  query MemoryGraph($assistantId: ID!) {\n    memoryGraph(assistantId: $assistantId) {\n      nodes { id label type strategy entityType edgeCount }\n      edges { source target type label weight }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query ThreadTraces($threadId: ID!, $tenantId: ID!) {\n    threadTraces(threadId: $threadId, tenantId: $tenantId) {\n      traceId\n      threadId\n      agentId\n      agentName\n      model\n      inputTokens\n      outputTokens\n      durationMs\n      costUsd\n      estimated\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  query ThreadTraces($threadId: ID!, $tenantId: ID!) {\n    threadTraces(threadId: $threadId, tenantId: $tenantId) {\n      traceId\n      threadId\n      agentId\n      agentName\n      model\n      inputTokens\n      outputTokens\n      durationMs\n      costUsd\n      estimated\n      createdAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query TurnInvocationLogs($tenantId: ID!, $turnId: ID!) {\n    turnInvocationLogs(tenantId: $tenantId, turnId: $turnId) {\n      requestId\n      modelId\n      timestamp\n      inputTokenCount\n      outputTokenCount\n      cacheReadTokenCount\n      inputPreview\n      outputPreview\n      toolCount\n      costUsd\n      toolUses\n      hasToolResult\n      branch\n    }\n  }\n"): (typeof documents)["\n  query TurnInvocationLogs($tenantId: ID!, $turnId: ID!) {\n    turnInvocationLogs(tenantId: $tenantId, turnId: $turnId) {\n      requestId\n      modelId\n      timestamp\n      inputTokenCount\n      outputTokenCount\n      cacheReadTokenCount\n      inputPreview\n      outputPreview\n      toolCount\n      costUsd\n      toolUses\n      hasToolResult\n      branch\n    }\n  }\n"];
 
 export function graphql(source: string) {
   return (documents as any)[source] ?? {};
