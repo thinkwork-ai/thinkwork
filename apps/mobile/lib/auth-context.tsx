@@ -77,19 +77,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Wait for CognitoSecureStorage to hydrate from SecureStore
         await auth.waitForStorageReady();
 
-        // Try to restore the existing Cognito session
+        // Try to restore the existing Cognito session (password / SRP flow)
         const session = await auth.getCurrentSession();
         if (session && !cancelled) {
           const token = session.getIdToken().getJwtToken();
           setAuthToken(token);
-          setUser(auth.getCurrentUser());
-        } else if (!cancelled) {
-          // Fallback: OAuth/federated sessions can't be restored via SRP,
-          // but tokens are stored directly in CognitoSecureStorage
-          const oauthToken = await auth.getIdToken();
-          if (oauthToken) {
-            setAuthToken(oauthToken);
-            setUser(auth.getCurrentUser());
+          setUser(auth.parseUserFromSession(session));
+          return;
+        }
+
+        // Fallback: OAuth/federated sessions can't be restored via SRP,
+        // but tokens are stored directly in CognitoSecureStorage. Read the
+        // id token sync from storage so we don't depend on getSession's
+        // async refresh callback returning in time.
+        if (!cancelled) {
+          const restoredUser = auth.getCurrentUser();
+          if (restoredUser) {
+            const oauthToken = await auth.getIdToken();
+            if (oauthToken) {
+              setAuthToken(oauthToken);
+              setUser(restoredUser);
+            }
           }
         }
       } catch (e) {
@@ -155,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = session.getIdToken().getJwtToken();
     setAuthToken(token);
     setDidActiveLogin(true);
-    setUser(auth.getCurrentUser());
+    setUser(auth.parseUserFromSession(session));
 
     // Persist credentials for biometric re-auth — fire-and-forget so it
     // doesn't block the login flow (SecureStore writes take ~50ms each)
@@ -178,7 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const session = await auth.signIn(email, password);
       const token = session.getIdToken().getJwtToken();
       setAuthToken(token);
-      setUser(auth.getCurrentUser());
+      setUser(auth.parseUserFromSession(session));
       return true;
     } catch (e) {
       console.warn("[AuthProvider] credential restore failed:", e);

@@ -10,6 +10,7 @@ import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
 const PREFIX = "CognitoIdentityServiceProvider";
+const CLIENT_ID = process.env.EXPO_PUBLIC_COGNITO_CLIENT_ID || "";
 
 // In-memory cache so synchronous reads work (Cognito SDK calls getItem synchronously)
 const memoryCache = new Map<string, string>();
@@ -26,28 +27,43 @@ async function hydrate() {
   }
 
   try {
-    // SecureStore doesn't support listing keys, so we read the known key
-    // patterns that Cognito uses. The SDK stores:
-    //   <prefix>.<clientId>.LastAuthUser
-    //   <prefix>.<clientId>.<username>.idToken
-    //   <prefix>.<clientId>.<username>.accessToken
-    //   <prefix>.<clientId>.<username>.refreshToken
-    //   <prefix>.<clientId>.<username>.clockDrift
-    //   <prefix>.<clientId>.<username>.userData
-    //
-    // We store the set of known keys under a manifest key.
+    // SecureStore doesn't support listing keys. We derive the full set of
+    // known Cognito keys from LastAuthUser (plus a legacy manifest fallback
+    // for older sessions). Relying on LastAuthUser avoids a failure mode
+    // where a reload — e.g. Updates.reloadAsync() after an OTA install —
+    // killed the debounced manifest write before it could flush.
+    const lastUserKey = `${PREFIX}.${CLIENT_ID}.LastAuthUser`;
+    const username = await SecureStore.getItemAsync(lastUserKey);
+    const keysToLoad = new Set<string>();
+
+    if (username) {
+      keysToLoad.add(lastUserKey);
+      const userPrefix = `${PREFIX}.${CLIENT_ID}.${username}`;
+      keysToLoad.add(`${userPrefix}.idToken`);
+      keysToLoad.add(`${userPrefix}.accessToken`);
+      keysToLoad.add(`${userPrefix}.refreshToken`);
+      keysToLoad.add(`${userPrefix}.clockDrift`);
+      keysToLoad.add(`${userPrefix}.userData`);
+    }
+
+    // Legacy manifest support (pre-fix sessions). Harmless once all users
+    // have re-signed in under the new hydration path; delete later.
     const manifestRaw = await SecureStore.getItemAsync(`${PREFIX}.__manifest__`);
     if (manifestRaw) {
-      const keys: string[] = JSON.parse(manifestRaw);
-      await Promise.all(
-        keys.map(async (key) => {
-          const value = await SecureStore.getItemAsync(key);
-          if (value !== null) {
-            memoryCache.set(key, value);
-          }
-        }),
-      );
+      try {
+        const keys: string[] = JSON.parse(manifestRaw);
+        keys.forEach((k) => keysToLoad.add(k));
+      } catch {}
     }
+
+    await Promise.all(
+      [...keysToLoad].map(async (key) => {
+        const value = await SecureStore.getItemAsync(key);
+        if (value !== null) {
+          memoryCache.set(key, value);
+        }
+      }),
+    );
   } catch (e) {
     console.warn("[CognitoStorage] hydrate error:", e);
   }
