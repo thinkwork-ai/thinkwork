@@ -1,6 +1,6 @@
-# Thinkwork Mobile
+# ThinkWork Mobile
 
-Mobile app for Thinkwork.
+Mobile app for ThinkWork.
 
 ## EAS Account
 

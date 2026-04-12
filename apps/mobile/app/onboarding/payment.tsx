@@ -54,7 +54,7 @@ export default function PaymentScreen() {
               />
             </View>
             <CardTitle>
-              <H2 className="tracking-wider text-center" numberOfLines={1} adjustsFontSizeToFit>Welcome to Thinkwork</H2>
+              <H2 className="tracking-wider text-center" numberOfLines={1} adjustsFontSizeToFit>Welcome to ThinkWork</H2>
             </CardTitle>
             <CardDescription>
               <Muted className="text-center">

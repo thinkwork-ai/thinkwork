@@ -91,7 +91,7 @@ export function BiometricLockScreen({
           minimumFontScale={0.5}
           style={{ fontSize: 24 }}
         >
-          Thinkwork
+          ThinkWork
         </Text>
         <Text className="text-neutral-500 dark:text-neutral-400 mb-8">
           Locked

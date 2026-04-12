@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "Thinkwork",
+    "name": "ThinkWork",
     "slug": "team",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "scheme": "team",
+    "scheme": "thinkwork",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -18,9 +18,9 @@
       "bundleIdentifier": "ai.thinkwork.agent",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSPhotoLibraryUsageDescription": "Allow Thinkwork to access your photos for attaching images to tickets.",
-        "NSMicrophoneUsageDescription": "Allow Thinkwork to use the microphone for voice input.",
-        "NSSpeechRecognitionUsageDescription": "Allow Thinkwork to use speech recognition for voice input."
+        "NSPhotoLibraryUsageDescription": "Allow ThinkWork to access your photos for attaching images to tickets.",
+        "NSMicrophoneUsageDescription": "Allow ThinkWork to use the microphone for voice input.",
+        "NSSpeechRecognitionUsageDescription": "Allow ThinkWork to use speech recognition for voice input."
       }
     },
     "android": {
@@ -39,8 +39,8 @@
       "expo-router",
       "expo-web-browser",
       ["expo-speech-recognition", {
-        "microphonePermission": "Allow Thinkwork to use the microphone for voice input.",
-        "speechRecognitionPermission": "Allow Thinkwork to use speech recognition."
+        "microphonePermission": "Allow ThinkWork to use the microphone for voice input.",
+        "speechRecognitionPermission": "Allow ThinkWork to use speech recognition."
       }],
       ["expo-notifications", {
         "color": "#f59e0b"
