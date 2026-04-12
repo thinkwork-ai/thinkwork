@@ -32,7 +32,8 @@ Thinkwork is organized into three infrastructure tiers that deploy in order:
 - Connector Lambda functions (Slack, GitHub, Google)
 - Step Functions state machines (automations, routine runner)
 - CloudFront distributions (admin app, end-user app)
-- ECS Fargate (only if `memory_engine = "hindsight"`)
+- Bedrock AgentCore Memory (always on — auto-provisioned for managed long-term memory)
+- ECS Fargate (only if `enable_hindsight = true`)
 
 ## Prerequisites
 
@@ -109,8 +110,10 @@ Enable model access before running deploy. If models aren't enabled, the deploy 
    # domain_name    = "thinkwork.example.com"
    # hosted_zone_id = "Z1234567890ABC"
 
-   # Memory engine
-   memory_engine = "managed"   # default AgentCore LongTerm memory, upgrade to hindsight later if needed
+   # Memory
+   # AgentCore managed memory (auto-retention) is always on.
+   # Uncomment to also enable the Hindsight ECS add-on:
+   # enable_hindsight = true
 
    # Database engine
    database_engine = "aurora-serverless"   # recommended for dev

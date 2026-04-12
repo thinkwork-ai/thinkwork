@@ -88,8 +88,13 @@ db_password = "change-me-before-deploy"
 
 # Optional — defaults shown
 database_engine = "aurora-serverless"   # or "rds-postgres"
-memory_engine   = "managed"             # or "hindsight"
+# enable_hindsight = true                # optional Hindsight add-on (ECS+ALB)
 ```
+
+AgentCore managed memory is always on — every agent gets automatic
+per-turn retention with zero config. Set `enable_hindsight = true` to
+additionally provision the Hindsight ECS service for semantic +
+entity-graph retrieval alongside it.
 
 <Aside type="caution">
 Do not commit `db_password` to source control. Use a secrets manager or environment variable injection in CI. See [Configuration Reference](/deploy/configuration/) for all available variables.

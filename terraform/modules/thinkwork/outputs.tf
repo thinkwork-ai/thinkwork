@@ -81,14 +81,19 @@ output "ecr_repository_url" {
   value = module.agentcore.ecr_repository_url
 }
 
-output "memory_engine" {
-  description = "Which memory engine is active (managed or hindsight)"
-  value       = var.memory_engine
+output "agentcore_memory_id" {
+  description = "Bedrock AgentCore Memory resource ID (always present — managed memory is always on)"
+  value       = module.agentcore_memory.memory_id
+}
+
+output "hindsight_enabled" {
+  description = "Whether the Hindsight add-on is enabled"
+  value       = local.hindsight_enabled
 }
 
 output "hindsight_endpoint" {
-  description = "Hindsight API endpoint (only when memory_engine = hindsight)"
-  value       = var.memory_engine == "hindsight" ? module.hindsight[0].hindsight_endpoint : null
+  description = "Hindsight API endpoint (null when enable_hindsight = false)"
+  value       = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : null
 }
 
 # Admin static site

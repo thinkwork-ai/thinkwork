@@ -1,6 +1,6 @@
 ---
 title: Long-term Memory
-description: How Thinkwork stores and recalls information from prior interactions, using AWS AgentCore LongTerm memory by default and Hindsight as an optional alternative.
+description: How Thinkwork stores and recalls information from prior interactions, using AWS AgentCore managed memory with automatic retention and Hindsight as an optional add-on.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -16,37 +16,31 @@ Long-term memory helps agents retain useful facts across turns or across related
 - Prior decisions and follow-up items
 - Summaries synthesized from earlier conversations
 
-Thinkwork currently documents two long-term memory modes for managed agents.
+Thinkwork ships with **AgentCore managed memory always on** and **Hindsight as an optional add-on** that runs alongside it.
 
-## Default: AWS AgentCore LongTerm memory
+## AgentCore managed memory — always on
 
-The default option is AWS AgentCore LongTerm memory.
+Every Thinkwork deployment provisions an AWS Bedrock AgentCore Memory resource as part of the `thinkwork` Terraform module. The agent container automatically emits a `CreateEvent` for every turn (user message + assistant response), and AgentCore's background strategies extract facts into four namespaces:
 
-In deployment config, this is currently surfaced as `memory_engine = "managed"`. In the open source app, that `managed` setting refers to the built-in AgentCore LongTerm path rather than a separate generic memory abstraction.
+- **Semantic** — similarity-based recall of cross-thread facts
+- **Summarization** — synthesized per-session carry-forward context
+- **User-preference** — durable preference capture
+- **Episodic** — remembered events and prior interactions
 
-The documented default long-term memory setup includes four built-in strategies:
+The agent reads them back via the `recall()` tool. There is no need for the model to call `remember()` for routine facts — it only exists for user-driven "please remember X" requests. Retention is automatic and requires zero prompting.
 
-- **Semantic** for similarity-based recall
-- **Summarization** for synthesized carry-forward context
-- **User-preference** for durable preference capture
-- **Episodic** for remembered events and prior interactions
+## Hindsight — optional add-on
 
-This is the right starting point for most deployments because it is the default path and does not require the separate Hindsight service.
-
-## Hindsight
-
-**Hindsight** is an alternative memory engine.
-
-It runs on ECS Fargate and adds a fuller explicit memory lifecycle:
+**Hindsight** is an additional long-term memory system that runs alongside managed memory, not instead of it. It runs on ECS Fargate behind an ALB and adds a fuller explicit memory lifecycle with entity-graph traversal and cross-encoder reranking:
 
 - **Retain** stores candidate memories from conversations
-- **Recall** retrieves relevant memories for the next turn
+- **Recall** retrieves relevant memories with entity-graph and BM25 signals
 - **Reflect** periodically synthesizes and compresses memory over time
 
-Enable it with `memory_engine = "hindsight"` in your deployment config.
+Enable it with `enable_hindsight = true` in your deployment config. When enabled, the agent gets both tool sets — managed `remember()`/`recall()`/`forget()` AND `hindsight_retain`/`hindsight_recall`/`hindsight_reflect`. The `remember()` tool dual-writes to both backends so explicit memories land in both systems.
 
 <Aside type="tip">
-Start with the default AgentCore LongTerm memory unless you already know you need Hindsight's separate retain and reflect workflows.
+Managed memory gives you automatic retention out of the box. Only enable Hindsight if you need its entity-graph retrieval, cross-encoder reranking, or batch reflection features — they're not a replacement for managed memory.
 </Aside>
 
 ## Long-term memory versus thread history

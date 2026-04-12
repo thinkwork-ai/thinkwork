@@ -72,10 +72,10 @@ variable "database_engine" {
   default     = "aurora-serverless"
 }
 
-variable "memory_engine" {
-  description = "Memory engine: 'managed' (AgentCore built-in, default) or 'hindsight' (ECS+ALB, opt-in)"
-  type        = string
-  default     = "managed"
+variable "enable_hindsight" {
+  description = "Optional Hindsight add-on alongside the always-on managed memory (ECS+ALB for semantic + graph retrieval)"
+  type        = bool
+  default     = false
 }
 
 variable "google_oauth_client_id" {
@@ -119,7 +119,7 @@ module "thinkwork" {
 
   db_password                = var.db_password
   database_engine            = var.database_engine
-  memory_engine              = var.memory_engine
+  enable_hindsight           = var.enable_hindsight
   google_oauth_client_id     = var.google_oauth_client_id
   google_oauth_client_secret = var.google_oauth_client_secret
   pre_signup_lambda_zip      = var.pre_signup_lambda_zip
@@ -199,14 +199,19 @@ output "database_name" {
   value       = module.thinkwork.database_name
 }
 
-output "memory_engine" {
-  description = "Active memory engine (managed or hindsight)"
-  value       = module.thinkwork.memory_engine
+output "hindsight_enabled" {
+  description = "Whether the Hindsight add-on is enabled"
+  value       = module.thinkwork.hindsight_enabled
 }
 
 output "hindsight_endpoint" {
-  description = "Hindsight API endpoint (null when memory_engine = managed)"
+  description = "Hindsight API endpoint (null when enable_hindsight = false)"
   value       = module.thinkwork.hindsight_endpoint
+}
+
+output "agentcore_memory_id" {
+  description = "AgentCore Memory resource ID used for automatic retention"
+  value       = module.thinkwork.agentcore_memory_id
 }
 
 output "admin_url" {

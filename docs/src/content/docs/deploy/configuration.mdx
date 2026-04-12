@@ -23,7 +23,8 @@ These must be set in every deployment. There are no defaults.
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
 | `database_engine` | string | `"aurora-serverless"` | `aurora-serverless` (Aurora Serverless v2) or `rds-postgres` (provisioned RDS). Use `aurora-serverless` for dev/staging and variable workloads. |
-| `memory_engine` | string | `"managed"` | `managed` (the default AWS AgentCore LongTerm memory path used by the open source app) or `hindsight` (ECS Fargate alternative with a fuller explicit memory lifecycle). |
+| `enable_hindsight` | bool | `false` | Optional Hindsight memory add-on (ECS Fargate + ALB for semantic + entity-graph retrieval). AgentCore managed memory with automatic per-turn retention is always on regardless of this setting — this flag only controls whether Hindsight is *also* deployed alongside it. |
+| `memory_engine` | string | `""` | **Deprecated.** Use `enable_hindsight` instead. For backwards compatibility, setting this to `"hindsight"` is equivalent to `enable_hindsight = true`. |
 | `default_model_id` | string | `"anthropic.claude-3-5-sonnet-20241022-v2:0"` | Bedrock model ID for the default Agent Template created on first deploy. |
 | `log_retention_days` | number | `30` | CloudWatch log group retention in days. Set to `0` for never expire (not recommended for production). |
 
@@ -85,17 +86,30 @@ For development, set `aurora_min_capacity = 0.5`. Aurora Serverless v2 pauses af
 | `admin_app_subdomain` | string | `"app"` | Subdomain for the admin app (e.g. `app.thinkwork.example.com`). |
 | `api_subdomain` | string | `"api"` | Subdomain for API Gateway (e.g. `api.thinkwork.example.com`). |
 
-## Memory engine
+## Memory
+
+Thinkwork always provisions an AWS Bedrock AgentCore Memory resource as
+part of `module.thinkwork`. The agent container emits a `CreateEvent` for
+every turn, and AgentCore's built-in strategies (semantic, summarization,
+user-preference, episodic) extract facts in the background. Retention is
+automatic — you don't need to configure anything or prompt the model to
+call `remember()`.
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `memory_engine` | string | `"managed"` | `managed` or `hindsight`. `managed` is the config surface for the default AWS AgentCore LongTerm memory integration. |
-| `hindsight_retain_interval_hours` | number | `1` | How often (hours) Hindsight runs the retain step. Only used if `memory_engine = "hindsight"`. |
+| `agentcore_memory_id` | string | `""` | Optional pre-existing AgentCore Memory resource ID to reuse. Leave empty to let the `agentcore-memory` module auto-provision one. |
+| `enable_hindsight` | bool | `false` | Optional add-on: also deploy the Hindsight ECS service for semantic + entity-graph retrieval alongside managed memory. |
+| `hindsight_image_tag` | string | `"0.5.0"` | Hindsight Docker image tag. Only used when `enable_hindsight = true`. |
+| `hindsight_retain_interval_hours` | number | `1` | How often (hours) Hindsight runs the retain step. Only used when `enable_hindsight = true`. |
 | `hindsight_reflect_interval_hours` | number | `24` | How often (hours) Hindsight runs the reflect/synthesis step. |
 | `hindsight_task_cpu` | number | `512` | ECS Fargate CPU units for Hindsight tasks. |
 | `hindsight_task_memory` | number | `1024` | ECS Fargate memory (MB) for Hindsight tasks. |
 
-With `memory_engine = "managed"`, Thinkwork uses AWS AgentCore LongTerm memory by default. The documented default setup includes four built-in strategies: semantic, summarization, user-preference, and episodic.
+When `enable_hindsight = true`, the agent container gains three additional
+tools (`hindsight_retain`, `hindsight_recall`, `hindsight_reflect`)
+alongside the always-on managed memory tools (`remember`, `recall`,
+`forget`). The `remember()` tool dual-writes to both backends so explicit
+memories land in both stores.
 
 ## Email (SES)
 
@@ -153,7 +167,7 @@ database_engine   = "aurora-serverless"
 aurora_min_capacity = 1
 aurora_max_capacity = 32
 
-memory_engine = "hindsight"
+enable_hindsight = true      # optional add-on alongside managed memory
 
 single_nat_gateway = false   # HA: one NAT per AZ
 

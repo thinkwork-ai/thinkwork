@@ -40,16 +40,18 @@ function generateSecret(length = 32): string {
 
 /**
  * Resolve the bundled Terraform modules directory.
- * When installed via npm: <pkg>/dist/terraform/
- * When running from repo: <repo>/terraform/
+ * When installed via npm: <pkg>/dist/terraform/ (sibling of cli.js in dist)
+ * When running from repo: <repo>/terraform/ (three levels up from apps/cli/dist)
  */
 function findBundledTerraform(): string {
-  // Check npm package bundle first (dist/terraform/)
-  const bundled = resolve(__dirname, "..", "terraform");
+  // Check npm package bundle first — scripts/bundle-terraform.js puts
+  // modules at dist/terraform/, same directory as cli.js.
+  const bundled = resolve(__dirname, "terraform");
   if (existsSync(join(bundled, "modules"))) return bundled;
 
-  // Fallback: repo root (for development)
-  const repoTf = resolve(__dirname, "..", "..", "..", "..", "terraform");
+  // Fallback: repo root (for development). __dirname is apps/cli/dist,
+  // so three `..` reach the thinkwork repo root.
+  const repoTf = resolve(__dirname, "..", "..", "..", "terraform");
   if (existsSync(join(repoTf, "modules"))) return repoTf;
 
   throw new Error(
@@ -277,21 +279,86 @@ provider "aws" {
   region = var.region
 }
 
-variable "stage" { type = string }
-variable "region" { type = string; default = "us-east-1" }
-variable "account_id" { type = string }
-variable "db_password" { type = string; sensitive = true }
-variable "database_engine" { type = string; default = "aurora-serverless" }
-variable "enable_hindsight" { type = bool; default = false }
-variable "google_oauth_client_id" { type = string; default = "" }
-variable "google_oauth_client_secret" { type = string; sensitive = true; default = "" }
-variable "pre_signup_lambda_zip" { type = string; default = "" }
-variable "lambda_zips_dir" { type = string; default = "" }
-variable "api_auth_secret" { type = string; sensitive = true; default = "" }
-variable "admin_callback_urls" { type = list(string); default = ["http://localhost:5174", "http://localhost:5174/auth/callback"] }
-variable "admin_logout_urls" { type = list(string); default = ["http://localhost:5174"] }
-variable "mobile_callback_urls" { type = list(string); default = ["exp://localhost:8081", "thinkwork://", "thinkwork://auth/callback"] }
-variable "mobile_logout_urls" { type = list(string); default = ["exp://localhost:8081", "thinkwork://"] }
+variable "stage" {
+  type = string
+}
+
+variable "region" {
+  type    = string
+  default = "us-east-1"
+}
+
+variable "account_id" {
+  type = string
+}
+
+variable "db_password" {
+  type      = string
+  sensitive = true
+}
+
+variable "database_engine" {
+  type    = string
+  default = "aurora-serverless"
+}
+
+variable "enable_hindsight" {
+  type    = bool
+  default = false
+}
+
+variable "agentcore_memory_id" {
+  type        = string
+  default     = ""
+  description = "Optional pre-existing Bedrock AgentCore Memory resource ID. Leave empty to auto-provision."
+}
+
+variable "google_oauth_client_id" {
+  type    = string
+  default = ""
+}
+
+variable "google_oauth_client_secret" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "pre_signup_lambda_zip" {
+  type    = string
+  default = ""
+}
+
+variable "lambda_zips_dir" {
+  type    = string
+  default = ""
+}
+
+variable "api_auth_secret" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "admin_callback_urls" {
+  type    = list(string)
+  default = ["http://localhost:5174", "http://localhost:5174/auth/callback"]
+}
+
+variable "admin_logout_urls" {
+  type    = list(string)
+  default = ["http://localhost:5174"]
+}
+
+variable "mobile_callback_urls" {
+  type    = list(string)
+  default = ["exp://localhost:8081", "thinkwork://", "thinkwork://auth/callback"]
+}
+
+variable "mobile_logout_urls" {
+  type    = list(string)
+  default = ["exp://localhost:8081", "thinkwork://"]
+}
 
 module "thinkwork" {
   source = "./modules/thinkwork"
@@ -303,6 +370,7 @@ module "thinkwork" {
   db_password                = var.db_password
   database_engine            = var.database_engine
   enable_hindsight           = var.enable_hindsight
+  agentcore_memory_id        = var.agentcore_memory_id
   google_oauth_client_id     = var.google_oauth_client_id
   google_oauth_client_secret = var.google_oauth_client_secret
   pre_signup_lambda_zip      = var.pre_signup_lambda_zip
@@ -314,17 +382,50 @@ module "thinkwork" {
   mobile_logout_urls         = var.mobile_logout_urls
 }
 
-output "api_endpoint"       { value = module.thinkwork.api_endpoint }
-output "user_pool_id"       { value = module.thinkwork.user_pool_id }
-output "admin_client_id"    { value = module.thinkwork.admin_client_id }
-output "mobile_client_id"   { value = module.thinkwork.mobile_client_id }
-output "bucket_name"        { value = module.thinkwork.bucket_name }
-output "db_cluster_endpoint" { value = module.thinkwork.db_cluster_endpoint }
-output "db_secret_arn"      { value = module.thinkwork.db_secret_arn; sensitive = true }
-output "ecr_repository_url"  { value = module.thinkwork.ecr_repository_url }
-output "hindsight_enabled"   { value = module.thinkwork.hindsight_enabled }
-output "hindsight_endpoint"  { value = module.thinkwork.hindsight_endpoint }
-output "agentcore_memory_id" { value = module.thinkwork.agentcore_memory_id }
+output "api_endpoint" {
+  value = module.thinkwork.api_endpoint
+}
+
+output "user_pool_id" {
+  value = module.thinkwork.user_pool_id
+}
+
+output "admin_client_id" {
+  value = module.thinkwork.admin_client_id
+}
+
+output "mobile_client_id" {
+  value = module.thinkwork.mobile_client_id
+}
+
+output "bucket_name" {
+  value = module.thinkwork.bucket_name
+}
+
+output "db_cluster_endpoint" {
+  value = module.thinkwork.db_cluster_endpoint
+}
+
+output "db_secret_arn" {
+  value     = module.thinkwork.db_secret_arn
+  sensitive = true
+}
+
+output "ecr_repository_url" {
+  value = module.thinkwork.ecr_repository_url
+}
+
+output "hindsight_enabled" {
+  value = module.thinkwork.hindsight_enabled
+}
+
+output "hindsight_endpoint" {
+  value = module.thinkwork.hindsight_endpoint
+}
+
+output "agentcore_memory_id" {
+  value = module.thinkwork.agentcore_memory_id
+}
 `);
       }
 

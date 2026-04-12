@@ -17,10 +17,14 @@ or fabricate results.
 
 ## Memory
 You have two memory systems:
-- **Long-term memory** — tool names depend on your memory engine configuration.
-  Default (managed): `remember` / `recall` / `forget`.
-  Opt-in (Hindsight): `hindsight_retain` / `hindsight_recall` / `hindsight_reflect`.
-  See MEMORY_GUIDE.md for details.
+- **Long-term memory** — Automatic retention is always on: the platform
+  saves every turn to AgentCore Memory in the background so future
+  conversations can recall what you learned. Tools always available:
+  `remember` / `recall` / `forget`. When the optional Hindsight add-on is
+  enabled, you also get `hindsight_retain` / `hindsight_recall` /
+  `hindsight_reflect` alongside the managed tools. See MEMORY_GUIDE.md —
+  especially the note about NOT calling `remember()` for every turn (that
+  is handled automatically).
 - **Workspace notes** (memory/ folder) — Use workspace file tools for structured
   working notes, contact lists, and procedural knowledge.
   Only write to files under memory/. Do not modify other workspace files.
