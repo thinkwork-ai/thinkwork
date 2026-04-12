@@ -177,6 +177,20 @@ resource "aws_iam_role_policy" "lambda_cognito" {
   })
 }
 
+resource "aws_iam_role_policy" "lambda_cloudwatch_read" {
+  name = "cloudwatch-logs-read"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["logs:FilterLogEvents", "logs:GetLogEvents", "logs:DescribeLogGroups"]
+      Resource = "arn:aws:logs:${var.region}:${var.account_id}:log-group:*model-invocations*"
+    }]
+  })
+}
+
 resource "aws_iam_role_policy" "lambda_bedrock" {
   name = "bedrock-invoke"
   role = aws_iam_role.lambda.id
