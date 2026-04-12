@@ -20,22 +20,22 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 
 <CardGrid>
   <Card title="Agents" icon="rocket">
-    Managed agents powered by Bedrock, connected agents that bring their own runtime. Agent Templates for fleet-wide configuration. Skill packs for reusable capabilities.
+    Managed agents on AgentCore, connected agents that bring their own runtime, plus templates and skill packs for fleet-wide reuse.
   </Card>
   <Card title="Threads" icon="document">
-    The universal work container. Every conversation, task, automation, and email lands in a thread with full history, context, and audit trail.
+    The universal work container. Every conversation, task, automation, and connector event lands in a thread with history and audit trail.
+  </Card>
+  <Card title="Memory" icon="open-book">
+    The umbrella for document knowledge, long-term memory, retrieval context, and the emerging knowledge graph direction.
   </Card>
   <Card title="Connectors" icon="puzzle">
-    Bring in external channels, events, and tool systems. Slack, GitHub, Google Workspace, plus MCP-based tool connectors and custom recipes.
+    Bring in external channels, events, and tool systems. Integrations cover Slack, GitHub, and Google Workspace, while MCP tools cover remote external capabilities and custom recipes.
   </Card>
   <Card title="Automations" icon="setting">
     Scheduled jobs, event-driven triggers, and routines that run on your schedule. Step Functions under the hood.
   </Card>
   <Card title="Control" icon="approve-check">
     Guardrails, budgets, and usage tracking. Know what your agents are doing, how much they cost, and where the boundaries are.
-  </Card>
-  <Card title="Knowledge" icon="open-book">
-    Document-backed RAG via Bedrock Knowledge Bases. Upload documents, agents retrieve what they need inline.
   </Card>
 </CardGrid>
 
@@ -50,3 +50,5 @@ thinkwork doctor -s dev
 ```
 
 That's it. Five commands, one AWS account, production-grade agent infrastructure.
+
+If you're new to Thinkwork, read the Concepts section in this order: [Threads](/concepts/threads/), [Agents](/concepts/agents/), [Memory](/concepts/knowledge/), then [Connectors](/concepts/connectors/).

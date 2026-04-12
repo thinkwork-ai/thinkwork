@@ -1,32 +1,32 @@
 ---
 title: Connectors
-description: Connect Thinkwork to external channels, event sources, and tool systems. Use built-in connectors for Slack, GitHub, and Google Workspace, or add MCP-based tool connectors and custom recipes.
+description: Connect Thinkwork to external channels, event sources, and tool systems. Use built-in integrations for Slack, GitHub, and Google Workspace, or add MCP-based external tools and custom recipes.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
 Connectors are how Thinkwork interfaces with the outside world. They bring external systems into the thread model and let agents act back on those systems in a controlled way.
 
-In practice, Thinkwork uses connectors in two broad ways:
+Thinkwork uses connectors in two broad ways:
 
-1. **Channel and event connectors** turn inbound messages, webhooks, and app events into threads.
-2. **Tool connectors** give agents access to external capabilities they can call during work, including MCP-based tool servers.
+1. **Integrations** turn inbound messages, webhooks, and app events into threads, then send responses back out.
+2. **MCP tools** give agents access to external capabilities they can call during work.
 
-Both fit the same architectural story: Thinkwork keeps threads, agents, controls, and auditability in one system while connectors handle integration boundaries.
+Both fit the same architectural story: Thinkwork keeps threads, agents, controls, and auditability in one system while connectors handle the system boundary.
 
-## Connector types
+## Connectors at a glance
 
-### Channel and event connectors
+### Integrations
 
-These connectors route communications and app events into Thinkwork. When a Slack message arrives, a GitHub issue is filed, or a Google Calendar event triggers, the connector turns that external event into a thread and routes it to the right agent.
+Integrations cover app and system connectivity, including Slack, GitHub, Google Workspace, inbound webhook flows, outbound actions, and connector routing.
 
-They are bidirectional: agents can also send messages, create issues, reply to emails, and post updates back to the originating system through the same connector.
+Use integrations when Thinkwork needs to receive or send activity through an external product surface.
 
-### Tool connectors
+### MCP tools
 
-Tool connectors let agents call external systems during a turn. In practice, this often means connecting to remote tool servers such as MCP.
+MCP tools cover remote external capabilities that agents call during a turn. They are still connectors, but they are tool-oriented instead of message-oriented.
 
-Use tool connectors when the capability already exists outside Thinkwork and you want agents to use it without rebuilding that logic inside Thinkwork.
+Use MCP when the capability already exists outside Thinkwork and you want agents to use it without rebuilding it inside the platform.
 
 Common examples include:
 
@@ -36,71 +36,23 @@ Common examples include:
 - Search or retrieval against external systems
 - Database or business-system queries exposed through an MCP server
 
-## Built-in channel and event connectors
+## Navigate this section
 
-### Slack
-
-The Slack connector enables two flows:
-
-**Inbound** — A user messages a Slack app (direct message or mention in a channel). The connector creates a `SLACK-` thread, assigns it to the configured agent, and the agent's response is posted back to Slack in real time.
-
-**Outbound** — An agent or automation can post messages to Slack channels using the `slack_send_message` tool (available via the Slack skill pack).
-
-Setup requires:
-1. Creating a Slack app in your workspace with the required OAuth scopes
-2. Configuring the Slack connector in the admin app with your app credentials
-3. Setting the event subscription URL to your API Gateway endpoint
-
-Required OAuth scopes: `chat:write`, `im:history`, `im:read`, `app_mentions:read`, `channels:history`
-
-```
-Slack message
-    → Slack Events API
-    → API Gateway /connectors/slack
-    → Connector Lambda (validates signature, creates thread)
-    → AgentCore invoked
-    → Response posted back to Slack
-```
-
-### GitHub
-
-The GitHub connector handles:
-
-- **Issues** — New issues become `GH-` threads; agents can triage, label, comment, and close
-- **Pull requests** — PR events create threads; agents can review, suggest changes, approve
-- **Issue comments** — Mentions (`@agent-name`) in issue comments trigger agent responses
-- **Repository events** — Push events, workflow failures, and custom webhooks
-
-Setup requires a GitHub App installed on your organization or repository, with a webhook pointed at your API Gateway endpoint.
-
-Required permissions: `issues:write`, `pull_requests:write`, `contents:read`
-
-### Google Workspace
-
-The Google Workspace connector includes:
-
-- **Gmail** — Inbound emails create `EMAIL-` threads; agents can reply, forward, label
-- **Google Calendar** — Event invites and reminders can trigger automations
-- **Google Drive** — Documents can be referenced in agent context (requires Knowledge Base integration)
-
-Setup uses OAuth 2.0. The connector handles the OAuth flow and stores tokens in the credential vault.
-
-<Aside type="note">
-Google OAuth requires a verified domain and an approved OAuth app for production use. For development, you can use test users and an unverified app with the appropriate disclaimer.
-</Aside>
+- See [Integrations](/concepts/connectors/integrations/) for Slack, GitHub, Google Workspace, inbound and outbound flows, auth, and routing
+- See [MCP Tools](/concepts/connectors/mcp-tools/) for MCP-based external tool connectors
 
 ## MCP as a connector pattern
 
-Thinkwork supports MCP (Model Context Protocol) as a **tool connector** pattern, not as a separate top-level product module.
+Thinkwork supports MCP (Model Context Protocol) as a connector path under **Connectors**, not as a separate top-level product module.
 
-That means MCP sits under the broader Connectors model:
+That means MCP sits inside the broader Connectors model:
 
 - **Threads** are still the unit of work
 - **Agents** still decide what to do in the thread
 - **Connectors** bring in outside systems, whether they are communication channels or tool servers
 - **Controls** still govern what agents can access and how usage is tracked
 
-If you want agents to call remote tools through MCP, see [MCP tool connectors](/concepts/mcp-servers/).
+If you want agents to call remote tools through MCP, see [MCP Tools](/concepts/connectors/mcp-tools/).
 
 ## Credential vault
 
@@ -171,7 +123,7 @@ For simple deployments, set a default agent on each connector and skip routing r
 </Aside>
 
 <Aside type="note">
-Need agents to use external tools instead of inbound channels? See [MCP tool connectors](/concepts/mcp-servers/) for the Thinkwork pattern for connecting remote tool servers through the Connectors layer.
+Need agents to use external tools instead of inbound channels? See [MCP Tools](/concepts/connectors/mcp-tools/) for the Thinkwork pattern for connecting remote tool servers through the Connectors layer. MCP stays under Connectors in the docs because it is one integration path, not a separate platform pillar.
 </Aside>
 
 ## Thread metadata from connectors

@@ -1,0 +1,51 @@
+---
+title: Lifecycle and Types
+description: Thread statuses, channels, prefixes, and how Thinkwork models different kinds of work in the same thread system.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Thinkwork uses one thread model for many kinds of work. The differences show up in status, channel, and metadata, not in separate storage systems.
+
+## Thread lifecycle
+
+```
+open → waiting → open → ... → closed
+                             ↘ failed
+```
+
+- **open** means the thread is active and can receive more work
+- **waiting** means the thread is paused for a human reply or external event
+- **closed** means the work is complete
+- **failed** means the run hit an unrecoverable error
+
+Threads can be reopened later without losing history.
+
+## Channel model
+
+Every thread has a channel that explains how it entered the system.
+
+| Channel | Prefix | Origination |
+|---------|--------|-------------|
+| `CHAT` | `CHAT-` | Direct message in the admin or end-user app |
+| `AUTO` | `AUTO-` | Automation or scheduled job |
+| `EMAIL` | `EMAIL-` | Inbound email via SES |
+| `SLACK` | `SLACK-` | Message from Slack connector |
+| `GITHUB` | `GH-` | GitHub event or comment |
+| `TASK` | `TASK-` | Manually created task thread |
+| `EVAL` | `EVAL-` | Eval pack run |
+
+The prefix is human-readable by design, which makes logs, screenshots, and support conversations easier to follow.
+
+## Why types matter
+
+Thinkwork does not treat these as separate conversation systems. They all land in the same thread model, which means you get the same:
+
+- history and replayability
+- status transitions
+- audit trail
+- agent assignment model
+
+<Aside type="tip">
+When you are reasoning about work in Thinkwork, start with the thread. Channel and status explain the rest.
+</Aside>

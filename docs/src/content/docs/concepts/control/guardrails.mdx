@@ -1,0 +1,44 @@
+---
+title: Guardrails
+description: How Thinkwork applies Bedrock guardrails and other safety boundaries to managed agent work.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Thinkwork uses Amazon Bedrock Guardrails as the primary enforcement layer for managed agents.
+
+## What guardrails do
+
+Guardrails are evaluated around model invocation and can:
+
+- block disallowed topics
+- filter unsafe content
+- detect or redact PII
+- apply grounding checks
+- enforce word or phrase filters
+
+## Where they are configured
+
+Guardrails are referenced from agent templates, which lets you apply the same safety boundary across a fleet of agents.
+
+That keeps enforcement in one place instead of scattering it across prompts.
+
+## What happens on a guardrail hit
+
+When a guardrail blocks or alters a response, the resulting event is visible in Thinkwork's thread and control surfaces.
+
+This matters for debugging because you can distinguish:
+
+- model behavior
+- tool behavior
+- policy enforcement
+
+<Aside type="note">
+The current open source docs clearly support guardrails. They do not document a separate approval workflow surface here, so this page stays focused on the enforcement model that is already described.
+</Aside>
+
+## Related pages
+
+- [Control Overview](/concepts/control/)
+- [Budgets, Usage, and Audit](/concepts/control/budgets-usage-and-audit/)
+- [Agents](/concepts/agents/)

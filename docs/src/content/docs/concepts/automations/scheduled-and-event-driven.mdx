@@ -1,0 +1,46 @@
+---
+title: Scheduled and Event-driven
+description: "The two main automation entry points in Thinkwork: schedules and triggers."
+---
+
+Scheduled and event-driven automations are the main ways Thinkwork starts agent work without a person sending a message.
+
+## Scheduled automations
+
+A scheduled automation runs on an EventBridge schedule expression. It creates an `AUTO-` thread, invokes the configured agent, and records the full run in that thread.
+
+Common use cases:
+
+- daily digests
+- weekly summaries
+- periodic sync jobs
+- recurring health checks
+
+Thinkwork uses AWS EventBridge cron or rate expressions for these schedules.
+
+## Event-driven automations
+
+An event-driven automation starts when a matching event occurs.
+
+Examples documented in the open source app include:
+
+- a new thread is created
+- a thread status changes
+- a connector event arrives
+- a custom webhook triggers the automation
+
+This is useful when work should happen because something changed, not because a clock ticked.
+
+## Shared model
+
+Both automation types still use the same underlying building blocks:
+
+- an automation definition
+- an `AUTO-` thread for each run
+- AgentCore invocation
+- Step Functions execution and status tracking
+
+## Related pages
+
+- [Automations Overview](/concepts/automations/)
+- [Routines and Execution Model](/concepts/automations/routines-and-execution-model/)

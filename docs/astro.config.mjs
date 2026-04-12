@@ -7,6 +7,10 @@ export default defineConfig({
     starlight({
       title: "Thinkwork",
       favicon: "/favicon.png",
+      head: [
+        { tag: "link", attrs: { rel: "icon", type: "image/png", href: "/favicon.png" } },
+        { tag: "link", attrs: { rel: "apple-touch-icon", href: "/favicon.png" } },
+      ],
       customCss: ["./src/styles/custom.css"],
       social: [
         { icon: "github", label: "GitHub", href: "https://github.com/thinkwork-ai/thinkwork" },
@@ -16,18 +20,56 @@ export default defineConfig({
         {
           label: "Concepts",
           items: [
-            { label: "Agents", slug: "concepts/agents" },
-            { label: "Threads", slug: "concepts/threads" },
+            {
+              label: "Agents",
+              items: [
+                { label: "Overview", slug: "concepts/agents" },
+                { label: "Managed Agents", slug: "concepts/agents/managed-agents" },
+                { label: "Templates and Skills", slug: "concepts/agents/templates-and-skills" },
+              ],
+            },
+            {
+              label: "Threads",
+              items: [
+                { label: "Overview", slug: "concepts/threads" },
+                { label: "Lifecycle and Types", slug: "concepts/threads/lifecycle-and-types" },
+                { label: "Routing and Metadata", slug: "concepts/threads/routing-and-metadata" },
+              ],
+            },
+            {
+              label: "Memory",
+              items: [
+                { label: "Overview", slug: "concepts/knowledge" },
+                { label: "Document Knowledge", slug: "concepts/knowledge/document-knowledge" },
+                { label: "Long-term Memory", slug: "concepts/knowledge/memory" },
+                { label: "Retrieval and Context", slug: "concepts/knowledge/retrieval-and-context" },
+                { label: "Knowledge Graph Direction", slug: "concepts/knowledge/knowledge-graph" },
+              ],
+            },
             {
               label: "Connectors",
               items: [
                 { label: "Overview", slug: "concepts/connectors" },
-                { label: "MCP Tool Connectors", slug: "concepts/mcp-servers" },
+                { label: "Integrations", slug: "concepts/connectors/integrations" },
+                { label: "MCP Tools", slug: "concepts/connectors/mcp-tools" },
               ],
             },
-            { label: "Automations", slug: "concepts/automations" },
-            { label: "Control", slug: "concepts/control" },
-            { label: "Knowledge", slug: "concepts/knowledge" },
+            {
+              label: "Automations",
+              items: [
+                { label: "Overview", slug: "concepts/automations" },
+                { label: "Scheduled and Event-driven", slug: "concepts/automations/scheduled-and-event-driven" },
+                { label: "Routines and Execution Model", slug: "concepts/automations/routines-and-execution-model" },
+              ],
+            },
+            {
+              label: "Control",
+              items: [
+                { label: "Overview", slug: "concepts/control" },
+                { label: "Guardrails", slug: "concepts/control/guardrails" },
+                { label: "Budgets, Usage, and Audit", slug: "concepts/control/budgets-usage-and-audit" },
+              ],
+            },
           ],
         },
         {

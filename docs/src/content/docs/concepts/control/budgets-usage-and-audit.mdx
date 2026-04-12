@@ -1,0 +1,48 @@
+---
+title: Budgets, Usage, and Audit
+description: Spend controls, turn-level usage tracking, and audit logging for Thinkwork deployments.
+---
+
+Budgets, usage tracking, and audit logs are the operational side of control in Thinkwork.
+
+## Budgets
+
+Budgets let you cap spending at the agent, tenant, or automation level. When a budget is exceeded, Thinkwork can alert or suspend work depending on configuration.
+
+## Usage tracking
+
+Thinkwork tracks usage at the turn level, including:
+
+- input and output tokens
+- estimated cost
+- model used
+- duration
+- tool activity
+
+That makes it possible to understand both spend and behavior.
+
+## Auditability
+
+Agent invocations are also written to an audit log in S3 in your AWS account.
+
+This gives operators a durable record for:
+
+- debugging
+- compliance review
+- incident investigation
+- cost analysis
+
+## Why this matters
+
+Control is not just about blocking bad output. It is also about being able to answer practical questions later, like:
+
+- what happened
+- what it cost
+- which agent did it
+- which policy or budget boundary fired
+
+## Related pages
+
+- [Control Overview](/concepts/control/)
+- [Guardrails](/concepts/control/guardrails/)
+- [Architecture](/architecture/)
