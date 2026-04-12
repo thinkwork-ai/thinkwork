@@ -167,6 +167,8 @@ jobs:
             -var "database_engine=aurora-serverless" \
             -var "enable_hindsight=true" \
             -var "api_auth_secret=${{ secrets.API_AUTH_SECRET }}" \
+            -var "google_oauth_client_id=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}" \
+            -var "google_oauth_client_secret=${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}" \
             -var "lambda_zips_dir=$LAMBDA_DIR"
 
   # ── Build & deploy admin app ─────────────────────────────────────
