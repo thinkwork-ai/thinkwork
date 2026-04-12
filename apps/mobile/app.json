@@ -31,6 +31,7 @@
       "edgeToEdgeEnabled": true,
       "package": "com.thinkwork.agent",
       "permissions": [
+        "android.permission.RECORD_AUDIO",
         "android.permission.RECORD_AUDIO"
       ]
     },
@@ -64,6 +65,9 @@
     "owner": "thinkwork-ai",
     "runtimeVersion": {
       "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/ff3bfecf-778d-40b6-9215-6c853187413d"
     }
   }
 }

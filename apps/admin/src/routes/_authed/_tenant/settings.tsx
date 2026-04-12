@@ -86,7 +86,7 @@ function SettingsPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="lg:col-span-2">
                 <CardHeader><CardTitle>Resources & URLs</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
                   {deploy.bucketName && <Row label="S3 Bucket" value={deploy.bucketName} />}
