@@ -21,6 +21,7 @@ import {
   notifyCostRecorded,
 } from "../lib/cost-recording.js";
 import { buildSkillEnvOverrides } from "../lib/oauth-token.js";
+import { loadTenantBuiltinTools } from "./skills.js";
 // PRD-22: Signal protocol removed — agents use tools for thread state transitions
 
 /**
@@ -47,7 +48,6 @@ const WORKSPACE_BUCKET = process.env.WORKSPACE_BUCKET || "";
 // API URL used by skills for callbacks (thread-management, email-send, etc.)
 // Reads MANIFLOW_API_URL first, falls back to legacy MCP_BASE_URL until infra is updated.
 const MANIFLOW_API_URL = process.env.MANIFLOW_API_URL || process.env.MCP_BASE_URL || "";
-const EXA_API_KEY = process.env.EXA_API_KEY || "";
 const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
 
 const db = getDb();
@@ -239,11 +239,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
       const s3Key = isTenantCustom
         ? `tenants/${tenantSlug}/skills/${s.skill_id}`
         : `skills/catalog/${s.skill_id}`;
-      // Merge platform env vars for known default skills (e.g. EXA_API_KEY for web-search)
       const merged = envOverrides ? { ...envOverrides } : {};
-      if (s.skill_id === "web-search" && EXA_API_KEY) {
-        merged.EXA_API_KEY = EXA_API_KEY;
-      }
       return {
         skillId: s.skill_id,
         s3Key,
@@ -272,10 +268,10 @@ export async function handler(event: InvokeEvent): Promise<void> {
       });
     }
 
-    // Default skills: always available for all agents (Phase 4a/4b script skills)
+    // Default skills: always available for all agents (Phase 4a/4b script skills).
+    // web-search is NOT in this list — it's opt-in via tenant_builtin_tools below.
     const defaultSkills = [
       { skillId: "agent-thread-management", s3Key: "skills/catalog/agent-thread-management" },
-      { skillId: "web-search", s3Key: "skills/catalog/web-search" },
       { skillId: "artifacts", s3Key: "skills/catalog/artifacts" },
       { skillId: "workspace-memory", s3Key: "skills/catalog/workspace-memory" },
     ];
@@ -288,16 +284,30 @@ export async function handler(event: InvokeEvent): Promise<void> {
           AGENT_ID: agentId,
         };
         if (currentUserEmail) env.CURRENT_USER_EMAIL = currentUserEmail;
-        // Inject EXA_API_KEY for web-search skill
-        if (ds.skillId === "web-search" && EXA_API_KEY) {
-          env.EXA_API_KEY = EXA_API_KEY;
-        }
         skillsConfig.push({
           ...ds,
           secretRef: undefined,
           envOverrides: env,
         });
       }
+    }
+
+    // Tenant-configured built-in tools (web-search, …): only injected when a row
+    // exists with enabled=true AND a usable API key in Secrets Manager.
+    try {
+      const builtinTools = await loadTenantBuiltinTools(tenantId);
+      for (const bt of builtinTools) {
+        if (skillsConfig.some((s) => s.skillId === bt.toolSlug)) continue;
+        skillsConfig.push({
+          skillId: bt.toolSlug,
+          s3Key: `skills/catalog/${bt.toolSlug}`,
+          secretRef: undefined,
+          envOverrides: bt.envOverrides,
+        });
+        console.log(`[chat-agent-invoke] Injected built-in tool '${bt.toolSlug}' (provider=${bt.provider})`);
+      }
+    } catch (err) {
+      console.warn(`[chat-agent-invoke] Failed to load tenant built-in tools:`, err);
     }
 
     // Apply class tool_access policy — remove blocked skills

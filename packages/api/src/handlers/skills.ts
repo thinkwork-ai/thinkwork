@@ -15,11 +15,13 @@ import {
 	SecretsManagerClient,
 	CreateSecretCommand,
 	UpdateSecretCommand,
+	DeleteSecretCommand,
+	GetSecretValueCommand,
 	ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
-import { agentSkills, skillCatalog, tenantSkills, tenantMcpServers, agentMcpServers, agentTemplateMcpServers } from "@thinkwork/database-pg/schema";
+import { agentSkills, skillCatalog, tenantSkills, tenantMcpServers, agentMcpServers, agentTemplateMcpServers, tenantBuiltinTools } from "@thinkwork/database-pg/schema";
 import { parse as parseYaml } from "yaml";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
 import { handleCors, json, error, notFound, unauthorized } from "../lib/response.js";
@@ -225,6 +227,27 @@ export async function handler(
 		if (mcpTestMatch && method === "POST") {
 			if (!tenantSlug) return error("x-tenant-slug header required", 400);
 			return mcpTestConnection(tenantSlug, mcpTestMatch[1]);
+		}
+
+		// --- Built-in Tools (per-tenant config for catalog skills like web-search) ---
+
+		if (path === "/api/skills/builtin-tools" && method === "GET") {
+			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			return builtinToolsList(tenantSlug);
+		}
+		const builtinToolMatch = path.match(/^\/api\/skills\/builtin-tools\/([^/]+)$/);
+		if (builtinToolMatch && method === "PUT") {
+			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			return builtinToolsUpsert(tenantSlug, builtinToolMatch[1], event);
+		}
+		if (builtinToolMatch && method === "DELETE") {
+			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			return builtinToolsDelete(tenantSlug, builtinToolMatch[1]);
+		}
+		const builtinToolTestMatch = path.match(/^\/api\/skills\/builtin-tools\/([^/]+)\/test$/);
+		if (builtinToolTestMatch && method === "POST") {
+			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			return builtinToolsTest(tenantSlug, builtinToolTestMatch[1], event);
 		}
 
 		// --- MCP Server routes (agent-level assignment) ---
@@ -1779,6 +1802,312 @@ async function mcpListUserServers(
 		});
 
 	return json({ servers });
+}
+
+// ---------------------------------------------------------------------------
+// Built-in Tools — tenant-level config for catalog skills (web-search, …)
+// ---------------------------------------------------------------------------
+
+const BUILTIN_TOOL_CATALOG: Record<string, { providers: string[]; keyEnvVar: Record<string, string> }> = {
+	"web-search": {
+		providers: ["exa", "serpapi"],
+		keyEnvVar: { exa: "EXA_API_KEY", serpapi: "SERPAPI_KEY" },
+	},
+};
+
+function builtinToolSecretName(tenantId: string, slug: string): string {
+	return `thinkwork/${STAGE}/tenant/${tenantId}/builtin/${slug}`;
+}
+
+async function builtinToolsList(
+	tenantSlug: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const tenantId = await resolveTenantId(tenantSlug);
+	if (!tenantId) return error("Tenant not found", 404);
+
+	const rows = await db
+		.select()
+		.from(tenantBuiltinTools)
+		.where(eq(tenantBuiltinTools.tenant_id, tenantId));
+
+	return json({
+		tools: rows.map((r) => ({
+			id: r.id,
+			toolSlug: r.tool_slug,
+			provider: r.provider,
+			enabled: r.enabled,
+			config: r.config,
+			hasSecret: !!r.secret_ref,
+			lastTestedAt: r.last_tested_at,
+			createdAt: r.created_at,
+			updatedAt: r.updated_at,
+		})),
+	});
+}
+
+async function builtinToolsUpsert(
+	tenantSlug: string,
+	slug: string,
+	event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const tenantId = await resolveTenantId(tenantSlug);
+	if (!tenantId) return error("Tenant not found", 404);
+
+	const catalogEntry = BUILTIN_TOOL_CATALOG[slug];
+	if (!catalogEntry) return error(`Unknown built-in tool '${slug}'`, 400);
+
+	const body = JSON.parse(event.body || "{}") as {
+		provider?: string;
+		enabled?: boolean;
+		config?: Record<string, unknown>;
+		apiKey?: string;
+	};
+
+	if (body.provider && !catalogEntry.providers.includes(body.provider)) {
+		return error(
+			`provider must be one of ${catalogEntry.providers.join(", ")}`,
+			400,
+		);
+	}
+
+	const [existing] = await db
+		.select()
+		.from(tenantBuiltinTools)
+		.where(
+			and(
+				eq(tenantBuiltinTools.tenant_id, tenantId),
+				eq(tenantBuiltinTools.tool_slug, slug),
+			),
+		);
+
+	let secretRef = existing?.secret_ref ?? null;
+	if (body.apiKey) {
+		const secretName = builtinToolSecretName(tenantId, slug);
+		const secretValue = JSON.stringify({ type: "builtinToolApiKey", token: body.apiKey });
+		try {
+			await sm.send(
+				new UpdateSecretCommand({ SecretId: secretName, SecretString: secretValue }),
+			);
+		} catch (err: any) {
+			if (err instanceof ResourceNotFoundException) {
+				await sm.send(
+					new CreateSecretCommand({ Name: secretName, SecretString: secretValue }),
+				);
+			} else {
+				throw err;
+			}
+		}
+		secretRef = secretName;
+	}
+
+	if (existing) {
+		const updates: Record<string, unknown> = { updated_at: new Date() };
+		if (body.provider !== undefined) updates.provider = body.provider;
+		if (body.enabled !== undefined) updates.enabled = body.enabled;
+		if (body.config !== undefined) updates.config = body.config;
+		if (secretRef !== existing.secret_ref) updates.secret_ref = secretRef;
+
+		await db
+			.update(tenantBuiltinTools)
+			.set(updates)
+			.where(eq(tenantBuiltinTools.id, existing.id));
+		return json({ id: existing.id, toolSlug: slug, updated: true });
+	}
+
+	const [inserted] = await db
+		.insert(tenantBuiltinTools)
+		.values({
+			tenant_id: tenantId,
+			tool_slug: slug,
+			provider: body.provider ?? null,
+			enabled: body.enabled ?? false,
+			config: body.config ?? null,
+			secret_ref: secretRef,
+		})
+		.returning({ id: tenantBuiltinTools.id });
+
+	return json({ id: inserted.id, toolSlug: slug, created: true });
+}
+
+async function builtinToolsDelete(
+	tenantSlug: string,
+	slug: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const tenantId = await resolveTenantId(tenantSlug);
+	if (!tenantId) return error("Tenant not found", 404);
+
+	const [row] = await db
+		.select()
+		.from(tenantBuiltinTools)
+		.where(
+			and(
+				eq(tenantBuiltinTools.tenant_id, tenantId),
+				eq(tenantBuiltinTools.tool_slug, slug),
+			),
+		);
+
+	if (!row) return notFound("Built-in tool config not found");
+
+	if (row.secret_ref) {
+		try {
+			await sm.send(
+				new DeleteSecretCommand({
+					SecretId: row.secret_ref,
+					ForceDeleteWithoutRecovery: true,
+				}),
+			);
+		} catch (err) {
+			console.warn(`[builtin-tools] Failed to delete secret: ${(err as Error).message}`);
+		}
+	}
+
+	await db.delete(tenantBuiltinTools).where(eq(tenantBuiltinTools.id, row.id));
+	return json({ ok: true, deleted: slug });
+}
+
+async function resolveBuiltinToolApiKey(secretRef: string): Promise<string | null> {
+	try {
+		const res = await sm.send(new GetSecretValueCommand({ SecretId: secretRef }));
+		if (!res.SecretString) return null;
+		const parsed = JSON.parse(res.SecretString) as { token?: string };
+		return parsed.token ?? null;
+	} catch (err) {
+		console.warn(`[builtin-tools] Failed to fetch secret ${secretRef}: ${(err as Error).message}`);
+		return null;
+	}
+}
+
+async function builtinToolsTest(
+	tenantSlug: string,
+	slug: string,
+	event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const tenantId = await resolveTenantId(tenantSlug);
+	if (!tenantId) return error("Tenant not found", 404);
+
+	// Allow testing with a key supplied in the request body (before it's saved)
+	// OR with the stored secret_ref for an existing row.
+	const body = (event.body ? JSON.parse(event.body) : {}) as {
+		provider?: string;
+		apiKey?: string;
+	};
+
+	let provider = body.provider;
+	let apiKey = body.apiKey;
+
+	if (!apiKey) {
+		const [row] = await db
+			.select()
+			.from(tenantBuiltinTools)
+			.where(
+				and(
+					eq(tenantBuiltinTools.tenant_id, tenantId),
+					eq(tenantBuiltinTools.tool_slug, slug),
+				),
+			);
+		if (!row) return error("No saved config and no apiKey provided", 400);
+		provider = provider ?? row.provider ?? undefined;
+		if (row.secret_ref) {
+			apiKey = (await resolveBuiltinToolApiKey(row.secret_ref)) ?? undefined;
+		}
+	}
+
+	if (!provider) return error("provider is required", 400);
+	if (!apiKey) return error("apiKey is required (and no stored secret was found)", 400);
+
+	if (slug !== "web-search") {
+		return error(`Test not implemented for tool '${slug}'`, 400);
+	}
+
+	try {
+		if (provider === "exa") {
+			const res = await fetch("https://api.exa.ai/search", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"x-api-key": apiKey,
+					"User-Agent": "Thinkwork/1.0",
+				},
+				body: JSON.stringify({ query: "ping", numResults: 1 }),
+				signal: AbortSignal.timeout(10000),
+			});
+			if (!res.ok) {
+				const text = await res.text();
+				return json({ ok: false, error: `Exa ${res.status}: ${text.slice(0, 200)}` }, 502);
+			}
+			const data = (await res.json()) as { results?: unknown[] };
+			const count = Array.isArray(data.results) ? data.results.length : 0;
+			await markBuiltinToolTested(tenantId, slug);
+			return json({ ok: true, provider, resultCount: count });
+		}
+
+		if (provider === "serpapi") {
+			const url = `https://serpapi.com/search.json?engine=google&q=ping&num=1&api_key=${encodeURIComponent(apiKey)}`;
+			const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+			if (!res.ok) {
+				const text = await res.text();
+				return json({ ok: false, error: `SerpAPI ${res.status}: ${text.slice(0, 200)}` }, 502);
+			}
+			const data = (await res.json()) as { organic_results?: unknown[]; error?: string };
+			if (data.error) {
+				return json({ ok: false, error: `SerpAPI: ${data.error}` }, 502);
+			}
+			const count = Array.isArray(data.organic_results) ? data.organic_results.length : 0;
+			await markBuiltinToolTested(tenantId, slug);
+			return json({ ok: true, provider, resultCount: count });
+		}
+
+		return error(`Unknown provider '${provider}'`, 400);
+	} catch (err: any) {
+		return json({ ok: false, error: err.message || "Test failed" }, 502);
+	}
+}
+
+async function markBuiltinToolTested(tenantId: string, slug: string): Promise<void> {
+	await db
+		.update(tenantBuiltinTools)
+		.set({ last_tested_at: new Date() })
+		.where(
+			and(
+				eq(tenantBuiltinTools.tenant_id, tenantId),
+				eq(tenantBuiltinTools.tool_slug, slug),
+			),
+		);
+}
+
+/** Load enabled built-in tools for a tenant, with API keys resolved from Secrets Manager. */
+export async function loadTenantBuiltinTools(
+	tenantId: string,
+): Promise<Array<{ toolSlug: string; provider: string | null; envOverrides: Record<string, string> }>> {
+	const rows = await db
+		.select()
+		.from(tenantBuiltinTools)
+		.where(
+			and(
+				eq(tenantBuiltinTools.tenant_id, tenantId),
+				eq(tenantBuiltinTools.enabled, true),
+			),
+		);
+
+	const out: Array<{ toolSlug: string; provider: string | null; envOverrides: Record<string, string> }> = [];
+	for (const row of rows) {
+		const envOverrides: Record<string, string> = {};
+		if (row.tool_slug === "web-search") {
+			const provider = row.provider ?? "exa";
+			envOverrides.WEB_SEARCH_PROVIDER = provider;
+			if (row.secret_ref) {
+				const key = await resolveBuiltinToolApiKey(row.secret_ref);
+				if (key) {
+					if (provider === "exa") envOverrides.EXA_API_KEY = key;
+					else if (provider === "serpapi") envOverrides.SERPAPI_KEY = key;
+				}
+			}
+			// If no key resolved, skip — we don't inject a broken skill.
+			if (!envOverrides.EXA_API_KEY && !envOverrides.SERPAPI_KEY) continue;
+		}
+		out.push({ toolSlug: row.tool_slug, provider: row.provider, envOverrides });
+	}
+	return out;
 }
 
 // ---------------------------------------------------------------------------

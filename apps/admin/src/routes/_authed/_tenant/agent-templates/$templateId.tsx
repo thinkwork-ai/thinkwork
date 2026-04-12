@@ -23,6 +23,7 @@ import {
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageLayout } from "@/components/PageLayout";
+import { DataTable } from "@/components/ui/data-table";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +51,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Switch } from "@/components/ui/switch";
 import { ModelSelect } from "@/components/agents/ModelSelect";
 import {
   AgentTemplateDetailQuery,
@@ -604,6 +606,7 @@ function TemplateEditorPage() {
             <ToggleGroupItem value="config" className="px-4">Configuration</ToggleGroupItem>
             <ToggleGroupItem value="workspace" className="px-4" disabled={isNew}>Workspace</ToggleGroupItem>
             <ToggleGroupItem value="skills" className="px-4" disabled={isNew}>Skills</ToggleGroupItem>
+            <ToggleGroupItem value="mcp" className="px-4" disabled={isNew}>MCP Servers</ToggleGroupItem>
           </ToggleGroup>
           <div className="flex items-center gap-2">
             <Button onClick={handleSave} disabled={saving || !name || !slug || !model}>
@@ -747,193 +750,109 @@ function TemplateEditorPage() {
 
         {/* Skills Tab */}
         {activeTab === "skills" && (
-          <>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-sm">Assigned Skills</CardTitle>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setAddSkillDialogOpen(true)}
-              >
-                <Plus className="h-3.5 w-3.5 mr-1.5" />
-                Add Skill
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {templateSkills.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">
-                  No skills assigned. Click "Add Skill" to assign skills from the catalog.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {templateSkills.map((s) => {
-                    const meta = catalogMap.get(s.skill_id);
-                    return (
-                      <div
-                        key={s.skill_id}
-                        className="flex items-center justify-between rounded-md border px-3 py-2"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="font-medium text-sm">
-                            {meta?.name || s.skill_id}
-                          </span>
-                          {meta?.description && (
-                            <span className="text-xs text-muted-foreground truncate max-w-[300px]">
-                              {meta.description}
-                            </span>
-                          )}
-                          {(meta as any)?.mode === "agent" && (
-                            <Badge variant="outline" className="text-[10px]">agent</Badge>
-                          )}
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          onClick={() => removeSkill(s.skill_id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
+          <DataTable
+            columns={[
+              {
+                accessorKey: "name",
+                header: "Name",
+                size: 180,
+                cell: ({ row }: any) => <span className="font-medium">{row.original.name}</span>,
+              },
+              {
+                accessorKey: "description",
+                header: "Description",
+                cell: ({ row }: any) => (
+                  <span className="text-muted-foreground text-xs truncate block max-w-[400px]">
+                    {row.original.description || "—"}
+                  </span>
+                ),
+              },
+              {
+                accessorKey: "category",
+                header: "Category",
+                size: 120,
+                cell: ({ row }: any) => (
+                  <Badge variant="outline" className="text-[10px]">{row.original.category || "—"}</Badge>
+                ),
+              },
+              {
+                id: "enabled",
+                header: () => <div className="text-right">Enabled</div>,
+                size: 80,
+                cell: ({ row }: any) => {
+                  const isEnabled = templateSkills.some((s) => s.skill_id === row.original.slug);
+                  return (
+                    <div className="flex justify-end">
+                      <Switch
+                        checked={isEnabled}
+                        onCheckedChange={(checked) => {
+                          if (checked) addSkill(row.original.slug);
+                          else removeSkill(row.original.slug);
+                        }}
+                      />
+                    </div>
+                  );
+                },
+              },
+            ]}
+            data={catalog}
+            pageSize={0}
+            tableClassName="table-fixed"
+          />
+        )}
 
-            {/* Add Skill Dialog */}
-            <Dialog open={addSkillDialogOpen} onOpenChange={setAddSkillDialogOpen}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Add Skill</DialogTitle>
-                </DialogHeader>
-                <div className="max-h-[400px] overflow-y-auto space-y-1">
-                  {availableSkills.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4 text-center">
-                      All available skills are already assigned.
-                    </p>
-                  ) : (
-                    availableSkills.map((s) => (
-                      <button
-                        key={s.slug}
-                        className="w-full flex items-center justify-between rounded-md px-3 py-2 hover:bg-accent text-left"
-                        onClick={() => addSkill(s.slug)}
-                      >
-                        <div>
-                          <span className="font-medium text-sm">{s.name}</span>
-                          {s.description && (
-                            <p className="text-xs text-muted-foreground truncate max-w-[350px]">
-                              {s.description}
-                            </p>
-                          )}
-                        </div>
-                        <Plus className="h-4 w-4 text-muted-foreground shrink-0" />
-                      </button>
-                    ))
-                  )}
-                </div>
-              </DialogContent>
-            </Dialog>
-          </Card>
-
-          {/* MCP Servers */}
-          <Card className="mt-4">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Cable className="h-4 w-4" />
-                MCP Servers
-              </CardTitle>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setAddMcpDialogOpen(true)}
-                disabled={unassignedMcpServers.length === 0}
-              >
-                <Plus className="h-3.5 w-3.5 mr-1.5" />
-                Add MCP Server
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {templateMcpServers.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">
-                  {availableMcpServers.length === 0
-                    ? "No MCP servers registered. Register one in the MCP Servers page first."
-                    : "No MCP servers assigned. Click \"Add MCP Server\" to assign one."}
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {templateMcpServers.map((ms) => {
-                    const server = mcpServerMap.get(ms.mcp_server_id);
-                    return (
-                      <div
-                        key={ms.mcp_server_id}
-                        className="flex items-center justify-between rounded-md border px-3 py-2"
-                      >
-                        <div className="flex items-center gap-3">
-                          <Cable className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-medium text-sm">
-                            {server?.name || ms.mcp_server_id}
-                          </span>
-                          {server?.authType && (
-                            <Badge variant="outline" className="text-[10px]">
-                              {server.authType === "per_user_oauth" ? "OAuth" : server.authType === "tenant_api_key" ? "API Key" : "No Auth"}
-                            </Badge>
-                          )}
-                          {server?.url && (
-                            <span className="text-xs text-muted-foreground truncate max-w-[250px]">
-                              {server.url}
-                            </span>
-                          )}
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          onClick={() => removeMcpServer(ms.mcp_server_id)}
-                        >
-                          <XCircle className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-
-            {/* Add MCP Server Dialog */}
-            <Dialog open={addMcpDialogOpen} onOpenChange={setAddMcpDialogOpen}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Add MCP Server</DialogTitle>
-                </DialogHeader>
-                <div className="max-h-[400px] overflow-y-auto space-y-1">
-                  {unassignedMcpServers.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4 text-center">
-                      All registered MCP servers are already assigned.
-                    </p>
-                  ) : (
-                    unassignedMcpServers.map((s) => (
-                      <button
-                        key={s.id}
-                        className="w-full flex items-center justify-between rounded-md px-3 py-2 hover:bg-accent text-left"
-                        onClick={() => addMcpServer(s.id)}
-                      >
-                        <div>
-                          <span className="font-medium text-sm">{s.name}</span>
-                          <p className="text-xs text-muted-foreground truncate max-w-[350px]">
-                            {s.url}
-                          </p>
-                        </div>
-                        <Plus className="h-4 w-4 text-muted-foreground shrink-0" />
-                      </button>
-                    ))
-                  )}
-                </div>
-              </DialogContent>
-            </Dialog>
-          </Card>
-          </>
+        {/* MCP Servers Tab */}
+        {activeTab === "mcp" && (
+          <DataTable
+            columns={[
+              {
+                accessorKey: "name",
+                header: "Name",
+                size: 180,
+                cell: ({ row }: any) => <span className="font-medium">{row.original.name}</span>,
+              },
+              {
+                accessorKey: "authType",
+                header: "Auth",
+                size: 100,
+                cell: ({ row }: any) => (
+                  <Badge variant="outline" className="text-[10px]">
+                    {row.original.authType === "oauth" ? "OAuth" : row.original.authType === "tenant_api_key" ? "API Key" : "None"}
+                  </Badge>
+                ),
+              },
+              {
+                id: "tools",
+                header: "Tools",
+                size: 80,
+                cell: ({ row }: any) => (
+                  <span className="text-xs text-muted-foreground">{row.original.tools?.length || 0} tools</span>
+                ),
+              },
+              {
+                id: "enabled",
+                header: () => <div className="text-right">Enabled</div>,
+                size: 80,
+                cell: ({ row }: any) => {
+                  const isEnabled = templateMcpServers.some((ts) => ts.mcp_server_id === row.original.id);
+                  return (
+                    <div className="flex justify-end">
+                      <Switch
+                        checked={isEnabled}
+                        onCheckedChange={async (checked) => {
+                          if (checked) await addMcpServer(row.original.id);
+                          else await removeMcpServer(row.original.id);
+                        }}
+                      />
+                    </div>
+                  );
+                },
+              },
+            ]}
+            data={availableMcpServers}
+            pageSize={0}
+            tableClassName="table-fixed"
+          />
         )}
 
         {/* Workspace Tab */}
