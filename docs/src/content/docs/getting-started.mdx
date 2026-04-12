@@ -1,11 +1,11 @@
 ---
 title: Getting Started
-description: Install the CLI, deploy Thinkwork into your AWS account, and send your first agent message in under 15 minutes.
+description: Install the CLI, deploy ThinkWork into your AWS account, and send your first agent message in under 15 minutes.
 ---
 
 import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
-Thinkwork deploys entirely into your AWS account. There is no SaaS control plane, no shared infrastructure, and no Kubernetes. You own everything — the code runs in your VPC, data lives in your Aurora database, and models run through your Bedrock endpoint.
+ThinkWork deploys entirely into your AWS account. There is no SaaS control plane, no shared infrastructure, and no Kubernetes. You own everything — the code runs in your VPC, data lives in your Aurora database, and models run through your Bedrock endpoint.
 
 This guide walks you from zero to a running agent invoke.
 
@@ -60,7 +60,7 @@ thinkwork login
 
 ## Step 3 — Initialize a deployment
 
-`thinkwork init` scaffolds a Thinkwork deployment directory with a `terraform.tfvars` file and a local state configuration.
+`thinkwork init` scaffolds a ThinkWork deployment directory with a `terraform.tfvars` file and a local state configuration.
 
 ```bash
 thinkwork init -s dev
@@ -106,7 +106,7 @@ Do not commit `db_password` to source control. Use a secrets manager or environm
 thinkwork deploy -s dev
 ```
 
-This command runs `terraform init` followed by `terraform apply` inside the Thinkwork module. The first deploy provisions approximately 260 AWS resources across three tiers:
+This command runs `terraform init` followed by `terraform apply` inside the ThinkWork module. The first deploy provisions approximately 260 AWS resources across three tiers:
 
 - **Foundation** — VPC, subnets, Cognito user pool, KMS keys, Route53 records
 - **Data** — Aurora Postgres cluster, S3 buckets, Bedrock Knowledge Base
@@ -218,6 +218,6 @@ Navigate to your Admin App URL, sign in with your Cognito user, click **New Thre
 - Read [Concepts: Threads](/concepts/threads/) to understand the universal work container
 - Read [Concepts: Agents](/concepts/agents/) to understand how AgentCore, Bedrock, templates, and skill packs fit together
 - Read [Concepts: Memory](/concepts/knowledge/) to understand document knowledge, long-term memory, and retrieval context
-- Read [Concepts: Connectors](/concepts/connectors/) to see how Thinkwork connects to external channels, events, and MCP-based tool systems
+- Read [Concepts: Connectors](/concepts/connectors/) to see how ThinkWork connects to external channels, events, and MCP-based tool systems
 - See [Deploy: Greenfield](/deploy/greenfield/) for a detailed walkthrough of what gets created
 - See [Deploy: BYO Infrastructure](/deploy/byo/) if you want to bring your own VPC, database, or Cognito

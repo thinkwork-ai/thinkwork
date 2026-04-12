@@ -1,11 +1,11 @@
 ---
 title: Architecture
-description: How Thinkwork fits together across threads, memory, agents, and connectors, and where that maps onto the AWS deployment tiers.
+description: How ThinkWork fits together across threads, memory, agents, and connectors, and where that maps onto the AWS deployment tiers.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Thinkwork has two useful views of the system:
+ThinkWork has two useful views of the system:
 
 1. a **conceptual model** for reasoning about how work flows through the product
 2. an **infrastructure model** for understanding what gets deployed in AWS
@@ -15,7 +15,7 @@ The conceptual model is:
 - **Threads** are the record of work
 - **Memory** surfaces useful context into a turn, including document retrieval and long-term memory
 - **Agents** are the execution layer that decide and act
-- **Connectors** connect Thinkwork to outside systems, including MCP-based tool connectors
+- **Connectors** connect ThinkWork to outside systems, including MCP-based tool connectors
 
 Those concepts map onto a three-tier AWS deployment. Every resource lives in your AWS account. There is no shared infrastructure, no callbacks to external control planes, and no telemetry sent outside your account.
 
@@ -240,12 +240,12 @@ The only state that is NOT in Aurora is the vector index (OpenSearch), binary as
 
 ## Multi-tenancy
 
-Thinkwork is multi-tenant within a single deployment. Every Aurora table has a `tenant_id` column and all queries are tenant-scoped. The Cognito identity pool maps users to tenants at login time.
+ThinkWork is multi-tenant within a single deployment. Every Aurora table has a `tenant_id` column and all queries are tenant-scoped. The Cognito identity pool maps users to tenants at login time.
 
 Row-level security (Postgres RLS) enforces tenant isolation at the database level — even if application code has a bug, a query cannot return data from another tenant.
 
 ```sql
--- RLS policy (applied automatically by Thinkwork migrations)
+-- RLS policy (applied automatically by ThinkWork migrations)
 CREATE POLICY tenant_isolation ON threads
   USING (tenant_id = current_setting('app.current_tenant_id')::uuid);
 ```
@@ -265,13 +265,13 @@ CREATE POLICY tenant_isolation ON threads
 
 ## AgentCore container
 
-AgentCore is deployed as a Lambda container image stored in ECR. The image is built from the Thinkwork base image and includes:
+AgentCore is deployed as a Lambda container image stored in ECR. The image is built from the ThinkWork base image and includes:
 
 - Python 3.12
 - [Strands](https://strandsagents.com) agent framework
 - Boto3 (Bedrock, S3, SSM, Secrets Manager clients)
 - httpx (for skill HTTP tools)
 - psycopg3 (Aurora connection)
-- The Thinkwork runtime library (tool registration, memory read/write, context assembly)
+- The ThinkWork runtime library (tool registration, memory read/write, context assembly)
 
 The container is 512MB compressed. Lambda allocates 3GB memory (configurable), which maps to approximately 2 vCPUs. Cold start time is 3–5 seconds for the first invocation after a period of inactivity; warm invocations start in under 100ms.

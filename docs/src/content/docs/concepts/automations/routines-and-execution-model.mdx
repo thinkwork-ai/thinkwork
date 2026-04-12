@@ -1,11 +1,11 @@
 ---
 title: Routines and Execution Model
-description: How Thinkwork runs automations and routines with Step Functions, AUTO threads, and recorded runs.
+description: How ThinkWork runs automations and routines with Step Functions, AUTO threads, and recorded runs.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Thinkwork documents routines as multi-step automations that can chain agent invocations, branching, and external actions.
+ThinkWork documents routines as multi-step automations that can chain agent invocations, branching, and external actions.
 
 ## Execution model
 
@@ -14,7 +14,7 @@ All automations are backed by AWS Step Functions.
 A typical run looks like this:
 
 1. EventBridge or an API trigger starts the state machine
-2. Thinkwork creates an `AUTO-` thread for the run
+2. ThinkWork creates an `AUTO-` thread for the run
 3. AgentCore executes the configured step or prompt
 4. The run finishes as `succeeded` or `failed`
 

@@ -5,7 +5,7 @@ description: How to build a custom connector. OAuth flow, credential vault integ
 
 import { Aside } from '@astrojs/starlight/components';
 
-Thinkwork ships with Slack, GitHub, and Google Workspace connectors. When you need to integrate a service that isn't covered, you can build a custom connector using the connector recipe pattern.
+ThinkWork ships with Slack, GitHub, and Google Workspace connectors. When you need to integrate a service that isn't covered, you can build a custom connector using the connector recipe pattern.
 
 A connector has four parts:
 
@@ -36,7 +36,7 @@ examples/connector-recipe/
 
 ## Step 1: Build the webhook handler
 
-The handler receives raw HTTP requests from the external service, validates the signature, and calls the Thinkwork API to create threads.
+The handler receives raw HTTP requests from the external service, validates the signature, and calls the ThinkWork API to create threads.
 
 ```python
 # handler/main.py
@@ -148,7 +148,7 @@ import boto3
 import json
 
 def store_oauth_tokens(connector_id: str, user_id: str, tokens: dict) -> None:
-    """Store OAuth tokens in the Thinkwork credential vault (DynamoDB + KMS)."""
+    """Store OAuth tokens in the ThinkWork credential vault (DynamoDB + KMS)."""
     ssm = boto3.client("ssm")
     
     key = f"/thinkwork/connectors/{connector_id}/tokens/{user_id}"
@@ -240,7 +240,7 @@ def send_reply(thread_id: str, message: str) -> dict:
     Post a reply back to the originating My Service conversation.
 
     Args:
-        thread_id: The Thinkwork thread ID (used to look up the original message metadata)
+        thread_id: The ThinkWork thread ID (used to look up the original message metadata)
         message: The reply text to send
 
     Returns:
@@ -311,7 +311,7 @@ resource "aws_apigatewayv2_route" "oauth_callback" {
 
 ## Registering the connector
 
-After deploying the infrastructure, register the connector in Thinkwork:
+After deploying the infrastructure, register the connector in ThinkWork:
 
 ```graphql
 mutation RegisterConnector {
@@ -337,7 +337,7 @@ mutation RegisterConnector {
 2. Configure the webhook URL in the external service's settings
 3. Send a test event from the external service (most services have a "send test" button)
 4. Check the AWS Lambda logs: `aws logs tail /aws/lambda/<stage>-thinkwork-connector-my-service --follow`
-5. Check the Thinkwork admin app for the new thread
+5. Check the ThinkWork admin app for the new thread
 
 <Aside type="tip">
 Use [ngrok](https://ngrok.com) during development to expose your local Lambda to the internet for webhook testing, or use the AWS Lambda function URL directly for quick iteration.

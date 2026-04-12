@@ -5,12 +5,12 @@ description: Write a SKILL.md file, upload it to your S3 skill catalog, and make
 
 import { Aside } from '@astrojs/starlight/components';
 
-Thinkwork implements the [Agent Skills specification](https://agentskills.io/specification) — an open standard for portable, agent-readable skill definitions. A skill pack is a directory containing a `SKILL.md` file (with optional `scripts/`, `references/`, and `assets/` directories) that defines tools, instructions, and context for managed agents.
+ThinkWork implements the [Agent Skills specification](https://agentskills.io/specification) — an open standard for portable, agent-readable skill definitions. A skill pack is a directory containing a `SKILL.md` file (with optional `scripts/`, `references/`, and `assets/` directories) that defines tools, instructions, and context for managed agents.
 
 Skill packs are stored in S3 and loaded by AgentCore at invoke time. You don't need to rebuild or redeploy the AgentCore Lambda to add new skills — upload a skill pack and assign it to an agent.
 
 <Aside type="tip">
-  The [Agent Skills spec](https://agentskills.io/specification) defines the `SKILL.md` format, naming conventions, and directory structure. Thinkwork follows this standard, so skills you write are portable across any platform that implements the spec.
+  The [Agent Skills spec](https://agentskills.io/specification) defines the `SKILL.md` format, naming conventions, and directory structure. ThinkWork follows this standard, so skills you write are portable across any platform that implements the spec.
 </Aside>
 
 ## How it works
@@ -33,10 +33,10 @@ my-skill/
 ├── scripts/          # Optional: executable code
 ├── references/       # Optional: additional documentation
 ├── assets/           # Optional: templates, data files
-└── skill.yaml        # Optional: Thinkwork catalog metadata
+└── skill.yaml        # Optional: ThinkWork catalog metadata
 ```
 
-The only required file is `SKILL.md`. The `skill.yaml` file is a Thinkwork extension for catalog metadata (display name, icon, category, triggers).
+The only required file is `SKILL.md`. The `skill.yaml` file is a ThinkWork extension for catalog metadata (display name, icon, category, triggers).
 
 ## SKILL.md format
 
@@ -274,7 +274,7 @@ Keep skill files small. The S3 download and parse happens in the Lambda hot path
 
 ## Example skill pack library
 
-The `examples/skill-pack/` directory in the Thinkwork repo contains ready-to-use skill packs:
+The `examples/skill-pack/` directory in the ThinkWork repo contains ready-to-use skill packs:
 
 | Skill | Description |
 |-------|-------------|
