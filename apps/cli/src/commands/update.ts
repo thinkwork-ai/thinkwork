@@ -41,13 +41,13 @@ function compareVersions(a: string, b: string): number {
   return 0;
 }
 
-export function registerUpgradeCommand(program: Command): void {
+export function registerUpdateCommand(program: Command): void {
   program
-    .command("upgrade")
+    .command("update")
     .description("Check for and install CLI updates")
     .option("--check", "Only check for updates, don't install")
     .action(async (opts: { check?: boolean }) => {
-      printHeader("upgrade", "", null);
+      printHeader("update", "", null);
 
       console.log(`  Current version: ${chalk.bold(VERSION)}`);
 
