@@ -58,7 +58,7 @@ export const memorySearch = async (
 
 	// Verify agent belongs to tenant
 	const [agent] = await db
-		.select({ slug: agents.slug, tenant_id: agents.tenant_id })
+		.select({ id: agents.id, slug: agents.slug, tenant_id: agents.tenant_id })
 		.from(agents)
 		.where(eq(agents.id, assistantId));
 
@@ -66,10 +66,14 @@ export const memorySearch = async (
 		throw new Error("Agent not found or access denied");
 	}
 
+	// AgentCore Memory keys namespaces on the agent UUID (actorId set from
+	// _ASSISTANT_ID in the container), whereas Hindsight keys bank_id on
+	// the agent slug. Thread both identifiers into the backend calls.
+	const agentId = agent.id as string;
 	const bankId = agent.slug || assistantId;
 
 	const [agentCoreResults, hindsightResults] = await Promise.all([
-		searchAgentCore(bankId, query, limit),
+		searchAgentCore(agentId, query, limit),
 		searchHindsight(bankId, query, limit),
 	]);
 
@@ -91,7 +95,7 @@ export const memorySearch = async (
 // ---------------------------------------------------------------------------
 
 async function searchAgentCore(
-	bankId: string,
+	agentId: string,
 	query: string,
 	limit: number,
 ): Promise<SearchRow[]> {
@@ -101,12 +105,14 @@ async function searchAgentCore(
 	const client = getAgentCoreClient();
 	const out: SearchRow[] = [];
 
+	// Namespaces use the agent UUID (actorId from the container's
+	// _ASSISTANT_ID env var), not the slug.
 	const calls = NAMESPACE_PREFIXES.map(async ({ prefix, strategy }) => {
 		try {
 			const resp = await client.send(
 				new RetrieveMemoryRecordsCommand({
 					memoryId,
-					namespace: prefix(bankId),
+					namespace: prefix(agentId),
 					searchCriteria: {
 						searchQuery: query,
 						topK: limit,
@@ -120,7 +126,7 @@ async function searchAgentCore(
 						? (r.content as any).text
 						: "") || "";
 				const ns =
-					r.namespaces && r.namespaces.length > 0 ? r.namespaces[0] : prefix(bankId);
+					r.namespaces && r.namespaces.length > 0 ? r.namespaces[0] : prefix(agentId);
 				return {
 					memoryRecordId: r.memoryRecordId || `${ns}-${Math.random()}`,
 					content: { text },
@@ -134,7 +140,7 @@ async function searchAgentCore(
 		} catch (err) {
 			// eslint-disable-next-line no-console
 			console.debug(
-				`[memorySearch] AgentCore retrieve failed for ${bankId}/${prefix(bankId)}:`,
+				`[memorySearch] AgentCore retrieve failed for ${agentId}/${prefix(agentId)}:`,
 				(err as Error)?.message,
 			);
 			return [] as SearchRow[];

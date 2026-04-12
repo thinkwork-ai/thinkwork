@@ -87,31 +87,40 @@ interface MemoryRow {
 export const memoryRecords = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const { assistantId } = args as { assistantId: string; namespace: string };
 
-	// Resolve the set of agent slugs we're querying.
-	let agentSlugs: string[];
+	// Resolve the agents we're querying. AgentCore Memory keys namespaces on
+	// `actorId` which the agent container sets to the agent UUID (via the
+	// _ASSISTANT_ID env var), so records live at `assistant_<uuid>` /
+	// `preferences_<uuid>`. Hindsight keys on `bank_id` which defaults to
+	// the agent SLUG, so hindsight.memory_units rows live at `bank_id =
+	// <slug>`. We resolve both for each agent and fan out accordingly.
+	let agentList: Array<{ id: string; slug: string }>;
 
 	if (assistantId === "all") {
 		if (!ctx.auth.tenantId) throw new Error("Tenant context required for all-agents query");
 		const agentRows = await db
-			.select({ slug: agents.slug })
+			.select({ id: agents.id, slug: agents.slug })
 			.from(agents)
 			.where(eq(agents.tenant_id, ctx.auth.tenantId));
-		agentSlugs = agentRows.map((a) => a.slug).filter(Boolean) as string[];
-		if (agentSlugs.length === 0) return [];
+		agentList = agentRows
+			.filter((a) => a.id)
+			.map((a) => ({ id: a.id as string, slug: (a.slug || a.id) as string }));
+		if (agentList.length === 0) return [];
 	} else {
 		const [agent] = await db
-			.select({ tenant_id: agents.tenant_id, slug: agents.slug })
+			.select({ id: agents.id, tenant_id: agents.tenant_id, slug: agents.slug })
 			.from(agents)
 			.where(eq(agents.id, assistantId));
 		if (!agent || (ctx.auth.tenantId && agent.tenant_id !== ctx.auth.tenantId)) {
 			throw new Error("Agent not found or access denied");
 		}
-		agentSlugs = [agent.slug || assistantId];
+		agentList = [{ id: agent.id as string, slug: (agent.slug || agent.id) as string }];
 	}
+
+	const agentSlugs = agentList.map((a) => a.slug);
 
 	// Kick both backends off in parallel. Either may be empty/unavailable.
 	const [agentCoreRows, hindsightRows] = await Promise.all([
-		fetchAgentCoreRecords(agentSlugs),
+		fetchAgentCoreRecords(agentList),
 		fetchHindsightRecords(agentSlugs),
 	]);
 
@@ -132,28 +141,32 @@ export const memoryRecords = async (_parent: any, args: any, ctx: GraphQLContext
 // AgentCore Memory backend
 // ---------------------------------------------------------------------------
 
-async function fetchAgentCoreRecords(agentSlugs: string[]): Promise<MemoryRow[]> {
+async function fetchAgentCoreRecords(
+	agentList: Array<{ id: string; slug: string }>,
+): Promise<MemoryRow[]> {
 	const memoryId = process.env.AGENTCORE_MEMORY_ID;
 	if (!memoryId) return [];
 
 	const client = getAgentCoreClient();
 	const out: MemoryRow[] = [];
 
-	// Fan out: for each agent, hit each namespace prefix. Kept sequential
-	// per-agent (but parallel across namespaces) to keep burst load on the
-	// AgentCore API bounded when the tenant has many agents.
-	for (const slug of agentSlugs) {
+	// Fan out: for each agent, hit each namespace prefix. Namespaces use
+	// the agent UUID (actorId from the container's _ASSISTANT_ID env var),
+	// so we query by agent.id. We also thread the agent.slug through so
+	// the returned MemoryRow can carry it for the UI's agentNamesBySlug
+	// lookup.
+	for (const agent of agentList) {
 		const calls = NAMESPACE_PREFIXES.map(async ({ prefix, strategy }) => {
 			try {
 				const resp = await client.send(
 					new ListMemoryRecordsCommand({
 						memoryId,
-						namespace: prefix(slug),
+						namespace: prefix(agent.id),
 						maxResults: PER_NAMESPACE_LIMIT,
 					}),
 				);
 				return (resp.memoryRecordSummaries || []).map((r) =>
-					mapAgentCoreRecord(r, slug, strategy),
+					mapAgentCoreRecord(r, agent, strategy),
 				);
 			} catch (err) {
 				// Missing namespace / no extracted records yet is normal —
@@ -161,7 +174,7 @@ async function fetchAgentCoreRecords(agentSlugs: string[]): Promise<MemoryRow[]>
 				// processed any events yet. Log at debug only.
 				// eslint-disable-next-line no-console
 				console.debug(
-					`[memoryRecords] AgentCore list failed for ${slug}/${prefix(slug)}:`,
+					`[memoryRecords] AgentCore list failed for ${agent.id}/${prefix(agent.id)}:`,
 					(err as Error)?.message,
 				);
 				return [] as MemoryRow[];
@@ -183,7 +196,7 @@ function mapAgentCoreRecord(
 		score?: number;
 		metadata?: Record<string, any>;
 	},
-	agentSlug: string,
+	agent: { id: string; slug: string },
 	strategy: string,
 ): MemoryRow {
 	// MemoryContent is a discriminated union; the TextMember has a
@@ -195,16 +208,16 @@ function mapAgentCoreRecord(
 	const ns = r.namespaces && r.namespaces.length > 0 ? r.namespaces[0] : "";
 	const createdAtISO = r.createdAt ? r.createdAt.toISOString() : null;
 	return {
-		memoryRecordId: r.memoryRecordId || `${agentSlug}-${ns}-${Math.random()}`,
+		memoryRecordId: r.memoryRecordId || `${agent.id}-${ns}-${Math.random()}`,
 		content: { text },
 		createdAt: createdAtISO,
 		updatedAt: createdAtISO,
 		expiresAt: null,
-		namespace: ns || agentSlug,
+		namespace: ns || agent.id,
 		strategyId: r.memoryStrategyId || null,
 		strategy,
 		score: typeof r.score === "number" ? r.score : null,
-		agentSlug,
+		agentSlug: agent.slug,
 		factType: null,
 		confidence: typeof r.score === "number" ? r.score : null,
 		eventDate: null,
