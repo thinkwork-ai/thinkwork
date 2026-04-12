@@ -198,6 +198,19 @@ export type AgentKnowledgeBaseInput = {
   searchConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
+export type AgentPerformance = {
+  __typename?: 'AgentPerformance';
+  agentId: Scalars['ID']['output'];
+  agentName: Scalars['String']['output'];
+  avgDurationMs: Scalars['Float']['output'];
+  errorCount: Scalars['Int']['output'];
+  invocationCount: Scalars['Int']['output'];
+  p95DurationMs: Scalars['Float']['output'];
+  totalCostUsd: Scalars['Float']['output'];
+  totalInputTokens: Scalars['Int']['output'];
+  totalOutputTokens: Scalars['Int']['output'];
+};
+
 export type AgentSkill = {
   __typename?: 'AgentSkill';
   agentId: Scalars['ID']['output'];
@@ -932,6 +945,23 @@ export type ModelCostSummary = {
   model: Scalars['String']['output'];
   outputTokens: Scalars['Int']['output'];
   totalUsd: Scalars['Float']['output'];
+};
+
+export type ModelInvocation = {
+  __typename?: 'ModelInvocation';
+  branch?: Maybe<Scalars['String']['output']>;
+  cacheReadTokenCount: Scalars['Int']['output'];
+  costUsd?: Maybe<Scalars['Float']['output']>;
+  hasToolResult?: Maybe<Scalars['Boolean']['output']>;
+  inputPreview?: Maybe<Scalars['String']['output']>;
+  inputTokenCount: Scalars['Int']['output'];
+  modelId: Scalars['String']['output'];
+  outputPreview?: Maybe<Scalars['String']['output']>;
+  outputTokenCount: Scalars['Int']['output'];
+  requestId: Scalars['String']['output'];
+  timestamp: Scalars['AWSDateTime']['output'];
+  toolCount?: Maybe<Scalars['Int']['output']>;
+  toolUses?: Maybe<Array<Scalars['String']['output']>>;
 };
 
 export type Mutation = {
@@ -1707,6 +1737,15 @@ export type PageInfo = {
   hasNextPage: Scalars['Boolean']['output'];
 };
 
+export type PerformanceTimeSeries = {
+  __typename?: 'PerformanceTimeSeries';
+  avgDurationMs: Scalars['Float']['output'];
+  day: Scalars['String']['output'];
+  errorCount: Scalars['Int']['output'];
+  invocationCount: Scalars['Int']['output'];
+  totalCostUsd: Scalars['Float']['output'];
+};
+
 export type Query = {
   __typename?: 'Query';
   _empty?: Maybe<Scalars['String']['output']>;
@@ -1714,7 +1753,9 @@ export type Query = {
   agent?: Maybe<Agent>;
   agentApiKeys: Array<AgentApiKey>;
   agentBudgetStatus?: Maybe<BudgetStatus>;
+  agentCostBreakdown: CostSummary;
   agentEmailCapability?: Maybe<AgentEmailCapability>;
+  agentPerformance: Array<AgentPerformance>;
   agentTemplate?: Maybe<AgentTemplate>;
   agentTemplates: Array<AgentTemplate>;
   agentVersions: Array<AgentVersion>;
@@ -1741,6 +1782,7 @@ export type Query = {
   memorySystemConfig: MemorySystemConfig;
   messages: MessageConnection;
   modelCatalog: Array<ModelCatalogEntry>;
+  performanceTimeSeries: Array<PerformanceTimeSeries>;
   queuedWakeups: Array<AgentWakeupRequest>;
   recipe?: Maybe<Recipe>;
   recipes: Array<Recipe>;
@@ -1750,6 +1792,7 @@ export type Query = {
   routines: Array<Routine>;
   scheduledJob?: Maybe<ScheduledJob>;
   scheduledJobs: Array<ScheduledJob>;
+  singleAgentPerformance?: Maybe<AgentPerformance>;
   team?: Maybe<Team>;
   teams: Array<Team>;
   templateSyncDiff: TemplateSyncDiff;
@@ -1759,11 +1802,13 @@ export type Query = {
   thread?: Maybe<Thread>;
   threadByNumber?: Maybe<Thread>;
   threadLabels: Array<ThreadLabel>;
+  threadTraces: Array<TraceEvent>;
   threadTurn?: Maybe<ThreadTurn>;
   threadTurnEvents: Array<ThreadTurnEvent>;
   threadTurns: Array<ThreadTurn>;
   threads: Array<Thread>;
   threadsPaged: ThreadsPage;
+  turnInvocationLogs: Array<ModelInvocation>;
   user?: Maybe<User>;
   userQuickActions: Array<UserQuickAction>;
   webhook?: Maybe<Webhook>;
@@ -1799,8 +1844,23 @@ export type QueryAgentBudgetStatusArgs = {
 };
 
 
+export type QueryAgentCostBreakdownArgs = {
+  agentId: Scalars['ID']['input'];
+  from?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  tenantId: Scalars['ID']['input'];
+  to?: InputMaybe<Scalars['AWSDateTime']['input']>;
+};
+
+
 export type QueryAgentEmailCapabilityArgs = {
   agentId: Scalars['ID']['input'];
+};
+
+
+export type QueryAgentPerformanceArgs = {
+  from?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  tenantId: Scalars['ID']['input'];
+  to?: InputMaybe<Scalars['AWSDateTime']['input']>;
 };
 
 
@@ -1947,6 +2007,13 @@ export type QueryMessagesArgs = {
 };
 
 
+export type QueryPerformanceTimeSeriesArgs = {
+  agentId?: InputMaybe<Scalars['ID']['input']>;
+  days?: InputMaybe<Scalars['Int']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
+
 export type QueryQueuedWakeupsArgs = {
   tenantId: Scalars['ID']['input'];
 };
@@ -2006,6 +2073,12 @@ export type QueryScheduledJobsArgs = {
 };
 
 
+export type QuerySingleAgentPerformanceArgs = {
+  agentId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
+};
+
+
 export type QueryTeamArgs = {
   id: Scalars['ID']['input'];
 };
@@ -2050,6 +2123,12 @@ export type QueryThreadByNumberArgs = {
 
 export type QueryThreadLabelsArgs = {
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryThreadTracesArgs = {
+  tenantId: Scalars['ID']['input'];
+  threadId: Scalars['ID']['input'];
 };
 
 
@@ -2101,6 +2180,12 @@ export type QueryThreadsPagedArgs = {
   sortField?: InputMaybe<Scalars['String']['input']>;
   statuses?: InputMaybe<Array<Scalars['String']['input']>>;
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryTurnInvocationLogsArgs = {
+  tenantId: Scalars['ID']['input'];
+  turnId: Scalars['ID']['input'];
 };
 
 
@@ -2690,6 +2775,21 @@ export type ThreadsPage = {
   __typename?: 'ThreadsPage';
   items: Array<Thread>;
   totalCount: Scalars['Int']['output'];
+};
+
+export type TraceEvent = {
+  __typename?: 'TraceEvent';
+  agentId?: Maybe<Scalars['ID']['output']>;
+  agentName?: Maybe<Scalars['String']['output']>;
+  costUsd?: Maybe<Scalars['Float']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  durationMs?: Maybe<Scalars['Int']['output']>;
+  estimated?: Maybe<Scalars['Boolean']['output']>;
+  inputTokens?: Maybe<Scalars['Int']['output']>;
+  model?: Maybe<Scalars['String']['output']>;
+  outputTokens?: Maybe<Scalars['Int']['output']>;
+  threadId?: Maybe<Scalars['ID']['output']>;
+  traceId: Scalars['String']['output'];
 };
 
 export type UpdateAgentInput = {
@@ -3709,6 +3809,22 @@ export type MemoryGraphQueryVariables = Exact<{
 
 export type MemoryGraphQuery = { __typename?: 'Query', memoryGraph: { __typename?: 'MemoryGraph', nodes: Array<{ __typename?: 'MemoryGraphNode', id: string, label: string, type: string, strategy?: string | null, entityType?: string | null, edgeCount: number }>, edges: Array<{ __typename?: 'MemoryGraphEdge', source: string, target: string, type: string, label?: string | null, weight: number }> } };
 
+export type ThreadTracesQueryVariables = Exact<{
+  threadId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
+}>;
+
+
+export type ThreadTracesQuery = { __typename?: 'Query', threadTraces: Array<{ __typename?: 'TraceEvent', traceId: string, threadId?: string | null, agentId?: string | null, agentName?: string | null, model?: string | null, inputTokens?: number | null, outputTokens?: number | null, durationMs?: number | null, costUsd?: number | null, estimated?: boolean | null, createdAt: any }> };
+
+export type TurnInvocationLogsQueryVariables = Exact<{
+  tenantId: Scalars['ID']['input'];
+  turnId: Scalars['ID']['input'];
+}>;
+
+
+export type TurnInvocationLogsQuery = { __typename?: 'Query', turnInvocationLogs: Array<{ __typename?: 'ModelInvocation', requestId: string, modelId: string, timestamp: any, inputTokenCount: number, outputTokenCount: number, cacheReadTokenCount: number, inputPreview?: string | null, outputPreview?: string | null, toolCount?: number | null, costUsd?: number | null, toolUses?: Array<string> | null, hasToolResult?: boolean | null, branch?: string | null }> };
+
 
 export const CreateSubAgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateSubAgent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateAgentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createAgent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}}]}}]}}]} as unknown as DocumentNode<CreateSubAgentMutation, CreateSubAgentMutationVariables>;
 export const DeleteSubAgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteSubAgent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteAgent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<DeleteSubAgentMutation, DeleteSubAgentMutationVariables>;
@@ -3814,3 +3930,5 @@ export const SyncTemplateToAgentDocument = {"kind":"Document","definitions":[{"k
 export const SyncTemplateToAllAgentsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SyncTemplateToAllAgents"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"templateId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"syncTemplateToAllAgents"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"templateId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"templateId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agentsSynced"}},{"kind":"Field","name":{"kind":"Name","value":"agentsFailed"}},{"kind":"Field","name":{"kind":"Name","value":"errors"}}]}}]}}]} as unknown as DocumentNode<SyncTemplateToAllAgentsMutation, SyncTemplateToAllAgentsMutationVariables>;
 export const RollbackAgentVersionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RollbackAgentVersion"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"versionId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"rollbackAgentVersion"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"versionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"versionId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<RollbackAgentVersionMutation, RollbackAgentVersionMutationVariables>;
 export const MemoryGraphDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"MemoryGraph"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"assistantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"memoryGraph"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"assistantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"assistantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"strategy"}},{"kind":"Field","name":{"kind":"Name","value":"entityType"}},{"kind":"Field","name":{"kind":"Name","value":"edgeCount"}}]}},{"kind":"Field","name":{"kind":"Name","value":"edges"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"weight"}}]}}]}}]}}]} as unknown as DocumentNode<MemoryGraphQuery, MemoryGraphQueryVariables>;
+export const ThreadTracesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"ThreadTraces"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"threadTraces"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"threadId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}}},{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"traceId"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"agentName"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"inputTokens"}},{"kind":"Field","name":{"kind":"Name","value":"outputTokens"}},{"kind":"Field","name":{"kind":"Name","value":"durationMs"}},{"kind":"Field","name":{"kind":"Name","value":"costUsd"}},{"kind":"Field","name":{"kind":"Name","value":"estimated"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<ThreadTracesQuery, ThreadTracesQueryVariables>;
+export const TurnInvocationLogsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"TurnInvocationLogs"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"turnId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"turnInvocationLogs"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"turnId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"turnId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"requestId"}},{"kind":"Field","name":{"kind":"Name","value":"modelId"}},{"kind":"Field","name":{"kind":"Name","value":"timestamp"}},{"kind":"Field","name":{"kind":"Name","value":"inputTokenCount"}},{"kind":"Field","name":{"kind":"Name","value":"outputTokenCount"}},{"kind":"Field","name":{"kind":"Name","value":"cacheReadTokenCount"}},{"kind":"Field","name":{"kind":"Name","value":"inputPreview"}},{"kind":"Field","name":{"kind":"Name","value":"outputPreview"}},{"kind":"Field","name":{"kind":"Name","value":"toolCount"}},{"kind":"Field","name":{"kind":"Name","value":"costUsd"}},{"kind":"Field","name":{"kind":"Name","value":"toolUses"}},{"kind":"Field","name":{"kind":"Name","value":"hasToolResult"}},{"kind":"Field","name":{"kind":"Name","value":"branch"}}]}}]}}]} as unknown as DocumentNode<TurnInvocationLogsQuery, TurnInvocationLogsQueryVariables>;

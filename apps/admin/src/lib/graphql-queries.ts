@@ -1560,3 +1560,41 @@ export const MemoryGraphQuery = graphql(`
     }
   }
 `);
+
+export const ThreadTracesQuery = graphql(`
+  query ThreadTraces($threadId: ID!, $tenantId: ID!) {
+    threadTraces(threadId: $threadId, tenantId: $tenantId) {
+      traceId
+      threadId
+      agentId
+      agentName
+      model
+      inputTokens
+      outputTokens
+      durationMs
+      costUsd
+      estimated
+      createdAt
+    }
+  }
+`);
+
+export const TurnInvocationLogsQuery = graphql(`
+  query TurnInvocationLogs($tenantId: ID!, $turnId: ID!) {
+    turnInvocationLogs(tenantId: $tenantId, turnId: $turnId) {
+      requestId
+      modelId
+      timestamp
+      inputTokenCount
+      outputTokenCount
+      cacheReadTokenCount
+      inputPreview
+      outputPreview
+      toolCount
+      costUsd
+      toolUses
+      hasToolResult
+      branch
+    }
+  }
+`);
