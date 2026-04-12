@@ -60,7 +60,6 @@ const columns: ColumnDef<McpServer>[] = [
     cell: ({ row }) => (
       <div className="pl-3">
         <span className="font-medium">{row.original.name}</span>
-        <p className="text-xs text-muted-foreground truncate">{row.original.url}</p>
       </div>
     ),
   },
@@ -174,7 +173,7 @@ function McpServersPage() {
           columns={columns}
           data={servers}
           pageSize={0}
-          tableClassName="table-fixed"
+          tableClassName="table-fixed [&_tbody_tr]:h-10"
           onRowClick={(row) => setDetailServer(row)}
         />
       )}

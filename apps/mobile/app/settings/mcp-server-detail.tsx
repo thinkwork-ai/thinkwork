@@ -103,6 +103,8 @@ export default function McpServerDetailScreen() {
     await fetchServer();
   };
 
+  const [clearing, setClearing] = useState(false);
+
   const handleClearAuth = () => {
     Alert.alert(
       "Clear Authentication",
@@ -114,8 +116,9 @@ export default function McpServerDetailScreen() {
           style: "destructive",
           onPress: async () => {
             if (!tenant?.id || !user?.id || !server) return;
+            setClearing(true);
             try {
-              await fetch(`${API_BASE}/api/skills/user-mcp-tokens/${server.id}`, {
+              const res = await fetch(`${API_BASE}/api/skills/user-mcp-tokens/${server.id}`, {
                 method: "DELETE",
                 headers: {
                   "x-api-key": GRAPHQL_API_KEY,
@@ -123,9 +126,17 @@ export default function McpServerDetailScreen() {
                   "x-principal-id": user.id,
                 },
               });
-              await fetchServer();
+              if (res.ok) {
+                setServer({ ...server, authStatus: "not_connected" });
+                Alert.alert("Cleared", "Authentication removed. Tap Authenticate to reconnect.");
+              } else {
+                const body = await res.text();
+                Alert.alert("Error", `Failed to clear: ${res.status} ${body}`);
+              }
             } catch (err) {
-              Alert.alert("Error", "Failed to clear authentication.");
+              Alert.alert("Error", "Failed to clear authentication. Check your connection.");
+            } finally {
+              setClearing(false);
             }
           },
         },
