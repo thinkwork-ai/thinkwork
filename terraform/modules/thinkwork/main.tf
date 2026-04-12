@@ -174,6 +174,10 @@ module "api" {
   agentcore_function_arn  = module.agentcore.agentcore_function_arn
   hindsight_endpoint      = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
   agentcore_memory_id     = module.agentcore_memory.memory_id
+  admin_url               = "https://${module.admin_site.distribution_domain}"
+  docs_url                = "https://${module.docs_site.distribution_domain}"
+  appsync_realtime_url    = module.appsync.graphql_realtime_url
+  ecr_repository_url      = module.agentcore.ecr_repository_url
 }
 
 ################################################################################
