@@ -69,12 +69,6 @@ strategies_json='[
       "name": "summaries",
       "namespaces": ["session_{sessionId}"]
     }
-  },
-  {
-    "semanticMemoryStrategy": {
-      "name": "episodes",
-      "namespaces": ["episodes_{actorId}/{sessionId}"]
-    }
   }
 ]'
 
