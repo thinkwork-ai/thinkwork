@@ -90,7 +90,7 @@ No repo clone required — `thinkwork init` scaffolds all Terraform modules from
 
 - **AWS Region** — where to deploy (default: us-east-1)
 - **Database engine** — `aurora-serverless` (production) or `rds-postgres` (dev, cheaper)
-- **Memory engine** — `managed` (built-in) or `hindsight` (ECS Fargate with semantic + graph retrieval)
+- **Hindsight add-on** — optional y/N (managed AgentCore memory with automatic per-turn retention is always on; Hindsight adds ECS Fargate semantic + entity-graph retrieval alongside it)
 - **Google OAuth** — optional social login for Cognito
 - **Admin UI URL** — callback URL for the admin dashboard
 - **Mobile app scheme** — deep link scheme for the mobile app
@@ -119,22 +119,27 @@ thinkwork status
 ```
 
 ```
-  Environments
-  ──────────────────────────────────────────────────────────────────────
-  Stage           Source    Lambdas   AgentCore     Memory        URLs
-  ──────────────────────────────────────────────────────────────────────
-  ● dev           aws+cli  42        active        hindsight ✓   API: https://ho7oy...
-                                                                 WS:  dcrs2r...
-                                                                 Mem: http://tw-dev...
-  ──────────────────────────────────────────────────────────────────────
+  ⬡ dev
+  ─────────────────────────────────────────
+  Source:          AWS + local config
+  Region:          us-east-1
+  Account:         123456789012
+  Lambda fns:      42
+  AgentCore:       Active
+  Memory:          managed (always on)
+  Hindsight:       healthy
+  ...
 ```
 
 URLs are clickable in supported terminals (iTerm2, Windows Terminal, VS Code, etc.).
 
-### Switch memory engine
+### Enable the Hindsight memory add-on
+
+Managed AgentCore memory is always on. To also enable Hindsight (ECS Fargate
+service for semantic + entity-graph retrieval) alongside it:
 
 ```bash
-thinkwork config set memory-engine hindsight -s dev --apply
+thinkwork config set enable-hindsight true -s dev --apply
 ```
 
 ### Deploy a specific tier

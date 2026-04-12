@@ -7,25 +7,31 @@ import { resolveTierDir, ensureInit, ensureWorkspace, runTerraform } from "../te
 import { loadEnvironment, listEnvironments, resolveTerraformDir } from "../environments.js";
 import { printHeader, printSuccess, printError, printWarning } from "../ui.js";
 
-const VALID_MEMORY_ENGINES = ["managed", "hindsight"] as const;
-
 function readTfVar(tfvarsPath: string, key: string): string | null {
   if (!existsSync(tfvarsPath)) return null;
   const content = readFileSync(tfvarsPath, "utf-8");
-  const match = content.match(new RegExp(`^${key}\\s*=\\s*"([^"]*)"`, "m"));
-  return match ? match[1] : null;
+  // Support both quoted string values and bare bool/number values.
+  const quoted = content.match(new RegExp(`^${key}\\s*=\\s*"([^"]*)"`, "m"));
+  if (quoted) return quoted[1];
+  const bare = content.match(new RegExp(`^${key}\\s*=\\s*([^\\s#]+)`, "m"));
+  return bare ? bare[1] : null;
 }
+
+/** Keys whose tfvars representation is a bare bool/number, not a quoted string. */
+const BARE_KEYS = new Set(["enable_hindsight"]);
 
 function setTfVar(tfvarsPath: string, key: string, value: string): void {
   if (!existsSync(tfvarsPath)) {
     throw new Error(`terraform.tfvars not found at ${tfvarsPath}`);
   }
   let content = readFileSync(tfvarsPath, "utf-8");
-  const regex = new RegExp(`^(${key}\\s*=\\s*)"[^"]*"`, "m");
-  if (regex.test(content)) {
-    content = content.replace(regex, `$1"${value}"`);
+  const bare = BARE_KEYS.has(key);
+  const newLine = bare ? `${key} = ${value}` : `${key} = "${value}"`;
+  const existingRegex = new RegExp(`^${key}\\s*=\\s*(?:"[^"]*"|[^\\s#]+)`, "m");
+  if (existingRegex.test(content)) {
+    content = content.replace(existingRegex, newLine);
   } else {
-    content += `\n${key} = "${value}"\n`;
+    content += `\n${newLine}\n`;
   }
   writeFileSync(tfvarsPath, content);
 }
@@ -68,7 +74,7 @@ export function registerConfigCommand(program: Command): void {
         console.log(`  ${chalk.bold("Region:")}          ${env.region}`);
         console.log(`  ${chalk.bold("Account:")}         ${env.accountId}`);
         console.log(`  ${chalk.bold("Database:")}        ${env.databaseEngine}`);
-        console.log(`  ${chalk.bold("Memory:")}          ${env.memoryEngine}`);
+        console.log(`  ${chalk.bold("Memory:")}          managed (always on)${env.enableHindsight ? " + hindsight" : ""}`);
         console.log(`  ${chalk.bold("Terraform dir:")}   ${env.terraformDir}`);
         console.log(`  ${chalk.bold("Created:")}         ${env.createdAt}`);
         console.log(`  ${chalk.bold("Updated:")}         ${env.updatedAt}`);
@@ -116,8 +122,8 @@ export function registerConfigCommand(program: Command): void {
       console.log(chalk.dim("  ─────────────────────────────────────────────────────────────"));
 
       for (const env of envs) {
-        const memBadge = env.memoryEngine === "hindsight"
-          ? chalk.magenta("hindsight")
+        const memBadge = env.enableHindsight
+          ? chalk.magenta("managed+hindsight")
           : chalk.dim("managed");
         const dbBadge = env.databaseEngine === "rds-postgres"
           ? chalk.yellow("rds")
@@ -142,7 +148,7 @@ export function registerConfigCommand(program: Command): void {
   // thinkwork config get <key> -s <stage>
   config
     .command("get <key>")
-    .description("Get a configuration value (e.g. memory-engine)")
+    .description("Get a configuration value (e.g. enable-hindsight)")
     .requiredOption("-s, --stage <name>", "Deployment stage")
     .action((key: string, opts: { stage: string }) => {
       const stageCheck = validateStage(opts.stage);
@@ -175,9 +181,23 @@ export function registerConfigCommand(program: Command): void {
         process.exit(1);
       }
 
-      const tfKey = key.replace(/-/g, "_");
-      if (tfKey === "memory_engine" && !VALID_MEMORY_ENGINES.includes(value as typeof VALID_MEMORY_ENGINES[number])) {
-        printError(`Invalid memory engine "${value}". Must be: ${VALID_MEMORY_ENGINES.join(", ")}`);
+      let tfKey = key.replace(/-/g, "_");
+      let tfValue = value;
+
+      // Deprecated: memory_engine → enable_hindsight translation.
+      // Kept for one release so existing scripts and muscle memory keep working.
+      if (tfKey === "memory_engine") {
+        if (value !== "managed" && value !== "hindsight") {
+          printError(`Invalid memory engine "${value}". Must be 'managed' or 'hindsight'. Note: memory_engine is deprecated — use enable_hindsight instead.`);
+          process.exit(1);
+        }
+        printWarning("memory_engine is deprecated — translating to enable_hindsight. Managed memory is always on.");
+        tfKey = "enable_hindsight";
+        tfValue = value === "hindsight" ? "true" : "false";
+      }
+
+      if (tfKey === "enable_hindsight" && tfValue !== "true" && tfValue !== "false") {
+        printError(`Invalid enable_hindsight value "${tfValue}". Must be 'true' or 'false'.`);
         process.exit(1);
       }
 
@@ -186,9 +206,9 @@ export function registerConfigCommand(program: Command): void {
 
       const tfvarsPath = resolveTfvarsPath(opts.stage);
       const oldValue = readTfVar(tfvarsPath, tfKey);
-      setTfVar(tfvarsPath, tfKey, value);
+      setTfVar(tfvarsPath, tfKey, tfValue);
 
-      console.log(`  ${key}: ${oldValue ?? "(unset)"} → ${value}`);
+      console.log(`  ${tfKey}: ${oldValue ?? "(unset)"} → ${tfValue}`);
 
       if (opts.apply) {
         const tfDir = resolveTerraformDir(opts.stage);
@@ -212,9 +232,9 @@ export function registerConfigCommand(program: Command): void {
           printError(`Deploy failed (exit ${code})`);
           process.exit(code);
         }
-        printSuccess(`Configuration applied: ${key} = ${value}`);
+        printSuccess(`Configuration applied: ${tfKey} = ${tfValue}`);
       } else {
-        printSuccess(`Configuration updated: ${key} = ${value}`);
+        printSuccess(`Configuration updated: ${tfKey} = ${tfValue}`);
         printWarning("Run with --apply to deploy the change, or run 'thinkwork deploy' separately.");
       }
     });
