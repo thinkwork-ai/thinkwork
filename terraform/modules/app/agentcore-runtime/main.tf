@@ -210,6 +210,17 @@ resource "aws_lambda_function_url" "agentcore" {
   authorization_type = "NONE"
 }
 
+# Without this permission, a NONE-auth Function URL returns 403 to every
+# caller. aws_lambda_function_url only configures the endpoint; it does not
+# create the companion resource-based policy statement.
+resource "aws_lambda_permission" "agentcore_function_url" {
+  statement_id           = "AllowPublicFunctionUrl"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.agentcore.function_name
+  principal              = "*"
+  function_url_auth_type = "NONE"
+}
+
 ################################################################################
 # Outputs
 ################################################################################
