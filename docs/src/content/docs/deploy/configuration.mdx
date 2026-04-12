@@ -23,7 +23,7 @@ These must be set in every deployment. There are no defaults.
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
 | `database_engine` | string | `"aurora-serverless"` | `aurora-serverless` (Aurora Serverless v2) or `rds-postgres` (provisioned RDS). Use `aurora-serverless` for dev/staging and variable workloads. |
-| `memory_engine` | string | `"managed"` | `managed` (Aurora-backed, built-in) or `hindsight` (ECS Fargate, full memory lifecycle). |
+| `memory_engine` | string | `"managed"` | `managed` (the default AWS AgentCore LongTerm memory path used by the open source app) or `hindsight` (ECS Fargate alternative with a fuller explicit memory lifecycle). |
 | `default_model_id` | string | `"anthropic.claude-3-5-sonnet-20241022-v2:0"` | Bedrock model ID for the default Agent Template created on first deploy. |
 | `log_retention_days` | number | `30` | CloudWatch log group retention in days. Set to `0` for never expire (not recommended for production). |
 
@@ -89,11 +89,13 @@ For development, set `aurora_min_capacity = 0.5`. Aurora Serverless v2 pauses af
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `memory_engine` | string | `"managed"` | `managed` or `hindsight`. |
+| `memory_engine` | string | `"managed"` | `managed` or `hindsight`. `managed` is the config surface for the default AWS AgentCore LongTerm memory integration. |
 | `hindsight_retain_interval_hours` | number | `1` | How often (hours) Hindsight runs the retain step. Only used if `memory_engine = "hindsight"`. |
 | `hindsight_reflect_interval_hours` | number | `24` | How often (hours) Hindsight runs the reflect/synthesis step. |
 | `hindsight_task_cpu` | number | `512` | ECS Fargate CPU units for Hindsight tasks. |
 | `hindsight_task_memory` | number | `1024` | ECS Fargate memory (MB) for Hindsight tasks. |
+
+With `memory_engine = "managed"`, Thinkwork uses AWS AgentCore LongTerm memory by default. The documented default setup includes four built-in strategies: semantic, summarization, user-preference, and episodic.
 
 ## Email (SES)
 

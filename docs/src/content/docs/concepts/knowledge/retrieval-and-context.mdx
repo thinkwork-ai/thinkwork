@@ -1,0 +1,48 @@
+---
+title: Retrieval and Context
+description: How document retrieval, memory recall, and thread history come together inside a Thinkwork turn.
+---
+
+A Thinkwork agent turn is assembled from multiple context sources, not just the latest user message.
+
+## Context sources
+
+Depending on configuration, a managed agent may receive:
+
+- The current thread message
+- Recent thread history
+- Retrieved document passages from a knowledge base
+- Recalled memories
+- Skill pack instructions and tool definitions
+- Connector metadata from the source system
+
+## Why this matters
+
+This is the practical reason Thinkwork separates Threads, Memory, and Agents as concepts:
+
+- **Threads** hold the canonical work record
+- **Memory** provides retrieved context, including documents and long-term memory
+- **Agents** decide how to act on that context
+
+## Turn assembly
+
+A typical turn looks like this:
+
+```
+Current message
+  + recent thread history
+  + retrieved document chunks
+  + relevant memories
+  + tool and policy context
+  = model input for this turn
+```
+
+The exact mix depends on the agent template and deployment settings.
+
+## Current reality
+
+In the open source docs today, the clearest implemented retrieval path is document retrieval through Bedrock Knowledge Bases, plus AWS AgentCore LongTerm memory by default and Hindsight as an optional alternative.
+
+The default long-term memory setup includes semantic, summarization, user-preference, and episodic strategies.
+
+Thinkwork may expand how retrieval is configured over time, but this page describes the current mental model rather than promising a more advanced orchestration layer than the repo shows today.

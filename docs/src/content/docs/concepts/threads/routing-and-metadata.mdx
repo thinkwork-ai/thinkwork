@@ -1,0 +1,50 @@
+---
+title: Routing and Metadata
+description: How thread metadata, channel context, and routing signals help agents respond appropriately.
+---
+
+Thread routing in Thinkwork is driven by the thread record plus its channel-specific metadata.
+
+## Metadata as routing context
+
+Threads carry a `metadata` JSON field for source-specific details.
+
+Examples include:
+
+- **EMAIL**: `fromAddress`, `toAddress`, `subject`, `messageId`, `inReplyTo`
+- **SLACK**: `channelId`, `messageTs`, `teamId`, `userId`
+- **GITHUB**: `repoFullName`, `issueNumber`, `eventType`
+
+That metadata is available in the thread record and can be included in agent context.
+
+## Why metadata matters
+
+Metadata lets Thinkwork keep one thread model while still preserving where the work came from.
+
+It supports patterns like:
+
+- replying back to the correct Slack thread
+- linking an answer to the right GitHub issue
+- distinguishing inbound email from an internal automation run
+- tailoring behavior based on source channel
+
+## Routing model
+
+At a high level, routing follows this shape:
+
+```
+Inbound message or event
+  → thread created or updated
+  → channel + metadata captured
+  → agent selected
+  → context assembled
+  → response written back to the thread
+```
+
+Connector-originated work uses the same thread path as direct user work. That keeps auditability and downstream automation behavior consistent.
+
+## Related pages
+
+- [Threads Overview](/concepts/threads/)
+- [Lifecycle and Types](/concepts/threads/lifecycle-and-types/)
+- [Connectors](/concepts/connectors/)

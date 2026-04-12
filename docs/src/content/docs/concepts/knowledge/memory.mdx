@@ -1,0 +1,74 @@
+---
+title: Long-term Memory
+description: How Thinkwork stores and recalls information from prior interactions, using AWS AgentCore LongTerm memory by default and Hindsight as an optional alternative.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Long-term memory is how Thinkwork carries information forward from previous work. Unlike document knowledge, which starts with uploaded source files, long-term memory starts with what happened in threads.
+
+## What long-term memory means in Thinkwork
+
+Long-term memory helps agents retain useful facts across turns or across related work, such as:
+
+- User or team preferences
+- Ongoing project context
+- Prior decisions and follow-up items
+- Summaries synthesized from earlier conversations
+
+Thinkwork currently documents two long-term memory modes for managed agents.
+
+## Default: AWS AgentCore LongTerm memory
+
+The default option is AWS AgentCore LongTerm memory.
+
+In deployment config, this is currently surfaced as `memory_engine = "managed"`. In the open source app, that `managed` setting refers to the built-in AgentCore LongTerm path rather than a separate generic memory abstraction.
+
+The documented default long-term memory setup includes four built-in strategies:
+
+- **Semantic** for similarity-based recall
+- **Summarization** for synthesized carry-forward context
+- **User-preference** for durable preference capture
+- **Episodic** for remembered events and prior interactions
+
+This is the right starting point for most deployments because it is the default path and does not require the separate Hindsight service.
+
+## Hindsight
+
+**Hindsight** is an alternative memory engine.
+
+It runs on ECS Fargate and adds a fuller explicit memory lifecycle:
+
+- **Retain** stores candidate memories from conversations
+- **Recall** retrieves relevant memories for the next turn
+- **Reflect** periodically synthesizes and compresses memory over time
+
+Enable it with `memory_engine = "hindsight"` in your deployment config.
+
+<Aside type="tip">
+Start with the default AgentCore LongTerm memory unless you already know you need Hindsight's separate retain and reflect workflows.
+</Aside>
+
+## Long-term memory versus thread history
+
+Thread history is the complete record. Long-term memory is the selective carry-forward layer.
+
+- **Thread history** preserves everything in the thread database
+- **Long-term memory** surfaces only the pieces worth reusing later
+
+That distinction matters because long threads are still auditable even when only a smaller set of facts is recalled into the next turn.
+
+## Long-term memory versus document knowledge
+
+Use long-term memory for information learned from work. Use document knowledge for information loaded from source material.
+
+In practice, many agents use both:
+
+- document knowledge grounds answers in docs and policies
+- long-term memory carries forward context from prior interactions
+
+## Configuration touchpoints
+
+- [Deploy: Configuration Reference](/deploy/configuration/)
+- [Concepts: Agents](/concepts/agents/)
+- [Concepts: Threads](/concepts/threads/)

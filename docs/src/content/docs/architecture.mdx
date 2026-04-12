@@ -1,13 +1,81 @@
 ---
 title: Architecture
-description: Three-tier AWS infrastructure model. Foundation, Data, and App tiers. Data flow, state locations, and what gets deployed where.
+description: How Thinkwork fits together across threads, memory, agents, and connectors, and where that maps onto the AWS deployment tiers.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Thinkwork is organized into three infrastructure tiers that are deployed in dependency order. Every resource lives in your AWS account. There is no shared infrastructure, no callbacks to external control planes, and no telemetry sent outside your account.
+Thinkwork has two useful views of the system:
 
-## Three-tier model
+1. a **conceptual model** for reasoning about how work flows through the product
+2. an **infrastructure model** for understanding what gets deployed in AWS
+
+The conceptual model is:
+
+- **Threads** are the record of work
+- **Memory** surfaces useful context into a turn, including document retrieval and long-term memory
+- **Agents** are the execution layer that decide and act
+- **Connectors** connect Thinkwork to outside systems, including MCP-based tool connectors
+
+Those concepts map onto a three-tier AWS deployment. Every resource lives in your AWS account. There is no shared infrastructure, no callbacks to external control planes, and no telemetry sent outside your account.
+
+## System model
+
+Before getting into the deployment tiers, it helps to frame the runtime in product terms:
+
+```
+External systems and users
+    ↓
+Threads
+    ↓
+Memory
+    ↓
+Agents
+    ↓
+Connectors and responses back out
+```
+
+### Threads
+
+Threads are the durable record of work. User chats, connector events, emails, and automations all become threads with history, status, metadata, and auditability.
+
+See [Threads](/concepts/threads/).
+
+### Memory
+
+Memory is the context layer. It determines what gets surfaced into the current turn beyond the latest message.
+
+In the current open source app, that mainly means:
+
+- thread history selected for the context window
+- document retrieval through Bedrock Knowledge Bases
+- long-term memory recall through AWS AgentCore LongTerm memory by default, or Hindsight when configured
+- context assembly before model invocation
+
+The default long-term memory setup includes semantic, summarization, user-preference, and episodic strategies.
+
+See [Memory](/concepts/knowledge/).
+
+### Agents
+
+Agents are the execution layer. They receive a thread plus assembled context, decide what to do, call tools, and produce a response.
+
+In managed mode, this execution happens in AgentCore.
+
+See [Agents](/concepts/agents/).
+
+### Connectors
+
+Connectors are the integration boundary. Some connectors bring inbound events into threads, and some expose external tools for agents to call.
+
+This includes:
+
+- channel and event connectors such as Slack, GitHub, and Google Workspace
+- tool connectors, including [MCP Tools](/concepts/connectors/mcp-tools/)
+
+See [Connectors](/concepts/connectors/).
+
+## Three-tier deployment model
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -85,8 +153,8 @@ A full round trip from user message to agent response:
    └─ Reads thread history from Aurora
    └─ Downloads assigned skill packs from S3
    └─ Queries Bedrock Knowledge Base (if assigned) → retrieves relevant chunks
-   └─ Reads memories from Aurora (managed) or Hindsight (ECS) 
-   └─ Builds context: system prompt + skills instructions + memories + KB chunks + history
+   └─ Reads long-term memories through the default AgentCore LongTerm path (`memory_engine = "managed"`) or Hindsight (ECS)
+   └─ Builds context: system prompt + selected history + retrieved knowledge + recalled memory + tool config
 
 3. Bedrock inference
    └─ Strands sends context + message to Bedrock (Claude)
@@ -115,7 +183,19 @@ External service (Slack, GitHub, etc.)
         └─ Writes thread record to Aurora (channel=SLACK, metadata={...})
         └─ Invokes AgentCore (same path as user message above)
     → Agent response
-        → Outbound skill tool: posts reply back to Slack/GitHub/etc.
+        → Outbound connector or tool call posts reply back to Slack/GitHub/etc.
+```
+
+## Data flow: MCP tool connector
+
+```
+AgentCore receives thread + assembled context
+    → Resolves enabled tool connectors from template/agent config
+    → Connects to MCP server over HTTP streaming or SSE
+    → Discovers available tools for this invocation
+    → Model calls MCP tool when needed
+    → Tool result returns into the same turn
+    → Final response written back to the thread
 ```
 
 ## Data flow: automation
@@ -132,6 +212,13 @@ EventBridge scheduled rule (cron)
 
 ## Where state lives
 
+This split is useful to keep in mind:
+
+- **Threads** preserve the canonical record of work in Aurora
+- **Memory** combines persisted sources like documents and memories with retrieval-time assembly
+- **Agents** are mostly stateless between invocations aside from their configuration
+- **Connectors** store credentials and integration configuration, but the resulting work still lands in threads
+
 | What | Where | Backup |
 |------|-------|--------|
 | Agents, threads, messages | Aurora Postgres | Automated daily snapshots (7-day retention) |
@@ -140,13 +227,13 @@ EventBridge scheduled rule (cron)
 | Knowledge documents | S3 (knowledge bucket) | S3 versioning enabled |
 | Audit logs | S3 (audit log bucket) | S3 versioning + lifecycle to Glacier after 90d |
 | Memories (managed) | Aurora Postgres | Same as above |
-| Memories (Hindsight) | Aurora Postgres + ECS in-flight | Same as above |
+| Memories (Hindsight) | Aurora Postgres + ECS in-flight processing | Same as above |
 | OAuth tokens / API keys | SSM Parameter Store (SecureString, KMS) | SSM-managed |
 | Terraform state | S3 (tfstate bucket) + DynamoDB (lock table) | S3 versioning enabled |
 | Vector index | OpenSearch Serverless | OpenSearch-managed snapshots |
 
 <Aside type="note">
-The only state that is NOT in Aurora is the vector index (OpenSearch) and binary assets (S3). If you restore from an Aurora snapshot, agents, threads, and memories are fully recovered. You would need to re-trigger a Knowledge Base sync to rebuild the vector index.
+The only state that is NOT in Aurora is the vector index (OpenSearch), binary assets (S3), and a small amount of managed identity or secret state in AWS services such as Cognito and Secrets Manager. If you restore from an Aurora snapshot, agents, threads, and memories are largely recovered. You would still need to restore any non-Aurora configuration and re-trigger a Knowledge Base sync to rebuild the vector index.
 </Aside>
 
 ## Multi-tenancy

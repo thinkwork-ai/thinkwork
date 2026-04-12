@@ -1,0 +1,50 @@
+---
+title: Routines and Execution Model
+description: How Thinkwork runs automations and routines with Step Functions, AUTO threads, and recorded runs.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Thinkwork documents routines as multi-step automations that can chain agent invocations, branching, and external actions.
+
+## Execution model
+
+All automations are backed by AWS Step Functions.
+
+A typical run looks like this:
+
+1. EventBridge or an API trigger starts the state machine
+2. Thinkwork creates an `AUTO-` thread for the run
+3. AgentCore executes the configured step or prompt
+4. The run finishes as `succeeded` or `failed`
+
+For routines, each step becomes part of the Step Functions execution path.
+
+## Runs and debugging
+
+Every automation run is recorded with status, timing, and the associated thread.
+
+That gives you two useful views of the same work:
+
+- the **thread view**, which shows the agent conversation and outputs
+- the **execution view**, which shows state-machine progress and failures
+
+## Manual triggers and retries
+
+Automations can also be triggered manually, and retry behavior can be configured for failed runs.
+
+That makes it practical to:
+
+- test before enabling a schedule
+- rerun a failed job
+- override the prompt for a one-off run
+
+<Aside type="note">
+The docs describe Step Functions as the current execution backbone for automations and routines. They do not assume a broader workflow designer than the open source app currently documents.
+</Aside>
+
+## Related pages
+
+- [Automations Overview](/concepts/automations/)
+- [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/)
+- [Threads](/concepts/threads/)

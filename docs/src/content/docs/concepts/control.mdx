@@ -1,213 +1,40 @@
 ---
 title: Control
-description: Guardrails, budgets, usage tracking, and cost visibility for your agent fleet. Know what your agents are doing, what they cost, and where the boundaries are.
+description: Guardrails, budgets, usage tracking, and auditability for your Thinkwork deployment.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Card, CardGrid } from '@astrojs/starlight/components';
 
-The Control module gives you visibility and enforcement over your agent fleet. As your deployment grows from a single agent to dozens of agents running automations around the clock, you need guardrails to prevent misuse, budgets to prevent runaway costs, and usage tracking to understand what's happening.
+Control is the operational boundary layer for Thinkwork. It answers two blunt questions:
 
-## Guardrails
+- what are agents allowed to do
+- what actually happened when they did it
 
-Thinkwork uses **Amazon Bedrock Guardrails** as the enforcement layer. Guardrails are evaluated on every agent invoke — before the prompt reaches the model (input filter) and after the model generates a response (output filter).
+That means Control is not just safety policy. It is also spend management, visibility, and auditability.
 
-### What guardrails cover
+## What Control covers
 
-- **Topic blocking** — Prevent the model from discussing specific subjects (e.g., competitor products, investment advice)
-- **Content filters** — Block hate speech, violence, profanity, or custom sensitive categories
-- **PII detection** — Detect and redact personally identifiable information in responses
-- **Grounding** — Verify that responses are grounded in retrieved context (reduces hallucination)
-- **Word filters** — Block or mask specific words or phrases
+In the current open source docs, Control includes:
 
-### Configuring guardrails
+- guardrails at model invocation time
+- budgets and usage tracking
+- rate limits and spend boundaries
+- audit logging in your AWS account
 
-Guardrails are created in the AWS Bedrock console and referenced by ID in your Agent Templates:
+## Why this matters
 
-```graphql
-mutation CreateTemplate {
-  createAgentTemplate(input: {
-    name: "Production Safe"
-    modelId: "anthropic.claude-3-5-sonnet-20241022-v2:0"
-    guardrailId: "gr-prod-safe-v2"
-    guardrailVersion: "DRAFT"   # or a specific version number
-  }) {
-    id
-  }
-}
-```
+As soon as agents move from demos into real work, you need a way to enforce boundaries and inspect behavior after the fact. Thinkwork treats that as a first-class concept instead of an afterthought.
 
-When a guardrail blocks a message, the agent response is replaced with a configured fallback message and the thread is flagged with a `guardrail_triggered` event. These events are visible in the admin app and queryable via the API.
+<CardGrid>
+  <Card title="Guardrails" icon="shield-check">
+    Bedrock guardrails and the enforcement boundary for managed agents.
+  </Card>
+  <Card title="Budgets, Usage, and Audit" icon="report">
+    Spend controls, turn-level usage tracking, and durable audit logs.
+  </Card>
+</CardGrid>
 
-```graphql
-query GuardrailEvents {
-  listThreadEvents(filter: { type: GUARDRAIL_TRIGGERED }, limit: 20) {
-    items {
-      threadId
-      agentId
-      triggeredAt
-      direction     # INPUT or OUTPUT
-      action        # BLOCKED or ANONYMIZED
-      policy        # Which guardrail policy triggered
-    }
-  }
-}
-```
+## Read this section
 
-<Aside type="note">
-Guardrails are applied at the Bedrock API call level, not by Thinkwork's application code. This means they apply to every model invocation regardless of how the agent is prompted — they cannot be bypassed by jailbreak attempts in the thread.
-</Aside>
-
-## Budgets
-
-Budgets cap the spending for an agent, a tenant, or a time period. When a budget is exceeded, the agent is suspended (threads stop accepting new messages) until the budget resets or is manually increased.
-
-### Budget scopes
-
-| Scope | Description |
-|-------|-------------|
-| Per-agent daily | Cap a single agent's daily Bedrock spend |
-| Per-agent monthly | Cap a single agent's monthly spend |
-| Tenant monthly | Cap total spend across all agents for a tenant |
-| Automation | Cap total spend for a specific automation |
-
-### Creating a budget
-
-```graphql
-mutation CreateBudget {
-  createBudget(input: {
-    name: "Support bot — monthly cap"
-    scope: AGENT
-    agentId: "agent-support"
-    period: MONTHLY
-    limitUsd: 50.00
-    alertThresholds: [0.75, 0.90]   # Alert at 75% and 90%
-    onExceeded: SUSPEND_AGENT       # or: ALERT_ONLY, SUSPEND_THREAD
-    notifyEmails: ["ops@example.com"]
-  }) {
-    id
-    currentSpendUsd
-    remainingUsd
-    resetsAt
-  }
-}
-```
-
-When `alertThresholds` are hit, Thinkwork sends an email (via SES) and creates a `BUDGET_ALERT` event visible in the admin app.
-
-### Checking budget status
-
-```graphql
-query BudgetStatus {
-  getBudget(id: "budget-abc123") {
-    id
-    name
-    limitUsd
-    currentSpendUsd
-    remainingUsd
-    percentUsed
-    status    # ok, warning, exceeded
-    resetsAt
-  }
-}
-```
-
-## Usage tracking
-
-Thinkwork tracks usage at the turn level. Every agent invoke records:
-
-| Metric | Description |
-|--------|-------------|
-| `inputTokens` | Tokens in the prompt (including context, history, tools) |
-| `outputTokens` | Tokens in the model response |
-| `totalTokens` | Sum of input + output |
-| `estimatedCostUsd` | Estimated cost based on Bedrock pricing |
-| `modelId` | Which model was used |
-| `durationMs` | Wall time from invoke to response |
-| `toolCallCount` | Number of tool calls made in this turn |
-
-### Querying usage
-
-```graphql
-query UsageSummary {
-  getUsageSummary(filter: {
-    agentId: "agent-support"
-    startDate: "2024-04-01"
-    endDate: "2024-04-30"
-  }) {
-    totalTurns
-    totalTokens
-    totalInputTokens
-    totalOutputTokens
-    estimatedCostUsd
-    byModel {
-      modelId
-      turns
-      tokens
-      costUsd
-    }
-    byDay {
-      date
-      turns
-      tokens
-      costUsd
-    }
-  }
-}
-```
-
-### Usage in the admin app
-
-The admin app includes a **Usage** dashboard that shows:
-
-- Spend by agent (current month)
-- Token usage trend (30-day chart)
-- Top agents by cost
-- Guardrail trigger rate
-- Budget status overview
-
-<Aside type="tip">
-Set up monthly budgets with email alerts for all production agents before your first real-world deploy. It takes 2 minutes and prevents the surprise of a runaway automation consuming $500 in Bedrock calls overnight.
-</Aside>
-
-## Rate limiting
-
-Beyond budgets, you can set **rate limits** to cap the velocity of agent invocations:
-
-```graphql
-mutation SetRateLimit {
-  updateAgent(id: "agent-support", input: {
-    rateLimits: {
-      turnsPerMinute: 10
-      turnsPerHour: 100
-      turnsPerDay: 500
-    }
-  }) {
-    id
-    rateLimits {
-      turnsPerMinute
-      turnsPerHour
-      turnsPerDay
-    }
-  }
-}
-```
-
-When a rate limit is hit, new messages are queued (up to a configurable queue depth) rather than rejected. If the queue is full, the API returns a `429 Too Many Requests` response.
-
-## Audit log
-
-All agent invocations are written to an audit log stored in S3 (in your account). Each log entry includes:
-
-- Thread ID, turn ID, agent ID, tenant ID
-- The full input prompt (after guardrail input filter)
-- The full model response (before guardrail output filter)
-- Tool calls and results
-- Model, token counts, cost estimate
-- Guardrail evaluation results
-- Timestamp and duration
-
-Log entries are stored as newline-delimited JSON in `s3://<stage>-thinkwork-audit-logs/YYYY/MM/DD/`. You can query them with Athena, ship them to a SIEM, or use them for compliance reporting.
-
-<Aside type="caution">
-Audit logs contain the full text of every agent conversation. Treat the audit log bucket as sensitive data. The bucket is created with server-side encryption (KMS), versioning enabled, and no public access. Access is restricted to IAM roles with explicit permissions.
-</Aside>
+- [Guardrails](/concepts/control/guardrails/)
+- [Budgets, Usage, and Audit](/concepts/control/budgets-usage-and-audit/)

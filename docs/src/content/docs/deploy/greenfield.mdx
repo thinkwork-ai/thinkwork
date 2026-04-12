@@ -32,7 +32,7 @@ Thinkwork is organized into three infrastructure tiers that deploy in order:
 - Connector Lambda functions (Slack, GitHub, Google)
 - Step Functions state machines (automations, routine runner)
 - CloudFront distributions (admin app, end-user app)
-- ECS Fargate (if `memory_engine = "hindsight"`)
+- ECS Fargate (only if `memory_engine = "hindsight"`)
 
 ## Prerequisites
 
@@ -110,7 +110,7 @@ Enable model access before running deploy. If models aren't enabled, the deploy 
    # hosted_zone_id = "Z1234567890ABC"
 
    # Memory engine
-   memory_engine = "managed"   # start here, upgrade to hindsight later
+   memory_engine = "managed"   # default AgentCore LongTerm memory, upgrade to hindsight later if needed
 
    # Database engine
    database_engine = "aurora-serverless"   # recommended for dev

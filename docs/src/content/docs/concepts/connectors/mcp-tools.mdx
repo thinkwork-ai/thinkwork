@@ -1,0 +1,101 @@
+---
+title: MCP Tools
+description: Use MCP-based external tool connectors under the Connectors model.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+MCP (Model Context Protocol) is Thinkwork's connector path for external tool systems. It lives under **Connectors**, not as a separate platform pillar.
+
+Use MCP tools when agents need to call remote capabilities during work, such as CRM actions, ticket updates, internal API operations, search, or database queries exposed by an MCP server.
+
+<Aside type="note">
+For the broader connector model, start with [Connectors Overview](/concepts/connectors/). For app and channel integrations like Slack, GitHub, and Google Workspace, see [Integrations](/concepts/connectors/integrations/).
+</Aside>
+
+## How MCP tools fit
+
+Thinkwork uses two broad connector paths:
+
+1. **Integrations** bring external messages and events into threads
+2. **MCP tools** give agents external capabilities they can call during a turn
+
+Both still operate inside the same Thinkwork model:
+
+- threads remain the unit of work
+- agents decide what to do
+- controls govern access and usage
+- audit trails capture tool activity
+
+## How it works
+
+```text
+Admin registers MCP server
+    → Assigns it to agent template or agent
+    → Agent invocation resolves auth
+    → Agent container connects to MCP server
+    → Tools are discovered
+    → Agent calls tools during the turn
+    → Calls are logged in the thread timeline
+```
+
+## Registration
+
+MCP servers are registered at the tenant level, then assigned to agent templates or agents.
+
+Typical config includes:
+
+| Field | Description |
+|---|---|
+| Name | Display name for the MCP server |
+| URL | HTTP endpoint for the server |
+| Transport | Streamable HTTP or SSE |
+| Auth | None, tenant API key, or per-user OAuth |
+
+In the admin experience, this should appear under **Connectors → MCP Tools**.
+
+## Authentication
+
+MCP tool connectors commonly use one of three patterns:
+
+### None
+
+Useful for private-network services or systems with external network controls.
+
+### Tenant API key
+
+A shared secret is stored securely and resolved at invocation time for any agent allowed to use that MCP server.
+
+### Per-user OAuth
+
+Useful when downstream tools need user-scoped access. Thinkwork resolves the paired user's token before opening the MCP connection.
+
+<Aside type="note">
+If a per-user OAuth token is missing, Thinkwork can skip that MCP server for the invocation while still allowing the rest of the agent run to proceed.
+</Aside>
+
+## Runtime behavior
+
+At runtime, Thinkwork discovers tools from the MCP server and adds them beside built-in tools and skill-provided tools. If an MCP server is unavailable, the agent can continue with its remaining toolset.
+
+MCP usage is tracked in the thread timeline, including:
+
+- tool name
+- MCP server attribution
+- input and output previews
+- execution status
+
+## Supported use cases
+
+Common MCP tool connector use cases include:
+
+- CRM lookups and updates
+- internal admin APIs
+- task and ticket actions
+- business-system queries
+- search or retrieval over external systems
+
+## Related pages
+
+- [Connectors Overview](/concepts/connectors/)
+- [Integrations](/concepts/connectors/integrations/)

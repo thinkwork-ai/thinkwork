@@ -1,188 +1,44 @@
 ---
 title: Threads
-description: The universal work container in Thinkwork. Every conversation, task, automation run, and email lands in a thread with full history, context window management, and a typed channel.
+description: The universal work container in Thinkwork. Every conversation, task, automation run, and connector event lands in a thread with history, status, and channel context.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Card, CardGrid } from '@astrojs/starlight/components';
 
-A thread is the fundamental unit of work in Thinkwork. Every interaction — a chat with an agent, an automated task run, an inbound email, a scheduled routine — is a thread. Threads give you a consistent interface for observing, auditing, resuming, and replying to any kind of work your agents do.
+A thread is the fundamental unit of work in Thinkwork. Whether work starts from a chat, automation, email, or connector event, it lands in the same thread model.
 
-## Thread anatomy
+That is one of Thinkwork's strongest ideas. You do not have one system for chat, another for workflows, and another for inbound integrations. You have one durable record of work.
 
-A thread has:
+## What threads give you
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | string | Unique thread ID, always prefixed (e.g. `CHAT-0042`) |
-| `prefix` | string | Channel-derived prefix (see below) |
-| `channel` | enum | The thread's originating channel |
-| `status` | enum | `open`, `closed`, `failed`, `waiting` |
-| `title` | string | Human-readable label |
-| `agentId` | string | The agent assigned to this thread |
-| `tenantId` | string | The tenant this thread belongs to |
-| `messages` | Message[] | The full message history |
-| `metadata` | JSON | Channel-specific metadata (e.g. Slack message ID, email headers) |
-| `createdAt` | timestamp | When the thread was opened |
-| `updatedAt` | timestamp | Last activity |
+Threads provide the shared container for:
 
-## Channels
+- message history
+- status tracking
+- channel identity
+- metadata from the source system
+- auditability and replayability
 
-Every thread has a channel that indicates how it was created. The channel determines the thread prefix and the routing behavior.
+## Why threads matter
 
-| Channel | Prefix | Origination |
-|---------|--------|-------------|
-| `CHAT` | `CHAT-` | Direct message in the admin or end-user app |
-| `AUTO` | `AUTO-` | Automation or scheduled job |
-| `EMAIL` | `EMAIL-` | Inbound email via SES |
-| `SLACK` | `SLACK-` | Message from Slack connector |
-| `GITHUB` | `GH-` | GitHub event (issue, PR comment, etc.) |
-| `TASK` | `TASK-` | Manually created task thread |
-| `EVAL` | `EVAL-` | Eval pack run |
+Threads are the backbone that connects the rest of the platform:
 
-The prefix is appended with a zero-padded sequence number scoped to the tenant: `CHAT-0001`, `CHAT-0002`, etc.
+- **Agents** respond inside threads
+- **Memory** is assembled from thread history and retained context
+- **Automations** create `AUTO-` threads for every run
+- **Connectors** map inbound systems onto the same thread model
+- **Control** uses thread activity for usage, budgets, and audit trails
 
-<Aside type="note">
-Thread IDs are human-readable by design. When you reference a thread in a Slack message, a GitHub issue, or a log line, `CHAT-0042` is immediately meaningful. The underlying UUID is available as `threadUUID` for API integrations that need it.
-</Aside>
+<CardGrid>
+  <Card title="Lifecycle and Types" icon="list-tree">
+    Statuses, prefixes, channels, and how Thinkwork models different kinds of work in one thread system.
+  </Card>
+  <Card title="Routing and Metadata" icon="seti:settings">
+    Channel-specific metadata and routing context for connector and app-originated work.
+  </Card>
+</CardGrid>
 
-## Thread lifecycle
+## Read this section
 
-```
-open → waiting → open → ... → closed
-                             ↘ failed
-```
-
-- **open** — Thread is active and the agent is ready to receive messages
-- **waiting** — Thread is paused, waiting for a human reply or external event
-- **closed** — Thread is complete (explicitly closed or auto-closed by the agent)
-- **failed** — Thread hit an unrecoverable error
-
-Threads can be reopened from `closed` or `failed` status. The full message history is preserved.
-
-## Messages
-
-Each thread contains an ordered list of messages. A message has:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | string | Unique message ID |
-| `threadId` | string | Parent thread |
-| `role` | enum | `user`, `assistant`, `system`, `tool` |
-| `body` | string | Message content (Markdown) |
-| `toolCalls` | ToolCall[] | Tool calls made in this turn (if role=assistant) |
-| `toolResults` | ToolResult[] | Tool results returned (if role=tool) |
-| `tokenCount` | int | Approximate tokens in this message |
-| `model` | string | Bedrock model ID that generated this message (assistant only) |
-| `createdAt` | timestamp | When the message was created |
-
-## Turns
-
-A **turn** is a user message plus the agent's response (which may include multiple tool calls before the final text response). Turns are the billing and audit unit — cost tracking, rate limiting, and usage reporting all happen at the turn level.
-
-```
-Turn 1:
-  [user]      "Summarize last week's GitHub issues"
-  [tool]      search_github_issues(...)
-  [tool]      ← results
-  [assistant] "Here are the 14 open issues from last week..."
-
-Turn 2:
-  [user]      "Which ones are highest priority?"
-  [assistant] "Based on labels and comments..."
-```
-
-## Context window management
-
-AgentCore manages the context window automatically. When the accumulated message history approaches the model's context limit, Thinkwork:
-
-1. Trims the oldest messages from the context (not from the database — they're still stored)
-2. If Hindsight memory is enabled, summarizes trimmed content before discarding it
-3. Always preserves the system prompt and the most recent N turns
-
-The `maxContextMessages` setting on an Agent Template controls how many messages are included per turn. The default is 40 (approximately 20 turns).
-
-<Aside type="tip">
-Thread history is always fully available in the admin app and via the API, even if older messages were trimmed from the context window. Trimming only affects what the model sees on the next turn — it never deletes data.
-</Aside>
-
-## Querying threads
-
-```graphql
-# List all open CHAT threads for an agent
-query ListThreads {
-  listThreads(filter: {
-    channel: CHAT
-    status: open
-    agentId: "agent-abc123"
-  }, limit: 20) {
-    items {
-      id
-      prefix
-      title
-      status
-      updatedAt
-      lastMessage {
-        body
-        role
-      }
-    }
-    nextToken
-  }
-}
-
-# Get a single thread with messages
-query GetThread {
-  getThread(id: "CHAT-0042") {
-    id
-    title
-    status
-    messages {
-      id
-      role
-      body
-      createdAt
-      tokenCount
-    }
-  }
-}
-```
-
-## Real-time updates
-
-Threads emit AppSync subscription events as they change. Subscribe to a thread to receive live updates as the agent processes a message:
-
-```graphql
-subscription OnThreadUpdate {
-  onThreadUpdate(threadId: "CHAT-0042") {
-    ... on NewMessageEvent {
-      message {
-        id
-        role
-        body
-      }
-    }
-    ... on AgentStatusEvent {
-      status
-      activity
-    }
-    ... on ThreadUpdateEvent {
-      thread {
-        status
-        updatedAt
-      }
-    }
-  }
-}
-```
-
-See [GraphQL Schema](/api/graphql/) for the full subscription event types.
-
-## Thread metadata
-
-Threads carry a `metadata` JSON field for channel-specific data. For example:
-
-- **EMAIL threads** — `{ fromAddress, toAddress, subject, messageId, inReplyTo }`
-- **SLACK threads** — `{ channelId, messageTs, teamId, userId }`
-- **GITHUB threads** — `{ repoFullName, issueNumber, eventType }`
-
-Metadata is set at thread creation and is read-only after that. It's available in the context passed to the agent so the agent can reference the originating channel if needed.
+- [Lifecycle and Types](/concepts/threads/lifecycle-and-types/)
+- [Routing and Metadata](/concepts/threads/routing-and-metadata/)
