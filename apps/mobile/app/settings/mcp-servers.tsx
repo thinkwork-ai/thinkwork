@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { View, ScrollView, Pressable, RefreshControl } from "react-native";
 import { useColorScheme } from "nativewind";
+import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { Cable, CheckCircle2, AlertTriangle, Link2, RefreshCw } from "lucide-react-native";
+import { Cable, CheckCircle2, AlertTriangle, Link2, RefreshCw, ChevronRight } from "lucide-react-native";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { Text, Muted } from "@/components/ui/typography";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,7 @@ type McpServerRow = {
 export default function McpServersScreen() {
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
+  const router = useRouter();
 
   const [meResult] = useMe();
   const user = meResult.data?.me ?? undefined;
@@ -123,7 +125,7 @@ export default function McpServersScreen() {
                 {needsAction.map((server, idx) => (
                   <Pressable
                     key={server.id}
-                    onPress={() => handleConnect(server)}
+                    onPress={() => router.push({ pathname: "/settings/mcp-server-detail", params: { id: server.id } })}
                     className={`flex-row items-center px-4 py-3 active:bg-neutral-50 dark:active:bg-neutral-800 ${idx < needsAction.length - 1 ? "border-b border-neutral-100 dark:border-neutral-800" : ""}`}
                   >
                     <View className="w-9 h-9 rounded-lg bg-neutral-100 dark:bg-neutral-800 items-center justify-center">
@@ -164,37 +166,35 @@ export default function McpServersScreen() {
               </Text>
               <View className="overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
                 {readyServers.map((server, idx) => (
-                  <View
+                  <Pressable
                     key={server.id}
-                    className={`px-4 py-3 ${idx < readyServers.length - 1 ? "border-b border-neutral-100 dark:border-neutral-800" : ""}`}
+                    onPress={() => router.push({ pathname: "/settings/mcp-server-detail", params: { id: server.id } })}
+                    className={`flex-row items-center px-4 py-3 active:bg-neutral-50 dark:active:bg-neutral-800 ${idx < readyServers.length - 1 ? "border-b border-neutral-100 dark:border-neutral-800" : ""}`}
                   >
-                    <View className="flex-row items-center justify-between">
-                      <View className="flex-row items-center gap-3 flex-1">
-                        <View className="w-9 h-9 rounded-lg bg-neutral-100 dark:bg-neutral-800 items-center justify-center">
-                          <CheckCircle2 size={18} color="#22c55e" />
-                        </View>
-                        <View className="flex-1">
-                          <Text className="font-medium text-neutral-900 dark:text-neutral-100">
-                            {server.name}
-                          </Text>
-                          <Muted className="text-xs">
-                            {server.tools?.length
-                              ? `${server.tools.length} tools available`
-                              : server.authType === "none"
-                                ? "No auth required"
-                                : "Connected"}
-                          </Muted>
-                        </View>
-                      </View>
-                      <Badge
-                        variant="outline"
-                        className="px-2 py-0.5 border-green-500/30"
-                        textClassName="text-xs text-green-400"
-                      >
-                        Active
-                      </Badge>
+                    <View className="w-9 h-9 rounded-lg bg-neutral-100 dark:bg-neutral-800 items-center justify-center">
+                      <CheckCircle2 size={18} color="#22c55e" />
                     </View>
-                  </View>
+                    <View className="flex-1 ml-3">
+                      <Text className="font-medium text-neutral-900 dark:text-neutral-100">
+                        {server.name}
+                      </Text>
+                      <Muted className="text-xs">
+                        {server.tools?.length
+                          ? `${server.tools.length} tools available`
+                          : server.authType === "none"
+                            ? "No auth required"
+                            : "Connected"}
+                      </Muted>
+                    </View>
+                    <Badge
+                      variant="outline"
+                      className="px-2 py-0.5 border-green-500/30 mr-2"
+                      textClassName="text-xs text-green-400"
+                    >
+                      Active
+                    </Badge>
+                    <ChevronRight size={16} color={colors.mutedForeground} />
+                  </Pressable>
                 ))}
               </View>
             </View>

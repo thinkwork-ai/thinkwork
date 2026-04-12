@@ -276,6 +276,16 @@ export async function handler(
 			return mcpListUserServers(tenantId, userId);
 		}
 
+		// DELETE /api/skills/user-mcp-tokens/:mcpServerId — clear user's OAuth tokens for an MCP server
+		const clearTokenMatch = path.match(/^\/api\/skills\/user-mcp-tokens\/([^/]+)$/);
+		if (clearTokenMatch && method === "DELETE") {
+			const mcpServerId = clearTokenMatch[1];
+			const userId = event.headers["x-principal-id"];
+			const tenantId = event.headers["x-tenant-id"];
+			if (!userId || !tenantId) return error("x-principal-id and x-tenant-id headers required", 400);
+			return mcpClearUserToken(userId, tenantId, mcpServerId);
+		}
+
 		return notFound("Route not found");
 	} catch (err) {
 		console.error("Skills handler error:", err);
@@ -1608,6 +1618,46 @@ async function mcpListOAuthProviders(): Promise<APIGatewayProxyStructuredResultV
 			providerType: r.provider_type,
 		})),
 	});
+}
+
+async function mcpClearUserToken(
+	userId: string,
+	tenantId: string,
+	mcpServerId: string,
+) {
+	const { userMcpTokens } = await import("@thinkwork/database-pg/schema");
+
+	// Find the token row
+	const [tokenRow] = await db
+		.select({ id: userMcpTokens.id, secret_ref: userMcpTokens.secret_ref })
+		.from(userMcpTokens)
+		.where(and(
+			eq(userMcpTokens.user_id, userId),
+			eq(userMcpTokens.mcp_server_id, mcpServerId),
+		));
+
+	if (!tokenRow) {
+		return json({ ok: true, message: "No token found" });
+	}
+
+	// Delete the secret from Secrets Manager if it exists
+	if (tokenRow.secret_ref) {
+		try {
+			const { SecretsManagerClient, DeleteSecretCommand } = await import("@aws-sdk/client-secrets-manager");
+			const sm = new SecretsManagerClient({ region: process.env.AWS_REGION || "us-east-1" });
+			await sm.send(new DeleteSecretCommand({
+				SecretId: tokenRow.secret_ref,
+				ForceDeleteWithoutRecovery: true,
+			}));
+		} catch (err) {
+			console.warn("[mcp-clear-token] Failed to delete secret:", (err as Error).message);
+		}
+	}
+
+	// Delete the token row
+	await db.delete(userMcpTokens).where(eq(userMcpTokens.id, tokenRow.id));
+
+	return json({ ok: true, cleared: true });
 }
 
 async function mcpListUserServers(
