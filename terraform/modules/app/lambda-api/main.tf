@@ -168,6 +168,7 @@ resource "aws_iam_role_policy" "lambda_cognito" {
     Statement = [{
       Effect = "Allow"
       Action = [
+        "cognito-idp:AdminCreateUser",
         "cognito-idp:AdminGetUser",
         "cognito-idp:AdminUpdateUserAttributes",
         "cognito-idp:ListUsers",
