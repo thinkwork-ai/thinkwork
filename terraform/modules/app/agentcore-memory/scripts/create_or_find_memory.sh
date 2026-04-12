@@ -34,13 +34,13 @@ if [[ -z "$name" || -z "$region" ]]; then
 fi
 
 # Step 1: list existing memories and look for one with matching name.
-# AgentCore Memory uses a `name` field on the resource. The list API returns
-# a page of summaries; we filter client-side for the exact name match.
+# The list API may return `name: null` for some memories, so we also match
+# by ID prefix (the API uses `{name}-{randomSuffix}` as the ID format).
 existing_id="$(
   aws bedrock-agentcore-control list-memories \
     --region "$region" \
     --output json 2>/dev/null \
-    | jq -r --arg n "$name" '.memories[]? | select(.name == $n) | .id' \
+    | jq -r --arg n "$name" '.memories[]? | select(.name == $n or (.id | startswith($n))) | .id' \
     | head -n1 || true
 )"
 
