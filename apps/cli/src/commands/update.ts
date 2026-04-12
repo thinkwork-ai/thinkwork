@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { execSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import chalk from "chalk";
 import { VERSION } from "../version.js";
 import { printHeader } from "../ui.js";
@@ -16,15 +17,23 @@ function getLatestVersion(): string | null {
   }
 }
 
-function detectInstallMethod(): "npm" | "homebrew" | "unknown" {
+function detectInstallMethod(): "npm" | "homebrew" {
   try {
     const which = execSync("which thinkwork", {
       encoding: "utf-8",
       timeout: 5000,
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();
-    if (which.includes("Cellar") || which.includes("homebrew")) return "homebrew";
-    if (which.includes("node_modules") || which.includes("npm") || which.includes("nvm") || which.includes("fnm")) return "npm";
+    // Resolve symlinks: Homebrew-installed Node puts npm global binaries in
+    // /opt/homebrew/bin, so a plain "homebrew" substring match yields a false
+    // positive. Only a true Homebrew formula install resolves under /Cellar/.
+    let resolved = which;
+    try {
+      resolved = realpathSync(which);
+    } catch {
+      /* use `which` value as-is if realpath fails */
+    }
+    if (resolved.includes("/Cellar/")) return "homebrew";
     return "npm";
   } catch {
     return "npm";
