@@ -40,6 +40,7 @@ import {
 	notifyCostRecorded,
 } from "../lib/cost-recording.js";
 import { buildSkillEnvOverrides, resolveOAuthToken } from "../lib/oauth-token.js";
+import { loadTenantBuiltinTools } from "./skills.js";
 import { ensureThreadForWork } from "../lib/thread-helpers.js";
 import { isThreadBlocked, checkConcurrencyLimits } from "../lib/thread-dispatch.js";
 import { promoteNextDeferredWakeup } from "../lib/wakeup-defer.js";
@@ -56,7 +57,6 @@ const MCP_AUTH_SECRET = process.env.MCP_AUTH_SECRET || "";
 const AGENTCORE_GATEWAY_URL = process.env.AGENTCORE_GATEWAY_URL || "";
 const WORKSPACE_BUCKET = process.env.WORKSPACE_BUCKET || "";
 const MANIFLOW_API_URL = process.env.MANIFLOW_API_URL || process.env.MCP_BASE_URL || "";
-const EXA_API_KEY = process.env.EXA_API_KEY || "";
 const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
 const BATCH_SIZE = 10;
 
@@ -290,7 +290,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 			? `tenants/${tenantSlug}/skills/${s.skill_id}`
 			: `skills/catalog/${s.skill_id}`;
 		const merged: Record<string, string> = envOverrides ? { ...envOverrides } : {};
-		if (s.skill_id === "web-search" && EXA_API_KEY) merged.EXA_API_KEY = EXA_API_KEY;
 		return {
 			skillId: s.skill_id,
 			s3Key,
@@ -361,10 +360,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 		});
 	}
 
-	// Default skills: always available for all agents (parity with chat-agent-invoke)
+	// Default skills: always available for all agents (parity with chat-agent-invoke).
+	// web-search is NOT in this list — it's opt-in via tenant_builtin_tools below.
 	const defaultSkills = [
 		{ skillId: "agent-thread-management", s3Key: "skills/catalog/agent-thread-management" },
-		{ skillId: "web-search", s3Key: "skills/catalog/web-search" },
 		{ skillId: "artifacts", s3Key: "skills/catalog/artifacts" },
 		{ skillId: "workspace-memory", s3Key: "skills/catalog/workspace-memory" },
 	];
@@ -376,7 +375,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 				GRAPHQL_API_KEY: APPSYNC_API_KEY,
 				AGENT_ID: wakeup.agent_id,
 			};
-			if (ds.skillId === "web-search" && EXA_API_KEY) env.EXA_API_KEY = EXA_API_KEY;
 			skillsConfig.push({
 				...ds,
 				secretRef: undefined,
@@ -384,6 +382,32 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 				mcpServer: undefined,
 			});
 		}
+	}
+
+	// Tenant-configured built-in tools (web-search, …): only injected when a row
+	// exists with enabled=true AND a usable API key in Secrets Manager.
+	try {
+		const builtinTools = await loadTenantBuiltinTools(wakeup.tenant_id);
+		for (const bt of builtinTools) {
+			// If a hand-installed agent_skills row already provided this tool,
+			// overlay our env overrides onto it so the provider + key still win.
+			const existing = skillsConfig.find((s) => s.skillId === bt.toolSlug);
+			if (existing) {
+				existing.envOverrides = { ...(existing.envOverrides || {}), ...bt.envOverrides };
+				console.log(`[wakeup-processor] Overlaid env for built-in tool '${bt.toolSlug}' (provider=${bt.provider})`);
+				continue;
+			}
+			skillsConfig.push({
+				skillId: bt.toolSlug,
+				s3Key: `skills/catalog/${bt.toolSlug}`,
+				secretRef: undefined,
+				envOverrides: bt.envOverrides,
+				mcpServer: undefined,
+			});
+			console.log(`[wakeup-processor] Injected built-in tool '${bt.toolSlug}' (provider=${bt.provider})`);
+		}
+	} catch (err) {
+		console.warn(`[wakeup-processor] Failed to load tenant built-in tools:`, err);
 	}
 
 	// Apply class tool_access policy — remove blocked skills
