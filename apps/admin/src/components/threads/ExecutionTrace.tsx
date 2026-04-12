@@ -182,8 +182,27 @@ type BranchSpan = {
 function buildTimelineFromUsage(
   toolInvocations: any[],
   responseText: string,
+  model?: string,
+  inputTokens?: number,
+  outputTokens?: number,
+  totalCost?: number,
 ): TimelineEvent[] {
   const events: TimelineEvent[] = [];
+
+  // Add LLM call if we have model info
+  if (model) {
+    const shortModel = model.replace(/^us\.anthropic\./, "").replace(/-v\d+:\d+$/, "");
+    events.push({
+      type: "llm",
+      timestamp: "",
+      branch: "parent",
+      modelId: shortModel,
+      inputTokens: inputTokens || 0,
+      outputTokens: outputTokens || 0,
+      costUsd: totalCost || 0,
+      toolUses: toolInvocations.map((ti: any) => ti.tool_name).filter(Boolean),
+    });
+  }
 
   // Add tool call events from usage data
   for (const ti of toolInvocations) {
@@ -392,9 +411,13 @@ function getBranchForEvent(eventIdx: number, branches: BranchSpan[]): BranchSpan
   return branches.find(b => b.eventIndices.includes(eventIdx)) ?? null;
 }
 
-function ExecutionTimeline({ turnId, toolInvocations, responseText, onViewDetail }: {
+function ExecutionTimeline({ turnId, toolInvocations, model, inputTokens, outputTokens, totalCostFromTurn, responseText, onViewDetail }: {
   turnId: string;
   toolInvocations: any[];
+  model?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalCostFromTurn?: number;
   responseText: string;
   onViewDetail: (title: string, content: string) => void;
 }) {
@@ -411,7 +434,7 @@ function ExecutionTimeline({ turnId, toolInvocations, responseText, onViewDetail
   // Build timeline from CloudWatch invocations if available, otherwise from tool_invocations usage data
   const events = invocations.length > 0
     ? buildTimeline(invocations, toolInvocations, "", responseText)
-    : buildTimelineFromUsage(toolInvocations, responseText);
+    : buildTimelineFromUsage(toolInvocations, responseText, model, inputTokens, outputTokens, totalCostFromTurn);
 
   if (events.length === 0) return null;
 
@@ -682,7 +705,16 @@ function TurnRow({ turn }: { turn: any }) {
           {turn.status !== "queued" && turn.status !== "running" && (
             <ExecutionTimeline
               turnId={turn.id}
-              toolInvocations={(usage?.tool_invocations || []) as any[]}
+              toolInvocations={
+                (usage?.tool_invocations?.length > 0
+                  ? usage.tool_invocations
+                  : (usage?.tools_called || []).map((name: string) => ({ tool_name: name, type: "tool", status: "success" }))
+                ) as any[]
+              }
+              model={usage?.model || ""}
+              inputTokens={usage?.input_tokens || 0}
+              outputTokens={usage?.output_tokens || 0}
+              totalCostFromTurn={turn.totalCost || 0}
               responseText={result?.response ? String(result.response) : ""}
               onViewDetail={(t, c) => setDetailDialog({ title: t, content: c })}
             />
