@@ -60,10 +60,30 @@ type MemoryGraph {
   edges: [MemoryGraphEdge!]!
 }
 
+"""
+Runtime memory system configuration exposed to the admin UI.
+Lets the UI decide which views to render (e.g. Knowledge Graph toggle is
+only meaningful when Hindsight is deployed alongside managed memory).
+"""
+type MemorySystemConfig {
+  """
+  True when managed AgentCore Memory is provisioned and wired into the
+  agent container. This is the always-on baseline — when false, memory
+  features may be unavailable.
+  """
+  managedMemoryEnabled: Boolean!
+  """
+  True when the optional Hindsight add-on is deployed (ECS + ALB). Gates
+  the Knowledge Graph / entity-graph views in the admin UI.
+  """
+  hindsightEnabled: Boolean!
+}
+
 extend type Query {
   memoryRecords(assistantId: ID!, namespace: String!): [MemoryRecord!]!
   memorySearch(assistantId: ID!, query: String!, strategy: MemoryStrategy, limit: Int): MemorySearchResult!
   memoryGraph(assistantId: ID!): MemoryGraph!
+  memorySystemConfig: MemorySystemConfig!
 }
 
 extend type Mutation {

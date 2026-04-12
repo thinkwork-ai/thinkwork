@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
@@ -7,6 +7,7 @@ import {
   AgentDetailQuery,
   MemoryRecordsQuery,
   MemorySearchQuery,
+  MemorySystemConfigQuery,
   DeleteMemoryRecordMutation,
   UpdateMemoryRecordMutation,
 } from "@/lib/graphql-queries";
@@ -151,6 +152,14 @@ function AgentMemoryPage() {
   const [strategyFilter, setStrategyFilter] = useState("");
   const [view, setView] = useState<string>("memories");
 
+  // Hide the Knowledge Graph toggle entirely when Hindsight is not
+  // deployed — managed AgentCore Memory has no entity graph to render.
+  const [memorySystemConfigResult] = useQuery({ query: MemorySystemConfigQuery });
+  const hindsightEnabled = memorySystemConfigResult.data?.memorySystemConfig?.hindsightEnabled ?? false;
+  useEffect(() => {
+    if (!hindsightEnabled && view === "graph") setView("memories");
+  }, [hindsightEnabled, view]);
+
   const graphRef = useRef<MemoryGraphHandle>(null);
 
   const [agentResult] = useQuery({
@@ -292,16 +301,18 @@ function AgentMemoryPage() {
                     : `${rows.length} memor${rows.length !== 1 ? "ies" : "y"}`}
               </p>
             </div>
-            <ToggleGroup
-              type="single"
-              variant="outline"
-              size="sm"
-              value={view}
-              onValueChange={(val) => { if (val) setView(val); }}
-            >
-              <ToggleGroupItem value="graph" className="h-7 text-xs px-3">Knowledge Graph</ToggleGroupItem>
-              <ToggleGroupItem value="memories" className="h-7 text-xs px-3">Memories</ToggleGroupItem>
-            </ToggleGroup>
+            {hindsightEnabled && (
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                value={view}
+                onValueChange={(val) => { if (val) setView(val); }}
+              >
+                <ToggleGroupItem value="memories" className="h-7 text-xs px-3">Memories</ToggleGroupItem>
+                <ToggleGroupItem value="graph" className="h-7 text-xs px-3">Knowledge Graph</ToggleGroupItem>
+              </ToggleGroup>
+            )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Button

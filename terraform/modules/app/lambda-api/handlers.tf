@@ -12,28 +12,29 @@ locals {
 
   # Common environment variables shared by all API handlers
   common_env = {
-    STAGE                  = var.stage
-    DATABASE_URL           = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
-    DATABASE_SECRET_ARN    = var.graphql_db_secret_arn
-    DATABASE_HOST          = var.db_cluster_endpoint
-    DATABASE_NAME          = var.database_name
-    BUCKET_NAME                = var.bucket_name
-    USER_POOL_ID               = var.user_pool_id
-    COGNITO_USER_POOL_ID       = var.user_pool_id
-    ADMIN_CLIENT_ID            = var.admin_client_id
-    MOBILE_CLIENT_ID           = var.mobile_client_id
-    COGNITO_APP_CLIENT_IDS     = "${var.admin_client_id},${var.mobile_client_id}"
-    APPSYNC_ENDPOINT           = var.appsync_api_url
-    APPSYNC_API_KEY            = var.appsync_api_key
-    GRAPHQL_API_KEY            = var.appsync_api_key
-    API_AUTH_SECRET             = var.api_auth_secret
-    THINKWORK_API_SECRET        = var.api_auth_secret
-    MANIFLOW_API_SECRET         = var.api_auth_secret
-    AGENTCORE_INVOKE_URL        = var.agentcore_invoke_url
-    AGENTCORE_FUNCTION_NAME     = var.agentcore_function_name
-    WORKSPACE_BUCKET            = var.bucket_name
-    HINDSIGHT_ENDPOINT          = var.hindsight_endpoint
-    NODE_OPTIONS           = "--enable-source-maps"
+    STAGE                   = var.stage
+    DATABASE_URL            = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
+    DATABASE_SECRET_ARN     = var.graphql_db_secret_arn
+    DATABASE_HOST           = var.db_cluster_endpoint
+    DATABASE_NAME           = var.database_name
+    BUCKET_NAME             = var.bucket_name
+    USER_POOL_ID            = var.user_pool_id
+    COGNITO_USER_POOL_ID    = var.user_pool_id
+    ADMIN_CLIENT_ID         = var.admin_client_id
+    MOBILE_CLIENT_ID        = var.mobile_client_id
+    COGNITO_APP_CLIENT_IDS  = "${var.admin_client_id},${var.mobile_client_id}"
+    APPSYNC_ENDPOINT        = var.appsync_api_url
+    APPSYNC_API_KEY         = var.appsync_api_key
+    GRAPHQL_API_KEY         = var.appsync_api_key
+    API_AUTH_SECRET         = var.api_auth_secret
+    THINKWORK_API_SECRET    = var.api_auth_secret
+    MANIFLOW_API_SECRET     = var.api_auth_secret
+    AGENTCORE_INVOKE_URL    = var.agentcore_invoke_url
+    AGENTCORE_FUNCTION_NAME = var.agentcore_function_name
+    WORKSPACE_BUCKET        = var.bucket_name
+    HINDSIGHT_ENDPOINT      = var.hindsight_endpoint
+    AGENTCORE_MEMORY_ID     = var.agentcore_memory_id
+    NODE_OPTIONS            = "--enable-source-maps"
   }
 }
 
@@ -113,15 +114,15 @@ locals {
   # Map of route_key → handler name for API Gateway
   api_routes = local.use_local_zips ? {
     # GraphQL — the main API entry point
-    "POST /graphql"              = "graphql-http"
-    "GET /graphql"               = "graphql-http"
+    "POST /graphql" = "graphql-http"
+    "GET /graphql"  = "graphql-http"
 
     # Health check (keep placeholder alive too)
     # "GET /health" is handled by placeholder
 
     # Agents
-    "ANY /api/agents/{proxy+}"   = "agents"
-    "ANY /api/agents"            = "agents"
+    "ANY /api/agents/{proxy+}" = "agents"
+    "ANY /api/agents"          = "agents"
 
     # Agent actions (start/stop/heartbeat/budget)
     "ANY /api/agent-actions/{proxy+}" = "agent-actions"
@@ -131,25 +132,25 @@ locals {
     "ANY /api/messages"          = "messages"
 
     # Teams
-    "ANY /api/teams/{proxy+}"    = "teams"
-    "ANY /api/teams"             = "teams"
+    "ANY /api/teams/{proxy+}"        = "teams"
+    "ANY /api/teams"                 = "teams"
     "ANY /api/team-members/{proxy+}" = "team-members"
 
     # Tenants
-    "ANY /api/tenants/{proxy+}"  = "tenants"
-    "ANY /api/tenants"           = "tenants"
+    "ANY /api/tenants/{proxy+}" = "tenants"
+    "ANY /api/tenants"          = "tenants"
 
     # Users
-    "ANY /api/users/{proxy+}"    = "users"
-    "ANY /api/users"             = "users"
+    "ANY /api/users/{proxy+}" = "users"
+    "ANY /api/users"          = "users"
 
     # Invites
-    "ANY /api/invites/{proxy+}"  = "invites"
-    "ANY /api/invites"           = "invites"
+    "ANY /api/invites/{proxy+}" = "invites"
+    "ANY /api/invites"          = "invites"
 
     # Skills
-    "ANY /api/skills/{proxy+}"   = "skills"
-    "ANY /api/skills"            = "skills"
+    "ANY /api/skills/{proxy+}" = "skills"
+    "ANY /api/skills"          = "skills"
 
     # Activity
     "ANY /api/activity/{proxy+}" = "activity"
@@ -166,8 +167,8 @@ locals {
     "ANY /api/routines"          = "routines"
 
     # Budgets
-    "ANY /api/budgets/{proxy+}"  = "budgets"
-    "ANY /api/budgets"           = "budgets"
+    "ANY /api/budgets/{proxy+}" = "budgets"
+    "ANY /api/budgets"          = "budgets"
 
     # Guardrails
     "ANY /api/guardrails/{proxy+}" = "guardrails"

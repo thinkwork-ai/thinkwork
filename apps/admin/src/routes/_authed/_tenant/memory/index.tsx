@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
@@ -7,6 +7,7 @@ import {
   AgentsListQuery,
   MemoryRecordsQuery,
   MemorySearchQuery,
+  MemorySystemConfigQuery,
   DeleteMemoryRecordMutation,
   UpdateMemoryRecordMutation,
 } from "@/lib/graphql-queries";
@@ -137,9 +138,23 @@ function MemoryPage() {
   const [selectedAgentId, setSelectedAgentId] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
-  const [view, setView] = useState<"memories" | "graph">("graph");
+  const [view, setView] = useState<"memories" | "graph">("memories");
   const graphRef = useRef<MemoryGraphHandle>(null);
 
+  // Detect which memory backends are wired up at runtime. The Knowledge
+  // Graph view is only meaningful when Hindsight is deployed, so hide the
+  // toggle entirely when it's disabled — managed AgentCore Memory alone
+  // has no entity graph to render.
+  const [memorySystemConfigResult] = useQuery({
+    query: MemorySystemConfigQuery,
+  });
+  const hindsightEnabled = memorySystemConfigResult.data?.memorySystemConfig?.hindsightEnabled ?? false;
+
+  // If Hindsight is disabled mid-session (e.g. after a deploy), force the
+  // view back to memories so we never render an empty graph.
+  useEffect(() => {
+    if (!hindsightEnabled && view === "graph") setView("memories");
+  }, [hindsightEnabled, view]);
 
   const [agentsResult] = useQuery({
     query: AgentsListQuery,
@@ -324,10 +339,12 @@ function MemoryPage() {
             <p className="text-xs text-muted-foreground">{memoryCount}</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <ToggleGroup type="single" value={view} onValueChange={(v) => v && setView(v as "memories" | "graph")} variant="outline">
-              <ToggleGroupItem value="graph" className="px-3 text-xs">Knowledge Graph</ToggleGroupItem>
-              <ToggleGroupItem value="memories" className="px-3 text-xs">Memories</ToggleGroupItem>
-            </ToggleGroup>
+            {hindsightEnabled && (
+              <ToggleGroup type="single" value={view} onValueChange={(v) => v && setView(v as "memories" | "graph")} variant="outline">
+                <ToggleGroupItem value="memories" className="px-3 text-xs">Memories</ToggleGroupItem>
+                <ToggleGroupItem value="graph" className="px-3 text-xs">Knowledge Graph</ToggleGroupItem>
+              </ToggleGroup>
+            )}
             <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
               <SelectTrigger className="w-44">
                 <SelectValue placeholder="Select agent" />

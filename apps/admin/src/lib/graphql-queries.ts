@@ -1370,6 +1370,15 @@ export const MemorySearchQuery = graphql(`
   }
 `);
 
+export const MemorySystemConfigQuery = graphql(`
+  query MemorySystemConfig {
+    memorySystemConfig {
+      managedMemoryEnabled
+      hindsightEnabled
+    }
+  }
+`);
+
 // ---------------------------------------------------------------------------
 // Agent Templates
 // ---------------------------------------------------------------------------

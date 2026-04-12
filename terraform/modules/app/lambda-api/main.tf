@@ -191,6 +191,27 @@ resource "aws_iam_role_policy" "lambda_bedrock" {
   })
 }
 
+# AgentCore Memory read access for the GraphQL memory resolvers.
+# memoryRecords / memorySearch call ListMemoryRecordsCommand to fetch
+# records across the tenant's agents.
+resource "aws_iam_role_policy" "lambda_agentcore_memory" {
+  name = "agentcore-memory-read"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "bedrock-agentcore:ListMemoryRecords",
+        "bedrock-agentcore:RetrieveMemoryRecords",
+        "bedrock-agentcore:GetMemoryRecord",
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
 ################################################################################
 # Placeholder Lambda — proves the infrastructure works
 #

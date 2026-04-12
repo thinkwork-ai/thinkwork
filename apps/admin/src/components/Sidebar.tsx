@@ -195,7 +195,7 @@ export function AppSidebar() {
                   className="h-7 w-7 rounded-md shrink-0"
                 />
                 <span className="text-lg font-semibold truncate">
-                  Thinkwork Admin
+                  Thinkwork
                 </span>
               </Link>
             </SidebarMenuButton>
