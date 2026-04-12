@@ -33,11 +33,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch";
 import {
   listMcpServers,
   registerMcpServer,
   deleteMcpServer,
   testMcpServer,
+  updateMcpServer,
   type McpServer,
 } from "@/lib/mcp-api";
 
@@ -336,16 +339,35 @@ function ServerDetailDialog({
   const [testResult, setTestResult] = useState<{ ok: boolean; tools?: Array<{ name: string; description?: string }>; error?: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [toggling, setToggling] = useState(false);
+  const [enabled, setEnabled] = useState(server.enabled !== false);
+  const [showTools, setShowTools] = useState(false);
 
   const handleTest = async () => {
     setTesting(true); setTestResult(null);
     try {
       const result = await testMcpServer(tenantSlug, server.id);
       setTestResult(result);
+      if (result.ok) toast.success(`Connected — ${result.tools?.length || 0} tools`);
     } catch (e: any) {
       setTestResult({ ok: false, error: e.message });
+      toast.error("Connection failed");
     } finally {
       setTesting(false);
+    }
+  };
+
+  const handleToggle = async (val: boolean) => {
+    setToggling(true);
+    try {
+      await updateMcpServer(tenantSlug, server.id, { enabled: val });
+      setEnabled(val);
+      toast.success(val ? "Server enabled" : "Server disabled");
+      onChanged();
+    } catch {
+      toast.error("Failed to update server");
+    } finally {
+      setToggling(false);
     }
   };
 
@@ -353,78 +375,130 @@ function ServerDetailDialog({
     setDeleting(true);
     try {
       await deleteMcpServer(tenantSlug, server.id);
+      toast.success("Server deleted");
       onClose();
       onChanged();
-    } catch (e: any) {
-      console.error("Delete failed:", e);
+    } catch {
+      toast.error("Delete failed");
     } finally {
       setDeleting(false);
     }
   };
 
+  const handleAuthenticate = () => {
+    const apiUrl = import.meta.env.VITE_API_URL || "";
+    const authUrl = `${apiUrl}/api/skills/mcp-oauth/authorize?mcpServerId=${server.id}&tenantSlug=${tenantSlug}`;
+    window.open(authUrl, "_blank", "width=600,height=700");
+  };
+
+  const isConnected = testResult?.ok === true || (server.tools && server.tools.length > 0);
+  const toolCount = testResult?.tools?.length ?? server.tools?.length ?? 0;
+  const authLabel = server.authType === "oauth" ? "OAuth" : server.authType === "tenant_api_key" ? "API Key" : "None";
+
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{server.name}</DialogTitle>
-          <DialogDescription>{server.url}</DialogDescription>
+          <DialogTitle className="flex items-center gap-2">
+            <Cable className="h-5 w-5" />
+            {server.name}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <span className="text-muted-foreground">Transport:</span>{" "}
-              <span className="font-mono">{server.transport}</span>
+          {/* Status + URL */}
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Status</span>
+              <div className="flex items-center gap-1.5">
+                {isConnected
+                  ? <><CheckCircle2 className="h-3.5 w-3.5 text-green-500" /><span className="text-green-500">connected</span></>
+                  : <><AlertCircle className="h-3.5 w-3.5 text-muted-foreground" /><span className="text-muted-foreground">unknown</span></>}
+              </div>
             </div>
-            <div>
-              <span className="text-muted-foreground">Auth:</span>{" "}
-              {server.authType === "oauth" ? "OAuth" : server.authType === "tenant_api_key" ? "API Key" : "None"}
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Auth</span>
+              <span>{authLabel}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">URL</span>
+              <span className="font-mono text-xs truncate max-w-[280px]">{server.url}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Transport</span>
+              <span className="font-mono text-xs">{server.transport}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Tools</span>
+              <span>{toolCount} tool{toolCount !== 1 ? "s" : ""}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Enabled</span>
+              <Switch checked={enabled} onCheckedChange={handleToggle} disabled={toggling} />
             </div>
           </div>
 
-          {server.tools && server.tools.length > 0 && (
-            <div>
-              <p className="text-sm font-medium mb-1">Cached Tools ({server.tools.length})</p>
-              <div className="max-h-40 overflow-y-auto space-y-1">
-                {server.tools.map((t) => (
-                  <div key={t.name} className="text-xs px-2 py-1 bg-muted rounded">
-                    <span className="font-mono font-medium">{t.name}</span>
-                    {t.description && <span className="text-muted-foreground ml-2">{t.description}</span>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
+          {/* Test result */}
           {testResult && (
             <div className={`flex items-start gap-2 p-3 rounded-md text-sm ${testResult.ok ? "bg-green-500/10 text-green-600 dark:text-green-400" : "bg-destructive/10 text-destructive"}`}>
               {testResult.ok ? <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" /> : <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />}
               <div>
                 {testResult.ok
-                  ? `Connected. ${testResult.tools?.length || 0} tools discovered and cached.`
+                  ? `Connected. ${testResult.tools?.length || 0} tools discovered.`
                   : `Failed: ${testResult.error}`}
               </div>
             </div>
           )}
 
-          <div className="flex items-center gap-2 pt-2">
-            <Button variant="outline" size="sm" onClick={handleTest} disabled={testing}>
-              {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <TestTube className="h-3.5 w-3.5 mr-1.5" />}
-              Test Connection
-            </Button>
-            <div className="flex-1" />
-            {confirmDelete ? (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Delete?</span>
-                <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting}>
-                  {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Confirm"}
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>Cancel</Button>
-              </div>
-            ) : (
-              <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setConfirmDelete(true)}>
-                <Trash2 className="h-3.5 w-3.5 mr-1.5" />Delete
+          {/* Tools list (collapsible) */}
+          {toolCount > 0 && (
+            <div>
+              <button
+                className="text-sm font-medium flex items-center gap-1 hover:underline"
+                onClick={() => setShowTools(!showTools)}
+              >
+                {showTools ? "Hide" : "View"} tools ({toolCount})
+              </button>
+              {showTools && (
+                <div className="max-h-48 overflow-y-auto space-y-1 mt-2">
+                  {(testResult?.tools ?? server.tools ?? []).map((t) => (
+                    <div key={t.name} className="text-xs px-2 py-1.5 bg-muted rounded">
+                      <span className="font-mono font-medium">{t.name}</span>
+                      {t.description && <p className="text-muted-foreground mt-0.5">{t.description}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="border-t pt-3 space-y-2">
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={handleTest} disabled={testing}>
+                {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <TestTube className="h-3.5 w-3.5 mr-1.5" />}
+                Test Connection
               </Button>
-            )}
+              {server.authType === "oauth" && (
+                <Button variant="outline" size="sm" onClick={handleAuthenticate}>
+                  Authenticate
+                </Button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {confirmDelete ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Are you sure?</span>
+                  <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting}>
+                    {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Delete"}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+                </div>
+              ) : (
+                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setConfirmDelete(true)}>
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" />Delete Server
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </DialogContent>
