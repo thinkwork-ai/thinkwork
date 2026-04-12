@@ -63,6 +63,27 @@ type UserProfile {
   updatedAt: AWSDateTime!
 }
 
+# --- Deployment Status (read from Lambda env vars) ---
+
+type DeploymentStatus {
+  stage: String!
+  source: String!
+  region: String!
+  accountId: String
+  bucketName: String
+  databaseEndpoint: String
+  ecrUrl: String
+  adminUrl: String
+  docsUrl: String
+  apiEndpoint: String
+  appsyncUrl: String
+  appsyncRealtimeUrl: String
+  hindsightEndpoint: String
+  agentcoreStatus: String
+  hindsightEnabled: Boolean!
+  managedMemoryEnabled: Boolean!
+}
+
 # --- Inputs ---
 
 input CreateTenantInput {
@@ -116,6 +137,7 @@ extend type Query {
   me: User
   user(id: ID!): User
   tenantMembers(tenantId: ID!): [TenantMember!]!
+  deploymentStatus: DeploymentStatus!
 }
 
 input InviteMemberInput {

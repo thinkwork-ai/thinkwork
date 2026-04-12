@@ -6,7 +6,8 @@ import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TenantDetailQuery } from "@/lib/graphql-queries";
+import { Badge } from "@/components/ui/badge";
+import { TenantDetailQuery, DeploymentStatusQuery } from "@/lib/graphql-queries";
 import { formatCents, formatDateTime } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authed/_tenant/settings")({
@@ -17,21 +18,24 @@ function SettingsPage() {
   const { tenantId } = useTenant();
   useBreadcrumbs([{ label: "Settings" }]);
 
-  const [result] = useQuery({
+  const [tenantResult] = useQuery({
     query: TenantDetailQuery,
     variables: { id: tenantId! },
     pause: !tenantId,
   });
 
+  const [deployResult] = useQuery({ query: DeploymentStatusQuery });
+
   if (!tenantId) return <PageSkeleton />;
 
-  const tenant = result.data?.tenant;
+  const tenant = tenantResult.data?.tenant;
+  const deploy = deployResult.data?.deploymentStatus;
 
   return (
     <PageLayout
       header={<PageHeader title="Settings" description="Tenant configuration and preferences" />}
     >
-      {result.fetching || !tenant ? (
+      {tenantResult.fetching || !tenant ? (
         <PageSkeleton />
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -66,6 +70,38 @@ function SettingsPage() {
               </CardContent>
             </Card>
           )}
+
+          {deploy && (
+            <>
+              <Card>
+                <CardHeader><CardTitle>Deployment</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  <Row label="Stage" value={deploy.stage} />
+                  <Row label="Source" value={deploy.source} />
+                  <Row label="Region" value={deploy.region} />
+                  {deploy.accountId && <Row label="Account" value={deploy.accountId} />}
+                  <StatusRow label="AgentCore" value={deploy.agentcoreStatus} active={deploy.agentcoreStatus === "managed (always on)"} />
+                  <StatusRow label="Memory" value={deploy.managedMemoryEnabled ? "managed (always on)" : "disabled"} active={deploy.managedMemoryEnabled} />
+                  <StatusRow label="Hindsight" value={deploy.hindsightEnabled ? "enabled" : "disabled"} active={deploy.hindsightEnabled} />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader><CardTitle>Resources & URLs</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  {deploy.bucketName && <Row label="S3 Bucket" value={deploy.bucketName} />}
+                  {deploy.databaseEndpoint && <Row label="Database" value={deploy.databaseEndpoint} />}
+                  {deploy.ecrUrl && <Row label="ECR" value={deploy.ecrUrl} />}
+                  {deploy.adminUrl && <UrlRow label="Admin" url={deploy.adminUrl} />}
+                  {deploy.docsUrl && <UrlRow label="Docs" url={deploy.docsUrl} />}
+                  {deploy.apiEndpoint && <UrlRow label="API" url={deploy.apiEndpoint} />}
+                  {deploy.appsyncUrl && <UrlRow label="AppSync" url={deploy.appsyncUrl} />}
+                  {deploy.appsyncRealtimeUrl && <UrlRow label="WebSocket" url={deploy.appsyncRealtimeUrl} />}
+                  {deploy.hindsightEndpoint && <UrlRow label="Hindsight" url={deploy.hindsightEndpoint} />}
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
       )}
     </PageLayout>
@@ -77,6 +113,31 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between text-sm">
       <span className="text-muted-foreground">{label}</span>
       <span>{value}</span>
+    </div>
+  );
+}
+
+function StatusRow({ label, value, active }: { label: string; value: string | null | undefined; active: boolean }) {
+  return (
+    <div className="flex justify-between text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <Badge variant={active ? "default" : "secondary"}>{value || "unknown"}</Badge>
+    </div>
+  );
+}
+
+function UrlRow({ label, url }: { label: string; url: string }) {
+  return (
+    <div className="flex justify-between text-sm gap-4">
+      <span className="text-muted-foreground shrink-0">{label}</span>
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="truncate text-primary hover:underline"
+      >
+        {url.replace(/^https?:\/\//, "")}
+      </a>
     </div>
   );
 }

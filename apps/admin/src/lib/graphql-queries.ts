@@ -902,6 +902,33 @@ export const TenantDetailQuery = graphql(`
 `);
 
 // ---------------------------------------------------------------------------
+// Deployment Status
+// ---------------------------------------------------------------------------
+
+export const DeploymentStatusQuery = graphql(`
+  query DeploymentStatus {
+    deploymentStatus {
+      stage
+      source
+      region
+      accountId
+      bucketName
+      databaseEndpoint
+      ecrUrl
+      adminUrl
+      docsUrl
+      apiEndpoint
+      appsyncUrl
+      appsyncRealtimeUrl
+      hindsightEndpoint
+      agentcoreStatus
+      hindsightEnabled
+      managedMemoryEnabled
+    }
+  }
+`);
+
+// ---------------------------------------------------------------------------
 // Tenant Members (Humans)
 // ---------------------------------------------------------------------------
 

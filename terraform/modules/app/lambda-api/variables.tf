@@ -158,6 +158,30 @@ variable "agentcore_function_arn" {
   default     = ""
 }
 
+variable "admin_url" {
+  description = "Admin app URL (e.g. https://d3li9vbqnhv7w.cloudfront.net)"
+  type        = string
+  default     = ""
+}
+
+variable "docs_url" {
+  description = "Docs site URL (e.g. https://d2grg1uavrp7lx.cloudfront.net)"
+  type        = string
+  default     = ""
+}
+
+variable "appsync_realtime_url" {
+  description = "AppSync realtime/WebSocket endpoint URL"
+  type        = string
+  default     = ""
+}
+
+variable "ecr_repository_url" {
+  description = "ECR repository URL for AgentCore container"
+  type        = string
+  default     = ""
+}
+
 variable "cors_allowed_origins" {
   description = "Allowed CORS origins for the API Gateway. Use [\"*\"] for development."
   type        = list(string)
