@@ -176,6 +176,40 @@ type BranchSpan = {
   eventIndices: number[];
 };
 
+/** Fallback timeline when CloudWatch invocation logs aren't available.
+ * Builds events from the turn's tool_invocations usage data + a synthetic
+ * LLM entry from the turn's aggregate token/cost stats. */
+function buildTimelineFromUsage(
+  toolInvocations: any[],
+  responseText: string,
+): TimelineEvent[] {
+  const events: TimelineEvent[] = [];
+
+  // Add tool call events from usage data
+  for (const ti of toolInvocations) {
+    events.push({
+      type: "tool_call",
+      timestamp: "",
+      branch: ti.type === "sub_agent" ? `sub-agent:${(ti.tool_name || "").toLowerCase()}` : "parent",
+      toolName: ti.tool_name || "unknown",
+      toolType: ti.type || "tool",
+      toolInput: ti.input_preview || "",
+      toolOutput: ti.output_preview || "",
+    });
+  }
+
+  if (responseText) {
+    events.push({
+      type: "response",
+      timestamp: "",
+      branch: "parent",
+      responseText,
+    });
+  }
+
+  return events;
+}
+
 function buildTimeline(
   invocations: any[],
   toolInvocations: any[],
@@ -372,10 +406,15 @@ function ExecutionTimeline({ turnId, toolInvocations, responseText, onViewDetail
   });
 
   const invocations = (result.data as any)?.turnInvocationLogs ?? [];
-  if (result.fetching) return <p className="text-[10px] text-muted-foreground px-3">Loading timeline...</p>;
-  if (invocations.length === 0) return null;
+  if (result.fetching && invocations.length === 0) return <p className="text-[10px] text-muted-foreground px-3">Loading timeline...</p>;
 
-  const events = buildTimeline(invocations, toolInvocations, "", responseText);
+  // Build timeline from CloudWatch invocations if available, otherwise from tool_invocations usage data
+  const events = invocations.length > 0
+    ? buildTimeline(invocations, toolInvocations, "", responseText)
+    : buildTimelineFromUsage(toolInvocations, responseText);
+
+  if (events.length === 0) return null;
+
   const totalCost = invocations.reduce((sum: number, inv: any) => sum + (inv.costUsd || 0), 0);
   const totalInputTokens = invocations.reduce((sum: number, inv: any) => sum + (inv.inputTokenCount || 0), 0);
   const totalOutputTokens = invocations.reduce((sum: number, inv: any) => sum + (inv.outputTokenCount || 0), 0);
