@@ -1,17 +1,17 @@
 ---
 title: BYO Infrastructure
-description: Bring your own VPC, database, or Cognito user pool. Thinkwork can integrate with existing AWS infrastructure instead of creating new resources.
+description: Bring your own VPC, database, or Cognito user pool. ThinkWork can integrate with existing AWS infrastructure instead of creating new resources.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Thinkwork creates all its infrastructure by default, but most production teams already have a VPC, a database, and an identity system. Rather than creating parallel infrastructure, Thinkwork can adopt yours.
+ThinkWork creates all its infrastructure by default, but most production teams already have a VPC, a database, and an identity system. Rather than creating parallel infrastructure, ThinkWork can adopt yours.
 
-Every major infrastructure component has a `create_*` flag and a corresponding `existing_*` variable. Set `create_vpc = false` and provide `existing_vpc_id`, and Thinkwork deploys into your VPC instead of creating one.
+Every major infrastructure component has a `create_*` flag and a corresponding `existing_*` variable. Set `create_vpc = false` and provide `existing_vpc_id`, and ThinkWork deploys into your VPC instead of creating one.
 
 ## BYO VPC
 
-The most common scenario: you already have a VPC with private subnets and NAT gateways, and you want Thinkwork to deploy into it.
+The most common scenario: you already have a VPC with private subnets and NAT gateways, and you want ThinkWork to deploy into it.
 
 ```hcl
 # terraform.tfvars
@@ -36,7 +36,7 @@ existing_public_subnet_ids = [
 ```
 
 <Aside type="note">
-Private subnets must have outbound internet access (via NAT gateway or VPC endpoints) for Lambda functions to reach Bedrock and other AWS services. Thinkwork does not create VPC endpoints by default, but the module supports `create_vpc_endpoints = true` for networks without NAT.
+Private subnets must have outbound internet access (via NAT gateway or VPC endpoints) for Lambda functions to reach Bedrock and other AWS services. ThinkWork does not create VPC endpoints by default, but the module supports `create_vpc_endpoints = true` for networks without NAT.
 </Aside>
 
 ### VPC requirements
@@ -51,7 +51,7 @@ Your existing VPC must have:
 
 ## BYO Database
 
-If you have an existing Aurora Postgres or RDS Postgres cluster, Thinkwork can use it instead of creating a new one.
+If you have an existing Aurora Postgres or RDS Postgres cluster, ThinkWork can use it instead of creating a new one.
 
 ```hcl
 # terraform.tfvars
@@ -68,7 +68,7 @@ existing_db_security_group_id = "sg-0a1b2c3d4e5f67890"
 ```
 
 <Aside type="caution">
-Thinkwork runs database migrations on first deploy. Your existing database user must have `CREATE TABLE`, `ALTER TABLE`, and `CREATE INDEX` privileges on the specified database. After the initial migration, a least-privilege role is created for ongoing operation.
+ThinkWork runs database migrations on first deploy. Your existing database user must have `CREATE TABLE`, `ALTER TABLE`, and `CREATE INDEX` privileges on the specified database. After the initial migration, a least-privilege role is created for ongoing operation.
 </Aside>
 
 ### Database requirements
@@ -90,7 +90,7 @@ CREATE EXTENSION IF NOT EXISTS "vector";
 
 ### Migrations
 
-Thinkwork runs migrations via a Lambda function invoked during deploy. The migration runner uses the `db_password` variable to connect. After initial deploy, schema changes in subsequent Thinkwork versions are applied automatically on `thinkwork deploy`.
+ThinkWork runs migrations via a Lambda function invoked during deploy. The migration runner uses the `db_password` variable to connect. After initial deploy, schema changes in subsequent ThinkWork versions are applied automatically on `thinkwork deploy`.
 
 If you need to run migrations manually (e.g., to preview changes before deploying):
 
@@ -101,7 +101,7 @@ thinkwork migrate -s dev              # Apply
 
 ## BYO Cognito
 
-If your team already uses Cognito for authentication, Thinkwork can attach to your existing user pool.
+If your team already uses Cognito for authentication, ThinkWork can attach to your existing user pool.
 
 ```hcl
 # terraform.tfvars
@@ -111,13 +111,13 @@ existing_user_pool_id       = "us-east-1_ABC123XYZ"
 existing_user_pool_arn      = "arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_ABC123XYZ"
 existing_identity_pool_id   = "us-east-1:12345678-abcd-efgh-ijkl-123456789012"
 
-# Thinkwork will create a new app client in your existing pool
+# ThinkWork will create a new app client in your existing pool
 # unless you provide an existing one
 # existing_user_pool_client_id = "1abc2def3ghi4jkl"
 ```
 
 <Aside type="note">
-When using an existing Cognito pool, Thinkwork creates its own app client within your pool. This client has specific OAuth flows and callback URLs configured for the admin and end-user apps. Your existing users will be able to sign into Thinkwork apps using their existing credentials.
+When using an existing Cognito pool, ThinkWork creates its own app client within your pool. This client has specific OAuth flows and callback URLs configured for the admin and end-user apps. Your existing users will be able to sign into ThinkWork apps using their existing credentials.
 </Aside>
 
 ### Cognito requirements
@@ -127,7 +127,7 @@ Your existing user pool must have:
 - Email as a required attribute
 - Username or email sign-in enabled
 - `ALLOW_USER_SRP_AUTH` and `ALLOW_REFRESH_TOKEN_AUTH` auth flows enabled
-- A compatible password policy (Thinkwork enforces minimum 8 characters)
+- A compatible password policy (ThinkWork enforces minimum 8 characters)
 
 ## BYO everything: example configuration
 
@@ -159,16 +159,16 @@ existing_user_pool_id     = "us-east-1_PROD123"
 existing_user_pool_arn    = "arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_PROD123"
 existing_identity_pool_id = "us-east-1:prod-identity-pool-id"
 
-# Thinkwork still creates: AppSync, API Gateway, Lambda, S3, Step Functions,
+# ThinkWork still creates: AppSync, API Gateway, Lambda, S3, Step Functions,
 # CloudFront, KMS, SES, OpenSearch, Bedrock KB, EventBridge, IAM
 ```
 
 ## Partial BYO
 
-You can mix and match. A common pattern for teams migrating to Thinkwork:
+You can mix and match. A common pattern for teams migrating to ThinkWork:
 
 ```hcl
-# Bring your existing VPC and Cognito, but let Thinkwork create the database
+# Bring your existing VPC and Cognito, but let ThinkWork create the database
 create_vpc     = false
 existing_vpc_id = "vpc-existing"
 # ... subnet IDs ...
@@ -177,7 +177,7 @@ create_cognito          = false
 existing_user_pool_id   = "us-east-1_existing"
 # ... other Cognito vars ...
 
-# Database: let Thinkwork create Aurora (default behavior)
+# Database: let ThinkWork create Aurora (default behavior)
 create_database = true
 db_password     = "new-password-for-thinkwork-db"
 database_engine = "aurora-serverless"

@@ -5,11 +5,11 @@ description: Managed agents powered by AgentCore and Bedrock, connected agents t
 
 import { Aside } from '@astrojs/starlight/components';
 
-An agent in Thinkwork is a named entity that receives messages in a thread and produces responses. Agents come in two flavors: **managed** (Thinkwork runs the runtime) and **connected** (you bring your own runtime).
+An agent in ThinkWork is a named entity that receives messages in a thread and produces responses. Agents come in two flavors: **managed** (ThinkWork runs the runtime) and **connected** (you bring your own runtime).
 
 ## The role of agents in the system
 
-Agents are the decision-making layer of Thinkwork. They sit on top of threads, use knowledge and memory for context, and call tools through skill packs or connectors.
+Agents are the decision-making layer of ThinkWork. They sit on top of threads, use knowledge and memory for context, and call tools through skill packs or connectors.
 
 If you're new to the model, a good reading order is:
 
@@ -20,7 +20,7 @@ If you're new to the model, a good reading order is:
 
 ## Managed agents
 
-Managed agents are the default Thinkwork runtime. Thinkwork runs them on AgentCore in your AWS account and wires them into the rest of the platform.
+Managed agents are the default ThinkWork runtime. ThinkWork runs them on AgentCore in your AWS account and wires them into the rest of the platform.
 
 Every managed agent has:
 
@@ -55,12 +55,12 @@ mutation CreateAgent {
 
 ## Connected agents
 
-Connected agents let you plug an existing runtime, such as your own Python service, LangChain app, or custom container, into the Thinkwork thread and control plane. Thinkwork handles auth, thread persistence, real-time updates, and the admin UI while you provide the inference logic.
+Connected agents let you plug an existing runtime, such as your own Python service, LangChain app, or custom container, into the ThinkWork thread and control plane. ThinkWork handles auth, thread persistence, real-time updates, and the admin UI while you provide the inference logic.
 
-Connected agents register a **webhook endpoint**. When a message arrives in a thread assigned to a connected agent, Thinkwork POSTs the thread context to your endpoint and expects a response in the standard message format.
+Connected agents register a **webhook endpoint**. When a message arrives in a thread assigned to a connected agent, ThinkWork POSTs the thread context to your endpoint and expects a response in the standard message format.
 
 <Aside type="note">
-Connected agents are useful when you already have agent infrastructure and want Thinkwork's thread system, connectors, and admin app on top of it without migrating your runtime.
+Connected agents are useful when you already have agent infrastructure and want ThinkWork's thread system, connectors, and admin app on top of it without migrating your runtime.
 </Aside>
 
 ## Agent Templates
@@ -107,13 +107,13 @@ When you update a template, every agent assigned to it picks up the change on th
 
 Skill packs are the primary extension mechanism for managed agents. A skill pack is a `SKILL.md` file stored in your S3 skill catalog bucket. At invoke time, AgentCore downloads the skill packs assigned to the agent, parses them, and injects their capabilities into the runtime.
 
-Managed agents can also receive external tools through connectors, including MCP-based tool connectors configured at the tenant and template level. Use skill packs when you want to package logic inside Thinkwork, and use connector-managed tool systems when you want agents to call out to existing external services.
+Managed agents can also receive external tools through connectors, including MCP-based tool connectors configured at the tenant and template level. Use skill packs when you want to package logic inside ThinkWork, and use connector-managed tool systems when you want agents to call out to existing external services.
 
 See [Templates and Skills](/concepts/agents/templates-and-skills/) for the fuller operating model and [Authoring Guide: Skill Packs](/guides/skill-packs/) for the SKILL.md format.
 
 ## Model selection
 
-Thinkwork uses Amazon Bedrock for managed agent inference. Any model available in your region through Bedrock can be used, but you must [request model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html) in the AWS console first.
+ThinkWork uses Amazon Bedrock for managed agent inference. Any model available in your region through Bedrock can be used, but you must [request model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html) in the AWS console first.
 
 Recommended starting models:
 

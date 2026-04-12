@@ -1,11 +1,11 @@
 ---
 title: Managed Agents
-description: How Thinkwork runs managed agents on AgentCore, what gets configured per agent, and where knowledge and memory plug in.
+description: How ThinkWork runs managed agents on AgentCore, what gets configured per agent, and where knowledge and memory plug in.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Managed agents are the default Thinkwork runtime. Thinkwork runs the agent loop for you inside your AWS account, so you get a consistent execution model, thread integration, streaming, and auditability without building your own orchestration layer.
+Managed agents are the default ThinkWork runtime. ThinkWork runs the agent loop for you inside your AWS account, so you get a consistent execution model, thread integration, streaming, and auditability without building your own orchestration layer.
 
 ## Runtime model
 
@@ -21,7 +21,7 @@ Thread message → API Gateway → AgentCore Lambda → Strands agent loop
                                AppSync subscription → client
 ```
 
-Strands handles the inner agent loop, including tool calls and streaming. Thinkwork supplies the surrounding system: thread state, templates, controls, connectors, and deployment inside your AWS account.
+Strands handles the inner agent loop, including tool calls and streaming. ThinkWork supplies the surrounding system: thread state, templates, controls, connectors, and deployment inside your AWS account.
 
 ## What a managed agent includes
 
@@ -35,7 +35,7 @@ Every managed agent has:
 - Control settings such as guardrails, rate limits, and budgets
 
 <Aside type="note">
-Knowledge and memory are separate concepts in Thinkwork. Knowledge usually means documents and retrieval context. Memory means information retained from prior interactions. Both feed the same agent turn, but they are configured and reasoned about differently.
+Knowledge and memory are separate concepts in ThinkWork. Knowledge usually means documents and retrieval context. Memory means information retained from prior interactions. Both feed the same agent turn, but they are configured and reasoned about differently.
 </Aside>
 
 ## Typical setup flow
@@ -55,4 +55,4 @@ Managed agents are the best fit when you want:
 - Tight integration with threads, automations, and controls
 - Simple operations for internal tools and production workflows
 
-Use [connected agents](/concepts/agents/) when you already have an external runtime that you want Thinkwork to orchestrate around rather than replace.
+Use [connected agents](/concepts/agents/) when you already have an external runtime that you want ThinkWork to orchestrate around rather than replace.
