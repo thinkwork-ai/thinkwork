@@ -173,6 +173,7 @@ module "api" {
   agentcore_invoke_url    = module.agentcore.agentcore_invoke_url
   agentcore_function_name = module.agentcore.agentcore_function_name
   hindsight_endpoint      = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
+  agentcore_memory_id     = module.agentcore_memory.memory_id
 }
 
 ################################################################################

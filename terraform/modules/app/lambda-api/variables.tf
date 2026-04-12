@@ -146,6 +146,12 @@ variable "hindsight_endpoint" {
   default     = ""
 }
 
+variable "agentcore_memory_id" {
+  description = "Bedrock AgentCore Memory resource ID — used by the GraphQL memory resolvers to list records across tenant agents."
+  type        = string
+  default     = ""
+}
+
 variable "agentcore_function_name" {
   description = "AgentCore Lambda function name (for direct SDK invoke instead of Function URL)"
   type        = string

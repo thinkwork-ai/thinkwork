@@ -1,20 +1,94 @@
 /**
- * memoryRecords — List memory records from Hindsight's memory_units table.
+ * memoryRecords — list long-term memory records for one agent or all
+ * agents in the tenant.
  *
- * PRD-41B Phase 5: Replaces AgentCore Memory reads with direct Hindsight
- * Postgres queries against the `hindsight` schema.
+ * Reads from two backends:
  *
- * Supports single-agent (assistantId = agent UUID) and all-agents mode
- * (assistantId = "all", requires tenantId from auth context).
+ * 1. **AgentCore Memory** (always on). Every agent turn is automatically
+ *    retained into a Bedrock AgentCore Memory resource via the
+ *    `store_turn_pair` hook in the agent container, and background
+ *    strategies extract facts into four namespaces. We call
+ *    `ListMemoryRecordsCommand` with namespace prefixes `assistant_{slug}`
+ *    (semantic) and `preferences_{slug}` (preferences) to fetch cross-
+ *    thread facts and preferences. Session-scoped strategies (`session_*`
+ *    and `episodes_*`) are intentionally skipped here — they need
+ *    per-session fanout and have less value in the flat "all memories"
+ *    view.
+ *
+ * 2. **Hindsight** (optional add-on). When the Hindsight ECS service is
+ *    deployed, records also live in the `hindsight.memory_units` table in
+ *    Aurora. We pull them via a direct SQL query and merge with the
+ *    AgentCore results.
+ *
+ * Results from both sources are merged, sorted by createdAt DESC, and
+ * capped at 500 total rows. Either backend can be absent and the resolver
+ * still returns whatever the other backend has (or an empty array if both
+ * are unavailable).
+ *
+ * Supports single-agent (`assistantId = <uuid>`) and all-agents mode
+ * (`assistantId = "all"`, requires tenant context from auth).
  */
 
+import {
+	BedrockAgentCoreClient,
+	ListMemoryRecordsCommand,
+} from "@aws-sdk/client-bedrock-agentcore";
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, sql, agents } from "../../utils.js";
+
+// Lazy-init singleton — one client per Lambda container.
+let _agentcoreClient: BedrockAgentCoreClient | null = null;
+function getAgentCoreClient(): BedrockAgentCoreClient {
+	if (!_agentcoreClient) {
+		_agentcoreClient = new BedrockAgentCoreClient({
+			region: process.env.AWS_REGION || "us-east-1",
+		});
+	}
+	return _agentcoreClient;
+}
+
+// Strategy namespaces that hold cross-thread records for an actor. These
+// mirror memory.py:STRATEGY_NAMESPACES. The `semantic` and `preferences`
+// namespaces are keyed on actorId alone, so we can fetch them with a
+// prefix match per agent slug. The `session_*` and `episodes_*` namespaces
+// also include a sessionId and are skipped here.
+const NAMESPACE_PREFIXES: Array<{ prefix: (slug: string) => string; strategy: string }> = [
+	{ prefix: (slug) => `assistant_${slug}`, strategy: "semantic" },
+	{ prefix: (slug) => `preferences_${slug}`, strategy: "preferences" },
+];
+
+const PER_NAMESPACE_LIMIT = 50;
+const TOTAL_CAP = 500;
+
+interface MemoryRow {
+	memoryRecordId: string;
+	content: { text: string };
+	createdAt: string | null;
+	updatedAt: string | null;
+	expiresAt: string | null;
+	namespace: string;
+	strategyId: string | null;
+	strategy: string;
+	score: number | null;
+	agentSlug: string | null;
+	factType: string | null;
+	confidence: number | null;
+	eventDate: string | null;
+	occurredStart: string | null;
+	occurredEnd: string | null;
+	mentionedAt: string | null;
+	tags: string[] | null;
+	accessCount: number;
+	proofCount: number | null;
+	context: string | null;
+	_sortKey: number;
+}
 
 export const memoryRecords = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const { assistantId } = args as { assistantId: string; namespace: string };
 
-	let bankIds: string[];
+	// Resolve the set of agent slugs we're querying.
+	let agentSlugs: string[];
 
 	if (assistantId === "all") {
 		if (!ctx.auth.tenantId) throw new Error("Tenant context required for all-agents query");
@@ -22,8 +96,8 @@ export const memoryRecords = async (_parent: any, args: any, ctx: GraphQLContext
 			.select({ slug: agents.slug })
 			.from(agents)
 			.where(eq(agents.tenant_id, ctx.auth.tenantId));
-		bankIds = agentRows.map((a) => a.slug).filter(Boolean) as string[];
-		if (bankIds.length === 0) return [];
+		agentSlugs = agentRows.map((a) => a.slug).filter(Boolean) as string[];
+		if (agentSlugs.length === 0) return [];
 	} else {
 		const [agent] = await db
 			.select({ tenant_id: agents.tenant_id, slug: agents.slug })
@@ -32,10 +106,127 @@ export const memoryRecords = async (_parent: any, args: any, ctx: GraphQLContext
 		if (!agent || (ctx.auth.tenantId && agent.tenant_id !== ctx.auth.tenantId)) {
 			throw new Error("Agent not found or access denied");
 		}
-		bankIds = [agent.slug || assistantId];
+		agentSlugs = [agent.slug || assistantId];
 	}
 
-	const bankIdList = sql.join(bankIds.map((b) => sql`${b}`), sql`, `);
+	// Kick both backends off in parallel. Either may be empty/unavailable.
+	const [agentCoreRows, hindsightRows] = await Promise.all([
+		fetchAgentCoreRecords(agentSlugs),
+		fetchHindsightRecords(agentSlugs),
+	]);
+
+	// Merge, dedupe by memoryRecordId (defensive — shouldn't happen since
+	// the ID namespaces are disjoint), sort newest-first, cap.
+	const merged = new Map<string, MemoryRow>();
+	for (const row of [...agentCoreRows, ...hindsightRows]) {
+		if (!merged.has(row.memoryRecordId)) merged.set(row.memoryRecordId, row);
+	}
+	const sorted = [...merged.values()].sort((a, b) => b._sortKey - a._sortKey);
+	const capped = sorted.slice(0, TOTAL_CAP);
+
+	// Strip the internal _sortKey before returning.
+	return capped.map(({ _sortKey: _drop, ...rest }) => rest);
+};
+
+// ---------------------------------------------------------------------------
+// AgentCore Memory backend
+// ---------------------------------------------------------------------------
+
+async function fetchAgentCoreRecords(agentSlugs: string[]): Promise<MemoryRow[]> {
+	const memoryId = process.env.AGENTCORE_MEMORY_ID;
+	if (!memoryId) return [];
+
+	const client = getAgentCoreClient();
+	const out: MemoryRow[] = [];
+
+	// Fan out: for each agent, hit each namespace prefix. Kept sequential
+	// per-agent (but parallel across namespaces) to keep burst load on the
+	// AgentCore API bounded when the tenant has many agents.
+	for (const slug of agentSlugs) {
+		const calls = NAMESPACE_PREFIXES.map(async ({ prefix, strategy }) => {
+			try {
+				const resp = await client.send(
+					new ListMemoryRecordsCommand({
+						memoryId,
+						namespace: prefix(slug),
+						maxResults: PER_NAMESPACE_LIMIT,
+					}),
+				);
+				return (resp.memoryRecordSummaries || []).map((r) =>
+					mapAgentCoreRecord(r, slug, strategy),
+				);
+			} catch (err) {
+				// Missing namespace / no extracted records yet is normal —
+				// the strategies run in the background and may not have
+				// processed any events yet. Log at debug only.
+				// eslint-disable-next-line no-console
+				console.debug(
+					`[memoryRecords] AgentCore list failed for ${slug}/${prefix(slug)}:`,
+					(err as Error)?.message,
+				);
+				return [] as MemoryRow[];
+			}
+		});
+		const results = await Promise.all(calls);
+		for (const arr of results) out.push(...arr);
+	}
+	return out;
+}
+
+function mapAgentCoreRecord(
+	r: {
+		memoryRecordId?: string;
+		content?: { text?: string } | any;
+		memoryStrategyId?: string;
+		namespaces?: string[];
+		createdAt?: Date;
+		score?: number;
+		metadata?: Record<string, any>;
+	},
+	agentSlug: string,
+	strategy: string,
+): MemoryRow {
+	// MemoryContent is a discriminated union; the TextMember has a
+	// `text` string. Be defensive against the `$unknown` member.
+	const text =
+		(r.content && typeof (r.content as any).text === "string"
+			? (r.content as any).text
+			: "") || "";
+	const ns = r.namespaces && r.namespaces.length > 0 ? r.namespaces[0] : "";
+	const createdAtISO = r.createdAt ? r.createdAt.toISOString() : null;
+	return {
+		memoryRecordId: r.memoryRecordId || `${agentSlug}-${ns}-${Math.random()}`,
+		content: { text },
+		createdAt: createdAtISO,
+		updatedAt: createdAtISO,
+		expiresAt: null,
+		namespace: ns || agentSlug,
+		strategyId: r.memoryStrategyId || null,
+		strategy,
+		score: typeof r.score === "number" ? r.score : null,
+		agentSlug,
+		factType: null,
+		confidence: typeof r.score === "number" ? r.score : null,
+		eventDate: null,
+		occurredStart: null,
+		occurredEnd: null,
+		mentionedAt: null,
+		tags: null,
+		accessCount: 0,
+		proofCount: null,
+		context: null,
+		_sortKey: r.createdAt ? r.createdAt.getTime() : 0,
+	};
+}
+
+// ---------------------------------------------------------------------------
+// Hindsight backend
+// ---------------------------------------------------------------------------
+
+async function fetchHindsightRecords(agentSlugs: string[]): Promise<MemoryRow[]> {
+	if (!process.env.HINDSIGHT_ENDPOINT) return [];
+
+	const bankIdList = sql.join(agentSlugs.map((b) => sql`${b}`), sql`, `);
 	let result: any;
 	try {
 		result = await db.execute(sql`
@@ -50,18 +241,23 @@ export const memoryRecords = async (_parent: any, args: any, ctx: GraphQLContext
 			LIMIT 500
 		`);
 	} catch {
-		// Hindsight schema may not exist (managed memory engine)
+		// hindsight schema may not exist even when HINDSIGHT_ENDPOINT is set
+		// (e.g. during a provisioning window). Return empty rather than
+		// throw so AgentCore results still surface.
 		return [];
 	}
 
-	return (result.rows || []).map((r: any) => {
+	return (result.rows || []).map((r: any): MemoryRow => {
 		const strategy = factTypeToStrategy(r.fact_type);
 		let meta: any = {};
-		try { meta = typeof r.metadata === "string" ? JSON.parse(r.metadata) : (r.metadata || {}); } catch {}
+		try {
+			meta = typeof r.metadata === "string" ? JSON.parse(r.metadata) : (r.metadata || {});
+		} catch {}
+		const createdAt = toISO(r.created_at);
 		return {
 			memoryRecordId: String(r.id),
 			content: { text: String(r.text || "") },
-			createdAt: toISO(r.created_at),
+			createdAt,
 			updatedAt: toISO(r.updated_at),
 			expiresAt: null,
 			namespace: r.bank_id || "",
@@ -79,21 +275,31 @@ export const memoryRecords = async (_parent: any, args: any, ctx: GraphQLContext
 			accessCount: r.access_count ?? 0,
 			proofCount: r.proof_count ?? null,
 			context: r.context || null,
+			_sortKey: createdAt ? new Date(createdAt).getTime() : 0,
 		};
 	});
-};
+}
 
 function toISO(val: any): string | null {
 	if (!val) return null;
-	try { return new Date(val).toISOString(); } catch { return null; }
+	try {
+		return new Date(val).toISOString();
+	} catch {
+		return null;
+	}
 }
 
 function factTypeToStrategy(factType: string | null): string {
 	switch (factType) {
-		case "world": return "semantic";
-		case "experience": return "episodes";
-		case "opinion": return "preferences";
-		case "observation": return "reflections";
-		default: return "semantic";
+		case "world":
+			return "semantic";
+		case "experience":
+			return "episodes";
+		case "opinion":
+			return "preferences";
+		case "observation":
+			return "reflections";
+		default:
+			return "semantic";
 	}
 }
