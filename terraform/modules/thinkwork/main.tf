@@ -170,8 +170,8 @@ module "api" {
   lambda_zips_dir         = var.lambda_zips_dir
   api_auth_secret         = var.api_auth_secret
   db_password             = var.db_password
-  agentcore_invoke_url    = module.agentcore.agentcore_invoke_url
   agentcore_function_name = module.agentcore.agentcore_function_name
+  agentcore_function_arn  = module.agentcore.agentcore_function_arn
   hindsight_endpoint      = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
   agentcore_memory_id     = module.agentcore_memory.memory_id
 }
