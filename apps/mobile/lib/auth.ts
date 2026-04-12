@@ -196,42 +196,34 @@ export async function getIdToken(): Promise<string | null> {
 
 // ---------------------------------------------------------------------------
 // Current user (reads from last-known session)
+//
+// Purely synchronous: decodes whatever id token is in CognitoSecureStorage
+// (memory-cache backed) rather than going through `user.getSession(cb)` —
+// that callback fires async whenever the stored session needs an HTTP refresh,
+// which returned `null` to callers that expected a sync answer (e.g. bootstrap
+// right after an `Updates.reloadAsync()`). Refresh is handled separately by
+// getCurrentSession/getIdToken; here we only need to identify who is signed in.
 // ---------------------------------------------------------------------------
 export function getCurrentUser(): AuthUser | null {
-  const pool = getUserPool();
-  if (!pool) return null;
-
-  const user = pool.getCurrentUser();
-  if (!user) {
-    // Fallback: check for OAuth tokens stored directly (federated sessions)
-    const idToken = getStoredOAuthIdToken();
-    if (idToken) {
-      try {
-        const payload = decodeJwtPayload(idToken);
-        return {
-          email: (payload["email"] as string) ?? "",
-          name: (payload["name"] as string) ?? undefined,
-          sub: (payload["sub"] as string) ?? "",
-          tenantId: (payload["custom:tenant_id"] as string) ?? undefined,
-          groups: (payload["cognito:groups"] as string[]) ?? [],
-        };
-      } catch {
-        return null;
-      }
-    }
+  const idToken = getStoredOAuthIdToken();
+  if (!idToken) return null;
+  try {
+    const payload = decodeJwtPayload(idToken);
+    return {
+      email: (payload["email"] as string) ?? "",
+      name: (payload["name"] as string) ?? undefined,
+      sub: (payload["sub"] as string) ?? "",
+      tenantId: (payload["custom:tenant_id"] as string) ?? undefined,
+      groups: (payload["cognito:groups"] as string[]) ?? [],
+    };
+  } catch {
     return null;
   }
+}
 
-  let authUser: AuthUser | null = null;
-
-  user.getSession(
-    (err: Error | null, session: CognitoUserSession | null) => {
-      if (err || !session || !session.isValid()) return;
-      authUser = parseIdToken(session);
-    },
-  );
-
-  return authUser;
+/** Parse a CognitoUserSession's id token into an AuthUser (fully sync). */
+export function parseUserFromSession(session: CognitoUserSession): AuthUser {
+  return parseIdToken(session);
 }
 
 // ---------------------------------------------------------------------------
