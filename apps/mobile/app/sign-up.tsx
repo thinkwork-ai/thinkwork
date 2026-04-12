@@ -111,7 +111,7 @@ export default function SignUpScreen() {
               </CardTitle>
               <CardDescription>
                 <Muted className="text-center">
-                  Get started with Thinkwork
+                  Get started with ThinkWork
                 </Muted>
               </CardDescription>
             </CardHeader>

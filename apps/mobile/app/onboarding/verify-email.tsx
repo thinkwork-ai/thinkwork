@@ -74,7 +74,7 @@ export default function VerifyEmailScreen() {
             <View className="gap-3 px-2">
               <Text className="text-center leading-6">
                 Click the link in your email to verify your account and continue
-                setting up Thinkwork.
+                setting up ThinkWork.
               </Text>
               <Text size="sm" variant="muted" className="text-center">
                 Don't see it? Check your spam folder.

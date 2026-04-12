@@ -183,7 +183,7 @@ export default function AcceptInvitationScreen() {
               <CardDescription>
                 <Muted className="text-center">
                   Join <Text className="font-semibold">{invitation.tenantName}</Text> on
-                  Thinkwork
+                  ThinkWork
                 </Muted>
               </CardDescription>
             </CardHeader>

@@ -168,7 +168,7 @@ export default function SignInScreen() {
               />
             </View>
             <CardTitle className="pb-2">
-              <H2 className="tracking-wider" numberOfLines={1} adjustsFontSizeToFit>Thinkwork</H2>
+              <H2 className="tracking-wider" numberOfLines={1} adjustsFontSizeToFit>ThinkWork</H2>
             </CardTitle>
           </CardHeader>
 

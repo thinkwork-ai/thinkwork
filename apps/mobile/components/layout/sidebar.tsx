@@ -92,7 +92,7 @@ export function Sidebar() {
           />
           <View className="flex-1 gap-0">
             <Text className="text-base font-semibold text-neutral-900 dark:text-neutral-100 leading-tight">
-              Thinkwork
+              ThinkWork
             </Text>
             <Text className="text-xs text-neutral-500 dark:text-neutral-400 leading-tight" numberOfLines={1}>
               {user?.email ?? ""}

@@ -1,5 +1,5 @@
 /**
- * MCP Client — calls the Thinkwork Builder MCP server.
+ * MCP Client — calls the ThinkWork Builder MCP server.
  *
  * URL and auth token are read from env vars:
  *   EXPO_PUBLIC_MCP_BUILDER_URL  (default: https://api.thinkwork.ai/mcp/builder)

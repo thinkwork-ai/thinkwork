@@ -210,9 +210,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!code) throw new Error("No authorization code in callback URL");
 
     const tokens = await auth.exchangeCodeForTokens(code, redirectUri);
-    const user = auth.storeOAuthTokens(tokens);
+    let oauthUser = auth.storeOAuthTokens(tokens);
     setAuthToken(tokens.id_token);
-    setUser(user);
+
+    // Federated (Google) users don't have custom:tenant_id in their JWT on
+    // first sign-in. Mirror the admin app's TenantContext bootstrap flow:
+    // call bootstrapUser to auto-provision a tenant and merge the id into
+    // local user state so the routing guard can redirect to the home tab.
+    if (!oauthUser.tenantId) {
+      const graphqlUrl = process.env.EXPO_PUBLIC_GRAPHQL_URL;
+      if (!graphqlUrl) throw new Error("GraphQL URL not configured");
+      const res = await fetch(graphqlUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${tokens.id_token}`,
+        },
+        body: JSON.stringify({
+          query: `mutation { bootstrapUser { user { id email name } tenant { id name slug plan } isNew } }`,
+        }),
+      });
+      const result = await res.json();
+      const bootstrap = result?.data?.bootstrapUser;
+      if (!bootstrap?.tenant?.id) {
+        throw new Error(result?.errors?.[0]?.message ?? "Failed to provision workspace");
+      }
+      oauthUser = { ...oauthUser, tenantId: bootstrap.tenant.id };
+    }
+
+    setUser(oauthUser);
     setDidActiveLogin(true);
   }, []);
 

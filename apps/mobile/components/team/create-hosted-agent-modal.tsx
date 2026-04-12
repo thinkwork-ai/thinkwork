@@ -86,7 +86,7 @@ export function CreateHostedAgentModal({ visible, onClose, runtimeProfile: initi
                   ? "Create a chat agent powered by AgentCore Runtime with Firecracker isolation. Ready instantly."
                   : runtimeProfile === "code"
                   ? "Create a code agent with GitHub CLI, D2, Claude Code, and development tools. Ready instantly."
-                  : "Create a cloud-hosted agent powered by Thinkwork infrastructure. It will be ready in about 2 minutes."}
+                  : "Create a cloud-hosted agent powered by ThinkWork infrastructure. It will be ready in about 2 minutes."}
               </Muted>
             </View>
 
