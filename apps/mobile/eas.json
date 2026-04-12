@@ -13,32 +13,40 @@
     },
     "preview": {
       "distribution": "internal",
+      "node": "20.19.5",
       "ios": {
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_COGNITO_USER_POOL_ID": "<your-cognito-user-pool-id>",
-        "EXPO_PUBLIC_COGNITO_CLIENT_ID": "<your-cognito-client-id>",
-        "EXPO_PUBLIC_COGNITO_DOMAIN": "<your-cognito-domain>",
-        "EXPO_PUBLIC_GRAPHQL_URL": "<your-graphql-http-url>",
-        "EXPO_PUBLIC_GRAPHQL_API_KEY": "<your-appsync-api-key>",
-        "EXPO_PUBLIC_GRAPHQL_WS_URL": "<your-appsync-ws-url>"
+        "EXPO_PUBLIC_COGNITO_USER_POOL_ID": "us-east-1_L4DhLVKis",
+        "EXPO_PUBLIC_COGNITO_CLIENT_ID": "4hmooifj2surt62sjks45kemuh",
+        "EXPO_PUBLIC_COGNITO_DOMAIN": "https://thinkwork-dev.auth.us-east-1.amazoncognito.com",
+        "EXPO_PUBLIC_GRAPHQL_URL": "https://ho7oyksms0.execute-api.us-east-1.amazonaws.com/graphql",
+        "EXPO_PUBLIC_GRAPHQL_API_KEY": "da2-agfhgx54sfeydoqzid5gpr3vpm",
+        "EXPO_PUBLIC_GRAPHQL_WS_URL": "wss://dcrs2rau6nfk7djkuwia4oaczq.appsync-realtime-api.us-east-1.amazonaws.com/graphql"
       }
     },
     "production": {
       "autoIncrement": true,
       "channel": "production",
+      "node": "20.19.5",
       "env": {
-        "EXPO_PUBLIC_COGNITO_USER_POOL_ID": "<your-cognito-user-pool-id>",
-        "EXPO_PUBLIC_COGNITO_CLIENT_ID": "<your-cognito-client-id>",
-        "EXPO_PUBLIC_COGNITO_DOMAIN": "<your-cognito-domain>",
-        "EXPO_PUBLIC_GRAPHQL_URL": "<your-graphql-http-url>",
-        "EXPO_PUBLIC_GRAPHQL_API_KEY": "<your-appsync-api-key>",
-        "EXPO_PUBLIC_GRAPHQL_WS_URL": "<your-appsync-ws-url>"
+        "EXPO_PUBLIC_COGNITO_USER_POOL_ID": "us-east-1_L4DhLVKis",
+        "EXPO_PUBLIC_COGNITO_CLIENT_ID": "4hmooifj2surt62sjks45kemuh",
+        "EXPO_PUBLIC_COGNITO_DOMAIN": "https://thinkwork-dev.auth.us-east-1.amazoncognito.com",
+        "EXPO_PUBLIC_GRAPHQL_URL": "https://ho7oyksms0.execute-api.us-east-1.amazonaws.com/graphql",
+        "EXPO_PUBLIC_GRAPHQL_API_KEY": "da2-agfhgx54sfeydoqzid5gpr3vpm",
+        "EXPO_PUBLIC_GRAPHQL_WS_URL": "wss://dcrs2rau6nfk7djkuwia4oaczq.appsync-realtime-api.us-east-1.amazonaws.com/graphql"
       }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "eric@maniflow.ai",
+        "ascAppId": "REPLACE_WITH_NUMERIC_APP_ID",
+        "appleTeamId": "REPLACE_WITH_TEAM_ID"
+      }
+    }
   }
 }

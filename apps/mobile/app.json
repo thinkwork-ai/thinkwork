@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "ThinkWork",
-    "slug": "team",
+    "slug": "thinkwork-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -20,7 +20,7 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "Allow ThinkWork to access your photos for attaching images to tickets.",
         "NSMicrophoneUsageDescription": "Allow ThinkWork to use the microphone for voice input.",
-        "NSSpeechRecognitionUsageDescription": "Allow ThinkWork to use speech recognition for voice input."
+        "NSSpeechRecognitionUsageDescription": "Allow ThinkWork to use speech recognition."
       }
     },
     "android": {
@@ -29,7 +29,10 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.thinkwork.agent"
+      "package": "com.thinkwork.agent",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -38,26 +41,29 @@
     "plugins": [
       "expo-router",
       "expo-web-browser",
-      ["expo-speech-recognition", {
-        "microphonePermission": "Allow ThinkWork to use the microphone for voice input.",
-        "speechRecognitionPermission": "Allow ThinkWork to use speech recognition."
-      }],
-      ["expo-notifications", {
-        "color": "#f59e0b"
-      }]
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow ThinkWork to use the microphone for voice input.",
+          "speechRecognitionPermission": "Allow ThinkWork to use speech recognition."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#f59e0b"
+        }
+      ]
     ],
     "extra": {
+      "router": {},
       "eas": {
-        "projectId": "152ef1c2-e6e8-4734-b59d-eb8d00229146"
-      },
-      "router": {}
+        "projectId": "ff3bfecf-778d-40b6-9215-6c853187413d"
+      }
     },
     "owner": "thinkwork-ai",
     "runtimeVersion": {
       "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/152ef1c2-e6e8-4734-b59d-eb8d00229146"
     }
   }
 }
