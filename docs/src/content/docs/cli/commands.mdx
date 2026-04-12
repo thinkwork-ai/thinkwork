@@ -433,25 +433,23 @@ thinkwork mcp add <name> --url <url> --tenant <slug> -s <stage> [options]
 | `--url <url>` | MCP server endpoint URL (required) |
 | `--tenant <slug>` | Tenant slug (required) |
 | `--transport <type>` | Transport: `streamable-http` (default) or `sse` |
-| `--auth-type <type>` | Auth: `none` (default), `tenant_api_key`, or `per_user_oauth` |
+| `--auth-type <type>` | Auth: `none` (default), `tenant_api_key`, or `oauth` |
 | `--api-key <token>` | API key or bearer token (for `tenant_api_key`) |
-| `--oauth-provider <name>` | OAuth provider name (for `per_user_oauth`) |
 
 **Examples:**
 
 ```bash
 # Register with API key auth
 thinkwork mcp add my-tools \
-  --url https://mcp.example.com/sse \
+  --url https://mcp.example.com/crm \
   --auth-type tenant_api_key \
   --api-key sk-abc123 \
   --tenant my-tenant -s dev
 
-# Register with per-user OAuth (e.g., Lastmile)
+# Register with server-managed OAuth (users connect from mobile app)
 thinkwork mcp add lastmile-crm \
-  --url https://mcp.lastmile-tei.com/crm/sse \
-  --auth-type per_user_oauth \
-  --oauth-provider lastmile \
+  --url https://mcp-dev.lastmile-tei.com/crm \
+  --auth-type oauth \
   --tenant my-tenant -s dev
 ```
 
