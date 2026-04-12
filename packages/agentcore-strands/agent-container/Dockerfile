@@ -2,7 +2,7 @@
 # Pure Python — no Node.js dependency. Supports any Bedrock model.
 # Build from monorepo root: docker build -f packages/agentcore-strands/agent-container/Dockerfile .
 
-FROM --platform=linux/arm64 python:3.12-slim
+FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
@@ -69,7 +69,9 @@ ENV AGENTCORE_MEMORY_ID=""
 
 EXPOSE 8080
 
-# Bedrock AgentCore Runtime runs the container directly as an HTTP server.
-# No Lambda Web Adapter needed (unlike Lambda-hosted containers).
+# Lambda Web Adapter — bridges Lambda invoke events ↔ HTTP server.
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt/extensions/lambda-adapter
+ENV AWS_LWA_PORT=8080
+ENV AWS_LWA_READINESS_CHECK_PATH=/ping
 
 CMD ["python", "server.py"]
