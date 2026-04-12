@@ -60,7 +60,6 @@ jobs:
   publish-homebrew:
     name: Update Homebrew Tap
     needs: publish-npm
-    if: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: Wait for npm propagation
@@ -91,26 +90,9 @@ jobs:
 
       - name: Update formula
         run: |
-          cat > homebrew-tap/Formula/thinkwork.rb << 'RUBY'
-          class Thinkwork < Formula
-            desc "CLI for deploying and managing Thinkwork agent infrastructure on AWS"
-            homepage "https://github.com/thinkwork-ai/thinkwork"
-            url "${{ steps.meta.outputs.url }}"
-            sha256 "${{ steps.meta.outputs.sha256 }}"
-            license "MIT"
-
-            depends_on "node@20"
-
-            def install
-              system "npm", "install", *std_npm_args
-              bin.install_symlink libexec/"bin/thinkwork"
-            end
-
-            test do
-              assert_match version.to_s, shell_output("#{bin}/thinkwork --version")
-            end
-          end
-          RUBY
+          URL="${{ steps.meta.outputs.url }}"
+          SHA="${{ steps.meta.outputs.sha256 }}"
+          sed "s|__URL__|${URL}|g; s|__SHA__|${SHA}|g" .github/homebrew-formula.rb.template > homebrew-tap/Formula/thinkwork.rb
 
       - name: Push formula update
         run: |
