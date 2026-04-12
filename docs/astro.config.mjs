@@ -5,7 +5,7 @@ export default defineConfig({
   // site: "https://docs.thinkwork.ai",  // uncomment when custom domain is live
   integrations: [
     starlight({
-      title: "Thinkwork",
+      title: "ThinkWork",
       favicon: "/favicon.png",
       head: [
         { tag: "link", attrs: { rel: "icon", type: "image/png", href: "/favicon.png" } },

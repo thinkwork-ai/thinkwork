@@ -1,13 +1,13 @@
 ---
 title: Long-term Memory
-description: How Thinkwork stores and recalls information from prior interactions, using AWS AgentCore managed memory with automatic retention and Hindsight as an optional add-on.
+description: How ThinkWork stores and recalls information from prior interactions, using AWS AgentCore managed memory with automatic retention and Hindsight as an optional add-on.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Long-term memory is how Thinkwork carries information forward from previous work. Unlike document knowledge, which starts with uploaded source files, long-term memory starts with what happened in threads.
+Long-term memory is how ThinkWork carries information forward from previous work. Unlike document knowledge, which starts with uploaded source files, long-term memory starts with what happened in threads.
 
-## What long-term memory means in Thinkwork
+## What long-term memory means in ThinkWork
 
 Long-term memory helps agents retain useful facts across turns or across related work, such as:
 
@@ -16,11 +16,11 @@ Long-term memory helps agents retain useful facts across turns or across related
 - Prior decisions and follow-up items
 - Summaries synthesized from earlier conversations
 
-Thinkwork ships with **AgentCore managed memory always on** and **Hindsight as an optional add-on** that runs alongside it.
+ThinkWork ships with **AgentCore managed memory always on** and **Hindsight as an optional add-on** that runs alongside it.
 
 ## AgentCore managed memory — always on
 
-Every Thinkwork deployment provisions an AWS Bedrock AgentCore Memory resource as part of the `thinkwork` Terraform module. The agent container automatically emits a `CreateEvent` for every turn (user message + assistant response), and AgentCore's background strategies extract facts into four namespaces:
+Every ThinkWork deployment provisions an AWS Bedrock AgentCore Memory resource as part of the `thinkwork` Terraform module. The agent container automatically emits a `CreateEvent` for every turn (user message + assistant response), and AgentCore's background strategies extract facts into four namespaces:
 
 - **Semantic** — similarity-based recall of cross-thread facts
 - **Summarization** — synthesized per-session carry-forward context

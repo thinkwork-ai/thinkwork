@@ -1,11 +1,11 @@
 ---
 title: Lifecycle and Types
-description: Thread statuses, channels, prefixes, and how Thinkwork models different kinds of work in the same thread system.
+description: Thread statuses, channels, prefixes, and how ThinkWork models different kinds of work in the same thread system.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Thinkwork uses one thread model for many kinds of work. The differences show up in status, channel, and metadata, not in separate storage systems.
+ThinkWork uses one thread model for many kinds of work. The differences show up in status, channel, and metadata, not in separate storage systems.
 
 ## Thread lifecycle
 
@@ -39,7 +39,7 @@ The prefix is human-readable by design, which makes logs, screenshots, and suppo
 
 ## Why types matter
 
-Thinkwork does not treat these as separate conversation systems. They all land in the same thread model, which means you get the same:
+ThinkWork does not treat these as separate conversation systems. They all land in the same thread model, which means you get the same:
 
 - history and replayability
 - status transitions
@@ -47,5 +47,5 @@ Thinkwork does not treat these as separate conversation systems. They all land i
 - agent assignment model
 
 <Aside type="tip">
-When you are reasoning about work in Thinkwork, start with the thread. Channel and status explain the rest.
+When you are reasoning about work in ThinkWork, start with the thread. Channel and status explain the rest.
 </Aside>

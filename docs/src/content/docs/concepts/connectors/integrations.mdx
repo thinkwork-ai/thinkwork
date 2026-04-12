@@ -5,7 +5,7 @@ description: App and system integrations for Slack, GitHub, Google Workspace, an
 
 import { Aside } from '@astrojs/starlight/components';
 
-Thinkwork integrations connect external apps and systems to the thread model. They ingest messages, webhooks, and events into threads, then let agents respond back through the same integration boundary.
+ThinkWork integrations connect external apps and systems to the thread model. They ingest messages, webhooks, and events into threads, then let agents respond back through the same integration boundary.
 
 This is the app and system side of Connectors: Slack, GitHub, Google Workspace, webhook-style inbound flows, outbound actions, and the auth and routing needed to make them work safely.
 
@@ -15,7 +15,7 @@ An integration typically does four jobs:
 
 1. Accepts an inbound event from an external system
 2. Validates auth, signatures, or OAuth state
-3. Creates or updates a thread in Thinkwork
+3. Creates or updates a thread in ThinkWork
 4. Sends agent or automation output back to the source system
 
 ```text
@@ -78,7 +78,7 @@ For production Google integrations, expect verified OAuth setup, approved scopes
 
 ## Inbound and outbound patterns
 
-Thinkwork treats integrations as bidirectional by default.
+ThinkWork treats integrations as bidirectional by default.
 
 | Pattern | Example |
 |---|---|
@@ -87,7 +87,7 @@ Thinkwork treats integrations as bidirectional by default.
 | Outbound reply | Agent posts back to the Slack conversation |
 | Outbound action | Agent comments on a pull request or replies to an email |
 
-This keeps the external system as the engagement surface while Thinkwork keeps the internal execution model.
+This keeps the external system as the engagement surface while ThinkWork keeps the internal execution model.
 
 ## Auth and credential handling
 
@@ -97,7 +97,7 @@ Integrations usually need one of these auth patterns:
 - **OAuth tokens** for user or tenant-connected apps
 - **Service credentials or API keys** for system-to-system actions
 
-Thinkwork stores integration credentials in the credential vault and resolves them only when the connector needs them.
+ThinkWork stores integration credentials in the credential vault and resolves them only when the connector needs them.
 
 ## Routing and metadata
 
@@ -114,7 +114,7 @@ This lets one integration fan work to different agents without changing the exte
 
 ## Custom integration recipes
 
-For systems beyond Slack, GitHub, and Google Workspace, Thinkwork supports custom connector recipes. A typical recipe includes:
+For systems beyond Slack, GitHub, and Google Workspace, ThinkWork supports custom connector recipes. A typical recipe includes:
 
 - an inbound handler
 - credential and auth configuration

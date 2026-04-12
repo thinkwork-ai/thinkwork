@@ -1,15 +1,15 @@
 ---
 title: Greenfield AWS Deploy
-description: Step-by-step Terraform deploy of Thinkwork from scratch into a new AWS account or region. What gets created, how long it takes, and how to validate.
+description: Step-by-step Terraform deploy of ThinkWork from scratch into a new AWS account or region. What gets created, how long it takes, and how to validate.
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components';
 
-This guide walks through a full Thinkwork deployment into a fresh AWS account with no existing infrastructure. At the end, you'll have ~260 AWS resources running across three tiers, accessible via the admin app and GraphQL API.
+This guide walks through a full ThinkWork deployment into a fresh AWS account with no existing infrastructure. At the end, you'll have ~260 AWS resources running across three tiers, accessible via the admin app and GraphQL API.
 
 ## What gets deployed
 
-Thinkwork is organized into three infrastructure tiers that deploy in order:
+ThinkWork is organized into three infrastructure tiers that deploy in order:
 
 **Foundation tier** — Networking, identity, and encryption
 - VPC with public and private subnets across 2 AZs
