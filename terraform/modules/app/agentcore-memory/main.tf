@@ -110,8 +110,8 @@ data "external" "memory" {
   program = ["bash", "${path.module}/scripts/create_or_find_memory.sh"]
 
   query = {
-    name              = local.memory_name
-    region            = var.region
+    name               = local.memory_name
+    region             = var.region
     execution_role_arn = aws_iam_role.memory_execution[0].arn
   }
 }

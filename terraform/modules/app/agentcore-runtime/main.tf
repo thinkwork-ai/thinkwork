@@ -115,6 +115,25 @@ resource "aws_iam_role_policy" "agentcore" {
         Resource = "arn:aws:bedrock:${var.region}::foundation-model/*"
       },
       {
+        # Automatic memory retention — every agent turn calls CreateEvent
+        # to feed AgentCore's background strategies. Also needs read access
+        # so the recall() tool can fetch previously extracted records and
+        # so forget() can soft-archive old records.
+        Sid    = "AgentCoreMemoryReadWrite"
+        Effect = "Allow"
+        Action = [
+          "bedrock-agentcore:CreateEvent",
+          "bedrock-agentcore:ListEvents",
+          "bedrock-agentcore:GetEvent",
+          "bedrock-agentcore:ListMemoryRecords",
+          "bedrock-agentcore:RetrieveMemoryRecords",
+          "bedrock-agentcore:GetMemoryRecord",
+          "bedrock-agentcore:BatchCreateMemoryRecords",
+          "bedrock-agentcore:BatchUpdateMemoryRecords",
+        ]
+        Resource = "*"
+      },
+      {
         Sid      = "CloudWatchLogs"
         Effect   = "Allow"
         Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
