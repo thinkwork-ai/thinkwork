@@ -53,7 +53,7 @@ variable "region" {
 }
 
 locals {
-  memory_name = "${var.name_prefix}-${var.stage}"
+  memory_name = "${replace(var.name_prefix, "-", "_")}_${replace(var.stage, "-", "_")}"
   bootstrap   = var.existing_memory_id == ""
 }
 
