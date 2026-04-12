@@ -21,19 +21,19 @@ export default defineConfig({
           label: "Concepts",
           items: [
             {
-              label: "Agents",
-              items: [
-                { label: "Overview", slug: "concepts/agents" },
-                { label: "Managed Agents", slug: "concepts/agents/managed-agents" },
-                { label: "Templates and Skills", slug: "concepts/agents/templates-and-skills" },
-              ],
-            },
-            {
               label: "Threads",
               items: [
                 { label: "Overview", slug: "concepts/threads" },
                 { label: "Lifecycle and Types", slug: "concepts/threads/lifecycle-and-types" },
                 { label: "Routing and Metadata", slug: "concepts/threads/routing-and-metadata" },
+              ],
+            },
+            {
+              label: "Agents",
+              items: [
+                { label: "Overview", slug: "concepts/agents" },
+                { label: "Managed Agents", slug: "concepts/agents/managed-agents" },
+                { label: "Templates and Skills", slug: "concepts/agents/templates-and-skills" },
               ],
             },
             {
@@ -55,19 +55,19 @@ export default defineConfig({
               ],
             },
             {
-              label: "Automations",
-              items: [
-                { label: "Overview", slug: "concepts/automations" },
-                { label: "Scheduled and Event-driven", slug: "concepts/automations/scheduled-and-event-driven" },
-                { label: "Routines and Execution Model", slug: "concepts/automations/routines-and-execution-model" },
-              ],
-            },
-            {
               label: "Control",
               items: [
                 { label: "Overview", slug: "concepts/control" },
                 { label: "Guardrails", slug: "concepts/control/guardrails" },
                 { label: "Budgets, Usage, and Audit", slug: "concepts/control/budgets-usage-and-audit" },
+              ],
+            },
+            {
+              label: "Automations",
+              items: [
+                { label: "Overview", slug: "concepts/automations" },
+                { label: "Scheduled and Event-driven", slug: "concepts/automations/scheduled-and-event-driven" },
+                { label: "Routines and Execution Model", slug: "concepts/automations/routines-and-execution-model" },
               ],
             },
           ],
