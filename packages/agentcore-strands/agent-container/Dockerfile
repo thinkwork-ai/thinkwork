@@ -2,8 +2,8 @@
 # Pure Python — no Node.js dependency. Supports any Bedrock model.
 # Build from monorepo root: docker build -f packages/agentcore-strands/agent-container/Dockerfile .
 
-# Pull Lambda Web Adapter for the TARGET platform (arm64)
-FROM --platform=$TARGETPLATFORM public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 AS lambda-adapter
+# Pull Lambda Web Adapter for arm64 (matches Bedrock AgentCore Runtime)
+FROM --platform=linux/arm64 public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 AS lambda-adapter
 
 FROM python:3.12-slim
 
