@@ -205,21 +205,9 @@ resource "aws_lambda_function" "agentcore" {
   }
 }
 
-resource "aws_lambda_function_url" "agentcore" {
-  function_name      = aws_lambda_function.agentcore.function_name
-  authorization_type = "NONE"
-}
-
-# Without this permission, a NONE-auth Function URL returns 403 to every
-# caller. aws_lambda_function_url only configures the endpoint; it does not
-# create the companion resource-based policy statement.
-resource "aws_lambda_permission" "agentcore_function_url" {
-  statement_id           = "AllowPublicFunctionUrl"
-  action                 = "lambda:InvokeFunctionUrl"
-  function_name          = aws_lambda_function.agentcore.function_name
-  principal              = "*"
-  function_url_auth_type = "NONE"
-}
+# AgentCore is invoked directly via the Lambda SDK (InvokeCommand) from
+# chat-agent-invoke — no Function URL is needed, and exposing one would be
+# a public attack surface for prompt injection.
 
 ################################################################################
 # Outputs
@@ -235,12 +223,12 @@ output "execution_role_arn" {
   value       = aws_iam_role.agentcore.arn
 }
 
-output "agentcore_invoke_url" {
-  description = "Lambda Function URL for the AgentCore container"
-  value       = aws_lambda_function_url.agentcore.function_url
-}
-
 output "agentcore_function_name" {
   description = "AgentCore Lambda function name (for direct SDK invoke)"
   value       = aws_lambda_function.agentcore.function_name
+}
+
+output "agentcore_function_arn" {
+  description = "AgentCore Lambda function ARN (for IAM policy on callers)"
+  value       = aws_lambda_function.agentcore.arn
 }

@@ -134,12 +134,6 @@ variable "api_auth_secret" {
   default     = ""
 }
 
-variable "agentcore_invoke_url" {
-  description = "Lambda Function URL for AgentCore container invocation"
-  type        = string
-  default     = ""
-}
-
 variable "hindsight_endpoint" {
   description = "Hindsight API endpoint (empty when enable_hindsight = false)"
   type        = string
@@ -153,7 +147,13 @@ variable "agentcore_memory_id" {
 }
 
 variable "agentcore_function_name" {
-  description = "AgentCore Lambda function name (for direct SDK invoke instead of Function URL)"
+  description = "AgentCore Lambda function name (for direct SDK invoke)"
+  type        = string
+  default     = ""
+}
+
+variable "agentcore_function_arn" {
+  description = "AgentCore Lambda function ARN (used to grant lambda:InvokeFunction)"
   type        = string
   default     = ""
 }
