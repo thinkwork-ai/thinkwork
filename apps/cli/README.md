@@ -5,6 +5,10 @@ Deploy and manage Thinkwork AI agent stacks on AWS.
 ## Install
 
 ```bash
+# Homebrew (macOS / Linux) — auto-taps thinkwork-ai/tap on first install
+brew install thinkwork-ai/tap/thinkwork
+
+# npm
 npm install -g thinkwork-cli
 ```
 
