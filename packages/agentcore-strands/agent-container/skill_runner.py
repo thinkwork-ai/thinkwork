@@ -25,7 +25,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-SKILLS_DIR = "/app/skills"
+SKILLS_DIR = "/tmp/skills"
 
 
 def _parse_skill_yaml(filepath: str) -> dict | None:
