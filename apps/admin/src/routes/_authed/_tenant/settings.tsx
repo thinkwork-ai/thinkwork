@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "urql";
+import { Copy, Check } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageHeader } from "@/components/PageHeader";
@@ -89,15 +91,15 @@ function SettingsPage() {
               <Card className="lg:col-span-2">
                 <CardHeader><CardTitle>Resources & URLs</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
-                  {deploy.bucketName && <Row label="S3 Bucket" value={deploy.bucketName} />}
-                  {deploy.databaseEndpoint && <Row label="Database" value={deploy.databaseEndpoint} />}
-                  {deploy.ecrUrl && <Row label="ECR" value={deploy.ecrUrl} />}
-                  {deploy.adminUrl && <UrlRow label="Admin" url={deploy.adminUrl} />}
-                  {deploy.docsUrl && <UrlRow label="Docs" url={deploy.docsUrl} />}
-                  {deploy.apiEndpoint && <UrlRow label="API" url={deploy.apiEndpoint} />}
-                  {deploy.appsyncUrl && <UrlRow label="AppSync" url={deploy.appsyncUrl} />}
-                  {deploy.appsyncRealtimeUrl && <UrlRow label="WebSocket" url={deploy.appsyncRealtimeUrl} />}
-                  {deploy.hindsightEndpoint && <UrlRow label="Hindsight" url={deploy.hindsightEndpoint} />}
+                  {deploy.bucketName && <CopyableRow label="S3 Bucket" value={deploy.bucketName} />}
+                  {deploy.databaseEndpoint && <CopyableRow label="Database" value={deploy.databaseEndpoint} />}
+                  {deploy.ecrUrl && <CopyableRow label="ECR" value={deploy.ecrUrl} />}
+                  {deploy.adminUrl && <CopyableRow label="Admin" value={deploy.adminUrl} url />}
+                  {deploy.docsUrl && <CopyableRow label="Docs" value={deploy.docsUrl} url />}
+                  {deploy.apiEndpoint && <CopyableRow label="API" value={deploy.apiEndpoint} url />}
+                  {deploy.appsyncUrl && <CopyableRow label="AppSync" value={deploy.appsyncUrl} url />}
+                  {deploy.appsyncRealtimeUrl && <CopyableRow label="WebSocket" value={deploy.appsyncRealtimeUrl} url />}
+                  {deploy.hindsightEndpoint && <CopyableRow label="Hindsight" value={deploy.hindsightEndpoint} url />}
                 </CardContent>
               </Card>
             </>
@@ -126,18 +128,39 @@ function StatusRow({ label, value, active }: { label: string; value: string | nu
   );
 }
 
-function UrlRow({ label, url }: { label: string; url: string }) {
+function CopyableRow({ label, value, url }: { label: string; value: string; url?: boolean }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
   return (
-    <div className="flex justify-between text-sm gap-4">
+    <div className="flex items-center justify-between text-sm gap-4">
       <span className="text-muted-foreground shrink-0">{label}</span>
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="truncate text-primary hover:underline"
-      >
-        {url.replace(/^https?:\/\//, "")}
-      </a>
+      <div className="flex items-center gap-1.5 min-w-0">
+        {url ? (
+          <a
+            href={value}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="truncate text-primary hover:underline"
+          >
+            {value.replace(/^https?:\/\//, "")}
+          </a>
+        ) : (
+          <span className="truncate">{value}</span>
+        )}
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+        </button>
+      </div>
     </div>
   );
 }
