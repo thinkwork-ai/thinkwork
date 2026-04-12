@@ -1,11 +1,11 @@
 ---
 title: CLI Overview
-description: The @thinkwork/cli npm package. Install, configure, and manage Thinkwork deployments from the command line.
+description: The @thinkwork/cli npm package. Install, configure, and manage ThinkWork deployments from the command line.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-The Thinkwork CLI (`@thinkwork/cli`) is the primary way to deploy and manage Thinkwork. It wraps Terraform with a developer-friendly interface, manages named environment profiles, and provides health-check and diagnostic commands.
+The ThinkWork CLI (`@thinkwork/cli`) is the primary way to deploy and manage ThinkWork. It wraps Terraform with a developer-friendly interface, manages named environment profiles, and provides health-check and diagnostic commands.
 
 ## Installation
 
@@ -50,7 +50,7 @@ The CLI is a Commander.js application that:
 
 ## Environment profiles
 
-An environment profile is a named configuration that maps to a Thinkwork deployment. Profiles are stored at `~/.thinkwork/environments/<name>.json`.
+An environment profile is a named configuration that maps to a ThinkWork deployment. Profiles are stored at `~/.thinkwork/environments/<name>.json`.
 
 ```json
 {
@@ -104,7 +104,7 @@ thinkwork config list -s dev
 
 ## Remote state
 
-Thinkwork uses S3 + DynamoDB for Terraform remote state. The `bootstrap` command creates these resources before the first deploy:
+ThinkWork uses S3 + DynamoDB for Terraform remote state. The `bootstrap` command creates these resources before the first deploy:
 
 ```bash
 thinkwork bootstrap -s dev

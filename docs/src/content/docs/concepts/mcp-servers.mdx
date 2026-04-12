@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 MCP servers expose tools that agents can call during conversations. By registering an MCP server, you give agents access to external capabilities — CRM lookups, task management, database queries — without writing custom skill code.
 
-Thinkwork connects to MCP servers using HTTP streaming (Streamable HTTP transport). The agent container creates an `MCPClient` via the Strands Agent SDK, which handles the full connection lifecycle: initialization, tool discovery, tool calls, and cleanup.
+ThinkWork connects to MCP servers using HTTP streaming (Streamable HTTP transport). The agent container creates an `MCPClient` via the Strands Agent SDK, which handles the full connection lifecycle: initialization, tool discovery, tool calls, and cleanup.
 
 ## How it works
 
@@ -69,7 +69,7 @@ The flow:
 2. Admin assigns MCP server to an agent template
 3. Template syncs to agents
 4. **User** opens the mobile app → **MCP Servers** screen → taps **Connect**
-5. The Thinkwork API discovers the MCP server's OAuth metadata via `/.well-known/oauth-protected-resource`
+5. The ThinkWork API discovers the MCP server's OAuth metadata via `/.well-known/oauth-protected-resource`
 6. User is redirected to the MCP server's authorization endpoint (PKCE flow)
 7. After sign-in, the access token + refresh token are stored in Secrets Manager
 8. On subsequent agent invocations, the token is resolved and sent to the MCP server

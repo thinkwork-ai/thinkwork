@@ -1,6 +1,6 @@
 ---
 title: Configuration Reference
-description: All Terraform variables for a Thinkwork deployment. Required fields, optional overrides, and defaults.
+description: All Terraform variables for a ThinkWork deployment. Required fields, optional overrides, and defaults.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -88,7 +88,7 @@ For development, set `aurora_min_capacity = 0.5`. Aurora Serverless v2 pauses af
 
 ## Memory
 
-Thinkwork always provisions an AWS Bedrock AgentCore Memory resource as
+ThinkWork always provisions an AWS Bedrock AgentCore Memory resource as
 part of `module.thinkwork`. The agent container emits a `CreateEvent` for
 every turn, and AgentCore's built-in strategies (semantic, summarization,
 user-preference, episodic) extract facts in the background. Retention is
@@ -141,7 +141,7 @@ memories land in both stores.
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `tags` | map(string) | `{}` | Additional tags applied to all resources. Merged with Thinkwork's default tags (`Stage`, `ManagedBy: thinkwork`). |
+| `tags` | map(string) | `{}` | Additional tags applied to all resources. Merged with ThinkWork's default tags (`Stage`, `ManagedBy: thinkwork`). |
 
 ## Example: minimal dev config
 
