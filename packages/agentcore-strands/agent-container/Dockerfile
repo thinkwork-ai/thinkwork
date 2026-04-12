@@ -2,7 +2,7 @@
 # Pure Python — no Node.js dependency. Supports any Bedrock model.
 # Build from monorepo root: docker build -f packages/agentcore-strands/agent-container/Dockerfile .
 
-FROM python:3.12-slim
+FROM --platform=linux/arm64 python:3.12-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
