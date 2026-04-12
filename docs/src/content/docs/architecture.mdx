@@ -134,7 +134,8 @@ The app tier is where computation happens. It depends on both lower tiers.
 | Connector Lambdas | One per connector (Slack, GitHub, Google) — handles inbound events |
 | Step Functions | Automation runner, routine executor |
 | EventBridge | Triggers for scheduled automations |
-| ECS Fargate (optional) | Hindsight memory engine (if `memory_engine = "hindsight"`) |
+| Bedrock AgentCore Memory | Always on — automatic per-turn retention into four strategies (semantic, preferences, summaries, episodes) |
+| ECS Fargate (optional) | Hindsight memory add-on (if `enable_hindsight = true`) |
 | CloudFront | CDN for admin app, end-user app static files |
 | SES (sending) | Outbound email from agent responses |
 
@@ -153,7 +154,8 @@ A full round trip from user message to agent response:
    └─ Reads thread history from Aurora
    └─ Downloads assigned skill packs from S3
    └─ Queries Bedrock Knowledge Base (if assigned) → retrieves relevant chunks
-   └─ Reads long-term memories through the default AgentCore LongTerm path (`memory_engine = "managed"`) or Hindsight (ECS)
+   └─ Agent tools read long-term memories from AgentCore Memory (always on) via the `recall()` tool, and optionally from Hindsight (ECS) when `enable_hindsight = true`
+   └─ After the turn completes, the container auto-emits a CreateEvent into AgentCore Memory so background strategies extract facts for future recall
    └─ Builds context: system prompt + selected history + retrieved knowledge + recalled memory + tool config
 
 3. Bedrock inference

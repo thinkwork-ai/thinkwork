@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import sys
+import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
 
@@ -82,14 +83,108 @@ def store_turn(
     turn_index: int = 0,
     **_kwargs,
 ) -> bool:
-    """No-op — Hindsight ingests conversation data via KG Extract worker.
+    """Emit a single-message CreateEvent into AgentCore Memory.
 
-    PRD-41B: Per-turn ingestion removed. Messages are stored in the
-    messages table by the API layer and fed to Hindsight in batches
-    by the KG Extract cron worker.
+    Used by the per-turn auto-retain hook in server.py to feed AgentCore's
+    background strategies (semantic, preferences, summaries, episodes).
+    Best-effort: logs and returns False on any failure; never raises.
     """
-    logger.debug("memory.store_turn no-op (Hindsight via KG Extract)")
-    return True
+    if not AGENTCORE_MEMORY_ID:
+        return False
+    if not ticket_id or not content:
+        return False
+
+    actor_id = os.environ.get("_ASSISTANT_ID", "")
+    if not actor_id:
+        logger.debug("memory.store_turn skipped: _ASSISTANT_ID unset")
+        return False
+
+    try:
+        client = _get_agentcore_client()
+        clean_content = _strip_reasoning(content)
+        if not clean_content:
+            return False
+        client.create_event(
+            memoryId=AGENTCORE_MEMORY_ID,
+            actorId=actor_id,
+            sessionId=ticket_id,
+            eventTimestamp=datetime.now(timezone.utc),
+            payload=[{
+                "conversational": {
+                    "content": {"text": clean_content},
+                    "role": role.upper(),
+                }
+            }],
+        )
+        logger.info("memory.store_turn thread=%s role=%s len=%d",
+                    ticket_id, role, len(clean_content))
+        return True
+    except Exception as e:
+        logger.warning("memory.store_turn failed thread=%s role=%s: %s",
+                       ticket_id, role, e)
+        return False
+
+
+def store_turn_pair(
+    ticket_id: str,
+    user_message: str,
+    assistant_response: str,
+) -> bool:
+    """Emit a single CreateEvent containing both user and assistant turns.
+
+    Cheaper than two separate store_turn calls (one API request vs two),
+    and the AgentCore strategies process the pair as a single conversational
+    unit. Called from the per-turn hook in server.py after the Strands
+    agent produces a response.
+
+    Best-effort: returns False on any failure; never raises.
+    """
+    if not AGENTCORE_MEMORY_ID:
+        return False
+    if not ticket_id:
+        return False
+
+    actor_id = os.environ.get("_ASSISTANT_ID", "")
+    if not actor_id:
+        logger.debug("memory.store_turn_pair skipped: _ASSISTANT_ID unset")
+        return False
+
+    clean_user = _strip_reasoning(user_message or "")
+    clean_assistant = _strip_reasoning(assistant_response or "")
+    if not clean_user and not clean_assistant:
+        return False
+
+    payload = []
+    if clean_user:
+        payload.append({
+            "conversational": {
+                "content": {"text": clean_user},
+                "role": "USER",
+            }
+        })
+    if clean_assistant:
+        payload.append({
+            "conversational": {
+                "content": {"text": clean_assistant},
+                "role": "ASSISTANT",
+            }
+        })
+
+    try:
+        client = _get_agentcore_client()
+        client.create_event(
+            memoryId=AGENTCORE_MEMORY_ID,
+            actorId=actor_id,
+            sessionId=ticket_id,
+            eventTimestamp=datetime.now(timezone.utc),
+            payload=payload,
+        )
+        logger.info("memory.store_turn_pair thread=%s actor=%s user_len=%d asst_len=%d",
+                    ticket_id, actor_id, len(clean_user), len(clean_assistant))
+        return True
+    except Exception as e:
+        logger.warning("memory.store_turn_pair failed thread=%s: %s", ticket_id, e)
+        return False
 
 
 

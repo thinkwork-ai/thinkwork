@@ -165,7 +165,7 @@ jobs:
             -var "account_id=${{ secrets.AWS_ACCOUNT_ID }}" \
             -var "db_password=${{ secrets.DB_PASSWORD }}" \
             -var "database_engine=aurora-serverless" \
-            -var "memory_engine=hindsight" \
+            -var "enable_hindsight=true" \
             -var "api_auth_secret=${{ secrets.API_AUTH_SECRET }}" \
             -var "lambda_zips_dir=$LAMBDA_DIR"
 
@@ -328,7 +328,8 @@ jobs:
           echo "║ S3 Bucket:  $(terraform output -raw bucket_name 2>/dev/null || echo 'N/A')"
           echo "║ Database:   $(terraform output -raw db_cluster_endpoint 2>/dev/null || echo 'N/A')"
           echo "║ ECR:        $(terraform output -raw ecr_repository_url 2>/dev/null || echo 'N/A')"
-          echo "║ Memory:     $(terraform output -raw memory_engine 2>/dev/null || echo 'N/A')"
+          echo "║ Memory:     managed (always on)"
+          echo "║ Hindsight:  $(terraform output -raw hindsight_enabled 2>/dev/null || echo 'N/A')"
           echo "║"
           echo "║ Job Results:"
           echo "║   Terraform Apply: ${{ needs.terraform-apply.result }}"

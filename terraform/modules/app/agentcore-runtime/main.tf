@@ -26,20 +26,14 @@ variable "bucket_name" {
   type        = string
 }
 
-variable "memory_engine" {
-  description = "Memory engine: 'managed' or 'hindsight'. Passed as MEMORY_ENGINE env var to the container."
-  type        = string
-  default     = "managed"
-}
-
 variable "hindsight_endpoint" {
-  description = "Hindsight API endpoint (only used when memory_engine = 'hindsight')"
+  description = "Hindsight API endpoint. Empty string (default) disables Hindsight tools in the container; set to an endpoint URL to enable Hindsight as an add-on alongside the always-on managed memory."
   type        = string
   default     = ""
 }
 
 variable "agentcore_memory_id" {
-  description = "AgentCore Memory resource ID (only used when memory_engine = 'managed')"
+  description = "AgentCore Memory resource ID. Populated automatically by the agentcore-memory module; injected into the container as AGENTCORE_MEMORY_ID for auto-retention."
   type        = string
   default     = ""
 }
@@ -177,7 +171,6 @@ resource "aws_lambda_function" "agentcore" {
     variables = {
       PORT                   = "8080"
       AWS_LWA_PORT           = "8080"
-      MEMORY_ENGINE          = var.memory_engine
       AGENTCORE_MEMORY_ID    = var.agentcore_memory_id
       AGENTCORE_FILES_BUCKET = var.bucket_name
     }

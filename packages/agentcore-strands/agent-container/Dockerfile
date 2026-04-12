@@ -61,10 +61,9 @@ ENV PORT=8080
 ENV HOME=/home/strandsuser
 ENV AWS_REGION=us-east-1
 ENV AGENTCORE_FILES_BUCKET=""
-# Memory engine: "managed" (AgentCore built-in) or "hindsight" (ECS service)
-# Set via Terraform memory_engine variable
-ENV MEMORY_ENGINE=managed
-# AgentCore Memory ID (only used when MEMORY_ENGINE=managed)
+# AgentCore Memory ID — always populated by Terraform. Managed memory is
+# always on; Hindsight is an optional add-on enabled when HINDSIGHT_ENDPOINT
+# is also set in the environment.
 ENV AGENTCORE_MEMORY_ID=""
 
 EXPOSE 8080

@@ -506,22 +506,20 @@ def _call_strands_agent(system_prompt: str, messages: list,
     # 3. Build tool list: memory tools + Nova Act browser + file_read + script skills
     tools = []
 
-    # Memory engine selection: "managed" (AgentCore built-in) or "hindsight" (external service).
-    # Controlled by MEMORY_ENGINE env var, set via Terraform memory_engine variable.
-    _memory_engine = os.environ.get("MEMORY_ENGINE", "managed").lower()
+    # Memory: AgentCore managed memory is ALWAYS registered. Automatic per-turn
+    # retention (store_turn_pair hook in do_POST) feeds the background strategies,
+    # and the remember/recall/forget tools expose explicit reads/writes to the
+    # model. Hindsight is an optional ADD-ON registered alongside when
+    # HINDSIGHT_ENDPOINT is set in the environment.
+    try:
+        from memory_tools import remember, recall, forget
+        tools.extend([remember, recall, forget])
+        logger.info("Managed memory tools registered: remember, recall, forget")
+    except Exception as e:
+        logger.warning("Managed memory tools registration failed: %s", e)
 
-    if _memory_engine == "managed":
-        # AgentCore managed memory: remember/recall/forget tools backed by
-        # the native AgentCore Memory API (4 strategies: semantic facts,
-        # user preferences, session summaries, episodic).
-        try:
-            from memory_tools import remember, recall, forget
-            tools.extend([remember, recall, forget])
-            logger.info("Managed memory tools registered: remember, recall, forget (engine=managed)")
-        except Exception as e:
-            logger.warning("Managed memory tools registration failed: %s", e)
-
-    elif _memory_engine == "hindsight":
+    _hindsight_enabled = bool(os.environ.get("HINDSIGHT_ENDPOINT"))
+    if _hindsight_enabled:
         # Hindsight memory: retain/recall/reflect tools backed by the
         # Hindsight ECS service (semantic + BM25 + entity graph + temporal
         # retrieval with cross-encoder reranking).
@@ -725,9 +723,6 @@ def _call_strands_agent(system_prompt: str, messages: list,
                                "set" if hs_endpoint else "MISSING", hs_bank or "MISSING")
         except Exception as e:
             logger.warning("Hindsight tools registration failed: %s", e)
-
-    else:
-        logger.warning("Unknown MEMORY_ENGINE '%s', no memory tools loaded. Expected 'managed' or 'hindsight'.", _memory_engine)
 
     # Add file_read tool for skill resource access
     try:
@@ -1407,12 +1402,13 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
             if assistant_id:
                 os.environ["_ASSISTANT_ID"] = assistant_id
 
-            # Build messages — prefer history pre-loaded by the API layer from
-            # Aurora `messages` table. The legacy memory.py path is dead since
-            # store_turn() became a no-op in 2310a356 (PRD-41B Phase 3) — there
-            # are no AgentCore Memory events left to retrieve. The new flow is:
-            # chat-agent-invoke selects the last 30 turns and ships them inline
-            # in `messages_history`, and we hand the list to Strands directly.
+            # Build messages from history pre-loaded by the API layer from
+            # Aurora `messages` table. chat-agent-invoke selects the last 30
+            # turns and ships them inline in `messages_history`, and we hand
+            # the list to Strands directly. Automatic retention into AgentCore
+            # Memory happens AFTER the Strands call returns (see the
+            # store_turn_pair hook after _audit_response below) so background
+            # strategies can extract facts for future recall.
             messages = []
             history_payload = payload.get("messages_history") or []
             if isinstance(history_payload, list):
@@ -1524,6 +1520,18 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                 except Exception:
                     allowed = ["web_search"]
                 _audit_response(tenant_id, response_text, allowed)
+
+                # Auto-retain this turn into AgentCore Memory so background
+                # strategies (semantic / preferences / summaries / episodes)
+                # extract facts without the model having to call remember().
+                # Silently skipped when AGENTCORE_MEMORY_ID is unset.
+                # Best-effort — never block the response on retention failure.
+                try:
+                    from memory import store_turn_pair
+                    store_turn_pair(ticket_id, message, response_text)
+                except Exception as retain_err:
+                    logger.warning("auto-retain failed thread=%s: %s",
+                                   ticket_id, retain_err)
 
                 log_agent_invocation(tenant_id=tenant_id, tools_used=["strands_agent"],
                                     duration_ms=duration_ms, status="success")

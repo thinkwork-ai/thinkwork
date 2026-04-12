@@ -138,25 +138,31 @@ variable "database_engine" {
   default     = "aurora-serverless"
 }
 
+variable "enable_hindsight" {
+  description = "Enable Hindsight long-term memory as an optional add-on alongside the always-on AgentCore managed memory. When true, deploys an ECS+ALB service for semantic/entity-graph/cross-encoder retrieval. Default false."
+  type        = bool
+  default     = false
+}
+
 variable "memory_engine" {
-  description = "Memory engine: 'managed' (AgentCore built-in, default) or 'hindsight' (ECS+ALB service, opt-in)"
+  description = "DEPRECATED. Use `enable_hindsight` instead. For backwards compatibility, setting this to 'hindsight' is equivalent to `enable_hindsight = true`. AgentCore managed memory is always on and cannot be disabled."
   type        = string
-  default     = "managed"
+  default     = ""
 
   validation {
-    condition     = contains(["managed", "hindsight"], var.memory_engine)
-    error_message = "memory_engine must be 'managed' or 'hindsight'"
+    condition     = var.memory_engine == "" || contains(["managed", "hindsight"], var.memory_engine)
+    error_message = "memory_engine (deprecated) must be empty, 'managed', or 'hindsight'. Prefer enable_hindsight instead."
   }
 }
 
 variable "hindsight_image_tag" {
-  description = "Hindsight Docker image tag (only used when memory_engine = 'hindsight')"
+  description = "Hindsight Docker image tag (only used when enable_hindsight = true)"
   type        = string
   default     = "0.5.0"
 }
 
 variable "agentcore_memory_id" {
-  description = "AgentCore Memory resource ID (only used when memory_engine = 'managed')"
+  description = "Optional pre-existing AgentCore Memory resource ID. When set, the agentcore-memory module skips provisioning and reuses this ID. Leave empty to auto-provision."
   type        = string
   default     = ""
 }

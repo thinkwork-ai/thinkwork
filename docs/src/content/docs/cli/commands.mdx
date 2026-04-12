@@ -388,8 +388,8 @@ Updates a value in `terraform.tfvars` for the specified stage. The key must be a
 **Example:**
 
 ```bash
-thinkwork config set -s dev memory_engine hindsight
-# ✓ Updated terraform.tfvars: memory_engine = "hindsight"
+thinkwork config set -s dev enable_hindsight true
+# ✓ Updated terraform.tfvars: enable_hindsight = true
 # Run `thinkwork deploy -s dev` to apply.
 
 thinkwork config set -s dev aurora_max_capacity 32

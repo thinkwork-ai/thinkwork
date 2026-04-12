@@ -141,7 +141,7 @@ variable "agentcore_invoke_url" {
 }
 
 variable "hindsight_endpoint" {
-  description = "Hindsight API endpoint (empty when memory_engine = managed)"
+  description = "Hindsight API endpoint (empty when enable_hindsight = false)"
   type        = string
   default     = ""
 }

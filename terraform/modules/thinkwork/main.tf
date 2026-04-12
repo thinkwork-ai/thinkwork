@@ -11,6 +11,12 @@
 
 locals {
   bucket_name = var.bucket_name != "" ? var.bucket_name : "thinkwork-${var.stage}-storage"
+
+  # Hindsight is an optional add-on. Preferred toggle: var.enable_hindsight.
+  # For one release we also honor the deprecated var.memory_engine == "hindsight"
+  # so existing tfvars keep working. The CLI config command also auto-translates
+  # between the two. Remove the legacy branch in a future release.
+  hindsight_enabled = var.enable_hindsight || var.memory_engine == "hindsight"
 }
 
 ################################################################################
@@ -47,12 +53,12 @@ module "cognito" {
   stage  = var.stage
   region = var.region
 
-  create_cognito              = var.create_cognito
-  existing_user_pool_id       = var.existing_user_pool_id
-  existing_user_pool_arn      = var.existing_user_pool_arn
-  existing_admin_client_id     = var.existing_admin_client_id
+  create_cognito            = var.create_cognito
+  existing_user_pool_id     = var.existing_user_pool_id
+  existing_user_pool_arn    = var.existing_user_pool_arn
+  existing_admin_client_id  = var.existing_admin_client_id
   existing_mobile_client_id = var.existing_mobile_client_id
-  existing_identity_pool_id   = var.existing_identity_pool_id
+  existing_identity_pool_id = var.existing_identity_pool_id
 
   google_oauth_client_id     = var.google_oauth_client_id
   google_oauth_client_secret = var.google_oauth_client_secret
@@ -90,7 +96,7 @@ module "s3" {
 module "database" {
   source = "../data/aurora-postgres"
 
-  stage  = var.stage
+  stage = var.stage
 
   create_database               = var.create_database
   existing_db_cluster_arn       = var.existing_db_cluster_arn
@@ -151,9 +157,9 @@ module "api" {
   bucket_name = module.s3.bucket_name
   bucket_arn  = module.s3.bucket_arn
 
-  user_pool_id       = module.cognito.user_pool_id
-  user_pool_arn      = module.cognito.user_pool_arn
-  admin_client_id     = module.cognito.admin_client_id
+  user_pool_id     = module.cognito.user_pool_id
+  user_pool_arn    = module.cognito.user_pool_arn
+  admin_client_id  = module.cognito.admin_client_id
   mobile_client_id = module.cognito.mobile_client_id
 
   appsync_api_url = module.appsync.graphql_api_url
@@ -161,12 +167,27 @@ module "api" {
 
   kb_service_role_arn = module.bedrock_kb.kb_service_role_arn
 
-  lambda_zips_dir      = var.lambda_zips_dir
-  api_auth_secret      = var.api_auth_secret
-  db_password          = var.db_password
+  lambda_zips_dir         = var.lambda_zips_dir
+  api_auth_secret         = var.api_auth_secret
+  db_password             = var.db_password
   agentcore_invoke_url    = module.agentcore.agentcore_invoke_url
   agentcore_function_name = module.agentcore.agentcore_function_name
-  hindsight_endpoint      = var.memory_engine == "hindsight" ? module.hindsight[0].hindsight_endpoint : ""
+  hindsight_endpoint      = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
+}
+
+################################################################################
+# AgentCore Memory (managed) — always created. Provides automatic per-turn
+# retention via memory.store_turn_pair in the agent container. If the caller
+# already has a memory resource, set `agentcore_memory_id` on the root module
+# to short-circuit provisioning.
+################################################################################
+
+module "agentcore_memory" {
+  source = "../app/agentcore-memory"
+
+  stage              = var.stage
+  region             = var.region
+  existing_memory_id = var.agentcore_memory_id
 }
 
 module "agentcore" {
@@ -177,9 +198,8 @@ module "agentcore" {
   region      = var.region
   bucket_name = module.s3.bucket_name
 
-  memory_engine       = var.memory_engine
-  hindsight_endpoint  = var.memory_engine == "hindsight" ? module.hindsight[0].hindsight_endpoint : ""
-  agentcore_memory_id = var.agentcore_memory_id
+  hindsight_endpoint  = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
+  agentcore_memory_id = module.agentcore_memory.memory_id
 }
 
 module "crons" {
@@ -199,7 +219,7 @@ module "job_triggers" {
 }
 
 module "hindsight" {
-  count  = var.memory_engine == "hindsight" ? 1 : 0
+  count  = local.hindsight_enabled ? 1 : 0
   source = "../app/hindsight-memory"
 
   stage                = var.stage

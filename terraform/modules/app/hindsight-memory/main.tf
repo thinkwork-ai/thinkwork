@@ -1,13 +1,15 @@
 ################################################################################
-# Hindsight Memory Engine — App Module
+# Hindsight Memory (Optional Add-On) — App Module
 #
-# Optional ECS Fargate + ALB service for Hindsight long-term memory.
-# Only created when memory_engine = "hindsight". When memory_engine = "managed",
-# this module creates nothing and AgentCore's built-in memory is used instead.
+# Optional ECS Fargate + ALB service for Hindsight long-term memory. Only
+# created when `enable_hindsight = true`. AgentCore managed memory is
+# always on (see ../agentcore-memory) — Hindsight runs alongside it as an
+# add-on, not as a replacement.
 #
-# Hindsight provides retain/recall/reflect tools for cross-thread,
-# cross-session organizational memory. It runs local embeddings + reranker
-# and uses the shared Aurora PostgreSQL instance with pgvector.
+# Hindsight provides hindsight_retain/recall/reflect tools for cross-thread
+# organizational memory with entity-graph traversal and cross-encoder
+# reranking. It runs local embeddings + reranker and uses the shared Aurora
+# PostgreSQL instance with pgvector.
 ################################################################################
 
 variable "stage" {
