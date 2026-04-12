@@ -386,7 +386,7 @@ function ServerDetailDialog({
 
   const handleAuthenticate = () => {
     const apiUrl = import.meta.env.VITE_API_URL || "";
-    const authUrl = `${apiUrl}/api/skills/mcp-oauth/authorize?mcpServerId=${server.id}&tenantSlug=${tenantSlug}`;
+    const authUrl = `${apiUrl}/api/skills/mcp-oauth/authorize?mcpServerId=${server.id}&tenantSlug=${tenantSlug}&force=true`;
     window.open(authUrl, "_blank", "width=600,height=700");
   };
 

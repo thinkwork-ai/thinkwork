@@ -98,7 +98,7 @@ export default function McpServerDetailScreen() {
 
   const handleAuthenticate = async () => {
     if (!server || !tenant?.id || !user?.id) return;
-    const url = `${API_BASE}/api/skills/mcp-oauth/authorize?mcpServerId=${server.id}&userId=${user.id}&tenantId=${tenant.id}`;
+    const url = `${API_BASE}/api/skills/mcp-oauth/authorize?mcpServerId=${server.id}&userId=${user.id}&tenantId=${tenant.id}&force=true`;
     await WebBrowser.openBrowserAsync(url);
     await fetchServer();
   };

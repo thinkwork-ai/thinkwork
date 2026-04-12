@@ -326,11 +326,13 @@ async function mcpOAuthAuthorize(
 	const authConfig = (server.auth_config as Record<string, string>) || {};
 	const apiBaseUrl = `https://${event.headers.host || ""}`;
 	const callbackUrl = `${apiBaseUrl}/api/skills/mcp-oauth/callback`;
+	const forceRediscovery = qs.force === "true";
 
-	// Resolve OAuth endpoints: use auth_config if pre-configured, otherwise discover via RFC 9728
-	let authorizeEndpoint = authConfig.authorize_endpoint || "";
-	let tokenEndpoint = authConfig.token_endpoint || "";
-	let clientId = authConfig.client_id || "";
+	// Always discover via RFC 9728 unless we have cached endpoints AND not forcing rediscovery
+	let authorizeEndpoint = (!forceRediscovery && authConfig.authorize_endpoint) || "";
+	let tokenEndpoint = (!forceRediscovery && authConfig.token_endpoint) || "";
+	let clientId = (!forceRediscovery && authConfig.client_id) || "";
+	let registrationEndpoint = "";
 
 	if (!authorizeEndpoint || !tokenEndpoint) {
 		// Discover via RFC 9728
@@ -345,18 +347,51 @@ async function mcpOAuthAuthorize(
 		const authServerUrl = resourceMeta.authorization_servers?.[0];
 		if (!authServerUrl) return error("No authorization server in resource metadata", 502);
 
-		// Get OIDC config
+		// Get auth server metadata (RFC 8414 or OIDC discovery)
 		const authMetaRes = await fetch(`${authServerUrl}/.well-known/oauth-authorization-server`, { signal: AbortSignal.timeout(10000) })
 			.catch(() => null);
 		const oidcRes = authMetaRes?.ok ? authMetaRes : await fetch(`${authServerUrl}/.well-known/openid-configuration`, { signal: AbortSignal.timeout(10000) });
 		if (!oidcRes.ok) return error("Failed to discover auth server endpoints", 502);
-		const authMeta = await oidcRes.json() as { authorization_endpoint: string; token_endpoint: string };
+		const authMeta = await oidcRes.json() as {
+			authorization_endpoint: string;
+			token_endpoint: string;
+			registration_endpoint?: string;
+		};
 
-		if (!authorizeEndpoint) authorizeEndpoint = authMeta.authorization_endpoint;
-		if (!tokenEndpoint) tokenEndpoint = authMeta.token_endpoint;
+		authorizeEndpoint = authMeta.authorization_endpoint;
+		tokenEndpoint = authMeta.token_endpoint;
+		if (authMeta.registration_endpoint) registrationEndpoint = authMeta.registration_endpoint;
 	}
 
-	if (!clientId) return error("No client_id configured. Set client_id in the MCP server's auth config.", 400);
+	// RFC 7591 Dynamic Client Registration — if no client_id and registration endpoint exists
+	if (!clientId && registrationEndpoint) {
+		const dcrRes = await fetch(registrationEndpoint, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				client_name: `Thinkwork (${server.slug || "mcp"})`,
+				redirect_uris: [callbackUrl],
+				grant_types: ["authorization_code", "refresh_token"],
+				response_types: ["code"],
+				token_endpoint_auth_method: "none",
+			}),
+			signal: AbortSignal.timeout(10000),
+		});
+		if (!dcrRes.ok) {
+			const body = await dcrRes.text();
+			return error(`Dynamic Client Registration failed: ${dcrRes.status} ${body}`, 502);
+		}
+		const dcrData = await dcrRes.json() as { client_id: string };
+		clientId = dcrData.client_id;
+
+		// Cache the discovered endpoints + client_id for next time
+		await db.update(tenantMcpServers).set({
+			auth_config: { authorize_endpoint: authorizeEndpoint, token_endpoint: tokenEndpoint, client_id: clientId },
+			updated_at: new Date(),
+		}).where(eq(tenantMcpServers.id, mcpServerId));
+	}
+
+	if (!clientId) return error("No client_id — server has no registration endpoint and no client_id configured", 400);
 	if (!authorizeEndpoint) return error("Could not resolve authorize endpoint", 502);
 
 	// Generate PKCE code_verifier + code_challenge (required for public clients)
