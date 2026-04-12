@@ -238,15 +238,6 @@ export default function McpServerDetailScreen() {
 
           {/* Actions */}
           <View className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-hidden">
-            {/* Reconnect / Test */}
-            <Pressable
-              onPress={onRefresh}
-              className="flex-row items-center gap-3 px-4 py-3.5 active:bg-neutral-50 dark:active:bg-neutral-800 border-b border-neutral-100 dark:border-neutral-800"
-            >
-              <RefreshCw size={18} color={colors.primary} />
-              <Text className="text-sm" style={{ color: colors.primary }}>Reconnect</Text>
-            </Pressable>
-
             {/* Authenticate (OAuth only) */}
             {isOAuth && (
               <Pressable
