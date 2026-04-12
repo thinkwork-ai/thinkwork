@@ -69,6 +69,13 @@ strategies_json='[
       "name": "summaries",
       "namespaces": ["session_{sessionId}"]
     }
+  },
+  {
+    "customMemoryStrategy": {
+      "name": "episodes",
+      "description": "Episodic memory — stores experience-based memories per actor and session",
+      "namespaces": ["episodes_{actorId}/{sessionId}"]
+    }
   }
 ]'
 
