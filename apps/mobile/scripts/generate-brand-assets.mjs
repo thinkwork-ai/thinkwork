@@ -111,13 +111,11 @@ function brainTightRectSvg(width, strokeWidth = 0) {
 // ---------------------------------------------------------------------------
 
 // iOS app icon — MUST be opaque (Apple rejects transparent icons).
-// Heavy stroke (1.6) so the node-graph reads at the home-screen scale,
-// and the brain fills 94% of the tile width so the mark dominates the
-// icon the same way it dominates the in-app logo. iOS rounds corners
-// automatically; the brain's widest nodes stay inside the squircle
-// mask at this ratio.
+// Heavy stroke (1.6) so the node-graph reads at the home-screen scale.
+// Brain fills 85% of the tile width — enough to dominate the icon
+// while leaving a visible margin inside the iOS squircle mask.
 await renderPng(
-  brainSvg(1024, 0.94, BG, 1.6),
+  brainSvg(1024, 0.85, BG, 1.6),
   path.join(expoAssets, "icon.png")
 );
 

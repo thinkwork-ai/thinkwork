@@ -52,7 +52,8 @@ export default function VerifyEmailScreen() {
             <View className="mb-3">
               <Image
                 source={require("@/assets/logo.png")}
-                style={{ width: 64, height: 64, borderRadius: 12 }}
+                style={{ width: 80, height: 64 }}
+                resizeMode="contain"
               />
             </View>
             <CardTitle>
