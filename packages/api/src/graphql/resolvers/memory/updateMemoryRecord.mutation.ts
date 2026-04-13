@@ -1,20 +1,26 @@
 /**
- * updateMemoryRecord — Update a memory's text in Hindsight.
- *
- * PRD-41B Phase 5: Replaces AgentCore Memory update with direct Postgres update.
+ * updateMemoryRecord — Update a memory record's text through the active
+ * engine adapter. Engines without an `update` capability throw a clear
+ * error.
  */
 
 import type { GraphQLContext } from "../../context.js";
-import { db, sql } from "../../utils.js";
+import { getMemoryServices } from "../../../lib/memory/index.js";
 
-export const updateMemoryRecord = async (_parent: any, args: any, _ctx: GraphQLContext) => {
-	const { memoryRecordId, content } = args as { memoryRecordId: string; content: string };
+export const updateMemoryRecord = async (
+	_parent: any,
+	args: any,
+	_ctx: GraphQLContext,
+) => {
+	const { memoryRecordId, content } = args as {
+		memoryRecordId: string;
+		content: string;
+	};
 
-	await db.execute(sql`
-		UPDATE hindsight.memory_units
-		SET text = ${content}, updated_at = NOW()
-		WHERE id = ${memoryRecordId}::uuid
-	`);
-
+	const { adapter, config } = getMemoryServices();
+	if (!adapter.update) {
+		throw new Error(`Memory update is not supported on engine "${config.engine}"`);
+	}
+	await adapter.update(memoryRecordId, content);
 	return true;
 };

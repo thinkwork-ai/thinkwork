@@ -13,10 +13,22 @@ locals {
   bucket_name = var.bucket_name != "" ? var.bucket_name : "thinkwork-${var.stage}-storage"
 
   # Hindsight is an optional add-on. Preferred toggle: var.enable_hindsight.
-  # For one release we also honor the deprecated var.memory_engine == "hindsight"
-  # so existing tfvars keep working. The CLI config command also auto-translates
-  # between the two. Remove the legacy branch in a future release.
+  # For one release we also honor the legacy var.memory_engine == "hindsight"
+  # so existing tfvars keep working.
   hindsight_enabled = var.enable_hindsight || var.memory_engine == "hindsight"
+
+  # Canonical long-term memory engine for this deployment. Exactly one engine
+  # is active per deployment for recall/inspect/export. Auto-selects from
+  # enable_hindsight when var.memory_engine is left empty so existing deploys
+  # keep working without config changes. Legacy value "managed" maps to
+  # "agentcore".
+  resolved_memory_engine = (
+    var.memory_engine == "hindsight" || var.memory_engine == "agentcore"
+    ? var.memory_engine
+    : var.memory_engine == "managed"
+    ? "agentcore"
+    : local.hindsight_enabled ? "hindsight" : "agentcore"
+  )
 }
 
 ################################################################################
@@ -174,6 +186,7 @@ module "api" {
   agentcore_function_arn  = module.agentcore.agentcore_function_arn
   hindsight_endpoint      = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
   agentcore_memory_id     = module.agentcore_memory.memory_id
+  memory_engine           = local.resolved_memory_engine
   admin_url               = "https://${module.admin_site.distribution_domain}"
   docs_url                = "https://${module.docs_site.distribution_domain}"
   appsync_realtime_url    = module.appsync.graphql_realtime_url
@@ -206,6 +219,7 @@ module "agentcore" {
 
   hindsight_endpoint  = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
   agentcore_memory_id = module.agentcore_memory.memory_id
+  memory_engine       = local.resolved_memory_engine
 }
 
 module "crons" {

@@ -1,15 +1,15 @@
 /**
- * memoryGraph — Fetch knowledge graph from Hindsight for visualization.
+ * memoryGraph — Fetch knowledge graph from the active memory engine.
  *
- * Reads directly from Hindsight's tables in the `hindsight` schema
- * on the shared Aurora instance.
- *
- * Nodes = entities (people, orgs, concepts) — colored by ontology_type from metadata
- * Edges = entity cooccurrences — all labeled "COOCCURS"
+ * Capability-gated: engines without graph inspection (AgentCore) return
+ * an empty graph. Hindsight's entity / cooccurrence tables live directly
+ * in the shared Aurora instance so the SQL path stays inline here,
+ * gated on the adapter's `inspectGraph` capability.
  */
 
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, sql, agents } from "../../utils.js";
+import { getMemoryServices } from "../../../lib/memory/index.js";
 
 export const memoryGraph = async (
 	_parent: unknown,
@@ -18,7 +18,6 @@ export const memoryGraph = async (
 ) => {
 	const { assistantId } = args;
 
-	// Verify agent belongs to tenant and get slug (Hindsight bank_id)
 	const [agent] = await db
 		.select({ id: agents.id, tenant_id: agents.tenant_id, slug: agents.slug })
 		.from(agents)
@@ -28,12 +27,17 @@ export const memoryGraph = async (
 		throw new Error("Agent not found or access denied");
 	}
 
+	const { inspect: inspectService } = getMemoryServices();
+	const capabilities = await inspectService.capabilities();
+	if (!capabilities.inspectGraph) {
+		return { nodes: [], edges: [] };
+	}
+
 	const bankId = agent.slug;
 	if (!bankId) {
 		return { nodes: [], edges: [] };
 	}
 
-	// Query entities from Hindsight schema
 	let entityRows: any;
 	try {
 		entityRows = await db.execute(sql`
@@ -44,11 +48,9 @@ export const memoryGraph = async (
 			LIMIT 200
 		`);
 	} catch {
-		// Hindsight schema may not exist (managed memory engine)
 		return { nodes: [], edges: [] };
 	}
 
-	// Query entity cooccurrences (edges)
 	const edgeRows = await db.execute(sql`
 		SELECT
 			e1.id AS source_id,
@@ -62,7 +64,6 @@ export const memoryGraph = async (
 		LIMIT 500
 	`);
 
-	// Build nodes
 	const nodes = (entityRows.rows || []).map((r: any) => {
 		let meta: any = {};
 		try {
@@ -78,7 +79,6 @@ export const memoryGraph = async (
 		};
 	});
 
-	// Build edges
 	const maxCooccurrence = Math.max(
 		1,
 		...(edgeRows.rows || []).map((r: any) => Number(r.cooccurrence_count) || 1),

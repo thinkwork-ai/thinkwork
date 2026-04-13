@@ -146,6 +146,16 @@ variable "agentcore_memory_id" {
   default     = ""
 }
 
+variable "memory_engine" {
+  description = "Active long-term memory engine for this deployment. Exactly one engine is canonical for recall/inspect/export. Defaults to 'hindsight' for hosted ThinkWork; self-hosted/serverless deployments may choose 'agentcore'."
+  type        = string
+  default     = "hindsight"
+  validation {
+    condition     = contains(["hindsight", "agentcore"], var.memory_engine)
+    error_message = "memory_engine must be 'hindsight' or 'agentcore'."
+  }
+}
+
 variable "agentcore_function_name" {
   description = "AgentCore Lambda function name (for direct SDK invoke)"
   type        = string

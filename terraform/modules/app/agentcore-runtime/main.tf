@@ -38,6 +38,16 @@ variable "agentcore_memory_id" {
   default     = ""
 }
 
+variable "memory_engine" {
+  description = "Active long-term memory engine ('hindsight' or 'agentcore'). Controls whether the container auto-retains each turn into AgentCore Memory after a response; when 'hindsight' is active, auto-retention is skipped so we don't pay for writes no recall path reads."
+  type        = string
+  default     = "hindsight"
+  validation {
+    condition     = contains(["hindsight", "agentcore"], var.memory_engine)
+    error_message = "memory_engine must be 'hindsight' or 'agentcore'."
+  }
+}
+
 ################################################################################
 # ECR Repository
 ################################################################################
@@ -192,6 +202,7 @@ resource "aws_lambda_function" "agentcore" {
       AWS_LWA_PORT           = "8080"
       AGENTCORE_MEMORY_ID    = var.agentcore_memory_id
       AGENTCORE_FILES_BUCKET = var.bucket_name
+      MEMORY_ENGINE          = var.memory_engine
     }
   }
 
