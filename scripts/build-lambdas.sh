@@ -28,6 +28,35 @@ ESBUILD_FLAGS=(
   --external:aws-sdk
 )
 
+# graphql-http uses memory adapter commands (BatchCreateMemoryRecordsCommand,
+# BatchUpdateMemoryRecordsCommand, DeleteMemoryRecordCommand) that are newer
+# than the @aws-sdk/client-bedrock-agentcore version shipped in the Lambda
+# Node 20 runtime. Bundle that one SDK package with graphql-http so the
+# pinned node_modules version is used instead of the runtime's.
+GRAPHQL_HTTP_ESBUILD_FLAGS=(
+  --bundle
+  --platform=node
+  --target=node20
+  --format=esm
+  --minify
+  --sourcemap
+  --external:@aws-sdk/client-bedrock
+  --external:@aws-sdk/client-cloudwatch-logs
+  --external:@aws-sdk/client-lambda
+  --external:@aws-sdk/client-s3
+  --external:@aws-sdk/client-secrets-manager
+  --external:@aws-sdk/client-ses
+  --external:@aws-sdk/client-sns
+  --external:@aws-sdk/client-ssm
+  --external:@aws-sdk/client-bedrock-agent
+  --external:@aws-sdk/client-bedrock-agent-runtime
+  --external:@aws-sdk/client-dynamodb
+  --external:@aws-sdk/lib-dynamodb
+  --external:@aws-sdk/client-sts
+  --external:@aws-sdk/credential-providers
+  --external:aws-sdk
+)
+
 build_handler() {
   local name="$1"
   local entry="$2"
@@ -39,8 +68,12 @@ build_handler() {
   fi
 
   mkdir -p "$out_dir"
+  local flags_ref="ESBUILD_FLAGS[@]"
+  if [ "$name" = "graphql-http" ]; then
+    flags_ref="GRAPHQL_HTTP_ESBUILD_FLAGS[@]"
+  fi
   npx esbuild "$entry" \
-    "${ESBUILD_FLAGS[@]}" \
+    "${!flags_ref}" \
     --outfile="$out_dir/index.mjs" \
     --banner:js="import{createRequire}from'module';const require=createRequire(import.meta.url);" \
     2>/dev/null
