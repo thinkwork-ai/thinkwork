@@ -36,22 +36,19 @@ cd "$REPO_ROOT"
 pnpm --filter @thinkwork/www build
 
 echo "▸ Syncing to S3 bucket: $WWW_BUCKET ..."
-# Pass 1: immutable hashed assets — cache forever.
+# Pass 1: content-hashed assets under /_astro/ — safe to mark immutable.
+aws s3 sync apps/www/dist/_astro/ "s3://${WWW_BUCKET}/_astro/" \
+  --delete \
+  --region "$REGION" \
+  --cache-control "public, max-age=31536000, immutable"
+
+# Pass 2: everything else (HTML, sitemaps, favicon, og-image, robots) —
+# short cache so fixed-path assets update on redeploy without being
+# stuck in browser cache for a year.
 aws s3 sync apps/www/dist/ "s3://${WWW_BUCKET}/" \
   --delete \
   --region "$REGION" \
-  --exclude "*.html" \
-  --exclude "*.xml" \
-  --exclude "*.txt" \
-  --cache-control "public, max-age=31536000, immutable"
-
-# Pass 2: HTML + sitemaps + robots — short cache so releases propagate.
-aws s3 sync apps/www/dist/ "s3://${WWW_BUCKET}/" \
-  --region "$REGION" \
-  --exclude "*" \
-  --include "*.html" \
-  --include "*.xml" \
-  --include "*.txt" \
+  --exclude "_astro/*" \
   --cache-control "public, max-age=60, must-revalidate"
 
 echo "▸ Invalidating CloudFront cache: $WWW_CF_ID ..."
