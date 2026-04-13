@@ -1,4 +1,6 @@
 ---
+import BrainMark from "./BrainMark.astro";
+
 const docsUrl = "https://docs.thinkwork.ai";
 const githubUrl = "https://github.com/thinkwork-ai/thinkwork";
 ---
@@ -6,11 +8,7 @@ const githubUrl = "https://github.com/thinkwork-ai/thinkwork";
 <footer class="border-t border-white/5 bg-[#05080c]">
   <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 px-6 py-10 md:flex-row">
     <div class="flex items-center gap-2.5">
-      <span class="flex h-7 w-7 items-center justify-center rounded-md border border-brand/40 bg-brand/10 text-brand">
-        <svg viewBox="0 0 24 24" fill="none" class="h-3.5 w-3.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 6h16M4 12h10M4 18h16" />
-        </svg>
-      </span>
+      <BrainMark class="text-brand" size={28} title="ThinkWork" />
       <span class="text-sm font-semibold tracking-tight text-slate-300">ThinkWork</span>
     </div>
     <div class="flex items-center gap-6 text-sm text-slate-500">
