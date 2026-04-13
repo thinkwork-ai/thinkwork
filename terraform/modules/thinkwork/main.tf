@@ -78,11 +78,13 @@ module "cognito" {
 
   admin_callback_urls = concat(
     var.admin_callback_urls,
-    ["https://${module.admin_site.distribution_domain}", "https://${module.admin_site.distribution_domain}/auth/callback"]
+    ["https://${module.admin_site.distribution_domain}", "https://${module.admin_site.distribution_domain}/auth/callback"],
+    var.admin_domain != "" ? ["https://${var.admin_domain}", "https://${var.admin_domain}/auth/callback"] : []
   )
   admin_logout_urls = concat(
     var.admin_logout_urls,
-    ["https://${module.admin_site.distribution_domain}"]
+    ["https://${module.admin_site.distribution_domain}"],
+    var.admin_domain != "" ? ["https://${var.admin_domain}"] : []
   )
   mobile_callback_urls = var.mobile_callback_urls
   mobile_logout_urls   = var.mobile_logout_urls
