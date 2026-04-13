@@ -28,14 +28,19 @@ terraform {
 }
 
 locals {
-  apex         = var.domain
-  www          = "www.${var.domain}"
-  docs         = "docs.${var.domain}"
-  docs_enabled = var.docs_cloudfront_domain_name != ""
-  name_id      = replace(var.domain, ".", "-")
+  apex    = var.domain
+  www     = "www.${var.domain}"
+  docs    = "docs.${var.domain}"
+  name_id = replace(var.domain, ".", "-")
 
   # ACM SANs: always include www, conditionally include docs.
-  cert_sans = local.docs_enabled ? [local.www, local.docs] : [local.www]
+  # Gated on var.include_docs (a plain bool) rather than on the docs
+  # CloudFront output to keep the dependency graph acyclic.
+  cert_sans = var.include_docs ? [local.www, local.docs] : [local.www]
+
+  # The docs CNAME record can only be created when we both intend to
+  # serve docs AND have the distribution domain to point at.
+  create_docs_record = var.include_docs && var.docs_cloudfront_domain_name != ""
 }
 
 ################################################################################
@@ -203,7 +208,7 @@ resource "cloudflare_record" "www_redirect" {
 ################################################################################
 
 resource "cloudflare_record" "docs" {
-  count = local.docs_enabled ? 1 : 0
+  count = local.create_docs_record ? 1 : 0
 
   zone_id = var.cloudflare_zone_id
   name    = local.docs

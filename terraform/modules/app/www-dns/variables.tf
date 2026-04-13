@@ -18,8 +18,14 @@ variable "cloudfront_domain_name" {
   type        = string
 }
 
+variable "include_docs" {
+  description = "When true, add docs.<domain> to the ACM cert SANs and create a Cloudflare CNAME for it. Separated from docs_cloudfront_domain_name to avoid a Terraform dependency cycle (distribution depends on cert, so the cert can't depend on the distribution output)."
+  type        = bool
+  default     = false
+}
+
 variable "docs_cloudfront_domain_name" {
-  description = "CloudFront distribution domain name for the docs site. When set, docs.<domain> is added to the ACM cert SANs and a Cloudflare CNAME is created pointing at this distribution."
+  description = "CloudFront distribution domain name for the docs site. Used as the target for the docs.<domain> Cloudflare CNAME when include_docs is true."
   type        = string
   default     = ""
 }

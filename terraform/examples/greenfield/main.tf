@@ -171,10 +171,16 @@ module "www_dns" {
   count  = local.www_dns_enabled ? 1 : 0
   source = "../../modules/app/www-dns"
 
-  stage                       = var.stage
-  domain                      = var.www_domain
-  cloudflare_zone_id          = var.cloudflare_zone_id
-  cloudfront_domain_name      = module.thinkwork.www_distribution_domain
+  stage                  = var.stage
+  domain                 = var.www_domain
+  cloudflare_zone_id     = var.cloudflare_zone_id
+  cloudfront_domain_name = module.thinkwork.www_distribution_domain
+
+  # Docs: include_docs is a plain bool (no output reference) so the
+  # ACM cert SAN list doesn't depend on the docs distribution output,
+  # which itself depends on the cert. docs_cloudfront_domain_name is
+  # read only after the cert is created, for the CNAME record.
+  include_docs                = true
   docs_cloudfront_domain_name = module.thinkwork.docs_distribution_domain
 }
 
