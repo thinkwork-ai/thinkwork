@@ -32,9 +32,9 @@ export function BreadcrumbProvider({ children }: { children: ReactNode }) {
         .reverse()
         .map((b) => b.label)
         .join(" · ");
-      document.title = `${title} · Thinkwork`;
+      document.title = `${title} · ThinkWork`;
     } else {
-      document.title = "Thinkwork Admin";
+      document.title = "ThinkWork Admin";
     }
   }, [breadcrumbs]);
 
