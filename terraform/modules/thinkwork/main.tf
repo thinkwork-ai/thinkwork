@@ -281,3 +281,17 @@ module "docs_site" {
   custom_domain   = var.docs_domain
   certificate_arn = var.docs_certificate_arn
 }
+
+################################################################################
+# Public Website (www)
+################################################################################
+
+module "www_site" {
+  source = "../app/static-site"
+
+  stage           = var.stage
+  site_name       = "www"
+  custom_domain   = var.www_domain
+  certificate_arn = var.www_certificate_arn
+  # is_spa defaults to false — SSG output, directory URIs get rewritten to index.html
+}

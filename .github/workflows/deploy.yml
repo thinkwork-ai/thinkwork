@@ -30,6 +30,7 @@ jobs:
       skills: ${{ steps.filter.outputs.skills }}
       admin: ${{ steps.filter.outputs.admin }}
       docs: ${{ steps.filter.outputs.docs }}
+      www: ${{ steps.filter.outputs.www }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -52,6 +53,8 @@ jobs:
               - 'apps/admin/**'
             docs:
               - 'docs/**'
+            www:
+              - 'apps/www/**'
 
   # ── Build Lambda zips ────────────────────────────────────────────
   # Always build — TF needs the zips to keep API Gateway routes intact.
@@ -154,6 +157,8 @@ jobs:
 
       - name: Terraform Apply
         working-directory: terraform/examples/greenfield
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           LAMBDA_DIR=""
           if [ -d "${{ github.workspace }}/dist/lambdas" ]; then
@@ -174,7 +179,9 @@ jobs:
             -var "google_oauth_client_id=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}" \
             -var "google_oauth_client_secret=${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}" \
             -var "lambda_zips_dir=$LAMBDA_DIR" \
-            -var "pre_signup_lambda_zip=$PRE_SIGNUP_ZIP"
+            -var "pre_signup_lambda_zip=$PRE_SIGNUP_ZIP" \
+            -var "www_domain=${{ vars.WWW_DOMAIN }}" \
+            -var "cloudflare_zone_id=${{ vars.CLOUDFLARE_ZONE_ID }}"
 
   # ── Build & deploy admin app ─────────────────────────────────────
   build-admin:
@@ -248,6 +255,41 @@ jobs:
       - name: Build & deploy
         run: bash scripts/build-docs.sh ${{ env.STAGE }}
 
+  # ── Build & deploy public website (apps/www) ───────────────────
+  build-www:
+    name: Build & Deploy Www
+    needs: [terraform-apply]
+    if: always() && needs.terraform-apply.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: terraform/examples/greenfield
+        run: |
+          terraform init
+          terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
+
+      - name: Build & deploy
+        run: bash scripts/build-www.sh ${{ env.STAGE }}
+
   # ── Bootstrap workspace + skills ─────────────────────────────────
   bootstrap:
     name: Bootstrap
@@ -297,7 +339,7 @@ jobs:
   # ── Deploy summary ──────────────────────────────────────────────
   summary:
     name: Deploy Summary
-    needs: [terraform-apply, build-admin, build-docs, bootstrap]
+    needs: [terraform-apply, build-admin, build-docs, build-www, bootstrap]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:
@@ -329,6 +371,7 @@ jobs:
           echo "║"
           echo "║ Admin App:  $(terraform output -raw admin_url 2>/dev/null || echo 'N/A')"
           echo "║ Docs Site:  $(terraform output -raw docs_url 2>/dev/null || echo 'N/A')"
+          echo "║ Www Site:   $(terraform output -raw www_url 2>/dev/null || echo 'N/A')"
           echo "║ API:        $(terraform output -raw api_endpoint 2>/dev/null || echo 'N/A')"
           echo "║ AppSync:    $(terraform output -raw appsync_api_url 2>/dev/null || echo 'N/A')"
           echo "║ Hindsight:  $(terraform output -raw hindsight_endpoint 2>/dev/null || echo 'N/A')"
@@ -342,5 +385,6 @@ jobs:
           echo "║   Terraform Apply: ${{ needs.terraform-apply.result }}"
           echo "║   Build Admin:     ${{ needs.build-admin.result }}"
           echo "║   Build Docs:      ${{ needs.build-docs.result }}"
+          echo "║   Build Www:       ${{ needs.build-www.result }}"
           echo "║   Bootstrap:       ${{ needs.bootstrap.result }}"
           echo "╚══════════════════════════════════════════════════════════════╝"

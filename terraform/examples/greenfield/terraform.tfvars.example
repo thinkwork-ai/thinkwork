@@ -29,3 +29,13 @@ db_password = "CHANGE_ME_strong_password_here"
 
 # Pre-signup Lambda (optional — leave empty if not using custom pre-signup logic)
 # pre_signup_lambda_zip = "./lambdas/pre-signup.zip"
+
+# Public website (apps/www) custom domain.
+# Leave www_domain empty to skip the custom domain and serve on the raw
+# CloudFront URL. When set, you must also provide cloudflare_zone_id below —
+# the www-dns module creates the ACM cert, apex CNAME, and www→apex redirect.
+#
+# The Cloudflare API token is read from the CLOUDFLARE_API_TOKEN environment
+# variable. NEVER put the token in this file.
+# www_domain         = "thinkwork.ai"
+# cloudflare_zone_id = "your-cloudflare-zone-id"
