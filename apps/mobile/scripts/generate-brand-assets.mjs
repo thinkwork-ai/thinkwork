@@ -38,18 +38,27 @@ const BRAND = "#38bdf8";
 // ---------------------------------------------------------------------------
 
 /**
- * Build an SVG that centers the brain inside a canvas of `size`.
+ * Build an SVG that centers the brain inside a square canvas of `size`.
  *
- * @param {number}        size           canvas width/height in px
- * @param {number}        iconFillRatio  0..1, portion of the canvas the brain occupies
- * @param {string|null}   bg             background color, or null for transparent
- * @param {number}        strokeWidth    stroke width in user-space units (0 = fill only).
- *                                       Useful for the iOS icon where the node-graph
- *                                       lines need extra weight to survive home-screen scale.
+ * `widthFillRatio` is the fraction of the CANVAS WIDTH the brain should
+ * occupy — since the brain is wider than it is tall (aspect ~1.241:1),
+ * fitting it to the full width is what makes it feel big in a square
+ * tile. Height is derived from the brain aspect and centered vertically.
+ *
+ * @param {number}        size             canvas width/height in px
+ * @param {number}        widthFillRatio   0..1, brain width / canvas width
+ * @param {string|null}   bg               background color, or null for transparent
+ * @param {number}        strokeWidth      stroke width in user-space units (0 = fill only).
+ *                                         Useful for the iOS icon where the node-graph
+ *                                         lines need extra weight to survive home-screen scale.
  */
-function brainSvg(size, iconFillRatio, bg, strokeWidth = 0) {
-  const iconSize = Math.round(size * iconFillRatio);
-  const offset = Math.round((size - iconSize) / 2);
+function brainSvg(size, widthFillRatio, bg, strokeWidth = 0) {
+  const [, , vbW, vbH] = BRAIN_VIEWBOX.split(" ").map(Number);
+  const brainAspect = vbW / vbH;
+  const brainW = Math.round(size * widthFillRatio);
+  const brainH = Math.round(brainW / brainAspect);
+  const offsetX = Math.round((size - brainW) / 2);
+  const offsetY = Math.round((size - brainH) / 2);
   const bgRect = bg
     ? `<rect width="${size}" height="${size}" fill="${bg}"/>`
     : "";
@@ -59,7 +68,7 @@ function brainSvg(size, iconFillRatio, bg, strokeWidth = 0) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
   ${bgRect}
-  <svg x="${offset}" y="${offset}" width="${iconSize}" height="${iconSize}" viewBox="${BRAIN_VIEWBOX}" fill="${BRAND}">
+  <svg x="${offsetX}" y="${offsetY}" width="${brainW}" height="${brainH}" viewBox="${BRAIN_VIEWBOX}" fill="${BRAND}">
     <g transform="${BRAIN_GROUP_TRANSFORM}">
       <path d="${BRAIN_PATH_D}"${strokeAttrs} />
     </g>
@@ -102,12 +111,13 @@ function brainTightRectSvg(width, strokeWidth = 0) {
 // ---------------------------------------------------------------------------
 
 // iOS app icon — MUST be opaque (Apple rejects transparent icons).
-// Heavier stroke on the node-graph lines so they survive the home-screen
-// downscale, and a larger fill so the mark dominates the tile. iOS
-// rounds corners automatically; 0.82 keeps the outer nodes safely away
-// from the corner clip.
+// Heavy stroke (1.6) so the node-graph reads at the home-screen scale,
+// and the brain fills 94% of the tile width so the mark dominates the
+// icon the same way it dominates the in-app logo. iOS rounds corners
+// automatically; the brain's widest nodes stay inside the squircle
+// mask at this ratio.
 await renderPng(
-  brainSvg(1024, 0.82, BG, 1.0),
+  brainSvg(1024, 0.94, BG, 1.6),
   path.join(expoAssets, "icon.png")
 );
 
