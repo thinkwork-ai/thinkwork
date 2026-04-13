@@ -1,68 +1,101 @@
 ---
 title: Long-term Memory
-description: How ThinkWork stores and recalls information from prior interactions, using AWS AgentCore managed memory with automatic retention and Hindsight as an optional add-on.
+description: How ThinkWork carries learned context forward through a stable memory contract above pluggable memory engines.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Long-term memory is how ThinkWork carries information forward from previous work. Unlike document knowledge, which starts with uploaded source files, long-term memory starts with what happened in threads.
+Long-term memory is how ThinkWork carries useful context forward from prior work without turning the thread record into the only recall mechanism.
+
+Unlike document knowledge, which starts from uploaded source material, long-term memory starts from what the system learned across interactions.
 
 ## What long-term memory means in ThinkWork
 
-Long-term memory helps agents retain useful facts across turns or across related work, such as:
+Long-term memory is for context like:
 
-- User or team preferences
-- Ongoing project context
-- Prior decisions and follow-up items
-- Summaries synthesized from earlier conversations
+- user or team preferences
+- ongoing project context
+- prior decisions and follow-up items
+- durable facts worth recalling across threads
+- summaries or abstractions of earlier work
 
-ThinkWork ships with **AgentCore managed memory always on** and **Hindsight as an optional add-on** that runs alongside it.
+The important product rule is simple:
 
-## AgentCore managed memory — always on
+- **Threads are the canonical record of work**
+- **Long-term memory is the selective carry-forward layer**
 
-Every ThinkWork deployment provisions an AWS Bedrock AgentCore Memory resource as part of the `thinkwork` Terraform module. The agent container automatically emits a `CreateEvent` for every turn (user message + assistant response), and AgentCore's background strategies extract facts into four namespaces:
+## The ThinkWork memory contract
 
-- **Semantic** — similarity-based recall of cross-thread facts
-- **Summarization** — synthesized per-session carry-forward context
-- **User-preference** — durable preference capture
-- **Episodic** — remembered events and prior interactions
+ThinkWork owns the memory contract above any one backend.
 
-The agent reads them back via the `recall()` tool. There is no need for the model to call `remember()` for routine facts — it only exists for user-driven "please remember X" requests. Retention is automatic and requires zero prompting.
+That means ThinkWork should provide the stable semantics for:
 
-## Hindsight — optional add-on
+- retain
+- recall
+- inspect
+- export
+- context assembly
 
-**Hindsight** is an additional long-term memory system that runs alongside managed memory, not instead of it. It runs on ECS Fargate behind an ALB and adds a fuller explicit memory lifecycle with entity-graph traversal and cross-encoder reranking:
+The underlying engine can vary.
 
-- **Retain** stores candidate memories from conversations
-- **Recall** retrieves relevant memories with entity-graph and BM25 signals
-- **Reflect** periodically synthesizes and compresses memory over time
+Today, ThinkWork supports two long-term memory adapters:
 
-Enable it with `enable_hindsight = true` in your deployment config. When enabled, the agent gets both tool sets — managed `remember()`/`recall()`/`forget()` AND `hindsight_retain`/`hindsight_recall`/`hindsight_reflect`. The `remember()` tool dual-writes to both backends so explicit memories land in both systems.
+- **[Hindsight](https://hindsight.vectorize.io/)**
+- **[AgentCore Memory](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory.html)**
+
+Exactly **one** engine is canonical per deployment.
+
+- **Hosted ThinkWork** defaults to **[Hindsight](https://hindsight.vectorize.io/)**
+- **Self-hosted and serverless-friendly deployments** may choose **[AgentCore Memory](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory.html)**
 
 <Aside type="tip">
-Managed memory gives you automatic retention out of the box. Only enable Hindsight if you need its entity-graph retrieval, cross-encoder reranking, or batch reflection features — they're not a replacement for managed memory.
+The engine is pluggable. The contract is the stable part.
 </Aside>
 
-## Long-term memory versus thread history
+## Short-term context versus long-term memory
 
-Thread history is the complete record. Long-term memory is the selective carry-forward layer.
+This distinction matters a lot:
 
-- **Thread history** preserves everything in the thread database
-- **Long-term memory** surfaces only the pieces worth reusing later
+- **Short-term and session context** come from thread history
+- **Long-term memory** provides selective recall across prior work
 
-That distinction matters because long threads are still auditable even when only a smaller set of facts is recalled into the next turn.
+Long-term memory should help the system avoid rereading everything. It should not pretend to replace the thread record.
+
+## Current engine choices
+
+### [Hindsight](https://hindsight.vectorize.io/)
+
+Hindsight is the richer long-term memory path and the default for hosted ThinkWork.
+
+It is the better fit when you want:
+- stronger inspectability
+- a clearer portable memory plane
+- richer recall behavior
+- future graph and reflection direction
+
+### [AgentCore Memory](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory.html)
+
+AgentCore Memory is a valid long-term memory option for deployments that want a serverless-first path inside AWS-managed infrastructure.
+
+It is a good fit when you want:
+- AWS-native managed memory primitives
+- lower infrastructure sprawl
+- a simpler self-hosted/serverless deployment story
+
+Capability differences may exist between engines. ThinkWork should surface those honestly instead of pretending every engine is identical.
 
 ## Long-term memory versus document knowledge
 
-Use long-term memory for information learned from work. Use document knowledge for information loaded from source material.
+Use long-term memory for information learned from work.
+Use document knowledge for information loaded from source material.
 
-In practice, many agents use both:
+Many agents use both:
 
 - document knowledge grounds answers in docs and policies
-- long-term memory carries forward context from prior interactions
+- long-term memory carries forward learned context from prior work
 
-## Configuration touchpoints
+## Related pages
 
-- [Deploy: Configuration Reference](/deploy/configuration/)
-- [Concepts: Agents](/concepts/agents/)
-- [Concepts: Threads](/concepts/threads/)
+- [Memory overview](/concepts/knowledge/)
+- [Document Knowledge](/concepts/knowledge/document-knowledge/)
+- [Retrieval and Context](/concepts/knowledge/retrieval-and-context/)

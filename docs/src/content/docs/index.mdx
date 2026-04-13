@@ -1,9 +1,9 @@
 ---
 title: ThinkWork
-description: Production-grade agent platform for teams that already live on AWS.
+description: Production-grade open agent harness for teams that already live on AWS.
 template: splash
 hero:
-  tagline: Open infrastructure for AI work. Threads run the work, controls keep it safe, agents plug into the same system, and connectors bring in external channels and tools — all inside your existing AWS account via Terraform.
+  tagline: ThinkWork makes agent infrastructure easy without giving up ownership. Threads run the work, memory carries context forward, controls keep it safe, agents plug into the same system, and connectors bring in external channels and tools, all inside your existing AWS account via Terraform.
   actions:
     - text: Getting Started
       link: /getting-started/
@@ -26,7 +26,7 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
     The universal work container. Every conversation, task, automation, and connector event lands in a thread with history and audit trail.
   </Card>
   <Card title="Memory" icon="open-book">
-    The umbrella for document knowledge, long-term memory, retrieval context, and the emerging knowledge graph direction.
+    The umbrella for document knowledge, long-term memory, retrieval context, and portable memory contracts above any one backend.
   </Card>
   <Card title="Connectors" icon="puzzle">
     Bring in external channels, events, and tool systems. Integrations cover Slack, GitHub, and Google Workspace, while MCP tools cover remote external capabilities and custom recipes.
@@ -49,6 +49,6 @@ thinkwork deploy -s dev
 thinkwork doctor -s dev
 ```
 
-That's it. Five commands, one AWS account, production-grade agent infrastructure.
+That's it. Five commands, one AWS account, and you own a production-grade agent harness instead of renting a black box.
 
 If you're new to ThinkWork, read the Concepts section in this order: [Threads](/concepts/threads/), [Agents](/concepts/agents/), [Memory](/concepts/knowledge/), then [Connectors](/concepts/connectors/).

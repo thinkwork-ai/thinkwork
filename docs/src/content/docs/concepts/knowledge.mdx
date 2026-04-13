@@ -1,56 +1,75 @@
 ---
 title: Memory
-description: The context layer for ThinkWork agents, covering document knowledge, long-term memory, retrieval, and the emerging knowledge graph direction.
+description: The harness-owned context layer for ThinkWork agents, spanning document retrieval, long-term memory, and turn assembly.
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-Memory is the umbrella for the context ThinkWork agents use beyond the latest message. In practice, that includes both retrieved source material and retained context from prior work.
+Memory is how ThinkWork carries useful context forward without treating every backend as the product.
 
-This section explains how ThinkWork combines document knowledge, long-term memory, retrieval and context assembly, plus where the knowledge graph direction may go next.
+The clean model is:
+
+- **Threads** keep the full record of work
+- **Memory** decides what context should carry forward into the current turn
+- **Agents** act on that assembled context
+
+That means Memory is not just one store, and it is not just long-term recall. It is the harness-owned context layer above changing retrieval and memory engines.
 
 ## What belongs under Memory
 
-ThinkWork separates three related but different ideas:
+Memory in ThinkWork spans four related concerns:
 
-- **Threads** keep the full record of work
-- **Memory** decides what context gets surfaced into a turn
-- **Agents** use that context to act
-
-That framing keeps the docs cleaner and avoids making the platform feel like document RAG is the whole story.
+- **Document knowledge** for uploaded source material and grounded retrieval
+- **Long-term memory** for facts and context learned from prior work
+- **Retrieval and context assembly** for how those pieces reach a turn
+- **Structured memory direction** for future graph-shaped memory and knowledge
 
 <CardGrid>
   <Card title="Document Knowledge" icon="open-book">
-    Bedrock Knowledge Bases for uploaded documents, retrieval, and source grounding.
+    Retrieved source material from uploaded documents. Good for policies, runbooks, and reference content.
   </Card>
   <Card title="Long-term Memory" icon="seti:bookmark">
-    AWS AgentCore LongTerm memory by default, plus Hindsight as an alternative memory engine.
+    Carry-forward context learned from prior work. ThinkWork exposes one memory contract above pluggable engines.
   </Card>
   <Card title="Retrieval and Context" icon="search">
-    How thread history, retrieved document chunks, and recalled memories come together in a turn.
+    How thread history, retrieved documents, and recalled memories come together inside a turn.
   </Card>
-  <Card title="Knowledge Graph Direction" icon="graph">
-    A forward-looking note on structured memory and knowledge, clearly framed as roadmap direction.
+  <Card title="Structured Memory Direction" icon="graph">
+    Forward-looking direction for richer entity and relationship-aware memory. Roadmap, not current core product surface.
   </Card>
 </CardGrid>
 
-## Current reality
+## The current product truth
 
-In the current open source docs, the most concrete implemented memory story is:
+Today, the stable story should be read in this order:
 
-1. document retrieval through Bedrock Knowledge Bases
-2. AWS AgentCore LongTerm memory as the default long-term memory system
-3. Hindsight as an optional alternative memory engine
-4. context assembly inside the agent turn
+1. **Threads are the record of work**
+2. **Memory is the context layer**
+3. **ThinkWork exposes a stable memory contract above memory engines**
+4. **Document retrieval and long-term recall are implementation paths under that contract**
 
-The default long-term memory setup includes four built-in strategies:
+ThinkWork currently supports two long-term memory adapters:
 
-- semantic
-- summarization
-- user-preference
-- episodic
+- **[Hindsight](https://hindsight.vectorize.io/)**
+- **[AgentCore Memory](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory.html)**
 
-That is enough to build useful internal agents today without implying a larger memory platform than the repo currently documents.
+Exactly one long-term memory engine is canonical per deployment.
+
+- **Hosted ThinkWork** defaults to **[Hindsight](https://hindsight.vectorize.io/)**
+- **Self-hosted and serverless-friendly deployments** may choose **[AgentCore Memory](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory.html)**
+
+Short-term and session context still come from thread history. Long-term memory should not masquerade as the thread record.
+
+## Why this framing matters
+
+This keeps the product honest.
+
+It avoids teaching people that:
+- memory is just another name for RAG,
+- AgentCore or [Hindsight](https://hindsight.vectorize.io/) are the conceptual model,
+- or long-term memory replaces thread history.
+
+The contract belongs to ThinkWork. Engines implement it.
 
 ## Read this section
 
