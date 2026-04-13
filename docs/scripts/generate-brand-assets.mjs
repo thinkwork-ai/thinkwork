@@ -27,7 +27,9 @@ const repoRoot = path.resolve(scriptDir, "../..");
 const sharp = require(path.join(repoRoot, "docs/node_modules/sharp"));
 
 const BRAND = "#38bdf8";
-const STROKE_ATTRS = `stroke="${BRAND}" stroke-width="0.7" stroke-linejoin="round" stroke-linecap="round"`;
+// Matches the mobile icon stroke weight so the docs favicon and the
+// Starlight logo read the same bold as the mobile app icon.
+const STROKE_ATTRS = `stroke="${BRAND}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"`;
 
 const faviconOut = path.join(repoRoot, "docs/public/favicon.png");
 const logoOut = path.join(repoRoot, "docs/src/assets/logo.png");
@@ -43,10 +45,19 @@ async function renderPng(svg, outPath) {
 // Favicon (256x256, transparent)
 // ---------------------------------------------------------------------------
 
+// Width-based fill matching the mobile icon — brain spans 95% of the
+// canvas width, centered vertically, so the docs favicon has the same
+// weight and proportions as the mobile app icon at home-screen scale.
 const faviconSize = 256;
+const [, , docVbW, docVbH] = BRAIN_VIEWBOX.split(" ").map(Number);
+const favBrainW = Math.round(faviconSize * 0.95);
+const favBrainH = Math.round((favBrainW * docVbH) / docVbW);
+const favOffsetX = Math.round((faviconSize - favBrainW) / 2);
+const favOffsetY = Math.round((faviconSize - favBrainH) / 2);
+
 const faviconSvg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${faviconSize}" height="${faviconSize}" viewBox="0 0 ${faviconSize} ${faviconSize}">
-  <svg x="18" y="18" width="220" height="220" viewBox="${BRAIN_VIEWBOX}" fill="${BRAND}">
+  <svg x="${favOffsetX}" y="${favOffsetY}" width="${favBrainW}" height="${favBrainH}" viewBox="${BRAIN_VIEWBOX}" fill="${BRAND}">
     <g transform="${BRAIN_GROUP_TRANSFORM}">
       <path d="${BRAIN_PATH_D}" ${STROKE_ATTRS} />
     </g>
