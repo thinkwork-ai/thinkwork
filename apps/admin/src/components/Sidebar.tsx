@@ -194,7 +194,7 @@ export function AppSidebar() {
                 <img
                   src="/logo.png"
                   alt="ThinkWork"
-                  className="h-7 w-9 shrink-0 object-contain"
+                  className="h-6 w-8 shrink-0 object-contain"
                 />
                 <span className="text-lg font-semibold truncate">
                   ThinkWork
