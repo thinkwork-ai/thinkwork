@@ -67,7 +67,7 @@ function FilterPill({ label, count, isActive, onPress }: { label: string; count:
       onPress={onPress}
       className={`px-4 h-9 rounded-full items-center justify-center ${
         isActive
-          ? "bg-orange-500"
+          ? "bg-sky-500"
           : "bg-neutral-100 dark:bg-neutral-800"
       }`}
     >
@@ -278,12 +278,12 @@ function CreateThreadModal({
                       setShowAgentPicker(false);
                     }}
                     className={`px-4 py-3 border-b border-neutral-200 dark:border-neutral-800 ${
-                      effectiveAgentId === ag.id ? "bg-orange-50 dark:bg-orange-900/20" : "bg-white dark:bg-neutral-900"
+                      effectiveAgentId === ag.id ? "bg-sky-50 dark:bg-sky-900/20" : "bg-white dark:bg-neutral-900"
                     }`}
                   >
                     <Text className={`${
                       effectiveAgentId === ag.id
-                        ? "text-orange-600 dark:text-orange-400 font-medium"
+                        ? "text-sky-600 dark:text-sky-400 font-medium"
                         : "text-neutral-900 dark:text-neutral-100"
                     }`}>
                       {ag.name}

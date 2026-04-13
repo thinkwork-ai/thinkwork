@@ -58,7 +58,7 @@ export function MentionAutocomplete({ query, candidates, onSelect, visible }: Me
             ? (dark ? "rgba(249,115,22,0.15)" : "rgba(249,115,22,0.1)")
             : (dark ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)");
           const badgeText = isAssistant
-            ? (dark ? "#fb923c" : "#ea580c")
+            ? (dark ? "#38bdf8" : "#0284c7")
             : (dark ? "#818cf8" : "#4f46e5");
 
           return (

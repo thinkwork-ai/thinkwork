@@ -7,6 +7,10 @@ export default defineConfig({
     starlight({
       title: "ThinkWork",
       favicon: "/favicon.png",
+      logo: {
+        src: "./src/assets/logo.png",
+        alt: "ThinkWork",
+      },
       head: [
         { tag: "link", attrs: { rel: "icon", type: "image/png", href: "/favicon.png" } },
         { tag: "link", attrs: { rel: "apple-touch-icon", href: "/favicon.png" } },

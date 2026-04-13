@@ -108,15 +108,15 @@ export function AssignAgentModal({
                 <Pressable
                   onPress={handleUnassign}
                   disabled={submitting}
-                  className="flex-row items-center justify-between py-3 px-3 rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20"
+                  className="flex-row items-center justify-between py-3 px-3 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/20"
                 >
                   <View className="flex-row items-center gap-2 flex-1">
-                    <CircleMinus size={18} color="#ea580c" />
-                    <Text className="text-sm font-medium text-orange-700 dark:text-orange-300">
+                    <CircleMinus size={18} color="#0284c7" />
+                    <Text className="text-sm font-medium text-sky-700 dark:text-sky-300">
                       Unassign current agent
                     </Text>
                   </View>
-                  {submitting && <ActivityIndicator size="small" color="#ea580c" />}
+                  {submitting && <ActivityIndicator size="small" color="#0284c7" />}
                 </Pressable>
               </View>
             )}

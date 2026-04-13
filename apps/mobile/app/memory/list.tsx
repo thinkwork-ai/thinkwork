@@ -227,7 +227,7 @@ export default function MemoryListScreen() {
       disabled={fetching}
       className="p-2 active:opacity-70"
     >
-      <RefreshCw size={18} color={fetching ? colors.mutedForeground : "#f97316"} />
+      <RefreshCw size={18} color={fetching ? colors.mutedForeground : "#0ea5e9"} />
     </Pressable>
   );
 

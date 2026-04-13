@@ -116,7 +116,7 @@ export function AddMemberModal({ visible, teamId, onClose }: AddMemberModalProps
                         onPress={() => setSelectedAgentId(a.id)}
                         className={`flex-row items-center justify-between px-4 py-3 rounded-xl border ${
                           isSelected
-                            ? "border-orange-500 bg-orange-50 dark:bg-orange-900/20"
+                            ? "border-sky-500 bg-sky-50 dark:bg-sky-900/20"
                             : "border-neutral-200 dark:border-neutral-800"
                         }`}
                       >

@@ -195,7 +195,7 @@ export default function NewTriggerScreen() {
                 onPress={() => setJobType(t)}
                 className={`flex-1 items-center justify-center rounded-lg border ${
                   jobType === t
-                    ? "bg-orange-500 border-orange-500"
+                    ? "bg-sky-500 border-sky-500"
                     : "bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700"
                 }`}
                 style={{ height: 48 }}
@@ -241,10 +241,10 @@ export default function NewTriggerScreen() {
                         setShowAgentPicker(false);
                       }}
                       className={`px-4 py-3 border-b border-neutral-200 dark:border-neutral-800 ${
-                        selectedAgentId === a.id ? "bg-orange-50 dark:bg-orange-900/20" : "bg-white dark:bg-neutral-900"
+                        selectedAgentId === a.id ? "bg-sky-50 dark:bg-sky-900/20" : "bg-white dark:bg-neutral-900"
                       }`}
                     >
-                      <Text className={selectedAgentId === a.id ? "text-orange-600 dark:text-orange-400 font-medium" : "text-neutral-900 dark:text-neutral-100"}>
+                      <Text className={selectedAgentId === a.id ? "text-sky-600 dark:text-sky-400 font-medium" : "text-neutral-900 dark:text-neutral-100"}>
                         {a.name}
                       </Text>
                     </Pressable>
@@ -289,10 +289,10 @@ export default function NewTriggerScreen() {
                     if (!name.trim()) setName(r.name);
                   }}
                   className={`px-4 py-3 border-b border-neutral-200 dark:border-neutral-800 ${
-                    selectedRoutineId === r.id ? "bg-orange-50 dark:bg-orange-900/20" : "bg-white dark:bg-neutral-900"
+                    selectedRoutineId === r.id ? "bg-sky-50 dark:bg-sky-900/20" : "bg-white dark:bg-neutral-900"
                   }`}
                 >
-                  <Text className={selectedRoutineId === r.id ? "text-orange-600 dark:text-orange-400 font-medium" : "text-neutral-900 dark:text-neutral-100"}>
+                  <Text className={selectedRoutineId === r.id ? "text-sky-600 dark:text-sky-400 font-medium" : "text-neutral-900 dark:text-neutral-100"}>
                     {r.name}
                   </Text>
                 </Pressable>
@@ -317,7 +317,7 @@ export default function NewTriggerScreen() {
                 onPress={() => setFrequency(f.key)}
                 className={`px-3 py-2 rounded-lg border ${
                   frequency === f.key
-                    ? "bg-orange-500 border-orange-500"
+                    ? "bg-sky-500 border-sky-500"
                     : "bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700"
                 }`}
               >
@@ -341,7 +341,7 @@ export default function NewTriggerScreen() {
                     onPress={() => setHour(h)}
                     className={`w-10 h-10 rounded-lg items-center justify-center border ${
                       hour === h
-                        ? "bg-orange-500 border-orange-500"
+                        ? "bg-sky-500 border-sky-500"
                         : "bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700"
                     }`}
                   >
@@ -356,7 +356,7 @@ export default function NewTriggerScreen() {
                     onPress={() => setAmpm(v)}
                     className={`px-3 h-10 rounded-lg items-center justify-center border ${
                       ampm === v
-                        ? "bg-orange-500 border-orange-500"
+                        ? "bg-sky-500 border-sky-500"
                         : "bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700"
                     }`}
                   >
@@ -379,7 +379,7 @@ export default function NewTriggerScreen() {
                   onPress={() => toggleWeekday(i)}
                   className={`w-10 h-10 rounded-full items-center justify-center border ${
                     weekdays.includes(i)
-                      ? "bg-orange-500 border-orange-500"
+                      ? "bg-sky-500 border-sky-500"
                       : "bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700"
                   }`}
                 >
@@ -401,7 +401,7 @@ export default function NewTriggerScreen() {
                   onPress={() => setDayOfMonth(d)}
                   className={`w-10 h-10 rounded-lg items-center justify-center border ${
                     dayOfMonth === d
-                      ? "bg-orange-500 border-orange-500"
+                      ? "bg-sky-500 border-sky-500"
                       : "bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700"
                   }`}
                 >
@@ -429,10 +429,10 @@ export default function NewTriggerScreen() {
                   key={tz.value}
                   onPress={() => { setTimezone(tz.value); setShowTzPicker(false); }}
                   className={`px-4 py-3 border-b border-neutral-200 dark:border-neutral-800 ${
-                    timezone === tz.value ? "bg-orange-50 dark:bg-orange-900/20" : "bg-white dark:bg-neutral-900"
+                    timezone === tz.value ? "bg-sky-50 dark:bg-sky-900/20" : "bg-white dark:bg-neutral-900"
                   }`}
                 >
-                  <Text className={timezone === tz.value ? "text-orange-600 dark:text-orange-400 font-medium" : "text-neutral-900 dark:text-neutral-100"}>
+                  <Text className={timezone === tz.value ? "text-sky-600 dark:text-sky-400 font-medium" : "text-neutral-900 dark:text-neutral-100"}>
                     {tz.label}
                   </Text>
                 </Pressable>

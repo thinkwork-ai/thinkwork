@@ -161,10 +161,11 @@ export default function SignInScreen() {
       >
         <Card className="w-[90%] max-w-md">
           <CardHeader className="items-center">
-            <View className="mb-2">
+            <View className="mb-3">
               <Image
-                source={require("@/assets/icon.png")}
-                style={{ width: 80, height: 80, borderRadius: 16 }}
+                source={require("@/assets/logo.png")}
+                style={{ width: 130, height: 105 }}
+                resizeMode="contain"
               />
             </View>
             <CardTitle className="pb-2">

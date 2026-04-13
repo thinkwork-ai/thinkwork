@@ -190,7 +190,7 @@ export default function ThreadDetailScreen() {
             label="Status"
             valueComponent={
               <Pressable onPress={() => setShowStatusPicker(!showStatusPicker)}>
-                <Text className="text-base text-orange-500 font-medium">
+                <Text className="text-base text-sky-500 font-medium">
                   {STATUS_LABELS[status] || status}
                 </Text>
               </Pressable>
@@ -206,13 +206,13 @@ export default function ThreadDetailScreen() {
                     setShowStatusPicker(false);
                   }}
                   className={`px-3 py-2.5 rounded-lg mb-0.5 ${
-                    status === s ? "bg-orange-500/10" : ""
+                    status === s ? "bg-sky-500/10" : ""
                   }`}
                 >
                   <Text
                     className={`text-base ${
                       status === s
-                        ? "text-orange-500 font-semibold"
+                        ? "text-sky-500 font-semibold"
                         : "text-neutral-700 dark:text-neutral-300"
                     }`}
                   >
@@ -266,7 +266,7 @@ export default function ThreadDetailScreen() {
             <Text className="text-base text-neutral-500 dark:text-neutral-400">Conversation</Text>
             <View className="flex-row items-center gap-2">
               {(messages?.length ?? 0) > 0 && (
-                <View style={{ backgroundColor: "#f97316" }} className="rounded-full px-2 py-0.5">
+                <View style={{ backgroundColor: "#0ea5e9" }} className="rounded-full px-2 py-0.5">
                   <Text className="text-xs text-white font-medium">
                     {messages?.length}
                   </Text>

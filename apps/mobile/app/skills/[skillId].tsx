@@ -240,7 +240,7 @@ export default function SkillDetailScreen() {
                 onPress={handleInstall}
                 disabled={!isFormComplete || installing}
                 className={`rounded-lg py-3 items-center mt-2 ${
-                  isFormComplete ? "bg-orange-500" : "bg-neutral-300 dark:bg-neutral-700"
+                  isFormComplete ? "bg-sky-500" : "bg-neutral-300 dark:bg-neutral-700"
                 }`}
               >
                 {installing ? (

@@ -39,8 +39,8 @@ module.exports = {
           dark: "#fafafa",
         },
         primary: {
-          DEFAULT: "#f8841d",
-          dark: "#faa54b",
+          DEFAULT: "#0ea5e9",
+          dark: "#38bdf8",
           foreground: "#fafafa",
         },
         secondary: {
@@ -82,7 +82,7 @@ module.exports = {
           dark: "#171717",
           foreground: "#171717",
           "foreground-dark": "#fafafa",
-          primary: "#f8841d",
+          primary: "#0ea5e9",
           "primary-foreground": "#fafafa",
           accent: "#f0f0f0",
           "accent-dark": "#262626",

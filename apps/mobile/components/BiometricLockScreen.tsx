@@ -81,7 +81,7 @@ export function BiometricLockScreen({
       <View className="items-center max-w-sm">
         {/* Logo */}
         <Image
-          source={require("@/assets/icon.png")}
+          source={require("@/assets/logo.png")}
           style={{ width: 80, height: 80, borderRadius: 16, marginBottom: 8 }}
         />
         <Text

@@ -22,7 +22,7 @@ function inferStageColor(name: string): string | null {
   if (lower.includes('working') || lower.includes('10-')) return '#6366f1';
   if (lower.includes('account') || lower.includes('20-')) return '#0ea5e9';
   if (lower.includes('formulate') || lower.includes('30-')) return '#f59e0b';
-  if (lower.includes('negotiat') || lower.includes('40-')) return '#f97316';
+  if (lower.includes('negotiat') || lower.includes('40-')) return '#0ea5e9';
   if (lower.includes('implement') || lower.includes('50-')) return '#22c55e';
   if (lower.includes('won') || lower.includes('closed')) return '#10b981';
   if (lower.includes('lost') || lower.includes('disqualif')) return '#ef4444';
@@ -53,7 +53,7 @@ export function StageBadge({ name, color }: { name?: string; color?: string }) {
 export function PriorityBadge({ priority }: { priority?: string }) {
   if (!priority) return null;
   const colors: Record<string, string> = {
-    critical: '#ef4444', high: '#f97316', medium: '#eab308', low: '#22c55e',
+    critical: '#ef4444', high: '#0ea5e9', medium: '#eab308', low: '#22c55e',
   };
   const color = colors[priority.toLowerCase()] || '#9ca3af';
   return (

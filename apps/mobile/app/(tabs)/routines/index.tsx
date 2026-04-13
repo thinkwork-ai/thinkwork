@@ -66,7 +66,7 @@ export default function RoutinesScreen() {
               </Muted>
               <Pressable
                 onPress={handleNewRoutine}
-                className="bg-orange-500 px-6 py-2.5 rounded-xl flex-row items-center gap-2"
+                className="bg-sky-500 px-6 py-2.5 rounded-xl flex-row items-center gap-2"
               >
                 <Plus size={16} color="#fff" />
                 <Text weight="medium" className="text-white">

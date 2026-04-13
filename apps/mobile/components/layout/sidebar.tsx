@@ -87,7 +87,7 @@ export function Sidebar() {
       <View className="px-4 border-b border-neutral-200 dark:border-neutral-800 justify-center" style={{ height: 56 }}>
         <View className="flex-row items-center gap-3">
           <Image
-            source={require("@/assets/icon.png")}
+            source={require("@/assets/logo.png")}
             style={{ width: 28, height: 28, borderRadius: 6 }}
           />
           <View className="flex-1 gap-0">

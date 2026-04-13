@@ -73,8 +73,8 @@ function TeamMemberRow({
       line1Left={
         <View className="flex-row items-center flex-1">
           <Avatar className="h-10 w-10">
-            <AvatarFallback className="bg-orange-100 dark:bg-orange-900">
-              <Text className="text-sm font-semibold text-orange-600 dark:text-orange-300">
+            <AvatarFallback className="bg-sky-100 dark:bg-sky-900">
+              <Text className="text-sm font-semibold text-sky-600 dark:text-sky-300">
                 {getInitials(user.name, user.email)}
               </Text>
             </AvatarFallback>
@@ -252,8 +252,8 @@ export default function TeamMembersScreen() {
       render: (item) => (
         <View className="flex-row items-center gap-3">
           <Avatar className="h-8 w-8">
-            <AvatarFallback className="bg-orange-100 dark:bg-orange-900">
-              <Text className="text-xs font-semibold text-orange-600 dark:text-orange-300">
+            <AvatarFallback className="bg-sky-100 dark:bg-sky-900">
+              <Text className="text-xs font-semibold text-sky-600 dark:text-sky-300">
                 {getInitials(item.name, item.email)}
               </Text>
             </AvatarFallback>

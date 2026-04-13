@@ -200,7 +200,7 @@ export function AgentProfileEditor({ agentId, onSaveReady, onSaveStateChange }: 
                   <Pressable
                     key={d}
                     onPress={() => toggleDomain(d)}
-                    className="flex-row items-center rounded-full bg-orange-500 px-2.5 py-0.5 gap-1"
+                    className="flex-row items-center rounded-full bg-sky-500 px-2.5 py-0.5 gap-1"
                   >
                     <Text className="text-xs font-medium text-white">{d}</Text>
                     <X size={10} color="#fff" />

@@ -107,7 +107,7 @@ export default function NewRoutineScreen() {
     return (
       <DetailLayout title="New Routine">
         <View className="flex-1 items-center justify-center px-8">
-          <ActivityIndicator size="large" color="#f97316" />
+          <ActivityIndicator size="large" color="#0ea5e9" />
           <Muted className="mt-4 text-center">
             Evaluating your routine...
           </Muted>
@@ -182,7 +182,7 @@ export default function NewRoutineScreen() {
                 disabled={!canSave || notReady}
                 className="px-6 py-2.5 rounded-xl flex-row items-center gap-2"
                 style={{
-                  backgroundColor: canSave && !notReady ? "#f97316" : "#525252",
+                  backgroundColor: canSave && !notReady ? "#0ea5e9" : "#525252",
                 }}
               >
                 <Text weight="semibold" className="text-white">

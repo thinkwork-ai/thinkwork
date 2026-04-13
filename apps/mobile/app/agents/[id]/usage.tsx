@@ -52,7 +52,7 @@ function BudgetForm({ limit, setLimit, hardStop, setHardStop, enabled, setEnable
       {/* Save */}
       <Pressable
         onPress={onSave}
-        className="bg-orange-500 rounded-lg px-4 py-3 items-center mt-1"
+        className="bg-sky-500 rounded-lg px-4 py-3 items-center mt-1"
       >
         <Text className="text-white font-semibold">Save budget</Text>
       </Pressable>
@@ -218,7 +218,7 @@ export default function AgentUsageScreen() {
             <Muted>No budget configured</Muted>
             <Pressable
               onPress={() => setShowBudgetModal(true)}
-              className="bg-orange-500 rounded-lg px-4 py-2"
+              className="bg-sky-500 rounded-lg px-4 py-2"
             >
               <Text className="text-white font-semibold">Set budget</Text>
             </Pressable>

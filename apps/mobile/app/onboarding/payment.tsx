@@ -49,7 +49,7 @@ export default function PaymentScreen() {
           <CardHeader className="items-center pb-4">
             <View className="mb-3">
               <Image
-                source={require("@/assets/icon.png")}
+                source={require("@/assets/logo.png")}
                 style={{ width: 64, height: 64, borderRadius: 12 }}
               />
             </View>

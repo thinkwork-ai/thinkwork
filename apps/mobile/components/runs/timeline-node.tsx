@@ -132,8 +132,8 @@ export function TimelineNode({
             onPress={() => onFixError(error)}
             className="flex-row items-center gap-1.5 mt-2"
           >
-            <Play size={14} color="#f97316" />
-            <Text className="text-sm font-semibold" style={{ color: "#f97316" }}>
+            <Play size={14} color="#0ea5e9" />
+            <Text className="text-sm font-semibold" style={{ color: "#0ea5e9" }}>
               Fix in Builder
             </Text>
           </Pressable>

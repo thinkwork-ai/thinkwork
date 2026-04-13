@@ -203,7 +203,7 @@ export default function ManageAccountScreen() {
                       onPress={() => handleUpdatePlan(plan)}
                       className={`flex-1 items-center justify-center rounded-lg border ${
                         isActive
-                          ? "bg-orange-500 border-orange-500"
+                          ? "bg-sky-500 border-sky-500"
                           : "bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700"
                       }`}
                       style={{ height: 48 }}
@@ -251,7 +251,7 @@ export default function ManageAccountScreen() {
             <Pressable
               onPress={handleSubmit}
               disabled={submitting}
-              className="flex-row items-center justify-center px-5 rounded-lg bg-orange-500 border border-orange-500"
+              className="flex-row items-center justify-center px-5 rounded-lg bg-sky-500 border border-sky-500"
               style={{ opacity: submitting ? 0.5 : 1, height: 40 }}
             >
               {submitting ? (
@@ -328,7 +328,7 @@ export default function ManageAccountScreen() {
               <Pressable
                 onPress={handlePasswordChange}
                 disabled={passwordSubmitting}
-                className="mt-4 items-center py-3 rounded-lg bg-orange-500"
+                className="mt-4 items-center py-3 rounded-lg bg-sky-500"
                 style={{ opacity: passwordSubmitting ? 0.5 : 1 }}
               >
                 {passwordSubmitting ? (

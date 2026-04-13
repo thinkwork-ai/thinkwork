@@ -193,7 +193,7 @@ export default function SkillConfigureScreen() {
               onPress={handleSave}
               disabled={!isFormComplete || saving}
               className={`rounded-lg py-3 items-center mt-2 ${
-                isFormComplete ? "bg-orange-500" : "bg-neutral-300 dark:bg-neutral-700"
+                isFormComplete ? "bg-sky-500" : "bg-neutral-300 dark:bg-neutral-700"
               }`}
             >
               {saving ? (

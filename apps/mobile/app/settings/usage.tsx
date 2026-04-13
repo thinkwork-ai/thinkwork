@@ -32,7 +32,7 @@ function formatDate(dateStr: string): string {
 function BarSegment({ pct, total }: { pct: number; total: number }) {
   const width = Math.max(2, Math.round(pct));
   return (
-    <View className="h-2 rounded-full bg-orange-500 dark:bg-orange-400" style={{ flex: pct / 100, minWidth: 2, maxWidth: `${width}%` }} />
+    <View className="h-2 rounded-full bg-sky-500 dark:bg-sky-400" style={{ flex: pct / 100, minWidth: 2, maxWidth: `${width}%` }} />
   );
 }
 
@@ -60,7 +60,7 @@ function ModelRow({ model, tokens, totalTokens, cost, isLast }: ModelRowProps) {
       {/* Bar */}
       <View className="flex-row h-1.5 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
         <View
-          className="h-1.5 rounded-full bg-orange-500 dark:bg-orange-400"
+          className="h-1.5 rounded-full bg-sky-500 dark:bg-sky-400"
           style={{ width: `${Math.max(1, pct)}%` }}
         />
       </View>
@@ -91,7 +91,7 @@ function DayRow({ date, tokens, maxTokens, isLast }: DayRowProps) {
       </View>
       <View className="flex-row h-1.5 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
         <View
-          className="h-1.5 rounded-full bg-orange-500 dark:bg-orange-400"
+          className="h-1.5 rounded-full bg-sky-500 dark:bg-sky-400"
           style={{ width: `${Math.max(tokens > 0 ? 1 : 0, pct)}%` }}
         />
       </View>
@@ -140,7 +140,7 @@ export default function UsageScreen() {
         <View className="mt-4 px-4">
           {isLoading ? (
             <View className="items-center justify-center py-16">
-              <ActivityIndicator size="large" color="#f8841d" />
+              <ActivityIndicator size="large" color="#0ea5e9" />
               <Muted className="mt-3">Loading usage data…</Muted>
             </View>
           ) : summary === null ? (
@@ -156,8 +156,8 @@ export default function UsageScreen() {
                 </Text>
                 <Muted className="mt-1 text-sm">total tokens used</Muted>
                 {summary.totalCost > 0 && (
-                  <View className="mt-3 px-3 py-1 rounded-full border border-orange-500 bg-transparent">
-                    <Text className="text-sm text-orange-400 font-medium">
+                  <View className="mt-3 px-3 py-1 rounded-full border border-sky-500 bg-transparent">
+                    <Text className="text-sm text-sky-400 font-medium">
                       {formatCost(summary.totalCost)} estimated cost
                     </Text>
                   </View>

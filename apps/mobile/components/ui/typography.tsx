@@ -14,7 +14,7 @@ const textVariants = cva("", {
       default: "text-neutral-900 dark:text-neutral-100",
       muted: "text-neutral-500 dark:text-neutral-400",
       destructive: "text-red-500",
-      primary: "text-orange-500",
+      primary: "text-sky-500",
     },
     size: {
       xs: "text-xs", // 12px

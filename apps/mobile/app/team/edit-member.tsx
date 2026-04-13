@@ -76,9 +76,9 @@ export default function EditMemberScreen() {
       headerRight={
         <Pressable onPress={handleSave} disabled={submitting}>
           {submitting ? (
-            <ActivityIndicator size="small" color="#f8841d" />
+            <ActivityIndicator size="small" color="#0ea5e9" />
           ) : (
-            <Text style={{ color: "#f8841d", fontWeight: "600", fontSize: 17 }}>Save</Text>
+            <Text style={{ color: "#0ea5e9", fontWeight: "600", fontSize: 17 }}>Save</Text>
           )}
         </Pressable>
       }

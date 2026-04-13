@@ -40,22 +40,28 @@ const BRAND = "#38bdf8";
 /**
  * Build an SVG that centers the brain inside a canvas of `size`.
  *
- * @param {number} size           canvas width/height in px
- * @param {number} iconFillRatio  0..1, portion of the canvas the brain occupies
- * @param {string|null} bg        background color, or null for transparent
+ * @param {number}        size           canvas width/height in px
+ * @param {number}        iconFillRatio  0..1, portion of the canvas the brain occupies
+ * @param {string|null}   bg             background color, or null for transparent
+ * @param {number}        strokeWidth    stroke width in user-space units (0 = fill only).
+ *                                       Useful for the iOS icon where the node-graph
+ *                                       lines need extra weight to survive home-screen scale.
  */
-function brainSvg(size, iconFillRatio, bg) {
+function brainSvg(size, iconFillRatio, bg, strokeWidth = 0) {
   const iconSize = Math.round(size * iconFillRatio);
   const offset = Math.round((size - iconSize) / 2);
   const bgRect = bg
     ? `<rect width="${size}" height="${size}" fill="${bg}"/>`
+    : "";
+  const strokeAttrs = strokeWidth > 0
+    ? ` stroke="${BRAND}" stroke-width="${strokeWidth}" stroke-linejoin="round" stroke-linecap="round"`
     : "";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
   ${bgRect}
   <svg x="${offset}" y="${offset}" width="${iconSize}" height="${iconSize}" viewBox="${BRAIN_VIEWBOX}" fill="${BRAND}">
     <g transform="${BRAIN_GROUP_TRANSFORM}">
-      <path d="${BRAIN_PATH_D}" />
+      <path d="${BRAIN_PATH_D}"${strokeAttrs} />
     </g>
   </svg>
 </svg>`;
@@ -68,14 +74,40 @@ async function renderPng(svg, outPath) {
   console.log(`✓ ${path.relative(repoRoot, outPath)}`);
 }
 
+/**
+ * Render the brain edge-to-edge on a non-square canvas that matches the
+ * tight viewBox aspect ratio. No padding baked into the PNG — the <Image>
+ * consumer just needs to pass the same aspect to avoid whitespace.
+ */
+function brainTightRectSvg(width, strokeWidth = 0) {
+  const [, , vbW, vbH] = BRAIN_VIEWBOX.split(" ").map(Number);
+  const height = Math.round(width * (vbH / vbW));
+  const strokeAttrs = strokeWidth > 0
+    ? ` stroke="${BRAND}" stroke-width="${strokeWidth}" stroke-linejoin="round" stroke-linecap="round"`
+    : "";
+  return {
+    svg: `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${BRAIN_VIEWBOX}" fill="${BRAND}">
+  <g transform="${BRAIN_GROUP_TRANSFORM}">
+    <path d="${BRAIN_PATH_D}"${strokeAttrs} />
+  </g>
+</svg>`,
+    width,
+    height,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Expo managed assets (referenced from app.json)
 // ---------------------------------------------------------------------------
 
 // iOS app icon — MUST be opaque (Apple rejects transparent icons).
-// Leaves room around the brain; iOS rounds corners automatically.
+// Heavier stroke on the node-graph lines so they survive the home-screen
+// downscale, and a larger fill so the mark dominates the tile. iOS
+// rounds corners automatically; 0.82 keeps the outer nodes safely away
+// from the corner clip.
 await renderPng(
-  brainSvg(1024, 0.68, BG),
+  brainSvg(1024, 0.82, BG, 1.0),
   path.join(expoAssets, "icon.png")
 );
 
@@ -99,3 +131,15 @@ await renderPng(
   brainSvg(48, 0.95, null),
   path.join(expoAssets, "favicon.png")
 );
+
+// In-app logo used by sign-in / onboarding / sidebar — transparent,
+// edge-to-edge on a non-square canvas that matches the brain's aspect
+// ratio so <Image> consumers can pass the same aspect and get zero
+// baked-in padding. Heavier stroke (0.7) so the node-graph reads bold
+// at the smaller display sizes inline UI tends to use. Separate from
+// icon.png because iOS app icons must be opaque, which gives them a
+// boxed look when reused inline in the UI.
+{
+  const { svg } = brainTightRectSvg(512, 0.7);
+  await renderPng(svg, path.join(expoAssets, "logo.png"));
+}
