@@ -1,47 +1,71 @@
 ---
 title: Document Knowledge
-description: How ThinkWork uses Bedrock Knowledge Bases for document-backed retrieval.
+description: How ThinkWork uses uploaded documents as a retrieval source inside the broader Memory layer.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Document knowledge is ThinkWork's current document retrieval layer. You upload source material, ThinkWork indexes it into a Bedrock Knowledge Base, and managed agents can retrieve relevant passages during a turn.
+Document knowledge is the part of Memory that starts from uploaded source material rather than prior interactions.
+
+Use it when the answer should come from documents your organization already owns, not from what an agent happened to learn during earlier work.
 
 ## What it is good at
 
-Use document knowledge for:
+Document knowledge is a good fit for:
 
-- Product docs and internal runbooks
-- Policies and operating procedures
+- product docs and internal runbooks
+- policies and operating procedures
 - FAQ-style support content
-- Long-form reference material that changes occasionally
+- long-form reference material that changes occasionally
 
-It is a grounding layer, not a replacement for memory. Documents answer, "what does the organization know?" Memory answers, "what has this agent or team learned across interactions?"
+This is a grounding layer, not a replacement for memory.
 
-## Storage model
+- **Document knowledge** answers: “What does the organization know from source material?”
+- **Long-term memory** answers: “What has this agent or team learned across work?”
 
-```
+## Where it fits in ThinkWork
+
+The full model is:
+
+- **Threads** store what happened
+- **Document knowledge** provides retrieved source material
+- **Long-term memory** carries learned context forward
+- **Retrieval and context assembly** decide what reaches the turn
+
+That is why document knowledge lives under Memory. It is one context source, not the whole story.
+
+## Current implementation
+
+Today, ThinkWork’s document-backed retrieval path uses **Bedrock Knowledge Bases**.
+
+The rough flow is:
+
+```txt
 Document upload
-    → S3 knowledge bucket
-    → Bedrock Knowledge Base sync
-    → embeddings + vector index
-    → retrieval during agent turns
+  -> S3 knowledge bucket
+  -> Bedrock Knowledge Base sync
+  -> embeddings + vector index
+  -> retrieval during agent turns
 ```
 
-The source files stay in S3 in your AWS account. Retrieval uses Bedrock Knowledge Bases backed by OpenSearch Serverless.
+The source files stay in S3 in your AWS account. Retrieval runs through Bedrock Knowledge Bases backed by OpenSearch Serverless.
 
 ## Operational notes
 
-- Documents do not automatically resync when source files change
-- Chunking strategy is set when the knowledge base is created
-- OpenSearch Serverless sets a meaningful cost floor, even at low usage
+- document sources do not automatically resync when files change
+- chunking strategy is set when the knowledge base is created
+- OpenSearch Serverless creates a meaningful cost floor, even at low usage
 
 <Aside type="caution">
-If you are cost-sensitive, decide whether you need a full Bedrock Knowledge Base before enabling it broadly. The retrieval experience is strong, but the OpenSearch Serverless minimum cost is material for small deployments.
+If you are cost-sensitive, decide whether you need a full Bedrock Knowledge Base before enabling it broadly. The retrieval experience is solid, but the OpenSearch Serverless minimum cost is real.
 </Aside>
 
-## Related pages
+## What this page is not
 
+This page is about document retrieval as a context source.
+It is not the full memory contract, and it is not the canonical record of work.
+
+For that broader model, start with:
 - [Memory overview](/concepts/knowledge/)
 - [Long-term Memory](/concepts/knowledge/memory/)
 - [Retrieval and Context](/concepts/knowledge/retrieval-and-context/)

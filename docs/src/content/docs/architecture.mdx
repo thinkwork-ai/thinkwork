@@ -19,6 +19,8 @@ The conceptual model is:
 
 Those concepts map onto a three-tier AWS deployment. Every resource lives in your AWS account. There is no shared infrastructure, no callbacks to external control planes, and no telemetry sent outside your account.
 
+That matters because ThinkWork is not just trying to run agents. It is trying to give customers an open, customer-owned harness for AI work.
+
 ## System model
 
 Before getting into the deployment tiers, it helps to frame the runtime in product terms:
@@ -43,7 +45,7 @@ See [Threads](/concepts/threads/).
 
 ### Memory
 
-Memory is the context layer. It determines what gets surfaced into the current turn beyond the latest message.
+Memory is the context layer. It determines what gets surfaced into the current turn beyond the latest message, and over time it should be portable through a ThinkWork-owned contract rather than defined by any one backend.
 
 In the current open source app, that mainly means:
 
@@ -60,7 +62,7 @@ See [Memory](/concepts/knowledge/).
 
 Agents are the execution layer. They receive a thread plus assembled context, decide what to do, call tools, and produce a response.
 
-In managed mode, this execution happens in AgentCore.
+In managed mode, this execution happens in AgentCore, but the surrounding harness remains ThinkWork's. That distinction is important: managed does not mean vendor-hosted.
 
 See [Agents](/concepts/agents/).
 

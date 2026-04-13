@@ -1,36 +1,47 @@
 ---
 title: Knowledge Graph Direction
-description: The likely next step beyond document retrieval, framed as roadmap direction rather than current product surface.
+description: Forward-looking direction for richer structured memory, framed clearly as roadmap rather than current core product surface.
 ---
 
-The current open source ThinkWork docs focus on two implemented memory patterns:
+ThinkWork’s current Memory story does **not** depend on a full knowledge graph product surface.
 
-- document knowledge through Bedrock Knowledge Bases
-- long-term memory through AWS AgentCore LongTerm memory by default, or Hindsight when configured
+Today, the shipped story is simpler:
 
-A **knowledge graph** is the next likely direction for structured knowledge, not a fully documented product surface today.
+- threads are the system of record
+- document knowledge handles retrieved source material
+- long-term memory carries learned context forward
+- retrieval and context assembly decide what reaches a turn
 
-## Why it matters
+A knowledge graph is the likely next step beyond that, not the current center of the product.
 
-A knowledge graph would complement document retrieval by modeling entities and relationships directly, such as:
+## Why this direction matters
+
+A graph-shaped memory layer could make recall more relationship-aware by modeling entities and connections directly, such as:
 
 - customers and accounts
 - services and dependencies
 - incidents and linked decisions
 - people, teams, and ownership
+- concepts and their relationships over time
 
-That could make retrieval more relationship-aware than document chunk search alone.
+That could make memory more structured than document chunk retrieval or flat fact recall alone.
 
 ## How to think about it today
 
-Treat this as roadmap context, not a deploy-and-use feature set in the current docs.
+Treat this as **forward direction**, not as something the current docs ask you to depend on.
 
-If you're evaluating ThinkWork now, plan around:
+If you are evaluating ThinkWork now, plan around:
 
-- threads as the system of work
-- document knowledge for source material
-- memory for retained context
+- **Threads** for the work record
+- **Memory** for context
+- **Document knowledge** for source material
+- **Long-term memory** for learned carry-forward context
 
-Then watch the roadmap for structured knowledge graph capabilities.
+Then watch the roadmap for richer structured-memory and graph capabilities.
 
-See [Roadmap](/roadmap/) for the current forward-looking note.
+## Related pages
+
+- [Memory overview](/concepts/knowledge/)
+- [Document Knowledge](/concepts/knowledge/document-knowledge/)
+- [Long-term Memory](/concepts/knowledge/memory/)
+- [Roadmap](/roadmap/)

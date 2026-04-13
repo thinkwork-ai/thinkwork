@@ -1,11 +1,13 @@
 ---
 title: Managed Agents
-description: How ThinkWork runs managed agents on AgentCore, what gets configured per agent, and where knowledge and memory plug in.
+description: How ThinkWork runs managed agents inside your AWS account, what gets configured per agent, and why managed does not mean vendor-hosted.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
 Managed agents are the default ThinkWork runtime. ThinkWork runs the agent loop for you inside your AWS account, so you get a consistent execution model, thread integration, streaming, and auditability without building your own orchestration layer.
+
+The important distinction is that **managed does not mean vendor-hosted**. ThinkWork makes agent infrastructure easy, but the harness, state, controls, and data still live inside your deployment boundary.
 
 ## Runtime model
 
@@ -21,7 +23,23 @@ Thread message → API Gateway → AgentCore Lambda → Strands agent loop
                                AppSync subscription → client
 ```
 
-Strands handles the inner agent loop, including tool calls and streaming. ThinkWork supplies the surrounding system: thread state, templates, controls, connectors, and deployment inside your AWS account.
+Strands handles the inner agent loop, including tool calls and streaming. ThinkWork supplies the surrounding system: thread state, memory behavior, templates, controls, connectors, and deployment inside your AWS account.
+
+## Why this model matters
+
+ThinkWork is not a black-box hosted agent API.
+
+It is an open harness for AI work that happens to be easy to deploy and operate.
+
+That means you do not have to choose between:
+- easy infrastructure
+- owned infrastructure
+- portable architecture
+- inspectable control surfaces
+
+ThinkWork is designed to give you all four.
+
+For teams already on AWS, that is the point: you get production-grade managed agents without handing your runtime, thread record, or memory layer to a third-party control plane.
 
 ## What a managed agent includes
 
@@ -30,12 +48,12 @@ Every managed agent has:
 - A model chosen through its agent template
 - A system prompt stored on the agent record
 - Optional skill packs
-- Optional knowledge access
+- Optional document knowledge access
 - Optional memory behavior
 - Control settings such as guardrails, rate limits, and budgets
 
 <Aside type="note">
-Knowledge and memory are separate concepts in ThinkWork. Knowledge usually means documents and retrieval context. Memory means information retained from prior interactions. Both feed the same agent turn, but they are configured and reasoned about differently.
+Memory is the umbrella context layer in ThinkWork. Document knowledge and long-term memory are different inputs into that layer, and both feed the same agent turn in different ways.
 </Aside>
 
 ## Typical setup flow
@@ -43,7 +61,7 @@ Knowledge and memory are separate concepts in ThinkWork. Knowledge usually means
 1. Create an agent template with model and control defaults
 2. Create an agent and assign the template
 3. Attach skill packs if the agent needs custom tools or instructions
-4. Attach knowledge sources if the agent should retrieve from documents
+4. Attach document knowledge sources if the agent should retrieve from documents
 5. Choose the memory mode that matches the use case
 
 ## When to use managed agents
@@ -52,7 +70,8 @@ Managed agents are the best fit when you want:
 
 - Bedrock-native deployment in your own AWS account
 - A standard runtime across many agents
-- Tight integration with threads, automations, and controls
+- Tight integration with threads, memory, automations, and controls
 - Simple operations for internal tools and production workflows
+- Easy setup without giving up ownership of the harness
 
 Use [connected agents](/concepts/agents/) when you already have an external runtime that you want ThinkWork to orchestrate around rather than replace.
