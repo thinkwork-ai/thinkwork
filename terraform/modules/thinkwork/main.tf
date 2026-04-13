@@ -252,6 +252,7 @@ module "admin_site" {
 
   stage     = var.stage
   site_name = "admin"
+  is_spa    = true
 }
 
 ################################################################################

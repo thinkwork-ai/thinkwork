@@ -33,6 +33,12 @@ variable "certificate_arn" {
   default     = ""
 }
 
+variable "is_spa" {
+  description = "When true, configure CloudFront for a single-page app: drop the directory-rewrite function and fall back to /index.html with 200 on 403/404 so the client router can handle deep links."
+  type        = bool
+  default     = false
+}
+
 ################################################################################
 # S3 Bucket
 ################################################################################
@@ -74,9 +80,14 @@ resource "aws_cloudfront_origin_access_control" "site" {
 #
 # S3 with OAC doesn't auto-serve index.html for subdirectory requests.
 # /getting-started/ → /getting-started/index.html
+#
+# Not needed (and harmful) for SPAs: a deep route like /humans would be
+# rewritten to /humans/index.html, which S3 doesn't have — 403 from S3
+# instead of letting the SPA fallback below serve /index.html.
 ################################################################################
 
 resource "aws_cloudfront_function" "rewrite" {
+  count   = var.is_spa ? 0 : 1
   name    = "thinkwork-${var.stage}-${var.site_name}-rewrite"
   runtime = "cloudfront-js-2.0"
   publish = true
@@ -92,6 +103,19 @@ resource "aws_cloudfront_function" "rewrite" {
       return request;
     }
   EOF
+}
+
+locals {
+  # For SPAs, 403/404 from S3 means "not a real asset" — serve index.html with
+  # a 200 so the client router can resolve the route. For directory-style
+  # static sites, surface a real 404 page.
+  error_responses = var.is_spa ? [
+    { error_code = 403, response_code = 200, response_page_path = "/index.html" },
+    { error_code = 404, response_code = 200, response_page_path = "/index.html" },
+    ] : [
+    { error_code = 404, response_code = 404, response_page_path = "/404.html" },
+    { error_code = 403, response_code = 404, response_page_path = "/404.html" },
+  ]
 }
 
 ################################################################################
@@ -117,9 +141,12 @@ resource "aws_cloudfront_distribution" "site" {
     cached_methods         = ["GET", "HEAD"]
     compress               = true
 
-    function_association {
-      event_type   = "viewer-request"
-      function_arn = aws_cloudfront_function.rewrite.arn
+    dynamic "function_association" {
+      for_each = var.is_spa ? [] : [1]
+      content {
+        event_type   = "viewer-request"
+        function_arn = aws_cloudfront_function.rewrite[0].arn
+      }
     }
 
     forwarded_values {
@@ -130,17 +157,13 @@ resource "aws_cloudfront_distribution" "site" {
     }
   }
 
-  # Fallback for true 404s (e.g. deleted pages) — serve the 404 page
-  custom_error_response {
-    error_code         = 404
-    response_code      = 404
-    response_page_path = "/404.html"
-  }
-
-  custom_error_response {
-    error_code         = 403
-    response_code      = 404
-    response_page_path = "/404.html"
+  dynamic "custom_error_response" {
+    for_each = local.error_responses
+    content {
+      error_code         = custom_error_response.value.error_code
+      response_code      = custom_error_response.value.response_code
+      response_page_path = custom_error_response.value.response_page_path
+    }
   }
 
   restrictions {
