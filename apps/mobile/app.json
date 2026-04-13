@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#070a0f"
     },
     "ios": {
       "supportsTablet": true,
@@ -26,7 +26,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#070a0f"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.thinkwork.agent",
@@ -52,7 +52,7 @@
       [
         "expo-notifications",
         {
-          "color": "#f59e0b"
+          "color": "#38bdf8"
         }
       ]
     ],
