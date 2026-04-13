@@ -278,6 +278,32 @@ resource "aws_iam_role_policy" "lambda_ssm_read" {
   })
 }
 
+# Allow API handler Lambdas to invoke each other directly. sendMessage
+# dispatches to chat-agent-invoke for instant chat response; the memory
+# resolvers reach knowledge-base-manager and job-schedule-manager for
+# admin-driven operations. The existing lambda_agentcore_invoke policy
+# covers the Strands runtime Lambda only — this one covers internal
+# api-to-api calls. ARNs are constructed deterministically from the
+# handler naming pattern so we don't create a dependency cycle with the
+# handler resource.
+resource "aws_iam_role_policy" "lambda_api_cross_invoke" {
+  name = "api-cross-function-invoke"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = ["lambda:InvokeFunction"]
+      Resource = [
+        "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-chat-agent-invoke",
+        "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-knowledge-base-manager",
+        "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-job-schedule-manager",
+      ]
+    }]
+  })
+}
+
 ################################################################################
 # Placeholder Lambda — proves the infrastructure works
 #
