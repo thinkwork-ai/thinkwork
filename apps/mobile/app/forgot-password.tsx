@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Image,
 } from "react-native";
 import { useRouter } from "expo-router";
 import {
@@ -132,8 +133,15 @@ export default function ForgotPasswordScreen() {
       >
         <Card className="w-[90%] max-w-md">
           <CardHeader className="items-center">
+            <View className="mb-3">
+              <Image
+                source={require("@/assets/logo.png")}
+                style={{ width: 130, height: 105 }}
+                resizeMode="contain"
+              />
+            </View>
             <CardTitle>
-              <H2 className="tracking-wider uppercase">Reset Password</H2>
+              <H2 className="tracking-tight">Reset Password</H2>
             </CardTitle>
             <CardDescription>
               <Muted className="text-center">
@@ -148,7 +156,6 @@ export default function ForgotPasswordScreen() {
             {step === "email" ? (
               <>
                 <Input
-                  label="Email"
                   placeholder="your@email.com"
                   value={email}
                   onChangeText={setEmail}

@@ -82,10 +82,11 @@ export function BiometricLockScreen({
         {/* Logo */}
         <Image
           source={require("@/assets/logo.png")}
-          style={{ width: 80, height: 80, borderRadius: 16, marginBottom: 8 }}
+          style={{ width: 130, height: 105, marginBottom: 8 }}
+          resizeMode="contain"
         />
         <Text
-          className="font-semibold text-neutral-900 dark:text-neutral-100 mb-1 tracking-wider uppercase"
+          className="font-semibold text-neutral-900 dark:text-neutral-100 mb-1 tracking-tight"
           numberOfLines={1}
           adjustsFontSizeToFit
           minimumFontScale={0.5}
