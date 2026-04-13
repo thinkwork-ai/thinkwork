@@ -29,9 +29,10 @@ const ogOut = path.join(publicDir, "og-image.png");
 const faviconOut = path.join(publicDir, "favicon.png");
 
 // Stroke attributes applied to every rendered brain instance below so
-// the node-graph reads bold at small sizes and matches the Astro
-// <BrainMark> component's DOM output.
-const BRAIN_STROKE = 'stroke="#38bdf8" stroke-width="0.7" stroke-linejoin="round" stroke-linecap="round"';
+// the node-graph reads bold at small sizes and matches the mobile icon
+// (apps/mobile/scripts/generate-brand-assets.mjs uses the same 1.6
+// stroke width).
+const BRAIN_STROKE = 'stroke="#38bdf8" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"';
 
 // ---------------------------------------------------------------------------
 // Open Graph image (1200x630)
@@ -101,10 +102,21 @@ console.log(`✓ wrote ${path.relative(repoRoot, ogOut)}`);
 // Favicon (256x256, transparent background — browsers downscale for the tab bar)
 // ---------------------------------------------------------------------------
 
+// Width-based fill matching the mobile icon (brainSvg / 0.94 width fill).
+// Brain spans 95% of the canvas width, centered vertically. Non-square
+// aspect is compensated for automatically by deriving brain height
+// from the tight viewBox.
 const faviconSize = 256;
+const [, , _favVbX, _favVbY] = [0, 0, 0, 0]; // unused, keep destructure symmetric
+const [, , _favVbW, _favVbH] = BRAIN_VIEWBOX.split(" ").map(Number);
+const favBrainW = Math.round(faviconSize * 0.95);
+const favBrainH = Math.round((favBrainW * _favVbH) / _favVbW);
+const favOffsetX = Math.round((faviconSize - favBrainW) / 2);
+const favOffsetY = Math.round((faviconSize - favBrainH) / 2);
+
 const faviconSvg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${faviconSize}" height="${faviconSize}" viewBox="0 0 ${faviconSize} ${faviconSize}">
-  <svg x="18" y="18" width="220" height="220" viewBox="${BRAIN_VIEWBOX}" fill="#38bdf8">
+  <svg x="${favOffsetX}" y="${favOffsetY}" width="${favBrainW}" height="${favBrainH}" viewBox="${BRAIN_VIEWBOX}" fill="#38bdf8">
     <g transform="${BRAIN_GROUP_TRANSFORM}">
       <path d="${BRAIN_PATH_D}" ${BRAIN_STROKE} />
     </g>
