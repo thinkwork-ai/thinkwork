@@ -158,7 +158,11 @@ jobs:
       - name: Terraform Apply
         working-directory: terraform/examples/greenfield
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Cloudflare provider init requires a non-empty token even when
+          # the www_dns module has count=0. Fall back to a placeholder when
+          # the real secret isn't set — the provider only hits the API if
+          # WWW_DOMAIN is also configured, which enables the module.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || 'placeholder-not-configured' }}
         run: |
           LAMBDA_DIR=""
           if [ -d "${{ github.workspace }}/dist/lambdas" ]; then
