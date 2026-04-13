@@ -93,14 +93,13 @@ await sharp(Buffer.from(ogSvg))
 console.log(`✓ wrote ${path.relative(repoRoot, ogOut)}`);
 
 // ---------------------------------------------------------------------------
-// Favicon (256x256 — browsers downscale for the tab bar)
+// Favicon (256x256, transparent background — browsers downscale for the tab bar)
 // ---------------------------------------------------------------------------
 
 const faviconSize = 256;
 const faviconSvg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${faviconSize}" height="${faviconSize}" viewBox="0 0 ${faviconSize} ${faviconSize}">
-  <rect width="${faviconSize}" height="${faviconSize}" rx="48" fill="#070a0f"/>
-  <svg x="28" y="28" width="200" height="200" viewBox="${BRAIN_VIEWBOX}" fill="#38bdf8">
+  <svg x="18" y="18" width="220" height="220" viewBox="${BRAIN_VIEWBOX}" fill="#38bdf8">
     <g transform="${BRAIN_GROUP_TRANSFORM}">
       <path d="${BRAIN_PATH_D}" />
     </g>
