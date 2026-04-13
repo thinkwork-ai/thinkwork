@@ -109,8 +109,18 @@ export const db = getDb();
 let _chatAgentInvokeFnArn: string | null | undefined;
 export async function getChatAgentInvokeFnArn(): Promise<string | null> {
 	if (_chatAgentInvokeFnArn !== undefined) return _chatAgentInvokeFnArn;
+
+	// Preferred: read the ARN from env (Terraform wires it in directly).
+	// Falls back to SSM lookup only for deployments that haven't been
+	// migrated to the env-var path yet.
+	const envArn = process.env.CHAT_AGENT_INVOKE_FN_ARN;
+	if (envArn) {
+		_chatAgentInvokeFnArn = envArn;
+		return _chatAgentInvokeFnArn;
+	}
+
 	try {
-		let stage = process.env.STAGE || process.env.STAGE || "";
+		let stage = process.env.STAGE || "";
 		if (!stage && process.env.SST_RESOURCE_App) {
 			try { stage = JSON.parse(process.env.SST_RESOURCE_App).stage; } catch {}
 		}
@@ -121,7 +131,10 @@ export async function getChatAgentInvokeFnArn(): Promise<string | null> {
 			Name: `/thinkwork/${stage}/chat-agent-invoke-fn-arn`,
 		}));
 		_chatAgentInvokeFnArn = res.Parameter?.Value || null;
-	} catch {
+	} catch (err) {
+		console.warn(
+			`[graphql] chat-agent-invoke SSM lookup failed: ${(err as Error)?.name}: ${(err as Error)?.message}`,
+		);
 		_chatAgentInvokeFnArn = null;
 	}
 	return _chatAgentInvokeFnArn;

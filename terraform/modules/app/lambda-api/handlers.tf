@@ -34,12 +34,18 @@ locals {
     HINDSIGHT_ENDPOINT      = var.hindsight_endpoint
     AGENTCORE_MEMORY_ID     = var.agentcore_memory_id
     MEMORY_ENGINE           = var.memory_engine
-    ADMIN_URL               = var.admin_url
-    DOCS_URL                = var.docs_url
-    APPSYNC_REALTIME_URL    = var.appsync_realtime_url
-    ECR_REPOSITORY_URL      = var.ecr_repository_url
-    AWS_ACCOUNT_ID          = var.account_id
-    NODE_OPTIONS            = "--enable-source-maps"
+    # Skip the SSM indirection for cross-function ARN lookup. Terraform
+    # already knows this ARN at apply time and the Lambda role's SSM
+    # permission has been a recurring source of silent failures where
+    # getChatAgentInvokeFnArn falls back to null and sendMessage loses
+    # message_history on the wakeup-processor fallback path.
+    CHAT_AGENT_INVOKE_FN_ARN = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-chat-agent-invoke"
+    ADMIN_URL                = var.admin_url
+    DOCS_URL                 = var.docs_url
+    APPSYNC_REALTIME_URL     = var.appsync_realtime_url
+    ECR_REPOSITORY_URL       = var.ecr_repository_url
+    AWS_ACCOUNT_ID           = var.account_id
+    NODE_OPTIONS             = "--enable-source-maps"
   }
 }
 
