@@ -1,19 +1,22 @@
 /**
- * deleteMemoryRecord — Delete a memory from Hindsight.
- *
- * PRD-41B Phase 5: Replaces AgentCore Memory delete with direct Postgres delete.
+ * deleteMemoryRecord — Delete a memory record through the active engine
+ * adapter. Engines without a `forget` capability throw a clear error.
  */
 
 import type { GraphQLContext } from "../../context.js";
-import { db, sql } from "../../utils.js";
+import { getMemoryServices } from "../../../lib/memory/index.js";
 
-export const deleteMemoryRecord = async (_parent: any, args: any, _ctx: GraphQLContext) => {
+export const deleteMemoryRecord = async (
+	_parent: any,
+	args: any,
+	_ctx: GraphQLContext,
+) => {
 	const { memoryRecordId } = args as { memoryRecordId: string };
 
-	await db.execute(sql`
-		DELETE FROM hindsight.memory_units
-		WHERE id = ${memoryRecordId}::uuid
-	`);
-
+	const { adapter, config } = getMemoryServices();
+	if (!adapter.forget) {
+		throw new Error(`Memory delete is not supported on engine "${config.engine}"`);
+	}
+	await adapter.forget(memoryRecordId);
 	return true;
 };

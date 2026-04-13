@@ -1524,14 +1524,21 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                 # Auto-retain this turn into AgentCore Memory so background
                 # strategies (semantic / preferences / summaries / episodes)
                 # extract facts without the model having to call remember().
-                # Silently skipped when AGENTCORE_MEMORY_ID is unset.
+                # Gated on MEMORY_ENGINE: only runs when the deployment's
+                # canonical long-term engine is AgentCore. Hosted ThinkWork
+                # (MEMORY_ENGINE=hindsight) skips this write so we don't pay
+                # for AgentCore retains no recall path reads from.
                 # Best-effort — never block the response on retention failure.
-                try:
-                    from memory import store_turn_pair
-                    store_turn_pair(ticket_id, message, response_text)
-                except Exception as retain_err:
-                    logger.warning("auto-retain failed thread=%s: %s",
-                                   ticket_id, retain_err)
+                memory_engine = os.environ.get("MEMORY_ENGINE", "hindsight").lower()
+                if memory_engine == "agentcore":
+                    try:
+                        from memory import store_turn_pair
+                        store_turn_pair(ticket_id, message, response_text)
+                    except Exception as retain_err:
+                        logger.warning("auto-retain failed thread=%s: %s",
+                                       ticket_id, retain_err)
+                else:
+                    logger.debug("auto-retain skipped (MEMORY_ENGINE=%s)", memory_engine)
 
                 log_agent_invocation(tenant_id=tenant_id, tools_used=["strands_agent"],
                                     duration_ms=duration_ms, status="success")

@@ -145,13 +145,13 @@ variable "enable_hindsight" {
 }
 
 variable "memory_engine" {
-  description = "DEPRECATED. Use `enable_hindsight` instead. For backwards compatibility, setting this to 'hindsight' is equivalent to `enable_hindsight = true`. AgentCore managed memory is always on and cannot be disabled."
+  description = "Active long-term memory engine for canonical recall/inspect/export. Exactly one engine is authoritative per deployment. Accepted values: 'hindsight' (requires enable_hindsight = true), 'agentcore' (uses the always-on AgentCore managed memory). Legacy value 'managed' maps to 'agentcore'. Empty = auto-select: 'hindsight' when enable_hindsight = true, otherwise 'agentcore'."
   type        = string
   default     = ""
 
   validation {
-    condition     = var.memory_engine == "" || contains(["managed", "hindsight"], var.memory_engine)
-    error_message = "memory_engine (deprecated) must be empty, 'managed', or 'hindsight'. Prefer enable_hindsight instead."
+    condition     = var.memory_engine == "" || contains(["managed", "hindsight", "agentcore"], var.memory_engine)
+    error_message = "memory_engine must be empty, 'hindsight', 'agentcore', or legacy 'managed'."
   }
 }
 

@@ -33,6 +33,7 @@ locals {
     WORKSPACE_BUCKET        = var.bucket_name
     HINDSIGHT_ENDPOINT      = var.hindsight_endpoint
     AGENTCORE_MEMORY_ID     = var.agentcore_memory_id
+    MEMORY_ENGINE           = var.memory_engine
     ADMIN_URL               = var.admin_url
     DOCS_URL                = var.docs_url
     APPSYNC_REALTIME_URL    = var.appsync_realtime_url
