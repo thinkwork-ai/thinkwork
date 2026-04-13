@@ -133,6 +133,7 @@ variable "cloudflare_zone_id" {
 locals {
   www_dns_enabled = var.www_domain != "" && var.cloudflare_zone_id != ""
   docs_domain     = var.www_domain != "" ? "docs.${var.www_domain}" : ""
+  admin_domain    = var.www_domain != "" ? "admin.${var.www_domain}" : ""
 }
 
 module "thinkwork" {
@@ -156,9 +157,14 @@ module "thinkwork" {
   www_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
 
   # Docs site custom domain (derived from www_domain — docs.<apex>). The
-  # same ACM cert covers apex + www + docs so both distributions share it.
+  # same ACM cert covers apex + www + docs + admin so every distribution
+  # shares it.
   docs_domain          = local.www_dns_enabled ? local.docs_domain : ""
   docs_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
+
+  # Admin SPA custom domain (derived from www_domain — admin.<apex>).
+  admin_domain          = local.www_dns_enabled ? local.admin_domain : ""
+  admin_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
 
   # Greenfield: create everything (all defaults are true)
 }
@@ -182,6 +188,10 @@ module "www_dns" {
   # read only after the cert is created, for the CNAME record.
   include_docs                = true
   docs_cloudfront_domain_name = module.thinkwork.docs_distribution_domain
+
+  # Admin: same cycle-avoidance pattern.
+  include_admin                = true
+  admin_cloudfront_domain_name = module.thinkwork.admin_distribution_domain
 }
 
 ################################################################################
@@ -271,7 +281,7 @@ output "agentcore_memory_id" {
 
 output "admin_url" {
   description = "Admin app URL"
-  value       = "https://${module.thinkwork.admin_distribution_domain}"
+  value       = local.www_dns_enabled ? "https://${local.admin_domain}" : "https://${module.thinkwork.admin_distribution_domain}"
 }
 
 output "admin_distribution_id" {

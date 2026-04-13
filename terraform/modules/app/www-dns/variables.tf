@@ -29,3 +29,15 @@ variable "docs_cloudfront_domain_name" {
   type        = string
   default     = ""
 }
+
+variable "include_admin" {
+  description = "When true, add admin.<domain> to the ACM cert SANs and create a Cloudflare CNAME for it. Same cycle-avoidance rationale as include_docs."
+  type        = bool
+  default     = false
+}
+
+variable "admin_cloudfront_domain_name" {
+  description = "CloudFront distribution domain name for the admin SPA. Used as the target for the admin.<domain> Cloudflare CNAME when include_admin is true."
+  type        = string
+  default     = ""
+}

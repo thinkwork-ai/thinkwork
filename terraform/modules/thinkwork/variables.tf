@@ -277,3 +277,19 @@ variable "www_certificate_arn" {
   type        = string
   default     = ""
 }
+
+# ---------------------------------------------------------------------------
+# Admin site (custom domain — optional)
+# ---------------------------------------------------------------------------
+
+variable "admin_domain" {
+  description = "Custom domain for the admin SPA (e.g. admin.thinkwork.ai). Leave empty for CloudFront default."
+  type        = string
+  default     = ""
+}
+
+variable "admin_certificate_arn" {
+  description = "ACM certificate ARN for the admin domain (us-east-1, required for CloudFront custom domains)."
+  type        = string
+  default     = ""
+}

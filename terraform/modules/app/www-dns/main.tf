@@ -2,13 +2,14 @@
 # Public Website DNS + TLS (Cloudflare zone, AWS ACM cert, www→apex 301)
 #
 # Responsibilities:
-#   1. ACM certificate in us-east-1 covering apex + www (+ optional docs).
+#   1. ACM certificate in us-east-1 covering apex + www
+#      (+ optional docs + optional admin).
 #   2. Cloudflare DNS records for ACM DNS validation.
 #   3. Apex CNAME in Cloudflare → primary CloudFront distribution (DNS-only).
 #   4. Second CloudFront distribution fronting an S3 website-redirect bucket
 #      that 301s www.<domain> → https://<domain>, plus its Cloudflare CNAME.
-#   5. Optional docs.<domain> CNAME → docs CloudFront distribution when
-#      docs_cloudfront_domain_name is set.
+#   5. Optional docs.<domain> CNAME → docs CloudFront distribution.
+#   6. Optional admin.<domain> CNAME → admin CloudFront distribution.
 #
 # Cloudflare records MUST be DNS-only (grey cloud). CloudFront terminates TLS
 # with the ACM cert and needs the real Host header.
@@ -31,16 +32,24 @@ locals {
   apex    = var.domain
   www     = "www.${var.domain}"
   docs    = "docs.${var.domain}"
+  admin   = "admin.${var.domain}"
   name_id = replace(var.domain, ".", "-")
 
-  # ACM SANs: always include www, conditionally include docs.
-  # Gated on var.include_docs (a plain bool) rather than on the docs
-  # CloudFront output to keep the dependency graph acyclic.
-  cert_sans = var.include_docs ? [local.www, local.docs] : [local.www]
+  # ACM SANs: always include www, conditionally include docs and admin.
+  # Gated on plain bool vars (not on CloudFront outputs) to keep the
+  # dependency graph acyclic — distributions depend on the cert, so
+  # the cert mustn't depend on distribution outputs.
+  cert_sans = concat(
+    [local.www],
+    var.include_docs ? [local.docs] : [],
+    var.include_admin ? [local.admin] : [],
+  )
 
-  # The docs CNAME record can only be created when we both intend to
-  # serve docs AND have the distribution domain to point at.
-  create_docs_record = var.include_docs && var.docs_cloudfront_domain_name != ""
+  # CNAME records can only be created when we have the distribution
+  # domain to point at. Those inputs come after the cert is done, so
+  # they don't participate in the cert's dependency graph.
+  create_docs_record  = var.include_docs && var.docs_cloudfront_domain_name != ""
+  create_admin_record = var.include_admin && var.admin_cloudfront_domain_name != ""
 }
 
 ################################################################################
@@ -217,4 +226,20 @@ resource "cloudflare_record" "docs" {
   ttl     = 300
   proxied = false
   comment = "thinkwork-${var.stage} docs → CloudFront"
+}
+
+################################################################################
+# admin.<domain> → admin CloudFront distribution (optional)
+################################################################################
+
+resource "cloudflare_record" "admin" {
+  count = local.create_admin_record ? 1 : 0
+
+  zone_id = var.cloudflare_zone_id
+  name    = local.admin
+  content = var.admin_cloudfront_domain_name
+  type    = "CNAME"
+  ttl     = 300
+  proxied = false
+  comment = "thinkwork-${var.stage} admin → CloudFront"
 }
