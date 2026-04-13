@@ -132,6 +132,7 @@ variable "cloudflare_zone_id" {
 
 locals {
   www_dns_enabled = var.www_domain != "" && var.cloudflare_zone_id != ""
+  docs_domain     = var.www_domain != "" ? "docs.${var.www_domain}" : ""
 }
 
 module "thinkwork" {
@@ -154,21 +155,27 @@ module "thinkwork" {
   www_domain          = var.www_domain
   www_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
 
+  # Docs site custom domain (derived from www_domain — docs.<apex>). The
+  # same ACM cert covers apex + www + docs so both distributions share it.
+  docs_domain          = local.www_dns_enabled ? local.docs_domain : ""
+  docs_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
+
   # Greenfield: create everything (all defaults are true)
 }
 
 ################################################################################
-# Public Website DNS (Cloudflare zone, ACM cert, www→apex redirect)
+# Public Website DNS (Cloudflare zone, ACM cert, www→apex redirect, docs)
 ################################################################################
 
 module "www_dns" {
   count  = local.www_dns_enabled ? 1 : 0
   source = "../../modules/app/www-dns"
 
-  stage                  = var.stage
-  domain                 = var.www_domain
-  cloudflare_zone_id     = var.cloudflare_zone_id
-  cloudfront_domain_name = module.thinkwork.www_distribution_domain
+  stage                       = var.stage
+  domain                      = var.www_domain
+  cloudflare_zone_id          = var.cloudflare_zone_id
+  cloudfront_domain_name      = module.thinkwork.www_distribution_domain
+  docs_cloudfront_domain_name = module.thinkwork.docs_distribution_domain
 }
 
 ################################################################################
@@ -273,7 +280,7 @@ output "admin_bucket_name" {
 
 output "docs_url" {
   description = "Docs site URL"
-  value       = "https://${module.thinkwork.docs_distribution_domain}"
+  value       = local.www_dns_enabled ? "https://${local.docs_domain}" : "https://${module.thinkwork.docs_distribution_domain}"
 }
 
 output "docs_distribution_id" {
