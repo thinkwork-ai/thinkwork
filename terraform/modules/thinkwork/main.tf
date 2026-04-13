@@ -264,9 +264,11 @@ module "ses" {
 module "admin_site" {
   source = "../app/static-site"
 
-  stage     = var.stage
-  site_name = "admin"
-  is_spa    = true
+  stage           = var.stage
+  site_name       = "admin"
+  is_spa          = true
+  custom_domain   = var.admin_domain
+  certificate_arn = var.admin_certificate_arn
 }
 
 ################################################################################
