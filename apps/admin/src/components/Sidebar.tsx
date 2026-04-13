@@ -192,12 +192,12 @@ export function AppSidebar() {
             <SidebarMenuButton size="lg" asChild>
               <Link to="/dashboard">
                 <img
-                  src="/favicon.png"
-                  alt="Thinkwork"
-                  className="h-7 w-7 rounded-md shrink-0"
+                  src="/logo.png"
+                  alt="ThinkWork"
+                  className="h-7 w-9 shrink-0 object-contain"
                 />
                 <span className="text-lg font-semibold truncate">
-                  Thinkwork
+                  ThinkWork
                 </span>
               </Link>
             </SidebarMenuButton>

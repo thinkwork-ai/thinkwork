@@ -207,7 +207,7 @@ function SignInPage() {
     : confirm.pending
       ? "Check your email"
       : mode === "sign-in"
-        ? "Sign in to Thinkwork"
+        ? "Sign in to ThinkWork"
         : "Create your account";
 
   const description = newPw.required
@@ -234,9 +234,9 @@ function SignInPage() {
       <div className="w-full max-w-sm px-4">
         {/* Branding */}
         <div className="mb-6 flex items-center justify-center gap-2">
-          <img src="/favicon.png" alt="Thinkwork" className="h-8 w-8" />
+          <img src="/logo.png" alt="ThinkWork" className="h-8 w-10 object-contain" />
           <span className="text-lg font-semibold tracking-tight">
-            Thinkwork
+            ThinkWork
           </span>
         </div>
 

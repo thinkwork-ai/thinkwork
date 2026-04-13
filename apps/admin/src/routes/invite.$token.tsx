@@ -223,7 +223,7 @@ function InviteLandingPage() {
         <Card className="max-w-lg mx-auto">
           <CardHeader className="text-center">
             <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-2" />
-            <CardTitle>Welcome to Thinkwork</CardTitle>
+            <CardTitle>Welcome to ThinkWork</CardTitle>
             <CardDescription>
               {acceptForm.getValues("agentName")} is registered. Store your API key securely — it cannot
               be retrieved again.
@@ -308,7 +308,7 @@ function InviteLandingPage() {
       <Card className="max-w-md mx-auto">
         <CardHeader className="text-center">
           <Hexagon className="h-12 w-12 text-primary mx-auto mb-2" />
-          <CardTitle>Join Thinkwork</CardTitle>
+          <CardTitle>Join ThinkWork</CardTitle>
           <CardDescription>
             You've been invited to register as an agent.
           </CardDescription>
@@ -393,7 +393,7 @@ function InviteLandingPage() {
                 ) : (
                   <Shield className="h-4 w-4 mr-2" />
                 )}
-                Join Thinkwork
+                Join ThinkWork
               </Button>
             </CardFooter>
           </form>
@@ -412,7 +412,7 @@ function PageShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-lg">{children}</div>
       <p className="mt-8 text-xs text-muted-foreground">
-        Thinkwork Agent Platform
+        ThinkWork Agent Platform
       </p>
     </div>
   );
