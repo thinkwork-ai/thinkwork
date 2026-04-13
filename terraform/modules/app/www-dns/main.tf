@@ -2,11 +2,13 @@
 # Public Website DNS + TLS (Cloudflare zone, AWS ACM cert, www→apex 301)
 #
 # Responsibilities:
-#   1. ACM certificate in us-east-1 covering both apex and www.
+#   1. ACM certificate in us-east-1 covering apex + www (+ optional docs).
 #   2. Cloudflare DNS records for ACM DNS validation.
 #   3. Apex CNAME in Cloudflare → primary CloudFront distribution (DNS-only).
 #   4. Second CloudFront distribution fronting an S3 website-redirect bucket
 #      that 301s www.<domain> → https://<domain>, plus its Cloudflare CNAME.
+#   5. Optional docs.<domain> CNAME → docs CloudFront distribution when
+#      docs_cloudfront_domain_name is set.
 #
 # Cloudflare records MUST be DNS-only (grey cloud). CloudFront terminates TLS
 # with the ACM cert and needs the real Host header.
@@ -26,18 +28,23 @@ terraform {
 }
 
 locals {
-  apex    = var.domain
-  www     = "www.${var.domain}"
-  name_id = replace(var.domain, ".", "-")
+  apex         = var.domain
+  www          = "www.${var.domain}"
+  docs         = "docs.${var.domain}"
+  docs_enabled = var.docs_cloudfront_domain_name != ""
+  name_id      = replace(var.domain, ".", "-")
+
+  # ACM SANs: always include www, conditionally include docs.
+  cert_sans = local.docs_enabled ? [local.www, local.docs] : [local.www]
 }
 
 ################################################################################
-# ACM certificate (us-east-1, covers apex + www)
+# ACM certificate (us-east-1, covers apex + www [+ docs])
 ################################################################################
 
 resource "aws_acm_certificate" "www" {
   domain_name               = local.apex
-  subject_alternative_names = [local.www]
+  subject_alternative_names = local.cert_sans
   validation_method         = "DNS"
 
   lifecycle {
@@ -185,4 +192,24 @@ resource "cloudflare_record" "www_redirect" {
   ttl     = 300
   proxied = false
   comment = "thinkwork-${var.stage} www → redirect distribution"
+}
+
+################################################################################
+# docs.<domain> → docs CloudFront distribution (optional)
+#
+# Created only when the greenfield stack wires docs_cloudfront_domain_name.
+# The docs CloudFront alias picks up the same ACM cert via certificate_arn
+# on the thinkwork module's docs_site.
+################################################################################
+
+resource "cloudflare_record" "docs" {
+  count = local.docs_enabled ? 1 : 0
+
+  zone_id = var.cloudflare_zone_id
+  name    = local.docs
+  content = var.docs_cloudfront_domain_name
+  type    = "CNAME"
+  ttl     = 300
+  proxied = false
+  comment = "thinkwork-${var.stage} docs → CloudFront"
 }
