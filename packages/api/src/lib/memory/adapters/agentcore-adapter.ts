@@ -17,6 +17,7 @@ import { randomUUID } from "node:crypto";
 import {
 	BatchCreateMemoryRecordsCommand,
 	BedrockAgentCoreClient,
+	CreateEventCommand,
 	DeleteMemoryRecordCommand,
 	ListMemoryRecordsCommand,
 	RetrieveMemoryRecordsCommand,
@@ -33,6 +34,7 @@ import type {
 	RecallResult,
 	RetainRequest,
 	RetainResult,
+	RetainTurnRequest,
 	ThinkWorkMemoryRecord,
 } from "../types.js";
 
@@ -169,6 +171,43 @@ export class AgentCoreAdapter implements MemoryAdapter {
 			},
 		};
 		return { record, backend: "agentcore" };
+	}
+
+	async retainTurn(req: RetainTurnRequest): Promise<void> {
+		// AgentCore's CreateEvent ingests a conversational turn and feeds
+		// the background extraction strategies (semantic / preferences /
+		// summaries / episodes). This is the same shape store_turn_pair
+		// in memory.py uses today; we lift it into the adapter so the
+		// runtime can call it through the normalized layer instead of
+		// reaching into the AgentCore SDK directly.
+		const client = this.getClient();
+		const actorId = req.ownerId;
+		const sessionId = req.threadId;
+		if (!sessionId) {
+			throw new Error("[agentcore-adapter] retainTurn requires threadId");
+		}
+
+		const payload = req.messages
+			.filter((m) => m.content && m.content.trim().length > 0)
+			.map((m) => ({
+				conversational: {
+					content: { text: m.content },
+					role: m.role.toUpperCase() as "USER" | "ASSISTANT" | "SYSTEM",
+				},
+			}));
+		if (payload.length === 0) return;
+
+		await client.send(
+			new CreateEventCommand({
+				memoryId: this.memoryId,
+				actorId,
+				sessionId,
+				eventTimestamp: new Date(),
+				// SDK declares the payload union with a `$unknown` member; the
+				// concrete `conversational` shape is the only one we use.
+				payload: payload as any,
+			}),
+		);
 	}
 
 	async inspect(req: InspectRequest): Promise<ThinkWorkMemoryRecord[]> {

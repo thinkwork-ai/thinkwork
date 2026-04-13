@@ -39,13 +39,23 @@ variable "agentcore_memory_id" {
 }
 
 variable "memory_engine" {
-  description = "Active long-term memory engine ('hindsight' or 'agentcore'). Controls whether the container auto-retains each turn into AgentCore Memory after a response; when 'hindsight' is active, auto-retention is skipped so we don't pay for writes no recall path reads."
+  description = "Active long-term memory engine ('hindsight' or 'agentcore'). Surfaced to the runtime as MEMORY_ENGINE for telemetry/debugging only; engine selection itself happens in the API's normalized memory layer when memory-retain is invoked."
   type        = string
   default     = "hindsight"
   validation {
     condition     = contains(["hindsight", "agentcore"], var.memory_engine)
     error_message = "memory_engine must be 'hindsight' or 'agentcore'."
   }
+}
+
+# memory-retain Lambda name + ARN are constructed locally rather than
+# taken as inputs to avoid a circular dependency: the lambda-api module
+# already consumes this module's outputs (agentcore_function_name/arn).
+# The Lambda name follows the deterministic pattern from
+# lambda-api/handlers.tf: thinkwork-${stage}-api-${handler_name}.
+locals {
+  memory_retain_fn_name = "thinkwork-${var.stage}-api-memory-retain"
+  memory_retain_fn_arn  = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.memory_retain_fn_name}"
 }
 
 ################################################################################
@@ -167,6 +177,17 @@ resource "aws_iam_role_policy" "agentcore" {
         Action   = ["ssm:GetParameter", "ssm:PutParameter"]
         Resource = "arn:aws:ssm:${var.region}:${var.account_id}:parameter/thinkwork/${var.stage}/agentcore/*"
       },
+      {
+        # Async-invoke the memory-retain Lambda after every chat turn so
+        # the API's normalized memory layer can run the active engine's
+        # retainTurn() path (Hindsight POST /memories or AgentCore
+        # CreateEvent). InvocationType=Event from the Python client; this
+        # Lambda is the only target.
+        Sid      = "MemoryRetainInvoke"
+        Effect   = "Allow"
+        Action   = ["lambda:InvokeFunction"]
+        Resource = local.memory_retain_fn_arn
+      },
     ]
   })
 }
@@ -203,6 +224,7 @@ resource "aws_lambda_function" "agentcore" {
       AGENTCORE_MEMORY_ID    = var.agentcore_memory_id
       AGENTCORE_FILES_BUCKET = var.bucket_name
       MEMORY_ENGINE          = var.memory_engine
+      MEMORY_RETAIN_FN_NAME  = local.memory_retain_fn_name
     }
   }
 
