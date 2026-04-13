@@ -13,7 +13,9 @@
  * - packages/api/src/graphql/resolvers/memory/memorySearch.query.ts:97-152
  */
 
+import { randomUUID } from "node:crypto";
 import {
+	BatchCreateMemoryRecordsCommand,
 	BatchUpdateMemoryRecordsCommand,
 	BedrockAgentCoreClient,
 	DeleteMemoryRecordCommand,
@@ -118,10 +120,56 @@ export class AgentCoreAdapter implements MemoryAdapter {
 	}
 
 	async retain(req: RetainRequest): Promise<RetainResult> {
-		throw new Error(
-			"[agentcore-adapter] retain via normalized path is not implemented yet; " +
-				"use runtime store_turn_pair or direct batch_create_memory_records",
+		const client = this.getClient();
+		const actorId = req.ownerId;
+		const namespace = `assistant_${actorId}`;
+		const requestIdentifier = randomUUID().replace(/-/g, "").slice(0, 16);
+		const timestamp = new Date();
+
+		const resp = await client.send(
+			new BatchCreateMemoryRecordsCommand({
+				memoryId: this.memoryId,
+				records: [
+					{
+						requestIdentifier,
+						content: { text: req.content },
+						namespaces: [namespace],
+						timestamp,
+					},
+				],
+			}),
 		);
+
+		const failed = resp.failedRecords || [];
+		if (failed.length > 0) {
+			throw new Error(
+				`[agentcore-adapter] retain failed: ${JSON.stringify(failed[0])}`,
+			);
+		}
+
+		const successful = resp.successfulRecords || [];
+		const ref = successful[0]?.memoryRecordId || requestIdentifier;
+		const record: ThinkWorkMemoryRecord = {
+			id: ref,
+			tenantId: req.tenantId,
+			ownerType: "agent",
+			ownerId: req.ownerId,
+			threadId: req.threadId,
+			kind: "unit",
+			sourceType: req.sourceType,
+			strategy: "semantic",
+			status: "active",
+			content: { text: req.content },
+			backendRefs: [{ backend: "agentcore", ref }],
+			createdAt: timestamp.toISOString(),
+			metadata: {
+				namespace,
+				requestIdentifier,
+				role: req.role,
+				...(req.metadata || {}),
+			},
+		};
+		return { record, backend: "agentcore" };
 	}
 
 	async inspect(req: InspectRequest): Promise<ThinkWorkMemoryRecord[]> {

@@ -115,6 +115,17 @@ export class HindsightAdapter implements MemoryAdapter {
 		const bankId = await this.resolveBankId(req.ownerId);
 		const factType = sourceTypeToFactType(req.sourceType);
 
+		const item: Record<string, unknown> = {
+			content: req.content,
+			context: req.sourceType,
+		};
+		const mergedMetadata: Record<string, unknown> = {
+			...(req.metadata || {}),
+			fact_type: factType,
+		};
+		if (req.role) mergedMetadata.role = req.role;
+		item.metadata = mergedMetadata;
+
 		let data: any = null;
 		try {
 			const resp = await fetch(
@@ -122,12 +133,7 @@ export class HindsightAdapter implements MemoryAdapter {
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						text: req.content,
-						context: req.sourceType,
-						fact_type: factType,
-						metadata: req.metadata || {},
-					}),
+					body: JSON.stringify({ items: [item] }),
 					signal: AbortSignal.timeout(this.timeoutMs),
 				},
 			);
@@ -139,7 +145,8 @@ export class HindsightAdapter implements MemoryAdapter {
 			throw new Error(`[hindsight-adapter] retain failed: ${(err as Error)?.message}`);
 		}
 
-		const unit = data?.memory_unit || data?.unit || data || {};
+		const unitList = data?.memory_units || data?.items || (data?.memory_unit ? [data.memory_unit] : []);
+		const unit = Array.isArray(unitList) && unitList.length > 0 ? unitList[0] : data || {};
 		const record = this.mapUnit({ ...unit, text: unit.text || req.content }, req, bankId);
 		return { record, backend: "hindsight" };
 	}
@@ -248,7 +255,14 @@ export class HindsightAdapter implements MemoryAdapter {
 	): ThinkWorkMemoryRecord {
 		const createdAt = toISO(unit.created_at) || new Date().toISOString();
 		const updatedAt = toISO(unit.updated_at) || undefined;
-		const factType: string | null = unit.fact_type || null;
+		const metaFactType =
+			unit.metadata && typeof unit.metadata === "object"
+				? (unit.metadata as Record<string, unknown>).fact_type
+				: undefined;
+		const factType: string | null =
+			(unit.fact_type as string | null | undefined) ||
+			(typeof metaFactType === "string" ? metaFactType : null) ||
+			null;
 		return {
 			id: String(unit.id || `hindsight-${bankId}-${createdAt}`),
 			tenantId: owner.tenantId,
