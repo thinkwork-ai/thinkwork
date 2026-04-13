@@ -29,6 +29,10 @@ terraform {
       source  = "hashicorp/null"
       version = "~> 3.0"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 4.0"
+    }
   }
 
   backend "s3" {
@@ -43,6 +47,10 @@ terraform {
 provider "aws" {
   region = var.region
 }
+
+# Cloudflare provider reads its token from the CLOUDFLARE_API_TOKEN env var.
+# Never commit the token to tfvars or source control.
+provider "cloudflare" {}
 
 variable "stage" {
   description = "Deployment stage — must match the Terraform workspace name"
@@ -110,6 +118,22 @@ variable "api_auth_secret" {
   default     = ""
 }
 
+variable "www_domain" {
+  description = "Public website apex domain (e.g. thinkwork.ai). Leave empty to skip the custom domain and DNS wiring."
+  type        = string
+  default     = ""
+}
+
+variable "cloudflare_zone_id" {
+  description = "Cloudflare zone ID for var.www_domain. Non-secret. Required when www_domain is set."
+  type        = string
+  default     = ""
+}
+
+locals {
+  www_dns_enabled = var.www_domain != "" && var.cloudflare_zone_id != ""
+}
+
 module "thinkwork" {
   source = "../../modules/thinkwork"
 
@@ -126,7 +150,25 @@ module "thinkwork" {
   lambda_zips_dir            = var.lambda_zips_dir
   api_auth_secret            = var.api_auth_secret
 
+  # Public website custom domain (optional — wired only when www_domain is set)
+  www_domain          = var.www_domain
+  www_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
+
   # Greenfield: create everything (all defaults are true)
+}
+
+################################################################################
+# Public Website DNS (Cloudflare zone, ACM cert, www→apex redirect)
+################################################################################
+
+module "www_dns" {
+  count  = local.www_dns_enabled ? 1 : 0
+  source = "../../modules/app/www-dns"
+
+  stage                  = var.stage
+  domain                 = var.www_domain
+  cloudflare_zone_id     = var.cloudflare_zone_id
+  cloudfront_domain_name = module.thinkwork.www_distribution_domain
 }
 
 ################################################################################
@@ -242,4 +284,24 @@ output "docs_distribution_id" {
 output "docs_bucket_name" {
   description = "S3 bucket for docs site assets"
   value       = module.thinkwork.docs_bucket_name
+}
+
+output "www_url" {
+  description = "Public website URL"
+  value       = var.www_domain != "" ? "https://${var.www_domain}" : "https://${module.thinkwork.www_distribution_domain}"
+}
+
+output "www_distribution_id" {
+  description = "CloudFront distribution ID for the public website (for cache invalidation)"
+  value       = module.thinkwork.www_distribution_id
+}
+
+output "www_distribution_domain" {
+  description = "CloudFront distribution domain for the public website"
+  value       = module.thinkwork.www_distribution_domain
+}
+
+output "www_bucket_name" {
+  description = "S3 bucket for public website assets"
+  value       = module.thinkwork.www_bucket_name
 }

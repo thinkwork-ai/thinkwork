@@ -127,3 +127,19 @@ output "docs_bucket_name" {
   description = "S3 bucket for docs site assets"
   value       = module.docs_site.bucket_name
 }
+
+# Public website (www)
+output "www_distribution_id" {
+  description = "CloudFront distribution ID for the public website"
+  value       = module.www_site.distribution_id
+}
+
+output "www_distribution_domain" {
+  description = "CloudFront domain for the public website"
+  value       = module.www_site.distribution_domain
+}
+
+output "www_bucket_name" {
+  description = "S3 bucket for the public website assets"
+  value       = module.www_site.bucket_name
+}
