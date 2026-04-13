@@ -25,6 +25,7 @@ import type {
 	RecallResult,
 	RetainRequest,
 	RetainResult,
+	RetainTurnRequest,
 	ThinkWorkMemoryRecord,
 } from "../types.js";
 
@@ -149,6 +150,39 @@ export class HindsightAdapter implements MemoryAdapter {
 		const unit = Array.isArray(unitList) && unitList.length > 0 ? unitList[0] : data || {};
 		const record = this.mapUnit({ ...unit, text: unit.text || req.content }, req, bankId);
 		return { record, backend: "hindsight" };
+	}
+
+	async retainTurn(req: RetainTurnRequest): Promise<void> {
+		const bankId = await this.resolveBankId(req.ownerId);
+		const items = req.messages
+			.filter((m) => m.content && m.content.trim().length > 0)
+			.map((m) => ({
+				content: m.content,
+				context: "thread_turn",
+				metadata: {
+					...(req.metadata || {}),
+					role: m.role,
+					thread_id: req.threadId,
+				},
+			}));
+		if (items.length === 0) return;
+
+		try {
+			const resp = await fetch(
+				`${this.endpoint}/v1/default/banks/${encodeURIComponent(bankId)}/memories`,
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ items }),
+					signal: AbortSignal.timeout(this.timeoutMs),
+				},
+			);
+			if (!resp.ok) {
+				throw new Error(`hindsight retainTurn ${resp.status}`);
+			}
+		} catch (err) {
+			throw new Error(`[hindsight-adapter] retainTurn failed: ${(err as Error)?.message}`);
+		}
 	}
 
 	async inspect(req: InspectRequest): Promise<ThinkWorkMemoryRecord[]> {

@@ -20,6 +20,7 @@ import type {
 	RecallResult,
 	RetainRequest,
 	RetainResult,
+	RetainTurnRequest,
 	ThinkWorkMemoryRecord,
 } from "./types.js";
 
@@ -31,6 +32,16 @@ export interface MemoryAdapter {
 	recall(request: RecallRequest): Promise<RecallResult[]>;
 
 	retain(request: RetainRequest): Promise<RetainResult>;
+
+	/**
+	 * Ingest a conversational turn for background extraction. Engines
+	 * decide their own extraction strategy: AgentCore feeds the
+	 * background semantic/preferences/summaries/episodes pipelines via
+	 * CreateEvent; Hindsight feeds the conversation to its own
+	 * LLM-based fact extractor. Distinct from {@link retain}, which
+	 * stores a single pre-extracted fact.
+	 */
+	retainTurn(request: RetainTurnRequest): Promise<void>;
 
 	inspect(request: InspectRequest): Promise<ThinkWorkMemoryRecord[]>;
 
