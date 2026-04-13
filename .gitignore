@@ -243,3 +243,6 @@ test-results/
 playwright-report/
 playwright/.cache/
 
+# Local PRDs (work-in-progress, not for source control)
+.prds/
+

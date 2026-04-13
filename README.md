@@ -1,10 +1,12 @@
 # Thinkwork
 
-**Production-grade agent platform for teams that already live on AWS.**
+**Production-grade open agent harness for teams that already live on AWS.**
 
-Thinkwork is open infrastructure for AI work. Threads run the work, controls keep it safe, managed and connected agents plug into the same system, and the whole thing drops into your existing AWS account via Terraform.
+Thinkwork makes agent infrastructure easy without handing the harness to a black-box vendor. Threads run the work, memory carries context forward, controls keep it safe, agents and connectors plug into the same system, and the whole thing drops into your existing AWS account via Terraform.
 
-If you're not on AWS, this isn't the right tool for you — and that's the point. No Kubernetes, no third-party SaaS, no tire-kicker mode.
+Five commands, one AWS account, and you own a production-quality agent runtime that stays open, portable, and under your control.
+
+If you're not on AWS, this isn't the right tool for you — and that's the point. No Kubernetes, no third-party SaaS control plane, no tire-kicker mode.
 
 ## Status
 
@@ -12,12 +14,12 @@ If you're not on AWS, this isn't the right tool for you — and that's the point
 
 ## What ships in v1
 
-- **Six product modules:** Agents, Threads, Connectors, Automations, Control, Knowledge
+- **Six product modules:** Agents, Threads, Connectors, Automations, Control, Memory
 - **Two clients:** an admin/operator web app (`apps/admin`) and a mobile client (`apps/mobile`, Expo)
 - **A real CLI** (`@thinkwork/cli`) for `init`, `deploy`, `doctor`, agent invoke, and skill publishing
 - **Three connectors at launch:** Slack, GitHub, Google Workspace
 - **Agentic Tasks** and **Question Cards** for structured task intake and execution
-- **Knowledge Bases** backed by Bedrock for document RAG
+- **Memory** as the umbrella layer for document knowledge, long-term memory, retrieval context, and portable memory contracts
 - **Agent Templates** for fleet-wide configuration
 - **Terraform Registry modules** at `thinkwork-ai/thinkwork/aws` — drops into your existing AWS Landing Zone with BYO-everywhere support
 
@@ -36,6 +38,8 @@ thinkwork doctor
 thinkwork agents create my-first-agent
 thinkwork agents invoke my-first-agent "Hello"
 ```
+
+That is the pitch: easy agent infrastructure, without giving up ownership of the harness.
 
 ## Repo layout
 

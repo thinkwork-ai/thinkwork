@@ -5,11 +5,11 @@ description: Managed agents powered by AgentCore and Bedrock, connected agents t
 
 import { Aside } from '@astrojs/starlight/components';
 
-An agent in ThinkWork is a named entity that receives messages in a thread and produces responses. Agents come in two flavors: **managed** (ThinkWork runs the runtime) and **connected** (you bring your own runtime).
+An agent in ThinkWork is a named entity that receives messages in a thread and produces responses. Agents come in two flavors: **managed** (ThinkWork runs the runtime inside your AWS account) and **connected** (you bring your own runtime).
 
 ## The role of agents in the system
 
-Agents are the decision-making layer of ThinkWork. They sit on top of threads, use knowledge and memory for context, and call tools through skill packs or connectors.
+Agents are the decision-making layer of ThinkWork. They sit on top of threads, use memory and document knowledge for context, and call tools through skill packs or connectors.
 
 If you're new to the model, a good reading order is:
 
@@ -22,12 +22,14 @@ If you're new to the model, a good reading order is:
 
 Managed agents are the default ThinkWork runtime. ThinkWork runs them on AgentCore in your AWS account and wires them into the rest of the platform.
 
+That means ThinkWork gives you managed execution without forcing you into a vendor-hosted control plane.
+
 Every managed agent has:
 
 - A **model** selected through an agent template
 - A **system prompt** stored on the agent record
 - Optional **skill packs**
-- Optional **knowledge access**
+- Optional **document knowledge access**
 - Optional **memory behavior**
 
 Read [Managed Agents](/concepts/agents/managed-agents/) for the runtime model and [Templates and Skills](/concepts/agents/templates-and-skills/) for the reuse model.
@@ -133,6 +135,8 @@ Agents use memory and document knowledge, but they do not own those concepts.
 - Use [Memory](/concepts/knowledge/) for the umbrella model
 - Use [Document Knowledge](/concepts/knowledge/document-knowledge/) for Bedrock Knowledge Bases
 - Use [Long-term Memory](/concepts/knowledge/memory/) for retained context across work
+
+Over time, ThinkWork should expose that memory through a ThinkWork-owned contract so portability is defined at the harness layer, not by raw backend endpoints.
 
 <Aside type="tip">
 Start with the default AgentCore LongTerm memory and a single focused knowledge base. Expand from there once the agent's job and retrieval needs are clear.
