@@ -26,9 +26,12 @@ COPY packages/agentcore-strands/agent-container/skill_runner.py .
 # - memory_tools.py: remember/recall/forget for managed engine
 # - hindsight_usage_capture.py: cost attribution for hindsight engine
 # - hindsight_recall_filter.py: post-recall entity-aware filter for hindsight
+# - api_memory_client.py: bridge to API memory-retain Lambda for the
+#   per-turn auto-retention path (engine-agnostic)
 COPY packages/agentcore-strands/agent-container/memory_tools.py .
 COPY packages/agentcore-strands/agent-container/hindsight_usage_capture.py .
 COPY packages/agentcore-strands/agent-container/hindsight_recall_filter.py .
+COPY packages/agentcore-strands/agent-container/api_memory_client.py .
 
 # Copy shared Agent Container modules
 COPY packages/agentcore/agent-container/permissions.py .
