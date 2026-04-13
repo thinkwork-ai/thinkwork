@@ -232,7 +232,7 @@ resource "aws_iam_role_policy" "lambda_agentcore_invoke" {
 # memoryRecords / memorySearch call ListMemoryRecordsCommand to fetch
 # records across the tenant's agents.
 resource "aws_iam_role_policy" "lambda_agentcore_memory" {
-  name = "agentcore-memory-read"
+  name = "agentcore-memory-rw"
   role = aws_iam_role.lambda.id
 
   policy = jsonencode({
@@ -243,6 +243,10 @@ resource "aws_iam_role_policy" "lambda_agentcore_memory" {
         "bedrock-agentcore:ListMemoryRecords",
         "bedrock-agentcore:RetrieveMemoryRecords",
         "bedrock-agentcore:GetMemoryRecord",
+        "bedrock-agentcore:BatchCreateMemoryRecords",
+        "bedrock-agentcore:BatchUpdateMemoryRecords",
+        "bedrock-agentcore:BatchDeleteMemoryRecords",
+        "bedrock-agentcore:DeleteMemoryRecord",
       ]
       Resource = "*"
     }]
