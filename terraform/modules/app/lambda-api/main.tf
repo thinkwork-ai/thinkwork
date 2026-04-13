@@ -253,6 +253,31 @@ resource "aws_iam_role_policy" "lambda_agentcore_memory" {
   })
 }
 
+# graphql-http's sendMessage mutation reads SSM parameters like
+# /thinkwork/${stage}/chat-agent-invoke-fn-arn to discover the direct
+# Lambda targets for cross-function invocation. Without this, the SSM
+# GetParameter call fails with AccessDenied, the caller silently
+# catches the error, and sendMessage falls back to the wakeup-processor
+# path — which doesn't load messages_history from Aurora. That's why
+# multi-turn chat was losing prior context: history was only loaded on
+# the direct path, which never ran.
+resource "aws_iam_role_policy" "lambda_ssm_read" {
+  name = "ssm-param-read"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "ssm:GetParameter",
+        "ssm:GetParameters",
+      ]
+      Resource = "arn:aws:ssm:${var.region}:${var.account_id}:parameter/thinkwork/${var.stage}/*"
+    }]
+  })
+}
+
 ################################################################################
 # Placeholder Lambda — proves the infrastructure works
 #
