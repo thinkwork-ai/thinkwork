@@ -1,0 +1,34 @@
+---
+// Brain icon by Sergey Patutin / The Noun Project — CC BY 3.0.
+// Shared path data lives in src/lib/brain-path.mjs.
+import {
+  BRAIN_PATH_D,
+  BRAIN_VIEWBOX,
+  BRAIN_GROUP_TRANSFORM,
+} from "../lib/brain-path.mjs";
+
+interface Props {
+  class?: string;
+  size?: number;
+  title?: string;
+}
+
+const { class: className = "", size = 36, title } = Astro.props;
+---
+
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox={BRAIN_VIEWBOX}
+  width={size}
+  height={size}
+  class={className}
+  fill="currentColor"
+  role={title ? "img" : undefined}
+  aria-hidden={title ? undefined : "true"}
+>
+  {title && <title>{title}</title>}
+  <!-- Brain icon by Sergey Patutin / The Noun Project (CC BY 3.0) -->
+  <g transform={BRAIN_GROUP_TRANSFORM}>
+    <path d={BRAIN_PATH_D} />
+  </g>
+</svg>
