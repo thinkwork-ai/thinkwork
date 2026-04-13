@@ -81,13 +81,13 @@ resource "aws_cloudfront_origin_access_control" "site" {
 # S3 with OAC doesn't auto-serve index.html for subdirectory requests.
 # /getting-started/ → /getting-started/index.html
 #
-# Not needed (and harmful) for SPAs: a deep route like /humans would be
-# rewritten to /humans/index.html, which S3 doesn't have — 403 from S3
-# instead of letting the SPA fallback below serve /index.html.
+# Always created (so flipping is_spa on an existing distribution doesn't hit
+# CloudFront's "can't delete a function still associated with a distribution"
+# error), but the viewer-request association is only wired up for non-SPA
+# sites. For SPAs we rely on the 403/404 → /index.html fallback below.
 ################################################################################
 
 resource "aws_cloudfront_function" "rewrite" {
-  count   = var.is_spa ? 0 : 1
   name    = "thinkwork-${var.stage}-${var.site_name}-rewrite"
   runtime = "cloudfront-js-2.0"
   publish = true
@@ -145,7 +145,7 @@ resource "aws_cloudfront_distribution" "site" {
       for_each = var.is_spa ? [] : [1]
       content {
         event_type   = "viewer-request"
-        function_arn = aws_cloudfront_function.rewrite[0].arn
+        function_arn = aws_cloudfront_function.rewrite.arn
       }
     }
 
