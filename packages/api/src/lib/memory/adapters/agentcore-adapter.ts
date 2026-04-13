@@ -16,7 +16,6 @@
 import { randomUUID } from "node:crypto";
 import {
 	BatchCreateMemoryRecordsCommand,
-	BatchUpdateMemoryRecordsCommand,
 	BedrockAgentCoreClient,
 	DeleteMemoryRecordCommand,
 	ListMemoryRecordsCommand,
@@ -212,19 +211,17 @@ export class AgentCoreAdapter implements MemoryAdapter {
 		);
 	}
 
-	async update(recordId: string, content: string): Promise<void> {
-		const client = this.getClient();
-		await client.send(
-			new BatchUpdateMemoryRecordsCommand({
-				memoryId: this.memoryId,
-				records: [
-					{
-						memoryRecordId: recordId,
-						timestamp: new Date(),
-						content: { text: content },
-					},
-				],
-			}),
+	async update(_recordId: string, _content: string): Promise<void> {
+		// AgentCore Memory's BatchUpdateMemoryRecords API returns SUCCEEDED
+		// for extracted records but silently no-ops the content change.
+		// Verified directly via `aws bedrock-agentcore batch-update-memory-records`
+		// followed by `get-memory-record` showing the original text. Rather
+		// than lie at the contract boundary, refuse the call so callers see
+		// the real story. If AgentCore ever exposes a mutable record type we
+		// can revisit. For now this is a footgun we'd rather throw than hide.
+		throw new Error(
+			"AgentCore memory records are immutable in this deployment. " +
+				"Create a new memory instead.",
 		);
 	}
 
