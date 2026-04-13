@@ -255,7 +255,14 @@ export class HindsightAdapter implements MemoryAdapter {
 	): ThinkWorkMemoryRecord {
 		const createdAt = toISO(unit.created_at) || new Date().toISOString();
 		const updatedAt = toISO(unit.updated_at) || undefined;
-		const factType: string | null = unit.fact_type || null;
+		const metaFactType =
+			unit.metadata && typeof unit.metadata === "object"
+				? (unit.metadata as Record<string, unknown>).fact_type
+				: undefined;
+		const factType: string | null =
+			(unit.fact_type as string | null | undefined) ||
+			(typeof metaFactType === "string" ? metaFactType : null) ||
+			null;
 		return {
 			id: String(unit.id || `hindsight-${bankId}-${createdAt}`),
 			tenantId: owner.tenantId,
