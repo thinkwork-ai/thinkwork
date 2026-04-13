@@ -80,6 +80,7 @@ resource "aws_lambda_function" "handler" {
     "github-app",
     "github-repos",
     "memory",
+    "memory-retain",
     "artifact-deliver",
     "recipe-refresh",
     "connector-installs",
@@ -309,6 +310,7 @@ resource "aws_ssm_parameter" "lambda_arns" {
     "chat-agent-invoke-fn-arn"    = aws_lambda_function.handler["chat-agent-invoke"].arn
     "kb-manager-fn-arn"           = aws_lambda_function.handler["knowledge-base-manager"].arn
     "job-schedule-manager-fn-arn" = aws_lambda_function.handler["job-schedule-manager"].arn
+    "memory-retain-fn-arn"        = aws_lambda_function.handler["memory-retain"].arn
   } : {}
 
   name  = "/thinkwork/${var.stage}/${each.key}"

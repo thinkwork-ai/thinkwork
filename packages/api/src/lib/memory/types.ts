@@ -94,6 +94,24 @@ export type RetainResult = {
 	backend: MemoryEngineType | string;
 };
 
+/**
+ * A conversational turn ingested for background extraction.
+ *
+ * Distinct from {@link RetainRequest} (which is a single explicit fact).
+ * `retainTurn` exists so engines can do their own extraction work on the
+ * raw conversation: AgentCore feeds CreateEvent → background strategies
+ * (semantic / preferences / summaries / episodes); Hindsight feeds the
+ * same conversation to its own LLM-based extraction pipeline. Both keep
+ * the runtime out of the extraction business.
+ */
+export type RetainTurnRequest = MemoryOwnerRef & {
+	messages: Array<{
+		role: "user" | "assistant" | "system";
+		content: string;
+	}>;
+	metadata?: Record<string, unknown>;
+};
+
 export type InspectRequest = MemoryOwnerRef & {
 	kinds?: MemoryRecordKind[];
 	cursor?: string;

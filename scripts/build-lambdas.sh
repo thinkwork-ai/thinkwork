@@ -28,12 +28,13 @@ ESBUILD_FLAGS=(
   --external:aws-sdk
 )
 
-# graphql-http uses memory adapter commands (BatchCreateMemoryRecordsCommand,
-# BatchUpdateMemoryRecordsCommand, DeleteMemoryRecordCommand) that are newer
-# than the @aws-sdk/client-bedrock-agentcore version shipped in the Lambda
-# Node 20 runtime. Bundle that one SDK package with graphql-http so the
-# pinned node_modules version is used instead of the runtime's.
-GRAPHQL_HTTP_ESBUILD_FLAGS=(
+# graphql-http and memory-retain use memory adapter commands
+# (BatchCreate / BatchUpdate / Delete / CreateEvent on
+# @aws-sdk/client-bedrock-agentcore) that are newer than the version
+# shipped in the Lambda Node 20 runtime. Bundle that one SDK package
+# with these handlers so the pinned node_modules version is used
+# instead of the runtime's.
+MEMORY_HANDLER_ESBUILD_FLAGS=(
   --bundle
   --platform=node
   --target=node20
@@ -69,8 +70,8 @@ build_handler() {
 
   mkdir -p "$out_dir"
   local flags_ref="ESBUILD_FLAGS[@]"
-  if [ "$name" = "graphql-http" ]; then
-    flags_ref="GRAPHQL_HTTP_ESBUILD_FLAGS[@]"
+  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ]; then
+    flags_ref="MEMORY_HANDLER_ESBUILD_FLAGS[@]"
   fi
   npx esbuild "$entry" \
     "${!flags_ref}" \
@@ -236,6 +237,9 @@ build_handler "agent-skills-list" \
 
 build_handler "memory" \
   "$REPO_ROOT/packages/api/memory.ts"
+
+build_handler "memory-retain" \
+  "$REPO_ROOT/packages/api/src/handlers/memory-retain.ts"
 
 build_handler "artifact-deliver" \
   "$REPO_ROOT/packages/api/src/handlers/artifact-deliver.ts"

@@ -1521,24 +1521,27 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                     allowed = ["web_search"]
                 _audit_response(tenant_id, response_text, allowed)
 
-                # Auto-retain this turn into AgentCore Memory so background
-                # strategies (semantic / preferences / summaries / episodes)
-                # extract facts without the model having to call remember().
-                # Gated on MEMORY_ENGINE: only runs when the deployment's
-                # canonical long-term engine is AgentCore. Hosted ThinkWork
-                # (MEMORY_ENGINE=hindsight) skips this write so we don't pay
-                # for AgentCore retains no recall path reads from.
-                # Best-effort — never block the response on retention failure.
-                memory_engine = os.environ.get("MEMORY_ENGINE", "hindsight").lower()
-                if memory_engine == "agentcore":
-                    try:
-                        from memory import store_turn_pair
-                        store_turn_pair(ticket_id, message, response_text)
-                    except Exception as retain_err:
-                        logger.warning("auto-retain failed thread=%s: %s",
-                                       ticket_id, retain_err)
-                else:
-                    logger.debug("auto-retain skipped (MEMORY_ENGINE=%s)", memory_engine)
+                # Auto-retain this turn through the API's normalized memory
+                # layer. The memory-retain Lambda invokes the active
+                # engine's adapter.retainTurn() — Hindsight POSTs the turn
+                # to /memories for its own LLM extraction; AgentCore fires
+                # CreateEvent so the background semantic / preferences /
+                # summaries / episodes strategies pick it up. Engine
+                # selection lives entirely in the API layer; the runtime is
+                # engine-agnostic. Async invoke (InvocationType=Event), so
+                # this never blocks the response. Best-effort — failures
+                # log and move on.
+                try:
+                    import api_memory_client
+                    api_memory_client.retain_turn_pair(
+                        thread_id=ticket_id,
+                        user_message=message,
+                        assistant_response=response_text,
+                        tenant_id=tenant_id,
+                    )
+                except Exception as retain_err:
+                    logger.warning("auto-retain failed thread=%s: %s",
+                                   ticket_id, retain_err)
 
                 log_agent_invocation(tenant_id=tenant_id, tools_used=["strands_agent"],
                                     duration_ms=duration_ms, status="success")
