@@ -165,7 +165,7 @@ export function AddUserModal({ visible, teamId, onClose }: AddUserModalProps) {
                         <Pressable
                           onPress={() => handleAddUser(usrId, user.name || "Unknown")}
                           disabled={isSubmitting}
-                          className="rounded-lg bg-orange-500 px-3 py-1.5"
+                          className="rounded-lg bg-sky-500 px-3 py-1.5"
                           style={{ opacity: isSubmitting ? 0.5 : 1 }}
                         >
                           {isSubmitting ? (
@@ -182,14 +182,14 @@ export function AddUserModal({ visible, teamId, onClose }: AddUserModalProps) {
                             onPress={() => setSelectedRole((prev) => ({ ...prev, [usrId]: r }))}
                             className={`flex-1 items-center py-1.5 rounded-md border ${
                               role === r
-                                ? "border-orange-500 bg-orange-50 dark:bg-orange-900/20"
+                                ? "border-sky-500 bg-sky-50 dark:bg-sky-900/20"
                                 : "border-neutral-200 dark:border-neutral-800"
                             }`}
                           >
                             <Text
                               className={`text-xs font-medium capitalize ${
                                 role === r
-                                  ? "text-orange-600 dark:text-orange-400"
+                                  ? "text-sky-600 dark:text-sky-400"
                                   : "text-neutral-600 dark:text-neutral-400"
                               }`}
                             >
@@ -240,7 +240,7 @@ export function AddUserModal({ visible, teamId, onClose }: AddUserModalProps) {
                   <Pressable
                     onPress={handleInvite}
                     disabled={inviting || !inviteEmail.trim()}
-                    className="items-center py-2.5 rounded-lg bg-orange-500"
+                    className="items-center py-2.5 rounded-lg bg-sky-500"
                     style={{ opacity: inviting || !inviteEmail.trim() ? 0.5 : 1 }}
                   >
                     {inviting ? (

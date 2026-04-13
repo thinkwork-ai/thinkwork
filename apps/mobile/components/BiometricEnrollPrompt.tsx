@@ -39,7 +39,7 @@ export function BiometricEnrollPrompt({ onComplete }: BiometricEnrollPromptProps
     <View className="absolute inset-0 bg-black/50 items-center justify-center p-4 z-50">
       <Card className="w-full max-w-sm">
         <CardContent className="pt-6 items-center">
-          <View className="w-16 h-16 rounded-full bg-orange-100 dark:bg-orange-900/30 items-center justify-center mb-4">
+          <View className="w-16 h-16 rounded-full bg-sky-100 dark:bg-sky-900/30 items-center justify-center mb-4">
             <Scan size={32} color={colors.primary} />
           </View>
           

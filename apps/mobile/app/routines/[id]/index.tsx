@@ -227,7 +227,7 @@ function InfoRow({
   return inner;
 }
 
-function SpinningLoader({ size = 18, color = "#f97316" }: { size?: number; color?: string }) {
+function SpinningLoader({ size = 18, color = "#0ea5e9" }: { size?: number; color?: string }) {
   const spinValue = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const animation = Animated.loop(

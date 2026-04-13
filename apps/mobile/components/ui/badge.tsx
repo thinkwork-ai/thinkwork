@@ -9,7 +9,7 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-orange-500",
+        default: "bg-sky-500",
         secondary: "bg-neutral-100 dark:bg-neutral-800",
         destructive: "bg-red-100 dark:bg-red-900/30 border border-red-500/50",
         outline: "border border-neutral-300 dark:border-neutral-700 bg-transparent",
@@ -77,8 +77,8 @@ export function StatusBadge({
     unknown: { variant: "outline" as const, label: "Unknown", dotColor: "bg-neutral-400 dark:bg-neutral-500" },
     revoked: { variant: "destructive" as const, label: "Revoked", dotColor: "bg-red-500" },
     pending: { variant: "warning" as const, label: "Pending", dotColor: "bg-yellow-600" },
-    starting: { variant: "warning" as const, label: "Starting", dotColor: "bg-orange-500" },
-    updating: { variant: "warning" as const, label: "Updating", dotColor: "bg-orange-500" },
+    starting: { variant: "warning" as const, label: "Starting", dotColor: "bg-sky-500" },
+    updating: { variant: "warning" as const, label: "Updating", dotColor: "bg-sky-500" },
     stopped: { variant: "outline" as const, label: "Stopped", dotColor: "bg-neutral-400 dark:bg-neutral-500" },
   };
 

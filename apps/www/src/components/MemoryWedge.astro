@@ -7,8 +7,8 @@ const memoryPoints = [
 
 const infraPoints = [
   "ThinkWork deploys into your AWS account. No SaaS control plane.",
-  "The work record lives in your boundary. The runtime lives in your boundary.",
-  "Governance, audit, and network controls stay where they already are.",
+  "The work record stays in your systems. The runtime runs in your AWS account.",
+  "Governance, audit, and network controls stay where your team already manages them.",
 ];
 ---
 
@@ -21,7 +21,7 @@ const infraPoints = [
     <div class="max-w-3xl">
       <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand/90">The wedge</p>
       <h2 class="mt-3 text-3xl font-bold tracking-tight md:text-5xl">
-        Your memory. Your runtime. Your boundary.
+        Your memory. Your runtime. Your AWS.
       </h2>
       <p class="mt-5 text-lg text-slate-400 md:text-xl">
         ThinkWork's two hardest-hitting differences aren't features — they're where the system lives and who owns the context.
@@ -60,7 +60,7 @@ const infraPoints = [
               <path d="M3 10h18M9 4v6" />
             </svg>
           </span>
-          <h3 class="text-2xl font-bold">Your AWS boundary</h3>
+          <h3 class="text-2xl font-bold">Your AWS account</h3>
         </div>
         <ul class="mt-6 space-y-4">
           {infraPoints.map((p) => (

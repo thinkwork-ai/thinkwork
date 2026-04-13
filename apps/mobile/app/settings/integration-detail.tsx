@@ -133,7 +133,7 @@ export default function CredentialDetailScreen() {
           {/* Provider Info */}
           <View className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-4 mb-6">
             <View className="flex-row items-center mb-4">
-              <View className="items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900/30 w-12 h-12">
+              <View className="items-center justify-center rounded-lg bg-sky-100 dark:bg-sky-900/30 w-12 h-12">
                 <Text style={{ fontSize: 24 }}>{provider.icon || "🔗"}</Text>
               </View>
               <View className="flex-1 ml-3">

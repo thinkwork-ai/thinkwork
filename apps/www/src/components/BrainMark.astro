@@ -11,9 +11,15 @@ interface Props {
   class?: string;
   size?: number;
   title?: string;
+  strokeWidth?: number;
 }
 
-const { class: className = "", size = 36, title } = Astro.props;
+const {
+  class: className = "",
+  size = 36,
+  title,
+  strokeWidth = 0.7,
+} = Astro.props;
 ---
 
 <svg
@@ -29,6 +35,12 @@ const { class: className = "", size = 36, title } = Astro.props;
   {title && <title>{title}</title>}
   <!-- Brain icon by Sergey Patutin / The Noun Project (CC BY 3.0) -->
   <g transform={BRAIN_GROUP_TRANSFORM}>
-    <path d={BRAIN_PATH_D} />
+    <path
+      d={BRAIN_PATH_D}
+      stroke="currentColor"
+      stroke-width={strokeWidth}
+      stroke-linejoin="round"
+      stroke-linecap="round"
+    />
   </g>
 </svg>

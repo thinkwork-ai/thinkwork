@@ -458,7 +458,7 @@ function getGenuiIconConfig(type: string): { icon: any; color: string } {
   if (type.startsWith("task")) return { icon: CheckSquare, color: "#8b5cf6" };
   if (type.startsWith("account")) return { icon: Building2, color: "#64748b" };
   if (type === "crm_mutation_result") return { icon: RefreshCw, color: "#f59e0b" };
-  if (type === "question_card") return { icon: ClipboardList, color: "#f8841d" }; // PRD-46
+  if (type === "question_card") return { icon: ClipboardList, color: "#0ea5e9" }; // PRD-46
   return { icon: MapPin, color: "#6366f1" }; // Places + default
 }
 

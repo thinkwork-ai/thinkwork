@@ -81,8 +81,8 @@ export default function AgentBudgetScreen() {
         <View className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-4 gap-3">
           <Text className="font-semibold">Mode</Text>
           <View className="flex-row gap-2">
-            <Pressable className={`px-3 py-2 rounded ${mode === "cost" ? "bg-orange-500" : "bg-neutral-200 dark:bg-neutral-800"}`} onPress={() => setMode("cost")}><Text className={mode === "cost" ? "text-white" : ""}>Cost ($)</Text></Pressable>
-            <Pressable className={`px-3 py-2 rounded ${mode === "tokens" ? "bg-orange-500" : "bg-neutral-200 dark:bg-neutral-800"}`} onPress={() => setMode("tokens")}><Text className={mode === "tokens" ? "text-white" : ""}>Tokens</Text></Pressable>
+            <Pressable className={`px-3 py-2 rounded ${mode === "cost" ? "bg-sky-500" : "bg-neutral-200 dark:bg-neutral-800"}`} onPress={() => setMode("cost")}><Text className={mode === "cost" ? "text-white" : ""}>Cost ($)</Text></Pressable>
+            <Pressable className={`px-3 py-2 rounded ${mode === "tokens" ? "bg-sky-500" : "bg-neutral-200 dark:bg-neutral-800"}`} onPress={() => setMode("tokens")}><Text className={mode === "tokens" ? "text-white" : ""}>Tokens</Text></Pressable>
           </View>
           <Text>Monthly limit</Text>
           <Input value={limit} onChangeText={setLimit} keyboardType="numeric" placeholder="Limit" />
@@ -94,7 +94,7 @@ export default function AgentBudgetScreen() {
             <Text>Enabled</Text>
             <Switch value={enabled} onValueChange={setEnabled} />
           </View>
-          <Pressable onPress={onSave} className="bg-orange-500 rounded px-4 py-3 items-center"><Text className="text-white font-semibold">Save budget</Text></Pressable>
+          <Pressable onPress={onSave} className="bg-sky-500 rounded px-4 py-3 items-center"><Text className="text-white font-semibold">Save budget</Text></Pressable>
         </View>
       </View>
     </DetailLayout>

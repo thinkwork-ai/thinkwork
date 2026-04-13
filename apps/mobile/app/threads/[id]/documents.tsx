@@ -26,8 +26,8 @@ function DocumentCard({ doc }: { doc: any }) {
         onPress={() => setExpanded(!expanded)}
         className="flex-row items-center px-4 py-3 active:bg-neutral-50 dark:active:bg-neutral-800"
       >
-        <View className="w-8 h-8 bg-orange-100 dark:bg-orange-900/40 rounded-lg items-center justify-center mr-3">
-          <FileText size={16} color="#f97316" />
+        <View className="w-8 h-8 bg-sky-100 dark:bg-sky-900/40 rounded-lg items-center justify-center mr-3">
+          <FileText size={16} color="#0ea5e9" />
         </View>
         <View className="flex-1">
           <Text className="text-base font-medium text-neutral-900 dark:text-neutral-100" numberOfLines={1}>

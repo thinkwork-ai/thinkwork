@@ -133,7 +133,7 @@ export default function SkillsScreen() {
                 <Muted className="text-center mb-4">No routines yet</Muted>
                 <Pressable
                   onPress={() => router.push("/routines/new")}
-                  className="bg-orange-500 px-5 py-2 rounded-xl flex-row items-center gap-2"
+                  className="bg-sky-500 px-5 py-2 rounded-xl flex-row items-center gap-2"
                 >
                   <Plus size={16} color="#fff" />
                   <Text weight="medium" className="text-white">

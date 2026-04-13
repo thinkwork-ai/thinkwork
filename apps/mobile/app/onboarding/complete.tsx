@@ -111,7 +111,7 @@ export default function CompleteScreen() {
         {/* Logo */}
         <View className="mb-8">
           <Image
-            source={require("@/assets/icon.png")}
+            source={require("@/assets/logo.png")}
             style={{ width: 80, height: 80, borderRadius: 16 }}
           />
         </View>

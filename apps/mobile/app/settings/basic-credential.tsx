@@ -84,7 +84,7 @@ export default function BasicCredentialScreen() {
             <Pressable
               onPress={handleSave}
               disabled={!canSave || saving}
-              className="flex-row items-center justify-center px-5 rounded-lg bg-orange-500 border border-orange-500"
+              className="flex-row items-center justify-center px-5 rounded-lg bg-sky-500 border border-sky-500"
               style={{ opacity: !canSave || saving ? 0.5 : 1, height: 44 }}
             >
               {saving ? (

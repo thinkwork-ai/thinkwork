@@ -63,7 +63,7 @@ const CHANNEL_CONFIG: Record<string, { icon: any; bg: string; fg: string }> = {
   EMAIL:    { icon: Mail,          bg: "rgba(20,184,166,0.15)",  fg: "#14b8a6" },
   JOB:      { icon: Briefcase,     bg: "rgba(245,158,11,0.15)",  fg: "#f59e0b" },
   WEBHOOK:  { icon: Webhook,       bg: "rgba(168,85,247,0.15)",  fg: "#a855f7" },
-  SCHEDULE: { icon: IconClockBolt,  bg: "rgba(249,115,22,0.15)",  fg: "#f97316" },
+  SCHEDULE: { icon: IconClockBolt,  bg: "rgba(249,115,22,0.15)",  fg: "#0ea5e9" },
   TASK:     { icon: CheckSquare,   bg: "rgba(34,197,94,0.15)",   fg: "#22c55e" },
 };
 const DEFAULT_CHANNEL = { icon: FileText, bg: "rgba(107,114,128,0.15)", fg: "#6b7280" } as const;

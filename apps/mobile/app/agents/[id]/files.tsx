@@ -28,7 +28,7 @@ function Breadcrumbs({ path, id }: { path: string; id: string }) {
   return (
     <View className="flex-row items-center flex-wrap py-2">
       <Pressable onPress={() => navigateTo("/")}>
-        <Text className="text-lg text-orange-500 font-medium">/</Text>
+        <Text className="text-lg text-sky-500 font-medium">/</Text>
       </Pressable>
       {parts.map((part, i) => {
         const fullPath = "/" + parts.slice(0, i + 1).join("/");
@@ -40,7 +40,7 @@ function Breadcrumbs({ path, id }: { path: string; id: string }) {
               <Text className="text-lg text-neutral-900 dark:text-neutral-100 font-medium">{part}</Text>
             ) : (
               <Pressable onPress={() => navigateTo(fullPath)}>
-                <Text className="text-lg text-orange-500 font-medium">{part}</Text>
+                <Text className="text-lg text-sky-500 font-medium">{part}</Text>
               </Pressable>
             )}
           </View>
@@ -84,7 +84,7 @@ function FileRow({
         className="flex-1 flex-row items-center py-3.5 px-4 active:bg-neutral-50 dark:active:bg-neutral-900"
       >
         {isDir ? (
-          <Folder size={22} color="#f8841d" />
+          <Folder size={22} color="#0ea5e9" />
         ) : (
           <FileText size={22} color="#737373" />
         )}
@@ -212,7 +212,7 @@ export default function AgentFilesScreen() {
       headerRight={
         <Pressable onPress={() => setEditMode(!editMode)} className="p-1">
           {editMode ? (
-            <Text style={{ color: "#f97316" }} className="font-semibold text-base">Done</Text>
+            <Text style={{ color: "#0ea5e9" }} className="font-semibold text-base">Done</Text>
           ) : (
             <Trash2 size={20} color="#ef4444" />
           )}
@@ -227,7 +227,7 @@ export default function AgentFilesScreen() {
               <Breadcrumbs path={currentPath} id={id!} />
             </View>
             <Pressable onPress={() => loadFiles(currentPath)} className="px-3 py-1">
-              <Text className="text-base text-orange-500 font-medium">Refresh</Text>
+              <Text className="text-base text-sky-500 font-medium">Refresh</Text>
             </Pressable>
           </View>
         </View>
@@ -241,7 +241,7 @@ export default function AgentFilesScreen() {
           <View className="flex-1 items-center justify-center px-4 py-16">
             <Text className="text-red-500 text-center text-sm">{error}</Text>
             <Pressable onPress={() => loadFiles(currentPath)} className="mt-3">
-              <Text className="text-orange-500 font-medium">Retry</Text>
+              <Text className="text-sky-500 font-medium">Retry</Text>
             </Pressable>
           </View>
         ) : files && files.length === 0 ? (

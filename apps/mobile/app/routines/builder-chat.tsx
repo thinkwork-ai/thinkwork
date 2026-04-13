@@ -167,7 +167,7 @@ export default function BuilderChatScreen() {
         hasConversation && tenantRepo ? (
           <Pressable onPress={handleBuild} disabled={building || notReady}>
             <Text
-              style={{ color: building ? colors.mutedForeground : "#f97316" }}
+              style={{ color: building ? colors.mutedForeground : "#0ea5e9" }}
               className="font-semibold text-base"
             >
               {building ? "Building..." : "Build"}

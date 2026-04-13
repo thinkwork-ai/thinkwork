@@ -303,7 +303,7 @@ export function AgentDetailContent({
     if (isDigestUpdating || gwAny.status === "updating") {
       return (
         <View className="flex-row items-center gap-1">
-          <ActivityIndicator size="small" color="#f8841d" />
+          <ActivityIndicator size="small" color="#0ea5e9" />
           <Badge variant="outline">Updating</Badge>
         </View>
       );
@@ -311,7 +311,7 @@ export function AgentDetailContent({
     if (isStarting) {
       return (
         <View className="flex-row items-center gap-1">
-          <ActivityIndicator size="small" color="#f8841d" />
+          <ActivityIndicator size="small" color="#0ea5e9" />
           <Badge variant="outline">Starting</Badge>
         </View>
       );
@@ -378,7 +378,7 @@ export function AgentDetailContent({
       {gwAny.type !== "local" && (agentInstanceId || gateway.baseUrl) && (
         <InfoRow
           label="Agent ID"
-          labelIcon={<Hash size={16} color="#f8841d" />}
+          labelIcon={<Hash size={16} color="#0ea5e9" />}
           valueComponent={
             <Pressable
               onPress={async () => {
@@ -413,7 +413,7 @@ export function AgentDetailContent({
         const row = (
           <InfoRow
             label="Agent Type"
-            labelIcon={<Tag size={16} color="#f8841d" />}
+            labelIcon={<Tag size={16} color="#0ea5e9" />}
             valueComponent={
               <View className="flex-row items-center gap-2">
                 <Text className="text-base text-neutral-900 dark:text-neutral-100">{agentTypeLabel}</Text>
@@ -446,7 +446,7 @@ export function AgentDetailContent({
       <Pressable onPress={() => router.push(`/agents/${id}/profile`)}>
         <InfoRow
           label="Profile"
-          labelIcon={<CircleUser size={16} color="#f8841d" />}
+          labelIcon={<CircleUser size={16} color="#0ea5e9" />}
           valueComponent={
             <View className="flex-row items-center gap-2">
               <Text className="text-base text-neutral-900 dark:text-neutral-100">{gateway.name || "—"}</Text>
@@ -458,7 +458,7 @@ export function AgentDetailContent({
 
       {/* Overview */}
       {gateway.type !== "ecs" && (
-        <InfoRow label="Default" labelIcon={<Star size={16} color="#f8841d" />} value={gateway.isDefault ? "Yes" : "No"} />
+        <InfoRow label="Default" labelIcon={<Star size={16} color="#0ea5e9" />} value={gateway.isDefault ? "Yes" : "No"} />
       )}
       {/* Assigned User — tappable only for team admins/owners */}
       {isTeamAdmin ? (
@@ -480,7 +480,7 @@ export function AgentDetailContent({
         >
           <InfoRow
             label="Assigned User"
-            labelIcon={<User size={16} color="#f8841d" />}
+            labelIcon={<User size={16} color="#0ea5e9" />}
             valueComponent={
               <View className="flex-row items-center gap-2">
                 <Text className="text-base text-neutral-900 dark:text-neutral-100">
@@ -494,7 +494,7 @@ export function AgentDetailContent({
       ) : (
         <InfoRow
           label="Assigned User"
-          labelIcon={<User size={16} color="#f8841d" />}
+          labelIcon={<User size={16} color="#0ea5e9" />}
           valueComponent={
             <View className="flex-row items-center gap-2">
               <Text className="text-base text-neutral-900 dark:text-neutral-100">
@@ -509,7 +509,7 @@ export function AgentDetailContent({
       <Pressable onPress={() => canEdit && router.push(`/agents/${id}/model`)}>
         <InfoRow
           label="Model"
-          labelIcon={<Bot size={16} color="#f8841d" />}
+          labelIcon={<Bot size={16} color="#0ea5e9" />}
           valueComponent={
             <View className="flex-row items-center gap-2">
               <Text className="text-base text-neutral-900 dark:text-neutral-100">
@@ -525,7 +525,7 @@ export function AgentDetailContent({
       <Pressable onPress={() => router.push(`/agents/${id}/usage`)}>
         <InfoRow
           label="Usage"
-          labelIcon={<BarChart3 size={16} color="#f8841d" />}
+          labelIcon={<BarChart3 size={16} color="#0ea5e9" />}
           valueComponent={
             <View className="flex-row items-center gap-2">
               <Text className="text-base text-neutral-900 dark:text-neutral-100">
@@ -609,7 +609,7 @@ export function AgentDetailContent({
         <Pressable onPress={() => router.push(`/agents/${id}/skills`)}>
           <InfoRow
             label="Skills"
-            labelIcon={<Zap size={16} color="#f8841d" />}
+            labelIcon={<Zap size={16} color="#0ea5e9" />}
             valueComponent={
               <View className="flex-row items-center gap-2">
                 {skillsLoading ? (
@@ -634,7 +634,7 @@ export function AgentDetailContent({
         <Pressable onPress={() => router.push(`/agents/${id}/files`)}>
           <InfoRow
             label="Workspace"
-            labelIcon={<Folder size={16} color="#f8841d" />}
+            labelIcon={<Folder size={16} color="#0ea5e9" />}
             valueComponent={
               <View className="flex-row items-center gap-2">
                 <Text className="text-base text-neutral-900 dark:text-neutral-100">Files</Text>
@@ -791,7 +791,7 @@ export function AgentDetailContent({
 
             <InfoRow
               label="Type"
-              labelIcon={<Server size={16} color="#f8841d" />}
+              labelIcon={<Server size={16} color="#0ea5e9" />}
               value={agentTypeLabel}
             />
 
@@ -799,7 +799,7 @@ export function AgentDetailContent({
               const versionRow = (
                 <InfoRow
                   label="Team Version"
-                  labelIcon={<Tag size={16} color="#f8841d" />}
+                  labelIcon={<Tag size={16} color="#0ea5e9" />}
                   valueComponent={
                     <View className="flex-row items-center gap-2">
                       <Text className="text-base text-neutral-900 dark:text-neutral-100">{displayVersion}</Text>
@@ -809,8 +809,8 @@ export function AgentDetailContent({
                         </View>
                       )}
                       {showUpdate && (
-                        <View className="flex-row items-center rounded-full px-2.5 py-0.5 border border-orange-400 dark:border-orange-500">
-                          <Text className="text-xs font-semibold text-orange-500 dark:text-orange-400">Update</Text>
+                        <View className="flex-row items-center rounded-full px-2.5 py-0.5 border border-sky-400 dark:border-sky-500">
+                          <Text className="text-xs font-semibold text-sky-500 dark:text-sky-400">Update</Text>
                         </View>
                       )}
                     </View>
@@ -842,20 +842,20 @@ export function AgentDetailContent({
             })() : (
               <InfoRow
                 label="Team Version"
-                labelIcon={<Tag size={16} color="#f8841d" />}
+                labelIcon={<Tag size={16} color="#0ea5e9" />}
                 value="—"
               />
             )}
 
             <InfoRow
               label="Status"
-              labelIcon={<Activity size={16} color="#f8841d" />}
+              labelIcon={<Activity size={16} color="#0ea5e9" />}
               valueComponent={statusValueComponent}
             />
 
             <InfoRow
               label="Heartbeat"
-              labelIcon={<Clock size={16} color="#f8841d" />}
+              labelIcon={<Clock size={16} color="#0ea5e9" />}
               value={lastHeartbeatLabel}
               valueClassName="text-sm font-mono"
               isLast
@@ -956,7 +956,7 @@ export function AgentDetailContent({
             }}
           >
             <View className="items-center mb-4">
-              <ArrowUpCircle size={40} color="#f97316" />
+              <ArrowUpCircle size={40} color="#0ea5e9" />
             </View>
             <Text className="text-lg font-bold text-center text-neutral-900 dark:text-neutral-100 mb-2">
               Update Available
@@ -991,7 +991,7 @@ export function AgentDetailContent({
               }}
               disabled={restarting}
               style={{
-                backgroundColor: restarting ? "#d4d4d4" : "#f97316",
+                backgroundColor: restarting ? "#d4d4d4" : "#0ea5e9",
                 paddingVertical: 14,
                 borderRadius: 10,
                 alignItems: "center",

@@ -131,7 +131,7 @@ export default function HeartbeatDetailScreen() {
                 onValueChange={(v) =>
                   setEnabled({ heartbeatId: id, enabled: v })
                 }
-                trackColor={{ false: "#d4d4d4", true: "#f8841d" }}
+                trackColor={{ false: "#d4d4d4", true: "#0ea5e9" }}
                 thumbColor="#ffffff"
               />
             </View>

@@ -42,7 +42,7 @@ function ThemeButton({
         onPress={onPress}
         className={`flex-row items-center gap-2 px-3 py-1.5 rounded-md border ${
           isActive
-            ? "bg-orange-500 border-orange-500"
+            ? "bg-sky-500 border-sky-500"
             : "bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700"
         }`}
       >
@@ -59,7 +59,7 @@ function ThemeButton({
       onPress={onPress}
       className={`flex-1 items-center justify-center py-2.5 rounded-lg border ${
         isActive
-          ? "bg-orange-500 border-orange-500"
+          ? "bg-sky-500 border-sky-500"
           : "bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700"
       }`}
     >
@@ -304,7 +304,7 @@ export default function SettingsScreen() {
                   value={biometricEnabled}
                   onValueChange={handleBiometricToggle}
                   disabled={togglingBiometric}
-                  trackColor={{ false: "#d4d4d4", true: "#f8841d" }}
+                  trackColor={{ false: "#d4d4d4", true: "#0ea5e9" }}
                   thumbColor="#ffffff"
                 />
               </View>

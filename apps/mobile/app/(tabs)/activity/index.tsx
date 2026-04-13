@@ -64,7 +64,7 @@ function FilterPill({ label, isActive, onPress }: { label: string; isActive: boo
       onPress={onPress}
       className={`px-4 h-9 rounded-full items-center justify-center ${
         isActive
-          ? "bg-orange-500"
+          ? "bg-sky-500"
           : "bg-neutral-100 dark:bg-neutral-800"
       }`}
     >

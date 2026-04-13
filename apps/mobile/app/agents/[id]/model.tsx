@@ -59,7 +59,7 @@ export default function AgentModelScreen() {
 
         {agent === undefined || catalogModels === null ? (
           <View className="p-6 items-center">
-            <ActivityIndicator color="#f8841d" />
+            <ActivityIndicator color="#0ea5e9" />
           </View>
         ) : agent === null ? (
           <View className="px-4 py-8">
@@ -101,7 +101,7 @@ export default function AgentModelScreen() {
                       </Text>
                     </View>
 
-                    {selected ? <Check size={18} color="#f97316" /> : null}
+                    {selected ? <Check size={18} color="#0ea5e9" /> : null}
                   </Pressable>
                 );
               })}
