@@ -437,7 +437,7 @@ function AgentMemoryPage() {
                     : "Memory record"}
                 </SheetDescription>
               </div>
-              {!editing && (
+              {!editing && hindsightEnabled && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -509,7 +509,15 @@ function AgentMemoryPage() {
                 </div>
               </>
             ) : (
-              <MemoryContent text={selectedRecord?.text ?? ""} />
+              <>
+                <MemoryContent text={selectedRecord?.text ?? ""} />
+                {!hindsightEnabled && (
+                  <p className="mt-4 text-xs text-muted-foreground">
+                    AgentCore memory records are immutable in this deployment. To change a fact,
+                    create a new memory instead.
+                  </p>
+                )}
+              </>
             )}
           </div>
         </SheetContent>
