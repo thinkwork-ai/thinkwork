@@ -93,9 +93,13 @@ describe("verifyLastmileSignature", () => {
 		expect(ok).toBe(false);
 	});
 
-	it("falls open in non-production when secret is unset (dev convenience)", async () => {
+	it("falls through when no secret is configured — token in URL is primary auth", async () => {
+		// After the /webhooks/{token} unification, signature verification is
+		// opt-in. When neither a per-tenant secret nor the env-var fallback is
+		// set, verifySignature returns true and the 32-byte random URL token
+		// becomes the sole auth. Environment is irrelevant.
 		delete process.env.LASTMILE_WEBHOOK_SECRET;
-		process.env.NODE_ENV = "development";
+		process.env.NODE_ENV = "production";
 		const ok = await verifyLastmileSignature({
 			rawBody: BODY,
 			headers: {},
@@ -103,12 +107,27 @@ describe("verifyLastmileSignature", () => {
 		expect(ok).toBe(true);
 	});
 
-	it("fails closed in production when secret is unset", async () => {
-		delete process.env.LASTMILE_WEBHOOK_SECRET;
-		process.env.NODE_ENV = "production";
+	it("accepts a per-tenant secret passed via req.secret (overrides env var)", async () => {
+		const tenantSecret = "whsec_tenant_specific_xyz";
+		// Env var points at a different secret — req.secret should win.
+		process.env.LASTMILE_WEBHOOK_SECRET = "whsec_env_fallback";
+		const sig = sign(BODY, tenantSecret);
 		const ok = await verifyLastmileSignature({
 			rawBody: BODY,
-			headers: {},
+			headers: { "x-lastmile-signature": sig },
+			secret: tenantSecret,
+		});
+		expect(ok).toBe(true);
+	});
+
+	it("rejects when a per-tenant secret is present but signature is wrong", async () => {
+		const tenantSecret = "whsec_tenant_specific_xyz";
+		delete process.env.LASTMILE_WEBHOOK_SECRET;
+		const wrongSig = sign(BODY, "different_secret");
+		const ok = await verifyLastmileSignature({
+			rawBody: BODY,
+			headers: { "x-lastmile-signature": wrongSig },
+			secret: tenantSecret,
 		});
 		expect(ok).toBe(false);
 	});

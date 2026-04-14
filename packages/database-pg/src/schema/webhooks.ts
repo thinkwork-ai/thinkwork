@@ -23,6 +23,7 @@ import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core";
 import { agents } from "./agents";
 import { routines } from "./routines";
+import { connectProviders } from "./integrations";
 
 // ---------------------------------------------------------------------------
 // webhooks — webhook endpoint definitions
@@ -40,9 +41,10 @@ export const webhooks = pgTable(
 		name: text("name").notNull(),
 		description: text("description"),
 		token: text("token").notNull(),
-		target_type: text("target_type").notNull(), // agent | routine
+		target_type: text("target_type").notNull(), // agent | routine | task
 		agent_id: uuid("agent_id").references(() => agents.id),
 		routine_id: uuid("routine_id").references(() => routines.id),
+		connect_provider_id: uuid("connect_provider_id").references(() => connectProviders.id),
 		prompt: text("prompt"), // injected into agent context with payload
 		config: jsonb("config"), // future: allowed_ips, headers_to_extract, etc.
 		enabled: boolean("enabled").notNull().default(true),
@@ -62,6 +64,10 @@ export const webhooks = pgTable(
 		uniqueIndex("idx_webhooks_token").on(table.token),
 		index("idx_webhooks_tenant").on(table.tenant_id),
 		index("idx_webhooks_tenant_enabled").on(table.tenant_id, table.enabled),
+		index("idx_webhooks_provider_tenant").on(
+			table.connect_provider_id,
+			table.tenant_id,
+		),
 	],
 );
 
@@ -108,6 +114,10 @@ export const webhooksRelations = relations(webhooks, ({ one }) => ({
 	routine: one(routines, {
 		fields: [webhooks.routine_id],
 		references: [routines.id],
+	}),
+	connectProvider: one(connectProviders, {
+		fields: [webhooks.connect_provider_id],
+		references: [connectProviders.id],
 	}),
 }));
 
