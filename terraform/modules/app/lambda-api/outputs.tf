@@ -32,3 +32,13 @@ output "memory_retain_fn_arn" {
   description = "Memory-retain Lambda ARN. Used to grant lambda:InvokeFunction to the agentcore-runtime role."
   value       = local.use_local_zips ? aws_lambda_function.handler["memory-retain"].arn : ""
 }
+
+output "email_inbound_fn_arn" {
+  description = "email-inbound Lambda ARN. Used by the SES module to wire the receipt rule Lambda action."
+  value       = local.use_local_zips ? aws_lambda_function.handler["email-inbound"].arn : ""
+}
+
+output "email_inbound_fn_name" {
+  description = "email-inbound Lambda function name. Used by the SES module for lambda:InvokeFunction permissions."
+  value       = local.use_local_zips ? aws_lambda_function.handler["email-inbound"].function_name : ""
+}
