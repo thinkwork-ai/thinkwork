@@ -1,0 +1,364 @@
+/**
+ * Integration-style tests for the adapter-neutral ingest pipeline.
+ *
+ * Mocks the adapter registry, OAuth resolver, ensureExternalTaskThread, and
+ * the drizzle chain for the handoff message insert. Drives the pipeline
+ * through each branch: unknown provider, bad signature, missing user id,
+ * unresolved connection, happy path (created + reused thread), refresh
+ * failure (pipeline still completes), and reassignment handoff.
+ */
+
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// ── DB: only `insert` is used (handoff message). ─────────────────────────────
+
+const { mockInsertValues, mockInsert, mockDb } = vi.hoisted(() => {
+	const mockInsertValues = vi.fn().mockResolvedValue(undefined);
+	const mockInsert = vi.fn(() => ({ values: mockInsertValues }));
+	const mockDb = { insert: mockInsert };
+	return { mockInsertValues, mockInsert, mockDb };
+});
+
+vi.mock("@thinkwork/database-pg", () => ({
+	getDb: () => mockDb,
+	schema: { messages: { id: "id" } },
+}));
+
+vi.mock("drizzle-orm", () => ({
+	eq: (...args: unknown[]) => args,
+}));
+
+// ── Adapter registry ─────────────────────────────────────────────────────────
+
+const {
+	mockVerifySignature,
+	mockNormalizeEvent,
+	mockRefresh,
+	mockHasAdapter,
+	mockGetAdapter,
+} = vi.hoisted(() => {
+	const mockVerifySignature = vi.fn();
+	const mockNormalizeEvent = vi.fn();
+	const mockRefresh = vi.fn();
+	const mockHasAdapter = vi.fn((p: string) => p === "lastmile");
+	const mockGetAdapter = vi.fn(() => ({
+		provider: "lastmile",
+		verifySignature: mockVerifySignature,
+		normalizeEvent: mockNormalizeEvent,
+		refresh: mockRefresh,
+	}));
+	return {
+		mockVerifySignature,
+		mockNormalizeEvent,
+		mockRefresh,
+		mockHasAdapter,
+		mockGetAdapter,
+	};
+});
+
+vi.mock("../integrations/external-work-items/index.js", () => ({
+	getAdapter: mockGetAdapter,
+	hasAdapter: mockHasAdapter,
+}));
+
+// ── OAuth + connection resolver ──────────────────────────────────────────────
+
+const { mockResolveConnection, mockResolveOAuthToken } = vi.hoisted(() => {
+	const mockResolveConnection = vi.fn();
+	const mockResolveOAuthToken = vi.fn();
+	return { mockResolveConnection, mockResolveOAuthToken };
+});
+
+vi.mock("../lib/oauth-token.js", () => ({
+	resolveConnectionByProviderUserId: mockResolveConnection,
+	resolveOAuthToken: mockResolveOAuthToken,
+}));
+
+// ── ensureExternalTaskThread + closeExternalTaskThread ───────────────────────
+
+const { mockEnsureThread, mockCloseThread } = vi.hoisted(() => {
+	const mockEnsureThread = vi.fn();
+	const mockCloseThread = vi.fn();
+	return { mockEnsureThread, mockCloseThread };
+});
+
+vi.mock("../integrations/external-work-items/ensureExternalTaskThread.js", () => ({
+	ensureExternalTaskThread: mockEnsureThread,
+	closeExternalTaskThread: mockCloseThread,
+}));
+
+// ── Import AFTER mocks ───────────────────────────────────────────────────────
+
+import { ingestExternalTaskEvent } from "../integrations/external-work-items/ingestEvent.js";
+import type { ExternalTaskEnvelope } from "../integrations/external-work-items/types.js";
+
+// ── Fixtures ─────────────────────────────────────────────────────────────────
+
+const RAW_BODY = JSON.stringify({ event: "assigned", data: { task: { id: "task_1" } } });
+const HEADERS = { "x-lastmile-signature": "deadbeef" };
+
+function buildConn(overrides?: Partial<{ connectionId: string; tenantId: string; userId: string; providerId: string }>) {
+	return {
+		connectionId: "conn-1",
+		tenantId: "tenant-1",
+		userId: "user-1",
+		providerId: "prov-1",
+		...overrides,
+	};
+}
+
+function buildEnvelope(title = "Task title"): ExternalTaskEnvelope {
+	return {
+		_type: "external_task",
+		item: {
+			core: { id: "task_1", provider: "lastmile", title },
+			capabilities: {},
+			fields: [],
+			actions: [],
+		},
+		blocks: [],
+	};
+}
+
+// ── Reset ────────────────────────────────────────────────────────────────────
+
+beforeEach(() => {
+	vi.clearAllMocks();
+	mockHasAdapter.mockImplementation((p: string) => p === "lastmile");
+	mockGetAdapter.mockReturnValue({
+		provider: "lastmile",
+		verifySignature: mockVerifySignature,
+		normalizeEvent: mockNormalizeEvent,
+		refresh: mockRefresh,
+	} as never);
+	mockInsert.mockReturnValue({ values: mockInsertValues });
+	mockInsertValues.mockResolvedValue(undefined);
+});
+
+// ── Tests ────────────────────────────────────────────────────────────────────
+
+describe("ingestExternalTaskEvent — guard branches", () => {
+	it("returns ignored for an unknown provider", async () => {
+		mockHasAdapter.mockReturnValueOnce(false);
+		const result = await ingestExternalTaskEvent({
+			provider: "asana",
+			rawBody: RAW_BODY,
+			headers: HEADERS,
+		});
+		expect(result).toEqual({
+			status: "ignored",
+			reason: "unknown provider: asana",
+		});
+		expect(mockVerifySignature).not.toHaveBeenCalled();
+	});
+
+	it("returns unverified when the adapter rejects the signature", async () => {
+		mockVerifySignature.mockResolvedValueOnce(false);
+		const result = await ingestExternalTaskEvent({
+			provider: "lastmile",
+			rawBody: RAW_BODY,
+			headers: HEADERS,
+		});
+		expect(result).toEqual({ status: "unverified" });
+		expect(mockNormalizeEvent).not.toHaveBeenCalled();
+	});
+
+	it("returns unresolved_connection when the event has no providerUserId", async () => {
+		mockVerifySignature.mockResolvedValueOnce(true);
+		mockNormalizeEvent.mockResolvedValueOnce({
+			kind: "task.updated",
+			externalTaskId: "task_1",
+			receivedAt: "2026-04-14T10:00:00Z",
+		});
+		const result = await ingestExternalTaskEvent({
+			provider: "lastmile",
+			rawBody: RAW_BODY,
+			headers: HEADERS,
+		});
+		expect(result).toEqual({ status: "unresolved_connection" });
+		expect(mockResolveConnection).not.toHaveBeenCalled();
+	});
+
+	it("returns unresolved_connection when no active connection matches the provider user id", async () => {
+		mockVerifySignature.mockResolvedValueOnce(true);
+		mockNormalizeEvent.mockResolvedValueOnce({
+			kind: "task.updated",
+			externalTaskId: "task_1",
+			providerUserId: "user_lastmile_99",
+			receivedAt: "2026-04-14T10:00:00Z",
+		});
+		mockResolveConnection.mockResolvedValueOnce(null);
+		const result = await ingestExternalTaskEvent({
+			provider: "lastmile",
+			rawBody: RAW_BODY,
+			headers: HEADERS,
+		});
+		expect(result).toEqual({
+			status: "unresolved_connection",
+			providerUserId: "user_lastmile_99",
+		});
+		expect(mockEnsureThread).not.toHaveBeenCalled();
+	});
+});
+
+describe("ingestExternalTaskEvent — happy path", () => {
+	it("refreshes the envelope, ensures the thread, and returns ok", async () => {
+		mockVerifySignature.mockResolvedValueOnce(true);
+		mockNormalizeEvent.mockResolvedValueOnce({
+			kind: "task.assigned",
+			externalTaskId: "task_1",
+			providerUserId: "user_lastmile_1",
+			receivedAt: "2026-04-14T10:00:00Z",
+		});
+		mockResolveConnection.mockResolvedValueOnce(buildConn());
+		mockResolveOAuthToken.mockResolvedValueOnce("access-token-xyz");
+		const envelope = buildEnvelope("Deliver groceries");
+		mockRefresh.mockResolvedValueOnce(envelope);
+		mockEnsureThread.mockResolvedValueOnce({ threadId: "thread-new", created: true });
+
+		const result = await ingestExternalTaskEvent({
+			provider: "lastmile",
+			rawBody: RAW_BODY,
+			headers: HEADERS,
+		});
+
+		expect(result.status).toBe("ok");
+		if (result.status !== "ok") return;
+		expect(result.threadId).toBe("thread-new");
+		expect(result.created).toBe(true);
+		expect(result.envelope).toBe(envelope);
+
+		expect(mockRefresh).toHaveBeenCalledWith({
+			externalTaskId: "task_1",
+			ctx: {
+				tenantId: "tenant-1",
+				userId: "user-1",
+				connectionId: "conn-1",
+				authToken: "access-token-xyz",
+			},
+		});
+		expect(mockEnsureThread).toHaveBeenCalledWith(
+			expect.objectContaining({
+				tenantId: "tenant-1",
+				provider: "lastmile",
+				externalTaskId: "task_1",
+				connectionId: "conn-1",
+				title: "Deliver groceries",
+				envelope,
+			}),
+		);
+		expect(mockInsert).not.toHaveBeenCalled();
+	});
+
+	it("still ensures the thread when refresh() fails (title falls back to placeholder)", async () => {
+		mockVerifySignature.mockResolvedValueOnce(true);
+		mockNormalizeEvent.mockResolvedValueOnce({
+			kind: "task.updated",
+			externalTaskId: "task_2",
+			providerUserId: "user_lastmile_1",
+			receivedAt: "2026-04-14T10:00:00Z",
+		});
+		mockResolveConnection.mockResolvedValueOnce(buildConn());
+		mockResolveOAuthToken.mockResolvedValueOnce("token");
+		mockRefresh.mockRejectedValueOnce(new Error("MCP 500"));
+		mockEnsureThread.mockResolvedValueOnce({ threadId: "thread-2", created: false });
+
+		const result = await ingestExternalTaskEvent({
+			provider: "lastmile",
+			rawBody: RAW_BODY,
+			headers: HEADERS,
+		});
+
+		expect(result.status).toBe("ok");
+		if (result.status !== "ok") return;
+		expect(result.envelope).toBeUndefined();
+		expect(mockEnsureThread).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: "External task task_2",
+				envelope: undefined,
+			}),
+		);
+	});
+});
+
+describe("ingestExternalTaskEvent — reassignment handoff", () => {
+	it("closes the previous assignee's thread and writes a handoff message", async () => {
+		mockVerifySignature.mockResolvedValueOnce(true);
+		mockNormalizeEvent.mockResolvedValueOnce({
+			kind: "task.reassigned",
+			externalTaskId: "task_r",
+			providerUserId: "user_new",
+			previousProviderUserId: "user_prev",
+			receivedAt: "2026-04-14T10:00:00Z",
+		});
+
+		// First resolveConnection: the new assignee (for the main happy path)
+		// Second resolveConnection: the previous assignee (for handoff)
+		mockResolveConnection
+			.mockResolvedValueOnce(buildConn({ connectionId: "conn-new", userId: "user-new" }))
+			.mockResolvedValueOnce(buildConn({ connectionId: "conn-prev", userId: "user-prev", tenantId: "tenant-1" }));
+
+		mockResolveOAuthToken.mockResolvedValueOnce("token");
+		mockRefresh.mockResolvedValueOnce(buildEnvelope("Reassigned task"));
+		mockCloseThread.mockResolvedValueOnce("thread-closed-id");
+		mockEnsureThread.mockResolvedValueOnce({ threadId: "thread-new", created: true });
+
+		const result = await ingestExternalTaskEvent({
+			provider: "lastmile",
+			rawBody: RAW_BODY,
+			headers: HEADERS,
+		});
+
+		expect(result.status).toBe("ok");
+		expect(mockCloseThread).toHaveBeenCalledWith({
+			tenantId: "tenant-1",
+			provider: "lastmile",
+			externalTaskId: "task_r",
+			connectionId: "conn-prev",
+			reason: "reassigned",
+		});
+		// Handoff message inserted on the closed thread
+		expect(mockInsert).toHaveBeenCalled();
+		const insertCalls = mockInsertValues.mock.calls as unknown as Array<Array<{
+			thread_id: string;
+			role: string;
+			content: string;
+			metadata: Record<string, unknown>;
+		}>>;
+		const inserted = insertCalls[0][0];
+		expect(inserted.thread_id).toBe("thread-closed-id");
+		expect(inserted.role).toBe("system");
+		expect(inserted.content).toContain("reassigned away");
+		expect(inserted.metadata).toMatchObject({
+			kind: "external_task_handoff",
+			provider: "lastmile",
+			externalTaskId: "task_r",
+		});
+	});
+
+	it("does not insert a handoff message when the previous connection is unknown", async () => {
+		mockVerifySignature.mockResolvedValueOnce(true);
+		mockNormalizeEvent.mockResolvedValueOnce({
+			kind: "task.reassigned",
+			externalTaskId: "task_r",
+			providerUserId: "user_new",
+			previousProviderUserId: "user_unknown",
+			receivedAt: "2026-04-14T10:00:00Z",
+		});
+		mockResolveConnection
+			.mockResolvedValueOnce(buildConn())
+			.mockResolvedValueOnce(null);
+		mockResolveOAuthToken.mockResolvedValueOnce("token");
+		mockRefresh.mockResolvedValueOnce(buildEnvelope());
+		mockEnsureThread.mockResolvedValueOnce({ threadId: "thread-new", created: true });
+
+		await ingestExternalTaskEvent({
+			provider: "lastmile",
+			rawBody: RAW_BODY,
+			headers: HEADERS,
+		});
+
+		expect(mockCloseThread).not.toHaveBeenCalled();
+		expect(mockInsert).not.toHaveBeenCalled();
+	});
+});
