@@ -2,7 +2,7 @@ import type { GraphQLContext } from "../../context.js";
 import {
 	db,
 	scheduledJobs,
-	snakeToCamel, invokeJobScheduleManager,
+	snakeToCamel, invokeJobScheduleManager, eq,
 } from "../../utils.js";
 
 export const createScheduledJob = async (_parent: any, args: any, ctx: GraphQLContext) => {
@@ -27,8 +27,7 @@ export const createScheduledJob = async (_parent: any, args: any, ctx: GraphQLCo
 			created_by_id: i.createdById || null,
 		})
 		.returning();
-	// Fire-and-forget: create EventBridge schedule
-	invokeJobScheduleManager("POST", {
+	const result = await invokeJobScheduleManager("POST", {
 		triggerId: row.id,
 		tenantId: i.tenantId,
 		triggerType: i.triggerType || i.jobType,
@@ -42,5 +41,15 @@ export const createScheduledJob = async (_parent: any, args: any, ctx: GraphQLCo
 		config: i.config ? JSON.parse(i.config) : undefined,
 		createdByType: i.createdByType || "user",
 	});
-	return snakeToCamel(row);
+	if (!result.ok) {
+		throw new Error(
+			`Automation saved but EventBridge schedule could not be provisioned: ${result.error}. Open the automation and press Save to retry.`,
+		);
+	}
+	// Re-read to pick up eb_schedule_name populated by the manager Lambda
+	const [refreshed] = await db
+		.select()
+		.from(scheduledJobs)
+		.where(eq(scheduledJobs.id, row.id));
+	return snakeToCamel(refreshed || row);
 };
