@@ -593,12 +593,23 @@ def _call_strands_agent(system_prompt: str, messages: list,
                     enable_reflect=False,
                 )
 
-                # Capture closure variables for the wrappers below.
+                # Capture closure variables for the wrappers below. The wrappers
+                # are `async def` so Strands awaits them on the main event loop
+                # (see sdk-python/src/strands/tools/decorator.py stream()) —
+                # this is critical: it means we bypass _run_async entirely and
+                # aiohttp's ClientSession binds to the long-lived main loop
+                # instead of a short-lived per-call loop. Sync tools would run
+                # in asyncio.to_thread, which reuses worker threads with stale
+                # thread-local loops — the root cause of the "Event loop is
+                # closed" failures we hit on the first-ever hindsight_reflect
+                # invocation. Upstream hindsight-client 0.5.1 still ships the
+                # same _run_async (asyncio.get_event_loop) implementation, but
+                # exposes arecall/areflect as native async variants. Use those.
                 _hs_client_ref = hs_client
                 _hs_bank_ref = hs_bank
 
                 @_strands_tool
-                def hindsight_recall(query: str) -> str:
+                async def hindsight_recall(query: str) -> str:
                     """Search your long-term memory for facts about people, companies, projects, places, and prior conversations.
 
                     THIS IS YOUR PRIMARY TOOL for any factual question about
@@ -649,7 +660,9 @@ def _call_strands_agent(system_prompt: str, messages: list,
                         # for our bank shapes) and max_tokens 4096→1500 (smaller
                         # raw pool to filter). Hindsight 0.5.0's proof_count boost
                         # (PR #821) plus our post-filter carries the weight now.
-                        response = _hs_client_ref.recall(
+                        # Note: arecall (native async) — not recall — to avoid
+                        # _run_async's stale-loop reuse.
+                        response = await _hs_client_ref.arecall(
                             bank_id=_hs_bank_ref,
                             query=query,
                             budget="low",
@@ -673,7 +686,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
                         return f"Memory recall failed: {e}"
 
                 @_strands_tool
-                def hindsight_reflect(query: str) -> str:
+                async def hindsight_reflect(query: str) -> str:
                     """Synthesize a reasoned answer from many long-term memory facts at once.
 
                     Use this when a question requires combining multiple facts
@@ -703,7 +716,9 @@ def _call_strands_agent(system_prompt: str, messages: list,
                         is nothing to draw from.
                     """
                     try:
-                        response = _hs_client_ref.reflect(
+                        # areflect (native async) — not reflect — to avoid
+                        # _run_async's stale-loop reuse.
+                        response = await _hs_client_ref.areflect(
                             bank_id=_hs_bank_ref,
                             query=query,
                             budget="mid",
