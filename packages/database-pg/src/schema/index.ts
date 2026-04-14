@@ -3,7 +3,7 @@
  *
  * v0.1 — only tables needed for the Thinkwork launch.
  * Cut tables (autoresearch, eval, ontology, places,
- * workflow-configs, usage-records) stay in maniflow.
+ * workflow-configs, usage-records) are out of scope.
  */
 
 export * from "./core";

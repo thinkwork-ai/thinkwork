@@ -28,7 +28,7 @@ import boto3
 from botocore.config import Config as BotoConfig
 from botocore.exceptions import ClientError
 
-# --- MANIFLOW_ADDITION: Convex message persistence ---
+# --- THINKWORK_ADDITION: Convex message persistence ---
 import urllib.request
 import urllib.error
 
@@ -56,7 +56,7 @@ def convex_send_message(endpoint: str, payload: dict) -> None:
         urllib.request.urlopen(req, timeout=5)
     except Exception as e:
         logger.warning("Convex write failed endpoint=%s error=%s", endpoint, e)
-# --- END MANIFLOW_ADDITION ---
+# --- END THINKWORK_ADDITION ---
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -156,13 +156,13 @@ def invoke_agent_runtime(
     Raises:
         RuntimeError: If invocation fails
     """
-    # --- MANIFLOW_ADDITION: write user message to Convex ---
+    # --- THINKWORK_ADDITION: write user message to Convex ---
     convex_send_message("agentcore/ingest-message", {
         "tenantId": tenant_id,
         "role": "user",
         "content": message,
     })
-    # --- END MANIFLOW_ADDITION ---
+    # --- END THINKWORK_ADDITION ---
 
     # Demo mode: call local Agent Container directly
     local_url = os.environ.get("AGENT_CONTAINER_URL")
@@ -176,7 +176,7 @@ def invoke_agent_runtime(
     else:
         result = _invoke_agentcore(tenant_id, message, model, runtime_type, ticket_id, use_memory=use_memory, assistant_id=assistant_id, workspace_tenant_id=workspace_tenant_id, skills=skills, tenant_slug=tenant_slug, instance_id=instance_id, mcp_servers=mcp_servers)
 
-    # --- MANIFLOW_ADDITION: write assistant response to Convex ---
+    # --- THINKWORK_ADDITION: write assistant response to Convex ---
     response_text = result.get("response", json.dumps(result))
     if isinstance(response_text, dict):
         response_text = json.dumps(response_text)
@@ -185,7 +185,7 @@ def invoke_agent_runtime(
         "role": "assistant",
         "content": response_text,
     })
-    # --- END MANIFLOW_ADDITION ---
+    # --- END THINKWORK_ADDITION ---
 
     return result
 

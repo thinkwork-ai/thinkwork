@@ -50,12 +50,12 @@ const AGENTCORE_INVOKE_URL = process.env.AGENTCORE_INVOKE_URL || "";
 const AGENTCORE_FUNCTION_NAME = process.env.AGENTCORE_FUNCTION_NAME || "";
 const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
 const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
-const MANIFLOW_API_SECRET = process.env.MANIFLOW_API_SECRET || "";
+const THINKWORK_API_SECRET = process.env.THINKWORK_API_SECRET || "";
 const MCP_BASE_URL = process.env.MCP_BASE_URL || "";
 const MCP_AUTH_SECRET = process.env.MCP_AUTH_SECRET || "";
 const AGENTCORE_GATEWAY_URL = process.env.AGENTCORE_GATEWAY_URL || "";
 const WORKSPACE_BUCKET = process.env.WORKSPACE_BUCKET || "";
-const MANIFLOW_API_URL = process.env.MANIFLOW_API_URL || process.env.MCP_BASE_URL || "";
+const THINKWORK_API_URL = process.env.THINKWORK_API_URL || process.env.MCP_BASE_URL || "";
 const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
 const BATCH_SIZE = 10;
 
@@ -93,7 +93,7 @@ async function invokeAgentCore(payload: Record<string, unknown>): Promise<{ ok: 
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
-			...(MANIFLOW_API_SECRET ? { Authorization: `Bearer ${MANIFLOW_API_SECRET}` } : {}),
+			...(THINKWORK_API_SECRET ? { Authorization: `Bearer ${THINKWORK_API_SECRET}` } : {}),
 		},
 		body: JSON.stringify(payload),
 	});
@@ -326,8 +326,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 					envOverrides: {
 						AGENT_EMAIL_ADDRESS: emailAddress,
 						AGENT_ID: wakeup.agent_id,
-						MANIFLOW_API_URL: MCP_BASE_URL,
-						MANIFLOW_API_SECRET: MANIFLOW_API_SECRET,
+						THINKWORK_API_URL: MCP_BASE_URL,
+						THINKWORK_API_SECRET: THINKWORK_API_SECRET,
 						INBOUND_MESSAGE_ID: (payload?.originalMessageId as string) || "",
 						INBOUND_SUBJECT: (payload?.subject as string) || "",
 						INBOUND_FROM: (payload?.from as string) || "",
@@ -348,8 +348,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 			envOverrides: {
 				AGENT_EMAIL_ADDRESS: `${agentSlug}@agents.thinkwork.ai`,
 				AGENT_ID: wakeup.agent_id,
-				MANIFLOW_API_URL: MANIFLOW_API_URL,
-				MANIFLOW_API_SECRET: MANIFLOW_API_SECRET,
+				THINKWORK_API_URL: THINKWORK_API_URL,
+				THINKWORK_API_SECRET: THINKWORK_API_SECRET,
 				INBOUND_MESSAGE_ID: "",
 				INBOUND_SUBJECT: "",
 				INBOUND_FROM: "",
@@ -369,8 +369,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 	for (const ds of defaultSkills) {
 		if (!skillsConfig.some((s) => s.skillId === ds.skillId)) {
 			const env: Record<string, string> = {
-				MANIFLOW_API_URL: MANIFLOW_API_URL,
-				MANIFLOW_API_SECRET: MANIFLOW_API_SECRET,
+				THINKWORK_API_URL: THINKWORK_API_URL,
+				THINKWORK_API_SECRET: THINKWORK_API_SECRET,
 				GRAPHQL_API_KEY: APPSYNC_API_KEY,
 				AGENT_ID: wakeup.agent_id,
 			};
@@ -564,8 +564,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 				secretRef: undefined,
 				mcpServer: undefined,
 				envOverrides: {
-					MANIFLOW_API_URL: APPSYNC_ENDPOINT,
-					MANIFLOW_API_SECRET: APPSYNC_API_KEY,
+					THINKWORK_API_URL: APPSYNC_ENDPOINT,
+					THINKWORK_API_SECRET: APPSYNC_API_KEY,
 					AGENT_ID: wakeup.agent_id,
 					TENANT_ID: wakeup.tenant_id,
 					CURRENT_THREAD_ID: runThreadId,

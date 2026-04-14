@@ -23,7 +23,7 @@ If you're not on AWS, this isn't the right tool for you — and that's the point
 
 ## Status
 
-🚧 **Pre-release.** v0.1.0 is in active migration from the closed-source maniflow codebase. See [PRD-47 in the maniflow repo](https://github.com/maniflow-ai/maniflow/blob/main/prds/prd-47-thinkwork-oss-cutover.md) for the full migration plan and the eleven-phase rollout. Watch this repo for the v0.1.0 release.
+🚧 **Pre-release.** v0.1.0 is in active development. Watch this repo for the release.
 
 ## What ships in v1
 
