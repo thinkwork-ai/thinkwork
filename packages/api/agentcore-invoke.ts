@@ -23,7 +23,7 @@ interface LambdaResult {
   body: string;
 }
 
-const MANIFLOW_API_SECRET = process.env.MANIFLOW_API_SECRET || "";
+const THINKWORK_API_SECRET = process.env.THINKWORK_API_SECRET || "";
 const AWS_REGION = process.env.AWS_REGION || "us-east-1";
 const AGENTCORE_RUNTIME_SSM_PREFIX = process.env.AGENTCORE_RUNTIME_SSM_PREFIX || "";
 
@@ -92,12 +92,12 @@ function json(statusCode: number, body: unknown): LambdaResult {
 }
 
 function checkAuth(headers?: Record<string, string | undefined>): boolean {
-  if (!MANIFLOW_API_SECRET) return true; // dev mode — no secret configured
+  if (!THINKWORK_API_SECRET) return true; // dev mode — no secret configured
   const auth = headers?.authorization || headers?.Authorization || "";
   if (!auth.startsWith("Bearer ")) return false;
   const token = auth.slice(7);
   try {
-    return timingSafeEqual(Buffer.from(token), Buffer.from(MANIFLOW_API_SECRET));
+    return timingSafeEqual(Buffer.from(token), Buffer.from(THINKWORK_API_SECRET));
   } catch {
     return false;
   }

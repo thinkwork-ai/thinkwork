@@ -28,8 +28,8 @@ locals {
     GRAPHQL_API_KEY         = var.appsync_api_key
     API_AUTH_SECRET         = var.api_auth_secret
     THINKWORK_API_SECRET    = var.api_auth_secret
-    MANIFLOW_API_SECRET     = var.api_auth_secret
     EMAIL_HMAC_SECRET       = var.api_auth_secret
+    THINKWORK_API_URL       = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com"
     AGENTCORE_FUNCTION_NAME = var.agentcore_function_name
     WORKSPACE_BUCKET        = var.bucket_name
     HINDSIGHT_ENDPOINT      = var.hindsight_endpoint

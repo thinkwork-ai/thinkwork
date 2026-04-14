@@ -3,8 +3,8 @@
 All operations use the Thinkwork GraphQL API. Every curl follows this pattern:
 
 ```bash
-curl -s -X POST "${MANIFLOW_API_URL}" \
-  -H "x-api-key: ${MANIFLOW_API_SECRET}" \
+curl -s -X POST "${THINKWORK_API_URL}" \
+  -H "x-api-key: ${THINKWORK_API_SECRET}" \
   -H "Content-Type: application/json" \
   -d '{ "query": "...", "variables": { ... } }'
 ```
@@ -12,8 +12,8 @@ curl -s -X POST "${MANIFLOW_API_URL}" \
 ## 1. Create a Sub-Thread
 
 ```bash
-curl -s -X POST "${MANIFLOW_API_URL}" \
-  -H "x-api-key: ${MANIFLOW_API_SECRET}" \
+curl -s -X POST "${THINKWORK_API_URL}" \
+  -H "x-api-key: ${THINKWORK_API_SECRET}" \
   -H "Content-Type: application/json" \
   -d "$(cat <<EOF
 {
@@ -39,8 +39,8 @@ EOF
 Block a thread until another thread is completed:
 
 ```bash
-curl -s -X POST "${MANIFLOW_API_URL}" \
-  -H "x-api-key: ${MANIFLOW_API_SECRET}" \
+curl -s -X POST "${THINKWORK_API_URL}" \
+  -H "x-api-key: ${THINKWORK_API_SECRET}" \
   -H "Content-Type: application/json" \
   -d "$(cat <<EOF
 {
@@ -57,8 +57,8 @@ EOF
 ## 3. Update Thread Status
 
 ```bash
-curl -s -X POST "${MANIFLOW_API_URL}" \
-  -H "x-api-key: ${MANIFLOW_API_SECRET}" \
+curl -s -X POST "${THINKWORK_API_URL}" \
+  -H "x-api-key: ${THINKWORK_API_SECRET}" \
   -H "Content-Type: application/json" \
   -d "$(cat <<EOF
 {
@@ -77,8 +77,8 @@ EOF
 ## 4. Add a Comment
 
 ```bash
-curl -s -X POST "${MANIFLOW_API_URL}" \
-  -H "x-api-key: ${MANIFLOW_API_SECRET}" \
+curl -s -X POST "${THINKWORK_API_URL}" \
+  -H "x-api-key: ${THINKWORK_API_SECRET}" \
   -H "Content-Type: application/json" \
   -d "$(cat <<EOF
 {
@@ -99,8 +99,8 @@ EOF
 ## 5. List Sub-Threads
 
 ```bash
-curl -s -X POST "${MANIFLOW_API_URL}" \
-  -H "x-api-key: ${MANIFLOW_API_SECRET}" \
+curl -s -X POST "${THINKWORK_API_URL}" \
+  -H "x-api-key: ${THINKWORK_API_SECRET}" \
   -H "Content-Type: application/json" \
   -d "$(cat <<EOF
 {
@@ -117,8 +117,8 @@ EOF
 ## 6. Get Thread Details
 
 ```bash
-curl -s -X POST "${MANIFLOW_API_URL}" \
-  -H "x-api-key: ${MANIFLOW_API_SECRET}" \
+curl -s -X POST "${THINKWORK_API_URL}" \
+  -H "x-api-key: ${THINKWORK_API_SECRET}" \
   -H "Content-Type: application/json" \
   -d "$(cat <<EOF
 {

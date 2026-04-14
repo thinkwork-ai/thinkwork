@@ -16,11 +16,11 @@ metadata:
 1. **Same tenant only** — you can only create/modify threads within your own tenant.
 2. **No deleting threads** — you may update status but never delete threads.
 3. **Max 10 sub-threads per turn** — avoid creating excessive sub-threads in a single invocation.
-4. **Never expose secrets** — do not echo `$MANIFLOW_API_SECRET` in responses.
+4. **Never expose secrets** — do not echo `$THINKWORK_API_SECRET` in responses.
 
 ## Available Operations
 
-All operations use the Thinkwork GraphQL API via `curl` against `$MANIFLOW_API_URL` with header `x-api-key: $MANIFLOW_API_SECRET`.
+All operations use the Thinkwork GraphQL API via `curl` against `$THINKWORK_API_URL` with header `x-api-key: $THINKWORK_API_SECRET`.
 
 | Operation | Mutation/Query | Purpose |
 |-----------|---------------|---------|

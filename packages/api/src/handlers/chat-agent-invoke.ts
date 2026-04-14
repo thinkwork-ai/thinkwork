@@ -45,11 +45,11 @@ function getTraceId(): string {
 const AGENTCORE_FUNCTION_NAME = process.env.AGENTCORE_FUNCTION_NAME || "";
 const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
 const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
-const MANIFLOW_API_SECRET = process.env.MANIFLOW_API_SECRET || "";
+const THINKWORK_API_SECRET = process.env.THINKWORK_API_SECRET || "";
 const WORKSPACE_BUCKET = process.env.WORKSPACE_BUCKET || "";
 // API URL used by skills for callbacks (thread-management, email-send, etc.)
-// Reads MANIFLOW_API_URL first, falls back to legacy MCP_BASE_URL until infra is updated.
-const MANIFLOW_API_URL = process.env.MANIFLOW_API_URL || process.env.MCP_BASE_URL || "";
+// Reads THINKWORK_API_URL first, falls back to legacy MCP_BASE_URL until infra is updated.
+const THINKWORK_API_URL = process.env.THINKWORK_API_URL || process.env.MCP_BASE_URL || "";
 const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
 
 const db = getDb();
@@ -261,8 +261,8 @@ export async function handler(event: InvokeEvent): Promise<void> {
         envOverrides: {
           AGENT_EMAIL_ADDRESS: `${agentSlug}@agents.thinkwork.ai`,
           AGENT_ID: agentId,
-          MANIFLOW_API_URL: MANIFLOW_API_URL,
-          MANIFLOW_API_SECRET: MANIFLOW_API_SECRET,
+          THINKWORK_API_URL: THINKWORK_API_URL,
+          THINKWORK_API_SECRET: THINKWORK_API_SECRET,
           INBOUND_MESSAGE_ID: "",
           INBOUND_SUBJECT: "",
           INBOUND_FROM: "",
@@ -281,8 +281,8 @@ export async function handler(event: InvokeEvent): Promise<void> {
     for (const ds of defaultSkills) {
       if (!skillsConfig.some((s) => s.skillId === ds.skillId)) {
         const env: Record<string, string> = {
-          MANIFLOW_API_URL: MANIFLOW_API_URL,
-          MANIFLOW_API_SECRET: MANIFLOW_API_SECRET,
+          THINKWORK_API_URL: THINKWORK_API_URL,
+          THINKWORK_API_SECRET: THINKWORK_API_SECRET,
           GRAPHQL_API_KEY: APPSYNC_API_KEY,
           AGENT_ID: agentId,
         };

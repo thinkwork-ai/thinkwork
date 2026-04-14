@@ -13,7 +13,7 @@ import {
 } from "@aws-sdk/client-cloudwatch-logs";
 
 const logsClient = new CloudWatchLogsClient({ region: "us-east-1" });
-const INVOCATIONS_LOG_GROUP = process.env.BEDROCK_INVOCATION_LOG_GROUP || "/maniflow/bedrock/model-invocations";
+const INVOCATIONS_LOG_GROUP = process.env.BEDROCK_INVOCATION_LOG_GROUP || "/thinkwork/bedrock/model-invocations";
 
 // Fallback pricing for cost calculation (per million tokens)
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {

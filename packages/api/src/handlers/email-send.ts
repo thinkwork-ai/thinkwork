@@ -6,7 +6,7 @@
  *
  * Route: POST /api/email/send (API Gateway)
  *
- * Auth: MANIFLOW_API_SECRET bearer token (agent runtime → API)
+ * Auth: THINKWORK_API_SECRET bearer token (agent runtime → API)
  */
 
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
@@ -19,7 +19,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import { generateReplyToken } from "../lib/email-tokens.js";
 
-const MANIFLOW_API_SECRET = process.env.MANIFLOW_API_SECRET || "";
+const THINKWORK_API_SECRET = process.env.THINKWORK_API_SECRET || "";
 
 const db = getDb();
 
@@ -37,7 +37,7 @@ interface SendEmailRequest {
 export async function handler(event: APIGatewayProxyEventV2) {
 	// Auth
 	const authHeader = event.headers?.authorization || "";
-	if (!authHeader.startsWith("Bearer ") || authHeader.slice(7) !== MANIFLOW_API_SECRET) {
+	if (!authHeader.startsWith("Bearer ") || authHeader.slice(7) !== THINKWORK_API_SECRET) {
 		return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };
 	}
 

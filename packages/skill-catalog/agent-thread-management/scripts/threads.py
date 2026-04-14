@@ -10,8 +10,8 @@ import os
 import urllib.request
 import urllib.error
 
-API_URL = os.environ.get("MANIFLOW_API_URL", "")
-API_SECRET = os.environ.get("MANIFLOW_API_SECRET", "")
+API_URL = os.environ.get("THINKWORK_API_URL", "")
+API_SECRET = os.environ.get("THINKWORK_API_SECRET", "")
 GRAPHQL_API_KEY = os.environ.get("GRAPHQL_API_KEY", "") or API_SECRET
 TENANT_ID = os.environ.get("TENANT_ID", "") or os.environ.get("_MCP_TENANT_ID", "")
 AGENT_ID = os.environ.get("AGENT_ID", "") or os.environ.get("_MCP_AGENT_ID", "")

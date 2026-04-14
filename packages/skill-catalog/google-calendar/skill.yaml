@@ -36,6 +36,6 @@ oauth_provider: google_productivity
 oauth_scopes: [gmail, calendar, identity]
 requires_env:
   - GCAL_ACCESS_TOKEN
-  - MANIFLOW_API_URL
-  - MANIFLOW_API_SECRET
+  - THINKWORK_API_URL
+  - THINKWORK_API_SECRET
   - GCAL_CONNECTION_ID

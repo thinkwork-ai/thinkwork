@@ -5,8 +5,8 @@
 Escalate a thread to your supervisor agent when you cannot proceed:
 
 ```bash
-curl -s -X POST "${MANIFLOW_API_URL}" \
-  -H "x-api-key: ${MANIFLOW_API_SECRET}" \
+curl -s -X POST "${THINKWORK_API_URL}" \
+  -H "x-api-key: ${THINKWORK_API_SECRET}" \
   -H "Content-Type: application/json" \
   -d "$(cat <<EOF
 {
@@ -34,8 +34,8 @@ EOF
 Delegate a thread to another agent better suited to handle it:
 
 ```bash
-curl -s -X POST "${MANIFLOW_API_URL}" \
-  -H "x-api-key: ${MANIFLOW_API_SECRET}" \
+curl -s -X POST "${THINKWORK_API_URL}" \
+  -H "x-api-key: ${THINKWORK_API_SECRET}" \
   -H "Content-Type: application/json" \
   -d "$(cat <<EOF
 {

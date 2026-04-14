@@ -5,8 +5,8 @@ import os
 import urllib.request
 import urllib.error
 
-API_URL = os.environ.get("MANIFLOW_API_URL", "")
-API_SECRET = os.environ.get("MANIFLOW_API_SECRET", "")
+API_URL = os.environ.get("THINKWORK_API_URL", "")
+API_SECRET = os.environ.get("THINKWORK_API_SECRET", "")
 AGENT_ID = os.environ.get("AGENT_ID", "")
 AGENT_EMAIL = os.environ.get("AGENT_EMAIL_ADDRESS", "")
 TENANT_ID = os.environ.get("TENANT_ID", "") or os.environ.get("_MCP_TENANT_ID", "")
@@ -41,7 +41,7 @@ def send_email(
     if len(to) > 5:
         return json.dumps({"error": "Maximum 5 recipients per email"})
     if not API_URL or not API_SECRET:
-        return json.dumps({"error": "MANIFLOW_API_URL and MANIFLOW_API_SECRET are required"})
+        return json.dumps({"error": "THINKWORK_API_URL and THINKWORK_API_SECRET are required"})
 
     payload = {
         "agentId": AGENT_ID,
