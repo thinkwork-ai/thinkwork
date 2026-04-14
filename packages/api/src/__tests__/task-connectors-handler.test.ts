@@ -85,6 +85,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
 	webhookDeliveries: { id: "id", webhook_id: "webhook_id", received_at: "received_at" },
 	connectProviders: { id: "id", name: "name", provider_type: "provider_type" },
 	connections: { id: "id", tenant_id: "tenant_id", provider_id: "provider_id", status: "status", metadata: "metadata" },
+	threadTurns: { id: "id", webhook_id: "webhook_id" },
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -184,6 +185,7 @@ describe("task-connectors — GET /api/task-connectors", () => {
 				connect_provider_id: "prov-1",
 				token: "tok_abc",
 				config: null,
+				enabled: true,
 				last_invoked_at: null,
 				invocation_count: 0,
 			},
@@ -241,16 +243,32 @@ describe("task-connectors — POST /api/task-connectors/:slug (enable)", () => {
 		expect(mockInsert).toHaveBeenCalled();
 	});
 
-	it("is idempotent — returns existing row on second call", async () => {
+	it("is idempotent — returns existing enabled row on second call", async () => {
 		primeWhere([{ id: "prov-1", name: "lastmile", display_name: "LastMile Tasks" }]);
-		primeWhere([{ id: "wh-existing", token: "tok_existing" }]);
+		primeWhere([{ id: "wh-existing", token: "tok_existing", enabled: true }]);
 
 		const res = await handler(buildEvent("POST", "/api/task-connectors/lastmile"));
 		expect(res.statusCode).toBe(200);
 		const body = JSON.parse(res.body as string);
 		expect(body.already_enabled).toBe(true);
+		expect(body.re_enabled).toBe(false);
 		expect(body.webhook_url).toBe("https://api.example.test/webhooks/tok_existing");
 		expect(mockInsert).not.toHaveBeenCalled();
+		expect(mockUpdate).not.toHaveBeenCalled();
+	});
+
+	it("re-enables an existing disabled row (preserving token + secret)", async () => {
+		primeWhere([{ id: "prov-1", name: "lastmile", display_name: "LastMile Tasks" }]);
+		primeWhere([{ id: "wh-existing", token: "tok_preserved", enabled: false }]);
+
+		const res = await handler(buildEvent("POST", "/api/task-connectors/lastmile"));
+		expect(res.statusCode).toBe(200);
+		const body = JSON.parse(res.body as string);
+		expect(body.already_enabled).toBe(false);
+		expect(body.re_enabled).toBe(true);
+		expect(body.webhook_url).toBe("https://api.example.test/webhooks/tok_preserved");
+		expect(mockInsert).not.toHaveBeenCalled();
+		expect(mockUpdate).toHaveBeenCalled();
 	});
 
 	it("returns 404 for an unknown slug", async () => {
@@ -260,12 +278,47 @@ describe("task-connectors — POST /api/task-connectors/:slug (enable)", () => {
 	});
 });
 
-describe("task-connectors — DELETE /api/task-connectors/:slug (disable)", () => {
-	it("removes the webhook row for the provider", async () => {
+describe("task-connectors — DELETE /api/task-connectors/:slug (soft disable)", () => {
+	it("soft-disables an enabled webhook row via UPDATE enabled=false", async () => {
 		primeWhere([{ id: "prov-1" }]);
+		primeWhere([{ id: "wh-1", enabled: true }]);
 
 		const res = await handler(buildEvent("DELETE", "/api/task-connectors/lastmile"));
 		expect(res.statusCode).toBe(200);
+		const body = JSON.parse(res.body as string);
+		expect(body.mode).toBe("soft");
+		expect(body.changed).toBe(true);
+		expect(mockUpdate).toHaveBeenCalled();
+		expect(mockDelete).not.toHaveBeenCalled();
+	});
+
+	it("is idempotent — already-disabled row returns ok/changed:false", async () => {
+		primeWhere([{ id: "prov-1" }]);
+		primeWhere([{ id: "wh-1", enabled: false }]);
+
+		const res = await handler(buildEvent("DELETE", "/api/task-connectors/lastmile"));
+		expect(res.statusCode).toBe(200);
+		const body = JSON.parse(res.body as string);
+		expect(body.mode).toBe("soft");
+		expect(body.changed).toBe(false);
+		expect(mockUpdate).not.toHaveBeenCalled();
+	});
+
+	it("hard delete with ?hard=true calls thread_turns null + webhook delete", async () => {
+		primeWhere([{ id: "prov-1" }]);
+		primeWhere([{ id: "wh-1", enabled: true }]);
+
+		const event = buildEvent("DELETE", "/api/task-connectors/lastmile");
+		(event as unknown as { queryStringParameters: Record<string, string> }).queryStringParameters = { hard: "true" };
+
+		const res = await handler(event);
+		expect(res.statusCode).toBe(200);
+		const body = JSON.parse(res.body as string);
+		expect(body.mode).toBe("hard");
+		expect(body.changed).toBe(true);
+		// Update is called once (to null threadTurns.webhook_id)
+		expect(mockUpdate).toHaveBeenCalled();
+		// Delete is called on webhooks
 		expect(mockDelete).toHaveBeenCalled();
 	});
 });
