@@ -179,6 +179,24 @@ export const DeleteMessageMutation = graphql(`
   }
 `);
 
+export const ExecuteExternalTaskActionMutation = graphql(`
+  mutation ExecuteExternalTaskAction(
+    $threadId: ID!
+    $actionType: String!
+    $params: AWSJSON
+  ) {
+    executeExternalTaskAction(
+      threadId: $threadId
+      actionType: $actionType
+      params: $params
+    ) {
+      threadId
+      envelope
+      auditMessageId
+    }
+  }
+`);
+
 // ---------------------------------------------------------------------------
 // Messages
 // ---------------------------------------------------------------------------

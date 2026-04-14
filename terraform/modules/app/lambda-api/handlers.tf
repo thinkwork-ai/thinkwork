@@ -79,6 +79,7 @@ resource "aws_lambda_function" "handler" {
     "job-schedule-manager",
     "webhooks",
     "webhooks-admin",
+    "integration-webhooks",
     "workspace-files",
     "knowledge-base-manager",
     "knowledge-base-files",
@@ -203,6 +204,9 @@ locals {
     # Webhooks admin
     "ANY /api/webhooks/{proxy+}" = "webhooks-admin"
     "ANY /api/webhooks"          = "webhooks-admin"
+
+    # Integration webhooks (signature-authed, per-provider)
+    "POST /integrations/{provider}/webhook" = "integration-webhooks"
 
     # Workspace files
     "ANY /api/workspaces/{proxy+}" = "workspace-files"
