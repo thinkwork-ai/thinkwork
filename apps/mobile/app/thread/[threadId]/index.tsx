@@ -170,6 +170,16 @@ export default function ThreadDetailRoute() {
   // ── Task state ──
   const [, executeUpdateThread] = useMutation(UpdateThreadMutation);
   const isTask = thread?.channel?.toUpperCase() === "TASK";
+  // External-task threads (LastMile etc.) ride channel=task but render the
+  // timeline + pinned external-task header instead of the sub-task FlatList,
+  // so the user can chat with their attached agent and use the action bar.
+  const hasExternalTask = Boolean(
+    ((thread?.metadata ?? {}) as Record<string, unknown>).external &&
+      (((thread?.metadata as Record<string, unknown> | undefined)?.external) as
+        | Record<string, unknown>
+        | undefined)?.latestEnvelope,
+  );
+  const useTaskFlatList = isTask && !hasExternalTask;
   const isDone = thread?.status?.toUpperCase() === "DONE";
   const childThreads = (thread?.children ?? []) as any[];
   const allDescendantTasks = useMemo(() => {
@@ -304,7 +314,7 @@ export default function ThreadDetailRoute() {
       >
         <View className="flex-row items-center justify-between pl-2 pr-4" style={{ height: 44 }}>
           {/* Left: back + title */}
-          <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace("/")} className="flex-row items-center gap-1.5 active:opacity-70 flex-shrink" style={{ maxWidth: isTask ? "65%" : "80%" }}>
+          <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace("/")} className="flex-row items-center gap-1.5 active:opacity-70 flex-shrink" style={{ maxWidth: useTaskFlatList ? "65%" : "80%" }}>
             <ChevronLeft size={24} color={colors.foreground} />
             <Text className="text-lg font-semibold" numberOfLines={1}>{isLoaded ? thread.title : "Loading..."}</Text>
           </Pressable>
@@ -312,13 +322,13 @@ export default function ThreadDetailRoute() {
           {/* Right actions */}
           {isLoaded && (
             <View className="flex-row items-center gap-2">
-              {isTask && !isDone && (
+              {useTaskFlatList && !isDone && (
                 <Pressable onPress={handleMarkDone} className="flex-row items-center gap-1 px-3 py-1.5 rounded-full active:opacity-70" style={{ backgroundColor: isDark ? "#166534" : "#16a34a" }}>
                   <Check size={14} color="#fff" strokeWidth={2.5} />
                   <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>Done</Text>
                 </Pressable>
               )}
-              {!isTask && (
+              {!useTaskFlatList && (
                 <Pressable onPress={() => router.push(`/thread/${threadId}/info`)} className="p-2 active:opacity-70">
                   <Info size={22} color={colors.mutedForeground} strokeWidth={1.25} />
                 </Pressable>
@@ -332,7 +342,7 @@ export default function ThreadDetailRoute() {
       {/* Content area — single scrollable page via ActivityTimeline's FlatList */}
       <View className="flex-1" style={{ backgroundColor: colors.background }}>
         {isLoaded ? (
-          isTask ? (
+          useTaskFlatList ? (
             /* Task view: scrollable card + sub-tasks, no timeline */
             <FlatList
               data={allDescendantTasks}
@@ -388,36 +398,30 @@ export default function ThreadDetailRoute() {
               ListFooterComponent={<View style={{ height: 20 }} />}
             />
           ) : (
-            /* Non-task view: activity timeline (with optional external task
-               header when thread.metadata.external.latestEnvelope exists) */
-            (() => {
-              const externalMeta = (thread?.metadata ?? {}) as Record<string, unknown>;
-              const hasExternalTask = Boolean(
-                (externalMeta.external as Record<string, unknown> | undefined)?.latestEnvelope,
-              );
-              const pinnedHeader = hasExternalTask ? (
-                <PinnedExternalTaskHeader
-                  threadMetadata={thread.metadata}
-                  threadId={thread.id}
-                  tenantId={thread.tenantId}
-                  currentUserId={currentUser?.id}
-                />
-              ) : null;
-              return (
-                <ActivityTimeline
-                  key={threadId}
-                  messages={messages}
-                  turns={turns}
-                  agentName={agentName}
-                  isAdmin={isAdmin}
-                  isAgentRunning={!!threadId && isThreadActive(threadId)}
-                  onLinkPress={handleLinkPress}
-                  onSaveRecipe={handleSaveRecipe}
-                  listHeaderComponent={pinnedHeader}
-                  currentUserId={currentUser?.id}
-                />
-              );
-            })()
+            /* Timeline view: pinned external-task header (if present) above
+               the activity timeline. Used by both regular chat threads and
+               external-task threads (channel=task with metadata.external). */
+            <ActivityTimeline
+              key={threadId}
+              messages={messages}
+              turns={turns}
+              agentName={agentName}
+              isAdmin={isAdmin}
+              isAgentRunning={!!threadId && isThreadActive(threadId)}
+              onLinkPress={handleLinkPress}
+              onSaveRecipe={handleSaveRecipe}
+              listHeaderComponent={
+                hasExternalTask ? (
+                  <PinnedExternalTaskHeader
+                    threadMetadata={thread.metadata}
+                    threadId={thread.id}
+                    tenantId={thread.tenantId}
+                    currentUserId={currentUser?.id}
+                  />
+                ) : null
+              }
+              currentUserId={currentUser?.id}
+            />
           )
         ) : null}
       </View>
