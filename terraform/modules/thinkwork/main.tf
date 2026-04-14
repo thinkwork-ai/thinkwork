@@ -193,6 +193,7 @@ module "api" {
   docs_url                = "https://${module.docs_site.distribution_domain}"
   appsync_realtime_url    = module.appsync.graphql_realtime_url
   ecr_repository_url      = module.agentcore.ecr_repository_url
+  job_scheduler_role_arn  = module.job_triggers.job_scheduler_role_arn
 }
 
 ################################################################################
