@@ -130,6 +130,12 @@ variable "cloudflare_zone_id" {
   default     = ""
 }
 
+variable "ses_inbound_domain" {
+  description = "Subdomain for agent email (e.g. agents.thinkwork.ai). Terraform creates a delegated Route53 hosted zone, SES domain identity + DKIM, MX record, and receipt rule. Leave empty to skip SES inbound resources."
+  type        = string
+  default     = ""
+}
+
 locals {
   www_dns_enabled = var.www_domain != "" && var.cloudflare_zone_id != ""
   docs_domain     = var.www_domain != "" ? "docs.${var.www_domain}" : ""
@@ -165,6 +171,9 @@ module "thinkwork" {
   # Admin SPA custom domain (derived from www_domain — admin.<apex>).
   admin_domain          = local.www_dns_enabled ? local.admin_domain : ""
   admin_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
+
+  # SES inbound email subdomain (delegated Route53 subzone).
+  ses_inbound_domain = var.ses_inbound_domain
 
   # Greenfield: create everything (all defaults are true)
 }
@@ -327,4 +336,19 @@ output "www_distribution_domain" {
 output "www_bucket_name" {
   description = "S3 bucket for public website assets"
   value       = module.thinkwork.www_bucket_name
+}
+
+output "ses_inbound_zone_id" {
+  description = "Route53 hosted zone ID for the email subdomain (null when ses_inbound_domain is not set)"
+  value       = module.thinkwork.ses_inbound_zone_id
+}
+
+output "ses_inbound_name_servers" {
+  description = "Name servers for the delegated email subzone. Paste these as NS records at the registrar that hosts the parent domain (Google Domains for thinkwork.ai) before SES can verify."
+  value       = module.thinkwork.ses_inbound_name_servers
+}
+
+output "ses_inbound_mx_target" {
+  description = "MX target host for the email subdomain. Already written into the subzone by Terraform — informational."
+  value       = module.thinkwork.ses_inbound_mx_target
 }
