@@ -132,14 +132,7 @@ function CopyButton({ value, label }: { value: string; label?: string }) {
 // Columns
 // ---------------------------------------------------------------------------
 
-function connectorColumns(handlers: {
-	onTest: (row: ConnectorRow) => void;
-	onGenerateSecret: (row: ConnectorRow) => void;
-	onDisable: (row: ConnectorRow) => void;
-	onReEnable: (row: ConnectorRow) => void;
-	onHardDelete: (row: ConnectorRow) => void;
-	onViewDeliveries: (row: ConnectorRow) => void;
-}): ColumnDef<ConnectorRow>[] {
+function connectorColumns(): ColumnDef<ConnectorRow>[] {
 	return [
 		{
 			accessorKey: "display_name",
@@ -243,87 +236,6 @@ function connectorColumns(handlers: {
 				);
 			},
 			size: 230,
-		},
-		{
-			id: "actions",
-			header: "",
-			cell: ({ row }) => {
-				const r = row.original;
-				// Catalog entry not yet configured — no actions, user clicks
-				// the top-level "Add Connector" button to enable.
-				if (!r.configured) return null;
-
-				return (
-					<DropdownMenu>
-						<DropdownMenuTrigger asChild>
-							<Button variant="ghost" size="sm">
-								Actions
-							</Button>
-						</DropdownMenuTrigger>
-						<DropdownMenuContent align="end">
-							<DropdownMenuItem
-								onClick={(e) => {
-									e.stopPropagation();
-									handlers.onViewDeliveries(r);
-								}}
-							>
-								View deliveries
-							</DropdownMenuItem>
-							{r.enabled && (
-								<>
-									<DropdownMenuItem
-										onClick={(e) => {
-											e.stopPropagation();
-											handlers.onTest(r);
-										}}
-									>
-										<Send className="h-3.5 w-3.5 mr-1.5" /> Send test event
-									</DropdownMenuItem>
-									<DropdownMenuItem
-										onClick={(e) => {
-											e.stopPropagation();
-											handlers.onGenerateSecret(r);
-										}}
-									>
-										<KeyRound className="h-3.5 w-3.5 mr-1.5" />{" "}
-										{r.has_secret ? "Rotate signing secret" : "Generate signing secret"}
-									</DropdownMenuItem>
-								</>
-							)}
-							<DropdownMenuSeparator />
-							{r.enabled ? (
-								<DropdownMenuItem
-									onClick={(e) => {
-										e.stopPropagation();
-										handlers.onDisable(r);
-									}}
-								>
-									<PowerOff className="h-3.5 w-3.5 mr-1.5" /> Disable connector
-								</DropdownMenuItem>
-							) : (
-								<DropdownMenuItem
-									onClick={(e) => {
-										e.stopPropagation();
-										handlers.onReEnable(r);
-									}}
-								>
-									<Power className="h-3.5 w-3.5 mr-1.5" /> Re-enable connector
-								</DropdownMenuItem>
-							)}
-							<DropdownMenuItem
-								className="text-destructive"
-								onClick={(e) => {
-									e.stopPropagation();
-									handlers.onHardDelete(r);
-								}}
-							>
-								<Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete permanently
-							</DropdownMenuItem>
-						</DropdownMenuContent>
-					</DropdownMenu>
-				);
-			},
-			size: 110,
 		},
 	];
 }
@@ -580,110 +492,6 @@ function ConnectorsPage() {
 		[connectors],
 	);
 
-	const handleDisable = async (row: ConnectorRow) => {
-		if (!tenantId) return;
-		if (
-			!window.confirm(
-				`Disable ${row.display_name}? New events will be dropped until you re-enable. Existing threads and delivery history are preserved.`,
-			)
-		) {
-			return;
-		}
-		try {
-			await apiFetch(`/api/task-connectors/${row.slug}`, tenantId, {
-				method: "DELETE",
-			});
-			toast.success(`${row.display_name} disabled`);
-			fetchData();
-		} catch (e) {
-			toast.error(e instanceof Error ? e.message : String(e));
-		}
-	};
-
-	const handleReEnable = async (row: ConnectorRow) => {
-		if (!tenantId) return;
-		try {
-			await apiFetch(`/api/task-connectors/${row.slug}`, tenantId, {
-				method: "POST",
-			});
-			toast.success(`${row.display_name} re-enabled`);
-			fetchData();
-		} catch (e) {
-			toast.error(e instanceof Error ? e.message : String(e));
-		}
-	};
-
-	const handleHardDelete = async (row: ConnectorRow) => {
-		if (!tenantId) return;
-		if (
-			!window.confirm(
-				`Permanently delete ${row.display_name}? This removes the webhook row + signing secret. Delivery history is preserved but loses its webhook link. You'll need to reconfigure the provider dashboard from scratch if you re-add this connector.`,
-			)
-		) {
-			return;
-		}
-		try {
-			await apiFetch(`/api/task-connectors/${row.slug}?hard=true`, tenantId, {
-				method: "DELETE",
-			});
-			toast.success(`${row.display_name} permanently deleted`);
-			fetchData();
-		} catch (e) {
-			toast.error(e instanceof Error ? e.message : String(e));
-		}
-	};
-
-	const handleTest = async (row: ConnectorRow) => {
-		if (!tenantId) return;
-		try {
-			const res = await apiFetch<{ ok: boolean; status: number; response: unknown }>(
-				`/api/task-connectors/${row.slug}/test`,
-				tenantId,
-				{ method: "POST" },
-			);
-			if (res.ok) {
-				toast.success("Test event delivered");
-				fetchData();
-			} else {
-				toast.error(`Test failed (${res.status})`);
-			}
-		} catch (e) {
-			toast.error(e instanceof Error ? e.message : String(e));
-		}
-	};
-
-	const handleGenerateSecret = async (row: ConnectorRow) => {
-		if (!tenantId) return;
-		try {
-			const res = await apiFetch<{ secret: string }>(
-				`/api/task-connectors/${row.slug}/generate-secret`,
-				tenantId,
-				{ method: "POST" },
-			);
-			// Reuse the Setup Instructions dialog to reveal the secret ONCE.
-			setSetupResult({
-				ok: true,
-				slug: row.slug,
-				webhook_url: row.webhook_url ?? "",
-				already_enabled: true,
-			});
-			// Secret is shown inside the dialog — but we need to pre-populate it.
-			// Simpler: just toast + copy to clipboard here.
-			try {
-				await navigator.clipboard.writeText(res.secret);
-				toast.success(
-					"Signing secret generated + copied to clipboard. Paste it into your provider dashboard now — it won't be shown again.",
-					{ duration: 10000 },
-				);
-			} catch {
-				toast.info(`Signing secret: ${res.secret}`, { duration: 30000 });
-			}
-			fetchData();
-		} catch (e) {
-			toast.error(e instanceof Error ? e.message : String(e));
-		}
-	};
-
 	if (!tenantId || loading) return <PageSkeleton />;
 
 	const description = (() => {
@@ -723,18 +531,7 @@ function ConnectorsPage() {
 				/>
 			) : (
 				<DataTable
-					columns={connectorColumns({
-						onTest: handleTest,
-						onGenerateSecret: handleGenerateSecret,
-						onDisable: handleDisable,
-						onReEnable: handleReEnable,
-						onHardDelete: handleHardDelete,
-						onViewDeliveries: (row) =>
-							navigate({
-								to: "/connectors/$slug",
-								params: { slug: row.slug },
-							}),
-					})}
+					columns={connectorColumns()}
 					data={connectors}
 					onRowClick={(row) =>
 						row.configured
