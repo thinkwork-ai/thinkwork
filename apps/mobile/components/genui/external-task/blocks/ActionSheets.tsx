@@ -194,7 +194,7 @@ export function AssignActionSheet({ visible, onClose, item, submit }: CommonProp
 	const [value, setValue] = useState(item.core.assignee?.id ?? "");
 	const [saving, setSaving] = useState(false);
 
-	const snapPoints = useMemo(() => ["38%"], []);
+	const snapPoints = useMemo(() => ["50%"], []);
 
 	useEffect(() => {
 		if (visible) {
@@ -302,7 +302,7 @@ export function CommentActionSheet({ visible, onClose, submit }: Omit<CommonProp
 	const [content, setContent] = useState("");
 	const [saving, setSaving] = useState(false);
 
-	const snapPoints = useMemo(() => ["60%"], []);
+	const snapPoints = useMemo(() => ["50%"], []);
 
 	useEffect(() => {
 		if (visible) {
@@ -483,7 +483,7 @@ export function EditFormActionSheet({ visible, onClose, item, submit }: CommonPr
 	const [saving, setSaving] = useState(false);
 
 	const form = item.forms?.edit;
-	const snapPoints = useMemo(() => ["85%"], []);
+	const snapPoints = useMemo(() => ["50%"], []);
 
 	useEffect(() => {
 		if (visible && form) {
