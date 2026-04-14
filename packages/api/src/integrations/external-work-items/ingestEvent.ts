@@ -125,6 +125,7 @@ export async function ingestExternalTaskEvent(args: {
 		providerId: conn.providerId,
 		providerUserId: event.providerUserId,
 		userId: conn.userId,
+		defaultAgentId: conn.defaultAgentId,
 		title,
 		envelope,
 	});

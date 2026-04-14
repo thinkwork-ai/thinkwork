@@ -65,11 +65,24 @@ interface TokenRefreshResult {
  * Matches on `connections.metadata->{provider}->userId`. The OAuth callback
  * is responsible for writing that field at connect time; if it's missing the
  * webhook resolution will return null and the caller must log + drop.
+ *
+ * Also surfaces `defaultAgentId` from `metadata.{provider}.default_agent_id`
+ * so the webhook ingest can wire the user's opted-in chat agent onto new
+ * external-task threads. Undefined when the user has not opted in.
  */
 export async function resolveConnectionByProviderUserId(
 	providerName: string,
 	providerUserId: string,
-): Promise<{ connectionId: string; tenantId: string; userId: string; providerId: string } | null> {
+): Promise<
+	| {
+			connectionId: string;
+			tenantId: string;
+			userId: string;
+			providerId: string;
+			defaultAgentId?: string;
+	  }
+	| null
+> {
 	const rows = await db
 		.select({
 			connectionId: connections.id,
@@ -92,11 +105,17 @@ export async function resolveConnectionByProviderUserId(
 		const meta = (row.metadata ?? {}) as Record<string, unknown>;
 		const providerMeta = (meta[providerName] ?? {}) as Record<string, unknown>;
 		if (providerMeta.userId === providerUserId) {
+			const rawDefaultAgentId = providerMeta.default_agent_id;
+			const defaultAgentId =
+				typeof rawDefaultAgentId === "string" && rawDefaultAgentId.length > 0
+					? rawDefaultAgentId
+					: undefined;
 			return {
 				connectionId: row.connectionId,
 				tenantId: row.tenantId,
 				userId: row.userId,
 				providerId: row.providerId,
+				defaultAgentId,
 			};
 		}
 	}
