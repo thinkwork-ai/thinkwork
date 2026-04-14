@@ -263,8 +263,8 @@ export async function buildSkillEnvOverrides(
 	}
 
 	// Always provide the API URL and secret so skills can call back
-	envOverrides.MANIFLOW_API_URL = process.env.MCP_BASE_URL || "";
-	envOverrides.MANIFLOW_API_SECRET = process.env.MANIFLOW_API_SECRET || "";
+	envOverrides.THINKWORK_API_URL = process.env.MCP_BASE_URL || "";
+	envOverrides.THINKWORK_API_SECRET = process.env.THINKWORK_API_SECRET || "";
 
 	return envOverrides;
 }

@@ -5,7 +5,7 @@
  *
  * Route: POST /api/artifacts/:id/deliver
  *
- * Auth: MANIFLOW_API_SECRET bearer token
+ * Auth: THINKWORK_API_SECRET bearer token
  */
 
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
@@ -14,7 +14,7 @@ import { getDb } from "@thinkwork/database-pg";
 import { artifacts, agents, agentCapabilities } from "@thinkwork/database-pg/schema";
 import { renderEmailDelivery, renderSmsDelivery } from "../lib/artifact-delivery.js";
 
-const MANIFLOW_API_SECRET = process.env.MANIFLOW_API_SECRET || "";
+const THINKWORK_API_SECRET = process.env.THINKWORK_API_SECRET || "";
 
 const db = getDb();
 
@@ -30,7 +30,7 @@ export async function handler(event: APIGatewayProxyEventV2) {
 	const authHeader = event.headers?.authorization || "";
 	if (
 		!authHeader.startsWith("Bearer ") ||
-		authHeader.slice(7) !== MANIFLOW_API_SECRET
+		authHeader.slice(7) !== THINKWORK_API_SECRET
 	) {
 		return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };
 	}

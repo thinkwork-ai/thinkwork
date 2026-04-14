@@ -52,8 +52,8 @@ triggers:
   - "update status"
   - "add dependency"
 requires_env:
-  - MANIFLOW_API_URL
-  - MANIFLOW_API_SECRET
+  - THINKWORK_API_URL
+  - THINKWORK_API_SECRET
   - AGENT_ID
   - TENANT_ID
   - CURRENT_THREAD_ID

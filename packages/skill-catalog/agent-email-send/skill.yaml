@@ -18,8 +18,8 @@ triggers:
   - "follow up"
   - "email them"
 requires_env:
-  - MANIFLOW_API_URL
-  - MANIFLOW_API_SECRET
+  - THINKWORK_API_URL
+  - THINKWORK_API_SECRET
   - AGENT_ID
   - AGENT_EMAIL_ADDRESS
   - INBOUND_MESSAGE_ID

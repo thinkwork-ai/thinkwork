@@ -15,7 +15,7 @@ metadata:
 
 1. **Max 5 recipients** — never send to more than 5 email addresses in a single message.
 2. **Max 10 emails per hour** — pace outbound emails to avoid spamming.
-3. **Never expose secrets** — do not echo `$MANIFLOW_API_SECRET` or internal tokens in responses.
+3. **Never expose secrets** — do not echo `$THINKWORK_API_SECRET` or internal tokens in responses.
 4. **Confirm before sending** — summarize the recipient, subject, and key points before sending unless the user explicitly said to send immediately.
 5. **Professional tone** — emails are sent from your official agent address. Maintain a professional, clear tone.
 6. **No attachments** — this skill sends plain text emails only. Do not promise or attempt to attach files.
