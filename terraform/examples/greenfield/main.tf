@@ -204,6 +204,31 @@ module "www_dns" {
 }
 
 ################################################################################
+# SES Inbound DNS Delegation
+#
+# The ses-email module creates a Route53 hosted zone for var.ses_inbound_domain
+# (e.g. agents.thinkwork.ai). For the subzone to resolve, the parent zone
+# (thinkwork.ai at Cloudflare) must carry NS records pointing at the 4 AWS name
+# servers. New Route53 zones always return exactly 4 name servers, so we can
+# hardcode count = 4 without hitting "count value is not known" at plan time.
+#
+# Without this delegation, terraform creates the Route53 zone and the MX/DKIM
+# records inside it, but the outside world asks Cloudflare for agents.thinkwork.ai
+# and gets NXDOMAIN because Cloudflare doesn't know to delegate.
+################################################################################
+
+resource "cloudflare_record" "agents_ns" {
+  count = var.ses_inbound_domain != "" && var.cloudflare_zone_id != "" ? 4 : 0
+
+  zone_id = var.cloudflare_zone_id
+  name    = var.ses_inbound_domain
+  content = module.thinkwork.ses_inbound_name_servers[count.index]
+  type    = "NS"
+  ttl     = 300
+  proxied = false
+}
+
+################################################################################
 # Outputs
 ################################################################################
 
