@@ -90,14 +90,9 @@ CREATE EXTENSION IF NOT EXISTS "vector";
 
 ### Migrations
 
-ThinkWork runs migrations via a Lambda function invoked during deploy. The migration runner uses the `db_password` variable to connect. After initial deploy, schema changes in subsequent ThinkWork versions are applied automatically on `thinkwork deploy`.
+ThinkWork runs migrations via a Lambda function invoked during deploy. The migration runner uses the `db_password` variable to connect. After initial deploy, schema changes in subsequent ThinkWork versions are applied automatically on `thinkwork deploy -s <stage>`.
 
-If you need to run migrations manually (e.g., to preview changes before deploying):
-
-```bash
-thinkwork migrate --dry-run -s dev    # Preview SQL
-thinkwork migrate -s dev              # Apply
-```
+To preview schema changes before applying, use `thinkwork plan -s <stage>` — it prints the Terraform plan including any migration Lambda invocations.
 
 ## BYO Cognito
 

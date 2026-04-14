@@ -27,7 +27,7 @@ We ask reporters to give us reasonable time to address the issue before public d
 
 This policy covers the `thinkwork-ai/thinkwork` repository and its published artifacts:
 
-- `@thinkwork/cli` (npm)
+- `thinkwork-cli` (npm)
 - `thinkwork-ai/thinkwork/aws` (Terraform Registry)
 - `thinkwork-ai/homebrew-tap` (Homebrew)
 - The Astro Starlight docs site at `docs.thinkwork.ai`
