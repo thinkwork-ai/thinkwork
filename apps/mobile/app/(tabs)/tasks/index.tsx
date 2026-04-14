@@ -119,11 +119,16 @@ export default function TasksScreen() {
     const due = formatDueDate(item.dueAt);
     const isDone = (item.status || "").toUpperCase() === "DONE";
     const isParent = (item.childCount ?? 0) > 0;
+    const externalProvider =
+      (item.metadata?.external?.provider as string | undefined) ?? null;
     // Parent tasks: ListChecks (teal), Child tasks: CheckSquare (green)
     const iconConfig = isParent
       ? { icon: ListChecks, bg: "rgba(20,184,166,0.15)", fg: "#14b8a6" }
       : { icon: CheckSquare, bg: "rgba(34,197,94,0.15)", fg: "#22c55e" };
     const IconComponent = iconConfig.icon;
+    const providerLabel = externalProvider
+      ? externalProvider.charAt(0).toUpperCase() + externalProvider.slice(1)
+      : null;
 
     return (
       <Pressable
@@ -142,11 +147,27 @@ export default function TasksScreen() {
 
         {/* Content */}
         <View className="flex-1 ml-3">
-          {/* Line 1: identifier (left) + due date (right) */}
+          {/* Line 1: identifier + provider pill (left) + due date (right) */}
           <View className="flex-row items-center justify-between">
-            <Text className="text-xs font-mono text-primary" style={{ lineHeight: 14 }}>
-              {item.identifier}
-            </Text>
+            <View className="flex-row items-center gap-1.5">
+              <Text className="text-xs font-mono text-primary" style={{ lineHeight: 14 }}>
+                {item.identifier}
+              </Text>
+              {providerLabel ? (
+                <View
+                  style={{
+                    paddingHorizontal: 6,
+                    paddingVertical: 1,
+                    borderRadius: 4,
+                    backgroundColor: isDark ? "rgba(99,102,241,0.18)" : "rgba(99,102,241,0.12)",
+                  }}
+                >
+                  <Text style={{ fontSize: 9, fontWeight: "600", color: isDark ? "#a5b4fc" : "#4f46e5", lineHeight: 12 }}>
+                    {providerLabel}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
             <View className="flex-row items-center gap-1">
               {due.label ? (
                 <>
