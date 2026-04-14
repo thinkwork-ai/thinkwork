@@ -22,6 +22,7 @@ import {
   notifyCostRecorded,
 } from "../lib/cost-recording.js";
 import { buildSkillEnvOverrides } from "../lib/oauth-token.js";
+import { buildMcpConfigs } from "../lib/mcp-configs.js";
 import { loadTenantBuiltinTools } from "./skills.js";
 // PRD-22: Signal protocol removed — agents use tools for thread state transitions
 
@@ -439,8 +440,11 @@ export async function handler(event: InvokeEvent): Promise<void> {
 
     console.log(`[chat-agent-invoke] Loaded ${messagesHistory.length} prior messages for thread=${threadId}`);
 
+    // Build MCP configs from agent_mcp_servers + tenant_mcp_servers (auth-resolved).
+    const mcpConfigs = await buildMcpConfigs(agentId, agent.human_pair_id, "[chat-agent-invoke]");
+
     // 2d. Call AgentCore Lambda directly via the SDK (no Function URL).
-    console.log(`[chat-agent-invoke] Invoking AgentCore runtime=${runtimeType} model=${agentModel} skills=${skillsConfig.length}`);
+    console.log(`[chat-agent-invoke] Invoking AgentCore runtime=${runtimeType} model=${agentModel} skills=${skillsConfig.length} mcp=${mcpConfigs.length}`);
 
     if (!AGENTCORE_FUNCTION_NAME) {
       throw new Error("AGENTCORE_FUNCTION_NAME env var not set");
@@ -468,6 +472,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
       knowledge_bases: knowledgeBasesConfig,
       trigger_channel: "chat",
       guardrail_config: guardrailPayload || undefined,
+      mcp_configs: mcpConfigs.length > 0 ? mcpConfigs : undefined,
     };
 
     // The agentcore container runs an HTTP server behind Lambda Web Adapter;
