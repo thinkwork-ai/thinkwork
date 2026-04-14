@@ -36,6 +36,7 @@ const {
 	mockRefresh,
 	mockNormalizeItem,
 	mockBuildBlocks,
+	mockBuildFormSchema,
 	mockHasAdapter,
 	mockGetAdapter,
 } = vi.hoisted(() => {
@@ -44,6 +45,13 @@ const {
 	const mockRefresh = vi.fn();
 	const mockNormalizeItem = vi.fn();
 	const mockBuildBlocks = vi.fn(() => []);
+	const mockBuildFormSchema = vi.fn(() => ({
+		id: "form_edit",
+		title: "Edit",
+		submitLabel: "Save",
+		actionType: "external_task.edit_fields",
+		fields: [],
+	}));
 	const mockHasAdapter = vi.fn((p: string) => p === "lastmile");
 	const mockGetAdapter = vi.fn(() => ({
 		provider: "lastmile",
@@ -52,6 +60,7 @@ const {
 		refresh: mockRefresh,
 		normalizeItem: mockNormalizeItem,
 		buildBlocks: mockBuildBlocks,
+		buildFormSchema: mockBuildFormSchema,
 	}));
 	return {
 		mockVerifySignature,
@@ -59,6 +68,7 @@ const {
 		mockRefresh,
 		mockNormalizeItem,
 		mockBuildBlocks,
+		mockBuildFormSchema,
 		mockHasAdapter,
 		mockGetAdapter,
 	};
@@ -148,6 +158,7 @@ beforeEach(() => {
 		refresh: mockRefresh,
 		normalizeItem: mockNormalizeItem,
 		buildBlocks: mockBuildBlocks,
+		buildFormSchema: mockBuildFormSchema,
 	} as never);
 	mockBuildBlocks.mockReturnValue([]);
 	mockInsert.mockReturnValue({ values: mockInsertValues });
