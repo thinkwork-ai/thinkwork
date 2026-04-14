@@ -7,8 +7,6 @@ import {
   Bot,
   Users,
   Repeat,
-  Activity,
-  DollarSign,
   BarChart3,
   Settings,
   Puzzle,
@@ -177,12 +175,11 @@ export function AppSidebar() {
   const manageItems: NavItem[] = [
     { to: "/memory", icon: Brain, label: "Memories" },
     { to: "/knowledge-bases", icon: BookOpen, label: "Knowledge Base" },
-    { to: "/costs", icon: DollarSign, label: "Usage & Costs" },
+    { to: "/analytics", icon: BarChart3, label: "Analytics" },
     { to: "/scheduled-jobs", icon: CalendarClock, label: "Automations" },
     { to: "/connectors", icon: Plug, label: "Connectors" },
     { to: "/webhooks", icon: Webhook, label: "Webhooks" },
     { to: "/humans", icon: Users, label: "Humans" },
-    { to: "/activity", icon: Activity, label: "Activity" },
     { to: "/settings", icon: Settings, label: "Settings" },
   ];
 
