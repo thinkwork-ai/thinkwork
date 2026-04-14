@@ -516,6 +516,7 @@ async function dispatchTask(
 		record.external_task_id = result.event.externalTaskId;
 		record.provider_user_id = result.event.providerUserId;
 		record.normalized_kind = result.event.kind;
+		record.provider_event_id = result.event.providerEventId;
 		record.thread_id = result.threadId;
 		record.thread_created = result.created;
 	} else if (result.status === "unresolved_connection") {
@@ -523,6 +524,7 @@ async function dispatchTask(
 			record.external_task_id = result.event.externalTaskId;
 			record.provider_user_id = result.event.providerUserId ?? result.providerUserId;
 			record.normalized_kind = result.event.kind;
+			record.provider_event_id = result.event.providerEventId;
 		} else {
 			record.provider_user_id = result.providerUserId;
 		}

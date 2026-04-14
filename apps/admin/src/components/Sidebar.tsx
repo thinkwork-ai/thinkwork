@@ -21,6 +21,7 @@ import {
   LayoutTemplate,
   Cable,
   Wrench,
+  Plug,
 } from "lucide-react";
 import { useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
@@ -178,6 +179,7 @@ export function AppSidebar() {
     { to: "/knowledge-bases", icon: BookOpen, label: "Knowledge Base" },
     { to: "/costs", icon: DollarSign, label: "Usage & Costs" },
     { to: "/scheduled-jobs", icon: CalendarClock, label: "Automations" },
+    { to: "/connectors", icon: Plug, label: "Connectors" },
     { to: "/webhooks", icon: Webhook, label: "Webhooks" },
     { to: "/humans", icon: Users, label: "Humans" },
     { to: "/activity", icon: Activity, label: "Activity" },
