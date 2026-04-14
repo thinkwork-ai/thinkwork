@@ -7,8 +7,14 @@
  * - Otherwise → `ensureThreadForWork({ channel: "task" })` then persist the
  *   `external` metadata block so future lookups and refreshes find the row.
  *
- * Denormalized column writes (title, updated_at) happen here so the thread
- * list can show a fresh title without loading `metadata.external.latestEnvelope`.
+ * Denormalized column writes (title, status, priority, due_at, description,
+ * assignee, updated_at) happen here so the Tasks tab list query can render
+ * a fresh row without loading `metadata.external.latestEnvelope`.
+ *
+ * Assignee is always the human (`assignee_type="user"`) — external tasks are
+ * Human-in-the-Loop work. `agent_id` is set to the user's per-provider opt-in
+ * (`connections.metadata.{provider}.default_agent_id`) so chat in the task
+ * thread wakes up the user's chosen assistant.
  */
 
 import { and, eq, sql } from "drizzle-orm";
@@ -20,6 +26,58 @@ import type {
 
 const { threads } = schema;
 const db = getDb();
+
+const VALID_THREAD_STATUSES = new Set([
+	"backlog",
+	"todo",
+	"in_progress",
+	"in_review",
+	"blocked",
+	"done",
+	"cancelled",
+]);
+
+const VALID_THREAD_PRIORITIES = new Set([
+	"low",
+	"medium",
+	"high",
+	"urgent",
+	"critical",
+]);
+
+function mapStatusToThread(value: string | undefined): string | undefined {
+	if (!value) return undefined;
+	return VALID_THREAD_STATUSES.has(value) ? value : undefined;
+}
+
+function mapPriorityToThread(value: string | undefined): string | undefined {
+	if (!value) return undefined;
+	if (value === "normal") return "medium";
+	return VALID_THREAD_PRIORITIES.has(value) ? value : undefined;
+}
+
+type DenormalizedFields = {
+	description?: string | null;
+	due_at?: Date | null;
+	status?: string;
+	priority?: string;
+};
+
+function denormalizeFromEnvelope(
+	envelope: ExternalTaskEnvelope | undefined,
+): DenormalizedFields {
+	if (!envelope) return {};
+	const core = envelope.item.core;
+	const out: DenormalizedFields = {
+		description: core.description ?? null,
+		due_at: core.dueAt ? new Date(core.dueAt) : null,
+	};
+	const status = mapStatusToThread(core.status?.value);
+	if (status) out.status = status;
+	const priority = mapPriorityToThread(core.priority?.value);
+	if (priority) out.priority = priority;
+	return out;
+}
 
 export type ExternalThreadMeta = {
 	provider: TaskProvider;
@@ -40,6 +98,8 @@ export type EnsureExternalTaskThreadArgs = {
 	providerId: string;
 	providerUserId?: string;
 	userId?: string;
+	/** User-opt-in agent (from connections.metadata.{provider}.default_agent_id). */
+	defaultAgentId?: string;
 	title: string;
 	envelope?: ExternalTaskEnvelope;
 };
@@ -65,6 +125,8 @@ export async function ensureExternalTaskThread(
 		)
 		.limit(1);
 
+	const denorm = denormalizeFromEnvelope(args.envelope);
+
 	if (existing.length > 0) {
 		const [row] = existing;
 		const currentMeta = (row.metadata ?? {}) as Record<string, unknown>;
@@ -84,6 +146,18 @@ export async function ensureExternalTaskThread(
 			.set({
 				title: args.title,
 				metadata: { ...currentMeta, external: nextExternal },
+				// Self-heal assignee on every upsert so pre-Phase-A threads recover.
+				...(args.userId
+					? { assignee_type: "user", assignee_id: args.userId }
+					: {}),
+				...(args.envelope
+					? {
+							description: denorm.description ?? null,
+							due_at: denorm.due_at ?? null,
+							...(denorm.status ? { status: denorm.status } : {}),
+							...(denorm.priority ? { priority: denorm.priority } : {}),
+						}
+					: {}),
 				updated_at: new Date(),
 			})
 			.where(eq(threads.id, row.id));
@@ -113,6 +187,18 @@ export async function ensureExternalTaskThread(
 		.update(threads)
 		.set({
 			metadata: { external: externalMeta },
+			...(args.userId
+				? { assignee_type: "user", assignee_id: args.userId }
+				: {}),
+			...(args.defaultAgentId ? { agent_id: args.defaultAgentId } : {}),
+			...(args.envelope
+				? {
+						description: denorm.description ?? null,
+						due_at: denorm.due_at ?? null,
+						...(denorm.status ? { status: denorm.status } : {}),
+						...(denorm.priority ? { priority: denorm.priority } : {}),
+					}
+				: {}),
 			updated_at: new Date(),
 		})
 		.where(eq(threads.id, threadId));
