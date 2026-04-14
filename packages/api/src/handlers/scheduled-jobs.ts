@@ -61,21 +61,24 @@ async function getJobScheduleManagerFnArn(): Promise<string | null> {
 	return _jobScheduleManagerFnArn;
 }
 
+type ScheduleManagerResult = { ok: true } | { ok: false; error: string };
+
 async function invokeJobScheduleManager(
 	method: string,
 	body: Record<string, unknown>,
-): Promise<void> {
+): Promise<ScheduleManagerResult> {
 	try {
 		const fnArn = await getJobScheduleManagerFnArn();
 		if (!fnArn) {
-			console.warn("[scheduled-jobs] Job schedule manager ARN not found, skipping EB schedule");
-			return;
+			const msg = "Job schedule manager Lambda ARN not configured (SSM parameter missing)";
+			console.error("[scheduled-jobs]", msg);
+			return { ok: false, error: msg };
 		}
 		const { LambdaClient, InvokeCommand } = await import("@aws-sdk/client-lambda");
 		const lambda = new LambdaClient({});
-		await lambda.send(new InvokeCommand({
+		const res = await lambda.send(new InvokeCommand({
 			FunctionName: fnArn,
-			InvocationType: "Event",
+			InvocationType: "RequestResponse",
 			Payload: new TextEncoder().encode(JSON.stringify({
 				body: JSON.stringify(body),
 				requestContext: { http: { method } },
@@ -85,8 +88,28 @@ async function invokeJobScheduleManager(
 				},
 			})),
 		}));
+		const rawPayload = res.Payload ? new TextDecoder().decode(res.Payload) : "";
+		if (res.FunctionError) {
+			console.error("[scheduled-jobs] Job schedule manager Lambda error:", res.FunctionError, rawPayload);
+			return { ok: false, error: `Job schedule manager threw: ${rawPayload || res.FunctionError}` };
+		}
+		if (rawPayload) {
+			try {
+				const parsed = JSON.parse(rawPayload) as { statusCode?: number; body?: string };
+				if (typeof parsed.statusCode === "number" && parsed.statusCode >= 400) {
+					const inner = typeof parsed.body === "string" ? parsed.body : JSON.stringify(parsed.body);
+					console.error("[scheduled-jobs] Job schedule manager returned", parsed.statusCode, inner);
+					return { ok: false, error: `Job schedule manager returned ${parsed.statusCode}: ${inner}` };
+				}
+			} catch {
+				// Non-JSON response — treat as opaque success since no FunctionError was set
+			}
+		}
+		return { ok: true };
 	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
 		console.error("[scheduled-jobs] Failed to invoke job schedule manager:", err);
+		return { ok: false, error: message };
 	}
 }
 
@@ -245,7 +268,7 @@ async function createScheduledJob(
 
 	// Create EventBridge schedule if this is a timer-based trigger
 	if (row.schedule_type && row.schedule_expression) {
-		invokeJobScheduleManager("POST", {
+		const result = await invokeJobScheduleManager("POST", {
 			triggerId: row.id,
 			tenantId,
 			triggerType: row.trigger_type,
@@ -259,9 +282,22 @@ async function createScheduledJob(
 			config: row.config || undefined,
 			createdByType: "user",
 		});
+		if (!result.ok) {
+			// Keep the DB row so the user's input isn't lost; surface a clear error
+			// so they can retry via Edit → Save (which hits the update/repair path).
+			return error(
+				`Automation saved but EventBridge schedule could not be provisioned: ${result.error}. Open the automation and press Save to retry.`,
+				502,
+			);
+		}
 	}
 
-	return json(row, 201);
+	// Re-read to pick up eb_schedule_name written by the manager Lambda
+	const [refreshed] = await db
+		.select()
+		.from(scheduledJobs)
+		.where(eq(scheduledJobs.id, row.id));
+	return json(refreshed || row, 201);
 }
 
 async function updateScheduledJob(
@@ -292,9 +328,9 @@ async function updateScheduledJob(
 
 	if (!updated) return notFound("Trigger not found");
 
-	// Update EventBridge schedule — await to ensure state changes (especially enable/disable) are applied
+	// Update EventBridge schedule — await and surface errors so repair/edit flows are reliable
 	if (updated.schedule_type && updated.schedule_expression) {
-		await invokeJobScheduleManager("PUT", {
+		const result = await invokeJobScheduleManager("PUT", {
 			triggerId: updated.id,
 			scheduleExpression: updated.schedule_expression,
 			scheduleType: updated.schedule_type,
@@ -303,9 +339,20 @@ async function updateScheduledJob(
 			config: updated.config || undefined,
 			enabled: updated.enabled,
 		});
+		if (!result.ok) {
+			return error(
+				`Automation updated in database but EventBridge schedule sync failed: ${result.error}`,
+				502,
+			);
+		}
 	}
 
-	return json(updated);
+	// Re-read to pick up eb_schedule_name in case the update path provisioned a fresh schedule
+	const [refreshed] = await db
+		.select()
+		.from(scheduledJobs)
+		.where(eq(scheduledJobs.id, updated.id));
+	return json(refreshed || updated);
 }
 
 async function deleteScheduledJob(

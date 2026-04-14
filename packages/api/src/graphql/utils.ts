@@ -223,22 +223,25 @@ export async function getJobScheduleManagerFnArn(): Promise<string | null> {
 	return _jobScheduleManagerFnArn;
 }
 
-/** Fire-and-forget: create/update/delete a scheduled job via the manager Lambda */
+export type ScheduleManagerResult = { ok: true } | { ok: false; error: string };
+
+/** Synchronously invoke the job schedule manager Lambda and parse the result. */
 export async function invokeJobScheduleManager(
 	method: string,
 	body: Record<string, unknown>,
-): Promise<void> {
+): Promise<ScheduleManagerResult> {
 	try {
 		const fnArn = await getJobScheduleManagerFnArn();
 		if (!fnArn) {
-			console.warn("[graphql] Job schedule manager ARN not found, skipping");
-			return;
+			const msg = "Job schedule manager Lambda ARN not configured (SSM parameter missing)";
+			console.error("[graphql]", msg);
+			return { ok: false, error: msg };
 		}
 		const { LambdaClient, InvokeCommand } = await import("@aws-sdk/client-lambda");
 		const lambda = new LambdaClient({});
-		await lambda.send(new InvokeCommand({
+		const res = await lambda.send(new InvokeCommand({
 			FunctionName: fnArn,
-			InvocationType: "Event",
+			InvocationType: "RequestResponse",
 			Payload: new TextEncoder().encode(JSON.stringify({
 				body: JSON.stringify(body),
 				requestContext: { http: { method } },
@@ -248,8 +251,28 @@ export async function invokeJobScheduleManager(
 				},
 			})),
 		}));
+		const rawPayload = res.Payload ? new TextDecoder().decode(res.Payload) : "";
+		if (res.FunctionError) {
+			console.error("[graphql] Job schedule manager Lambda error:", res.FunctionError, rawPayload);
+			return { ok: false, error: `Job schedule manager threw: ${rawPayload || res.FunctionError}` };
+		}
+		if (rawPayload) {
+			try {
+				const parsed = JSON.parse(rawPayload) as { statusCode?: number; body?: string };
+				if (typeof parsed.statusCode === "number" && parsed.statusCode >= 400) {
+					const inner = typeof parsed.body === "string" ? parsed.body : JSON.stringify(parsed.body);
+					console.error("[graphql] Job schedule manager returned", parsed.statusCode, inner);
+					return { ok: false, error: `Job schedule manager returned ${parsed.statusCode}: ${inner}` };
+				}
+			} catch {
+				// Non-JSON response — treat as opaque success since no FunctionError was set
+			}
+		}
+		return { ok: true };
 	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
 		console.error("[graphql] Failed to invoke job schedule manager:", err);
+		return { ok: false, error: message };
 	}
 }
 

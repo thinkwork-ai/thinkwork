@@ -366,21 +366,55 @@ async function updateJob(body: UpdateJobBody): Promise<Record<string, unknown>> 
 				oneTime: current.schedule_type === "at",
 			}),
 		};
-		try {
-			await schedulerClient.send(
-				new UpdateScheduleCommand({
-					Name: current.eb_schedule_name!,
-					GroupName: SCHEDULE_GROUP,
-					ScheduleExpression: expression,
-					ScheduleExpressionTimezone: body.timezone ?? current.timezone ?? undefined,
-					Target: target,
-					FlexibleTimeWindow: { Mode: "OFF" },
-					State: ScheduleState.ENABLED,
-				}),
-			);
-		} catch (ebErr) {
-			console.error(`[job-schedule-manager] Failed to update EB schedule:`, ebErr);
-		}
+		await schedulerClient.send(
+			new UpdateScheduleCommand({
+				Name: current.eb_schedule_name!,
+				GroupName: SCHEDULE_GROUP,
+				ScheduleExpression: expression,
+				ScheduleExpressionTimezone: body.timezone ?? current.timezone ?? undefined,
+				Target: target,
+				FlexibleTimeWindow: { Mode: "OFF" },
+				State: ScheduleState.ENABLED,
+			}),
+		);
+	} else if (isEnabled && !current.eb_schedule_name) {
+		// Repair path: the row was created (or left) without an EventBridge schedule.
+		// This happens when the create-time provisioning call failed. Create the
+		// schedule now so the automation can actually fire.
+		await ensureScheduleGroup();
+		const scheduleName = buildScheduleName(current.id, current.schedule_type === "at");
+		const target: Target = {
+			Arn: targetArn,
+			RoleArn: roleArn,
+			Input: JSON.stringify({
+				triggerId: current.id,
+				triggerType: current.trigger_type,
+				tenantId: current.tenant_id,
+				agentId: current.agent_id,
+				routineId: current.routine_id,
+				prompt: body.prompt !== undefined ? body.prompt : current.prompt,
+				scheduleName,
+				oneTime: current.schedule_type === "at",
+			}),
+		};
+		await schedulerClient.send(
+			new CreateScheduleCommand({
+				Name: scheduleName,
+				GroupName: SCHEDULE_GROUP,
+				ScheduleExpression: expression,
+				ScheduleExpressionTimezone: body.timezone ?? current.timezone ?? undefined,
+				Target: target,
+				FlexibleTimeWindow: { Mode: "OFF" },
+				State: ScheduleState.ENABLED,
+				Description: `Thinkwork ${current.trigger_type}: ${current.name || current.id}`,
+				...(current.schedule_type === "at" ? { ActionAfterCompletion: "DELETE" } : {}),
+			}),
+		);
+		await db
+			.update(triggers)
+			.set({ eb_schedule_name: scheduleName })
+			.where(eq(triggers.id, body.triggerId));
+		console.log(`[job-schedule-manager] Repaired missing EB schedule ${scheduleName} for trigger ${current.id}`);
 	}
 
 	console.log(`[job-schedule-manager] Updated job ${body.triggerId}`);
