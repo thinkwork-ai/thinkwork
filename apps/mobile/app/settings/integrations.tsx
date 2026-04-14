@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { View, ScrollView, Pressable, RefreshControl, Alert } from "react-native";
 import { useColorScheme } from "nativewind";
 import * as WebBrowser from "expo-web-browser";
-import { Mail, Calendar, Link2, Link2Off, AlertTriangle, RefreshCw } from "lucide-react-native";
+import { Mail, Calendar, Link2, Link2Off, AlertTriangle, RefreshCw, ListChecks } from "lucide-react-native";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { Text, Muted } from "@/components/ui/typography";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +30,7 @@ type ConnectionRow = {
 const PROVIDER_ICONS: Record<string, typeof Mail> = {
   google_productivity: Mail,
   microsoft_365: Calendar,
+  lastmile: ListChecks,
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -98,6 +99,13 @@ export default function IntegrationsScreen() {
     await fetchConnections();
   };
 
+  const handleConnectLastmile = async () => {
+    if (!tenant?.id || !user?.id) return;
+    const url = `${API_BASE}/api/oauth/authorize?provider=lastmile&userId=${user.id}&tenantId=${tenant.id}`;
+    await WebBrowser.openBrowserAsync(url);
+    await fetchConnections();
+  };
+
   const handleDisconnect = async (connectionId: string, providerName: string) => {
     Alert.alert(
       "Disconnect",
@@ -131,6 +139,8 @@ export default function IntegrationsScreen() {
       await handleConnectGoogle();
     } else if (providerName === "microsoft_365") {
       await handleConnectMicrosoft();
+    } else if (providerName === "lastmile") {
+      await handleConnectLastmile();
     }
   };
 
@@ -290,8 +300,31 @@ export default function IntegrationsScreen() {
                 </Pressable>
               )}
 
-              {/* Both connected */}
-              {connectedProviders.has("google_productivity") && connectedProviders.has("microsoft_365") && (
+              {/* LastMile Tasks */}
+              {!connectedProviders.has("lastmile") && (
+                <Pressable
+                  onPress={handleConnectLastmile}
+                  className="flex-row items-center px-4 py-3 border-t border-neutral-100 dark:border-neutral-800 active:bg-neutral-50 dark:active:bg-neutral-800"
+                >
+                  <View className="w-9 h-9 rounded-lg bg-neutral-100 dark:bg-neutral-800 items-center justify-center">
+                    <ListChecks size={18} color={colors.primary} />
+                  </View>
+                  <View className="flex-1 ml-3">
+                    <Text className="font-medium text-neutral-900 dark:text-neutral-100">
+                      LastMile Tasks
+                    </Text>
+                    <Muted className="text-xs">Work tasks assigned to you in LastMile</Muted>
+                  </View>
+                  <Badge variant="outline" className="px-2 py-0.5" textClassName="text-xs">
+                    Connect
+                  </Badge>
+                </Pressable>
+              )}
+
+              {/* All connected */}
+              {connectedProviders.has("google_productivity") &&
+                connectedProviders.has("microsoft_365") &&
+                connectedProviders.has("lastmile") && (
                 <View className="px-4 py-3">
                   <Muted className="text-sm">All available integrations connected.</Muted>
                 </View>
