@@ -55,6 +55,27 @@ resource "aws_iam_role" "job_scheduler" {
   })
 }
 
+# When job-schedule-manager creates a schedule, it sets this role as the
+# target RoleArn. EventBridge Scheduler assumes it and invokes the
+# job-trigger Lambda. ARN is constructed by naming convention so this
+# module doesn't have to import the lambda-api module's outputs.
+resource "aws_iam_role_policy" "job_scheduler_invoke" {
+  name = "invoke-job-trigger"
+  role = aws_iam_role.job_scheduler.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = ["lambda:InvokeFunction"]
+      Resource = [
+        "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-job-trigger",
+        "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-job-trigger:*",
+      ]
+    }]
+  })
+}
+
 ################################################################################
 # Outputs
 ################################################################################

@@ -48,6 +48,16 @@ locals {
     AWS_ACCOUNT_ID           = var.account_id
     NODE_OPTIONS             = "--enable-source-maps"
   }
+
+  # Per-handler env-var overrides. ARNs are constructed from the naming
+  # pattern (same trick as lambda_api_cross_invoke in main.tf) so we don't
+  # introduce a self-referential dependency inside the handler for_each.
+  handler_extra_env = {
+    "job-schedule-manager" = {
+      JOB_TRIGGER_ARN      = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-job-trigger"
+      JOB_TRIGGER_ROLE_ARN = var.job_scheduler_role_arn
+    }
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -77,6 +87,7 @@ resource "aws_lambda_function" "handler" {
     "guardrails",
     "scheduled-jobs",
     "job-schedule-manager",
+    "job-trigger",
     "webhooks",
     "webhooks-admin",
     "integration-webhooks",
@@ -109,9 +120,11 @@ resource "aws_lambda_function" "handler" {
   source_code_hash = filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip")
 
   environment {
-    variables = merge(local.common_env, {
-      FUNCTION_NAME = each.key
-    })
+    variables = merge(
+      local.common_env,
+      { FUNCTION_NAME = each.key },
+      lookup(local.handler_extra_env, each.key, {}),
+    )
   }
 
   tags = {
