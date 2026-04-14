@@ -69,7 +69,7 @@ def _push(phase: str, model: str, usage: Any) -> None:
 
 def install(retain_model: str = "openai.gpt-oss-20b-1:0",
             reflect_model: str = "openai.gpt-oss-120b-1:0") -> bool:
-    """Monkey-patch Hindsight.retain_batch and .reflect to capture usage.
+    """Monkey-patch Hindsight retain/reflect (sync + async) to capture usage.
 
     Returns True on first install, False if already installed or if the
     hindsight_client package isn't importable. Defaults match the
@@ -81,8 +81,15 @@ def install(retain_model: str = "openai.gpt-oss-20b-1:0",
     hindsight-strands integration calls `client.retain(...)` which
     delegates to `self.retain_batch(...)`, so patching retain_batch alone
     is enough to cover both single (`retain`) and batch (`retain_batch`)
-    callers — patching both would push the same usage twice for a single
-    retain call.
+    sync callers — patching both would push the same usage twice for a
+    single retain call.
+
+    We patch BOTH the sync methods (`retain_batch`, `reflect`) and the
+    async variants (`aretain_batch`, `areflect`). The agent's tool
+    wrappers call the async variants directly to avoid `_run_async`'s
+    stale-loop reuse, so without async-side patches `hindsight_usage`
+    would silently drop to zero whenever the agent uses memory tools —
+    a regression we hit after PR #24 made the wrappers async.
     """
     global _installed
     with _lock:
@@ -96,6 +103,8 @@ def install(retain_model: str = "openai.gpt-oss-20b-1:0",
 
         original_retain_batch = Hindsight.retain_batch
         original_reflect = Hindsight.reflect
+        original_aretain_batch = getattr(Hindsight, "aretain_batch", None)
+        original_areflect = getattr(Hindsight, "areflect", None)
 
         def patched_retain_batch(self, *args, **kwargs):
             resp = original_retain_batch(self, *args, **kwargs)
@@ -111,11 +120,33 @@ def install(retain_model: str = "openai.gpt-oss-20b-1:0",
                 _push("reflect", reflect_model, usage)
             return resp
 
+        async def patched_aretain_batch(self, *args, **kwargs):
+            resp = await original_aretain_batch(self, *args, **kwargs)
+            usage = getattr(resp, "usage", None)
+            if usage is not None:
+                _push("retain", retain_model, usage)
+            return resp
+
+        async def patched_areflect(self, *args, **kwargs):
+            resp = await original_areflect(self, *args, **kwargs)
+            usage = getattr(resp, "usage", None)
+            if usage is not None:
+                _push("reflect", reflect_model, usage)
+            return resp
+
         Hindsight.retain_batch = patched_retain_batch  # type: ignore[method-assign]
         Hindsight.reflect = patched_reflect  # type: ignore[method-assign]
+        if original_aretain_batch is not None:
+            Hindsight.aretain_batch = patched_aretain_batch  # type: ignore[method-assign]
+        if original_areflect is not None:
+            Hindsight.areflect = patched_areflect  # type: ignore[method-assign]
+
         _installed = True
-        logger.info("hindsight_usage_capture installed on Hindsight (retain=%s reflect=%s)",
-                    retain_model, reflect_model)
+        logger.info(
+            "hindsight_usage_capture installed on Hindsight (retain=%s reflect=%s, async_patched=%s)",
+            retain_model, reflect_model,
+            (original_aretain_batch is not None) and (original_areflect is not None),
+        )
         return True
 
 
