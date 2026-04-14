@@ -34,23 +34,31 @@ const {
 	mockVerifySignature,
 	mockNormalizeEvent,
 	mockRefresh,
+	mockNormalizeItem,
+	mockBuildBlocks,
 	mockHasAdapter,
 	mockGetAdapter,
 } = vi.hoisted(() => {
 	const mockVerifySignature = vi.fn();
 	const mockNormalizeEvent = vi.fn();
 	const mockRefresh = vi.fn();
+	const mockNormalizeItem = vi.fn();
+	const mockBuildBlocks = vi.fn(() => []);
 	const mockHasAdapter = vi.fn((p: string) => p === "lastmile");
 	const mockGetAdapter = vi.fn(() => ({
 		provider: "lastmile",
 		verifySignature: mockVerifySignature,
 		normalizeEvent: mockNormalizeEvent,
 		refresh: mockRefresh,
+		normalizeItem: mockNormalizeItem,
+		buildBlocks: mockBuildBlocks,
 	}));
 	return {
 		mockVerifySignature,
 		mockNormalizeEvent,
 		mockRefresh,
+		mockNormalizeItem,
+		mockBuildBlocks,
 		mockHasAdapter,
 		mockGetAdapter,
 	};
@@ -138,7 +146,10 @@ beforeEach(() => {
 		verifySignature: mockVerifySignature,
 		normalizeEvent: mockNormalizeEvent,
 		refresh: mockRefresh,
+		normalizeItem: mockNormalizeItem,
+		buildBlocks: mockBuildBlocks,
 	} as never);
+	mockBuildBlocks.mockReturnValue([]);
 	mockInsert.mockReturnValue({ values: mockInsertValues });
 	mockInsertValues.mockResolvedValue(undefined);
 });
@@ -294,18 +305,76 @@ describe("ingestExternalTaskEvent — happy path", () => {
 		);
 	});
 
-	it("still ensures the thread when refresh() fails (title falls back to placeholder)", async () => {
+	it("synthesizes an envelope from event.raw.task when refresh() fails", async () => {
 		mockVerifySignature.mockResolvedValueOnce(true);
 		mockNormalizeEvent.mockResolvedValueOnce({
-			kind: "task.updated",
+			kind: "task.created",
 			externalTaskId: "task_2",
 			providerUserId: "user_lastmile_1",
 			receivedAt: "2026-04-14T10:00:00Z",
+			raw: {
+				action: "created",
+				task: {
+					id: "task_2",
+					title: "Deliver groceries",
+					assignee_id: "user_lastmile_1",
+					status: "todo",
+				},
+			},
 		});
 		mockResolveConnection.mockResolvedValueOnce(buildConn());
 		mockResolveOAuthToken.mockResolvedValueOnce("token");
 		mockRefresh.mockRejectedValueOnce(new Error("MCP 500"));
-		mockEnsureThread.mockResolvedValueOnce({ threadId: "thread-2", created: false });
+		// Adapter falls back to normalizeItem on the raw task payload.
+		mockNormalizeItem.mockReturnValueOnce({
+			core: {
+				id: "task_2",
+				provider: "lastmile",
+				title: "Deliver groceries",
+				status: { value: "todo", label: "To do" },
+			},
+			capabilities: {},
+			fields: [],
+			actions: [],
+		});
+		mockBuildBlocks.mockReturnValueOnce([
+			{ type: "task_header" as const, title: "Deliver groceries" },
+		] as never);
+		mockEnsureThread.mockResolvedValueOnce({ threadId: "thread-2", created: true });
+
+		const result = await ingestExternalTaskEvent({
+			provider: "lastmile",
+			rawBody: RAW_BODY,
+			headers: HEADERS,
+		});
+
+		expect(result.status).toBe("ok");
+		if (result.status !== "ok") return;
+		expect(result.envelope).toBeDefined();
+		expect(result.envelope?._source?.tool).toBe("webhook_payload_fallback");
+		expect(mockNormalizeItem).toHaveBeenCalledWith(
+			expect.objectContaining({ id: "task_2", title: "Deliver groceries" }),
+		);
+		expect(mockEnsureThread).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: "Deliver groceries",
+			}),
+		);
+	});
+
+	it("falls back to placeholder title when refresh fails AND event has no raw task", async () => {
+		mockVerifySignature.mockResolvedValueOnce(true);
+		mockNormalizeEvent.mockResolvedValueOnce({
+			kind: "task.updated",
+			externalTaskId: "task_3",
+			providerUserId: "user_lastmile_1",
+			receivedAt: "2026-04-14T10:00:00Z",
+			// no `raw`, so extractRawTask returns null
+		});
+		mockResolveConnection.mockResolvedValueOnce(buildConn());
+		mockResolveOAuthToken.mockResolvedValueOnce("token");
+		mockRefresh.mockRejectedValueOnce(new Error("MCP 500"));
+		mockEnsureThread.mockResolvedValueOnce({ threadId: "thread-3", created: false });
 
 		const result = await ingestExternalTaskEvent({
 			provider: "lastmile",
@@ -316,9 +385,10 @@ describe("ingestExternalTaskEvent — happy path", () => {
 		expect(result.status).toBe("ok");
 		if (result.status !== "ok") return;
 		expect(result.envelope).toBeUndefined();
+		expect(mockNormalizeItem).not.toHaveBeenCalled();
 		expect(mockEnsureThread).toHaveBeenCalledWith(
 			expect.objectContaining({
-				title: "External task task_2",
+				title: "External task task_3",
 				envelope: undefined,
 			}),
 		);
