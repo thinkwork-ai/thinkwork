@@ -247,12 +247,10 @@ export default function SettingsScreen() {
   const agents = agentsData?.agents ?? [];
 
   const activeAgent = useMemo(() => {
-    const uid = user?.sub;
+    // Server already scopes agents to the authed user; pick the team agent or first.
     const all = (agents as any[]).filter((a: any) => a.type !== "local");
-    if (!uid) return null;
-    const paired = all.filter((a: any) => a.humanPairId === uid);
-    return paired.find((a: any) => a.role === "team") ?? paired[0] ?? null;
-  }, [agents, user?.sub]);
+    return all.find((a: any) => a.role === "team") ?? all[0] ?? null;
+  }, [agents]);
 
   const [themePreference, setThemePreference] = useState<ThemeOption>("dark");
   const [signingOut, setSigningOut] = useState(false);

@@ -29,7 +29,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "../global.css";
 
 function RootLayoutNav() {
-  const { isLoading, isAuthenticated, user, signOut, didActiveLogin } = useAuth();
+  const { isLoading, isAuthenticated, user, signOut, didActiveLogin, getToken } = useAuth();
   const {
     isEnabled: biometricEnabled,
     isSupported: biometricSupported,
@@ -170,7 +170,17 @@ function RootLayoutNav() {
     }
   }, [isLoading, isAuthenticated, segments, hasTenant, navigationReady, agents]);
 
-  const handleBiometricUnlock = () => {
+  const handleBiometricUnlock = async () => {
+    // Force a token refresh before dropping the lock screen. For OAuth users
+    // this exchanges the stored refresh_token for a fresh id token; for
+    // password users it refreshes the Cognito SRP session. Either way the
+    // GraphQL client gets a valid token, preventing the post-unlock 401 ->
+    // sign-in bounce when the app has been backgrounded past token TTL.
+    try {
+      await getToken();
+    } catch (e) {
+      console.warn("[_layout] biometric unlock token refresh failed:", e);
+    }
     isAuthenticating.current = false;
     setIsUnlocked(true);
   };

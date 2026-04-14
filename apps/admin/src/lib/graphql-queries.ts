@@ -7,7 +7,7 @@ import { gql } from "@urql/core";
 
 export const AgentsListQuery = graphql(`
   query AgentsList($tenantId: ID!) {
-    agents(tenantId: $tenantId) {
+    agents: allTenantAgents(tenantId: $tenantId) {
       id
       name
       slug

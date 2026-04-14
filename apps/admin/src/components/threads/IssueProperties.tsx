@@ -64,7 +64,7 @@ interface Thread {
 
 const AgentsForPickerQuery = graphql(`
   query AgentsForPicker($tenantId: ID!) {
-    agents(tenantId: $tenantId) {
+    agents: allTenantAgents(tenantId: $tenantId) {
       id
       name
       status

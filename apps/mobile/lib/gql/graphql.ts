@@ -1796,6 +1796,7 @@ export type Query = {
   agentVersions: Array<AgentVersion>;
   agentWorkspaces: Array<AgentWorkspace>;
   agents: Array<Agent>;
+  allTenantAgents: Array<Agent>;
   artifact?: Maybe<Artifact>;
   artifacts: Array<Artifact>;
   budgetPolicies: Array<BudgetPolicy>;
@@ -1922,11 +1923,17 @@ export type QueryAgentWorkspacesArgs = {
 
 
 export type QueryAgentsArgs = {
-  humanPairId?: InputMaybe<Scalars['ID']['input']>;
   includeSystem?: InputMaybe<Scalars['Boolean']['input']>;
   status?: InputMaybe<AgentStatus>;
   tenantId: Scalars['ID']['input'];
   type?: InputMaybe<AgentType>;
+};
+
+
+export type QueryAllTenantAgentsArgs = {
+  includeSubAgents?: InputMaybe<Scalars['Boolean']['input']>;
+  includeSystem?: InputMaybe<Scalars['Boolean']['input']>;
+  tenantId: Scalars['ID']['input'];
 };
 
 
