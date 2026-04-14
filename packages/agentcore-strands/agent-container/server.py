@@ -659,13 +659,23 @@ def _call_strands_agent(system_prompt: str, messages: list,
                     want answered, not just keywords. Returns a numbered list
                     of matching memory facts.
 
-                    For SYNTHESIS questions ("tell me about X", "summarize Y",
-                    "brief me on Z"), call this tool first to get the raw
-                    facts, then call `hindsight_reflect` in the same turn to
-                    synthesize a narrative answer over those facts. Recall
-                    and reflect are designed to work as a pair, not as
-                    alternatives. For pure LOOKUP questions ("where does X
-                    work?"), recall alone is sufficient — no reflect needed.
+                    REQUIRED FOLLOW-UP: For any "tell me about X", "what do
+                    you know about Y", "summarize Z", "brief me on W", or
+                    similar open-ended question about a person / company /
+                    customer / project / topic, you MUST call
+                    `hindsight_reflect` in the SAME turn after this tool
+                    returns. Recall surfaces the raw facts; reflect runs a
+                    larger LLM over those facts to produce a coherent
+                    narrative answer with reasoning across multiple
+                    memories. Skipping reflect for these question shapes
+                    leaves the user with a flat list instead of a
+                    synthesized briefing.
+
+                    The ONLY case where you may skip the reflect follow-up
+                    is a narrowly scoped factual lookup with a single
+                    expected answer, e.g. "what is X's email address?",
+                    "where does Y work?", "when did we last talk about Z?".
+                    For anything broader, run BOTH tools.
 
                     Args:
                         query: The factual question or topic to search for.
@@ -715,37 +725,35 @@ def _call_strands_agent(system_prompt: str, messages: list,
 
                 @_strands_tool
                 async def hindsight_reflect(query: str) -> str:
-                    """Synthesize a reasoned answer on top of memories already retrieved by hindsight_recall.
+                    """Synthesize a narrative answer over many long-term memory facts at once.
 
-                    PREREQUISITE: You MUST call `hindsight_recall` first in
-                    this turn. `hindsight_reflect` is a SYNTHESIS LAYER that
-                    runs on top of the raw memories that `hindsight_recall`
-                    surfaces — it is NOT a substitute for recall. The two
-                    tools work as a pair:
+                    PAIRING WITH hindsight_recall: This tool is the second
+                    half of a two-step flow. The correct order is:
 
-                      1. `hindsight_recall(query)` → raw matching facts
-                      2. `hindsight_reflect(query)` → narrative answer synthesized
-                          across many facts at once
+                      1. `hindsight_recall(query)` → returns the raw matching facts
+                      2. `hindsight_reflect(query)` → returns a synthesized
+                          narrative answer over those facts
 
-                    For ANY memory-shaped question ("What do you know about X?",
-                    "Tell me about Y", "Summarize Z", "Brief me on the account"),
-                    the correct flow is ALWAYS recall → reflect, in that order,
-                    in the same turn. Do not skip recall, even for synthesis
-                    questions. Recall is cheap; running it first gives reflect
-                    grounded source facts to reason over and gives YOU the raw
-                    evidence you need to cite or quote.
+                    You should call BOTH tools in the same turn for ANY
+                    open-ended memory question:
 
-                    Reflect calls a larger LLM behind the scenes and is more
-                    expensive than recall, so reserve it for questions that
-                    actually need narrative synthesis (briefings, summaries,
-                    "what are the key relationships between…" questions). For
-                    pure lookup questions ("where does X work?"), recall alone
-                    is enough — skip reflect.
+                      * "What do you know about <X>?"
+                      * "Tell me about <person/company/project>"
+                      * "Summarize what we know about <X>"
+                      * "Brief me on <account>"
+                      * "What are the key relationships between <A> and <B>?"
 
-                    Same scope rules as hindsight_recall: this is the right
-                    tool for questions about people, companies, customers,
-                    or projects you have stored facts about. Do NOT route
-                    synthesis questions to CRM tools as a first step.
+                    Reflect runs a larger LLM behind the scenes (more
+                    expensive than recall), so the only case where you may
+                    SKIP reflect is a narrowly scoped factual lookup with a
+                    single expected answer ("what is X's email address?",
+                    "where does Y work?"). For anything broader — anything
+                    that asks for context, summary, briefing, narrative, or
+                    synthesis — run reflect after recall.
+
+                    Same scope rules as hindsight_recall: people, companies,
+                    customers, projects you have stored facts about. Do NOT
+                    route synthesis questions to CRM tools as a first step.
 
                     Args:
                         query: The synthesis question to answer from memory.
