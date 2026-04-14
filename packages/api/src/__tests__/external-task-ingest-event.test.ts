@@ -97,7 +97,15 @@ import type { ExternalTaskEnvelope } from "../integrations/external-work-items/t
 const RAW_BODY = JSON.stringify({ event: "assigned", data: { task: { id: "task_1" } } });
 const HEADERS = { "x-lastmile-signature": "deadbeef" };
 
-function buildConn(overrides?: Partial<{ connectionId: string; tenantId: string; userId: string; providerId: string }>) {
+function buildConn(
+	overrides?: Partial<{
+		connectionId: string;
+		tenantId: string;
+		userId: string;
+		providerId: string;
+		defaultAgentId: string;
+	}>,
+) {
 	return {
 		connectionId: "conn-1",
 		tenantId: "tenant-1",
@@ -243,11 +251,44 @@ describe("ingestExternalTaskEvent — happy path", () => {
 				provider: "lastmile",
 				externalTaskId: "task_1",
 				connectionId: "conn-1",
+				userId: "user-1",
 				title: "Deliver groceries",
 				envelope,
 			}),
 		);
+		// Without an opt-in, defaultAgentId is undefined.
+		const ensureCall = mockEnsureThread.mock.calls[0][0] as { defaultAgentId?: string };
+		expect(ensureCall.defaultAgentId).toBeUndefined();
 		expect(mockInsert).not.toHaveBeenCalled();
+	});
+
+	it("forwards defaultAgentId from the resolved connection's per-user opt-in", async () => {
+		mockVerifySignature.mockResolvedValueOnce(true);
+		mockNormalizeEvent.mockResolvedValueOnce({
+			kind: "task.assigned",
+			externalTaskId: "task_42",
+			providerUserId: "user_lastmile_1",
+			receivedAt: "2026-04-14T10:00:00Z",
+		});
+		mockResolveConnection.mockResolvedValueOnce(
+			buildConn({ defaultAgentId: "agent-research-bot" }),
+		);
+		mockResolveOAuthToken.mockResolvedValueOnce("token");
+		mockRefresh.mockResolvedValueOnce(buildEnvelope("Task with assist"));
+		mockEnsureThread.mockResolvedValueOnce({ threadId: "thread-42", created: true });
+
+		await ingestExternalTaskEvent({
+			provider: "lastmile",
+			rawBody: RAW_BODY,
+			headers: HEADERS,
+		});
+
+		expect(mockEnsureThread).toHaveBeenCalledWith(
+			expect.objectContaining({
+				userId: "user-1",
+				defaultAgentId: "agent-research-bot",
+			}),
+		);
 	});
 
 	it("still ensures the thread when refresh() fails (title falls back to placeholder)", async () => {
