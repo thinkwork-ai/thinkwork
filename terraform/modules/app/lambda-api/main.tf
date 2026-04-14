@@ -302,6 +302,45 @@ resource "aws_iam_role_policy" "lambda_ssm_read" {
   })
 }
 
+# job-schedule-manager creates/updates/deletes EventBridge Scheduler
+# schedules (and the thinkwork-jobs schedule group on first use). Without
+# these permissions the manager Lambda threw silently and every scheduled
+# automation was orphaned with eb_schedule_name = null.
+resource "aws_iam_role_policy" "lambda_scheduler" {
+  name = "eventbridge-scheduler-rw"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "scheduler:CreateSchedule",
+          "scheduler:UpdateSchedule",
+          "scheduler:DeleteSchedule",
+          "scheduler:GetSchedule",
+          "scheduler:ListSchedules",
+          "scheduler:CreateScheduleGroup",
+          "scheduler:GetScheduleGroup",
+          "scheduler:DeleteScheduleGroup",
+          "scheduler:TagResource",
+        ]
+        Resource = "*"
+      },
+      # Scheduler.CreateSchedule takes a RoleArn for the target; AWS requires
+      # the caller to have iam:PassRole on that role. Without this the
+      # CreateSchedule call fails with AccessDenied even if the scheduler
+      # permissions above are set.
+      {
+        Effect   = "Allow"
+        Action   = ["iam:PassRole"]
+        Resource = var.job_scheduler_role_arn != "" ? var.job_scheduler_role_arn : "*"
+      },
+    ]
+  })
+}
+
 # Allow API handler Lambdas to invoke each other directly. sendMessage
 # dispatches to chat-agent-invoke for instant chat response; the memory
 # resolvers reach knowledge-base-manager and job-schedule-manager for

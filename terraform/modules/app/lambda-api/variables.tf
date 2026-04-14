@@ -197,3 +197,9 @@ variable "cors_allowed_origins" {
   type        = list(string)
   default     = ["*"]
 }
+
+variable "job_scheduler_role_arn" {
+  description = "IAM role ARN that EventBridge Scheduler assumes to invoke the job-trigger Lambda. Passed from the job-triggers module."
+  type        = string
+  default     = ""
+}
