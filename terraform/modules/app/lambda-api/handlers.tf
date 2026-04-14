@@ -91,6 +91,7 @@ resource "aws_lambda_function" "handler" {
     "webhooks",
     "webhooks-admin",
     "webhook-deliveries-cleanup",
+    "task-connectors",
     "workspace-files",
     "knowledge-base-manager",
     "knowledge-base-files",
@@ -102,8 +103,6 @@ resource "aws_lambda_function" "handler" {
     "memory-retain",
     "artifact-deliver",
     "recipe-refresh",
-    "connector-installs",
-    "connector-secrets",
     "agent-skills-list",
     "bootstrap-workspaces",
     "code-factory",
@@ -218,6 +217,10 @@ locals {
     "ANY /api/webhooks/{proxy+}" = "webhooks-admin"
     "ANY /api/webhooks"          = "webhooks-admin"
 
+    # Task Connectors admin
+    "ANY /api/task-connectors/{proxy+}" = "task-connectors"
+    "ANY /api/task-connectors"          = "task-connectors"
+
     # Workspace files
     "ANY /api/workspaces/{proxy+}" = "workspace-files"
 
@@ -239,10 +242,6 @@ locals {
     # GitHub App
     "ANY /api/github-app/{proxy+}" = "github-app"
     "POST /api/github/webhook"     = "github-app"
-
-    # Connectors
-    "ANY /api/connector-installs/{proxy+}" = "connector-installs"
-    "ANY /api/connector-secrets/{proxy+}"  = "connector-secrets"
   } : {}
 }
 

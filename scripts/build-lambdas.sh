@@ -208,6 +208,9 @@ build_handler "webhooks-admin" \
 build_handler "webhook-deliveries-cleanup" \
   "$REPO_ROOT/packages/api/src/handlers/webhook-deliveries-cleanup.ts"
 
+build_handler "task-connectors" \
+  "$REPO_ROOT/packages/api/src/handlers/task-connectors.ts"
+
 build_handler "github-app" \
   "$REPO_ROOT/packages/api/src/handlers/github-app.ts"
 
@@ -228,12 +231,6 @@ build_handler "knowledge-base-files" \
 
 build_handler "workspace-files" \
   "$REPO_ROOT/packages/api/workspace-files.ts"
-
-build_handler "connector-installs" \
-  "$REPO_ROOT/packages/api/connector-installs.ts"
-
-build_handler "connector-secrets" \
-  "$REPO_ROOT/packages/api/connector-secrets.ts"
 
 build_handler "agent-skills-list" \
   "$REPO_ROOT/packages/api/agent-skills-list.ts"

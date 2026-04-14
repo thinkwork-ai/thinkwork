@@ -205,6 +205,8 @@ export type NormalizedEvent = {
 	externalTaskId: string;
 	providerUserId?: string;
 	previousProviderUserId?: string;
+	/** Provider-side unique delivery id (for idempotency + cross-reference). */
+	providerEventId?: string;
 	receivedAt: string;
 	raw?: Record<string, unknown>;
 };
