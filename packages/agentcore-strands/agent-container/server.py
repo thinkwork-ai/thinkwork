@@ -607,7 +607,16 @@ def _call_strands_agent(system_prompt: str, messages: list,
                 # invocation. Upstream hindsight-client 0.5.1 still ships the
                 # same _run_async (asyncio.get_event_loop) implementation, but
                 # exposes arecall/areflect as native async variants. Use those.
-                _hs_client_ref = hs_client
+                #
+                # We build a FRESH Hindsight instance inside each tool call and
+                # `await client.aclose()` in finally so aiohttp's ClientSession
+                # + TCPConnector are released explicitly. Caching the client
+                # across calls leaks "Unclosed client session" warnings on
+                # every warm invocation because the session is never torn down
+                # until GC, and GC-at-process-shutdown in Lambda is
+                # unreliable. The fresh-client cost is ~10ms of TCP setup,
+                # negligible vs. the Hindsight ECS call itself.
+                _hs_endpoint_ref = hs_endpoint
                 _hs_bank_ref = hs_bank
 
                 @_strands_tool
@@ -657,6 +666,10 @@ def _call_strands_agent(system_prompt: str, messages: list,
                         A numbered list of matching memories, or
                         "No relevant memories found." if nothing matches.
                     """
+                    # Fresh client per call — see the closure-capture comment
+                    # above for why we don't share across calls. Explicit
+                    # aclose() in finally to prevent aiohttp session leaks.
+                    _client = Hindsight(base_url=_hs_endpoint_ref, timeout=300.0)
                     try:
                         # PRD-42 follow-up: drop budget mid→low (less graph fanout
                         # for our bank shapes) and max_tokens 4096→1500 (smaller
@@ -664,7 +677,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
                         # (PR #821) plus our post-filter carries the weight now.
                         # Note: arecall (native async) — not recall — to avoid
                         # _run_async's stale-loop reuse.
-                        response = await _hs_client_ref.arecall(
+                        response = await _client.arecall(
                             bank_id=_hs_bank_ref,
                             query=query,
                             budget="low",
@@ -686,6 +699,11 @@ def _call_strands_agent(system_prompt: str, messages: list,
                     except Exception as e:
                         logger.error("hindsight_recall failed: %s", e)
                         return f"Memory recall failed: {e}"
+                    finally:
+                        try:
+                            await _client.aclose()
+                        except Exception as _close_err:
+                            logger.warning("hindsight_recall aclose failed: %s", _close_err)
 
                 @_strands_tool
                 async def hindsight_reflect(query: str) -> str:
@@ -717,10 +735,13 @@ def _call_strands_agent(system_prompt: str, messages: list,
                         memories, or "No relevant memories found." if there
                         is nothing to draw from.
                     """
+                    # Fresh client per call, explicit aclose in finally —
+                    # see hindsight_recall for the rationale.
+                    _client = Hindsight(base_url=_hs_endpoint_ref, timeout=300.0)
                     try:
                         # areflect (native async) — not reflect — to avoid
                         # _run_async's stale-loop reuse.
-                        response = await _hs_client_ref.areflect(
+                        response = await _client.areflect(
                             bank_id=_hs_bank_ref,
                             query=query,
                             budget="mid",
@@ -729,6 +750,11 @@ def _call_strands_agent(system_prompt: str, messages: list,
                     except Exception as e:
                         logger.error("hindsight_reflect failed: %s", e)
                         return f"Memory reflect failed: {e}"
+                    finally:
+                        try:
+                            await _client.aclose()
+                        except Exception as _close_err:
+                            logger.warning("hindsight_reflect aclose failed: %s", _close_err)
 
                 tools.extend(hs_tools)
                 tools.append(hindsight_recall)
