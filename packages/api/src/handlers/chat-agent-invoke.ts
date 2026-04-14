@@ -450,6 +450,17 @@ export async function handler(event: InvokeEvent): Promise<void> {
       throw new Error("AGENTCORE_FUNCTION_NAME env var not set");
     }
 
+    // Load thread metadata so the agent runtime can see external-task context
+    // (e.g. LastMile envelope) alongside message history. Without this, an
+    // agent attached to an external-task thread has no idea what task it is
+    // looking at and can only respond to the literal user message.
+    const [threadMetaRow] = await db
+      .select({ metadata: threads.metadata })
+      .from(threads)
+      .where(eq(threads.id, threadId));
+    const threadMetadata =
+      (threadMetaRow?.metadata as Record<string, unknown> | null) ?? null;
+
     const invokeStart = Date.now();
     const invokePayload = {
       tenant_id: tenantId,
@@ -473,6 +484,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
       trigger_channel: "chat",
       guardrail_config: guardrailPayload || undefined,
       mcp_configs: mcpConfigs.length > 0 ? mcpConfigs : undefined,
+      thread_metadata: threadMetadata || undefined,
     };
 
     // The agentcore container runs an HTTP server behind Lambda Web Adapter;
