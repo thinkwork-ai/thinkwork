@@ -6,10 +6,23 @@
  * connect_provider_id — i.e. the admin-side configuration for receiving
  * external task events from providers like LastMile.
  *
+ * Lifecycle:
+ *   POST   :slug                — enable (inserts the row, or re-enables an
+ *                                 existing disabled row while preserving its
+ *                                 token + signing secret)
+ *   DELETE :slug                — soft disable (UPDATE enabled=false). Row +
+ *                                 config preserved; webhook URL stops
+ *                                 accepting events. Reversible via POST :slug.
+ *   DELETE :slug?hard=true      — hard delete. Nulls thread_turns.webhook_id
+ *                                 (cascade is SET NULL on webhook_deliveries)
+ *                                 and removes the webhooks row. Delivery
+ *                                 history survives but loses its webhook_id
+ *                                 reference. Use with care.
+ *
  * Routes:
  *   GET    /api/task-connectors                         — list catalog with per-tenant enablement
- *   POST   /api/task-connectors/:slug                   — enable connector (creates webhook row)
- *   DELETE /api/task-connectors/:slug                   — disable (deletes webhook row)
+ *   POST   /api/task-connectors/:slug                   — enable / re-enable
+ *   DELETE /api/task-connectors/:slug[?hard=true]       — soft disable (or hard delete)
  *   GET    /api/task-connectors/:slug/deliveries        — paginated delivery history
  *   POST   /api/task-connectors/:slug/test              — fire a synthetic event
  *   POST   /api/task-connectors/:slug/generate-secret   — issue HMAC signing secret (returned once)
@@ -28,6 +41,7 @@ import {
 	webhookDeliveries,
 	connectProviders,
 	connections,
+	threadTurns,
 } from "@thinkwork/database-pg/schema";
 import { db } from "../lib/db.js";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
@@ -111,7 +125,7 @@ export async function handler(
 
 		// Item: /api/task-connectors/:slug
 		if (method === "POST") return enableConnector(tenantId, slug);
-		if (method === "DELETE") return disableConnector(tenantId, slug);
+		if (method === "DELETE") return disableConnector(tenantId, slug, event);
 		return error("Method not allowed", 405);
 	} catch (err) {
 		console.error("[task-connectors] handler error:", err);
@@ -129,6 +143,9 @@ type ConnectorRow = {
 	provider_id: string;
 	provider_type: string;
 	is_available: boolean;
+	/** Whether a webhook row has been created (enabled OR disabled). */
+	configured: boolean;
+	/** Whether the webhook row is currently accepting events. */
 	enabled: boolean;
 	webhook_id: string | null;
 	webhook_url: string | null;
@@ -155,13 +172,16 @@ async function listConnectors(
 		.from(connectProviders)
 		.where(eq(connectProviders.provider_type, "task"));
 
-	// 2. Fetch this tenant's existing task webhook rows in one query.
+	// 2. Fetch this tenant's existing task webhook rows in one query. Include
+	//    disabled rows — the UI needs to show them so the user can re-enable
+	//    or hard-delete.
 	const existingWebhooks = await db
 		.select({
 			id: webhooks.id,
 			connect_provider_id: webhooks.connect_provider_id,
 			token: webhooks.token,
 			config: webhooks.config,
+			enabled: webhooks.enabled,
 			last_invoked_at: webhooks.last_invoked_at,
 			invocation_count: webhooks.invocation_count,
 		})
@@ -189,7 +209,8 @@ async function listConnectors(
 	const rows: ConnectorRow[] = [];
 	for (const provider of catalog) {
 		const webhook = webhookByProvider.get(provider.id);
-		const enabled = !!webhook;
+		const exists = !!webhook;
+		const enabled = webhook?.enabled ?? false;
 
 		const [connectionCountRow] = await db
 			.select({ count: sql<number>`count(*)::int` })
@@ -236,6 +257,7 @@ async function listConnectors(
 			provider_id: provider.id,
 			provider_type: provider.provider_type,
 			is_available: provider.is_available,
+			configured: exists,
 			enabled,
 			webhook_id: webhook?.id ?? null,
 			webhook_url: webhook ? webhookUrlForToken(webhook.token) : null,
@@ -255,7 +277,7 @@ async function listConnectors(
 }
 
 // ---------------------------------------------------------------------------
-// POST /api/task-connectors/:slug — enable (idempotent)
+// POST /api/task-connectors/:slug — enable (or re-enable a disabled row)
 // ---------------------------------------------------------------------------
 
 async function enableConnector(
@@ -273,7 +295,8 @@ async function enableConnector(
 		);
 	if (!provider) return notFound(`Connector '${slug}' not found`);
 
-	// Idempotent: if a row already exists, return it.
+	// If a row already exists, re-enable it in place — preserving the token
+	// and signing secret — so the provider-side webhook config stays valid.
 	const [existing] = await db
 		.select()
 		.from(webhooks)
@@ -285,12 +308,19 @@ async function enableConnector(
 			),
 		);
 	if (existing) {
+		if (!existing.enabled) {
+			await db
+				.update(webhooks)
+				.set({ enabled: true, updated_at: new Date() })
+				.where(eq(webhooks.id, existing.id));
+		}
 		return json({
 			ok: true,
 			id: existing.id,
 			slug,
 			webhook_url: webhookUrlForToken(existing.token),
-			already_enabled: true,
+			already_enabled: existing.enabled,
+			re_enabled: !existing.enabled,
 		});
 	}
 
@@ -317,18 +347,22 @@ async function enableConnector(
 			slug,
 			webhook_url: webhookUrlForToken(inserted.token),
 			already_enabled: false,
+			re_enabled: false,
 		},
 		201,
 	);
 }
 
 // ---------------------------------------------------------------------------
-// DELETE /api/task-connectors/:slug — disable
+// DELETE /api/task-connectors/:slug — soft disable (default) or hard delete
+// when `?hard=true`. Soft preserves the row, config, and delivery history;
+// hard removes the row after nulling dependent FKs.
 // ---------------------------------------------------------------------------
 
 async function disableConnector(
 	tenantId: string,
 	slug: string,
+	event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
 	const [provider] = await db
 		.select({ id: connectProviders.id })
@@ -336,8 +370,11 @@ async function disableConnector(
 		.where(eq(connectProviders.name, slug));
 	if (!provider) return notFound(`Connector '${slug}' not found`);
 
-	await db
-		.delete(webhooks)
+	const hard = (event.queryStringParameters?.hard ?? "").toLowerCase() === "true";
+
+	const [existing] = await db
+		.select({ id: webhooks.id, enabled: webhooks.enabled })
+		.from(webhooks)
 		.where(
 			and(
 				eq(webhooks.tenant_id, tenantId),
@@ -345,8 +382,36 @@ async function disableConnector(
 				eq(webhooks.connect_provider_id, provider.id),
 			),
 		);
+	if (!existing) {
+		return json({ ok: true, slug, mode: hard ? "hard" : "soft", changed: false });
+	}
 
-	return json({ ok: true, slug });
+	if (hard) {
+		// Null the thread_turns FK first; webhook_deliveries FK is ON DELETE
+		// SET NULL so it handles itself. webhook_idempotency cascades on
+		// delete via its own FK definition.
+		await db
+			.update(threadTurns)
+			.set({ webhook_id: null })
+			.where(eq(threadTurns.webhook_id, existing.id));
+		await db.delete(webhooks).where(eq(webhooks.id, existing.id));
+		return json({ ok: true, slug, mode: "hard", changed: true });
+	}
+
+	// Soft disable — UPDATE enabled=false. Idempotent: if already disabled,
+	// no write, still 200.
+	if (existing.enabled) {
+		await db
+			.update(webhooks)
+			.set({ enabled: false, updated_at: new Date() })
+			.where(eq(webhooks.id, existing.id));
+	}
+	return json({
+		ok: true,
+		slug,
+		mode: "soft",
+		changed: existing.enabled,
+	});
 }
 
 // ---------------------------------------------------------------------------

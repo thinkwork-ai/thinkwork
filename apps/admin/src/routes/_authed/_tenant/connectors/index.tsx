@@ -9,6 +9,9 @@ import {
 	ListChecks,
 	KeyRound,
 	Send,
+	Power,
+	PowerOff,
+	Trash2,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useTenant } from "@/context/TenantContext";
@@ -55,6 +58,9 @@ type ConnectorRow = {
 	provider_id: string;
 	provider_type: string;
 	is_available: boolean;
+	/** Whether a webhook row has been created (enabled or disabled). */
+	configured: boolean;
+	/** Whether the webhook row is currently accepting events. */
 	enabled: boolean;
 	webhook_id: string | null;
 	webhook_url: string | null;
@@ -130,6 +136,8 @@ function connectorColumns(handlers: {
 	onTest: (row: ConnectorRow) => void;
 	onGenerateSecret: (row: ConnectorRow) => void;
 	onDisable: (row: ConnectorRow) => void;
+	onReEnable: (row: ConnectorRow) => void;
+	onHardDelete: (row: ConnectorRow) => void;
 	onViewDeliveries: (row: ConnectorRow) => void;
 }): ColumnDef<ConnectorRow>[] {
 	return [
@@ -150,20 +158,35 @@ function connectorColumns(handlers: {
 		{
 			accessorKey: "enabled",
 			header: "Status",
-			cell: ({ row }) =>
-				row.original.enabled ? (
-					<Badge
-						variant="secondary"
-						className="text-xs gap-1 bg-green-500/15 text-green-600 dark:text-green-400"
-					>
-						Enabled
-					</Badge>
-				) : (
+			cell: ({ row }) => {
+				const r = row.original;
+				if (r.enabled) {
+					return (
+						<Badge
+							variant="secondary"
+							className="text-xs gap-1 bg-green-500/15 text-green-600 dark:text-green-400"
+						>
+							Enabled
+						</Badge>
+					);
+				}
+				if (r.configured) {
+					return (
+						<Badge
+							variant="secondary"
+							className="text-xs gap-1 bg-amber-500/15 text-amber-600 dark:text-amber-400"
+						>
+							Disabled
+						</Badge>
+					);
+				}
+				return (
 					<Badge variant="secondary" className="text-xs bg-muted text-muted-foreground">
 						Available
 					</Badge>
-				),
-			size: 100,
+				);
+			},
+			size: 110,
 		},
 		{
 			accessorKey: "webhook_url",
@@ -243,8 +266,13 @@ function connectorColumns(handlers: {
 		{
 			id: "actions",
 			header: "",
-			cell: ({ row }) =>
-				row.original.enabled ? (
+			cell: ({ row }) => {
+				const r = row.original;
+				// Catalog entry not yet configured — no actions, user clicks
+				// the top-level "Add Connector" button to enable.
+				if (!r.configured) return null;
+
+				return (
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
 							<Button variant="ghost" size="sm">
@@ -255,42 +283,66 @@ function connectorColumns(handlers: {
 							<DropdownMenuItem
 								onClick={(e) => {
 									e.stopPropagation();
-									handlers.onViewDeliveries(row.original);
+									handlers.onViewDeliveries(r);
 								}}
 							>
 								View deliveries
 							</DropdownMenuItem>
-							<DropdownMenuItem
-								onClick={(e) => {
-									e.stopPropagation();
-									handlers.onTest(row.original);
-								}}
-							>
-								<Send className="h-3.5 w-3.5 mr-1.5" /> Send test event
-							</DropdownMenuItem>
-							<DropdownMenuItem
-								onClick={(e) => {
-									e.stopPropagation();
-									handlers.onGenerateSecret(row.original);
-								}}
-							>
-								<KeyRound className="h-3.5 w-3.5 mr-1.5" />{" "}
-								{row.original.has_secret ? "Rotate signing secret" : "Generate signing secret"}
-							</DropdownMenuItem>
+							{r.enabled && (
+								<>
+									<DropdownMenuItem
+										onClick={(e) => {
+											e.stopPropagation();
+											handlers.onTest(r);
+										}}
+									>
+										<Send className="h-3.5 w-3.5 mr-1.5" /> Send test event
+									</DropdownMenuItem>
+									<DropdownMenuItem
+										onClick={(e) => {
+											e.stopPropagation();
+											handlers.onGenerateSecret(r);
+										}}
+									>
+										<KeyRound className="h-3.5 w-3.5 mr-1.5" />{" "}
+										{r.has_secret ? "Rotate signing secret" : "Generate signing secret"}
+									</DropdownMenuItem>
+								</>
+							)}
 							<DropdownMenuSeparator />
+							{r.enabled ? (
+								<DropdownMenuItem
+									onClick={(e) => {
+										e.stopPropagation();
+										handlers.onDisable(r);
+									}}
+								>
+									<PowerOff className="h-3.5 w-3.5 mr-1.5" /> Disable connector
+								</DropdownMenuItem>
+							) : (
+								<DropdownMenuItem
+									onClick={(e) => {
+										e.stopPropagation();
+										handlers.onReEnable(r);
+									}}
+								>
+									<Power className="h-3.5 w-3.5 mr-1.5" /> Re-enable connector
+								</DropdownMenuItem>
+							)}
 							<DropdownMenuItem
 								className="text-destructive"
 								onClick={(e) => {
 									e.stopPropagation();
-									handlers.onDisable(row.original);
+									handlers.onHardDelete(r);
 								}}
 							>
-								Disable connector
+								<Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete permanently
 							</DropdownMenuItem>
 						</DropdownMenuContent>
 					</DropdownMenu>
-				) : null,
-			size: 100,
+				);
+			},
+			size: 110,
 		},
 	];
 }
@@ -535,8 +587,15 @@ function ConnectorsPage() {
 		() => connectors.filter((c) => c.enabled),
 		[connectors],
 	);
-	const availableConnectors = useMemo(
-		() => connectors.filter((c) => !c.enabled && c.is_available),
+	// Connectors in the catalog that this tenant has NOT yet added. Disabled
+	// rows are re-enabled via the row's own Re-enable action, not the Add
+	// flow, so they are excluded here.
+	const unconfiguredConnectors = useMemo(
+		() => connectors.filter((c) => !c.configured && c.is_available),
+		[connectors],
+	);
+	const disabledConnectors = useMemo(
+		() => connectors.filter((c) => c.configured && !c.enabled),
 		[connectors],
 	);
 
@@ -544,7 +603,7 @@ function ConnectorsPage() {
 		if (!tenantId) return;
 		if (
 			!window.confirm(
-				`Disable ${row.display_name}? Existing threads stay, but new events will be dropped.`,
+				`Disable ${row.display_name}? New events will be dropped until you re-enable. Existing threads and delivery history are preserved.`,
 			)
 		) {
 			return;
@@ -554,6 +613,39 @@ function ConnectorsPage() {
 				method: "DELETE",
 			});
 			toast.success(`${row.display_name} disabled`);
+			fetchData();
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : String(e));
+		}
+	};
+
+	const handleReEnable = async (row: ConnectorRow) => {
+		if (!tenantId) return;
+		try {
+			await apiFetch(`/api/task-connectors/${row.slug}`, tenantId, {
+				method: "POST",
+			});
+			toast.success(`${row.display_name} re-enabled`);
+			fetchData();
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : String(e));
+		}
+	};
+
+	const handleHardDelete = async (row: ConnectorRow) => {
+		if (!tenantId) return;
+		if (
+			!window.confirm(
+				`Permanently delete ${row.display_name}? This removes the webhook row + signing secret. Delivery history is preserved but loses its webhook link. You'll need to reconfigure the provider dashboard from scratch if you re-add this connector.`,
+			)
+		) {
+			return;
+		}
+		try {
+			await apiFetch(`/api/task-connectors/${row.slug}?hard=true`, tenantId, {
+				method: "DELETE",
+			});
+			toast.success(`${row.display_name} permanently deleted`);
 			fetchData();
 		} catch (e) {
 			toast.error(e instanceof Error ? e.message : String(e));
@@ -613,17 +705,26 @@ function ConnectorsPage() {
 
 	if (!tenantId || loading) return <PageSkeleton />;
 
+	const description = (() => {
+		const parts: string[] = [`${enabledConnectors.length} enabled`];
+		if (disabledConnectors.length > 0)
+			parts.push(`${disabledConnectors.length} disabled`);
+		if (unconfiguredConnectors.length > 0)
+			parts.push(`${unconfiguredConnectors.length} available`);
+		return parts.join(", ");
+	})();
+
 	return (
 		<PageLayout
 			header={
 				<PageHeader
 					title="Connectors"
-					description={`${enabledConnectors.length} enabled, ${availableConnectors.length} available`}
+					description={description}
 					actions={
 						<Button
 							size="sm"
 							onClick={() => setAddOpen(true)}
-							disabled={availableConnectors.length === 0}
+							disabled={unconfiguredConnectors.length === 0}
 						>
 							<Plus className="h-4 w-4 mr-1" /> Add Connector
 						</Button>
@@ -645,6 +746,8 @@ function ConnectorsPage() {
 						onTest: handleTest,
 						onGenerateSecret: handleGenerateSecret,
 						onDisable: handleDisable,
+						onReEnable: handleReEnable,
+						onHardDelete: handleHardDelete,
 						onViewDeliveries: (row) =>
 							navigate({
 								to: "/connectors/$slug",
@@ -653,7 +756,7 @@ function ConnectorsPage() {
 					})}
 					data={connectors}
 					onRowClick={(row) =>
-						row.enabled
+						row.configured
 							? navigate({
 									to: "/connectors/$slug",
 									params: { slug: row.slug },
@@ -667,7 +770,7 @@ function ConnectorsPage() {
 				open={addOpen}
 				onOpenChange={setAddOpen}
 				tenantId={tenantId}
-				availableConnectors={availableConnectors}
+				availableConnectors={unconfiguredConnectors}
 				onCreated={(res) => {
 					setSetupResult(res);
 					fetchData();

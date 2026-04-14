@@ -39,8 +39,12 @@ export const webhookDeliveries = pgTable(
 			.default(sql`gen_random_uuid()`),
 
 		// Routing — nullable because completely-unmatched requests (token
-		// doesn't resolve to any webhook row) still get logged.
-		webhook_id: uuid("webhook_id").references(() => webhooks.id),
+		// doesn't resolve to any webhook row) still get logged. SET NULL on
+		// webhook delete so delivery history survives a connector hard-delete
+		// — the audit trail is more valuable than referential integrity here.
+		webhook_id: uuid("webhook_id").references(() => webhooks.id, {
+			onDelete: "set null",
+		}),
 		tenant_id: uuid("tenant_id").references(() => tenants.id),
 		target_type: text("target_type"), // agent | routine | task | null
 
