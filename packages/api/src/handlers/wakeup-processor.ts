@@ -326,7 +326,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 					envOverrides: {
 						AGENT_EMAIL_ADDRESS: emailAddress,
 						AGENT_ID: wakeup.agent_id,
-						THINKWORK_API_URL: MCP_BASE_URL,
+						THINKWORK_API_URL: THINKWORK_API_URL,
 						THINKWORK_API_SECRET: THINKWORK_API_SECRET,
 						INBOUND_MESSAGE_ID: (payload?.originalMessageId as string) || "",
 						INBOUND_SUBJECT: (payload?.subject as string) || "",
