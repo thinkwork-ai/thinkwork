@@ -293,3 +293,19 @@ variable "admin_certificate_arn" {
   type        = string
   default     = ""
 }
+
+# ---------------------------------------------------------------------------
+# SES inbound email (delegated subzone — Option A)
+# ---------------------------------------------------------------------------
+
+variable "ses_inbound_domain" {
+  description = "Subdomain used for agent email (e.g. agents.thinkwork.ai). Terraform creates a delegated Route53 hosted zone for this name, manages the SES domain identity + DKIM CNAMEs + MX in that zone, and wires an SES receipt rule that stores inbound mail in S3 and invokes the email-inbound Lambda. Leave empty to skip all SES inbound resources. After first apply, paste the `ses_inbound_name_servers` output as NS records at whatever hosts the parent domain."
+  type        = string
+  default     = ""
+}
+
+variable "ses_manage_active_rule_set" {
+  description = "Activate the SES receipt rule set. Only ONE rule set can be active per region per AWS account; set false on secondary stages that share an account so they don't fight over activation."
+  type        = bool
+  default     = true
+}

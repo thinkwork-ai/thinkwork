@@ -255,8 +255,16 @@ module "hindsight" {
 module "ses" {
   source = "../app/ses-email"
 
-  stage      = var.stage
-  account_id = var.account_id
+  stage        = var.stage
+  account_id   = var.account_id
+  region       = var.region
+  email_domain = var.ses_inbound_domain
+
+  inbound_bucket_name   = module.s3.bucket_name
+  email_inbound_fn_arn  = module.api.email_inbound_fn_arn
+  email_inbound_fn_name = module.api.email_inbound_fn_name
+
+  manage_active_rule_set = var.ses_manage_active_rule_set
 }
 
 ################################################################################
