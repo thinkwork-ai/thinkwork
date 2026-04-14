@@ -239,8 +239,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (result.type !== "success") return;
 
-      // Parse code from callback URL — avoid `new URL()` which isn't reliable on Hermes
-      const codeMatch = result.url.match(/[?&]code=([^&]+)/);
+      // Parse code from callback URL — avoid `new URL()` which isn't reliable on Hermes.
+      // Stop at `&` AND `#` — Cognito's redirect appends a trailing `#` fragment
+      // that would otherwise get captured into the code and rejected as
+      // `invalid_grant`. This was the root cause of every "Token exchange failed"
+      // error we were chasing all day.
+      const codeMatch = result.url.match(/[?&]code=([^&#]+)/);
       const code = codeMatch?.[1] ? decodeURIComponent(codeMatch[1]) : null;
       if (!code) throw new Error("No authorization code in callback URL");
       console.log("[AuthProvider] Google OAuth code length:", code.length);
