@@ -185,7 +185,8 @@ jobs:
             -var "lambda_zips_dir=$LAMBDA_DIR" \
             -var "pre_signup_lambda_zip=$PRE_SIGNUP_ZIP" \
             -var "www_domain=${{ vars.WWW_DOMAIN }}" \
-            -var "cloudflare_zone_id=${{ vars.CLOUDFLARE_ZONE_ID }}"
+            -var "cloudflare_zone_id=${{ vars.CLOUDFLARE_ZONE_ID }}" \
+            -var "ses_inbound_domain=agents.thinkwork.ai"
 
   # ── Build & deploy admin app ─────────────────────────────────────
   build-admin:
