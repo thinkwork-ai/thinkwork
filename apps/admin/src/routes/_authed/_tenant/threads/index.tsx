@@ -572,21 +572,22 @@ function ThreadsPage() {
   const isLoading = threadsResult.fetching && !threadsResult.data;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-6.5rem)]">
-      <div className="shrink-0 space-y-4 pb-4">
+    <PageLayout
+      header={
+        <>
           <PageHeader
             title="Threads"
             description={isLoading ? "Loading..." : `${totalCount} thread${totalCount !== 1 ? "s" : ""}${viewState.showArchived ? " (archived)" : ""}`}
           />
 
           {threadsResult.error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <div className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {threadsResult.error.message}
             </div>
           )}
 
           {/* Toolbar */}
-          <div className="flex items-center justify-between gap-2 sm:gap-3">
+          <div className="mt-4 flex items-center justify-between gap-2 sm:gap-3">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <Button variant="outline" onClick={() => openNewThread(newThreadDefaults())}>
             <Plus className="h-4 w-4 sm:mr-1" />
@@ -724,8 +725,9 @@ function ThreadsPage() {
           </div>
         </div>
       </div>
-      </div>
-      <div className="flex-1 min-h-0">
+        </>
+      }
+    >
       {/* Empty state */}
       {filtered.length === 0 && viewState.viewMode === "list" && (
         <EmptyState
@@ -803,7 +805,6 @@ function ThreadsPage() {
           </Collapsible>
         ))
       )}
-      </div>
-    </div>
+    </PageLayout>
   );
 }

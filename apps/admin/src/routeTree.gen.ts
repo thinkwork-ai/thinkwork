@@ -16,13 +16,11 @@ import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 import { Route as AuthedTenantRouteImport } from './routes/_authed/_tenant'
 import { Route as AuthedTenantSettingsRouteImport } from './routes/_authed/_tenant/settings'
-import { Route as AuthedTenantPerformanceRouteImport } from './routes/_authed/_tenant/performance'
 import { Route as AuthedTenantOrgRouteImport } from './routes/_authed/_tenant/org'
 import { Route as AuthedTenantMcpServersRouteImport } from './routes/_authed/_tenant/mcp-servers'
 import { Route as AuthedTenantDashboardRouteImport } from './routes/_authed/_tenant/dashboard'
-import { Route as AuthedTenantCostsRouteImport } from './routes/_authed/_tenant/costs'
 import { Route as AuthedTenantBuiltinToolsRouteImport } from './routes/_authed/_tenant/builtin-tools'
-import { Route as AuthedTenantActivityRouteImport } from './routes/_authed/_tenant/activity'
+import { Route as AuthedTenantAnalyticsRouteImport } from './routes/_authed/_tenant/analytics'
 import { Route as AuthedTenantWebhooksIndexRouteImport } from './routes/_authed/_tenant/webhooks/index'
 import { Route as AuthedTenantThreadsIndexRouteImport } from './routes/_authed/_tenant/threads/index'
 import { Route as AuthedTenantSkillsIndexRouteImport } from './routes/_authed/_tenant/skills/index'
@@ -94,11 +92,6 @@ const AuthedTenantSettingsRoute = AuthedTenantSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthedTenantRoute,
 } as any)
-const AuthedTenantPerformanceRoute = AuthedTenantPerformanceRouteImport.update({
-  id: '/performance',
-  path: '/performance',
-  getParentRoute: () => AuthedTenantRoute,
-} as any)
 const AuthedTenantOrgRoute = AuthedTenantOrgRouteImport.update({
   id: '/org',
   path: '/org',
@@ -114,20 +107,15 @@ const AuthedTenantDashboardRoute = AuthedTenantDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthedTenantRoute,
 } as any)
-const AuthedTenantCostsRoute = AuthedTenantCostsRouteImport.update({
-  id: '/costs',
-  path: '/costs',
-  getParentRoute: () => AuthedTenantRoute,
-} as any)
 const AuthedTenantBuiltinToolsRoute =
   AuthedTenantBuiltinToolsRouteImport.update({
     id: '/builtin-tools',
     path: '/builtin-tools',
     getParentRoute: () => AuthedTenantRoute,
   } as any)
-const AuthedTenantActivityRoute = AuthedTenantActivityRouteImport.update({
-  id: '/activity',
-  path: '/activity',
+const AuthedTenantAnalyticsRoute = AuthedTenantAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
   getParentRoute: () => AuthedTenantRoute,
 } as any)
 const AuthedTenantWebhooksIndexRoute =
@@ -351,13 +339,11 @@ export interface FileRoutesByFullPath {
   '/sign-in': typeof SignInRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/invite/$token': typeof InviteTokenRoute
-  '/activity': typeof AuthedTenantActivityRoute
+  '/analytics': typeof AuthedTenantAnalyticsRoute
   '/builtin-tools': typeof AuthedTenantBuiltinToolsRoute
-  '/costs': typeof AuthedTenantCostsRoute
   '/dashboard': typeof AuthedTenantDashboardRoute
   '/mcp-servers': typeof AuthedTenantMcpServersRoute
   '/org': typeof AuthedTenantOrgRoute
-  '/performance': typeof AuthedTenantPerformanceRoute
   '/settings': typeof AuthedTenantSettingsRoute
   '/agent-templates/$templateId': typeof AuthedTenantAgentTemplatesTemplateIdRoute
   '/agent-templates/defaults': typeof AuthedTenantAgentTemplatesDefaultsRoute
@@ -402,13 +388,11 @@ export interface FileRoutesByTo {
   '/sign-in': typeof SignInRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/invite/$token': typeof InviteTokenRoute
-  '/activity': typeof AuthedTenantActivityRoute
+  '/analytics': typeof AuthedTenantAnalyticsRoute
   '/builtin-tools': typeof AuthedTenantBuiltinToolsRoute
-  '/costs': typeof AuthedTenantCostsRoute
   '/dashboard': typeof AuthedTenantDashboardRoute
   '/mcp-servers': typeof AuthedTenantMcpServersRoute
   '/org': typeof AuthedTenantOrgRoute
-  '/performance': typeof AuthedTenantPerformanceRoute
   '/settings': typeof AuthedTenantSettingsRoute
   '/agent-templates/$templateId': typeof AuthedTenantAgentTemplatesTemplateIdRoute
   '/agent-templates/defaults': typeof AuthedTenantAgentTemplatesDefaultsRoute
@@ -456,13 +440,11 @@ export interface FileRoutesById {
   '/_authed/_tenant': typeof AuthedTenantRouteWithChildren
   '/auth/callback': typeof AuthCallbackRoute
   '/invite/$token': typeof InviteTokenRoute
-  '/_authed/_tenant/activity': typeof AuthedTenantActivityRoute
+  '/_authed/_tenant/analytics': typeof AuthedTenantAnalyticsRoute
   '/_authed/_tenant/builtin-tools': typeof AuthedTenantBuiltinToolsRoute
-  '/_authed/_tenant/costs': typeof AuthedTenantCostsRoute
   '/_authed/_tenant/dashboard': typeof AuthedTenantDashboardRoute
   '/_authed/_tenant/mcp-servers': typeof AuthedTenantMcpServersRoute
   '/_authed/_tenant/org': typeof AuthedTenantOrgRoute
-  '/_authed/_tenant/performance': typeof AuthedTenantPerformanceRoute
   '/_authed/_tenant/settings': typeof AuthedTenantSettingsRoute
   '/_authed/_tenant/agent-templates/$templateId': typeof AuthedTenantAgentTemplatesTemplateIdRoute
   '/_authed/_tenant/agent-templates/defaults': typeof AuthedTenantAgentTemplatesDefaultsRoute
@@ -509,13 +491,11 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/auth/callback'
     | '/invite/$token'
-    | '/activity'
+    | '/analytics'
     | '/builtin-tools'
-    | '/costs'
     | '/dashboard'
     | '/mcp-servers'
     | '/org'
-    | '/performance'
     | '/settings'
     | '/agent-templates/$templateId'
     | '/agent-templates/defaults'
@@ -560,13 +540,11 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/auth/callback'
     | '/invite/$token'
-    | '/activity'
+    | '/analytics'
     | '/builtin-tools'
-    | '/costs'
     | '/dashboard'
     | '/mcp-servers'
     | '/org'
-    | '/performance'
     | '/settings'
     | '/agent-templates/$templateId'
     | '/agent-templates/defaults'
@@ -613,13 +591,11 @@ export interface FileRouteTypes {
     | '/_authed/_tenant'
     | '/auth/callback'
     | '/invite/$token'
-    | '/_authed/_tenant/activity'
+    | '/_authed/_tenant/analytics'
     | '/_authed/_tenant/builtin-tools'
-    | '/_authed/_tenant/costs'
     | '/_authed/_tenant/dashboard'
     | '/_authed/_tenant/mcp-servers'
     | '/_authed/_tenant/org'
-    | '/_authed/_tenant/performance'
     | '/_authed/_tenant/settings'
     | '/_authed/_tenant/agent-templates/$templateId'
     | '/_authed/_tenant/agent-templates/defaults'
@@ -719,13 +695,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedTenantSettingsRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
-    '/_authed/_tenant/performance': {
-      id: '/_authed/_tenant/performance'
-      path: '/performance'
-      fullPath: '/performance'
-      preLoaderRoute: typeof AuthedTenantPerformanceRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
     '/_authed/_tenant/org': {
       id: '/_authed/_tenant/org'
       path: '/org'
@@ -747,13 +716,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedTenantDashboardRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
-    '/_authed/_tenant/costs': {
-      id: '/_authed/_tenant/costs'
-      path: '/costs'
-      fullPath: '/costs'
-      preLoaderRoute: typeof AuthedTenantCostsRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
     '/_authed/_tenant/builtin-tools': {
       id: '/_authed/_tenant/builtin-tools'
       path: '/builtin-tools'
@@ -761,11 +723,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedTenantBuiltinToolsRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
-    '/_authed/_tenant/activity': {
-      id: '/_authed/_tenant/activity'
-      path: '/activity'
-      fullPath: '/activity'
-      preLoaderRoute: typeof AuthedTenantActivityRouteImport
+    '/_authed/_tenant/analytics': {
+      id: '/_authed/_tenant/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AuthedTenantAnalyticsRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
     '/_authed/_tenant/webhooks/': {
@@ -1031,13 +993,11 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthedTenantRouteChildren {
-  AuthedTenantActivityRoute: typeof AuthedTenantActivityRoute
+  AuthedTenantAnalyticsRoute: typeof AuthedTenantAnalyticsRoute
   AuthedTenantBuiltinToolsRoute: typeof AuthedTenantBuiltinToolsRoute
-  AuthedTenantCostsRoute: typeof AuthedTenantCostsRoute
   AuthedTenantDashboardRoute: typeof AuthedTenantDashboardRoute
   AuthedTenantMcpServersRoute: typeof AuthedTenantMcpServersRoute
   AuthedTenantOrgRoute: typeof AuthedTenantOrgRoute
-  AuthedTenantPerformanceRoute: typeof AuthedTenantPerformanceRoute
   AuthedTenantSettingsRoute: typeof AuthedTenantSettingsRoute
   AuthedTenantAgentTemplatesTemplateIdRoute: typeof AuthedTenantAgentTemplatesTemplateIdRoute
   AuthedTenantAgentTemplatesDefaultsRoute: typeof AuthedTenantAgentTemplatesDefaultsRoute
@@ -1079,13 +1039,11 @@ interface AuthedTenantRouteChildren {
 }
 
 const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
-  AuthedTenantActivityRoute: AuthedTenantActivityRoute,
+  AuthedTenantAnalyticsRoute: AuthedTenantAnalyticsRoute,
   AuthedTenantBuiltinToolsRoute: AuthedTenantBuiltinToolsRoute,
-  AuthedTenantCostsRoute: AuthedTenantCostsRoute,
   AuthedTenantDashboardRoute: AuthedTenantDashboardRoute,
   AuthedTenantMcpServersRoute: AuthedTenantMcpServersRoute,
   AuthedTenantOrgRoute: AuthedTenantOrgRoute,
-  AuthedTenantPerformanceRoute: AuthedTenantPerformanceRoute,
   AuthedTenantSettingsRoute: AuthedTenantSettingsRoute,
   AuthedTenantAgentTemplatesTemplateIdRoute:
     AuthedTenantAgentTemplatesTemplateIdRoute,

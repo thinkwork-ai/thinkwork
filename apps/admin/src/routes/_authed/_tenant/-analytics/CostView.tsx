@@ -1,12 +1,8 @@
 import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import { BrainCircuit, Bot } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis } from "recharts";
 import { useTenant } from "@/context/TenantContext";
-import { useBreadcrumbs } from "@/context/BreadcrumbContext";
-import { PageHeader } from "@/components/PageHeader";
-import { PageLayout } from "@/components/PageLayout";
 import { MetricCard } from "@/components/MetricCard";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -18,72 +14,41 @@ import { useCostData } from "@/hooks/useCostData";
 import { useCostStore } from "@/stores/cost-store";
 import { ModelCatalogQuery, AgentsListQuery } from "@/lib/graphql-queries";
 
-export const Route = createFileRoute("/_authed/_tenant/costs")({
-  component: CostsPage,
-});
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 const trendChartConfig = {
   llmUsd: { label: "LLM", color: "hsl(142, 71%, 45%)" },
   computeUsd: { label: "Infra", color: "hsl(217, 71%, 53%)" },
   toolsUsd: { label: "Tools", color: "hsl(38, 92%, 50%)" },
 } satisfies ChartConfig;
 
-/** Shorten a raw Bedrock model ID into a readable name. */
 function shortenModelId(modelId: string): string {
-  // Strip ARN prefix: "arn:aws:bedrock:...:inference-profile/us.anthropic.claude-..." → "us.anthropic.claude-..."
   const afterSlash = modelId.includes("/") ? modelId.split("/").pop()! : modelId;
-  // Strip provider prefix and version suffix
   return afterSlash.replace(/^us\.anthropic\./, "").replace(/-\d{8,}/, "").replace(/-v\d+:\d+$/, "");
 }
 
-/** Build a model_id → display_name lookup from the catalog. */
 function useModelDisplayNames(): Map<string, string> {
   const [result] = useQuery({ query: ModelCatalogQuery });
   const models = result.data?.modelCatalog ?? [];
   return new Map(models.map((m) => [m.modelId, m.displayName]));
 }
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
-
-function CostsPage() {
+export function CostView() {
   const { tenantId } = useTenant();
-  useBreadcrumbs([{ label: "Costs" }]);
-
   const { loading } = useCostData(tenantId);
 
   if (!tenantId || loading) return <PageSkeleton />;
 
   return (
-    <PageLayout
-      header={
-        <PageHeader
-          title="Cost Management"
-          description="Track spending, monitor budgets, and analyze costs across your agents"
-        />
-      }
-    >
-      <div className="space-y-6">
-        <SummaryMetrics />
-        <TrendChart />
+    <div className="space-y-6">
+      <SummaryMetrics />
+      <TrendChart />
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <AgentBudgetTable />
-          <CostByModelCard />
-        </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <AgentBudgetTable />
+        <CostByModelCard />
       </div>
-    </PageLayout>
+    </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Isolated components — each subscribes to its own zustand slice
-// ---------------------------------------------------------------------------
 
 function SummaryMetrics() {
   const summary = useCostStore((s) => s.summary);
@@ -189,7 +154,6 @@ function AgentBudgetTable() {
   const summary = useCostStore((s) => s.summary);
   const [showArchived, setShowArchived] = useState(false);
 
-  // Fetch active agents to distinguish current vs archived
   const [agentsResult] = useQuery({
     query: AgentsListQuery,
     variables: { tenantId: tenantId! },
@@ -199,7 +163,6 @@ function AgentBudgetTable() {
     (agentsResult.data?.agents ?? []).map((a: { id: string }) => a.id),
   );
 
-  // Build a budget lookup: agentId → budget policy
   const agentBudgetMap = new Map(
     budgets
       .filter((b) => b.policy.scope === "agent" && b.policy.agentId)
@@ -207,7 +170,6 @@ function AgentBudgetTable() {
   );
   const tenantBudget = budgets.find((b) => b.policy.scope === "tenant");
 
-  // Merge agent costs with their budget limits
   const allRows = [...agentCosts]
     .sort((a, b) => b.totalUsd - a.totalUsd)
     .map((agent) => {
@@ -386,5 +348,3 @@ function CostByModelCard() {
     </Card>
   );
 }
-
-

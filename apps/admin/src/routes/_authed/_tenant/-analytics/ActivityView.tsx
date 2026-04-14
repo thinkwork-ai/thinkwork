@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useSubscription } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
@@ -14,9 +14,6 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { BarChart, Bar, XAxis, Cell } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { useTenant } from "@/context/TenantContext";
-import { useBreadcrumbs } from "@/context/BreadcrumbContext";
-import { PageHeader } from "@/components/PageHeader";
-import { PageLayout } from "@/components/PageLayout";
 import { EmptyState } from "@/components/EmptyState";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { DataTable } from "@/components/ui/data-table";
@@ -34,13 +31,6 @@ import {
   formatCost,
   formatDuration,
 } from "@/lib/activity-utils";
-export const Route = createFileRoute("/_authed/_tenant/activity")({
-  component: ActivityPage,
-});
-
-/* ------------------------------------------------------------------ */
-/* Activity histogram                                                 */
-/* ------------------------------------------------------------------ */
 
 const activityChartConfig = {
   count: { label: "Activity", color: "hsl(217, 91%, 60%)" },
@@ -125,19 +115,13 @@ function ActivityChart({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Page                                                               */
-/* ------------------------------------------------------------------ */
-
-function ActivityPage() {
+export function ActivityView() {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
-  useBreadcrumbs([{ label: "Activity" }]);
 
   const [search, setSearch] = useState("");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
-  // GraphQL queries — thread-centric (PRD-15)
   const [threadsResult, reexecuteThreads] = useQuery({
     query: ThreadsListQuery,
     variables: { tenantId: tenantId! },
@@ -149,7 +133,6 @@ function ActivityPage() {
     reexecuteThreads({ requestPolicy: "network-only" });
   }, [reexecuteThreads]);
 
-  // Live subscriptions — refetch on thread or turn updates
   const [runSub] = useSubscription({
     query: OnThreadTurnUpdatedSubscription,
     variables: { tenantId: tenantId! },
@@ -170,7 +153,6 @@ function ActivityPage() {
     reexecuteThreads({ requestPolicy: "network-only" });
   }, [threadSub.data, reexecuteThreads]);
 
-  // Build agent name map from threads
   const agentMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const t of (threadsResult.data?.threads ?? []) as any[]) {
@@ -179,7 +161,6 @@ function ActivityPage() {
     return map;
   }, [threadsResult.data]);
 
-  // Normalize threads into ActivityItem[] (PRD-15: thread-centric feed)
   const allItems = useMemo<ActivityItem[]>(() => {
     const threads = (threadsResult.data?.threads ?? []) as any[];
     return mapThreads(threads, agentMap);
@@ -269,29 +250,23 @@ function ActivityPage() {
   if (!tenantId || isLoading) return <PageSkeleton />;
 
   return (
-    <PageLayout
-      header={
-        <div className="space-y-2">
-          <PageHeader
-            title="Activity"
-            description={`${allItems.length} item${allItems.length !== 1 ? "s" : ""}`}
-          />
+    <div className="space-y-3">
+      <div className="text-xs text-muted-foreground">
+        {allItems.length} item{allItems.length !== 1 ? "s" : ""}
+      </div>
 
-          <ActivityChart items={allItems} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
+      <ActivityChart items={allItems} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
 
-          {/* Search + Refresh */}
-          <div className="flex items-center gap-2">
-            <FilterBarSearch
-              value={search}
-              onChange={setSearch}
-              placeholder="Search activity..."
-              className="flex-1 max-w-sm"
-            />
-            <Button type="button" variant="outline" size="sm" onClick={refreshAll}>Refresh</Button>
-          </div>
-        </div>
-      }
-    >
+      <div className="flex items-center gap-2">
+        <FilterBarSearch
+          value={search}
+          onChange={setSearch}
+          placeholder="Search activity..."
+          className="flex-1 max-w-sm"
+        />
+        <Button type="button" variant="outline" size="sm" onClick={refreshAll}>Refresh</Button>
+      </div>
+
       {selectedDay && (
         <div className="flex items-center gap-2 py-1">
           <Badge variant="secondary" className="text-xs gap-1">
@@ -324,7 +299,6 @@ function ActivityPage() {
           tableClassName="table-fixed"
         />
       )}
-
-    </PageLayout>
+    </div>
   );
 }

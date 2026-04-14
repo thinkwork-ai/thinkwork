@@ -121,7 +121,7 @@ function DashboardPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5 *:data-[slot=card]:shadow-xs dark:*:data-[slot=card]:bg-card">
           <MetricCard label="Agents Online" value={`${onlineAgents.length} / ${agents.length}`} href="/agents" />
           <MetricCard label="Open Threads" value={openThreads.length} href="/threads" />
-          <MetricCard label="Recent Activity" value={allActivityItems.length} href="/activity" />
+          <MetricCard label="Recent Activity" value={allActivityItems.length} href="/analytics" />
           <SpendMetric />
           <CostPerEventMetric />
         </div>
@@ -132,7 +132,7 @@ function DashboardPage() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold uppercase tracking-wide">Recent Activity</h3>
-              <Link to="/activity" className="text-xs text-muted-foreground hover:text-foreground">
+              <Link to="/analytics" className="text-xs text-muted-foreground hover:text-foreground">
                 View all
               </Link>
             </div>
@@ -249,7 +249,7 @@ function SpendMetric() {
     <MetricCard
       label="Spend (MTD)"
       value={formatUsd(totalUsd)}
-      href="/costs"
+      href="/analytics?view=cost"
     />
   );
 }
@@ -262,7 +262,7 @@ function CostPerEventMetric() {
     <MetricCard
       label="Cost / Event"
       value={eventCount > 0 ? formatUsd(costPerEvent) : "—"}
-      href="/costs"
+      href="/analytics?view=cost"
     />
   );
 }

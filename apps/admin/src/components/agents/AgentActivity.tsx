@@ -105,7 +105,7 @@ export function AgentActivity({ items, onRefresh, agentId, agentName }: AgentAct
                   Refresh
                 </button>
               )}
-              <Link to="/activity" className="text-xs text-muted-foreground hover:text-foreground">
+              <Link to="/analytics" className="text-xs text-muted-foreground hover:text-foreground">
                 View all activity
               </Link>
             </div>
