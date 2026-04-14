@@ -27,7 +27,11 @@ import { verifyLastmileSignature } from "./verifySignature.js";
 export const lastmileAdapter: ExternalWorkItemAdapter = {
 	provider: "lastmile",
 
-	verifySignature(req: { rawBody: string; headers: Record<string, string> }): Promise<boolean> {
+	verifySignature(req: {
+		rawBody: string;
+		headers: Record<string, string>;
+		secret?: string;
+	}): Promise<boolean> {
 		return verifyLastmileSignature(req);
 	},
 

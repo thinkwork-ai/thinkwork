@@ -173,28 +173,30 @@ describe("ingestExternalTaskEvent — guard branches", () => {
 
 	it("returns unresolved_connection when the event has no providerUserId", async () => {
 		mockVerifySignature.mockResolvedValueOnce(true);
-		mockNormalizeEvent.mockResolvedValueOnce({
-			kind: "task.updated",
+		const normalized = {
+			kind: "task.updated" as const,
 			externalTaskId: "task_1",
 			receivedAt: "2026-04-14T10:00:00Z",
-		});
+		};
+		mockNormalizeEvent.mockResolvedValueOnce(normalized);
 		const result = await ingestExternalTaskEvent({
 			provider: "lastmile",
 			rawBody: RAW_BODY,
 			headers: HEADERS,
 		});
-		expect(result).toEqual({ status: "unresolved_connection" });
+		expect(result).toEqual({ status: "unresolved_connection", event: normalized });
 		expect(mockResolveConnection).not.toHaveBeenCalled();
 	});
 
 	it("returns unresolved_connection when no active connection matches the provider user id", async () => {
 		mockVerifySignature.mockResolvedValueOnce(true);
-		mockNormalizeEvent.mockResolvedValueOnce({
-			kind: "task.updated",
+		const normalized = {
+			kind: "task.updated" as const,
 			externalTaskId: "task_1",
 			providerUserId: "user_lastmile_99",
 			receivedAt: "2026-04-14T10:00:00Z",
-		});
+		};
+		mockNormalizeEvent.mockResolvedValueOnce(normalized);
 		mockResolveConnection.mockResolvedValueOnce(null);
 		const result = await ingestExternalTaskEvent({
 			provider: "lastmile",
@@ -204,6 +206,7 @@ describe("ingestExternalTaskEvent — guard branches", () => {
 		expect(result).toEqual({
 			status: "unresolved_connection",
 			providerUserId: "user_lastmile_99",
+			event: normalized,
 		});
 		expect(mockEnsureThread).not.toHaveBeenCalled();
 	});

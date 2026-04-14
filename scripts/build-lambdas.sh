@@ -205,8 +205,8 @@ build_handler "webhooks" \
 build_handler "webhooks-admin" \
   "$REPO_ROOT/packages/api/src/handlers/webhooks-admin.ts"
 
-build_handler "integration-webhooks" \
-  "$REPO_ROOT/packages/api/src/handlers/integration-webhooks.ts"
+build_handler "webhook-deliveries-cleanup" \
+  "$REPO_ROOT/packages/api/src/handlers/webhook-deliveries-cleanup.ts"
 
 build_handler "github-app" \
   "$REPO_ROOT/packages/api/src/handlers/github-app.ts"

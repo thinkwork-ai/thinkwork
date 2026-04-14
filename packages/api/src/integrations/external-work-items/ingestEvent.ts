@@ -31,7 +31,7 @@ const db = getDb();
 export type IngestResult =
 	| { status: "ignored"; reason: string }
 	| { status: "unverified" }
-	| { status: "unresolved_connection"; providerUserId?: string }
+	| { status: "unresolved_connection"; providerUserId?: string; event?: NormalizedEvent }
 	| {
 			status: "ok";
 			threadId: string;
@@ -40,29 +40,50 @@ export type IngestResult =
 			envelope?: ExternalTaskEnvelope;
 	  };
 
+/**
+ * Pipeline for an inbound adapter webhook. The caller passes:
+ * - `provider`, `rawBody`, `headers` — the raw request
+ * - `tenantId` (optional) — scopes `resolveConnectionByProviderUserId` to a
+ *   single tenant. Passed by the unified `/webhooks/{token}` dispatch where
+ *   the webhook row already pinned down the tenant. Omit to scan all
+ *   connections globally.
+ * - `secret` (optional) — per-tenant signing secret forwarded to
+ *   `adapter.verifySignature`. When absent, the adapter falls through to its
+ *   env-var fallback or token-only auth per its own policy.
+ */
 export async function ingestExternalTaskEvent(args: {
 	provider: string;
 	rawBody: string;
 	headers: Record<string, string>;
+	tenantId?: string;
+	secret?: string;
 }): Promise<IngestResult> {
-	const { provider, rawBody, headers } = args;
+	const { provider, rawBody, headers, tenantId, secret } = args;
 
 	if (!hasAdapter(provider)) {
 		return { status: "ignored", reason: `unknown provider: ${provider}` };
 	}
 	const adapter = getAdapter(provider as TaskProvider);
 
-	const ok = await adapter.verifySignature({ rawBody, headers });
+	const ok = await adapter.verifySignature({ rawBody, headers, secret });
 	if (!ok) return { status: "unverified" };
 
 	const event = await adapter.normalizeEvent(rawBody);
 
 	if (!event.providerUserId) {
-		return { status: "unresolved_connection" };
+		return { status: "unresolved_connection", event };
 	}
-	const conn = await resolveConnectionByProviderUserId(provider, event.providerUserId);
+	const conn = await resolveConnectionByProviderUserId(
+		provider,
+		event.providerUserId,
+		tenantId,
+	);
 	if (!conn) {
-		return { status: "unresolved_connection", providerUserId: event.providerUserId };
+		return {
+			status: "unresolved_connection",
+			providerUserId: event.providerUserId,
+			event,
+		};
 	}
 
 	const authToken =
@@ -87,9 +108,12 @@ export async function ingestExternalTaskEvent(args: {
 	}
 
 	if (event.kind === "task.reassigned" && event.previousProviderUserId) {
+		// Scope the previous-assignee lookup to the same tenant — reassignments
+		// don't cross tenant boundaries and the global scan is expensive.
 		const prevConn = await resolveConnectionByProviderUserId(
 			provider,
 			event.previousProviderUserId,
+			conn.tenantId,
 		);
 		if (prevConn) {
 			const closedThreadId = await closeExternalTaskThread({

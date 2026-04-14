@@ -15,6 +15,13 @@
       "when": 1776000847373,
       "tag": "0001_milky_surge",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776170219841,
+      "tag": "0002_aberrant_mattie_franklin",
+      "breakpoints": true
     }
   ]
 }

@@ -227,6 +227,8 @@ export interface ExternalWorkItemAdapter {
 	verifySignature(req: {
 		rawBody: string;
 		headers: Record<string, string>;
+		/** Per-tenant signing secret from `webhooks.config.secret`, if configured. */
+		secret?: string;
 	}): Promise<boolean>;
 
 	normalizeEvent(rawBody: string): Promise<NormalizedEvent>;

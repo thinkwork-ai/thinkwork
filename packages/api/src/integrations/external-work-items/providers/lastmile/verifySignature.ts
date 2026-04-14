@@ -1,8 +1,12 @@
 /**
  * LastMile webhook HMAC verification.
  *
- * Phase 1 locks the interface; Phase 4 will wire `LASTMILE_WEBHOOK_SECRET` and
- * implement real HMAC-SHA256 comparison using crypto.timingSafeEqual.
+ * Per-tenant signing: the caller (webhooks.ts task dispatch branch) passes
+ * the secret read from `webhooks.config.secret`. When no secret is configured
+ * for that tenant's connector, signature verification is skipped — the
+ * random 32-byte token in the URL is already the primary auth. The env var
+ * `LASTMILE_WEBHOOK_SECRET` remains as a legacy fallback for any call site
+ * that hasn't migrated to per-tenant secrets.
  */
 
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -12,11 +16,13 @@ const WEBHOOK_SECRET_ENV = "LASTMILE_WEBHOOK_SECRET";
 export async function verifyLastmileSignature(req: {
 	rawBody: string;
 	headers: Record<string, string>;
+	secret?: string;
 }): Promise<boolean> {
-	const secret = process.env[WEBHOOK_SECRET_ENV];
+	const secret = req.secret || process.env[WEBHOOK_SECRET_ENV];
 	if (!secret) {
-		console.warn(`[lastmile] ${WEBHOOK_SECRET_ENV} not set — signature verification skipped in dev`);
-		return process.env.NODE_ENV !== "production";
+		// No per-tenant secret configured AND no env var fallback. Token in URL
+		// is the primary auth; signature verification is opt-in. Allow through.
+		return true;
 	}
 
 	const provided =
