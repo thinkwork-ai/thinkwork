@@ -33,6 +33,9 @@ except ImportError:
 _tracker_installed = False
 from install_skills import install_skills
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
+
 # ── MCP tool allowlist wrapper ───────────────────────────────────────────────
 # Strands' MCPClient is a ToolProvider: the Agent calls `await
 # client.load_tools()` during construction and uses whatever AgentTools come
@@ -41,6 +44,11 @@ from install_skills import install_skills
 # tool_name. The wrapper also populates _mcp_tool_to_server (a previously
 # stubbed-out dict) so the response-formatting pass below can correctly
 # classify MCP tool calls as tool_type='mcp_server' in the UI.
+#
+# Must be defined AFTER `logger` — the except branch below calls
+# logger.warning() and referencing it before the logger exists crashes
+# at module load the moment strands isn't importable (local tests, any
+# future version skew, etc.).
 try:
     from strands.tools.tool_provider import ToolProvider as _StrandsToolProvider
 
@@ -118,9 +126,6 @@ except Exception as _e:
     )
     _AllowlistedMCPClient = None  # type: ignore[assignment]
     _allowlist_wrapper_available = False
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-logger = logging.getLogger(__name__)
 
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 WORKSPACE_DIR = os.environ.get("WORKSPACE_DIR", "/tmp/workspace")
