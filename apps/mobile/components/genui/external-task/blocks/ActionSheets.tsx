@@ -17,7 +17,8 @@ import { View, Pressable } from "react-native";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { X, Check, Search } from "lucide-react-native";
-import BottomSheet, {
+import {
+	BottomSheetModal,
 	BottomSheetBackdrop,
 	BottomSheetScrollView,
 	BottomSheetTextInput,
@@ -71,7 +72,7 @@ export function StatusActionSheet({ visible, onClose, item, submit }: CommonProp
 	const { colorScheme } = useColorScheme();
 	const isDark = colorScheme === "dark";
 	const colors = isDark ? COLORS.dark : COLORS.light;
-	const sheetRef = useRef<BottomSheet>(null);
+	const sheetRef = useRef<BottomSheetModal>(null);
 	const backdrop = useBackdrop();
 	const [filter, setFilter] = useState("");
 	const [saving, setSaving] = useState(false);
@@ -79,9 +80,9 @@ export function StatusActionSheet({ visible, onClose, item, submit }: CommonProp
 	const snapPoints = useMemo(() => ["50%"], []);
 
 	useEffect(() => {
-		if (visible) sheetRef.current?.snapToIndex(0);
+		if (visible) sheetRef.current?.present();
 		else {
-			sheetRef.current?.close();
+			sheetRef.current?.dismiss();
 			setFilter("");
 		}
 	}, [visible]);
@@ -107,15 +108,12 @@ export function StatusActionSheet({ visible, onClose, item, submit }: CommonProp
 		onClose();
 	};
 
-	if (!visible) return null;
-
 	return (
-		<BottomSheet
+		<BottomSheetModal
 			ref={sheetRef}
-			index={-1}
 			snapPoints={snapPoints}
 			enablePanDownToClose
-			onClose={onClose}
+			onDismiss={onClose}
 			backdropComponent={backdrop}
 			backgroundStyle={{
 				backgroundColor: isDark ? "#1c1c1e" : "#ffffff",
@@ -179,7 +177,7 @@ export function StatusActionSheet({ visible, onClose, item, submit }: CommonProp
 					})
 				)}
 			</BottomSheetScrollView>
-		</BottomSheet>
+		</BottomSheetModal>
 	);
 }
 
@@ -191,7 +189,7 @@ export function AssignActionSheet({ visible, onClose, item, submit }: CommonProp
 	const { colorScheme } = useColorScheme();
 	const isDark = colorScheme === "dark";
 	const colors = isDark ? COLORS.dark : COLORS.light;
-	const sheetRef = useRef<BottomSheet>(null);
+	const sheetRef = useRef<BottomSheetModal>(null);
 	const backdrop = useBackdrop();
 	const [value, setValue] = useState(item.core.assignee?.id ?? "");
 	const [saving, setSaving] = useState(false);
@@ -201,8 +199,8 @@ export function AssignActionSheet({ visible, onClose, item, submit }: CommonProp
 	useEffect(() => {
 		if (visible) {
 			setValue(item.core.assignee?.id ?? "");
-			sheetRef.current?.snapToIndex(0);
-		} else sheetRef.current?.close();
+			sheetRef.current?.present();
+		} else sheetRef.current?.dismiss();
 	}, [visible, item.core.assignee?.id]);
 
 	const handleSubmit = async () => {
@@ -213,16 +211,13 @@ export function AssignActionSheet({ visible, onClose, item, submit }: CommonProp
 		onClose();
 	};
 
-	if (!visible) return null;
-
 	return (
-		<BottomSheet
+		<BottomSheetModal
 			ref={sheetRef}
-			index={-1}
 			snapPoints={snapPoints}
 			enablePanDownToClose
 			keyboardBehavior="interactive"
-			onClose={onClose}
+			onDismiss={onClose}
 			backdropComponent={backdrop}
 			backgroundStyle={{
 				backgroundColor: isDark ? "#1c1c1e" : "#ffffff",
@@ -289,7 +284,7 @@ export function AssignActionSheet({ visible, onClose, item, submit }: CommonProp
 					</Text>
 				</Pressable>
 			</BottomSheetView>
-		</BottomSheet>
+		</BottomSheetModal>
 	);
 }
 
@@ -302,7 +297,7 @@ export function CommentActionSheet({ visible, onClose, submit }: Omit<CommonProp
 	const isDark = colorScheme === "dark";
 	const colors = isDark ? COLORS.dark : COLORS.light;
 	const insets = useSafeAreaInsets();
-	const sheetRef = useRef<BottomSheet>(null);
+	const sheetRef = useRef<BottomSheetModal>(null);
 	const backdrop = useBackdrop();
 	const [content, setContent] = useState("");
 	const [saving, setSaving] = useState(false);
@@ -312,8 +307,8 @@ export function CommentActionSheet({ visible, onClose, submit }: Omit<CommonProp
 	useEffect(() => {
 		if (visible) {
 			setContent("");
-			sheetRef.current?.snapToIndex(0);
-		} else sheetRef.current?.close();
+			sheetRef.current?.present();
+		} else sheetRef.current?.dismiss();
 	}, [visible]);
 
 	const handleSubmit = async () => {
@@ -324,18 +319,15 @@ export function CommentActionSheet({ visible, onClose, submit }: Omit<CommonProp
 		onClose();
 	};
 
-	if (!visible) return null;
-
 	return (
-		<BottomSheet
+		<BottomSheetModal
 			ref={sheetRef}
-			index={-1}
 			snapPoints={snapPoints}
 			enablePanDownToClose
 			keyboardBehavior="interactive"
 			keyboardBlurBehavior="restore"
 			android_keyboardInputMode="adjustResize"
-			onClose={onClose}
+			onDismiss={onClose}
 			backdropComponent={backdrop}
 			backgroundStyle={{
 				backgroundColor: isDark ? "#1c1c1e" : "#ffffff",
@@ -386,7 +378,7 @@ export function CommentActionSheet({ visible, onClose, submit }: Omit<CommonProp
 					}}
 				/>
 			</BottomSheetScrollView>
-		</BottomSheet>
+		</BottomSheetModal>
 	);
 }
 
@@ -485,7 +477,7 @@ export function EditFormActionSheet({ visible, onClose, item, submit }: CommonPr
 	const isDark = colorScheme === "dark";
 	const colors = isDark ? COLORS.dark : COLORS.light;
 	const insets = useSafeAreaInsets();
-	const sheetRef = useRef<BottomSheet>(null);
+	const sheetRef = useRef<BottomSheetModal>(null);
 	const backdrop = useBackdrop();
 	const [formValues, setFormValues] = useState<Record<string, unknown>>({});
 	const [saving, setSaving] = useState(false);
@@ -500,9 +492,9 @@ export function EditFormActionSheet({ visible, onClose, item, submit }: CommonPr
 				if (f.defaultValue !== undefined) initial[f.key] = f.defaultValue;
 			}
 			setFormValues(initial);
-			sheetRef.current?.snapToIndex(0);
+			sheetRef.current?.present();
 		} else {
-			sheetRef.current?.close();
+			sheetRef.current?.dismiss();
 		}
 	}, [visible, form]);
 
@@ -514,18 +506,17 @@ export function EditFormActionSheet({ visible, onClose, item, submit }: CommonPr
 		onClose();
 	};
 
-	if (!visible || !form) return null;
+	if (!form) return null;
 
 	return (
-		<BottomSheet
+		<BottomSheetModal
 			ref={sheetRef}
-			index={-1}
 			snapPoints={snapPoints}
 			enablePanDownToClose
 			keyboardBehavior="interactive"
 			keyboardBlurBehavior="restore"
 			android_keyboardInputMode="adjustResize"
-			onClose={onClose}
+			onDismiss={onClose}
 			backdropComponent={backdrop}
 			backgroundStyle={{
 				backgroundColor: isDark ? "#1c1c1e" : "#ffffff",
@@ -587,6 +578,6 @@ export function EditFormActionSheet({ visible, onClose, item, submit }: CommonPr
 					</View>
 				))}
 			</BottomSheetScrollView>
-		</BottomSheet>
+		</BottomSheetModal>
 	);
 }

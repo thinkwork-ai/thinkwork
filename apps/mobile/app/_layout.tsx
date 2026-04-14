@@ -26,6 +26,7 @@ import { useThreadTurnUpdatedSubscription } from "@/lib/hooks/use-subscriptions"
 import { useBiometricAuth, getBiometricName } from "@/hooks/useBiometricAuth";
 import { BiometricLockScreen } from "@/components/BiometricLockScreen";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import "../global.css";
 
 function RootLayoutNav() {
@@ -214,6 +215,7 @@ function RootLayoutNav() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+    <BottomSheetModalProvider>
     <TurnCompletionProvider tenantId={tenantId}>
     <ThemeProvider value={NAV_THEME[colorScheme === "dark" ? "dark" : "light"]}>
       <Stack screenOptions={{ headerShown: false }}>
@@ -272,6 +274,7 @@ function RootLayoutNav() {
       )}
     </ThemeProvider>
     </TurnCompletionProvider>
+    </BottomSheetModalProvider>
     </GestureHandlerRootView>
   );
 }
