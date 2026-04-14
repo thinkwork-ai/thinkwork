@@ -20,9 +20,9 @@ ThinkWork is organized into three infrastructure tiers that deploy in order:
 - SES identity (verified domain for outbound email)
 
 **Data tier** — Storage and AI services
-- Aurora Postgres (serverless v2 by default, 0.5–16 ACUs)
+- Aurora Postgres (serverless v2 by default, 0.5–16 ACUs) with `pgvector` for the Bedrock KB vector index
 - S3 buckets: skill catalog, knowledge documents, audit logs, assets
-- Bedrock Knowledge Base + OpenSearch Serverless collection
+- Bedrock Knowledge Base service role (vector store lives in Aurora — no OpenSearch)
 - Secrets Manager secret for DB credentials
 
 **App tier** — Compute and APIs
@@ -146,8 +146,7 @@ Enable model access before running deploy. If models aren't enabled, the deploy 
    Applying data tier...
    ✓ Aurora cluster (4m 22s)
    ✓ S3 buckets (0m 08s)
-   ✓ OpenSearch Serverless collection (3m 15s)
-   ✓ Bedrock Knowledge Base (0m 45s)
+   ✓ Bedrock Knowledge Base service role (0m 12s)
 
    Applying app tier...
    ✓ AppSync API (0m 22s)
@@ -220,11 +219,10 @@ Enable model access before running deploy. If models aren't enabled, the deploy 
 | Step Functions | 4 | State machines for automations, routine runner |
 | EventBridge | 3 | Scheduled automation rules, event bus |
 | SES | 5 | Identity, config set, event destination, suppression list |
-| OpenSearch | 6 | Serverless collection, access policy, data access, encryption |
 | Secrets Manager | 4 | DB credentials, Cognito secrets, connector secrets |
 | Route53 / ACM | 8 | Hosted zone records, certificates, validation records |
 | Misc | 18 | CloudWatch log groups, SSM parameters, ECR repo |
-| **Total** | **~264** | |
+| **Total** | **~258** | |
 
 ## Subsequent deploys
 
@@ -234,7 +232,6 @@ Operations that take longer:
 - Aurora scaling parameter changes: 5–10 min (no downtime)
 - CloudFront distribution changes: 3–8 min (no downtime)
 - Container image updates: 2–3 min (no downtime, Lambda blue/green)
-- OpenSearch collection changes: 10–20 min
 
 ## Troubleshooting
 
