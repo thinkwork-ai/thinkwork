@@ -206,6 +206,30 @@ resource "aws_iam_role_policy" "lambda_bedrock" {
   })
 }
 
+# SES send permissions for the email-send handler. Scoped to any
+# verified identity in this account+region so the email-send Lambda
+# can SendRawEmail from agents.thinkwork.ai (and any other domain
+# identity a future deployment might add).
+resource "aws_iam_role_policy" "lambda_ses_send" {
+  name = "ses-send"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "ses:SendEmail",
+        "ses:SendRawEmail",
+      ]
+      Resource = [
+        "arn:aws:ses:${var.region}:${var.account_id}:identity/*",
+        "arn:aws:ses:${var.region}:${var.account_id}:configuration-set/*",
+      ]
+    }]
+  })
+}
+
 # Allow API Lambdas to directly invoke the AgentCore Lambda. Used by
 # chat-agent-invoke (and future wake-up/retry paths) via InvokeCommand.
 resource "aws_iam_role_policy" "lambda_agentcore_invoke" {
