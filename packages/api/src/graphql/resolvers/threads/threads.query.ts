@@ -3,6 +3,7 @@ import {
 	db, eq, and, desc, sql,
 	threads, threadToCamel,
 } from "../../utils.js";
+import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 
 export const threads_query = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const conditions = [eq(threads.tenant_id, args.tenantId)];
@@ -17,7 +18,23 @@ export const threads_query = async (_parent: any, args: any, ctx: GraphQLContext
 		conditions.push(sql`${threads.parent_id} IS NULL`);
 	}
 	if (args.agentId) conditions.push(eq(threads.agent_id, args.agentId));
-	if (args.assigneeId) conditions.push(eq(threads.assignee_id, args.assigneeId));
+	if (args.assigneeId) {
+		// Mobile passes user.sub (Cognito) as assigneeId. For Google-OAuth
+		// users the DB users.id is a fresh UUID linked by email, so sub !=
+		// users.id. When the caller is asking for "threads assigned to me"
+		// (passing their own Cognito principalId), rewrite to the caller's
+		// DB users.id so threads.assignee_id (which is a users.id FK)
+		// actually matches. Non-self filters pass through unchanged.
+		let effectiveAssigneeId = args.assigneeId;
+		if (
+			ctx.auth.authType === "cognito" &&
+			args.assigneeId === ctx.auth.principalId
+		) {
+			const dbId = await resolveCallerUserId(ctx);
+			if (dbId) effectiveAssigneeId = dbId;
+		}
+		conditions.push(eq(threads.assignee_id, effectiveAssigneeId));
+	}
 	if (args.parentId) conditions.push(eq(threads.parent_id, args.parentId));
 	if (args.search) {
 		conditions.push(
