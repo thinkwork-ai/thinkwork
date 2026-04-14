@@ -122,11 +122,9 @@ memories land in both stores.
 
 ## Knowledge Base
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `create_knowledge_base` | bool | `true` | Whether to create the default Bedrock Knowledge Base and OpenSearch Serverless collection. Set `false` to skip (saves ~$345/month if not using Knowledge module). |
-| `knowledge_base_embedding_model` | string | `"amazon.titan-embed-text-v2:0"` | Bedrock embedding model for KB indexing. |
-| `opensearch_standby_replicas` | string | `"DISABLED"` | OpenSearch Serverless standby replicas. Set `"ENABLED"` for production HA (doubles cost). |
+ThinkWork provisions an IAM service role that lets Bedrock Knowledge Bases read from the KB S3 bucket, invoke `amazon.titan-embed-text-v2:0` for embeddings, and write vectors into Aurora Postgres via the RDS Data API. There is no OpenSearch Serverless collection — the vector index lives in the same Aurora cluster as the rest of your data (`pgvector`), so there is no separate vector-store cost line.
+
+Knowledge Base configuration (chunking strategy, data source wiring, sync schedule) is managed at runtime through the Knowledge module, not through terraform variables.
 
 ## AgentCore
 
@@ -184,8 +182,6 @@ google_oauth_client_secret = var.google_oauth_secret
 ses_from_address    = "agents@agents.example.com"
 ses_inbound_enabled = true
 ses_inbound_domain  = "mail.agents.example.com"
-
-opensearch_standby_replicas = "ENABLED"
 
 agentcore_reserved_concurrency = 50
 

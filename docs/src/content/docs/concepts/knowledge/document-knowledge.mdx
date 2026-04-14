@@ -48,17 +48,13 @@ Document upload
   -> retrieval during agent turns
 ```
 
-The source files stay in S3 in your AWS account. Retrieval runs through Bedrock Knowledge Bases backed by OpenSearch Serverless.
+The source files stay in S3 in your AWS account. Retrieval runs through Bedrock Knowledge Bases backed by Aurora Postgres with the `pgvector` extension — the same Aurora cluster that stores agents, threads, and memories. There is no separate vector database and no OpenSearch Serverless collection to pay for.
 
 ## Operational notes
 
 - document sources do not automatically resync when files change
 - chunking strategy is set when the knowledge base is created
-- OpenSearch Serverless creates a meaningful cost floor, even at low usage
-
-<Aside type="caution">
-If you are cost-sensitive, decide whether you need a full Bedrock Knowledge Base before enabling it broadly. The retrieval experience is solid, but the OpenSearch Serverless minimum cost is real.
-</Aside>
+- vector index lives in Aurora (`pgvector`), so there is no additional vector-store cost floor — you pay for the Aurora cluster you already have
 
 ## What this page is not
 
