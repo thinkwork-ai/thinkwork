@@ -33,6 +33,7 @@ import { Route as AuthedTenantMemoryIndexRouteImport } from './routes/_authed/_t
 import { Route as AuthedTenantKnowledgeBasesIndexRouteImport } from './routes/_authed/_tenant/knowledge-bases/index'
 import { Route as AuthedTenantInboxIndexRouteImport } from './routes/_authed/_tenant/inbox/index'
 import { Route as AuthedTenantHumansIndexRouteImport } from './routes/_authed/_tenant/humans/index'
+import { Route as AuthedTenantConnectorsIndexRouteImport } from './routes/_authed/_tenant/connectors/index'
 import { Route as AuthedTenantArtifactsIndexRouteImport } from './routes/_authed/_tenant/artifacts/index'
 import { Route as AuthedTenantAgentsIndexRouteImport } from './routes/_authed/_tenant/agents/index'
 import { Route as AuthedTenantAgentTemplatesIndexRouteImport } from './routes/_authed/_tenant/agent-templates/index'
@@ -44,6 +45,7 @@ import { Route as AuthedTenantScheduledJobsScheduledJobIdRouteImport } from './r
 import { Route as AuthedTenantRoutinesRoutineIdRouteImport } from './routes/_authed/_tenant/routines/$routineId'
 import { Route as AuthedTenantKnowledgeBasesKbIdRouteImport } from './routes/_authed/_tenant/knowledge-bases/$kbId'
 import { Route as AuthedTenantInboxInboxItemIdRouteImport } from './routes/_authed/_tenant/inbox/$inboxItemId'
+import { Route as AuthedTenantConnectorsSlugRouteImport } from './routes/_authed/_tenant/connectors/$slug'
 import { Route as AuthedTenantAgentsNewRouteImport } from './routes/_authed/_tenant/agents/new'
 import { Route as AuthedTenantAgentsInvitesRouteImport } from './routes/_authed/_tenant/agents/invites'
 import { Route as AuthedTenantAgentsAgentIdRouteImport } from './routes/_authed/_tenant/agents/$agentId'
@@ -184,6 +186,12 @@ const AuthedTenantHumansIndexRoute = AuthedTenantHumansIndexRouteImport.update({
   path: '/humans/',
   getParentRoute: () => AuthedTenantRoute,
 } as any)
+const AuthedTenantConnectorsIndexRoute =
+  AuthedTenantConnectorsIndexRouteImport.update({
+    id: '/connectors/',
+    path: '/connectors/',
+    getParentRoute: () => AuthedTenantRoute,
+  } as any)
 const AuthedTenantArtifactsIndexRoute =
   AuthedTenantArtifactsIndexRouteImport.update({
     id: '/artifacts/',
@@ -246,6 +254,12 @@ const AuthedTenantInboxInboxItemIdRoute =
   AuthedTenantInboxInboxItemIdRouteImport.update({
     id: '/inbox/$inboxItemId',
     path: '/inbox/$inboxItemId',
+    getParentRoute: () => AuthedTenantRoute,
+  } as any)
+const AuthedTenantConnectorsSlugRoute =
+  AuthedTenantConnectorsSlugRouteImport.update({
+    id: '/connectors/$slug',
+    path: '/connectors/$slug',
     getParentRoute: () => AuthedTenantRoute,
   } as any)
 const AuthedTenantAgentsNewRoute = AuthedTenantAgentsNewRouteImport.update({
@@ -350,6 +364,7 @@ export interface FileRoutesByFullPath {
   '/agents/$agentId': typeof AuthedTenantAgentsAgentIdRoute
   '/agents/invites': typeof AuthedTenantAgentsInvitesRoute
   '/agents/new': typeof AuthedTenantAgentsNewRoute
+  '/connectors/$slug': typeof AuthedTenantConnectorsSlugRoute
   '/inbox/$inboxItemId': typeof AuthedTenantInboxInboxItemIdRoute
   '/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeBasesKbIdRoute
   '/routines/$routineId': typeof AuthedTenantRoutinesRoutineIdRoute
@@ -361,6 +376,7 @@ export interface FileRoutesByFullPath {
   '/agent-templates/': typeof AuthedTenantAgentTemplatesIndexRoute
   '/agents/': typeof AuthedTenantAgentsIndexRoute
   '/artifacts/': typeof AuthedTenantArtifactsIndexRoute
+  '/connectors/': typeof AuthedTenantConnectorsIndexRoute
   '/humans/': typeof AuthedTenantHumansIndexRoute
   '/inbox/': typeof AuthedTenantInboxIndexRoute
   '/knowledge-bases/': typeof AuthedTenantKnowledgeBasesIndexRoute
@@ -399,6 +415,7 @@ export interface FileRoutesByTo {
   '/agents/$agentId': typeof AuthedTenantAgentsAgentIdRoute
   '/agents/invites': typeof AuthedTenantAgentsInvitesRoute
   '/agents/new': typeof AuthedTenantAgentsNewRoute
+  '/connectors/$slug': typeof AuthedTenantConnectorsSlugRoute
   '/inbox/$inboxItemId': typeof AuthedTenantInboxInboxItemIdRoute
   '/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeBasesKbIdRoute
   '/routines/$routineId': typeof AuthedTenantRoutinesRoutineIdRoute
@@ -410,6 +427,7 @@ export interface FileRoutesByTo {
   '/agent-templates': typeof AuthedTenantAgentTemplatesIndexRoute
   '/agents': typeof AuthedTenantAgentsIndexRoute
   '/artifacts': typeof AuthedTenantArtifactsIndexRoute
+  '/connectors': typeof AuthedTenantConnectorsIndexRoute
   '/humans': typeof AuthedTenantHumansIndexRoute
   '/inbox': typeof AuthedTenantInboxIndexRoute
   '/knowledge-bases': typeof AuthedTenantKnowledgeBasesIndexRoute
@@ -451,6 +469,7 @@ export interface FileRoutesById {
   '/_authed/_tenant/agents/$agentId': typeof AuthedTenantAgentsAgentIdRoute
   '/_authed/_tenant/agents/invites': typeof AuthedTenantAgentsInvitesRoute
   '/_authed/_tenant/agents/new': typeof AuthedTenantAgentsNewRoute
+  '/_authed/_tenant/connectors/$slug': typeof AuthedTenantConnectorsSlugRoute
   '/_authed/_tenant/inbox/$inboxItemId': typeof AuthedTenantInboxInboxItemIdRoute
   '/_authed/_tenant/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeBasesKbIdRoute
   '/_authed/_tenant/routines/$routineId': typeof AuthedTenantRoutinesRoutineIdRoute
@@ -462,6 +481,7 @@ export interface FileRoutesById {
   '/_authed/_tenant/agent-templates/': typeof AuthedTenantAgentTemplatesIndexRoute
   '/_authed/_tenant/agents/': typeof AuthedTenantAgentsIndexRoute
   '/_authed/_tenant/artifacts/': typeof AuthedTenantArtifactsIndexRoute
+  '/_authed/_tenant/connectors/': typeof AuthedTenantConnectorsIndexRoute
   '/_authed/_tenant/humans/': typeof AuthedTenantHumansIndexRoute
   '/_authed/_tenant/inbox/': typeof AuthedTenantInboxIndexRoute
   '/_authed/_tenant/knowledge-bases/': typeof AuthedTenantKnowledgeBasesIndexRoute
@@ -502,6 +522,7 @@ export interface FileRouteTypes {
     | '/agents/$agentId'
     | '/agents/invites'
     | '/agents/new'
+    | '/connectors/$slug'
     | '/inbox/$inboxItemId'
     | '/knowledge-bases/$kbId'
     | '/routines/$routineId'
@@ -513,6 +534,7 @@ export interface FileRouteTypes {
     | '/agent-templates/'
     | '/agents/'
     | '/artifacts/'
+    | '/connectors/'
     | '/humans/'
     | '/inbox/'
     | '/knowledge-bases/'
@@ -551,6 +573,7 @@ export interface FileRouteTypes {
     | '/agents/$agentId'
     | '/agents/invites'
     | '/agents/new'
+    | '/connectors/$slug'
     | '/inbox/$inboxItemId'
     | '/knowledge-bases/$kbId'
     | '/routines/$routineId'
@@ -562,6 +585,7 @@ export interface FileRouteTypes {
     | '/agent-templates'
     | '/agents'
     | '/artifacts'
+    | '/connectors'
     | '/humans'
     | '/inbox'
     | '/knowledge-bases'
@@ -602,6 +626,7 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/agents/$agentId'
     | '/_authed/_tenant/agents/invites'
     | '/_authed/_tenant/agents/new'
+    | '/_authed/_tenant/connectors/$slug'
     | '/_authed/_tenant/inbox/$inboxItemId'
     | '/_authed/_tenant/knowledge-bases/$kbId'
     | '/_authed/_tenant/routines/$routineId'
@@ -613,6 +638,7 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/agent-templates/'
     | '/_authed/_tenant/agents/'
     | '/_authed/_tenant/artifacts/'
+    | '/_authed/_tenant/connectors/'
     | '/_authed/_tenant/humans/'
     | '/_authed/_tenant/inbox/'
     | '/_authed/_tenant/knowledge-bases/'
@@ -812,6 +838,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedTenantHumansIndexRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
+    '/_authed/_tenant/connectors/': {
+      id: '/_authed/_tenant/connectors/'
+      path: '/connectors'
+      fullPath: '/connectors/'
+      preLoaderRoute: typeof AuthedTenantConnectorsIndexRouteImport
+      parentRoute: typeof AuthedTenantRoute
+    }
     '/_authed/_tenant/artifacts/': {
       id: '/_authed/_tenant/artifacts/'
       path: '/artifacts'
@@ -887,6 +920,13 @@ declare module '@tanstack/react-router' {
       path: '/inbox/$inboxItemId'
       fullPath: '/inbox/$inboxItemId'
       preLoaderRoute: typeof AuthedTenantInboxInboxItemIdRouteImport
+      parentRoute: typeof AuthedTenantRoute
+    }
+    '/_authed/_tenant/connectors/$slug': {
+      id: '/_authed/_tenant/connectors/$slug'
+      path: '/connectors/$slug'
+      fullPath: '/connectors/$slug'
+      preLoaderRoute: typeof AuthedTenantConnectorsSlugRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
     '/_authed/_tenant/agents/new': {
@@ -1004,6 +1044,7 @@ interface AuthedTenantRouteChildren {
   AuthedTenantAgentsAgentIdRoute: typeof AuthedTenantAgentsAgentIdRoute
   AuthedTenantAgentsInvitesRoute: typeof AuthedTenantAgentsInvitesRoute
   AuthedTenantAgentsNewRoute: typeof AuthedTenantAgentsNewRoute
+  AuthedTenantConnectorsSlugRoute: typeof AuthedTenantConnectorsSlugRoute
   AuthedTenantInboxInboxItemIdRoute: typeof AuthedTenantInboxInboxItemIdRoute
   AuthedTenantKnowledgeBasesKbIdRoute: typeof AuthedTenantKnowledgeBasesKbIdRoute
   AuthedTenantRoutinesRoutineIdRoute: typeof AuthedTenantRoutinesRoutineIdRoute
@@ -1015,6 +1056,7 @@ interface AuthedTenantRouteChildren {
   AuthedTenantAgentTemplatesIndexRoute: typeof AuthedTenantAgentTemplatesIndexRoute
   AuthedTenantAgentsIndexRoute: typeof AuthedTenantAgentsIndexRoute
   AuthedTenantArtifactsIndexRoute: typeof AuthedTenantArtifactsIndexRoute
+  AuthedTenantConnectorsIndexRoute: typeof AuthedTenantConnectorsIndexRoute
   AuthedTenantHumansIndexRoute: typeof AuthedTenantHumansIndexRoute
   AuthedTenantInboxIndexRoute: typeof AuthedTenantInboxIndexRoute
   AuthedTenantKnowledgeBasesIndexRoute: typeof AuthedTenantKnowledgeBasesIndexRoute
@@ -1052,6 +1094,7 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantAgentsAgentIdRoute: AuthedTenantAgentsAgentIdRoute,
   AuthedTenantAgentsInvitesRoute: AuthedTenantAgentsInvitesRoute,
   AuthedTenantAgentsNewRoute: AuthedTenantAgentsNewRoute,
+  AuthedTenantConnectorsSlugRoute: AuthedTenantConnectorsSlugRoute,
   AuthedTenantInboxInboxItemIdRoute: AuthedTenantInboxInboxItemIdRoute,
   AuthedTenantKnowledgeBasesKbIdRoute: AuthedTenantKnowledgeBasesKbIdRoute,
   AuthedTenantRoutinesRoutineIdRoute: AuthedTenantRoutinesRoutineIdRoute,
@@ -1064,6 +1107,7 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantAgentTemplatesIndexRoute: AuthedTenantAgentTemplatesIndexRoute,
   AuthedTenantAgentsIndexRoute: AuthedTenantAgentsIndexRoute,
   AuthedTenantArtifactsIndexRoute: AuthedTenantArtifactsIndexRoute,
+  AuthedTenantConnectorsIndexRoute: AuthedTenantConnectorsIndexRoute,
   AuthedTenantHumansIndexRoute: AuthedTenantHumansIndexRoute,
   AuthedTenantInboxIndexRoute: AuthedTenantInboxIndexRoute,
   AuthedTenantKnowledgeBasesIndexRoute: AuthedTenantKnowledgeBasesIndexRoute,

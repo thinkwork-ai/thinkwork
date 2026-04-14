@@ -96,4 +96,68 @@ describe("normalizeLastmileEvent", () => {
 		const evt = await normalizeLastmileEvent(JSON.stringify(payload));
 		expect(evt.raw).toEqual(payload);
 	});
+
+	// ------------------------------------------------------------------------
+	// Real LastMile webhook payload — pinned from Eric's test tenant
+	// 2026-04-14. Keep this fixture in sync with production.
+	// ------------------------------------------------------------------------
+
+	const REAL_LASTMILE_PAYLOAD = [
+		{
+			eventId: "f2a869c5-d8d6-4f50-98de-5e6fa580ca24",
+			occurredAt: "2026-04-14T12:27:10.550Z",
+			companyId: "co_y15610tsjbkqz5cqoic8gjla",
+			resource: "task",
+			action: "created",
+			entityId: "task_olli1gaiu4jf50m8dnww0gvy",
+			meta: {},
+			outboxId: "dc50bc69-2a1c-4bd7-ba2e-840ab442bf37",
+			task: {
+				id: "task_olli1gaiu4jf50m8dnww0gvy",
+				title: "ThinkWork test",
+				priority: "medium",
+				status_id: "status_hfcqtycmuaix6pjfnu3mb3ot",
+				company_id: "co_y15610tsjbkqz5cqoic8gjla",
+				created_at: "2026-04-14T12:26:45.11+00:00",
+				creator_id: "user_wv4f3er5wsdnev73kkavtixu",
+				updated_at: "2026-04-14T12:26:45.11+00:00",
+				assigned_at: "2026-04-14T12:26:45.11+00:00",
+				assignee_id: "user_wv4f3er5wsdnev73kkavtixu",
+				description: "this is a test ThinkWork integration task",
+				entity_type: "basic",
+				is_archived: false,
+				task_number: 41366,
+				workflow_id: "t15kbzez6y8e33qxdbkx7jt5",
+				task_type_id: "task_type_fmk8znhdbqt2s1qnruawgmc3",
+				organization_id: "org_sqc4e42x51o0d0xotp3h9c8r",
+			},
+		},
+	];
+
+	it("normalizes the real LastMile batched-array payload", async () => {
+		const evt = await normalizeLastmileEvent(JSON.stringify(REAL_LASTMILE_PAYLOAD));
+		expect(evt.kind).toBe("task.created");
+		expect(evt.externalTaskId).toBe("task_olli1gaiu4jf50m8dnww0gvy");
+		expect(evt.providerUserId).toBe("user_wv4f3er5wsdnev73kkavtixu");
+		expect(evt.providerEventId).toBe("f2a869c5-d8d6-4f50-98de-5e6fa580ca24");
+		expect(evt.receivedAt).toBe("2026-04-14T12:27:10.550Z");
+		// Raw is the unwrapped first element, not the outer array
+		expect((evt.raw as Record<string, unknown>).resource).toBe("task");
+	});
+
+	it("throws on an empty array", async () => {
+		await expect(normalizeLastmileEvent("[]")).rejects.toThrow(/empty array/);
+	});
+
+	it("falls back to outboxId when eventId is absent", async () => {
+		const body = JSON.stringify([
+			{
+				outboxId: "outbox-fallback",
+				action: "updated",
+				task: { id: "task_x", assignee_id: "user_x" },
+			},
+		]);
+		const evt = await normalizeLastmileEvent(body);
+		expect(evt.providerEventId).toBe("outbox-fallback");
+	});
 });
