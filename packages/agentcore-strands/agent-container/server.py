@@ -272,6 +272,9 @@ def _retrieve_kb_context(kb_config: list, query: str, max_results: int = 5) -> s
     return context
 
 
+from external_task_context import format_external_task_context
+
+
 def _build_system_prompt(skills_config: list | None = None, kb_config: list | None = None,
                          profile=None) -> str:
     """Build system prompt from workspace files + installed skills + KB info.
@@ -1477,6 +1480,7 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
         human_name = payload.get("human_name") or ""
         guardrail_config = payload.get("guardrail_config")
         mcp_configs = payload.get("mcp_configs") or []
+        thread_metadata = payload.get("thread_metadata") or {}
         if mcp_configs:
             logger.info("MCP configs received: %d servers (%s)",
                         len(mcp_configs),
@@ -1579,6 +1583,17 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
             parent_kb_config = None if has_workspace_map else knowledge_bases_config
             system_prompt = _build_system_prompt(effective_skills, parent_kb_config,
                                                  profile=profile)
+
+            # External-task context injection: when the thread carries an
+            # external-task envelope (LastMile etc.), append a structured
+            # summary so the agent knows what task the user is looking at.
+            # Without this the agent only sees the literal user message and
+            # has no idea the conversation is about a specific task.
+            external_block = format_external_task_context(thread_metadata)
+            if external_block:
+                system_prompt += "\n\n---\n\n" + external_block
+                logger.info("Injected external-task context into system prompt (%d chars)",
+                            len(external_block))
 
             # Auto-retrieve relevant KB context — only for agents WITHOUT workspace map
             if knowledge_bases_config and not has_workspace_map:
