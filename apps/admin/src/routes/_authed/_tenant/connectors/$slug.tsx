@@ -457,7 +457,7 @@ function ConnectorDetailPage() {
 									<MoreVertical className="h-4 w-4" />
 								</Button>
 							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end">
+							<DropdownMenuContent align="end" className="min-w-[14rem] [&_[role=menuitem]]:whitespace-nowrap">
 								{connector.enabled ? (
 									<>
 										<DropdownMenuItem onClick={handleTest}>
