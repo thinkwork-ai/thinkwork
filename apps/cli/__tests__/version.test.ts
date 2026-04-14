@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { execSync } from "node:child_process";
 import { VERSION } from "../src/index.js";
 
-describe("@thinkwork/cli", () => {
+describe("thinkwork-cli", () => {
   it("exports a version string", () => {
     expect(typeof VERSION).toBe("string");
     expect(VERSION).toMatch(/^\d+\.\d+\.\d+/);
