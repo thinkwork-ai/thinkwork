@@ -189,25 +189,6 @@ function connectorColumns(handlers: {
 			size: 110,
 		},
 		{
-			accessorKey: "webhook_url",
-			header: "Webhook URL",
-			cell: ({ row }) => {
-				const url = row.original.webhook_url;
-				if (!url) {
-					return <span className="text-xs text-muted-foreground">—</span>;
-				}
-				return (
-					<div className="flex items-center gap-2 min-w-0">
-						<code className="text-[11px] font-mono truncate max-w-[280px] text-muted-foreground">
-							{url}
-						</code>
-						<CopyButton value={url} />
-					</div>
-				);
-			},
-			size: 360,
-		},
-		{
 			accessorKey: "secret_status",
 			header: "Signing",
 			cell: ({ row }) =>
