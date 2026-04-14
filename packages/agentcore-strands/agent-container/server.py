@@ -5,6 +5,8 @@ Supports any Bedrock model (Claude, Nova, Llama, Mistral) via the Strands
 Agent SDK. Tools are loaded via script-based skills (skill_runner.py).
 MCP tool servers connected via MCPClient (streamable HTTP transport).
 Pure Python — no Node.js dependency.
+
+Build revision: 2026-04-13 — include PR #24 (hindsight async tools).
 """
 import json
 import logging
