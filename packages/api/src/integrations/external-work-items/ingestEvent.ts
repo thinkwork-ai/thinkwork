@@ -28,6 +28,31 @@ import {
 const { messages } = schema;
 const db = getDb();
 
+/**
+ * Pull the raw task object out of a NormalizedEvent's `raw` field for use
+ * with `adapter.normalizeItem`. Handles both the real LastMile shape
+ * (`raw.task`) and legacy fixture shapes (`raw.data.task`). Returns null
+ * when nothing task-shaped is available — the caller falls back to the
+ * placeholder title.
+ */
+function extractRawTask(
+	raw: Record<string, unknown> | undefined,
+): Record<string, unknown> | null {
+	if (!raw || typeof raw !== "object") return null;
+	const direct = raw.task;
+	if (direct && typeof direct === "object" && !Array.isArray(direct)) {
+		return direct as Record<string, unknown>;
+	}
+	const data = raw.data;
+	if (data && typeof data === "object" && !Array.isArray(data)) {
+		const nested = (data as Record<string, unknown>).task;
+		if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+			return nested as Record<string, unknown>;
+		}
+	}
+	return null;
+}
+
 export type IngestResult =
 	| { status: "ignored"; reason: string }
 	| { status: "unverified" }
@@ -105,6 +130,42 @@ export async function ingestExternalTaskEvent(args: {
 			`[ingest:${provider}] refresh failed for ${event.externalTaskId}:`,
 			(err as Error).message,
 		);
+	}
+
+	// Fallback: if refresh() didn't produce an envelope (MCP unreachable,
+	// no auth token, or the adapter just threw), synthesize one from the
+	// raw webhook payload. Providers always embed the task object in the
+	// event body, so we can normalize it directly without a round-trip.
+	// This keeps the pinned ExternalTaskCard working and Phase A's
+	// denormalization (title / status / priority / due_at / description)
+	// populating even when the adapter's read path is offline.
+	if (!envelope) {
+		try {
+			const rawTask = extractRawTask(event.raw);
+			if (rawTask) {
+				const item = adapter.normalizeItem(rawTask);
+				const blocks = adapter.buildBlocks(item);
+				envelope = {
+					_type: "external_task",
+					_source: {
+						provider: provider as TaskProvider,
+						tool: "webhook_payload_fallback",
+						params: { externalTaskId: event.externalTaskId },
+					},
+					item,
+					blocks,
+					_refreshedAt: new Date().toISOString(),
+				};
+				console.log(
+					`[ingest:${provider}] synthesized envelope from webhook payload for ${event.externalTaskId}`,
+				);
+			}
+		} catch (err) {
+			console.warn(
+				`[ingest:${provider}] synthetic envelope build failed for ${event.externalTaskId}:`,
+				(err as Error).message,
+			);
+		}
 	}
 
 	if (event.kind === "task.reassigned" && event.previousProviderUserId) {
