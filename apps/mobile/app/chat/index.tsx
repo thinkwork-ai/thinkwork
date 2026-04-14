@@ -47,12 +47,11 @@ export default function ChatRoute() {
   const [{ data: agentsData }] = useAgents(tenantId);
   const agents = agentsData?.agents ?? [];
 
-  const visibleAgents = useMemo(() => {
-    const all = (agents as any[]).filter((a: any) => a.type !== "local");
-    const uid = user?.sub;
-    if (!uid) return [];
-    return all.filter((a: any) => a.humanPairId === uid);
-  }, [agents, user?.sub]);
+  // Server already scopes agents to the authed user. Just drop local scratch agents.
+  const visibleAgents = useMemo(
+    () => (agents as any[]).filter((a: any) => a.type !== "local"),
+    [agents],
+  );
 
   const [selectedId, setSelectedId] = useState<string | null>(paramAgentId ?? null);
 

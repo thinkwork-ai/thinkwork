@@ -1,5 +1,6 @@
 // Queries
 import { agents } from "./agents.query.js";
+import { allTenantAgents } from "./allTenantAgents.query.js";
 import { agent } from "./agent.query.js";
 import { agentApiKeys } from "./agentApiKeys.query.js";
 import { agentEmailCapability } from "./agentEmailCapability.query.js";
@@ -22,7 +23,7 @@ import { toggleAgentEmailChannel } from "./toggleAgentEmailChannel.mutation.js";
 import { claimVanityEmailAddress } from "./claimVanityEmailAddress.mutation.js";
 import { releaseVanityEmailAddress } from "./releaseVanityEmailAddress.mutation.js";
 
-export const agentQueries = { agents, agent, agentWorkspaces, agentApiKeys, agentEmailCapability, modelCatalog };
+export const agentQueries = { agents, allTenantAgents, agent, agentWorkspaces, agentApiKeys, agentEmailCapability, modelCatalog };
 
 export const agentMutations = {
 	createAgent,

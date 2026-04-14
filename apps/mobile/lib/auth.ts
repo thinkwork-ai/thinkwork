@@ -190,8 +190,18 @@ export async function getAccessToken(): Promise<string | null> {
 export async function getIdToken(): Promise<string | null> {
   const session = await getCurrentSession();
   if (session) return session.getIdToken().getJwtToken();
-  // Fallback for OAuth sessions
-  return getStoredOAuthIdToken();
+  // Fallback for OAuth/federated sessions: the Cognito SDK can't refresh these
+  // via SRP, so we manage them ourselves. Refresh the stored id token via the
+  // Cognito hosted-UI /oauth2/token endpoint if it's expired or near-expiry.
+  const stored = getStoredOAuthIdToken();
+  if (!stored) return null;
+  if (!isJwtExpiringSoon(stored)) return stored;
+  const refreshed = await refreshOAuthTokens();
+  if (refreshed) return refreshed;
+  // Refresh attempted and failed, AND the stored token is expired/near-expiry.
+  // Returning the stale token would just cause 401 loops downstream; signal
+  // unauthenticated so the caller can route the user back to sign-in.
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -344,4 +354,87 @@ export function getStoredOAuthAccessToken(): string | null {
   const username = CognitoSecureStorage.getItem(`${prefix}.LastAuthUser`);
   if (!username) return null;
   return CognitoSecureStorage.getItem(`${prefix}.${username}.accessToken`);
+}
+
+/**
+ * Get the stored OAuth refresh token directly from CognitoSecureStorage.
+ */
+export function getStoredOAuthRefreshToken(): string | null {
+  const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
+  const username = CognitoSecureStorage.getItem(`${prefix}.LastAuthUser`);
+  if (!username) return null;
+  return CognitoSecureStorage.getItem(`${prefix}.${username}.refreshToken`);
+}
+
+/**
+ * Returns true when a JWT is expired or within 2 minutes of expiring.
+ * Used to decide whether to refresh the stored OAuth id token.
+ */
+function isJwtExpiringSoon(token: string, skewSeconds = 120): boolean {
+  try {
+    const payload = decodeJwtPayload(token);
+    const exp = payload["exp"];
+    if (typeof exp !== "number") return true;
+    return exp <= Math.floor(Date.now() / 1000) + skewSeconds;
+  } catch {
+    return true;
+  }
+}
+
+// Serialize concurrent refresh attempts so we don't fire multiple
+// /oauth2/token requests when several callers hit an expired token at once.
+let _oauthRefreshInFlight: Promise<string | null> | null = null;
+
+/**
+ * Use the stored OAuth refresh_token to mint a new id/access token via the
+ * Cognito hosted-UI /oauth2/token endpoint. Writes the new tokens back into
+ * CognitoSecureStorage so subsequent reads see them.
+ *
+ * Returns the new id token on success, or null if there's no refresh token,
+ * the refresh call fails, or the response is malformed. On refresh failure
+ * the stored tokens are left in place — caller decides whether to sign out.
+ *
+ * Note: Cognito's refresh_token grant returns id_token + access_token but
+ * typically NOT a new refresh_token; the existing refresh_token stays valid
+ * until its own expiry (default 30 days).
+ */
+export async function refreshOAuthTokens(): Promise<string | null> {
+  if (_oauthRefreshInFlight) return _oauthRefreshInFlight;
+
+  _oauthRefreshInFlight = (async () => {
+    const refreshToken = getStoredOAuthRefreshToken();
+    if (!refreshToken) return null;
+
+    try {
+      const response = await fetch(`${COGNITO_DOMAIN}/oauth2/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          client_id: CLIENT_ID,
+          refresh_token: refreshToken,
+        }).toString(),
+      });
+      if (!response.ok) return null;
+      const body = (await response.json()) as {
+        id_token?: string;
+        access_token?: string;
+      };
+      if (!body.id_token || !body.access_token) return null;
+
+      const prefix = `CognitoIdentityServiceProvider.${CLIENT_ID}`;
+      const username = CognitoSecureStorage.getItem(`${prefix}.LastAuthUser`);
+      if (!username) return null;
+      CognitoSecureStorage.setItem(`${prefix}.${username}.idToken`, body.id_token);
+      CognitoSecureStorage.setItem(`${prefix}.${username}.accessToken`, body.access_token);
+      return body.id_token;
+    } catch (e) {
+      console.warn("[auth] refreshOAuthTokens failed:", e);
+      return null;
+    } finally {
+      _oauthRefreshInFlight = null;
+    }
+  })();
+
+  return _oauthRefreshInFlight;
 }
