@@ -143,3 +143,19 @@ output "www_bucket_name" {
   description = "S3 bucket for the public website assets"
   value       = module.www_site.bucket_name
 }
+
+# SES inbound email
+output "ses_inbound_zone_id" {
+  description = "Route53 hosted zone ID for the email subdomain (null when ses_inbound_domain is not set)"
+  value       = module.ses.zone_id
+}
+
+output "ses_inbound_name_servers" {
+  description = "Name servers for the delegated email subzone. Paste these as NS records at the registrar that hosts the parent domain (e.g. Google Domains) before SES can verify."
+  value       = module.ses.name_servers
+}
+
+output "ses_inbound_mx_target" {
+  description = "MX target host for the email subdomain. Terraform already writes this into the subzone — this output is informational."
+  value       = module.ses.mx_target
+}
