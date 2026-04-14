@@ -8,6 +8,9 @@ import {
 	KeyRound,
 	Trash2,
 	AlertTriangle,
+	MoreVertical,
+	Power,
+	PowerOff,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTenant } from "@/context/TenantContext";
@@ -18,6 +21,13 @@ import { PageSkeleton } from "@/components/PageSkeleton";
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+	DropdownMenu,
+	DropdownMenuTrigger,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { relativeTime } from "@/lib/utils";
 
@@ -258,7 +268,10 @@ function ConnectorDetailPage() {
 	const { tenantId } = useTenant();
 	const { slug } = Route.useParams();
 	const navigate = useNavigate();
-	useBreadcrumbs([{ label: "Connectors" }, { label: slug }]);
+	useBreadcrumbs([
+		{ label: "Connectors", href: "/connectors" },
+		{ label: slug },
+	]);
 
 	const [connector, setConnector] = useState<ConnectorRow | null>(null);
 	const [deliveries, setDeliveries] = useState<Delivery[]>([]);
@@ -353,7 +366,7 @@ function ConnectorDetailPage() {
 		if (!tenantId || !connector) return;
 		if (
 			!window.confirm(
-				`Disable ${connector.display_name}? Existing threads stay, new events will be dropped.`,
+				`Disable ${connector.display_name}? New events will be dropped until you re-enable. Existing threads and delivery history are preserved.`,
 			)
 		) {
 			return;
@@ -363,6 +376,26 @@ function ConnectorDetailPage() {
 				method: "DELETE",
 			});
 			toast.success("Connector disabled");
+			fetchData();
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : String(e));
+		}
+	};
+
+	const handleHardDelete = async () => {
+		if (!tenantId || !connector) return;
+		if (
+			!window.confirm(
+				`Permanently delete ${connector.display_name}? This removes the webhook row + signing secret. Delivery history is preserved but loses its webhook link. You'll need to reconfigure the provider dashboard from scratch if you re-add this connector.`,
+			)
+		) {
+			return;
+		}
+		try {
+			await apiFetch(`/api/task-connectors/${slug}?hard=true`, tenantId, {
+				method: "DELETE",
+			});
+			toast.success("Connector permanently deleted");
 			navigate({ to: "/connectors" });
 		} catch (e) {
 			toast.error(e instanceof Error ? e.message : String(e));
@@ -414,46 +447,54 @@ function ConnectorDetailPage() {
 							: "Disabled — new events are dropped. Row + history preserved."
 					}
 					actions={
-						<div className="flex items-center gap-2">
-							<Button
-								variant="outline"
-								size="sm"
-								onClick={() => navigate({ to: "/connectors" })}
-							>
-								<ArrowLeft className="h-4 w-4 mr-1" /> Back
-							</Button>
-							{connector.enabled ? (
-								<>
-									<Button size="sm" variant="outline" onClick={handleTest}>
-										<Send className="h-3.5 w-3.5 mr-1.5" /> Send test event
-									</Button>
-									<Button
-										size="sm"
-										variant="outline"
-										onClick={handleGenerateSecret}
-									>
-										<KeyRound className="h-3.5 w-3.5 mr-1.5" />
-										{connector.has_secret ? "Rotate secret" : "Generate secret"}
-									</Button>
-									{connector.has_secret && (
-										<Button
-											size="sm"
-											variant="outline"
-											onClick={handleRemoveSecret}
-										>
-											<Trash2 className="h-3.5 w-3.5 mr-1.5" /> Remove secret
-										</Button>
-									)}
-									<Button size="sm" variant="outline" onClick={handleDisable}>
-										Disable
-									</Button>
-								</>
-							) : (
-								<Button size="sm" variant="outline" onClick={handleReEnable}>
-									Re-enable
+						<DropdownMenu>
+							<DropdownMenuTrigger asChild>
+								<Button
+									variant="ghost"
+									size="icon"
+									aria-label="Connector actions"
+								>
+									<MoreVertical className="h-4 w-4" />
 								</Button>
-							)}
-						</div>
+							</DropdownMenuTrigger>
+							<DropdownMenuContent align="end">
+								{connector.enabled ? (
+									<>
+										<DropdownMenuItem onClick={handleTest}>
+											<Send className="h-3.5 w-3.5 mr-1.5" /> Send test event
+										</DropdownMenuItem>
+										<DropdownMenuItem onClick={handleGenerateSecret}>
+											<KeyRound className="h-3.5 w-3.5 mr-1.5" />
+											{connector.has_secret
+												? "Rotate signing secret"
+												: "Generate signing secret"}
+										</DropdownMenuItem>
+										{connector.has_secret && (
+											<DropdownMenuItem onClick={handleRemoveSecret}>
+												<Trash2 className="h-3.5 w-3.5 mr-1.5" /> Remove signing secret
+											</DropdownMenuItem>
+										)}
+										<DropdownMenuSeparator />
+										<DropdownMenuItem onClick={handleDisable}>
+											<PowerOff className="h-3.5 w-3.5 mr-1.5" /> Disable connector
+										</DropdownMenuItem>
+									</>
+								) : (
+									<>
+										<DropdownMenuItem onClick={handleReEnable}>
+											<Power className="h-3.5 w-3.5 mr-1.5" /> Re-enable connector
+										</DropdownMenuItem>
+										<DropdownMenuSeparator />
+									</>
+								)}
+								<DropdownMenuItem
+									onClick={handleHardDelete}
+									className="text-destructive"
+								>
+									<Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete permanently
+								</DropdownMenuItem>
+							</DropdownMenuContent>
+						</DropdownMenu>
 					}
 				/>
 			}
