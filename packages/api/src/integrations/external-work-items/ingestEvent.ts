@@ -144,6 +144,12 @@ export async function ingestExternalTaskEvent(args: {
 			const rawTask = extractRawTask(event.raw);
 			if (rawTask) {
 				const item = adapter.normalizeItem(rawTask);
+				// Build the edit form schema so action buttons (Change
+				// status / Assign / Edit) that reference formId='form_edit'
+				// can render their form — otherwise the card shows
+				// "Form form_edit not found on this task" and clicks no-op.
+				const editForm = adapter.buildFormSchema(item);
+				item.forms = { ...(item.forms ?? {}), edit: editForm };
 				const blocks = adapter.buildBlocks(item);
 				envelope = {
 					_type: "external_task",

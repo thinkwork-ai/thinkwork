@@ -44,7 +44,11 @@ export function normalizeLastmileTask(raw: Record<string, unknown>): NormalizedT
 	const updatedAt = asString(pick(raw, "updated_at", "updatedAt", "modified_at"));
 	const url = asString(pick(raw, "url", "web_url", "webUrl"));
 
+	// LastMile's real webhook shape uses `assignee_id` / `owner_id` as plain
+	// strings. Older fixtures nested an `assignee: { id, name, email }` object.
+	// Support both — prefer the nested object when present (richer metadata).
 	const assigneeRaw = pick<Record<string, unknown>>(raw, "assignee", "assigned_to", "assignedTo");
+	const assigneeIdDirect = asString(pick(raw, "assignee_id", "owner_id", "assigneeId", "ownerId"));
 	const assignee = assigneeRaw
 		? {
 				id: asString(pick(assigneeRaw, "id", "user_id", "userId")),
@@ -54,7 +58,9 @@ export function normalizeLastmileTask(raw: Record<string, unknown>): NormalizedT
 					"Unassigned",
 				email: asString(pick(assigneeRaw, "email")),
 			}
-		: undefined;
+		: assigneeIdDirect
+			? { id: assigneeIdDirect, name: assigneeIdDirect }
+			: undefined;
 
 	const labels = asArray<string | { name?: string; label?: string }>(
 		pick(raw, "labels", "tags"),
