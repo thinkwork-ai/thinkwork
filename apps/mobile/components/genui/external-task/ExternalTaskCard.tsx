@@ -10,6 +10,12 @@ import { FieldList } from './blocks/FieldList';
 import { BadgeRow } from './blocks/BadgeRow';
 import { ActionBar } from './blocks/ActionBar';
 import { FormBlock } from './blocks/FormBlock';
+import {
+  StatusActionSheet,
+  AssignActionSheet,
+  CommentActionSheet,
+  EditFormActionSheet,
+} from './blocks/ActionSheets';
 import type {
   ExternalTaskEnvelope,
   NormalizedTask,
@@ -139,6 +145,8 @@ function ExternalTaskCard({ data, context }: GenUIProps) {
   const [currentEnvelope, setCurrentEnvelope] = useState<ExternalTaskEnvelope>(envelope);
   const [submitting, setSubmitting] = useState(false);
   const [topLevelError, setTopLevelError] = useState<string | null>(null);
+  // Which action is currently showing its modal sheet. Null when closed.
+  const [activeActionType, setActiveActionType] = useState<TaskActionType | null>(null);
 
   const [, executeExternalTaskAction] = useMutation(ExecuteExternalTaskActionMutation);
 
@@ -189,33 +197,72 @@ function ExternalTaskCard({ data, context }: GenUIProps) {
     );
   }
 
+  // Route button clicks to the appropriate modal sheet instead of rendering
+  // forms inline. Sheets submit directly through `submit` when the user
+  // confirms, then close themselves.
   const handleActionPress = (a: TaskActionSpec) => {
-    if (a.formId) {
+    const modalActions: TaskActionType[] = [
+      'external_task.update_status',
+      'external_task.assign',
+      'external_task.comment',
+      'external_task.edit_fields',
+    ];
+    if (modalActions.includes(a.type)) {
+      setActiveActionType(a.type);
       return;
     }
     submit({ actionType: a.type, params: a.params ?? {} });
   };
 
+  const closeSheet = () => setActiveActionType(null);
+
   return (
-    <View className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-hidden">
-      {blocks.map((b, i) =>
-        renderBlock({
-          block: b,
-          item,
-          submitting,
-          handleActionPress,
-          submit,
-          keyPrefix: `${i}-`,
-        }),
-      )}
-      {topLevelError ? (
-        <View className="px-4 py-2 border-t border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20">
-          <Text size="xs" className="text-red-600">
-            {topLevelError}
-          </Text>
-        </View>
-      ) : null}
-    </View>
+    <>
+      <View className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-hidden">
+        {blocks.map((b, i) =>
+          renderBlock({
+            block: b,
+            item,
+            submitting,
+            handleActionPress,
+            submit,
+            keyPrefix: `${i}-`,
+          }),
+        )}
+        {topLevelError ? (
+          <View className="px-4 py-2 border-t border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20">
+            <Text size="xs" className="text-red-600">
+              {topLevelError}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      <StatusActionSheet
+        visible={activeActionType === 'external_task.update_status'}
+        onClose={closeSheet}
+        item={item}
+        submit={submit}
+      />
+      <AssignActionSheet
+        visible={activeActionType === 'external_task.assign'}
+        onClose={closeSheet}
+        item={item}
+        submit={submit}
+      />
+      <CommentActionSheet
+        visible={activeActionType === 'external_task.comment'}
+        onClose={closeSheet}
+        item={item}
+        submit={submit}
+      />
+      <EditFormActionSheet
+        visible={activeActionType === 'external_task.edit_fields'}
+        onClose={closeSheet}
+        item={item}
+        submit={submit}
+      />
+    </>
   );
 }
 
