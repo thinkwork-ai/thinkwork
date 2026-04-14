@@ -798,20 +798,13 @@ export function ActivityTimeline({
   );
 
 
-  if (timeline.length === 0) {
-    // Still render the list-header slot so callers that pass a pinned
-    // element (e.g. ExternalTaskCard for external-task threads) don't lose
-    // it on fresh threads that have no messages yet.
-    return (
-      <View className="flex-1">
-        {listHeaderComponent}
-        <View className="flex-1 items-center justify-center py-12">
-          <Muted>No activity yet</Muted>
-        </View>
-      </View>
-    );
-  }
-
+  // Always render through the FlatList so the pinned list-header element
+  // (e.g. ExternalTaskCard for external-task threads) can scroll when its
+  // content overflows the viewport. Empty timelines get a centered
+  // "No activity yet" fallback via ListEmptyComponent. `flexGrow: 1` on the
+  // contentContainerStyle lets the empty component fill the remaining
+  // space when the header is short, while still allowing the list to
+  // scroll when the header is tall.
   return (
     <FlatList
       ref={flatListRef}
@@ -820,7 +813,12 @@ export function ActivityTimeline({
       keyExtractor={keyExtractor}
       ListHeaderComponent={listHeaderComponent}
       ListFooterComponent={isAgentRunning ? <TypingIndicator /> : null}
-      contentContainerStyle={{ paddingVertical: 8 }}
+      ListEmptyComponent={
+        <View className="items-center justify-center py-12">
+          <Muted>No activity yet</Muted>
+        </View>
+      }
+      contentContainerStyle={{ paddingVertical: 8, flexGrow: 1 }}
       showsVerticalScrollIndicator={false}
       onScrollToIndexFailed={(info) => {
         setTimeout(() => {
