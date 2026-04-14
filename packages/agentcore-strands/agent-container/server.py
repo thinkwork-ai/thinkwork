@@ -36,97 +36,6 @@ from install_skills import install_skills
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-# ── MCP tool allowlist wrapper ───────────────────────────────────────────────
-# Strands' MCPClient is a ToolProvider: the Agent calls `await
-# client.load_tools()` during construction and uses whatever AgentTools come
-# back. To enforce `toolAllowlist` from agent_mcp_servers.config, we wrap the
-# MCPClient in a passthrough ToolProvider that filters load_tools() output by
-# tool_name. The wrapper also populates _mcp_tool_to_server (a previously
-# stubbed-out dict) so the response-formatting pass below can correctly
-# classify MCP tool calls as tool_type='mcp_server' in the UI.
-#
-# Must be defined AFTER `logger` — the except branch below calls
-# logger.warning() and referencing it before the logger exists crashes
-# at module load the moment strands isn't importable (local tests, any
-# future version skew, etc.).
-try:
-    from strands.tools.tool_provider import ToolProvider as _StrandsToolProvider
-
-    class _AllowlistedMCPClient(_StrandsToolProvider):
-        """Passthrough ToolProvider that filters an inner MCPClient's tools.
-
-        Delegates every non-filtering method (add_consumer, remove_consumer,
-        stop, _session access) to the inner MCPClient so the existing
-        cleanup loop in _call_strands_agent's finally block keeps working
-        without unwrapping.
-        """
-
-        def __init__(self, inner, server_name, allowlist, tool_to_server):
-            super().__init__()
-            self._inner = inner
-            self._server_name = server_name
-            # None = no filter, non-empty set = filter. Empty list from the
-            # wire treated as "allow all" per the plan's resolved question.
-            self._allowlist = set(allowlist) if allowlist else None
-            self._tool_to_server = tool_to_server
-
-        async def load_tools(self, **kwargs):
-            loaded = await self._inner.load_tools(**kwargs)
-            kept = []
-            dropped = []
-            for tool in loaded:
-                name = getattr(tool, "tool_name", None) or getattr(tool, "name", "")
-                if name:
-                    self._tool_to_server[name] = self._server_name
-                if self._allowlist is None or name in self._allowlist:
-                    kept.append(tool)
-                else:
-                    dropped.append(name)
-            if self._allowlist is not None:
-                # Surface allowlisted names that the server didn't actually
-                # expose — usually a config drift signal.
-                available = {getattr(t, "tool_name", None) or getattr(t, "name", "") for t in loaded}
-                missing = [n for n in self._allowlist if n not in available]
-                if missing:
-                    logger.warning(
-                        "MCP %s: allowlist names %d tool(s) not exposed by server: %s",
-                        self._server_name, len(missing), missing,
-                    )
-                logger.info(
-                    "MCP %s: allowlist kept %d tools, dropped %d (%s)",
-                    self._server_name, len(kept), len(dropped), dropped or "—",
-                )
-            else:
-                logger.info(
-                    "MCP %s: loaded %d tools (no allowlist)",
-                    self._server_name, len(kept),
-                )
-            return kept
-
-        def add_consumer(self, consumer_id, **kwargs):
-            return self._inner.add_consumer(consumer_id, **kwargs)
-
-        def remove_consumer(self, consumer_id, **kwargs):
-            return self._inner.remove_consumer(consumer_id, **kwargs)
-
-        # Delegate attributes the existing cleanup loop touches directly.
-        @property
-        def _session(self):
-            return getattr(self._inner, "_session", None)
-
-        def stop(self, *args, **kwargs):
-            return self._inner.stop(*args, **kwargs)
-
-    _allowlist_wrapper_available = True
-except Exception as _e:
-    logger.warning(
-        "strands.tools.tool_provider.ToolProvider not importable (%s) — "
-        "MCP toolAllowlist will not be enforced this process.",
-        _e,
-    )
-    _AllowlistedMCPClient = None  # type: ignore[assignment]
-    _allowlist_wrapper_available = False
-
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 WORKSPACE_DIR = os.environ.get("WORKSPACE_DIR", "/tmp/workspace")
 DEFAULT_MODEL = "us.anthropic.claude-sonnet-4-6"
@@ -1218,31 +1127,9 @@ def _call_strands_agent(system_prompt: str, messages: list,
             logger.info("MCP creating client for %s with %d headers", server_name, len(headers))
             client = MCPClient(lambda u=url, h=headers: streamablehttp_client(url=u, headers=h))
             # Don't call start() — the Agent will start the client and load tools automatically.
-            # Wrap the client in _AllowlistedMCPClient so (a) toolAllowlist from
-            # cfg["tools"] is enforced at load_tools time and (b)
-            # _mcp_tool_to_server gets populated for UI tool-type classification.
-            # `cfg.get("tools") or None` normalizes empty list / missing → None
-            # (no filter). An explicit non-empty list activates filtering.
-            allowlist = cfg.get("tools") or None
-            if _allowlist_wrapper_available and _AllowlistedMCPClient is not None:
-                provider = _AllowlistedMCPClient(
-                    inner=client,
-                    server_name=server_name,
-                    allowlist=allowlist,
-                    tool_to_server=_mcp_tool_to_server,
-                )
-                mcp_clients.append(provider)
-                logger.info(
-                    "MCP client registered (wrapped): %s url=%s allowlist=%s",
-                    server_name, url,
-                    f"{len(allowlist)} tool(s)" if allowlist else "none",
-                )
-            else:
-                mcp_clients.append(client)
-                logger.info(
-                    "MCP client registered (raw, no allowlist enforcement): %s url=%s",
-                    server_name, url,
-                )
+            # Just register the client as a tool provider.
+            mcp_clients.append(client)
+            logger.info("MCP client registered: %s url=%s (tools will be discovered by Agent)", server_name, url)
         except Exception as e:
             import traceback
             logger.error("MCP connection FAILED for %s (%s): %s\n%s", server_name, url, e, traceback.format_exc())
