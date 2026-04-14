@@ -90,7 +90,7 @@ resource "aws_lambda_function" "handler" {
     "job-trigger",
     "webhooks",
     "webhooks-admin",
-    "integration-webhooks",
+    "webhook-deliveries-cleanup",
     "workspace-files",
     "knowledge-base-manager",
     "knowledge-base-files",
@@ -218,9 +218,6 @@ locals {
     "ANY /api/webhooks/{proxy+}" = "webhooks-admin"
     "ANY /api/webhooks"          = "webhooks-admin"
 
-    # Integration webhooks (signature-authed, per-provider)
-    "POST /integrations/{provider}/webhook" = "integration-webhooks"
-
     # Workspace files
     "ANY /api/workspaces/{proxy+}" = "workspace-files"
 
@@ -294,6 +291,28 @@ resource "aws_scheduler_schedule" "wakeup_processor" {
 
   target {
     arn      = aws_lambda_function.handler["wakeup-processor"].arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# ---------------------------------------------------------------------------
+# webhook_deliveries retention cron — daily delete of rows older than 90 days
+# ---------------------------------------------------------------------------
+
+resource "aws_scheduler_schedule" "webhook_deliveries_cleanup" {
+  count = local.use_local_zips ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-webhook-deliveries-cleanup"
+  group_name          = "default"
+  schedule_expression = "cron(0 4 * * ? *)" # daily at 04:00 UTC
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["webhook-deliveries-cleanup"].arn
     role_arn = aws_iam_role.scheduler.arn
   }
 }

@@ -69,10 +69,16 @@ interface TokenRefreshResult {
  * Also surfaces `defaultAgentId` from `metadata.{provider}.default_agent_id`
  * so the webhook ingest can wire the user's opted-in chat agent onto new
  * external-task threads. Undefined when the user has not opted in.
+ *
+ * When `tenantId` is provided, the scan is scoped to that tenant — used by
+ * the unified token-based webhook dispatch where the webhook row already
+ * pinned down the tenant. When omitted, the scan runs across all active
+ * connections globally (legacy behavior, kept for backward compat).
  */
 export async function resolveConnectionByProviderUserId(
 	providerName: string,
 	providerUserId: string,
+	tenantId?: string,
 ): Promise<
 	| {
 			connectionId: string;
@@ -83,6 +89,14 @@ export async function resolveConnectionByProviderUserId(
 	  }
 	| null
 > {
+	const conditions = [
+		eq(connectProviders.name, providerName),
+		eq(connections.status, "active"),
+	];
+	if (tenantId) {
+		conditions.push(eq(connections.tenant_id, tenantId));
+	}
+
 	const rows = await db
 		.select({
 			connectionId: connections.id,
@@ -94,12 +108,7 @@ export async function resolveConnectionByProviderUserId(
 		})
 		.from(connections)
 		.innerJoin(connectProviders, eq(connections.provider_id, connectProviders.id))
-		.where(
-			and(
-				eq(connectProviders.name, providerName),
-				eq(connections.status, "active"),
-			),
-		);
+		.where(and(...conditions));
 
 	for (const row of rows) {
 		const meta = (row.metadata ?? {}) as Record<string, unknown>;
