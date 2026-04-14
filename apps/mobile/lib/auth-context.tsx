@@ -20,7 +20,6 @@ import {
   type ReactNode,
 } from "react";
 import { AppState, Platform } from "react-native";
-import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import type { AuthUser } from "@/lib/auth";
 import * as auth from "@/lib/auth";
@@ -195,59 +194,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ------ Sign in with Google (OAuth) ------
+  // Re-entry guard: if a sign-in is already in flight, ignore additional
+  // calls. React's batched state updates can let two button presses fire
+  // before `googleLoading` flips, which would issue two authorize requests
+  // and burn the first single-use code.
+  const oauthInFlightRef = useRef(false);
   const handleSignInWithGoogle = useCallback(async () => {
-    if (Platform.OS === "web") {
-      const redirectUri = window.location.origin + "/auth/callback";
-      window.location.href = auth.getGoogleSignInUrl(redirectUri);
+    if (oauthInFlightRef.current) {
+      console.warn("[AuthProvider] Google OAuth: already in flight, ignoring re-entry");
       return;
     }
-
-    // Native: use expo-web-browser in-app auth session
-    const redirectUri = Linking.createURL("auth/callback");
-    console.log("[AuthProvider] Google OAuth redirectUri:", redirectUri);
-    const authorizeUrl = auth.getGoogleSignInUrl(redirectUri);
-    console.log("[AuthProvider] Google OAuth authorizeUrl:", authorizeUrl);
-    const result = await WebBrowser.openAuthSessionAsync(authorizeUrl, redirectUri);
-    console.log("[AuthProvider] Google OAuth result type:", result.type, "url" in result ? result.url : "no url");
-
-    if (result.type !== "success") return;
-
-    // Parse code from callback URL — avoid `new URL()` which isn't reliable on Hermes
-    const codeMatch = result.url.match(/[?&]code=([^&]+)/);
-    const code = codeMatch?.[1] ? decodeURIComponent(codeMatch[1]) : null;
-    if (!code) throw new Error("No authorization code in callback URL");
-
-    const tokens = await auth.exchangeCodeForTokens(code, redirectUri);
-    let oauthUser = auth.storeOAuthTokens(tokens);
-    setAuthToken(tokens.id_token);
-
-    // Federated (Google) users don't have custom:tenant_id in their JWT on
-    // first sign-in. Mirror the admin app's TenantContext bootstrap flow:
-    // call bootstrapUser to auto-provision a tenant and merge the id into
-    // local user state so the routing guard can redirect to the home tab.
-    if (!oauthUser.tenantId) {
-      const graphqlUrl = process.env.EXPO_PUBLIC_GRAPHQL_URL;
-      if (!graphqlUrl) throw new Error("GraphQL URL not configured");
-      const res = await fetch(graphqlUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${tokens.id_token}`,
-        },
-        body: JSON.stringify({
-          query: `mutation { bootstrapUser { user { id email name } tenant { id name slug plan } isNew } }`,
-        }),
-      });
-      const result = await res.json();
-      const bootstrap = result?.data?.bootstrapUser;
-      if (!bootstrap?.tenant?.id) {
-        throw new Error(result?.errors?.[0]?.message ?? "Failed to provision workspace");
+    oauthInFlightRef.current = true;
+    try {
+      if (Platform.OS === "web") {
+        const redirectUri = window.location.origin + "/auth/callback";
+        window.location.href = auth.getGoogleSignInUrl(redirectUri);
+        return;
       }
-      oauthUser = { ...oauthUser, tenantId: bootstrap.tenant.id };
-    }
 
-    setUser(oauthUser);
-    setDidActiveLogin(true);
+      // Native: hard-code the redirect URI rather than computing via
+      // Linking.createURL("auth/callback"). expo-linking's createURL applies
+      // path normalization (host/slash placement, encodeURI) that produced a
+      // URI which Cognito's exact-string comparison rejected on the
+      // authorize→token leg, surfacing as `invalid_grant`. The literal
+      // matches what's registered in the Cognito user pool client callback
+      // list and removes any computation from the hot path.
+      const redirectUri = "thinkwork://auth/callback";
+      console.log("[AuthProvider] Google OAuth redirectUri:", redirectUri);
+      const authorizeUrl = auth.getGoogleSignInUrl(redirectUri);
+      console.log("[AuthProvider] Google OAuth authorizeUrl:", authorizeUrl);
+      const result = await WebBrowser.openAuthSessionAsync(authorizeUrl, redirectUri);
+      console.log("[AuthProvider] Google OAuth result type:", result.type, "url" in result ? result.url : "no url");
+
+      if (result.type !== "success") return;
+
+      // Parse code from callback URL — avoid `new URL()` which isn't reliable on Hermes
+      const codeMatch = result.url.match(/[?&]code=([^&]+)/);
+      const code = codeMatch?.[1] ? decodeURIComponent(codeMatch[1]) : null;
+      if (!code) throw new Error("No authorization code in callback URL");
+      console.log("[AuthProvider] Google OAuth code length:", code.length);
+
+      const tokens = await auth.exchangeCodeForTokens(code, redirectUri);
+      let oauthUser = auth.storeOAuthTokens(tokens);
+      setAuthToken(tokens.id_token);
+
+      // Federated (Google) users don't have custom:tenant_id in their JWT on
+      // first sign-in. Mirror the admin app's TenantContext bootstrap flow:
+      // call bootstrapUser to auto-provision a tenant and merge the id into
+      // local user state so the routing guard can redirect to the home tab.
+      if (!oauthUser.tenantId) {
+        const graphqlUrl = process.env.EXPO_PUBLIC_GRAPHQL_URL;
+        if (!graphqlUrl) throw new Error("GraphQL URL not configured");
+        const res = await fetch(graphqlUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${tokens.id_token}`,
+          },
+          body: JSON.stringify({
+            query: `mutation { bootstrapUser { user { id email name } tenant { id name slug plan } isNew } }`,
+          }),
+        });
+        const bootstrapResult = await res.json();
+        const bootstrap = bootstrapResult?.data?.bootstrapUser;
+        if (!bootstrap?.tenant?.id) {
+          throw new Error(bootstrapResult?.errors?.[0]?.message ?? "Failed to provision workspace");
+        }
+        oauthUser = { ...oauthUser, tenantId: bootstrap.tenant.id };
+      }
+
+      setUser(oauthUser);
+      setDidActiveLogin(true);
+    } finally {
+      oauthInFlightRef.current = false;
+    }
   }, []);
 
   // ------ Sign up / confirm ------

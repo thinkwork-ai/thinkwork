@@ -284,6 +284,16 @@ export async function exchangeCodeForTokens(
   code: string,
   redirectUri: string,
 ): Promise<OAuthTokens> {
+  // Log the EXACT inputs Cognito will see. Don't log the full code (treat it
+  // as a credential), just its length and a short prefix so we can tell two
+  // attempts apart without leaking the secret.
+  console.log("[auth] exchangeCodeForTokens", {
+    domain: COGNITO_DOMAIN,
+    clientIdLen: CLIENT_ID.length,
+    redirectUri,
+    codeLen: code.length,
+    codePrefix: code.slice(0, 6),
+  });
   const response = await fetch(`${COGNITO_DOMAIN}/oauth2/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -297,6 +307,12 @@ export async function exchangeCodeForTokens(
 
   if (!response.ok) {
     const text = await response.text();
+    console.error("[auth] token exchange failed", {
+      status: response.status,
+      body: text,
+      redirectUri,
+      codeLen: code.length,
+    });
     throw new Error(`Token exchange failed: ${text}`);
   }
 
