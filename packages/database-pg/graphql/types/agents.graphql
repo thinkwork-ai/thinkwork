@@ -195,7 +195,10 @@ type AgentWorkspace {
 }
 
 extend type Query {
-  agents(tenantId: ID!, status: AgentStatus, type: AgentType, humanPairId: ID, includeSystem: Boolean): [Agent!]!
+  agents(tenantId: ID!, status: AgentStatus, type: AgentType, includeSystem: Boolean): [Agent!]!
+  # Workspace-wide agent list for tenant owners/admins (admin app). Fails closed
+  # to an empty list when the caller is not an owner/admin of `tenantId`.
+  allTenantAgents(tenantId: ID!, includeSystem: Boolean, includeSubAgents: Boolean): [Agent!]!
   agent(id: ID!): Agent
   agentWorkspaces(agentId: ID!): [AgentWorkspace!]!
   agentApiKeys(agentId: ID!): [AgentApiKey!]!

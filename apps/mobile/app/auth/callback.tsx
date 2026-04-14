@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { View, ActivityIndicator } from "react-native";
+import { View, ActivityIndicator, Platform } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { Text } from "@/components/ui/typography";
 import * as auth from "@/lib/auth";
@@ -11,6 +11,15 @@ export default function AuthCallbackScreen() {
   const handledRef = useRef(false);
 
   useEffect(() => {
+    // On native, Google OAuth completes inside WebBrowser.openAuthSessionAsync
+    // (handled by handleSignInWithGoogle in auth-context). Expo Router ALSO
+    // routes the redirect deep link to this screen; if we exchange the code
+    // here we race the in-context handler. Even with the wrong redirect_uri
+    // (`undefined/auth/callback` on native, since window.location is absent),
+    // the call can still invalidate the single-use code, leaving the
+    // legitimate in-context exchange to fail with `invalid_grant`. Bail out on
+    // native and let the routing guard + AuthProvider drive navigation.
+    if (Platform.OS !== "web") return;
     if (!code || handledRef.current) return;
     handledRef.current = true;
 

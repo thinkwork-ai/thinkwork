@@ -49,14 +49,11 @@ export default function ThreadsScreen() {
   const [{ data: meData }] = useMe();
   const currentUser = meData?.me;
 
-  const visibleAgents = useMemo(() => {
-    const all = (agents as any[]).filter((a: any) => a.type !== "local");
-    // Show agents paired to this user (by DB user id), or all agents if none are paired
-    const uid = currentUser?.id || user?.sub;
-    if (!uid) return all;
-    const paired = all.filter((a: any) => a.humanPairId === uid);
-    return paired.length > 0 ? paired : all;
-  }, [agents, currentUser?.id, user?.sub]);
+  // Server already scopes agents to the authed user. Just drop local scratch agents.
+  const visibleAgents = useMemo(
+    () => (agents as any[]).filter((a: any) => a.type !== "local"),
+    [agents],
+  );
 
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
