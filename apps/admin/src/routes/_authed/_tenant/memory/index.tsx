@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery, useMutation } from "urql";
+import { useQuery, useMutation, useClient } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Loader2, Trash2, Brain, Search, X } from "lucide-react";
 import {
@@ -186,14 +186,50 @@ function MemoryPage() {
   const selectedAgent = agents.find((a) => a.id === selectedAgentId);
   const namespace = selectedAgent?.slug ? `assistant_${selectedAgent.slug}` : effectiveAgentId ? `assistant_${effectiveAgentId}` : "";
 
-  // Memory records — pass "all" for all-agents mode, resolver handles it
-  const memoriesAgentId = isAllAgents ? "all" : selectedAgentId;
-
+  // Single-agent path uses urql normally. All-agents fans out per-agent
+  // below (mirroring MemoryGraph) to avoid the resolver's "all" branch,
+  // which requires a tenant claim in the JWT that Google OAuth users
+  // don't always have populated yet.
   const [memoryResult, refetchMemory] = useQuery({
     query: MemoryRecordsQuery,
-    variables: { assistantId: memoriesAgentId, namespace: namespace || "all" },
-    pause: !!activeSearch,
+    variables: { assistantId: selectedAgentId, namespace: namespace || "all" },
+    pause: !!activeSearch || isAllAgents || !selectedAgentId,
   });
+
+  // Multi-agent fan-out
+  const client = useClient();
+  const [multiRecords, setMultiRecords] = useState<any[] | null>(null);
+  const [multiFetching, setMultiFetching] = useState(false);
+
+  const fetchAllAgentRecords = useCallback(async () => {
+    if (!isAllAgents || agents.length === 0 || activeSearch) return;
+    setMultiFetching(true);
+    try {
+      const perAgent = await Promise.all(
+        agents.map(async (a) => {
+          try {
+            const res = await client
+              .query(MemoryRecordsQuery, { assistantId: a.id, namespace: "all" })
+              .toPromise();
+            return (res.data?.memoryRecords ?? []) as any[];
+          } catch {
+            return [];
+          }
+        }),
+      );
+      setMultiRecords(perAgent.flat());
+    } finally {
+      setMultiFetching(false);
+    }
+  }, [isAllAgents, agents, activeSearch, client]);
+
+  useEffect(() => {
+    if (isAllAgents && !activeSearch) {
+      fetchAllAgentRecords();
+    } else {
+      setMultiRecords(null);
+    }
+  }, [isAllAgents, activeSearch, fetchAllAgentRecords]);
 
   // Search mode
   const [searchResult] = useQuery({
@@ -240,11 +276,15 @@ function MemoryPage() {
     context: r.context ?? null,
   });
 
-  const rows: MemoryRow[] = activeSearch
-    ? (searchResult.data?.memorySearch?.records ?? []).map(mapRecord)
-    : (memoryResult.data?.memoryRecords ?? [])
-        .map(mapRecord)
-        .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+  const rawRecords: any[] = activeSearch
+    ? (searchResult.data?.memorySearch?.records ?? [])
+    : isAllAgents
+      ? (multiRecords ?? [])
+      : (memoryResult.data?.memoryRecords ?? []);
+
+  const rows: MemoryRow[] = rawRecords
+    .map(mapRecord)
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 
   const columns: ColumnDef<MemoryRow>[] = [
     {
@@ -303,7 +343,8 @@ function MemoryPage() {
       });
       setSelectedRecord({ ...selectedRecord, text: editValue });
       setEditing(false);
-      refetchMemory({ requestPolicy: "network-only" });
+      if (isAllAgents) fetchAllAgentRecords();
+      else refetchMemory({ requestPolicy: "network-only" });
     } finally {
       setSaving(false);
     }
@@ -316,7 +357,8 @@ function MemoryPage() {
       await deleteMemory({ memoryRecordId: selectedRecord.memoryRecordId });
       setSheetOpen(false);
       setSelectedRecord(null);
-      refetchMemory({ requestPolicy: "network-only" });
+      if (isAllAgents) fetchAllAgentRecords();
+      else refetchMemory({ requestPolicy: "network-only" });
     } finally {
       setDeleting(false);
     }
@@ -324,9 +366,11 @@ function MemoryPage() {
 
   if (agentsResult.fetching && !agentsResult.data) return <PageSkeleton />;
 
-  const isLoading = (activeSearch
+  const isLoading = activeSearch
     ? searchResult.fetching && !searchResult.data
-    : memoryResult.fetching && !memoryResult.data);
+    : isAllAgents
+      ? multiFetching && multiRecords === null
+      : memoryResult.fetching && !memoryResult.data;
 
   const memoryCount = isAllAgents ? agents.length + " agents" : `${rows.length} memor${rows.length !== 1 ? "ies" : "y"}`;
 
