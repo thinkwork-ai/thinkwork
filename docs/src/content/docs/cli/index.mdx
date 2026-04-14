@@ -1,16 +1,22 @@
 ---
 title: CLI Overview
-description: The @thinkwork/cli npm package. Install, configure, and manage ThinkWork deployments from the command line.
+description: The thinkwork-cli npm package. Install, configure, and manage ThinkWork deployments from the command line.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-The ThinkWork CLI (`@thinkwork/cli`) is the primary way to deploy and manage ThinkWork. It wraps Terraform with a developer-friendly interface, manages named environment profiles, and provides health-check and diagnostic commands.
+The ThinkWork CLI (`thinkwork-cli`) is the primary way to deploy and manage ThinkWork. It wraps Terraform with a developer-friendly interface, manages named environment profiles, and provides health-check and diagnostic commands.
 
 ## Installation
 
 ```bash
-npm install -g @thinkwork/cli
+npm install -g thinkwork-cli
+```
+
+Or run one-off without installing globally:
+
+```bash
+npx thinkwork-cli --help
 ```
 
 Verify the installation:
