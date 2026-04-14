@@ -684,44 +684,76 @@ def _call_strands_agent(system_prompt: str, messages: list,
                         A numbered list of matching memories, or
                         "No relevant memories found." if nothing matches.
                     """
-                    # Fresh client per call — see the closure-capture comment
-                    # above for why we don't share across calls. Explicit
-                    # aclose() in finally to prevent aiohttp session leaks.
-                    _client = Hindsight(base_url=_hs_endpoint_ref, timeout=300.0)
-                    try:
-                        # PRD-42 follow-up: drop budget mid→low (less graph fanout
-                        # for our bank shapes) and max_tokens 4096→1500 (smaller
-                        # raw pool to filter). Hindsight 0.5.0's proof_count boost
-                        # (PR #821) plus our post-filter carries the weight now.
-                        # Note: arecall (native async) — not recall — to avoid
-                        # _run_async's stale-loop reuse.
-                        response = await _client.arecall(
-                            bank_id=_hs_bank_ref,
-                            query=query,
-                            budget="low",
-                            max_tokens=1500,
-                        )
-                        raw = getattr(response, "results", None) or []
-                        if not raw:
-                            return "No relevant memories found."
-                        # Post-filter: top-N pre-cap, entity-aware relevance filter,
-                        # observation-preferred dedup, hard cap. See
-                        # hindsight_recall_filter.py for the full pipeline and the
-                        # Phase 0 Marco bank data that drove the thresholds.
-                        from hindsight_recall_filter import (
-                            filter_recall_results,
-                            format_results_for_agent,
-                        )
-                        filtered = filter_recall_results(raw, query)
-                        return format_results_for_agent(filtered)
-                    except Exception as e:
-                        logger.error("hindsight_recall failed: %s", e)
-                        return f"Memory recall failed: {e}"
-                    finally:
+                    # Fresh client per attempt — see the closure-capture
+                    # comment above for why we don't share across calls.
+                    # Explicit aclose() in finally to prevent aiohttp session
+                    # leaks. Retry on transient upstream errors (HTTP 5xx,
+                    # BedrockException, "Try your request again"): Bedrock
+                    # flaps intermittently and Hindsight surfaces those as
+                    # 500s to us — we saw one in production on 2026-04-14
+                    # that left the agent with "Memory reflect failed" when
+                    # the next attempt would have succeeded. 2 retries with
+                    # 1s/2s backoffs caps worst-case added latency at ~3s.
+                    import asyncio as _asyncio
+                    last_exc = None
+                    for _attempt in range(3):
+                        _client = Hindsight(base_url=_hs_endpoint_ref, timeout=300.0)
                         try:
-                            await _client.aclose()
-                        except Exception as _close_err:
-                            logger.warning("hindsight_recall aclose failed: %s", _close_err)
+                            # PRD-42 follow-up: drop budget mid→low (less graph fanout
+                            # for our bank shapes) and max_tokens 4096→1500 (smaller
+                            # raw pool to filter). Hindsight 0.5.0's proof_count boost
+                            # (PR #821) plus our post-filter carries the weight now.
+                            # Note: arecall (native async) — not recall — to avoid
+                            # _run_async's stale-loop reuse.
+                            response = await _client.arecall(
+                                bank_id=_hs_bank_ref,
+                                query=query,
+                                budget="low",
+                                max_tokens=1500,
+                            )
+                            raw = getattr(response, "results", None) or []
+                            if not raw:
+                                return "No relevant memories found."
+                            # Post-filter: top-N pre-cap, entity-aware relevance filter,
+                            # observation-preferred dedup, hard cap. See
+                            # hindsight_recall_filter.py for the full pipeline and the
+                            # Phase 0 Marco bank data that drove the thresholds.
+                            from hindsight_recall_filter import (
+                                filter_recall_results,
+                                format_results_for_agent,
+                            )
+                            filtered = filter_recall_results(raw, query)
+                            return format_results_for_agent(filtered)
+                        except Exception as e:
+                            last_exc = e
+                            _msg = str(e)
+                            _transient = (
+                                "(500)" in _msg or "(502)" in _msg
+                                or "(503)" in _msg or "(504)" in _msg
+                                or "BedrockException" in _msg
+                                or "ServiceUnavailableError" in _msg
+                                or "Try your request again" in _msg
+                                or "throttl" in _msg.lower()
+                            )
+                            if _attempt < 2 and _transient:
+                                _backoff = 1.0 * (2 ** _attempt)
+                                logger.warning(
+                                    "hindsight_recall attempt %d/3 transient failure, retrying in %.1fs: %s",
+                                    _attempt + 1, _backoff, _msg[:200],
+                                )
+                                await _asyncio.sleep(_backoff)
+                                continue
+                            logger.error(
+                                "hindsight_recall failed (attempt %d/3): %s",
+                                _attempt + 1, e,
+                            )
+                            return f"Memory recall failed: {e}"
+                        finally:
+                            try:
+                                await _client.aclose()
+                            except Exception as _close_err:
+                                logger.warning("hindsight_recall aclose failed: %s", _close_err)
+                    return f"Memory recall failed: {last_exc}"
 
                 @_strands_tool
                 async def hindsight_reflect(query: str) -> str:
@@ -763,26 +795,51 @@ def _call_strands_agent(system_prompt: str, messages: list,
                         memories, or "No relevant memories found." if there
                         is nothing to draw from.
                     """
-                    # Fresh client per call, explicit aclose in finally —
-                    # see hindsight_recall for the rationale.
-                    _client = Hindsight(base_url=_hs_endpoint_ref, timeout=300.0)
-                    try:
-                        # areflect (native async) — not reflect — to avoid
-                        # _run_async's stale-loop reuse.
-                        response = await _client.areflect(
-                            bank_id=_hs_bank_ref,
-                            query=query,
-                            budget="mid",
-                        )
-                        return getattr(response, "text", None) or "No relevant memories found."
-                    except Exception as e:
-                        logger.error("hindsight_reflect failed: %s", e)
-                        return f"Memory reflect failed: {e}"
-                    finally:
+                    # Fresh client per attempt + retry on transient upstream
+                    # errors — see hindsight_recall for the rationale.
+                    import asyncio as _asyncio
+                    last_exc = None
+                    for _attempt in range(3):
+                        _client = Hindsight(base_url=_hs_endpoint_ref, timeout=300.0)
                         try:
-                            await _client.aclose()
-                        except Exception as _close_err:
-                            logger.warning("hindsight_reflect aclose failed: %s", _close_err)
+                            # areflect (native async) — not reflect — to avoid
+                            # _run_async's stale-loop reuse.
+                            response = await _client.areflect(
+                                bank_id=_hs_bank_ref,
+                                query=query,
+                                budget="mid",
+                            )
+                            return getattr(response, "text", None) or "No relevant memories found."
+                        except Exception as e:
+                            last_exc = e
+                            _msg = str(e)
+                            _transient = (
+                                "(500)" in _msg or "(502)" in _msg
+                                or "(503)" in _msg or "(504)" in _msg
+                                or "BedrockException" in _msg
+                                or "ServiceUnavailableError" in _msg
+                                or "Try your request again" in _msg
+                                or "throttl" in _msg.lower()
+                            )
+                            if _attempt < 2 and _transient:
+                                _backoff = 1.0 * (2 ** _attempt)
+                                logger.warning(
+                                    "hindsight_reflect attempt %d/3 transient failure, retrying in %.1fs: %s",
+                                    _attempt + 1, _backoff, _msg[:200],
+                                )
+                                await _asyncio.sleep(_backoff)
+                                continue
+                            logger.error(
+                                "hindsight_reflect failed (attempt %d/3): %s",
+                                _attempt + 1, e,
+                            )
+                            return f"Memory reflect failed: {e}"
+                        finally:
+                            try:
+                                await _client.aclose()
+                            except Exception as _close_err:
+                                logger.warning("hindsight_reflect aclose failed: %s", _close_err)
+                    return f"Memory reflect failed: {last_exc}"
 
                 tools.extend(hs_tools)
                 tools.append(hindsight_recall)
