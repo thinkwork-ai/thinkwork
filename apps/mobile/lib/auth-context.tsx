@@ -223,7 +223,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log("[AuthProvider] Google OAuth redirectUri:", redirectUri);
       const authorizeUrl = auth.getGoogleSignInUrl(redirectUri);
       console.log("[AuthProvider] Google OAuth authorizeUrl:", authorizeUrl);
-      const result = await WebBrowser.openAuthSessionAsync(authorizeUrl, redirectUri);
+      // preferEphemeralSession: true uses ASWebAuthenticationSession's
+      // private session mode on iOS, which gives every sign-in attempt a
+      // clean cookie jar. Without it, a failed previous attempt can leave
+      // stale Cognito hosted-UI session cookies in the persistent jar; the
+      // next authorize request gets short-circuited via SSO and Cognito
+      // issues a code bound to the old session state, which the token
+      // exchange then rejects as `invalid_grant`. Retrying works because
+      // the failed exchange invalidates that stale state. Forcing
+      // ephemeral sessions removes the failure mode entirely.
+      const result = await WebBrowser.openAuthSessionAsync(authorizeUrl, redirectUri, {
+        preferEphemeralSession: true,
+      });
       console.log("[AuthProvider] Google OAuth result type:", result.type, "url" in result ? result.url : "no url");
 
       if (result.type !== "success") return;
