@@ -799,9 +799,15 @@ export function ActivityTimeline({
 
 
   if (timeline.length === 0) {
+    // Still render the list-header slot so callers that pass a pinned
+    // element (e.g. ExternalTaskCard for external-task threads) don't lose
+    // it on fresh threads that have no messages yet.
     return (
-      <View className="flex-1 items-center justify-center py-12">
-        <Muted>No activity yet</Muted>
+      <View className="flex-1">
+        {listHeaderComponent}
+        <View className="flex-1 items-center justify-center py-12">
+          <Muted>No activity yet</Muted>
+        </View>
       </View>
     );
   }
