@@ -35,6 +35,7 @@ export const Route = createFileRoute("/_authed/_tenant/connectors/$slug")({
 type ConnectorRow = {
 	slug: string;
 	display_name: string;
+	configured: boolean;
 	enabled: boolean;
 	webhook_id: string | null;
 	webhook_url: string | null;
@@ -372,13 +373,13 @@ function ConnectorDetailPage() {
 
 	if (!tenantId || loading) return <PageSkeleton />;
 
-	if (!connector) {
+	if (!connector || !connector.configured) {
 		return (
 			<PageLayout
-				header={<PageHeader title={slug} description="Connector not found" />}
+				header={<PageHeader title={slug} description="Connector not added" />}
 			>
 				<p className="text-sm text-muted-foreground mb-4">
-					{err ?? "This connector has not been enabled for your tenant."}
+					{err ?? "This connector has not been added for your tenant. Go back and click Add Connector."}
 				</p>
 				<Button variant="outline" onClick={() => navigate({ to: "/connectors" })}>
 					<ArrowLeft className="h-4 w-4 mr-1" /> Back to Connectors
@@ -386,6 +387,17 @@ function ConnectorDetailPage() {
 			</PageLayout>
 		);
 	}
+
+	const handleReEnable = async () => {
+		if (!tenantId) return;
+		try {
+			await apiFetch(`/api/task-connectors/${slug}`, tenantId, { method: "POST" });
+			toast.success("Re-enabled");
+			fetchData();
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : String(e));
+		}
+	};
 
 	return (
 		<PageLayout
@@ -399,7 +411,7 @@ function ConnectorDetailPage() {
 								} connected · ${connector.delivery_count_24h} event${
 									connector.delivery_count_24h === 1 ? "" : "s"
 								} in the last 24h`
-							: "Not enabled for this tenant"
+							: "Disabled — new events are dropped. Row + history preserved."
 					}
 					actions={
 						<div className="flex items-center gap-2">
@@ -410,7 +422,7 @@ function ConnectorDetailPage() {
 							>
 								<ArrowLeft className="h-4 w-4 mr-1" /> Back
 							</Button>
-							{connector.enabled && (
+							{connector.enabled ? (
 								<>
 									<Button size="sm" variant="outline" onClick={handleTest}>
 										<Send className="h-3.5 w-3.5 mr-1.5" /> Send test event
@@ -432,10 +444,14 @@ function ConnectorDetailPage() {
 											<Trash2 className="h-3.5 w-3.5 mr-1.5" /> Remove secret
 										</Button>
 									)}
-									<Button size="sm" variant="destructive" onClick={handleDisable}>
+									<Button size="sm" variant="outline" onClick={handleDisable}>
 										Disable
 									</Button>
 								</>
+							) : (
+								<Button size="sm" variant="outline" onClick={handleReEnable}>
+									Re-enable
+								</Button>
 							)}
 						</div>
 					}
