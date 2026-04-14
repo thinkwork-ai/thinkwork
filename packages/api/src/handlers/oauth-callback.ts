@@ -146,15 +146,23 @@ export async function handler(
 		const tokens = await tokenRes.json() as TokenResponse;
 		console.log(`[oauth-callback] Token exchange succeeded for connection ${conn.id}`);
 
-		// 4. Get user info (email) from provider
+		// 4. Get user info (email + native user id) from provider.
+		// Native user id is load-bearing for webhook ingestion: provider
+		// webhooks carry the native id, not email, and we need to route an
+		// inbound event back to the connected user.
 		let externalId = "";
+		let providerUserinfo: Record<string, unknown> = {};
 		try {
 			const userinfoRes = await fetch(config.userinfo_url, {
 				headers: { Authorization: `Bearer ${tokens.access_token}` },
 			});
 			if (userinfoRes.ok) {
-				const userinfo = await userinfoRes.json() as Record<string, string>;
-				externalId = userinfo.email || userinfo.mail || userinfo.userPrincipalName || "";
+				providerUserinfo = (await userinfoRes.json()) as Record<string, unknown>;
+				externalId =
+					(providerUserinfo.email as string | undefined) ||
+					(providerUserinfo.mail as string | undefined) ||
+					(providerUserinfo.userPrincipalName as string | undefined) ||
+					"";
 			}
 		} catch (err) {
 			console.warn(`[oauth-callback] Userinfo fetch failed:`, err);
@@ -209,6 +217,28 @@ export async function handler(
 			oauth_state: undefined, // Clear state token
 		};
 		delete metadata.oauth_state;
+
+		// LastMile: persist the provider-native user id under
+		// `metadata.lastmile.userId` so inbound webhooks can route events back
+		// to this connection (webhooks carry the native id, not email).
+		if (provider.name === "lastmile") {
+			const lastmileUserId =
+				(providerUserinfo.id as string | undefined) ||
+				(providerUserinfo.user_id as string | undefined) ||
+				(providerUserinfo.userId as string | undefined) ||
+				(providerUserinfo.sub as string | undefined);
+			const existingLastmileMeta = (metadata.lastmile as Record<string, unknown> | undefined) ?? {};
+			metadata.lastmile = {
+				...existingLastmileMeta,
+				...(lastmileUserId ? { userId: lastmileUserId } : {}),
+				...(providerUserinfo.name ? { name: providerUserinfo.name } : {}),
+			};
+			if (!lastmileUserId) {
+				console.warn(
+					`[oauth-callback] LastMile userinfo missing native user id — webhook ingestion will fail for connection ${conn.id}`,
+				);
+			}
+		}
 
 		if (provider.name === "google_productivity") {
 			// Initialize Gmail historyId

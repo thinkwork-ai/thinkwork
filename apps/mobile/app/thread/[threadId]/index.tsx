@@ -16,6 +16,7 @@ import { useThreadReadState } from "@/lib/hooks/use-thread-read-state";
 import { ActivityTimeline, type SaveRecipeInfo } from "@/components/threads/ActivityTimeline";
 import { MarkdownMessage } from "@/components/chat/MarkdownMessage";
 import { TaskRow } from "@/components/threads/TaskRow";
+import { PinnedExternalTaskHeader } from "@/components/thread/PinnedExternalTaskHeader";
 import { SaveRecipeSheet, type SaveRecipeSheetRef } from "@/components/genui/SaveRecipeSheet";
 import { CreateRecipeMutation } from "@/lib/graphql-queries";
 import { useAppMode } from "@/lib/hooks/use-app-mode";
@@ -387,19 +388,36 @@ export default function ThreadDetailRoute() {
               ListFooterComponent={<View style={{ height: 20 }} />}
             />
           ) : (
-            /* Non-task view: activity timeline */
-            <ActivityTimeline
-              key={threadId}
-              messages={messages}
-              turns={turns}
-              agentName={agentName}
-              isAdmin={isAdmin}
-              isAgentRunning={!!threadId && isThreadActive(threadId)}
-              onLinkPress={handleLinkPress}
-              onSaveRecipe={handleSaveRecipe}
-              listHeaderComponent={null}
-              currentUserId={currentUser?.id}
-            />
+            /* Non-task view: activity timeline (with optional external task
+               header when thread.metadata.external.latestEnvelope exists) */
+            (() => {
+              const externalMeta = (thread?.metadata ?? {}) as Record<string, unknown>;
+              const hasExternalTask = Boolean(
+                (externalMeta.external as Record<string, unknown> | undefined)?.latestEnvelope,
+              );
+              const pinnedHeader = hasExternalTask ? (
+                <PinnedExternalTaskHeader
+                  threadMetadata={thread.metadata}
+                  threadId={thread.id}
+                  tenantId={thread.tenantId}
+                  currentUserId={currentUser?.id}
+                />
+              ) : null;
+              return (
+                <ActivityTimeline
+                  key={threadId}
+                  messages={messages}
+                  turns={turns}
+                  agentName={agentName}
+                  isAdmin={isAdmin}
+                  isAgentRunning={!!threadId && isThreadActive(threadId)}
+                  onLinkPress={handleLinkPress}
+                  onSaveRecipe={handleSaveRecipe}
+                  listHeaderComponent={pinnedHeader}
+                  currentUserId={currentUser?.id}
+                />
+              );
+            })()
           )
         ) : null}
       </View>

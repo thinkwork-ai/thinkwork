@@ -1,0 +1,19 @@
+# External task integration — structured action executor.
+#
+# Direct-path mutation: the client calls this instead of routing a form-card
+# submission through the agent. Returns the fresh envelope so the UI can
+# replace optimistic state.
+
+type ExternalTaskActionResult {
+  threadId: ID!
+  envelope: AWSJSON!
+  auditMessageId: ID
+}
+
+extend type Mutation {
+  executeExternalTaskAction(
+    threadId: ID!
+    actionType: String!
+    params: AWSJSON
+  ): ExternalTaskActionResult!
+}

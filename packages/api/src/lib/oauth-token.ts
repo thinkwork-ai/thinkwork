@@ -58,6 +58,84 @@ interface TokenRefreshResult {
 }
 
 /**
+ * Resolve an active connection row for a provider-native user id (e.g.
+ * LastMile's internal user uuid), given the provider name. Webhooks carry the
+ * native id, not our Cognito sub, so this is the one-stop lookup.
+ *
+ * Matches on `connections.metadata->{provider}->userId`. The OAuth callback
+ * is responsible for writing that field at connect time; if it's missing the
+ * webhook resolution will return null and the caller must log + drop.
+ */
+export async function resolveConnectionByProviderUserId(
+	providerName: string,
+	providerUserId: string,
+): Promise<{ connectionId: string; tenantId: string; userId: string; providerId: string } | null> {
+	const rows = await db
+		.select({
+			connectionId: connections.id,
+			tenantId: connections.tenant_id,
+			userId: connections.user_id,
+			providerId: connections.provider_id,
+			status: connections.status,
+			metadata: connections.metadata,
+		})
+		.from(connections)
+		.innerJoin(connectProviders, eq(connections.provider_id, connectProviders.id))
+		.where(
+			and(
+				eq(connectProviders.name, providerName),
+				eq(connections.status, "active"),
+			),
+		);
+
+	for (const row of rows) {
+		const meta = (row.metadata ?? {}) as Record<string, unknown>;
+		const providerMeta = (meta[providerName] ?? {}) as Record<string, unknown>;
+		if (providerMeta.userId === providerUserId) {
+			return {
+				connectionId: row.connectionId,
+				tenantId: row.tenantId,
+				userId: row.userId,
+				providerId: row.providerId,
+			};
+		}
+	}
+	return null;
+}
+
+/**
+ * Resolve a user's active connection row for a named provider. Used by the
+ * external-task executor and webhook pipeline to map
+ * `(tenantId, userId, providerName)` → `{ connectionId, providerId }`
+ * without each call site re-learning the join shape.
+ */
+export async function resolveConnectionForUser(
+	tenantId: string,
+	userId: string,
+	providerName: string,
+): Promise<{ connectionId: string; providerId: string } | null> {
+	const [row] = await db
+		.select({
+			connectionId: connections.id,
+			providerId: connections.provider_id,
+			status: connections.status,
+			providerName: connectProviders.name,
+		})
+		.from(connections)
+		.innerJoin(connectProviders, eq(connections.provider_id, connectProviders.id))
+		.where(
+			and(
+				eq(connections.tenant_id, tenantId),
+				eq(connections.user_id, userId),
+				eq(connectProviders.name, providerName),
+			),
+		);
+
+	if (!row || row.status !== "active") return null;
+	return { connectionId: row.connectionId, providerId: row.providerId };
+}
+
+/**
  * Resolve a fresh OAuth access token for a given connection.
  * Returns the access token string, or null if resolution fails.
  */

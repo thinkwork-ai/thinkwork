@@ -1,0 +1,16 @@
+{
+	"id": "task_abc123",
+	"title": "Deliver groceries to 221B Baker St",
+	"description": "Left-side entrance, call on arrival.",
+	"status": "in_progress",
+	"priority": "high",
+	"assignee": {
+		"id": "user_42",
+		"name": "Alice Doe",
+		"email": "alice@example.com"
+	},
+	"due_at": "2026-04-20T12:00:00Z",
+	"updated_at": "2026-04-13T09:15:00Z",
+	"url": "https://lastmile-tei.com/tasks/task_abc123",
+	"labels": ["urgent", "route-1"]
+}
