@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { View, ScrollView, Pressable, Alert, RefreshControl } from "react-native";
 import { useColorScheme } from "nativewind";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
 import {
   Cable,
   CheckCircle2,
@@ -98,15 +98,17 @@ export default function McpServerDetailScreen() {
 
   const handleAuthenticate = async () => {
     if (!server || !tenant?.id || !user?.id) return;
-    // `openAuthSessionAsync` + `preferEphemeralSession: true` — see the
-    // longer comment in `mcp-servers.tsx:handleConnect`. Required so the
-    // WorkOS session cookie doesn't persist across reconnect attempts and
-    // strand the user on a "Logged in as ..." consent screen.
+    // See the longer comment in `mcp-servers.tsx:handleConnect`. Using
+    // real Safari (`Linking.openURL`) instead of an in-app browser is
+    // what actually makes the Clerk sign-in form work. The
+    // `/exchange` call is made from `app/mcp-oauth-complete.tsx` after
+    // the deep-link return.
     const url = `${API_BASE}/api/skills/mcp-oauth/authorize?mcpServerId=${server.id}&userId=${user.id}&tenantId=${tenant.id}&force=true`;
-    await WebBrowser.openAuthSessionAsync(url, "thinkwork://mcp-oauth-complete", {
-      preferEphemeralSession: true,
-    });
-    await fetchServer();
+    try {
+      await Linking.openURL(url);
+    } catch (e) {
+      console.warn("[mcp-oauth] Linking.openURL failed:", e);
+    }
   };
 
   const [clearing, setClearing] = useState(false);
