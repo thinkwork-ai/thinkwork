@@ -1,5 +1,12 @@
 # User Quick Actions — per-user saved prompt shortcuts
 
+# Scope discriminates between the Threads-footer (default) and the
+# Tasks-footer lists. Existing actions backfill to "thread".
+enum QuickActionScope {
+  thread
+  task
+}
+
 type UserQuickAction {
   id: ID!
   userId: ID!
@@ -7,15 +14,18 @@ type UserQuickAction {
   title: String!
   prompt: String!
   workspaceAgentId: ID
+  scope: QuickActionScope!
   sortOrder: Int!
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
 }
 
 input CreateQuickActionInput {
+  tenantId: ID!
   title: String!
   prompt: String!
   workspaceAgentId: ID
+  scope: QuickActionScope
   sortOrder: Int
 }
 
@@ -23,20 +33,20 @@ input UpdateQuickActionInput {
   title: String
   prompt: String
   workspaceAgentId: ID
+  scope: QuickActionScope
   sortOrder: Int
 }
 
 input ReorderQuickActionsInput {
-  items: [ReorderQuickActionItem!]!
-}
-
-input ReorderQuickActionItem {
-  id: ID!
-  sortOrder: Int!
+  tenantId: ID!
+  scope: QuickActionScope
+  orderedIds: [ID!]!
 }
 
 extend type Query {
-  userQuickActions(tenantId: ID!): [UserQuickAction!]!
+  # Scope defaults to "thread" server-side when omitted so older clients
+  # continue to see the Threads list.
+  userQuickActions(tenantId: ID!, scope: QuickActionScope): [UserQuickAction!]!
 }
 
 extend type Mutation {

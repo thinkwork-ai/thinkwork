@@ -29,6 +29,12 @@ export const userQuickActions = pgTable(
 		title: text("title").notNull(),
 		prompt: text("prompt").notNull(),
 		workspace_agent_id: uuid("workspace_agent_id").references(() => agents.id),
+		// Discriminator for which surface the action applies to: "thread"
+		// (the default — Start-a-thread footer) or "task" (the Tasks-tab
+		// footer). Existing rows backfill to "thread" via the column
+		// default so current users see no behavior change. sort_order is
+		// per-surface so reordering one list doesn't shuffle the other.
+		scope: text("scope").notNull().default("thread"),
 		sort_order: integer("sort_order").notNull().default(0),
 		created_at: timestamp("created_at", { withTimezone: true })
 			.notNull()
@@ -40,6 +46,14 @@ export const userQuickActions = pgTable(
 	(table) => [
 		index("idx_user_quick_actions_user").on(table.user_id),
 		index("idx_user_quick_actions_tenant").on(table.tenant_id),
+		// Scope filtering is the common read path after this change. The
+		// composite index lets the userQuickActions query hit a single
+		// index instead of filtering + scope-matching.
+		index("idx_user_quick_actions_user_tenant_scope").on(
+			table.user_id,
+			table.tenant_id,
+			table.scope,
+		),
 	],
 );
 

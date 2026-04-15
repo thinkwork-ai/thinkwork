@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { useMutation } from 'urql';
 import { Text } from '@/components/ui/typography';
@@ -44,19 +44,22 @@ function renderBlock({
   item: NormalizedTask;
   submitting: boolean;
   handleActionPress: (a: TaskActionSpec) => void;
-  onEditPress: () => void;
+  onEditPress: (() => void) | undefined;
   submit: SubmitFn;
   keyPrefix: string;
   activityRows: ActivityRow[];
 }): React.ReactNode {
   switch (block.type) {
     case 'task_header':
+      // Force `showSource` / `showUpdatedAt` off on mobile: the Task Detail
+      // page now puts the provider label in the nav header, so repeating
+      // "LASTMILE TASKS · Updated …" inside the card is redundant.
       return (
         <TaskHeader
           key={`${keyPrefix}header`}
           item={item}
-          showSource={block.showSource}
-          showUpdatedAt={block.showUpdatedAt}
+          showSource={false}
+          showUpdatedAt={false}
           onEditPress={onEditPress}
         />
       );
@@ -158,12 +161,26 @@ function ExternalTaskCard({ data, context }: GenUIProps) {
   const envelope = data as unknown as ExternalTaskEnvelope;
   const threadId = context?.threadId;
   const activityRows: ActivityRow[] = (context?.activityRows ?? []) as ActivityRow[];
+  const hideEditButton = context?.hideEditButton ?? false;
+  const editRequestCounter = context?.editRequestCounter ?? 0;
 
   const [currentEnvelope, setCurrentEnvelope] = useState<ExternalTaskEnvelope>(envelope);
   const [submitting, setSubmitting] = useState(false);
   const [topLevelError, setTopLevelError] = useState<string | null>(null);
   // Which action is currently showing its modal sheet. Null when closed.
   const [activeActionType, setActiveActionType] = useState<TaskActionType | null>(null);
+
+  // Page-level "Edit Task" dropdown → open the edit sheet. The dropdown
+  // increments `editRequestCounter`; we fire whenever it moves.
+  const lastEditRequestRef = useRef(editRequestCounter);
+  useEffect(() => {
+    if (editRequestCounter !== lastEditRequestRef.current) {
+      lastEditRequestRef.current = editRequestCounter;
+      if (editRequestCounter > 0) {
+        setActiveActionType('external_task.edit_fields');
+      }
+    }
+  }, [editRequestCounter]);
 
   const [, executeExternalTaskAction] = useMutation(ExecuteExternalTaskActionMutation);
 
@@ -235,10 +252,14 @@ function ExternalTaskCard({ data, context }: GenUIProps) {
 
   // The pencil icon in the task_header opens the same edit form modal that
   // the removed action_bar used to launch via `external_task.edit_fields`.
+  // When `hideEditButton` is set (Task Detail page), we pass `undefined` so
+  // TaskHeader suppresses the pencil and the page-level dropdown becomes
+  // the sole edit entry point.
   const onEditPress = useCallback(
     () => setActiveActionType('external_task.edit_fields'),
     [],
   );
+  const effectiveOnEditPress = hideEditButton ? undefined : onEditPress;
 
   return (
     <>
@@ -249,7 +270,7 @@ function ExternalTaskCard({ data, context }: GenUIProps) {
             item,
             submitting,
             handleActionPress,
-            onEditPress,
+            onEditPress: effectiveOnEditPress,
             submit,
             keyPrefix: `${i}-`,
             activityRows,

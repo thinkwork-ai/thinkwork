@@ -15,6 +15,12 @@ export const updateQuickAction = async (_parent: any, args: any, ctx: GraphQLCon
 	if (i.prompt !== undefined) updates.prompt = i.prompt;
 	if (i.workspaceAgentId !== undefined) updates.workspace_agent_id = i.workspaceAgentId;
 	if (i.sortOrder !== undefined) updates.sort_order = i.sortOrder;
+	// Allow moving an action between scopes. Rare in practice but
+	// harmless to support and useful for a "convert to task action"
+	// affordance we might add later.
+	if (i.scope !== undefined) {
+		updates.scope = i.scope === "task" ? "task" : "thread";
+	}
 
 	const [row] = await db
 		.update(userQuickActions)

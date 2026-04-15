@@ -69,6 +69,17 @@ export interface GenUIContext {
     content: string;
     createdAt: string;
   }>;
+  /**
+   * Hide the in-card edit button. Set by the pinned task header on the Task
+   * Detail page so the page-level dropdown becomes the single edit entry
+   * point and the card stays free of duplicate chrome.
+   */
+  hideEditButton?: boolean;
+  /**
+   * Monotonically increasing counter driven by the page-level "Edit Task"
+   * dropdown item. When it changes, the card opens its edit sheet.
+   */
+  editRequestCounter?: number;
 }
 
 // Lazy imports to keep bundle size down

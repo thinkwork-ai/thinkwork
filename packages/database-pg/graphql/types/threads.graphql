@@ -68,6 +68,12 @@ type Thread {
   cancelledAt: AWSDateTime
   closedAt: AWSDateTime
   archivedAt: AWSDateTime
+  # External-system sync state for task-channel threads. null for threads
+  # that don't sync externally (internal chats, webhook-ingested tasks
+  # that already carry metadata.external). Task-channel threads created
+  # from mobile will land in "local", "pending", "synced", or "error".
+  syncStatus: String
+  syncError: String
   lastTurnCompletedAt: AWSDateTime
   lastResponsePreview: String
   lastReadAt: AWSDateTime
@@ -251,6 +257,12 @@ extend type Mutation {
 
   escalateThread(input: EscalateThreadInput!): Thread!
   delegateThread(input: DelegateThreadInput!): Thread!
+
+  # Re-fire the outbound sync for a task-channel thread that ended up in
+  # sync_status='error' or 'local'. Returns the reconciled thread so
+  # callers can render the new badge state. Already-synced rows are a
+  # no-op and return unchanged.
+  retryTaskSync(threadId: ID!): Thread!
 }
 
 input EscalateThreadInput {

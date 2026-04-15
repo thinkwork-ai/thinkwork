@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { View, ScrollView, Pressable, RefreshControl, Alert } from "react-native";
 import { useColorScheme } from "nativewind";
 import * as WebBrowser from "expo-web-browser";
@@ -10,23 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { COLORS } from "@/lib/theme";
 import { useMe } from "@/lib/hooks/use-users";
+import { useConnections, type ConnectionRow } from "@/lib/hooks/use-connections";
 import { AgentsQuery } from "@/lib/graphql-queries";
 const API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(/\/graphql$/, "");
 const GRAPHQL_API_KEY = process.env.EXPO_PUBLIC_GRAPHQL_API_KEY || "";
-
-type ConnectionRow = {
-  id: string;
-  tenant_id: string;
-  user_id: string;
-  provider_id: string;
-  status: string;
-  external_id: string | null;
-  metadata: Record<string, unknown> | null;
-  connected_at: string | null;
-  provider_name: string;
-  provider_display_name: string;
-  provider_type: string;
-};
 
 const PROVIDER_ICONS: Record<string, typeof Mail> = {
   google_productivity: Mail,
@@ -52,9 +39,8 @@ export default function IntegrationsScreen() {
   // the whole screen behind an extra GraphQL request.
   const tenantId = user?.tenantId ?? undefined;
 
-  const [connections, setConnections] = useState<ConnectionRow[] | null>(null);
+  const { connections, loading, refetch: refetchConnections } = useConnections();
   const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [expandedAgentPicker, setExpandedAgentPicker] = useState<string | null>(null);
   const [savingAgentFor, setSavingAgentFor] = useState<string | null>(null);
 
@@ -78,41 +64,9 @@ export default function IntegrationsScreen() {
     );
   }, [agentsResult.data?.agents, user?.id]);
 
-  const fetchConnections = useCallback(async () => {
-    // Wait for tenant + user to resolve, but don't hang the loading
-    // state — setLoading(false) so the render gate releases and the
-    // screen can show whatever state it has (empty list is better
-    // than a permanent skeleton).
-    if (!tenantId || !user?.id) {
-      setLoading(false);
-      return;
-    }
-    try {
-      const res = await fetch(`${API_BASE}/api/connections`, {
-        headers: {
-          "x-api-key": GRAPHQL_API_KEY,
-          "x-tenant-id": tenantId,
-          "x-principal-id": user.id,
-        },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setConnections(data);
-      }
-    } catch (err) {
-      console.error("[integrations] Failed to fetch connections:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, [tenantId, user?.id]);
-
-  useEffect(() => {
-    void fetchConnections();
-  }, [fetchConnections]);
-
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchConnections();
+    await refetchConnections();
     setRefreshing(false);
   };
 
@@ -121,14 +75,14 @@ export default function IntegrationsScreen() {
     const url = `${API_BASE}/api/oauth/authorize?provider=google_productivity&userId=${user.id}&tenantId=${tenantId}`;
     await WebBrowser.openBrowserAsync(url);
     // Refresh connections after OAuth flow completes
-    await fetchConnections();
+    await refetchConnections();
   };
 
   const handleConnectMicrosoft = async () => {
     if (!tenantId || !user?.id) return;
     const url = `${API_BASE}/api/oauth/authorize?provider=microsoft_365&userId=${user.id}&tenantId=${tenantId}`;
     await WebBrowser.openBrowserAsync(url);
-    await fetchConnections();
+    await refetchConnections();
   };
 
   // LastMile connects via MCP Servers → LastMile Tasks → OAuth. The
@@ -175,7 +129,7 @@ export default function IntegrationsScreen() {
         if (!res.ok) {
           throw new Error(`PUT /api/connections failed: ${res.status}`);
         }
-        await fetchConnections();
+        await refetchConnections();
         setExpandedAgentPicker(null);
       } catch (err) {
         console.error("[integrations] Failed to set default agent:", err);
@@ -184,7 +138,7 @@ export default function IntegrationsScreen() {
         setSavingAgentFor(null);
       }
     },
-    [tenantId, fetchConnections],
+    [tenantId, refetchConnections],
   );
 
   const handleDisconnect = async (connectionId: string, providerName: string) => {
@@ -205,7 +159,7 @@ export default function IntegrationsScreen() {
                   "x-tenant-id": tenantId || "",
                 },
               });
-              await fetchConnections();
+              await refetchConnections();
             } catch (err) {
               console.error("[integrations] Disconnect failed:", err);
             }

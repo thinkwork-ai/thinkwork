@@ -20,10 +20,15 @@ interface MessageInputFooterProps {
   isDark: boolean;
   /** Show the quick actions button (Zap icon) */
   onQuickActions?: () => void;
+  /** Render the quick actions button dimmed and swallow presses. Used by
+   *  the Tasks footer until Task-scoped Quick Actions ship. */
+  quickActionsDisabled?: boolean;
   /** Skip bottom safe area inset (when parent already handles it) */
   skipBottomInset?: boolean;
   /** Open workspace picker (+ button) */
   onPlusPress?: () => void;
+  /** Render the plus button dimmed and swallow presses. */
+  plusDisabled?: boolean;
   /** Currently selected workspaces shown as chips */
   selectedWorkspaces?: SelectedWorkspace[];
   /** Remove a workspace chip */
@@ -43,7 +48,9 @@ export const MessageInputFooter = forwardRef<MessageInputFooterRef, MessageInput
   isDark,
   skipBottomInset,
   onQuickActions,
+  quickActionsDisabled,
   onPlusPress,
+  plusDisabled,
   selectedWorkspaces,
   onRemoveWorkspace,
 }, ref) {
@@ -122,12 +129,22 @@ export const MessageInputFooter = forwardRef<MessageInputFooterRef, MessageInput
         <View className="flex-row items-center justify-between px-4 pt-1 pb-2">
           <View className="flex-row items-center gap-4">
             {onPlusPress && (
-              <Pressable onPress={onPlusPress} className="p-1 active:opacity-70">
+              <Pressable
+                onPress={plusDisabled ? undefined : onPlusPress}
+                disabled={plusDisabled}
+                className="p-1 active:opacity-70"
+                style={{ opacity: plusDisabled ? 0.35 : 1 }}
+              >
                 <Plus size={26} color={colors.mutedForeground} />
               </Pressable>
             )}
             {onQuickActions && (
-              <Pressable onPress={onQuickActions} className="p-1 active:opacity-70">
+              <Pressable
+                onPress={quickActionsDisabled ? undefined : onQuickActions}
+                disabled={quickActionsDisabled}
+                className="p-1 active:opacity-70"
+                style={{ opacity: quickActionsDisabled ? 0.35 : 1 }}
+              >
                 <Zap size={24} color={colors.mutedForeground} />
               </Pressable>
             )}
