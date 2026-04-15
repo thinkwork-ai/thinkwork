@@ -9,6 +9,7 @@
 import type { GraphQLContext } from "../../context.js";
 import { executeExternalTaskAction as executor } from "../../../integrations/external-work-items/executeAction.js";
 import type { TaskActionType } from "../../../integrations/external-work-items/types.js";
+import { resolveCaller } from "../core/resolve-auth-user.js";
 
 const VALID_ACTION_TYPES: readonly TaskActionType[] = [
 	"external_task.update_status",
@@ -27,8 +28,12 @@ export const executeExternalTaskAction = async (
 	args: { threadId: string; actionType: string; params?: Record<string, unknown> },
 	ctx: GraphQLContext,
 ) => {
-	if (!ctx.auth.tenantId) throw new Error("Unauthorized: tenant not resolved");
-	if (!ctx.auth.principalId) throw new Error("Unauthorized: principal not resolved");
+	// Google federated Cognito JWTs don't carry custom:tenant_id so we can't
+	// trust ctx.auth.tenantId alone — resolve both ids through the DB users
+	// row (by sub or email fallback) for robust identity on OAuth callers.
+	const { userId, tenantId } = await resolveCaller(ctx);
+	if (!tenantId) throw new Error("Unauthorized: tenant not resolved");
+	if (!userId) throw new Error("Unauthorized: principal not resolved");
 	if (!isActionType(args.actionType)) {
 		throw new Error(`Invalid actionType: ${args.actionType}`);
 	}
@@ -37,8 +42,8 @@ export const executeExternalTaskAction = async (
 		threadId: args.threadId,
 		actionType: args.actionType,
 		params: args.params ?? {},
-		tenantId: ctx.auth.tenantId,
-		principalId: ctx.auth.principalId,
+		tenantId,
+		principalId: userId,
 	});
 
 	return {

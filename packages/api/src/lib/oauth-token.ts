@@ -16,7 +16,7 @@ import { eq, and } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { schema } from "@thinkwork/database-pg";
 
-const { connections, connectProviders, credentials } = schema;
+const { connections, connectProviders, credentials, userMcpTokens, tenantMcpServers } = schema;
 import {
 	SecretsManagerClient,
 	GetSecretValueCommand,
@@ -166,12 +166,27 @@ export async function resolveConnectionForUser(
 /**
  * Resolve a fresh OAuth access token for a given connection.
  * Returns the access token string, or null if resolution fails.
+ *
+ * LastMile special case: tokens live in `user_mcp_tokens` + a different
+ * Secrets Manager path (`thinkwork/.../mcp-tokens/{userId}/{mcpServerId}`)
+ * because the OAuth flow goes through the MCP Servers RFC 9728 pipeline, not
+ * the `oauth-callback` flow. For non-LastMile providers we fall through to
+ * the standard `connections` secret path.
  */
 export async function resolveOAuthToken(
 	connectionId: string,
 	tenantId: string,
 	providerId: string,
 ): Promise<string | null> {
+	// Check if this is a LastMile connection — route to the MCP token path.
+	const [providerRow] = await db
+		.select({ name: connectProviders.name })
+		.from(connectProviders)
+		.where(eq(connectProviders.id, providerId));
+	if (providerRow?.name === "lastmile") {
+		return resolveLastmileUserToken(connectionId, tenantId);
+	}
+
 	const secretId = `thinkwork/${STAGE}/oauth/${connectionId}`;
 
 	// 1. Read current token from Secrets Manager
@@ -479,4 +494,104 @@ export async function notifyConnectionExpired(
 	}
 
 	console.log(`[oauth-token] Connection ${connectionId} expired: ${reason}`);
+}
+
+/**
+ * Resolve the per-user LastMile access token from the MCP OAuth path.
+ *
+ * LastMile users authenticate via the mobile MCP Servers screen, which
+ * stores tokens in `user_mcp_tokens` + Secrets Manager at
+ * `thinkwork/{stage}/mcp-tokens/{userId}/{mcpServerId}`. The `connections`
+ * row created by the whoami hook is just an identity-linking record — it
+ * does NOT own the credential. So for LastMile the token lookup goes
+ * through the MCP path.
+ *
+ * Matches the LastMile Tasks MCP server by URL substring (same heuristic
+ * as the whoami hook in skills.ts). If there are multiple LastMile MCP
+ * servers for the tenant (Tasks, CRM, Data Catalog) we use the Tasks one
+ * because that's the only one that currently performs write actions on
+ * tasks — when another provider needs writes, re-think this lookup.
+ */
+async function resolveLastmileUserToken(
+	connectionId: string,
+	tenantId: string,
+): Promise<string | null> {
+	// 1. Get the user_id from the connections row — we can't trust caller
+	//    context here because this function is called from executeAction,
+	//    webhook ingest, and refresh paths all with different upstream args.
+	const [conn] = await db
+		.select({ user_id: connections.user_id })
+		.from(connections)
+		.where(
+			and(eq(connections.id, connectionId), eq(connections.tenant_id, tenantId)),
+		);
+	if (!conn?.user_id) {
+		console.warn(
+			`[oauth-token] LastMile connection ${connectionId} has no user_id`,
+		);
+		return null;
+	}
+
+	// 2. Find the LastMile Tasks MCP server for this tenant. Match by URL
+	//    pattern (host contains "lastmile", path contains "/tasks") to stay
+	//    agnostic of whatever slug the admin chose.
+	const tenantMcpRows = await db
+		.select({
+			id: tenantMcpServers.id,
+			url: tenantMcpServers.url,
+			enabled: tenantMcpServers.enabled,
+		})
+		.from(tenantMcpServers)
+		.where(eq(tenantMcpServers.tenant_id, tenantId));
+	const tasksMcp = tenantMcpRows.find(
+		(r) =>
+			r.enabled &&
+			r.url.toLowerCase().includes("lastmile") &&
+			r.url.toLowerCase().includes("/tasks"),
+	);
+	if (!tasksMcp) {
+		console.warn(
+			`[oauth-token] No LastMile Tasks MCP server configured for tenant ${tenantId}`,
+		);
+		return null;
+	}
+
+	// 3. Read the user's token row.
+	const [tok] = await db
+		.select({
+			secret_ref: userMcpTokens.secret_ref,
+			status: userMcpTokens.status,
+		})
+		.from(userMcpTokens)
+		.where(
+			and(
+				eq(userMcpTokens.user_id, conn.user_id),
+				eq(userMcpTokens.mcp_server_id, tasksMcp.id),
+				eq(userMcpTokens.status, "active"),
+			),
+		);
+	if (!tok?.secret_ref) {
+		console.warn(
+			`[oauth-token] No active MCP token for user ${conn.user_id} on LastMile Tasks`,
+		);
+		return null;
+	}
+
+	// 4. Pull the access token out of Secrets Manager.
+	try {
+		const result = await sm.send(
+			new GetSecretValueCommand({ SecretId: tok.secret_ref }),
+		);
+		if (!result.SecretString) return null;
+		const parsed = JSON.parse(result.SecretString) as { access_token?: string };
+		return parsed.access_token ?? null;
+	} catch (err) {
+		if (err instanceof ResourceNotFoundException) {
+			console.warn(
+				`[oauth-token] SM secret missing for LastMile MCP token: ${tok.secret_ref}`,
+			);
+			return null;
+		}
+		throw err;
+	}
 }
