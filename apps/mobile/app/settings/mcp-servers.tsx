@@ -83,8 +83,21 @@ export default function McpServersScreen() {
     if (!tenantId || !user?.id) return;
     // RFC 9728 OAuth flow — the API handles discovery, registration, and token exchange.
     // We just open the authorize URL which redirects through the MCP server's OAuth proxy.
+    //
+    // `openAuthSessionAsync` + `preferEphemeralSession: true` gives every
+    // attempt a clean ASWebAuthenticationSession cookie jar on iOS — without
+    // it WorkOS's session cookie persists across reconnect attempts and the
+    // user lands on a "Logged in as ..." consent screen instead of an
+    // email/password form, so switching accounts is impossible. Same fix
+    // pattern as auth-context.tsx already uses for Google OAuth.
+    //
+    // The server-side callback redirects to `thinkwork://mcp-oauth-complete`
+    // when done, which Expo detects and uses to auto-close the in-app
+    // browser (no manual "you can close this window" step).
     const url = `${API_BASE}/api/skills/mcp-oauth/authorize?mcpServerId=${mcpServer.id}&userId=${user.id}&tenantId=${tenantId}`;
-    await WebBrowser.openBrowserAsync(url);
+    await WebBrowser.openAuthSessionAsync(url, "thinkwork://mcp-oauth-complete", {
+      preferEphemeralSession: true,
+    });
     await fetchServers();
   };
 
