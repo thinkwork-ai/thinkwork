@@ -567,9 +567,12 @@ export function EditFormActionSheet({ visible, onClose, item, submit }: CommonPr
 					</View>
 				))}
 
-				{/* Save button: bottom-left of the modal body, rendered as a
-				    neutral outline button (not the filled primary accent). */}
-				<View className="flex-row mt-2">
+				{/* Save button: bottom-RIGHT of the modal body, rendered as a
+				    neutral outline button (not the filled primary accent).
+				    User feedback 2026-04-15: right-justified matches the
+				    iOS-native Cancel-left / Save-right convention users are
+				    used to from other modals in the app. */}
+				<View className="flex-row justify-end mt-2">
 					<Pressable
 						onPress={handleSubmit}
 						disabled={saving}
