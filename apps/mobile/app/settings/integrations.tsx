@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { View, ScrollView, Pressable, RefreshControl, Alert, Platform } from "react-native";
+import { View, ScrollView, Pressable, RefreshControl, Alert } from "react-native";
 import { useColorScheme } from "nativewind";
 import * as WebBrowser from "expo-web-browser";
 import { useQuery } from "urql";
@@ -123,71 +123,13 @@ export default function IntegrationsScreen() {
     await fetchConnections();
   };
 
-  // LastMile self-registration. LastMile (Clerk) OAuth isn't configured
-  // server-side yet, so instead we prompt for the LastMile user id directly.
-  // Users can find it in their LastMile profile URL. The backend creates a
-  // connections row with metadata.lastmile.userId so inbound webhooks route
-  // back to the right ThinkWork user without needing an access token.
-  const registerLastmileUser = useCallback(
-    async (lastmileUserId: string) => {
-      if (!tenant?.id || !user?.id) return;
-      const trimmed = lastmileUserId.trim();
-      if (!trimmed) return;
-      try {
-        const res = await fetch(`${API_BASE}/api/connections`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": GRAPHQL_API_KEY,
-            "x-tenant-id": tenant.id,
-            "x-principal-id": user.id,
-          },
-          body: JSON.stringify({
-            providerName: "lastmile",
-            external_id: trimmed,
-            metadata: { lastmile: { userId: trimmed } },
-          }),
-        });
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(text || `HTTP ${res.status}`);
-        }
-        await fetchConnections();
-      } catch (err) {
-        console.error("[integrations] LastMile self-register failed:", err);
-        Alert.alert(
-          "Couldn't connect",
-          "We couldn't register your LastMile user ID. Please try again.",
-        );
-      }
-    },
-    [tenant?.id, user?.id, fetchConnections],
-  );
-
+  // LastMile connects via MCP Servers → LastMile Tasks → OAuth. The
+  // post-OAuth hook in skills.ts calls user_whoami on the MCP server and
+  // writes the connections row automatically. Point users there.
   const handleConnectLastmile = async () => {
-    if (!tenant?.id || !user?.id) return;
-    if (Platform.OS !== "ios") {
-      Alert.alert(
-        "iOS only",
-        "Manual LastMile registration currently only works on iOS. Android support coming soon.",
-      );
-      return;
-    }
-    Alert.prompt(
-      "Connect LastMile",
-      "Paste your LastMile user ID (e.g. user_xxxxxxxxxxxxxxxxxxxxxxxx). You can find this in your LastMile profile URL.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Connect",
-          onPress: (value?: string) => {
-            if (value) void registerLastmileUser(value);
-          },
-        },
-      ],
-      "plain-text",
-      "",
-      "default",
+    Alert.alert(
+      "Connect via MCP Servers",
+      "LastMile Tasks uses OAuth through the MCP Servers screen. Open the header menu → MCP Servers → LastMile Tasks → Connect. Your LastMile user id is picked up automatically.",
     );
   };
 
