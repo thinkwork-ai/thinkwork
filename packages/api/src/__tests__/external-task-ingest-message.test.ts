@@ -26,7 +26,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockInsertValues, mockInsertReturning, mockInsert, mockDb } = vi.hoisted(() => {
 	const mockInsertReturning = vi.fn().mockResolvedValue([{ id: "mock-msg-id" }]);
-	const mockInsertValues = vi.fn(() => ({
+	// Typed parameter so TS infers `mock.calls` as `[unknown][]` — see the
+	// sibling comment in external-task-ingest-event.test.ts for why.
+	const mockInsertValues = vi.fn((_values: unknown) => ({
 		returning: mockInsertReturning,
 		then: (resolve: (value: undefined) => unknown, reject?: (reason: unknown) => unknown) =>
 			Promise.resolve(undefined).then(resolve, reject),

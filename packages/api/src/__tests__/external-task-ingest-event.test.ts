@@ -18,7 +18,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockInsertValues, mockInsertReturning, mockInsert, mockDb } = vi.hoisted(() => {
 	const mockInsertReturning = vi.fn().mockResolvedValue([{ id: "mock-msg-id" }]);
-	const mockInsertValues = vi.fn(() => ({
+	// Typed parameter so TS infers `mock.calls` as `[unknown][]` and lets
+	// tests read the insert payload via `mock.calls[0][0]`. Without this,
+	// `vi.fn(() => ...)` infers a zero-arg factory and `calls` ends up as
+	// `never[][]`, which breaks TS2493 on tuple indexing.
+	const mockInsertValues = vi.fn((_values: unknown) => ({
 		returning: mockInsertReturning,
 		then: (resolve: (value: undefined) => unknown, reject?: (reason: unknown) => unknown) =>
 			Promise.resolve(undefined).then(resolve, reject),
