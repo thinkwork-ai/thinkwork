@@ -497,6 +497,155 @@ export async function notifyConnectionExpired(
 }
 
 /**
+ * Stored MCP token shape — matches the JSON written to Secrets Manager by
+ * `skills.ts` (initial OAuth code exchange) and by `refreshLastmileMcpToken`
+ * (this file). The `expires_in` field is authoritative for per-row expiry
+ * bookkeeping on `user_mcp_tokens.expires_at`; the secret itself only
+ * carries `obtained_at` for audit purposes.
+ */
+interface StoredMcpToken {
+	access_token: string;
+	refresh_token: string | null;
+	token_type: string;
+	obtained_at: string;
+}
+
+interface McpTokenAuthConfig {
+	client_id?: string;
+	token_endpoint?: string;
+}
+
+/**
+ * Refresh a LastMile MCP token via the WorkOS `/oauth2/token` endpoint
+ * using `grant_type=refresh_token`. The WorkOS public-client flow does
+ * NOT require a client_secret — the mobile MCP Servers screen registers
+ * a new DCR client on first connect with `token_endpoint_auth_method:
+ * "none"`, and the client_id is cached in `tenant_mcp_servers.auth_config`.
+ *
+ * WorkOS rotates the `refresh_token` on every successful refresh — the
+ * new pair MUST be persisted back to Secrets Manager before returning,
+ * otherwise the next refresh attempt will fail with "invalid refresh
+ * token" and the user has to reconnect from mobile (exactly the PR H
+ * bug this helper fixes).
+ *
+ * Concurrency: two Lambda invocations can race here. The second one will
+ * fail because WorkOS invalidates the old refresh_token, mark the row
+ * expired, and the caller will fall back to its synthetic-envelope path
+ * for that single request. Next invocation picks up the freshly-stored
+ * token and succeeds.
+ *
+ * Returns the new access_token on success, null on any failure.
+ *
+ * Exported for unit tests; the intended public entry point is
+ * `resolveOAuthToken(connectionId, tenantId, providerId)` which wraps
+ * this helper behind the LastMile provider detection path.
+ */
+export async function refreshLastmileMcpToken(args: {
+	secretRef: string;
+	storedToken: StoredMcpToken;
+	userMcpTokenId: string;
+	tokenEndpoint: string;
+	clientId: string;
+}): Promise<string | null> {
+	const { secretRef, storedToken, userMcpTokenId, tokenEndpoint, clientId } = args;
+
+	if (!storedToken.refresh_token) {
+		console.warn(
+			`[oauth-token] LastMile MCP token has no refresh_token; cannot refresh ${secretRef}`,
+		);
+		await db
+			.update(userMcpTokens)
+			.set({ status: "expired", updated_at: new Date() })
+			.where(eq(userMcpTokens.id, userMcpTokenId));
+		return null;
+	}
+
+	let refreshJson: {
+		access_token?: string;
+		refresh_token?: string;
+		token_type?: string;
+		expires_in?: number;
+	};
+	try {
+		const body = new URLSearchParams({
+			grant_type: "refresh_token",
+			refresh_token: storedToken.refresh_token,
+			client_id: clientId,
+		});
+		const res = await fetch(tokenEndpoint, {
+			method: "POST",
+			headers: { "Content-Type": "application/x-www-form-urlencoded" },
+			body: body.toString(),
+			signal: AbortSignal.timeout(10_000),
+		});
+		if (!res.ok) {
+			const errText = await res.text().catch(() => "");
+			console.error(
+				`[oauth-token] LastMile MCP refresh failed: ${res.status} ${errText}`,
+			);
+			await db
+				.update(userMcpTokens)
+				.set({ status: "expired", updated_at: new Date() })
+				.where(eq(userMcpTokens.id, userMcpTokenId));
+			return null;
+		}
+		refreshJson = await res.json();
+	} catch (err) {
+		console.error(`[oauth-token] LastMile MCP refresh error:`, err);
+		return null;
+	}
+
+	if (!refreshJson.access_token) {
+		console.error(
+			`[oauth-token] LastMile MCP refresh returned no access_token for ${secretRef}`,
+		);
+		return null;
+	}
+
+	// Persist the rotated pair back to SM before returning — if this step
+	// fails, future resolves will keep handing out the now-invalid old
+	// access_token and we'd be in a permanently broken state.
+	const updated: StoredMcpToken = {
+		access_token: refreshJson.access_token,
+		// WorkOS rotates — if it didn't return a new one for some reason,
+		// keep the old one (better than null-ing out the refresh_token).
+		refresh_token: refreshJson.refresh_token ?? storedToken.refresh_token,
+		token_type: refreshJson.token_type ?? storedToken.token_type,
+		obtained_at: new Date().toISOString(),
+	};
+	try {
+		await sm.send(
+			new UpdateSecretCommand({
+				SecretId: secretRef,
+				SecretString: JSON.stringify(updated),
+			}),
+		);
+	} catch (err) {
+		console.error(
+			`[oauth-token] Failed to persist refreshed LastMile MCP token to SM:`,
+			err,
+		);
+		return null;
+	}
+
+	// Update the expiry bookkeeping row so the next resolve reads the right
+	// expires_at. If WorkOS didn't return expires_in, leave the column alone
+	// and fall back to JWT exp on next resolve (not currently implemented).
+	if (refreshJson.expires_in) {
+		const newExpiresAt = new Date(Date.now() + refreshJson.expires_in * 1000);
+		await db
+			.update(userMcpTokens)
+			.set({ expires_at: newExpiresAt, updated_at: new Date() })
+			.where(eq(userMcpTokens.id, userMcpTokenId));
+	}
+
+	console.log(
+		`[oauth-token] Refreshed LastMile MCP token ${secretRef} (expires_in=${refreshJson.expires_in ?? "?"}s)`,
+	);
+	return refreshJson.access_token;
+}
+
+/**
  * Resolve the per-user LastMile access token from the MCP OAuth path.
  *
  * LastMile users authenticate via the mobile MCP Servers screen, which
@@ -511,6 +660,14 @@ export async function notifyConnectionExpired(
  * servers for the tenant (Tasks, CRM, Data Catalog) we use the Tasks one
  * because that's the only one that currently performs write actions on
  * tasks — when another provider needs writes, re-think this lookup.
+ *
+ * PR H: this function now proactively refreshes the token when
+ * `user_mcp_tokens.expires_at` is within `EXPIRY_BUFFER_MS` of now.
+ * Previously we just returned the stored access_token as-is, so every
+ * ~15 minutes of idle time the webhook ingest path would start failing
+ * with "Invalid WorkOS token" and the user had to manually reconnect
+ * from mobile to unblock. Auto-refresh via the stored `refresh_token`
+ * closes that gap.
  */
 async function resolveLastmileUserToken(
 	connectionId: string,
@@ -534,12 +691,14 @@ async function resolveLastmileUserToken(
 
 	// 2. Find the LastMile Tasks MCP server for this tenant. Match by URL
 	//    pattern (host contains "lastmile", path contains "/tasks") to stay
-	//    agnostic of whatever slug the admin chose.
+	//    agnostic of whatever slug the admin chose. Also select auth_config
+	//    so the refresh helper can reach the WorkOS token endpoint.
 	const tenantMcpRows = await db
 		.select({
 			id: tenantMcpServers.id,
 			url: tenantMcpServers.url,
 			enabled: tenantMcpServers.enabled,
+			auth_config: tenantMcpServers.auth_config,
 		})
 		.from(tenantMcpServers)
 		.where(eq(tenantMcpServers.tenant_id, tenantId));
@@ -556,11 +715,13 @@ async function resolveLastmileUserToken(
 		return null;
 	}
 
-	// 3. Read the user's token row.
+	// 3. Read the user's token row AND its expiry.
 	const [tok] = await db
 		.select({
+			id: userMcpTokens.id,
 			secret_ref: userMcpTokens.secret_ref,
 			status: userMcpTokens.status,
+			expires_at: userMcpTokens.expires_at,
 		})
 		.from(userMcpTokens)
 		.where(
@@ -577,14 +738,14 @@ async function resolveLastmileUserToken(
 		return null;
 	}
 
-	// 4. Pull the access token out of Secrets Manager.
+	// 4. Pull the full token blob out of Secrets Manager.
+	let storedToken: StoredMcpToken;
 	try {
 		const result = await sm.send(
 			new GetSecretValueCommand({ SecretId: tok.secret_ref }),
 		);
 		if (!result.SecretString) return null;
-		const parsed = JSON.parse(result.SecretString) as { access_token?: string };
-		return parsed.access_token ?? null;
+		storedToken = JSON.parse(result.SecretString) as StoredMcpToken;
 	} catch (err) {
 		if (err instanceof ResourceNotFoundException) {
 			console.warn(
@@ -594,4 +755,51 @@ async function resolveLastmileUserToken(
 		}
 		throw err;
 	}
+	if (!storedToken.access_token) return null;
+
+	// 5. Check expiry (PR H). Refresh if within the buffer OR if the row
+	//    is missing an `expires_at` column entirely (pre-PR-H rows) AND
+	//    the secret's `obtained_at` is older than the buffer.
+	const needsRefresh = (() => {
+		if (tok.expires_at) {
+			return new Date(tok.expires_at).getTime() - Date.now() < EXPIRY_BUFFER_MS;
+		}
+		// No expires_at column — fall back to obtained_at + a conservative
+		// 15-minute lifetime (WorkOS default) minus the buffer.
+		if (storedToken.obtained_at) {
+			const obtainedMs = new Date(storedToken.obtained_at).getTime();
+			const assumedLifetimeMs = 15 * 60 * 1000;
+			return Date.now() - obtainedMs > assumedLifetimeMs - EXPIRY_BUFFER_MS;
+		}
+		// Nothing to go on — don't preemptively refresh; let the call fail
+		// and the next invocation will see expires_at after the refresh
+		// (which also stamps it).
+		return false;
+	})();
+
+	if (!needsRefresh) {
+		return storedToken.access_token;
+	}
+
+	// 6. Refresh. Extract endpoint + client_id from the MCP server's auth_config.
+	const authCfg = (tasksMcp.auth_config as McpTokenAuthConfig | null) ?? {};
+	const tokenEndpoint = authCfg.token_endpoint;
+	const clientId = authCfg.client_id;
+	if (!tokenEndpoint || !clientId) {
+		console.warn(
+			`[oauth-token] LastMile Tasks MCP ${tasksMcp.id} has no token_endpoint/client_id in auth_config — cannot refresh; returning stale token`,
+		);
+		// Hand back the stale token — the MCP call will fail with "Invalid
+		// WorkOS token" and the webhook ingest will fall back to synthetic,
+		// same as before PR H. Not worse than the pre-PR-H state.
+		return storedToken.access_token;
+	}
+	const refreshed = await refreshLastmileMcpToken({
+		secretRef: tok.secret_ref,
+		storedToken,
+		userMcpTokenId: tok.id,
+		tokenEndpoint,
+		clientId,
+	});
+	return refreshed ?? storedToken.access_token;
 }
