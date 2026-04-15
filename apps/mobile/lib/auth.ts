@@ -383,6 +383,20 @@ export function getStoredOAuthRefreshToken(): string | null {
 }
 
 /**
+ * Returns true if there's any usable session material in CognitoSecureStorage
+ * — specifically a refresh_token. This is the "soft auth" signal the app uses
+ * to avoid bouncing users to /sign-in on a transient bootstrap failure: as
+ * long as a refresh_token is present, we consider the user logged in and show
+ * the biometric gate instead of the sign-in screen.
+ *
+ * MUST be called after `waitForStorageReady()` so the in-memory cache is
+ * populated.
+ */
+export function hasStoredSession(): boolean {
+  return getStoredOAuthRefreshToken() !== null;
+}
+
+/**
  * Returns true when a JWT is expired or within 2 minutes of expiring.
  * Used to decide whether to refresh the stored OAuth id token.
  */
