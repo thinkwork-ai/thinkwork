@@ -55,7 +55,7 @@ describe("lastmileAdapter.normalizeItem", () => {
 });
 
 describe("lastmileAdapter.buildBlocks", () => {
-	it("returns the default header → fields → badges → actions → form layout", () => {
+	it("returns the default header → fields → badges → actions layout (edit form opens via modal sheet)", () => {
 		const item = lastmileAdapter.normalizeItem(fixture as Record<string, unknown>);
 		const blocks = lastmileAdapter.buildBlocks(item);
 		expect(blocks.map((b) => b.type)).toEqual([
@@ -63,7 +63,6 @@ describe("lastmileAdapter.buildBlocks", () => {
 			"field_list",
 			"badge_row",
 			"action_bar",
-			"form",
 		]);
 	});
 });
