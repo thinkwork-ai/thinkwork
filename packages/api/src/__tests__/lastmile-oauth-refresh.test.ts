@@ -17,8 +17,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockUpdateWhere, mockUpdateSet, mockUpdate, mockDb } = vi.hoisted(() => {
 	const mockUpdateWhere = vi.fn().mockResolvedValue(undefined);
-	const mockUpdateSet = vi.fn(() => ({ where: mockUpdateWhere }));
-	const mockUpdate = vi.fn(() => ({ set: mockUpdateSet }));
+	// Typed parameters so TS infers `mock.calls` as `[unknown][]` instead
+	// of `never[][]` — see external-task-ingest-event.test.ts for the same
+	// pattern + rationale.
+	const mockUpdateSet = vi.fn((_args: unknown) => ({ where: mockUpdateWhere }));
+	const mockUpdate = vi.fn((_table: unknown) => ({ set: mockUpdateSet }));
 	const mockDb = {
 		update: mockUpdate,
 		// resolveLastmileUserToken also calls db.select; the refresh helper
