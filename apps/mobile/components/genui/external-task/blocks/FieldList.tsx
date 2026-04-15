@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import { Text } from '@/components/ui/typography';
 import type { NormalizedTask, TaskFieldSpec } from '../types';
 
-function renderValue(field: TaskFieldSpec): string {
+function renderValue(field: TaskFieldSpec, item: NormalizedTask): string {
   if (field.value == null) return '—';
   if (field.type === 'date') {
     const s = String(field.value);
@@ -16,6 +16,19 @@ function renderValue(field: TaskFieldSpec): string {
   if (field.type === 'select') {
     const opt = field.options?.find((o) => o.value === field.value);
     return opt?.label ?? String(field.value);
+  }
+  if (field.type === 'user') {
+    // The assignee field's raw value is a provider-opaque user id. The
+    // normalizer already resolved a human-readable `core.assignee.name`
+    // (e.g. "Eric Odom" from `first_name`+`last_name`, or email fallback)
+    // — prefer that so the card doesn't dump a raw id string on the user.
+    const key = field.key.toLowerCase();
+    if (key === 'assignee' || key === 'owner') {
+      const name = item.core.assignee?.name;
+      if (name && name !== String(field.value)) return name;
+      return item.core.assignee?.email ?? String(field.value);
+    }
+    return String(field.value);
   }
   if (field.type === 'chips' && Array.isArray(field.value)) {
     return (field.value as unknown[]).join(', ');
@@ -65,7 +78,7 @@ export function FieldList({
               {f.label}
             </Text>
             <Text size="sm" className="flex-1 dark:text-neutral-200">
-              {renderValue(f)}
+              {renderValue(f, item)}
             </Text>
           </View>
         ))}
