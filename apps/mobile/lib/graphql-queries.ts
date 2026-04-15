@@ -745,8 +745,6 @@ export const ThreadsQuery = graphql(`
       dueAt
       closedAt
       archivedAt
-      syncStatus
-      syncError
       lastActivityAt
       lastTurnCompletedAt
       lastReadAt
@@ -1208,16 +1206,18 @@ export const AgentWorkspacesQuery = gql`
 // Quick Actions (per-user saved prompts)
 // ---------------------------------------------------------------------------
 
+// NOTE: scope arg + field were added to these docs when PR #91 landed
+// the backend work but removed locally until the graphql-http Lambda is
+// deployed with the new schema. Put them back after deploy lands.
 export const UserQuickActionsQuery = gql`
-  query UserQuickActions($tenantId: ID!, $scope: QuickActionScope) {
-    userQuickActions(tenantId: $tenantId, scope: $scope) {
+  query UserQuickActions($tenantId: ID!) {
+    userQuickActions(tenantId: $tenantId) {
       id
       userId
       tenantId
       title
       prompt
       workspaceAgentId
-      scope
       sortOrder
       createdAt
       updatedAt
@@ -1234,7 +1234,6 @@ export const CreateQuickActionMutation = gql`
       title
       prompt
       workspaceAgentId
-      scope
       sortOrder
       createdAt
       updatedAt
@@ -1251,7 +1250,6 @@ export const UpdateQuickActionMutation = gql`
       title
       prompt
       workspaceAgentId
-      scope
       sortOrder
       createdAt
       updatedAt

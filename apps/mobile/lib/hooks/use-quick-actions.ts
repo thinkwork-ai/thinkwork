@@ -24,18 +24,22 @@ export interface QuickAction {
 }
 
 /**
- * Quick actions for the current user scoped to a given footer. Each scope
- * has its own list and its own sort order — reordering one doesn't touch
- * the other. Pass `scope="task"` from the Tasks footer, `scope="thread"`
- * (or omit) from the Threads footer.
+ * Quick actions for the current user.
+ *
+ * The second `scope` argument is accepted for forward compatibility with
+ * the backend PR that adds scope filtering server-side, but we do NOT
+ * pass it as a GraphQL variable yet — the deployed graphql-http Lambda
+ * doesn't know the `$scope` argument until that PR ships. Once it's
+ * deployed, put the variable back and the UI will start rendering
+ * separate Thread / Task lists.
  */
 export function useQuickActions(
   tenantId: string | undefined,
-  scope: QuickActionScope = "thread",
+  _scope: QuickActionScope = "thread",
 ) {
   return useQuery({
     query: UserQuickActionsQuery,
-    variables: { tenantId: tenantId!, scope },
+    variables: { tenantId: tenantId! },
     pause: !tenantId,
   });
 }

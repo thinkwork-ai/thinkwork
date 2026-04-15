@@ -4,9 +4,10 @@ import { View, FlatList, Pressable, Keyboard, KeyboardAvoidingView, Platform, Al
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ChevronLeft, ChevronRight, Info, Check, Circle, CheckSquare, ListChecks, AlertCircle, Clock, Trash2 } from "lucide-react-native";
+import { ChevronLeft, ChevronRight, Info, Check, Circle, CheckSquare, ListChecks, AlertCircle, Clock, Trash2, Pencil } from "lucide-react-native";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { ShimmerText } from "@/components/ui/ShimmerText";
+import { getExternalProviderLabel, getThreadHeaderLabel } from "@/lib/thread-display";
 import { MessageInputFooter } from "@/components/input/MessageInputFooter";
 import { QuickActionsSheet, type QuickActionsSheetRef } from "@/components/chat/QuickActionsSheet";
 import { useQuickActions, useDeleteQuickAction, type QuickAction } from "@/lib/hooks/use-quick-actions";
@@ -220,6 +221,16 @@ export default function ThreadDetailRoute() {
         | Record<string, unknown>
         | undefined)?.latestEnvelope,
   );
+  // Monotonic counter: the "Edit Task" dropdown item increments this, and
+  // the pinned ExternalTaskCard opens its edit sheet when it changes.
+  const [editRequestCounter, setEditRequestCounter] = useState(0);
+  // Derive a human-friendly provider label from the external envelope for
+  // the page header ("LastMile Task"), so we don't repeat the task title
+  // both in the header and inside the card.
+  const externalProviderLabel = useMemo(
+    () => (hasExternalTask ? getExternalProviderLabel(thread) : null),
+    [hasExternalTask, thread],
+  );
   const useTaskFlatList = isTask && !hasExternalTask;
   const isDone = thread?.status?.toUpperCase() === "DONE";
   const childThreads = (thread?.children ?? []) as any[];
@@ -358,7 +369,9 @@ export default function ThreadDetailRoute() {
           <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace("/")} className="flex-row items-center gap-1.5 active:opacity-70 flex-shrink" style={{ maxWidth: useTaskFlatList ? "65%" : "80%" }}>
             <ChevronLeft size={24} color={colors.foreground} />
             {isLoaded ? (
-              <Text className="text-lg font-semibold" numberOfLines={1}>{thread.title}</Text>
+              <Text className="text-lg font-semibold" numberOfLines={1}>
+                {hasExternalTask && externalProviderLabel ? externalProviderLabel : thread.title}
+              </Text>
             ) : initialTitle ? (
               <Text className="text-lg font-semibold" numberOfLines={1}>{initialTitle}</Text>
             ) : (
@@ -377,19 +390,26 @@ export default function ThreadDetailRoute() {
               )}
               <HeaderContextMenu
                 items={[
+                  ...(hasExternalTask
+                    ? [{
+                        label: "Edit Task",
+                        icon: Pencil,
+                        onPress: () => setEditRequestCounter((n) => n + 1),
+                      }]
+                    : []),
                   {
-                    label: useTaskFlatList ? "Task Info" : "Thread Info",
+                    label: useTaskFlatList || hasExternalTask ? "Task Info" : "Thread Info",
                     icon: Info,
                     onPress: () => router.push(`/thread/${threadId}/info`),
                   },
                   {
-                    label: useTaskFlatList ? "Delete Task" : "Delete Thread",
+                    label: useTaskFlatList || hasExternalTask ? "Delete Task" : "Delete Thread",
                     icon: Trash2,
                     destructive: true,
                     separator: true,
                     onPress: () => {
                       Alert.alert(
-                        useTaskFlatList ? "Delete Task?" : "Delete Thread?",
+                        useTaskFlatList || hasExternalTask ? "Delete Task?" : "Delete Thread?",
                         "This action cannot be undone.",
                         [
                           { text: "Cancel", style: "cancel" },
@@ -430,7 +450,10 @@ export default function ThreadDetailRoute() {
               renderItem={({ item, index }) => (
                 <View>
                   {index > 0 && <View className="h-px bg-neutral-200 dark:bg-neutral-800" style={{ marginLeft: 68 }} />}
-                  <TaskRow task={item} onPress={() => router.push({ pathname: `/thread/${item.id}`, params: item.title ? { title: item.title } : {} })} />
+                  <TaskRow task={item} onPress={() => {
+                    const headerLabel = getThreadHeaderLabel(item);
+                    router.push({ pathname: `/thread/${item.id}`, params: headerLabel ? { title: headerLabel } : {} });
+                  }} />
                 </View>
               )}
               ListHeaderComponent={
@@ -490,6 +513,7 @@ export default function ThreadDetailRoute() {
               isAgentRunning={!!threadId && isThreadActive(threadId)}
               onLinkPress={handleLinkPress}
               onSaveRecipe={handleSaveRecipe}
+              hideEmptyState={hasExternalTask}
               listHeaderComponent={
                 hasExternalTask ? (
                   <PinnedExternalTaskHeader
@@ -498,6 +522,7 @@ export default function ThreadDetailRoute() {
                     tenantId={thread.tenantId}
                     currentUserId={currentUser?.id}
                     activityRows={activityRows}
+                    editRequestCounter={editRequestCounter}
                   />
                 ) : null
               }
