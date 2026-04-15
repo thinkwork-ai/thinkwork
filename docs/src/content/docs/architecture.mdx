@@ -201,6 +201,28 @@ AgentCore receives thread + assembled context
     → Final response written back to the thread
 ```
 
+## Data flow: external task webhook
+
+```
+External system (LastMile, Linear, etc.)
+    → POST /integrations/<provider>/webhook (API Gateway)
+    → Webhooks Lambda
+        └─ Resolves webhook by token (target_type=task, provider id)
+        └─ adapter.verifySignature (opt-in, provider-specific)
+        └─ adapter.normalizeEvent → NormalizedEvent
+        └─ Resolves the connection via providerUserId
+        └─ Resolves the per-user MCP token (auto-refresh on expiry)
+        └─ adapter.refresh() → live envelope
+        │      (synthetic envelope fallback if refresh fails)
+        └─ Upserts external-task thread (channel=TASK, metadata.external.latestEnvelope)
+        └─ Writes system message (metadata.kind="external_task_event")
+        └─ Awaits [notifyNewMessage, notifyThreadUpdate, sendExternalTaskPush]
+    → Mobile task card refreshes via AppSync subscription (~2s)
+    → Push notification fires only for assignment / status / due changes
+```
+
+See [External Tasks](/concepts/connectors/external-tasks/) for the full connector model, adapter seam, and current limits.
+
 ## Data flow: automation
 
 ```
