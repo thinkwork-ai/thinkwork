@@ -10,13 +10,22 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// ── DB: only `insert` is used (handoff message). ─────────────────────────────
+// ── DB: insert is used for both the closed-thread handoff message (bare
+//        `.values(...)` call) and the PR A/B activity message
+//        (`.values(...).returning({ id })`). The mock chain supports both
+//        shapes: it returns a thenable that also exposes `.returning()`.
+// ─────────────────────────────────────────────────────────────────────────────
 
-const { mockInsertValues, mockInsert, mockDb } = vi.hoisted(() => {
-	const mockInsertValues = vi.fn().mockResolvedValue(undefined);
+const { mockInsertValues, mockInsertReturning, mockInsert, mockDb } = vi.hoisted(() => {
+	const mockInsertReturning = vi.fn().mockResolvedValue([{ id: "mock-msg-id" }]);
+	const mockInsertValues = vi.fn(() => ({
+		returning: mockInsertReturning,
+		then: (resolve: (value: undefined) => unknown, reject?: (reason: unknown) => unknown) =>
+			Promise.resolve(undefined).then(resolve, reject),
+	}));
 	const mockInsert = vi.fn(() => ({ values: mockInsertValues }));
 	const mockDb = { insert: mockInsert };
-	return { mockInsertValues, mockInsert, mockDb };
+	return { mockInsertValues, mockInsertReturning, mockInsert, mockDb };
 });
 
 vi.mock("@thinkwork/database-pg", () => ({
@@ -162,7 +171,7 @@ beforeEach(() => {
 	} as never);
 	mockBuildBlocks.mockReturnValue([]);
 	mockInsert.mockReturnValue({ values: mockInsertValues });
-	mockInsertValues.mockResolvedValue(undefined);
+	mockInsertReturning.mockResolvedValue([{ id: "mock-msg-id" }]);
 });
 
 // ── Tests ────────────────────────────────────────────────────────────────────
