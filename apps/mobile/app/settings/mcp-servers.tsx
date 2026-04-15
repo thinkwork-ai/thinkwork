@@ -3,7 +3,7 @@ import { View, ScrollView, Pressable, RefreshControl } from "react-native";
 import { useColorScheme } from "nativewind";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
-import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import { Cable, CheckCircle2, AlertTriangle, Link2, RefreshCw, ChevronRight } from "lucide-react-native";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { Text, Muted } from "@/components/ui/typography";
@@ -81,25 +81,24 @@ export default function McpServersScreen() {
 
   const handleConnect = async (mcpServer: McpServerRow) => {
     if (!tenantId || !user?.id) return;
-    // Open the IdP authorize URL in real Safari via `Linking.openURL`.
-    // In-app browser presenters (ASWebAuthenticationSession,
-    // SFSafariViewController via WebBrowser) put Clerk's SDK into a
-    // cookie-isolation state where its `__session` / `__client` cookies
-    // don't stick across the sign-in POST + redirect chain, and the form
-    // loops with "A problem repeatedly occurred". Real Safari handles
-    // the whole flow normally.
+    // RFC 9728 OAuth flow — the API handles discovery, registration, and token exchange.
+    // We just open the authorize URL which redirects through the MCP server's OAuth proxy.
     //
-    // Completion handler: the IdP redirects to
-    // `thinkwork://mcp-oauth-complete?code=…&state=…`. iOS shows its
-    // "Open in Thinkwork?" prompt, and on confirm expo-router routes
-    // that URL to `app/mcp-oauth-complete.tsx`, which does the
-    // server-side `/exchange` POST and navigates back here.
+    // `openAuthSessionAsync` + `preferEphemeralSession: true` gives every
+    // attempt a clean ASWebAuthenticationSession cookie jar on iOS — without
+    // it WorkOS's session cookie persists across reconnect attempts and the
+    // user lands on a "Logged in as ..." consent screen instead of an
+    // email/password form, so switching accounts is impossible. Same fix
+    // pattern as auth-context.tsx already uses for Google OAuth.
+    //
+    // The server-side callback redirects to `thinkwork://mcp-oauth-complete`
+    // when done, which Expo detects and uses to auto-close the in-app
+    // browser (no manual "you can close this window" step).
     const url = `${API_BASE}/api/skills/mcp-oauth/authorize?mcpServerId=${mcpServer.id}&userId=${user.id}&tenantId=${tenantId}`;
-    try {
-      await Linking.openURL(url);
-    } catch (e) {
-      console.warn("[mcp-oauth] Linking.openURL failed:", e);
-    }
+    await WebBrowser.openAuthSessionAsync(url, "thinkwork://mcp-oauth-complete", {
+      preferEphemeralSession: true,
+    });
+    await fetchServers();
   };
 
   if (loading) {

@@ -262,7 +262,6 @@ function RootLayoutNav() {
         <Stack.Screen name="onboarding/payment" />
         <Stack.Screen name="onboarding/complete" />
         <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
-        <Stack.Screen name="mcp-oauth-complete" options={{ headerShown: false }} />
         <Stack.Screen name="demo" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="thread/[threadId]" options={{ headerShown: false }} />
