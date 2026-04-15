@@ -7,6 +7,7 @@ import { DetailLayout } from "@/components/layout/detail-layout";
 import { useAuth } from "@/lib/auth-context";
 import { Text } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
+import { getThreadHeaderLabel } from "@/lib/thread-display";
 import { useQuery, useMutation } from "urql";
 import {
   ThreadQuery,
@@ -212,7 +213,10 @@ export default function ThreadInfoRoute() {
               return (
                 <Pressable
                   key={child.id}
-                  onPress={() => router.push({ pathname: `/thread/${child.id}`, params: child.title ? { title: child.title } : {} })}
+                  onPress={() => {
+                    const headerLabel = getThreadHeaderLabel(child);
+                    router.push({ pathname: `/thread/${child.id}`, params: headerLabel ? { title: headerLabel } : {} });
+                  }}
                   className="flex-row items-center gap-2.5 px-4 py-3 border-t border-neutral-200 dark:border-neutral-800 active:opacity-70"
                 >
                   <Circle size={14} color={statusColor((child.status || "").toUpperCase(), isDark)} />

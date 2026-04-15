@@ -533,7 +533,9 @@ export type CreateKnowledgeBaseInput = {
 
 export type CreateQuickActionInput = {
   prompt: Scalars['String']['input'];
+  scope?: InputMaybe<QuickActionScope>;
   sortOrder?: InputMaybe<Scalars['Int']['input']>;
+  tenantId: Scalars['ID']['input'];
   title: Scalars['String']['input'];
   workspaceAgentId?: InputMaybe<Scalars['ID']['input']>;
 };
@@ -1070,6 +1072,7 @@ export type Mutation = {
   reorderQuickActions: Array<UserQuickAction>;
   requestRevision: InboxItem;
   resubmitInboxItem: InboxItem;
+  retryTaskSync: Thread;
   revokeAgentApiKey: AgentApiKey;
   rollbackAgentVersion: Agent;
   sendMessage: Message;
@@ -1534,6 +1537,11 @@ export type MutationRequestRevisionArgs = {
 export type MutationResubmitInboxItemArgs = {
   id: Scalars['ID']['input'];
   input?: InputMaybe<ResubmitInboxItemInput>;
+};
+
+
+export type MutationRetryTaskSyncArgs = {
+  threadId: Scalars['ID']['input'];
 };
 
 
@@ -2238,6 +2246,7 @@ export type QueryUserArgs = {
 
 
 export type QueryUserQuickActionsArgs = {
+  scope?: InputMaybe<QuickActionScope>;
   tenantId: Scalars['ID']['input'];
 };
 
@@ -2253,6 +2262,11 @@ export type QueryWebhooksArgs = {
   targetType?: InputMaybe<Scalars['String']['input']>;
   tenantId: Scalars['ID']['input'];
 };
+
+export enum QuickActionScope {
+  Task = 'task',
+  Thread = 'thread'
+}
 
 export type Recipe = {
   __typename?: 'Recipe';
@@ -2289,13 +2303,10 @@ export type ReleaseThreadInput = {
   status?: InputMaybe<ThreadStatus>;
 };
 
-export type ReorderQuickActionItem = {
-  id: Scalars['ID']['input'];
-  sortOrder: Scalars['Int']['input'];
-};
-
 export type ReorderQuickActionsInput = {
-  items: Array<ReorderQuickActionItem>;
+  orderedIds: Array<Scalars['ID']['input']>;
+  scope?: InputMaybe<QuickActionScope>;
+  tenantId: Scalars['ID']['input'];
 };
 
 export type RequestRevisionInput = {
@@ -2643,6 +2654,8 @@ export type Thread = {
   reporterId?: Maybe<Scalars['ID']['output']>;
   startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   status: ThreadStatus;
+  syncError?: Maybe<Scalars['String']['output']>;
+  syncStatus?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
   title: Scalars['String']['output'];
   type: ThreadType;
@@ -2882,6 +2895,7 @@ export type UpdateKnowledgeBaseInput = {
 
 export type UpdateQuickActionInput = {
   prompt?: InputMaybe<Scalars['String']['input']>;
+  scope?: InputMaybe<QuickActionScope>;
   sortOrder?: InputMaybe<Scalars['Int']['input']>;
   title?: InputMaybe<Scalars['String']['input']>;
   workspaceAgentId?: InputMaybe<Scalars['ID']['input']>;
@@ -3018,6 +3032,7 @@ export type UserQuickAction = {
   createdAt: Scalars['AWSDateTime']['output'];
   id: Scalars['ID']['output'];
   prompt: Scalars['String']['output'];
+  scope: QuickActionScope;
   sortOrder: Scalars['Int']['output'];
   tenantId: Scalars['ID']['output'];
   title: Scalars['String']['output'];
@@ -3673,6 +3688,13 @@ export type ReorderQuickActionsMutationVariables = Exact<{
 
 export type ReorderQuickActionsMutation = { __typename?: 'Mutation', reorderQuickActions: Array<{ __typename?: 'UserQuickAction', id: string, sortOrder: number }> };
 
+export type RetryTaskSyncMutationVariables = Exact<{
+  threadId: Scalars['ID']['input'];
+}>;
+
+
+export type RetryTaskSyncMutation = { __typename?: 'Mutation', retryTaskSync: { __typename?: 'Thread', id: string, syncStatus?: string | null, syncError?: string | null, metadata?: any | null } };
+
 export type RefreshGenUiMutationVariables = Exact<{
   messageId: Scalars['ID']['input'];
   toolIndex: Scalars['Int']['input'];
@@ -3769,5 +3791,6 @@ export const CreateQuickActionDocument = {"kind":"Document","definitions":[{"kin
 export const UpdateQuickActionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateQuickAction"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateQuickActionInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateQuickAction"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"prompt"}},{"kind":"Field","name":{"kind":"Name","value":"workspaceAgentId"}},{"kind":"Field","name":{"kind":"Name","value":"sortOrder"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateQuickActionMutation, UpdateQuickActionMutationVariables>;
 export const DeleteQuickActionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteQuickAction"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteQuickAction"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<DeleteQuickActionMutation, DeleteQuickActionMutationVariables>;
 export const ReorderQuickActionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ReorderQuickActions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ReorderQuickActionsInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"reorderQuickActions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"sortOrder"}}]}}]}}]} as unknown as DocumentNode<ReorderQuickActionsMutation, ReorderQuickActionsMutationVariables>;
+export const RetryTaskSyncDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RetryTaskSync"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"retryTaskSync"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"threadId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"syncStatus"}},{"kind":"Field","name":{"kind":"Name","value":"syncError"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}}]}}]}}]} as unknown as DocumentNode<RetryTaskSyncMutation, RetryTaskSyncMutationVariables>;
 export const RefreshGenUiDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RefreshGenUI"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"messageId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"toolIndex"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"refreshGenUI"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"messageId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"messageId"}}},{"kind":"Argument","name":{"kind":"Name","value":"toolIndex"},"value":{"kind":"Variable","name":{"kind":"Name","value":"toolIndex"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"toolResults"}}]}}]}}]} as unknown as DocumentNode<RefreshGenUiMutation, RefreshGenUiMutationVariables>;
 export const CreateRecipeDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateRecipe"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateRecipeInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createRecipe"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"genuiType"}}]}}]}}]} as unknown as DocumentNode<CreateRecipeMutation, CreateRecipeMutationVariables>;

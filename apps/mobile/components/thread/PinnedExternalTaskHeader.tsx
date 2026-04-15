@@ -20,6 +20,7 @@ export function PinnedExternalTaskHeader({
   currentUserId,
   messageId,
   activityRows,
+  editRequestCounter,
 }: {
   threadMetadata: unknown;
   threadId: string;
@@ -32,6 +33,11 @@ export function PinnedExternalTaskHeader({
    * Passed through to ExternalTaskCard's `activity_list` block renderer.
    */
   activityRows?: Array<{ id: string; content: string; createdAt: string }>;
+  /**
+   * Monotonic counter from the task detail page's "Edit Task" dropdown.
+   * When it increments the card opens its edit sheet.
+   */
+  editRequestCounter?: number;
 }) {
   const meta = (threadMetadata ?? {}) as Record<string, unknown>;
   const external = (meta.external ?? undefined) as
@@ -60,6 +66,8 @@ export function PinnedExternalTaskHeader({
           toolIndex: 0,
           currentUserId,
           activityRows,
+          hideEditButton: true,
+          editRequestCounter,
         }}
       />
     </View>

@@ -97,6 +97,12 @@ export interface ActivityTimelineProps {
   onSaveRecipe?: (info: SaveRecipeInfo) => void;
   listHeaderComponent?: React.ReactElement | null;
   /**
+   * Suppress the centered "No activity yet" placeholder. The Task Detail
+   * page uses this because the pinned external-task card already fills the
+   * viewport and the "empty" message is misleading there.
+   */
+  hideEmptyState?: boolean;
+  /**
    * PRD-46: current user's id, threaded into GenUI cards so interactive
    * cards (e.g. QuestionCard) can stamp `senderId` on outgoing messages.
    */
@@ -663,6 +669,7 @@ export function ActivityTimeline({
   onLinkPress,
   onSaveRecipe,
   listHeaderComponent,
+  hideEmptyState,
   currentUserId,
 }: ActivityTimelineProps) {
   const { colorScheme } = useColorScheme();
@@ -814,9 +821,11 @@ export function ActivityTimeline({
       ListHeaderComponent={listHeaderComponent}
       ListFooterComponent={isAgentRunning ? <TypingIndicator /> : null}
       ListEmptyComponent={
-        <View className="items-center justify-center py-12">
-          <Muted>No activity yet</Muted>
-        </View>
+        hideEmptyState ? null : (
+          <View className="items-center justify-center py-12">
+            <Muted>No activity yet</Muted>
+          </View>
+        )
       }
       contentContainerStyle={{ paddingVertical: 8, flexGrow: 1 }}
       showsVerticalScrollIndicator={false}

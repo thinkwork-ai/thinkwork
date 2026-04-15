@@ -14,6 +14,7 @@ import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { COLORS } from "@/lib/theme";
 import { CheckSquare, ListChecks, ChevronRight, AlertCircle, Clock } from "lucide-react-native";
 import { ThreadChannel } from "@/lib/gql/graphql";
+import { getThreadHeaderLabel } from "@/lib/thread-display";
 
 function formatDueDate(dateStr: string | null | undefined): { label: string; isOverdue: boolean } {
   if (!dateStr) return { label: "", isOverdue: false };
@@ -132,7 +133,10 @@ export default function TasksScreen() {
 
     return (
       <Pressable
-        onPress={() => router.push({ pathname: `/thread/${item.id}`, params: item.title ? { title: item.title } : {} })}
+        onPress={() => {
+          const headerLabel = getThreadHeaderLabel(item);
+          router.push({ pathname: `/thread/${item.id}`, params: headerLabel ? { title: headerLabel } : {} });
+        }}
         className="flex-row items-start py-2 pr-4 active:bg-neutral-50 dark:active:bg-neutral-900"
         style={{ backgroundColor: colors.background }}
       >

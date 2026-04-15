@@ -5,6 +5,7 @@ import {
 	threadToCamel,
 } from "../../utils.js";
 import { notifyThreadUpdate } from "../../notify.js";
+import { syncExternalTaskOnCreate } from "../../../integrations/external-work-items/syncExternalTaskOnCreate.js";
 
 export const createThread = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const i = args.input;
@@ -47,6 +48,14 @@ export const createThread = async (_parent: any, args: any, ctx: GraphQLContext)
 		: channel === "task" ? "todo"
 		: "backlog";
 
+	// Task-channel rows created by a user (not the webhook ingest path,
+	// which writes via ensureExternalTaskThread and sets its own metadata)
+	// start in sync_status='pending'. The syncExternalTaskOnCreate call
+	// below will flip this to 'synced', 'local', or 'error'. Non-task
+	// channels stay NULL since they don't sync externally.
+	const isUserCreatedTask = channel === "task" && i.createdByType !== "agent";
+	const initialSyncStatus = isUserCreatedTask ? "pending" : null;
+
 	const [row] = await db
 		.insert(threads)
 		.values({
@@ -69,6 +78,7 @@ export const createThread = async (_parent: any, args: any, ctx: GraphQLContext)
 			labels: i.labels ? JSON.parse(i.labels) : undefined,
 			metadata: i.metadata ? JSON.parse(i.metadata) : undefined,
 			due_at: i.dueAt ? new Date(i.dueAt) : undefined,
+			sync_status: initialSyncStatus,
 		})
 		.returning();
 	notifyThreadUpdate({
@@ -115,6 +125,37 @@ export const createThread = async (_parent: any, args: any, ctx: GraphQLContext)
 			entity_type: "thread",
 			entity_id: row.id,
 		}).catch(() => {}); // fire-and-forget
+	}
+
+	// Outbound sync to external task system (LastMile). Synchronous —
+	// per the PRD we want the mutation response to reflect the final
+	// sync state so the mobile client can render the right badge on
+	// first render. Fails quietly: syncExternalTaskOnCreate never
+	// throws; worst case the row ends up sync_status='error' and the
+	// user can retry via the retryTaskSync mutation.
+	//
+	// Only user-created task rows flow through this path. Agent-created
+	// tasks skip it because the agent's own tooling handles sync
+	// semantics (a team agent "delegating" via createThread is a
+	// different code path).
+	if (isUserCreatedTask && row.created_by_id) {
+		await syncExternalTaskOnCreate({
+			threadId: row.id,
+			tenantId: row.tenant_id,
+			userId: row.created_by_id,
+			title: row.title,
+			description: row.description,
+			externalRef: row.identifier ?? undefined,
+		});
+		// Re-read the row so the response reflects the final sync_status
+		// and metadata.external block. Cheap — indexed PK lookup.
+		const [reconciled] = await db
+			.select()
+			.from(threads)
+			.where(eq(threads.id, row.id));
+		if (reconciled) {
+			return { ...threadToCamel(reconciled), commentCount: 0, childCount: 0 };
+		}
 	}
 
 	return { ...threadToCamel(row), commentCount: 0, childCount: 0 };

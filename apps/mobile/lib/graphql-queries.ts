@@ -1206,6 +1206,9 @@ export const AgentWorkspacesQuery = gql`
 // Quick Actions (per-user saved prompts)
 // ---------------------------------------------------------------------------
 
+// NOTE: scope arg + field were added to these docs when PR #91 landed
+// the backend work but removed locally until the graphql-http Lambda is
+// deployed with the new schema. Put them back after deploy lands.
 export const UserQuickActionsQuery = gql`
   query UserQuickActions($tenantId: ID!) {
     userQuickActions(tenantId: $tenantId) {
@@ -1265,6 +1268,24 @@ export const ReorderQuickActionsMutation = gql`
     reorderQuickActions(input: $input) {
       id
       sortOrder
+    }
+  }
+`;
+
+// ---------------------------------------------------------------------------
+// Task sync retry — re-fires outbound sync for task-channel threads that
+// ended up in sync_status='error' or 'local'. Response mirrors the minimal
+// subset the TaskRow badge needs to re-render; full thread state is
+// re-fetched via the Tasks query on the next polling tick.
+// ---------------------------------------------------------------------------
+
+export const RetryTaskSyncMutation = gql`
+  mutation RetryTaskSync($threadId: ID!) {
+    retryTaskSync(threadId: $threadId) {
+      id
+      syncStatus
+      syncError
+      metadata
     }
   }
 `;
