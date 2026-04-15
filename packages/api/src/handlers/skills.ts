@@ -443,11 +443,20 @@ async function mcpOAuthAuthorize(
 	authorizeUrl.searchParams.set("code_challenge", codeChallenge);
 	authorizeUrl.searchParams.set("code_challenge_method", "S256");
 	// Force a fresh login prompt instead of reusing any cached IdP session.
-	// WorkOS specifically recommended `prompt=login` for this flow — it
-	// prevents the "silently authenticated as the last session" edge case
-	// that was reconnecting users to the wrong identity, and it matches
-	// OIDC §3.1.2.1. Standards-compliant, zero backend state change.
+	// OIDC §3.1.2.1 `prompt=login` SHOULD prompt for reauthentication, but
+	// WorkOS AuthKit observed 2026-04-15 treats `prompt=login` as "show the
+	// consent screen" rather than "re-authenticate" when a browser-side
+	// session cookie is still valid — the end user lands on a "Logged in
+	// as eric@..." consent dialog instead of an email/password form, so
+	// switching accounts is impossible.
+	//
+	// `max_age=0` is the OIDC companion lever (§3.1.2.1): "If the max_age
+	// request is 0, the OP MUST reauthenticate the End-User." Most IdPs
+	// that ignore `prompt=login` still honor `max_age`, because it maps
+	// to a concrete session-age comparison rather than a mode string.
+	// Sending both is belt-and-suspenders — standards-compliant either way.
 	authorizeUrl.searchParams.set("prompt", "login");
+	authorizeUrl.searchParams.set("max_age", "0");
 
 	return {
 		statusCode: 302,
