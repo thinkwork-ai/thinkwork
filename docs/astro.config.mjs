@@ -78,18 +78,45 @@ export default defineConfig({
           ],
         },
         {
+          label: "Applications",
+          items: [
+            {
+              label: "Admin",
+              items: [
+                { label: "Overview", slug: "applications/admin" },
+                { label: "Agents & Templates", slug: "applications/admin/agents" },
+                { label: "Connectors & Tools", slug: "applications/admin/connectors" },
+                { label: "Memory & Knowledge", slug: "applications/admin/memory-and-knowledge" },
+                { label: "Observability & Control", slug: "applications/admin/observability" },
+                { label: "Administration", slug: "applications/admin/administration" },
+              ],
+            },
+            {
+              label: "Mobile",
+              items: [
+                { label: "Overview", slug: "applications/mobile" },
+                { label: "Authentication", slug: "applications/mobile/authentication" },
+                { label: "Threads & Chat", slug: "applications/mobile/threads-and-chat" },
+                { label: "Integrations & MCP Connect", slug: "applications/mobile/integrations-and-mcp-connect" },
+                { label: "Push Notifications", slug: "applications/mobile/push-notifications" },
+                { label: "Distribution", slug: "applications/mobile/distribution" },
+              ],
+            },
+            {
+              label: "CLI",
+              items: [
+                { label: "Overview", slug: "applications/cli" },
+                { label: "Commands", slug: "applications/cli/commands" },
+              ],
+            },
+          ],
+        },
+        {
           label: "Deploy",
           items: [
             { label: "Greenfield AWS", slug: "deploy/greenfield" },
             { label: "BYO Infrastructure", slug: "deploy/byo" },
             { label: "Configuration Reference", slug: "deploy/configuration" },
-          ],
-        },
-        {
-          label: "CLI Reference",
-          items: [
-            { label: "Overview", slug: "cli" },
-            { label: "Commands", slug: "cli/commands" },
           ],
         },
         {

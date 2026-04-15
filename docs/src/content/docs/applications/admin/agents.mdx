@@ -1,0 +1,126 @@
+---
+title: Admin — Agents & Templates
+description: Manage agents, agent templates, skill pack assignments, sub-agents, workspaces, and per-agent scheduled jobs from the admin web app.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The Agents surface is where operators and agent authors build, configure, and iterate on the agents running in a ThinkWork tenant. It covers the full lifecycle: registration, template-driven fleet config, skills, memory, sub-agents, workspaces, and per-agent automations.
+
+## Agents
+
+**Route:** `/agents`
+
+The Agents page lists every agent in the tenant with status, type (managed via AgentCore vs bring-your-own runtime), and quick metrics (recent runs, cost, error rate). Operators can create a new agent from scratch at `/agents/new` or, more commonly, from an agent template.
+
+Each agent detail page (`/agents/:agentId`) has its own sub-navigation:
+
+| Tab | Purpose |
+|---|---|
+| **Overview** | Identity, description, owner, runtime configuration, current status |
+| **Skills** | Skill packs assigned to this agent. See [Skills catalog](#skills-catalog) |
+| **Knowledge** | Knowledge bases attached to this agent. Retrieval is scoped per-agent |
+| **Memory** | Per-agent memory records with XML-topic parsing and manual edits |
+| **Sub-agents** | Child agents this agent can delegate to |
+| **Workspaces** | Agent-scoped workspaces for project-style groupings |
+| **Scheduled Jobs** | Per-agent cron and event-driven automations |
+
+Agents also have **budget policies**, **rollback support** (revert to a prior configuration), and per-agent usage metrics. For fleet-level configuration (guardrails, default model, budget caps), use agent templates.
+
+## Agent templates
+
+**Route:** `/agent-templates`
+
+Agent templates are reusable configuration bundles that propagate across groups of agents. A template defines:
+
+- Model and runtime (managed AgentCore or BYO)
+- Default skill-pack assignments
+- Default knowledge bases
+- MCP server assignments
+- Guardrail assignments
+- Budget caps
+
+When an agent is created from a template, it inherits everything. When the template changes, operators **sync** the change out to the agent fleet from `/agent-templates/:templateId/sync`.
+
+<Aside type="note">
+Template sync is explicit, not automatic. A template change does not instantly mutate every child agent — the operator reviews the diff on the sync page and chooses which agents to update. This is deliberate: it keeps fleet-wide changes reviewable.
+</Aside>
+
+## Skills catalog
+
+**Route:** `/skills`
+
+The Skills catalog is where skill packs are browsed, installed, and authored. Two sources:
+
+- **Public catalog** — skills published by the ThinkWork project and community, backed by the skill catalog S3 bucket
+- **Tenant-installed skills** — skills installed into the tenant, either from the public catalog or custom-authored
+
+Each skill row shows its version, owner, description, and a one-click install button. Installed skills then appear on any agent's **Skills** tab for assignment.
+
+A lightweight Python **skill builder** lives at `/skills/builder` for authoring custom skills directly in the admin app. For serious skill authoring, use [Authoring Guide: Skill Packs](/guides/skill-packs/).
+
+## MCP servers (tenant level)
+
+**Route:** `/mcp-servers`
+
+The MCP Servers page is where operators register MCP (Model Context Protocol) servers at the **tenant** level. This is the tenant-wide catalog — it does **not** issue per-user tokens.
+
+For each MCP server, the admin UI captures:
+
+| Field | Purpose |
+|---|---|
+| Name | Display name shown throughout the admin app and mobile integration screen |
+| URL | The MCP server's HTTP endpoint |
+| Transport | Streamable HTTP (recommended) or SSE |
+| Authentication | None, tenant API key, or per-user OAuth (managed by the MCP server) |
+
+Once registered, MCP servers can be **assigned to agent templates** (and flow down to agents via template sync) or directly to individual agents. A "Test Connection" button verifies the server is reachable and caches its tool list.
+
+<Aside type="note">
+Per-user OAuth tokens for MCP servers are **not** issued from the admin app. Operators register the MCP server here; end users grant their own access from the [Mobile App's MCP Servers screen](/applications/mobile/integrations-and-mcp-connect/). That split is enforced by design — admin owns infrastructure, users own their credentials.
+</Aside>
+
+See [MCP Tool Connectors](/concepts/mcp-servers/) for the full connector model, token lifecycle, and runtime behavior.
+
+## Built-in tools
+
+**Route:** `/builtin-tools`
+
+Built-in tools are provider-scoped capabilities that ship with ThinkWork — Slack, GitHub, Google Sheets, and similar. They're distinct from MCP servers in that ThinkWork owns the integration code and the credentials are stored directly in the credential vault instead of negotiated through an MCP server.
+
+Operators add credentials here, test the connection, and assign the tool to agents the same way they assign skills. Use built-in tools when the capability is standard and doesn't warrant an MCP server.
+
+## Security Center
+
+**Route:** `/security`
+
+The Security Center is the operator's view into guardrails and safety policy. It shows:
+
+- **Guardrail stats** — blocks, allows, filter strength over time
+- **Registered guardrails** — created via Bedrock Guardrails and associated with agent templates
+- **Template assignments** — which templates enforce which guardrails
+
+Guardrails are assigned at the template level and inherited by child agents. That way, a tenant-wide safety policy only needs to be wired up once.
+
+## Sub-agents and workspaces
+
+Two smaller features worth naming:
+
+**Sub-agents** are agents that can be delegated to from a parent agent. A parent agent can list its sub-agents on the Sub-agents tab, and at runtime it can hand a turn off to one of them. This is how more complex agent graphs are assembled inside ThinkWork.
+
+**Workspaces** scope an agent's work to a named context — a project, a customer, a product area. Workspaces show up in the mobile app as selectable chips in the message input, and on the admin side each workspace has its own settings page.
+
+## Per-agent scheduled jobs
+
+**Route:** `/agents/:agentId/scheduled-jobs`
+
+Scheduled jobs (cron or event-driven) that fire in the context of a specific agent live under the agent detail page. This is distinct from tenant-level [Automations](/applications/admin/administration/#automations-and-routines), which are global to the tenant.
+
+Per-agent jobs are how an agent gets a recurring "heartbeat" — a scheduled prompt that runs the agent on a timer, inside its own thread, with its assigned skills and memory.
+
+## Related pages
+
+- [Agents (concept)](/concepts/agents/) — the underlying agent model
+- [Skills authoring guide](/guides/skill-packs/) — writing custom skill packs
+- [Connectors & Tools](/applications/admin/connectors/) — connector-side wiring for things agents can act on
+- [MCP Tool Connectors](/concepts/mcp-servers/) — the MCP connector pattern

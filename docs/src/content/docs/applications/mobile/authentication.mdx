@@ -1,0 +1,88 @@
+---
+title: Mobile — Authentication
+description: Google OAuth sign-in, biometric lock, session restore, and the pre-signup Lambda that gates tenant membership in the ThinkWork mobile app.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The mobile app uses **Google OAuth** as its primary sign-in method, federated through AWS Cognito. Once signed in, users stay signed in across launches through a stored refresh token, and can optionally protect the app behind biometric unlock.
+
+This page covers the full auth surface: how sign-in works, how session restore works, how the app handles tenant resolution, and what the pre-signup Lambda does.
+
+## Sign-in with Google
+
+The sign-in screen (`/sign-in`) has two entry points:
+
+1. **Google button** — the primary path. Launches a federated OAuth flow through Cognito's Google identity provider.
+2. **Email / password fallback** — available for tenants that still provision password users through Cognito directly. Most tenants skip this.
+
+The Google flow uses Expo's `WebBrowser.openAuthSessionAsync` with `preferEphemeralSession: true` on iOS. That flag matters:
+
+<Aside type="caution">
+`preferEphemeralSession: true` is required. It tells iOS not to share cookies with Safari, which means the OAuth session is isolated per sign-in. Without it, signing out of the app does not actually sign the user out of Google in Safari, so the next sign-in silently picks up the last Safari cookie and the user cannot switch accounts. Always use `openAuthSessionAsync` with the ephemeral flag — never `openBrowserAsync`.
+</Aside>
+
+The OAuth flow lands back at `/auth/callback` on web or is handled inline by the Expo WebBrowser on native. The callback exchanges the authorization code for an id token and a refresh token, and the app stores those in SecureStore.
+
+## The pre-signup Lambda
+
+Between Google's OAuth consent and Cognito issuing tokens, a **Cognito pre-signup Lambda** runs. Its job is to validate the federated user and provision them into a tenant before Cognito finishes sign-up.
+
+What the pre-signup Lambda does today:
+
+- **Validates the email domain.** Most tenants allow only a specific set of domains; the Lambda rejects sign-ups from other domains.
+- **Creates or links the user record.** If this is a new federated user, it creates a user row in Aurora. If the user already exists (typing the same email that was previously provisioned by an operator), it links the federated identity to the existing row instead of creating a duplicate.
+- **Resolves the user's tenant.** New federated users are mapped to a tenant based on domain or invitation, and the tenant id is stored alongside the user row.
+
+After the Lambda returns, Cognito completes sign-up, issues tokens, and the mobile app receives them.
+
+<Aside type="note">
+Tenant id resolution on the mobile client is load-bearing. Every GraphQL call carries the tenant id, so if the pre-signup Lambda did not set it correctly, the app cannot talk to the API at all. The first post-sign-in action is always a tenant-resolution check, and a missing tenant id triggers a hard sign-out with a clear error.
+</Aside>
+
+## Session restore
+
+After the first successful sign-in, the refresh token is persisted to SecureStore alongside the tenant id. On every cold start:
+
+1. The root layout reads the refresh token and the tenant id from SecureStore.
+2. If both are present, the app calls `useAuth.getCurrentUser()` which hydrates the Cognito session synchronously from the stored tokens.
+3. If the access token is expired, the refresh token is exchanged for a new one through the OAuth refresh path.
+4. Only after the session is hydrated does the app let the user navigate into the authenticated tabs.
+
+The hydration path has one invariant worth calling out:
+
+<Aside type="caution">
+The `getCurrentUser()` call on cold start must be **synchronous from the client's point of view** — it reads from SecureStore and returns immediately, without issuing a network request or waiting on an async callback. Introducing a callback-based `getSession(cb)` or a debounced manifest read would break the sign-in screen's ability to skip itself on restore. If you touch this path, the restore-from-refresh-token flow is the correct extension point, not the credential-restore path.
+</Aside>
+
+## Biometric lock
+
+Users can enable biometric lock (Face ID / Touch ID on iOS) from the **Settings → Account** screen. When enabled:
+
+- The app gates access behind a biometric prompt on launch and on foreground after a background interval.
+- A biometric lock overlay renders immediately at the root layout — before any thread data is fetched — so the user cannot glimpse private content if the prompt is cancelled.
+- Unlocking does **not** re-issue tokens; it only unblocks the UI. The stored refresh token stays valid across lock cycles.
+
+Biometric lock is a UX feature, not a crypto feature. The tokens in SecureStore are protected by the iOS keychain's own access controls; biometric lock is a second gate on top of the same keychain-protected secrets.
+
+## Signing out
+
+Sign-out is a small but important flow:
+
+1. Clear the refresh token and tenant id from SecureStore.
+2. Clear any in-memory auth state.
+3. (On iOS) Do not attempt to clear Safari cookies — they weren't shared in the first place thanks to `preferEphemeralSession`.
+4. Route the user to `/sign-in`.
+
+Because the OAuth session was ephemeral, the next sign-in starts from a clean state and the user can pick any Google account without the last one being silently reused.
+
+## The pre-signup gap
+
+One known gap worth being honest about: the pre-signup Lambda validates domain and resolves the tenant, but it does not yet support **invite-based sign-up** — cases where the operator pre-provisioned a pending user row and the federated sign-in should pick that up automatically. Today, an invited user's sign-in will create a new federated record that the operator then has to link manually in the admin app. Closing that gap is on the near-term roadmap.
+
+## Related pages
+
+- [Admin — Administration](/applications/admin/administration/) — tenant user management and invites
+- [Mobile — Threads & Chat](/applications/mobile/threads-and-chat/) — what users land in after sign-in
+- [Mobile — Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/) — self-serve per-user OAuth for connectors and MCP servers
+- [Deploy Configuration](/deploy/configuration/) — Cognito identity provider configuration for Google OAuth

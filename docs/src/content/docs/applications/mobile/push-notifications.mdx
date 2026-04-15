@@ -1,0 +1,99 @@
+---
+title: Mobile — Push Notifications
+description: Expo push registration, token handling, narrow push policy for external tasks, deep-link routing, and cold-launch tap handling in the ThinkWork mobile app.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Push notifications in the ThinkWork mobile app are delivered through [Expo's push notification service](https://docs.expo.dev/push-notifications/overview/), which wraps APNs for iOS. The server decides when to fire; the client handles permissions, registration, payload routing, and the cold-launch "user tapped a notification while the app was closed" case.
+
+## Registration flow
+
+Push registration happens automatically at the root layout, after sign-in:
+
+1. On mount of the authenticated layout, `usePushNotifications()` checks the current permission state.
+2. If permissions aren't granted yet, the app asks. (This is the only permission prompt the mobile app makes at startup — everything else is asked on-demand.)
+3. Once granted, the app requests an Expo push token via `Notifications.getExpoPushTokenAsync()`.
+4. The token is sent to the backend through a `RegisterPushTokenMutation` that stores it alongside the user's record.
+
+From that point on, the backend can fire a push to this user any time the server-side policy decides to. The token is refreshed on next cold start if Expo rotates it.
+
+<Aside type="note">
+Simulators don't have push tokens. The registration path skips the `getExpoPushTokenAsync()` call on simulator builds so development still works. You can still deliver pushes to a simulator via `xcrun simctl push` for local testing.
+</Aside>
+
+## Foreground behavior
+
+When a push lands while the app is in the foreground, iOS normally suppresses the banner. The mobile app overrides that with `setNotificationHandler()` so foreground pushes still show a banner and sound. The rationale: an agent firing a push while the user is in the Inbox is surfacing something the user probably wants to see without losing the current screen.
+
+## Tap handling
+
+Tapping a push opens the app. What happens next depends on the tap context:
+
+- **App is already running** — the notification-response listener fires with the tapped payload. The app pulls `threadId` out of the payload's `data` field and routes to `/thread/[threadId]`.
+- **App was backgrounded** — same as above. iOS hands the tap off to the still-running process.
+- **App was closed (cold launch)** — the app boots, the root layout mounts, and then `getLastNotificationResponseAsync()` is called once to retrieve the cold-launch tap, if any. If there is one, the app routes into the target thread after completing auth hydration.
+
+All three paths land in the same thread-detail screen, so the user always ends up looking at the thing the push was about.
+
+## Narrow push policy for external tasks
+
+Not every event that affects a user fires a push. For external task events, the policy is deliberately narrow (see [External Task Connectors — Push notification policy](/concepts/connectors/external-tasks/#push-notification-policy)):
+
+| Event | Push? |
+|---|---|
+| Task assigned or reassigned to the user | Yes |
+| Task status changed | Yes |
+| Task updated with `status`, `status_id`, `due_at`, or `due_date` in the changed fields | Yes |
+| Task updated with only description, title, or priority changes | No |
+| Task commented | No |
+| Task created | No |
+
+The reasoning: push notifications should only fire on things that change the user's plan. A description edit shouldn't buzz a user's pocket; an assignment or due-date change should.
+
+The same activity still lands on the task card's **Activity** section (via AppSync subscriptions, see [Mobile — Threads & Chat](/applications/mobile/threads-and-chat/#real-time-not-polling)) — only the push is filtered. The user can always see the full audit trail by opening the thread.
+
+## Payload shape
+
+External-task pushes carry a small, predictable payload:
+
+```json
+{
+  "title": "LastMile · Assigned to you",
+  "body": "Deploy to staging — due Friday",
+  "data": {
+    "threadId": "<thread uuid>",
+    "eventKind": "task.assigned"
+  }
+}
+```
+
+The title and body are truncated to 150 characters. The `data.threadId` is what the tap handler uses to route. The `data.eventKind` is an echo of the webhook event kind and is useful for debugging but is not currently rendered in the UI.
+
+Other push sources (agent-initiated notifications, admin-initiated messages) use the same `data.threadId` contract so the tap handler is shared across all push types.
+
+## Quiet hours and user control
+
+v1 does not implement per-user quiet hours or category-level push toggles. Users who want to silence ThinkWork pushes use iOS's standard per-app notification settings. A more granular in-app preferences screen (mute specific task integrations, set quiet hours, daily digest) is on the roadmap.
+
+## Testing push locally
+
+Three options for testing pushes during development:
+
+1. **Real device + Expo push** — the easiest path. Run a development build on an iPhone, trigger an action on the server that fires a push, and watch it land.
+2. **Simulator + `xcrun simctl push`** — send an APNs-shaped payload directly to a running simulator. Useful for testing payload parsing and tap routing without a real server.
+3. **Expo push tool** — Expo's web tool lets you send a test push to any token. Useful for sanity-checking that registration is working end-to-end.
+
+For payload routing specifically, the simulator path is enough: the mobile app doesn't care where the push came from as long as the `data` shape is right.
+
+## Known limits
+
+- **Android not yet shipped.** Push notifications are iOS-only in v1. The Expo push wrapper would work on Android out of the box, but no production Android build is published.
+- **No per-integration mute.** Users can't silence LastMile pushes while keeping Microsoft 365 pushes, for example. This is an in-app preferences page on the roadmap.
+- **Cold-launch deep link does not restore scroll state.** Tapping a push while the app is closed opens the target thread at its default scroll position, not wherever the user had previously scrolled.
+
+## Related pages
+
+- [External Task Connectors — Push notification policy](/concepts/connectors/external-tasks/#push-notification-policy) — the server-side policy that decides when to fire
+- [Mobile — Threads & Chat](/applications/mobile/threads-and-chat/) — where the tap handler lands
+- [Mobile — Authentication](/applications/mobile/authentication/) — why push registration waits for sign-in

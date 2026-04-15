@@ -1,0 +1,101 @@
+---
+title: Admin Web App
+description: The ThinkWork admin web app — a Vite + React 19 dashboard for tenant operators to manage agents, connectors, memory, controls, and deployments.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The admin web app is the operator-facing control plane for a ThinkWork deployment. Platform operators — the people who configure agents, wire up connectors, manage tenant settings, and watch controls — live here. End users live in the [Mobile App](/applications/mobile/).
+
+The admin app is a Vite + React 19 single-page application with file-based routing through TanStack Router. It talks to the same GraphQL and REST endpoints the mobile app does, scoped with an `x-tenant-id` header on every request.
+
+<Aside type="note">
+Tenant-level configuration (MCP servers, connector credentials, guardrails, budgets) lives in the admin app. Per-user connections (self-serve OAuth for integrations and MCP token issuance) live in the [Mobile App](/applications/mobile/integrations-and-mcp-connect/). That split is intentional: operators register capabilities; end users grant their own access.
+</Aside>
+
+## Who uses it
+
+Three rough personas:
+
+- **Platform operators** — the people who stood up ThinkWork in AWS and configure the tenant. They spend most of their time under Agents, Connectors, and Settings.
+- **Agent authors** — the people building and iterating on agents, skills, knowledge bases, and guardrails. They live under Agents, Skills, Memory, and Security.
+- **Audit / observability owners** — the people watching usage, cost, and safety. They live under Analytics, Security Center, and Inbox.
+
+All three are tenant-scoped. The admin app is multi-tenant at the routing level: the `_authed/_tenant` layout enforces a tenant selection before loading any tenant data.
+
+## Authentication
+
+Operators sign in at `/sign-in` using **AWS Cognito** — email/password, or Google SSO through the same Cognito-managed federated identity provider. After login, the app resolves a tenant for the user, stores the JWT, and mounts the authenticated layout.
+
+The auth flow:
+
+1. Operator hits `/sign-in`.
+2. They authenticate with Cognito (SRP or Google).
+3. The app exchanges the code at `/auth/callback` (for Google) or completes SRP inline.
+4. JWT + tenant context are stored; the app redirects into the `_authed/_tenant` layout.
+5. Every subsequent GraphQL / REST call carries the JWT in `Authorization` and the tenant id in `x-tenant-id`.
+
+Local development bypasses the Cognito gate for speed; production deployments always require it.
+
+## The sidebar
+
+The admin app's sidebar is the fastest way to understand its scope. Top-level groups:
+
+| Group | Contains |
+|---|---|
+| **Work** | Dashboard, Threads, Inbox |
+| **Agents** | Agents, Agent Templates, Skills Catalog, MCP Servers, Built-in Tools, Security Center |
+| **Manage** | Memory, Knowledge Bases, Analytics, Automations, Connectors, Webhooks, Humans, Settings |
+| **Other** | Org Chart, Routines, Artifacts, Agent Invites |
+
+This guide splits those into five topical pages that match the rest of the docs:
+
+- [Agents & Templates](/applications/admin/agents/) — agents, templates, skills, sub-agents, workspaces, per-agent scheduled jobs
+- [Connectors & Tools](/applications/admin/connectors/) — integrations, tenant-level MCP servers, built-in tools, webhooks, credential vault
+- [Memory & Knowledge](/applications/admin/memory-and-knowledge/) — memory graph viewer, knowledge bases, document upload
+- [Observability & Control](/applications/admin/observability/) — analytics, security center, guardrails, audit, budgets
+- [Administration](/applications/admin/administration/) — humans, tenant settings, deployment status, automations, routines
+
+## Dashboard, threads, inbox
+
+The three Work-group pages are the operator's day-to-day starting point.
+
+**Dashboard** (`/dashboard`) — top-level metric cards, recent threads, recent runs, quick-access lists. This is where operators land after login and where they'll come back when they want a pulse on the tenant without drilling into a specific domain.
+
+**Threads** (`/threads`) — a paginated thread list with Kanban and table views, filters on status / agent / priority, and a detail view at `/threads/:id` that renders the full conversation plus turn-level audit. Threads can be archived. Real-time updates land via AppSync subscriptions, so the list and detail views stay in sync without a manual refresh.
+
+**Inbox** (`/inbox`) — the approval queue. Agents can be configured to request human approval for sensitive actions (for example, changes to their own configuration or uploads to a knowledge base). Those requests land here in `pending` state, and operators approve, reject, or ask for revision.
+
+## Tenant scoping and multi-tenancy
+
+Every page in the admin app is tenant-scoped. The `_authed/_tenant` layout resolves a tenant from the URL or from a stored preference, and every API call — GraphQL and REST — carries that tenant id. Postgres row-level security on the backend enforces isolation, so even a bug in the admin app cannot leak cross-tenant data.
+
+Operators who manage multiple tenants switch by picking a different tenant in the top bar. The JWT is reused; the tenant context is swapped and all queries re-fetch.
+
+## What lives in the admin app vs the mobile app
+
+The rule of thumb: **the admin app configures the tenant; the mobile app is where end users do the work.**
+
+| Capability | Where |
+|---|---|
+| Register an agent or agent template | Admin |
+| Connect your personal Google account to an agent | Mobile |
+| Register a tenant-level MCP server (URL, transport, auth type) | Admin |
+| Grant your personal OAuth token to that MCP server | Mobile |
+| Configure guardrails, budgets, and audit retention | Admin |
+| Chat with an agent, review threads, act on external tasks | Mobile |
+| Upload knowledge-base documents | Admin |
+| Register a webhook connector with a signing secret | Admin |
+| See a push notification when you're assigned a task | Mobile |
+
+When in doubt, tenant-level = admin, user-level = mobile.
+
+## What's next
+
+Start with [Agents & Templates](/applications/admin/agents/) for the agent-authoring surface, or jump straight to [Connectors & Tools](/applications/admin/connectors/) if you're wiring up Slack, GitHub, Google Workspace, or an MCP server.
+
+## Related pages
+
+- [Mobile App](/applications/mobile/) — the end-user client for threads, tasks, and connections
+- [CLI](/applications/cli/) — the `thinkwork-cli` deploy and management tool
+- [Architecture](/architecture/) — how the admin app fits into the three-tier deployment model
