@@ -1,9 +1,11 @@
 /**
  * Connections CRUD Handler
  *
- * GET  /api/connections          — list connections by tenant_id + user_id
- * GET  /api/connections/:id      — single connection with provider join
- * PUT  /api/connections/:id      — JSONB merge on metadata
+ * GET    /api/connections        — list connections by tenant_id + user_id
+ * GET    /api/connections/:id    — single connection with provider join
+ * POST   /api/connections        — self-register (no OAuth); body:
+ *                                   { providerName, external_id?, metadata? }
+ * PUT    /api/connections/:id    — JSONB merge on metadata
  * DELETE /api/connections/:id    — set status inactive, delete SM secret + credentials
  */
 
@@ -70,6 +72,10 @@ export async function handler(
 				return id
 					? getConnection(tenantId, id)
 					: listConnections(tenantId, userId);
+			case "POST":
+				if (id) return error("POST to /api/connections/:id not supported", 405);
+				if (!userId) return error("Missing x-principal-id header");
+				return createConnection(tenantId, userId, event);
 			case "PUT":
 				if (!id) return error("Missing connection ID");
 				return updateConnection(tenantId, id, event);
@@ -147,6 +153,76 @@ async function getConnection(
 
 	if (!row) return notFound("Connection not found");
 	return json(row);
+}
+
+async function createConnection(
+	tenantId: string,
+	userId: string,
+	event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const body = parseBody(event);
+	const providerName =
+		typeof body.providerName === "string" ? body.providerName : "";
+	if (!providerName) return error("Missing providerName");
+
+	const externalId =
+		typeof body.external_id === "string" ? body.external_id : null;
+	const metadataInput =
+		body.metadata && typeof body.metadata === "object"
+			? (body.metadata as Record<string, unknown>)
+			: {};
+
+	const [provider] = await db
+		.select({ id: connectProviders.id })
+		.from(connectProviders)
+		.where(eq(connectProviders.name, providerName));
+	if (!provider) return notFound(`Unknown provider: ${providerName}`);
+
+	// Idempotent upsert on (tenant_id, user_id, provider_id). If a row
+	// already exists, JSONB-merge the new metadata into it and flip it
+	// back to active — users self-registering again should be a no-op,
+	// not a duplicate row.
+	const [existing] = await db
+		.select({ id: connections.id })
+		.from(connections)
+		.where(
+			and(
+				eq(connections.tenant_id, tenantId),
+				eq(connections.user_id, userId),
+				eq(connections.provider_id, provider.id),
+			),
+		);
+
+	if (existing) {
+		const metadataJson = JSON.stringify(metadataInput);
+		const [updated] = await db
+			.update(connections)
+			.set({
+				status: "active",
+				external_id: externalId ?? undefined,
+				metadata: sql`COALESCE(metadata, '{}'::jsonb) || ${metadataJson}::jsonb`,
+				connected_at: new Date(),
+				disconnected_at: null,
+				updated_at: new Date(),
+			})
+			.where(eq(connections.id, existing.id))
+			.returning();
+		return json(updated);
+	}
+
+	const [inserted] = await db
+		.insert(connections)
+		.values({
+			tenant_id: tenantId,
+			user_id: userId,
+			provider_id: provider.id,
+			status: "active",
+			external_id: externalId,
+			metadata: metadataInput,
+			connected_at: new Date(),
+		})
+		.returning();
+	return json(inserted, 201);
 }
 
 async function updateConnection(

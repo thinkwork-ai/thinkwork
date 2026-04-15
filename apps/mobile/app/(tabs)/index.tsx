@@ -74,8 +74,8 @@ export default function ThreadsScreen() {
     return map;
   }, [agents]);
 
-  // ── Inbox / Tasks toggle ──────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<"inbox" | "tasks">("inbox");
+  // ── Threads / Tasks toggle ──────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<"threads" | "tasks">("threads");
 
   // ── Thread filters + query (scoped to active agent) ────────────────────
   const [filters, setFilters] = useState<ThreadFilters>({ statuses: [], channels: [], agentId: "", showArchived: false });
@@ -457,20 +457,20 @@ export default function ThreadsScreen() {
         </View>
       )}
 
-      {/* Inbox / Tasks tabs with badges */}
+      {/* Threads / Tasks tabs with badges */}
       <View className="flex-row border-b border-neutral-200 dark:border-neutral-800" style={{ backgroundColor: colors.background }}>
         <Pressable
-          onPress={() => setActiveTab("inbox")}
+          onPress={() => setActiveTab("threads")}
           className="flex-1 flex-row items-center justify-center gap-1.5 py-2.5"
-          style={activeTab === "inbox" ? { borderBottomWidth: 2, borderBottomColor: colors.primary } : undefined}
+          style={activeTab === "threads" ? { borderBottomWidth: 2, borderBottomColor: colors.primary } : undefined}
         >
-          <Text className={`text-sm font-semibold ${activeTab === "inbox" ? "" : "text-neutral-400 dark:text-neutral-500"}`}
-            style={activeTab === "inbox" ? { color: colors.primary } : undefined}>Inbox</Text>
+          <Text className={`text-sm font-semibold ${activeTab === "threads" ? "" : "text-neutral-400 dark:text-neutral-500"}`}
+            style={activeTab === "threads" ? { color: colors.primary } : undefined}>Threads</Text>
           {(() => {
             const unreadCount = filteredThreads.filter((t: any) => isUnread(t.id, t.lastTurnCompletedAt || t.createdAt, t.lastReadAt)).length;
             return unreadCount > 0 ? (
-              <View className="rounded-full min-w-[18px] h-[18px] items-center justify-center px-1" style={{ backgroundColor: activeTab === "inbox" ? colors.primary : (isDark ? "#404040" : "#d4d4d4") }}>
-                <Text style={{ color: activeTab === "inbox" ? (isDark ? "#000" : "#fff") : colors.mutedForeground, fontSize: 10, fontWeight: "700" }}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
+              <View className="rounded-full min-w-[18px] h-[18px] items-center justify-center px-1" style={{ backgroundColor: activeTab === "threads" ? colors.primary : (isDark ? "#404040" : "#d4d4d4") }}>
+                <Text style={{ color: activeTab === "threads" ? (isDark ? "#000" : "#fff") : colors.mutedForeground, fontSize: 10, fontWeight: "700" }}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
               </View>
             ) : null;
           })()}
@@ -492,7 +492,7 @@ export default function ThreadsScreen() {
 
       <View className="flex-1" style={{ backgroundColor: colors.background }}>
       <WebContent>
-        {activeTab === "inbox" && filtersOpen && (
+        {activeTab === "threads" && filtersOpen && (
           <ThreadFilterBar filters={filters} onFiltersChange={setFilters} />
         )}
 
@@ -552,7 +552,7 @@ export default function ThreadsScreen() {
       </View>
 
       {/* Bottom input area — hidden on Tasks tab */}
-      {activeTab === "inbox" && <View>
+      {activeTab === "threads" && <View>
         <MessageInputFooter
           ref={messageInputRef}
           value={newThreadText}

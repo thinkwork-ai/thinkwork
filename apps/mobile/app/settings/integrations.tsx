@@ -123,11 +123,14 @@ export default function IntegrationsScreen() {
     await fetchConnections();
   };
 
+  // LastMile connects via MCP Servers → LastMile Tasks → OAuth. The
+  // post-OAuth hook in skills.ts calls user_whoami on the MCP server and
+  // writes the connections row automatically. Point users there.
   const handleConnectLastmile = async () => {
-    if (!tenant?.id || !user?.id) return;
-    const url = `${API_BASE}/api/oauth/authorize?provider=lastmile&userId=${user.id}&tenantId=${tenant.id}`;
-    await WebBrowser.openBrowserAsync(url);
-    await fetchConnections();
+    Alert.alert(
+      "Connect via MCP Servers",
+      "LastMile Tasks uses OAuth through the MCP Servers screen. Open the header menu → MCP Servers → LastMile Tasks → Connect. Your LastMile user id is picked up automatically.",
+    );
   };
 
   // Persist the user's per-provider default agent pick onto the connection
