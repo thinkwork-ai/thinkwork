@@ -465,7 +465,7 @@ export default function ThreadsScreen() {
           style={activeTab === "inbox" ? { borderBottomWidth: 2, borderBottomColor: colors.primary } : undefined}
         >
           <Text className={`text-sm font-semibold ${activeTab === "inbox" ? "" : "text-neutral-400 dark:text-neutral-500"}`}
-            style={activeTab === "inbox" ? { color: colors.primary } : undefined}>Inbox</Text>
+            style={activeTab === "inbox" ? { color: colors.primary } : undefined}>Threads</Text>
           {(() => {
             const unreadCount = filteredThreads.filter((t: any) => isUnread(t.id, t.lastTurnCompletedAt || t.createdAt, t.lastReadAt)).length;
             return unreadCount > 0 ? (
