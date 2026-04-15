@@ -543,24 +543,9 @@ export function EditFormActionSheet({ visible, onClose, item, submit }: CommonPr
 						</Muted>
 					)}
 				</View>
-				<View className="flex-row items-center gap-2">
-					<Pressable
-						onPress={handleSubmit}
-						disabled={saving}
-						className="px-3 py-1.5 rounded-full active:opacity-70"
-						style={{ backgroundColor: colors.primary }}
-					>
-						<Text
-							className="text-xs font-semibold"
-							style={{ color: isDark ? "#000" : "#fff" }}
-						>
-							{saving ? "Saving…" : form.submitLabel}
-						</Text>
-					</Pressable>
-					<Pressable onPress={onClose} className="p-1 active:opacity-70">
-						<X size={20} color={colors.mutedForeground} />
-					</Pressable>
-				</View>
+				<Pressable onPress={onClose} className="p-1 active:opacity-70">
+					<X size={20} color={colors.mutedForeground} />
+				</Pressable>
 			</View>
 
 			<BottomSheetScrollView
@@ -581,6 +566,24 @@ export function EditFormActionSheet({ visible, onClose, item, submit }: CommonPr
 						)}
 					</View>
 				))}
+
+				{/* Save button: bottom-left of the modal body, rendered as a
+				    neutral outline button (not the filled primary accent). */}
+				<View className="flex-row mt-2">
+					<Pressable
+						onPress={handleSubmit}
+						disabled={saving}
+						className="px-4 py-2.5 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 active:bg-neutral-100 dark:active:bg-neutral-800"
+						style={{ opacity: saving ? 0.6 : 1 }}
+					>
+						<Text
+							className="text-sm font-semibold"
+							style={{ color: colors.foreground }}
+						>
+							{saving ? "Saving…" : form.submitLabel}
+						</Text>
+					</Pressable>
+				</View>
 			</BottomSheetScrollView>
 		</BottomSheetModal>
 	);
