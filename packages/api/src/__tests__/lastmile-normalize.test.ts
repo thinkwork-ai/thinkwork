@@ -102,28 +102,33 @@ describe("lastmileAdapter.normalizeItem", () => {
 });
 
 describe("lastmileAdapter.buildBlocks", () => {
-	it("returns the default header → fields → badges → actions → activity layout (edit form opens via modal sheet)", () => {
+	it("returns the default header → fields → badges → activity layout (edit form opens via pencil icon in task_header)", () => {
 		const item = lastmileAdapter.normalizeItem(fixture as Record<string, unknown>);
 		const blocks = lastmileAdapter.buildBlocks(item);
 		expect(blocks.map((b) => b.type)).toEqual([
 			"task_header",
 			"field_list",
 			"badge_row",
-			"action_bar",
 			"activity_list",
 		]);
 	});
 
-	it("places activity_list after action_bar with limit 10", () => {
+	it("places activity_list after badge_row with limit 10", () => {
 		const item = lastmileAdapter.normalizeItem(fixture as Record<string, unknown>);
 		const blocks = lastmileAdapter.buildBlocks(item);
-		const actionBarIdx = blocks.findIndex((b) => b.type === "action_bar");
+		const badgeIdx = blocks.findIndex((b) => b.type === "badge_row");
 		const activityIdx = blocks.findIndex((b) => b.type === "activity_list");
-		expect(activityIdx).toBeGreaterThan(actionBarIdx);
+		expect(activityIdx).toBeGreaterThan(badgeIdx);
 		const activity = blocks[activityIdx];
 		if (activity?.type !== "activity_list") throw new Error("expected activity_list");
 		expect(activity.limit).toBe(10);
 		expect(activity.title).toBe("Activity");
+	});
+
+	it("does not emit an action_bar block (edit opens via header pencil icon)", () => {
+		const item = lastmileAdapter.normalizeItem(fixture as Record<string, unknown>);
+		const blocks = lastmileAdapter.buildBlocks(item);
+		expect(blocks.find((b) => b.type === "action_bar")).toBeUndefined();
 	});
 });
 

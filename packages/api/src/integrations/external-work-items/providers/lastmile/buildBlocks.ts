@@ -1,11 +1,16 @@
 /**
  * LastMile default block layout for a single-task envelope.
  *
- * task_header → field_list → badge_row → action_bar → activity_list
+ * task_header → field_list → badge_row → activity_list
  *
  * The edit form is NOT inlined — it opens as a bottom sheet modal when the
- * user clicks an action button (Change status / Assign / Comment / Edit),
- * handled by ExternalTaskCard's action dispatch layer.
+ * user taps the pencil icon rendered in the task_header block by the mobile
+ * renderer (see apps/mobile/components/genui/external-task/blocks/TaskHeader.tsx).
+ *
+ * The old action_bar block (Change status / Assign / Comment / Edit) was
+ * removed because update_status / assign / comment were broken (PR F #80) and
+ * the only working path was edit_fields. That action now lives as a compact
+ * header button instead of a 4-button footer.
  *
  * The activity_list renders webhook-driven audit rows (status changes,
  * reassignments, comments) that arrive via the ingest pipeline and land in
@@ -26,15 +31,11 @@ export function buildLastmileBlocks(_item: NormalizedTask): TaskBlock[] {
 		{
 			type: "field_list",
 			fieldKeys: ["status", "priority", "assignee", "dueAt"],
-			columns: 2,
+			columns: 1,
 		},
 		{
 			type: "badge_row",
 			fieldKeys: ["labels"],
-		},
-		{
-			type: "action_bar",
-			actionIds: ["act_update_status", "act_assign", "act_comment", "act_edit_fields"],
 		},
 		{
 			type: "activity_list",
