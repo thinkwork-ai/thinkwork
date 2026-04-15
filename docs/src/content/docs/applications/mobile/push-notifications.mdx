@@ -24,7 +24,7 @@ Simulators don't have push tokens. The registration path skips the `getExpoPushT
 
 ## Foreground behavior
 
-When a push lands while the app is in the foreground, iOS normally suppresses the banner. The mobile app overrides that with `setNotificationHandler()` so foreground pushes still show a banner and sound. The rationale: an agent firing a push while the user is in the Inbox is surfacing something the user probably wants to see without losing the current screen.
+When a push lands while the app is in the foreground, iOS normally suppresses the banner. The mobile app overrides that with `setNotificationHandler()` so foreground pushes still show a banner and sound. The rationale: an agent firing a push while the user is on the Threads tab is surfacing something the user probably wants to see without losing the current screen.
 
 ## Tap handling
 
