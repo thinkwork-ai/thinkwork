@@ -224,7 +224,7 @@ export default function IntegrationsScreen() {
 
   if (loading || !tenant) {
     return (
-      <DetailLayout title="Integrations">
+      <DetailLayout title="Connectors">
         <View className="flex-1 p-4" style={{ maxWidth: 600 }}>
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-20 w-full rounded-xl mb-3" />
