@@ -235,7 +235,7 @@ export default function IntegrationsScreen() {
   }
 
   return (
-    <DetailLayout title="Integrations">
+    <DetailLayout title="Connectors">
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 24 }}
@@ -398,7 +398,7 @@ export default function IntegrationsScreen() {
           {/* Available integrations */}
           <View>
             <Text className="text-sm font-medium text-neutral-500 dark:text-neutral-400 mb-2 px-1">
-              {activeConnections.length > 0 ? "Add More" : "Available Integrations"}
+              {activeConnections.length > 0 ? "Add More" : "Available Connectors"}
             </Text>
             <View className="overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
               {/* Google Workspace */}
