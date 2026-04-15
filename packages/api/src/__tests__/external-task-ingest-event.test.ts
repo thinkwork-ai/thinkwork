@@ -118,6 +118,21 @@ vi.mock("../integrations/external-work-items/ensureExternalTaskThread.js", () =>
 	closeExternalTaskThread: mockCloseThread,
 }));
 
+// ── graphql/notify + push (PR B/C): stub so tests don't load the real
+//    modules, which would transitively import the DB schema and trip
+//    the drizzle-orm mock. We don't assert on them in this file.
+// ─────────────────────────────────────────────────────────────────────────────
+
+vi.mock("../graphql/notify.js", () => ({
+	notifyNewMessage: vi.fn().mockResolvedValue(undefined),
+	notifyThreadUpdate: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../lib/push-notifications.js", () => ({
+	sendExternalTaskPush: vi.fn().mockResolvedValue(undefined),
+	sendTurnCompletedPush: vi.fn().mockResolvedValue(undefined),
+}));
+
 // ── Import AFTER mocks ───────────────────────────────────────────────────────
 
 import { ingestExternalTaskEvent } from "../integrations/external-work-items/ingestEvent.js";

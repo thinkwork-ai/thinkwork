@@ -137,6 +137,18 @@ vi.mock("../graphql/notify.js", () => ({
 	notifyThreadUpdate: mockNotifyThreadUpdate,
 }));
 
+// ── Expo push fan-out (PR C) ─────────────────────────────────────────────────
+
+const { mockSendExternalTaskPush } = vi.hoisted(() => {
+	const mockSendExternalTaskPush = vi.fn().mockResolvedValue(undefined);
+	return { mockSendExternalTaskPush };
+});
+
+vi.mock("../lib/push-notifications.js", () => ({
+	sendExternalTaskPush: mockSendExternalTaskPush,
+	sendTurnCompletedPush: vi.fn().mockResolvedValue(undefined),
+}));
+
 // ── Imports (after mocks) ────────────────────────────────────────────────────
 
 import { ingestExternalTaskEvent } from "../integrations/external-work-items/ingestEvent.js";
@@ -236,6 +248,7 @@ beforeEach(() => {
 	mockInsertReturning.mockResolvedValue([{ id: "mock-msg-id" }]);
 	mockNotifyNewMessage.mockResolvedValue(undefined);
 	mockNotifyThreadUpdate.mockResolvedValue(undefined);
+	mockSendExternalTaskPush.mockResolvedValue(undefined);
 });
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -693,6 +706,166 @@ describe("ingestExternalTaskEvent — activity message (PR A)", () => {
 			expect(result.status).toBe("ok");
 			await Promise.resolve();
 			expect(mockNotifyNewMessage).toHaveBeenCalledTimes(1);
+		});
+	});
+
+	describe("PR C — Expo push fan-out", () => {
+		it("fires sendExternalTaskPush with 'Assigned to you' on task.assigned", async () => {
+			arrangePipeline(
+				{
+					kind: "task.assigned",
+					externalTaskId: "task_1",
+					providerUserId: "user_lm_1",
+					receivedAt: "2026-04-14T10:00:00Z",
+				},
+				envelope({
+					title: "Restock walk-in cooler",
+					assignee: { id: "user_lm_1", name: "Eric" },
+				}),
+			);
+
+			await ingestExternalTaskEvent({
+				provider: "lastmile",
+				rawBody: RAW_BODY,
+				headers: HEADERS,
+			});
+			await Promise.resolve();
+
+			expect(mockSendExternalTaskPush).toHaveBeenCalledTimes(1);
+			expect(mockSendExternalTaskPush).toHaveBeenCalledWith({
+				userId: "user-1",
+				tenantId: "tenant-1",
+				threadId: "thread-1",
+				title: "Restock walk-in cooler",
+				body: "Assigned to you",
+				eventKind: "task.assigned",
+			});
+		});
+
+		it("fires sendExternalTaskPush with the summary on task.updated status change", async () => {
+			arrangePipeline(
+				{
+					kind: "task.updated",
+					externalTaskId: "task_1",
+					providerUserId: "user_lm_1",
+					receivedAt: "2026-04-14T10:00:00Z",
+					raw: { propertiesUpdated: ["status"] },
+				},
+				envelope({
+					title: "Test Outbox",
+					status: { value: "in_progress", label: "In Progress" },
+				}),
+			);
+
+			await ingestExternalTaskEvent({
+				provider: "lastmile",
+				rawBody: RAW_BODY,
+				headers: HEADERS,
+			});
+			await Promise.resolve();
+
+			expect(mockSendExternalTaskPush).toHaveBeenCalledTimes(1);
+			const call = mockSendExternalTaskPush.mock.calls[0][0] as {
+				body: string;
+				title: string;
+				eventKind: string;
+			};
+			expect(call.body).toBe("Status changed to In Progress");
+			expect(call.title).toBe("Test Outbox");
+			expect(call.eventKind).toBe("task.updated");
+		});
+
+		it("does NOT push for task.updated description-only changes", async () => {
+			arrangePipeline(
+				{
+					kind: "task.updated",
+					externalTaskId: "task_1",
+					providerUserId: "user_lm_1",
+					receivedAt: "2026-04-14T10:00:00Z",
+					raw: { propertiesUpdated: ["description"] },
+				},
+				envelope(),
+			);
+
+			await ingestExternalTaskEvent({
+				provider: "lastmile",
+				rawBody: RAW_BODY,
+				headers: HEADERS,
+			});
+			await Promise.resolve();
+
+			// A system activity row IS still inserted (PR A), but no push.
+			expect(mockInsert).toHaveBeenCalledTimes(1);
+			expect(mockSendExternalTaskPush).not.toHaveBeenCalled();
+		});
+
+		it("does NOT push for task.commented (v1 noise policy)", async () => {
+			arrangePipeline(
+				{
+					kind: "task.commented",
+					externalTaskId: "task_1",
+					providerUserId: "user_lm_1",
+					receivedAt: "2026-04-14T10:00:00Z",
+					raw: { comment: { body: "ping" } },
+				},
+				envelope(),
+			);
+
+			await ingestExternalTaskEvent({
+				provider: "lastmile",
+				rawBody: RAW_BODY,
+				headers: HEADERS,
+			});
+			await Promise.resolve();
+
+			expect(mockSendExternalTaskPush).not.toHaveBeenCalled();
+		});
+
+		it("does NOT push for noise events (null summary)", async () => {
+			arrangePipeline(
+				{
+					kind: "task.created",
+					externalTaskId: "task_1",
+					providerUserId: "user_lm_1",
+					receivedAt: "2026-04-14T10:00:00Z",
+				},
+				envelope(),
+			);
+
+			await ingestExternalTaskEvent({
+				provider: "lastmile",
+				rawBody: RAW_BODY,
+				headers: HEADERS,
+			});
+			await Promise.resolve();
+
+			expect(mockInsert).not.toHaveBeenCalled();
+			expect(mockSendExternalTaskPush).not.toHaveBeenCalled();
+		});
+
+		it("still returns ok when sendExternalTaskPush rejects", async () => {
+			mockSendExternalTaskPush.mockRejectedValueOnce(new Error("expo 503"));
+			arrangePipeline(
+				{
+					kind: "task.assigned",
+					externalTaskId: "task_1",
+					providerUserId: "user_lm_1",
+					receivedAt: "2026-04-14T10:00:00Z",
+				},
+				envelope({ assignee: { id: "user_lm_1", name: "Eric" } }),
+			);
+
+			const result = await ingestExternalTaskEvent({
+				provider: "lastmile",
+				rawBody: RAW_BODY,
+				headers: HEADERS,
+			});
+
+			expect(result.status).toBe("ok");
+			// Notify calls still fired (independent of push).
+			await Promise.resolve();
+			expect(mockNotifyNewMessage).toHaveBeenCalledTimes(1);
+			expect(mockNotifyThreadUpdate).toHaveBeenCalledTimes(1);
 		});
 	});
 });
