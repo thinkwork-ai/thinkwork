@@ -485,7 +485,7 @@ export function EditFormActionSheet({ visible, onClose, item, submit }: CommonPr
 	const [saving, setSaving] = useState(false);
 
 	const form = item.forms?.edit;
-	const snapPoints = useMemo(() => ["50%"], []);
+	const snapPoints = useMemo(() => ["75%"], []);
 
 	useEffect(() => {
 		if (visible && form) {
