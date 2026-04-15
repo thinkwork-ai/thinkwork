@@ -34,31 +34,6 @@ const BUCKET = process.env.WORKSPACE_BUCKET!;
 const CATALOG_PREFIX = "skills/catalog";
 const STAGE = process.env.STAGE || "dev";
 
-// Mobile-app deep link for MCP OAuth completion. ASWebAuthenticationSession
-// on iOS watches the URL bar for any redirect to this exact scheme and
-// auto-closes as soon as it sees one. Registered as the MCP client's
-// redirect_uri (via DCR) so the IdP redirects straight here rather than
-// routing through an HTTPS Lambda hop — eliminating a class of
-// cookie-persistence failures on multi-redirect OAuth chains.
-//
-// Must match `apps/mobile/app.json:scheme`. If the scheme ever changes,
-// update both at once AND bump `DCR_VERSION` below to force re-registration
-// of any cached clients, or their old redirect_uri will reject the new URL.
-const MCP_OAUTH_DEEP_LINK = "thinkwork://mcp-oauth-complete";
-// Bump whenever redirect_uris or client_name changes — forces any cached
-// DCR registrations to re-register against the new shape.
-//
-// v1: redirect_uris = [HTTPS callback]           (original)
-// v2: redirect_uris = [MCP_OAUTH_DEEP_LINK]      (custom scheme direct — blocked
-//                                                 by Safari's JS-redirect-to-custom-scheme
-//                                                 guard on WorkOS AuthKit's interstitial)
-// v3: redirect_uris = [HTTPS callback]           (back to HTTPS intermediate; the
-//                                                 Lambda callback does the token
-//                                                 exchange then 302s to the custom
-//                                                 scheme, which Safari honors as a
-//                                                 server-side redirect)
-const DCR_VERSION = "v3";
-
 // ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
@@ -71,10 +46,7 @@ export async function handler(
 	const method = event.requestContext.http.method;
 	const path = event.rawPath;
 
-	// MCP OAuth endpoints are public (browser redirects + mobile code
-	// exchange, no Bearer token). See MCP_OAUTH_DEEP_LINK comment below
-	// for why the happy path goes through /exchange (POST from the app)
-	// rather than the legacy /callback browser redirect.
+	// MCP OAuth endpoints are public (browser redirects, no Bearer token)
 	if (path.startsWith("/api/skills/mcp-oauth/")) {
 		try {
 			if (path === "/api/skills/mcp-oauth/authorize" && method === "GET") {
@@ -82,9 +54,6 @@ export async function handler(
 			}
 			if (path === "/api/skills/mcp-oauth/callback" && method === "GET") {
 				return mcpOAuthCallback(event);
-			}
-			if (path === "/api/skills/mcp-oauth/exchange" && method === "POST") {
-				return mcpOAuthExchange(event);
 			}
 			return notFound("Route not found");
 		} catch (err) {
@@ -382,14 +351,11 @@ async function mcpOAuthAuthorize(
 	const apiBaseUrl = `https://${event.headers.host || ""}`;
 	const callbackUrl = `${apiBaseUrl}/api/skills/mcp-oauth/callback`;
 	const forceRediscovery = qs.force === "true";
-	// Cache is only valid if it was populated under the current DCR_VERSION.
-	// Bumping DCR_VERSION (e.g. after changing redirect_uris) forces every
-	// cached client to re-register with the updated details.
-	const cacheValid = authConfig.dcr_version === DCR_VERSION && !forceRediscovery;
 
-	let authorizeEndpoint = (cacheValid && authConfig.authorize_endpoint) || "";
-	let tokenEndpoint = (cacheValid && authConfig.token_endpoint) || "";
-	let clientId = (cacheValid && authConfig.client_id) || "";
+	// Always discover via RFC 9728 unless we have cached endpoints AND not forcing rediscovery
+	let authorizeEndpoint = (!forceRediscovery && authConfig.authorize_endpoint) || "";
+	let tokenEndpoint = (!forceRediscovery && authConfig.token_endpoint) || "";
+	let clientId = (!forceRediscovery && authConfig.client_id) || "";
 	let registrationEndpoint = "";
 
 	if (!authorizeEndpoint || !tokenEndpoint) {
@@ -423,16 +389,6 @@ async function mcpOAuthAuthorize(
 
 	// RFC 7591 Dynamic Client Registration — if no client_id and registration endpoint exists
 	if (!clientId && registrationEndpoint) {
-		// Register the HTTPS Lambda callback as the redirect_uri. WorkOS
-		// AuthKit's final-hop interstitial does a CLIENT-SIDE JS redirect
-		// when the registered redirect_uri is a custom scheme
-		// (thinkwork://…), and Safari blocks JS-initiated redirects to
-		// custom schemes without a fresh user gesture — breaking the
-		// flow at the very end. Registering the HTTPS callback instead
-		// means WorkOS issues a normal 302 redirect to the Lambda, the
-		// Lambda does the token exchange, and THEN 302s to the custom
-		// scheme — which Safari honors because it's a server-side
-		// redirect, not JS.
 		const dcrRes = await fetch(registrationEndpoint, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -452,15 +408,9 @@ async function mcpOAuthAuthorize(
 		const dcrData = await dcrRes.json() as { client_id: string };
 		clientId = dcrData.client_id;
 
-		// Cache the discovered endpoints + client_id + DCR version so a
-		// future redirect_uri/client_name change can invalidate it.
+		// Cache the discovered endpoints + client_id for next time
 		await db.update(tenantMcpServers).set({
-			auth_config: {
-				authorize_endpoint: authorizeEndpoint,
-				token_endpoint: tokenEndpoint,
-				client_id: clientId,
-				dcr_version: DCR_VERSION,
-			},
+			auth_config: { authorize_endpoint: authorizeEndpoint, token_endpoint: tokenEndpoint, client_id: clientId },
 			updated_at: new Date(),
 		}).where(eq(tenantMcpServers.id, mcpServerId));
 	}
@@ -483,9 +433,7 @@ async function mcpOAuthAuthorize(
 		codeVerifier,
 	})).toString("base64url");
 
-	// Redirect to authorize. redirect_uri matches the DCR registration —
-	// HTTPS Lambda callback, not the custom scheme (see DCR_VERSION
-	// history at the top of this file).
+	// Redirect to authorize
 	const authorizeUrl = new URL(authorizeEndpoint);
 	authorizeUrl.searchParams.set("client_id", clientId);
 	authorizeUrl.searchParams.set("redirect_uri", callbackUrl);
@@ -494,17 +442,21 @@ async function mcpOAuthAuthorize(
 	authorizeUrl.searchParams.set("state", state);
 	authorizeUrl.searchParams.set("code_challenge", codeChallenge);
 	authorizeUrl.searchParams.set("code_challenge_method", "S256");
-	// NOTE 2026-04-15: we USED to also send `prompt=login` + `max_age=0`
-	// as account-switching levers, but they both contributed to a
-	// Clerk→workos-bridge redirect loop — WorkOS was re-checking the
-	// session freshness on every hop through the bridge, and `max_age=0`
-	// is literally unsatisfiable ("session must be ≤0 seconds old"), so
-	// the freshly-authenticated user kept getting bounced back to
-	// /en/sign-in and WebKit surfaced "A problem repeatedly occurred".
-	// Dropping both gets the basic flow working again. If account
-	// switching becomes a user-facing problem, we'll add an explicit
-	// WorkOS logout step to the authorize flow instead of relying on
-	// OIDC re-auth hints that AuthKit handles inconsistently.
+	// Force a fresh login prompt instead of reusing any cached IdP session.
+	// OIDC §3.1.2.1 `prompt=login` SHOULD prompt for reauthentication, but
+	// WorkOS AuthKit observed 2026-04-15 treats `prompt=login` as "show the
+	// consent screen" rather than "re-authenticate" when a browser-side
+	// session cookie is still valid — the end user lands on a "Logged in
+	// as eric@..." consent dialog instead of an email/password form, so
+	// switching accounts is impossible.
+	//
+	// `max_age=0` is the OIDC companion lever (§3.1.2.1): "If the max_age
+	// request is 0, the OP MUST reauthenticate the End-User." Most IdPs
+	// that ignore `prompt=login` still honor `max_age`, because it maps
+	// to a concrete session-age comparison rather than a mode string.
+	// Sending both is belt-and-suspenders — standards-compliant either way.
+	authorizeUrl.searchParams.set("prompt", "login");
+	authorizeUrl.searchParams.set("max_age", "0");
 
 	return {
 		statusCode: 302,
@@ -512,6 +464,20 @@ async function mcpOAuthAuthorize(
 		body: "",
 	};
 }
+
+/**
+ * Mobile-app deep link for MCP OAuth completion. The mobile MCP Servers
+ * screen opens the OAuth flow via `WebBrowser.openAuthSessionAsync(...,
+ * MCP_OAUTH_DEEP_LINK, { preferEphemeralSession: true })`, and Expo's
+ * ASWebAuthenticationSession watches for ANY redirect to this scheme.
+ * As soon as our `mcpOAuthCallback` returns a 302 with `Location:
+ * thinkwork://mcp-oauth-complete?...`, the in-app browser auto-closes
+ * and the mobile callback receives the result via Expo's promise.
+ *
+ * Hard-coded `thinkwork` scheme matches `apps/mobile/app.json:scheme`.
+ * If we ever ship the app under a different scheme, update both at once.
+ */
+const MCP_OAUTH_DEEP_LINK = "thinkwork://mcp-oauth-complete";
 
 function deepLinkRedirect(
 	status: "success" | "error",
@@ -525,31 +491,33 @@ function deepLinkRedirect(
 	};
 }
 
-interface McpOAuthExchangeResult {
-	ok: boolean;
-	reason?: string;
-	status?: string;
-}
-
 /**
- * Shared exchange helper: takes an authorization code + opaque state and
- * performs the token exchange, stores tokens in Secrets Manager, upserts the
- * user_mcp_tokens row, and runs the LastMile whoami post-hook. Called from
- * both the legacy `mcpOAuthCallback` (HTTPS browser redirect) and the new
- * `mcpOAuthExchange` (mobile POST) entry points — `redirectUri` MUST match
- * the `redirect_uri` sent to the IdP's /authorize for the original flow.
+ * Step 2: OAuth callback. Exchanges auth code for tokens, stores in SM,
+ * then redirects to the mobile deep link so the in-app auth browser
+ * auto-closes (rather than rendering a manual "you can close this
+ * window" HTML page that requires a tap to dismiss).
+ *
+ * GET /api/skills/mcp-oauth/callback?code=X&state=Y
  */
-async function performMcpOAuthExchange(
-	code: string,
-	stateParam: string,
-	redirectUri: string,
-): Promise<McpOAuthExchangeResult> {
+async function mcpOAuthCallback(
+	event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const qs = event.queryStringParameters || {};
+	const { code, state: stateParam } = qs;
+	if (!code || !stateParam) {
+		return deepLinkRedirect("error", { reason: "missing_code_or_state" });
+	}
+
+	// Decode state
 	let state: { mcpServerId: string; userId: string; tenantId: string; tokenEndpoint: string; clientId: string; codeVerifier: string };
 	try {
 		state = JSON.parse(Buffer.from(stateParam, "base64url").toString());
 	} catch {
-		return { ok: false, reason: "invalid_state" };
+		return deepLinkRedirect("error", { reason: "invalid_state" });
 	}
+
+	const apiBaseUrl = `https://${event.headers.host || ""}`;
+	const callbackUrl = `${apiBaseUrl}/api/skills/mcp-oauth/callback`;
 
 	// Exchange code for tokens (public client — PKCE, no client_secret)
 	const tokenRes = await fetch(state.tokenEndpoint, {
@@ -558,7 +526,7 @@ async function performMcpOAuthExchange(
 		body: new URLSearchParams({
 			grant_type: "authorization_code",
 			code,
-			redirect_uri: redirectUri,
+			redirect_uri: callbackUrl,
 			client_id: state.clientId,
 			code_verifier: state.codeVerifier,
 		}).toString(),
@@ -568,7 +536,10 @@ async function performMcpOAuthExchange(
 	if (!tokenRes.ok) {
 		const errBody = await tokenRes.text().catch(() => "");
 		console.error(`[mcp-oauth] Token exchange failed: ${tokenRes.status} ${errBody}`);
-		return { ok: false, reason: "token_exchange_failed", status: String(tokenRes.status) };
+		return deepLinkRedirect("error", {
+			reason: "token_exchange_failed",
+			status: String(tokenRes.status),
+		});
 	}
 
 	const tokenData = await tokenRes.json() as {
@@ -730,69 +701,10 @@ async function performMcpOAuthExchange(
 		console.warn(`[mcp-oauth] LastMile whoami hook failed for user ${state.userId}:`, hookErr);
 	}
 
-	return { ok: true };
-}
-
-/**
- * Legacy HTTPS browser-redirect callback. Kept alive so existing flows that
- * somehow end up here still complete, but new authorize calls use the
- * mobile deep-link `redirect_uri` and go through `mcpOAuthExchange` instead.
- *
- * GET /api/skills/mcp-oauth/callback?code=X&state=Y
- */
-async function mcpOAuthCallback(
-	event: APIGatewayProxyEventV2,
-): Promise<APIGatewayProxyStructuredResultV2> {
-	const qs = event.queryStringParameters || {};
-	const { code, state: stateParam } = qs;
-	if (!code || !stateParam) {
-		return deepLinkRedirect("error", { reason: "missing_code_or_state" });
-	}
-
-	const apiBaseUrl = `https://${event.headers.host || ""}`;
-	const callbackUrl = `${apiBaseUrl}/api/skills/mcp-oauth/callback`;
-	const result = await performMcpOAuthExchange(code, stateParam, callbackUrl);
-	if (!result.ok) {
-		return deepLinkRedirect("error", {
-			reason: result.reason ?? "unknown",
-			...(result.status ? { status: result.status } : {}),
-		});
-	}
+	// Redirect to the mobile deep link — ASWebAuthenticationSession on
+	// the mobile side detects the `thinkwork://` scheme and auto-closes
+	// the in-app browser, returning control to the MCP Servers screen.
 	return deepLinkRedirect("success");
-}
-
-/**
- * Mobile entry point: the app's ASWebAuthenticationSession catches the
- * IdP's `thinkwork://mcp-oauth-complete?code=X&state=Y` redirect directly,
- * and the app then POSTs `{code, state}` here to do the code→token
- * exchange and storage server-side. Returns JSON so the mobile app can
- * show a useful success/error state.
- *
- * POST /api/skills/mcp-oauth/exchange  Body: {"code":"...","state":"..."}
- */
-async function mcpOAuthExchange(
-	event: APIGatewayProxyEventV2,
-): Promise<APIGatewayProxyStructuredResultV2> {
-	let body: { code?: string; state?: string };
-	try {
-		body = JSON.parse(event.body || "{}");
-	} catch {
-		return error("Invalid JSON body", 400);
-	}
-	const code = body.code;
-	const stateParam = body.state;
-	if (!code || !stateParam) {
-		return error("code and state are required", 400);
-	}
-
-	const result = await performMcpOAuthExchange(code, stateParam, MCP_OAUTH_DEEP_LINK);
-	if (!result.ok) {
-		return json(
-			{ status: "error", reason: result.reason ?? "unknown", tokenStatus: result.status },
-			400,
-		);
-	}
-	return json({ status: "success" });
 }
 
 // ---------------------------------------------------------------------------
