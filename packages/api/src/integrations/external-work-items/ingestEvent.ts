@@ -25,6 +25,7 @@ import {
 	ensureExternalTaskThread,
 } from "./ensureExternalTaskThread.js";
 import { notifyNewMessage, notifyThreadUpdate } from "../../graphql/notify.js";
+import { sendExternalTaskPush } from "../../lib/push-notifications.js";
 
 const { messages } = schema;
 const db = getDb();
@@ -282,6 +283,29 @@ export async function ingestExternalTaskEvent(args: {
 					(err as Error).message,
 				);
 			});
+
+			// PR C — Expo push for events that matter to the caller.
+			// By construction, reaching this block means we resolved a
+			// connection whose `metadata.{provider}.userId` matches
+			// `event.providerUserId`, i.e. the event's subject IS this user.
+			// `shouldPushExternalTaskEvent` just decides which KIND of event
+			// is worth pushing for; it doesn't re-check user identity.
+			const pushDecision = shouldPushExternalTaskEvent(event, envelope, summary);
+			if (pushDecision.push) {
+				sendExternalTaskPush({
+					userId: conn.userId,
+					tenantId: conn.tenantId,
+					threadId: result.threadId,
+					title,
+					body: pushDecision.body ?? summary,
+					eventKind: event.kind,
+				}).catch((err) => {
+					console.warn(
+						`[ingest:${provider}] sendExternalTaskPush failed for ${event.externalTaskId}:`,
+						(err as Error).message,
+					);
+				});
+			}
 		} catch (err) {
 			console.warn(
 				`[ingest:${provider}] activity message insert failed for ${event.externalTaskId}:`,
@@ -495,5 +519,76 @@ export function summarizeWebhookEvent(
 
 		default:
 			return null;
+	}
+}
+
+// ---------------------------------------------------------------------------
+// shouldPushExternalTaskEvent (PR C)
+// ---------------------------------------------------------------------------
+
+/**
+ * Narrow set of property keys that warrant an Expo push on a `task.updated`
+ * event. Status and due date are the two that a signed-in assignee actively
+ * cares about out-of-app; description edits, tag changes, etc. are strictly
+ * opt-in via pull-to-refresh. Tightening this set is the v1 noise policy —
+ * widen it later once we see what users actually want to be paged for.
+ */
+const PUSHABLE_UPDATE_KEYS = new Set([
+	"status",
+	"status_id",
+	"due_at",
+	"due_date",
+	"dueAt",
+]);
+
+/**
+ * Decide whether an inbound webhook event should page the caller via Expo
+ * push. By construction the resolved connection in the ingest pipeline IS
+ * the caller (matched on `metadata.{provider}.userId === event.providerUserId`),
+ * so this helper only disambiguates the KIND of event — it does NOT re-check
+ * user identity.
+ *
+ * v1 policy (narrow to avoid noise):
+ *
+ * - `task.assigned` / `task.reassigned` → push ("Assigned to you")
+ * - `task.status_changed` → push (reuse the summary line)
+ * - `task.updated` with `status` or `due_*` changed → push (reuse summary)
+ * - `task.updated` with only description/noise/other → NO push
+ * - `task.commented` → NO push (actor dedup is unreliable; follow-up work)
+ * - `task.created` → NO push (creation is its own signal)
+ * - `task.closed` → NO push
+ *
+ * Returns `{ push: false }` for anything else. Callers MUST check `push`
+ * before sending, and MUST fall back to the inserted system-message summary
+ * when `body` is undefined so the push body always has something to say.
+ */
+export function shouldPushExternalTaskEvent(
+	event: NormalizedEvent,
+	envelope: ExternalTaskEnvelope | undefined,
+	fallbackSummary: string,
+): { push: boolean; body?: string } {
+	switch (event.kind) {
+		case "task.assigned":
+		case "task.reassigned":
+			return { push: true, body: "Assigned to you" };
+
+		case "task.status_changed":
+			return { push: true, body: fallbackSummary };
+
+		case "task.updated": {
+			const changed = extractChangedKeys(event.raw);
+			if (!changed || changed.length === 0) return { push: false };
+			const meaningful = changed.filter((k) => !NOISE_PROPERTY_KEYS.has(k));
+			if (meaningful.length === 0) return { push: false };
+			const shouldPush = meaningful.some((k) => PUSHABLE_UPDATE_KEYS.has(k));
+			if (!shouldPush) return { push: false };
+			return { push: true, body: fallbackSummary };
+		}
+
+		case "task.created":
+		case "task.commented":
+		case "task.closed":
+		default:
+			return { push: false };
 	}
 }
