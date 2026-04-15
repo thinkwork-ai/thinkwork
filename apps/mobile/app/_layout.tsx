@@ -152,8 +152,16 @@ function RootLayoutNav() {
     if (!isAuthenticated && !isPublicRoute) {
       router.replace("/sign-in");
     } else if (isAuthenticated && !hasTenant && !isPublicRoute) {
-      // User authenticated but JWT has no tenantId
-      disableBiometric().catch(() => {});
+      // Authenticated but no tenantId — the bootstrap() effect in
+      // AuthProvider couldn't resolve it from the cached SecureStore value
+      // OR the bootstrapUser network fallback. Route the user back to
+      // /sign-in so they can re-authenticate, but DO NOT disable biometric
+      // here. The old code called `disableBiometric().catch(() => {})`
+      // which permanently wiped the user's Face ID preference on every
+      // cold start where tenantId resolution failed — so Eric would enable
+      // Face ID, close the app, reopen, and find himself signed out with
+      // Face ID silently off. Leave the biometric preference alone; the
+      // routing is enough.
       setIsUnlocked(true);
       router.replace("/sign-in");
     } else if (isAuthenticated && segments[0] === "sign-in") {
