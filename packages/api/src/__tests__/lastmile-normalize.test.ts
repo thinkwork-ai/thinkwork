@@ -83,8 +83,8 @@ describe("envelopeFromRaw", () => {
 		const env = envelopeFromRaw(fixture as Record<string, unknown>, "task_abc123");
 		expect(env._type).toBe("external_task");
 		expect(env._source?.provider).toBe("lastmile");
-		expect(env._source?.tool).toBe("task_get");
-		expect(env._source?.params).toEqual({ id: "task_abc123" });
+		expect(env._source?.tool).toBe("tasks_get");
+		expect(env._source?.params).toEqual({ task_id: "task_abc123" });
 		expect(env.item.forms?.edit?.id).toBe("form_edit");
 		expect(env.blocks.length).toBeGreaterThan(0);
 	});

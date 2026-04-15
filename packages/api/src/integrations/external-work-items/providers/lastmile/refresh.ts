@@ -1,7 +1,12 @@
 /**
- * LastMile task refresh: `task_get` via the MCP server, normalized into an
+ * LastMile task refresh: `tasks_get` via the MCP server, normalized into an
  * envelope (item + blocks + form). Used by both the Phase 5 refresh branch
  * and the Phase 2 executeAction path after a mutation.
+ *
+ * The server's tool is `tasks_get` (pluralized) and it takes a `task_id`
+ * argument — both confirmed against `tools/list` on mcp-dev.lastmile-tei.com.
+ * Earlier naming (`task_get` + `id`) was inferred, not probed, and caused the
+ * "MCP error" banner on the mobile ExternalTaskCard refresh path.
  */
 
 import type { AdapterCallContext, ExternalTaskEnvelope } from "../../types.js";
@@ -20,12 +25,12 @@ export async function refreshLastmileTask(args: {
 	const raw = await callMcpTool({
 		server: LASTMILE_MCP_SERVER,
 		tool: LASTMILE_TOOLS.get,
-		args: { id: externalTaskId },
+		args: { task_id: externalTaskId },
 		authToken: ctx.authToken,
 	});
 
 	if (!raw || typeof raw !== "object") {
-		throw new Error(`[lastmile] task_get returned non-object payload for ${externalTaskId}`);
+		throw new Error(`[lastmile] ${LASTMILE_TOOLS.get} returned non-object payload for ${externalTaskId}`);
 	}
 
 	return envelopeFromRaw(raw as Record<string, unknown>, externalTaskId);
@@ -45,7 +50,7 @@ export function envelopeFromRaw(
 		_source: {
 			provider: "lastmile",
 			tool: LASTMILE_TOOLS.get,
-			params: { id: externalTaskId },
+			params: { task_id: externalTaskId },
 		},
 		item,
 		blocks,
