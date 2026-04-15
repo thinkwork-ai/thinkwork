@@ -1,0 +1,174 @@
+---
+title: Admin — Security Center
+description: Guardrails dashboard, creation, template assignments, and the audit view for agent-triggered content blocks.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The Security Center is the operator's home for guardrail management, block statistics, and safety audit. Guardrails are Bedrock Guardrails-backed content filters and topic policies that every agent invocation passes through; when a guardrail activates, the agent's turn is either blocked or logged depending on the policy.
+
+**Route:** `/security`  
+**File:** `apps/admin/src/routes/_authed/_tenant/security/index.tsx`
+
+## Five tabs
+
+The page is tab-switched: **Dashboard**, **Guardrails**, **Policies**, **Approvals**, **Audit**. The first three are shipped; Approvals and Audit are placeholder "Coming Soon" states that will round out the section in future releases.
+
+### Dashboard
+
+The Dashboard tab shows aggregate health at a glance.
+
+**Metric cards** across the top:
+
+| Card | Source |
+|---|---|
+| Active Guardrails | Count of registered guardrails in `active` state |
+| Templates with Guardrails | Count of agent templates that have at least one guardrail assigned |
+| Blocks (24h) | Rolling 24-hour count of block events |
+| Blocks (7d) | Rolling 7-day count |
+
+**Blocks by Type** card breaks the counts down into categories (hate, insults, sexual, violence, misconduct, topic) with badges and running totals.
+
+**Recent Blocks** table shows the last ~10 block events with time, type, action (BLOCKED / LOGGED), and a preview of the user message that triggered the block.
+
+All of this is backed by a single `getGuardrailStats()` REST call returning:
+
+```
+{
+  guardrails_count, templates_with_guardrails,
+  blocks_24h, blocks_7d, blocks_30d,
+  blocks_by_type: [{ type, count }],
+  blocks_by_action: [{ action, count }],
+  recent_blocks: GuardrailBlock[]
+}
+```
+
+### Guardrails
+
+The Guardrails tab is the CRUD surface for registered guardrails.
+
+**Top row:** search bar + "Create Guardrail" button.
+
+**Table columns:**
+
+| Column | Notes |
+|---|---|
+| Name | Display name |
+| Status | Active / Inactive |
+| Default | Toggle — whether this guardrail is the tenant default (applied to any template that doesn't explicitly pick one) |
+| Assigned Templates | Count button — clicking opens the `AssignTemplatesDialog` |
+| Created | Timestamp |
+| Delete | Button; confirmation alert before firing |
+
+### Policies
+
+The Policies tab is a read-only overview of which agent templates have which guardrails attached. Columns: template name (linked to template detail), model, blocked tools, guardrail, agent count.
+
+This is the "at a glance" view for auditing tenant-wide safety coverage — one row per template, clearly showing whether each is protected by a guardrail.
+
+## Creating a guardrail
+
+The **`CreateGuardrailDialog`** captures:
+
+- **Name** and **Description**
+- **Content filters** — four or five rows (`hate`, `insults`, `sexual`, `violence`, optionally `misconduct`), each with input strength and output strength dropdowns (`NONE`, `LOW`, `MEDIUM`, `HIGH`)
+- **Denied topics** — an add / remove list where each topic has a name, a definition, and optional example phrases
+
+Submitting the dialog fires `createGuardrail()` against `POST /api/guardrails` with `{ name, description, config }`. The backend creates the Bedrock guardrail (and its version) and returns the persisted row.
+
+Guardrail config shape:
+
+```
+{
+  contentFilters?: {
+    hate?:     { inputStrength, outputStrength },
+    insults?:  { inputStrength, outputStrength },
+    sexual?:   { inputStrength, outputStrength },
+    violence?: { inputStrength, outputStrength },
+    misconduct?:{ inputStrength, outputStrength },
+  },
+  deniedTopics?: [{ name, definition, examples? }]
+}
+```
+
+## Assigning guardrails to templates
+
+The `AssignTemplatesDialog` is a checklist dialog. It fires `AgentTemplatesListQuery` to load every template in the tenant, pre-selects templates currently attached to this guardrail, and on save calls `PUT /api/guardrails/:id/templates` with `{ template_ids }`. The endpoint replaces the assignment set atomically.
+
+<Aside type="note">
+A guardrail can be attached to many templates, and a template can have at most one guardrail. If you need multiple policies on a single template, combine them into one guardrail — the backend does not support stacking.
+</Aside>
+
+## Toggling the default
+
+Each row has a **Default** switch. Only one guardrail can be the tenant default at a time. Clicking the switch fires `PUT /api/guardrails/:id/default` with `{ is_default: true }`; the backend unsets any prior default in the same transaction.
+
+The default guardrail applies to any agent whose template does not explicitly pick a guardrail.
+
+## Delete behavior
+
+Deleting a guardrail unassigns it from all templates in the same transaction and hard-deletes the row. There is no archive state and no undo — the confirmation dialog is the only safety. If the guardrail was the tenant default, the default slot becomes empty and operators have to pick a new one.
+
+## REST endpoints
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/guardrails/stats` | Dashboard aggregates |
+| `GET /api/guardrails` | List guardrails |
+| `POST /api/guardrails` | Create |
+| `PUT /api/guardrails/:id` | Update |
+| `DELETE /api/guardrails/:id` | Delete |
+| `PUT /api/guardrails/:id/default` | Toggle default |
+| `PUT /api/guardrails/:id/templates` | Replace template assignments |
+
+All requests carry `x-tenant-id` in the header.
+
+## Data model
+
+- **`guardrails`** — id, tenant_id, name, description, bedrock_guardrail_id, bedrock_version, is_default, status, config (JSON), created_at, updated_at
+- **`guardrail_blocks`** — id, tenant_id, agent_id, guardrail_id, thread_id, message_id, block_type (INPUT / OUTPUT), action (BLOCKED / LOGGED), blocked_topics, content_filters, raw_response, user_message, created_at
+- **`guardrail_template_assignments`** — many-to-many join between guardrails and agent templates
+
+The Bedrock-side guardrail has its own versioning; the row stores the current version so runtime can resolve which Bedrock guardrail to invoke.
+
+## Workflows
+
+### Stand up a tenant-wide safety policy
+
+1. Open Security Center → Guardrails tab
+2. Click Create Guardrail
+3. Name it (e.g. "default-policy") and set content filter strengths
+4. Add denied topics for anything the tenant explicitly wants to block
+5. Save
+6. Toggle Default on the new row
+7. Verify under the Policies tab that every template now shows the default guardrail (or an explicitly-assigned one)
+
+### Audit a specific block
+
+1. Open the Dashboard tab
+2. Find the block in the Recent Blocks table
+3. Note the agent id and block type
+4. Cross-reference in [Threads](/applications/admin/threads/) to see the full conversation that triggered the block
+5. If the block was a false positive, consider tuning the filter strength or revising denied topics
+
+### Soften or tighten after launch
+
+1. Open Guardrails
+2. Click into the guardrail (edit mode)
+3. Adjust content filter strengths or denied topics
+4. Save — the change propagates to every template the guardrail is assigned to
+
+## Known limits
+
+- **Approvals and Audit tabs are Coming Soon.** Approvals will integrate the [Inbox](/applications/admin/inbox/) approval flows; Audit will expose the full `guardrail_blocks` table with filtering. Today, use the Dashboard's Recent Blocks list as the closest approximation.
+- **Only Bedrock content filter types are visualized.** The dashboard does not yet show custom policy activations (denied topics fire but aren't separated in the "Blocks by Type" card).
+- **Denied topics don't validate uniqueness.** Adding the same topic twice is allowed; it's up to the operator to deduplicate.
+- **No archival / soft delete.** Delete is permanent.
+
+## Related pages
+
+- [Inbox](/applications/admin/inbox/) — the human-in-the-loop approval queue (Approvals tab will eventually unify with this)
+- [Agent Templates](/applications/admin/agent-templates/) — where guardrails are assigned
+- [Threads](/applications/admin/threads/) — where to look for the conversation that triggered a block
+- [Control (concept)](/concepts/control/) — the product model for controls
+- [Guardrails (concept)](/concepts/control/guardrails/) — the guardrails concept page

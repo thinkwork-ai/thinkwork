@@ -1,0 +1,146 @@
+---
+title: Admin — Settings
+description: Tenant configuration, plan information, deployment status, and copyable resource URLs. Most of the page is read-only; configuration that isn't a toggle lives in Terraform.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The Settings page is the canonical read-out of the tenant's configuration and the underlying deployment. Most of it is **read-only** — configuration lives in Terraform and the admin app reflects what's actually deployed, rather than offering a separate configuration store that could drift from the real state.
+
+**Route:** `/settings`  
+**File:** `apps/admin/src/routes/_authed/_tenant/settings.tsx`
+
+## Layout
+
+The page is a stack of four cards: Organization, Configuration, Deployment, and Resources & URLs.
+
+## Organization
+
+| Field | Notes |
+|---|---|
+| Name | Tenant display name |
+| Slug | URL-safe identifier |
+| Plan | Subscription tier (if applicable) |
+| Issue prefix | Prefix for tenant-scoped sequential ids |
+| Issue counter | Monotonic counter used for thread numbers and similar sequential ids |
+| Created at | When the tenant was first provisioned |
+
+All of these are read-only. Renaming a tenant or changing its slug is a Terraform + CLI operation, not a UI operation.
+
+## Configuration
+
+This section is conditional — it only renders if the tenant row's `settings` field is populated. When present, it carries tenant-wide defaults:
+
+| Field | Notes |
+|---|---|
+| Default model | Falls back to this when an agent template doesn't specify its own |
+| Monthly budget | Tenant-wide spend cap for month-to-date |
+| Auto-close threads | After N minutes of inactivity, threads auto-close (prevents forever-open threads from accumulating) |
+| Max agents | Hard cap on the number of agents the tenant can have |
+| Feature flags | JSON object with any tenant-level feature flags (e.g. `enable_hindsight`, `enable_voice_dictation`) |
+
+Like Organization, this is read-only. Changes go through Terraform.
+
+## Deployment
+
+The Deployment card is where operators check "what's actually deployed and is it healthy?"
+
+| Field | Notes |
+|---|---|
+| Stage | `dev`, `staging`, or `prod` |
+| Source | Terraform module version or internal deployment marker |
+| Region | AWS region |
+| Account ID | AWS account id |
+| AgentCore status | Managed / Disabled / Self-hosted — with a status badge |
+| Managed memory | Enabled / Disabled |
+| Hindsight | Enabled / Disabled — the optional long-term memory add-on |
+
+<Aside type="note">
+`DeploymentStatusQuery` typically reads from cached deployment metadata (stack exports or a `deployment_metadata` table), not from a live `describe-stack` call. If the deployment has shifted in ways the admin doesn't know about, the Settings page can lag reality until the cache is refreshed.
+</Aside>
+
+## Resources & URLs
+
+The last card is a list of copyable rows for the infrastructure endpoints the operator uses day-to-day:
+
+- **S3 bucket** — tenant's primary bucket (skill catalog, knowledge sources, audit log)
+- **Database endpoint** — Aurora cluster endpoint
+- **ECR URL** — Elastic Container Registry where the agent container image lives
+- **Admin URL** — the admin app itself (self-link, useful for sharing)
+- **Docs URL** — this docs site
+- **API endpoint** — the HTTP GraphQL / REST endpoint
+- **AppSync URL** — the HTTPS AppSync endpoint for GraphQL mutations
+- **WebSocket URL** — the AppSync realtime URL for subscriptions
+- **Hindsight endpoint** — only shown when Hindsight is enabled
+
+Every row has a copy button that yanks the value to the clipboard. The rows are not secret values; they're resource identifiers the operator regularly pastes into CLI tools, AWS consoles, or downstream configuration.
+
+## GraphQL queries
+
+| Query | Purpose |
+|---|---|
+| `TenantDetailQuery($id)` | Tenant identity + settings |
+| `DeploymentStatusQuery` | Deployment metadata and service health |
+
+Both queries run on page mount and are cached by urql. Refreshing the page re-fetches.
+
+## Data model
+
+- **`tenants`** — Aurora table with name, slug, plan, issue prefix, issue counter, created at
+- **`tenant_settings`** — related table with default model, budget, auto-close, max agents, feature flags
+- **`deployment_metadata`** — cached or dynamically computed view of the CloudFormation stack exports
+
+## What's editable vs what isn't
+
+| Field | Editable in admin? |
+|---|---|
+| Tenant name | No — Terraform |
+| Slug | No — Terraform |
+| Plan | No — billing system |
+| Issue counter | No — backend-managed |
+| Default model | No — Terraform or tenant-config API |
+| Monthly budget | No — Terraform |
+| Auto-close threads | No — Terraform |
+| Max agents | No — Terraform |
+| Feature flags | No — Terraform |
+| Deployment stage / region | No — Terraform + redeploy |
+| Resource URLs | No — derived from deployment |
+
+The deliberately heavy use of "No — Terraform" is the design philosophy: tenant configuration is code, code is reviewed, and the admin app reflects the reviewed state. Ad-hoc runtime configuration drift is actively avoided.
+
+## Workflows
+
+### Check the tenant's current deployment state
+
+1. Open `/settings`
+2. Read the Deployment card
+3. Verify stage, region, and that AgentCore status is "managed (always on)"
+4. Note the Terraform module version under Source — useful if something isn't working after a redeploy
+
+### Share an API endpoint with a developer
+
+1. Open `/settings`
+2. Scroll to Resources & URLs
+3. Click the copy button next to API endpoint
+4. Paste into the developer's request
+
+### Diagnose "why is memory empty for everyone?"
+
+1. Open `/settings` → Deployment card
+2. Check `Managed memory: Enabled`
+3. Check `Hindsight: Enabled` (if that's the expected backend)
+4. If either is Disabled, the tenant config doesn't match expectations and a Terraform update + redeploy is needed
+
+## Known limits
+
+- **Everything is read-only.** There are no toggles, no save buttons, no inline edits. If you want to change a setting, you change Terraform.
+- **Deployment status can lag.** The underlying query reads cached metadata, not live CloudFormation, so recent changes may not appear until the cache refreshes.
+- **No tenant rename UI.** Rename is a Terraform + database migration.
+- **No per-tenant logs link.** The Resources card lists storage endpoints but doesn't link directly to CloudWatch log groups or metrics.
+
+## Related pages
+
+- [Humans](/applications/admin/humans/) — tenant member management (the mutable counterpart to this page)
+- [Deploy Configuration](/deploy/configuration/) — the Terraform reference for every field on this page
+- [CLI](/applications/cli/) — the tool used to change Terraform-backed settings and redeploy
+- [Architecture](/architecture/) — how the tenant fits into the three-tier deployment model

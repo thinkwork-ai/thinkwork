@@ -1,0 +1,115 @@
+---
+title: Admin — Skills Catalog
+description: Browse the public skill catalog, install or upload skills, and author custom skills through a guided builder and editor.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The Skills Catalog is where skill packs are browsed, installed, uploaded, and authored. Skills are the reusable capability bundles that agents inherit — a skill can add tool definitions, background knowledge, or behavior instructions, and any agent that's been assigned the skill inherits it at invocation time.
+
+Two sources feed the catalog:
+
+- **Public catalog** — skills published by the ThinkWork project and community, backed by the public skill catalog S3 bucket; read-only from the tenant's perspective
+- **Tenant-owned skills** — skills the tenant has installed from the public catalog (`catalog-installed`), uploaded as a ZIP/folder (`tenant-uploaded`), or authored from scratch in the builder (`tenant-created`)
+
+## The list view
+
+**Route:** `/skills`  
+**File:** `apps/admin/src/routes/_authed/_tenant/skills/index.tsx`
+
+The list is a unified `DataTable` with tabbed filtering: **All**, **Installed**, **Custom**, and **Catalog**. Each row shows:
+
+- Name
+- Description
+- Category
+- Version (with an **upgrade badge** if a newer version is available in the catalog)
+- Type — built-in, catalog-installed, tenant-uploaded, or tenant-created
+- Status — enabled / active
+
+The "Upload Skill" button opens a dialog with a drag-drop file zone. The dialog accepts ZIPs (extracted via JSZip), YAML, Markdown, and Python files. For ZIP uploads, it parses the `SKILL.md` frontmatter to auto-fill the skill's name and description.
+
+Clicking a row navigates to the skill detail view.
+
+### Underlying API
+
+The list is REST-driven, not GraphQL:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/skills/catalog` | Read the public catalog |
+| `GET /api/skills/tenant` | Read tenant-installed and tenant-created skills |
+| `POST /api/skills/tenant/:slug/install` | Install a skill from the catalog |
+| `POST /api/skills/tenant/create` | Create a new tenant-owned skill |
+| `POST /api/skills/tenant/:slug/files/:path` | Write a file into a tenant skill |
+| `GET /api/skills/tenant/:slug/upgradeable` | Check if a newer catalog version is available |
+
+Every tenant-scoped request carries `x-tenant-slug` in the header.
+
+### The upgrade badge
+
+When an operator views Installed skills, the list calls `checkUpgradeable()` in batch against the catalog. For each installed skill, the endpoint checks whether a newer version exists and returns a flag. If true, the row shows an "Update" badge; clicking through to detail offers an explicit upgrade action.
+
+## The skill detail view
+
+**Route:** `/skills/:slug`  
+**File:** `apps/admin/src/routes/_authed/_tenant/skills/$slug.tsx`
+
+The detail view is a full file-tree browser plus editor, sized for real skill authoring work:
+
+- **Header** — skill name, description, action buttons (Install / Uninstall / Upgrade depending on state)
+- **Metadata badges** — Built-in / Catalog / Custom, Category, Version, Tags, Read-only where applicable
+- **Dependencies** — if the skill declares dependencies, they render as clickable badges showing which are installed vs missing
+- **File tree** — collapsible folder structure on the left, built from `listCatalogFiles()` or `listTenantSkillFiles()`
+- **Editor pane** — on the right, a CodeMirror editor (markdown, Python, and YAML syntax support) or a ReactMarkdown preview for `.md` files
+- **Toolbar** — file name, Preview / Raw toggle for markdown, Delete button (custom skills only), Save / Discard (editable files only)
+
+Built-in and catalog-installed skills are read-only in the editor. Only tenant-created or tenant-uploaded skills are editable; trying to type in a built-in skill's editor is a no-op.
+
+### Files and destructive actions
+
+For tenant-owned skills, operators can:
+
+- **Edit a file** — type, click Save, PUT to `/api/skills/tenant/:slug/files/:path`
+- **Add a new file** — click "+ Add", type a path, hit Enter, POST to the same endpoint
+- **Delete a file** — click the trash icon next to the file in the tree, confirm, DELETE
+
+Destructive actions (uninstall, delete file, upgrade) use alert dialogs and do not have undo.
+
+## The skill builder
+
+**Route:** `/skills/builder`  
+**File:** `apps/admin/src/routes/_authed/_tenant/skills/builder.tsx`
+
+The builder is a guided wizard for creating tenant-owned custom skills from scratch. Four steps:
+
+1. **Template picker** — four cards: **Script Tool**, **Knowledge**, **Process**, **Blank**
+2. **Metadata form** — name, description, category, tags. The slug is derived from the name.
+3. **Content editor** — CodeMirror in markdown mode editing the generated `SKILL.md` template. Templates use `{{name}}`, `{{slug}}`, `{{slug_underscore}}`, and `{{description}}` substitutions that are pre-filled from step 2.
+4. **Review** — confirmation card showing name, slug, template, category, approximate line count, and any extra files the template will also create (e.g. the Script Tool template adds a `scripts/tool.py` stub with a `TODO` comment)
+
+Submitting fires `createTenantSkill()` (creates the skill row), then iteratively PUTs each template file. On success, the builder navigates to `/skills/:slug` so the operator can immediately start editing.
+
+<Aside type="note">
+The builder is deliberately small. Serious skill authoring — multi-file packs, tests, dependency management — should happen in your editor of choice and land via ZIP upload or the [Authoring Guide: Skill Packs](/guides/skill-packs/). The builder is for quick prototypes and single-file skills.
+</Aside>
+
+## Distinction: Skills tab on an agent vs the Skills Catalog
+
+- **Skills Catalog** (this page) — browse, install, and author skills at the **tenant** level. Skills here exist whether or not any agent uses them.
+- **Skills tab on an agent** — assign one of the tenant-installed skills to a specific agent, possibly configure its credentials. See [Agents → Skills](/applications/admin/agents/#skills).
+
+A skill goes through two steps before it affects a real invocation: install to the tenant (here), then assign to an agent (on the agent detail page).
+
+## Known limits
+
+- **Python skill builder is lightly tested.** The Script Tool template produces a valid stub but the actual iteration loop (edit → test → deploy) is better handled in a real development environment and uploaded as a ZIP.
+- **Dependency resolution is read-only.** The detail page shows which dependencies are installed vs missing, but there's no auto-install button.
+- **No archival.** Deleted skills are hard-deleted. There's no undo.
+- **Upgrade can force-overwrite customizations.** If a tenant has customized a catalog-installed skill, running upgrade with `force=true` overwrites the customizations. The UI warns before this happens but relies on the operator confirming.
+
+## Related pages
+
+- [Agents](/applications/admin/agents/) — where tenant-installed skills are assigned to specific agents
+- [Authoring Guide: Skill Packs](/guides/skill-packs/) — the authoring reference for serious skill development
+- [Tenant MCP Servers](/applications/admin/mcp-servers/) — the other path for exposing external capabilities to agents
+- [Built-in Tools](/applications/admin/builtin-tools/) — provider-scoped tools (Web Search, etc.) that aren't skill packs

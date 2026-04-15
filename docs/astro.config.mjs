@@ -84,11 +84,42 @@ export default defineConfig({
               label: "Admin",
               items: [
                 { label: "Overview", slug: "applications/admin" },
-                { label: "Agents & Templates", slug: "applications/admin/agents" },
-                { label: "Connectors & Tools", slug: "applications/admin/connectors" },
-                { label: "Memory & Knowledge", slug: "applications/admin/memory-and-knowledge" },
-                { label: "Observability & Control", slug: "applications/admin/observability" },
-                { label: "Administration", slug: "applications/admin/administration" },
+                { label: "Authentication & Tenancy", slug: "applications/admin/authentication-and-tenancy" },
+                {
+                  label: "Work",
+                  items: [
+                    { label: "Dashboard", slug: "applications/admin/dashboard" },
+                    { label: "Threads", slug: "applications/admin/threads" },
+                    { label: "Inbox", slug: "applications/admin/inbox" },
+                  ],
+                },
+                {
+                  label: "Agents",
+                  items: [
+                    { label: "Agents", slug: "applications/admin/agents" },
+                    { label: "Agent Templates", slug: "applications/admin/agent-templates" },
+                    { label: "Agent Invites", slug: "applications/admin/agent-invites" },
+                    { label: "Skills Catalog", slug: "applications/admin/skills-catalog" },
+                    { label: "Tenant MCP Servers", slug: "applications/admin/mcp-servers" },
+                    { label: "Built-in Tools", slug: "applications/admin/builtin-tools" },
+                    { label: "Security Center", slug: "applications/admin/security-center" },
+                  ],
+                },
+                {
+                  label: "Manage",
+                  items: [
+                    { label: "Memory", slug: "applications/admin/memory" },
+                    { label: "Knowledge Bases", slug: "applications/admin/knowledge-bases" },
+                    { label: "Analytics", slug: "applications/admin/analytics" },
+                    { label: "Scheduled Jobs", slug: "applications/admin/scheduled-jobs" },
+                    { label: "Routines", slug: "applications/admin/routines" },
+                    { label: "Connectors", slug: "applications/admin/connectors" },
+                    { label: "Webhooks", slug: "applications/admin/webhooks" },
+                    { label: "Artifacts", slug: "applications/admin/artifacts" },
+                    { label: "Humans", slug: "applications/admin/humans" },
+                    { label: "Settings", slug: "applications/admin/settings" },
+                  ],
+                },
               ],
             },
             {

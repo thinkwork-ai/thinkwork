@@ -1,0 +1,124 @@
+---
+title: Admin — Inbox
+description: The approval queue for agent-requested human-in-the-loop actions. Approve, reject, or request revision on sensitive agent operations.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The Inbox is the approval queue for agent-requested human-in-the-loop actions. Agents can be configured to request human approval before performing sensitive operations — configuration changes, knowledge-base uploads, destructive tool calls — and those requests land here in `PENDING` state.
+
+This is the seam between automation and oversight: agents do work autonomously until they hit something that a human needs to confirm, and the Inbox is where that confirmation happens.
+
+## The list
+
+**Route:** `/inbox`  
+**File:** `apps/admin/src/routes/_authed/_tenant/inbox/index.tsx`
+
+The list is split into two tabs: **Pending** and **Resolved**. Each row shows:
+
+| Column | What it shows |
+|---|---|
+| Request | Type icon, title, and an optional revision-version badge |
+| Type | A badge for the request category (config change, knowledge upload, tool invocation, etc.) |
+| Status | Icon + label — PENDING, APPROVED, REJECTED, REVISION_REQUESTED |
+| Requested | Relative time since the agent opened the request |
+
+Title search filters both tabs. The counts in the tab headers show pending + resolved counts without firing additional queries — they're computed from the same `InboxItemsListQuery` response and split client-side.
+
+Revisions are tracked explicitly: if an approver asked for changes and the agent resubmitted, the version number ticks and appears as a badge so the reviewer can see the history.
+
+## The item detail
+
+**Route:** `/inbox/:inboxItemId`  
+**File:** `apps/admin/src/routes/_authed/_tenant/inbox/$inboxItemId.tsx`
+
+Clicking an item opens the full review screen. The layout is a wide main column (`lg:col-span-2`) with the request details plus a narrow sidebar.
+
+### Main column sections
+
+- **Item details card** — type, revision number, description, the full payload rendered by a type-specific component (`InboxItemPayloadRenderer`), plus a "Raw JSON" toggle for the underlying payload and any prior review notes
+- **Linked threads** — threads that this request is associated with (typically the thread that triggered the agent to open the request)
+- **Comments** — a simple comment log. Approvers can post review context that's visible to future reviewers and to the agent on resubmission
+- **Activity timeline** — a chronological log of state transitions, populated by `ActivityLogQuery`
+
+### Sidebar
+
+The right sidebar carries the item's metadata: status, type, revision, entity type, decided date, expires date, created date. The status is not editable from the sidebar — actions live in the header button group.
+
+### Actions
+
+Four buttons appear in the item header when the item is actionable (`PENDING` or `REVISION_REQUESTED`):
+
+| Button | Effect |
+|---|---|
+| **Approve** | `ApproveInboxItemMutation` — the agent's action proceeds |
+| **Reject** | `RejectInboxItemMutation` — the agent is notified and the action does not execute |
+| **Request Revision** | Opens a prompt for review notes, then fires `RequestRevisionMutation` |
+| **Resubmit** | Only visible on a revision path — `ResubmitInboxItemMutation` |
+
+Each mutation triggers a refetch of the item detail so the UI reflects the new state immediately.
+
+## State transitions
+
+```
+PENDING ──► APPROVED
+   │
+   ├──► REJECTED
+   │
+   └──► REVISION_REQUESTED ──► PENDING (on resubmit)
+                             └──► REJECTED
+                             └──► APPROVED
+```
+
+- A `PENDING` item can move to `APPROVED`, `REJECTED`, or `REVISION_REQUESTED`
+- A `REVISION_REQUESTED` item comes back to `PENDING` when the agent resubmits with changes, and can still go directly to `APPROVED` or `REJECTED` from the revision state
+- `APPROVED` and `REJECTED` are terminal — they move the item to the Resolved tab and the action buttons disappear
+
+## The payload renderer
+
+Different request types have different payload shapes, so the admin app uses `InboxItemPayloadRenderer` — a type-dispatch component that picks the right child renderer based on the item's `type` field. Examples:
+
+- **Config change requests** render the field-level diff between current and proposed configuration
+- **Knowledge upload requests** render the file list and a preview of the first document
+- **Tool invocation requests** render the tool name, input arguments, and any pre-computed risk assessment
+
+Unknown or unhandled types fall back to a raw JSON view with the same "Raw JSON" toggle as the known-type renderers.
+
+## Workflows
+
+### Approve a pending config change
+
+1. Open `/inbox`
+2. Filter to Pending (default tab)
+3. Click the row
+4. Read the payload's diff renderer
+5. If it looks right, click Approve
+6. The item moves to Resolved and the agent's config change executes
+
+### Ask an agent to revise its request
+
+1. Click a pending item
+2. Click Request Revision
+3. Enter review notes in the prompt dialog
+4. The item moves to `REVISION_REQUESTED` with your notes attached
+5. The agent receives the feedback, makes changes, and resubmits — the item returns to `PENDING` with an incremented revision number
+
+### Audit a resolved approval
+
+1. Go to the Resolved tab
+2. Filter by title or scroll to the item
+3. Click through to see the final state, all comments, and the full activity timeline
+4. The linked threads section shows which threads triggered the request
+
+## Known limits
+
+- **Review notes prompt is a `window.prompt()`.** The Request Revision flow uses the browser's native prompt dialog rather than a styled modal. Functional, not polished.
+- **No filtering by type.** The list supports search by title but doesn't have type-faceted filtering.
+- **Type-specific renderers are opt-in.** Agent types that haven't shipped a dedicated payload renderer fall back to raw JSON. Operators can still approve them, but the presentation isn't as clean.
+
+## Related pages
+
+- [Threads](/applications/admin/threads/) — inbox items usually link back to a parent thread
+- [Agents](/applications/admin/agents/) — configure which actions require approval per agent template
+- [Security Center](/applications/admin/security-center/) — policy and guardrail enforcement
+- [Control (concept)](/concepts/control/) — the product model for approvals and controls

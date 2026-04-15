@@ -1,0 +1,166 @@
+---
+title: Admin — Webhooks
+description: Custom HTTP webhooks that fire an agent or a routine when an external system POSTs to them. Token-based auth, rate limiting, invocation log, and test invocation.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Webhooks are custom HTTP endpoints that external systems can POST to in order to trigger an agent turn or a routine. They are distinct from [Connectors](/applications/admin/connectors/) in that they don't wrap a specific provider — they're blank slates. Any system that can make an authenticated HTTP POST can become a ThinkWork trigger through a webhook.
+
+## The list
+
+**Route:** `/webhooks`  
+**File:** `apps/admin/src/routes/_authed/_tenant/webhooks/index.tsx`
+
+A searchable `DataTable` with:
+
+| Column | Notes |
+|---|---|
+| Name | Display name |
+| Type | Badge: **Agent** or **Routine** depending on what the webhook targets |
+| Target | Agent or routine name |
+| Enabled | Enabled / Disabled badge |
+| Last Invoked | Relative timestamp |
+| Invocation count | Lifetime count |
+| Created | Timestamp |
+
+A **New Webhook** button opens the creation dialog.
+
+## The detail page
+
+**Route:** `/webhooks/:webhookId`  
+**File:** `apps/admin/src/routes/_authed/_tenant/webhooks/$webhookId.tsx`
+
+### Header
+
+- Webhook name
+- Enable / disable toggle
+- Delete with confirmation
+
+### Token card
+
+- The **bearer token** (masked by default with a show / copy button)
+- The full invocation URL: `https://<api-endpoint>/webhooks/<webhookId>`
+
+External systems call the URL with `Authorization: Bearer <token>` and a JSON body. The token is a random 32-character string generated at webhook creation and never rotated automatically.
+
+### Configuration
+
+Read-only display of:
+
+- Target type (agent / routine)
+- Target name
+- Rate limit (requests per minute)
+- Prompt override (for agent targets — the string the agent receives when the webhook fires)
+
+### Invocation log
+
+An expandable table of run cards, one per invocation:
+
+- Status — succeeded / failed
+- Started at / finished at
+- Error message (for failures)
+- Context snapshot — the JSON payload the webhook received, used for replay and debugging
+
+## REST endpoints
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/webhooks` | List webhooks |
+| `GET /api/webhooks/:webhookId` | Detail |
+| `GET /api/webhooks/:webhookId/runs` | Invocation history |
+| `POST /api/webhooks` | Create |
+| `PATCH /api/webhooks/:webhookId` | Update |
+| `DELETE /api/webhooks/:webhookId` | Delete |
+| `POST /api/webhooks/:webhookId/test` | Manual test invocation |
+
+## External usage
+
+Once created, external systems trigger the webhook with a simple POST:
+
+```bash
+curl -X POST "https://<api-endpoint>/webhooks/<webhookId>" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "hello from external system", "context": {"foo": "bar"}}'
+```
+
+The backend:
+
+1. Validates the token
+2. Checks the rate limit (returns 429 if exceeded)
+3. Invokes the target (agent turn or routine execution)
+4. Writes a row to the invocation log with the full payload in `context_snapshot`
+5. Returns a response once the target starts (not once it finishes)
+
+The webhook is fire-and-forget from the caller's perspective. If the caller wants to know the result, they should read it from the created thread or poll the run status.
+
+## Data model
+
+- **`webhooks`** — Aurora table with id, tenant_id, name, description, token, target_type (`agent` / `routine`), agent_id / routine_id, prompt, config, enabled, rate_limit, last_invoked_at, invocation_count, created_at, updated_at
+- **Runs** — `thread_turns` rows with `webhook_id` FK and a `context_snapshot` field storing the inbound JSON payload
+- **Rate limit state** — in-memory per webhook (per instance, not distributed); resets on Lambda cold start
+
+## Rate limiting
+
+Each webhook has a per-minute rate limit (default 10). When the limit is exceeded, the backend returns HTTP 429 without invoking the target and without writing to the run log. The rate limit is a hard cap — there's no queue or back-pressure.
+
+Because rate limit state is per-Lambda-instance, distributed invocations can collectively exceed the declared limit by the number of warm Lambda instances. For workflows that genuinely need hard caps, use a downstream queue rather than relying on the webhook's rate limit.
+
+## Prompt overrides
+
+For agent-targeted webhooks, the **prompt** field lets operators specify a canonical prompt that the agent receives when the webhook fires. The inbound JSON body is still available in `context_snapshot` and can be referenced by the agent's tools, but the prompt override controls what the agent "hears" when the turn starts.
+
+This is how operators ship "when something happens, do X" workflows: the prompt override says "do X" and the inbound payload carries the context.
+
+## Workflows
+
+### Set up a custom Zapier trigger
+
+1. Click **New Webhook**
+2. Name it "Zapier → daily-summary agent"
+3. Target type: agent
+4. Target: the `daily-summary` agent
+5. Rate limit: 10/min
+6. Prompt override: "A new Zapier trigger fired. Review the payload and produce a summary."
+7. Save
+8. Copy the token and the URL
+9. Paste into Zapier's webhook action
+10. Test from Zapier — verify the invocation appears in the log
+
+### Debug a failing webhook
+
+1. Open the webhook detail page
+2. Scroll to the invocation log
+3. Expand the most recent failed row
+4. Check the error message
+5. Check `context_snapshot` to see what was actually received
+6. Common causes: token mismatch (401), rate limit (429), target agent not found or disabled (500), payload parse error (400)
+
+### Rotate a leaked token
+
+<Aside type="caution">
+The admin UI does not currently expose an in-place token rotation. If a token leaks, the remediation today is:
+1. Disable the webhook
+2. Delete it
+3. Create a new webhook with the same target and prompt
+4. Update the external system with the new token and URL
+
+The webhook id changes, so the URL also changes. Plan for that in the external system's configuration.
+</Aside>
+
+## Known limits
+
+- **No in-place token rotation.** Rotation is delete + recreate.
+- **Per-instance rate limiting.** The rate limit is enforced per warm Lambda instance, not distributed. Distributed usage can collectively exceed the declared limit.
+- **No queue.** Rate-limited requests are rejected, not queued.
+- **Fire-and-forget.** The caller gets an immediate ack; the actual result lands on the thread created by the invocation.
+- **REST-only.** Webhooks don't flow through urql; the list refetches after each mutation.
+
+## Related pages
+
+- [Connectors](/applications/admin/connectors/) — provider-specific inbound integrations (Slack, GitHub, Google) — a different thing from custom webhooks
+- [Scheduled Jobs](/applications/admin/scheduled-jobs/) — the time-based counterpart to webhook-driven triggers
+- [Routines](/applications/admin/routines/) — multi-step workflows that webhooks can trigger
+- [Agents](/applications/admin/agents/) — the other target type for webhook invocations
+- [Automations (concept)](/concepts/automations/) — the product model

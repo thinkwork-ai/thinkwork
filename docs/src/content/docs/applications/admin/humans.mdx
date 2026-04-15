@@ -1,0 +1,134 @@
+---
+title: Admin — Humans
+description: Tenant user management — view members, invite new users, manage roles, and track invitation status.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The Humans page is the tenant's user directory. It lists every person (and every service account) who has access to the tenant, their role, and their current status. From here operators invite new members, see who's pending acceptance, and manage the access that underpins every other admin feature.
+
+**Route:** `/humans`  
+**File:** `apps/admin/src/routes/_authed/_tenant/humans/index.tsx`
+
+## The list
+
+A searchable `DataTable` with columns:
+
+| Column | Notes |
+|---|---|
+| Name | Avatar with initials + display name |
+| Email | Primary identifier |
+| Role | Badge — Owner / Editor / Viewer |
+| Status | Badge — Active / Pending |
+| Joined | Relative timestamp (for active members) or "Invited" (for pending) |
+
+A **Invite Member** button in the header opens the `InviteMemberDialog`.
+
+## Roles
+
+Three roles cover the common cases:
+
+- **Owner** — full access to every admin surface. Can invite and remove other members, change roles, delete the tenant configuration, and touch billing
+- **Editor** — can create and edit agents, templates, skills, connectors, scheduled jobs, routines, and webhooks. Cannot manage members or tenant settings
+- **Viewer** — read-only access to all admin surfaces. Useful for auditors or stakeholders who need visibility but not authority
+
+Role checks are enforced server-side. Even if the UI shows a button, the underlying mutation is rejected if the caller's role doesn't allow it.
+
+## Inviting a new member
+
+The `InviteMemberDialog` captures:
+
+- **Email** — Cognito is the identity provider, so this is the email the user will authenticate with
+- **Role** — Owner / Editor / Viewer
+- **Optional message** — a short note included in the invitation email
+
+Submitting the dialog fires a `CreateTenantMemberInvitationMutation` (likely routed through GraphQL). The backend:
+
+1. Creates a pending row in `tenant_members` with `status: pending`
+2. Issues a Cognito invitation or sends a SES email with a signup / acceptance link
+3. Returns the new row to the UI
+
+The UI refetches `TenantMembersListQuery` after the mutation resolves and the new pending member appears in the list.
+
+<Aside type="note">
+Exact delivery — Cognito admin_create_user vs a custom SES email — depends on how the tenant's user pool is configured. Most tenants use the Cognito admin_create_user flow, which ships an email with a temporary password that the invitee changes on first sign-in.
+</Aside>
+
+## Accepting an invitation
+
+From the invitee's side:
+
+1. They receive the invitation email
+2. They click the link, land at the admin app's `/sign-in` page
+3. They authenticate with the temporary password or via Google SSO
+4. The tenant pre-signup Lambda links them to the tenant and marks their `tenant_members` row as `active`
+5. They land in the authenticated layout as a member of the tenant
+
+The admin app's user list flips the row from `pending` to `active` on the next refetch.
+
+## Principal types
+
+The `tenant_members` table also carries a `principal_type` column that distinguishes:
+
+- **`user`** — a human member
+- **`service_account`** — a programmatic account used by BYOB agents and internal services
+
+The Humans page only shows `user` rows. Service accounts are managed through [Agent Invites](/applications/admin/agent-invites/) and the credential vault, not through Humans.
+
+## GraphQL
+
+| Query / Mutation | Purpose |
+|---|---|
+| `TenantMembersListQuery($tenantId)` | List members |
+| `CreateTenantMemberInvitationMutation` | Invite a new member |
+
+Role changes and member removal likely flow through additional mutations not directly visible in the Humans route — they may be exposed through a detail page not yet shipped or through a dialog on row click.
+
+## Data model
+
+**`tenant_members`** — Aurora table with:
+
+- `id`, `tenant_id`, `principal_type` (user / service_account)
+- `email`, `name`
+- `role` (owner / editor / viewer)
+- `status` (active / pending)
+- `created_at`, `updated_at`
+
+The row is the source of truth for access control. Postgres row-level security policies on every other tenant table reference the current user's tenant membership to enforce isolation.
+
+## Workflows
+
+### Invite a new operator
+
+1. Click **Invite Member**
+2. Enter their email
+3. Choose Editor (most common for day-to-day operators) or Viewer (for read-only audit access)
+4. Submit
+5. The new member appears with `status: pending`
+6. They receive the Cognito invitation email
+7. After they sign in, their status flips to `active`
+
+### Demote a user from Editor to Viewer
+
+<Aside type="note">
+Role editing is not deeply visible in the current Humans route code — the list is read-oriented. The supported path today is through a detail-page form or an alternate admin channel. A future UI improvement would add an inline role dropdown to the Humans table.
+</Aside>
+
+### Remove a member
+
+1. Find the member in the list
+2. (Supported through the admin API; UI surface in the current release is limited)
+
+## Known limits
+
+- **No role editing UI in the current list.** Row-level role changes need a detail page or API call.
+- **No bulk invite.** Members are invited one at a time.
+- **No custom roles.** The three built-in roles are the only options; there's no per-capability permission grid.
+- **No delegated administration.** Owners have full authority; there's no "can invite but can't edit" middle ground.
+
+## Related pages
+
+- [Settings](/applications/admin/settings/) — tenant configuration, plan, and deployment status
+- [Agent Invites](/applications/admin/agent-invites/) — the BYOB equivalent for service accounts
+- [Authentication & Tenancy](/applications/admin/authentication-and-tenancy/) — how members authenticate into the admin app
+- [Architecture → Multi-tenancy](/architecture/#multi-tenancy) — tenant isolation at the database level

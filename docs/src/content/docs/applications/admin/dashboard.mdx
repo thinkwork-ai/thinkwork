@@ -1,0 +1,80 @@
+---
+title: Admin — Dashboard
+description: The admin app's landing page — metric cards, recent activity, recent threads, and drill-in dialogs for runs and threads.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The Dashboard is the operator's day-one landing page. It's designed to answer one question: "Is the tenant healthy right now?" — not to replace the drill-in pages for threads, agents, or analytics.
+
+**Route:** `/dashboard` (`_authed/_tenant/dashboard`)
+
+## What it shows
+
+The layout is simple: five metric cards across the top, then two paginated lists (Recent Activity, Recent Threads) in a two-column grid on larger screens.
+
+### Metric cards
+
+| Card | What it shows |
+|---|---|
+| **Agents Online** | Count of agents currently in `IDLE` or `BUSY` status |
+| **Open Threads** | Count of threads not in `DONE` or `CANCELLED` |
+| **Recent Activity** | Count of runs and thread updates in the last 24 hours |
+| **Spend (MTD)** | Month-to-date spend from the cost store |
+| **Cost / Event** | Average cost per turn event over the period |
+
+Cost metrics come from the same `useCostStore` (Zustand) that the [Analytics](/applications/admin/analytics/) page uses, so the dashboard does not re-fetch cost data on every navigation — it reads from the already-hydrated store.
+
+### Recent Activity list
+
+A unified feed of recent **runs** and **thread updates**, merged by timestamp and paginated client-side at 10 items per page. Each row shows:
+
+- An icon for run vs thread update
+- The agent name (for runs) or thread title (for thread updates)
+- A status badge (`running`, `succeeded`, `failed` for runs; thread status colors for thread updates)
+- Relative timestamp
+
+Clicking a run row opens the **`RunDetailDialog`** — a modal showing the run's execution details and the final response markdown. Clicking a thread row opens the **`ThreadDetailDialog`** — a modal showing thread metadata, description, and recent comments.
+
+### Recent Threads list
+
+A second paginated list, 10 per page, showing the tenant's most recently-touched threads. This is intentionally narrower than the full [Threads](/applications/admin/threads/) page: it exists so the operator can quickly glance at what's been happening without leaving the dashboard.
+
+## Where the data comes from
+
+The dashboard fires four GraphQL queries on mount:
+
+- `AgentsListQuery` — populates the Agents Online metric
+- `ThreadsListQuery` — powers Recent Threads and half of the activity feed
+- `ThreadTurnsQuery` — powers the run side of the activity feed
+- `ThreadDetailQuery` — lazy-loaded when a thread is clicked into the drill-in dialog
+
+Cost metrics come from the `useCostStore` hook which internally fetches `/api/cost` (a REST endpoint) the first time it's used in the session.
+
+<Aside type="note">
+The activity feed is currently constructed client-side by merging runs and thread updates, sorting by timestamp, and trimming to a page. A dedicated activity-feed resolver is a known TODO — the file carries a `// TODO: Wire to a real activity feed query when available` comment. Until that lands, the feed is computed from two queries rather than one.
+</Aside>
+
+## Pagination and refresh behavior
+
+Both lists paginate client-side using a custom `Pager` component. Pagination state is per-list — flipping to page 2 of activity does not affect threads pagination.
+
+Refreshes are push-driven, not polled:
+
+- Any thread-turn event fires `OnThreadTurnUpdatedSubscription`, which re-executes `ThreadTurnsQuery` and the activity merge rebuilds
+- Any thread change fires `OnThreadUpdatedSubscription`, which re-executes `ThreadsListQuery` and Recent Threads rebuilds
+
+The dashboard is always within a few seconds of reality. Operators do not need to pull to refresh.
+
+## Known limits
+
+- **No dedicated activity-feed query.** Client-side merge of runs and threads is the current implementation. A real feed query would let the dashboard show more than just the intersection of runs + thread updates.
+- **Cost metrics can be undefined on first render.** The `useCostStore` hydrates asynchronously; components render `?? 0` placeholders until it lands. This flashes zeros for a tick on cold load.
+- **No per-metric drill-in.** Clicking "Agents Online" does not navigate anywhere. The drill-in for agents is [Agents](/applications/admin/agents/); for threads it's [Threads](/applications/admin/threads/); for spend it's [Analytics](/applications/admin/analytics/).
+
+## Related pages
+
+- [Threads](/applications/admin/threads/) — the full thread list and detail views
+- [Agents](/applications/admin/agents/) — the agent roster
+- [Analytics](/applications/admin/analytics/) — deeper views of activity, cost, and performance
+- [Authentication & Tenancy](/applications/admin/authentication-and-tenancy/) — the layout the dashboard renders inside

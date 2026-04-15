@@ -54,7 +54,7 @@ Subscriptions drive all three. `useThreadUpdatedSubscription` watches for thread
 
 ### Tool-call inline render
 
-When an agent calls a tool during a turn, the tool call renders inline in the timeline as a collapsible row: tool name, input preview, output preview. This is the mobile mirror of the [Admin app's turn-level audit view](/applications/admin/observability/#thread-level-audit), scoped to what's relevant to an end user.
+When an agent calls a tool during a turn, the tool call renders inline in the timeline as a collapsible row: tool name, input preview, output preview. This is the mobile mirror of the [Admin app's thread detail turn-level audit view](/applications/admin/threads/#thread-detail), scoped to what's relevant to an end user.
 
 Tool calls with rich output — for example, a tool returning an external task envelope — use the GenUI registry to render a custom block inline, instead of just plain text. The GenUI registry is how the mobile app stays extensible without shipping a new build for every new tool.
 
@@ -72,7 +72,7 @@ A microphone button next to the input opens the `VoiceDictationBar`. Speech is t
 
 ### Quick actions
 
-A lightning-bolt button opens the quick-actions sheet: a customizable list of one-tap prompts the user has saved ("summarize", "plan my day", "draft a reply"). Quick actions are per-user and sync back to the admin app through the same GraphQL schema — see [Admin — Agents & Templates](/applications/admin/agents/) for the authoring side.
+A lightning-bolt button opens the quick-actions sheet: a customizable list of one-tap prompts the user has saved ("summarize", "plan my day", "draft a reply"). Quick actions are per-user and sync back to the admin app through the same GraphQL schema — see [Admin — Agents](/applications/admin/agents/) for the authoring side.
 
 ### Plus button
 

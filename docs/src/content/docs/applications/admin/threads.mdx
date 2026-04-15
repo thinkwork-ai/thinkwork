@@ -1,0 +1,132 @@
+---
+title: Admin — Threads
+description: The admin app's thread list and detail views — Kanban and grouped-table layouts, filters, inline editing, live subscriptions, traces, artifacts, and the turn-level audit.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Threads are the canonical record of work in ThinkWork. Every user chat, every connector-driven conversation, every scheduled automation turn lands in a thread. The admin app's Threads surface is where operators and authors browse those threads, filter them, change their state, and drill into the per-turn audit that explains exactly what happened on any given message.
+
+## The thread list
+
+**Route:** `/threads`  
+**File:** `apps/admin/src/routes/_authed/_tenant/threads/index.tsx`
+
+The list is the most feature-dense page in the admin app. It supports:
+
+- **Two view modes** — table (optionally grouped) and Kanban board (drag-and-drop between statuses)
+- **Text search** — full-text across titles and recent messages, debounced 300ms
+- **Quick filters** — status, priority, assignee, archived, plus saved quick-filter presets
+- **Sort** — by updated time, created time, priority, or status
+- **Grouping** — by status, priority, or assignee, with collapsible group headers
+- **Inline editing** — status icon click opens a dropdown to change status; assignee chip opens a popover to change assignee
+- **Live updates** — any thread-level or turn-level event re-executes the list
+
+Each row uses a `StatusIcon`, `PriorityIcon`, title, last-turn snippet, assignee avatar, and a relative-time column. The whole row is clickable and navigates to the detail view.
+
+### View state persistence
+
+Filter state, sort state, group state, and which groups are collapsed are all persisted to `localStorage`, keyed by tenant id. When an operator switches tenants, their view state swaps with the tenant. When they sign out and back in, their view state is restored.
+
+### Server-side vs client-side filtering
+
+Most filters push to the server — the `ThreadsPagedQuery` takes status, priority, archived, and search variables and returns a paginated response with a total count. One filter is applied client-side: **assignee**. The query fetches the page based on the other filters, and the assignee filter is applied after the results land.
+
+<Aside type="caution">
+Because assignee filtering happens after pagination, a filtered page can show fewer rows than the page size if the assignee matches only some of the rows on that page. This is a known quirk, not a bug — the total-count field still reflects the pre-assignee-filter count.
+</Aside>
+
+### Live subscriptions
+
+Two subscriptions drive realtime:
+
+- `OnThreadUpdatedSubscription` — any thread in the tenant changed
+- `OnThreadTurnUpdatedSubscription` — any turn state transition (queued → running → succeeded/failed)
+
+Both trigger a `reexecuteThreads({ requestPolicy: "network-only" })` call. The list stays within a second or two of reality without any polling.
+
+## Thread detail
+
+**Route:** `/threads/:threadId`  
+**File:** `apps/admin/src/routes/_authed/_tenant/threads/$threadId.tsx`
+
+The detail page is a two-pane layout on larger screens: a main content column with the timeline and an optional right sidebar with thread properties, sub-tasks, attachments, and artifacts. On small screens the sidebar becomes a bottom sheet.
+
+### The main column
+
+- **Header** — identifier, an optional `checkoutRunId` badge, inline-editable title and description (click-to-edit via `InlineEditor`), and a "more" menu with delete
+- **Activity / timeline** — rendered by `ExecutionTrace`, a unified feed of user messages, agent messages, tool calls, and tool results in chronological order
+- **`ThreadTraces`** — a collapsible section that shows the turn-level audit: every tool call, every retrieved knowledge chunk, every memory write, every guardrail activation, and any cost metrics associated with the turn
+- **`LiveRunWidget`** — shown only when a turn is currently running; surfaces the in-flight state
+
+### The sidebar (right pane)
+
+- **Properties card** — status, priority, type, assigned agent. Each is a select that saves via `UpdateThreadMutation` on change
+- **Sub-tasks** — a list with inline add (for parent-child thread relationships)
+- **Attachments** — an upload area that is currently a stub (see [Known limits](#known-limits))
+- **Artifacts** — click-through list of any artifacts the agent has produced on this thread; clicking opens `ArtifactViewDialog` with the full content
+
+### Navigation breadcrumbs
+
+Breadcrumbs carry context from where the user came from:
+
+- If they navigated from the Agents detail page, the breadcrumb trail includes the parent agent (via a `fromAgentId` search param)
+- Otherwise, the trail is just Threads → (this thread)
+
+### Live subscriptions on the detail page
+
+The detail view subscribes to the same two subscriptions as the list, filtered to this specific thread:
+
+- `OnThreadUpdatedSubscription` re-executes `ThreadDetailQuery` on thread-level changes
+- `OnThreadTurnUpdatedSubscription` re-executes both the thread query and the `ArtifactsListQuery` — turns can produce artifacts
+
+## Thread state
+
+Threads move through a small lifecycle:
+
+| Status | Meaning |
+|---|---|
+| `BACKLOG` | Captured but not yet scheduled |
+| `TODO` | Ready to be picked up |
+| `IN_PROGRESS` | Currently being worked on |
+| `IN_REVIEW` | Waiting on human review (often tied to an Inbox approval) |
+| `BLOCKED` | Stuck on a dependency or error |
+| `DONE` | Completed |
+| `CANCELLED` | Abandoned |
+
+Priority is a separate axis: `CRITICAL`, `URGENT`, `HIGH`, `MEDIUM`, `LOW`.
+
+Beyond the explicit status, an additional **inbox status** is computed for each row: `running` if a turn is actively executing, `unread` if the thread has new turns since the operator last read it, or `read` otherwise. This is what drives the subtle shimmer and the unread indicator in the list.
+
+## Workflows
+
+### Triage
+
+1. Open `/threads` with default filters (all non-archived)
+2. Group by assignee to see who's got what
+3. Click into a row to read the timeline
+4. Use the inline status picker to move the thread through its lifecycle
+5. If the thread needs a human decision that the agent is waiting on, approve it from the [Inbox](/applications/admin/inbox/)
+
+### Debug a bad turn
+
+1. Open the thread detail page
+2. Scroll to the specific turn in the timeline
+3. Expand the `ThreadTraces` section underneath
+4. Read: assembled context, tool calls and their input/output previews, retrieved knowledge, recalled memory, guardrail activations, cost, duration
+5. If you need to inspect the raw payload, the S3 audit log (NDJSON per invocation) has the same data in canonical form
+
+## Known limits
+
+- **Attachment upload is stubbed.** The upload handler in `$threadId.tsx` throws "not yet implemented" — the UI renders but the mutation is not wired. Tracked in the file as a TODO.
+- **Activity feed is stitched client-side.** `ExecutionTrace` merges comments and messages; a dedicated activity feed query is on the roadmap. Today the detail view has no cross-system activity feed (e.g. "assignee changed by X at Y").
+- **Client-side assignee filter can return short pages.** See the callout in [Server-side vs client-side filtering](#server-side-vs-client-side-filtering).
+- **No bulk actions.** The thread list does not support multi-select for bulk archive, bulk assign, or bulk status changes. Operators change threads one at a time.
+
+## Related pages
+
+- [Inbox](/applications/admin/inbox/) — the approval queue for agent-requested human-in-the-loop actions
+- [Agents](/applications/admin/agents/) — the agent roster; agents own their threads
+- [Artifacts](/applications/admin/artifacts/) — tenant-wide view of thread-generated artifacts
+- [Analytics](/applications/admin/analytics/) — aggregate metrics over threads
+- [Threads (concept)](/concepts/threads/) — the underlying thread model
