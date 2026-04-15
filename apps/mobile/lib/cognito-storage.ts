@@ -26,6 +26,9 @@ async function hydrate() {
     return;
   }
 
+  const t0 = Date.now();
+  console.log("[auth-boot] hydrate start, clientIdLen=", CLIENT_ID.length);
+
   try {
     // SecureStore doesn't support listing keys. We derive the full set of
     // known Cognito keys from LastAuthUser (plus a legacy manifest fallback
@@ -34,6 +37,7 @@ async function hydrate() {
     // killed the debounced manifest write before it could flush.
     const lastUserKey = `${PREFIX}.${CLIENT_ID}.LastAuthUser`;
     const username = await SecureStore.getItemAsync(lastUserKey);
+    console.log("[auth-boot] hydrate LastAuthUser:", username ? `len=${username.length}` : "null");
     const keysToLoad = new Set<string>();
 
     if (username) {
@@ -56,16 +60,21 @@ async function hydrate() {
       } catch {}
     }
 
+    let foundCount = 0;
     await Promise.all(
       [...keysToLoad].map(async (key) => {
         const value = await SecureStore.getItemAsync(key);
         if (value !== null) {
           memoryCache.set(key, value);
+          foundCount += 1;
         }
       }),
     );
+    console.log(
+      `[auth-boot] hydrate done in ${Date.now() - t0}ms, queried=${keysToLoad.size}, found=${foundCount}, cacheSize=${memoryCache.size}`,
+    );
   } catch (e) {
-    console.warn("[CognitoStorage] hydrate error:", e);
+    console.warn("[auth-boot] hydrate error:", e);
   }
   hydrated = true;
 }

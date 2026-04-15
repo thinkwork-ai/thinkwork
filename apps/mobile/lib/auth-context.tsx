@@ -42,6 +42,14 @@ interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  /**
+   * True when SecureStore has a refresh_token — i.e. the user has been
+   * authenticated at some point and we can, in principle, refresh back into
+   * a valid session. Stays true even when `user` is null during a transient
+   * bootstrap/refresh failure. The app uses this as the "soft auth" signal
+   * to show the biometric lock screen instead of bouncing to /sign-in.
+   */
+  hasStoredSession: boolean;
   /** True when user actively signed in (typed password or biometric), false for auto-restore */
   didActiveLogin: boolean;
   signIn: (email: string, password: string) => Promise<void>;
@@ -51,6 +59,13 @@ interface AuthContextValue {
   getToken: () => Promise<string | null>;
   /** Attempt to restore session using stored credentials (after biometric) */
   restoreWithCredentials: () => Promise<boolean>;
+  /**
+   * Re-run the bootstrap flow (hydrate → session → OAuth refresh → tenantId).
+   * Used by the biometric unlock handler to recover from a transient failure
+   * without routing the user back to /sign-in. Resolves to `true` when a
+   * usable user was restored, `false` otherwise.
+   */
+  retryBootstrap: () => Promise<boolean>;
   /** Sign in with Google via Cognito hosted UI */
   signInWithGoogle: () => Promise<void>;
   /** Increments each time the app returns to foreground and token is refreshed. Watch this to re-fetch data. */
@@ -68,115 +83,121 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasStoredSession, setHasStoredSession] = useState(false);
   const [didActiveLogin, setDidActiveLogin] = useState(false);
   const [refreshCounter, setRefreshCounter] = useState(0);
   const refreshingRef = useRef(false);
 
   // ------ Bootstrap: wait for SecureStore hydration, then check session ------
-  useEffect(() => {
-    let cancelled = false;
+  // Extracted to a callback so the biometric unlock handler can re-run it on
+  // demand after a transient refresh failure. We never bounce the user back
+  // to /sign-in while `hasStoredSession` is true — the app shows the biometric
+  // lock screen instead.
+  const runBootstrap = useCallback(async (): Promise<boolean> => {
+    console.log("[auth-boot] bootstrap start");
+    try {
+      // Wait for CognitoSecureStorage to hydrate from SecureStore
+      await auth.waitForStorageReady();
 
-    async function bootstrap() {
-      try {
-        // Wait for CognitoSecureStorage to hydrate from SecureStore
-        await auth.waitForStorageReady();
+      // Set the soft-auth signal up-front so the routing guard can see it
+      // even when session restore fails below.
+      const stored = auth.hasStoredSession();
+      setHasStoredSession(stored);
+      console.log("[auth-boot] storage ready, hasStoredSession=", stored);
 
-        // Try to restore the existing Cognito session (password / SRP flow)
-        const session = await auth.getCurrentSession();
-        if (session && !cancelled) {
-          const token = session.getIdToken().getJwtToken();
-          setAuthToken(token);
-          setUser(auth.parseUserFromSession(session));
-          return;
+      // Try to restore the existing Cognito session (password / SRP flow)
+      const session = await auth.getCurrentSession();
+      console.log("[auth-boot] getCurrentSession:", session ? "valid" : "null");
+      if (session) {
+        const token = session.getIdToken().getJwtToken();
+        setAuthToken(token);
+        setUser(auth.parseUserFromSession(session));
+        console.log("[auth-boot] restored via SRP session");
+        return true;
+      }
+
+      // Fallback: OAuth/federated sessions can't be restored via SRP,
+      // but tokens are stored directly in CognitoSecureStorage. Read the
+      // id token sync from storage so we don't depend on getSession's
+      // async refresh callback returning in time.
+      const restoredUser = auth.getCurrentUser();
+      console.log(
+        "[auth-boot] getCurrentUser:",
+        restoredUser ? `sub=${restoredUser.sub.slice(0, 8)} tenantId=${restoredUser.tenantId ?? "none"}` : "null",
+      );
+      if (!restoredUser) {
+        console.log("[auth-boot] no user from either path");
+        return false;
+      }
+
+      const oauthToken = await auth.getIdToken();
+      console.log("[auth-boot] getIdToken:", oauthToken ? `len=${oauthToken.length}` : "null");
+      if (!oauthToken) {
+        console.log("[auth-boot] OAuth path: no id token, leaving soft-auth state");
+        return false;
+      }
+
+      setAuthToken(oauthToken);
+
+      // Federated (Google) JWTs don't carry custom:tenant_id. We resolve
+      // it in two tiers: cached in SecureStore (fast path), then a
+      // bootstrapUser network call (self-healing fallback).
+      if (!restoredUser.tenantId) {
+        try {
+          const cached = await SecureStore.getItemAsync(STORED_TENANT_ID_KEY);
+          if (cached) restoredUser.tenantId = cached;
+        } catch (e) {
+          console.warn("[auth-boot] tenantId rehydrate failed:", e);
         }
+      }
 
-        // Fallback: OAuth/federated sessions can't be restored via SRP,
-        // but tokens are stored directly in CognitoSecureStorage. Read the
-        // id token sync from storage so we don't depend on getSession's
-        // async refresh callback returning in time.
-        if (!cancelled) {
-          const restoredUser = auth.getCurrentUser();
-          if (restoredUser) {
-            const oauthToken = await auth.getIdToken();
-            if (oauthToken) {
-              setAuthToken(oauthToken);
-
-              // Federated (Google) JWTs don't carry custom:tenant_id. We
-              // resolve it in two tiers so a valid token NEVER bounces the
-              // user back to /sign-in on cold start:
-              //
-              //   1. Fast path — read a cached tenantId from SecureStore
-              //      (set after the last successful bootstrapUser call).
-              //      Zero network cost, sub-ms read.
-              //
-              //   2. Network fallback — if the cache is empty (existing
-              //      sessions that predate this fix, or if the OS wiped
-              //      SecureStore), call the bootstrapUser mutation with the
-              //      restored token. Persist the result so step 1 handles
-              //      it next time. Self-healing.
-              //
-              // Only if BOTH paths fail do we set the user with no tenantId,
-              // and at that point the routing guard in _layout.tsx will
-              // route to /sign-in — but it will NOT disable biometric or
-              // wipe credentials.
-              if (!restoredUser.tenantId) {
-                try {
-                  const cached = await SecureStore.getItemAsync(STORED_TENANT_ID_KEY);
-                  if (cached) {
-                    restoredUser.tenantId = cached;
-                  }
-                } catch (e) {
-                  console.warn("[AuthProvider] tenantId rehydrate failed:", e);
-                }
-              }
-
-              if (!restoredUser.tenantId) {
-                try {
-                  const graphqlUrl = process.env.EXPO_PUBLIC_GRAPHQL_URL;
-                  if (graphqlUrl) {
-                    const res = await fetch(graphqlUrl, {
-                      method: "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${oauthToken}`,
-                      },
-                      body: JSON.stringify({
-                        query: `mutation { bootstrapUser { user { id email name } tenant { id name slug plan } isNew } }`,
-                      }),
-                    });
-                    const payload = await res.json();
-                    const tenantId = payload?.data?.bootstrapUser?.tenant?.id as
-                      | string
-                      | undefined;
-                    if (tenantId) {
-                      restoredUser.tenantId = tenantId;
-                      // Persist so the next cold start takes the fast path.
-                      SecureStore.setItemAsync(STORED_TENANT_ID_KEY, tenantId).catch(
-                        (e) => console.warn("[AuthProvider] tenantId persist failed:", e),
-                      );
-                    } else {
-                      console.warn("[AuthProvider] bootstrapUser returned no tenant", payload);
-                    }
-                  }
-                } catch (e) {
-                  console.warn("[AuthProvider] bootstrapUser fallback failed:", e);
-                }
-              }
-
-              setUser(restoredUser);
+      if (!restoredUser.tenantId) {
+        try {
+          const graphqlUrl = process.env.EXPO_PUBLIC_GRAPHQL_URL;
+          if (graphqlUrl) {
+            const res = await fetch(graphqlUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${oauthToken}`,
+              },
+              body: JSON.stringify({
+                query: `mutation { bootstrapUser { user { id email name } tenant { id name slug plan } isNew } }`,
+              }),
+            });
+            const payload = await res.json();
+            const tenantId = payload?.data?.bootstrapUser?.tenant?.id as string | undefined;
+            if (tenantId) {
+              restoredUser.tenantId = tenantId;
+              SecureStore.setItemAsync(STORED_TENANT_ID_KEY, tenantId).catch((e) =>
+                console.warn("[auth-boot] tenantId persist failed:", e),
+              );
+            } else {
+              console.warn("[auth-boot] bootstrapUser returned no tenant", payload);
             }
           }
+        } catch (e) {
+          console.warn("[auth-boot] bootstrapUser fallback failed:", e);
         }
-      } catch (e) {
-        console.warn("[AuthProvider] bootstrap error:", e);
-      } finally {
-        if (!cancelled) setIsLoading(false);
       }
-    }
 
-    bootstrap();
-    return () => { cancelled = true; };
+      setUser(restoredUser);
+      console.log("[auth-boot] restored via OAuth path, tenantId=", restoredUser.tenantId ?? "none");
+      return true;
+    } catch (e) {
+      console.warn("[auth-boot] bootstrap error:", e);
+      return false;
+    }
   }, []);
+
+  // First-run bootstrap on mount
+  useEffect(() => {
+    let cancelled = false;
+    runBootstrap().finally(() => {
+      if (!cancelled) setIsLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [runBootstrap]);
 
   // ------ Refresh token when app comes to foreground ------
   useEffect(() => {
@@ -230,6 +251,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = session.getIdToken().getJwtToken();
     setAuthToken(token);
     setDidActiveLogin(true);
+    setHasStoredSession(true);
     setUser(auth.parseUserFromSession(session));
 
     // Persist credentials for biometric re-auth — fire-and-forget so it
@@ -358,6 +380,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setUser(oauthUser);
+      setHasStoredSession(true);
       setDidActiveLogin(true);
     } finally {
       oauthInFlightRef.current = false;
@@ -384,6 +407,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     auth.signOut();
     setAuthToken(null);
     setUser(null);
+    setHasStoredSession(false);
     setDidActiveLogin(false);
     // Don't clear stored credentials — user may want biometric login next time.
     // Do clear the persisted tenantId so a fresh sign-in (possibly as a
@@ -406,6 +430,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isLoading,
         isAuthenticated: user !== null,
+        hasStoredSession,
         didActiveLogin,
         signIn: handleSignIn,
         signUp: handleSignUp,
@@ -413,6 +438,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signOut: handleSignOut,
         getToken,
         restoreWithCredentials,
+        retryBootstrap: runBootstrap,
         signInWithGoogle: handleSignInWithGoogle,
         refreshCounter,
       }}

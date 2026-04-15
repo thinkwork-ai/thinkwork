@@ -6,6 +6,7 @@ import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronLeft, ChevronRight, Info, Check, Circle, CheckSquare, ListChecks, AlertCircle, Clock, Trash2 } from "lucide-react-native";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
+import { ShimmerText } from "@/components/ui/ShimmerText";
 import { MessageInputFooter } from "@/components/input/MessageInputFooter";
 import { QuickActionsSheet, type QuickActionsSheetRef } from "@/components/chat/QuickActionsSheet";
 import { useQuickActions, useDeleteQuickAction, type QuickAction } from "@/lib/hooks/use-quick-actions";
@@ -505,7 +506,14 @@ export default function ThreadDetailRoute() {
           )
         ) : (
           <View className="flex-1 items-center justify-center">
-            <Text className="font-mono text-xs" style={{ color: colors.mutedForeground }}>loading…</Text>
+            <ShimmerText
+              text="loading…"
+              fontSize={12}
+              lineHeight={16}
+              fontFamily={Platform.OS === "ios" ? "Menlo" : "monospace"}
+              dimColor={isDark ? "#525252" : "#a3a3a3"}
+              brightColor={isDark ? "#a3a3a3" : "#525252"}
+            />
           </View>
         )}
       </View>

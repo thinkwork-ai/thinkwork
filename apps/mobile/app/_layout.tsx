@@ -30,7 +30,7 @@ import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import "../global.css";
 
 function RootLayoutNav() {
-  const { isLoading, isAuthenticated, user, signOut, didActiveLogin, getToken } = useAuth();
+  const { isLoading, isAuthenticated, user, signOut, didActiveLogin, getToken, hasStoredSession, retryBootstrap } = useAuth();
   const {
     isEnabled: biometricEnabled,
     isSupported: biometricSupported,
@@ -149,21 +149,28 @@ function RootLayoutNav() {
     const publicRoutes = ["sign-in", "sign-up", "verify", "demo", "onboarding", "invite", "forgot-password", "auth"];
     const isPublicRoute = publicRoutes.includes(segments[0] as string);
 
+    // Soft-auth: if SecureStore holds a refresh_token, consider the user
+    // signed-in-but-locked even while `user` is still null from a transient
+    // bootstrap failure. The biometric lock screen will gate the app and
+    // retryBootstrap() runs on unlock. Never send a soft-authenticated user
+    // to /sign-in — that would wipe the session they're trying to recover.
+    if (!isAuthenticated && hasStoredSession) {
+      // Hold position: the biometric lock overlay below will handle recovery.
+      return;
+    }
+
     if (!isAuthenticated && !isPublicRoute) {
       router.replace("/sign-in");
     } else if (isAuthenticated && !hasTenant && !isPublicRoute) {
-      // Authenticated but no tenantId — the bootstrap() effect in
-      // AuthProvider couldn't resolve it from the cached SecureStore value
-      // OR the bootstrapUser network fallback. Route the user back to
-      // /sign-in so they can re-authenticate, but DO NOT disable biometric
-      // here. The old code called `disableBiometric().catch(() => {})`
-      // which permanently wiped the user's Face ID preference on every
-      // cold start where tenantId resolution failed — so Eric would enable
-      // Face ID, close the app, reopen, and find himself signed out with
-      // Face ID silently off. Leave the biometric preference alone; the
-      // routing is enough.
-      setIsUnlocked(true);
-      router.replace("/sign-in");
+      // Authenticated but no tenantId — tenantId resolution failed in
+      // bootstrap (cache + bootstrapUser both missed). Do NOT disable
+      // biometric (the old bug that wiped Face ID preferences). If the
+      // biometric gate is active it will retry on unlock; otherwise fall
+      // through to /sign-in only when there's no stored session left.
+      if (!hasStoredSession) {
+        setIsUnlocked(true);
+        router.replace("/sign-in");
+      }
     } else if (isAuthenticated && segments[0] === "sign-in") {
       if (hasTenant) {
         router.replace("/");
@@ -177,7 +184,7 @@ function RootLayoutNav() {
         router.replace("/onboarding/complete");
       }
     }
-  }, [isLoading, isAuthenticated, segments, hasTenant, navigationReady, agents]);
+  }, [isLoading, isAuthenticated, segments, hasTenant, hasStoredSession, navigationReady, agents]);
 
   const handleBiometricUnlock = async () => {
     // Force a token refresh before dropping the lock screen. For OAuth users
@@ -185,7 +192,21 @@ function RootLayoutNav() {
     // password users it refreshes the Cognito SRP session. Either way the
     // GraphQL client gets a valid token, preventing the post-unlock 401 ->
     // sign-in bounce when the app has been backgrounded past token TTL.
+    //
+    // If the user wasn't fully hydrated (soft-auth state — `hasStoredSession`
+    // true but `user` still null), re-run the bootstrap flow first so
+    // unlocking actually puts us in the "authenticated with tenantId" state.
+    // If the retry fails, keep the lock screen visible so the user can try
+    // again — we never fall through to /sign-in in this path.
     try {
+      if (!isAuthenticated && hasStoredSession) {
+        const ok = await retryBootstrap();
+        if (!ok) {
+          console.warn("[_layout] bootstrap retry failed during unlock; staying locked");
+          isAuthenticating.current = false;
+          return;
+        }
+      }
       await getToken();
     } catch (e) {
       console.warn("[_layout] biometric unlock token refresh failed:", e);
@@ -208,10 +229,15 @@ function RootLayoutNav() {
     router.replace("/sign-in");
   };
 
-  // Show biometric lock screen: user is authed but hasn't unlocked with Face ID yet
+  // Show biometric lock screen in two cases:
+  //   1. Normal path: user is fully authed (user+tenantId) but hasn't unlocked
+  //      with Face ID since the last background transition.
+  //   2. Soft-auth recovery: bootstrap failed to resolve the user but a
+  //      refresh_token is still in SecureStore. Show the lock screen so
+  //      biometric unlock can re-run bootstrap and refresh tokens — this is
+  //      the "never bounce to /sign-in after a reload" guarantee.
   const needsBiometricUnlock =
-    isAuthenticated &&
-    hasTenant &&
+    ((isAuthenticated && hasTenant) || (!isAuthenticated && hasStoredSession)) &&
     !isUnlocked &&
     biometricEnabled &&
     !biometricLoading &&
