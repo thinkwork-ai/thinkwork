@@ -1,0 +1,164 @@
+---
+title: Admin — Scheduled Jobs
+description: Cron, rate, and one-shot triggers for agent heartbeats, reminders, scheduled invocations, and routine triggers. EventBridge-backed, with run history and manual trigger.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Scheduled Jobs are the tenant-wide scheduler for agent work. Every cron entry, rate-based trigger, one-shot reminder, and routine trigger lives here. Behind the UI they're implemented as AWS EventBridge rules (plus Step Functions for routines) and they fire into the same AgentCore invocation path the rest of the app uses.
+
+## The list
+
+**Route:** `/scheduled-jobs`  
+**File:** `apps/admin/src/routes/_authed/_tenant/scheduled-jobs/index.tsx`
+
+A searchable table with a top-right **New Job** button and a type-filter dropdown.
+
+### Columns
+
+| Column | Notes |
+|---|---|
+| Name | Display name; description rendered below in smaller type |
+| Type | Icon + badge: **Heartbeat**, **Reminder**, **Scheduled**, **Routine** |
+| Schedule | Cron or rate expression, rendered human-readable ("every 5 minutes", "daily at 09:00 UTC") |
+| Enabled | Toggle — disabling does not delete the underlying EventBridge rule, it pauses it |
+| Last run | Relative time |
+| Next run | Estimated from the schedule expression and `last_run_at` |
+
+### Trigger types
+
+Four types cover the use cases:
+
+- **`agent_heartbeat`** — a recurring prompt that runs an agent on a timer (e.g. "every 10 minutes, check your inbox")
+- **`agent_reminder`** — a one-shot or recurring prompt that reminds an agent to do something (e.g. "daily at 08:00, send the morning digest")
+- **`agent_scheduled`** — a general scheduled invocation of a specific agent
+- **`routine_schedule`** or **`routine_one_time`** — triggers a routine (multi-step workflow) instead of a single agent turn
+
+Each type determines how the trigger interacts with the target — heartbeats skip if the agent is busy, reminders queue up if the prior run hasn't finished, and routine triggers fan out to step execution.
+
+## The detail page
+
+**Route:** `/scheduled-jobs/:scheduledJobId`  
+**File:** `apps/admin/src/routes/_authed/_tenant/scheduled-jobs/$scheduledJobId.tsx`
+
+The detail page carries four sections:
+
+### Header
+
+- Job name + type badge
+- Action buttons: **Edit**, **Run Now** (manual trigger), **Enable / Disable**
+- Delete with confirmation
+
+### Configuration
+
+Read-only display of the job's persisted configuration:
+
+- Trigger type
+- Schedule expression (human format) and original expression (raw)
+- Timezone
+- Agent id or routine id (the target)
+- Prompt override (for agent-type jobs) — the string the agent receives when the trigger fires
+- Config JSON (for routine-type jobs) — the parameters passed to the routine
+
+### Run history
+
+An expandable list of run cards, one per prior execution. Each card shows status, start / end timestamps, and the resulting thread turn (if the run created one). Failed runs include an error message and a JSON blob of the error context so the operator can debug.
+
+### Next run
+
+A computed "next run" row estimates when the job will next fire based on the schedule expression and the last run timestamp.
+
+## REST endpoints
+
+Scheduled jobs are REST-driven, not GraphQL:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/scheduled-jobs` | Paginated list |
+| `GET /api/scheduled-jobs/:jobId/runs` | Run history for a specific job |
+| `POST /api/scheduled-jobs` | Create |
+| `PATCH /api/scheduled-jobs/:jobId` | Update (enable/disable, schedule, prompt, etc.) |
+| `DELETE /api/scheduled-jobs/:jobId` | Delete |
+| `POST /api/scheduled-jobs/:jobId/run` | Manual trigger (no request body) |
+
+The create and edit flows use a shared `ScheduledJobFormDialog` that captures all the fields and submits via REST.
+
+## Schedule expression formats
+
+Three forms are supported:
+
+| Form | Example | Meaning |
+|---|---|---|
+| **rate** | `rate(5 minutes)` | Fires every N time units after the job is created |
+| **cron** | `cron(0 9 ? * MON-FRI *)` | Standard AWS cron (minute, hour, day-of-month, month, day-of-week, year) |
+| **at** | `at(2026-04-15T14:00:00Z)` | Fires once at the given UTC time |
+
+<Aside type="caution">
+**`rate()` triggers use creation time as their epoch, not wall-clock time.** A job created at 14:37 with `rate(1 hour)` will fire at 15:37, 16:37, and so on — not at the top of each hour. Use `cron()` if you need wall-clock alignment.
+</Aside>
+
+## Data model
+
+- **`scheduled_jobs`** — Aurora table with id, tenant_id, name, description, trigger_type, enabled, schedule_type (rate / cron / at), schedule_expression, timezone, agent_id, routine_id, prompt, config (JSON), eb_schedule_name, last_run_at, next_run_at, created_at
+- **`eb_schedule_name`** — the EventBridge rule name backing this job. Deleting the job requires an EventBridge rule cleanup in the backend. This field is load-bearing — if it gets out of sync, orphaned EventBridge rules accumulate.
+- **Run history** — stored in `thread_turns` with a `scheduled_job_id` foreign key and a status field (`queued`, `running`, `succeeded`, `failed`, `cancelled`)
+
+## Relationship to Routines
+
+Scheduled jobs and [Routines](/applications/admin/routines/) are distinct concepts:
+
+- A **scheduled job** is a single trigger. Its target is either a single agent invocation (`agent_*` types) or a single routine execution (`routine_*` types).
+- A **routine** is a reusable, composable multi-step workflow.
+
+A single routine can be triggered by multiple scheduled jobs, by webhooks, or manually. Scheduled jobs are the "when to run it" side; routines are the "what to run" side.
+
+## Workflows
+
+### Add a daily morning brief
+
+1. Click **New Job**
+2. Name it "Morning brief"
+3. Type: `agent_scheduled`
+4. Schedule: `cron(0 9 ? * MON-FRI *)`, timezone UTC
+5. Target: pick the brief-producing agent
+6. Prompt: "Produce the morning brief for today"
+7. Save
+
+The job fires every weekday at 09:00 UTC and runs the agent with that prompt in a fresh thread.
+
+### Pause a misbehaving heartbeat
+
+1. Find the job on `/scheduled-jobs`
+2. Click the Enabled toggle
+3. The EventBridge rule is disabled but the job row stays; the job stops firing
+
+### Debug a failing routine trigger
+
+1. Open the job's detail page
+2. Scroll to Run history
+3. Expand the most recent failed run card
+4. Read the error JSON for context
+5. Cross-reference in [Routines](/applications/admin/routines/) to see the routine's full run log
+
+### Fire a job manually
+
+1. Open the detail page
+2. Click **Run Now**
+3. A new run is queued immediately regardless of the schedule
+4. Watch Run history to see it land
+
+## Known limits
+
+- **`rate()` timing is since creation, not wall-clock.** See the callout above.
+- **EventBridge rule cleanup depends on `eb_schedule_name`.** If that field gets out of sync, orphaned rules accumulate in AWS. The backend tries to keep this clean on delete, but operators should periodically audit.
+- **No bulk operations.** Enabling / disabling / deleting happens one job at a time.
+- **REST-driven.** No urql cache or live subscriptions; the list re-fetches after each mutation.
+- **Manual trigger ignores concurrency.** Clicking Run Now while a job is already running queues a second run. There's no "skip if already running" gate on manual triggers.
+
+## Related pages
+
+- [Routines](/applications/admin/routines/) — the multi-step workflow layer that scheduled jobs can trigger
+- [Agents](/applications/admin/agents/) — per-agent scheduled jobs live on the agent detail page
+- [Webhooks](/applications/admin/webhooks/) — the event-driven counterpart to time-driven triggers
+- [Automations (concept)](/concepts/automations/) — the product model
+- [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/) — concept detail

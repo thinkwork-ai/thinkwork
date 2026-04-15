@@ -1,0 +1,139 @@
+---
+title: Admin — Agent Templates
+description: Reusable agent configuration bundles — skills, knowledge, MCP servers, guardrails — plus the explicit sync flow that propagates changes out to linked agents.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Agent templates are reusable configuration bundles that multiple agents can share. A template defines the model, default skill assignments, default knowledge bases, MCP server assignments, guardrail attachments, system prompt, and budget caps. When an agent is created from a template, it inherits all of that. When the template changes, operators **sync** the change out to the linked agents — explicitly, not automatically.
+
+This is how fleet-wide configuration gets managed in ThinkWork without having to touch every agent individually.
+
+## The template list
+
+**Route:** `/agent-templates`  
+**File:** `apps/admin/src/routes/_authed/_tenant/agent-templates/index.tsx`
+
+The list is a searchable table showing every template in the tenant:
+
+| Column | Notes |
+|---|---|
+| Name | Display name |
+| Description | Short summary |
+| Category | Author-chosen category tag |
+| Model | The default model this template uses (Claude Haiku, Sonnet, Nova, etc.) |
+| Source | Where the template came from (built-in, tenant-created, imported) |
+| Skill count | How many skills are attached |
+| Published | Badge showing whether the template is publishable to child agents |
+| Action | "Use this template" button that opens a dialog to create an agent |
+
+The backing query is `AgentTemplatesListQuery`. The create-agent-from-template flow fires `CreateAgentFromTemplateMutation` with the new agent's name, slug, and any optional config overrides.
+
+## The template detail
+
+**Route:** `/agent-templates/:templateId`  
+**File:** `apps/admin/src/routes/_authed/_tenant/agent-templates/$templateId.tsx`
+
+The detail page is a split layout: form fields on the left, a CodeMirror editor for the system prompt on the right.
+
+### Left pane — form and assignments
+
+- **Identity** — name, slug, description, category, publish toggle
+- **Model select** — dropdown backed by the tenant's configured model catalog
+- **Skills table** — add/remove skills from the tenant-installed catalog
+- **MCP Servers table** — link/unlink tenant-registered MCP servers (sourced via the REST `listMcpServers` / `assignMcpToTemplate` / `unassignMcpFromTemplate` API module)
+- **Guardrail assignment** — pick a guardrail from the list registered in the [Security Center](/applications/admin/security-center/)
+- **Budget caps** — monthly spend cap; inherited by all child agents unless overridden
+
+### Right pane — system prompt editor
+
+A full CodeMirror editor in markdown mode, vscodeDark theme. The system prompt is the single most impactful field on the template — it's what most iteration happens against.
+
+### Linked agents section
+
+Below the main form, the template detail page lists every agent currently linked to this template. For each linked agent, the row shows its name, status, and (after a sync is triggered) its sync status.
+
+## The sync flow
+
+**Route:** `/agent-templates/:templateId/sync`  
+**File:** `apps/admin/src/routes/_authed/_tenant/agent-templates/$templateId_.sync.tsx`
+
+Sync is **explicit**. When an operator edits a template, the linked agents do not automatically absorb the change. Instead, a **Sync** button on the detail page opens a review page that shows, per linked agent, what would change if the operator confirmed.
+
+The review page uses an `AgentSyncCard` per agent. Each card carries the current config vs the template config and an individual "Sync this agent" button. The top of the page also has a "Sync All" button that fires `SyncTemplateToAllAgentsMutation` — a single mutation that applies the template to all linked agents server-side and returns `{ agentsSynced, agentsFailed }`.
+
+<Aside type="note">
+The explicit sync step is a deliberate design choice. Auto-propagating template changes would make fleet-wide mistakes trivially easy to ship — "I tweaked the system prompt and now 47 agents misbehave." Making operators review and confirm keeps fleet operations reviewable.
+</Aside>
+
+After the sync mutation resolves, a toast notifies the operator of success or partial failure. The linked agents list refetches so the cards reflect the new state.
+
+## State machine: template + linked agent
+
+```
+Template edit
+    │
+    ▼
+Template saved ──► linked agents now diverge from template
+    │
+    ▼
+Click "Sync" on template detail
+    │
+    ▼
+Review page renders per-agent diffs
+    │
+    ├──► Sync All ──► SyncTemplateToAllAgentsMutation ──► all linked agents updated
+    │
+    └──► Sync one at a time (per AgentSyncCard)
+```
+
+Until an operator clicks Sync, linked agents continue running with the pre-edit template configuration. Operators can verify the new template against a single agent before fanning out to the fleet.
+
+## Workflows
+
+### Ship a new fleet-wide skill
+
+1. Install the new skill via [Skills Catalog](/applications/admin/skills-catalog/)
+2. Open the template at `/agent-templates/:templateId`
+3. Add the skill to the Skills table
+4. Save the template
+5. Click **Sync** and land on the review page
+6. Confirm the diffs look right
+7. Click **Sync All** — or sync one agent first as a canary, then sync the rest
+8. Watch the linked agent list for sync status and agent heartbeats to confirm no regressions
+
+### Tune a system prompt across the fleet
+
+1. Open the template detail page
+2. Edit the system prompt in the right-pane CodeMirror editor
+3. Save
+4. (Optional) Pick one linked agent, open its [Agents](/applications/admin/agents/) detail page, and run it through a manual turn to sanity-check
+5. Return to the template, click Sync, and propagate the new prompt across the fleet
+
+### Roll back a bad template change
+
+1. Open the template and revert the system prompt (or whichever field was changed)
+2. Save
+3. Sync the revert out to the fleet
+
+Template history is not currently versioned — rollback means editing forward. Per-agent config history **is** versioned (see the Rollback button on the [Agents](/applications/admin/agents/) detail page).
+
+## Workflows not to do
+
+- **Don't edit a linked agent directly when you want a fleet change.** Per-agent edits do not back-propagate to the template. If multiple agents need the same change, edit the template and sync.
+- **Don't skip the sync step.** Editing a template without syncing leaves the linked agents in a divergent state where the template is nominally their source of truth but they're actually running the old config.
+
+## Known limits
+
+- **No template versioning.** Rollback is edit-forward. Per-agent rollback is available through the agent detail page, but the template itself has no git-like history.
+- **No template diff preview on the template detail page.** The diff only renders on the sync review page, after the operator has already saved changes and clicked Sync.
+- **No dry-run.** "Sync All" is an all-or-nothing mutation; there's no simulate-sync-and-show-what-would-happen mode separate from the review page.
+
+## Related pages
+
+- [Agents](/applications/admin/agents/) — the per-agent detail pages that inherit from templates
+- [Agent Invites](/applications/admin/agent-invites/) — BYOB agent registration
+- [Skills Catalog](/applications/admin/skills-catalog/) — the skills added to templates
+- [Tenant MCP Servers](/applications/admin/mcp-servers/) — the MCP servers assigned to templates
+- [Security Center](/applications/admin/security-center/) — guardrails assigned to templates
+- [Agents (concept)](/concepts/agents/) — the product model behind templates

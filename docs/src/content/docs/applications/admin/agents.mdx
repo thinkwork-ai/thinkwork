@@ -1,126 +1,181 @@
 ---
-title: Admin — Agents & Templates
-description: Manage agents, agent templates, skill pack assignments, sub-agents, workspaces, and per-agent scheduled jobs from the admin web app.
+title: Admin — Agents
+description: The agent roster plus per-agent detail tabs — Skills, Knowledge, Memory, Sub-agents, Workspaces, and Scheduled Jobs. How to create, configure, and iterate on agents in the admin web app.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-The Agents surface is where operators and agent authors build, configure, and iterate on the agents running in a ThinkWork tenant. It covers the full lifecycle: registration, template-driven fleet config, skills, memory, sub-agents, workspaces, and per-agent automations.
+The Agents surface is where operators and authors build, configure, and iterate on the agents running in a ThinkWork tenant. It covers the full agent lifecycle: listing the roster, creating new agents (usually from a template), and working inside each agent's detail tabs to manage skills, knowledge, memory, sub-agents, workspaces, and scheduled jobs.
 
-## Agents
+## The agent list
 
-**Route:** `/agents`
+**Route:** `/agents`  
+**File:** `apps/admin/src/routes/_authed/_tenant/agents/index.tsx`
 
-The Agents page lists every agent in the tenant with status, type (managed via AgentCore vs bring-your-own runtime), and quick metrics (recent runs, cost, error rate). Operators can create a new agent from scratch at `/agents/new` or, more commonly, from an agent template.
+The list is a `DataTable` with search, sort, and a pair of top-right buttons: **New Agent** (opens a dialog) and **Invite BYOB** (creates an invite token for a bring-your-own-runtime agent; see [Agent Invites](/applications/admin/agent-invites/)).
 
-Each agent detail page (`/agents/:agentId`) has its own sub-navigation:
+Each row carries:
 
-| Tab | Purpose |
+| Column | Notes |
 |---|---|
-| **Overview** | Identity, description, owner, runtime configuration, current status |
-| **Skills** | Skill packs assigned to this agent. See [Skills catalog](#skills-catalog) |
-| **Knowledge** | Knowledge bases attached to this agent. Retrieval is scoped per-agent |
-| **Memory** | Per-agent memory records with XML-topic parsing and manual edits |
-| **Sub-agents** | Child agents this agent can delegate to |
-| **Workspaces** | Agent-scoped workspaces for project-style groupings |
-| **Scheduled Jobs** | Per-agent cron and event-driven automations |
+| Name | Cloud vs BYOB icon next to the name — BYOB agents use runtimes other than the two ThinkWork-managed ones (`sdk`, `strands`) |
+| Status | `IDLE`, `BUSY`, `PAUSED`, or `STOPPED` as a `StatusBadge` |
+| Template | The linked agent template name, if any |
+| Human pair | The user this agent is paired with (for single-user agents) |
+| Budget | Monthly cap from the template's budget policy |
+| Heartbeat | Relative time since the agent last reported in |
 
-Agents also have **budget policies**, **rollback support** (revert to a prior configuration), and per-agent usage metrics. For fleet-level configuration (guardrails, default model, budget caps), use agent templates.
+The list is driven by `AgentsListQuery`. An `OnAgentStatusChangedSubscription` re-executes the query whenever any agent transitions states — creates, deletes, pauses, resumes — so the roster stays live.
 
-## Agent templates
+### Creating a new agent
 
-**Route:** `/agent-templates`
+**Route:** `/agents/new` (redirect only)
 
-Agent templates are reusable configuration bundles that propagate across groups of agents. A template defines:
+The `/agents/new` route is a stub: its `beforeLoad` hook throws `redirect({ to: "/agents" })` and the actual creation happens inside the **`NewAgentDialog`** that lives at the `_authed/_tenant` layout and is opened via `useDialog().openNewAgent()`. The dialog captures the name, slug, model, and optionally a template source, then fires `CreateAgentMutation` and navigates to the new detail page on success.
 
-- Model and runtime (managed AgentCore or BYO)
-- Default skill-pack assignments
-- Default knowledge bases
-- MCP server assignments
-- Guardrail assignments
-- Budget caps
+Most operators create agents from templates rather than from scratch — see [Agent Templates](/applications/admin/agent-templates/).
 
-When an agent is created from a template, it inherits everything. When the template changes, operators **sync** the change out to the agent fleet from `/agent-templates/:templateId/sync`.
+## The agent detail page
+
+**Route:** `/agents/:agentId`  
+**File:** `apps/admin/src/routes/_authed/_tenant/agents/$agentId.tsx`
+
+The detail page hosts the agent's overview metrics plus a nested tab router for the child tabs.
+
+### Overview layout
+
+- **Smart breadcrumbs** — if the agent is a sub-agent (has `parentAgentId`), the breadcrumb trail includes the parent name and a "Workspaces" link back to the parent's Workspaces tab. If the agent is top-level, the trail is just Agents → (this agent).
+- **`AgentMetrics`** — a card grid with API call count, threads, spend, and other derived stats
+- **`AgentActivity`** — a filtered activity feed showing runs and threads belonging to this agent. The tenant-wide queries are re-used and filtered client-side to this agent id.
+- **`AgentHeaderBadges`** — status, type, template link, budget, heartbeat
+- **Action buttons** — edit agent (opens `AgentFormDialog`), rollback (opens `AgentRollbackButton`'s dropdown of prior configurations to restore)
+
+Directly under the overview sits a **`TabsPanel`** that routes into six sub-pages, each a separate file under `agents/$agentId_.<tab>.tsx`.
+
+## Detail tabs
+
+### Skills
+
+**Route:** `/agents/:agentId/skills`  
+**File:** `apps/admin/src/routes/_authed/_tenant/agents/$agentId_.skills.tsx`
+
+The Skills tab manages which skills are installed on this specific agent. A `DataTable` shows the enabled skills with columns for name, description, enable toggle, and a configuration-status indicator (configured / needs setup / not needed).
+
+Installing a skill opens a dialog that lets the operator pick from the tenant-installed catalog and fill any required credential fields. The dialog uses the REST skills API (`listCatalog`, `installSkillToAgent`, `saveSkillCredentials`) rather than GraphQL. Skill catalog management itself lives on the [Skills Catalog](/applications/admin/skills-catalog/) page.
+
+The agent-level skill assignment is persisted via `SetAgentSkillsMutation`. Skills inherited from the agent's template appear alongside directly-assigned skills and can be toggled independently.
+
+### Knowledge
+
+**Route:** `/agents/:agentId/knowledge`  
+**File:** `apps/admin/src/routes/_authed/_tenant/agents/$agentId_.knowledge.tsx`
+
+The Knowledge tab is where knowledge bases are attached to or detached from this agent. Retrieval is scoped per-agent: an agent can only retrieve from knowledge bases it has been explicitly given access to.
+
+The table lists every knowledge base currently attached with a status badge and an enable checkbox. An "Add Knowledge Base" button opens a side panel (`KnowledgeBasesPanel`) that shows the tenant's full KB list so the operator can pick additional bases to attach. Changes persist via `SetAgentKnowledgeBasesMutation`.
+
+Knowledge base creation, document upload, and sync status live on the [Knowledge Bases](/applications/admin/knowledge-bases/) page.
+
+### Memory
+
+**Route:** `/agents/:agentId/memory`  
+**File:** `apps/admin/src/routes/_authed/_tenant/agents/$agentId_.memory.tsx`
+
+The Memory tab is a per-agent version of the tenant-wide [Memory](/applications/admin/memory/) page, scoped to this agent's namespace. Two view modes:
+
+- **Table** — searchable, editable list of memory records with columns for topic, content, updated time, and row-level actions
+- **Graph** — a force-graph visualization of memory records and their topic relationships, useful for finding clusters and orphans
+
+Clicking a row opens a detail sheet with the full content parsed from the `<topic name="...">content</topic>` XML format. From the sheet, operators can edit content (`UpdateMemoryRecordMutation`) or delete a record (`DeleteMemoryRecordMutation`).
+
+Whether edits are actually permitted depends on the memory backend. AgentCore managed memory records are immutable by default; Hindsight-backed records are fully editable. The tab checks `MemorySystemConfigQuery` at load time to decide.
+
+### Sub-agents
+
+**Route:** `/agents/:agentId/sub-agents`  
+**File:** `apps/admin/src/routes/_authed/_tenant/agents/$agentId_.sub-agents.tsx`
+
+Sub-agents are child agents that this agent can delegate to at runtime. The tab shows a table of current sub-agents with name, role, model, and a delete action. Clicking a sub-agent navigates into its own detail page.
+
+The "Create Sub-agent" dialog captures a name, slug, role, and model selection. Model options are hardcoded as a curated list (Haiku, Sonnet, Nova variants). The slug auto-fills from the name as the user types. Submission fires `CreateSubAgentMutation` and, on delete, `DeleteSubAgentMutation`.
+
+### Workspaces
+
+**Routes:** `/agents/:agentId/workspaces` and `/agents/:agentId/workspace`  
+**Files:** `agents/$agentId_.workspaces.tsx` and `agents/$agentId_/workspace.tsx`
+
+Workspaces are agent-scoped folders of configuration and context files — SOUL.md, USER.md, IDENTITY.md, and similar. The tab is a file browser + editor:
+
+- **Left sidebar** — a collapsible folder/file tree
+- **Right pane** — a CodeMirror markdown editor (with vscodeDark theme) and a header banner describing what the file is for (pulled from a static `FILE_DESCRIPTIONS` map that maps SOUL.md → "Core personality", etc.)
+- **Toolbar** — create folder, create file, breadcrumb trail
+
+File operations go through a custom REST endpoint at `POST /internal/workspace-files` that reads, writes, lists, and creates files under the agent's workspace prefix. Auto-save on blur or explicit save button.
 
 <Aside type="note">
-Template sync is explicit, not automatic. A template change does not instantly mutate every child agent — the operator reviews the diff on the sync page and chooses which agents to update. This is deliberate: it keeps fleet-wide changes reviewable.
+Both `$agentId_.workspaces.tsx` and `$agentId_/workspace.tsx` exist in the route tree. They render essentially the same UI — the second form appears to be a legacy or alternative route and may be consolidated in a future cleanup.
 </Aside>
 
-## Skills catalog
+### Scheduled Jobs
 
-**Route:** `/skills`
+**Route:** `/agents/:agentId/scheduled-jobs`  
+**File:** `apps/admin/src/routes/_authed/_tenant/agents/$agentId_.scheduled-jobs.index.tsx`
 
-The Skills catalog is where skill packs are browsed, installed, and authored. Two sources:
+Per-agent scheduled jobs — cron, rate, and one-shot triggers that invoke this specific agent. The tab is thin: it delegates to an `AgentScheduledJobs` component that renders the job list and create / edit dialogs.
 
-- **Public catalog** — skills published by the ThinkWork project and community, backed by the skill catalog S3 bucket
-- **Tenant-installed skills** — skills installed into the tenant, either from the public catalog or custom-authored
+This is distinct from the tenant-wide [Scheduled Jobs](/applications/admin/scheduled-jobs/) page, which covers all triggers across all agents and routines. The per-agent view is a filtered slice tied to the current agent.
 
-Each skill row shows its version, owner, description, and a one-click install button. Installed skills then appear on any agent's **Skills** tab for assignment.
+## Agent state
 
-A lightweight Python **skill builder** lives at `/skills/builder` for authoring custom skills directly in the admin app. For serious skill authoring, use [Authoring Guide: Skill Packs](/guides/skill-packs/).
+Agent status is a small enum backed by the `OnAgentStatusChangedSubscription`:
 
-## MCP servers (tenant level)
-
-**Route:** `/mcp-servers`
-
-The MCP Servers page is where operators register MCP (Model Context Protocol) servers at the **tenant** level. This is the tenant-wide catalog — it does **not** issue per-user tokens.
-
-For each MCP server, the admin UI captures:
-
-| Field | Purpose |
+| Status | Meaning |
 |---|---|
-| Name | Display name shown throughout the admin app and mobile integration screen |
-| URL | The MCP server's HTTP endpoint |
-| Transport | Streamable HTTP (recommended) or SSE |
-| Authentication | None, tenant API key, or per-user OAuth (managed by the MCP server) |
+| `IDLE` | Running, waiting for work |
+| `BUSY` | Currently executing a turn |
+| `PAUSED` | Admin-paused, will not accept new turns but can be resumed |
+| `STOPPED` | Terminated |
 
-Once registered, MCP servers can be **assigned to agent templates** (and flow down to agents via template sync) or directly to individual agents. A "Test Connection" button verifies the server is reachable and caches its tool list.
+Pausing and resuming are manual operator actions. Stopping is typically followed by deletion.
 
-<Aside type="note">
-Per-user OAuth tokens for MCP servers are **not** issued from the admin app. Operators register the MCP server here; end users grant their own access from the [Mobile App's MCP Servers screen](/applications/mobile/integrations-and-mcp-connect/). That split is enforced by design — admin owns infrastructure, users own their credentials.
-</Aside>
+Type is a separate axis: `WORKSPACE_AGENT` (scoped to a workspace under a parent), standalone agents, and future types like `TEAM_AGENT`.
 
-See [MCP Tool Connectors](/concepts/mcp-servers/) for the full connector model, token lifecycle, and runtime behavior.
+## Workflows
 
-## Built-in tools
+### Create a new agent from a template
 
-**Route:** `/builtin-tools`
+1. Open [Agent Templates](/applications/admin/agent-templates/)
+2. Click "Use this template" on the template row
+3. Fill the name, slug, and any config overrides
+4. Submit — the new agent is created with the template's skills, KB assignments, MCP servers, and guardrails
+5. Land on the new agent's detail page
 
-Built-in tools are provider-scoped capabilities that ship with ThinkWork — Slack, GitHub, Google Sheets, and similar. They're distinct from MCP servers in that ThinkWork owns the integration code and the credentials are stored directly in the credential vault instead of negotiated through an MCP server.
+### Iterate on an existing agent
 
-Operators add credentials here, test the connection, and assign the tool to agents the same way they assign skills. Use built-in tools when the capability is standard and doesn't warrant an MCP server.
+1. Open `/agents` and click into the agent
+2. Edit fields via `AgentFormDialog`, or change configuration per-tab (add a skill, attach a KB, tune memory)
+3. Changes persist via per-tab mutations; the subscription keeps other connected admin clients in sync
+4. Use the Rollback button to revert to a prior configuration if the changes break something
 
-## Security Center
+### Delegate work to sub-agents
 
-**Route:** `/security`
+1. Open the parent agent's **Sub-agents** tab
+2. Create a sub-agent with a role description (e.g. "handles customer support triage")
+3. At runtime, the parent agent can hand off a turn to the sub-agent through its built-in delegation tool
+4. The sub-agent runs in its own thread with its own skills, knowledge, and memory
 
-The Security Center is the operator's view into guardrails and safety policy. It shows:
+## Known limits
 
-- **Guardrail stats** — blocks, allows, filter strength over time
-- **Registered guardrails** — created via Bedrock Guardrails and associated with agent templates
-- **Template assignments** — which templates enforce which guardrails
-
-Guardrails are assigned at the template level and inherited by child agents. That way, a tenant-wide safety policy only needs to be wired up once.
-
-## Sub-agents and workspaces
-
-Two smaller features worth naming:
-
-**Sub-agents** are agents that can be delegated to from a parent agent. A parent agent can list its sub-agents on the Sub-agents tab, and at runtime it can hand a turn off to one of them. This is how more complex agent graphs are assembled inside ThinkWork.
-
-**Workspaces** scope an agent's work to a named context — a project, a customer, a product area. Workspaces show up in the mobile app as selectable chips in the message input, and on the admin side each workspace has its own settings page.
-
-## Per-agent scheduled jobs
-
-**Route:** `/agents/:agentId/scheduled-jobs`
-
-Scheduled jobs (cron or event-driven) that fire in the context of a specific agent live under the agent detail page. This is distinct from tenant-level [Automations](/applications/admin/administration/#automations-and-routines), which are global to the tenant.
-
-Per-agent jobs are how an agent gets a recurring "heartbeat" — a scheduled prompt that runs the agent on a timer, inside its own thread, with its assigned skills and memory.
+- **Agent creation redirects** — the `/agents/new` route is a stub; the dialog is the real entry point.
+- **Two workspace routes** — `$agentId_.workspaces.tsx` and `$agentId_/workspace.tsx` both exist; treat them as equivalent.
+- **Memory edits depend on backend** — AgentCore records are read-only; Hindsight records are editable.
+- **Activity feed is client-filtered** — the agent detail page filters the tenant-wide queries rather than issuing agent-scoped ones, which is fine for small tenants but can be slow at scale.
 
 ## Related pages
 
+- [Agent Templates](/applications/admin/agent-templates/) — reusable bundles + explicit sync flow
+- [Agent Invites](/applications/admin/agent-invites/) — BYOB runtime registration
+- [Skills Catalog](/applications/admin/skills-catalog/) — where the skills installed here come from
+- [Tenant MCP Servers](/applications/admin/mcp-servers/) — MCP tool assignment source
+- [Memory](/applications/admin/memory/) — tenant-wide memory view
 - [Agents (concept)](/concepts/agents/) — the underlying agent model
-- [Skills authoring guide](/guides/skill-packs/) — writing custom skill packs
-- [Connectors & Tools](/applications/admin/connectors/) — connector-side wiring for things agents can act on
-- [MCP Tool Connectors](/concepts/mcp-servers/) — the MCP connector pattern

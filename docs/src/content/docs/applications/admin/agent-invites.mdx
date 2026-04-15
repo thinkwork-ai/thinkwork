@@ -1,0 +1,122 @@
+---
+title: Admin — Agent Invites
+description: BYOB agent invitations and join-request approvals. Generate invite tokens, track usage, and approve or reject incoming join requests.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Agent Invites are how BYOB (bring-your-own-runtime) agents register themselves with a ThinkWork tenant. Instead of the admin provisioning the agent directly, the operator generates an invite token, shares it with the external runtime, and the runtime walks through a join flow that ultimately lands as an agent in the tenant.
+
+**Route:** `/agents/invites`  
+**File:** `apps/admin/src/routes/_authed/_tenant/agents/invites.tsx`
+
+## Two tabs
+
+### Invites
+
+The Invites tab lists every invite the operator has generated with a table of:
+
+| Column | Notes |
+|---|---|
+| Agent name | The pre-reserved agent name |
+| Type | Adapter type (HTTP, webhook, custom) |
+| Uses / max | Counter for how many times the token has been claimed vs the cap |
+| Created | When the invite was generated |
+| Expires | When the invite token stops working |
+| Expiry badge | Expired / Active visual indicator |
+| Copy link button | Copies the invite URL to the clipboard with a state flash (check → copy → done icons) |
+
+A "New Invite" button opens a dialog that captures name, adapter type, max uses (default 1), and TTL (default 24 hours). On submit, a random 32-character token is generated and persisted.
+
+The invite URL has the form `https://<admin-url>/invite/<token>`. Operators share this with the BYOB runtime, which walks through:
+
+1. Adapter selection — pick the transport type (HTTP, webhook, etc.)
+2. Join request creation — the runtime identifies itself
+3. API key claim — the runtime receives a tenant-scoped API key it will use on all subsequent calls
+
+### Join Requests
+
+The Join Requests tab shows incoming join requests from runtimes that have started the claim flow but haven't yet been approved. Columns:
+
+| Column | Notes |
+|---|---|
+| Agent name | Matches the invite that triggered the request |
+| Adapter type | What the runtime declared itself as |
+| Status | `PENDING`, `APPROVED`, or `REJECTED` |
+| Created | When the request landed |
+
+Pending rows have explicit Approve / Reject actions. Approving creates the agent in the tenant roster (visible in [Agents](/applications/admin/agents/)) and issues the API key. Rejecting marks the invite spent without creating the agent.
+
+## State lifecycle
+
+```
+Invite generated
+    │
+    ▼
+BYOB runtime hits /invite/:token
+    │
+    ▼
+Adapter selection  ──►  JoinRequest row created (status: PENDING)
+                                │
+                                ▼
+                  Admin approves ──► Agent created + API key issued
+                  Admin rejects  ──► JoinRequest.status = REJECTED
+    │
+    ▼
+Invite uses++  (if usage reaches max, invite marked expired)
+```
+
+An invite can be claimed multiple times if `max_uses > 1`. Each claim generates a separate join request.
+
+## Data model
+
+- **Invites** are rows in an internal invites table with columns for tenant id, agent name, adapter type, token, max uses, current uses, created at, expires at. The table is managed through `/internal/invites` REST endpoints (list, create, delete).
+- **Join requests** are rows in an internal join-requests table with columns for tenant id, invite id, adapter type, status, created at, approved at. Managed through `/internal/join-requests` REST endpoints.
+- **API keys** generated on approval are stored in the tenant's credential vault.
+
+Both tables are REST-driven, not GraphQL.
+
+## Workflows
+
+### Register a BYOB agent
+
+1. Operator clicks "New Invite" on the Invites tab
+2. Fill agent name, adapter type, max uses, TTL
+3. Copy the generated invite link
+4. Paste into the BYOB runtime's configuration or deployment pipeline
+5. The runtime boots and hits `/invite/:token` on first run
+6. The runtime walks through adapter selection and creates a join request
+7. The operator sees the pending request on the Join Requests tab
+8. Operator clicks Approve
+9. The agent appears in [Agents](/applications/admin/agents/) and the runtime receives its API key
+
+### Revoke a rogue BYOB agent
+
+1. Find the agent in the [Agents](/applications/admin/agents/) list
+2. Pause or delete it
+3. Also revoke the API key through the credential vault (see [Connectors](/applications/admin/connectors/) for credential rotation)
+4. The runtime will receive 401s on its next call and stop
+
+<Aside type="caution">
+Revoking a BYOB agent does not automatically revoke its API key — those are separate mutations. Both steps are needed to fully cut off a compromised runtime.
+</Aside>
+
+## Security considerations
+
+- **Invite tokens are bearer credentials.** Anyone with the token can claim it until it expires or hits max uses. Treat them like API keys.
+- **TTLs should be short.** The default 24-hour TTL is deliberate; don't extend it unless the deployment pipeline genuinely needs more time.
+- **Max uses should be 1 unless the runtime needs to re-register.** Multi-use invites make compromise harder to detect because a single successful claim doesn't expire the token.
+- **Approve requests with context.** The Join Requests tab shows adapter type but not much more — operators should know which runtimes they're expecting and reject unexpected requests.
+
+## Known limits
+
+- **No automated reject policy.** Every join request requires manual approval. There's no "auto-approve if the adapter type matches X" setting.
+- **No invite rotation.** If an invite needs to be extended, the operator generates a new invite rather than extending an existing one.
+- **REST, not GraphQL.** Invites and join requests don't flow through the main GraphQL API; they use internal REST endpoints, so they don't benefit from the urql cache or live subscriptions on other pages.
+- **Single agent per invite.** An invite reserves a single agent name, not a pool. Bulk BYOB registration requires bulk invite generation.
+
+## Related pages
+
+- [Agents](/applications/admin/agents/) — where approved BYOB agents appear
+- [Connectors](/applications/admin/connectors/) — credential vault and API key management
+- [Authentication & Tenancy](/applications/admin/authentication-and-tenancy/) — how the tenant context is resolved after a BYOB agent authenticates

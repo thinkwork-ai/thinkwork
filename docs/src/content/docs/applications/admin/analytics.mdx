@@ -1,0 +1,131 @@
+---
+title: Admin — Analytics
+description: Activity, Cost, and Performance views for the tenant — thread turns over time, LLM/infra/tools cost breakdowns, per-agent latency, and budget tracking.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The Analytics page is the operator's tenant-wide view into what the tenant is doing and what it's spending. Three tabs — **Activity**, **Cost**, **Performance** — switch between views built from the same underlying aggregates.
+
+**Route:** `/analytics?view=activity|cost|performance`  
+**File:** `apps/admin/src/routes/_authed/_tenant/analytics.tsx`
+
+## Layout
+
+A single top-of-page tab toggle switches between the three views. The Performance view also has an agent selector that scopes the charts to a single agent. All charts are rendered with [Recharts](https://recharts.org).
+
+## Activity view
+
+The Activity view answers "is the tenant busy, and where is the work happening?"
+
+It shows thread-turn counts rolled up to day buckets over a rolling window. The aggregation is computed client-side from the same thread and turn queries the [Threads](/applications/admin/threads/) page uses, filtered by timestamp.
+
+Queries:
+
+- `ThreadsListQuery` — thread-level data
+- `OnThreadTurnUpdatedSubscription` — real-time updates so the Activity view stays current as new turns land
+
+Because activity is computed client-side, it's fast on small tenants and slower on very large ones. A server-side activity aggregate is on the roadmap for tenants with many thousands of daily turns.
+
+## Cost view
+
+The Cost view is the money conversation. It's backed by **server-side aggregation** — the GraphQL resolvers pre-compute cost summaries and time series so the UI doesn't have to re-aggregate from per-turn rows.
+
+### Metric cards
+
+Six cards across the top:
+
+| Card | Value |
+|---|---|
+| **Total Spend** | Sum across LLM, infrastructure, and tools for the period |
+| **LLM** | Spend on model inference |
+| **Infra** | Spend on underlying compute (Lambda, Aurora, S3) |
+| **Tools** | Spend on tool invocations (MCP calls, built-in tools, connectors) |
+| **Invocations** | Count of turn events in the period |
+| **Cost / Event** | Total spend divided by invocations |
+
+### Trend chart
+
+A stacked bar chart across the last 30 days, split into LLM / Infra / Tools bands. The chart uses `CostTimeSeriesQuery` with `$days: 30`.
+
+### Agent budget table
+
+A per-agent table with columns for name, total spend this period, percent of budget used, and a status badge (`ok`, `warning`, `over`). Budgets are resolved via `BudgetStatusQuery`, which reads per-template budget policies.
+
+### Cost by model
+
+A breakdown table: model name, total spend, input tokens, output tokens. Model names are resolved to human-readable labels through `ModelCatalogQuery` so the UI shows "Claude Sonnet 4.6" rather than `anthropic.claude-sonnet-4-6-v1:0`.
+
+### Queries
+
+| Query | Purpose |
+|---|---|
+| `CostSummaryQuery($tenantId)` | Top-of-page metric cards |
+| `CostByAgentQuery($tenantId)` | Per-agent budget table |
+| `CostByModelQuery($tenantId)` | Cost by model table |
+| `CostTimeSeriesQuery($tenantId, $days)` | Trend chart |
+| `BudgetStatusQuery($tenantId)` | Budget percent used / status badges |
+| `ModelCatalogQuery` | Human-readable model labels |
+
+### Zustand caching
+
+Cost data is held in `useCostStore` (Zustand) so the Dashboard and Analytics pages don't re-fetch it on every navigation. Hydration happens lazily on first access; subsequent reads come from the store.
+
+## Performance view
+
+The Performance view answers "which agents are slow, which agents fail, and where are the tokens going?"
+
+The page takes an agent selector first — there's no all-agents aggregate here because the chart shapes would lose their meaning across heterogeneous agents. Pick an agent and the view shows:
+
+- Latency percentiles (p50 / p95 / p99) over time
+- Token usage (input and output) over time
+- Error rate
+
+Queries for performance pull from thread traces or the audit log's cost events depending on implementation. The exact query set is light in the current release — the Performance view is the thinnest of the three and leans on ad-hoc queries more than on dedicated resolvers.
+
+## Workflows
+
+### Answer "are we on budget this month?"
+
+1. Open Analytics → Cost
+2. Look at the Total Spend metric card and compare to the tenant's monthly budget
+3. Check the Agent budget table for any row in `warning` or `over` status
+4. If an agent is over budget, click through to its [Agents](/applications/admin/agents/) detail page and either adjust its template's budget cap or pause the agent
+
+### Answer "which agent is eating tokens?"
+
+1. Open Analytics → Cost
+2. Scroll to the "Cost by Agent" table
+3. Sort by total spend descending
+4. The top row is the top spender
+5. Cross-reference in Performance view to see whether it's high volume or high per-turn cost
+
+### Answer "is anything slower than usual?"
+
+1. Open Analytics → Performance
+2. Pick an agent
+3. Look at the latency percentile chart
+4. Compare p95 to the baseline from prior weeks
+5. If p95 is trending up, check [Threads](/applications/admin/threads/) for that agent to find the slow turns
+
+## Data sources
+
+- **Cost aggregates** — computed server-side from a `cost_events` or similar per-turn table, rolled up into `cost_aggregates` materialized views. The UI never sees raw cost rows.
+- **Activity counts** — client-side aggregation from the thread and turn queries
+- **Budget status** — derived server-side from per-template budget policies and current-period spend
+- **Model catalog** — a static catalog maintained alongside the tenant configuration
+
+## Known limits
+
+- **Activity is client-computed.** For tenants with tens of thousands of daily turns, the Activity view can be slow to render. A server-side activity aggregate is on the [Roadmap](/roadmap/).
+- **Performance view is shallow.** It shows one agent at a time and lacks a cross-agent comparison. A fuller performance dashboard is a future improvement.
+- **Cost attribution is per-agent only.** There's no per-thread or per-user chargeback view; see [Roadmap → Holistic cost tracking](/roadmap/#holistic-cost-tracking).
+- **No custom date ranges.** The trend chart is fixed to 30 days; longer or shorter windows aren't exposed in the UI.
+
+## Related pages
+
+- [Dashboard](/applications/admin/dashboard/) — the quick-glance metric cards that the Analytics page backs
+- [Threads](/applications/admin/threads/) — drill into the specific turns that drove a number
+- [Agents](/applications/admin/agents/) — per-agent metrics and budget adjustments
+- [Budgets, Usage, and Audit (concept)](/concepts/control/budgets-usage-and-audit/) — the control layer
+- [Roadmap](/roadmap/) — what's coming next in cost tracking and eval UI
