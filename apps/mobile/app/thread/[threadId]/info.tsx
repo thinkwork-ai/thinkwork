@@ -212,7 +212,7 @@ export default function ThreadInfoRoute() {
               return (
                 <Pressable
                   key={child.id}
-                  onPress={() => router.push(`/thread/${child.id}`)}
+                  onPress={() => router.push({ pathname: `/thread/${child.id}`, params: child.title ? { title: child.title } : {} })}
                   className="flex-row items-center gap-2.5 px-4 py-3 border-t border-neutral-200 dark:border-neutral-800 active:opacity-70"
                 >
                   <Circle size={14} color={statusColor((child.status || "").toUpperCase(), isDark)} />

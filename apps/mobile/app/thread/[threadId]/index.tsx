@@ -4,7 +4,8 @@ import { View, FlatList, Pressable, Keyboard, KeyboardAvoidingView, Platform, Al
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ChevronLeft, ChevronRight, Info, Check, Circle, CheckSquare, ListChecks, AlertCircle, Clock } from "lucide-react-native";
+import { ChevronLeft, ChevronRight, Info, Check, Circle, CheckSquare, ListChecks, AlertCircle, Clock, Trash2 } from "lucide-react-native";
+import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { MessageInputFooter } from "@/components/input/MessageInputFooter";
 import { QuickActionsSheet, type QuickActionsSheetRef } from "@/components/chat/QuickActionsSheet";
 import { useQuickActions, useDeleteQuickAction, type QuickAction } from "@/lib/hooks/use-quick-actions";
@@ -33,8 +34,19 @@ import {
   UpdateThreadMutation,
 } from "@/lib/graphql-queries";
 
+function LoadingTitle() {
+  const [dots, setDots] = useState("");
+  useEffect(() => {
+    const iv = setInterval(() => {
+      setDots((d) => (d.length >= 3 ? "" : d + "."));
+    }, 350);
+    return () => clearInterval(iv);
+  }, []);
+  return <Text className="text-lg font-semibold">{`Loading${dots}`}</Text>;
+}
+
 export default function ThreadDetailRoute() {
-  const { threadId } = useLocalSearchParams<{ threadId: string }>();
+  const { threadId, title: initialTitle } = useLocalSearchParams<{ threadId: string; title?: string }>();
   const router = useRouter();
   const { user } = useAuth();
   const tenantId = user?.tenantId;
@@ -344,7 +356,13 @@ export default function ThreadDetailRoute() {
           {/* Left: back + title */}
           <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace("/")} className="flex-row items-center gap-1.5 active:opacity-70 flex-shrink" style={{ maxWidth: useTaskFlatList ? "65%" : "80%" }}>
             <ChevronLeft size={24} color={colors.foreground} />
-            <Text className="text-lg font-semibold" numberOfLines={1}>{isLoaded ? thread.title : "Loading..."}</Text>
+            {isLoaded ? (
+              <Text className="text-lg font-semibold" numberOfLines={1}>{thread.title}</Text>
+            ) : initialTitle ? (
+              <Text className="text-lg font-semibold" numberOfLines={1}>{initialTitle}</Text>
+            ) : (
+              <LoadingTitle />
+            )}
           </Pressable>
 
           {/* Right actions */}
@@ -356,11 +374,44 @@ export default function ThreadDetailRoute() {
                   <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>Done</Text>
                 </Pressable>
               )}
-              {!useTaskFlatList && (
-                <Pressable onPress={() => router.push(`/thread/${threadId}/info`)} className="p-2 active:opacity-70">
-                  <Info size={22} color={colors.mutedForeground} strokeWidth={1.25} />
-                </Pressable>
-              )}
+              <HeaderContextMenu
+                items={[
+                  {
+                    label: useTaskFlatList ? "Task Info" : "Thread Info",
+                    icon: Info,
+                    onPress: () => router.push(`/thread/${threadId}/info`),
+                  },
+                  {
+                    label: useTaskFlatList ? "Delete Task" : "Delete Thread",
+                    icon: Trash2,
+                    destructive: true,
+                    separator: true,
+                    onPress: () => {
+                      Alert.alert(
+                        useTaskFlatList ? "Delete Task?" : "Delete Thread?",
+                        "This action cannot be undone.",
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          {
+                            text: "Delete",
+                            style: "destructive",
+                            onPress: async () => {
+                              try {
+                                await executeUpdateThread({ id: threadId, input: { archivedAt: new Date().toISOString() } });
+                                if (router.canGoBack()) router.back();
+                                else router.replace("/");
+                              } catch (e) {
+                                console.error("[ThreadDetail] Delete failed:", e);
+                                Alert.alert("Error", "Failed to delete. Please try again.");
+                              }
+                            },
+                          },
+                        ]
+                      );
+                    },
+                  },
+                ]}
+              />
             </View>
           )}
         </View>
@@ -378,7 +429,7 @@ export default function ThreadDetailRoute() {
               renderItem={({ item, index }) => (
                 <View>
                   {index > 0 && <View className="h-px bg-neutral-200 dark:bg-neutral-800" style={{ marginLeft: 68 }} />}
-                  <TaskRow task={item} onPress={() => router.push(`/thread/${item.id}`)} />
+                  <TaskRow task={item} onPress={() => router.push({ pathname: `/thread/${item.id}`, params: item.title ? { title: item.title } : {} })} />
                 </View>
               )}
               ListHeaderComponent={
@@ -452,7 +503,11 @@ export default function ThreadDetailRoute() {
               currentUserId={currentUser?.id}
             />
           )
-        ) : null}
+        ) : (
+          <View className="flex-1 items-center justify-center">
+            <Text className="font-mono text-xs" style={{ color: colors.mutedForeground }}>loading…</Text>
+          </View>
+        )}
       </View>
 
       {/* Message input */}
