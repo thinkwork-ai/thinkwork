@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { COLORS } from "@/lib/theme";
 import { useMe } from "@/lib/hooks/use-users";
-import { useTenant } from "@/lib/hooks/use-tenants";
 import { AgentsQuery } from "@/lib/graphql-queries";
 const API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(/\/graphql$/, "");
 const GRAPHQL_API_KEY = process.env.EXPO_PUBLIC_GRAPHQL_API_KEY || "";
@@ -48,8 +47,10 @@ export default function IntegrationsScreen() {
 
   const [meResult] = useMe();
   const user = meResult.data?.me ?? undefined;
-  const [tenantResult] = useTenant(user?.tenantId);
-  const tenant = tenantResult.data?.tenant ?? undefined;
+  // tenantId is the only field we actually consume from tenant anywhere in
+  // this screen — no need to round-trip a useTenant() query that can hang
+  // the whole screen behind an extra GraphQL request.
+  const tenantId = user?.tenantId ?? undefined;
 
   const [connections, setConnections] = useState<ConnectionRow[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -61,8 +62,8 @@ export default function IntegrationsScreen() {
   // "Default task agent" picker. Query is paused until tenant is known.
   const [agentsResult] = useQuery({
     query: AgentsQuery,
-    variables: { tenantId: tenant?.id || "" },
-    pause: !tenant?.id,
+    variables: { tenantId: tenantId || "" },
+    pause: !tenantId,
   });
   const myAgents = useMemo(() => {
     const all = (agentsResult.data?.agents ?? []) as Array<{
@@ -78,12 +79,19 @@ export default function IntegrationsScreen() {
   }, [agentsResult.data?.agents, user?.id]);
 
   const fetchConnections = useCallback(async () => {
-    if (!tenant?.id || !user?.id) return;
+    // Wait for tenant + user to resolve, but don't hang the loading
+    // state — setLoading(false) so the render gate releases and the
+    // screen can show whatever state it has (empty list is better
+    // than a permanent skeleton).
+    if (!tenantId || !user?.id) {
+      setLoading(false);
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE}/api/connections`, {
         headers: {
           "x-api-key": GRAPHQL_API_KEY,
-          "x-tenant-id": tenant.id,
+          "x-tenant-id": tenantId,
           "x-principal-id": user.id,
         },
       });
@@ -96,7 +104,7 @@ export default function IntegrationsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [tenant?.id, user?.id]);
+  }, [tenantId, user?.id]);
 
   useEffect(() => {
     void fetchConnections();
@@ -109,16 +117,16 @@ export default function IntegrationsScreen() {
   };
 
   const handleConnectGoogle = async () => {
-    if (!tenant?.id || !user?.id) return;
-    const url = `${API_BASE}/api/oauth/authorize?provider=google_productivity&userId=${user.id}&tenantId=${tenant.id}`;
+    if (!tenantId || !user?.id) return;
+    const url = `${API_BASE}/api/oauth/authorize?provider=google_productivity&userId=${user.id}&tenantId=${tenantId}`;
     await WebBrowser.openBrowserAsync(url);
     // Refresh connections after OAuth flow completes
     await fetchConnections();
   };
 
   const handleConnectMicrosoft = async () => {
-    if (!tenant?.id || !user?.id) return;
-    const url = `${API_BASE}/api/oauth/authorize?provider=microsoft_365&userId=${user.id}&tenantId=${tenant.id}`;
+    if (!tenantId || !user?.id) return;
+    const url = `${API_BASE}/api/oauth/authorize?provider=microsoft_365&userId=${user.id}&tenantId=${tenantId}`;
     await WebBrowser.openBrowserAsync(url);
     await fetchConnections();
   };
@@ -142,7 +150,7 @@ export default function IntegrationsScreen() {
       providerName: string,
       agentId: string | null,
     ) => {
-      if (!tenant?.id) return;
+      if (!tenantId) return;
       const currentMeta =
         (connection.metadata as Record<string, unknown> | null) ?? {};
       const currentProviderMeta =
@@ -158,7 +166,7 @@ export default function IntegrationsScreen() {
           headers: {
             "Content-Type": "application/json",
             "x-api-key": GRAPHQL_API_KEY,
-            "x-tenant-id": tenant.id,
+            "x-tenant-id": tenantId,
           },
           body: JSON.stringify({
             metadata: { [providerName]: nextProviderMeta },
@@ -176,7 +184,7 @@ export default function IntegrationsScreen() {
         setSavingAgentFor(null);
       }
     },
-    [tenant?.id, fetchConnections],
+    [tenantId, fetchConnections],
   );
 
   const handleDisconnect = async (connectionId: string, providerName: string) => {
@@ -194,7 +202,7 @@ export default function IntegrationsScreen() {
                 method: "DELETE",
                 headers: {
                   "x-api-key": GRAPHQL_API_KEY,
-                  "x-tenant-id": tenant?.id || "",
+                  "x-tenant-id": tenantId || "",
                 },
               });
               await fetchConnections();
@@ -225,7 +233,7 @@ export default function IntegrationsScreen() {
   // Check which providers are already connected
   const connectedProviders = new Set(activeConnections.map((c) => c.provider_name));
 
-  if (loading || !tenant) {
+  if (loading) {
     return (
       <DetailLayout title="Connectors">
         <View className="flex-1 p-4" style={{ maxWidth: 600 }}>
