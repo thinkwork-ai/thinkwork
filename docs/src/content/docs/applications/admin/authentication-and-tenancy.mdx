@@ -1,0 +1,154 @@
+---
+title: Admin — Authentication & Tenancy
+description: Cognito sign-in, tenant resolution, JWT plumbing, the authenticated layout, and the global dialogs and subscription wiring that sit underneath every admin page.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Every page in the admin app runs inside two nested layouts: `_authed` (is-signed-in guard) and `_authed/_tenant` (tenant-resolved shell). Understanding how those two layers work explains why the admin app feels the way it does — why pages load without a separate sign-in flow per page, why every query carries a tenant id, and where the realtime subscription plumbing lives.
+
+## Sign-in
+
+**Route:** `/sign-in`
+
+Sign-in is Cognito-backed with two entry points:
+
+- **Email / password** — direct Cognito user pool authentication
+- **Google SSO** — federated identity through Cognito's Google provider, completing at `/auth/callback`
+
+After authentication, the app stores the JWT in-memory, kicks off a background refresh loop (see [Token refresh](#token-refresh)), redirects to the authenticated layout, and preserves any `next` query parameter so the user lands on the page they were trying to reach.
+
+The sign-in page itself is small — a logo, the two entry points, and any invite-flow context (if the user was sent from a tenant invitation). Invites are handled at `/invite/:token` and flow through a separate adapter-selection → join-request → API-key-claim path before landing at sign-in.
+
+## The `_authed` guard
+
+**File:** `apps/admin/src/routes/_authed.tsx`
+
+The `_authed` layout is a thin guard. Its job is:
+
+1. Call `getCurrentSession()` from the auth context
+2. If there's no session, `throw redirect({ to: "/sign-in", search: { next: <current path> } })`
+3. Otherwise, render children
+
+Anything under `_authed/...` in the route tree is automatically behind this gate. That's why individual pages don't need their own auth check — they inherit it.
+
+## The `_authed/_tenant` layout
+
+**File:** `apps/admin/src/routes/_authed/_tenant.tsx`
+
+This is the big one. Every page in the Work, Agents, and Manage groups lives under this layout. It owns:
+
+- The **sidebar navigation** (Work / Agents / Manage / Other groups)
+- The **top bar** with tenant switcher, command palette, notifications, theme toggle, and user menu
+- The **breadcrumb bar** driven by `BreadcrumbContext` so each page can set its own trail
+- **Global dialogs** — `CreateThreadDialog` and `NewAgentDialog` are mounted at the layout level and triggered via context hooks (`openNewThread()`, `openNewAgent()`), not through a route change
+- The **`AppSyncSubscriptionProvider`** that manages live subscription connections for the whole session
+
+Rendering this layout also guarantees that `useTenant()` resolves to a real tenant id before any child page fetches data.
+
+### Tenant resolution
+
+**File:** `apps/admin/src/lib/TenantContext.tsx`
+
+Tenant resolution is a one-shot fetch on app boot:
+
+1. After sign-in, the app hits `/api/tenants/me`
+2. The response carries the tenant id, name, slug, and any tenant-level flags
+3. Those are stored in React context via `useTenant()`
+4. Every tenant-scoped GraphQL query reads `tenantId` from that context as a default variable
+
+If the `/api/tenants/me` call fails or returns an empty tenant, the layout surfaces a hard error and the user cannot proceed. Operators who manage multiple tenants switch by choosing a different tenant in the top bar — the JWT is reused, the tenant context is swapped, and all queries re-fetch.
+
+## JWT plumbing
+
+**File:** `apps/admin/src/lib/graphql-client.ts`
+
+The admin app uses urql with three exchanges: `cacheExchange` → `fetchExchange` → `subscriptionExchange`.
+
+### HTTP requests
+
+Every HTTP request (GraphQL queries and mutations, REST calls under `/api/...`) goes through `fetchOptions()`, which returns:
+
+```
+{
+  headers: {
+    Authorization: cachedToken,
+    "x-tenant-id": tenantId,
+  },
+}
+```
+
+`cachedToken` is a closure variable updated by the background refresh loop. It's read synchronously at request time so every call gets the current token without awaiting anything.
+
+### Token refresh
+
+`startTokenRefresh()` runs every 5 minutes in the background, calling `getIdToken()` from the auth context and updating `cachedToken`. The refresh is fire-and-forget from the request path's point of view — requests never wait on it.
+
+<Aside type="note">
+If the app sits idle long enough for the refresh token to expire (hours, not minutes), the next request returns 401 and the app forces a sign-out. There is no mid-request retry-with-refresh flow.
+</Aside>
+
+### AppSync subscriptions
+
+Subscriptions use AppSync's custom WebSocket protocol, not standard `graphql-ws`. The subscription exchange converts the HTTP URL (`VITE_GRAPHQL_HTTP_URL`) into the realtime subdomain (`appsync-realtime-api`), opens a WebSocket, performs the AppSync `connection_init` handshake with the JWT in the connection payload, then starts individual subscription streams as pages mount them.
+
+Three subscriptions fire across most of the app:
+
+- `OnThreadUpdatedSubscription` — any thread changed
+- `OnThreadTurnUpdatedSubscription` — any run/turn state transition
+- `OnAgentStatusChangedSubscription` — an agent came online, went idle, or was stopped
+
+Each subscription re-executes the relevant queries (threads list, agent detail, dashboard metrics) with `network-only` request policy so the UI stays live without a manual refresh.
+
+## Shared layout components
+
+The admin app leans heavily on a small set of reusable primitives. Every page uses some or all of these:
+
+| Component | Purpose |
+|---|---|
+| `PageLayout` | Wraps every tenant page. Holds the header + scrollable content area |
+| `PageHeader` | Title + description + optional action buttons (used consistently) |
+| `PageSkeleton` | Shimmer loading placeholder while the first query resolves |
+| `EmptyState` | Icon + title + description + optional CTA for empty lists |
+| `DataTable` | TanStack Table wrapper — sortable, filterable, paginated, row-click navigable |
+| `StatusBadge` | Status → color mapping for thread statuses, agent statuses, and run statuses |
+| `Badge` | Generic label badge (outline / secondary variants) |
+| `Dialog` / `Sheet` / `Popover` | Radix primitives for modals, side panels, dropdowns |
+| `Tabs` | Tab panel wrapper used for agent detail, analytics views, and security tabs |
+| `InlineEditor` | In-place text editing with save-on-blur for titles and descriptions |
+
+The sidebar groups — Work, Agents, Manage, Other — are defined in `AppSidebar` and match the top-level route tree under `_authed/_tenant`.
+
+## Global state
+
+The admin app uses a mix of urql for server state and Zustand for client-side caches:
+
+- **urql cache** — every GraphQL query and mutation goes through urql's normalized cache with configurable request policies (`cache-first`, `cache-and-network`, `network-only`)
+- **`useCostStore`** — Zustand store that caches cost data by agent; hydrated by the dashboard and analytics views so subsequent pages don't refetch
+- **`useActiveTurnsStore`** — tracks which threads currently have running turns, used by the "running" shimmer indicator in the threads list
+- **`useTenant()`, `useAuth()`, `useBreadcrumbs()`, `useDialog()`, `usePanel()`** — context hooks for layout-scoped state
+
+No Redux, no MobX — the split between urql (server state) and a handful of Zustand stores (client-only caches) is deliberate and kept small.
+
+## Notable routes outside the authenticated tree
+
+Three routes live outside `_authed`:
+
+- `/sign-in` — the entry point (above)
+- `/auth/callback` — the OAuth redirect landing for Google SSO; exchanges the code for tokens and routes into the app
+- `/invite/:token` — the public agent-invite flow (adapter selection, join request, API key claim) used for BYOB agent registration
+
+These pages do not have access to the tenant context because they run before tenant resolution.
+
+## Known limits
+
+- **No mid-session refresh retry.** If a request returns 401 because the token expired between refresh cycles, the app signs the user out rather than silently refreshing and retrying.
+- **Multi-tenant UI is tenant-at-a-time.** Operators with access to several tenants switch one at a time in the top bar; there is no "all tenants" aggregated view.
+- **Development bypass.** Local dev environments can bypass the Cognito gate via a config flag, which is convenient but means the sign-in flow isn't exercised every time a developer runs the app locally.
+
+## Related pages
+
+- [Admin Overview](/applications/admin/) — the full map of pages
+- [Mobile — Authentication](/applications/mobile/authentication/) — the mobile-side sign-in flow (Google OAuth + pre-signup Lambda)
+- [Architecture](/architecture/) — where the admin app sits in the three-tier deployment model
+- [Deploy Configuration](/deploy/configuration/) — the Cognito user pool and identity provider setup

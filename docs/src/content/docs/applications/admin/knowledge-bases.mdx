@@ -1,0 +1,156 @@
+---
+title: Admin — Knowledge Bases
+description: Create and manage Bedrock Knowledge Bases, upload documents via presigned S3 URLs, trigger Bedrock ingestion, and monitor sync status.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Knowledge Bases are Bedrock Knowledge Bases backed by Aurora `pgvector`. The admin UI lets operators create knowledge bases, upload documents directly to their underlying S3 bucket, trigger Bedrock's ingestion job, and watch sync status without leaving the app.
+
+## The list view
+
+**Route:** `/knowledge-bases`  
+**File:** `apps/admin/src/routes/_authed/_tenant/knowledge-bases/index.tsx`
+
+A searchable `DataTable` with columns for:
+
+| Column | Notes |
+|---|---|
+| Name | Display name + icon |
+| Status | `creating`, `ready`, `syncing`, `error` |
+| Docs | Total document count |
+| Last Sync | Relative timestamp of the most recent Bedrock ingestion run |
+| Description | Short description |
+
+A "Create KB" button in the header fires a creation flow (not deeply visible in the current route — the empty-state CTA is the typical entry point for most operators). Clicking a row navigates to the detail page.
+
+## The detail view
+
+**Route:** `/knowledge-bases/:kbId`  
+**File:** `apps/admin/src/routes/_authed/_tenant/knowledge-bases/$kbId.tsx`
+
+The detail page is a two-column grid: Documents on the left, Sync on the right, with a header showing the KB name, slug, status badges, and a delete confirmation flow.
+
+### Documents card
+
+The Documents card shows every file currently in the KB's S3 bucket with:
+
+- File name
+- Size
+- Last modified timestamp
+- Delete button (per file)
+
+An **Upload** button opens the file picker. Uploading uses a **presigned URL** pattern: the admin UI requests a presigned PUT URL from `POST /api/knowledge-bases/files` with `{ action: "getUploadUrl", kbId, filename, contentType }`, then uploads directly from the browser to S3. The admin server is never in the file-transfer path.
+
+After upload, the document list refreshes via `listDocuments(kbId)`.
+
+### Sync card
+
+The Sync card shows Bedrock-side state:
+
+- **Status** — the KB's own lifecycle state
+- **Last Sync** — relative timestamp
+- **Doc Count** — total document count
+- **Sync Status** — `SUCCESS`, `FAILED`, or similar (distinct from the KB status above)
+- **Chunking strategy** — how documents are split (fixed-size or semantic chunking)
+- **Chunk size** — tokens per chunk
+- **Chunk overlap** — percent overlap between chunks
+- **Embedding model** — the model used for vector embedding
+
+A **Sync Now** button triggers `SyncKnowledgeBaseMutation`, which starts a Bedrock ingestion job. The UI polls `KnowledgeBaseDetailQuery` every 5 seconds while `status === "syncing"` to surface progress.
+
+<Aside type="caution">
+Sync is not automatic on upload. Uploading a document adds it to S3 but the new document is not searchable until the operator triggers a sync. This is deliberate — Bedrock ingestion costs tokens and takes minutes, so the admin app waits for an explicit operator action.
+</Aside>
+
+### Error state
+
+If the KB has errored (`status === "error"`), the detail page shows the error message at the top. Common causes: embedding-model quota exhaustion, invalid document formats, S3 permissions drift.
+
+## REST endpoint
+
+Document file operations use a single RPC-style endpoint:
+
+```
+POST /api/knowledge-bases/files
+```
+
+With action dispatched through the request body:
+
+| Action | Behavior |
+|---|---|
+| `list` | Returns `{ files: [{ name, size, lastModified }] }` |
+| `getUploadUrl` | Returns `{ uploadUrl }` — a presigned S3 PUT URL valid ~15 minutes |
+| `delete` | Deletes a named file from the KB's S3 bucket |
+
+The upload URL response is short-lived and regenerated on each upload. The URL is scoped to a specific filename and bucket prefix, so a stolen URL can only overwrite the exact file it was issued for.
+
+## GraphQL queries
+
+| Query / Mutation | Purpose |
+|---|---|
+| `KnowledgeBasesListQuery($tenantId)` | List with summary fields |
+| `KnowledgeBaseDetailQuery($id)` | Full detail with chunking, embedding, sync metadata |
+| `UpdateKnowledgeBaseMutation` | Edit KB metadata (name, description, chunking) |
+| `DeleteKnowledgeBaseMutation($id)` | Hard delete |
+| `SyncKnowledgeBaseMutation($id)` | Trigger a Bedrock ingestion job |
+
+The detail query carries most of the interesting fields: `status`, `errorMessage`, `lastSyncAt`, `lastSyncStatus`, `chunkingStrategy`, `chunkSizeTokens`, `chunkOverlapPercent`, `embeddingModel`, `documentCount`.
+
+## Assigning a KB to an agent
+
+Knowledge bases are not automatically attached to every agent. The assignment happens on the agent's Knowledge tab — see [Agents → Knowledge](/applications/admin/agents/#knowledge). An operator attaches a KB to a specific agent, and the agent retrieves from that KB on every turn.
+
+## Data model
+
+- **`knowledge_bases`** — Aurora table with name, slug, status, description, error_message, chunking_strategy, chunk_size_tokens, chunk_overlap_percent, embedding_model, last_sync_at, last_sync_status, document_count
+- **Source documents** — S3 under `s3://<bucket>/kbs/<kbId>/<filename>`
+- **Vector index** — Aurora `pgvector` extension; the Bedrock ingestion job writes chunks and their embeddings directly into Aurora
+- **Agent attachment** — `agent_knowledge_bases` join table
+
+Because the vector index lives in Aurora, a single Aurora snapshot restore brings back KBs, their vector indexes, and all tenant data in one shot. The only S3 state to worry about on disaster recovery is the source documents themselves, and those have S3 versioning enabled.
+
+## Workflows
+
+### Create and populate a knowledge base
+
+1. Click "Create KB" (or the empty-state CTA)
+2. Enter name, description, chunking strategy
+3. Save — the row is created with `status: creating` → `ready`
+4. Open the detail page
+5. Upload documents one at a time or in a batch (each upload goes directly to S3 via presigned URL)
+6. Click **Sync Now** — the KB transitions to `syncing`
+7. The page polls every 5s until sync completes
+8. Attach the KB to one or more agents on their Knowledge tab
+9. Agents start retrieving from the new KB on their next turn
+
+### Update a document
+
+1. Open the KB detail page
+2. Delete the stale version
+3. Upload the new version
+4. Click Sync Now
+5. Wait for sync to complete — the old chunks are removed and the new chunks are indexed
+
+### Tune chunking
+
+1. Open the detail page
+2. Update `chunkingStrategy`, `chunkSizeTokens`, or `chunkOverlapPercent` (likely via an edit dialog; not deeply visible in route code)
+3. Save — the KB does not re-chunk existing documents automatically
+4. Trigger Sync Now to re-chunk with the new settings
+
+## Known limits
+
+- **No automatic sync on upload.** Every upload requires a manual Sync Now click.
+- **Polling is client-side.** The admin UI polls `KnowledgeBaseDetailQuery` every 5 seconds while the sync is in flight. There's no subscription for sync completion events.
+- **Document upload is per-file.** Bulk upload is sequential; the UI fires presigned-URL requests one at a time.
+- **No in-UI document preview.** Clicking a file does not open a preview; the admin UI only lists, uploads, and deletes.
+- **Delete is permanent.** No archival.
+
+## Related pages
+
+- [Agents — Knowledge tab](/applications/admin/agents/#knowledge) — where a KB gets attached to an agent
+- [Memory](/applications/admin/memory/) — the other context layer: stateful memory vs stateless documents
+- [Document Knowledge (concept)](/concepts/knowledge/document-knowledge/) — the product model
+- [Retrieval and Context](/concepts/knowledge/retrieval-and-context/) — how retrieval is assembled into a turn
+- [Architecture](/architecture/) — the three-tier deployment including Bedrock and Aurora pgvector

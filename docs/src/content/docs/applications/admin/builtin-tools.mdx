@@ -1,0 +1,123 @@
+---
+title: Admin — Built-in Tools
+description: Provider-scoped tools that ship with ThinkWork — currently Web Search via Exa or SerpAPI — with tenant-level API keys stored in the credential vault.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Built-in tools are provider-scoped capabilities that ship with ThinkWork itself, with credentials stored directly in the credential vault. They are distinct from [MCP servers](/applications/admin/mcp-servers/) — MCP servers are remote endpoints ThinkWork calls at runtime; built-in tools are standard integrations where the tenant only needs to provide an API key.
+
+**Route:** `/builtin-tools`  
+**File:** `apps/admin/src/routes/_authed/_tenant/builtin-tools.tsx`
+
+## What's in the catalog
+
+The catalog is deliberately small. In the current release, the catalog is effectively a single entry — **Web Search** — with two provider options:
+
+| Tool | Providers |
+|---|---|
+| Web Search | Exa, SerpAPI |
+
+The catalog is defined in both the admin UI (as a hardcoded array) and the backend (`BUILTIN_TOOL_CATALOG`). Extending the catalog requires code in both places — the UI hardcodes the slug, display name, description, and available provider list so the form can render the right fields.
+
+## The list view
+
+A `DataTable` showing every built-in tool and its current state:
+
+| Column | Notes |
+|---|---|
+| Tool name | Display name (Web Search) |
+| Provider | Badge showing the selected provider (Exa / SerpAPI), or empty if not configured |
+| Status | Enabled / Disabled / Not Configured |
+| API Key | "Set" if a credential is stored, "—" otherwise |
+| Last tested | Relative timestamp from the last Test result |
+
+Clicking a row opens the **`ConfigureDialog`**.
+
+## Configuring a tool
+
+The Configure dialog captures:
+
+- **Provider** — dropdown populated from the tool's available providers list
+- **API Key** — password input; placeholder hides the stored key if one already exists
+- **Enabled** — toggle
+- **Test** — button that fires the test endpoint and surfaces the result inline
+- **Delete** — only visible once the tool has been configured
+
+Saving goes through `PUT /api/skills/builtin-tools/:slug` with `{ provider, enabled, apiKey? }`. The backend writes the API key to Secrets Manager and stores a secret reference on the `tenant_builtin_tools` row. The UI gets back a `hasSecret` boolean it uses to decide whether to show the placeholder or the "Set API key" state on subsequent visits.
+
+### REST endpoints
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/skills/builtin-tools` | List tools and their state |
+| `PUT /api/skills/builtin-tools/:slug` | Upsert provider, key, or enabled state |
+| `DELETE /api/skills/builtin-tools/:slug` | Remove the configuration |
+| `POST /api/skills/builtin-tools/:slug/test` | Test the current or provided configuration |
+
+All requests carry `x-tenant-slug` in the header.
+
+## Testing
+
+The Test button fires a provider-specific call — for Web Search, it runs a canonical query against Exa or SerpAPI and returns `{ ok: boolean; resultCount?: number; error?: string }`. If the test succeeds, a toast shows the result count. If it fails, the error message surfaces inline so the operator can diagnose.
+
+Testing does not require saving first — the dialog lets the operator test with a new key before committing it to the vault.
+
+## Assigning to agents
+
+Built-in tools don't need to be assigned in the same way skills or MCP servers do — once configured at the tenant level, every agent that has the tool in its system prompt or tool policy can use it. Disabling the tool at the tenant level immediately cuts off all agents; there is no per-agent opt-in for built-in tools in the current release.
+
+<Aside type="note">
+This is a simpler model than skills or MCP. It's appropriate for a small set of shared utilities (search, email, calendar) where per-agent configuration would be more friction than value. If you need per-agent control over the same capability, wrap it as a skill or MCP server instead.
+</Aside>
+
+## Data model
+
+- **`tenant_builtin_tools`** — one row per `(tenant_id, tool_slug)` with columns for provider, enabled, and secret_ref
+- **Secrets Manager** — API keys are stored under references like `thinkwork/{stage}/builtin-tools/{tenant_id}/{tool_slug}`
+
+The admin UI never receives the plaintext API key after the initial save. Subsequent loads see `hasSecret: true` and render a placeholder in the password input.
+
+## Workflows
+
+### Configure Web Search for the first time
+
+1. Open `/builtin-tools`
+2. Click the Web Search row → Configure dialog opens
+3. Pick a provider (Exa is recommended for cost and result quality)
+4. Paste the API key
+5. Click Test — verify the result count comes back non-zero
+6. Set Enabled = true
+7. Save
+8. Any agent that includes Web Search in its tool policy now has search available
+
+### Switch providers
+
+1. Open the Configure dialog for Web Search
+2. Change the provider dropdown
+3. Paste the new provider's API key
+4. Test
+5. Save
+
+Switching providers does not flush in-flight agent invocations, but the next invocation will use the new provider.
+
+### Disable temporarily
+
+1. Open Configure
+2. Toggle Enabled to false
+3. Save
+
+All agents immediately stop seeing the tool. Re-enabling restores it.
+
+## Known limits
+
+- **Single tool in the catalog today.** Only Web Search is shipped; the framework is in place for more tools but the catalog is short.
+- **Tenant-level only.** No per-agent API key or per-agent provider override.
+- **Hardcoded catalog in two places.** Adding a new built-in tool requires code changes in both the admin UI's `CATALOG` array and the backend's `BUILTIN_TOOL_CATALOG`.
+- **No key format validation.** The Test button catches bad keys; there's no pre-submit format check.
+
+## Related pages
+
+- [Tenant MCP Servers](/applications/admin/mcp-servers/) — the other path for exposing external capabilities
+- [Skills Catalog](/applications/admin/skills-catalog/) — the third path: reusable skill packs with embedded tools
+- [Connectors](/applications/admin/connectors/) — platform-level inbound/outbound connectors (Slack, GitHub, Google) — a different category than built-in tools

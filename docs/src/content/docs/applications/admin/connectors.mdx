@@ -1,46 +1,134 @@
 ---
-title: Admin — Connectors & Tools
-description: Wire up Slack, GitHub, Google Workspace, webhooks, and tenant-level MCP servers from the admin web app. Manage the credential vault and connector routing.
+title: Admin — Connectors
+description: Slack, GitHub, Google, and other OAuth / webhook integrations. Manage credentials, watch delivery logs, and test invocations.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-The Connectors surface is where operators wire ThinkWork to the outside world at the tenant level. This covers inbound integrations (Slack, GitHub, Google Workspace), outbound webhooks, the credential vault, and the tenant-level MCP server catalog.
+Connectors are the platform-level integrations that bring external activity into ThinkWork as threads and let agents act back on those systems. The canonical examples are Slack, GitHub, and Google Workspace — but the Connectors page also hosts custom webhook connectors and anything else registered as a "connector" in the tenant.
 
-<Aside type="note">
-Tenant-level connector configuration lives here. Per-user OAuth connections — where an end user grants their personal credentials to a connector — are done from the [Mobile App](/applications/mobile/integrations-and-mcp-connect/). The rule of thumb: operators register capabilities, users grant access.
+## The list
+
+**Route:** `/connectors`  
+**File:** `apps/admin/src/routes/_authed/_tenant/connectors/index.tsx`
+
+A `DataTable` showing every connector registered for the tenant:
+
+| Column | Notes |
+|---|---|
+| Name | Display name |
+| Provider | Slack / GitHub / Google / Webhook / Custom |
+| Status | Enabled / Disabled |
+| Connections | Count of individual user connections or channels |
+| Last Delivery | Relative timestamp from the most recent inbound event |
+| Recent failures | Count of failed deliveries in the last 24 hours |
+
+A "Connect" button per provider opens the OAuth flow; custom connectors get a "Configure" button that captures manual credential fields.
+
+## The connector detail page
+
+**Route:** `/connectors/:slug`  
+**File:** `apps/admin/src/routes/_authed/_tenant/connectors/$slug.tsx`
+
+The detail page has four primary sections.
+
+### Header
+
+- Connector name
+- Enable / disable toggle
+- Delete action
+
+### Secret management
+
+- Show / hide button for the current signing secret
+- **Regenerate Secret** button — issues a new secret, which the external system must update
+- Fields for the webhook URL (copyable) and any provider-specific connection metadata
+
+### Delivery log
+
+An expandable table of recent deliveries. Each row shows:
+
+- Timestamp
+- Resolution status — `ok`, `failed`, `rate_limited`
+- Signature verification status
+- Normalized event kind (what ThinkWork classified the inbound event as)
+- External task id (for task-system connectors)
+- Provider user id
+- HTTP status code
+- Error message (for failures)
+- Duration
+- Body preview and size
+- Whether the delivery was a replay
+
+Clicking a row expands the full payload for debugging.
+
+### Test invocation
+
+A card at the bottom of the page lets the operator send a synthetic test payload through the connector to verify downstream behavior — thread creation, routing, and the agent receiving a turn.
+
+## REST endpoints
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/connectors` | List connectors |
+| `GET /api/connectors/:slug` | Detail |
+| `POST /api/connectors/:slug/enable` | Enable |
+| `POST /api/connectors/:slug/disable` | Disable |
+| `POST /api/connectors/:slug/regenerate-secret` | Rotate signing secret |
+| `GET /api/connectors/:slug/deliveries?limit=50` | Delivery log |
+
+All requests carry `x-tenant-id` in the header.
+
+## The OAuth flow
+
+For OAuth-based connectors (Slack, GitHub, Google), the `Connect <provider>` button kicks off this sequence:
+
+1. Frontend redirects to `/api/oauth/:provider/authorize?redirect_uri=...`
+2. Backend redirects the browser to the provider's OAuth consent URL
+3. User approves
+4. Provider redirects to `<API_URL>/api/oauth/:provider/callback?code=...`
+5. Backend exchanges the code for access + refresh tokens
+6. Tokens land in the **credential vault** — typically a Secrets Manager secret at `{tenantId}/{provider}`
+7. A webhook row is created in Aurora with a secret reference (not the plaintext secret)
+8. The connector is marked active and shows up in the list with a green status
+
+The vault separation means the admin UI never handles raw OAuth tokens. When the page wants to display or rotate credentials, it asks the backend, which dereferences the secret at request time.
+
+## Credential vault
+
+All connector credentials — OAuth access/refresh tokens, webhook signing secrets, API keys, service account JSONs — live in the credential vault. The vault is a combination of:
+
+- **Aurora tables** (`connector_credentials`, `webhooks`) for references, metadata, and status
+- **AWS Secrets Manager** for the plaintext secrets themselves, encrypted with a KMS key dedicated to the vault
+
+Every connector row in Aurora carries a `secret_ref` pointing into Secrets Manager. Runtime Lambdas hold IAM permissions to decrypt only the specific secrets they need — a Slack connector Lambda cannot decrypt a GitHub secret.
+
+### Rotation
+
+- **OAuth tokens** rotate automatically via the refresh token before expiry
+- **Webhook signing secrets** rotate manually through the **Regenerate Secret** button; the new secret must also be updated on the provider side
+- **API keys** rotate manually through the provider's own dashboard and then re-entered in the connector detail page
+
+<Aside type="caution">
+Regenerating a webhook signing secret immediately invalidates the old secret. The external provider must be updated with the new secret within ~60 seconds (the Lambda environment variable cache TTL) or deliveries will start failing signature verification.
 </Aside>
 
-## Connectors
+## Delivery log
 
-**Route:** `/connectors`
+Every inbound webhook event is logged as a row in a `webhook_deliveries` or similar table with the payload, signature status, resolution status, and error details. The log is read-only from the admin UI.
 
-The Connectors page lists every integration registered for the tenant with its status, enabled state, and credential health. Clicking into a connector (`/connectors/:slug`) opens the detail view with:
+Common delivery states:
 
-- OAuth flow entry point (for OAuth-based connectors like Slack and Google)
-- Credential management (rotate, revoke)
-- Test connection action
-- Enable / disable toggle
-- Routing rules for inbound events
-
-Connectors are the bridge between external systems and ThinkWork threads. An inbound connector turns a webhook or event into a thread; an outbound connector (or tool) lets an agent post back. See [Connectors Overview](/concepts/connectors/) for the model.
-
-### Credential vault
-
-All connector credentials are stored in the **credential vault** — a KMS-encrypted table in Aurora Postgres. Credentials never leave your AWS account. The vault holds:
-
-| Credential type | Example |
+| State | Meaning |
 |---|---|
-| OAuth access + refresh tokens | Slack, Google Workspace |
-| Webhook signing secrets | Slack, GitHub, external task providers |
-| API keys | Custom connectors, tenant API keys for MCP servers |
-| Service account JSON | Google Workspace service accounts |
+| `ok` | Delivered, signature verified, thread created or updated |
+| `failed` | Signature failure, payload parse error, or downstream error |
+| `rate_limited` | Connector-level rate limit hit; the event was rejected without processing |
+| `replay` | A replay of an earlier event (e.g. Slack Retry-Attempt header set) |
 
-Rotating a credential goes through the admin UI: navigate to the connector's detail page, hit **Rotate**, and enter the new value. The vault updates and active connector functions pick up the new value within about 60 seconds (the Lambda environment-variable cache TTL). OAuth credentials with refresh tokens are refreshed automatically before expiry.
+## Connector routing
 
-### Connector routing
-
-When an inbound connector creates a thread, it uses **connector routing rules** to decide which agent handles it. Routing rules are evaluated in order and the first match wins:
+Inbound events create threads, and those threads need to be routed to an agent. Routing rules live per-connector and evaluate in order — the first match wins:
 
 | Rule type | Example |
 |---|---|
@@ -49,56 +137,48 @@ When an inbound connector creates a thread, it uses **connector routing rules** 
 | User mapping | GitHub user `@alice` → alice-agent |
 | Default | Catch-all agent for the connector |
 
-For simple deployments, set a default agent on each connector and skip rules entirely. Add rules later when you need to fan work out to specialized agents.
+For small tenants, a single default agent per connector is usually enough. Rules are worth it only once the tenant has multiple specialized agents and wants to fan out.
 
-## Webhooks
+## Workflows
 
-**Route:** `/webhooks`
+### Connect Slack
 
-The Webhooks page is where operators create HTTP webhook endpoints that the tenant exposes to the outside world. Each webhook carries:
+1. Open `/connectors`
+2. Click **Connect Slack**
+3. Walk through the OAuth consent in the popup
+4. The page refreshes; Slack appears as Enabled with a green status
+5. Set a default agent for Slack on the detail page
+6. Post a test message in a configured Slack channel
+7. A new thread appears in [Threads](/applications/admin/threads/) routed to the default agent
 
-- A **token** (used as the public path — `/webhooks/<token>`)
-- A **signing secret** stored in the credential vault
-- An **assigned agent or routine** that receives the inbound event
-- A **rate limit** and enable / disable state
-- A **target type** — generic event, external task provider, or custom integration
+### Debug a failing webhook
 
-Webhook detail pages (`/webhooks/:webhookId`) show invocation logs and recent delivery results. The copy-token button gives operators the full URL to paste into the external system's webhook configuration.
+1. Open the detail page for the connector
+2. Scroll to the Delivery log
+3. Expand the most recent failed row
+4. Read the error message — common causes are signature mismatch (bad secret) and payload parse failures (provider schema change)
+5. If signature: regenerate the secret and update the provider
+6. If parse: file a bug and work around in the meantime
 
-External task integrations like LastMile Tasks use this webhook mechanism — see [External Task Connectors](/concepts/connectors/external-tasks/) for the ingest pipeline.
+### Rotate an OAuth token after credential leak
 
-## Tenant MCP servers
+1. Open the detail page
+2. Use the provider's own dashboard to revoke the compromised token
+3. Disable the connector in the admin UI
+4. Reconnect (kicks off a fresh OAuth flow)
+5. Re-enable
 
-**Route:** `/mcp-servers`
+## Known limits
 
-Tenant-level MCP server registration lives here. This is the catalog of MCP endpoints ThinkWork can route agent tool calls to — it does **not** issue per-user tokens.
-
-For each MCP server the admin captures: name, URL, transport (Streamable HTTP or SSE), and authentication type (none, tenant API key, or per-user OAuth). Registered servers can then be assigned to agent templates or individual agents from the [Agents & Templates](/applications/admin/agents/#mcp-servers-tenant-level) surface.
-
-Full details on the MCP connector model, token lifecycle, and runtime behavior live on the [MCP Tool Connectors](/concepts/mcp-servers/) concept page.
-
-## Built-in tools
-
-**Route:** `/builtin-tools`
-
-Built-in tools are a separate category from MCP servers: they are provider integrations (Slack, GitHub, Google Sheets, and similar) that ship as part of ThinkWork itself, with credentials stored directly in the credential vault. Use built-in tools when the capability is standard and doesn't warrant an MCP server; use MCP servers when the capability already exists outside ThinkWork.
-
-Both categories can be assigned to agents side by side — an agent can have built-in tools, MCP tools, and skill-provided tools in the same invocation.
-
-## Inbound vs outbound
-
-A quick mental model:
-
-- **Inbound connectors** turn external activity into threads. Slack messages, GitHub issues, Gmail, webhooks.
-- **Outbound connectors** let agents act back on those systems. Posting a Slack reply, commenting on a GitHub issue, sending an email, calling an external API.
-- **MCP servers and built-in tools** are outbound capabilities the agent calls during a turn.
-
-Most connectors are both directions — Slack, for example, sends inbound events and lets agents post outbound replies through the same credential.
+- **Delivery log is not archived.** Old delivery rows are retained according to the tenant's database retention policy; there is no long-term archive store.
+- **No bulk rotation.** Regenerating secrets is one connector at a time.
+- **Routing rules UI is light.** Rules are configurable but the editor is minimal; complex routing should probably live in the agent's system prompt instead.
+- **Thread-creation mapping is automatic.** The admin UI shows which thread was created from which delivery but does not let operators change the mapping.
 
 ## Related pages
 
-- [Connectors (concept)](/concepts/connectors/) — the connector model at the product level
-- [External Task Connectors](/concepts/connectors/external-tasks/) — how external task webhooks flow into threads
-- [MCP Tool Connectors](/concepts/mcp-servers/) — the MCP connector pattern
-- [Authoring Guide: Connectors](/guides/connectors/) — building a custom connector from scratch
-- [Mobile — Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/) — the per-user flip side of this page
+- [Webhooks](/applications/admin/webhooks/) — custom HTTP webhooks that target agents or routines (distinct from provider connectors)
+- [Tenant MCP Servers](/applications/admin/mcp-servers/) — a different kind of connector (remote tool servers)
+- [Built-in Tools](/applications/admin/builtin-tools/) — ThinkWork-owned integrations (Web Search)
+- [Connectors (concept)](/concepts/connectors/) — the product model
+- [Integrations (concept)](/concepts/connectors/integrations/) — concept page for inbound / outbound integrations
