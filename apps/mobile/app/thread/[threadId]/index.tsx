@@ -83,7 +83,13 @@ export default function ThreadDetailRoute() {
     variables: { threadId: threadId!, limit: 100 },
     pause: !threadId,
   });
-  const messages = useMemo(() => {
+  // Raw messages (post toolResults parse, pre role-filter). We derive two
+  // arrays from this: `messages` for the chat timeline (user+assistant only)
+  // and `activityRows` for the ExternalTaskCard's activity_list block (system
+  // rows emitted by the webhook ingest pipeline, PR #75). The chat timeline
+  // stays chat-only — system audit rows live on the task card, not in the
+  // agent message history.
+  const rawMessages = useMemo(() => {
     const edges = (messagesData?.messages?.edges ?? []) as any[];
     return edges.map((e: any) => {
       const m = e.node;
@@ -96,11 +102,33 @@ export default function ThreadDetailRoute() {
         } catch {}
       }
       return { ...m, toolResults };
-    }).filter((m: any) => {
+    });
+  }, [messagesData]);
+
+  const messages = useMemo(() => {
+    return rawMessages.filter((m: any) => {
       const role = (m.role || "").toLowerCase();
       return role === "user" || role === "assistant";
     });
-  }, [messagesData]);
+  }, [rawMessages]);
+
+  // Pre-filter webhook audit rows for the task card's activity_list block.
+  // The server-side ingest (PR #75) inserts these as role=system messages
+  // with metadata.kind="external_task_event" and human-readable content.
+  const activityRows = useMemo(() => {
+    return rawMessages
+      .filter((m: any) => {
+        const role = (m.role || "").toLowerCase();
+        if (role !== "system") return false;
+        const kind = (m.metadata as Record<string, unknown> | null | undefined)?.kind;
+        return kind === "external_task_event";
+      })
+      .map((m: any) => ({
+        id: String(m.id),
+        content: String(m.content ?? ""),
+        createdAt: String(m.createdAt ?? ""),
+      }));
+  }, [rawMessages]);
 
   // ── Turns ──
   const [{ data: turnsData }, reexecuteTurns] = useQuery({
@@ -417,6 +445,7 @@ export default function ThreadDetailRoute() {
                     threadId={thread.id}
                     tenantId={thread.tenantId}
                     currentUserId={currentUser?.id}
+                    activityRows={activityRows}
                   />
                 ) : null
               }

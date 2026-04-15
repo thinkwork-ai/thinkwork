@@ -19,12 +19,19 @@ export function PinnedExternalTaskHeader({
   tenantId,
   currentUserId,
   messageId,
+  activityRows,
 }: {
   threadMetadata: unknown;
   threadId: string;
   tenantId: string;
   currentUserId?: string;
   messageId?: string;
+  /**
+   * Webhook-driven audit rows derived from the raw messages query in the
+   * task detail screen (role=system + metadata.kind="external_task_event").
+   * Passed through to ExternalTaskCard's `activity_list` block renderer.
+   */
+  activityRows?: Array<{ id: string; content: string; createdAt: string }>;
 }) {
   const meta = (threadMetadata ?? {}) as Record<string, unknown>;
   const external = (meta.external ?? undefined) as
@@ -52,6 +59,7 @@ export function PinnedExternalTaskHeader({
           messageId: messageId ?? `pinned-${threadId}`,
           toolIndex: 0,
           currentUserId,
+          activityRows,
         }}
       />
     </View>
