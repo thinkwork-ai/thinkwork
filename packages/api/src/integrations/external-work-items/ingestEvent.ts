@@ -249,40 +249,53 @@ export async function ingestExternalTaskEvent(args: {
 				})
 				.returning({ id: messages.id });
 
-			// AppSync broadcast — fire-and-forget, matching the other
-			// thread-mutation call sites. A notify failure must never
-			// break ingest; the row is already durable in Postgres and
-			// the mobile client will pick it up on next pull-to-refresh.
+			// AppSync fan-out + Expo push — collected into an array and
+			// awaited via `Promise.allSettled` so the webhook Lambda actually
+			// flushes the I/O before returning. The previous fire-and-forget
+			// pattern let Node schedule these as dangling microtasks; the
+			// webhooks Lambda would freeze mid-handshake, and on the next
+			// invocation the AppSync socket would be "other side closed" and
+			// the Expo push would land ~30s late. Awaiting costs ~200–500ms
+			// of tail latency but gives us deterministic realtime delivery.
+			// Each promise keeps its own `.catch` so we preserve per-step
+			// debug labels and `allSettled` never throws the whole batch.
+			const fanOut: Promise<unknown>[] = [];
+
 			if (inserted?.id) {
-				notifyNewMessage({
-					messageId: inserted.id,
+				fanOut.push(
+					notifyNewMessage({
+						messageId: inserted.id,
+						threadId: result.threadId,
+						tenantId: conn.tenantId,
+						role: "system",
+						content: summary,
+						senderType: "system",
+					}).catch((err) => {
+						console.warn(
+							`[ingest:${provider}] notifyNewMessage failed for ${event.externalTaskId}:`,
+							(err as Error).message,
+						);
+					}),
+				);
+			}
+
+			fanOut.push(
+				notifyThreadUpdate({
 					threadId: result.threadId,
 					tenantId: conn.tenantId,
-					role: "system",
-					content: summary,
-					senderType: "system",
+					// The thread row was just refreshed by ensureExternalTaskThread;
+					// pass the envelope's status when we have one so the push
+					// payload matches reality. Fallback matches sendMessage.
+					status:
+						envelope?.item.core.status?.value ?? "in_progress",
+					title,
 				}).catch((err) => {
 					console.warn(
-						`[ingest:${provider}] notifyNewMessage failed for ${event.externalTaskId}:`,
+						`[ingest:${provider}] notifyThreadUpdate failed for ${event.externalTaskId}:`,
 						(err as Error).message,
 					);
-				});
-			}
-			notifyThreadUpdate({
-				threadId: result.threadId,
-				tenantId: conn.tenantId,
-				// The thread row was just refreshed by ensureExternalTaskThread;
-				// pass the envelope's status when we have one so the push
-				// payload matches reality. Fallback matches sendMessage.
-				status:
-					envelope?.item.core.status?.value ?? "in_progress",
-				title,
-			}).catch((err) => {
-				console.warn(
-					`[ingest:${provider}] notifyThreadUpdate failed for ${event.externalTaskId}:`,
-					(err as Error).message,
-				);
-			});
+				}),
+			);
 
 			// PR C — Expo push for events that matter to the caller.
 			// By construction, reaching this block means we resolved a
@@ -292,20 +305,24 @@ export async function ingestExternalTaskEvent(args: {
 			// is worth pushing for; it doesn't re-check user identity.
 			const pushDecision = shouldPushExternalTaskEvent(event, envelope, summary);
 			if (pushDecision.push) {
-				sendExternalTaskPush({
-					userId: conn.userId,
-					tenantId: conn.tenantId,
-					threadId: result.threadId,
-					title,
-					body: pushDecision.body ?? summary,
-					eventKind: event.kind,
-				}).catch((err) => {
-					console.warn(
-						`[ingest:${provider}] sendExternalTaskPush failed for ${event.externalTaskId}:`,
-						(err as Error).message,
-					);
-				});
+				fanOut.push(
+					sendExternalTaskPush({
+						userId: conn.userId,
+						tenantId: conn.tenantId,
+						threadId: result.threadId,
+						title,
+						body: pushDecision.body ?? summary,
+						eventKind: event.kind,
+					}).catch((err) => {
+						console.warn(
+							`[ingest:${provider}] sendExternalTaskPush failed for ${event.externalTaskId}:`,
+							(err as Error).message,
+						);
+					}),
+				);
 			}
+
+			await Promise.allSettled(fanOut);
 		} catch (err) {
 			console.warn(
 				`[ingest:${provider}] activity message insert failed for ${event.externalTaskId}:`,

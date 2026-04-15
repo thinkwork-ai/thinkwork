@@ -868,4 +868,116 @@ describe("ingestExternalTaskEvent — activity message (PR A)", () => {
 			expect(mockNotifyThreadUpdate).toHaveBeenCalledTimes(1);
 		});
 	});
+
+	describe("PR D — fan-out is awaited (no deferred microtasks)", () => {
+		/**
+		 * Contract lock for PR D: `ingestExternalTaskEvent` MUST NOT return
+		 * until `notifyNewMessage` / `notifyThreadUpdate` / `sendExternalTaskPush`
+		 * have all settled. In the previous fire-and-forget version, the
+		 * handler returned while these fetches were still handshake-ing,
+		 * Lambda froze the Node runtime, and the I/O got deferred to the
+		 * next invocation — causing 30+ second push delays and AppSync
+		 * "other side closed" errors in the webhooks Lambda.
+		 *
+		 * We prove "awaited" by having each fan-out mock flip a boolean on
+		 * completion AFTER a microtask delay. If the ingest returns before
+		 * the delay, the flag is still false and the test fails. If ingest
+		 * awaits, all flags are true by the time the test reads them.
+		 */
+		it("waits for notifyNewMessage + notifyThreadUpdate + push to resolve before returning", async () => {
+			let notifyNewDone = false;
+			let notifyThreadDone = false;
+			let pushDone = false;
+
+			const deferredResolve = async (setFlag: () => void) => {
+				// A real async tick — not `Promise.resolve()`, which would
+				// flush inline with the calling microtask and defeat the
+				// test. `setTimeout(r, 0)` forces a new task-queue entry.
+				await new Promise((r) => setTimeout(r, 0));
+				setFlag();
+			};
+
+			mockNotifyNewMessage.mockImplementationOnce(() =>
+				deferredResolve(() => {
+					notifyNewDone = true;
+				}),
+			);
+			mockNotifyThreadUpdate.mockImplementationOnce(() =>
+				deferredResolve(() => {
+					notifyThreadDone = true;
+				}),
+			);
+			mockSendExternalTaskPush.mockImplementationOnce(() =>
+				deferredResolve(() => {
+					pushDone = true;
+				}),
+			);
+
+			arrangePipeline(
+				{
+					kind: "task.updated",
+					externalTaskId: "task_1",
+					providerUserId: "user_lm_1",
+					receivedAt: "2026-04-14T10:00:00Z",
+					raw: { propertiesUpdated: ["status"] },
+				},
+				envelope({
+					title: "Test Outbox",
+					status: { value: "in_progress", label: "In Progress" },
+				}),
+			);
+
+			const result = await ingestExternalTaskEvent({
+				provider: "lastmile",
+				rawBody: RAW_BODY,
+				headers: HEADERS,
+			});
+
+			// No `await Promise.resolve()` — we're asserting that all
+			// three flags are already true at the moment ingest returns.
+			expect(result.status).toBe("ok");
+			expect(notifyNewDone).toBe(true);
+			expect(notifyThreadDone).toBe(true);
+			expect(pushDone).toBe(true);
+		});
+
+		it("still waits even when one fan-out step rejects (Promise.allSettled)", async () => {
+			let notifyThreadDone = false;
+			let pushDone = false;
+
+			mockNotifyNewMessage.mockRejectedValueOnce(new Error("appsync 503"));
+			mockNotifyThreadUpdate.mockImplementationOnce(async () => {
+				await new Promise((r) => setTimeout(r, 0));
+				notifyThreadDone = true;
+			});
+			mockSendExternalTaskPush.mockImplementationOnce(async () => {
+				await new Promise((r) => setTimeout(r, 0));
+				pushDone = true;
+			});
+
+			arrangePipeline(
+				{
+					kind: "task.updated",
+					externalTaskId: "task_1",
+					providerUserId: "user_lm_1",
+					receivedAt: "2026-04-14T10:00:00Z",
+					raw: { propertiesUpdated: ["status"] },
+				},
+				envelope({ status: { value: "done", label: "Done" } }),
+			);
+
+			const result = await ingestExternalTaskEvent({
+				provider: "lastmile",
+				rawBody: RAW_BODY,
+				headers: HEADERS,
+			});
+
+			expect(result.status).toBe("ok");
+			// A rejection in notifyNewMessage must not short-circuit the
+			// other fan-out steps — both remaining promises have settled
+			// by the time ingest returns.
+			expect(notifyThreadDone).toBe(true);
+			expect(pushDone).toBe(true);
+		});
+	});
 });
