@@ -56,6 +56,7 @@ export default defineConfig({
                 { label: "Overview", slug: "concepts/connectors" },
                 { label: "Integrations", slug: "concepts/connectors/integrations" },
                 { label: "MCP Tools", slug: "concepts/connectors/mcp-tools" },
+                { label: "External Tasks", slug: "concepts/connectors/external-tasks" },
               ],
             },
             {

@@ -7,12 +7,13 @@ import { Aside } from '@astrojs/starlight/components';
 
 Connectors are how ThinkWork interfaces with the outside world. They bring external systems into the thread model and let agents act back on those systems in a controlled way.
 
-ThinkWork uses connectors in two broad ways:
+ThinkWork uses connectors in three broad ways:
 
 1. **Integrations** turn inbound messages, webhooks, and app events into threads, then send responses back out.
 2. **MCP tools** give agents access to external capabilities they can call during work.
+3. **External task connectors** turn work items owned by an external task system into native ThinkWork threads with GenUI cards, realtime activity, and round-trip edits.
 
-Both fit the same architectural story: ThinkWork keeps threads, agents, controls, and auditability in one system while connectors handle the system boundary.
+All three fit the same architectural story: ThinkWork keeps threads, agents, controls, and auditability in one system while connectors handle the system boundary.
 
 ## Connectors at a glance
 
@@ -36,10 +37,17 @@ Common examples include:
 - Search or retrieval against external systems
 - Database or business-system queries exposed through an MCP server
 
+### External task connectors
+
+External task connectors turn work items from task systems like LastMile — and, via the same adapter seam, future targets like Linear — into native ThinkWork threads. The task renders as a mobile GenUI card with realtime activity and round-trip edits, not a markdown transcript and not an iframe-wrapped remote UI. The external system remains the source of truth for status, assignment, and audit history; ThinkWork owns the experience.
+
+Use external task connectors when a task system outside ThinkWork should feel native inside it.
+
 ## Navigate this section
 
 - See [Integrations](/concepts/connectors/integrations/) for Slack, GitHub, Google Workspace, inbound and outbound flows, auth, and routing
 - See [MCP Tools](/concepts/connectors/mcp-tools/) for MCP-based external tool connectors
+- See [External Tasks](/concepts/connectors/external-tasks/) for the adapter seam, webhook ingestion pipeline, and task-card GenUI model
 
 ## MCP as a connector pattern
 
