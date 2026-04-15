@@ -34,12 +34,44 @@ function asArray<T = unknown>(v: unknown): T[] {
 	return Array.isArray(v) ? (v as T[]) : [];
 }
 
+/**
+ * LastMile's `tasks_get` returns `status` / `priority` as populated
+ * objects — `{id, name, color, icon}` — not the legacy value strings
+ * older fixtures used. Unwrap whichever we're handed:
+ *
+ * - string like `"in_progress"` → fall through to `statusLabelFor()`
+ *   which maps it against the curated option set (legacy fixture path)
+ * - object like `{id: "status_hfcq...", name: "Backlog", color: "#..."}`
+ *   → emit `{value: id, label: name, color}` so the card renders the
+ *   LastMile-native label and the id round-trips on future updates
+ * - anything else → undefined
+ */
+function unwrapOption(
+	v: unknown,
+	legacyLookup: (s: string) => { value: string; label: string; color?: string } | undefined,
+): { value: string; label: string; color?: string } | undefined {
+	if (v === undefined || v === null) return undefined;
+	if (typeof v === "string") return legacyLookup(v);
+	if (typeof v === "object" && !Array.isArray(v)) {
+		const obj = v as Record<string, unknown>;
+		const id = asString(pick(obj, "id", "value"));
+		const name = asString(pick(obj, "name", "label"));
+		if (id && name) {
+			const color = asString(pick(obj, "color"));
+			return color ? { value: id, label: name, color } : { value: id, label: name };
+		}
+	}
+	return undefined;
+}
+
 export function normalizeLastmileTask(raw: Record<string, unknown>): NormalizedTask {
 	const id = asString(pick(raw, "id", "task_id", "taskId")) ?? "";
 	const title = asString(pick(raw, "title", "name", "summary")) ?? "Untitled task";
 	const description = asString(pick(raw, "description", "body", "details"));
-	const statusRaw = asString(pick(raw, "status", "state"));
-	const priorityRaw = asString(pick(raw, "priority", "importance"));
+	const statusRaw = pick(raw, "status", "state");
+	const priorityRaw = pick(raw, "priority", "importance");
+	const status = unwrapOption(statusRaw, statusLabelFor);
+	const priority = unwrapOption(priorityRaw, priorityLabelFor);
 	const dueAt = asString(pick(raw, "due_at", "dueAt", "due_date", "dueDate"));
 	const updatedAt = asString(pick(raw, "updated_at", "updatedAt", "modified_at"));
 	const url = asString(pick(raw, "url", "web_url", "webUrl"));
@@ -71,7 +103,10 @@ export function normalizeLastmileTask(raw: Record<string, unknown>): NormalizedT
 			key: "status",
 			label: "Status",
 			type: "select",
-			value: statusRaw,
+			// Prefer the unwrapped id so a future save-edit round-trips the
+			// real LastMile opaque id; fall through to the raw string for
+			// legacy fixture compatibility.
+			value: status?.value ?? asString(statusRaw),
 			editable: true,
 			options: LASTMILE_STATUS_OPTIONS,
 		},
@@ -79,7 +114,7 @@ export function normalizeLastmileTask(raw: Record<string, unknown>): NormalizedT
 			key: "priority",
 			label: "Priority",
 			type: "select",
-			value: priorityRaw,
+			value: priority?.value ?? asString(priorityRaw),
 			editable: true,
 			options: LASTMILE_PRIORITY_OPTIONS,
 		},
@@ -106,6 +141,9 @@ export function normalizeLastmileTask(raw: Record<string, unknown>): NormalizedT
 		},
 	];
 
+	// Comment action omitted — LastMile MCP exposes no comment tool, so
+	// surfacing a button that always throws would be worse UX than just
+	// hiding it. `capabilities.commentOnTask` is also false below.
 	const actions: TaskActionSpec[] = [
 		{
 			id: "act_update_status",
@@ -122,12 +160,6 @@ export function normalizeLastmileTask(raw: Record<string, unknown>): NormalizedT
 			formId: "form_edit",
 		},
 		{
-			id: "act_comment",
-			type: "external_task.comment",
-			label: "Comment",
-			variant: "secondary",
-		},
-		{
 			id: "act_edit_fields",
 			type: "external_task.edit_fields",
 			label: "Edit",
@@ -142,8 +174,8 @@ export function normalizeLastmileTask(raw: Record<string, unknown>): NormalizedT
 			provider: "lastmile",
 			title,
 			description,
-			status: statusLabelFor(statusRaw),
-			priority: priorityLabelFor(priorityRaw),
+			status,
+			priority,
 			assignee,
 			dueAt,
 			url,
@@ -154,7 +186,7 @@ export function normalizeLastmileTask(raw: Record<string, unknown>): NormalizedT
 			listTasks: true,
 			updateStatus: true,
 			assignTask: true,
-			commentOnTask: true,
+			commentOnTask: false,
 			editTaskFields: true,
 			createTask: false,
 		},
