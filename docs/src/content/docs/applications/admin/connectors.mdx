@@ -1,0 +1,104 @@
+---
+title: Admin — Connectors & Tools
+description: Wire up Slack, GitHub, Google Workspace, webhooks, and tenant-level MCP servers from the admin web app. Manage the credential vault and connector routing.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The Connectors surface is where operators wire ThinkWork to the outside world at the tenant level. This covers inbound integrations (Slack, GitHub, Google Workspace), outbound webhooks, the credential vault, and the tenant-level MCP server catalog.
+
+<Aside type="note">
+Tenant-level connector configuration lives here. Per-user OAuth connections — where an end user grants their personal credentials to a connector — are done from the [Mobile App](/applications/mobile/integrations-and-mcp-connect/). The rule of thumb: operators register capabilities, users grant access.
+</Aside>
+
+## Connectors
+
+**Route:** `/connectors`
+
+The Connectors page lists every integration registered for the tenant with its status, enabled state, and credential health. Clicking into a connector (`/connectors/:slug`) opens the detail view with:
+
+- OAuth flow entry point (for OAuth-based connectors like Slack and Google)
+- Credential management (rotate, revoke)
+- Test connection action
+- Enable / disable toggle
+- Routing rules for inbound events
+
+Connectors are the bridge between external systems and ThinkWork threads. An inbound connector turns a webhook or event into a thread; an outbound connector (or tool) lets an agent post back. See [Connectors Overview](/concepts/connectors/) for the model.
+
+### Credential vault
+
+All connector credentials are stored in the **credential vault** — a KMS-encrypted table in Aurora Postgres. Credentials never leave your AWS account. The vault holds:
+
+| Credential type | Example |
+|---|---|
+| OAuth access + refresh tokens | Slack, Google Workspace |
+| Webhook signing secrets | Slack, GitHub, external task providers |
+| API keys | Custom connectors, tenant API keys for MCP servers |
+| Service account JSON | Google Workspace service accounts |
+
+Rotating a credential goes through the admin UI: navigate to the connector's detail page, hit **Rotate**, and enter the new value. The vault updates and active connector functions pick up the new value within about 60 seconds (the Lambda environment-variable cache TTL). OAuth credentials with refresh tokens are refreshed automatically before expiry.
+
+### Connector routing
+
+When an inbound connector creates a thread, it uses **connector routing rules** to decide which agent handles it. Routing rules are evaluated in order and the first match wins:
+
+| Rule type | Example |
+|---|---|
+| Keyword match | Message contains "billing" → billing-agent |
+| Channel / source | Slack channel `#engineering` → eng-agent |
+| User mapping | GitHub user `@alice` → alice-agent |
+| Default | Catch-all agent for the connector |
+
+For simple deployments, set a default agent on each connector and skip rules entirely. Add rules later when you need to fan work out to specialized agents.
+
+## Webhooks
+
+**Route:** `/webhooks`
+
+The Webhooks page is where operators create HTTP webhook endpoints that the tenant exposes to the outside world. Each webhook carries:
+
+- A **token** (used as the public path — `/webhooks/<token>`)
+- A **signing secret** stored in the credential vault
+- An **assigned agent or routine** that receives the inbound event
+- A **rate limit** and enable / disable state
+- A **target type** — generic event, external task provider, or custom integration
+
+Webhook detail pages (`/webhooks/:webhookId`) show invocation logs and recent delivery results. The copy-token button gives operators the full URL to paste into the external system's webhook configuration.
+
+External task integrations like LastMile Tasks use this webhook mechanism — see [External Task Connectors](/concepts/connectors/external-tasks/) for the ingest pipeline.
+
+## Tenant MCP servers
+
+**Route:** `/mcp-servers`
+
+Tenant-level MCP server registration lives here. This is the catalog of MCP endpoints ThinkWork can route agent tool calls to — it does **not** issue per-user tokens.
+
+For each MCP server the admin captures: name, URL, transport (Streamable HTTP or SSE), and authentication type (none, tenant API key, or per-user OAuth). Registered servers can then be assigned to agent templates or individual agents from the [Agents & Templates](/applications/admin/agents/#mcp-servers-tenant-level) surface.
+
+Full details on the MCP connector model, token lifecycle, and runtime behavior live on the [MCP Tool Connectors](/concepts/mcp-servers/) concept page.
+
+## Built-in tools
+
+**Route:** `/builtin-tools`
+
+Built-in tools are a separate category from MCP servers: they are provider integrations (Slack, GitHub, Google Sheets, and similar) that ship as part of ThinkWork itself, with credentials stored directly in the credential vault. Use built-in tools when the capability is standard and doesn't warrant an MCP server; use MCP servers when the capability already exists outside ThinkWork.
+
+Both categories can be assigned to agents side by side — an agent can have built-in tools, MCP tools, and skill-provided tools in the same invocation.
+
+## Inbound vs outbound
+
+A quick mental model:
+
+- **Inbound connectors** turn external activity into threads. Slack messages, GitHub issues, Gmail, webhooks.
+- **Outbound connectors** let agents act back on those systems. Posting a Slack reply, commenting on a GitHub issue, sending an email, calling an external API.
+- **MCP servers and built-in tools** are outbound capabilities the agent calls during a turn.
+
+Most connectors are both directions — Slack, for example, sends inbound events and lets agents post outbound replies through the same credential.
+
+## Related pages
+
+- [Connectors (concept)](/concepts/connectors/) — the connector model at the product level
+- [External Task Connectors](/concepts/connectors/external-tasks/) — how external task webhooks flow into threads
+- [MCP Tool Connectors](/concepts/mcp-servers/) — the MCP connector pattern
+- [Authoring Guide: Connectors](/guides/connectors/) — building a custom connector from scratch
+- [Mobile — Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/) — the per-user flip side of this page

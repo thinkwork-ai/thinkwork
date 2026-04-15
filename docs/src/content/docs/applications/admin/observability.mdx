@@ -1,0 +1,105 @@
+---
+title: Admin — Observability & Control
+description: Analytics, guardrails, budgets, audit, and the Security Center — the operator's view into what the tenant is doing and what it's allowed to do.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The Observability and Control surface is the operator's window into what the tenant is actually doing — and the policy layer that governs what it's allowed to do. It spans analytics, guardrails, budgets, and audit.
+
+## Analytics
+
+**Route:** `/analytics`
+
+The Analytics page has three views that share the same underlying data:
+
+**Activity** — thread counts, run counts, and message volume over time, filtered by agent and time window. This is the "is the tenant busy?" view.
+
+**Cost** — spend by agent, by model, and by time window. Cost is computed from turn-level token counts and the model pricing configured for the tenant. This is the "where is the money going?" view.
+
+**Performance** — latency percentiles, token usage, and error rate by agent. This is the "which agents are slow or failing?" view.
+
+Charts are rendered with Recharts and backed by the same GraphQL queries the dashboard uses. For deeper analytics, export the underlying data via the audit log (NDJSON in S3) and query it with Athena or your analytics tool of choice.
+
+<Aside type="note">
+Cost reporting in v1 is turn-level aggregation, not per-tenant chargeback. A more sophisticated cost-tracking layer with attribution and chargeback reports is on the [Roadmap](/roadmap/#holistic-cost-tracking).
+</Aside>
+
+## Security Center
+
+**Route:** `/security`
+
+The Security Center is the central page for guardrail management. It shows:
+
+- **Guardrail stats over time** — blocks, allows, and filter strength. Each block is auditable back to the thread that triggered it.
+- **Registered guardrails** — every guardrail created in the tenant, typically backed by Bedrock Guardrails with a specific content policy (PII detection, toxicity, prompt-injection filters, etc.).
+- **Template assignments** — which agent templates enforce which guardrails. Guardrails are assigned at the template level so a tenant-wide safety policy only needs to be wired once.
+
+Creating a new guardrail opens a form that maps to the Bedrock Guardrails API under the hood. Once created, the guardrail shows up for assignment on every agent template's settings page.
+
+See [Guardrails (concept)](/concepts/control/guardrails/) for the guardrail model and [Control (concept)](/concepts/control/) for the broader control layer.
+
+## Budgets and usage
+
+**Route:** `/analytics` (the Cost view) and per-agent settings
+
+Budget enforcement in v1 happens at two levels:
+
+- **Per-agent budget caps** set on agent templates. Once an agent hits the cap for a period, new turns are refused until the period resets.
+- **Tenant-wide cost visibility** through the Analytics page. Tenant-wide enforcement (hard caps, chargeback) is on the [Roadmap](/roadmap/).
+
+The data that feeds these is the same turn-level cost estimate the Analytics Cost view uses: token counts from the model invocation, multiplied by configured model pricing.
+
+See [Budgets, Usage, and Audit (concept)](/concepts/control/budgets-usage-and-audit/) for the full model.
+
+## Audit
+
+**Route:** covered across Analytics, threads, and the audit log in S3
+
+Audit in ThinkWork is the combination of three things:
+
+- **Thread records** — every user and agent message, every tool call, and every tool result is captured on the thread detail page.
+- **Inbox approvals** — every approval request is logged with its resolution (approved / rejected / revision_requested).
+- **S3 audit log** — every agent invocation emits an NDJSON line to the tenant's audit log bucket. This is the canonical audit artifact for compliance and post-incident review.
+
+The audit log bucket lives under the tenant's AWS account (see [Deploy Configuration](/deploy/configuration/)), uses versioning, and lifecycles to Glacier after 90 days by default. The thread UI surfaces audit data inline; the S3 bucket is there for longer-term queries and external tooling.
+
+## Inbox — the approval queue
+
+**Route:** `/inbox`
+
+The Inbox is the approval queue for agent-requested human-in-the-loop actions. It's technically a "Work" page, not an "Observability" page, but it belongs in this mental group because it's where policy meets execution.
+
+Agent templates can mark certain actions as requiring human approval — changes to an agent's own configuration, uploads to a knowledge base, invocation of a sensitive tool. When the agent attempts the action, a request lands in the Inbox as `pending` and the action pauses until a human resolves it.
+
+Inbox items have four resolution states:
+
+| State | Meaning |
+|---|---|
+| `pending` | Waiting on a human |
+| `approved` | Human approved; action will execute |
+| `rejected` | Human rejected; action will not execute, agent notified |
+| `revision_requested` | Human asked for changes; returned to the agent to revise |
+
+Each item links back to the thread that triggered it and the turn that requested approval, so the reviewer has full context.
+
+## Thread-level audit
+
+Every thread (`/threads/:id`) has a turn-level audit view that shows, in order:
+
+- The incoming user message
+- The assembled context (prompt, retrieved knowledge, recalled memory, tool config)
+- The model's reasoning and tool calls
+- Each tool's inputs and outputs
+- The model's final response
+- Any guardrail activations, memory writes, and cost metrics
+
+This is the canonical place to debug "why did this agent do that on this turn?". For post-hoc analysis, the same data is also written to the S3 audit log.
+
+## Related pages
+
+- [Control (concept)](/concepts/control/) — the product model for controls
+- [Guardrails (concept)](/concepts/control/guardrails/) — guardrail details
+- [Budgets, Usage, and Audit (concept)](/concepts/control/budgets-usage-and-audit/) — the control layer
+- [Admin — Agents & Templates](/applications/admin/agents/) — where guardrails and budgets get assigned to templates
+- [Roadmap](/roadmap/) — what's coming next in cost tracking and eval UI
