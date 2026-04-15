@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { COLORS } from "@/lib/theme";
 import { useMe } from "@/lib/hooks/use-users";
-import { useTenant } from "@/lib/hooks/use-tenants";
 
 const API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(/\/graphql$/, "");
 const GRAPHQL_API_KEY = process.env.EXPO_PUBLIC_GRAPHQL_API_KEY || "";
@@ -36,20 +35,24 @@ export default function McpServersScreen() {
 
   const [meResult] = useMe();
   const user = meResult.data?.me ?? undefined;
-  const [tenantResult] = useTenant(user?.tenantId);
-  const tenant = tenantResult.data?.tenant ?? undefined;
+  const tenantId = user?.tenantId ?? undefined;
 
   const [servers, setServers] = useState<McpServerRow[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const fetchServers = useCallback(async () => {
-    if (!tenant?.id || !user?.id) return;
+    // Don't hang on skeleton if tenant/user aren't resolved yet — release
+    // the gate and let the effect re-fire when they are.
+    if (!tenantId || !user?.id) {
+      setLoading(false);
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE}/api/skills/user-mcp-servers`, {
         headers: {
           "x-api-key": GRAPHQL_API_KEY,
-          "x-tenant-id": tenant.id,
+          "x-tenant-id": tenantId,
           "x-principal-id": user.id,
         },
       });
@@ -62,7 +65,7 @@ export default function McpServersScreen() {
     } finally {
       setLoading(false);
     }
-  }, [tenant?.id, user?.id]);
+  }, [tenantId, user?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -77,15 +80,15 @@ export default function McpServersScreen() {
   };
 
   const handleConnect = async (mcpServer: McpServerRow) => {
-    if (!tenant?.id || !user?.id) return;
+    if (!tenantId || !user?.id) return;
     // RFC 9728 OAuth flow — the API handles discovery, registration, and token exchange.
     // We just open the authorize URL which redirects through the MCP server's OAuth proxy.
-    const url = `${API_BASE}/api/skills/mcp-oauth/authorize?mcpServerId=${mcpServer.id}&userId=${user.id}&tenantId=${tenant.id}`;
+    const url = `${API_BASE}/api/skills/mcp-oauth/authorize?mcpServerId=${mcpServer.id}&userId=${user.id}&tenantId=${tenantId}`;
     await WebBrowser.openBrowserAsync(url);
     await fetchServers();
   };
 
-  if (loading || !tenant) {
+  if (loading) {
     return (
       <DetailLayout title="MCP Servers">
         <View className="flex-1 p-4" style={{ maxWidth: 600 }}>
