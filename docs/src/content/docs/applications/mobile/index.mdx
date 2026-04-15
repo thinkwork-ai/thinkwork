@@ -1,0 +1,72 @@
+---
+title: Mobile App
+description: The ThinkWork mobile app — an Expo + React Native client for end users. Chat with agents, act on external tasks, connect your own integrations, and receive push notifications.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The mobile app is the end-user client for ThinkWork. Where the [Admin Web App](/applications/admin/) is for operators configuring a tenant, the mobile app is for the people actually doing work inside the tenant — chatting with agents, reviewing threads, acting on external tasks, and connecting their own integrations.
+
+It's an [Expo](https://expo.dev) application built on React Native, Expo Router, and the same GraphQL + REST endpoints the admin app uses. It is currently shipping on **iOS via TestFlight**.
+
+<Aside type="note">
+The mobile app owns **user-scoped** state: sign-in, per-user integration connections, per-user MCP tokens, and push subscriptions. Tenant-scoped state — agents, templates, connectors at the tenant level — lives in the [Admin Web App](/applications/admin/).
+</Aside>
+
+## Who uses it
+
+End users inside a tenant. That can mean:
+
+- A knowledge worker chatting with an agent for research or drafting
+- A frontline operator working an inbox of external tasks routed from a task system
+- A specialist connecting their personal Google account so an agent can read their calendar or email
+- An on-call engineer receiving a push notification when a task is assigned to them
+
+The mobile app is deliberately focused — it is not a miniature of the admin app. It only exposes what an individual user needs to do their own work.
+
+## The three tabs
+
+The root layout is a three-tab structure with deep-link support for additional screens:
+
+| Tab | Purpose |
+|---|---|
+| **Inbox** | Thread list, filtering, message input. Doubles as the entry point for starting new work |
+| **Tasks** | External task list — only visible when a task connector (e.g. LastMile) is connected |
+| **Settings** | Account, integrations, MCP servers, push notifications, theme, biometric lock |
+
+From any tab, the user can drill into a **thread detail** screen (`/thread/[threadId]`) which is where chat happens. The message input supports workspace selection, voice dictation, and quick actions.
+
+## Guide layout
+
+This section splits the mobile app into five sub-pages:
+
+- [Authentication](/applications/mobile/authentication/) — Google OAuth, biometric lock, session restore, the pre-signup Lambda
+- [Threads & Chat](/applications/mobile/threads-and-chat/) — inbox, thread detail, streaming render, message input, quick actions
+- [Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/) — self-serve OAuth for connectors and MCP servers
+- [Push Notifications](/applications/mobile/push-notifications/) — registration, payload handling, deep linking
+- [Distribution](/applications/mobile/distribution/) — EAS channels, TestFlight, iOS build setup
+
+## What the mobile app is _not_
+
+Deliberate non-goals worth naming:
+
+- **Not an admin console.** Tenant configuration, agent authoring, guardrails, and analytics live in the [Admin Web App](/applications/admin/).
+- **Not a replacement for a task system.** External tasks render as native cards, but the task system remains the source of truth. See [External Task Connectors](/concepts/connectors/external-tasks/).
+- **Not a general-purpose chat app.** Conversations are always with an agent (or a routine), never user-to-user. There are no DMs, no channels, no group chats.
+
+## Platform status
+
+| Platform | Status |
+|---|---|
+| iOS (TestFlight) | Beta — live for early users |
+| Android | Not yet shipped — the Expo code is cross-platform, but no production Android build is published |
+| Web (Expo web) | Not a target — the [Admin Web App](/applications/admin/) covers the browser use case |
+
+The v1 focus is iOS. Android follows once the iOS shape is stable.
+
+## Related pages
+
+- [Admin Web App](/applications/admin/) — the operator-facing control plane
+- [CLI](/applications/cli/) — `thinkwork-cli` for deployment
+- [External Task Connectors](/concepts/connectors/external-tasks/) — how external tasks render in the mobile app
+- [MCP Tool Connectors](/concepts/mcp-servers/) — the MCP model the mobile app connects into

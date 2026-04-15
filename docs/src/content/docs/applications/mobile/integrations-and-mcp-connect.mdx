@@ -1,0 +1,105 @@
+---
+title: Mobile — Integrations & MCP Connect
+description: Self-serve per-user OAuth for connectors and MCP servers in the ThinkWork mobile app — Google Productivity, Microsoft 365, LastMile, and any MCP server registered at the tenant level.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The mobile app owns the **user side** of connector and MCP configuration: self-serve OAuth flows, per-user token storage, and the "Needs Connection" prompts that surface when something needs to be granted. Tenant-level registration of MCP servers and connector credentials lives in the [Admin Web App](/applications/admin/connectors/).
+
+<Aside type="note">
+Why the split? Admin registers infrastructure (the MCP server's URL, transport, and authentication type; the tenant's OAuth client ID for Google). The mobile app handles user-owned credentials (each user's personal OAuth refresh token, each user's per-MCP-server access token). This keeps operator concerns and user concerns cleanly separated.
+</Aside>
+
+## Integrations screen
+
+**Route:** `/settings/integrations`
+
+The Integrations screen is the user's home for connecting their personal accounts to ThinkWork. It lists every integration the tenant supports alongside the user's current status for each:
+
+| Integration | What it unlocks |
+|---|---|
+| **Google Productivity** | Gmail read, Calendar read/write, Drive read for agents that have the Google built-in tool assigned |
+| **Microsoft 365** | Outlook, Calendar, OneDrive for agents that have the Microsoft built-in tool assigned |
+| **LastMile Tasks** | External task integration — webhook-driven task cards, save-edit round-trip, assigned-task push notifications |
+
+Each row shows a status badge:
+
+- **Connected** — the user has a valid OAuth token; green badge
+- **Expired** — the token expired and needs a re-consent; yellow badge
+- **Not connected** — the user has never connected; grey "Connect" button
+
+Tapping **Connect** launches a WebBrowser session to the tenant's OAuth authorize URL for the provider. The user consents in their browser, the provider redirects back, and the mobile app stores the new token in Secrets Manager (via the API) and updates the badge.
+
+### Per-provider agent picker
+
+For integrations that route inbound work to agents — notably LastMile Tasks — the integration row has a **default agent picker**. This determines which agent gets assigned when a new task lands in the user's inbox. The picker shows the agents the user has access to in this tenant, and the selection is stored per-user-per-provider.
+
+### Disconnecting
+
+Tapping an already-connected integration and choosing **Disconnect** clears the per-user token and revokes the provider's OAuth grant (where the provider supports revocation). The tenant-level connector registration is untouched — only this user's personal access is removed.
+
+## MCP Servers screen
+
+**Route:** `/settings/mcp-servers`
+
+The MCP Servers screen is the user side of [MCP Tool Connectors](/concepts/mcp-servers/). It lists every MCP server registered at the tenant level that is assigned to any agent the user has access to, plus the user's per-server auth status.
+
+Each row shows:
+
+- The MCP server's name and a one-line description
+- An auth status badge: **Active**, **Expired**, or **Needs Connection**
+- A tools count (how many tools this MCP server exposes)
+- A chevron into the [MCP Server detail](#mcp-server-detail-screen)
+
+The list is fetched from `/api/skills/user-mcp-servers` — a tenant + principal scoped REST endpoint — not from GraphQL. That's deliberate: the list is cheap to compute on the server and the REST endpoint is easier to cache for the common case of the user just reviewing state.
+
+### Connecting an MCP server
+
+Connecting is the same pattern as integrations: tap **Connect**, the app opens a WebBrowser to the MCP server's OAuth authorize URL, the user consents, the redirect lands back, and the per-user token is stored in Secrets Manager at the MCP-token path for this user and this server.
+
+Once connected, agents that have this MCP server assigned can call its tools on the user's behalf during invocations initiated by the user.
+
+### MCP server detail screen
+
+**Route:** `/settings/mcp-server-detail`
+
+The detail screen shows:
+
+- The MCP server's name, description, and transport
+- A list of tools the server exposes, with a short description per tool
+- The user's auth status
+- A connect / reconnect / disconnect button
+
+The tools list is the canonical "what can this server actually do?" view. It's read from the cached tool list the admin app captured when the MCP server was registered (see [Admin — Connectors & Tools](/applications/admin/connectors/)).
+
+### Token refresh behavior
+
+Users don't normally see the token-refresh flow — it runs automatically through the [oauth-token resolver](/concepts/mcp-servers/#token-refresh) before any outbound call. The user only sees a **"Reconnect"** prompt when a refresh has definitively failed (for example, the refresh token was revoked on the provider side), at which point they need to re-grant access.
+
+## Why integrations and MCP are separate screens
+
+The admin-side distinction (built-in tools vs MCP servers) flows through to the mobile app as two separate screens. The practical reason is that integrations are a **tenant-curated, named set** — a small number of providers the tenant's operators decided to support — while MCP servers are **assigned per agent** and can grow freely as the tenant adds new tool surfaces. Collapsing them into one screen would conflate two different mental models.
+
+For users, the rule is simple:
+
+- **Integrations** is where you grant access to the big, well-known providers (Google, Microsoft, task systems).
+- **MCP Servers** is where you grant access to whatever custom MCP servers the tenant has configured.
+
+In most tenants, the integrations list is short and stable while the MCP list grows over time as new tool surfaces come online.
+
+## Troubleshooting
+
+A few things to check when a connection isn't behaving:
+
+- **Connect button loops back to the same screen** — the WebBrowser session may have been closed before the redirect. Try again. If it persists, the tenant's OAuth redirect URI is probably misconfigured on the provider side.
+- **"Needs Connection" sticks after a successful consent** — the app polls the connection status after a redirect; if the poll is missed, pull to refresh the screen.
+- **Tools list is empty** — the admin app's "Test Connection" for this MCP server may have failed, so the tool list was never cached. Ask the operator to retest from the admin side.
+- **Push notifications not arriving after a task-integration connect** — see [Push Notifications](/applications/mobile/push-notifications/).
+
+## Related pages
+
+- [MCP Tool Connectors](/concepts/mcp-servers/) — the concept page with the full MCP model and token lifecycle
+- [External Task Connectors](/concepts/connectors/external-tasks/) — the specific connector class that drives the Tasks tab
+- [Admin — Connectors & Tools](/applications/admin/connectors/) — the tenant-level registration side
+- [Mobile — Authentication](/applications/mobile/authentication/) — the sign-in flow that precedes any of this

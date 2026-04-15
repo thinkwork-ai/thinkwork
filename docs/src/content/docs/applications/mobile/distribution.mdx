@@ -1,0 +1,98 @@
+---
+title: Mobile — Distribution
+description: EAS build channels, TestFlight setup, iOS bundle configuration, and the development / preview / production pipeline for the ThinkWork mobile app.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The mobile app is built and distributed through [Expo Application Services (EAS)](https://expo.dev/eas). This page covers how the three EAS channels (development, preview, production) are configured, how TestFlight distribution works, and the iOS-specific bits of the bundle.
+
+## EAS channels
+
+The app has three channels configured in `eas.json`, each with different trade-offs:
+
+| Channel | Distribution | Used for |
+|---|---|---|
+| **Development** | Internal, **device only** — simulator builds disabled | Running the dev client on a physical iPhone for debugging |
+| **Preview** | Internal, no auto-submit | Sharing a pre-production build with stakeholders before cutting a TestFlight release |
+| **Production** | External via TestFlight / App Store | Public releases through Apple's review pipeline |
+
+All three channels share the same Cognito endpoints and AWS backend — the difference is how the build is distributed, not which backend it talks to.
+
+### Development builds
+
+Development builds run the Expo dev client, so they support hot reload, remote debugging, and live updates without a full rebuild for every change. Development builds are **not** simulator builds — `eas build --profile development --platform ios` produces an `.ipa` that installs on a registered development device through Apple's developer provisioning profile.
+
+The reason simulator builds are disabled in this profile: the push-notification path needs a real device (simulators don't have push tokens), and most of what's worth debugging on the mobile app involves push registration, biometric unlock, or the OAuth WebBrowser, all of which either don't work or behave differently on a simulator.
+
+For simulator workflows during normal development, use `npx expo start` against a local Metro bundler — that does not need EAS.
+
+### Preview builds
+
+Preview builds are internal-distribution `.ipa` files shared directly with reviewers through Apple Business Manager or ad-hoc provisioning. They're the right tool when you want someone to try a pre-release on their real device without going through the TestFlight review delay.
+
+Preview is distinct from development in that it's a **release build**: optimizations on, source maps stripped, production Metro config. It behaves like the production app except it's not in TestFlight.
+
+### Production builds
+
+Production builds are the only channel that submits to the App Store and TestFlight. The EAS build profile has `autoIncrement: true` (the build number ticks every build), and the channel is `production`. Submission metadata (the Apple account, ASC app id, team id) lives in the EAS config.
+
+When a production build finishes, `eas submit --profile production --platform ios` uploads the `.ipa` to App Store Connect. From there, Apple runs its review, TestFlight receives the build, and external testers can install it. Once it's approved for the App Store, the same build graduates to the public release.
+
+## TestFlight setup
+
+TestFlight for this app runs on an **Apple Individual developer account** — not an Apple Business or Organization account. That has a few practical implications:
+
+- **Single owner.** The team id is tied to a single Apple ID; only that account can manage TestFlight testers and promote builds.
+- **No Apple Business Manager.** Builds are distributed through TestFlight's built-in invite flow (via email or public link), not through a managed-device channel.
+- **Apple review is still required.** Even internal TestFlight distribution requires the build to pass Apple's automated review. Real app review is only triggered when the build is promoted to public TestFlight or submitted for App Store release.
+
+The production EAS profile carries:
+
+- The Apple ID that owns the developer account
+- The App Store Connect app id (`ascAppId`)
+- The Apple team id
+
+<Aside type="caution">
+Changing any of the three fields above is load-bearing. If the Apple ID, app id, or team id don't match the App Store Connect record, `eas submit` silently uploads to the wrong app or errors out with a confusing "build not found" message. Treat these as pinned values.
+</Aside>
+
+## iOS bundle configuration
+
+The iOS bundle is configured through `app.json`:
+
+- **Bundle identifier** — the reverse-DNS identifier registered with Apple for this app
+- **URL scheme** — used for deep links into the app (for example, the OAuth redirect back from Google)
+- **Expo SDK** — pinned to a specific SDK version; the app is currently on Expo SDK 54
+- **New architecture** — React Native's new architecture (Fabric + TurboModules) is enabled
+
+The scheme is load-bearing for OAuth: the redirect URL registered with Cognito includes the scheme, and Cognito's Google provider is configured to redirect back to `thinkwork://auth/callback` on native and `https://<admin-url>/auth/callback` on web.
+
+## Node and Expo pinning
+
+<Aside type="caution">
+The EAS build environment pins Node to a specific version (currently 20.19.5). This is load-bearing: bumping the Node version in EAS without testing locally first has broken builds in the past, and the version in `eas.json` is the source of truth for CI.
+</Aside>
+
+If you upgrade Expo SDK or React Native, update `eas.json`'s Node pin at the same time. Don't rely on "latest" in production builds — Node point releases have changed Metro bundler behavior in subtle ways that only show up as runtime errors after a release.
+
+## Release checklist
+
+A rough checklist for cutting a production build:
+
+1. Merge your changes to `main`
+2. `pnpm install` and run a local dev build to sanity-check
+3. Bump the version in `app.json` (if this is a user-visible release — not every build needs a version bump)
+4. `eas build --profile production --platform ios`
+5. Wait for the build (usually 15–25 minutes)
+6. `eas submit --profile production --platform ios` to upload to App Store Connect
+7. Wait for Apple's automated review (usually 10–30 minutes for TestFlight)
+8. Once TestFlight shows the build as "Ready to Test", announce to testers
+
+If the build fails Apple review, the failure reason is in App Store Connect. Common causes: missing usage descriptions for permissions, unexpected API usage, metadata rejections. None of these are blocking — fix the cause, bump the build number, resubmit.
+
+## Related pages
+
+- [Mobile Overview](/applications/mobile/) — the mobile app at a glance
+- [Mobile — Authentication](/applications/mobile/authentication/) — why the OAuth scheme and bundle id must match
+- [Deploy Configuration](/deploy/configuration/) — the backend side of the Cognito and OAuth setup
