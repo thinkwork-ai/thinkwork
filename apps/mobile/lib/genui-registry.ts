@@ -56,6 +56,19 @@ export interface GenUIContext {
   toolIndex: number;
   /** Current user's id (for senderId on outgoing messages). May be undefined if not yet loaded. */
   currentUserId?: string;
+  /**
+   * Pre-filtered audit rows for the task card's `activity_list` block.
+   *
+   * Supplied by the task detail screen from the raw messages query, filtered
+   * to `role=system` / `metadata.kind = "external_task_event"`. The chat
+   * timeline itself does NOT render these rows — they live exclusively on
+   * the task card as a compact activity log.
+   */
+  activityRows?: Array<{
+    id: string;
+    content: string;
+    createdAt: string;
+  }>;
 }
 
 // Lazy imports to keep bundle size down

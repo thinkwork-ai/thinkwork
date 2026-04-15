@@ -10,6 +10,7 @@ import { FieldList } from './blocks/FieldList';
 import { BadgeRow } from './blocks/BadgeRow';
 import { ActionBar } from './blocks/ActionBar';
 import { FormBlock } from './blocks/FormBlock';
+import { ActivityList, type ActivityRow } from './blocks/ActivityList';
 import {
   StatusActionSheet,
   AssignActionSheet,
@@ -36,6 +37,7 @@ function renderBlock({
   handleActionPress,
   submit,
   keyPrefix,
+  activityRows,
 }: {
   block: TaskBlock;
   item: NormalizedTask;
@@ -43,6 +45,7 @@ function renderBlock({
   handleActionPress: (a: TaskActionSpec) => void;
   submit: SubmitFn;
   keyPrefix: string;
+  activityRows: ActivityRow[];
 }): React.ReactNode {
   switch (block.type) {
     case 'task_header':
@@ -112,6 +115,7 @@ function renderBlock({
               handleActionPress,
               submit,
               keyPrefix: `${keyPrefix}sec${i}-`,
+              activityRows,
             }),
           )}
         </View>
@@ -133,6 +137,14 @@ function renderBlock({
         </View>
       );
     case 'activity_list':
+      return (
+        <ActivityList
+          key={`${keyPrefix}activity`}
+          rows={activityRows}
+          title={block.title}
+          limit={block.limit}
+        />
+      );
     default:
       return null;
   }
@@ -141,6 +153,7 @@ function renderBlock({
 function ExternalTaskCard({ data, context }: GenUIProps) {
   const envelope = data as unknown as ExternalTaskEnvelope;
   const threadId = context?.threadId;
+  const activityRows: ActivityRow[] = (context?.activityRows ?? []) as ActivityRow[];
 
   const [currentEnvelope, setCurrentEnvelope] = useState<ExternalTaskEnvelope>(envelope);
   const [submitting, setSubmitting] = useState(false);
@@ -227,6 +240,7 @@ function ExternalTaskCard({ data, context }: GenUIProps) {
             handleActionPress,
             submit,
             keyPrefix: `${i}-`,
+            activityRows,
           }),
         )}
         {topLevelError ? (
