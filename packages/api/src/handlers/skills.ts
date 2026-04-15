@@ -442,6 +442,12 @@ async function mcpOAuthAuthorize(
 	authorizeUrl.searchParams.set("state", state);
 	authorizeUrl.searchParams.set("code_challenge", codeChallenge);
 	authorizeUrl.searchParams.set("code_challenge_method", "S256");
+	// Force a fresh login prompt instead of reusing any cached IdP session.
+	// WorkOS specifically recommended `prompt=login` for this flow — it
+	// prevents the "silently authenticated as the last session" edge case
+	// that was reconnecting users to the wrong identity, and it matches
+	// OIDC §3.1.2.1. Standards-compliant, zero backend state change.
+	authorizeUrl.searchParams.set("prompt", "login");
 
 	return {
 		statusCode: 302,
