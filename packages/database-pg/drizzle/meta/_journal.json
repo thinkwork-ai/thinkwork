@@ -36,6 +36,20 @@
       "when": 1776249324500,
       "tag": "0004_glamorous_magneto",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1776271655486,
+      "tag": "0005_ancient_nocturne",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1776276212924,
+      "tag": "0006_new_colonel_america",
+      "breakpoints": true
     }
   ]
 }

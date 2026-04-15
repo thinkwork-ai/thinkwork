@@ -56,6 +56,15 @@ export const threads = pgTable(
 		cancelled_at: timestamp("cancelled_at", { withTimezone: true }),
 		closed_at: timestamp("closed_at", { withTimezone: true }),
 		archived_at: timestamp("archived_at", { withTimezone: true }),
+		// Sync state for threads that mirror an external work item (task-
+		// channel rows). NULL = untracked (threads that never needed a
+		// sync, e.g. internal chats). "local" = mobile-created before the
+		// external API was wired, will never sync. "pending" = in-flight
+		// create/update call. "synced" = external system has this row.
+		// "error" = last sync attempt failed; see sync_error for details
+		// and the retryTaskSync mutation for the recovery path.
+		sync_status: text("sync_status"),
+		sync_error: text("sync_error"),
 		last_turn_completed_at: timestamp("last_turn_completed_at", { withTimezone: true }),
 		last_response_preview: text("last_response_preview"),
 		last_read_at: timestamp("last_read_at", { withTimezone: true }),

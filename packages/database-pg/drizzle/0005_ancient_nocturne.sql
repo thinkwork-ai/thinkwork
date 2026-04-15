@@ -1,0 +1,2 @@
+ALTER TABLE "user_quick_actions" ADD COLUMN "scope" text DEFAULT 'thread' NOT NULL;--> statement-breakpoint
+CREATE INDEX "idx_user_quick_actions_user_tenant_scope" ON "user_quick_actions" USING btree ("user_id","tenant_id","scope");
