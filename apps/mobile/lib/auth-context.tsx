@@ -29,6 +29,11 @@ import * as SecureStore from "expo-secure-store";
 // Keys for biometric credential storage
 const CRED_EMAIL_KEY = "biometric_stored_email";
 const CRED_PASSWORD_KEY = "biometric_stored_password";
+// Google federated JWTs don't carry custom:tenant_id, so we persist the
+// id returned by bootstrapUser here and rehydrate it during the cold-start
+// session restore. Without this, every cold start drops the user on /sign-in
+// and silently disables their biometric preference (see _layout.tsx guard).
+const STORED_TENANT_ID_KEY = "thinkwork_stored_tenant_id";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -95,6 +100,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const oauthToken = await auth.getIdToken();
             if (oauthToken) {
               setAuthToken(oauthToken);
+
+              // Federated (Google) JWTs don't carry custom:tenant_id. We
+              // resolve it in two tiers so a valid token NEVER bounces the
+              // user back to /sign-in on cold start:
+              //
+              //   1. Fast path — read a cached tenantId from SecureStore
+              //      (set after the last successful bootstrapUser call).
+              //      Zero network cost, sub-ms read.
+              //
+              //   2. Network fallback — if the cache is empty (existing
+              //      sessions that predate this fix, or if the OS wiped
+              //      SecureStore), call the bootstrapUser mutation with the
+              //      restored token. Persist the result so step 1 handles
+              //      it next time. Self-healing.
+              //
+              // Only if BOTH paths fail do we set the user with no tenantId,
+              // and at that point the routing guard in _layout.tsx will
+              // route to /sign-in — but it will NOT disable biometric or
+              // wipe credentials.
+              if (!restoredUser.tenantId) {
+                try {
+                  const cached = await SecureStore.getItemAsync(STORED_TENANT_ID_KEY);
+                  if (cached) {
+                    restoredUser.tenantId = cached;
+                  }
+                } catch (e) {
+                  console.warn("[AuthProvider] tenantId rehydrate failed:", e);
+                }
+              }
+
+              if (!restoredUser.tenantId) {
+                try {
+                  const graphqlUrl = process.env.EXPO_PUBLIC_GRAPHQL_URL;
+                  if (graphqlUrl) {
+                    const res = await fetch(graphqlUrl, {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${oauthToken}`,
+                      },
+                      body: JSON.stringify({
+                        query: `mutation { bootstrapUser { user { id email name } tenant { id name slug plan } isNew } }`,
+                      }),
+                    });
+                    const payload = await res.json();
+                    const tenantId = payload?.data?.bootstrapUser?.tenant?.id as
+                      | string
+                      | undefined;
+                    if (tenantId) {
+                      restoredUser.tenantId = tenantId;
+                      // Persist so the next cold start takes the fast path.
+                      SecureStore.setItemAsync(STORED_TENANT_ID_KEY, tenantId).catch(
+                        (e) => console.warn("[AuthProvider] tenantId persist failed:", e),
+                      );
+                    } else {
+                      console.warn("[AuthProvider] bootstrapUser returned no tenant", payload);
+                    }
+                  }
+                } catch (e) {
+                  console.warn("[AuthProvider] bootstrapUser fallback failed:", e);
+                }
+              }
+
               setUser(restoredUser);
             }
           }
@@ -278,6 +346,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         oauthUser = { ...oauthUser, tenantId: bootstrap.tenant.id };
       }
 
+      // Persist the tenantId so the next cold start can rehydrate it and
+      // skip the /sign-in bounce. Fire-and-forget — SecureStore writes are
+      // async and we don't want to block the happy path for persistence.
+      // This code runs after the `Platform.OS === "web"` early return above,
+      // so we're guaranteed to be on native here.
+      if (oauthUser.tenantId) {
+        SecureStore.setItemAsync(STORED_TENANT_ID_KEY, oauthUser.tenantId).catch((e) => {
+          console.warn("[AuthProvider] tenantId persist failed:", e);
+        });
+      }
+
       setUser(oauthUser);
       setDidActiveLogin(true);
     } finally {
@@ -306,7 +385,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthToken(null);
     setUser(null);
     setDidActiveLogin(false);
-    // Don't clear stored credentials — user may want biometric login next time
+    // Don't clear stored credentials — user may want biometric login next time.
+    // Do clear the persisted tenantId so a fresh sign-in (possibly as a
+    // different user) doesn't pick up the previous tenant. Fire-and-forget.
+    if (Platform.OS !== "web") {
+      SecureStore.deleteItemAsync(STORED_TENANT_ID_KEY).catch(() => {});
+    }
   }, []);
 
   // ------ Token getter (for manual use) ------

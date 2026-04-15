@@ -12,7 +12,7 @@ import { COLORS } from "@/lib/theme";
 import { useMe } from "@/lib/hooks/use-users";
 import { useTenant } from "@/lib/hooks/use-tenants";
 import { AgentsQuery } from "@/lib/graphql-queries";
-const API_BASE = "https://api.thinkwork.ai";
+const API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(/\/graphql$/, "");
 const GRAPHQL_API_KEY = process.env.EXPO_PUBLIC_GRAPHQL_API_KEY || "";
 
 type ConnectionRow = {
@@ -224,7 +224,7 @@ export default function IntegrationsScreen() {
 
   if (loading || !tenant) {
     return (
-      <DetailLayout title="Integrations">
+      <DetailLayout title="Connectors">
         <View className="flex-1 p-4" style={{ maxWidth: 600 }}>
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-20 w-full rounded-xl mb-3" />
@@ -235,7 +235,7 @@ export default function IntegrationsScreen() {
   }
 
   return (
-    <DetailLayout title="Integrations">
+    <DetailLayout title="Connectors">
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 24 }}
@@ -398,7 +398,7 @@ export default function IntegrationsScreen() {
           {/* Available integrations */}
           <View>
             <Text className="text-sm font-medium text-neutral-500 dark:text-neutral-400 mb-2 px-1">
-              {activeConnections.length > 0 ? "Add More" : "Available Integrations"}
+              {activeConnections.length > 0 ? "Add More" : "Available Connectors"}
             </Text>
             <View className="overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
               {/* Google Workspace */}
