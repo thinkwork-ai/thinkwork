@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { View, Pressable, FlatList, Animated, Easing } from "react-native";
 import { useColorScheme } from "nativewind";
 import { useRouter } from "expo-router";
-import { User, Bot, Check, X, AlertCircle, Clock, ChevronDown, ChevronRight, Copy, FileText, MapPin, DollarSign, UserPlus, CheckSquare, Building2, RefreshCw, MoreHorizontal, Bookmark, ClipboardList } from "lucide-react-native";
+import { User, Bot, Check, X, AlertCircle, Clock, ChevronDown, ChevronRight, Copy, FileText, MapPin, DollarSign, UserPlus, CheckSquare, Building2, RefreshCw, MoreHorizontal, Bookmark, ClipboardList, Info } from "lucide-react-native";
 import * as Clipboard from "expo-clipboard";
 import { useMutation } from "urql";
 import { Text, Muted } from "@/components/ui/typography";
@@ -450,6 +450,19 @@ function TurnContent({
   );
 }
 
+/** Compact log-row content for system-authored external task events.
+ *  Single line, muted, no bubble chrome — a log entry, not a conversation turn. */
+function SystemEventContent({ item }: { item: Message }) {
+  return (
+    <View className="flex-row items-center justify-between">
+      <Text className="text-sm flex-1" variant="muted" numberOfLines={2}>
+        {item.content}
+      </Text>
+      <Muted className="text-xs ml-2">{formatRelativeTime(item.createdAt)}</Muted>
+    </View>
+  );
+}
+
 /** Derive a short summary line for a GenUI tool result */
 /** Icon + color config for GenUI timeline blocks */
 function getGenuiIconConfig(type: string): { icon: any; color: string } {
@@ -732,6 +745,10 @@ export function ActivityTimeline({
       let iconBg = "transparent";
       let iconBorder: string | undefined;
 
+      const isExternalTaskEvent =
+        item.kind === "message" &&
+        item.data.metadata?.kind === "external_task_event";
+
       if (item.kind === "turn") {
         const { color, Icon: StatusIcon } = getTurnStatusStyle(item.data.status, isDark);
         icon = <StatusIcon size={16} color={color} />;
@@ -741,6 +758,9 @@ export function ActivityTimeline({
         const { icon: gIcon, color: gColor } = getGenuiIconConfig(genuiType);
         icon = React.createElement(gIcon, { size: 16, color: gColor });
         iconBorder = gColor;
+      } else if (isExternalTaskEvent) {
+        icon = <Info size={16} color={colors.mutedForeground} />;
+        iconBorder = colors.border;
       } else {
         const isUser =
           item.kind === "message" &&
@@ -759,6 +779,8 @@ export function ActivityTimeline({
       let content: React.ReactNode;
       if (item.kind === "genui") {
         content = <GenUIContent toolResult={item.data.toolResult} toolIndex={item.data.toolIndex} message={item.data.message} colors={colors} onSaveRecipe={onSaveRecipe} currentUserId={currentUserId} />;
+      } else if (isExternalTaskEvent) {
+        content = <SystemEventContent item={item.data} />;
       } else if (item.kind === "message") {
         const isUser = (item.data.role || "").toLowerCase() === "user" || (item.data.senderType || "").toLowerCase() === "user";
         if (isUser) content = <UserMessageContent item={item.data} colors={colors} onLinkPress={onLinkPress} />;
