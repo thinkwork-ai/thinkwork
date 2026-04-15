@@ -1,0 +1,2 @@
+DROP INDEX "uq_webhook_deliveries_provider_event";--> statement-breakpoint
+CREATE INDEX "idx_webhook_deliveries_provider_event" ON "webhook_deliveries" USING btree ("provider_name","provider_event_id");

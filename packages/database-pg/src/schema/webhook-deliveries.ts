@@ -24,7 +24,6 @@ import {
 	jsonb,
 	boolean,
 	index,
-	uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core";
@@ -100,11 +99,15 @@ export const webhookDeliveries = pgTable(
 			table.received_at,
 		),
 		index("idx_webhook_deliveries_status").on(table.resolution_status),
-		// Idempotency for providers that send a delivery id — partial unique
-		// via raw SQL since drizzle doesn't yet expose .where() on index defs.
-		uniqueIndex("uq_webhook_deliveries_provider_event")
-			.on(table.provider_name, table.provider_event_id)
-			.where(sql`provider_event_id IS NOT NULL`),
+		// Lookup by provider event id — for audit queries and manual retries.
+		// NOT unique: retries of the same event must all be logged so the audit
+		// trail is complete. Thread idempotency happens upstream in
+		// ensureExternalTaskThread via (tenantId, provider, externalTaskId), so
+		// a unique index here would just silently drop audit rows on retry.
+		index("idx_webhook_deliveries_provider_event").on(
+			table.provider_name,
+			table.provider_event_id,
+		),
 	],
 );
 
