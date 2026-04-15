@@ -39,18 +39,65 @@ describe("lastmileAdapter.normalizeItem", () => {
 		const item = lastmileAdapter.normalizeItem(fixture as Record<string, unknown>);
 		expect(item.capabilities.updateStatus).toBe(true);
 		expect(item.capabilities.assignTask).toBe(true);
-		expect(item.capabilities.commentOnTask).toBe(true);
+		// PR F: LastMile MCP exposes no comment tool — capability is false
+		// so the mobile card hides the Comment button.
+		expect(item.capabilities.commentOnTask).toBe(false);
 		expect(item.capabilities.editTaskFields).toBe(true);
 	});
 
-	it("surfaces all 4 action specs in a stable id order", () => {
+	it("surfaces 3 action specs in stable id order (no Comment — unsupported)", () => {
 		const item = lastmileAdapter.normalizeItem(fixture as Record<string, unknown>);
 		expect(item.actions.map((a) => a.id)).toEqual([
 			"act_update_status",
 			"act_assign",
-			"act_comment",
 			"act_edit_fields",
 		]);
+	});
+
+	it("unwraps a populated status object (LastMile tasks_get shape)", () => {
+		const raw = {
+			...(fixture as Record<string, unknown>),
+			status: {
+				id: "status_hfcqtycmuaix6pjfnu3mb3ot",
+				name: "Backlog",
+				color: "#969696",
+				icon: "IconPercentage0",
+			},
+		};
+		const item = lastmileAdapter.normalizeItem(raw);
+		expect(item.core.status).toEqual({
+			value: "status_hfcqtycmuaix6pjfnu3mb3ot",
+			label: "Backlog",
+			color: "#969696",
+		});
+		// Status field pre-fill uses the unwrapped id so a future save-edit
+		// can round-trip the real LastMile status identifier.
+		const statusField = item.fields.find((f) => f.key === "status");
+		expect(statusField?.value).toBe("status_hfcqtycmuaix6pjfnu3mb3ot");
+	});
+
+	it("unwraps a populated priority object too", () => {
+		const raw = {
+			...(fixture as Record<string, unknown>),
+			priority: { id: "prio_high", name: "High", color: "#f00" },
+		};
+		const item = lastmileAdapter.normalizeItem(raw);
+		expect(item.core.priority).toEqual({
+			value: "prio_high",
+			label: "High",
+			color: "#f00",
+		});
+	});
+
+	it("still accepts legacy string values for status (older fixtures)", () => {
+		// The existing fixture already drives this: status = "in_progress"
+		// (a plain string) should fall through to statusLabelFor().
+		const item = lastmileAdapter.normalizeItem(fixture as Record<string, unknown>);
+		expect(item.core.status).toEqual({
+			value: "in_progress",
+			label: "In progress",
+			color: "amber",
+		});
 	});
 });
 
