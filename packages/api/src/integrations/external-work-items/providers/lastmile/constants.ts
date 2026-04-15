@@ -13,17 +13,22 @@ export const LASTMILE_MCP_SERVER = "tasks";
 
 /** MCP tool names exposed by the LastMile Tasks server.
  *
- * Ground-truth names come from LastMile's `tools/list` JSON-RPC response.
- * Reads are pluralized (`tasks_get`, `tasks_list`); writes are singular
- * (`task_update`, `task_update_status`). The "get a task" tool requires
- * `task_id` (not `id`) as its argument — see refresh.ts.
+ * Ground-truth names come from LastMile's `tools/list` JSON-RPC response
+ * (re-probed 2026-04-15 for PR F). Reads are pluralized (`tasks_get`,
+ * `tasks_list`); writes are singular (`task_update`, `task_update_status`,
+ * `task_update_assignee`). **Every write tool requires `task_id`** as its
+ * argument key, not `id` — see `executeAction.ts` for the full list.
+ *
+ * There is NO comment tool on the server. The Comment action is
+ * unsupported for now; `executeLastmileAction` throws a clear error when
+ * invoked and `normalizeLastmileTask` sets `capabilities.commentOnTask =
+ * false` so the mobile card hides the button via the capability gate.
  */
 export const LASTMILE_TOOLS = {
 	get: "tasks_get",
 	list: "tasks_list",
 	updateStatus: "task_update_status",
-	assign: "task_assign",
-	addComment: "task_add_comment",
+	assign: "task_update_assignee",
 	update: "task_update",
 } as const;
 

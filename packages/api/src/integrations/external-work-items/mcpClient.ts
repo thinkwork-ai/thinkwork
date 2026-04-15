@@ -46,11 +46,32 @@ export async function callMcpTool({
 
 	const rpc = (await rpcResponse.json()) as {
 		error?: { message?: string };
-		result?: { content?: Array<{ type?: string; text?: string }> };
+		result?: {
+			content?: Array<{ type?: string; text?: string }>;
+			isError?: boolean;
+		};
 	};
+
+	// Transport-level JSON-RPC error (server rejected the request shape).
 	if (rpc?.error) throw new Error(rpc.error.message || "MCP error");
 
-	const content = rpc?.result?.content;
+	// Tool-level error — LastMile (and the MCP spec) signals "the tool
+	// ran and failed" by returning `result.isError: true` with the failure
+	// message inside `result.content[0].text`, NOT via the top-level
+	// `error` field. Without this branch the error string silently falls
+	// through as a "payload" and downstream callers throw a confusing
+	// "non-object payload" from their own shape checks. Probed on
+	// LastMile's mcp-dev server for `tasks_get` with a stale id:
+	//   { result: { content: [{type:"text",text:"Error: Task not found."}], isError: true } }
+	const result = rpc?.result;
+	if (result?.isError === true) {
+		const errText = Array.isArray(result.content)
+			? (result.content.find((c) => c?.type === "text" && c?.text)?.text ?? "tool error")
+			: "tool error";
+		throw new Error(`[mcp ${tool}] ${errText}`);
+	}
+
+	const content = result?.content;
 	if (Array.isArray(content)) {
 		for (const item of content) {
 			if (item?.type === "text" && item?.text) {

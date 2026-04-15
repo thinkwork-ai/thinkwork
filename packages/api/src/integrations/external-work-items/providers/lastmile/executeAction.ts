@@ -34,44 +34,59 @@ export async function executeLastmileAction(args: {
 
 	switch (actionType) {
 		case "external_task.update_status": {
-			const status = params.value ?? params.status;
-			if (!status) throw new Error("[lastmile] update_status requires params.value or params.status");
+			// `task_update_status` takes (task_id, status_id). Callers who
+			// supply a raw value string (from the mobile form's select) are
+			// responsible for mapping it to a LastMile opaque status id —
+			// the value/id mapping is a product follow-up (see PR G scope).
+			const statusId = params.status_id ?? params.value ?? params.status;
+			if (!statusId) {
+				throw new Error(
+					"[lastmile] update_status requires params.status_id (opaque LastMile status id, e.g. 'status_hfcqtycmuaix6pjfnu3mb3ot')",
+				);
+			}
 			await callMcpTool({
 				server: LASTMILE_MCP_SERVER,
 				tool: LASTMILE_TOOLS.updateStatus,
-				args: { id: externalTaskId, status },
+				args: { task_id: externalTaskId, status_id: statusId },
 				authToken: ctx.authToken,
 			});
 			break;
 		}
 		case "external_task.assign": {
-			const userId = params.userId ?? params.assignee ?? params.value;
-			if (!userId) throw new Error("[lastmile] assign requires params.userId");
+			// `task_update_assignee` takes (task_id, assignee_id) — the
+			// assignee_id is a LastMile user id like `user_wv4f3er5wsd...`.
+			const assigneeId =
+				params.assignee_id ?? params.userId ?? params.assignee ?? params.value;
+			if (!assigneeId) {
+				throw new Error(
+					"[lastmile] assign requires params.assignee_id (LastMile user id)",
+				);
+			}
 			await callMcpTool({
 				server: LASTMILE_MCP_SERVER,
 				tool: LASTMILE_TOOLS.assign,
-				args: { id: externalTaskId, userId },
+				args: { task_id: externalTaskId, assignee_id: assigneeId },
 				authToken: ctx.authToken,
 			});
 			break;
 		}
 		case "external_task.comment": {
-			const body = params.body ?? params.value ?? params.text;
-			if (!body) throw new Error("[lastmile] comment requires params.body");
-			await callMcpTool({
-				server: LASTMILE_MCP_SERVER,
-				tool: LASTMILE_TOOLS.addComment,
-				args: { id: externalTaskId, body },
-				authToken: ctx.authToken,
-			});
-			break;
+			// LastMile's MCP server does not expose a comment tool at all
+			// (verified via `tools/list` — there is no `task_add_comment`
+			// or equivalent). Fail fast with a clear message instead of
+			// silently calling a non-existent tool; the mobile card should
+			// hide the Comment button via `capabilities.commentOnTask` but
+			// this is the defensive backstop.
+			throw new Error(
+				"[lastmile] comment is not supported — LastMile MCP exposes no comment tool",
+			);
 		}
 		case "external_task.edit_fields": {
 			const { _formId: _ignoreFormId, ...fields } = params as Record<string, unknown>;
 			await callMcpTool({
 				server: LASTMILE_MCP_SERVER,
 				tool: LASTMILE_TOOLS.update,
-				args: { id: externalTaskId, ...fields },
+				args: { task_id: externalTaskId, ...fields },
 				authToken: ctx.authToken,
 			});
 			break;
