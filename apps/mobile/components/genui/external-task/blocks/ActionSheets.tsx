@@ -115,17 +115,17 @@ export function StatusActionSheet({ visible, onClose, item, submit }: CommonProp
 			enablePanDownToClose
 			onDismiss={onClose}
 			backdropComponent={backdrop}
+			index={0}
+			enableDynamicSizing={false}
 			backgroundStyle={{
 				backgroundColor: isDark ? "#1c1c1e" : "#ffffff",
-				borderRadius: 20,
+				borderTopLeftRadius: 16,
+				borderTopRightRadius: 16,
 			}}
 			handleIndicatorStyle={{
 				backgroundColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.15)",
 				width: 36,
 			}}
-			detached
-			bottomInset={80}
-			style={{ marginHorizontal: 20 }}
 		>
 			<View className="flex-row items-center justify-between px-4 pb-2">
 				<Text className="text-base font-semibold">Change status</Text>
@@ -219,17 +219,17 @@ export function AssignActionSheet({ visible, onClose, item, submit }: CommonProp
 			keyboardBehavior="interactive"
 			onDismiss={onClose}
 			backdropComponent={backdrop}
+			index={0}
+			enableDynamicSizing={false}
 			backgroundStyle={{
 				backgroundColor: isDark ? "#1c1c1e" : "#ffffff",
-				borderRadius: 20,
+				borderTopLeftRadius: 16,
+				borderTopRightRadius: 16,
 			}}
 			handleIndicatorStyle={{
 				backgroundColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.15)",
 				width: 36,
 			}}
-			detached
-			bottomInset={80}
-			style={{ marginHorizontal: 20 }}
 		>
 			<BottomSheetView style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
 				<View className="flex-row items-center justify-between pb-2">
@@ -329,6 +329,8 @@ export function CommentActionSheet({ visible, onClose, submit }: Omit<CommonProp
 			android_keyboardInputMode="adjustResize"
 			onDismiss={onClose}
 			backdropComponent={backdrop}
+			index={0}
+			enableDynamicSizing={false}
 			backgroundStyle={{
 				backgroundColor: isDark ? "#1c1c1e" : "#ffffff",
 				borderTopLeftRadius: 16,
@@ -518,6 +520,8 @@ export function EditFormActionSheet({ visible, onClose, item, submit }: CommonPr
 			android_keyboardInputMode="adjustResize"
 			onDismiss={onClose}
 			backdropComponent={backdrop}
+			index={0}
+			enableDynamicSizing={false}
 			backgroundStyle={{
 				backgroundColor: isDark ? "#1c1c1e" : "#ffffff",
 				borderTopLeftRadius: 16,
