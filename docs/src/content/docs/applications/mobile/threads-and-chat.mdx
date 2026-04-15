@@ -1,19 +1,19 @@
 ---
 title: Mobile — Threads & Chat
-description: The inbox, thread detail, streaming message render, message input with workspace picker, quick actions, and voice dictation in the ThinkWork mobile app.
+description: The Threads tab, thread detail, streaming message render, message input with workspace picker, quick actions, and voice dictation in the ThinkWork mobile app.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Threads are the heart of the mobile app. The Inbox tab shows the user's threads, each thread opens into a chat view with a streaming message timeline, and the message input supports workspace selection, voice dictation, and quick actions.
+Threads are the heart of the mobile app. The **Threads** tab shows the user's threads, each thread opens into a chat view with a streaming message timeline, and the message input supports workspace selection, voice dictation, and quick actions.
 
-## The Inbox
+## The Threads tab
 
 **Tab:** `(tabs)/index`
 
-The Inbox is the user's list of open and recent threads. Each row shows the thread title, the agent handling it, a snippet of the latest message, and a status indicator. Threads that are currently running show a subtle shimmer effect so the user can tell an agent is thinking in real time.
+The Threads tab is the user's list of open and recent threads. Each row shows the thread title, the agent handling it, a snippet of the latest message, and a status indicator. Threads that are currently running show a subtle shimmer effect so the user can tell an agent is thinking in real time.
 
-The Inbox supports:
+The Threads tab supports:
 
 - **Filtering** — by status, by agent, by channel (chat, task, email, Slack, GitHub)
 - **Search** — by title or recent message content
@@ -26,7 +26,7 @@ Rows are rendered by two components: `ThreadRow` for chat threads and `TaskRow` 
 
 **Tab:** `(tabs)/tasks`
 
-The Tasks tab is conditional. It only appears if the user has at least one connected task integration (currently LastMile; future: Linear and others). If no task connector is active, the tab is hidden from the tab bar and the user sees a two-tab layout (Inbox + Settings). As soon as they connect a task integration from **Settings → Integrations**, the Tasks tab appears.
+The Tasks tab is conditional. It only appears if the user has at least one connected task integration (currently LastMile; future: Linear and others). If no task connector is active, the tab is hidden from the tab bar and the user sees a two-tab layout (Threads + Settings). As soon as they connect a task integration from **Settings → Integrations**, the Tasks tab appears.
 
 The Tasks tab itself is a filtered view of the same threads list — it shows only threads where `channel = TASK` and the user is the assigned owner, filtered by active / done / all. See [External Task Connectors](/concepts/connectors/external-tasks/) for the full task-card model.
 
@@ -80,7 +80,7 @@ A plus button opens the workspace-picker sheet (the same one the workspace chip 
 
 ## Real-time, not polling
 
-Everything on the Inbox and thread detail screens is driven by AppSync subscriptions. The mobile app does **not** poll. When the user pulls to refresh, that's a backup path — the subscription should already have delivered the update by the time the user's thumb hits the screen.
+Everything on the Threads list and thread detail screens is driven by AppSync subscriptions. The mobile app does **not** poll. When the user pulls to refresh, that's a backup path — the subscription should already have delivered the update by the time the user's thumb hits the screen.
 
 When the app goes to background and comes back, subscriptions re-attach automatically via the Apollo client's connection management, and any missed updates are backfilled through the GraphQL query cache.
 
