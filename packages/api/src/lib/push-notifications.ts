@@ -23,6 +23,87 @@ function isExpoPushToken(token: string): boolean {
 	return typeof token === "string" && token.startsWith("ExponentPushToken[") && token.endsWith("]");
 }
 
+interface SendExternalTaskPushParams {
+	userId: string;
+	tenantId: string;
+	threadId: string;
+	title: string;
+	body: string;
+	eventKind: string;
+}
+
+/**
+ * Send a push to a specific ThinkWork user (no agent hop). Used by the
+ * external-task webhook pipeline: when LastMile delivers a `task.assigned`
+ * (or a `status` / `due_date` change on a task already assigned to the
+ * user), we push them a banner so they know something happened without
+ * having to open the app.
+ *
+ * `data.threadId` is what `use-push-notifications.ts:62-81` reads to deep
+ * link on tap, so the tap always routes to the task detail screen.
+ */
+export async function sendExternalTaskPush({
+	userId,
+	tenantId: _tenantId,
+	threadId,
+	title,
+	body,
+	eventKind,
+}: SendExternalTaskPushParams) {
+	try {
+		const db = getDb();
+
+		const rows = await db
+			.select({ id: users.id, email: users.email, token: users.expo_push_token })
+			.from(users)
+			.where(eq(users.id, userId));
+
+		if (rows.length === 0) {
+			console.log(`[push-notifications] User ${userId}: not found, skipping external task push`);
+			return;
+		}
+
+		const row = rows[0];
+		if (!row.token) {
+			console.log(`[push-notifications] User ${row.email}: no Expo push token, skipping`);
+			return;
+		}
+		if (!isExpoPushToken(row.token)) {
+			console.warn(`[push-notifications] Invalid token for user ${row.email}: ${row.token.slice(0, 30)}`);
+			return;
+		}
+
+		const message = {
+			to: row.token,
+			sound: "default",
+			title,
+			body: body.length > 150 ? body.slice(0, 147) + "..." : body,
+			data: { threadId, type: "external_task_event", eventKind },
+		};
+
+		try {
+			const res = await fetch(EXPO_PUSH_URL, {
+				method: "POST",
+				headers: {
+					"Accept": "application/json",
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify([message]),
+			});
+			const result = await res.json();
+			console.log(
+				`[push-notifications] external_task_event push (${res.status}) to ${row.email}:`,
+				JSON.stringify(result),
+			);
+		} catch (err) {
+			console.error("[push-notifications] External task push failed:", err);
+		}
+	} catch (err) {
+		// Never let push failures break the ingest pipeline.
+		console.error("[push-notifications] sendExternalTaskPush error:", err);
+	}
+}
+
 /**
  * Send a push notification to the user paired with the agent (agents.human_pair_id).
  */
