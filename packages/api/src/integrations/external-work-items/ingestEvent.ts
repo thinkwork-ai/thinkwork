@@ -24,6 +24,7 @@ import {
 	closeExternalTaskThread,
 	ensureExternalTaskThread,
 } from "./ensureExternalTaskThread.js";
+import { notifyNewMessage, notifyThreadUpdate } from "../../graphql/notify.js";
 
 const { messages } = schema;
 const db = getDb();
@@ -221,27 +222,65 @@ export async function ingestExternalTaskEvent(args: {
 		envelope,
 	});
 
-	// Insert a system activity-timeline entry so the user sees what changed.
-	// Mirrors the audit-message pattern in executeAction.ts but with
-	// metadata.kind = "external_task_event". Returns null for noisy events
-	// (task.created, unknown kinds, field-only changes to updated_at/etc.)
-	// — in those cases we skip the insert entirely.
+	// Insert a system activity-timeline entry so the user sees what changed,
+	// then broadcast via AppSync so the mobile task detail + inbox list
+	// update without the user pull-to-refreshing. `summarizeWebhookEvent`
+	// returns null for noise (task.created, updated_at-only, etc.) — in
+	// that case we skip the insert AND the notify to avoid empty pushes.
 	const summary = summarizeWebhookEvent(event, envelope);
 	if (summary) {
 		try {
-			await db.insert(messages).values({
-				thread_id: result.threadId,
-				tenant_id: conn.tenantId,
-				role: "system",
-				content: summary,
-				sender_type: "system",
-				metadata: {
-					kind: "external_task_event",
-					eventKind: event.kind,
-					provider,
-					externalTaskId: event.externalTaskId,
-					providerEventId: event.providerEventId,
-				},
+			const [inserted] = await db
+				.insert(messages)
+				.values({
+					thread_id: result.threadId,
+					tenant_id: conn.tenantId,
+					role: "system",
+					content: summary,
+					sender_type: "system",
+					metadata: {
+						kind: "external_task_event",
+						eventKind: event.kind,
+						provider,
+						externalTaskId: event.externalTaskId,
+						providerEventId: event.providerEventId,
+					},
+				})
+				.returning({ id: messages.id });
+
+			// AppSync broadcast — fire-and-forget, matching the other
+			// thread-mutation call sites. A notify failure must never
+			// break ingest; the row is already durable in Postgres and
+			// the mobile client will pick it up on next pull-to-refresh.
+			if (inserted?.id) {
+				notifyNewMessage({
+					messageId: inserted.id,
+					threadId: result.threadId,
+					tenantId: conn.tenantId,
+					role: "system",
+					content: summary,
+					senderType: "system",
+				}).catch((err) => {
+					console.warn(
+						`[ingest:${provider}] notifyNewMessage failed for ${event.externalTaskId}:`,
+						(err as Error).message,
+					);
+				});
+			}
+			notifyThreadUpdate({
+				threadId: result.threadId,
+				tenantId: conn.tenantId,
+				// The thread row was just refreshed by ensureExternalTaskThread;
+				// pass the envelope's status when we have one so the push
+				// payload matches reality. Fallback matches sendMessage.
+				status:
+					envelope?.item.core.status?.value ?? "in_progress",
+				title,
+			}).catch((err) => {
+				console.warn(
+					`[ingest:${provider}] notifyThreadUpdate failed for ${event.externalTaskId}:`,
+					(err as Error).message,
+				);
 			});
 		} catch (err) {
 			console.warn(

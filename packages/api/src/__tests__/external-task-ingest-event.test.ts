@@ -10,13 +10,26 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// ── DB: only `insert` is used (handoff message). ─────────────────────────────
+// ── DB: insert is used for both the closed-thread handoff message (bare
+//        `.values(...)` call) and the PR A/B activity message
+//        (`.values(...).returning({ id })`). The mock chain supports both
+//        shapes: it returns a thenable that also exposes `.returning()`.
+// ─────────────────────────────────────────────────────────────────────────────
 
-const { mockInsertValues, mockInsert, mockDb } = vi.hoisted(() => {
-	const mockInsertValues = vi.fn().mockResolvedValue(undefined);
+const { mockInsertValues, mockInsertReturning, mockInsert, mockDb } = vi.hoisted(() => {
+	const mockInsertReturning = vi.fn().mockResolvedValue([{ id: "mock-msg-id" }]);
+	// Typed parameter so TS infers `mock.calls` as `[unknown][]` and lets
+	// tests read the insert payload via `mock.calls[0][0]`. Without this,
+	// `vi.fn(() => ...)` infers a zero-arg factory and `calls` ends up as
+	// `never[][]`, which breaks TS2493 on tuple indexing.
+	const mockInsertValues = vi.fn((_values: unknown) => ({
+		returning: mockInsertReturning,
+		then: (resolve: (value: undefined) => unknown, reject?: (reason: unknown) => unknown) =>
+			Promise.resolve(undefined).then(resolve, reject),
+	}));
 	const mockInsert = vi.fn(() => ({ values: mockInsertValues }));
 	const mockDb = { insert: mockInsert };
-	return { mockInsertValues, mockInsert, mockDb };
+	return { mockInsertValues, mockInsertReturning, mockInsert, mockDb };
 });
 
 vi.mock("@thinkwork/database-pg", () => ({
@@ -162,7 +175,7 @@ beforeEach(() => {
 	} as never);
 	mockBuildBlocks.mockReturnValue([]);
 	mockInsert.mockReturnValue({ values: mockInsertValues });
-	mockInsertValues.mockResolvedValue(undefined);
+	mockInsertReturning.mockResolvedValue([{ id: "mock-msg-id" }]);
 });
 
 // ── Tests ────────────────────────────────────────────────────────────────────
