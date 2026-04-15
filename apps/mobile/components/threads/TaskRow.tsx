@@ -1,6 +1,6 @@
-import { View, Pressable } from "react-native";
+import { View, Pressable, ActivityIndicator } from "react-native";
 import { useColorScheme } from "nativewind";
-import { ChevronRight, Check, CheckSquare, ListChecks, AlertCircle, Clock } from "lucide-react-native";
+import { ChevronRight, Check, CheckSquare, ListChecks, AlertCircle, Clock, CloudOff, RefreshCw } from "lucide-react-native";
 import { Text, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
 
@@ -14,9 +14,96 @@ interface TaskRowProps {
     childCount?: number;
     dueAt?: string | null;
     assignee?: { name?: string | null } | null;
+    /** External-sync state for mobile-created task rows. See
+     *  packages/api/src/integrations/external-work-items/syncExternalTaskOnCreate.ts
+     *  for the full state machine. null for webhook-ingested rows. */
+    syncStatus?: string | null;
+    syncError?: string | null;
   };
   onPress: () => void;
   hideAssignee?: boolean;
+  /** Fires retryTaskSync(threadId) for error-state rows. Parent is
+   *  responsible for debouncing and refetching the list after. */
+  onRetrySync?: (taskId: string) => void;
+}
+
+/**
+ * Small chip that communicates the outbound-sync state of a mobile-created
+ * task. The state machine is owned by the backend (see
+ * `syncExternalTaskOnCreate.ts`); this component is purely presentational
+ * and reacts to `task.syncStatus`.
+ *
+ *   pending → spinner + "Syncing…"   (in-flight create/retry call)
+ *   local   → cloud-off + "Local"    (no connector, or API not wired)
+ *   error   → refresh + "Retry sync" (tap to fire retryTaskSync)
+ */
+function SyncBadge({
+  status,
+  error,
+  onRetry,
+  isDark,
+}: {
+  status: "pending" | "local" | "error";
+  error: string | null;
+  onRetry?: () => void;
+  isDark: boolean;
+}) {
+  const palette = (() => {
+    if (status === "pending") {
+      return {
+        bg: isDark ? "rgba(96,165,250,0.15)" : "rgba(37,99,235,0.08)",
+        fg: isDark ? "#60a5fa" : "#2563eb",
+      };
+    }
+    if (status === "local") {
+      return {
+        bg: isDark ? "rgba(163,163,163,0.15)" : "rgba(115,115,115,0.08)",
+        fg: isDark ? "#a3a3a3" : "#737373",
+      };
+    }
+    // error
+    return {
+      bg: isDark ? "rgba(248,113,113,0.15)" : "rgba(220,38,38,0.08)",
+      fg: isDark ? "#f87171" : "#dc2626",
+    };
+  })();
+
+  const label =
+    status === "pending" ? "Syncing…" : status === "local" ? "Local" : "Retry sync";
+
+  const inner = (
+    <View
+      className="flex-row items-center gap-1 rounded-full"
+      style={{ backgroundColor: palette.bg, paddingHorizontal: 6, paddingVertical: 2 }}
+    >
+      {status === "pending" ? (
+        <ActivityIndicator size="small" color={palette.fg} style={{ transform: [{ scale: 0.6 }] }} />
+      ) : status === "local" ? (
+        <CloudOff size={10} color={palette.fg} />
+      ) : (
+        <RefreshCw size={10} color={palette.fg} />
+      )}
+      <Text style={{ fontSize: 10, fontWeight: "600", color: palette.fg }}>{label}</Text>
+    </View>
+  );
+
+  // Error rows are tappable for retry. The Pressable stops event
+  // propagation so the tap doesn't also open the thread detail.
+  if (status === "error" && onRetry) {
+    return (
+      <Pressable
+        onPress={(e) => {
+          e.stopPropagation?.();
+          onRetry();
+        }}
+        accessibilityLabel={error ? `Retry sync — ${error}` : "Retry sync"}
+        className="active:opacity-70"
+      >
+        {inner}
+      </Pressable>
+    );
+  }
+  return inner;
 }
 
 const STATUS_ICON_COLORS: Record<string, { bg: string; fg: string }> = {
@@ -29,7 +116,7 @@ const STATUS_ICON_COLORS: Record<string, { bg: string; fg: string }> = {
 
 const PARENT_ICON = { bg: "rgba(20,184,166,0.15)", fg: "#14b8a6" };
 
-export function TaskRow({ task, onPress, hideAssignee }: TaskRowProps) {
+export function TaskRow({ task, onPress, hideAssignee, onRetrySync }: TaskRowProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? COLORS.dark : COLORS.light;
@@ -37,6 +124,14 @@ export function TaskRow({ task, onPress, hideAssignee }: TaskRowProps) {
   const statusUpper = (task.status || "").toUpperCase();
   const isDone = statusUpper === "DONE";
   const isParent = (task.childCount ?? 0) > 0;
+  // Treat `null` and the legacy value "synced" the same way — no badge.
+  // Rows coming in via the LastMile webhook ingest don't have syncStatus
+  // set because they're already canonical in the external system.
+  const syncStatus = task.syncStatus ?? null;
+  const showSyncBadge =
+    syncStatus === "pending" ||
+    syncStatus === "local" ||
+    syncStatus === "error";
 
   const iconColors = isParent ? PARENT_ICON : (STATUS_ICON_COLORS[statusUpper] || STATUS_ICON_COLORS.TODO);
   const IconComponent = isParent ? ListChecks : (isDone ? Check : CheckSquare);
@@ -79,6 +174,14 @@ export function TaskRow({ task, onPress, hideAssignee }: TaskRowProps) {
             )}
           </View>
           <View className="flex-row items-center gap-1">
+            {showSyncBadge && (
+              <SyncBadge
+                status={syncStatus as "pending" | "local" | "error"}
+                error={task.syncError ?? null}
+                onRetry={onRetrySync ? () => onRetrySync(task.id) : undefined}
+                isDark={isDark}
+              />
+            )}
             {due && (
               <>
                 {isOverdue ? (
