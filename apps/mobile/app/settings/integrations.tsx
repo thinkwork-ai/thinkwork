@@ -12,7 +12,7 @@ import { COLORS } from "@/lib/theme";
 import { useMe } from "@/lib/hooks/use-users";
 import { useTenant } from "@/lib/hooks/use-tenants";
 import { AgentsQuery } from "@/lib/graphql-queries";
-const API_BASE = "https://api.thinkwork.ai";
+const API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(/\/graphql$/, "");
 const GRAPHQL_API_KEY = process.env.EXPO_PUBLIC_GRAPHQL_API_KEY || "";
 
 type ConnectionRow = {

@@ -100,23 +100,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const oauthToken = await auth.getIdToken();
             if (oauthToken) {
               setAuthToken(oauthToken);
-              // Federated (Google) JWTs don't carry custom:tenant_id, so
-              // rehydrate the tenantId from SecureStore where we persisted
-              // it after the bootstrapUser mutation completed on first sign-in.
-              // Without this merge the routing guard in _layout.tsx bounces
-              // the user to /sign-in on every cold start AND silently disables
-              // biometric — making Face ID auto-unlock impossible for OAuth
-              // users.
-              if (!restoredUser.tenantId && Platform.OS !== "web") {
+
+              // Federated (Google) JWTs don't carry custom:tenant_id. We
+              // resolve it in two tiers so a valid token NEVER bounces the
+              // user back to /sign-in on cold start:
+              //
+              //   1. Fast path — read a cached tenantId from SecureStore
+              //      (set after the last successful bootstrapUser call).
+              //      Zero network cost, sub-ms read.
+              //
+              //   2. Network fallback — if the cache is empty (existing
+              //      sessions that predate this fix, or if the OS wiped
+              //      SecureStore), call the bootstrapUser mutation with the
+              //      restored token. Persist the result so step 1 handles
+              //      it next time. Self-healing.
+              //
+              // Only if BOTH paths fail do we set the user with no tenantId,
+              // and at that point the routing guard in _layout.tsx will
+              // route to /sign-in — but it will NOT disable biometric or
+              // wipe credentials.
+              if (!restoredUser.tenantId) {
                 try {
-                  const storedTenantId = await SecureStore.getItemAsync(STORED_TENANT_ID_KEY);
-                  if (storedTenantId) {
-                    restoredUser.tenantId = storedTenantId;
+                  const cached = await SecureStore.getItemAsync(STORED_TENANT_ID_KEY);
+                  if (cached) {
+                    restoredUser.tenantId = cached;
                   }
                 } catch (e) {
                   console.warn("[AuthProvider] tenantId rehydrate failed:", e);
                 }
               }
+
+              if (!restoredUser.tenantId) {
+                try {
+                  const graphqlUrl = process.env.EXPO_PUBLIC_GRAPHQL_URL;
+                  if (graphqlUrl) {
+                    const res = await fetch(graphqlUrl, {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${oauthToken}`,
+                      },
+                      body: JSON.stringify({
+                        query: `mutation { bootstrapUser { user { id email name } tenant { id name slug plan } isNew } }`,
+                      }),
+                    });
+                    const payload = await res.json();
+                    const tenantId = payload?.data?.bootstrapUser?.tenant?.id as
+                      | string
+                      | undefined;
+                    if (tenantId) {
+                      restoredUser.tenantId = tenantId;
+                      // Persist so the next cold start takes the fast path.
+                      SecureStore.setItemAsync(STORED_TENANT_ID_KEY, tenantId).catch(
+                        (e) => console.warn("[AuthProvider] tenantId persist failed:", e),
+                      );
+                    } else {
+                      console.warn("[AuthProvider] bootstrapUser returned no tenant", payload);
+                    }
+                  }
+                } catch (e) {
+                  console.warn("[AuthProvider] bootstrapUser fallback failed:", e);
+                }
+              }
+
               setUser(restoredUser);
             }
           }
