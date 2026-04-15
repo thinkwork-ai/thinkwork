@@ -27,7 +27,11 @@ function renderValue(field: TaskFieldSpec): string {
 export function FieldList({
   item,
   fieldKeys,
-  columns = 2,
+  // `columns` is retained on the block type for backwards compat with the
+  // adapter signature, but the mobile renderer now always uses a single-column
+  // definition-list layout (label left, value right). See PR feat/external-
+  // task-card-ui-cleanup for the rationale.
+  columns: _columns,
   title,
 }: {
   item: NormalizedTask;
@@ -49,16 +53,18 @@ export function FieldList({
           {title}
         </Text>
       ) : null}
-      <View className={`flex-row flex-wrap ${columns === 2 ? 'gap-y-3' : 'gap-y-2'}`}>
+      <View className="gap-y-2">
         {visible.map((f) => (
-          <View
-            key={f.key}
-            className={columns === 2 ? 'w-1/2 pr-3' : 'w-full'}
-          >
-            <Text size="xs" weight="medium" variant="muted" className="uppercase tracking-wide">
+          <View key={f.key} className="flex-row items-baseline">
+            <Text
+              size="xs"
+              weight="medium"
+              variant="muted"
+              className="uppercase tracking-wide w-24"
+            >
               {f.label}
             </Text>
-            <Text size="sm" className="mt-0.5 dark:text-neutral-200">
+            <Text size="sm" className="flex-1 dark:text-neutral-200">
               {renderValue(f)}
             </Text>
           </View>

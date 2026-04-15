@@ -35,6 +35,7 @@ function renderBlock({
   item,
   submitting,
   handleActionPress,
+  onEditPress,
   submit,
   keyPrefix,
   activityRows,
@@ -43,6 +44,7 @@ function renderBlock({
   item: NormalizedTask;
   submitting: boolean;
   handleActionPress: (a: TaskActionSpec) => void;
+  onEditPress: () => void;
   submit: SubmitFn;
   keyPrefix: string;
   activityRows: ActivityRow[];
@@ -55,6 +57,7 @@ function renderBlock({
           item={item}
           showSource={block.showSource}
           showUpdatedAt={block.showUpdatedAt}
+          onEditPress={onEditPress}
         />
       );
     case 'field_list':
@@ -113,6 +116,7 @@ function renderBlock({
               item,
               submitting,
               handleActionPress,
+              onEditPress,
               submit,
               keyPrefix: `${keyPrefix}sec${i}-`,
               activityRows,
@@ -229,6 +233,13 @@ function ExternalTaskCard({ data, context }: GenUIProps) {
 
   const closeSheet = () => setActiveActionType(null);
 
+  // The pencil icon in the task_header opens the same edit form modal that
+  // the removed action_bar used to launch via `external_task.edit_fields`.
+  const onEditPress = useCallback(
+    () => setActiveActionType('external_task.edit_fields'),
+    [],
+  );
+
   return (
     <>
       <View className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-hidden">
@@ -238,6 +249,7 @@ function ExternalTaskCard({ data, context }: GenUIProps) {
             item,
             submitting,
             handleActionPress,
+            onEditPress,
             submit,
             keyPrefix: `${i}-`,
             activityRows,
