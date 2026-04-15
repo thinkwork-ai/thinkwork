@@ -233,7 +233,7 @@ export default function ThreadsScreen() {
     navigatingRef.current = true;
     markRead(thread.id);
     setTimeout(() => {
-      router.push(`/thread/${thread.id}`);
+      router.push({ pathname: `/thread/${thread.id}`, params: thread.title ? { title: thread.title } : {} });
       // Reset after navigation settles
       setTimeout(() => { navigatingRef.current = false; }, 500);
     }, 0);
@@ -397,7 +397,7 @@ export default function ThreadsScreen() {
       {isWide ? (
         <TabHeader title={agentDisplayName} />
       ) : (
-        <View style={{ paddingTop: insets.top }} className="bg-white dark:bg-neutral-950 border-b border-neutral-200 dark:border-neutral-800">
+        <View style={{ paddingTop: insets.top }} className="bg-white dark:bg-neutral-950">
           <View className="flex-row items-center justify-between px-4" style={{ height: 44 }}>
             {/* Left: Agent name + picker */}
             <AgentPicker
@@ -457,37 +457,48 @@ export default function ThreadsScreen() {
         </View>
       )}
 
-      {/* Threads / Tasks tabs with badges */}
-      <View className="flex-row border-b border-neutral-200 dark:border-neutral-800" style={{ backgroundColor: colors.background }}>
-        <Pressable
-          onPress={() => setActiveTab("threads")}
-          className="flex-1 flex-row items-center justify-center gap-1.5 py-2.5"
-          style={activeTab === "threads" ? { borderBottomWidth: 2, borderBottomColor: colors.primary } : undefined}
-        >
-          <Text className={`text-sm font-semibold ${activeTab === "threads" ? "" : "text-neutral-400 dark:text-neutral-500"}`}
-            style={activeTab === "threads" ? { color: colors.primary } : undefined}>Threads</Text>
-          {(() => {
-            const unreadCount = filteredThreads.filter((t: any) => isUnread(t.id, t.lastTurnCompletedAt || t.createdAt, t.lastReadAt)).length;
-            return unreadCount > 0 ? (
-              <View className="rounded-full min-w-[18px] h-[18px] items-center justify-center px-1" style={{ backgroundColor: activeTab === "threads" ? colors.primary : (isDark ? "#404040" : "#d4d4d4") }}>
-                <Text style={{ color: activeTab === "threads" ? (isDark ? "#000" : "#fff") : colors.mutedForeground, fontSize: 10, fontWeight: "700" }}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
+      {/* Threads / Tasks segmented control */}
+      <View
+        className="border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 items-center justify-center"
+        style={{ height: 52, paddingBottom: 8 }}
+      >
+        <View className="flex-row rounded-full bg-neutral-200 dark:bg-neutral-800" style={{ padding: 2 }}>
+          <Pressable
+            onPress={() => setActiveTab("threads")}
+            className="flex-row items-center justify-center gap-1.5 rounded-full"
+            style={{
+              paddingHorizontal: 16,
+              paddingVertical: 5,
+              backgroundColor: activeTab === "threads" ? (isDark ? "#525252" : "#ffffff") : "transparent",
+            }}
+          >
+            <Text className="text-sm font-semibold" style={{ color: activeTab === "threads" ? colors.foreground : colors.mutedForeground }}>Threads</Text>
+            {(() => {
+              const unreadCount = filteredThreads.filter((t: any) => isUnread(t.id, t.lastTurnCompletedAt || t.createdAt, t.lastReadAt)).length;
+              return unreadCount > 0 ? (
+                <View className="rounded-full min-w-[18px] h-[18px] items-center justify-center px-1" style={{ backgroundColor: activeTab === "threads" ? colors.primary : (isDark ? "#404040" : "#d4d4d4") }}>
+                  <Text style={{ color: activeTab === "threads" ? (isDark ? "#000" : "#fff") : colors.mutedForeground, fontSize: 10, fontWeight: "700" }}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
+                </View>
+              ) : null;
+            })()}
+          </Pressable>
+          <Pressable
+            onPress={() => setActiveTab("tasks")}
+            className="flex-row items-center justify-center gap-1.5 rounded-full"
+            style={{
+              paddingHorizontal: 16,
+              paddingVertical: 5,
+              backgroundColor: activeTab === "tasks" ? (isDark ? "#525252" : "#ffffff") : "transparent",
+            }}
+          >
+            <Text className="text-sm font-semibold" style={{ color: activeTab === "tasks" ? colors.foreground : colors.mutedForeground }}>Tasks</Text>
+            {filteredTasks.length > 0 && (
+              <View className="rounded-full min-w-[18px] h-[18px] items-center justify-center px-1" style={{ backgroundColor: activeTab === "tasks" ? colors.primary : (isDark ? "#404040" : "#d4d4d4") }}>
+                <Text style={{ color: activeTab === "tasks" ? (isDark ? "#000" : "#fff") : colors.mutedForeground, fontSize: 10, fontWeight: "700" }}>{filteredTasks.length}</Text>
               </View>
-            ) : null;
-          })()}
-        </Pressable>
-        <Pressable
-          onPress={() => setActiveTab("tasks")}
-          className="flex-1 flex-row items-center justify-center gap-1.5 py-2.5"
-          style={activeTab === "tasks" ? { borderBottomWidth: 2, borderBottomColor: colors.primary } : undefined}
-        >
-          <Text className={`text-sm font-semibold ${activeTab === "tasks" ? "" : "text-neutral-400 dark:text-neutral-500"}`}
-            style={activeTab === "tasks" ? { color: colors.primary } : undefined}>Tasks</Text>
-          {filteredTasks.length > 0 && (
-            <View className="rounded-full min-w-[18px] h-[18px] items-center justify-center px-1" style={{ backgroundColor: activeTab === "tasks" ? colors.primary : (isDark ? "#404040" : "#d4d4d4") }}>
-              <Text style={{ color: activeTab === "tasks" ? (isDark ? "#000" : "#fff") : colors.mutedForeground, fontSize: 10, fontWeight: "700" }}>{filteredTasks.length}</Text>
-            </View>
-          )}
-        </Pressable>
+            )}
+          </Pressable>
+        </View>
       </View>
 
       <View className="flex-1" style={{ backgroundColor: colors.background }}>

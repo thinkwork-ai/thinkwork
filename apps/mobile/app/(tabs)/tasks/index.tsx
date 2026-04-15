@@ -132,7 +132,7 @@ export default function TasksScreen() {
 
     return (
       <Pressable
-        onPress={() => router.push(`/thread/${item.id}`)}
+        onPress={() => router.push({ pathname: `/thread/${item.id}`, params: item.title ? { title: item.title } : {} })}
         className="flex-row items-start py-2 pr-4 active:bg-neutral-50 dark:active:bg-neutral-900"
         style={{ backgroundColor: colors.background }}
       >
