@@ -466,7 +466,36 @@ async function mcpOAuthAuthorize(
 }
 
 /**
- * Step 2: OAuth callback. Exchanges auth code for tokens, stores in SM.
+ * Mobile-app deep link for MCP OAuth completion. The mobile MCP Servers
+ * screen opens the OAuth flow via `WebBrowser.openAuthSessionAsync(...,
+ * MCP_OAUTH_DEEP_LINK, { preferEphemeralSession: true })`, and Expo's
+ * ASWebAuthenticationSession watches for ANY redirect to this scheme.
+ * As soon as our `mcpOAuthCallback` returns a 302 with `Location:
+ * thinkwork://mcp-oauth-complete?...`, the in-app browser auto-closes
+ * and the mobile callback receives the result via Expo's promise.
+ *
+ * Hard-coded `thinkwork` scheme matches `apps/mobile/app.json:scheme`.
+ * If we ever ship the app under a different scheme, update both at once.
+ */
+const MCP_OAUTH_DEEP_LINK = "thinkwork://mcp-oauth-complete";
+
+function deepLinkRedirect(
+	status: "success" | "error",
+	extras: Record<string, string> = {},
+): APIGatewayProxyStructuredResultV2 {
+	const params = new URLSearchParams({ status, ...extras });
+	return {
+		statusCode: 302,
+		headers: { Location: `${MCP_OAUTH_DEEP_LINK}?${params.toString()}` },
+		body: "",
+	};
+}
+
+/**
+ * Step 2: OAuth callback. Exchanges auth code for tokens, stores in SM,
+ * then redirects to the mobile deep link so the in-app auth browser
+ * auto-closes (rather than rendering a manual "you can close this
+ * window" HTML page that requires a tap to dismiss).
  *
  * GET /api/skills/mcp-oauth/callback?code=X&state=Y
  */
@@ -475,14 +504,16 @@ async function mcpOAuthCallback(
 ): Promise<APIGatewayProxyStructuredResultV2> {
 	const qs = event.queryStringParameters || {};
 	const { code, state: stateParam } = qs;
-	if (!code || !stateParam) return error("code and state are required", 400);
+	if (!code || !stateParam) {
+		return deepLinkRedirect("error", { reason: "missing_code_or_state" });
+	}
 
 	// Decode state
 	let state: { mcpServerId: string; userId: string; tenantId: string; tokenEndpoint: string; clientId: string; codeVerifier: string };
 	try {
 		state = JSON.parse(Buffer.from(stateParam, "base64url").toString());
 	} catch {
-		return error("Invalid state parameter", 400);
+		return deepLinkRedirect("error", { reason: "invalid_state" });
 	}
 
 	const apiBaseUrl = `https://${event.headers.host || ""}`;
@@ -505,7 +536,10 @@ async function mcpOAuthCallback(
 	if (!tokenRes.ok) {
 		const errBody = await tokenRes.text().catch(() => "");
 		console.error(`[mcp-oauth] Token exchange failed: ${tokenRes.status} ${errBody}`);
-		return error(`Token exchange failed: ${tokenRes.status}`, 502);
+		return deepLinkRedirect("error", {
+			reason: "token_exchange_failed",
+			status: String(tokenRes.status),
+		});
 	}
 
 	const tokenData = await tokenRes.json() as {
@@ -667,12 +701,10 @@ async function mcpOAuthCallback(
 		console.warn(`[mcp-oauth] LastMile whoami hook failed for user ${state.userId}:`, hookErr);
 	}
 
-	// Return a simple success page that closes the browser
-	return {
-		statusCode: 200,
-		headers: { "Content-Type": "text/html" },
-		body: `<!DOCTYPE html><html><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#111;color:#fff"><div style="text-align:center"><h2>Connected!</h2><p>You can close this window.</p></div></body></html>`,
-	};
+	// Redirect to the mobile deep link — ASWebAuthenticationSession on
+	// the mobile side detects the `thinkwork://` scheme and auto-closes
+	// the in-app browser, returning control to the MCP Servers screen.
+	return deepLinkRedirect("success");
 }
 
 // ---------------------------------------------------------------------------
