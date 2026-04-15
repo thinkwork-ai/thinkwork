@@ -284,7 +284,19 @@ describe("ingestExternalTaskEvent — happy path", () => {
 		// Without an opt-in, defaultAgentId is undefined.
 		const ensureCall = mockEnsureThread.mock.calls[0][0] as { defaultAgentId?: string };
 		expect(ensureCall.defaultAgentId).toBeUndefined();
-		expect(mockInsert).not.toHaveBeenCalled();
+		// PR A: summarizeWebhookEvent inserts an activity row for task.assigned
+		// — the happy path now writes one system message on the new thread.
+		expect(mockInsert).toHaveBeenCalledTimes(1);
+		const activity = mockInsertValues.mock.calls[0][0] as {
+			thread_id: string;
+			role: string;
+			content: string;
+			metadata: { kind: string; eventKind: string };
+		};
+		expect(activity.thread_id).toBe("thread-new");
+		expect(activity.role).toBe("system");
+		expect(activity.metadata.kind).toBe("external_task_event");
+		expect(activity.metadata.eventKind).toBe("task.assigned");
 	});
 
 	it("forwards defaultAgentId from the resolved connection's per-user opt-in", async () => {
@@ -484,6 +496,16 @@ describe("ingestExternalTaskEvent — reassignment handoff", () => {
 		});
 
 		expect(mockCloseThread).not.toHaveBeenCalled();
-		expect(mockInsert).not.toHaveBeenCalled();
+		// PR A: no handoff insert (previous connection unknown), but the
+		// generic activity summary for task.reassigned is still written on
+		// the new thread.
+		expect(mockInsert).toHaveBeenCalledTimes(1);
+		const activity = mockInsertValues.mock.calls[0][0] as {
+			thread_id: string;
+			metadata: { kind: string; eventKind: string };
+		};
+		expect(activity.thread_id).toBe("thread-new");
+		expect(activity.metadata.kind).toBe("external_task_event");
+		expect(activity.metadata.eventKind).toBe("task.reassigned");
 	});
 });
