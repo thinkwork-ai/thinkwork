@@ -99,6 +99,93 @@ describe("lastmileAdapter.normalizeItem", () => {
 			color: "amber",
 		});
 	});
+
+	// ── PR G: injected options + first_name/last_name + user name ─────────
+
+	it("injects the unwrapped status option into field.options (PR G)", () => {
+		const raw = {
+			...(fixture as Record<string, unknown>),
+			status: {
+				id: "status_hfcqtycmuaix6pjfnu3mb3ot",
+				name: "Backlog",
+				color: "#969696",
+			},
+		};
+		const item = lastmileAdapter.normalizeItem(raw);
+		const statusField = item.fields.find((f) => f.key === "status");
+		// The real LastMile id must be present in the field.options so the
+		// mobile FieldList renderer (which does `options.find(o => o.value ===
+		// field.value)`) finds a match and shows "Backlog" instead of the
+		// raw opaque id.
+		const injected = statusField?.options?.find(
+			(o) => o.value === "status_hfcqtycmuaix6pjfnu3mb3ot",
+		);
+		expect(injected?.label).toBe("Backlog");
+		// The legacy options list should still be there for backwards compat.
+		expect(statusField?.options?.some((o) => o.value === "in_progress")).toBe(true);
+	});
+
+	it("injects the unwrapped priority option too (PR G)", () => {
+		const raw = {
+			...(fixture as Record<string, unknown>),
+			priority: { id: "prio_high", name: "High", color: "#f00" },
+		};
+		const item = lastmileAdapter.normalizeItem(raw);
+		const priorityField = item.fields.find((f) => f.key === "priority");
+		const injected = priorityField?.options?.find((o) => o.value === "prio_high");
+		expect(injected?.label).toBe("High");
+	});
+
+	it("does not duplicate an injected option when the id already exists (PR G)", () => {
+		// Edge case: if LastMile ever returns an option whose id matches a
+		// curated LASTMILE_STATUS_OPTIONS value (e.g. `{id: "done", name:
+		// "Completed"}`), we should NOT push a duplicate entry.
+		const raw = {
+			...(fixture as Record<string, unknown>),
+			status: { id: "done", name: "Completed" },
+		};
+		const item = lastmileAdapter.normalizeItem(raw);
+		const statusField = item.fields.find((f) => f.key === "status");
+		const doneEntries = statusField?.options?.filter((o) => o.value === "done") ?? [];
+		expect(doneEntries.length).toBe(1);
+	});
+
+	it("resolves assignee name from first_name + last_name (LastMile tasks_get shape)", () => {
+		const raw = {
+			...(fixture as Record<string, unknown>),
+			assignee: {
+				id: "user_wv4f3er5wsdnev73kkavtixu",
+				first_name: "Eric",
+				last_name: "Odom",
+				email: "eric@homecareintel.com",
+			},
+		};
+		const item = lastmileAdapter.normalizeItem(raw);
+		expect(item.core.assignee?.name).toBe("Eric Odom");
+		expect(item.core.assignee?.email).toBe("eric@homecareintel.com");
+	});
+
+	it("falls back to first_name only when last_name is missing", () => {
+		const raw = {
+			...(fixture as Record<string, unknown>),
+			assignee: {
+				id: "user_x",
+				first_name: "Madonna",
+				email: "madonna@example.com",
+			},
+		};
+		const item = lastmileAdapter.normalizeItem(raw);
+		expect(item.core.assignee?.name).toBe("Madonna");
+	});
+
+	it("falls back to email when no name fields are present", () => {
+		const raw = {
+			...(fixture as Record<string, unknown>),
+			assignee: { id: "user_z", email: "z@example.com" },
+		};
+		const item = lastmileAdapter.normalizeItem(raw);
+		expect(item.core.assignee?.name).toBe("z@example.com");
+	});
 });
 
 describe("lastmileAdapter.buildBlocks", () => {

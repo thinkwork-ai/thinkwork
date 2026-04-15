@@ -10,6 +10,7 @@ import type {
 	NormalizedTask,
 	TaskActionSpec,
 	TaskFieldSpec,
+	TaskOption,
 } from "../../types.js";
 import {
 	LASTMILE_PRIORITY_OPTIONS,
@@ -76,18 +77,32 @@ export function normalizeLastmileTask(raw: Record<string, unknown>): NormalizedT
 	const updatedAt = asString(pick(raw, "updated_at", "updatedAt", "modified_at"));
 	const url = asString(pick(raw, "url", "web_url", "webUrl"));
 
-	// LastMile's real webhook shape uses `assignee_id` / `owner_id` as plain
-	// strings. Older fixtures nested an `assignee: { id, name, email }` object.
-	// Support both — prefer the nested object when present (richer metadata).
+	// LastMile's real `tasks_get` response nests a populated `assignee`
+	// object — `{id, first_name, last_name, email}`. Older fixtures used
+	// `{id, name, email}` or a direct `assignee_id` string. Support all
+	// three shapes and prefer the richest. Name resolution chain:
+	//   1. explicit `name` / `display_name` / `displayName` / `full_name`
+	//   2. `"${first_name} ${last_name}"` (what LastMile actually ships)
+	//   3. `first_name` alone
+	//   4. `email`
+	//   5. raw id as last resort
 	const assigneeRaw = pick<Record<string, unknown>>(raw, "assignee", "assigned_to", "assignedTo");
 	const assigneeIdDirect = asString(pick(raw, "assignee_id", "owner_id", "assigneeId", "ownerId"));
+	function resolveAssigneeName(obj: Record<string, unknown>): string | undefined {
+		const direct = asString(
+			pick(obj, "name", "display_name", "displayName", "full_name"),
+		);
+		if (direct) return direct;
+		const first = asString(pick(obj, "first_name", "firstName"));
+		const last = asString(pick(obj, "last_name", "lastName"));
+		if (first && last) return `${first} ${last}`;
+		if (first) return first;
+		return asString(pick(obj, "email"));
+	}
 	const assignee = assigneeRaw
 		? {
 				id: asString(pick(assigneeRaw, "id", "user_id", "userId")),
-				name:
-					asString(pick(assigneeRaw, "name", "display_name", "displayName", "full_name")) ??
-					asString(pick(assigneeRaw, "email")) ??
-					"Unassigned",
+				name: resolveAssigneeName(assigneeRaw) ?? "Unassigned",
 				email: asString(pick(assigneeRaw, "email")),
 			}
 		: assigneeIdDirect
@@ -97,6 +112,22 @@ export function normalizeLastmileTask(raw: Record<string, unknown>): NormalizedT
 	const labels = asArray<string | { name?: string; label?: string }>(
 		pick(raw, "labels", "tags"),
 	).map((l) => (typeof l === "string" ? l : (l?.name ?? l?.label ?? ""))).filter(Boolean);
+
+	// Inject the unwrapped option into each select's option set so the mobile
+	// FieldList renderer (which looks up `field.value` in `field.options` for
+	// a label) finds a match when the value is a real LastMile opaque id like
+	// `status_hfcqtycmuaix6pjfnu3mb3ot`. Without this the renderer falls back
+	// to `String(field.value)` and shows the raw id in the card.
+	function mergeOption(
+		base: readonly TaskOption[],
+		extra: { value: string; label: string; color?: string } | undefined,
+	): TaskOption[] {
+		if (!extra) return [...base];
+		if (base.some((o) => o.value === extra.value)) return [...base];
+		return [...base, { value: extra.value, label: extra.label, color: extra.color }];
+	}
+	const statusOptions = mergeOption(LASTMILE_STATUS_OPTIONS, status);
+	const priorityOptions = mergeOption(LASTMILE_PRIORITY_OPTIONS, priority);
 
 	const fields: TaskFieldSpec[] = [
 		{
@@ -108,7 +139,7 @@ export function normalizeLastmileTask(raw: Record<string, unknown>): NormalizedT
 			// legacy fixture compatibility.
 			value: status?.value ?? asString(statusRaw),
 			editable: true,
-			options: LASTMILE_STATUS_OPTIONS,
+			options: statusOptions,
 		},
 		{
 			key: "priority",
@@ -116,7 +147,7 @@ export function normalizeLastmileTask(raw: Record<string, unknown>): NormalizedT
 			type: "select",
 			value: priority?.value ?? asString(priorityRaw),
 			editable: true,
-			options: LASTMILE_PRIORITY_OPTIONS,
+			options: priorityOptions,
 		},
 		{
 			key: "assignee",
