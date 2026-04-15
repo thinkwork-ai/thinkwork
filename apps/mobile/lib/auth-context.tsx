@@ -88,6 +88,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [refreshCounter, setRefreshCounter] = useState(0);
   const refreshingRef = useRef(false);
 
+  // Resolve a tenantId for a restored user. Federated (Google) JWTs — and
+  // sometimes even SRP-restored sessions that point at a federated user —
+  // don't carry `custom:tenant_id`, so we need a fallback. Two tiers:
+  //
+  //   1. Fast path — cached tenantId in SecureStore (written after the last
+  //      successful bootstrap). Zero network, sub-ms.
+  //   2. Network fallback — bootstrapUser mutation using the current id
+  //      token. Self-healing: persists to the cache for next cold start.
+  //
+  // Returns a new user object with `tenantId` populated if either path
+  // succeeded, otherwise returns the input unchanged (caller decides how to
+  // react to a missing tenantId).
+  const resolveTenantId = useCallback(
+    async (user: AuthUser, token: string): Promise<AuthUser> => {
+      if (user.tenantId) return user;
+
+      try {
+        const cached = await SecureStore.getItemAsync(STORED_TENANT_ID_KEY);
+        if (cached) {
+          console.log("[auth-boot] tenantId resolved from cache");
+          return { ...user, tenantId: cached };
+        }
+      } catch (e) {
+        console.warn("[auth-boot] tenantId rehydrate failed:", e);
+      }
+
+      try {
+        const graphqlUrl = process.env.EXPO_PUBLIC_GRAPHQL_URL;
+        if (!graphqlUrl) return user;
+        const res = await fetch(graphqlUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            query: `mutation { bootstrapUser { user { id email name } tenant { id name slug plan } isNew } }`,
+          }),
+        });
+        const payload = await res.json();
+        const tenantId = payload?.data?.bootstrapUser?.tenant?.id as string | undefined;
+        if (tenantId) {
+          console.log("[auth-boot] tenantId resolved via bootstrapUser");
+          SecureStore.setItemAsync(STORED_TENANT_ID_KEY, tenantId).catch((e) =>
+            console.warn("[auth-boot] tenantId persist failed:", e),
+          );
+          return { ...user, tenantId };
+        }
+        console.warn("[auth-boot] bootstrapUser returned no tenant", payload);
+      } catch (e) {
+        console.warn("[auth-boot] bootstrapUser fallback failed:", e);
+      }
+
+      return user;
+    },
+    [],
+  );
+
   // ------ Bootstrap: wait for SecureStore hydration, then check session ------
   // Extracted to a callback so the biometric unlock handler can re-run it on
   // demand after a transient refresh failure. We never bounce the user back
@@ -105,21 +163,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setHasStoredSession(stored);
       console.log("[auth-boot] storage ready, hasStoredSession=", stored);
 
-      // Try to restore the existing Cognito session (password / SRP flow)
+      // Try to restore the existing Cognito session (password / SRP flow).
+      // Note: this path can also succeed for Google-federated users when the
+      // stored refresh_token is still valid, and in that case the resulting
+      // id token still won't carry custom:tenant_id — so we must run the
+      // tenantId resolver here as well, not only in the OAuth fallback.
       const session = await auth.getCurrentSession();
       console.log("[auth-boot] getCurrentSession:", session ? "valid" : "null");
       if (session) {
         const token = session.getIdToken().getJwtToken();
         setAuthToken(token);
-        setUser(auth.parseUserFromSession(session));
-        console.log("[auth-boot] restored via SRP session");
+        const sessionUser = auth.parseUserFromSession(session);
+        const resolved = await resolveTenantId(sessionUser, token);
+        setUser(resolved);
+        console.log(
+          "[auth-boot] restored via SRP session, tenantId=",
+          resolved.tenantId ?? "none",
+        );
         return true;
       }
 
-      // Fallback: OAuth/federated sessions can't be restored via SRP,
-      // but tokens are stored directly in CognitoSecureStorage. Read the
-      // id token sync from storage so we don't depend on getSession's
-      // async refresh callback returning in time.
+      // Fallback: OAuth/federated sessions can't be restored via SRP when
+      // the refresh_token isn't usable (edge case). Read the id token sync
+      // from storage instead so we don't depend on getSession's async
+      // refresh callback returning in time.
       const restoredUser = auth.getCurrentUser();
       console.log(
         "[auth-boot] getCurrentUser:",
@@ -138,57 +205,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setAuthToken(oauthToken);
-
-      // Federated (Google) JWTs don't carry custom:tenant_id. We resolve
-      // it in two tiers: cached in SecureStore (fast path), then a
-      // bootstrapUser network call (self-healing fallback).
-      if (!restoredUser.tenantId) {
-        try {
-          const cached = await SecureStore.getItemAsync(STORED_TENANT_ID_KEY);
-          if (cached) restoredUser.tenantId = cached;
-        } catch (e) {
-          console.warn("[auth-boot] tenantId rehydrate failed:", e);
-        }
-      }
-
-      if (!restoredUser.tenantId) {
-        try {
-          const graphqlUrl = process.env.EXPO_PUBLIC_GRAPHQL_URL;
-          if (graphqlUrl) {
-            const res = await fetch(graphqlUrl, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${oauthToken}`,
-              },
-              body: JSON.stringify({
-                query: `mutation { bootstrapUser { user { id email name } tenant { id name slug plan } isNew } }`,
-              }),
-            });
-            const payload = await res.json();
-            const tenantId = payload?.data?.bootstrapUser?.tenant?.id as string | undefined;
-            if (tenantId) {
-              restoredUser.tenantId = tenantId;
-              SecureStore.setItemAsync(STORED_TENANT_ID_KEY, tenantId).catch((e) =>
-                console.warn("[auth-boot] tenantId persist failed:", e),
-              );
-            } else {
-              console.warn("[auth-boot] bootstrapUser returned no tenant", payload);
-            }
-          }
-        } catch (e) {
-          console.warn("[auth-boot] bootstrapUser fallback failed:", e);
-        }
-      }
-
-      setUser(restoredUser);
-      console.log("[auth-boot] restored via OAuth path, tenantId=", restoredUser.tenantId ?? "none");
+      const resolved = await resolveTenantId(restoredUser, oauthToken);
+      setUser(resolved);
+      console.log(
+        "[auth-boot] restored via OAuth path, tenantId=",
+        resolved.tenantId ?? "none",
+      );
       return true;
     } catch (e) {
       console.warn("[auth-boot] bootstrap error:", e);
       return false;
     }
-  }, []);
+  }, [resolveTenantId]);
 
   // First-run bootstrap on mount
   useEffect(() => {
