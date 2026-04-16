@@ -121,6 +121,42 @@ export function confirmSignUp(email: string, code: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Forgot password — send a reset code to the user's email
+// ---------------------------------------------------------------------------
+export function forgotPassword(email: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const pool = getUserPool();
+    if (!pool) return reject(new Error("Auth not configured"));
+
+    const user = new CognitoUser({ Username: email, Pool: pool });
+    user.forgotPassword({
+      onSuccess: () => resolve(),
+      onFailure: (err) => reject(err),
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Confirm forgot password — submit the code and a new password
+// ---------------------------------------------------------------------------
+export function confirmForgotPassword(
+  email: string,
+  code: string,
+  newPassword: string,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const pool = getUserPool();
+    if (!pool) return reject(new Error("Auth not configured"));
+
+    const user = new CognitoUser({ Username: email, Pool: pool });
+    user.confirmPassword(code, newPassword, {
+      onSuccess: () => resolve(),
+      onFailure: (err) => reject(err),
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Sign out
 // ---------------------------------------------------------------------------
 export function signOut(): void {
