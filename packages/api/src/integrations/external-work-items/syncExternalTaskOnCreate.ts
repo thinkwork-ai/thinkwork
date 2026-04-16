@@ -195,6 +195,23 @@ function idempotencyKeyForThread(threadId: string): string {
 	return `thinkwork-thread-${threadId}`;
 }
 
+/** LastMile's `POST /tasks` rejects a bare `YYYY-MM-DD` with HTTP 500
+ *  ("Failed query: ..." SQL error) but accepts full ISO-8601 datetimes.
+ *  The form-card date field produces the short form, so coerce before
+ *  sending. Any value that already has a `T` (or is null/undefined) is
+ *  left alone. */
+function normalizeDueDate(value: string | null | undefined): string | undefined {
+	if (!value) return undefined;
+	// Full ISO-8601 or anything with a time component — pass through.
+	if (value.includes("T")) return value;
+	// Plain `YYYY-MM-DD` → midnight UTC, explicit .000Z so the wire
+	// format matches what our empirical probe showed works.
+	if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+		return `${value}T00:00:00.000Z`;
+	}
+	return value;
+}
+
 /** Map the created LastMile task id into the metadata.external block that
  *  ensureExternalTaskThread expects. The POST /tasks response is minimal
  *  ({success, id}) so callers pass just the external id here; the
@@ -306,6 +323,13 @@ export async function syncExternalTaskOnCreate(
 				? args.assigneeProviderUserId
 				: providerUserId ?? undefined;
 
+		// LastMile rejects a bare `YYYY-MM-DD` (HTTP 500) and expects
+		// a full ISO-8601 datetime, so normalize date-only strings to
+		// midnight UTC. A value that already has a `T` (agent passed
+		// ISO) or clearly isn't a YYYY-MM-DD (e.g. spec-typical
+		// AWSDateTime) is forwarded verbatim.
+		const dueDate = normalizeDueDate(args.dueDate);
+
 		const created = await restCreateTask({
 			input: {
 				title: args.title,
@@ -316,7 +340,7 @@ export async function syncExternalTaskOnCreate(
 				description: args.description ?? undefined,
 				...(assigneeId ? { assigneeId } : {}),
 				...(args.priority ? { priority: args.priority } : {}),
-				...(args.dueDate ? { dueDate: args.dueDate } : {}),
+				...(dueDate ? { dueDate } : {}),
 			},
 			idempotencyKey: idempotencyKeyForThread(args.threadId),
 			ctx,
