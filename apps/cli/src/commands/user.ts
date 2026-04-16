@@ -24,7 +24,8 @@ import { Command } from "commander";
 import { spawn } from "node:child_process";
 import { validateStage } from "../config.js";
 import { resolveTierDir, ensureInit, ensureWorkspace } from "../terraform.js";
-import { printHeader, printSuccess, printError } from "../ui.js";
+import { apiFetchRaw, resolveApiConfig } from "../api-client.js";
+import { printHeader, printSuccess, printError, printWarning } from "../ui.js";
 
 /** Run `terraform output -raw <key>` and return stdout. */
 function getTerraformOutput(cwd: string, key: string): Promise<string> {
@@ -81,6 +82,94 @@ export function registerUserCommand(program: Command): void {
   const user = program
     .command("user")
     .description("User-management utilities for a deployed Thinkwork stack");
+
+  user
+    .command("invite <email>")
+    .description(
+      "Invite a teammate to a tenant. Creates the Cognito user (Cognito emails a temporary password) and adds them as a tenant member.",
+    )
+    .requiredOption("-s, --stage <name>", "Deployment stage")
+    .requiredOption("--tenant <slug>", "Tenant slug")
+    .option("--name <name>", "Display name for the invited user")
+    .option("--role <role>", "Tenant member role", "member")
+    .action(
+      async (
+        email: string,
+        opts: {
+          stage: string;
+          tenant: string;
+          name?: string;
+          role: string;
+        },
+      ): Promise<void> => {
+        const stageCheck = validateStage(opts.stage);
+        if (!stageCheck.valid) {
+          printError(stageCheck.error!);
+          process.exit(1);
+        }
+
+        const trimmed = email.trim().toLowerCase();
+        if (!trimmed || !trimmed.includes("@")) {
+          printError(
+            `"${email}" doesn't look like an email address. Pass the user's sign-in email.`,
+          );
+          process.exit(1);
+        }
+
+        const api = resolveApiConfig(opts.stage);
+        if (!api) process.exit(1);
+
+        printHeader("user invite", opts.stage);
+        console.log(`  Tenant: ${opts.tenant}`);
+        console.log(`  Email:  ${trimmed}`);
+        if (opts.name) console.log(`  Name:   ${opts.name}`);
+        console.log(`  Role:   ${opts.role}`);
+        console.log("");
+
+        try {
+          const result = await apiFetchRaw<{
+            alreadyMember?: boolean;
+            error?: string;
+            role?: string;
+          }>(
+            api!.apiUrl,
+            api!.authSecret,
+            `/api/tenants/${encodeURIComponent(opts.tenant)}/members`,
+            {
+              method: "POST",
+              body: JSON.stringify({
+                email: trimmed,
+                name: opts.name ?? null,
+                role: opts.role,
+              }),
+            },
+          );
+
+          if (!result.ok) {
+            const msg =
+              (result.body as any)?.error || `HTTP ${result.status}`;
+            printError(`Invite failed: ${msg}`);
+            process.exit(1);
+          }
+
+          if (result.body.alreadyMember) {
+            printWarning(
+              `${trimmed} is already a member of "${opts.tenant}" (role: ${result.body.role}). No email sent.`,
+            );
+            return;
+          }
+
+          printSuccess(
+            `Invited ${trimmed} to "${opts.tenant}" (role: ${result.body.role}). Cognito has emailed a temporary password; the user sets a new password on first sign-in.`,
+          );
+        } catch (err: any) {
+          printError(
+            `Invite failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          process.exit(1);
+        }
+      },
+    );
 
   user
     .command("reset-password <email>")
