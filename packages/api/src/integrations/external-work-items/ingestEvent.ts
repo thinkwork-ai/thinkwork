@@ -209,7 +209,22 @@ export async function ingestExternalTaskEvent(args: {
 		}
 	}
 
-	const title = envelope?.item.core.title ?? `External task ${event.externalTaskId}`;
+	// Title fallback chain — we want the best available title so we don't
+	// clobber a real title the outbound-sync path already wrote on the
+	// thread row (see `ensureExternalTaskThread` which only overwrites
+	// title when we have a rich envelope).
+	//   1. envelope.item.core.title        — rich MCP-derived envelope
+	//   2. raw webhook `task.title`        — cheap read from the webhook body
+	//   3. "External task {externalTaskId}" — last-resort placeholder
+	const rawTaskForTitle = extractRawTask(event.raw);
+	const rawWebhookTitle =
+		rawTaskForTitle && typeof rawTaskForTitle.title === "string" && rawTaskForTitle.title.length > 0
+			? (rawTaskForTitle.title as string)
+			: undefined;
+	const title =
+		envelope?.item.core.title ??
+		rawWebhookTitle ??
+		`External task ${event.externalTaskId}`;
 	const result = await ensureExternalTaskThread({
 		tenantId: conn.tenantId,
 		provider: provider as TaskProvider,
