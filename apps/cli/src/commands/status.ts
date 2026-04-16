@@ -190,7 +190,11 @@ function printStageDetail(info: DiscoveredStage): void {
 export function registerStatusCommand(program: Command): void {
   program
     .command("status")
-    .description("Show all Thinkwork environments (AWS + local)")
+    .alias("list")
+    .alias("ls")
+    .description(
+      "Show all Thinkwork environments / deployments (AWS + local). Aliases: list, ls",
+    )
     .option("-s, --stage <name>", "Show details for a specific stage")
     .option("--region <region>", "AWS region to scan", "us-east-1")
     .action(async (opts: { stage?: string; region: string }) => {

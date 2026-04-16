@@ -25,6 +25,7 @@ import { agentSkills, skillCatalog, tenantSkills, tenantMcpServers, agentMcpServ
 import { parse as parseYaml } from "yaml";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
 import { handleCors, json, error, notFound, unauthorized } from "../lib/response.js";
+import { resolveTenantId } from "../lib/tenants.js";
 import { callMcpTool } from "../integrations/external-work-items/mcpClient.js";
 
 const s3 = new S3Client({});
@@ -2254,17 +2255,6 @@ export async function loadTenantBuiltinTools(
 // ---------------------------------------------------------------------------
 // PRD-31: DB helpers
 // ---------------------------------------------------------------------------
-
-/** Resolve tenant slug to tenant UUID */
-async function resolveTenantId(tenantSlug: string): Promise<string | null> {
-	const { tenants } = await import("@thinkwork/database-pg/schema");
-	const [row] = await db
-		.select({ id: tenants.id })
-		.from(tenants)
-		.where(eq(tenants.slug, tenantSlug))
-		.limit(1);
-	return row?.id ?? null;
-}
 
 /** Ensure all is_default skills are provisioned for this tenant */
 async function ensureBuiltinSkills(tenantId: string): Promise<void> {
