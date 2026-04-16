@@ -28,3 +28,15 @@ a.site-title img {
   max-height: 1.75rem;
   width: auto;
 }
+
+/* Center body content on the splash landing page and add breathing room. */
+[data-has-hero] .sl-markdown-content {
+  max-width: 72rem;
+  margin-inline: auto;
+  padding-inline: 1.5rem;
+}
+
+[data-has-hero] .sl-markdown-content .sl-heading-wrapper {
+  text-align: center;
+  justify-content: center;
+}
