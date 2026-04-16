@@ -1,0 +1,25 @@
+slug: lastmile-tasks
+display_name: LastMile Tasks
+description: Collect intake details for a new LastMile task via a single Question Card form, then fire the create to LastMile. Use on user-created task threads where the external task hasn't been minted yet (sync_status='local').
+category: task-management
+version: "1.0.0"
+author: thinkwork
+icon: clipboard-list
+tags: [tasks, lastmile, intake, forms]
+execution: context
+mode: tool
+is_default: true
+triggers:
+  - "create a lastmile task"
+  - "new lastmile task"
+  - "file a task"
+  - "make a ticket"
+scripts:
+  - name: create_task
+    path: scripts/tasks.py
+    description: "Fire the LastMile POST /tasks for the current thread, using details the user filled in on the intake form. Call after reading a `form_response`. Requires CURRENT_THREAD_ID + the thread's workflowId to already be on its metadata."
+requires_env:
+  - THINKWORK_API_URL
+  - THINKWORK_API_SECRET
+  - TENANT_ID
+  - CURRENT_THREAD_ID
