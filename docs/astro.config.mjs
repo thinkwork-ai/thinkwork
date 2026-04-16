@@ -26,9 +26,11 @@ export default defineConfig({
         { label: "Getting Started", slug: "getting-started" },
         {
           label: "Concepts",
+          collapsed: true,
           items: [
             {
               label: "Threads",
+              collapsed: true,
               items: [
                 { label: "Overview", slug: "concepts/threads" },
                 { label: "Lifecycle and Types", slug: "concepts/threads/lifecycle-and-types" },
@@ -37,6 +39,7 @@ export default defineConfig({
             },
             {
               label: "Agents",
+              collapsed: true,
               items: [
                 { label: "Overview", slug: "concepts/agents" },
                 { label: "Managed Agents", slug: "concepts/agents/managed-agents" },
@@ -45,6 +48,7 @@ export default defineConfig({
             },
             {
               label: "Memory",
+              collapsed: true,
               items: [
                 { label: "Overview", slug: "concepts/knowledge" },
                 { label: "Document Knowledge", slug: "concepts/knowledge/document-knowledge" },
@@ -55,6 +59,7 @@ export default defineConfig({
             },
             {
               label: "Connectors",
+              collapsed: true,
               items: [
                 { label: "Overview", slug: "concepts/connectors" },
                 { label: "Integrations", slug: "concepts/connectors/integrations" },
@@ -64,6 +69,7 @@ export default defineConfig({
             },
             {
               label: "Control",
+              collapsed: true,
               items: [
                 { label: "Overview", slug: "concepts/control" },
                 { label: "Guardrails", slug: "concepts/control/guardrails" },
@@ -72,6 +78,7 @@ export default defineConfig({
             },
             {
               label: "Automations",
+              collapsed: true,
               items: [
                 { label: "Overview", slug: "concepts/automations" },
                 { label: "Scheduled and Event-driven", slug: "concepts/automations/scheduled-and-event-driven" },
@@ -82,14 +89,17 @@ export default defineConfig({
         },
         {
           label: "Applications",
+          collapsed: true,
           items: [
             {
               label: "Admin",
+              collapsed: true,
               items: [
                 { label: "Overview", slug: "applications/admin" },
                 { label: "Authentication & Tenancy", slug: "applications/admin/authentication-and-tenancy" },
                 {
                   label: "Work",
+                  collapsed: true,
                   items: [
                     { label: "Dashboard", slug: "applications/admin/dashboard" },
                     { label: "Threads", slug: "applications/admin/threads" },
@@ -98,6 +108,7 @@ export default defineConfig({
                 },
                 {
                   label: "Agents",
+                  collapsed: true,
                   items: [
                     { label: "Agents", slug: "applications/admin/agents" },
                     { label: "Agent Templates", slug: "applications/admin/agent-templates" },
@@ -110,6 +121,7 @@ export default defineConfig({
                 },
                 {
                   label: "Manage",
+                  collapsed: true,
                   items: [
                     { label: "Memory", slug: "applications/admin/memory" },
                     { label: "Knowledge Bases", slug: "applications/admin/knowledge-bases" },
@@ -127,6 +139,7 @@ export default defineConfig({
             },
             {
               label: "Mobile",
+              collapsed: true,
               items: [
                 { label: "Overview", slug: "applications/mobile" },
                 { label: "Authentication", slug: "applications/mobile/authentication" },
@@ -139,6 +152,7 @@ export default defineConfig({
             },
             {
               label: "CLI",
+              collapsed: true,
               items: [
                 { label: "Overview", slug: "applications/cli" },
                 { label: "Commands", slug: "applications/cli/commands" },
@@ -148,6 +162,7 @@ export default defineConfig({
         },
         {
           label: "Deploy",
+          collapsed: true,
           items: [
             { label: "Greenfield AWS", slug: "deploy/greenfield" },
             { label: "BYO Infrastructure", slug: "deploy/byo" },
@@ -156,12 +171,14 @@ export default defineConfig({
         },
         {
           label: "API Reference",
+          collapsed: true,
           items: [
             { label: "GraphQL Schema", slug: "api/graphql" },
           ],
         },
         {
           label: "Authoring Guides",
+          collapsed: true,
           items: [
             { label: "Skill Packs", slug: "guides/skill-packs" },
             { label: "Connectors", slug: "guides/connectors" },
