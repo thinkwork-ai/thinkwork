@@ -25,7 +25,6 @@ import { and, eq } from "drizzle-orm";
 import { schema } from "@thinkwork/database-pg";
 import type { GraphQLContext } from "../../context.js";
 import { db, threadToCamel } from "../../utils.js";
-import { resolveCaller } from "../core/resolve-auth-user.js";
 import { syncExternalTaskOnCreate } from "../../../integrations/external-work-items/syncExternalTaskOnCreate.js";
 
 const { threads, users, connections, connectProviders } = schema;
@@ -84,9 +83,17 @@ export const createLastmileTask = async (
 	args: { input: CreateLastmileTaskInput },
 	ctx: GraphQLContext,
 ) => {
-	const { tenantId, userId } = await resolveCaller(ctx);
-	if (!tenantId) throw new Error("Unauthorized: tenant not resolved");
-	if (!userId) throw new Error("Unauthorized: principal not resolved");
+	// Auth — accept two shapes: a Cognito JWT caller (mobile users,
+	// rare at thread-create time) or API-key + `x-tenant-id` (the
+	// agent skill path). We don't need the caller's user id here: the
+	// LastMile connection we use belongs to the thread's creator
+	// regardless of who's finalizing the task.
+	const tenantId = ctx.auth.tenantId;
+	if (!tenantId) {
+		throw new Error(
+			"Unauthorized: tenant not resolved (expected x-tenant-id header or a tenant-scoped JWT)",
+		);
+	}
 
 	const { threadId } = args.input;
 	if (!threadId) throw new Error("threadId is required");
@@ -122,7 +129,12 @@ export const createLastmileTask = async (
 		// summary will reflect whatever LastMile ultimately accepted.
 	}
 
-	const creatorId = thread.created_by_id ?? userId;
+	if (!thread.created_by_id) {
+		throw new Error(
+			`Thread ${threadId} has no created_by_id — cannot resolve a LastMile connection to act on.`,
+		);
+	}
+	const creatorId = thread.created_by_id;
 	const result = await syncExternalTaskOnCreate({
 		threadId,
 		tenantId,
