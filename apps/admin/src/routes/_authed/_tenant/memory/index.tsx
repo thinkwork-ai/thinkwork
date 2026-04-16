@@ -427,7 +427,7 @@ function MemoryPage() {
 
       <div className="flex-1 min-h-0 px-4">
         {view === "graph" ? (
-          <div className="h-full border border-border rounded-lg overflow-hidden">
+          <div className="h-full relative border border-border rounded-lg overflow-hidden">
             <MemoryGraph
               ref={graphRef}
               agentId={isAllAgents ? undefined : selectedAgentId}
