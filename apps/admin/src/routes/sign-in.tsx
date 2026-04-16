@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   createFileRoute,
+  Link,
   useNavigate,
   useSearch,
 } from "@tanstack/react-router";
@@ -395,7 +396,15 @@ function SignInPage() {
                     name="password"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Password</FormLabel>
+                        <div className="flex items-center justify-between">
+                          <FormLabel>Password</FormLabel>
+                          <Link
+                            to="/forgot-password"
+                            className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                          >
+                            Forgot password?
+                          </Link>
+                        </div>
                         <FormControl>
                           <Input
                             {...field}
