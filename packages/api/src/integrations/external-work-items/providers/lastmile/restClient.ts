@@ -142,6 +142,40 @@ export class LastmileRestError extends Error {
 	}
 }
 
+// ── JWT peek (diagnostic only — NO signature validation) ──────────────────
+
+/** Base64url-decode a JWT payload and return the claims. Used purely for
+ *  diagnostic logging on 401 so we can see what audience/issuer/expiry
+ *  LastMile rejected. Never use for authorization decisions. */
+function peekJwtClaims(token: string):
+	| {
+			aud?: unknown;
+			iss?: unknown;
+			exp?: number;
+			scope?: unknown;
+			sub?: unknown;
+	  }
+	| null {
+	try {
+		const parts = token.split(".");
+		if (parts.length < 2) return null;
+		const payload = parts[1];
+		if (!payload) return null;
+		const b64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+		const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+		const json = Buffer.from(padded, "base64").toString("utf8");
+		return JSON.parse(json) as {
+			aud?: unknown;
+			iss?: unknown;
+			exp?: number;
+			scope?: unknown;
+			sub?: unknown;
+		};
+	} catch {
+		return null;
+	}
+}
+
 // ── Shared fetch helper ────────────────────────────────────────────────────
 
 type Method = "GET" | "POST" | "PATCH" | "DELETE";
@@ -153,6 +187,11 @@ interface RequestArgs<B> {
 	body?: B;
 	query?: Record<string, string | number | undefined>;
 	idempotencyKey?: string;
+	/** Called when LastMile returns 401. Should return a freshly-refreshed
+	 *  access_token (bypassing any cache). Return null to signal
+	 *  unrecoverable auth — `doRequest` will then throw a 401 error.
+	 *  Only invoked once per call (no infinite refresh loops). */
+	refreshToken?: () => Promise<string | null>;
 }
 
 async function doRequest<TResponse, TBody = unknown>(
@@ -183,20 +222,29 @@ async function doRequest<TResponse, TBody = unknown>(
 		}
 	}
 
-	const headers: Record<string, string> = {
-		Authorization: `Bearer ${args.authToken}`,
-		Accept: "application/json",
+	// Mutable token so the 401-refresh path can swap it for the retry.
+	let currentToken = args.authToken;
+	let refreshConsumed = false;
+
+	const buildHeaders = (): Record<string, string> => {
+		const headers: Record<string, string> = {
+			Authorization: `Bearer ${currentToken}`,
+			Accept: "application/json",
+		};
+		if (args.body !== undefined) {
+			headers["Content-Type"] = "application/json";
+		}
+		if (args.idempotencyKey) {
+			headers["Idempotency-Key"] = args.idempotencyKey;
+		}
+		return headers;
 	};
-	if (args.body !== undefined) {
-		headers["Content-Type"] = "application/json";
-	}
-	if (args.idempotencyKey) {
-		headers["Idempotency-Key"] = args.idempotencyKey;
-	}
 
 	// Retry on 5xx only. 4xx errors are client-side — retrying won't help.
 	// Network errors (TypeError from fetch) also retry, since they're often
 	// transient DNS/connection blips on cold starts.
+	// 401s get ONE refresh-and-retry attempt when a refreshToken callback
+	// is provided, separately from the 5xx retry loop.
 	let lastErr: unknown = undefined;
 	for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
 		const controller = new AbortController();
@@ -205,7 +253,7 @@ async function doRequest<TResponse, TBody = unknown>(
 		try {
 			const res = await fetch(url.toString(), {
 				method: args.method,
-				headers,
+				headers: buildHeaders(),
 				body: args.body !== undefined ? JSON.stringify(args.body) : undefined,
 				signal: controller.signal,
 			});
@@ -233,6 +281,71 @@ async function doRequest<TResponse, TBody = unknown>(
 				parsed && typeof parsed === "object"
 					? (parsed as { error?: { code?: string; message?: string } }).error
 					: undefined;
+
+			// 401: diagnose + attempt a single force-refresh retry.
+			if (res.status === 401) {
+				const claims = peekJwtClaims(currentToken);
+				const nowSec = Math.floor(Date.now() / 1000);
+				console.error(
+					`[lastmile-rest] 401 from ${args.method} ${args.path}`,
+					{
+						status: 401,
+						code: errObj?.code,
+						message: errObj?.message || errText,
+						requestId: res.headers.get("x-request-id") ?? undefined,
+						responseBody: parsed ?? errText,
+						tokenAudience: claims?.aud,
+						tokenIssuer: claims?.iss,
+						tokenScope: claims?.scope,
+						tokenSub: claims?.sub,
+						tokenExp: claims?.exp,
+						nowSec,
+						tokenExpiresInSec:
+							typeof claims?.exp === "number" ? claims.exp - nowSec : undefined,
+						refreshRetryAttempted: refreshConsumed,
+					},
+				);
+
+				if (args.refreshToken && !refreshConsumed) {
+					refreshConsumed = true;
+					let refreshed: string | null = null;
+					try {
+						refreshed = await args.refreshToken();
+					} catch (refreshErr) {
+						console.error(
+							`[lastmile-rest] refresh callback threw:`,
+							refreshErr,
+						);
+					}
+					if (refreshed && refreshed !== currentToken) {
+						console.log(
+							`[lastmile-rest] refresh-retry firing for ${args.method} ${args.path}`,
+						);
+						currentToken = refreshed;
+						// Reset the attempt counter — the 5xx retries are a separate
+						// concern and the first try after refresh deserves a full
+						// budget of 5xx retries of its own.
+						attempt = -1;
+						continue;
+					}
+					console.warn(
+						`[lastmile-rest] refresh-retry abandoned (no new token) for ${args.method} ${args.path}`,
+					);
+				}
+
+				throw new LastmileRestError({
+					status: 401,
+					code: refreshConsumed
+						? "unauthorized_after_refresh"
+						: errObj?.code || "unauthorized",
+					message:
+						errObj?.message ||
+						errText ||
+						`LastMile ${args.method} ${args.path} failed (401)`,
+					requestId: res.headers.get("x-request-id") ?? undefined,
+					responseBody: parsed ?? errText,
+				});
+			}
 
 			// Retry on 5xx — reset and fall through to the next loop iter.
 			if (RETRY_STATUSES.has(res.status) && attempt < MAX_RETRIES) {
@@ -284,6 +397,12 @@ async function doRequest<TResponse, TBody = unknown>(
 export interface LastmileRestCtx {
 	/** Per-user OAuth bearer token, resolved via `resolveOAuthToken`. */
 	authToken: string;
+	/** Optional: called on 401 to force-refresh the token and retry once.
+	 *  Callers should wire this to `forceRefreshLastmileUserToken` so
+	 *  server-invalidated tokens self-heal without requiring mobile
+	 *  reconnect. Return null to signal unrecoverable auth — `doRequest`
+	 *  then surfaces a 401 the handler can translate to reconnect UX. */
+	refreshToken?: () => Promise<string | null>;
 }
 
 /** POST /v1/tasks — create a task. Blocked by LastMile Tasks API until the
@@ -298,6 +417,7 @@ export async function createTask(
 		authToken: args.ctx.authToken,
 		body: args.input,
 		idempotencyKey: args.idempotencyKey,
+		refreshToken: args.ctx.refreshToken,
 	});
 }
 
@@ -310,6 +430,7 @@ export async function getTask(
 		method: "GET",
 		path: `/v1/tasks/${encodeURIComponent(args.taskId)}`,
 		authToken: args.ctx.authToken,
+		refreshToken: args.ctx.refreshToken,
 	});
 }
 
@@ -322,6 +443,7 @@ export async function listTasks(
 		path: "/tasks",
 		authToken: args.ctx.authToken,
 		query: args.query as Record<string, string | number | undefined> | undefined,
+		refreshToken: args.ctx.refreshToken,
 	});
 }
 
@@ -336,6 +458,7 @@ export async function updateTask(
 		path: `/v1/tasks/${encodeURIComponent(args.taskId)}`,
 		authToken: args.ctx.authToken,
 		body: args.input,
+		refreshToken: args.ctx.refreshToken,
 	});
 }
 
@@ -348,6 +471,7 @@ export async function getMe(
 		method: "GET",
 		path: "/me",
 		authToken: args.ctx.authToken,
+		refreshToken: args.ctx.refreshToken,
 	});
 }
 
@@ -364,6 +488,7 @@ export async function listWorkflows(
 		method: "GET",
 		path: "/workflows",
 		authToken: args.ctx.authToken,
+		refreshToken: args.ctx.refreshToken,
 	});
 	return Array.isArray(raw) ? raw : (raw?.data ?? []);
 }

@@ -28,7 +28,10 @@
 import { and, eq, sql } from "drizzle-orm";
 import { schema } from "@thinkwork/database-pg";
 import { db } from "../../lib/db.js";
-import { resolveOAuthToken } from "../../lib/oauth-token.js";
+import {
+	resolveOAuthToken,
+	forceRefreshLastmileUserToken,
+} from "../../lib/oauth-token.js";
 import {
 	createTask as restCreateTask,
 	isLastmileRestConfigured,
@@ -225,7 +228,11 @@ export async function syncExternalTaskOnCreate(
 				...(args.workflowId ? { workflow_id: args.workflowId } : {}),
 			},
 			idempotencyKey: idempotencyKeyForThread(args.threadId),
-			ctx: { authToken },
+			ctx: {
+				authToken,
+				refreshToken: () =>
+					forceRefreshLastmileUserToken(conn.id, args.tenantId),
+			},
 		});
 
 		const externalMeta = buildExternalMeta({

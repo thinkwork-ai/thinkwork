@@ -26,10 +26,14 @@ import {
 	ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
 
-import { resolveOAuthToken } from "../lib/oauth-token.js";
+import {
+	resolveOAuthToken,
+	forceRefreshLastmileUserToken,
+} from "../lib/oauth-token.js";
 import {
 	listWorkflows as lastmileListWorkflows,
 	isLastmileRestConfigured,
+	LastmileRestError,
 } from "../integrations/external-work-items/providers/lastmile/restClient.js";
 
 const { connections, connectProviders, credentials } = schema;
@@ -373,13 +377,57 @@ async function listLastmileWorkflows(
 
 	const authToken = await resolveOAuthToken(conn.id, tenantId, conn.provider_id);
 	if (!authToken) {
-		return error("Task connector has no OAuth token — reconnect in Settings → MCP Servers", 401);
+		return json(
+			{
+				error: "reconnect_needed",
+				detail: "Task connector has no OAuth token — reconnect in Settings → MCP Servers",
+			},
+			401,
+		);
 	}
 
 	try {
-		const workflows = await lastmileListWorkflows({ ctx: { authToken } });
+		const workflows = await lastmileListWorkflows({
+			ctx: {
+				authToken,
+				// If LastMile rejects the token, force-refresh via WorkOS
+				// (bypassing our expires_at bookkeeping) and retry once.
+				// Handles server-side revocation, rotation mid-flight, and
+				// clock skew without requiring the user to reconnect.
+				refreshToken: () => forceRefreshLastmileUserToken(conn.id, tenantId),
+			},
+		});
 		return json(workflows);
 	} catch (err) {
+		if (err instanceof LastmileRestError) {
+			console.error("[connections] listLastmileWorkflows LastmileRestError:", {
+				status: err.status,
+				code: err.code,
+				message: err.message,
+				requestId: err.requestId,
+				responseBody: err.responseBody,
+			});
+			if (err.status === 401) {
+				return json(
+					{
+						error: "reconnect_needed",
+						detail: err.message,
+						lastmile_code: err.code,
+					},
+					401,
+				);
+			}
+			return json(
+				{
+					error: "lastmile_api_error",
+					detail: err.message,
+					lastmile_status: err.status,
+					lastmile_code: err.code,
+					lastmile_request_id: err.requestId,
+				},
+				502,
+			);
+		}
 		console.error("[connections] listLastmileWorkflows failed:", err);
 		return error(
 			`Failed to fetch workflows: ${(err as Error)?.message || "unknown error"}`,
