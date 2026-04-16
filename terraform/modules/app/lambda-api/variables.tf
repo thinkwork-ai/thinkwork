@@ -203,3 +203,9 @@ variable "job_scheduler_role_arn" {
   type        = string
   default     = ""
 }
+
+variable "lastmile_tasks_api_url" {
+  description = "Base URL of the LastMile Tasks REST API used by the outbound sync path (POST /tasks, GET /workflows, etc). Leave blank to feature-flag the integration off; mobile-created tasks then land in sync_status='local' until the URL is set."
+  type        = string
+  default     = ""
+}
