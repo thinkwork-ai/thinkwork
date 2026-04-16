@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useClient } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Loader2, Trash2, Brain, Search, X, ArrowLeft } from "lucide-react";
@@ -115,6 +115,7 @@ type MemoryRow = {
   accessCount: number;
   proofCount: number | null;
   context: string | null;
+  threadId: string | null;
 };
 
 const STRATEGY_COLORS: Record<string, string> = {
@@ -280,6 +281,7 @@ function MemoryPage() {
     accessCount: r.accessCount ?? 0,
     proofCount: r.proofCount ?? null,
     context: r.context ?? null,
+    threadId: r.threadId ?? null,
   });
 
   const rawRecords: any[] = activeSearch
@@ -546,6 +548,16 @@ function MemoryPage() {
                 )}
                 <MemoryContent text={selectedRecord?.text ?? ""} />
 
+                {selectedRecord?.threadId && (
+                  <Link
+                    to="/threads/$threadId"
+                    params={{ threadId: selectedRecord.threadId }}
+                    className="inline-flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300 hover:underline"
+                  >
+                    View source thread →
+                  </Link>
+                )}
+
                 {!hindsightEnabled && (
                   <p className="text-xs text-muted-foreground">
                     AgentCore memory records are immutable in this deployment. To change a fact,
@@ -676,7 +688,17 @@ function MemoryPage() {
               <MemoryContent text={graphNode.label} />
             )}
 
-            {graphNodeEdges.length > 0 && (
+            {graphNode?.latestThreadId && (
+              <Link
+                to="/threads/$threadId"
+                params={{ threadId: graphNode.latestThreadId }}
+                className="inline-flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300 hover:underline"
+              >
+                View source thread →
+              </Link>
+            )}
+
+{graphNodeEdges.length > 0 && (
               <div>
                 <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
                   {graphNode?.nodeType === "memory" ? "Mentions" : "Mentioned by"}

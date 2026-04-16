@@ -42,6 +42,7 @@ interface MemoryRow {
 	accessCount: number;
 	proofCount: number | null;
 	context: string | null;
+	threadId: string | null;
 }
 
 export const memoryRecords = async (_parent: any, args: any, ctx: GraphQLContext) => {
@@ -110,6 +111,12 @@ function normalizedToRow(
 		? (meta.tags as string[])
 		: null;
 	const score = typeof meta.score === "number" ? meta.score : null;
+	const rawMeta = (meta.raw || {}) as Record<string, any>;
+	const threadId: string | null =
+		(record.threadId as string | undefined) ||
+		(rawMeta.thread_id as string | undefined) ||
+		(rawMeta.threadId as string | undefined) ||
+		null;
 	return {
 		memoryRecordId: record.id,
 		content: { text: record.content.text },
@@ -133,5 +140,6 @@ function normalizedToRow(
 		accessCount: typeof meta.accessCount === "number" ? meta.accessCount : 0,
 		proofCount: typeof meta.proofCount === "number" ? meta.proofCount : null,
 		context: (meta.context as string | null) ?? null,
+		threadId,
 	};
 }
