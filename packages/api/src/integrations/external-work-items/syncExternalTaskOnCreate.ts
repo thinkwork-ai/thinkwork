@@ -15,7 +15,9 @@
  *         │
  *         ├── LASTMILE_TASKS_API_URL unset        → 'local'
  *         ├── no active task connector            → 'local'
+ *         ├── metadata.workflowId missing         → 'local'
  *         ├── connector has no OAuth token        → 'error'
+ *         ├── workflow/statuses lookup throws     → 'error' + sync_error
  *         ├── restClient.createTask() throws      → 'error' + sync_error
  *         └── success                             → 'synced' + metadata.external
  *
@@ -39,9 +41,11 @@ import {
 import { getConnectorBaseUrl } from "../../handlers/task-connectors.js";
 import {
 	createTask as restCreateTask,
+	getWorkflow as restGetWorkflow,
+	listStatuses as restListStatuses,
+	pickInitialStatus,
 	isLastmileRestConfigured,
 	LastmileRestError,
-	type LastmileTask,
 } from "./providers/lastmile/restClient.js";
 
 const { threads, connections, connectProviders } = schema;
@@ -162,13 +166,13 @@ export interface SyncExternalTaskOnCreateArgs {
 	 *  field on the LastMile create request so the remote task traces
 	 *  back to our local row. */
 	externalRef?: string;
-	/** LastMile workflow_id — retained in thread metadata for UI display
-	 *  ("this task belongs to Workflow X") but NOT sent in the create
-	 *  body: the OpenAPI v1.0.0 `/tasks` POST no longer accepts it. */
+	/** LastMile `workflow_id`. Required — picked by the user in the
+	 *  mobile workflow picker and passed through thread metadata. When
+	 *  absent (e.g. task created from a code path that doesn't route
+	 *  through the picker) we stamp `sync_status='local'` because the
+	 *  LastMile POST requires `workflowId`, `taskTypeId`, and `teamId`
+	 *  and we derive the latter two from the workflow record. */
 	workflowId?: string;
-	/** LastMile terminal id — required by the create API. Missing until
-	 *  the mobile terminal-picker ships. */
-	terminalId?: string;
 }
 
 /** Idempotency key for the create call. Using the local thread id ensures
@@ -178,10 +182,12 @@ function idempotencyKeyForThread(threadId: string): string {
 	return `thinkwork-thread-${threadId}`;
 }
 
-/** Map a successful LastmileTask response into the metadata.external
- *  block that ensureExternalTaskThread expects. */
+/** Map the created LastMile task id into the metadata.external block that
+ *  ensureExternalTaskThread expects. The POST /tasks response is minimal
+ *  ({success, id}) so callers pass just the external id here; the
+ *  broader row metadata gets hydrated on the next webhook/refresh. */
 function buildExternalMeta(args: {
-	lastmileTask: LastmileTask;
+	externalTaskId: string;
 	provider: string;
 	connectionId: string;
 	providerId: string;
@@ -190,7 +196,7 @@ function buildExternalMeta(args: {
 	const nowIso = new Date().toISOString();
 	return {
 		provider: args.provider,
-		externalTaskId: args.lastmileTask.id,
+		externalTaskId: args.externalTaskId,
 		connectionId: args.connectionId,
 		providerId: args.providerId,
 		providerUserId: args.providerUserId ?? undefined,
@@ -237,43 +243,65 @@ export async function syncExternalTaskOnCreate(
 
 	const providerUserId = getProviderUserId(conn);
 
-	// Per the LastMile OpenAPI v1.0.0 spec, `POST /tasks` requires
-	// `terminalId`. Thread creation is now agent-driven: the user types
-	// free-form intent, the agent gathers terminal + details, and the
-	// actual create fires later via the `tasks_create` tool (Phase 2).
-	// At thread-create time a missing terminalId is the expected state,
-	// not an error — stamp `local` so the UI shows a "draft" affordance
-	// instead of a red sync-failed badge.
-	if (!args.terminalId) {
+	// `workflowId` is the required gate. The LastMile POST /tasks call
+	// also needs `taskTypeId` + `teamId`, but both live on the workflow
+	// record so we derive them rather than pushing the ask up to the
+	// mobile picker. Absent workflow → stamp local (draft state, not
+	// error — the user simply hasn't picked a workflow yet).
+	if (!args.workflowId) {
 		const reason =
-			"Task will sync to LastMile once the agent has gathered enough context.";
+			"Task will sync to LastMile once a workflow is picked.";
 		await writeSyncState(args.threadId, { kind: "local", reason });
 		return { status: "local", reason };
 	}
 
+	const ctx = {
+		authToken,
+		baseUrl,
+		refreshToken: () =>
+			forceRefreshLastmilePat({
+				userId: args.userId,
+				getFreshWorkosJwt: () =>
+					forceRefreshLastmileUserToken(conn.id, args.tenantId),
+			}),
+	};
+
 	try {
-		const lastmileTask = await restCreateTask({
+		// Resolve taskTypeId + teamId from the workflow, and the initial
+		// statusId from the workflow's status list. All three are required
+		// by POST /tasks but all three are fully derivable from workflowId.
+		const [workflow, statuses] = await Promise.all([
+			restGetWorkflow({ workflowId: args.workflowId, ctx }),
+			restListStatuses({ ctx, query: { workflowId: args.workflowId } }),
+		]);
+		if (!workflow.taskTypeId) {
+			const message = `LastMile workflow ${args.workflowId} has no taskTypeId — cannot create task.`;
+			await writeSyncState(args.threadId, { kind: "error", message });
+			return { status: "error", message };
+		}
+		const initialStatus = pickInitialStatus(statuses);
+		if (!initialStatus) {
+			const message = `LastMile workflow ${args.workflowId} has no selectable status — cannot create task.`;
+			await writeSyncState(args.threadId, { kind: "error", message });
+			return { status: "error", message };
+		}
+
+		const created = await restCreateTask({
 			input: {
 				title: args.title,
-				terminalId: args.terminalId,
+				statusId: initialStatus.id,
+				workflowId: args.workflowId,
+				taskTypeId: workflow.taskTypeId,
+				teamId: workflow.teamId,
 				description: args.description ?? undefined,
 				...(providerUserId ? { assigneeId: providerUserId } : {}),
 			},
 			idempotencyKey: idempotencyKeyForThread(args.threadId),
-			ctx: {
-				authToken,
-				baseUrl,
-				refreshToken: () =>
-					forceRefreshLastmilePat({
-						userId: args.userId,
-						getFreshWorkosJwt: () =>
-							forceRefreshLastmileUserToken(conn.id, args.tenantId),
-					}),
-			},
+			ctx,
 		});
 
 		const externalMeta = buildExternalMeta({
-			lastmileTask,
+			externalTaskId: created.id,
 			provider: conn.provider_name,
 			connectionId: conn.id,
 			providerId: conn.provider_id,
@@ -283,7 +311,7 @@ export async function syncExternalTaskOnCreate(
 			kind: "synced",
 			externalMeta,
 		});
-		return { status: "synced", externalTaskId: lastmileTask.id };
+		return { status: "synced", externalTaskId: created.id };
 	} catch (err) {
 		// Format the error for sync_error. LastmileRestError already has
 		// useful fields; anything else gets `.message` only.
