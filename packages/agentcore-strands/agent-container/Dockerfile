@@ -28,6 +28,7 @@ COPY packages/agentcore-strands/agent-container/skill_runner.py .
 # - hindsight_recall_filter.py: post-recall entity-aware filter for hindsight
 # - api_memory_client.py: bridge to API memory-retain Lambda for the
 #   per-turn auto-retention path (engine-agnostic)
+COPY packages/agentcore-strands/agent-container/external_task_context.py .
 COPY packages/agentcore-strands/agent-container/memory_tools.py .
 COPY packages/agentcore-strands/agent-container/hindsight_usage_capture.py .
 COPY packages/agentcore-strands/agent-container/hindsight_recall_filter.py .
