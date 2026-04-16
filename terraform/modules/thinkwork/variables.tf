@@ -309,3 +309,9 @@ variable "ses_manage_active_rule_set" {
   type        = bool
   default     = true
 }
+
+variable "lastmile_tasks_api_url" {
+  description = "Base URL of the LastMile Tasks REST API (e.g. https://api-dev.lastmile-tei.com for develop). Feature-flags the outbound task sync — leave blank to keep mobile-created tasks in sync_status='local'."
+  type        = string
+  default     = ""
+}
