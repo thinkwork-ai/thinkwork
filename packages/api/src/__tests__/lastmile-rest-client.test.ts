@@ -26,9 +26,14 @@ vi.hoisted(() => {
 });
 
 import {
+	createTask,
+	getWorkflow,
+	listStatuses,
 	listTerminals,
 	listWorkflows,
+	pickInitialStatus,
 	LastmileRestError,
+	type LastmileStatus,
 } from "../integrations/external-work-items/providers/lastmile/restClient.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
@@ -304,6 +309,186 @@ describe("listWorkflows — misc error paths", () => {
 		await expect(
 			listWorkflows({ ctx: { authToken: "" } }),
 		).rejects.toMatchObject({ code: "missing_token" });
+	});
+});
+
+describe("getWorkflow", () => {
+	// GET /workflows/{id} is what the sync-on-create path uses to derive
+	// taskTypeId + teamId (both required by POST /tasks but both carried
+	// on the workflow record).
+	it("fetches a single workflow and returns taskTypeId + teamId", async () => {
+		const fetchSpy = vi.fn().mockResolvedValueOnce(
+			jsonResponse({
+				id: "wf_1",
+				name: "Engineering",
+				teamId: "engineering-team",
+				taskTypeId: "task_type_abc",
+				description: "Software engineering tasks",
+			}),
+		);
+		globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+		const wf = await getWorkflow({ workflowId: "wf_1", ctx: { authToken: OLD_TOKEN } });
+		expect(wf.id).toBe("wf_1");
+		expect(wf.teamId).toBe("engineering-team");
+		expect(wf.taskTypeId).toBe("task_type_abc");
+
+		const [url] = fetchSpy.mock.calls[0] as [string];
+		expect(url).toContain("/workflows/wf_1");
+	});
+
+	it("URL-encodes the workflow id", async () => {
+		const fetchSpy = vi.fn().mockResolvedValueOnce(
+			jsonResponse({ id: "wf/special", name: "x", teamId: "t1" }),
+		);
+		globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+		await getWorkflow({ workflowId: "wf/special", ctx: { authToken: OLD_TOKEN } });
+		const [url] = fetchSpy.mock.calls[0] as [string];
+		expect(url).toContain("/workflows/wf%2Fspecial");
+	});
+});
+
+describe("listStatuses", () => {
+	// Envelope verified empirically against
+	// GET https://dev-api.lastmile-tei.com/statuses?workflowId=… on 2026-04-16:
+	// {data, total, page, pageSize, hasMore}. Same slim-read pattern as
+	// listWorkflows / listTerminals — we only consume .data.
+	it("passes workflowId as a query param and unwraps the envelope", async () => {
+		const fetchSpy = vi.fn().mockResolvedValueOnce(
+			jsonResponse({
+				data: [
+					{ id: "status_1", name: "Backlog", workflowId: "wf_1", displayOrder: 0, isFinal: false },
+					{ id: "status_2", name: "Done", workflowId: "wf_1", displayOrder: 100, isFinal: true },
+				],
+				total: 2,
+				page: 1,
+				pageSize: 100,
+				hasMore: false,
+			}),
+		);
+		globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+		const statuses = await listStatuses({
+			ctx: { authToken: OLD_TOKEN },
+			query: { workflowId: "wf_1" },
+		});
+		expect(statuses).toHaveLength(2);
+		expect(statuses[0]?.name).toBe("Backlog");
+
+		const [url] = fetchSpy.mock.calls[0] as [string];
+		expect(url).toContain("/statuses");
+		expect(url).toContain("workflowId=wf_1");
+	});
+
+	it("handles a bare-array response defensively", async () => {
+		globalThis.fetch = vi
+			.fn()
+			.mockResolvedValueOnce(
+				jsonResponse([{ id: "s", name: "New", workflowId: "wf_1" }]),
+			) as unknown as typeof fetch;
+
+		const statuses = await listStatuses({ ctx: { authToken: OLD_TOKEN } });
+		expect(statuses).toEqual([{ id: "s", name: "New", workflowId: "wf_1" }]);
+	});
+});
+
+describe("pickInitialStatus", () => {
+	const base = (id: string, displayOrder: number, extras: Partial<LastmileStatus> = {}): LastmileStatus => ({
+		id, name: id, workflowId: "wf_1", displayOrder, isFinal: false, isActive: true, ...extras,
+	});
+
+	it("picks the lowest displayOrder non-final status", () => {
+		const chosen = pickInitialStatus([
+			base("b", 60),
+			base("a", 0),
+			base("c", 100, { isFinal: true }),
+		]);
+		expect(chosen?.id).toBe("a");
+	});
+
+	it("skips final statuses", () => {
+		const chosen = pickInitialStatus([
+			base("final", 0, { isFinal: true }),
+			base("open", 50, { isFinal: false }),
+		]);
+		expect(chosen?.id).toBe("open");
+	});
+
+	it("skips inactive statuses", () => {
+		const chosen = pickInitialStatus([
+			base("inactive", 0, { isActive: false }),
+			base("active", 50),
+		]);
+		expect(chosen?.id).toBe("active");
+	});
+
+	it("falls back to the first status if every status is final", () => {
+		const chosen = pickInitialStatus([
+			base("a", 0, { isFinal: true }),
+			base("b", 100, { isFinal: true }),
+		]);
+		expect(chosen?.id).toBe("a");
+	});
+
+	it("returns null on an empty list", () => {
+		expect(pickInitialStatus([])).toBeNull();
+	});
+});
+
+describe("createTask — new response shape", () => {
+	// Server returns `{success, id}` on 201 (not a full LastmileTask).
+	// Verified empirically 2026-04-16; PR #127's rewrite adapted the
+	// CreateTaskResponse type accordingly.
+	it("returns {success, id} and forwards the required workflow fields in the body", async () => {
+		const fetchSpy = vi.fn().mockResolvedValueOnce(
+			jsonResponse({ success: true, id: "task_abc123" }, 201),
+		);
+		globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+		const result = await createTask({
+			input: {
+				title: "New task",
+				statusId: "status_1",
+				workflowId: "wf_1",
+				taskTypeId: "task_type_1",
+				teamId: "team_1",
+				description: "some description",
+				assigneeId: "user_1",
+			},
+			idempotencyKey: "idem-1",
+			ctx: { authToken: OLD_TOKEN },
+		});
+
+		expect(result).toEqual({ success: true, id: "task_abc123" });
+
+		const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+		const body = JSON.parse(String(init.body));
+		expect(body).toMatchObject({
+			title: "New task",
+			statusId: "status_1",
+			workflowId: "wf_1",
+			taskTypeId: "task_type_1",
+			teamId: "team_1",
+			description: "some description",
+			assigneeId: "user_1",
+		});
+		// Idempotency-Key header propagates
+		expect((init.headers as Record<string, string>)["Idempotency-Key"]).toBe("idem-1");
+	});
+
+	it("surfaces 400 validation errors (e.g. missing statusId)", async () => {
+		globalThis.fetch = vi.fn().mockResolvedValueOnce(
+			jsonResponse({ error: "statusId is required." }, 400),
+		) as unknown as typeof fetch;
+
+		await expect(
+			createTask({
+				// Intentionally missing required field — forced-cast to hit the server-side 400.
+				input: { title: "x" } as unknown as Parameters<typeof createTask>[0]["input"],
+				ctx: { authToken: OLD_TOKEN },
+			}),
+		).rejects.toMatchObject({ status: 400 });
 	});
 });
 
