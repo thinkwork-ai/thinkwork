@@ -136,6 +136,12 @@ variable "ses_inbound_domain" {
   default     = ""
 }
 
+variable "lastmile_tasks_api_url" {
+  description = "Base URL of the LastMile Tasks REST API (e.g. https://api-dev.lastmile-tei.com for develop). Feature-flags the outbound task sync — leave blank to keep mobile-created tasks in sync_status='local'."
+  type        = string
+  default     = ""
+}
+
 locals {
   www_dns_enabled = var.www_domain != "" && var.cloudflare_zone_id != ""
   docs_domain     = var.www_domain != "" ? "docs.${var.www_domain}" : ""
@@ -174,6 +180,10 @@ module "thinkwork" {
 
   # SES inbound email subdomain (delegated Route53 subzone).
   ses_inbound_domain = var.ses_inbound_domain
+
+  # LastMile Tasks REST API base URL — feature-flags the outbound task
+  # sync. Empty string keeps mobile-created tasks in sync_status='local'.
+  lastmile_tasks_api_url = var.lastmile_tasks_api_url
 
   # Greenfield: create everything (all defaults are true)
 }
