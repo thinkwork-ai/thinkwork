@@ -1,0 +1,39 @@
+{
+  "id": "lastmile_task_intake",
+  "title": "Task details",
+  "description": "Add a few details so this task is actionable when it lands in LastMile.",
+  "submit_label": "Create task",
+  "fields": [
+    {
+      "id": "description",
+      "label": "Description",
+      "type": "textarea",
+      "required": false,
+      "placeholder": "What needs to happen? Any relevant context, links, or constraints."
+    },
+    {
+      "id": "priority",
+      "label": "Priority",
+      "type": "select",
+      "required": true,
+      "options": [
+        { "value": "urgent", "label": "Urgent" },
+        { "value": "high", "label": "High" },
+        { "value": "medium", "label": "Medium" },
+        { "value": "low", "label": "Low" }
+      ]
+    },
+    {
+      "id": "due_date",
+      "label": "Due date",
+      "type": "date",
+      "required": false
+    },
+    {
+      "id": "assignee_email",
+      "label": "Assign to (leave blank for yourself)",
+      "type": "user_picker",
+      "required": false
+    }
+  ]
+}
