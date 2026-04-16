@@ -101,6 +101,25 @@ export interface LastmileWorkflow {
 	updatedAt?: string;
 }
 
+/** LastMile terminal — required on `POST /tasks`. The agent picks one for
+ *  the user by calling `listTerminals()` and matching against the user's
+ *  free-form intent ("Houston", "CALSAN", etc.). We expose only the fields
+ *  useful for that disambiguation; nested `terminalProducts` /
+ *  `terminalServiceAreas` are dropped. */
+export interface LastmileTerminal {
+	id: string;
+	name: string;
+	externalId?: string | null;
+	abbv?: string | null;
+	locationId?: string | null;
+	location?: {
+		city?: string | null;
+		state?: string | null;
+		postalCode?: string | null;
+		fullAddress?: string | null;
+	} | null;
+}
+
 export interface UpdateTaskRequest {
 	title?: string;
 	description?: string | null;
@@ -543,5 +562,31 @@ export async function listWorkflows(
 	// Spec guarantees `data: Workflow[]`. Defensively unwrap a bare array
 	// in case an older handler is still deployed on some stage.
 	if (Array.isArray(envelope)) return envelope as LastmileWorkflow[];
+	return envelope?.data ?? [];
+}
+
+/** GET /terminals — returns the company's terminals for the agent's
+ *  terminal-picker tool. Verified empirically: the envelope is
+ *  `{ data, total, page, pageSize, hasMore }` (flat `page`/`pageSize`, not
+ *  `totalCount`/`totalPages`). We only care about `.data` so the extra
+ *  fields are ignored. First page at `pageSize=100` covers every tenant
+ *  we've seen to date; we'll add follow-up paging if that stops being
+ *  true. */
+export async function listTerminals(
+	args: { ctx: LastmileRestCtx; query?: { pageSize?: number } },
+): Promise<LastmileTerminal[]> {
+	const query: Record<string, string | number | undefined> = {
+		pageSize: args.query?.pageSize ?? 100,
+	};
+
+	const envelope = await doRequest<PaginatedResponse<LastmileTerminal>>({
+		method: "GET",
+		path: "/terminals",
+		authToken: args.ctx.authToken,
+		baseUrl: ctxToBaseUrl(args.ctx),
+		query,
+		refreshToken: args.ctx.refreshToken,
+	});
+	if (Array.isArray(envelope)) return envelope as LastmileTerminal[];
 	return envelope?.data ?? [];
 }
