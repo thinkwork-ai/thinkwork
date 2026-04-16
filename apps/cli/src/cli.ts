@@ -2,6 +2,7 @@
 
 import { Command } from "commander";
 import { VERSION } from "./version.js";
+import { loadCliConfig } from "./cli-config.js";
 import { registerPlanCommand } from "./commands/plan.js";
 import { registerDeployCommand } from "./commands/deploy.js";
 import { registerDestroyCommand } from "./commands/destroy.js";
@@ -30,13 +31,20 @@ program
     "AWS profile to use (sets AWS_PROFILE for Terraform and AWS CLI)"
   );
 
-// Apply --profile globally before any command runs
+// Apply --profile globally before any command runs. Precedence:
+//   1. Explicit --profile flag (command-level or program-level)
+//   2. Existing AWS_PROFILE env var (let the shell win)
+//   3. defaultProfile from ~/.thinkwork/config.json (set by `thinkwork login`)
 program.hook("preAction", (_thisCommand, actionCommand) => {
-  const profile =
+  const explicit =
     actionCommand.opts().profile ?? program.opts().profile;
-  if (profile) {
-    process.env.AWS_PROFILE = profile;
+  if (explicit) {
+    process.env.AWS_PROFILE = explicit;
+    return;
   }
+  if (process.env.AWS_PROFILE) return;
+  const fallback = loadCliConfig().defaultProfile;
+  if (fallback) process.env.AWS_PROFILE = fallback;
 });
 
 // Setup
