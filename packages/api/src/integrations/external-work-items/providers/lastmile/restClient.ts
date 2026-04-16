@@ -306,6 +306,13 @@ async function doRequest<TResponse, TBody = unknown>(
 			if (res.status === 401) {
 				const claims = peekJwtClaims(currentToken);
 				const nowSec = Math.floor(Date.now() / 1000);
+				// Token shape — prefix + suffix + length so we can compare
+				// to what's in SSM without leaking the full plaintext.
+				const tokenPreview =
+					currentToken.length > 14
+						? `${currentToken.slice(0, 12)}…${currentToken.slice(-4)}`
+						: `(len=${currentToken.length})`;
+				const outboundHeaders = buildHeaders();
 				console.error(
 					`[lastmile-rest] 401 from ${args.method} ${args.path}`,
 					{
@@ -314,6 +321,14 @@ async function doRequest<TResponse, TBody = unknown>(
 						message: errObj?.message || errText,
 						requestId: res.headers.get("x-request-id") ?? undefined,
 						responseBody: parsed ?? errText,
+						url: url.toString(),
+						outboundHeaders: {
+							...outboundHeaders,
+							// Don't log the full bearer — prefix/suffix only.
+							Authorization: `Bearer ${tokenPreview}`,
+						},
+						tokenPreview,
+						tokenLen: currentToken.length,
 						tokenAudience: claims?.aud,
 						tokenIssuer: claims?.iss,
 						tokenScope: claims?.scope,
