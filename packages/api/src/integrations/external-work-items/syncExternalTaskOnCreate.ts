@@ -58,8 +58,10 @@ type ActiveTaskConnection = {
 	metadata: Record<string, unknown> | null;
 };
 
-/** Find the first active task-kind connector owned by the given user. */
-async function findActiveTaskConnection(
+/** Find the first active task-kind connector owned by the given user.
+ *  Exported so sibling flows (e.g. the `create_task` inbox-item approval
+ *  path) can reuse the exact same connection-lookup semantics. */
+export async function findActiveTaskConnection(
 	tenantId: string,
 	userId: string,
 ): Promise<ActiveTaskConnection | null> {
@@ -94,7 +96,7 @@ async function findActiveTaskConnection(
 /** Pull the LastMile user id out of the connection metadata. Written by
  *  the post-OAuth hook in `skills.ts` during the initial MCP `user_whoami`
  *  call. Returns null if not set. */
-function getProviderUserId(
+export function getProviderUserId(
 	conn: ActiveTaskConnection,
 ): string | null {
 	const meta = conn.metadata ?? {};
@@ -106,7 +108,7 @@ function getProviderUserId(
 /** Write the terminal sync state + metadata.external onto the thread row.
  *  Always merges with the row's existing metadata so we don't clobber
  *  anything the create path already set (labels, workspace targeting, etc.). */
-async function writeSyncState(
+export async function writeSyncState(
 	threadId: string,
 	state:
 		| { kind: "synced"; externalMeta: Record<string, unknown> }
@@ -180,7 +182,7 @@ function idempotencyKeyForThread(threadId: string): string {
 
 /** Map a successful LastmileTask response into the metadata.external
  *  block that ensureExternalTaskThread expects. */
-function buildExternalMeta(args: {
+export function buildExternalMeta(args: {
 	lastmileTask: LastmileTask;
 	provider: string;
 	connectionId: string;

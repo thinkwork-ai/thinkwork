@@ -10,10 +10,27 @@ type ExternalTaskActionResult {
   auditMessageId: ID
 }
 
+# LastMile terminal info — slimmed down from the REST shape to what an
+# agent or a mobile picker needs to disambiguate between terminals.
+# Full fields (terminalProducts, terminalServiceAreas, supplier details)
+# are intentionally dropped.
+type LastmileTerminalInfo {
+  id: ID!
+  name: String!
+  externalId: String
+  abbv: String
+  city: String
+  state: String
+}
+
 extend type Mutation {
   executeExternalTaskAction(
     threadId: ID!
     actionType: String!
     params: AWSJSON
   ): ExternalTaskActionResult!
+}
+
+extend type Query {
+  lastmileTerminals(threadId: ID!): [LastmileTerminalInfo!]!
 }
