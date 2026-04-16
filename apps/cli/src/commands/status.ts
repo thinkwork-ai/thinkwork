@@ -197,6 +197,30 @@ export function registerStatusCommand(program: Command): void {
     )
     .option("-s, --stage <name>", "Show details for a specific stage")
     .option("--region <region>", "AWS region to scan", "us-east-1")
+    .addHelpText(
+      "after",
+      `
+Examples:
+  # List every deployment in the current AWS account (us-east-1)
+  $ thinkwork list
+
+  # Same thing, tighter verb
+  $ thinkwork ls
+
+  # Deep-dive on one stage (same info but scoped)
+  $ thinkwork list -s dev
+
+  # Scan a different region
+  $ thinkwork list --region us-west-2
+
+  # Use a specific AWS profile for this call only
+  $ thinkwork --profile work-sso list
+
+Discovers stages by looking for \`thinkwork-<stage>-api-graphql-http\`
+Lambdas and fans out to API Gateway, AppSync, S3, RDS, ECS, CloudFront,
+and AgentCore for per-stage detail.
+`,
+    )
     .action(async (opts: { stage?: string; region: string }) => {
       const identity = getAwsIdentity();
       printHeader("status", opts.stage || "all", identity);

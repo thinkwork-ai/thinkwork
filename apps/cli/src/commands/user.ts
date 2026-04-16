@@ -88,10 +88,42 @@ export function registerUserCommand(program: Command): void {
     .description(
       "Invite a teammate to a tenant. Creates the Cognito user (Cognito emails a temporary password) and adds them as a tenant member.",
     )
-    .requiredOption("-s, --stage <name>", "Deployment stage")
-    .requiredOption("--tenant <slug>", "Tenant slug")
+    .requiredOption("-s, --stage <name>", "Deployment stage (e.g. dev, prod)")
+    .requiredOption(
+      "--tenant <slug>",
+      "Tenant slug (the URL-safe tenant id, e.g. acme)",
+    )
     .option("--name <name>", "Display name for the invited user")
-    .option("--role <role>", "Tenant member role", "member")
+    .option(
+      "--role <role>",
+      'Tenant member role: "member", "admin", or "owner"',
+      "member",
+    )
+    .addHelpText(
+      "after",
+      `
+Examples:
+  # Invite a teammate as a regular member
+  $ thinkwork user invite alice@example.com --tenant acme -s dev
+
+  # Invite with a display name and admin role
+  $ thinkwork user invite bob@example.com --tenant acme -s dev \\
+      --name "Bob Smith" --role admin
+
+  # Re-inviting someone who's already a member is a no-op (no second email)
+  $ thinkwork user invite alice@example.com --tenant acme -s dev
+  ⚠  alice@example.com is already a member of "acme" (role: member). No email sent.
+
+What happens:
+  1. A Cognito user is created (or reused if the email already exists).
+  2. Cognito emails the user a temporary password.
+  3. The user is added to the tenant with the given role.
+  4. On first sign-in they're prompted to set a real password.
+
+Requires the stack to be deployed (the CLI discovers the API Gateway URL
+and reads api_auth_secret from terraform.tfvars for the stage).
+`,
+    )
     .action(
       async (
         email: string,
@@ -177,10 +209,26 @@ export function registerUserCommand(program: Command): void {
       "Trigger Cognito's forgot-password flow for a user (admin-initiated). Sends them a verification code email.",
     )
     .option("-p, --profile <name>", "AWS profile")
-    .requiredOption("-s, --stage <name>", "Deployment stage")
+    .requiredOption("-s, --stage <name>", "Deployment stage (e.g. dev, prod)")
     .option(
       "-r, --region <name>",
       "AWS region (defaults to AWS CLI default / AWS_REGION)",
+    )
+    .addHelpText(
+      "after",
+      `
+Examples:
+  # Admin-triggered password reset — works even if the account is locked
+  $ thinkwork user reset-password alice@example.com -s dev
+
+  # Target a specific AWS profile + region
+  $ thinkwork user reset-password alice@example.com -s prod \\
+      --profile thinkwork --region us-east-1
+
+Cognito emails the user a verification code; they set a new password on
+next sign-in. Use this instead of \`forgot-password\` when the user is in
+FORCE_CHANGE_PASSWORD or has been disabled.
+`,
     )
     .action(
       async (
