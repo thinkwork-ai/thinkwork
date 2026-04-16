@@ -36,7 +36,11 @@ const REQUEST_TIMEOUT_MS = 10_000;
 const RETRY_STATUSES = new Set([500, 502, 503, 504]);
 const MAX_RETRIES = 2;
 
-export function isLastmileRestConfigured(): boolean {
+export function isLastmileRestConfigured(args?: { baseUrl?: string | null }): boolean {
+	// Per-tenant baseUrl wins over the Lambda env var fallback. The env var
+	// acts as a bootstrap default for single-tenant / local-dev and gets
+	// removed once every tenant is configured via the admin UI.
+	if (args?.baseUrl) return true;
 	return BASE_URL.length > 0;
 }
 
@@ -195,6 +199,10 @@ interface RequestArgs<B> {
 	method: Method;
 	path: string;
 	authToken: string;
+	/** Per-call base URL override — wins over the LASTMILE_TASKS_API_URL
+	 *  env var. Supplied by callers that looked up the tenant's per-
+	 *  connector config (webhooks.config.baseUrl) via `getConnectorBaseUrl`. */
+	baseUrl?: string;
 	body?: B;
 	query?: Record<string, string | number | undefined>;
 	idempotencyKey?: string;
@@ -208,12 +216,13 @@ interface RequestArgs<B> {
 async function doRequest<TResponse, TBody = unknown>(
 	args: RequestArgs<TBody>,
 ): Promise<TResponse> {
-	if (!BASE_URL) {
+	const effectiveBase = args.baseUrl || BASE_URL;
+	if (!effectiveBase) {
 		throw new LastmileRestError({
 			status: 0,
 			code: "not_configured",
 			message:
-				"LastMile REST client is not configured — set LASTMILE_TASKS_API_URL to enable system-layer sync.",
+				"LastMile REST client is not configured — set the per-tenant baseUrl via the connector admin UI (or LASTMILE_TASKS_API_URL as a fallback).",
 		});
 	}
 	if (!args.authToken) {
@@ -224,7 +233,7 @@ async function doRequest<TResponse, TBody = unknown>(
 		});
 	}
 
-	const url = new URL(`${BASE_URL.replace(/\/$/, "")}${args.path}`);
+	const url = new URL(`${effectiveBase.replace(/\/$/, "")}${args.path}`);
 	if (args.query) {
 		for (const [k, v] of Object.entries(args.query)) {
 			if (v !== undefined && v !== null && v !== "") {
@@ -408,12 +417,21 @@ async function doRequest<TResponse, TBody = unknown>(
 export interface LastmileRestCtx {
 	/** Per-user OAuth bearer token, resolved via `resolveOAuthToken`. */
 	authToken: string;
+	/** Per-tenant REST API base URL (e.g. "https://api-dev.lastmile-tei.com").
+	 *  Read from `webhooks.config.baseUrl` via `getConnectorBaseUrl`. When
+	 *  omitted, falls back to the LASTMILE_TASKS_API_URL env var. */
+	baseUrl?: string | null;
 	/** Optional: called on 401 to force-refresh the token and retry once.
 	 *  Callers should wire this to `forceRefreshLastmileUserToken` so
 	 *  server-invalidated tokens self-heal without requiring mobile
 	 *  reconnect. Return null to signal unrecoverable auth — `doRequest`
 	 *  then surfaces a 401 the handler can translate to reconnect UX. */
 	refreshToken?: () => Promise<string | null>;
+}
+
+/** Compact helper to avoid repeating the ctx → args plumbing on every method. */
+function ctxToBaseUrl(ctx: LastmileRestCtx): string | undefined {
+	return ctx.baseUrl ?? undefined;
 }
 
 /** POST /tasks — create a task. Gated by `isLastmileRestConfigured()`. */
@@ -424,6 +442,7 @@ export async function createTask(
 		method: "POST",
 		path: "/tasks",
 		authToken: args.ctx.authToken,
+		baseUrl: ctxToBaseUrl(args.ctx),
 		body: args.input,
 		idempotencyKey: args.idempotencyKey,
 		refreshToken: args.ctx.refreshToken,
@@ -438,6 +457,7 @@ export async function getTask(
 		method: "GET",
 		path: `/tasks/${encodeURIComponent(args.taskId)}`,
 		authToken: args.ctx.authToken,
+		baseUrl: ctxToBaseUrl(args.ctx),
 		refreshToken: args.ctx.refreshToken,
 	});
 }
@@ -450,6 +470,7 @@ export async function listTasks(
 		method: "GET",
 		path: "/tasks",
 		authToken: args.ctx.authToken,
+		baseUrl: ctxToBaseUrl(args.ctx),
 		query: args.query as Record<string, string | number | undefined> | undefined,
 		refreshToken: args.ctx.refreshToken,
 	});
@@ -463,6 +484,7 @@ export async function updateTask(
 		method: "PATCH",
 		path: `/tasks/${encodeURIComponent(args.taskId)}`,
 		authToken: args.ctx.authToken,
+		baseUrl: ctxToBaseUrl(args.ctx),
 		body: args.input,
 		refreshToken: args.ctx.refreshToken,
 	});
@@ -477,6 +499,7 @@ export async function getMe(
 		method: "GET",
 		path: "/users/me",
 		authToken: args.ctx.authToken,
+		baseUrl: ctxToBaseUrl(args.ctx),
 		refreshToken: args.ctx.refreshToken,
 	});
 }
@@ -498,6 +521,7 @@ export async function listWorkflows(
 		method: "GET",
 		path: "/workflows",
 		authToken: args.ctx.authToken,
+		baseUrl: ctxToBaseUrl(args.ctx),
 		query,
 		refreshToken: args.ctx.refreshToken,
 	});

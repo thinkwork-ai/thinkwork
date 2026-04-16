@@ -39,6 +39,7 @@ import {
 	isLastmileRestConfigured,
 	LastmileRestError,
 } from "../integrations/external-work-items/providers/lastmile/restClient.js";
+import { getConnectorBaseUrl } from "./task-connectors.js";
 
 const { connections, connectProviders, credentials } = schema;
 
@@ -351,8 +352,15 @@ async function listLastmileWorkflows(
 	tenantId: string,
 	userId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	if (!isLastmileRestConfigured()) {
-		return error("LastMile REST API not configured (LASTMILE_TASKS_API_URL unset)", 503);
+	// Per-tenant baseUrl from webhooks.config.baseUrl (admin-settable on the
+	// Connectors → LastMile page); falls back to the LASTMILE_TASKS_API_URL
+	// Lambda env var if unset.
+	const baseUrl = await getConnectorBaseUrl(tenantId, "lastmile");
+	if (!isLastmileRestConfigured({ baseUrl })) {
+		return error(
+			"LastMile REST API not configured — set the base URL on the Connectors → LastMile page, or wire LASTMILE_TASKS_API_URL as a fallback.",
+			503,
+		);
 	}
 	if (!userId) return error("Missing x-principal-id header");
 
@@ -404,6 +412,7 @@ async function listLastmileWorkflows(
 		const workflows = await lastmileListWorkflows({
 			ctx: {
 				authToken: patToken,
+				baseUrl,
 				// If LastMile rejects the PAT (revoked, expired early), mint
 				// a fresh one by re-exchanging the user's WorkOS JWT.
 				refreshToken: () =>

@@ -28,6 +28,8 @@
  *   POST   /api/task-connectors/:slug/generate-secret   — issue HMAC signing secret (returned once)
  *   POST   /api/task-connectors/:slug/regenerate-secret — rotate HMAC signing secret
  *   DELETE /api/task-connectors/:slug/secret            — remove HMAC signing (token-only auth)
+ *   PATCH  /api/task-connectors/:slug/config            — update per-tenant connector settings
+ *                                                         (currently: baseUrl for the provider's REST API)
  */
 
 import type {
@@ -58,6 +60,44 @@ function webhookUrlForToken(token: string): string {
 	// Read at call time so tests can stub THINKWORK_API_URL via vi.stubEnv.
 	const base = process.env.THINKWORK_API_URL || "";
 	return `${base}/webhooks/${token}`;
+}
+
+/**
+ * Resolve the per-tenant REST base URL for a task connector by reading
+ * `webhooks.config.baseUrl` on the tenant's task webhook row for the
+ * named provider. Returns null when no webhook row exists or the config
+ * field is empty — callers should fall back to the provider-specific
+ * Lambda env var (e.g. `LASTMILE_TASKS_API_URL`).
+ *
+ * Exported so the REST-facing handlers (`connections.ts`,
+ * `syncExternalTaskOnCreate`) can read per-tenant config without
+ * duplicating the join. Reads on every call — fine because the task
+ * handlers already fetch the connection row; one extra single-row
+ * lookup is cheap compared to the outbound HTTP call.
+ */
+export async function getConnectorBaseUrl(
+	tenantId: string,
+	providerName: string,
+): Promise<string | null> {
+	const [row] = await db
+		.select({ config: webhooks.config })
+		.from(webhooks)
+		.innerJoin(
+			connectProviders,
+			eq(webhooks.connect_provider_id, connectProviders.id),
+		)
+		.where(
+			and(
+				eq(webhooks.tenant_id, tenantId),
+				eq(webhooks.target_type, "task"),
+				eq(connectProviders.name, providerName),
+			),
+		)
+		.limit(1);
+	if (!row) return null;
+	const cfg = (row.config ?? null) as Record<string, unknown> | null;
+	const url = cfg?.baseUrl;
+	return typeof url === "string" && url.length > 0 ? url : null;
 }
 
 function generateToken(): string {
@@ -122,6 +162,10 @@ export async function handler(
 			if (method === "DELETE") return removeSecret(tenantId, slug);
 			return error("Method not allowed", 405);
 		}
+		if (sub === "config") {
+			if (method === "PATCH") return updateConfig(tenantId, slug, event);
+			return error("Method not allowed", 405);
+		}
 
 		// Item: /api/task-connectors/:slug
 		if (method === "POST") return enableConnector(tenantId, slug);
@@ -151,6 +195,10 @@ type ConnectorRow = {
 	webhook_url: string | null;
 	has_secret: boolean;
 	secret_status: "configured" | "missing";
+	/** Per-tenant provider REST API base URL (e.g. LastMile's dev API host).
+	 *  Null when not configured — caller falls back to the provider's Lambda
+	 *  env var (`LASTMILE_TASKS_API_URL` etc.). Stored in webhooks.config.baseUrl. */
+	base_url: string | null;
 	connection_count: number;
 	last_delivery_at: string | null;
 	delivery_count_24h: number;
@@ -250,6 +298,10 @@ async function listConnectors(
 		const envSecretKey = LEGACY_ENV_SECRETS[provider.name];
 		const envSecretPresent =
 			typeof envSecretKey === "string" && !!process.env[envSecretKey];
+		const base_url =
+			typeof cfg?.baseUrl === "string" && cfg.baseUrl.length > 0
+				? cfg.baseUrl
+				: null;
 
 		rows.push({
 			slug: provider.name,
@@ -263,6 +315,7 @@ async function listConnectors(
 			webhook_url: webhook ? webhookUrlForToken(webhook.token) : null,
 			has_secret: tenantSecret,
 			secret_status: tenantSecret || envSecretPresent ? "configured" : "missing",
+			base_url,
 			connection_count,
 			last_delivery_at:
 				webhook?.last_invoked_at?.toISOString?.() ??
@@ -624,6 +677,100 @@ async function generateSecret(
 		.where(eq(webhooks.id, existing.id));
 
 	return json({ ok: true, secret: newSecret });
+}
+
+// ---------------------------------------------------------------------------
+// PATCH /api/task-connectors/:slug/config — per-tenant connector settings
+// ---------------------------------------------------------------------------
+
+/** Fields admins can write via the connector config endpoint. JSONB schema
+ *  is open-ended in the DB, but this allow-list keeps unknown keys out. */
+type AllowedConfigKey = "baseUrl";
+
+async function updateConfig(
+	tenantId: string,
+	slug: string,
+	event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const [provider] = await db
+		.select({ id: connectProviders.id })
+		.from(connectProviders)
+		.where(eq(connectProviders.name, slug));
+	if (!provider) return notFound(`Connector '${slug}' not found`);
+
+	const [existing] = await db
+		.select()
+		.from(webhooks)
+		.where(
+			and(
+				eq(webhooks.tenant_id, tenantId),
+				eq(webhooks.target_type, "task"),
+				eq(webhooks.connect_provider_id, provider.id),
+			),
+		);
+	if (!existing) {
+		return error(
+			"Connector is not enabled. Enable it before editing config.",
+			400,
+		);
+	}
+
+	// Parse + validate body. Reject unknown keys so a typo in the UI doesn't
+	// silently persist dead config.
+	let body: unknown;
+	try {
+		body = event.body ? JSON.parse(event.body) : {};
+	} catch {
+		return error("Invalid JSON body", 400);
+	}
+	if (typeof body !== "object" || body === null || Array.isArray(body)) {
+		return error("Body must be a JSON object", 400);
+	}
+
+	const ALLOWED: ReadonlySet<AllowedConfigKey> = new Set(["baseUrl"]);
+	const updates: Partial<Record<AllowedConfigKey, string | null>> = {};
+	for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
+		if (!ALLOWED.has(key as AllowedConfigKey)) {
+			return error(`Unknown config key: ${key}`, 400);
+		}
+		// Only string values or null (to clear the field) are accepted.
+		if (value !== null && typeof value !== "string") {
+			return error(`Config value for ${key} must be string or null`, 400);
+		}
+		if (key === "baseUrl" && typeof value === "string") {
+			try {
+				const parsed = new URL(value);
+				if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+					return error("baseUrl must be http(s)", 400);
+				}
+			} catch {
+				return error("baseUrl is not a valid URL", 400);
+			}
+		}
+		updates[key as AllowedConfigKey] = value;
+	}
+
+	const currentCfg = (existing.config ?? {}) as Record<string, unknown>;
+	const nextCfg: Record<string, unknown> = { ...currentCfg };
+	for (const [k, v] of Object.entries(updates)) {
+		if (v === null || v === "") delete nextCfg[k];
+		else nextCfg[k] = v;
+	}
+
+	await db
+		.update(webhooks)
+		.set({ config: nextCfg, updated_at: new Date() })
+		.where(eq(webhooks.id, existing.id));
+
+	return json({
+		ok: true,
+		config: {
+			baseUrl:
+				typeof nextCfg.baseUrl === "string" && nextCfg.baseUrl.length > 0
+					? nextCfg.baseUrl
+					: null,
+		},
+	});
 }
 
 async function removeSecret(

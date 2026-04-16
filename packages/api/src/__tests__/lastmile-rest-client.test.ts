@@ -252,6 +252,39 @@ describe("listWorkflows — 401 refresh-retry path", () => {
 	});
 });
 
+describe("listWorkflows — baseUrl override (per-tenant config)", () => {
+	it("uses ctx.baseUrl when provided, ignoring the env var default", async () => {
+		const fetchSpy = vi
+			.fn()
+			.mockResolvedValueOnce(jsonResponse({ data: [] }));
+		globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+		await listWorkflows({
+			ctx: {
+				authToken: OLD_TOKEN,
+				baseUrl: "https://tenant-specific.example.com",
+			},
+		});
+
+		const [url] = fetchSpy.mock.calls[0] as [string];
+		expect(url.startsWith("https://tenant-specific.example.com/workflows")).toBe(
+			true,
+		);
+	});
+
+	it("falls back to env var when ctx.baseUrl is null", async () => {
+		globalThis.fetch = vi
+			.fn()
+			.mockResolvedValueOnce(jsonResponse({ data: [] })) as unknown as typeof fetch;
+		await listWorkflows({ ctx: { authToken: OLD_TOKEN, baseUrl: null } });
+		const [url] = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock
+			.calls[0] as [string];
+		expect(url.startsWith("https://api-dev.lastmile-tei.com/workflows")).toBe(
+			true,
+		);
+	});
+});
+
 describe("listWorkflows — misc error paths", () => {
 	it("does not invoke refreshToken on 500 (only 401 triggers refresh)", async () => {
 		const fetchSpy = vi

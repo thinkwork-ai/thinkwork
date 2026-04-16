@@ -36,6 +36,7 @@ import {
 	getOrMintLastmilePat,
 	forceRefreshLastmilePat,
 } from "../../lib/lastmile-pat.js";
+import { getConnectorBaseUrl } from "../../handlers/task-connectors.js";
 import {
 	createTask as restCreateTask,
 	isLastmileRestConfigured,
@@ -201,11 +202,14 @@ function buildExternalMeta(args: {
 export async function syncExternalTaskOnCreate(
 	args: SyncExternalTaskOnCreateArgs,
 ): Promise<SyncExternalTaskResult> {
-	// Feature flag: if the REST client isn't wired yet, stamp the row
-	// `local` and return. No error — this is the expected state while
-	// we wait for LastMile to ship the endpoint.
-	if (!isLastmileRestConfigured()) {
-		const reason = "LASTMILE_TASKS_API_URL unset — task created locally only.";
+	// Feature flag: read the per-tenant baseUrl from webhooks.config (set
+	// via the admin Connectors UI) or fall back to LASTMILE_TASKS_API_URL.
+	// If neither is set, stamp local — expected state until the connector
+	// is configured.
+	const baseUrl = await getConnectorBaseUrl(args.tenantId, "lastmile");
+	if (!isLastmileRestConfigured({ baseUrl })) {
+		const reason =
+			"LastMile base URL not configured — set it on Connectors → LastMile, or wire LASTMILE_TASKS_API_URL as a fallback.";
 		await writeSyncState(args.threadId, { kind: "local", reason });
 		return { status: "local", reason };
 	}
@@ -257,6 +261,7 @@ export async function syncExternalTaskOnCreate(
 			idempotencyKey: idempotencyKeyForThread(args.threadId),
 			ctx: {
 				authToken,
+				baseUrl,
 				refreshToken: () =>
 					forceRefreshLastmilePat({
 						userId: args.userId,
