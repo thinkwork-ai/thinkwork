@@ -144,7 +144,14 @@ export async function ensureExternalTaskThread(
 		await db
 			.update(threads)
 			.set({
-				title: args.title,
+				// Only overwrite the existing title when we have a rich
+				// envelope — that's the only path where `args.title` is
+				// authoritative. Without an envelope, `args.title` is the
+				// ingestEvent fallback (either the raw webhook task.title or
+				// the `External task <id>` placeholder) and would clobber a
+				// better title that another code path (e.g. outbound
+				// syncExternalTaskOnCreate) already wrote onto the row.
+				...(args.envelope ? { title: args.title } : {}),
 				metadata: { ...currentMeta, external: nextExternal },
 				// Self-heal assignee on every upsert so pre-Phase-A threads recover.
 				...(args.userId
