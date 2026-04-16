@@ -178,6 +178,26 @@ export function registerLoginCommand(program: Command): void {
     )
     .option("--sso", "Skip the picker and go straight to SSO login")
     .option("--keys", "Skip the picker and go straight to access-key entry")
+    .addHelpText(
+      "after",
+      `
+Examples:
+  # Interactive picker — lists profiles from ~/.aws, verifies the one you pick,
+  # and saves it as your Thinkwork default.
+  $ thinkwork login
+
+  # Skip the picker, enter fresh access keys into a named profile
+  $ thinkwork login --keys --profile thinkwork
+
+  # Skip the picker, log in via AWS SSO
+  $ thinkwork login --sso --profile work-sso
+
+After login, commands resolve the AWS profile in this order:
+  1. --profile <name>            (per-command override)
+  2. \$AWS_PROFILE env var
+  3. defaultProfile from ~/.thinkwork/config.json  (set by this command)
+`,
+    )
     .action(async (opts: { profile: string; sso?: boolean; keys?: boolean }) => {
       printHeader("login", opts.profile);
 
