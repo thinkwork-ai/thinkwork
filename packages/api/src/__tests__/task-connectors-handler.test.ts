@@ -360,6 +360,114 @@ describe("task-connectors — secret lifecycle", () => {
 	});
 });
 
+describe("task-connectors — PATCH /api/task-connectors/:slug/config", () => {
+	it("merges baseUrl into webhooks.config without clobbering existing keys", async () => {
+		primeWhere([{ id: "prov-1" }]);
+		primeWhere([
+			{ id: "wh-1", config: { secret: "keep_me", baseUrl: "https://old" } },
+		]);
+
+		const res = await handler(
+			buildEvent(
+				"PATCH",
+				"/api/task-connectors/lastmile/config",
+				{ baseUrl: "https://api-dev.lastmile-tei.com" },
+			),
+		);
+		expect(res.statusCode).toBe(200);
+		const body = JSON.parse(res.body as string);
+		expect(body.config.baseUrl).toBe("https://api-dev.lastmile-tei.com");
+		// Assert the update() set-arg included BOTH keys (secret preserved).
+		const setArg = (mockUpdateSet.mock.calls as unknown as [[{ config: Record<string, unknown> }]])[0][0];
+		expect(setArg.config.secret).toBe("keep_me");
+		expect(setArg.config.baseUrl).toBe("https://api-dev.lastmile-tei.com");
+	});
+
+	it("clears baseUrl when body sets it to null or empty string", async () => {
+		primeWhere([{ id: "prov-1" }]);
+		primeWhere([
+			{ id: "wh-1", config: { secret: "keep", baseUrl: "https://old" } },
+		]);
+
+		const res = await handler(
+			buildEvent(
+				"PATCH",
+				"/api/task-connectors/lastmile/config",
+				{ baseUrl: null },
+			),
+		);
+		expect(res.statusCode).toBe(200);
+		const body = JSON.parse(res.body as string);
+		expect(body.config.baseUrl).toBeNull();
+		const setArg = (mockUpdateSet.mock.calls as unknown as [[{ config: Record<string, unknown> }]])[0][0];
+		expect(setArg.config.baseUrl).toBeUndefined();
+		expect(setArg.config.secret).toBe("keep");
+	});
+
+	it("rejects unknown keys", async () => {
+		primeWhere([{ id: "prov-1" }]);
+		primeWhere([{ id: "wh-1", config: null }]);
+
+		const res = await handler(
+			buildEvent(
+				"PATCH",
+				"/api/task-connectors/lastmile/config",
+				{ maliciousKey: "pwnd" },
+			),
+		);
+		expect(res.statusCode).toBe(400);
+	});
+
+	it("rejects non-URL baseUrl", async () => {
+		primeWhere([{ id: "prov-1" }]);
+		primeWhere([{ id: "wh-1", config: null }]);
+
+		const res = await handler(
+			buildEvent(
+				"PATCH",
+				"/api/task-connectors/lastmile/config",
+				{ baseUrl: "not-a-url" },
+			),
+		);
+		expect(res.statusCode).toBe(400);
+	});
+
+	it("rejects non-http(s) protocols", async () => {
+		primeWhere([{ id: "prov-1" }]);
+		primeWhere([{ id: "wh-1", config: null }]);
+
+		const res = await handler(
+			buildEvent(
+				"PATCH",
+				"/api/task-connectors/lastmile/config",
+				{ baseUrl: "ftp://sketchy.example.com" },
+			),
+		);
+		expect(res.statusCode).toBe(400);
+	});
+
+	it("rejects when connector is not enabled", async () => {
+		primeWhere([{ id: "prov-1" }]);
+		primeWhere([]); // no webhook row
+
+		const res = await handler(
+			buildEvent(
+				"PATCH",
+				"/api/task-connectors/lastmile/config",
+				{ baseUrl: "https://api-dev.lastmile-tei.com" },
+			),
+		);
+		expect(res.statusCode).toBe(400);
+	});
+
+	it("returns 405 for non-PATCH methods on /config", async () => {
+		const res = await handler(
+			buildEvent("POST", "/api/task-connectors/lastmile/config"),
+		);
+		expect(res.statusCode).toBe(405);
+	});
+});
+
 describe("task-connectors — POST /api/task-connectors/:slug/test", () => {
 	it("rejects when no active connection exists", async () => {
 		primeWhere([{ id: "prov-1", name: "lastmile" }]);

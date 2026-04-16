@@ -137,7 +137,17 @@ variable "ses_inbound_domain" {
 }
 
 variable "lastmile_tasks_api_url" {
-  description = "Base URL of the LastMile Tasks REST API (e.g. https://api-dev.lastmile-tei.com for develop). Feature-flags the outbound task sync — leave blank to keep mobile-created tasks in sync_status='local'."
+  description = <<-EOT
+    OPTIONAL fallback base URL for the LastMile Tasks REST API.
+
+    Prefer setting the URL per-tenant via the admin Connectors → LastMile
+    page (stored in webhooks.config.baseUrl); that value takes precedence.
+    This variable only fires when the per-tenant config is empty, and is
+    mainly useful for single-tenant dev stacks and bootstrap scenarios.
+
+    Leave blank (default) unless you specifically need the env-var
+    fallback. Example: https://api-dev.lastmile-tei.com.
+  EOT
   type        = string
   default     = ""
 }

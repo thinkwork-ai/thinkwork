@@ -25,11 +25,13 @@ export function useLastmileWorkflows() {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsReconnect, setNeedsReconnect] = useState(false);
 
   const fetchWorkflows = useCallback(async () => {
     if (!tenantId || !userId) return;
     setLoading(true);
     setError(null);
+    setNeedsReconnect(false);
     try {
       const res = await fetch(`${API_BASE}/api/connections/lastmile/workflows`, {
         headers: {
@@ -40,7 +42,18 @@ export function useLastmileWorkflows() {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error || body?.message || `HTTP ${res.status}`);
+        // Backend signals an auth-level failure (missing token, LastMile
+        // returned 401) with `error: "reconnect_needed"`. Distinguish from
+        // transient / generic errors so the UI can prompt reconnect.
+        if (res.status === 401 && body?.error === "reconnect_needed") {
+          setNeedsReconnect(true);
+          setError(
+            body?.detail ||
+              "LastMile connection needs to be refreshed — reconnect in Settings → MCP Servers.",
+          );
+          return;
+        }
+        throw new Error(body?.detail || body?.error || body?.message || `HTTP ${res.status}`);
       }
       const data = await res.json();
       setWorkflows(Array.isArray(data) ? data : data?.data ?? []);
@@ -56,5 +69,5 @@ export function useLastmileWorkflows() {
     void fetchWorkflows();
   }, [fetchWorkflows]);
 
-  return { workflows, loading, error, refetch: fetchWorkflows };
+  return { workflows, loading, error, needsReconnect, refetch: fetchWorkflows };
 }

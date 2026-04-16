@@ -646,36 +646,34 @@ export async function refreshLastmileMcpToken(args: {
 }
 
 /**
- * Resolve the per-user LastMile access token from the MCP OAuth path.
+ * Shared loader: resolves user → MCP server → token row → SM secret for
+ * the LastMile Tasks MCP. Used by both the proactive `resolveLastmileUserToken`
+ * path and the force-refresh `forceRefreshLastmileUserToken` path, which
+ * otherwise duplicated the four DB lookups.
  *
- * LastMile users authenticate via the mobile MCP Servers screen, which
- * stores tokens in `user_mcp_tokens` + Secrets Manager at
- * `thinkwork/{stage}/mcp-tokens/{userId}/{mcpServerId}`. The `connections`
- * row created by the whoami hook is just an identity-linking record — it
- * does NOT own the credential. So for LastMile the token lookup goes
- * through the MCP path.
- *
- * Matches the LastMile Tasks MCP server by URL substring (same heuristic
- * as the whoami hook in skills.ts). If there are multiple LastMile MCP
- * servers for the tenant (Tasks, CRM, Data Catalog) we use the Tasks one
- * because that's the only one that currently performs write actions on
- * tasks — when another provider needs writes, re-think this lookup.
- *
- * PR H: this function now proactively refreshes the token when
- * `user_mcp_tokens.expires_at` is within `EXPIRY_BUFFER_MS` of now.
- * Previously we just returned the stored access_token as-is, so every
- * ~15 minutes of idle time the webhook ingest path would start failing
- * with "Invalid WorkOS token" and the user had to manually reconnect
- * from mobile to unblock. Auto-refresh via the stored `refresh_token`
- * closes that gap.
+ * Returns null (and logs) at each failure point so callers can uniformly
+ * treat null as "no usable token — surface 401 to the user".
  */
-async function resolveLastmileUserToken(
+async function loadLastmileUserTokenContext(
 	connectionId: string,
 	tenantId: string,
-): Promise<string | null> {
-	// 1. Get the user_id from the connections row — we can't trust caller
-	//    context here because this function is called from executeAction,
-	//    webhook ingest, and refresh paths all with different upstream args.
+): Promise<
+	| {
+			userId: string;
+			tasksMcp: {
+				id: string;
+				url: string;
+				auth_config: McpTokenAuthConfig | null;
+			};
+			tok: {
+				id: string;
+				secret_ref: string;
+				expires_at: Date | null;
+			};
+			storedToken: StoredMcpToken;
+	  }
+	| null
+> {
 	const [conn] = await db
 		.select({ user_id: connections.user_id })
 		.from(connections)
@@ -689,10 +687,6 @@ async function resolveLastmileUserToken(
 		return null;
 	}
 
-	// 2. Find the LastMile Tasks MCP server for this tenant. Match by URL
-	//    pattern (host contains "lastmile", path contains "/tasks") to stay
-	//    agnostic of whatever slug the admin chose. Also select auth_config
-	//    so the refresh helper can reach the WorkOS token endpoint.
 	const tenantMcpRows = await db
 		.select({
 			id: tenantMcpServers.id,
@@ -715,7 +709,6 @@ async function resolveLastmileUserToken(
 		return null;
 	}
 
-	// 3. Read the user's token row AND its expiry.
 	const [tok] = await db
 		.select({
 			id: userMcpTokens.id,
@@ -738,7 +731,6 @@ async function resolveLastmileUserToken(
 		return null;
 	}
 
-	// 4. Pull the full token blob out of Secrets Manager.
 	let storedToken: StoredMcpToken;
 	try {
 		const result = await sm.send(
@@ -757,9 +749,163 @@ async function resolveLastmileUserToken(
 	}
 	if (!storedToken.access_token) return null;
 
-	// 5. Check expiry (PR H). Refresh if within the buffer OR if the row
-	//    is missing an `expires_at` column entirely (pre-PR-H rows) AND
-	//    the secret's `obtained_at` is older than the buffer.
+	return {
+		userId: conn.user_id,
+		tasksMcp: {
+			id: tasksMcp.id,
+			url: tasksMcp.url,
+			auth_config: (tasksMcp.auth_config as McpTokenAuthConfig | null) ?? null,
+		},
+		tok: {
+			id: tok.id,
+			secret_ref: tok.secret_ref,
+			expires_at: tok.expires_at,
+		},
+		storedToken,
+	};
+}
+
+/**
+ * Resolve `{ tokenEndpoint, clientId }` for refreshing a LastMile MCP token.
+ *
+ * Happy path: `auth_config` has both (populated at OAuth-start time in
+ * skills.ts:mcpOAuthStart via RFC 9728 discovery + DCR).
+ *
+ * Recovery path: `auth_config` is missing `token_endpoint` but has `client_id`
+ * — re-run the discovery step (same pattern as mcp-configs.ts) and backfill
+ * auth_config so this isn't re-done on every call.
+ *
+ * Unrecoverable: `client_id` is missing. Re-running DCR here would be
+ * invasive (new client, new storage) and the user's stored refresh_token
+ * is bound to the OLD client_id anyway — it wouldn't help. Return null
+ * and force a mobile reconnect.
+ */
+async function resolveLastmileAuthConfig(tasksMcp: {
+	id: string;
+	url: string;
+	auth_config: McpTokenAuthConfig | null;
+}): Promise<{ tokenEndpoint: string; clientId: string } | null> {
+	const cfg = tasksMcp.auth_config ?? {};
+	if (cfg.token_endpoint && cfg.client_id) {
+		return { tokenEndpoint: cfg.token_endpoint, clientId: cfg.client_id };
+	}
+
+	if (!cfg.client_id) {
+		console.error(
+			`[oauth-token] LastMile Tasks MCP ${tasksMcp.id} auth_config has no client_id — cannot refresh; user must reconnect from mobile to re-run DCR`,
+		);
+		return null;
+	}
+
+	// Have client_id, missing token_endpoint. Discover via RFC 9728.
+	try {
+		const mcpBase = tasksMcp.url.replace(/\/+$/, "");
+		const origin = new URL(mcpBase).origin;
+		const serverPath = new URL(mcpBase).pathname.replace(/^\//, "");
+		const wellKnownUrl = `${origin}/.well-known/oauth-protected-resource/${serverPath}`;
+		const resMeta = await fetch(wellKnownUrl, {
+			signal: AbortSignal.timeout(5_000),
+		});
+		if (!resMeta.ok) {
+			console.error(
+				`[oauth-token] RFC 9728 discovery failed for ${tasksMcp.id}: ${resMeta.status} on ${wellKnownUrl}`,
+			);
+			return null;
+		}
+		const meta = (await resMeta.json()) as {
+			authorization_servers?: string[];
+		};
+		const authServer = meta.authorization_servers?.[0];
+		if (!authServer) {
+			console.error(
+				`[oauth-token] RFC 9728 metadata missing authorization_servers for ${tasksMcp.id}`,
+			);
+			return null;
+		}
+		const authMetaRes = await fetch(
+			`${authServer}/.well-known/oauth-authorization-server`,
+			{ signal: AbortSignal.timeout(5_000) },
+		).catch(() => null);
+		const oidcRes =
+			authMetaRes?.ok
+				? authMetaRes
+				: await fetch(`${authServer}/.well-known/openid-configuration`, {
+						signal: AbortSignal.timeout(5_000),
+					});
+		if (!oidcRes.ok) {
+			console.error(
+				`[oauth-token] Authorization-server metadata fetch failed for ${tasksMcp.id}: ${oidcRes.status}`,
+			);
+			return null;
+		}
+		const authMeta = (await oidcRes.json()) as { token_endpoint?: string };
+		if (!authMeta.token_endpoint) {
+			console.error(
+				`[oauth-token] Authorization-server metadata has no token_endpoint for ${tasksMcp.id}`,
+			);
+			return null;
+		}
+
+		// Backfill auth_config so next call skips discovery.
+		const merged: McpTokenAuthConfig = {
+			...cfg,
+			token_endpoint: authMeta.token_endpoint,
+		};
+		await db
+			.update(tenantMcpServers)
+			.set({ auth_config: merged, updated_at: new Date() })
+			.where(eq(tenantMcpServers.id, tasksMcp.id));
+
+		console.log(
+			`[oauth-token] Backfilled token_endpoint for LastMile Tasks MCP ${tasksMcp.id} via RFC 9728 discovery`,
+		);
+		return { tokenEndpoint: authMeta.token_endpoint, clientId: cfg.client_id };
+	} catch (err) {
+		console.error(
+			`[oauth-token] RFC 9728 discovery error for LastMile Tasks MCP ${tasksMcp.id}:`,
+			err,
+		);
+		return null;
+	}
+}
+
+/**
+ * Resolve the per-user LastMile access token from the MCP OAuth path.
+ *
+ * LastMile users authenticate via the mobile MCP Servers screen, which
+ * stores tokens in `user_mcp_tokens` + Secrets Manager at
+ * `thinkwork/{stage}/mcp-tokens/{userId}/{mcpServerId}`. The `connections`
+ * row created by the whoami hook is just an identity-linking record — it
+ * does NOT own the credential. So for LastMile the token lookup goes
+ * through the MCP path.
+ *
+ * Matches the LastMile Tasks MCP server by URL substring (same heuristic
+ * as the whoami hook in skills.ts). If there are multiple LastMile MCP
+ * servers for the tenant (Tasks, CRM, Data Catalog) we use the Tasks one
+ * because that's the only one that currently performs write actions on
+ * tasks — when another provider needs writes, re-think this lookup.
+ *
+ * PR H: this function now proactively refreshes the token when
+ * `user_mcp_tokens.expires_at` is within `EXPIRY_BUFFER_MS` of now.
+ * Previously we just returned the stored access_token as-is, so every
+ * ~15 minutes of idle time the webhook ingest path would start failing
+ * with "Invalid WorkOS token" and the user had to manually reconnect
+ * from mobile to unblock. Auto-refresh via the stored `refresh_token`
+ * closes that gap.
+ *
+ * When `auth_config` is missing endpoints, we return null (forcing
+ * reconnect) rather than handing out a stale token — the old silent
+ * fallback produced LastMile "Failed to validate WorkOS user" errors
+ * downstream that were hard to diagnose.
+ */
+async function resolveLastmileUserToken(
+	connectionId: string,
+	tenantId: string,
+): Promise<string | null> {
+	const ctx = await loadLastmileUserTokenContext(connectionId, tenantId);
+	if (!ctx) return null;
+	const { tasksMcp, tok, storedToken } = ctx;
+
 	const needsRefresh = (() => {
 		if (tok.expires_at) {
 			return new Date(tok.expires_at).getTime() - Date.now() < EXPIRY_BUFFER_MS;
@@ -781,25 +927,55 @@ async function resolveLastmileUserToken(
 		return storedToken.access_token;
 	}
 
-	// 6. Refresh. Extract endpoint + client_id from the MCP server's auth_config.
-	const authCfg = (tasksMcp.auth_config as McpTokenAuthConfig | null) ?? {};
-	const tokenEndpoint = authCfg.token_endpoint;
-	const clientId = authCfg.client_id;
-	if (!tokenEndpoint || !clientId) {
-		console.warn(
-			`[oauth-token] LastMile Tasks MCP ${tasksMcp.id} has no token_endpoint/client_id in auth_config — cannot refresh; returning stale token`,
-		);
-		// Hand back the stale token — the MCP call will fail with "Invalid
-		// WorkOS token" and the webhook ingest will fall back to synthetic,
-		// same as before PR H. Not worse than the pre-PR-H state.
-		return storedToken.access_token;
-	}
+	const authCfg = await resolveLastmileAuthConfig(tasksMcp);
+	if (!authCfg) return null;
+
 	const refreshed = await refreshLastmileMcpToken({
 		secretRef: tok.secret_ref,
 		storedToken,
 		userMcpTokenId: tok.id,
-		tokenEndpoint,
-		clientId,
+		tokenEndpoint: authCfg.tokenEndpoint,
+		clientId: authCfg.clientId,
 	});
-	return refreshed ?? storedToken.access_token;
+	// If refresh fails we'd rather return null than hand out the stale
+	// token — the REST adapter's retry-on-401 path expects null to mean
+	// "unrecoverable, surface reconnect to mobile".
+	return refreshed;
+}
+
+/**
+ * Force-refresh variant: bypasses `expires_at` and always POSTs to WorkOS
+ * `/oauth2/token` with `grant_type=refresh_token`. The REST adapter
+ * (`lastmile/restClient.ts`) calls this after receiving a 401 from
+ * LastMile — covers cases where the token is valid by our bookkeeping
+ * but LastMile rejected it anyway (server-side revocation, rotation
+ * mid-flight, clock skew, etc.).
+ *
+ * Returns null on any unrecoverable failure; callers should treat that
+ * as 401 → prompt reconnect.
+ */
+export async function forceRefreshLastmileUserToken(
+	connectionId: string,
+	tenantId: string,
+): Promise<string | null> {
+	const ctx = await loadLastmileUserTokenContext(connectionId, tenantId);
+	if (!ctx) return null;
+	const { tasksMcp, tok, storedToken } = ctx;
+
+	const authCfg = await resolveLastmileAuthConfig(tasksMcp);
+	if (!authCfg) return null;
+
+	const refreshed = await refreshLastmileMcpToken({
+		secretRef: tok.secret_ref,
+		storedToken,
+		userMcpTokenId: tok.id,
+		tokenEndpoint: authCfg.tokenEndpoint,
+		clientId: authCfg.clientId,
+	});
+	if (!refreshed) {
+		console.warn(
+			`[oauth-token] Force-refresh of LastMile MCP token for connection ${connectionId} failed`,
+		);
+	}
+	return refreshed;
 }

@@ -28,7 +28,15 @@
 import { and, eq, sql } from "drizzle-orm";
 import { schema } from "@thinkwork/database-pg";
 import { db } from "../../lib/db.js";
-import { resolveOAuthToken } from "../../lib/oauth-token.js";
+import {
+	resolveOAuthToken,
+	forceRefreshLastmileUserToken,
+} from "../../lib/oauth-token.js";
+import {
+	getOrMintLastmilePat,
+	forceRefreshLastmilePat,
+} from "../../lib/lastmile-pat.js";
+import { getConnectorBaseUrl } from "../../handlers/task-connectors.js";
 import {
 	createTask as restCreateTask,
 	isLastmileRestConfigured,
@@ -154,10 +162,13 @@ export interface SyncExternalTaskOnCreateArgs {
 	 *  field on the LastMile create request so the remote task traces
 	 *  back to our local row. */
 	externalRef?: string;
-	/** LastMile workflow_id — the minimum context the API needs to
-	 *  auto-resolve team, status, and task_type. Passed from the mobile
-	 *  workflow picker via thread metadata. */
+	/** LastMile workflow_id — retained in thread metadata for UI display
+	 *  ("this task belongs to Workflow X") but NOT sent in the create
+	 *  body: the OpenAPI v1.0.0 `/tasks` POST no longer accepts it. */
 	workflowId?: string;
+	/** LastMile terminal id — required by the create API. Missing until
+	 *  the mobile terminal-picker ships. */
+	terminalId?: string;
 }
 
 /** Idempotency key for the create call. Using the local thread id ensures
@@ -191,11 +202,14 @@ function buildExternalMeta(args: {
 export async function syncExternalTaskOnCreate(
 	args: SyncExternalTaskOnCreateArgs,
 ): Promise<SyncExternalTaskResult> {
-	// Feature flag: if the REST client isn't wired yet, stamp the row
-	// `local` and return. No error — this is the expected state while
-	// we wait for LastMile to ship the endpoint.
-	if (!isLastmileRestConfigured()) {
-		const reason = "LASTMILE_TASKS_API_URL unset — task created locally only.";
+	// Feature flag: read the per-tenant baseUrl from webhooks.config (set
+	// via the admin Connectors UI) or fall back to LASTMILE_TASKS_API_URL.
+	// If neither is set, stamp local — expected state until the connector
+	// is configured.
+	const baseUrl = await getConnectorBaseUrl(args.tenantId, "lastmile");
+	if (!isLastmileRestConfigured({ baseUrl })) {
+		const reason =
+			"LastMile base URL not configured — set it on Connectors → LastMile, or wire LASTMILE_TASKS_API_URL as a fallback.";
 		await writeSyncState(args.threadId, { kind: "local", reason });
 		return { status: "local", reason };
 	}
@@ -207,25 +221,54 @@ export async function syncExternalTaskOnCreate(
 		return { status: "local", reason };
 	}
 
-	const authToken = await resolveOAuthToken(conn.id, args.tenantId, conn.provider_id);
+	// Prefer the LastMile PAT path (cached, long-lived, bypasses Clerk
+	// lookup) over raw WorkOS JWT. Mint lazily from the user's WorkOS
+	// token; cached in SSM per-user for reuse.
+	const authToken = await getOrMintLastmilePat({
+		userId: args.userId,
+		getFreshWorkosJwt: () =>
+			resolveOAuthToken(conn.id, args.tenantId, conn.provider_id),
+	});
 	if (!authToken) {
-		const message = `Task connector ${conn.provider_name} has no OAuth token — reconnect in Connectors.`;
+		const message = `Task connector ${conn.provider_name} has no usable LastMile token — reconnect in Connectors.`;
 		await writeSyncState(args.threadId, { kind: "error", message });
 		return { status: "error", message };
 	}
 
 	const providerUserId = getProviderUserId(conn);
 
+	// Per the LastMile OpenAPI v1.0.0 spec, `POST /tasks` requires
+	// `terminalId`. We don't currently surface terminal selection on the
+	// mobile side — the create will 4xx until that story lands.
+	// Tracked: terminal-picker work-item. Keeping the path wired so the
+	// field-rename + auth changes compile together; the workflow listing
+	// (which is what the mobile bug tracks) does not need terminalId.
+	if (!args.terminalId) {
+		const message =
+			"LastMile task create needs a terminalId (per OpenAPI v1.0.0). Add a terminal picker to the mobile create flow.";
+		await writeSyncState(args.threadId, { kind: "error", message });
+		return { status: "error", message };
+	}
+
 	try {
 		const lastmileTask = await restCreateTask({
 			input: {
 				title: args.title,
+				terminalId: args.terminalId,
 				description: args.description ?? undefined,
-				...(providerUserId ? { assignee_id: providerUserId } : {}),
-				...(args.workflowId ? { workflow_id: args.workflowId } : {}),
+				...(providerUserId ? { assigneeId: providerUserId } : {}),
 			},
 			idempotencyKey: idempotencyKeyForThread(args.threadId),
-			ctx: { authToken },
+			ctx: {
+				authToken,
+				baseUrl,
+				refreshToken: () =>
+					forceRefreshLastmilePat({
+						userId: args.userId,
+						getFreshWorkosJwt: () =>
+							forceRefreshLastmileUserToken(conn.id, args.tenantId),
+					}),
+			},
 		});
 
 		const externalMeta = buildExternalMeta({
