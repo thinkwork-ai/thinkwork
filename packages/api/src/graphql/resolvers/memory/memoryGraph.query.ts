@@ -64,18 +64,48 @@ export const memoryGraph = async (
 		LIMIT 500
 	`);
 
+	const entityIds: string[] = (entityRows.rows || []).map((r: any) => String(r.id));
+
+	// For each entity, look up the most recent source memory_unit that carries
+	// a thread_id in its metadata. Surfaces the originating thread in the
+	// knowledge-graph detail sheet. One query, bounded by the 200-entity cap.
+	const threadByEntity = new Map<string, string>();
+	if (entityIds.length > 0) {
+		try {
+			const threadRows = await db.execute(sql`
+				SELECT DISTINCT ON (ue.entity_id)
+					ue.entity_id::text AS entity_id,
+					m.metadata->>'thread_id' AS thread_id
+				FROM hindsight.unit_entities ue
+				JOIN hindsight.memory_units m ON m.id = ue.unit_id
+				WHERE ue.entity_id = ANY(${entityIds}::uuid[])
+					AND m.metadata->>'thread_id' IS NOT NULL
+				ORDER BY ue.entity_id, m.created_at DESC
+			`);
+			for (const tr of (threadRows.rows || []) as any[]) {
+				if (tr.entity_id && tr.thread_id) {
+					threadByEntity.set(String(tr.entity_id), String(tr.thread_id));
+				}
+			}
+		} catch {
+			// Best-effort — missing unit_entities or metadata just means no link.
+		}
+	}
+
 	const nodes = (entityRows.rows || []).map((r: any) => {
 		let meta: any = {};
 		try {
 			meta = typeof r.metadata === "string" ? JSON.parse(r.metadata) : (r.metadata || {});
 		} catch { /* ignore */ }
+		const id = String(r.id);
 		return {
-			id: String(r.id),
+			id,
 			label: String(r.canonical_name || ""),
 			type: "entity",
 			strategy: null,
 			entityType: meta.ontology_type || null,
 			edgeCount: Number(r.mention_count) || 0,
+			latestThreadId: threadByEntity.get(id) || null,
 		};
 	});
 

@@ -36,6 +36,7 @@ export interface MemoryGraphNode {
   strategy: string | null;
   entityType: string | null;
   edgeCount: number;
+  latestThreadId: string | null;
 }
 
 export interface MemoryGraphHandle {
@@ -142,6 +143,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
               strategy: n.strategy ?? null,
               entityType: n.entityType ?? null,
               edgeCount: n.edgeCount ?? 0,
+              latestThreadId: n.latestThreadId ?? null,
             });
           }
         }
@@ -157,6 +159,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
               strategy: n.strategy ?? null,
               entityType: n.entityType ?? null,
               edgeCount: n.edgeCount ?? 0,
+              latestThreadId: n.latestThreadId ?? null,
             });
           }
         }
@@ -204,18 +207,13 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       return new Set(filtered.map((n) => n.id));
     }, [allNodes, typeFilter, searchQuery, hasFilter]);
 
-    // Build graph data — hide or mute unmatched nodes
+    // Build graph data from raw sources only — filter state is NOT a dep.
+    // Mute/highlight on filter changes is applied by mutating material
+    // opacity in-place (see effect below), not by rebuilding graphData.
+    // Rebuilding would give ForceGraph3D a new identity → restart the
+    // simulation and reset the camera on every keystroke.
     const graphData = useMemo(() => {
-      const visibleNodes = (hideFiltered && matchedIds)
-        ? allNodes.filter((n) => matchedIds.has(n.id))
-        : allNodes.map((n) => ({
-            ...n,
-            __muted: matchedIds ? !matchedIds.has(n.id) : false,
-          }));
-
-      const nodeIds = new Set(visibleNodes.map((n) => n.id));
-
-      // Build links
+      const nodeIds = new Set(allNodes.map((n) => n.id));
       const links: { source: string; target: string; label: string; weight: number }[] = [];
       if (isMultiAgent) {
         for (const [aid, graph] of Object.entries(multiResults)) {
@@ -227,7 +225,6 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
               links.push({ source: src, target: tgt, label: e.label ?? "", weight: e.weight ?? 0.5 });
             }
           }
-          // Agent hub links removed
         }
       } else {
         const graph = singleResult.data?.memoryGraph;
@@ -239,9 +236,13 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
           }
         }
       }
+      return { nodes: allNodes, links };
+    }, [allNodes, isMultiAgent, multiResults, singleResult.data]);
 
-      return { nodes: visibleNodes, links };
-    }, [allNodes, matchedIds, hideFiltered, isMultiAgent, multiResults, singleResult.data]);
+    // Ref so nodeThreeObject (stable callback) can read the current filter
+    // without being re-created each time matchedIds changes.
+    const matchedIdsRef = useRef<Set<string> | null>(null);
+    matchedIdsRef.current = matchedIds;
 
     // Update getNodeWithEdges ref after graphData is available
     getNodeWithEdgesRef.current = (nodeId: string) => {
@@ -269,7 +270,8 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
     };
 
     const nodeThreeObject = useCallback((node: any) => {
-      const muted = !!node.__muted;
+      const matched = matchedIdsRef.current;
+      const muted = matched ? !matched.has(node.id) : false;
       const isMemory = node.nodeType === "memory";
       const entityType = node.entityType as string | null;
       const label = isMemory ? "Memory" : (entityType ? entityType.charAt(0).toUpperCase() + entityType.slice(1) : node.label?.slice(0, 12) || "Entity");
@@ -281,13 +283,15 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
 
       const group = new THREE.Group();
 
-      // Sphere
+      // Sphere — always transparent so runtime opacity tweaks take effect
       const geometry = new THREE.SphereGeometry(r, 16, 16);
-      const material = new THREE.MeshLambertMaterial({ color, transparent: muted, opacity });
+      const material = new THREE.MeshLambertMaterial({ color, transparent: true, opacity });
       const sphere = new THREE.Mesh(geometry, material);
       group.add(sphere);
 
-      // Text label via sprite
+      // Text label via sprite — canvas drawn pure white; mute effect comes
+      // from spriteMaterial.opacity so we don't have to redraw the canvas
+      // when the filter changes.
       const canvas = document.createElement("canvas");
       const size = 128;
       canvas.width = size;
@@ -296,7 +300,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       ctx.clearRect(0, 0, size, size);
       const fontSize = isMemory ? 18 : 14;
       ctx.font = `bold ${fontSize}px sans-serif`;
-      ctx.fillStyle = muted ? "rgba(255,255,255,0.15)" : "#ffffff";
+      ctx.fillStyle = "#ffffff";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(label, size / 2, size / 2);
@@ -307,36 +311,55 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       sprite.position.set(0, 0, 0);
       group.add(sprite);
 
-      return group;
-    }, [graphData]);
+      // Stash material refs so the filter effect can mutate opacity without
+      // rebuilding the graph.
+      node.__sphereMat = material;
+      node.__spriteMat = spriteMaterial;
 
-    // Lock camera to top-down 2D view and set up force layout after mount
+      return group;
+    }, []);
+
+    // Apply filter via in-place material opacity — NO graphData rebuild.
+    useEffect(() => {
+      for (const n of graphData.nodes as any[]) {
+        const muted = matchedIds ? !matchedIds.has(n.id) : false;
+        const op = muted ? 0.15 : 1;
+        if (n.__sphereMat) n.__sphereMat.opacity = op;
+        if (n.__spriteMat) n.__spriteMat.opacity = op;
+      }
+      fgRef.current?.refresh?.();
+    }, [matchedIds, graphData]);
+
+
+    // Force layout tuning — safe to re-run when data changes (strengths
+    // scale with node count). Does NOT touch the camera, so filter updates
+    // no longer reset the user's zoom/pan.
     useEffect(() => {
       const fg = fgRef.current;
       if (!fg) return;
-
-      // Force layout — stronger repulsion for multi-agent to prevent overlap
       const nodeCount = graphData.nodes.length;
       const chargeStrength = nodeCount > 50 ? -120 : -80;
       fg.d3Force("charge")?.strength(chargeStrength).distanceMax(200);
       fg.d3Force("link")?.distance(nodeCount > 50 ? 70 : 55);
       fg.d3Force("center")?.strength(1);
       fg.d3Force("collide", d3.forceCollide().radius(20).strength(0.8));
+    }, [graphData]);
 
-      // Lock camera to top-down orthographic-like view
+    // Camera + controls setup — runs exactly once when the ForceGraph is
+    // first available. Zoom/pan after that belongs to the user (and the
+    // zoom-to-fit effect above).
+    const cameraInitRef = useRef(false);
+    useEffect(() => {
+      const fg = fgRef.current;
+      if (!fg || !dims || cameraInitRef.current) return;
       const camera = fg.camera();
       const controls = fg.controls();
-
-      // Position camera looking straight down (higher = more zoomed out)
       camera.position.set(0, 0, 500);
       camera.up.set(0, 1, 0);
       camera.lookAt(0, 0, 0);
-
-      // Disable rotation, only allow pan (right-click/two-finger) and zoom
       controls.enableRotate = false;
       controls.panSpeed = 0.15;
       controls.zoomSpeed = 0.5;
-      // Make left-click pan instead of rotate
       controls.mouseButtons = {
         LEFT: THREE.MOUSE.PAN,
         MIDDLE: THREE.MOUSE.DOLLY,
@@ -346,8 +369,8 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         ONE: THREE.TOUCH.PAN,
         TWO: THREE.TOUCH.DOLLY_PAN,
       };
-
-    }, [graphData, dims]);
+      cameraInitRef.current = true;
+    }, [dims, graphData]);
 
     const anyFetching = isMultiAgent ? multiFetching : (singleResult.fetching && !singleResult.data);
     if (anyFetching) {

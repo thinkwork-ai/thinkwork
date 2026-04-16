@@ -1364,7 +1364,7 @@ export const MemoryRecordsQuery = graphql(`
       namespace strategyId strategy
       agentSlug factType confidence
       eventDate occurredStart occurredEnd mentionedAt
-      tags accessCount proofCount context
+      tags accessCount proofCount context threadId
     }
   }
 `);
@@ -1391,6 +1391,7 @@ export const MemorySearchQuery = graphql(`
         namespace
         strategy
         createdAt
+        threadId
       }
       totalCount
     }
@@ -1582,7 +1583,7 @@ export const RollbackAgentVersionMutation = graphql(`
 export const MemoryGraphQuery = graphql(`
   query MemoryGraph($assistantId: ID!) {
     memoryGraph(assistantId: $assistantId) {
-      nodes { id label type strategy entityType edgeCount }
+      nodes { id label type strategy entityType edgeCount latestThreadId }
       edges { source target type label weight }
     }
   }

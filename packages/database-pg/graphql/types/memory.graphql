@@ -19,6 +19,7 @@ type MemoryRecord {
   accessCount: Int
   proofCount: Int
   context: String
+  threadId: String
 }
 
 type MemoryContent {
@@ -45,6 +46,7 @@ type MemoryGraphNode {
   strategy: String
   entityType: String
   edgeCount: Int!
+  latestThreadId: String
 }
 
 type MemoryGraphEdge {
