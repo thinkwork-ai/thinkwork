@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View, Pressable, FlatList, Animated, Easing } from "react-native";
+import { View, Pressable, FlatList, Animated, Easing, RefreshControl } from "react-native";
 import { useColorScheme } from "nativewind";
 import { useRouter } from "expo-router";
 import { User, Bot, Check, X, AlertCircle, Clock, ChevronDown, ChevronRight, Copy, FileText, MapPin, DollarSign, UserPlus, CheckSquare, Building2, RefreshCw, MoreHorizontal, Bookmark, ClipboardList } from "lucide-react-native";
@@ -107,6 +107,8 @@ export interface ActivityTimelineProps {
    * cards (e.g. QuestionCard) can stamp `senderId` on outgoing messages.
    */
   currentUserId?: string;
+  refreshing?: boolean;
+  onRefresh?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -671,6 +673,8 @@ export function ActivityTimeline({
   listHeaderComponent,
   hideEmptyState,
   currentUserId,
+  refreshing,
+  onRefresh,
 }: ActivityTimelineProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
@@ -829,6 +833,15 @@ export function ActivityTimeline({
       }
       contentContainerStyle={{ paddingVertical: 8, flexGrow: 1 }}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        onRefresh ? (
+          <RefreshControl
+            refreshing={!!refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.mutedForeground}
+          />
+        ) : undefined
+      }
       onScrollToIndexFailed={(info) => {
         setTimeout(() => {
           try { flatListRef.current?.scrollToIndex({ index: info.index, animated: false, viewPosition: 0 }); } catch {}
