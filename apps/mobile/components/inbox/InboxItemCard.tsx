@@ -53,7 +53,6 @@ function typeLabel(type: string): string {
     case "hire_agent": return "Hire Agent";
     case "approve_ceo_strategy": return "Strategy";
     case "action": return "Action";
-    case "create_task": return "Create task";
     default: return type.replace(/_/g, " ");
   }
 }
