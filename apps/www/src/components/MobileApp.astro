@@ -1,0 +1,83 @@
+---
+const highlights = [
+  {
+    title: "Assigned work, one place",
+    desc: "Chats, automations, emails, and external tasks flow into a single inbox. Nothing asking the user to keep five tools open in parallel.",
+  },
+  {
+    title: "Native GenUI, not markdown",
+    desc: "Task cards render as native mobile components — fields, actions, activity — from a bounded block grammar the server controls.",
+  },
+  {
+    title: "Realtime by default",
+    desc: "Webhook events, agent turns, and status changes land on-device within seconds over AppSync. No pull-to-refresh dance.",
+  },
+  {
+    title: "On TestFlight today",
+    desc: "iOS first, live for early users. The Expo codebase is cross-platform; Android ships when the iOS shape is stable.",
+  },
+];
+---
+
+<section id="mobile" class="relative border-t border-white/5 bg-white/[0.015]">
+  <div class="pointer-events-none absolute inset-x-0 top-0 h-[520px] overflow-hidden">
+    <div class="absolute left-1/2 top-[-10%] h-[520px] w-[1000px] -translate-x-1/2 rounded-full bg-brand/5 blur-[160px]"></div>
+  </div>
+
+  <div class="relative mx-auto max-w-6xl px-6 py-24 md:py-32">
+    <div class="max-w-3xl">
+      <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand/90">End-user app</p>
+      <h2 class="mt-3 text-3xl font-bold tracking-tight md:text-5xl">
+        Your users get a real mobile app.
+      </h2>
+      <p class="mt-5 text-lg text-slate-400 md:text-xl">
+        The operator story lives in the admin web. The <em class="font-medium not-italic text-slate-200">user</em> story lives in a native-feeling iOS app built on the same threads, agents, and connectors the rest of the system uses.
+      </p>
+    </div>
+
+    <div class="mt-14 grid gap-10 lg:grid-cols-2 lg:items-center">
+      <div class="relative">
+        <div class="pointer-events-none absolute inset-0 rounded-3xl border border-brand/10 bg-gradient-to-br from-brand/[0.06] to-transparent"></div>
+
+        <div class="relative flex items-stretch justify-center gap-3 p-4 sm:gap-4 sm:p-6 md:gap-6 md:p-10">
+          <div class="relative flex-1 max-w-[240px] min-w-0">
+            <div class="overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#05080d] shadow-[0_24px_60px_rgba(0,0,0,0.45)] md:rounded-[2rem]">
+              <img
+                src="/images/mobile/threads-list.png"
+                alt="The Threads tab in the ThinkWork mobile app showing a unified inbox of chat threads, automations, and email threads"
+                loading="eager"
+                width="480"
+                height="1044"
+                class="block h-auto w-full"
+              />
+            </div>
+            <p class="mt-3 text-center text-xs font-mono uppercase tracking-[0.18em] text-slate-500">Threads</p>
+          </div>
+
+          <div class="relative flex-1 max-w-[240px] min-w-0">
+            <div class="overflow-hidden rounded-[1.5rem] border border-brand/20 bg-[#05080d] shadow-[0_24px_60px_rgba(56,189,248,0.18)] md:rounded-[2rem]">
+              <img
+                src="/images/mobile/tasks-list.png"
+                alt="The Tasks tab in the ThinkWork mobile app showing external tasks routed in from LastMile"
+                loading="eager"
+                width="480"
+                height="1044"
+                class="block h-auto w-full"
+              />
+            </div>
+            <p class="mt-3 text-center text-xs font-mono uppercase tracking-[0.18em] text-brand/70">Tasks</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid gap-5 sm:grid-cols-2">
+        {highlights.map((h) => (
+          <div class="rounded-2xl border border-white/5 bg-white/[0.02] p-6">
+            <h3 class="text-base font-semibold">{h.title}</h3>
+            <p class="mt-2 text-sm leading-6 text-slate-400">{h.desc}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+</section>
