@@ -5,7 +5,6 @@ import {
 	threadToCamel,
 } from "../../utils.js";
 import { notifyThreadUpdate } from "../../notify.js";
-import { syncExternalTaskOnCreate } from "../../../integrations/external-work-items/syncExternalTaskOnCreate.js";
 
 export const createThread = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const i = args.input;
@@ -127,35 +126,28 @@ export const createThread = async (_parent: any, args: any, ctx: GraphQLContext)
 		}).catch(() => {}); // fire-and-forget
 	}
 
-	// Outbound sync to external task system (LastMile). Synchronous —
-	// per the PRD we want the mutation response to reflect the final
-	// sync state so the mobile client can render the right badge on
-	// first render. Fails quietly: syncExternalTaskOnCreate never
-	// throws; worst case the row ends up sync_status='error' and the
-	// user can retry via the retryTaskSync mutation.
+	// User-created task threads now flow through a form-intake step
+	// before we fire `POST /tasks` on LastMile. The agent presents the
+	// `lastmile-tasks` Question Card, the user fills it in, and the
+	// agent calls the `createLastmileTask` mutation which in turn
+	// invokes `syncExternalTaskOnCreate`. We used to call that sync
+	// inline here — that skipped the intake step and produced a
+	// near-empty LastMile task (no description / priority / dueDate).
 	//
-	// Only user-created task rows flow through this path. Agent-created
-	// tasks skip it because the agent's own tooling handles sync
-	// semantics (a team agent "delegating" via createThread is a
-	// different code path).
+	// To preserve the mobile "draft badge, no red error" UX we stamp
+	// `sync_status='local'` with a friendly hint. Agent-created tasks
+	// still bypass this path entirely because they carry their own
+	// sync semantics.
 	if (isUserCreatedTask && row.created_by_id) {
-		// Pull the LastMile workflow_id off the thread metadata if the
-		// caller (mobile workflow picker) included it. Required by the
-		// LastMile create endpoint to auto-resolve team/status/task_type.
-		const rowMeta = (row.metadata ?? {}) as Record<string, unknown>;
-		const workflowId =
-			typeof rowMeta.workflowId === "string" ? rowMeta.workflowId : undefined;
-		await syncExternalTaskOnCreate({
-			threadId: row.id,
-			tenantId: row.tenant_id,
-			userId: row.created_by_id,
-			title: row.title,
-			description: row.description,
-			externalRef: row.identifier ?? undefined,
-			workflowId,
-		});
-		// Re-read the row so the response reflects the final sync_status
-		// and metadata.external block. Cheap — indexed PK lookup.
+		await db
+			.update(threads)
+			.set({
+				sync_status: "local",
+				sync_error:
+					"Fill out the task intake form in the thread to sync to LastMile.",
+				updated_at: new Date(),
+			})
+			.where(eq(threads.id, row.id));
 		const [reconciled] = await db
 			.select()
 			.from(threads)

@@ -173,6 +173,19 @@ export interface SyncExternalTaskOnCreateArgs {
 	 *  LastMile POST requires `workflowId`, `taskTypeId`, and `teamId`
 	 *  and we derive the latter two from the workflow record. */
 	workflowId?: string;
+	/** Optional — `'urgent' | 'high' | 'medium' | 'low'`. Forwarded
+	 *  verbatim into the POST body. Supplied by `createLastmileTask`
+	 *  from the intake form; other callers can omit. */
+	priority?: string;
+	/** Optional ISO-8601 date (YYYY-MM-DD). Empty/null means "no
+	 *  deadline"; we drop the field from the POST body entirely rather
+	 *  than send `null` (LastMile rejects the latter). */
+	dueDate?: string | null;
+	/** Optional — a LastMile user id (e.g. `user_wv4…`) to assign the
+	 *  task to. When provided, overrides the creator-default.
+	 *  `createLastmileTask` resolves this from a ThinkWork email before
+	 *  calling; other callers should pass an already-resolved id. */
+	assigneeProviderUserId?: string;
 }
 
 /** Idempotency key for the create call. Using the local thread id ensures
@@ -286,6 +299,13 @@ export async function syncExternalTaskOnCreate(
 			return { status: "error", message };
 		}
 
+		// Prefer the caller-supplied assignee (resolved from form data)
+		// over the creator default. Empty string / undefined → fall back.
+		const assigneeId =
+			args.assigneeProviderUserId?.length
+				? args.assigneeProviderUserId
+				: providerUserId ?? undefined;
+
 		const created = await restCreateTask({
 			input: {
 				title: args.title,
@@ -294,7 +314,9 @@ export async function syncExternalTaskOnCreate(
 				taskTypeId: workflow.taskTypeId,
 				teamId: workflow.teamId,
 				description: args.description ?? undefined,
-				...(providerUserId ? { assigneeId: providerUserId } : {}),
+				...(assigneeId ? { assigneeId } : {}),
+				...(args.priority ? { priority: args.priority } : {}),
+				...(args.dueDate ? { dueDate: args.dueDate } : {}),
 			},
 			idempotencyKey: idempotencyKeyForThread(args.threadId),
 			ctx,
