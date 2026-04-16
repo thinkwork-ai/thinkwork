@@ -69,19 +69,27 @@ export interface LastmileMe {
 }
 
 export interface CreateTaskRequest {
+	/** The only truly required field. */
 	title: string;
+	/** Required for auto-resolution of team_id, status_id, task_type_id.
+	 *  Without it the caller must supply status_id explicitly. */
+	workflow_id?: string;
 	description?: string | null;
 	assignee_id?: string;
 	priority?: "urgent" | "high" | "medium" | "low";
 	due_date?: string;
 	team_id?: string;
-	/** Attribution for cross-system correlation — LastMile stores this
-	 *  verbatim and echoes it back on every task response. We use it to
-	 *  correlate LastMile tasks back to our local `TASK-{n}` identifier. */
-	source?: {
-		system: string;
-		external_ref: string;
-	};
+	task_type_id?: string;
+	status_id?: string;
+}
+
+export interface LastmileWorkflow {
+	id: string;
+	name: string;
+	description?: string | null;
+	team_id: string;
+	task_type_id?: string | null;
+	is_active?: boolean;
 }
 
 export interface UpdateTaskRequest {
@@ -286,7 +294,7 @@ export async function createTask(
 ): Promise<LastmileTask> {
 	return doRequest<LastmileTask, CreateTaskRequest>({
 		method: "POST",
-		path: "/v1/tasks",
+		path: "/tasks",
 		authToken: args.ctx.authToken,
 		body: args.input,
 		idempotencyKey: args.idempotencyKey,
@@ -311,7 +319,7 @@ export async function listTasks(
 ): Promise<ListTasksResponse> {
 	return doRequest<ListTasksResponse>({
 		method: "GET",
-		path: "/v1/tasks",
+		path: "/tasks",
 		authToken: args.ctx.authToken,
 		query: args.query as Record<string, string | number | undefined> | undefined,
 	});
@@ -331,14 +339,31 @@ export async function updateTask(
 	});
 }
 
-/** GET /v1/me — replaces the `user_whoami` MCP call used immediately
+/** GET /me — replaces the `user_whoami` MCP call used immediately
  *  after OAuth to resolve the user's LastMile id. */
 export async function getMe(
 	args: { ctx: LastmileRestCtx },
 ): Promise<LastmileMe> {
 	return doRequest<LastmileMe>({
 		method: "GET",
-		path: "/v1/me",
+		path: "/me",
 		authToken: args.ctx.authToken,
 	});
+}
+
+/** GET /workflows — returns the company's active workflows. Used by the
+ *  mobile Tasks footer `+` button to let the user pick what kind of task
+ *  to create (each workflow = a task type with its own team, statuses,
+ *  and automation rules). */
+export async function listWorkflows(
+	args: { ctx: LastmileRestCtx },
+): Promise<LastmileWorkflow[]> {
+	// The handler returns `{ data: [...] }` (paginated) or bare array.
+	// Normalize to always return an array.
+	const raw = await doRequest<LastmileWorkflow[] | { data: LastmileWorkflow[] }>({
+		method: "GET",
+		path: "/workflows",
+		authToken: args.ctx.authToken,
+	});
+	return Array.isArray(raw) ? raw : (raw?.data ?? []);
 }

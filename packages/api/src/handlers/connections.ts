@@ -26,6 +26,12 @@ import {
 	ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
 
+import { resolveOAuthToken } from "../lib/oauth-token.js";
+import {
+	listWorkflows as lastmileListWorkflows,
+	isLastmileRestConfigured,
+} from "../integrations/external-work-items/providers/lastmile/restClient.js";
+
 const { connections, connectProviders, credentials } = schema;
 
 const STAGE = process.env.STAGE || "dev";
@@ -38,7 +44,7 @@ function parsePath(rawPath: string) {
 		.replace(/^\/api\/connections\/?/, "")
 		.split("/")
 		.filter(Boolean);
-	return { id: segments[0] || null };
+	return { id: segments[0] || null, sub: segments[1] || null };
 }
 
 function parseBody(event: APIGatewayProxyEventV2): Record<string, unknown> {
@@ -64,9 +70,17 @@ export async function handler(
 
 	const userId = event.headers["x-principal-id"] || "";
 	const method = event.requestContext.http.method;
-	const { id } = parsePath(event.rawPath);
+	const { id, sub } = parsePath(event.rawPath);
 
 	try {
+		// Sub-resource: GET /api/connections/lastmile/workflows
+		// Proxies the LastMile REST API so mobile can discover available
+		// workflows for the task-creation picker. Uses the user's existing
+		// OAuth token — same one the MCP and webhook paths already share.
+		if (method === "GET" && id === "lastmile" && sub === "workflows") {
+			return listLastmileWorkflows(tenantId, userId);
+		}
+
 		switch (method) {
 			case "GET":
 				return id
@@ -319,4 +333,57 @@ async function deleteConnection(
 		);
 
 	return json({ ok: true, id });
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/connections/lastmile/workflows — proxy to LastMile REST API
+// ---------------------------------------------------------------------------
+
+async function listLastmileWorkflows(
+	tenantId: string,
+	userId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	if (!isLastmileRestConfigured()) {
+		return error("LastMile REST API not configured (LASTMILE_TASKS_API_URL unset)", 503);
+	}
+	if (!userId) return error("Missing x-principal-id header");
+
+	// Find the user's active task-kind connection so we can resolve their
+	// OAuth token. Same lookup pattern syncExternalTaskOnCreate uses.
+	const [conn] = await db
+		.select({
+			id: connections.id,
+			provider_id: connections.provider_id,
+		})
+		.from(connections)
+		.innerJoin(connectProviders, eq(connections.provider_id, connectProviders.id))
+		.where(
+			and(
+				eq(connections.tenant_id, tenantId),
+				eq(connections.user_id, userId),
+				eq(connections.status, "active"),
+				eq(connectProviders.provider_type, "task"),
+			),
+		)
+		.limit(1);
+
+	if (!conn) {
+		return error("No active task connector for this user", 404);
+	}
+
+	const authToken = await resolveOAuthToken(conn.id, tenantId, conn.provider_id);
+	if (!authToken) {
+		return error("Task connector has no OAuth token — reconnect in Settings → MCP Servers", 401);
+	}
+
+	try {
+		const workflows = await lastmileListWorkflows({ ctx: { authToken } });
+		return json(workflows);
+	} catch (err) {
+		console.error("[connections] listLastmileWorkflows failed:", err);
+		return error(
+			`Failed to fetch workflows: ${(err as Error)?.message || "unknown error"}`,
+			502,
+		);
+	}
 }

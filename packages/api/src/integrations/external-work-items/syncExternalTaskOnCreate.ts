@@ -154,6 +154,10 @@ export interface SyncExternalTaskOnCreateArgs {
 	 *  field on the LastMile create request so the remote task traces
 	 *  back to our local row. */
 	externalRef?: string;
+	/** LastMile workflow_id — the minimum context the API needs to
+	 *  auto-resolve team, status, and task_type. Passed from the mobile
+	 *  workflow picker via thread metadata. */
+	workflowId?: string;
 }
 
 /** Idempotency key for the create call. Using the local thread id ensures
@@ -218,14 +222,7 @@ export async function syncExternalTaskOnCreate(
 				title: args.title,
 				description: args.description ?? undefined,
 				...(providerUserId ? { assignee_id: providerUserId } : {}),
-				...(args.externalRef
-					? {
-							source: {
-								system: "thinkwork",
-								external_ref: args.externalRef,
-							},
-						}
-					: {}),
+				...(args.workflowId ? { workflow_id: args.workflowId } : {}),
 			},
 			idempotencyKey: idempotencyKeyForThread(args.threadId),
 			ctx: { authToken },

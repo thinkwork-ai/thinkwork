@@ -139,6 +139,12 @@ export const createThread = async (_parent: any, args: any, ctx: GraphQLContext)
 	// semantics (a team agent "delegating" via createThread is a
 	// different code path).
 	if (isUserCreatedTask && row.created_by_id) {
+		// Pull the LastMile workflow_id off the thread metadata if the
+		// caller (mobile workflow picker) included it. Required by the
+		// LastMile create endpoint to auto-resolve team/status/task_type.
+		const rowMeta = (row.metadata ?? {}) as Record<string, unknown>;
+		const workflowId =
+			typeof rowMeta.workflowId === "string" ? rowMeta.workflowId : undefined;
 		await syncExternalTaskOnCreate({
 			threadId: row.id,
 			tenantId: row.tenant_id,
@@ -146,6 +152,7 @@ export const createThread = async (_parent: any, args: any, ctx: GraphQLContext)
 			title: row.title,
 			description: row.description,
 			externalRef: row.identifier ?? undefined,
+			workflowId,
 		});
 		// Re-read the row so the response reflects the final sync_status
 		// and metadata.external block. Cheap — indexed PK lookup.
