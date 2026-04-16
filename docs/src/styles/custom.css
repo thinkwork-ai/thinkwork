@@ -40,3 +40,16 @@ a.site-title img {
   text-align: center;
   justify-content: center;
 }
+
+/* Constrain mobile-screenshot images so iPhone-resolution PNGs (~1200px
+   wide) render at a sensible size inside docs content. Used on
+   external-tasks and other mobile walkthrough pages. */
+.mobile-screenshot {
+  display: block;
+  margin: 1.5rem auto;
+  max-width: 320px;
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+}

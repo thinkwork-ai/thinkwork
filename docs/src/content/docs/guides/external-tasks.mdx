@@ -90,7 +90,7 @@ Time to connect as an end user.
 2. Open **Settings** from the tab bar, then **Connectors** (or "Integrations" depending on build)
 3. Under **Add More**, tap **Connect** on the LastMile row
 
-![Mobile Connectors screen: LastMile Tasks connected with an Active badge; Google Workspace and Microsoft 365 available to connect](/images/external-tasks/mobile-integrations-connect.png)
+<img src="/images/external-tasks/mobile-integrations-connect.png" alt="Mobile Connectors screen: LastMile Tasks connected with an Active badge; Google Workspace and Microsoft 365 available to connect" class="mobile-screenshot" />
 
 The app opens a browser via `openAuthSessionAsync` with `preferEphemeralSession: true` — a fresh OAuth session that doesn't share cookies with Safari so account switching works. After consent, the provider redirects back into the app and your personal token lands in Secrets Manager (stored under a `user_mcp_tokens` pointer keyed to your user id).
 
@@ -109,11 +109,11 @@ From LastMile (or have a teammate do it):
 1. Create a new task, or reassign an existing one, to the user you just connected as
 2. Within ~2 seconds, the mobile app's **Tasks** tab badge ticks up and the new task appears in the list
 
-![Tasks tab list view with assigned LastMile tasks](/images/external-tasks/tasks-tab-list.png)
+<img src="/images/external-tasks/tasks-tab-list.png" alt="Tasks tab list view with assigned LastMile tasks" class="mobile-screenshot" />
 
 Tap the task to see the full detail — the pinned task card above the chat timeline:
 
-![Task detail: pinned LastMile task card above the chat timeline](/images/external-tasks/task-card-detail.png)
+<img src="/images/external-tasks/task-card-detail.png" alt="Task detail: pinned LastMile task card above the chat timeline" class="mobile-screenshot" />
 
 If a task doesn't appear, see [Troubleshooting](#troubleshooting) below.
 
@@ -127,7 +127,7 @@ On the task detail:
 2. Adjust a field — try editing the description or the due date (status and priority are pill-selectable but currently fail upstream for LastMile; see the note below)
 3. Tap **Save changes** in the bottom-right
 
-![Edit task bottom sheet: status pills, priority pills, assignee, due date, description textarea, Save changes button](/images/external-tasks/edit-modal.png)
+<img src="/images/external-tasks/edit-modal.png" alt="Edit task bottom sheet: status pills, priority pills, assignee, due date, description textarea, Save changes button" class="mobile-screenshot" />
 
 On submit, the mobile app fires the `executeExternalTaskAction` GraphQL mutation with action `edit_fields` and the form payload. The resolver dispatches to the LastMile adapter's `executeAction`, which translates the payload into LastMile's `task_update` tool call (keyed off `task_id`), waits for confirmation, then fires `refresh()` to pull the updated envelope. The card re-renders with the new values and LastMile's side reflects the change.
 
