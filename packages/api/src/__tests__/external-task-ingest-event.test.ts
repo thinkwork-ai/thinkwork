@@ -444,6 +444,70 @@ describe("ingestExternalTaskEvent — happy path", () => {
 			}),
 		);
 	});
+
+	it("synthesizes envelope from FLAT webhook body (raw IS the task, no wrapper)", async () => {
+		// LastMile's current webhook format sends the task object directly —
+		// no outer { eventId, action, task: {...} } wrapper. extractRawTask
+		// must detect this and return raw itself.
+		const FLAT_WEBHOOK_BODY = {
+			id: "task_p5oqk1ggq5ieu1bqm88jwvuk",
+			title: "New Engineering Task 5",
+			priority: "medium",
+			status_id: "status_hfcqtycmuaix6pjfnu3mb3ot",
+			assignee_id: "user_wv4f3er5wsdnev73kkavtixu",
+			description: "This is for ThinkWork",
+			task_number: 41506,
+			company_id: "co_y15610tsjbkqz5cqoic8gjla",
+			created_at: "2026-04-16T01:20:28.716+00:00",
+			updated_at: "2026-04-16T01:20:28.716+00:00",
+		};
+
+		mockVerifySignature.mockResolvedValueOnce(true);
+		mockNormalizeEvent.mockResolvedValueOnce({
+			kind: "task.created",
+			externalTaskId: "task_p5oqk1ggq5ieu1bqm88jwvuk",
+			providerUserId: "user_wv4f3er5wsdnev73kkavtixu",
+			receivedAt: "2026-04-16T01:20:28.716+00:00",
+			raw: FLAT_WEBHOOK_BODY,
+		});
+		mockResolveConnection.mockResolvedValueOnce(buildConn());
+		mockResolveOAuthToken.mockResolvedValueOnce("token");
+		mockRefresh.mockRejectedValueOnce(new Error("MCP unreachable"));
+		mockNormalizeItem.mockReturnValueOnce({
+			core: {
+				id: "task_p5oqk1ggq5ieu1bqm88jwvuk",
+				provider: "lastmile",
+				title: "New Engineering Task 5",
+			},
+			capabilities: {},
+			fields: [],
+			actions: [],
+		});
+		mockBuildBlocks.mockReturnValueOnce([]);
+		mockEnsureThread.mockResolvedValueOnce({ threadId: "thread-flat", created: true });
+
+		const result = await ingestExternalTaskEvent({
+			provider: "lastmile",
+			rawBody: JSON.stringify(FLAT_WEBHOOK_BODY),
+			headers: HEADERS,
+		});
+
+		expect(result.status).toBe("ok");
+		if (result.status !== "ok") return;
+		expect(result.envelope).toBeDefined();
+		expect(result.envelope?._source?.tool).toBe("webhook_payload_fallback");
+		expect(mockNormalizeItem).toHaveBeenCalledWith(
+			expect.objectContaining({
+				id: "task_p5oqk1ggq5ieu1bqm88jwvuk",
+				title: "New Engineering Task 5",
+			}),
+		);
+		expect(mockEnsureThread).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: "New Engineering Task 5",
+			}),
+		);
+	});
 });
 
 describe("ingestExternalTaskEvent — reassignment handoff", () => {
