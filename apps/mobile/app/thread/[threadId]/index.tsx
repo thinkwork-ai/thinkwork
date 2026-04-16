@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { InteractionManager } from "react-native";
-import { View, FlatList, Pressable, Keyboard, KeyboardAvoidingView, Platform, Alert } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { View, FlatList, Pressable, Keyboard, KeyboardAvoidingView, Platform, Alert, RefreshControl } from "react-native";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronLeft, ChevronRight, Info, Check, Circle, CheckSquare, ListChecks, AlertCircle, Clock, Trash2, Pencil } from "lucide-react-native";
@@ -83,7 +83,7 @@ export default function ThreadDetailRoute() {
   }, [agentsData?.agents]);
 
   // ── Thread data ──
-  const [{ data: threadData }, reexecuteThread] = useQuery({
+  const [{ data: threadData, fetching: fetchingThread }, reexecuteThread] = useQuery({
     query: ThreadQuery,
     variables: { id: threadId! },
     pause: !threadId,
@@ -92,7 +92,7 @@ export default function ThreadDetailRoute() {
   const agentName = thread?.agentId ? agentMap[thread.agentId] || "Agent" : "Agent";
 
   // ── Messages (separate query to include toolResults for GenUI) ──
-  const [{ data: messagesData }, reexecuteMessages] = useQuery({
+  const [{ data: messagesData, fetching: fetchingMessages }, reexecuteMessages] = useQuery({
     query: MessagesQuery,
     variables: { threadId: threadId!, limit: 100 },
     pause: !threadId,
@@ -145,7 +145,7 @@ export default function ThreadDetailRoute() {
   }, [rawMessages]);
 
   // ── Turns ──
-  const [{ data: turnsData }, reexecuteTurns] = useQuery({
+  const [{ data: turnsData, fetching: fetchingTurns }, reexecuteTurns] = useQuery({
     query: ThreadTurnsForThreadQuery,
     variables: { tenantId: tenantId!, threadId: threadId!, limit: 50 },
     pause: !threadId || !tenantId,
@@ -153,16 +153,33 @@ export default function ThreadDetailRoute() {
   const turns = (turnsData?.threadTurns ?? []) as any[];
   const hasRunningTurn = turns.some((t: any) => t.status === "running");
 
-  // Poll turns + messages while a turn is running
+  // Continuously poll messages/turns while the screen is mounted. Fast cadence
+  // while a turn is running, slower cadence when idle — the idle poll is a
+  // safety net for cases where the new-message subscription drops an event
+  // (WebSocket hiccup) or where the final assistant message lands a beat after
+  // the turn flips to `succeeded` (so the running-only poll would have
+  // stopped too early and left the tail message missing).
   useEffect(() => {
-    if (!hasRunningTurn) return;
+    if (!threadId) return;
+    const delay = hasRunningTurn ? 3000 : 8000;
     const interval = setInterval(() => {
       reexecuteTurns({ requestPolicy: "network-only" });
       reexecuteThread({ requestPolicy: "network-only" });
       reexecuteMessages({ requestPolicy: "network-only" });
-    }, 3000);
+    }, delay);
     return () => clearInterval(interval);
-  }, [hasRunningTurn, reexecuteTurns, reexecuteThread, reexecuteMessages]);
+  }, [threadId, hasRunningTurn, reexecuteTurns, reexecuteThread, reexecuteMessages]);
+
+  // Refresh whenever the screen gains focus — covers returning to the thread
+  // from info/details and app foregrounding.
+  useFocusEffect(
+    useCallback(() => {
+      if (!threadId) return;
+      reexecuteThread({ requestPolicy: "network-only" });
+      reexecuteMessages({ requestPolicy: "network-only" });
+      reexecuteTurns({ requestPolicy: "network-only" });
+    }, [threadId, reexecuteThread, reexecuteMessages, reexecuteTurns]),
+  );
 
   // ── Subscriptions (deferred to avoid setState-during-render warnings) ──
   const [{ data: threadEvent }] = useThreadUpdatedSubscription(tenantId);
@@ -321,6 +338,21 @@ export default function ThreadDetailRoute() {
       import("react-native").then(({ Linking }) => Linking.openURL(url).catch(() => null));
     }
   }, []);
+
+  // ── Pull-to-refresh ──
+  const [pullRefreshing, setPullRefreshing] = useState(false);
+  const handleRefresh = useCallback(() => {
+    if (!threadId) return;
+    setPullRefreshing(true);
+    reexecuteThread({ requestPolicy: "network-only" });
+    reexecuteMessages({ requestPolicy: "network-only" });
+    reexecuteTurns({ requestPolicy: "network-only" });
+  }, [threadId, reexecuteThread, reexecuteMessages, reexecuteTurns]);
+  useEffect(() => {
+    if (pullRefreshing && !fetchingThread && !fetchingMessages && !fetchingTurns) {
+      setPullRefreshing(false);
+    }
+  }, [pullRefreshing, fetchingThread, fetchingMessages, fetchingTurns]);
 
   // ── Send message ──
   const [messageText, setMessageText] = useState("");
@@ -499,6 +531,13 @@ export default function ThreadDetailRoute() {
                 </>
               }
               ListFooterComponent={<View style={{ height: 20 }} />}
+              refreshControl={
+                <RefreshControl
+                  refreshing={pullRefreshing}
+                  onRefresh={handleRefresh}
+                  tintColor={colors.mutedForeground}
+                />
+              }
             />
           ) : (
             /* Timeline view: pinned external-task header (if present) above
@@ -514,6 +553,8 @@ export default function ThreadDetailRoute() {
               onLinkPress={handleLinkPress}
               onSaveRecipe={handleSaveRecipe}
               hideEmptyState={hasExternalTask}
+              refreshing={pullRefreshing}
+              onRefresh={handleRefresh}
               listHeaderComponent={
                 hasExternalTask ? (
                   <PinnedExternalTaskHeader
