@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import { execSync } from "node:child_process";
 import { createInterface } from "node:readline";
+import { select, Separator } from "@inquirer/prompts";
 import chalk from "chalk";
 import { getAwsIdentity } from "../aws.js";
 import { listAwsProfiles, type AwsProfile } from "../aws-profiles.js";
@@ -53,35 +54,55 @@ type Choice =
   | { kind: "sso" }
   | { kind: "cancel" };
 
-async function pickProfile(profiles: AwsProfile[]): Promise<Choice> {
-  console.log("");
-  console.log(chalk.bold("  Found these profiles in ~/.aws:"));
-  profiles.forEach((p, i) => {
-    const idx = String(i + 1).padStart(2, " ");
-    console.log(
-      `    ${chalk.cyan(idx)}. ${chalk.bold(p.name)}  ${chalk.dim(`(${describeType(p.type)})`)}`,
-    );
-  });
-  const newIdx = profiles.length + 1;
-  const ssoIdx = profiles.length + 2;
-  console.log(
-    `    ${chalk.cyan(String(newIdx).padStart(2, " "))}. Enter new access keys`,
-  );
-  console.log(
-    `    ${chalk.cyan(String(ssoIdx).padStart(2, " "))}. Log in via AWS SSO`,
-  );
-  console.log("");
+type ChoiceValue = { kind: "existing"; name: string } | { kind: "keys" } | { kind: "sso" };
 
-  const answer = await ask(`  Pick a profile [1-${ssoIdx}] (Enter to cancel): `);
-  if (!answer) return { kind: "cancel" };
-  const n = Number.parseInt(answer, 10);
-  if (Number.isNaN(n) || n < 1 || n > ssoIdx) {
-    printError(`"${answer}" is not a valid option.`);
+/**
+ * Interactive picker with arrow-key navigation. Requires a TTY stdin; when
+ * piped / in CI, ask the caller to pass --keys / --sso / --profile instead.
+ */
+async function pickProfile(profiles: AwsProfile[]): Promise<Choice> {
+  if (!process.stdin.isTTY) {
+    printError(
+      "The profile picker needs an interactive terminal. Re-run with --keys, --sso, or --profile <name>.",
+    );
     return { kind: "cancel" };
   }
-  if (n === newIdx) return { kind: "keys" };
-  if (n === ssoIdx) return { kind: "sso" };
-  return { kind: "existing", name: profiles[n - 1]!.name };
+
+  const choices: Array<
+    { name: string; value: ChoiceValue; description?: string } | Separator
+  > = profiles.map((p) => ({
+    name: `${p.name}  ${chalk.dim(`(${describeType(p.type)})`)}`,
+    value: { kind: "existing", name: p.name },
+  }));
+  choices.push(new Separator());
+  choices.push({
+    name: "Enter new access keys",
+    value: { kind: "keys" },
+    description:
+      "Paste an AWS Access Key ID and Secret Access Key; saved to a new profile.",
+  });
+  choices.push({
+    name: "Log in via AWS SSO",
+    value: { kind: "sso" },
+    description: "Run `aws sso login` against the configured SSO profile.",
+  });
+
+  try {
+    const picked = await select<ChoiceValue>({
+      message: "Pick an AWS profile for Thinkwork:",
+      choices,
+      loop: false,
+      pageSize: Math.max(profiles.length + 2, 10),
+    });
+    return picked;
+  } catch (err) {
+    // inquirer throws ExitPromptError on Ctrl+C / Esc — match by name so we
+    // don't have to pull in @inquirer/core as a direct dep just for the class.
+    if (err instanceof Error && err.name === "ExitPromptError") {
+      return { kind: "cancel" };
+    }
+    throw err;
+  }
 }
 
 async function runKeyEntry(targetProfile: string): Promise<boolean> {
