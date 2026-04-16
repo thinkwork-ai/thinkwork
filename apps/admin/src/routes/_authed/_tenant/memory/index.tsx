@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useClient } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Loader2, Trash2, Brain, Search, X } from "lucide-react";
+import { Loader2, Trash2, Brain, Search, X, ArrowLeft } from "lucide-react";
 import {
   AgentsListQuery,
   MemoryRecordsQuery,
@@ -11,7 +11,7 @@ import {
   DeleteMemoryRecordMutation,
   UpdateMemoryRecordMutation,
 } from "@/lib/graphql-queries";
-import { MemoryGraph, type MemoryGraphHandle } from "@/components/MemoryGraph";
+import { MemoryGraph, type MemoryGraphHandle, type MemoryGraphNode } from "@/components/MemoryGraph";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -140,6 +140,12 @@ function MemoryPage() {
   const [activeSearch, setActiveSearch] = useState("");
   const [view, setView] = useState<"memories" | "graph">("memories");
   const graphRef = useRef<MemoryGraphHandle>(null);
+
+  // Graph node detail sheet
+  const [graphNode, setGraphNode] = useState<MemoryGraphNode | null>(null);
+  const [graphNodeEdges, setGraphNodeEdges] = useState<{ label: string; targetLabel: string; targetType: string; targetId: string }[]>([]);
+  const [graphSheetOpen, setGraphSheetOpen] = useState(false);
+  const [graphNodeHistory, setGraphNodeHistory] = useState<{ node: MemoryGraphNode; edges: { label: string; targetLabel: string; targetType: string; targetId: string }[] }[]>([]);
 
   // Detect which memory backends are wired up at runtime. The Knowledge
   // Graph view is only meaningful when Hindsight is deployed, so hide the
@@ -431,8 +437,15 @@ function MemoryPage() {
             <MemoryGraph
               ref={graphRef}
               agentId={isAllAgents ? undefined : selectedAgentId}
-              agentIds={isAllAgents ? agents.map((a) => a.id) : undefined}
+              agentIds={isAllAgents ? effectiveAgentIds : undefined}
               agentNames={agentNames}
+              searchQuery={searchQuery || undefined}
+              onNodeClick={(node, edges) => {
+                setGraphNode(node);
+                setGraphNodeEdges(edges);
+                setGraphNodeHistory([]);
+                setGraphSheetOpen(true);
+              }}
             />
           </div>
         ) : isLoading ? (
@@ -615,6 +628,99 @@ function MemoryPage() {
                   )}
                 </div>
               </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Graph node detail sheet */}
+      <Sheet open={graphSheetOpen} onOpenChange={setGraphSheetOpen}>
+        <SheetContent className="sm:max-w-lg flex flex-col">
+          <SheetHeader className="p-6 pb-0">
+            <SheetTitle className="flex items-center gap-2">
+              {graphNodeHistory.length > 0 && (
+                <button
+                  onClick={() => {
+                    const prev = graphNodeHistory[graphNodeHistory.length - 1];
+                    setGraphNodeHistory((h) => h.slice(0, -1));
+                    setGraphNode(prev.node);
+                    setGraphNodeEdges(prev.edges);
+                  }}
+                  className="text-muted-foreground hover:text-foreground -ml-1 mr-1"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+              )}
+              {graphNode?.nodeType === "memory" ? "Memory" : graphNode?.label}
+              <Badge
+                className={`font-normal text-xs ${
+                  graphNode?.nodeType === "memory"
+                    ? "bg-pink-500/20 text-pink-400"
+                    : "bg-sky-500/20 text-sky-400"
+                }`}
+              >
+                {graphNode?.nodeType === "memory"
+                  ? graphNode?.strategy ?? "memory"
+                  : graphNode?.entityType ?? "entity"}
+              </Badge>
+            </SheetTitle>
+            <SheetDescription>
+              {graphNode?.nodeType === "memory"
+                ? `Memory node — ${graphNodeEdges.length} connection${graphNodeEdges.length !== 1 ? "s" : ""}`
+                : `Entity — ${graphNodeEdges.length} mention${graphNodeEdges.length !== 1 ? "s" : ""}`}
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="flex-1 overflow-y-auto px-6 pt-4 space-y-4">
+            {graphNode?.nodeType === "memory" && (
+              <MemoryContent text={graphNode.label} />
+            )}
+
+            {graphNodeEdges.length > 0 && (
+              <div>
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                  {graphNode?.nodeType === "memory" ? "Mentions" : "Mentioned by"}
+                </h4>
+                <div className="space-y-2">
+                  {graphNodeEdges.map((edge, i) => (
+                    <div
+                      key={i}
+                      className="flex items-start gap-2 text-sm rounded-md bg-muted/30 px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => {
+                        const result = graphRef.current?.getNodeWithEdges(edge.targetId);
+                        if (result && graphNode) {
+                          setGraphNodeHistory((h) => [...h, { node: graphNode, edges: graphNodeEdges }]);
+                          setGraphNode(result.node);
+                          setGraphNodeEdges(result.edges);
+                        }
+                      }}
+                    >
+                      <Badge
+                        variant="outline"
+                        className={`shrink-0 text-[10px] mt-0.5 ${
+                          edge.targetType === "memory"
+                            ? "border-pink-500/30 text-pink-400"
+                            : "border-sky-500/30 text-sky-400"
+                        }`}
+                      >
+                        {edge.targetType === "memory" ? "Memory" : "Entity"}
+                      </Badge>
+                      <div className="min-w-0">
+                        <p className="font-medium text-foreground truncate">{stripTopicTags(edge.targetLabel)}</p>
+                        {edge.label && (
+                          <p className="text-xs text-muted-foreground">{edge.label}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {graphNodeEdges.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No connections found for this node.
+              </p>
             )}
           </div>
         </SheetContent>
