@@ -45,12 +45,10 @@ function extractRawTask(
 	if (direct && typeof direct === "object" && !Array.isArray(direct)) {
 		return direct as Record<string, unknown>;
 	}
-	const data = raw.data;
-	if (data && typeof data === "object" && !Array.isArray(data)) {
-		const nested = (data as Record<string, unknown>).task;
-		if (nested && typeof nested === "object" && !Array.isArray(nested)) {
-			return nested as Record<string, unknown>;
-		}
+	// Flat shape: the webhook body IS the task itself (no outer wrapper).
+	// LastMile's current webhook format sends the raw task object directly.
+	if (typeof raw.id === "string" && raw.id.length > 0) {
+		return raw as Record<string, unknown>;
 	}
 	return null;
 }
