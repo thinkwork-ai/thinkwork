@@ -50,6 +50,10 @@ type ConnectorRow = {
 	webhook_id: string | null;
 	webhook_url: string | null;
 	has_secret: boolean;
+	/** Per-tenant provider REST API base URL (set via the Connectors UI).
+	 *  Null when not configured — backend falls back to the provider's
+	 *  Lambda env var. */
+	base_url: string | null;
 	connection_count: number;
 	last_delivery_at: string | null;
 	delivery_count_24h: number;
@@ -277,6 +281,10 @@ function ConnectorDetailPage() {
 	const [deliveries, setDeliveries] = useState<Delivery[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [err, setErr] = useState<string | null>(null);
+	/** Edit-state for the API Base URL field. Separate from `connector` so
+	 *  the input stays editable mid-refresh and only commits on Save. */
+	const [baseUrlDraft, setBaseUrlDraft] = useState<string>("");
+	const [savingBaseUrl, setSavingBaseUrl] = useState(false);
 
 	const fetchData = useCallback(async () => {
 		if (!tenantId) return;
@@ -290,6 +298,11 @@ function ConnectorDetailPage() {
 			]);
 			const found = all.find((c) => c.slug === slug) ?? null;
 			setConnector(found);
+			// Refresh the draft to match server state on every load — the
+			// user's in-flight edit is discarded, which is the right
+			// trade-off: saving is explicit (button click), so any draft
+			// still pending at load time is either stale or rejected.
+			setBaseUrlDraft(found?.base_url ?? "");
 			setDeliveries(hist);
 			setErr(null);
 		} catch (e) {
@@ -339,6 +352,26 @@ function ConnectorDetailPage() {
 			fetchData();
 		} catch (e) {
 			toast.error(e instanceof Error ? e.message : String(e));
+		}
+	};
+
+	const handleSaveBaseUrl = async () => {
+		if (!tenantId) return;
+		const trimmed = baseUrlDraft.trim();
+		setSavingBaseUrl(true);
+		try {
+			await apiFetch(`/api/task-connectors/${slug}/config`, tenantId, {
+				method: "PATCH",
+				body: JSON.stringify({ baseUrl: trimmed === "" ? null : trimmed }),
+			});
+			toast.success(
+				trimmed === "" ? "Base URL cleared" : "Base URL saved",
+			);
+			fetchData();
+		} catch (e) {
+			toast.error(e instanceof Error ? e.message : String(e));
+		} finally {
+			setSavingBaseUrl(false);
 		}
 	};
 
@@ -526,6 +559,42 @@ function ConnectorDetailPage() {
 								Token-only auth. No signing secret configured — optional.
 							</>
 						)}
+					</div>
+				</div>
+			)}
+
+			{connector.configured && (
+				<div className="rounded-lg border bg-muted/20 p-3 mb-4">
+					<div className="flex items-start justify-between gap-3">
+						<div className="min-w-0 flex-1">
+							<div className="text-xs font-medium text-muted-foreground mb-1">
+								{connector.display_name} API Base URL
+							</div>
+							<input
+								type="url"
+								value={baseUrlDraft}
+								onChange={(e) => setBaseUrlDraft(e.target.value)}
+								placeholder="https://api-dev.lastmile-tei.com"
+								className="text-xs font-mono w-full border rounded px-2 py-1 bg-background"
+								spellCheck={false}
+								autoComplete="off"
+							/>
+							<p className="mt-1.5 text-xs text-muted-foreground">
+								Used for outbound REST calls (workflow picker, task create).
+								Leave blank to fall back to the Lambda env var.
+							</p>
+						</div>
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={handleSaveBaseUrl}
+							disabled={
+								savingBaseUrl ||
+								baseUrlDraft.trim() === (connector.base_url ?? "")
+							}
+						>
+							{savingBaseUrl ? "Saving…" : "Save"}
+						</Button>
 					</div>
 				</div>
 			)}

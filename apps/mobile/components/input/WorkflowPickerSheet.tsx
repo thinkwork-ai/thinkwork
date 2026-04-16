@@ -11,9 +11,9 @@ export interface Workflow {
   id: string;
   name: string;
   description?: string | null;
-  team_id?: string;
-  task_type_id?: string | null;
-  is_active?: boolean;
+  teamId?: string;
+  taskTypeId?: string | null;
+  isActive?: boolean;
 }
 
 export interface WorkflowPickerSheetRef {
@@ -25,13 +25,15 @@ interface WorkflowPickerSheetProps {
   workflows: Workflow[];
   loading?: boolean;
   error?: string | null;
+  needsReconnect?: boolean;
   selectedId: string | null;
   onSelect: (workflow: Workflow) => void;
   onRefresh?: () => void;
+  onReconnect?: () => void;
 }
 
 export const WorkflowPickerSheet = forwardRef<WorkflowPickerSheetRef, WorkflowPickerSheetProps>(
-  ({ workflows, loading, error, selectedId, onSelect, onRefresh }, ref) => {
+  ({ workflows, loading, error, needsReconnect, selectedId, onSelect, onRefresh, onReconnect }, ref) => {
     const bottomSheetRef = useRef<BottomSheet>(null);
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === "dark";
@@ -55,7 +57,7 @@ export const WorkflowPickerSheet = forwardRef<WorkflowPickerSheetRef, WorkflowPi
     );
 
     const activeWorkflows = useMemo(
-      () => workflows.filter((w) => w.is_active !== false),
+      () => workflows.filter((w) => w.isActive !== false),
       [workflows],
     );
 
@@ -94,8 +96,19 @@ export const WorkflowPickerSheet = forwardRef<WorkflowPickerSheetRef, WorkflowPi
           )}
 
           {error && !loading && (
-            <View className="py-8 items-center">
-              <Muted className="text-sm text-red-400">{error}</Muted>
+            <View className="py-8 items-center px-4">
+              <Muted className="text-sm text-red-400 text-center">{error}</Muted>
+              {needsReconnect && onReconnect && (
+                <Pressable
+                  onPress={onReconnect}
+                  className="mt-4 px-4 py-2 rounded-lg active:opacity-70"
+                  style={{ backgroundColor: colors.primary }}
+                >
+                  <Text className="text-sm font-medium" style={{ color: "#ffffff" }}>
+                    Reconnect LastMile
+                  </Text>
+                </Pressable>
+              )}
             </View>
           )}
 

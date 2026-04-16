@@ -285,7 +285,13 @@ export default function ThreadsScreen() {
   // automation rules. The selected workflow is shown as a chip and
   // included in the createTask call. Workflows are fetched from the
   // LastMile REST API via ThinkWork's connections proxy.
-  const { workflows, loading: workflowsLoading, error: workflowsError, refetch: refetchWorkflows } = useLastmileWorkflows();
+  const {
+    workflows,
+    loading: workflowsLoading,
+    error: workflowsError,
+    needsReconnect: workflowsNeedsReconnect,
+    refetch: refetchWorkflows,
+  } = useLastmileWorkflows();
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
 
   // ── Quick Actions (per-user, per-scope, from DB) ──────────────────────
@@ -863,9 +869,14 @@ export default function ThreadsScreen() {
         workflows={workflows}
         loading={workflowsLoading}
         error={workflowsError}
+        needsReconnect={workflowsNeedsReconnect}
         selectedId={selectedWorkflow?.id ?? null}
         onSelect={(wf) => setSelectedWorkflow(wf)}
         onRefresh={refetchWorkflows}
+        onReconnect={() => {
+          workflowPickerRef.current?.dismiss();
+          router.push("/settings/mcp-servers");
+        }}
       />
 
       {/* Quick Action Add/Edit Form. Saves into `qaFormScope` (captured

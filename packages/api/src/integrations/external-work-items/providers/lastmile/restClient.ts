@@ -1,5 +1,5 @@
 /**
- * LastMile Tasks — REST API client.
+ * LastMile — REST API client.
  *
  * ThinkWork talks to LastMile over two transports:
  *
@@ -14,13 +14,21 @@
  *    LLM in the loop. This is the deterministic path — when the mobile UI
  *    says "create a task," we don't want an agent synthesizing arguments.
  *
- * Every call takes a per-user OAuth bearer token — same token LastMile
- * issues via the existing `/oauth/token` flow. A missing `LASTMILE_TASKS_API_URL`
- * env var feature-flags the whole client off: callers should check
- * `isLastmileRestConfigured()` first and fall back gracefully when the
- * endpoint isn't wired yet. This lets us ship the surrounding plumbing
- * (sync_status columns, retry mutation, mobile badges) before the
- * LastMile API is available.
+ * **Authentication (per published spec at dev-playground.lastmile-tei.com):**
+ *
+ * Every call sends `Authorization: Bearer <token>`. The preferred token is
+ * a WorkOS **M2M** access_token obtained via `client_credentials` — see
+ * `lib/lastmile-m2m.ts`. M2M tokens carry an `org_id` claim that LastMile
+ * maps to a companyId via the organization's `metadata.lmi_company_id`,
+ * bypassing the per-user Clerk-lookup that was the source of the
+ * "Failed to validate WorkOS user" error on the per-user path.
+ *
+ * The legacy per-user WorkOS JWT path still works and is kept as a
+ * fallback for tenants that haven't provisioned an M2M client yet.
+ *
+ * **Wire format (per spec):** camelCase everywhere (path params, query
+ * params, request bodies, response bodies). Pagination uses
+ * `?page=1&pageSize=50` with an envelope `{data, page, pageSize, totalCount, totalPages}`.
  */
 
 const BASE_URL = process.env.LASTMILE_TASKS_API_URL || "";
@@ -28,92 +36,99 @@ const REQUEST_TIMEOUT_MS = 10_000;
 const RETRY_STATUSES = new Set([500, 502, 503, 504]);
 const MAX_RETRIES = 2;
 
-export function isLastmileRestConfigured(): boolean {
+export function isLastmileRestConfigured(args?: { baseUrl?: string | null }): boolean {
+	// Per-tenant baseUrl wins over the Lambda env var fallback. The env var
+	// acts as a bootstrap default for single-tenant / local-dev and gets
+	// removed once every tenant is configured via the admin UI.
+	if (args?.baseUrl) return true;
 	return BASE_URL.length > 0;
 }
 
-// ── Types (mirroring the spec handed to LastMile) ──────────────────────────
+// ── Types (aligned with LastMile OpenAPI v1.0.0 — camelCase throughout) ──
 
-/** Canonical shape of a LastMile task as returned by the REST endpoints.
- *  All five methods (create/get/list/update/via the /v1/me cousin) should
- *  return this same shape so we normalize once. */
+/** Canonical shape of a LastMile task as returned by the REST endpoints. */
 export interface LastmileTask {
 	id: string;
-	task_number?: number;
+	taskNumber?: string;
 	title: string;
 	description: string | null;
 	status: string;
-	status_id?: string | null;
 	priority: string | null;
-	due_date: string | null;
-	assignee_id: string | null;
-	creator_id: string | null;
-	team_id: string | null;
-	created_at: string;
-	updated_at: string;
-	assigned_at?: string | null;
-	completed_at?: string | null;
-	is_archived?: boolean;
-	source?: {
-		system?: string;
-		external_ref?: string;
-	} | null;
+	assigneeId: string | null;
+	terminalId?: string | null;
+	dueDate: string | null;
+	createdAt: string;
+	updatedAt: string;
 }
 
 export interface LastmileMe {
 	id: string;
-	name: string;
 	email: string;
-	primary_team_id?: string | null;
-	team_ids?: string[];
+	firstName?: string | null;
+	lastName?: string | null;
+	companyId?: string | null;
 }
 
+/** Shape per LastMile OpenAPI `TaskCreate`. `terminalId` is required on
+ *  their side; `workflowId` is kept on the ThinkWork side as thread
+ *  metadata but is NOT part of the LastMile POST body.
+ *
+ *  If a caller wants "LastMile picks the status/team from a workflow",
+ *  use `POST /workflows/{id}/tasks` instead — to be added as a helper
+ *  when we need it. For now `/tasks` is the generic path. */
 export interface CreateTaskRequest {
-	/** The only truly required field. */
 	title: string;
-	/** Required for auto-resolution of team_id, status_id, task_type_id.
-	 *  Without it the caller must supply status_id explicitly. */
-	workflow_id?: string;
+	terminalId: string;
 	description?: string | null;
-	assignee_id?: string;
-	priority?: "urgent" | "high" | "medium" | "low";
-	due_date?: string;
-	team_id?: string;
-	task_type_id?: string;
-	status_id?: string;
+	status?: string;
+	priority?: "urgent" | "high" | "medium" | "low" | string;
+	assigneeId?: string;
+	dueDate?: string;
 }
 
 export interface LastmileWorkflow {
 	id: string;
+	companyId?: string;
 	name: string;
 	description?: string | null;
-	team_id: string;
-	task_type_id?: string | null;
-	is_active?: boolean;
+	teamId: string;
+	taskTypeId?: string | null;
+	workflowData?: Record<string, unknown>;
+	automationRules?: Record<string, unknown> | null;
+	isActive?: boolean;
+	createdBy?: string | null;
+	createdAt?: string;
+	updatedAt?: string;
 }
 
 export interface UpdateTaskRequest {
 	title?: string;
 	description?: string | null;
-	status_id?: string;
-	priority?: "urgent" | "high" | "medium" | "low";
-	due_date?: string | null;
-	assignee_id?: string;
-}
-
-export interface ListTasksQuery {
-	assignee_id?: string;
 	status?: string;
-	team_id?: string;
-	updated_since?: string;
-	limit?: number;
-	cursor?: string;
+	priority?: "urgent" | "high" | "medium" | "low" | string;
+	dueDate?: string | null;
+	assigneeId?: string | null;
 }
 
-export interface ListTasksResponse {
-	items: LastmileTask[];
-	next_cursor: string | null;
+/** Query params for `GET /tasks` — camelCase, page/pageSize pagination. */
+export interface ListTasksQuery {
+	page?: number;
+	pageSize?: number;
+	status?: string;
+	assigneeId?: string;
+	terminalId?: string;
 }
+
+/** Standard pagination envelope used by most list endpoints. */
+export interface PaginatedResponse<T> {
+	data: T[];
+	page: number;
+	pageSize: number;
+	totalCount: number;
+	totalPages: number;
+}
+
+export type ListTasksResponse = PaginatedResponse<LastmileTask>;
 
 // ── Errors ────────────────────────────────────────────────────────────────
 
@@ -142,6 +157,40 @@ export class LastmileRestError extends Error {
 	}
 }
 
+// ── JWT peek (diagnostic only — NO signature validation) ──────────────────
+
+/** Base64url-decode a JWT payload and return the claims. Used purely for
+ *  diagnostic logging on 401 so we can see what audience/issuer/expiry
+ *  LastMile rejected. Never use for authorization decisions. */
+function peekJwtClaims(token: string):
+	| {
+			aud?: unknown;
+			iss?: unknown;
+			exp?: number;
+			scope?: unknown;
+			sub?: unknown;
+	  }
+	| null {
+	try {
+		const parts = token.split(".");
+		if (parts.length < 2) return null;
+		const payload = parts[1];
+		if (!payload) return null;
+		const b64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+		const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+		const json = Buffer.from(padded, "base64").toString("utf8");
+		return JSON.parse(json) as {
+			aud?: unknown;
+			iss?: unknown;
+			exp?: number;
+			scope?: unknown;
+			sub?: unknown;
+		};
+	} catch {
+		return null;
+	}
+}
+
 // ── Shared fetch helper ────────────────────────────────────────────────────
 
 type Method = "GET" | "POST" | "PATCH" | "DELETE";
@@ -150,20 +199,30 @@ interface RequestArgs<B> {
 	method: Method;
 	path: string;
 	authToken: string;
+	/** Per-call base URL override — wins over the LASTMILE_TASKS_API_URL
+	 *  env var. Supplied by callers that looked up the tenant's per-
+	 *  connector config (webhooks.config.baseUrl) via `getConnectorBaseUrl`. */
+	baseUrl?: string;
 	body?: B;
 	query?: Record<string, string | number | undefined>;
 	idempotencyKey?: string;
+	/** Called when LastMile returns 401. Should return a freshly-refreshed
+	 *  access_token (bypassing any cache). Return null to signal
+	 *  unrecoverable auth — `doRequest` will then throw a 401 error.
+	 *  Only invoked once per call (no infinite refresh loops). */
+	refreshToken?: () => Promise<string | null>;
 }
 
 async function doRequest<TResponse, TBody = unknown>(
 	args: RequestArgs<TBody>,
 ): Promise<TResponse> {
-	if (!BASE_URL) {
+	const effectiveBase = args.baseUrl || BASE_URL;
+	if (!effectiveBase) {
 		throw new LastmileRestError({
 			status: 0,
 			code: "not_configured",
 			message:
-				"LastMile REST client is not configured — set LASTMILE_TASKS_API_URL to enable system-layer sync.",
+				"LastMile REST client is not configured — set the per-tenant baseUrl via the connector admin UI (or LASTMILE_TASKS_API_URL as a fallback).",
 		});
 	}
 	if (!args.authToken) {
@@ -174,7 +233,7 @@ async function doRequest<TResponse, TBody = unknown>(
 		});
 	}
 
-	const url = new URL(`${BASE_URL.replace(/\/$/, "")}${args.path}`);
+	const url = new URL(`${effectiveBase.replace(/\/$/, "")}${args.path}`);
 	if (args.query) {
 		for (const [k, v] of Object.entries(args.query)) {
 			if (v !== undefined && v !== null && v !== "") {
@@ -183,20 +242,29 @@ async function doRequest<TResponse, TBody = unknown>(
 		}
 	}
 
-	const headers: Record<string, string> = {
-		Authorization: `Bearer ${args.authToken}`,
-		Accept: "application/json",
+	// Mutable token so the 401-refresh path can swap it for the retry.
+	let currentToken = args.authToken;
+	let refreshConsumed = false;
+
+	const buildHeaders = (): Record<string, string> => {
+		const headers: Record<string, string> = {
+			Authorization: `Bearer ${currentToken}`,
+			Accept: "application/json",
+		};
+		if (args.body !== undefined) {
+			headers["Content-Type"] = "application/json";
+		}
+		if (args.idempotencyKey) {
+			headers["Idempotency-Key"] = args.idempotencyKey;
+		}
+		return headers;
 	};
-	if (args.body !== undefined) {
-		headers["Content-Type"] = "application/json";
-	}
-	if (args.idempotencyKey) {
-		headers["Idempotency-Key"] = args.idempotencyKey;
-	}
 
 	// Retry on 5xx only. 4xx errors are client-side — retrying won't help.
 	// Network errors (TypeError from fetch) also retry, since they're often
 	// transient DNS/connection blips on cold starts.
+	// 401s get ONE refresh-and-retry attempt when a refreshToken callback
+	// is provided, separately from the 5xx retry loop.
 	let lastErr: unknown = undefined;
 	for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
 		const controller = new AbortController();
@@ -205,7 +273,7 @@ async function doRequest<TResponse, TBody = unknown>(
 		try {
 			const res = await fetch(url.toString(), {
 				method: args.method,
-				headers,
+				headers: buildHeaders(),
 				body: args.body !== undefined ? JSON.stringify(args.body) : undefined,
 				signal: controller.signal,
 			});
@@ -233,6 +301,71 @@ async function doRequest<TResponse, TBody = unknown>(
 				parsed && typeof parsed === "object"
 					? (parsed as { error?: { code?: string; message?: string } }).error
 					: undefined;
+
+			// 401: diagnose + attempt a single force-refresh retry.
+			if (res.status === 401) {
+				const claims = peekJwtClaims(currentToken);
+				const nowSec = Math.floor(Date.now() / 1000);
+				console.error(
+					`[lastmile-rest] 401 from ${args.method} ${args.path}`,
+					{
+						status: 401,
+						code: errObj?.code,
+						message: errObj?.message || errText,
+						requestId: res.headers.get("x-request-id") ?? undefined,
+						responseBody: parsed ?? errText,
+						tokenAudience: claims?.aud,
+						tokenIssuer: claims?.iss,
+						tokenScope: claims?.scope,
+						tokenSub: claims?.sub,
+						tokenExp: claims?.exp,
+						nowSec,
+						tokenExpiresInSec:
+							typeof claims?.exp === "number" ? claims.exp - nowSec : undefined,
+						refreshRetryAttempted: refreshConsumed,
+					},
+				);
+
+				if (args.refreshToken && !refreshConsumed) {
+					refreshConsumed = true;
+					let refreshed: string | null = null;
+					try {
+						refreshed = await args.refreshToken();
+					} catch (refreshErr) {
+						console.error(
+							`[lastmile-rest] refresh callback threw:`,
+							refreshErr,
+						);
+					}
+					if (refreshed && refreshed !== currentToken) {
+						console.log(
+							`[lastmile-rest] refresh-retry firing for ${args.method} ${args.path}`,
+						);
+						currentToken = refreshed;
+						// Reset the attempt counter — the 5xx retries are a separate
+						// concern and the first try after refresh deserves a full
+						// budget of 5xx retries of its own.
+						attempt = -1;
+						continue;
+					}
+					console.warn(
+						`[lastmile-rest] refresh-retry abandoned (no new token) for ${args.method} ${args.path}`,
+					);
+				}
+
+				throw new LastmileRestError({
+					status: 401,
+					code: refreshConsumed
+						? "unauthorized_after_refresh"
+						: errObj?.code || "unauthorized",
+					message:
+						errObj?.message ||
+						errText ||
+						`LastMile ${args.method} ${args.path} failed (401)`,
+					requestId: res.headers.get("x-request-id") ?? undefined,
+					responseBody: parsed ?? errText,
+				});
+			}
 
 			// Retry on 5xx — reset and fall through to the next loop iter.
 			if (RETRY_STATUSES.has(res.status) && attempt < MAX_RETRIES) {
@@ -284,11 +417,24 @@ async function doRequest<TResponse, TBody = unknown>(
 export interface LastmileRestCtx {
 	/** Per-user OAuth bearer token, resolved via `resolveOAuthToken`. */
 	authToken: string;
+	/** Per-tenant REST API base URL (e.g. "https://api-dev.lastmile-tei.com").
+	 *  Read from `webhooks.config.baseUrl` via `getConnectorBaseUrl`. When
+	 *  omitted, falls back to the LASTMILE_TASKS_API_URL env var. */
+	baseUrl?: string | null;
+	/** Optional: called on 401 to force-refresh the token and retry once.
+	 *  Callers should wire this to `forceRefreshLastmileUserToken` so
+	 *  server-invalidated tokens self-heal without requiring mobile
+	 *  reconnect. Return null to signal unrecoverable auth — `doRequest`
+	 *  then surfaces a 401 the handler can translate to reconnect UX. */
+	refreshToken?: () => Promise<string | null>;
 }
 
-/** POST /v1/tasks — create a task. Blocked by LastMile Tasks API until the
- *  endpoint ships; caller should gate this on `isLastmileRestConfigured()`
- *  and fall back to a `sync_status='local'` branch when unavailable. */
+/** Compact helper to avoid repeating the ctx → args plumbing on every method. */
+function ctxToBaseUrl(ctx: LastmileRestCtx): string | undefined {
+	return ctx.baseUrl ?? undefined;
+}
+
+/** POST /tasks — create a task. Gated by `isLastmileRestConfigured()`. */
 export async function createTask(
 	args: { input: CreateTaskRequest; idempotencyKey?: string; ctx: LastmileRestCtx },
 ): Promise<LastmileTask> {
@@ -296,24 +442,27 @@ export async function createTask(
 		method: "POST",
 		path: "/tasks",
 		authToken: args.ctx.authToken,
+		baseUrl: ctxToBaseUrl(args.ctx),
 		body: args.input,
 		idempotencyKey: args.idempotencyKey,
+		refreshToken: args.ctx.refreshToken,
 	});
 }
 
-/** GET /v1/tasks/{id} — replaces the `tasks_get` MCP call used by
- *  `refresh.ts`. Returns the full task in one round-trip. */
+/** GET /tasks/{taskId} — returns the full task in one round-trip. */
 export async function getTask(
 	args: { taskId: string; ctx: LastmileRestCtx },
 ): Promise<LastmileTask> {
 	return doRequest<LastmileTask>({
 		method: "GET",
-		path: `/v1/tasks/${encodeURIComponent(args.taskId)}`,
+		path: `/tasks/${encodeURIComponent(args.taskId)}`,
 		authToken: args.ctx.authToken,
+		baseUrl: ctxToBaseUrl(args.ctx),
+		refreshToken: args.ctx.refreshToken,
 	});
 }
 
-/** GET /v1/tasks — replaces `tasks_list` MCP. Cursor-paginated. */
+/** GET /tasks — paginated list (`?page=&pageSize=`). */
 export async function listTasks(
 	args: { query?: ListTasksQuery; ctx: LastmileRestCtx },
 ): Promise<ListTasksResponse> {
@@ -321,49 +470,63 @@ export async function listTasks(
 		method: "GET",
 		path: "/tasks",
 		authToken: args.ctx.authToken,
+		baseUrl: ctxToBaseUrl(args.ctx),
 		query: args.query as Record<string, string | number | undefined> | undefined,
+		refreshToken: args.ctx.refreshToken,
 	});
 }
 
-/** PATCH /v1/tasks/{id} — replaces `task_update_status`, `task_update_assignee`,
- *  and `task_update`. All field updates go through here. Returns the full
- *  task post-update so callers don't need a follow-up GET. */
+/** PATCH /tasks/{taskId} — partial update. Returns the full task post-update. */
 export async function updateTask(
 	args: { taskId: string; input: UpdateTaskRequest; ctx: LastmileRestCtx },
 ): Promise<LastmileTask> {
 	return doRequest<LastmileTask, UpdateTaskRequest>({
 		method: "PATCH",
-		path: `/v1/tasks/${encodeURIComponent(args.taskId)}`,
+		path: `/tasks/${encodeURIComponent(args.taskId)}`,
 		authToken: args.ctx.authToken,
+		baseUrl: ctxToBaseUrl(args.ctx),
 		body: args.input,
+		refreshToken: args.ctx.refreshToken,
 	});
 }
 
-/** GET /me — replaces the `user_whoami` MCP call used immediately
- *  after OAuth to resolve the user's LastMile id. */
+/** GET /users/me — current principal (works for both user and M2M tokens;
+ *  M2M returns the service-principal identity). */
 export async function getMe(
 	args: { ctx: LastmileRestCtx },
 ): Promise<LastmileMe> {
 	return doRequest<LastmileMe>({
 		method: "GET",
-		path: "/me",
+		path: "/users/me",
 		authToken: args.ctx.authToken,
+		baseUrl: ctxToBaseUrl(args.ctx),
+		refreshToken: args.ctx.refreshToken,
 	});
 }
 
-/** GET /workflows — returns the company's active workflows. Used by the
- *  mobile Tasks footer `+` button to let the user pick what kind of task
- *  to create (each workflow = a task type with its own team, statuses,
- *  and automation rules). */
+/** GET /workflows — returns the company's workflows for the mobile
+ *  task-picker. Paginated per spec; we fetch the first page (pageSize=100)
+ *  and return `data`. If a tenant ever has >100 workflows we'll add
+ *  follow-up paging; today that's not on the horizon. */
 export async function listWorkflows(
-	args: { ctx: LastmileRestCtx },
+	args: { ctx: LastmileRestCtx; query?: { teamId?: string; isActive?: boolean; pageSize?: number } },
 ): Promise<LastmileWorkflow[]> {
-	// The handler returns `{ data: [...] }` (paginated) or bare array.
-	// Normalize to always return an array.
-	const raw = await doRequest<LastmileWorkflow[] | { data: LastmileWorkflow[] }>({
+	const query: Record<string, string | number | undefined> = {
+		pageSize: args.query?.pageSize ?? 100,
+	};
+	if (args.query?.teamId) query.teamId = args.query.teamId;
+	if (typeof args.query?.isActive === "boolean") query.isActive = String(args.query.isActive);
+
+	const envelope = await doRequest<PaginatedResponse<LastmileWorkflow>>({
 		method: "GET",
 		path: "/workflows",
 		authToken: args.ctx.authToken,
+		baseUrl: ctxToBaseUrl(args.ctx),
+		query,
+		refreshToken: args.ctx.refreshToken,
 	});
-	return Array.isArray(raw) ? raw : (raw?.data ?? []);
+	// Spec guarantees `data: Workflow[]`. Defensively unwrap a bare array
+	// in case an older handler is still deployed on some stage.
+	if (Array.isArray(envelope)) return envelope as LastmileWorkflow[];
+	return envelope?.data ?? [];
 }
