@@ -1,0 +1,162 @@
+---
+title: Connect an External Task System
+description: End-to-end walkthrough — register LastMile as a task connector, wire up the inbound webhook, connect on the mobile app, and verify tasks land in the Tasks tab with round-trip edits.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+This guide walks through connecting an external task system to ThinkWork end-to-end. It uses **LastMile Tasks** as the reference provider because it's the first adapter in production — but the same adapter seam works for any provider that implements the [`ExternalWorkItemAdapter` interface](/concepts/connectors/external-tasks/#the-adapter-seam).
+
+By the end you will have:
+
+- A connect provider registered in the tenant
+- An inbound webhook receiving LastMile events and turning them into threads
+- The mobile app connected to LastMile on your user account
+- A task that lands in the mobile **Tasks** tab with a round-trip save-edit working
+
+No product or code changes are required — every step is a configuration operation in the admin app plus a per-user OAuth flow on mobile.
+
+## Prerequisites
+
+Before you start, make sure you have:
+
+- **Admin access** to the ThinkWork tenant — you'll need to register a connect provider, create a webhook, and optionally set a default task agent. See [Authentication & Tenancy](/applications/admin/authentication-and-tenancy/).
+- **The mobile app installed and signed in** on a device or the iOS simulator. See [Mobile — Authentication](/applications/mobile/authentication/).
+- **A LastMile account with API access** — you'll need the ability to configure webhooks in LastMile's dashboard and to set up the OAuth application the mobile app will connect through.
+
+Two configuration values from LastMile that you'll paste into ThinkWork:
+
+- A **webhook signing secret** (LastMile generates this when you create the webhook)
+- An **OAuth client id** for the mobile app's connect flow (your LastMile admin provisions this)
+
+## Step 1 — Register LastMile as a connect provider
+
+In the admin app:
+
+1. Open **Connectors** from the sidebar (see [Admin — Connectors](/applications/admin/connectors/))
+2. Click **Connect** on the LastMile provider card, or **Add custom connector** and fill in the fields manually
+3. Capture the provider name (used across the UI and in the mobile Connectors screen) and save
+
+This writes a `connect_providers` row at the tenant level. The provider is now registered but not yet wired to an inbound event stream — the next step handles that.
+
+<Aside type="note">
+For any provider other than LastMile, you'll use the custom-connector form and provide the OAuth authorize / token URLs, scopes, and a client identifier from the provider's dashboard.
+</Aside>
+
+## Step 2 — Create the inbound webhook
+
+Still in the admin app:
+
+1. Open **Webhooks** from the sidebar (see [Admin — Webhooks](/applications/admin/webhooks/))
+2. Click **New Webhook**
+3. Fill in:
+   - **Name** — something recognizable like "LastMile inbound"
+   - **Target type** — `Agent` or `Routine`. For most tenants, an agent is the right target: the agent receives the webhook's event context and reacts
+   - **Target** — choose the agent or routine that will receive task events. Tasks will still create their own threads; the target is the default agent those threads are assigned to
+   - **Rate limit** — default 10/min is fine for most deployments
+4. Save
+
+A webhook token is generated. The webhook URL has the form:
+
+```
+https://<api-endpoint>/webhooks/<token>
+```
+
+Copy both the token and the URL.
+
+### Store the signing secret
+
+Inbound webhooks verify a signature on every request. Paste the **signing secret** LastMile gave you into the webhook row's `config.secret` field (admin UI captures this on create; if you're migrating an existing webhook, use the **Regenerate Secret** control to rotate it). This is what the ingestion pipeline uses to reject forged requests.
+
+### Point LastMile at the webhook
+
+In LastMile's dashboard:
+
+1. Register a new webhook endpoint with the URL you just copied
+2. Configure it to send task events — at minimum `task.assigned`, `task.reassigned`, `task.status_changed`, and `task.updated`
+3. Paste the same signing secret into LastMile's webhook configuration
+
+Once saved, LastMile will start POSTing to the webhook on every task event.
+
+<Aside type="caution">
+The signing secret is the one value that **must** match exactly on both sides. A mismatch causes every inbound request to fail signature verification and the task will never appear in the mobile app. If the ingestion log shows signature failures, re-check both the LastMile side and the admin webhook row.
+</Aside>
+
+## Step 3 — Connect LastMile on the mobile app
+
+Time to connect as an end user.
+
+1. Open the mobile app and sign in (Google OAuth — see [Mobile — Authentication](/applications/mobile/authentication/))
+2. Open **Settings** from the tab bar, then **Connectors** (or "Integrations" depending on build)
+3. Under **Add More**, tap **Connect** on the LastMile row
+
+![Mobile Connectors screen: LastMile Tasks connected with an Active badge; Google Workspace and Microsoft 365 available to connect](/images/external-tasks/mobile-integrations-connect.png)
+
+The app opens a browser via `openAuthSessionAsync` with `preferEphemeralSession: true` — a fresh OAuth session that doesn't share cookies with Safari so account switching works. After consent, the provider redirects back into the app and your personal token lands in Secrets Manager (stored under a `user_mcp_tokens` pointer keyed to your user id).
+
+Once connected:
+
+- The row's badge flips to **Active**
+- A **Default task agent** dropdown appears — pick the agent that should be attached to any new LastMile task threads so you can chat about them. `None` is a valid choice if you just want the cards without agent conversation
+- A **Tasks** tab appears in the bottom tab bar with a badge count of your assigned tasks
+
+If the app ever shows **Reconnect** instead of **Active**, your token expired and the auto-refresh path failed (provider revoked, refresh token rotated outside ThinkWork, etc.). Tap Reconnect to walk the OAuth flow again.
+
+## Step 4 — Verify a task lands
+
+From LastMile (or have a teammate do it):
+
+1. Create a new task, or reassign an existing one, to the user you just connected as
+2. Within ~2 seconds, the mobile app's **Tasks** tab badge ticks up and the new task appears in the list
+
+![Tasks tab list view with assigned LastMile tasks](/images/external-tasks/tasks-tab-list.png)
+
+Tap the task to see the full detail — the pinned task card above the chat timeline:
+
+![Task detail: pinned LastMile task card above the chat timeline](/images/external-tasks/task-card-detail.png)
+
+If a task doesn't appear, see [Troubleshooting](#troubleshooting) below.
+
+## Step 5 — Try a round-trip edit
+
+Save-edits flow back to LastMile through the same adapter seam that handles reads.
+
+On the task detail:
+
+1. Tap **Edit** (the blue button below the field list)
+2. Adjust a field — try editing the description or the due date (status and priority are pill-selectable but currently fail upstream for LastMile; see the note below)
+3. Tap **Save changes** in the bottom-right
+
+![Edit task bottom sheet: status pills, priority pills, assignee, due date, description textarea, Save changes button](/images/external-tasks/edit-modal.png)
+
+On submit, the mobile app fires the `executeExternalTaskAction` GraphQL mutation with action `edit_fields` and the form payload. The resolver dispatches to the LastMile adapter's `executeAction`, which translates the payload into LastMile's `task_update` tool call (keyed off `task_id`), waits for confirmation, then fires `refresh()` to pull the updated envelope. The card re-renders with the new values and LastMile's side reflects the change.
+
+<Aside type="caution">
+**Status and priority edits from the form currently fail upstream** because LastMile's status-update tool expects opaque workflow IDs (`status_hfcq…`) rather than the curated value strings the form uses. Status changes through the dedicated **Change status** button work. Planned fix: source real workflow IDs from provider metadata and feed them through the form options.
+</Aside>
+
+## Troubleshooting
+
+**Task doesn't appear after firing from LastMile**
+
+1. Check the webhook delivery log in [Admin — Connectors](/applications/admin/connectors/) or the webhook's detail page under [Admin — Webhooks](/applications/admin/webhooks/). A `signature failure` means the secret doesn't match; a `parse error` means LastMile sent a payload shape the adapter doesn't recognize
+2. Confirm your mobile user's `connection.metadata.lastmile.userId` matches the `providerUserId` LastMile is sending. The ingestion pipeline uses `resolveConnectionByProviderUserId` to match events to users — if the ids don't match, the event is logged but no thread is created
+
+**Mobile app shows Reconnect on the LastMile row**
+
+The OAuth token expired and the 5-minute-buffer auto-refresh couldn't complete. Tap Reconnect to redo the OAuth flow. See [MCP Tool Connectors → Token refresh](/concepts/mcp-servers/#token-refresh) for the refresh mechanics.
+
+**Edit save returns an error**
+
+- **Status or priority field** — known upstream failure for LastMile; see the caution above
+- **Other fields** — check the MCP client error. Tool-level errors from LastMile are wrapped inside `result.content[0].text` with `isError: true`; the MCP client unwraps these and throws with the content text so the error surfaces in the UI instead of silently returning bad data
+
+**No push notification when a task is assigned**
+
+Push policy is deliberately narrow — see [External Tasks → Push notification policy](/concepts/connectors/external-tasks/#push-notification-policy). The activity row still lands on the card; only the banner notification is filtered.
+
+## Next steps
+
+- Read the [External Task Connectors](/concepts/connectors/external-tasks/) concept page for the full architecture, envelope shape, and block grammar
+- Read [Mobile — External Tasks](/applications/mobile/external-tasks/) for the user-facing mobile UX details
+- If you want to implement a provider other than LastMile (Linear, Jira, internal task systems), see the [Adding a new provider](/concepts/connectors/external-tasks/#adding-a-new-provider) section on the concept page — the adapter seam is provider-neutral by design and a new provider is a single TypeScript file plus a `connect_providers` row
