@@ -1,30 +1,21 @@
 /**
  * `thinkwork user ...` — user-management utilities for a deployed stack.
  *
- * Ops surface only: today the sole command is `reset-password`, which
- * triggers Cognito's forgot-password flow for a given email. The user
- * pool is read from the deployed Terraform outputs (same pattern the
- * `bootstrap` command uses), so there's no stack identifier to pass
- * beyond `--stage`.
- *
- * Admin-triggered vs. user-initiated: we use
- * `admin-reset-user-password` because it works even when the user's
- * account is in `FORCE_CHANGE_PASSWORD` or a disabled-due-to-forgotten
- * state — situations that block `forgot-password`. On success Cognito
- * emails the user a verification code; they set a new password in the
- * app the next time they sign in.
- *
- * This shells to the AWS CLI (same choice `bootstrap` made) to avoid
- * adding `@aws-sdk/client-cognito-identity-provider` to the CLI
- * bundle. The tradeoff: requires the `aws` binary on PATH, which the
- * `doctor` command already verifies.
+ * Two surfaces today:
+ *   - `invite`         — create a Cognito user + add them to a tenant. Supports
+ *                         both fully-flagged (agent / script) and interactive
+ *                         (TTY) invocations; when flags are missing in a TTY,
+ *                         the CLI prompts via @inquirer/prompts.
+ *   - `reset-password` — admin-initiated Cognito forgot-password.
  */
 
 import { Command } from "commander";
 import { spawn } from "node:child_process";
+import { input, select } from "@inquirer/prompts";
 import { validateStage } from "../config.js";
 import { resolveTierDir, ensureInit, ensureWorkspace } from "../terraform.js";
-import { apiFetchRaw, resolveApiConfig } from "../api-client.js";
+import { apiFetch, apiFetchRaw, resolveApiConfig } from "../api-client.js";
+import { listDeployedStages } from "../aws-discovery.js";
 import { printHeader, printSuccess, printError, printWarning } from "../ui.js";
 
 /** Run `terraform output -raw <key>` and return stdout. */
@@ -78,18 +69,118 @@ function runAwsCognitoReset(
   });
 }
 
+/**
+ * Prompt for a value when running interactively; error clearly when not.
+ * Returns null if the user cancels (Ctrl+C) — caller should short-circuit.
+ */
+function isCancellation(err: unknown): boolean {
+  return err instanceof Error && err.name === "ExitPromptError";
+}
+
+function requireTty(label: string): void {
+  if (!process.stdin.isTTY) {
+    printError(
+      `${label} is required. Pass it as a flag or re-run in an interactive terminal.`,
+    );
+    process.exit(1);
+  }
+}
+
+async function promptEmail(): Promise<string> {
+  requireTty("Email");
+  return await input({
+    message: "Email address of the person to invite:",
+    validate: (v) =>
+      v.trim().includes("@") ? true : "That doesn't look like an email.",
+  });
+}
+
+async function promptStage(region: string): Promise<string> {
+  requireTty("Stage");
+  const stages = listDeployedStages(region);
+  if (stages.length === 0) {
+    printError(
+      `No Thinkwork deployments found in ${region}. Run \`thinkwork list\` or pass --region.`,
+    );
+    process.exit(1);
+  }
+  if (stages.length === 1) {
+    console.log(`  Using the only deployed stage: ${stages[0]}`);
+    return stages[0];
+  }
+  return await select({
+    message: "Which stage?",
+    choices: stages.map((s) => ({ name: s, value: s })),
+    loop: false,
+  });
+}
+
+async function promptTenant(
+  apiUrl: string,
+  authSecret: string,
+): Promise<string> {
+  requireTty("Tenant");
+  const list = (await apiFetch(apiUrl, authSecret, "/api/tenants")) as Array<{
+    id: string;
+    name: string;
+    slug: string;
+  }>;
+  if (!list || list.length === 0) {
+    printError(
+      "No tenants exist in this stage yet. Create one in the admin UI first.",
+    );
+    process.exit(1);
+  }
+  if (list.length === 1) {
+    console.log(`  Using the only tenant: ${list[0].name} (${list[0].slug})`);
+    return list[0].slug;
+  }
+  return await select({
+    message: "Which tenant?",
+    choices: list.map((t) => ({
+      name: `${t.name}  (slug: ${t.slug})`,
+      value: t.slug,
+    })),
+    loop: false,
+  });
+}
+
+async function promptOptionalName(): Promise<string | undefined> {
+  // Only ask interactively; in non-TTY, skip silently.
+  if (!process.stdin.isTTY) return undefined;
+  const answer = await input({
+    message: "Display name (optional, press Enter to skip):",
+    default: "",
+  });
+  return answer.trim() || undefined;
+}
+
+async function promptRole(): Promise<string> {
+  if (!process.stdin.isTTY) return "member";
+  return await select({
+    message: "Role:",
+    choices: [
+      { name: "member — regular access", value: "member" },
+      { name: "admin — can manage members and settings", value: "admin" },
+      { name: "owner — full control", value: "owner" },
+    ],
+    default: "member",
+    loop: false,
+  });
+}
+
 export function registerUserCommand(program: Command): void {
   const user = program
     .command("user")
     .description("User-management utilities for a deployed Thinkwork stack");
 
   user
-    .command("invite <email>")
+    .command("invite [email]")
     .description(
-      "Invite a teammate to a tenant. Creates the Cognito user (Cognito emails a temporary password) and adds them as a tenant member.",
+      "Invite a teammate to a tenant. Creates the Cognito user (Cognito emails a temporary password) and adds them as a tenant member. Prompts interactively for any missing fields.",
     )
-    .requiredOption("-s, --stage <name>", "Deployment stage (e.g. dev, prod)")
-    .requiredOption(
+    .option("-s, --stage <name>", "Deployment stage (e.g. dev, prod)")
+    .option(
       "--tenant <slug>",
       "Tenant slug (the URL-safe tenant id, e.g. acme)",
     )
@@ -97,22 +188,24 @@ export function registerUserCommand(program: Command): void {
     .option(
       "--role <role>",
       'Tenant member role: "member", "admin", or "owner"',
-      "member",
     )
+    .option("--region <region>", "AWS region to scan", "us-east-1")
     .addHelpText(
       "after",
       `
 Examples:
-  # Invite a teammate as a regular member
+  # Fully interactive — prompts for email, stage, tenant, name, role.
+  $ thinkwork user invite
+
+  # Scriptable (no prompts) — all fields via flags.
   $ thinkwork user invite alice@example.com --tenant acme -s dev
 
-  # Invite with a display name and admin role
+  # Mix: pass the email, prompt for everything else.
+  $ thinkwork user invite alice@example.com
+
+  # With display name and admin role.
   $ thinkwork user invite bob@example.com --tenant acme -s dev \\
       --name "Bob Smith" --role admin
-
-  # Re-inviting someone who's already a member is a no-op (no second email)
-  $ thinkwork user invite alice@example.com --tenant acme -s dev
-  ⚠  alice@example.com is already a member of "acme" (role: member). No email sent.
 
 What happens:
   1. A Cognito user is created (or reused if the email already exists).
@@ -120,45 +213,64 @@ What happens:
   3. The user is added to the tenant with the given role.
   4. On first sign-in they're prompted to set a real password.
 
-Requires the stack to be deployed (the CLI discovers the API Gateway URL
-and reads api_auth_secret from terraform.tfvars for the stage).
+Re-inviting someone who's already a member is a no-op (no second email).
+Agents / scripts that pass all flags stay non-interactive.
 `,
     )
     .action(
       async (
-        email: string,
+        emailArg: string | undefined,
         opts: {
-          stage: string;
-          tenant: string;
+          stage?: string;
+          tenant?: string;
           name?: string;
-          role: string;
+          role?: string;
+          region: string;
         },
       ): Promise<void> => {
-        const stageCheck = validateStage(opts.stage);
-        if (!stageCheck.valid) {
-          printError(stageCheck.error!);
-          process.exit(1);
-        }
-
-        const trimmed = email.trim().toLowerCase();
-        if (!trimmed || !trimmed.includes("@")) {
-          printError(
-            `"${email}" doesn't look like an email address. Pass the user's sign-in email.`,
-          );
-          process.exit(1);
-        }
-
-        const api = resolveApiConfig(opts.stage);
-        if (!api) process.exit(1);
-
-        printHeader("user invite", opts.stage);
-        console.log(`  Tenant: ${opts.tenant}`);
-        console.log(`  Email:  ${trimmed}`);
-        if (opts.name) console.log(`  Name:   ${opts.name}`);
-        console.log(`  Role:   ${opts.role}`);
-        console.log("");
-
         try {
+          // Resolve email
+          let email = emailArg ?? "";
+          if (!email) email = await promptEmail();
+          email = email.trim().toLowerCase();
+          if (!email.includes("@")) {
+            printError(
+              `"${emailArg}" doesn't look like an email address. Pass the user's sign-in email.`,
+            );
+            process.exit(1);
+          }
+
+          // Resolve stage
+          let stage = opts.stage;
+          if (!stage) stage = await promptStage(opts.region);
+          const stageCheck = validateStage(stage);
+          if (!stageCheck.valid) {
+            printError(stageCheck.error!);
+            process.exit(1);
+          }
+
+          // Resolve API config (tfvars or Lambda-env fallback)
+          const api = resolveApiConfig(stage, opts.region);
+          if (!api) process.exit(1);
+
+          // Resolve tenant
+          let tenant = opts.tenant;
+          if (!tenant) tenant = await promptTenant(api!.apiUrl, api!.authSecret);
+
+          // Optional fields
+          let name = opts.name;
+          if (name === undefined && !emailArg) name = await promptOptionalName();
+          let role = opts.role;
+          if (!role && !emailArg) role = await promptRole();
+          role = role || "member";
+
+          printHeader("user invite", stage);
+          console.log(`  Tenant: ${tenant}`);
+          console.log(`  Email:  ${email}`);
+          if (name) console.log(`  Name:   ${name}`);
+          console.log(`  Role:   ${role}`);
+          console.log("");
+
           const result = await apiFetchRaw<{
             alreadyMember?: boolean;
             error?: string;
@@ -166,13 +278,13 @@ and reads api_auth_secret from terraform.tfvars for the stage).
           }>(
             api!.apiUrl,
             api!.authSecret,
-            `/api/tenants/${encodeURIComponent(opts.tenant)}/members`,
+            `/api/tenants/${encodeURIComponent(tenant)}/invites`,
             {
               method: "POST",
               body: JSON.stringify({
-                email: trimmed,
-                name: opts.name ?? null,
-                role: opts.role,
+                email,
+                name: name ?? null,
+                role,
               }),
             },
           );
@@ -186,15 +298,20 @@ and reads api_auth_secret from terraform.tfvars for the stage).
 
           if (result.body.alreadyMember) {
             printWarning(
-              `${trimmed} is already a member of "${opts.tenant}" (role: ${result.body.role}). No email sent.`,
+              `${email} is already a member of "${tenant}" (role: ${result.body.role}). No email sent.`,
             );
             return;
           }
 
           printSuccess(
-            `Invited ${trimmed} to "${opts.tenant}" (role: ${result.body.role}). Cognito has emailed a temporary password; the user sets a new password on first sign-in.`,
+            `Invited ${email} to "${tenant}" (role: ${result.body.role}). Cognito has emailed a temporary password; the user sets a new password on first sign-in.`,
           );
         } catch (err: any) {
+          if (isCancellation(err)) {
+            console.log("");
+            console.log("  Cancelled.");
+            return;
+          }
           printError(
             `Invite failed: ${err instanceof Error ? err.message : String(err)}`,
           );

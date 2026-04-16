@@ -11,6 +11,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { resolveTerraformDir } from "./environments.js";
 import { resolveTierDir } from "./terraform.js";
+import { getApiAuthSecretFromLambda } from "./aws-discovery.js";
 import { printError } from "./ui.js";
 
 /** Read a quoted string variable from a `terraform.tfvars` file. */
@@ -100,22 +101,37 @@ export async function apiFetchRaw<T = any>(
   return { ok: res.ok, status: res.status, body };
 }
 
-/** Resolve API URL + bearer token for a stage, or print an error and return null. */
+/**
+ * Resolve API URL + bearer token for a stage. Tries:
+ *   1. terraform.tfvars (local source of truth for the operator who ran init)
+ *   2. deployed Lambda env var (fallback for consumers who installed via npm
+ *      and have AWS creds but no repo checkout)
+ *
+ * Returns null and prints a clear error when neither works.
+ */
 export function resolveApiConfig(
   stage: string,
+  regionOverride?: string,
 ): { apiUrl: string; authSecret: string } | null {
   const tfvarsPath = resolveTfvarsPath(stage);
-  const authSecret = readTfVar(tfvarsPath, "api_auth_secret");
-  if (!authSecret) {
-    printError(`Cannot read api_auth_secret from ${tfvarsPath}`);
-    return null;
-  }
+  const tfAuthSecret = readTfVar(tfvarsPath, "api_auth_secret");
+  const tfRegion = readTfVar(tfvarsPath, "region");
 
-  const region = readTfVar(tfvarsPath, "region") || "us-east-1";
+  const region = regionOverride || tfRegion || "us-east-1";
   const apiUrl = getApiEndpoint(stage, region);
   if (!apiUrl) {
     printError(
-      `Cannot discover API endpoint for stage "${stage}". Is the stack deployed?`,
+      `Cannot discover API endpoint for stage "${stage}" in ${region}. Is the stack deployed?`,
+    );
+    return null;
+  }
+
+  // Prefer tfvars (local) when available; fall back to the Lambda env read.
+  const authSecret =
+    tfAuthSecret ?? getApiAuthSecretFromLambda(stage, region);
+  if (!authSecret) {
+    printError(
+      `Cannot read api_auth_secret. Tried terraform.tfvars at ${tfvarsPath} and the \`thinkwork-${stage}-api-tenants\` Lambda env. Deploy the stack or set --profile to a role with lambda:GetFunctionConfiguration.`,
     );
     return null;
   }
