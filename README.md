@@ -36,6 +36,23 @@ If you're not on AWS, this isn't the right tool for you — and that's the point
 - **Agent Templates** for fleet-wide configuration
 - **Terraform Registry modules** at `thinkwork-ai/thinkwork/aws` — drops into your existing AWS Landing Zone with BYO-everywhere support
 
+## Admin web
+
+<p align="center">
+  <img src="./apps/www/public/images/admin/dashboard.png" alt="ThinkWork admin dashboard — agents online, open threads, recent activity, recent threads" width="860" />
+</p>
+
+The operator surface. A React SPA at `apps/admin`, authenticated through Cognito and tenant-scoped on every request. Platform operators configure agents and templates, wire up connectors and MCP servers, manage the credential vault, register webhooks, upload knowledge, inspect per-agent memory, and watch activity, cost, and guardrail health — all against the tenant running in their own AWS account. See the [admin docs](https://docs.thinkwork.ai/applications/admin/) for the per-route breakdown.
+
+## Mobile app
+
+<p align="center">
+  <img src="./apps/www/public/images/mobile/threads-list.png" alt="Threads tab in the ThinkWork mobile app" width="280" />
+  <img src="./apps/www/public/images/mobile/tasks-list.png" alt="Tasks tab in the ThinkWork mobile app" width="280" />
+</p>
+
+The end-user surface. An Expo + React Native client at `apps/mobile`, currently shipping on iOS via TestFlight. Users get a unified inbox across chat threads, scheduled automations, emails, and **external tasks** routed in from systems like LastMile — tasks render as native GenUI cards with realtime activity, round-trip edits, and narrow-policy push notifications. The mobile app owns per-user OAuth and MCP tokens; tenant configuration stays on the admin side. See the [mobile docs](https://docs.thinkwork.ai/applications/mobile/) for the full surface.
+
 ## What's not in v1
 
 Knowledge Graph + Ontology Studio, AutoResearch, the eval UI, cost tracking, the places service, and a web end-user client are all on the roadmap but not in v0.1.0. We ship things only after they're load-bearing in production. See the docs roadmap page once docs ship.
