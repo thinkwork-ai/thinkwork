@@ -238,16 +238,17 @@ export async function syncExternalTaskOnCreate(
 	const providerUserId = getProviderUserId(conn);
 
 	// Per the LastMile OpenAPI v1.0.0 spec, `POST /tasks` requires
-	// `terminalId`. We don't currently surface terminal selection on the
-	// mobile side — the create will 4xx until that story lands.
-	// Tracked: terminal-picker work-item. Keeping the path wired so the
-	// field-rename + auth changes compile together; the workflow listing
-	// (which is what the mobile bug tracks) does not need terminalId.
+	// `terminalId`. Thread creation is now agent-driven: the user types
+	// free-form intent, the agent gathers terminal + details, and the
+	// actual create fires later via the `tasks_create` tool (Phase 2).
+	// At thread-create time a missing terminalId is the expected state,
+	// not an error — stamp `local` so the UI shows a "draft" affordance
+	// instead of a red sync-failed badge.
 	if (!args.terminalId) {
-		const message =
-			"LastMile task create needs a terminalId (per OpenAPI v1.0.0). Add a terminal picker to the mobile create flow.";
-		await writeSyncState(args.threadId, { kind: "error", message });
-		return { status: "error", message };
+		const reason =
+			"Task will sync to LastMile once the agent has gathered enough context.";
+		await writeSyncState(args.threadId, { kind: "local", reason });
+		return { status: "local", reason };
 	}
 
 	try {
