@@ -1,9 +1,11 @@
 ---
+import BrainMark from "./BrainMark.astro";
+
 const docsUrl = "https://docs.thinkwork.ai";
 const githubUrl = "https://github.com/thinkwork-ai/thinkwork";
 ---
 
-<section class="relative overflow-visible pt-32 pb-24 md:pt-44 md:pb-32">
+<section class="relative overflow-visible pt-24 pb-24 md:pt-32 md:pb-32">
   <div class="pointer-events-none absolute inset-x-0 -top-24 -bottom-32 overflow-hidden">
     <div class="absolute left-1/2 top-[-6%] h-[720px] w-[1200px] -translate-x-1/2 rounded-full bg-brand/8 blur-[160px]"></div>
     <div class="absolute left-1/2 top-[30%] h-[480px] w-[880px] -translate-x-1/2 rounded-full bg-brand/10 blur-[140px]"></div>
@@ -11,6 +13,9 @@ const githubUrl = "https://github.com/thinkwork-ai/thinkwork";
 
   <div class="relative mx-auto max-w-6xl px-6">
     <div class="mx-auto max-w-5xl text-center">
+      <div class="animate-fade-in-up mb-8 flex justify-center">
+        <BrainMark class="text-brand drop-shadow-[0_0_40px_rgba(56,189,248,0.35)]" size={120} title="ThinkWork" />
+      </div>
       <p class="animate-fade-in-up inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-slate-300">
         <span class="h-1.5 w-1.5 rounded-full bg-brand"></span>
         Open infrastructure for AI work
