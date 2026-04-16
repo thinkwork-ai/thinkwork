@@ -21,6 +21,7 @@ type SearchRow = {
 	strategyId: string;
 	strategy: string;
 	createdAt: string | null;
+	threadId: string | null;
 };
 
 export const memorySearch = async (
@@ -68,6 +69,12 @@ function toSearchRow(hit: RecallResult, fallbackNamespace: string): SearchRow {
 		(meta.memoryStrategyId as string | undefined) ||
 		hit.record.strategy ||
 		"";
+	const rawMeta = (meta.raw || {}) as Record<string, any>;
+	const threadId: string | null =
+		(hit.record.threadId as string | undefined) ||
+		(rawMeta.thread_id as string | undefined) ||
+		(rawMeta.threadId as string | undefined) ||
+		null;
 	return {
 		memoryRecordId: hit.record.id,
 		content: { text: hit.record.content.text },
@@ -76,5 +83,6 @@ function toSearchRow(hit: RecallResult, fallbackNamespace: string): SearchRow {
 		strategyId,
 		strategy: hit.record.strategy || "semantic",
 		createdAt: hit.record.createdAt || null,
+		threadId,
 	};
 }
