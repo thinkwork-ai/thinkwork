@@ -6,6 +6,9 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "ThinkWork",
+      components: {
+        Hero: "./src/components/Hero.astro",
+      },
       favicon: "/favicon.png",
       logo: {
         src: "./src/assets/logo.png",
