@@ -28,8 +28,10 @@ import { MessageInputFooter, type MessageInputFooterRef, type SelectedWorkspace 
 import { QuickActionsSheet, type QuickActionsSheetRef } from "@/components/chat/QuickActionsSheet";
 import { QuickActionFormSheet, type QuickActionFormSheetRef, type QuickActionFormData } from "@/components/chat/QuickActionFormSheet";
 import { WorkspacePickerSheet, type WorkspacePickerSheetRef, type SubAgent } from "@/components/input/WorkspacePickerSheet";
+import { WorkflowPickerSheet, type WorkflowPickerSheetRef, type Workflow } from "@/components/input/WorkflowPickerSheet";
 import { useQuickActions, useCreateQuickAction, useUpdateQuickAction, useDeleteQuickAction, type QuickAction } from "@/lib/hooks/use-quick-actions";
 import { useConnections } from "@/lib/hooks/use-connections";
+import { useLastmileWorkflows } from "@/lib/hooks/use-lastmile-workflows";
 import { getThreadHeaderLabel } from "@/lib/thread-display";
 
 export default function ThreadsScreen() {
@@ -273,8 +275,18 @@ export default function ThreadsScreen() {
   const quickActionsRef = useRef<QuickActionsSheetRef>(null);
   const quickActionFormRef = useRef<QuickActionFormSheetRef>(null);
   const workspacePickerRef = useRef<WorkspacePickerSheetRef>(null);
+  const workflowPickerRef = useRef<WorkflowPickerSheetRef>(null);
   const messageInputRef = useRef<MessageInputFooterRef>(null);
   const [selectedWorkspaces, setSelectedWorkspaces] = useState<SelectedWorkspace[]>([]);
+
+  // ── Task workflow picker ──────────────────────────────────────────────
+  // The `+` button on the Tasks footer opens a workflow picker — each
+  // workflow represents a kind of task with its own team, statuses, and
+  // automation rules. The selected workflow is shown as a chip and
+  // included in the createTask call. Workflows are fetched from the
+  // LastMile REST API via ThinkWork's connections proxy.
+  const { workflows, loading: workflowsLoading, error: workflowsError, refetch: refetchWorkflows } = useLastmileWorkflows();
+  const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
 
   // ── Quick Actions (per-user, per-scope, from DB) ──────────────────────
   // Thread and Task footers each have their own canned-prompt list; we
@@ -395,10 +407,14 @@ export default function ThreadsScreen() {
     setNewTaskText("");
     Keyboard.dismiss();
 
-    // Tasks route to the configured connector, not to a sub-agent — so no
-    // workspace routing hint. The backend create path sets channel=task,
-    // status=todo, and prefix TASK-{n} automatically.
     const creatorId = currentUser?.id || user?.sub;
+    // Include the selected workflow_id in metadata so the backend's
+    // syncExternalTaskOnCreate helper can pass it to LastMile's
+    // `POST /tasks { title, workflow_id }` — the minimum info the API
+    // needs to auto-resolve team, status, and task_type.
+    const taskMetadata = selectedWorkflow
+      ? JSON.stringify({ workflowId: selectedWorkflow.id, workflowName: selectedWorkflow.name })
+      : undefined;
     try {
       const { data: createData, error: createError } = await executeCreateThread({
         input: {
@@ -411,6 +427,7 @@ export default function ThreadsScreen() {
           createdById: creatorId,
           assigneeType: "user",
           assigneeId: creatorId,
+          ...(taskMetadata ? { metadata: taskMetadata } : {}),
         },
       });
 
@@ -452,7 +469,7 @@ export default function ThreadsScreen() {
     } catch (e) {
       console.error("[Tasks] Failed to create task:", e);
     }
-  }, [newTaskText, defaultTaskAgentId, activeAgent?.id, tenantId, currentUser?.id, user?.sub, executeCreateThread, executeSendMessage, reexecuteTasks, markRead, markThreadActive]);
+  }, [newTaskText, defaultTaskAgentId, activeAgent?.id, tenantId, currentUser?.id, user?.sub, selectedWorkflow, executeCreateThread, executeSendMessage, reexecuteTasks, markRead, markThreadActive]);
 
   const handleCreateThread = useCallback(async (overrideText?: string, overrideWorkspaces?: SelectedWorkspace[]) => {
     const text = (overrideText ?? newThreadText).trim();
@@ -752,15 +769,14 @@ export default function ThreadsScreen() {
             placeholder="Create a new task..."
             colors={colors}
             isDark={isDark}
-            // `+` is the "add task" button — placeholder for a richer
-            // structured task-creation form. Fires a soft alert for now
-            // so it's discoverable without being a silent no-op.
-            onPlusPress={() => {
-              Alert.alert(
-                "Add task",
-                "Structured task creation (fields, due date, assignee) is coming soon. For now, type the task title above and tap the send arrow.",
-              );
-            }}
+            // `+` opens the workflow picker — the user picks what kind of
+            // task to create (each workflow = a task type with its own
+            // team, statuses, and automation rules in LastMile).
+            onPlusPress={() => { Keyboard.dismiss(); workflowPickerRef.current?.present(); }}
+            // Show the selected workflow as a chip (reuses the workspace
+            // chip layout — same visual, different semantic).
+            selectedWorkspaces={selectedWorkflow ? [{ id: selectedWorkflow.id, name: selectedWorkflow.name }] : []}
+            onRemoveWorkspace={() => setSelectedWorkflow(null)}
             // `⚡` opens the same sheet the Threads footer uses, but the
             // upstream hook passes `scope="task"` so the list is filtered
             // to task-scoped actions only. The `activeQuickActions` and
@@ -839,6 +855,17 @@ export default function ThreadsScreen() {
             return [...prev, { id: agent.id, name: agent.name }];
           });
         }}
+      />
+
+      {/* Workflow picker for the Tasks footer `+` button */}
+      <WorkflowPickerSheet
+        ref={workflowPickerRef}
+        workflows={workflows}
+        loading={workflowsLoading}
+        error={workflowsError}
+        selectedId={selectedWorkflow?.id ?? null}
+        onSelect={(wf) => setSelectedWorkflow(wf)}
+        onRefresh={refetchWorkflows}
       />
 
       {/* Quick Action Add/Edit Form. Saves into `qaFormScope` (captured

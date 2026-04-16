@@ -41,6 +41,9 @@ export const retryTaskSync = async (
 		throw new Error("Thread has no created_by_id — cannot resolve task connector for retry");
 	}
 
+	const rowMeta = (row.metadata ?? {}) as Record<string, unknown>;
+	const workflowId =
+		typeof rowMeta.workflowId === "string" ? rowMeta.workflowId : undefined;
 	await syncExternalTaskOnCreate({
 		threadId: row.id,
 		tenantId: row.tenant_id,
@@ -48,6 +51,7 @@ export const retryTaskSync = async (
 		title: row.title,
 		description: row.description,
 		externalRef: row.identifier ?? undefined,
+		workflowId,
 	});
 
 	// Re-read the reconciled row so the response reflects the new
