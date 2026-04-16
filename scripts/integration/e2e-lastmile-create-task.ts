@@ -97,7 +97,9 @@ type Thread = {
 	title: string;
 	syncStatus: string | null;
 	syncError: string | null;
-	metadata: string | null; // AWSJSON — stringified
+	// AWSJSON — may come back as a JSON string OR a pre-parsed object
+	// depending on the GraphQL client/serializer. Normalized in step 2.
+	metadata: string | Record<string, unknown> | null;
 	type: string;
 	channel: string;
 };
@@ -140,7 +142,13 @@ function step2_checkSynced(thread: Thread): string {
 			`Expected syncStatus='synced', got '${thread.syncStatus}' (error: ${thread.syncError ?? "none"})`,
 		);
 	}
-	const meta = thread.metadata ? (JSON.parse(thread.metadata) as Record<string, unknown>) : {};
+	// `metadata` is the AWSJSON scalar. Depending on the GraphQL client /
+	// serializer it may come back as either a stringified JSON payload
+	// (spec-typical) or a pre-parsed object. Handle both defensively.
+	const meta =
+		typeof thread.metadata === "string"
+			? (JSON.parse(thread.metadata) as Record<string, unknown>)
+			: ((thread.metadata ?? {}) as Record<string, unknown>);
 	const external = (meta.external as Record<string, unknown> | undefined) ?? undefined;
 	const externalTaskId = external?.externalTaskId;
 	if (typeof externalTaskId !== "string" || !externalTaskId) {
@@ -177,7 +185,7 @@ async function step3_verifyInLastmile(externalTaskId: string): Promise<void> {
 		assigneeId?: string | null;
 	};
 	console.log(
-		"    → task found on LastMile: id=%s title=%q workflowId=%s statusId=%s",
+		"    → task found on LastMile: id=%s title=%j workflowId=%s statusId=%s",
 		task.id,
 		task.title,
 		task.workflowId,
