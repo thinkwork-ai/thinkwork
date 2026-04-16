@@ -132,6 +132,7 @@ export default defineConfig({
                 { label: "Authentication", slug: "applications/mobile/authentication" },
                 { label: "Threads & Chat", slug: "applications/mobile/threads-and-chat" },
                 { label: "Integrations & MCP Connect", slug: "applications/mobile/integrations-and-mcp-connect" },
+                { label: "External Tasks", slug: "applications/mobile/external-tasks" },
                 { label: "Push Notifications", slug: "applications/mobile/push-notifications" },
                 { label: "Distribution", slug: "applications/mobile/distribution" },
               ],
@@ -164,6 +165,7 @@ export default defineConfig({
           items: [
             { label: "Skill Packs", slug: "guides/skill-packs" },
             { label: "Connectors", slug: "guides/connectors" },
+            { label: "External Tasks", slug: "guides/external-tasks" },
             { label: "Eval Packs", slug: "guides/eval-packs" },
           ],
         },
