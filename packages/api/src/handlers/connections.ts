@@ -31,6 +31,10 @@ import {
 	forceRefreshLastmileUserToken,
 } from "../lib/oauth-token.js";
 import {
+	mintLastmileM2MToken,
+	isLastmileM2MConfigured,
+} from "../lib/lastmile-m2m.js";
+import {
 	listWorkflows as lastmileListWorkflows,
 	isLastmileRestConfigured,
 	LastmileRestError,
@@ -350,10 +354,68 @@ async function listLastmileWorkflows(
 	if (!isLastmileRestConfigured()) {
 		return error("LastMile REST API not configured (LASTMILE_TASKS_API_URL unset)", 503);
 	}
+
+	// Prefer the M2M (client_credentials) path — it carries an `org_id`
+	// claim that LastMile maps to a companyId directly, side-stepping the
+	// per-user Clerk lookup that was the source of "Failed to validate
+	// WorkOS user" on the user-JWT path.
+	const m2mConfigured = await isLastmileM2MConfigured(tenantId);
+	if (m2mConfigured) {
+		return listWorkflowsViaM2M(tenantId);
+	}
+
+	// Legacy path: per-user WorkOS JWT from the mobile MCP OAuth flow.
+	// Kept for tenants that haven't provisioned an M2M client yet.
+	return listWorkflowsViaUserToken(tenantId, userId);
+}
+
+async function listWorkflowsViaM2M(
+	tenantId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	let authToken: string | null;
+	try {
+		authToken = await mintLastmileM2MToken(tenantId);
+	} catch (err) {
+		console.error("[connections] mintLastmileM2MToken threw:", err);
+		return json(
+			{
+				error: "lastmile_m2m_mint_failed",
+				detail: (err as Error)?.message || "unknown error",
+			},
+			502,
+		);
+	}
+	if (!authToken) {
+		// Configured but returned null — shouldn't happen after the "configured"
+		// check above unless the SSM read raced with a secret deletion.
+		return json(
+			{ error: "lastmile_m2m_unavailable", detail: "M2M credentials not configured" },
+			503,
+		);
+	}
+
+	try {
+		const workflows = await lastmileListWorkflows({
+			ctx: {
+				authToken,
+				// 401-retry path: re-mint the M2M token (force, bypassing the
+				// in-process cache) and retry once. Covers the case where the
+				// cached token was revoked in WorkOS mid-flight.
+				refreshToken: () => mintLastmileM2MToken(tenantId, { forceRefresh: true }),
+			},
+		});
+		return json(workflows);
+	} catch (err) {
+		return mapLastmileError(err, "listWorkflowsViaM2M");
+	}
+}
+
+async function listWorkflowsViaUserToken(
+	tenantId: string,
+	userId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
 	if (!userId) return error("Missing x-principal-id header");
 
-	// Find the user's active task-kind connection so we can resolve their
-	// OAuth token. Same lookup pattern syncExternalTaskOnCreate uses.
 	const [conn] = await db
 		.select({
 			id: connections.id,
@@ -390,48 +452,51 @@ async function listLastmileWorkflows(
 		const workflows = await lastmileListWorkflows({
 			ctx: {
 				authToken,
-				// If LastMile rejects the token, force-refresh via WorkOS
-				// (bypassing our expires_at bookkeeping) and retry once.
-				// Handles server-side revocation, rotation mid-flight, and
-				// clock skew without requiring the user to reconnect.
 				refreshToken: () => forceRefreshLastmileUserToken(conn.id, tenantId),
 			},
 		});
 		return json(workflows);
 	} catch (err) {
-		if (err instanceof LastmileRestError) {
-			console.error("[connections] listLastmileWorkflows LastmileRestError:", {
-				status: err.status,
-				code: err.code,
-				message: err.message,
-				requestId: err.requestId,
-				responseBody: err.responseBody,
-			});
-			if (err.status === 401) {
-				return json(
-					{
-						error: "reconnect_needed",
-						detail: err.message,
-						lastmile_code: err.code,
-					},
-					401,
-				);
-			}
+		return mapLastmileError(err, "listWorkflowsViaUserToken");
+	}
+}
+
+function mapLastmileError(
+	err: unknown,
+	tag: string,
+): APIGatewayProxyStructuredResultV2 {
+	if (err instanceof LastmileRestError) {
+		console.error(`[connections] ${tag} LastmileRestError:`, {
+			status: err.status,
+			code: err.code,
+			message: err.message,
+			requestId: err.requestId,
+			responseBody: err.responseBody,
+		});
+		if (err.status === 401) {
 			return json(
 				{
-					error: "lastmile_api_error",
+					error: "reconnect_needed",
 					detail: err.message,
-					lastmile_status: err.status,
 					lastmile_code: err.code,
-					lastmile_request_id: err.requestId,
 				},
-				502,
+				401,
 			);
 		}
-		console.error("[connections] listLastmileWorkflows failed:", err);
-		return error(
-			`Failed to fetch workflows: ${(err as Error)?.message || "unknown error"}`,
+		return json(
+			{
+				error: "lastmile_api_error",
+				detail: err.message,
+				lastmile_status: err.status,
+				lastmile_code: err.code,
+				lastmile_request_id: err.requestId,
+			},
 			502,
 		);
 	}
+	console.error(`[connections] ${tag} failed:`, err);
+	return error(
+		`Failed to fetch workflows: ${(err as Error)?.message || "unknown error"}`,
+		502,
+	);
 }

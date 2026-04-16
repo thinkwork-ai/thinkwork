@@ -2,30 +2,36 @@
 /**
  * LastMile OAuth Token Diagnostic
  *
- * End-to-end probe that validates a WorkOS OAuth token (from the mobile
- * MCP Servers screen's existing flow) actually works against LastMile's
- * REST API — the exact call the mobile workflow picker makes.
+ * End-to-end probe that validates a LastMile bearer token works against
+ * LastMile's REST API — the exact call the mobile workflow picker makes.
  *
  * Use this when:
- *   - Mobile shows "Failed to validate WorkOS user"
- *   - You need to prove a stored token is still usable
+ *   - Mobile shows "Failed to validate WorkOS user" (user-JWT path)
+ *   - You need to prove a stored user token is still usable
  *   - You need to see what WorkOS actually issued (aud, iss, exp, scope)
+ *   - You need to verify a new M2M credential pair works end-to-end
  *
- * Two input modes:
+ * Three input modes:
  *
  *   (A) Raw token (fastest):
  *       npx tsx scripts/integration/diagnose-lastmile-token.ts \
  *         --token "eyJ..."
  *
- *   (B) User + tenant (exercises the real resolver, including refresh):
+ *   (B) M2M client credentials (recommended for production agents):
+ *       npx tsx scripts/integration/diagnose-lastmile-token.ts \
+ *         --m2m-client-id "client_01..." --m2m-client-secret "sk_..."
+ *
+ *   (C) User + tenant (reads stored user-JWT from SM; exercises the
+ *       existing per-user MCP OAuth path):
  *       npx tsx scripts/integration/diagnose-lastmile-token.ts \
  *         --tenant-id "<uuid>" --user-id "<cognito-sub>" \
  *         --stage dev
- *       (requires AWS creds for SecretsManager + RDS Data API access,
- *        just like the Lambda runtime)
+ *       (requires AWS creds for SecretsManager access, just like the
+ *       Lambda runtime)
  *
  * Env vars consumed when present:
- *   LASTMILE_TASKS_API_URL  — REST base URL (default: https://api-dev.lastmile-tei.com)
+ *   LASTMILE_TASKS_API_URL  — REST base URL (default: https://dev-api.lastmile-tei.com)
+ *   WORKOS_TOKEN_ENDPOINT   — for M2M minting (default: https://api.workos.com/user_management/authenticate)
  *
  * Exits 0 on 2xx, 1 on any failure. Prints everything relevant for triage
  * (request URL, JWT claims, status, LastMile error body, request id).
@@ -34,13 +40,18 @@
 import { parseArgs } from "node:util";
 
 const API_URL =
-	process.env.LASTMILE_TASKS_API_URL || "https://api-dev.lastmile-tei.com";
+	process.env.LASTMILE_TASKS_API_URL || "https://dev-api.lastmile-tei.com";
+const WORKOS_TOKEN_ENDPOINT =
+	process.env.WORKOS_TOKEN_ENDPOINT ||
+	"https://api.workos.com/user_management/authenticate";
 
 // ── Arg parsing ──────────────────────────────────────────────────────────
 
 const { values } = parseArgs({
 	options: {
 		token: { type: "string" },
+		"m2m-client-id": { type: "string" },
+		"m2m-client-secret": { type: "string" },
 		"tenant-id": { type: "string" },
 		"user-id": { type: "string" },
 		stage: { type: "string", default: "dev" },
@@ -51,15 +62,20 @@ const { values } = parseArgs({
 });
 
 const rawToken = values.token;
+const m2mClientId = values["m2m-client-id"];
+const m2mClientSecret = values["m2m-client-secret"];
 const tenantId = values["tenant-id"];
 const userId = values["user-id"];
 const stage = values.stage ?? "dev";
 const probePath = values.path ?? "/workflows";
 const verbose = !!values.verbose;
 
-if (!rawToken && !(tenantId && userId)) {
+const m2mMode = !!(m2mClientId && m2mClientSecret);
+const userMode = !!(tenantId && userId);
+
+if (!rawToken && !m2mMode && !userMode) {
 	console.error(
-		"Usage: diagnose-lastmile-token.ts (--token <jwt> | --tenant-id <uuid> --user-id <sub>) [--stage dev] [--path /workflows]",
+		"Usage: diagnose-lastmile-token.ts (--token <jwt> | --m2m-client-id <id> --m2m-client-secret <secret> | --tenant-id <uuid> --user-id <sub>) [--stage dev] [--path /workflows]",
 	);
 	process.exit(2);
 }
@@ -135,10 +151,43 @@ async function resolveFromBackend(args: {
 
 // ── Main probe ────────────────────────────────────────────────────────────
 
+async function mintM2MToken(clientId: string, clientSecret: string): Promise<string> {
+	console.log(`[diagnose] Minting M2M token via ${WORKOS_TOKEN_ENDPOINT}`);
+	const res = await fetch(WORKOS_TOKEN_ENDPOINT, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			client_id: clientId,
+			client_secret: clientSecret,
+			grant_type: "client_credentials",
+		}),
+	});
+	const body = await res.text();
+	if (!res.ok) {
+		throw new Error(
+			`WorkOS client_credentials rejected (${res.status}): ${body}`,
+		);
+	}
+	const parsed = JSON.parse(body) as {
+		access_token?: string;
+		token_type?: string;
+		expires_in?: number;
+	};
+	if (!parsed.access_token) {
+		throw new Error(`WorkOS returned no access_token: ${body}`);
+	}
+	console.log(
+		`[diagnose] Minted M2M token (token_type=${parsed.token_type}, expires_in=${parsed.expires_in ?? "?"}s)`,
+	);
+	return parsed.access_token;
+}
+
 async function main() {
 	let token: string;
 	if (rawToken) {
 		token = rawToken;
+	} else if (m2mMode) {
+		token = await mintM2MToken(m2mClientId!, m2mClientSecret!);
 	} else {
 		token = await resolveFromBackend({ tenantId: tenantId!, userId: userId!, stage });
 	}
@@ -190,15 +239,29 @@ async function main() {
 		const items = Array.isArray(bodyJson)
 			? bodyJson
 			: ((bodyJson as { data?: unknown[] } | null)?.data ?? []);
+		const envelope =
+			!Array.isArray(bodyJson) && bodyJson && typeof bodyJson === "object"
+				? (bodyJson as {
+						page?: number;
+						pageSize?: number;
+						totalCount?: number;
+						totalPages?: number;
+					})
+				: null;
 		const len = Array.isArray(items) ? items.length : 0;
-		console.log(`\n✅ SUCCESS — ${len} workflow(s)`);
+		console.log(`\nSUCCESS - ${len} item(s)`);
+		if (envelope) {
+			console.log(
+				`Envelope: page=${envelope.page} pageSize=${envelope.pageSize} totalCount=${envelope.totalCount} totalPages=${envelope.totalPages}`,
+			);
+		}
 		if (Array.isArray(items)) {
 			console.log(items.slice(0, 5));
 		}
 		process.exit(0);
 	}
 
-	console.error(`\n❌ FAILED — LastMile rejected the request`);
+	console.error(`\nFAILED - LastMile rejected the request`);
 	console.error("Body:", bodyJson ?? bodyText);
 	// Diagnostic hints based on what we saw in LastMile's auth.ts.
 	if (

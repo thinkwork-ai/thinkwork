@@ -11,9 +11,9 @@ export interface Workflow {
   id: string;
   name: string;
   description?: string | null;
-  team_id?: string;
-  task_type_id?: string | null;
-  is_active?: boolean;
+  teamId?: string;
+  taskTypeId?: string | null;
+  isActive?: boolean;
 }
 
 export interface WorkflowPickerSheetRef {
@@ -57,7 +57,7 @@ export const WorkflowPickerSheet = forwardRef<WorkflowPickerSheetRef, WorkflowPi
     );
 
     const activeWorkflows = useMemo(
-      () => workflows.filter((w) => w.is_active !== false),
+      () => workflows.filter((w) => w.isActive !== false),
       [workflows],
     );
 

@@ -157,10 +157,13 @@ export interface SyncExternalTaskOnCreateArgs {
 	 *  field on the LastMile create request so the remote task traces
 	 *  back to our local row. */
 	externalRef?: string;
-	/** LastMile workflow_id — the minimum context the API needs to
-	 *  auto-resolve team, status, and task_type. Passed from the mobile
-	 *  workflow picker via thread metadata. */
+	/** LastMile workflow_id — retained in thread metadata for UI display
+	 *  ("this task belongs to Workflow X") but NOT sent in the create
+	 *  body: the OpenAPI v1.0.0 `/tasks` POST no longer accepts it. */
 	workflowId?: string;
+	/** LastMile terminal id — required by the create API. Missing until
+	 *  the mobile terminal-picker ships. */
+	terminalId?: string;
 }
 
 /** Idempotency key for the create call. Using the local thread id ensures
@@ -219,13 +222,26 @@ export async function syncExternalTaskOnCreate(
 
 	const providerUserId = getProviderUserId(conn);
 
+	// Per the LastMile OpenAPI v1.0.0 spec, `POST /tasks` requires
+	// `terminalId`. We don't currently surface terminal selection on the
+	// mobile side — the create will 4xx until that story lands.
+	// Tracked: terminal-picker work-item. Keeping the path wired so the
+	// field-rename + auth changes compile together; the workflow listing
+	// (which is what the mobile bug tracks) does not need terminalId.
+	if (!args.terminalId) {
+		const message =
+			"LastMile task create needs a terminalId (per OpenAPI v1.0.0). Add a terminal picker to the mobile create flow.";
+		await writeSyncState(args.threadId, { kind: "error", message });
+		return { status: "error", message };
+	}
+
 	try {
 		const lastmileTask = await restCreateTask({
 			input: {
 				title: args.title,
+				terminalId: args.terminalId,
 				description: args.description ?? undefined,
-				...(providerUserId ? { assignee_id: providerUserId } : {}),
-				...(args.workflowId ? { workflow_id: args.workflowId } : {}),
+				...(providerUserId ? { assigneeId: providerUserId } : {}),
 			},
 			idempotencyKey: idempotencyKeyForThread(args.threadId),
 			ctx: {

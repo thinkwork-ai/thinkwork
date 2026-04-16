@@ -1,5 +1,5 @@
 /**
- * LastMile Tasks — REST API client.
+ * LastMile — REST API client.
  *
  * ThinkWork talks to LastMile over two transports:
  *
@@ -14,13 +14,21 @@
  *    LLM in the loop. This is the deterministic path — when the mobile UI
  *    says "create a task," we don't want an agent synthesizing arguments.
  *
- * Every call takes a per-user OAuth bearer token — same token LastMile
- * issues via the existing `/oauth/token` flow. A missing `LASTMILE_TASKS_API_URL`
- * env var feature-flags the whole client off: callers should check
- * `isLastmileRestConfigured()` first and fall back gracefully when the
- * endpoint isn't wired yet. This lets us ship the surrounding plumbing
- * (sync_status columns, retry mutation, mobile badges) before the
- * LastMile API is available.
+ * **Authentication (per published spec at dev-playground.lastmile-tei.com):**
+ *
+ * Every call sends `Authorization: Bearer <token>`. The preferred token is
+ * a WorkOS **M2M** access_token obtained via `client_credentials` — see
+ * `lib/lastmile-m2m.ts`. M2M tokens carry an `org_id` claim that LastMile
+ * maps to a companyId via the organization's `metadata.lmi_company_id`,
+ * bypassing the per-user Clerk-lookup that was the source of the
+ * "Failed to validate WorkOS user" error on the per-user path.
+ *
+ * The legacy per-user WorkOS JWT path still works and is kept as a
+ * fallback for tenants that haven't provisioned an M2M client yet.
+ *
+ * **Wire format (per spec):** camelCase everywhere (path params, query
+ * params, request bodies, response bodies). Pagination uses
+ * `?page=1&pageSize=50` with an envelope `{data, page, pageSize, totalCount, totalPages}`.
  */
 
 const BASE_URL = process.env.LASTMILE_TASKS_API_URL || "";
@@ -32,88 +40,91 @@ export function isLastmileRestConfigured(): boolean {
 	return BASE_URL.length > 0;
 }
 
-// ── Types (mirroring the spec handed to LastMile) ──────────────────────────
+// ── Types (aligned with LastMile OpenAPI v1.0.0 — camelCase throughout) ──
 
-/** Canonical shape of a LastMile task as returned by the REST endpoints.
- *  All five methods (create/get/list/update/via the /v1/me cousin) should
- *  return this same shape so we normalize once. */
+/** Canonical shape of a LastMile task as returned by the REST endpoints. */
 export interface LastmileTask {
 	id: string;
-	task_number?: number;
+	taskNumber?: string;
 	title: string;
 	description: string | null;
 	status: string;
-	status_id?: string | null;
 	priority: string | null;
-	due_date: string | null;
-	assignee_id: string | null;
-	creator_id: string | null;
-	team_id: string | null;
-	created_at: string;
-	updated_at: string;
-	assigned_at?: string | null;
-	completed_at?: string | null;
-	is_archived?: boolean;
-	source?: {
-		system?: string;
-		external_ref?: string;
-	} | null;
+	assigneeId: string | null;
+	terminalId?: string | null;
+	dueDate: string | null;
+	createdAt: string;
+	updatedAt: string;
 }
 
 export interface LastmileMe {
 	id: string;
-	name: string;
 	email: string;
-	primary_team_id?: string | null;
-	team_ids?: string[];
+	firstName?: string | null;
+	lastName?: string | null;
+	companyId?: string | null;
 }
 
+/** Shape per LastMile OpenAPI `TaskCreate`. `terminalId` is required on
+ *  their side; `workflowId` is kept on the ThinkWork side as thread
+ *  metadata but is NOT part of the LastMile POST body.
+ *
+ *  If a caller wants "LastMile picks the status/team from a workflow",
+ *  use `POST /workflows/{id}/tasks` instead — to be added as a helper
+ *  when we need it. For now `/tasks` is the generic path. */
 export interface CreateTaskRequest {
-	/** The only truly required field. */
 	title: string;
-	/** Required for auto-resolution of team_id, status_id, task_type_id.
-	 *  Without it the caller must supply status_id explicitly. */
-	workflow_id?: string;
+	terminalId: string;
 	description?: string | null;
-	assignee_id?: string;
-	priority?: "urgent" | "high" | "medium" | "low";
-	due_date?: string;
-	team_id?: string;
-	task_type_id?: string;
-	status_id?: string;
+	status?: string;
+	priority?: "urgent" | "high" | "medium" | "low" | string;
+	assigneeId?: string;
+	dueDate?: string;
 }
 
 export interface LastmileWorkflow {
 	id: string;
+	companyId?: string;
 	name: string;
 	description?: string | null;
-	team_id: string;
-	task_type_id?: string | null;
-	is_active?: boolean;
+	teamId: string;
+	taskTypeId?: string | null;
+	workflowData?: Record<string, unknown>;
+	automationRules?: Record<string, unknown> | null;
+	isActive?: boolean;
+	createdBy?: string | null;
+	createdAt?: string;
+	updatedAt?: string;
 }
 
 export interface UpdateTaskRequest {
 	title?: string;
 	description?: string | null;
-	status_id?: string;
-	priority?: "urgent" | "high" | "medium" | "low";
-	due_date?: string | null;
-	assignee_id?: string;
-}
-
-export interface ListTasksQuery {
-	assignee_id?: string;
 	status?: string;
-	team_id?: string;
-	updated_since?: string;
-	limit?: number;
-	cursor?: string;
+	priority?: "urgent" | "high" | "medium" | "low" | string;
+	dueDate?: string | null;
+	assigneeId?: string | null;
 }
 
-export interface ListTasksResponse {
-	items: LastmileTask[];
-	next_cursor: string | null;
+/** Query params for `GET /tasks` — camelCase, page/pageSize pagination. */
+export interface ListTasksQuery {
+	page?: number;
+	pageSize?: number;
+	status?: string;
+	assigneeId?: string;
+	terminalId?: string;
 }
+
+/** Standard pagination envelope used by most list endpoints. */
+export interface PaginatedResponse<T> {
+	data: T[];
+	page: number;
+	pageSize: number;
+	totalCount: number;
+	totalPages: number;
+}
+
+export type ListTasksResponse = PaginatedResponse<LastmileTask>;
 
 // ── Errors ────────────────────────────────────────────────────────────────
 
@@ -405,9 +416,7 @@ export interface LastmileRestCtx {
 	refreshToken?: () => Promise<string | null>;
 }
 
-/** POST /v1/tasks — create a task. Blocked by LastMile Tasks API until the
- *  endpoint ships; caller should gate this on `isLastmileRestConfigured()`
- *  and fall back to a `sync_status='local'` branch when unavailable. */
+/** POST /tasks — create a task. Gated by `isLastmileRestConfigured()`. */
 export async function createTask(
 	args: { input: CreateTaskRequest; idempotencyKey?: string; ctx: LastmileRestCtx },
 ): Promise<LastmileTask> {
@@ -421,20 +430,19 @@ export async function createTask(
 	});
 }
 
-/** GET /v1/tasks/{id} — replaces the `tasks_get` MCP call used by
- *  `refresh.ts`. Returns the full task in one round-trip. */
+/** GET /tasks/{taskId} — returns the full task in one round-trip. */
 export async function getTask(
 	args: { taskId: string; ctx: LastmileRestCtx },
 ): Promise<LastmileTask> {
 	return doRequest<LastmileTask>({
 		method: "GET",
-		path: `/v1/tasks/${encodeURIComponent(args.taskId)}`,
+		path: `/tasks/${encodeURIComponent(args.taskId)}`,
 		authToken: args.ctx.authToken,
 		refreshToken: args.ctx.refreshToken,
 	});
 }
 
-/** GET /v1/tasks — replaces `tasks_list` MCP. Cursor-paginated. */
+/** GET /tasks — paginated list (`?page=&pageSize=`). */
 export async function listTasks(
 	args: { query?: ListTasksQuery; ctx: LastmileRestCtx },
 ): Promise<ListTasksResponse> {
@@ -447,48 +455,54 @@ export async function listTasks(
 	});
 }
 
-/** PATCH /v1/tasks/{id} — replaces `task_update_status`, `task_update_assignee`,
- *  and `task_update`. All field updates go through here. Returns the full
- *  task post-update so callers don't need a follow-up GET. */
+/** PATCH /tasks/{taskId} — partial update. Returns the full task post-update. */
 export async function updateTask(
 	args: { taskId: string; input: UpdateTaskRequest; ctx: LastmileRestCtx },
 ): Promise<LastmileTask> {
 	return doRequest<LastmileTask, UpdateTaskRequest>({
 		method: "PATCH",
-		path: `/v1/tasks/${encodeURIComponent(args.taskId)}`,
+		path: `/tasks/${encodeURIComponent(args.taskId)}`,
 		authToken: args.ctx.authToken,
 		body: args.input,
 		refreshToken: args.ctx.refreshToken,
 	});
 }
 
-/** GET /me — replaces the `user_whoami` MCP call used immediately
- *  after OAuth to resolve the user's LastMile id. */
+/** GET /users/me — current principal (works for both user and M2M tokens;
+ *  M2M returns the service-principal identity). */
 export async function getMe(
 	args: { ctx: LastmileRestCtx },
 ): Promise<LastmileMe> {
 	return doRequest<LastmileMe>({
 		method: "GET",
-		path: "/me",
+		path: "/users/me",
 		authToken: args.ctx.authToken,
 		refreshToken: args.ctx.refreshToken,
 	});
 }
 
-/** GET /workflows — returns the company's active workflows. Used by the
- *  mobile Tasks footer `+` button to let the user pick what kind of task
- *  to create (each workflow = a task type with its own team, statuses,
- *  and automation rules). */
+/** GET /workflows — returns the company's workflows for the mobile
+ *  task-picker. Paginated per spec; we fetch the first page (pageSize=100)
+ *  and return `data`. If a tenant ever has >100 workflows we'll add
+ *  follow-up paging; today that's not on the horizon. */
 export async function listWorkflows(
-	args: { ctx: LastmileRestCtx },
+	args: { ctx: LastmileRestCtx; query?: { teamId?: string; isActive?: boolean; pageSize?: number } },
 ): Promise<LastmileWorkflow[]> {
-	// The handler returns `{ data: [...] }` (paginated) or bare array.
-	// Normalize to always return an array.
-	const raw = await doRequest<LastmileWorkflow[] | { data: LastmileWorkflow[] }>({
+	const query: Record<string, string | number | undefined> = {
+		pageSize: args.query?.pageSize ?? 100,
+	};
+	if (args.query?.teamId) query.teamId = args.query.teamId;
+	if (typeof args.query?.isActive === "boolean") query.isActive = String(args.query.isActive);
+
+	const envelope = await doRequest<PaginatedResponse<LastmileWorkflow>>({
 		method: "GET",
 		path: "/workflows",
 		authToken: args.ctx.authToken,
+		query,
 		refreshToken: args.ctx.refreshToken,
 	});
-	return Array.isArray(raw) ? raw : (raw?.data ?? []);
+	// Spec guarantees `data: Workflow[]`. Defensively unwrap a bare array
+	// in case an older handler is still deployed on some stage.
+	if (Array.isArray(envelope)) return envelope as LastmileWorkflow[];
+	return envelope?.data ?? [];
 }
