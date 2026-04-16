@@ -9,17 +9,19 @@
  *   - Mobile shows "Failed to validate WorkOS user" (user-JWT path)
  *   - You need to prove a stored user token is still usable
  *   - You need to see what WorkOS actually issued (aud, iss, exp, scope)
- *   - You need to verify a new M2M credential pair works end-to-end
+ *   - You need to exchange a WorkOS JWT for a LastMile PAT end-to-end
  *
- * Three input modes:
+ * Modes:
  *
  *   (A) Raw token (fastest):
  *       npx tsx scripts/integration/diagnose-lastmile-token.ts \
- *         --token "eyJ..."
+ *         --token "lmi_dev_..." | "eyJ..."
  *
- *   (B) M2M client credentials (recommended for production agents):
+ *   (B) WorkOS JWT → PAT exchange (recommended):
  *       npx tsx scripts/integration/diagnose-lastmile-token.ts \
- *         --m2m-client-id "client_01..." --m2m-client-secret "sk_..."
+ *         --workos-jwt "eyJ..."
+ *       Exchanges via POST /api-tokens, then hits /workflows with the
+ *       minted PAT. Prints the PAT id (save it!) and full response.
  *
  *   (C) User + tenant (reads stored user-JWT from SM; exercises the
  *       existing per-user MCP OAuth path):
@@ -29,9 +31,8 @@
  *       (requires AWS creds for SecretsManager access, just like the
  *       Lambda runtime)
  *
- * Env vars consumed when present:
+ * Env var consumed when present:
  *   LASTMILE_TASKS_API_URL  — REST base URL (default: https://dev-api.lastmile-tei.com)
- *   WORKOS_TOKEN_ENDPOINT   — for M2M minting (default: https://api.workos.com/user_management/authenticate)
  *
  * Exits 0 on 2xx, 1 on any failure. Prints everything relevant for triage
  * (request URL, JWT claims, status, LastMile error body, request id).
@@ -41,17 +42,15 @@ import { parseArgs } from "node:util";
 
 const API_URL =
 	process.env.LASTMILE_TASKS_API_URL || "https://dev-api.lastmile-tei.com";
-const WORKOS_TOKEN_ENDPOINT =
-	process.env.WORKOS_TOKEN_ENDPOINT ||
-	"https://api.workos.com/user_management/authenticate";
 
 // ── Arg parsing ──────────────────────────────────────────────────────────
 
 const { values } = parseArgs({
 	options: {
 		token: { type: "string" },
-		"m2m-client-id": { type: "string" },
-		"m2m-client-secret": { type: "string" },
+		"workos-jwt": { type: "string" },
+		"pat-name": { type: "string", default: "diagnose-cli" },
+		"pat-expires-days": { type: "string", default: "90" },
 		"tenant-id": { type: "string" },
 		"user-id": { type: "string" },
 		stage: { type: "string", default: "dev" },
@@ -62,20 +61,21 @@ const { values } = parseArgs({
 });
 
 const rawToken = values.token;
-const m2mClientId = values["m2m-client-id"];
-const m2mClientSecret = values["m2m-client-secret"];
+const workosJwt = values["workos-jwt"];
+const patName = values["pat-name"] ?? "diagnose-cli";
+const patExpiresDays = Number(values["pat-expires-days"] ?? 90);
 const tenantId = values["tenant-id"];
 const userId = values["user-id"];
 const stage = values.stage ?? "dev";
 const probePath = values.path ?? "/workflows";
 const verbose = !!values.verbose;
 
-const m2mMode = !!(m2mClientId && m2mClientSecret);
+const workosJwtMode = !!workosJwt;
 const userMode = !!(tenantId && userId);
 
-if (!rawToken && !m2mMode && !userMode) {
+if (!rawToken && !workosJwtMode && !userMode) {
 	console.error(
-		"Usage: diagnose-lastmile-token.ts (--token <jwt> | --m2m-client-id <id> --m2m-client-secret <secret> | --tenant-id <uuid> --user-id <sub>) [--stage dev] [--path /workflows]",
+		"Usage: diagnose-lastmile-token.ts (--token <pat-or-jwt> | --workos-jwt <jwt> [--pat-name <label>] [--pat-expires-days <n>] | --tenant-id <uuid> --user-id <sub>) [--stage dev] [--path /workflows]",
 	);
 	process.exit(2);
 }
@@ -151,43 +151,52 @@ async function resolveFromBackend(args: {
 
 // ── Main probe ────────────────────────────────────────────────────────────
 
-async function mintM2MToken(clientId: string, clientSecret: string): Promise<string> {
-	console.log(`[diagnose] Minting M2M token via ${WORKOS_TOKEN_ENDPOINT}`);
-	const res = await fetch(WORKOS_TOKEN_ENDPOINT, {
+async function exchangeWorkosJwtForPat(jwt: string): Promise<string> {
+	const url = `${API_URL.replace(/\/$/, "")}/api-tokens`;
+	console.log(`[diagnose] Exchanging WorkOS JWT for PAT via ${url}`);
+	const res = await fetch(url, {
 		method: "POST",
-		headers: { "Content-Type": "application/json" },
+		headers: {
+			Authorization: `Bearer ${jwt}`,
+			"Content-Type": "application/json",
+			Accept: "application/json",
+		},
 		body: JSON.stringify({
-			client_id: clientId,
-			client_secret: clientSecret,
-			grant_type: "client_credentials",
+			name: patName,
+			expiresInDays: patExpiresDays,
 		}),
 	});
-	const body = await res.text();
+	const bodyText = await res.text();
 	if (!res.ok) {
 		throw new Error(
-			`WorkOS client_credentials rejected (${res.status}): ${body}`,
+			`/api-tokens rejected (${res.status}): ${bodyText}`,
 		);
 	}
-	const parsed = JSON.parse(body) as {
-		access_token?: string;
-		token_type?: string;
-		expires_in?: number;
+	const parsed = JSON.parse(bodyText) as {
+		id: string;
+		name: string;
+		token: string;
+		tokenPrefix?: string;
+		expiresAt?: string | null;
 	};
-	if (!parsed.access_token) {
-		throw new Error(`WorkOS returned no access_token: ${body}`);
+	if (!parsed.token) {
+		throw new Error(`/api-tokens returned no token: ${bodyText}`);
 	}
 	console.log(
-		`[diagnose] Minted M2M token (token_type=${parsed.token_type}, expires_in=${parsed.expires_in ?? "?"}s)`,
+		`[diagnose] Minted PAT id=${parsed.id} name=${parsed.name} prefix=${parsed.tokenPrefix ?? parsed.token.slice(0, 14) + "…"} expiresAt=${parsed.expiresAt ?? "never"}`,
 	);
-	return parsed.access_token;
+	console.log(
+		`[diagnose] SAVE THIS PAT (plaintext only shown once): ${parsed.token}`,
+	);
+	return parsed.token;
 }
 
 async function main() {
 	let token: string;
 	if (rawToken) {
 		token = rawToken;
-	} else if (m2mMode) {
-		token = await mintM2MToken(m2mClientId!, m2mClientSecret!);
+	} else if (workosJwtMode) {
+		token = await exchangeWorkosJwtForPat(workosJwt!);
 	} else {
 		token = await resolveFromBackend({ tenantId: tenantId!, userId: userId!, stage });
 	}

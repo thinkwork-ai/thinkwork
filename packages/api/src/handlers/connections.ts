@@ -31,9 +31,9 @@ import {
 	forceRefreshLastmileUserToken,
 } from "../lib/oauth-token.js";
 import {
-	mintLastmileM2MToken,
-	isLastmileM2MConfigured,
-} from "../lib/lastmile-m2m.js";
+	getOrMintLastmilePat,
+	forceRefreshLastmilePat,
+} from "../lib/lastmile-pat.js";
 import {
 	listWorkflows as lastmileListWorkflows,
 	isLastmileRestConfigured,
@@ -354,68 +354,11 @@ async function listLastmileWorkflows(
 	if (!isLastmileRestConfigured()) {
 		return error("LastMile REST API not configured (LASTMILE_TASKS_API_URL unset)", 503);
 	}
-
-	// Prefer the M2M (client_credentials) path — it carries an `org_id`
-	// claim that LastMile maps to a companyId directly, side-stepping the
-	// per-user Clerk lookup that was the source of "Failed to validate
-	// WorkOS user" on the user-JWT path.
-	const m2mConfigured = await isLastmileM2MConfigured(tenantId);
-	if (m2mConfigured) {
-		return listWorkflowsViaM2M(tenantId);
-	}
-
-	// Legacy path: per-user WorkOS JWT from the mobile MCP OAuth flow.
-	// Kept for tenants that haven't provisioned an M2M client yet.
-	return listWorkflowsViaUserToken(tenantId, userId);
-}
-
-async function listWorkflowsViaM2M(
-	tenantId: string,
-): Promise<APIGatewayProxyStructuredResultV2> {
-	let authToken: string | null;
-	try {
-		authToken = await mintLastmileM2MToken(tenantId);
-	} catch (err) {
-		console.error("[connections] mintLastmileM2MToken threw:", err);
-		return json(
-			{
-				error: "lastmile_m2m_mint_failed",
-				detail: (err as Error)?.message || "unknown error",
-			},
-			502,
-		);
-	}
-	if (!authToken) {
-		// Configured but returned null — shouldn't happen after the "configured"
-		// check above unless the SSM read raced with a secret deletion.
-		return json(
-			{ error: "lastmile_m2m_unavailable", detail: "M2M credentials not configured" },
-			503,
-		);
-	}
-
-	try {
-		const workflows = await lastmileListWorkflows({
-			ctx: {
-				authToken,
-				// 401-retry path: re-mint the M2M token (force, bypassing the
-				// in-process cache) and retry once. Covers the case where the
-				// cached token was revoked in WorkOS mid-flight.
-				refreshToken: () => mintLastmileM2MToken(tenantId, { forceRefresh: true }),
-			},
-		});
-		return json(workflows);
-	} catch (err) {
-		return mapLastmileError(err, "listWorkflowsViaM2M");
-	}
-}
-
-async function listWorkflowsViaUserToken(
-	tenantId: string,
-	userId: string,
-): Promise<APIGatewayProxyStructuredResultV2> {
 	if (!userId) return error("Missing x-principal-id header");
 
+	// Find the user's active task-kind connection. We need it twice: to
+	// look up the user's WorkOS JWT (for PAT exchange) and to pass back
+	// into forceRefresh if the PAT we cached gets invalidated server-side.
 	const [conn] = await db
 		.select({
 			id: connections.id,
@@ -437,12 +380,21 @@ async function listWorkflowsViaUserToken(
 		return error("No active task connector for this user", 404);
 	}
 
-	const authToken = await resolveOAuthToken(conn.id, tenantId, conn.provider_id);
-	if (!authToken) {
+	// LastMile recommends PATs over the raw WorkOS JWT path because PATs
+	// don't hit the Clerk user lookup (the original cause of "Failed to
+	// validate WorkOS user"). Exchange the user's WorkOS JWT for a PAT
+	// once, cache in SSM, and use it for every subsequent call.
+	const patToken = await getOrMintLastmilePat({
+		userId,
+		getFreshWorkosJwt: () =>
+			resolveOAuthToken(conn.id, tenantId, conn.provider_id),
+	});
+	if (!patToken) {
 		return json(
 			{
 				error: "reconnect_needed",
-				detail: "Task connector has no OAuth token — reconnect in Settings → MCP Servers",
+				detail:
+					"Unable to obtain a LastMile API token — your WorkOS session may have expired. Reconnect in Settings → MCP Servers.",
 			},
 			401,
 		);
@@ -451,13 +403,23 @@ async function listWorkflowsViaUserToken(
 	try {
 		const workflows = await lastmileListWorkflows({
 			ctx: {
-				authToken,
-				refreshToken: () => forceRefreshLastmileUserToken(conn.id, tenantId),
+				authToken: patToken,
+				// If LastMile rejects the PAT (revoked, expired early), mint
+				// a fresh one by re-exchanging the user's WorkOS JWT.
+				refreshToken: () =>
+					forceRefreshLastmilePat({
+						userId,
+						getFreshWorkosJwt: () =>
+							// On the retry, prefer a forcibly refreshed WorkOS JWT
+							// too — covers the case where BOTH tokens expired while
+							// the adapter was dormant.
+							forceRefreshLastmileUserToken(conn.id, tenantId),
+					}),
 			},
 		});
 		return json(workflows);
 	} catch (err) {
-		return mapLastmileError(err, "listWorkflowsViaUserToken");
+		return mapLastmileError(err, "listLastmileWorkflows");
 	}
 }
 

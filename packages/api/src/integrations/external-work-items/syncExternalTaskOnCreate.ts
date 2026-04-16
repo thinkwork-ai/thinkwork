@@ -33,6 +33,10 @@ import {
 	forceRefreshLastmileUserToken,
 } from "../../lib/oauth-token.js";
 import {
+	getOrMintLastmilePat,
+	forceRefreshLastmilePat,
+} from "../../lib/lastmile-pat.js";
+import {
 	createTask as restCreateTask,
 	isLastmileRestConfigured,
 	LastmileRestError,
@@ -213,9 +217,16 @@ export async function syncExternalTaskOnCreate(
 		return { status: "local", reason };
 	}
 
-	const authToken = await resolveOAuthToken(conn.id, args.tenantId, conn.provider_id);
+	// Prefer the LastMile PAT path (cached, long-lived, bypasses Clerk
+	// lookup) over raw WorkOS JWT. Mint lazily from the user's WorkOS
+	// token; cached in SSM per-user for reuse.
+	const authToken = await getOrMintLastmilePat({
+		userId: args.userId,
+		getFreshWorkosJwt: () =>
+			resolveOAuthToken(conn.id, args.tenantId, conn.provider_id),
+	});
 	if (!authToken) {
-		const message = `Task connector ${conn.provider_name} has no OAuth token — reconnect in Connectors.`;
+		const message = `Task connector ${conn.provider_name} has no usable LastMile token — reconnect in Connectors.`;
 		await writeSyncState(args.threadId, { kind: "error", message });
 		return { status: "error", message };
 	}
@@ -247,7 +258,11 @@ export async function syncExternalTaskOnCreate(
 			ctx: {
 				authToken,
 				refreshToken: () =>
-					forceRefreshLastmileUserToken(conn.id, args.tenantId),
+					forceRefreshLastmilePat({
+						userId: args.userId,
+						getFreshWorkosJwt: () =>
+							forceRefreshLastmileUserToken(conn.id, args.tenantId),
+					}),
 			},
 		});
 
