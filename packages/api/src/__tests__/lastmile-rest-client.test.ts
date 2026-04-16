@@ -26,6 +26,7 @@ vi.hoisted(() => {
 });
 
 import {
+	listTerminals,
 	listWorkflows,
 	LastmileRestError,
 } from "../integrations/external-work-items/providers/lastmile/restClient.js";
@@ -303,5 +304,59 @@ describe("listWorkflows — misc error paths", () => {
 		await expect(
 			listWorkflows({ ctx: { authToken: "" } }),
 		).rejects.toMatchObject({ code: "missing_token" });
+	});
+});
+
+describe("listTerminals", () => {
+	// Envelope shape was verified empirically against
+	// `GET https://dev-api.lastmile-tei.com/terminals` on 2026-04-16:
+	// `{ data: Terminal[], total, page, pageSize, hasMore }` — a FLAT
+	// `page`/`pageSize` (not the `totalCount`/`totalPages` shape the
+	// PaginatedResponse<T> type documents). We only read `.data` so the
+	// mismatch is benign.
+	it("unwraps the real /terminals envelope into a bare array", async () => {
+		const fetchSpy = vi.fn().mockResolvedValueOnce(
+			jsonResponse({
+				data: [
+					{
+						id: "term_s0qvm3iyq0jgbd4e6hgx51y9",
+						name: "CALUMET SAN ANTONIO",
+						externalId: "TMW:CALSAN",
+						location: { city: "San Antonio", state: "TX" },
+					},
+				],
+				total: 1,
+				page: 1,
+				pageSize: 100,
+				hasMore: false,
+			}),
+		);
+		globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+		const result = await listTerminals({ ctx: { authToken: OLD_TOKEN } });
+
+		expect(result).toHaveLength(1);
+		expect(result[0]).toMatchObject({
+			id: "term_s0qvm3iyq0jgbd4e6hgx51y9",
+			name: "CALUMET SAN ANTONIO",
+		});
+
+		const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+		expect(url).toContain("/terminals");
+		expect(url).toContain("pageSize=100");
+		expect((init.headers as Record<string, string>).Authorization).toBe(
+			`Bearer ${OLD_TOKEN}`,
+		);
+	});
+
+	it("handles a bare-array response defensively", async () => {
+		globalThis.fetch = vi
+			.fn()
+			.mockResolvedValueOnce(
+				jsonResponse([{ id: "term_abc", name: "Houston" }]),
+			) as unknown as typeof fetch;
+
+		const result = await listTerminals({ ctx: { authToken: OLD_TOKEN } });
+		expect(result).toEqual([{ id: "term_abc", name: "Houston" }]);
 	});
 });
