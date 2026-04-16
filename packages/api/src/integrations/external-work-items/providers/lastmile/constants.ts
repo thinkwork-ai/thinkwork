@@ -13,11 +13,13 @@ export const LASTMILE_MCP_SERVER = "tasks";
 
 /** MCP tool names exposed by the LastMile Tasks server.
  *
- * Ground-truth names come from LastMile's `tools/list` JSON-RPC response
- * (re-probed 2026-04-15 for PR F). Reads are pluralized (`tasks_get`,
- * `tasks_list`); writes are singular (`task_update`, `task_update_status`,
- * `task_update_assignee`). **Every write tool requires `task_id`** as its
- * argument key, not `id` — see `executeAction.ts` for the full list.
+ * Reads are pluralized (`tasks_get`, `tasks_list`); writes are singular
+ * (`task_update`, `task_update_status`, `task_update_assignee`). Tool
+ * NAMES are snake_case identifiers — those are the literal strings the
+ * server dispatches on. Tool INPUT SCHEMAS are camelCase after LastMile's
+ * 2026-04 API rewrite: every write tool requires `taskId` (NOT `task_id`
+ * and NOT `id`) as its argument key. See `executeAction.ts` for the full
+ * argument shape per tool.
  *
  * There is NO comment tool on the server. The Comment action is
  * unsupported for now; `executeLastmileAction` throws a clear error when

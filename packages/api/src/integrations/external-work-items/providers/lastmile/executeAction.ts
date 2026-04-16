@@ -34,38 +34,38 @@ export async function executeLastmileAction(args: {
 
 	switch (actionType) {
 		case "external_task.update_status": {
-			// `task_update_status` takes (task_id, status_id). Callers who
+			// `task_update_status` takes (taskId, statusId). Callers who
 			// supply a raw value string (from the mobile form's select) are
 			// responsible for mapping it to a LastMile opaque status id —
 			// the value/id mapping is a product follow-up (see PR G scope).
-			const statusId = params.status_id ?? params.value ?? params.status;
+			const statusId = params.statusId ?? params.value ?? params.status;
 			if (!statusId) {
 				throw new Error(
-					"[lastmile] update_status requires params.status_id (opaque LastMile status id, e.g. 'status_hfcqtycmuaix6pjfnu3mb3ot')",
+					"[lastmile] update_status requires params.statusId (opaque LastMile status id, e.g. 'status_hfcqtycmuaix6pjfnu3mb3ot')",
 				);
 			}
 			await callMcpTool({
 				server: LASTMILE_MCP_SERVER,
 				tool: LASTMILE_TOOLS.updateStatus,
-				args: { task_id: externalTaskId, status_id: statusId },
+				args: { taskId: externalTaskId, statusId },
 				authToken: ctx.authToken,
 			});
 			break;
 		}
 		case "external_task.assign": {
-			// `task_update_assignee` takes (task_id, assignee_id) — the
-			// assignee_id is a LastMile user id like `user_wv4f3er5wsd...`.
+			// `task_update_assignee` takes (taskId, assigneeId) — the
+			// assigneeId is a LastMile user id like `user_wv4f3er5wsd...`.
 			const assigneeId =
-				params.assignee_id ?? params.userId ?? params.assignee ?? params.value;
+				params.assigneeId ?? params.userId ?? params.assignee ?? params.value;
 			if (!assigneeId) {
 				throw new Error(
-					"[lastmile] assign requires params.assignee_id (LastMile user id)",
+					"[lastmile] assign requires params.assigneeId (LastMile user id)",
 				);
 			}
 			await callMcpTool({
 				server: LASTMILE_MCP_SERVER,
 				tool: LASTMILE_TOOLS.assign,
-				args: { task_id: externalTaskId, assignee_id: assigneeId },
+				args: { taskId: externalTaskId, assigneeId },
 				authToken: ctx.authToken,
 			});
 			break;
@@ -86,7 +86,7 @@ export async function executeLastmileAction(args: {
 			await callMcpTool({
 				server: LASTMILE_MCP_SERVER,
 				tool: LASTMILE_TOOLS.update,
-				args: { task_id: externalTaskId, ...fields },
+				args: { taskId: externalTaskId, ...fields },
 				authToken: ctx.authToken,
 			});
 			break;

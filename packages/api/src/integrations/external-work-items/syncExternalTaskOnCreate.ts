@@ -150,7 +150,7 @@ export interface SyncExternalTaskOnCreateArgs {
 	userId: string;
 	title: string;
 	description?: string | null;
-	/** Local identifier like "TASK-82" used in the `source.external_ref`
+	/** Local identifier like "TASK-82" used in the `source.externalRef`
 	 *  field on the LastMile create request so the remote task traces
 	 *  back to our local row. */
 	externalRef?: string;
@@ -217,12 +217,12 @@ export async function syncExternalTaskOnCreate(
 			input: {
 				title: args.title,
 				description: args.description ?? undefined,
-				...(providerUserId ? { assignee_id: providerUserId } : {}),
+				...(providerUserId ? { assigneeId: providerUserId } : {}),
 				...(args.externalRef
 					? {
 							source: {
 								system: "thinkwork",
-								external_ref: args.externalRef,
+								externalRef: args.externalRef,
 							},
 						}
 					: {}),

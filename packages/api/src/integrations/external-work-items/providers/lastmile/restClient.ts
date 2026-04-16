@@ -35,28 +35,27 @@ export function isLastmileRestConfigured(): boolean {
 // ── Types (mirroring the spec handed to LastMile) ──────────────────────────
 
 /** Canonical shape of a LastMile task as returned by the REST endpoints.
- *  All five methods (create/get/list/update/via the /v1/me cousin) should
- *  return this same shape so we normalize once. */
+ *  LastMile's Tasks API is camelCase end-to-end after the 2026-04 rewrite. */
 export interface LastmileTask {
 	id: string;
-	task_number?: number;
+	taskNumber?: number;
 	title: string;
 	description: string | null;
 	status: string;
-	status_id?: string | null;
+	statusId?: string | null;
 	priority: string | null;
-	due_date: string | null;
-	assignee_id: string | null;
-	creator_id: string | null;
-	team_id: string | null;
-	created_at: string;
-	updated_at: string;
-	assigned_at?: string | null;
-	completed_at?: string | null;
-	is_archived?: boolean;
+	dueDate: string | null;
+	assigneeId: string | null;
+	creatorId: string | null;
+	teamId: string | null;
+	createdAt: string;
+	updatedAt: string;
+	assignedAt?: string | null;
+	completedAt?: string | null;
+	isArchived?: boolean;
 	source?: {
 		system?: string;
-		external_ref?: string;
+		externalRef?: string;
 	} | null;
 }
 
@@ -64,47 +63,47 @@ export interface LastmileMe {
 	id: string;
 	name: string;
 	email: string;
-	primary_team_id?: string | null;
-	team_ids?: string[];
+	primaryTeamId?: string | null;
+	teamIds?: string[];
 }
 
 export interface CreateTaskRequest {
 	title: string;
 	description?: string | null;
-	assignee_id?: string;
+	assigneeId?: string;
 	priority?: "urgent" | "high" | "medium" | "low";
-	due_date?: string;
-	team_id?: string;
+	dueDate?: string;
+	teamId?: string;
 	/** Attribution for cross-system correlation — LastMile stores this
 	 *  verbatim and echoes it back on every task response. We use it to
 	 *  correlate LastMile tasks back to our local `TASK-{n}` identifier. */
 	source?: {
 		system: string;
-		external_ref: string;
+		externalRef: string;
 	};
 }
 
 export interface UpdateTaskRequest {
 	title?: string;
 	description?: string | null;
-	status_id?: string;
+	statusId?: string;
 	priority?: "urgent" | "high" | "medium" | "low";
-	due_date?: string | null;
-	assignee_id?: string;
+	dueDate?: string | null;
+	assigneeId?: string;
 }
 
 export interface ListTasksQuery {
-	assignee_id?: string;
+	assigneeId?: string;
 	status?: string;
-	team_id?: string;
-	updated_since?: string;
+	teamId?: string;
+	updatedSince?: string;
 	limit?: number;
 	cursor?: string;
 }
 
 export interface ListTasksResponse {
 	items: LastmileTask[];
-	next_cursor: string | null;
+	nextCursor: string | null;
 }
 
 // ── Errors ────────────────────────────────────────────────────────────────

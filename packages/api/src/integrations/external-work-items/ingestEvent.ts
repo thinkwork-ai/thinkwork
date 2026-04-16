@@ -32,10 +32,9 @@ const db = getDb();
 
 /**
  * Pull the raw task object out of a NormalizedEvent's `raw` field for use
- * with `adapter.normalizeItem`. Handles both the real LastMile shape
- * (`raw.task`) and legacy fixture shapes (`raw.data.task`). Returns null
- * when nothing task-shaped is available — the caller falls back to the
- * placeholder title.
+ * with `adapter.normalizeItem`. LastMile sends `raw.task` (camelCase).
+ * Returns null when nothing task-shaped is available — the caller falls
+ * back to the placeholder title.
  */
 function extractRawTask(
 	raw: Record<string, unknown> | undefined,
@@ -44,13 +43,6 @@ function extractRawTask(
 	const direct = raw.task;
 	if (direct && typeof direct === "object" && !Array.isArray(direct)) {
 		return direct as Record<string, unknown>;
-	}
-	const data = raw.data;
-	if (data && typeof data === "object" && !Array.isArray(data)) {
-		const nested = (data as Record<string, unknown>).task;
-		if (nested && typeof nested === "object" && !Array.isArray(nested)) {
-			return nested as Record<string, unknown>;
-		}
 	}
 	return null;
 }

@@ -2,11 +2,15 @@
  * Unit tests for the LastMile executeAction path — focused on the
  * field names that MUST match the real MCP tool schemas.
  *
- * Every write tool on the LastMile Tasks MCP server requires `task_id`
+ * Every write tool on the LastMile Tasks MCP server requires `taskId`
  * (NOT `id`) as its argument key. `task_update_assignee` takes
- * `assignee_id` (NOT `userId`). There is no comment tool at all, so
- * `external_task.comment` must throw a clear error instead of silently
- * calling a non-existent `task_add_comment`.
+ * `assigneeId` (NOT `userId`). Tool input schemas are camelCase
+ * end-to-end after LastMile's 2026-04 API rewrite (tool NAMES remain
+ * snake_case — those are identifiers, not fields).
+ *
+ * There is no comment tool at all, so `external_task.comment` must
+ * throw a clear error instead of silently calling a non-existent
+ * `task_add_comment`.
  *
  * These tests mock `callMcpTool` (not fetch) so they verify the shape
  * our code HANDS to the client, not what the client does with it.
@@ -63,7 +67,7 @@ beforeEach(() => {
 });
 
 describe("executeLastmileAction — field names match MCP tool schemas", () => {
-	it("update_status passes { task_id, status_id }", async () => {
+	it("update_status passes { taskId, statusId }", async () => {
 		await executeLastmileAction({
 			actionType: "external_task.update_status",
 			externalTaskId: "task_1",
@@ -74,27 +78,27 @@ describe("executeLastmileAction — field names match MCP tool schemas", () => {
 		expect(mockCallMcpTool).toHaveBeenCalledWith(
 			expect.objectContaining({
 				tool: "task_update_status",
-				args: { task_id: "task_1", status_id: "status_new_id" },
+				args: { taskId: "task_1", statusId: "status_new_id" },
 			}),
 		);
 	});
 
-	it("update_status accepts explicit params.status_id as the source of truth", async () => {
+	it("update_status accepts explicit params.statusId as the source of truth", async () => {
 		await executeLastmileAction({
 			actionType: "external_task.update_status",
 			externalTaskId: "task_1",
-			params: { status_id: "status_explicit", value: "ignored" },
+			params: { statusId: "status_explicit", value: "ignored" },
 			ctx: BASE_CTX,
 		});
 
 		expect(mockCallMcpTool).toHaveBeenCalledWith(
 			expect.objectContaining({
-				args: { task_id: "task_1", status_id: "status_explicit" },
+				args: { taskId: "task_1", statusId: "status_explicit" },
 			}),
 		);
 	});
 
-	it("assign uses tool name task_update_assignee and passes { task_id, assignee_id }", async () => {
+	it("assign uses tool name task_update_assignee and passes { taskId, assigneeId }", async () => {
 		await executeLastmileAction({
 			actionType: "external_task.assign",
 			externalTaskId: "task_2",
@@ -105,27 +109,27 @@ describe("executeLastmileAction — field names match MCP tool schemas", () => {
 		expect(mockCallMcpTool).toHaveBeenCalledWith(
 			expect.objectContaining({
 				tool: "task_update_assignee",
-				args: { task_id: "task_2", assignee_id: "user_lastmile_7" },
+				args: { taskId: "task_2", assigneeId: "user_lastmile_7" },
 			}),
 		);
 	});
 
-	it("assign accepts explicit params.assignee_id", async () => {
+	it("assign accepts explicit params.assigneeId", async () => {
 		await executeLastmileAction({
 			actionType: "external_task.assign",
 			externalTaskId: "task_2",
-			params: { assignee_id: "user_lastmile_9" },
+			params: { assigneeId: "user_lastmile_9" },
 			ctx: BASE_CTX,
 		});
 
 		expect(mockCallMcpTool).toHaveBeenCalledWith(
 			expect.objectContaining({
-				args: { task_id: "task_2", assignee_id: "user_lastmile_9" },
+				args: { taskId: "task_2", assigneeId: "user_lastmile_9" },
 			}),
 		);
 	});
 
-	it("edit_fields uses task_update with task_id + the remaining form fields", async () => {
+	it("edit_fields uses task_update with taskId + the remaining form fields", async () => {
 		await executeLastmileAction({
 			actionType: "external_task.edit_fields",
 			externalTaskId: "task_3",
@@ -137,7 +141,7 @@ describe("executeLastmileAction — field names match MCP tool schemas", () => {
 			expect.objectContaining({
 				tool: "task_update",
 				args: {
-					task_id: "task_3",
+					taskId: "task_3",
 					title: "New title",
 					description: "New desc",
 				},

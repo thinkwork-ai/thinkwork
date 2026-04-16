@@ -3,10 +3,9 @@
  * envelope (item + blocks + form). Used by both the Phase 5 refresh branch
  * and the Phase 2 executeAction path after a mutation.
  *
- * The server's tool is `tasks_get` (pluralized) and it takes a `task_id`
- * argument — both confirmed against `tools/list` on mcp-dev.lastmile-tei.com.
- * Earlier naming (`task_get` + `id`) was inferred, not probed, and caused the
- * "MCP error" banner on the mobile ExternalTaskCard refresh path.
+ * The server's tool is `tasks_get` (pluralized, tool names stay snake_case)
+ * and it takes a `taskId` argument (tool input schemas are camelCase after
+ * LastMile's 2026-04 API rewrite).
  */
 
 import type { AdapterCallContext, ExternalTaskEnvelope } from "../../types.js";
@@ -25,7 +24,7 @@ export async function refreshLastmileTask(args: {
 	const raw = await callMcpTool({
 		server: LASTMILE_MCP_SERVER,
 		tool: LASTMILE_TOOLS.get,
-		args: { task_id: externalTaskId },
+		args: { taskId: externalTaskId },
 		authToken: ctx.authToken,
 	});
 
@@ -50,7 +49,7 @@ export function envelopeFromRaw(
 		_source: {
 			provider: "lastmile",
 			tool: LASTMILE_TOOLS.get,
-			params: { task_id: externalTaskId },
+			params: { taskId: externalTaskId },
 		},
 		item,
 		blocks,

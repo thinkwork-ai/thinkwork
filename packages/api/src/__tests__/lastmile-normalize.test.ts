@@ -11,7 +11,7 @@ import { lastmileAdapter } from "../integrations/external-work-items/providers/l
 import { envelopeFromRaw } from "../integrations/external-work-items/providers/lastmile/refresh.js";
 
 describe("lastmileAdapter.normalizeItem", () => {
-	it("maps snake_case fixture into NormalizedTask core", () => {
+	it("maps camelCase fixture into NormalizedTask core", () => {
 		const item = lastmileAdapter.normalizeItem(fixture as Record<string, unknown>);
 
 		expect(item.core.id).toBe("task_abc123");
@@ -100,7 +100,7 @@ describe("lastmileAdapter.normalizeItem", () => {
 		});
 	});
 
-	// ── PR G: injected options + first_name/last_name + user name ─────────
+	// ── PR G: injected options + firstName/lastName + user name ─────────
 
 	it("injects the unwrapped status option into field.options (PR G)", () => {
 		const raw = {
@@ -150,13 +150,13 @@ describe("lastmileAdapter.normalizeItem", () => {
 		expect(doneEntries.length).toBe(1);
 	});
 
-	it("resolves assignee name from first_name + last_name (LastMile tasks_get shape)", () => {
+	it("resolves assignee name from firstName + lastName (LastMile tasks_get shape)", () => {
 		const raw = {
 			...(fixture as Record<string, unknown>),
 			assignee: {
 				id: "user_wv4f3er5wsdnev73kkavtixu",
-				first_name: "Eric",
-				last_name: "Odom",
+				firstName: "Eric",
+				lastName: "Odom",
 				email: "eric@homecareintel.com",
 			},
 		};
@@ -165,12 +165,12 @@ describe("lastmileAdapter.normalizeItem", () => {
 		expect(item.core.assignee?.email).toBe("eric@homecareintel.com");
 	});
 
-	it("falls back to first_name only when last_name is missing", () => {
+	it("falls back to firstName only when lastName is missing", () => {
 		const raw = {
 			...(fixture as Record<string, unknown>),
 			assignee: {
 				id: "user_x",
-				first_name: "Madonna",
+				firstName: "Madonna",
 				email: "madonna@example.com",
 			},
 		};
@@ -236,7 +236,7 @@ describe("envelopeFromRaw", () => {
 		expect(env._type).toBe("external_task");
 		expect(env._source?.provider).toBe("lastmile");
 		expect(env._source?.tool).toBe("tasks_get");
-		expect(env._source?.params).toEqual({ task_id: "task_abc123" });
+		expect(env._source?.params).toEqual({ taskId: "task_abc123" });
 		expect(env.item.forms?.edit?.id).toBe("form_edit");
 		expect(env.blocks.length).toBeGreaterThan(0);
 	});

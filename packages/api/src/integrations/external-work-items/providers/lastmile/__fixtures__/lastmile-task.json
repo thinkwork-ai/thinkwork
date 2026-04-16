@@ -9,8 +9,8 @@
 		"name": "Alice Doe",
 		"email": "alice@example.com"
 	},
-	"due_at": "2026-04-20T12:00:00Z",
-	"updated_at": "2026-04-13T09:15:00Z",
+	"dueAt": "2026-04-20T12:00:00Z",
+	"updatedAt": "2026-04-13T09:15:00Z",
 	"url": "https://lastmile-tei.com/tasks/task_abc123",
 	"labels": ["urgent", "route-1"]
 }

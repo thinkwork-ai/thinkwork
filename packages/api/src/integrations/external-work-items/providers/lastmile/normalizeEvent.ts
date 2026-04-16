@@ -6,13 +6,17 @@
  *   - eventId       — unique delivery id (dedup + cross-reference)
  *   - occurredAt    — ISO timestamp
  *   - resource      — "task"
- *   - action        — "created" | "updated" | "assigned" | "status_changed" | ...
+ *   - action        — "created" | "updated" | "assigned" | "statusChanged" | ...
  *   - entityId      — redundant copy of the task id
- *   - task          — { id, title, assignee_id, status_id, ... }
+ *   - task          — { id, title, assigneeId, statusId, ... } (camelCase)
  *
  * For now we only normalize the FIRST element and log a warning if more
  * than one event arrives in a single delivery — batching support is a
  * follow-up. The raw body is still echoed back for debug / replay.
+ *
+ * All field reads here are camelCase to match LastMile's post-rewrite
+ * Tasks API + MCP. No snake_case fallbacks — LastMile is camelCase
+ * end-to-end.
  */
 
 import type { NormalizedEvent } from "../../types.js";
@@ -31,10 +35,9 @@ const KIND_ALIAS: Record<string, LastmileEventKind> = {
 	assigned: "task.assigned",
 	reassigned: "task.reassigned",
 	updated: "task.updated",
-	"status-changed": "task.status_changed",
-	status_changed: "task.status_changed",
+	statusChanged: "task.status_changed",
 	commented: "task.commented",
-	comment_added: "task.commented",
+	commentAdded: "task.commented",
 	closed: "task.closed",
 	completed: "task.closed",
 	archived: "task.closed",
@@ -89,47 +92,37 @@ export async function normalizeLastmileEvent(rawBody: string): Promise<Normalize
 		"updated";
 	const kind = (KIND_ALIAS[rawKind] ?? `task.${rawKind}`) as LastmileEventKind;
 
-	// Task object may be nested directly on the element (`outer.task`, the
-	// real LastMile shape) OR wrapped in a legacy `data` envelope
-	// (`outer.data.task`, older fixtures). Fall through both.
-	const dataWrap = asRecord(outer.data);
-	const task =
-		asRecord(outer.task) ?? asRecord(dataWrap?.task) ?? dataWrap ?? outer;
+	// Task object is nested on `outer.task` (the real LastMile shape). Fall
+	// through to the outer body itself as a last resort for flat payloads.
+	const task = asRecord(outer.task) ?? outer;
 
 	const externalTaskId =
 		asString(task.id) ??
-		asString(task.task_id) ??
+		asString(task.taskId) ??
 		asString(outer.entityId) ??
-		asString(outer.entity_id) ??
-		asString(outer.task_id) ??
 		"";
 	if (!externalTaskId) {
 		throw new Error("[lastmile] webhook payload missing task id");
 	}
 
-	// LastMile's current shape uses `assignee_id` directly as a string. Older
-	// fixtures used a nested `assignee: { id }` object — support both, plus
-	// the legacy `data.new_assignee` wrapper for reassignments.
+	// LastMile's current shape uses `assigneeId` directly as a string. A
+	// populated `assignee: { id }` object may appear on `tasks_get`-style
+	// responses — support both.
 	const assigneeObj = asRecord(task.assignee);
 	const providerUserId =
-		asString(task.assignee_id) ??
-		asString(task.owner_id) ??
+		asString(task.assigneeId) ??
+		asString(task.ownerId) ??
 		asString(assigneeObj?.id) ??
-		asString(asRecord(outer.new_assignee)?.id) ??
-		asString(asRecord(dataWrap?.new_assignee)?.id);
+		asString(asRecord(outer.newAssignee)?.id);
 
 	const previousProviderUserId = asString(
-		asRecord(outer.previous_assignee)?.id ??
-			asRecord(dataWrap?.previous_assignee)?.id ??
-			task.previous_assignee_id ??
-			outer.previous_assignee_id,
+		asRecord(outer.previousAssignee)?.id ?? outer.previousAssigneeId,
 	);
 
 	const providerEventId =
 		asString(outer.eventId) ??
-		asString(outer.event_id) ??
 		asString(outer.outboxId) ??
-		asString(outer.delivery_id);
+		asString(outer.deliveryId);
 
 	const receivedAt = asString(outer.occurredAt) ?? new Date().toISOString();
 

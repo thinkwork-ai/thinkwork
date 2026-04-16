@@ -1,9 +1,8 @@
 /**
  * LastMile task → NormalizedTask mapper.
  *
- * Defensive against both snake_case and camelCase keys since LastMile's MCP
- * response shape isn't pinned in this repo yet. When a real fixture lands in
- * __fixtures__/ tighten this to the exact shape.
+ * LastMile's Tasks API + MCP are camelCase end-to-end as of the 2026-04
+ * rewrite. All field reads here are camelCase — no snake_case fallbacks.
  */
 
 import type {
@@ -66,42 +65,40 @@ function unwrapOption(
 }
 
 export function normalizeLastmileTask(raw: Record<string, unknown>): NormalizedTask {
-	const id = asString(pick(raw, "id", "task_id", "taskId")) ?? "";
-	const title = asString(pick(raw, "title", "name", "summary")) ?? "Untitled task";
-	const description = asString(pick(raw, "description", "body", "details"));
-	const statusRaw = pick(raw, "status", "state");
-	const priorityRaw = pick(raw, "priority", "importance");
+	const id = asString(pick(raw, "id", "taskId")) ?? "";
+	const title = asString(pick(raw, "title", "name")) ?? "Untitled task";
+	const description = asString(pick(raw, "description", "body"));
+	const statusRaw = pick(raw, "status");
+	const priorityRaw = pick(raw, "priority");
 	const status = unwrapOption(statusRaw, statusLabelFor);
 	const priority = unwrapOption(priorityRaw, priorityLabelFor);
-	const dueAt = asString(pick(raw, "due_at", "dueAt", "due_date", "dueDate"));
-	const updatedAt = asString(pick(raw, "updated_at", "updatedAt", "modified_at"));
-	const url = asString(pick(raw, "url", "web_url", "webUrl"));
+	const dueAt = asString(pick(raw, "dueAt", "dueDate"));
+	const updatedAt = asString(pick(raw, "updatedAt"));
+	const url = asString(pick(raw, "url", "webUrl"));
 
-	// LastMile's real `tasks_get` response nests a populated `assignee`
-	// object — `{id, first_name, last_name, email}`. Older fixtures used
-	// `{id, name, email}` or a direct `assignee_id` string. Support all
-	// three shapes and prefer the richest. Name resolution chain:
-	//   1. explicit `name` / `display_name` / `displayName` / `full_name`
-	//   2. `"${first_name} ${last_name}"` (what LastMile actually ships)
-	//   3. `first_name` alone
+	// LastMile's `tasks_get` response nests a populated `assignee`
+	// object — `{id, firstName, lastName, email}`. Webhook payloads use
+	// a flat `assigneeId` string. Support both and prefer the richest.
+	// Name resolution chain:
+	//   1. explicit `name` / `displayName` / `fullName`
+	//   2. `"${firstName} ${lastName}"` (what `tasks_get` actually ships)
+	//   3. `firstName` alone
 	//   4. `email`
 	//   5. raw id as last resort
-	const assigneeRaw = pick<Record<string, unknown>>(raw, "assignee", "assigned_to", "assignedTo");
-	const assigneeIdDirect = asString(pick(raw, "assignee_id", "owner_id", "assigneeId", "ownerId"));
+	const assigneeRaw = pick<Record<string, unknown>>(raw, "assignee");
+	const assigneeIdDirect = asString(pick(raw, "assigneeId", "ownerId"));
 	function resolveAssigneeName(obj: Record<string, unknown>): string | undefined {
-		const direct = asString(
-			pick(obj, "name", "display_name", "displayName", "full_name"),
-		);
+		const direct = asString(pick(obj, "name", "displayName", "fullName"));
 		if (direct) return direct;
-		const first = asString(pick(obj, "first_name", "firstName"));
-		const last = asString(pick(obj, "last_name", "lastName"));
+		const first = asString(pick(obj, "firstName"));
+		const last = asString(pick(obj, "lastName"));
 		if (first && last) return `${first} ${last}`;
 		if (first) return first;
 		return asString(pick(obj, "email"));
 	}
 	const assignee = assigneeRaw
 		? {
-				id: asString(pick(assigneeRaw, "id", "user_id", "userId")),
+				id: asString(pick(assigneeRaw, "id", "userId")),
 				name: resolveAssigneeName(assigneeRaw) ?? "Unassigned",
 				email: asString(pick(assigneeRaw, "email")),
 			}
