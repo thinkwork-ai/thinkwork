@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View } from 'react-native';
 import { useMutation } from 'urql';
 import { Text } from '@/components/ui/typography';
 import ExternalTaskCard from '@/components/genui/external-task/ExternalTaskCard';
@@ -108,21 +108,15 @@ export function PinnedExternalTaskHeader({
   const envelope = liveEnvelope ?? cachedEnvelope;
 
   if (!envelope) {
-    // No data yet. Three visual states, all in the same container so the
-    // layout doesn't jump:
-    //   - refreshing (live fetch in flight) → spinner + "Loading task details…"
-    //   - refresh failed → static error text (no spinner), replaces loading
-    //   - never refreshed + no cache → neutral placeholder (legacy rows)
+    // While the live MCP fetch is in flight, stay out of the layout —
+    // the thread body already has a monospace ShimmerText loading
+    // indicator, and a second placeholder at the top double-decks the
+    // loading UI. Errors and the never-synced-yet state still render
+    // since those are terminal signals the user needs to see.
+    if (refreshing) return null;
     return (
       <View className="px-4 py-3 mx-3 mt-2 mb-1 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900 flex-row items-center gap-2">
-        {refreshing ? (
-          <>
-            <ActivityIndicator size="small" />
-            <Text size="xs" variant="muted">
-              Loading task details…
-            </Text>
-          </>
-        ) : refreshError ? (
+        {refreshError ? (
           <Text size="xs" variant="muted">
             {refreshError}
           </Text>
