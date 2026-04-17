@@ -513,6 +513,9 @@ importers:
       '@aws-sdk/client-bedrock-agentcore':
         specifier: ^3.1024.0
         version: 3.1028.0
+      '@aws-sdk/client-bedrock-runtime':
+        specifier: ^3.1024.0
+        version: 3.1028.0
       '@aws-sdk/client-cloudwatch-logs':
         specifier: ^3.917.0
         version: 3.1028.0
