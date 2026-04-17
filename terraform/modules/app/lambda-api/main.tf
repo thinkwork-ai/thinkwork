@@ -252,6 +252,62 @@ resource "aws_iam_role_policy" "lambda_agentcore_invoke" {
   })
 }
 
+# Eval-runner: invoke the AgentCore Runtime data plane to run an agent
+# under test, and call AgentCore Evaluations.Evaluate to score the
+# resulting spans. Both APIs are on the bedrock-agentcore service. Also
+# allow reading spans + log events from CloudWatch Logs (aws/spans is
+# the Transaction Search destination; the runtime log groups carry the
+# OTel scope=strands.telemetry.tracer log records that EvaluateCommand
+# requires alongside the spans).
+resource "aws_iam_role_policy" "lambda_eval_runner" {
+  name = "eval-runner-bedrock-agentcore"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "AgentCoreInvokeRuntime"
+        Effect   = "Allow"
+        Action   = ["bedrock-agentcore:InvokeAgentRuntime"]
+        Resource = "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:runtime/*"
+      },
+      {
+        Sid    = "AgentCoreEvaluate"
+        Effect = "Allow"
+        Action = [
+          "bedrock-agentcore:Evaluate",
+          "bedrock-agentcore:GetEvaluator",
+          "bedrock-agentcore:ListEvaluators",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "EvalSpansRead"
+        Effect = "Allow"
+        Action = [
+          "logs:FilterLogEvents",
+          "logs:GetLogEvents",
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams",
+        ]
+        Resource = [
+          "arn:aws:logs:${var.region}:${var.account_id}:log-group:aws/spans",
+          "arn:aws:logs:${var.region}:${var.account_id}:log-group:aws/spans:*",
+          "arn:aws:logs:${var.region}:${var.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*",
+          "arn:aws:logs:${var.region}:${var.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*:*",
+        ]
+      },
+      {
+        Sid      = "SsmReadEvalRunnerCfg"
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter", "ssm:GetParameters"]
+        Resource = "arn:aws:ssm:${var.region}:${var.account_id}:parameter/thinkwork/${var.stage}/agentcore/runtime-id-*"
+      },
+    ]
+  })
+}
+
 # AgentCore Memory read access for the GraphQL memory resolvers.
 # memoryRecords / memorySearch call ListMemoryRecordsCommand to fetch
 # records across the tenant's agents.
