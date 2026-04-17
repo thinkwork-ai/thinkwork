@@ -443,11 +443,12 @@ async function mcpOAuthAuthorize(
 	authorizeUrl.searchParams.set("state", state);
 	authorizeUrl.searchParams.set("code_challenge", codeChallenge);
 	authorizeUrl.searchParams.set("code_challenge_method", "S256");
-	// Account-switch isolation is handled on the mobile side by
-	// `ASWebAuthenticationSession` + `preferEphemeralSession: true` —
-	// each connect attempt gets a fresh cookie jar. Do NOT re-add
-	// `prompt=login` or `max_age=0` here: `max_age=0` is literally
-	// unsatisfiable ("authenticated 0 seconds ago") and we hit infinite
+	// The mobile MCP connect flow uses a persistent ASWebAuthenticationSession
+	// cookie jar (no `preferEphemeralSession`) so reconnects reuse the WorkOS
+	// session. If the user explicitly clears auth from the server detail
+	// screen, `force=true` is set on the authorize URL to bypass the SSO
+	// short-circuit server-side. Do NOT re-add `prompt=login` or `max_age=0`
+	// here: `max_age=0` is literally unsatisfiable and we hit infinite
 	// redirect loops the last two times we shipped it (PR #85, PR #86).
 
 	return {
@@ -459,9 +460,9 @@ async function mcpOAuthAuthorize(
 
 /**
  * Mobile-app deep link for MCP OAuth completion. The mobile MCP Servers
- * screen opens the OAuth flow via `WebBrowser.openAuthSessionAsync(...,
- * MCP_OAUTH_DEEP_LINK, { preferEphemeralSession: true })`, and Expo's
- * ASWebAuthenticationSession watches for ANY redirect to this scheme.
+ * screen opens the OAuth flow via `WebBrowser.openAuthSessionAsync(url,
+ * MCP_OAUTH_DEEP_LINK)` (plain 2-arg form, persistent cookie jar), and
+ * Expo's ASWebAuthenticationSession watches for ANY redirect to this scheme.
  * As soon as our `mcpOAuthCallback` returns a 302 with `Location:
  * thinkwork://mcp-oauth-complete?...`, the in-app browser auto-closes
  * and the mobile callback receives the result via Expo's promise.

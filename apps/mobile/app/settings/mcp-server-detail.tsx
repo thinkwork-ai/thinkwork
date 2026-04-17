@@ -98,14 +98,12 @@ export default function McpServerDetailScreen() {
 
   const handleAuthenticate = async () => {
     if (!server || !tenant?.id || !user?.id) return;
-    // `openAuthSessionAsync` + `preferEphemeralSession: true` — see the
-    // longer comment in `mcp-servers.tsx:handleConnect`. Required so the
-    // WorkOS session cookie doesn't persist across reconnect attempts and
-    // strand the user on a "Logged in as ..." consent screen.
+    // Persistent ASWebAuthenticationSession jar so WorkOS remembers the
+    // prior sign-in across reconnects — no need to re-enter credentials
+    // every time a token expires. `force=true` still bypasses SSO
+    // short-circuit server-side when the user explicitly re-authenticates.
     const url = `${API_BASE}/api/skills/mcp-oauth/authorize?mcpServerId=${server.id}&userId=${user.id}&tenantId=${tenant.id}&force=true`;
-    await WebBrowser.openAuthSessionAsync(url, "thinkwork://mcp-oauth-complete", {
-      preferEphemeralSession: true,
-    });
+    await WebBrowser.openAuthSessionAsync(url, "thinkwork://mcp-oauth-complete");
     await fetchServer();
   };
 

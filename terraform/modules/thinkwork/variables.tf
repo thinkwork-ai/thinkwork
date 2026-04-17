@@ -217,13 +217,21 @@ variable "api_auth_secret" {
 # ---------------------------------------------------------------------------
 
 variable "admin_callback_urls" {
-  type    = list(string)
-  default = ["http://localhost:5174", "http://localhost:5174/auth/callback"]
+  type = list(string)
+  default = [
+    "http://localhost:5174",
+    "http://localhost:5174/auth/callback",
+    "http://localhost:5175",
+    "http://localhost:5175/auth/callback",
+  ]
 }
 
 variable "admin_logout_urls" {
-  type    = list(string)
-  default = ["http://localhost:5174"]
+  type = list(string)
+  default = [
+    "http://localhost:5174",
+    "http://localhost:5175",
+  ]
 }
 
 variable "mobile_callback_urls" {
