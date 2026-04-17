@@ -1822,6 +1822,43 @@ export const DeleteEvalTestCaseMutation = gql`
   }
 `;
 
+export const DeleteEvalRunMutation = gql`
+  mutation DeleteEvalRun($id: ID!) {
+    deleteEvalRun(id: $id)
+  }
+`;
+
+export const CancelEvalRunMutation = gql`
+  mutation CancelEvalRun($id: ID!) {
+    cancelEvalRun(id: $id) {
+      id
+      status
+      completedAt
+    }
+  }
+`;
+
+export const EvalTestCaseHistoryQuery = gql`
+  query EvalTestCaseHistory($testCaseId: ID!, $limit: Int) {
+    evalTestCaseHistory(testCaseId: $testCaseId, limit: $limit) {
+      id
+      runId
+      testCaseName
+      category
+      status
+      score
+      durationMs
+      input
+      expected
+      actualOutput
+      assertions
+      evaluatorResults
+      errorMessage
+      createdAt
+    }
+  }
+`;
+
 export const OnEvalRunUpdatedSubscription = gql`
   subscription OnEvalRunUpdated($tenantId: ID!) {
     onEvalRunUpdated(tenantId: $tenantId) {
