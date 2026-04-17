@@ -36,27 +36,25 @@ thinkwork --version
 # 1.0.0
 ```
 
-## Step 2 — Login
+## Step 2 — Configure AWS credentials
 
-`thinkwork login` connects the CLI to your AWS account and stores a named environment profile.
+`thinkwork login` picks the AWS profile the CLI will use for every `terraform` and `aws` CLI shell-out. It's an arrow-key picker over your existing `~/.aws/` profiles, with fall-through to access-key entry or `aws sso login`.
 
 ```bash
 thinkwork login
 ```
 
-You'll be prompted for:
-
-- **Environment name** — a short label for this deployment (e.g. `dev`, `prod`, `acme-staging`)
-- **AWS region** — where to deploy (e.g. `us-east-1`)
-- **AWS profile** — which profile from `~/.aws/credentials` to use (or `default`)
-
-Credentials are stored at `~/.thinkwork/environments/<name>.json`. You can have multiple environments pointing at different accounts or regions.
+The chosen profile is saved as `defaultProfile` in `~/.thinkwork/config.json`. Subsequent commands honour it unless you override with `--profile <name>` per command or `$AWS_PROFILE`.
 
 ```bash
-# Log in to a second environment
-thinkwork login
-# When prompted, enter a different environment name and account
+# Non-interactive variants
+thinkwork login --sso  --profile work-sso     # aws sso login
+thinkwork login --keys --profile thinkwork    # enter fresh access keys
 ```
+
+<Aside type="note">
+This step does **not** sign you into a deployed stack — it only tells the CLI which AWS identity to use for provisioning. You'll sign into the stack in [Step 7](#step-7--sign-in-to-the-deployed-stack) after it's up.
+</Aside>
 
 ## Step 3 — Initialize a deployment
 
@@ -159,7 +157,45 @@ All checks passed.
 
 If any check fails, `doctor` prints the specific error and a remediation hint.
 
-## Step 6 — Invoke your first agent
+## Step 7 — Sign in to the deployed stack
+
+`thinkwork login` with `--stage <name>` signs you in to the Cognito user pool that was just provisioned. It opens your browser against Cognito's hosted UI (Google OAuth works if you configured it in `terraform.tfvars`), catches the redirect on a local loopback, and stashes the id/refresh tokens in `~/.thinkwork/config.json` under `sessions["dev"]`.
+
+```bash
+thinkwork login --stage dev
+# Opens your browser to https://thinkwork-dev.auth.us-east-1.amazoncognito.com/oauth2/authorize?…
+# Sign in. The CLI catches the callback, exchanges the code, and caches your session.
+```
+
+Verify it worked:
+
+```bash
+thinkwork me
+```
+
+```
+⬡ Thinkwork — me
+Stage:   dev
+
+  Stage        dev
+  Mode         cognito
+  User ID      u_01HXXXYZ...
+  Email        you@example.com
+  Tenant ID    t_01HXXX...
+  Tenant slug  acme
+```
+
+<Aside type="tip">
+For CI / service accounts that can't open a browser, use the api-key path instead:
+
+```bash
+thinkwork login --stage prod --api-key "$THINKWORK_API_KEY" --tenant acme
+```
+
+This stores the static `api_auth_secret` (from `terraform.tfvars` / the `graphql-http` Lambda env) plus a tenant slug. No browser needed.
+</Aside>
+
+## Step 8 — Invoke your first agent
 
 Use the GraphQL API to create a thread and send a message. Grab your AppSync endpoint from outputs:
 
