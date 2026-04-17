@@ -223,11 +223,20 @@ export default function ThreadDetailRoute() {
   // External-task threads (LastMile etc.) ride channel=task but render the
   // timeline + pinned external-task header instead of the sub-task FlatList,
   // so the user can chat with their attached agent and use the action bar.
+  //
+  // Flip on the presence of EITHER an `externalTaskId` (just-stamped mobile
+  // creation) or a cached `latestEnvelope` (webhook-ingested). The pinned
+  // card handles the "id set but envelope missing" case by firing a live
+  // refresh on mount — fresh MCP data preferred; cached envelope is the
+  // graceful fallback.
   const hasExternalTask = Boolean(
-    ((thread?.metadata ?? {}) as Record<string, unknown>).external &&
-      (((thread?.metadata as Record<string, unknown> | undefined)?.external) as
-        | Record<string, unknown>
-        | undefined)?.latestEnvelope,
+    (() => {
+      const external = (
+        (thread?.metadata ?? {}) as Record<string, unknown>
+      ).external as Record<string, unknown> | undefined;
+      if (!external) return false;
+      return Boolean(external.externalTaskId) || Boolean(external.latestEnvelope);
+    })(),
   );
   // Pre-sync LastMile tasks: the mobile task composer stamps
   // `metadata.workflowId` before the backend has POSTed to the external
@@ -252,6 +261,38 @@ export default function ThreadDetailRoute() {
   );
   const useTaskFlatList = isTask && !hasExternalTask && !isPreSyncExternalTask;
   const isDone = thread?.status?.toUpperCase() === "DONE";
+
+  // Once a task has been minted on LastMile, collapse the intake chatter
+  // (user's title, agent "opened a form", form card, form_response, and the
+  // "task created successfully" confirmation) from the timeline. The pinned
+  // Task Card covers "what is this task"; the user only needs to see
+  // follow-up questions / comments made AFTER creation. Threshold is the
+  // `lastUpdatedAt` written by `stampThreadFromWorkflowTaskCreate` — anything
+  // strictly after that timestamp is post-creation.
+  const taskStampedAt = useMemo<number | null>(() => {
+    const external = (thread?.metadata as Record<string, unknown> | undefined)
+      ?.external as { externalTaskId?: string; lastUpdatedAt?: string } | undefined;
+    if (!external?.externalTaskId || !external?.lastUpdatedAt) return null;
+    const t = new Date(external.lastUpdatedAt).getTime();
+    return Number.isFinite(t) ? t : null;
+  }, [thread?.metadata]);
+
+  const visibleMessages = useMemo(() => {
+    if (taskStampedAt === null) return messages;
+    return messages.filter((m: { createdAt: string }) => {
+      const t = new Date(m.createdAt).getTime();
+      return Number.isFinite(t) && t > taskStampedAt;
+    });
+  }, [messages, taskStampedAt]);
+
+  const visibleTurns = useMemo(() => {
+    if (taskStampedAt === null) return turns;
+    return turns.filter((t: { startedAt?: string; createdAt: string }) => {
+      const raw = t.startedAt ?? t.createdAt;
+      const at = new Date(raw).getTime();
+      return Number.isFinite(at) && at > taskStampedAt;
+    });
+  }, [turns, taskStampedAt]);
   const childThreads = (thread?.children ?? []) as any[];
   const allDescendantTasks = useMemo(() => {
     const result: any[] = [];
@@ -547,8 +588,8 @@ export default function ThreadDetailRoute() {
                external-task threads (channel=task with metadata.external). */
             <ActivityTimeline
               key={threadId}
-              messages={messages}
-              turns={turns}
+              messages={visibleMessages}
+              turns={visibleTurns}
               agentName={agentName}
               isAdmin={isAdmin}
               isAgentRunning={!!threadId && isThreadActive(threadId)}

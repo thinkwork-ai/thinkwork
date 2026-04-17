@@ -92,7 +92,7 @@ Time to connect as an end user.
 
 <img src="/images/external-tasks/mobile-integrations-connect.png" alt="Mobile Connectors screen: LastMile Tasks connected with an Active badge; Google Workspace and Microsoft 365 available to connect" class="mobile-screenshot" />
 
-The app opens a browser via `openAuthSessionAsync` with `preferEphemeralSession: true` — a fresh OAuth session that doesn't share cookies with Safari so account switching works. After consent, the provider redirects back into the app and your personal token lands in Secrets Manager (stored under a `user_mcp_tokens` pointer keyed to your user id).
+The app opens a browser via `openAuthSessionAsync` using the persistent ASWebAuthenticationSession cookie jar — so reconnects (e.g., after a token expires) don't force you to re-type credentials. After consent, the provider redirects back into the app and your personal token lands in Secrets Manager (stored under a `user_mcp_tokens` pointer keyed to your user id).
 
 Once connected:
 
