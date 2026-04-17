@@ -52,16 +52,15 @@ Look at your system prompt. If you see a `## Workflow Skill` section
    STOP. Do not call any other tool in the same turn.
 3. The user's next message contains a fenced ```form_response block
    with the submitted values. Call the LastMile MCP's
-   `workflow_task_create` tool, passing the thread's workflowId and
-   the entire form_response object:
+   `workflow_task_create` tool, passing the workflowId and the entire
+   form_response object:
 
    ```
    workflow_task_create(
-     workflowId=<thread.metadata.workflowId>,
+     workflowId=<the exact value under "Workflow ID" in the ## Workflow Skill block — NOT the form id, NOT your agent instance_id, and NOT a slug-looking string. Copy it verbatim.>,
      formResponse={"form_id": "<from form_response>", "values": {...}},
-     threadId=<thread_id>,
      threadTitle=<thread title>,
-     creator={"email": "<user email>", "name": "<user name>"}
+     creator={"email": "<user email>"}
    )
    ```
 
