@@ -50,6 +50,7 @@ import { registerBudgetCommand } from "./commands/budget.js";
 import { registerPerformanceCommand } from "./commands/performance.js";
 import { registerTraceCommand } from "./commands/trace.js";
 import { registerDashboardCommand } from "./commands/dashboard.js";
+import { registerEvalCommand } from "./commands/eval.js";
 
 const program = new Command();
 
@@ -144,6 +145,7 @@ registerBudgetCommand(program);
 registerPerformanceCommand(program);
 registerTraceCommand(program);
 registerDashboardCommand(program);
+registerEvalCommand(program);
 
 // Accept `--json` after any subcommand too (not just right after `thinkwork`).
 // Keeps individual registerXxxCommand functions free of plumbing. Walk only
