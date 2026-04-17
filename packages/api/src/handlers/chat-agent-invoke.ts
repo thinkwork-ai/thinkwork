@@ -929,7 +929,18 @@ async function stampThreadFromWorkflowTaskCreate(args: {
   if (typeof outputPreview === "string" && outputPreview) {
     try {
       const parsed = JSON.parse(outputPreview) as Record<string, unknown>;
-      const id = parsed.id ?? parsed.taskId ?? parsed.externalTaskId;
+      // The LastMile MCP returns
+      //   `{_type:"task_mutation_result", success:true, task:{id:"task_..."}}`
+      // so the id lives one level down under `task`. Keep the top-level
+      // keys as fallbacks for providers/tools that return the id directly.
+      const task = parsed.task as Record<string, unknown> | undefined;
+      const id =
+        task?.id ??
+        task?.taskId ??
+        task?.externalTaskId ??
+        parsed.id ??
+        parsed.taskId ??
+        parsed.externalTaskId;
       if (typeof id === "string" && id) externalTaskId = id;
     } catch {
       // Output wasn't JSON — nothing to stamp.
