@@ -197,18 +197,19 @@ resource "aws_iam_role_policy" "lambda_bedrock" {
   role = aws_iam_role.lambda.id
 
   # Cross-region inference profiles (us.anthropic.claude-*) require
-  # `bedrock:InvokeModel` on the *inference-profile* ARN in addition to
-  # the underlying foundation model. Needed by the eval-runner's
-  # llm-rubric judge and any other handler that calls Converse with a
-  # profile ID.
+  # `bedrock:InvokeModel` on the *inference-profile* ARN AND on the
+  # underlying foundation-model ARN in *every* region the profile can
+  # route to (e.g. us-east-2 for us.anthropic.claude-haiku-4-5). The
+  # region wildcard below covers all of them. Needed by the eval-runner
+  # llm-rubric judge and any handler that calls Converse with a profile ID.
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect = "Allow"
       Action = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
       Resource = [
-        "arn:aws:bedrock:${var.region}::foundation-model/*",
-        "arn:aws:bedrock:${var.region}:${var.account_id}:inference-profile/*",
+        "arn:aws:bedrock:*::foundation-model/*",
+        "arn:aws:bedrock:*:${var.account_id}:inference-profile/*",
       ]
     }]
   })
