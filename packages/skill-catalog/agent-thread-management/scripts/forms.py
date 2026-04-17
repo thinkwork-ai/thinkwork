@@ -18,10 +18,12 @@ import json
 import os
 import time
 
-# Skills are synced to /app/skills/{skill_id}/ on the AgentCore VM by
-# install_skills.py before the agent starts. present_form resolves form
-# paths relative to this root.
-SKILLS_DIR = os.environ.get("SKILLS_DIR", "/app/skills")
+# Skills are synced to /tmp/skills/{skill_id}/ per-request by
+# install_skill_from_s3() in packages/agentcore/agent-container/install_skills.py
+# (and skill_runner.py uses the same path). `present_form` resolves form
+# paths relative to this root. Override with SKILLS_DIR env var for
+# local dev/tests.
+SKILLS_DIR = os.environ.get("SKILLS_DIR", "/tmp/skills")
 
 # Allowed field types for v1 (PRD-46). Adding a new type also requires a
 # matching field component on the frontend in
