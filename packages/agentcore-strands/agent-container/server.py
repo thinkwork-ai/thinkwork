@@ -337,31 +337,13 @@ def _build_system_prompt(skills_config: list | None = None, kb_config: list | No
                 try:
                     with open(skill_yaml_path) as yf:
                         yaml_text = yf.read()
-                    # Inject SKILL.md when the skill either (a) is
-                    # `execution: context` (always-on instructions) or (b)
-                    # is `execution: script` AND declares `always_inject:
-                    # true` in skill.yaml. The second case lets a script
-                    # skill ship load-bearing decision logic in SKILL.md
-                    # without relying on progressive disclosure — we use
-                    # it for lastmile-tasks where the agent needs the
-                    # workflow-skill-vs-legacy branching rules up front.
-                    is_context = bool(
-                        re.search(r"^\s*execution:\s*context\s*$", yaml_text, re.MULTILINE)
-                    )
-                    is_always_inject = bool(
-                        re.search(r"^\s*always_inject:\s*true\s*$", yaml_text, re.MULTILINE)
-                    )
-                    if is_context or is_always_inject:
+                    # Simple check for execution: context without full YAML parser
+                    if re.search(r"^\s*execution:\s*context\s*$", yaml_text, re.MULTILINE):
                         with open(skill_md_path) as mf:
                             md_content = mf.read().strip()
                         if md_content:
                             parts.append(md_content)
-                            logger.info(
-                                "Injected %s skill %s SKILL.md (%d chars)",
-                                "context" if is_context else "script+always_inject",
-                                sid,
-                                len(md_content),
-                            )
+                            logger.info("Injected context skill %s SKILL.md (%d chars)", sid, len(md_content))
                 except Exception as e:
                     logger.warning("Failed to inject context skill %s: %s", sid, e)
 
