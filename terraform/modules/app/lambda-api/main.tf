@@ -196,12 +196,20 @@ resource "aws_iam_role_policy" "lambda_bedrock" {
   name = "bedrock-invoke"
   role = aws_iam_role.lambda.id
 
+  # Cross-region inference profiles (us.anthropic.claude-*) require
+  # `bedrock:InvokeModel` on the *inference-profile* ARN in addition to
+  # the underlying foundation model. Needed by the eval-runner's
+  # llm-rubric judge and any other handler that calls Converse with a
+  # profile ID.
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
-      Resource = "arn:aws:bedrock:${var.region}::foundation-model/*"
+      Effect = "Allow"
+      Action = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+      Resource = [
+        "arn:aws:bedrock:${var.region}::foundation-model/*",
+        "arn:aws:bedrock:${var.region}:${var.account_id}:inference-profile/*",
+      ]
     }]
   })
 }
