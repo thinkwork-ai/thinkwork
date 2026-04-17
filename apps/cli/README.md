@@ -20,8 +20,10 @@ npx thinkwork-cli --help
 
 ## Quick Start
 
+### Deploy a new stack
+
 ```bash
-# 1. Authenticate with AWS
+# 1. Authenticate with AWS (profile picker, --sso, or --keys)
 thinkwork login
 
 # 2. Check prerequisites
@@ -43,6 +45,21 @@ thinkwork bootstrap -s dev
 thinkwork outputs -s dev
 ```
 
+### Sign in to the deployed stack
+
+```bash
+# 8. Sign in to the Cognito user pool (opens browser; supports Google OAuth)
+thinkwork login --stage dev
+
+# 9. Verify identity + default tenant
+thinkwork me
+
+# 10. (CI only) non-interactive session with the api_auth_secret
+thinkwork login --stage prod --api-key "$THINKWORK_API_KEY" --tenant acme
+```
+
+After step 8, API-backed commands (`thinkwork thread list`, `thinkwork agent create`, etc.) resolve auth + tenant automatically from the stored session. The Cognito id-token refreshes in the background.
+
 No repo clone required — `thinkwork init` scaffolds all Terraform modules from the npm package.
 
 ## Commands
@@ -52,6 +69,10 @@ No repo clone required — `thinkwork init` scaffolds all Terraform modules from
 | Command | Description |
 |---------|-------------|
 | `thinkwork login` | Configure AWS credentials (access keys or `--sso`) |
+| `thinkwork login --stage <s>` | Sign in to a deployed stack via Cognito (OAuth; Google supported). Caches tokens in `~/.thinkwork/config.json` |
+| `thinkwork login --stage <s> --api-key <secret>` | Non-interactive CI path; stores the api_auth_secret as the session |
+| `thinkwork logout [--stage <s> \| --all]` | Forget stored sessions |
+| `thinkwork me [--stage <s>]` | Print who you're signed in as on a stage (verifies via a live `me` query) |
 | `thinkwork init -s <stage>` | Initialize a new environment — generates terraform.tfvars, scaffolds Terraform modules, runs `terraform init` |
 | `thinkwork doctor -s <stage>` | Check prerequisites (AWS CLI, Terraform, credentials, Bedrock access) |
 
@@ -80,13 +101,46 @@ No repo clone required — `thinkwork init` scaffolds all Terraform modules from
 
 ```
 -s, --stage <name>      Deployment stage (required for most commands)
+-t, --tenant <slug>     Tenant (workspace) slug. Falls back to the cached default.
 -p, --profile <name>    AWS profile to use
 -c, --component <tier>  Component tier: foundation, data, app, or all (default: all)
 -y, --yes               Skip confirmation prompts (for CI)
+--json                  Emit machine-readable JSON on stdout (stderr for logs)
 --defaults              Skip interactive prompts in init (use all defaults)
 -v, --version           Print CLI version
 -h, --help              Show help
 ```
+
+The CLI has two modes for every API-backed command:
+
+- **Flag-driven** — every field can be passed as a flag for scripting / agents.
+  Missing required flags in a non-TTY context exit 1 with a clear error.
+- **Interactive walkthrough** — when running in a terminal, missing fields are
+  prompted via arrow-key pickers. `Ctrl+C` cancels cleanly.
+
+Any flag accepted by a command is also inferrable from env vars:
+`THINKWORK_STAGE`, `THINKWORK_TENANT`, `THINKWORK_API_KEY` (for CI).
+
+## Roadmap
+
+The commands below are **scaffolded** in Phase 0 (help text + argument parsing
+ships now, so `thinkwork --help` shows the full surface area) and fill in
+phase-by-phase. Running a scaffolded command prints a "not yet implemented"
+message and exits with code 2.
+
+| Phase | Domain | Commands |
+|-------|--------|----------|
+| **0 (now)** | Foundation | `login` (Cognito + AWS), `logout`, `me`, `--json`, GraphQL client, codegen, shared helpers |
+| 1 | Work & approvals | `thread`, `message`, `label`, `inbox` |
+| 2 | Agents & workspace | `agent`, `template`, `tenant`, `member`, `team`, `kb` |
+| 3 | Automation & integrations | `routine`, `scheduled-job`, `turn`, `wakeup`, `webhook`, `connector`, `skill` |
+| 4 | Memory & artifacts | `memory`, `recipe`, `artifact` |
+| 5 | Observability & spend | `cost`, `budget`, `performance`, `trace`, `dashboard` |
+
+Each phase ships as one PR. Mid-phase stubs keep `thinkwork --help` complete
+so the full surface is always discoverable; individual commands flip from
+stub to real implementation as their phase lands. Run any
+`thinkwork <cmd> --help` today to see the planned flags + examples.
 
 ## Interactive Init
 
@@ -162,9 +216,33 @@ thinkwork deploy -s dev --profile my-org
 ### CI/CD (non-interactive)
 
 ```bash
+# Deploy side — uses AWS credentials from env / IAM role.
 thinkwork init -s prod --defaults
 thinkwork deploy -s prod -y
 thinkwork bootstrap -s prod
+
+# API side — store the api_auth_secret as an api-key session and invoke
+# commands without a browser / TTY.
+thinkwork login --stage prod --api-key "$THINKWORK_API_KEY" --tenant "$THINKWORK_TENANT"
+thinkwork thread list --status IN_PROGRESS --json | jq '.[].id'
+```
+
+### Pipe to jq
+
+Every API-backed command accepts `--json` for machine-readable stdout. Warnings, spinners, and errors always go to stderr, so piping stays clean:
+
+```bash
+thinkwork me --json | jq .tenantSlug
+thinkwork agent list --status OFFLINE --json | jq '.[].name'
+thinkwork cost summary --from 2026-04-01 --json | jq .totalUsd
+```
+
+### Forget a stored session
+
+```bash
+thinkwork logout --stage dev      # one stage
+thinkwork logout --all            # every stage
+thinkwork logout                  # interactive picker
 ```
 
 ## Prerequisites

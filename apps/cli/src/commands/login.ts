@@ -1,3 +1,26 @@
+/**
+ * `thinkwork login` — two sign-in flows, chosen by the presence of `--stage`.
+ *
+ *   Without --stage
+ *     AWS credentials picker (the original flow). Stores the chosen profile
+ *     in ~/.thinkwork/config.json as `defaultProfile`. Used before deploy /
+ *     destroy / list / any AWS-CLI-shelling command.
+ *
+ *   With --stage <s>
+ *     Cognito OAuth2 authorization-code flow over a local loopback listener
+ *     (default port 42010 — registered in the admin client's callback list).
+ *     After sign-in we exchange the code for id/refresh tokens, call
+ *     bootstrapUser to guarantee the DB row + tenant exist, and cache the
+ *     session + default tenant in ~/.thinkwork/config.json under
+ *     `sessions[<stage>]`. Used before any API-backed command
+ *     (`thinkwork thread ls`, `thinkwork agent create`, etc.).
+ *
+ *   With --stage <s> --api-key <secret>
+ *     Service / CI path. No browser. Stores the static bearer + tenant on the
+ *     session. Mirrors today's api_auth_secret behavior so automation doesn't
+ *     need an interactive login.
+ */
+
 import { Command } from "commander";
 import { execSync } from "node:child_process";
 import { createInterface } from "node:readline";
@@ -5,9 +28,18 @@ import { select, Separator } from "@inquirer/prompts";
 import chalk from "chalk";
 import { getAwsIdentity } from "../aws.js";
 import { listAwsProfiles, type AwsProfile } from "../aws-profiles.js";
-import { saveCliConfig } from "../cli-config.js";
+import { saveCliConfig, saveStageSession } from "../cli-config.js";
 import { ensureAwsCli } from "../prerequisites.js";
-import { printHeader, printSuccess, printError } from "../ui.js";
+import { printHeader, printSuccess, printError, printWarning } from "../ui.js";
+import { validateStage } from "../config.js";
+import { discoverCognitoConfig } from "../cognito-discovery.js";
+import {
+  loginWithCognito,
+  decodeIdToken,
+  CLI_LOOPBACK_PORT,
+} from "../cognito-oauth.js";
+import { getApiEndpoint } from "../aws-discovery.js";
+import { isCancellation } from "../lib/interactive.js";
 
 function ask(prompt: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -54,7 +86,10 @@ type Choice =
   | { kind: "sso" }
   | { kind: "cancel" };
 
-type ChoiceValue = { kind: "existing"; name: string } | { kind: "keys" } | { kind: "sso" };
+type ChoiceValue =
+  | { kind: "existing"; name: string }
+  | { kind: "keys" }
+  | { kind: "sso" };
 
 /**
  * Interactive picker with arrow-key navigation. Requires a TTY stdin; when
@@ -96,8 +131,6 @@ async function pickProfile(profiles: AwsProfile[]): Promise<Choice> {
     });
     return picked;
   } catch (err) {
-    // inquirer throws ExitPromptError on Ctrl+C / Esc — match by name so we
-    // don't have to pull in @inquirer/core as a direct dep just for the class.
     if (err instanceof Error && err.name === "ExitPromptError") {
       return { kind: "cancel" };
     }
@@ -160,7 +193,7 @@ function runSsoLogin(targetProfile: string): boolean {
   }
 }
 
-function finalize(profile: string, mode: string): void {
+function finalizeAws(profile: string, mode: string): void {
   const identity = getAwsIdentity();
   if (!identity) {
     printError(
@@ -186,11 +219,187 @@ function finalize(profile: string, mode: string): void {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Stack login (Cognito OAuth or api-key)
+// ---------------------------------------------------------------------------
+
+/**
+ * Call `bootstrapUser` to guarantee the authed Cognito identity has a DB row
+ * + tenant. Returns the tenant so we can cache it on the session.
+ *
+ * We use plain fetch + an inline query string here to avoid the codegen
+ * chicken-and-egg: login wires *up* the gql client, it doesn't consume one.
+ */
+async function bootstrapUserAndTenant(
+  stage: string,
+  region: string,
+  idToken: string,
+): Promise<{ tenantId: string; tenantSlug: string; tenantName: string } | null> {
+  const baseUrl = getApiEndpoint(stage, region);
+  if (!baseUrl) return null;
+  const url = `${baseUrl.replace(/\/+$/, "")}/graphql`;
+
+  const query = `mutation BootstrapLogin {
+    bootstrapUser {
+      tenant { id slug name }
+    }
+  }`;
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Authorization: idToken,
+      },
+      body: JSON.stringify({ query }),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      data?: { bootstrapUser?: { tenant?: { id: string; slug: string; name: string } } };
+      errors?: Array<{ message: string }>;
+    };
+    const tenant = json.data?.bootstrapUser?.tenant;
+    if (!tenant) return null;
+    return {
+      tenantId: tenant.id,
+      tenantSlug: tenant.slug,
+      tenantName: tenant.name,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function doCognitoLogin(opts: {
+  stage: string;
+  region: string;
+  port: number;
+  noBrowser: boolean;
+}): Promise<void> {
+  printHeader("login", opts.stage);
+
+  const cognito = discoverCognitoConfig(opts.stage, opts.region);
+  if (!cognito) {
+    printError(
+      `Could not find a Cognito user pool for stage "${opts.stage}" in ${opts.region}. Is the stack deployed?`,
+    );
+    process.exit(1);
+  }
+
+  console.log(`  User pool:     ${cognito.userPoolId}`);
+  console.log(`  Client:        ${cognito.clientId}`);
+  console.log(`  Hosted UI:     ${cognito.domainUrl}`);
+  console.log(`  Callback port: ${opts.port}`);
+
+  try {
+    const tokens = await loginWithCognito({
+      cognito,
+      port: opts.port,
+      openBrowser: !opts.noBrowser,
+    });
+
+    const claims = decodeIdToken(tokens.idToken);
+    const bootstrap = await bootstrapUserAndTenant(
+      opts.stage,
+      opts.region,
+      tokens.idToken,
+    );
+
+    saveStageSession(opts.stage, {
+      kind: "cognito",
+      idToken: tokens.idToken,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresAt: tokens.expiresAt,
+      userPoolId: cognito.userPoolId,
+      userPoolClientId: cognito.clientId,
+      cognitoDomain: cognito.domain,
+      region: cognito.region,
+      principalId: claims.sub,
+      email: claims.email,
+      tenantId: bootstrap?.tenantId,
+      tenantSlug: bootstrap?.tenantSlug,
+    });
+
+    // Remember this stage as the default so subsequent commands can omit -s.
+    saveCliConfig({ defaultStage: opts.stage });
+
+    printSuccess(`Signed in to ${opts.stage} as ${claims.email ?? claims.sub}`);
+    if (bootstrap) {
+      console.log(
+        `  Tenant: ${bootstrap.tenantName} (slug: ${bootstrap.tenantSlug})`,
+      );
+    } else {
+      printWarning(
+        "Signed in, but could not resolve a default tenant. Commands will prompt or require --tenant <slug> until one is cached.",
+      );
+    }
+    console.log("");
+    console.log(
+      chalk.dim(
+        `  Token expires: ${new Date(tokens.expiresAt * 1000).toISOString()}. Refreshed automatically.`,
+      ),
+    );
+  } catch (err) {
+    if (isCancellation(err)) {
+      console.log("");
+      console.log("  Cancelled.");
+      return;
+    }
+    printError(
+      `Sign-in failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    process.exit(1);
+  }
+}
+
+async function doApiKeyLogin(opts: {
+  stage: string;
+  region: string;
+  apiKey: string;
+  tenantSlug?: string;
+  tenantId?: string;
+}): Promise<void> {
+  printHeader("login", opts.stage);
+
+  // Verify the key works with a cheap GraphQL ping (me query — allowed for
+  // api-key callers that supply x-tenant-id, falls back to just trying).
+  const baseUrl = getApiEndpoint(opts.stage, opts.region);
+  if (!baseUrl) {
+    printError(
+      `Cannot discover API endpoint for stage "${opts.stage}" in ${opts.region}. Is the stack deployed?`,
+    );
+    process.exit(1);
+  }
+
+  saveStageSession(opts.stage, {
+    kind: "api-key",
+    authSecret: opts.apiKey,
+    tenantId: opts.tenantId,
+    tenantSlug: opts.tenantSlug,
+  });
+  saveCliConfig({ defaultStage: opts.stage });
+
+  printSuccess(`Stored api-key session for stage "${opts.stage}"`);
+  if (opts.tenantSlug) {
+    console.log(`  Default tenant: ${opts.tenantSlug}`);
+  } else {
+    printWarning(
+      "No tenant cached. Commands will require --tenant <slug> or THINKWORK_TENANT.",
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Registration
+// ---------------------------------------------------------------------------
+
 export function registerLoginCommand(program: Command): void {
   program
     .command("login")
     .description(
-      "Configure AWS credentials for Thinkwork. Picks from existing ~/.aws profiles by default; falls back to new keys or SSO.",
+      "Sign in. Without --stage: configure AWS credentials (for deploy / destroy). With --stage <s>: sign in to that stack's Cognito / API and cache a session for API-backed commands.",
     )
     .option(
       "--profile <name>",
@@ -199,91 +408,171 @@ export function registerLoginCommand(program: Command): void {
     )
     .option("--sso", "Skip the picker and go straight to SSO login")
     .option("--keys", "Skip the picker and go straight to access-key entry")
+    .option(
+      "-s, --stage <name>",
+      "Sign in to a deployed stack instead of configuring AWS credentials",
+    )
+    .option(
+      "-r, --region <region>",
+      "AWS region for the stack (defaults to us-east-1)",
+      "us-east-1",
+    )
+    .option(
+      "--api-key <secret>",
+      "Non-interactive path: store the api_auth_secret as the session for --stage <s>. Skips the browser.",
+    )
+    .option(
+      "--tenant <slug>",
+      "Cache this tenant slug on the session (used with --api-key, or to override the tenant chosen by bootstrapUser).",
+    )
+    .option(
+      "--port <number>",
+      `Loopback port for Cognito OAuth callback. Must match a registered callback URL. Defaults to ${CLI_LOOPBACK_PORT}.`,
+      String(CLI_LOOPBACK_PORT),
+    )
+    .option(
+      "--no-browser",
+      "Don't attempt to open the browser automatically — print the URL instead.",
+    )
     .addHelpText(
       "after",
       `
 Examples:
-  # Interactive picker — lists profiles from ~/.aws, verifies the one you pick,
-  # and saves it as your Thinkwork default.
+  # Configure AWS credentials (profile picker) — used before deploy/destroy/list.
   $ thinkwork login
 
-  # Skip the picker, enter fresh access keys into a named profile
-  $ thinkwork login --keys --profile thinkwork
+  # Sign in to a deployed stack with Cognito (opens your browser, supports Google SSO).
+  $ thinkwork login --stage dev
 
-  # Skip the picker, log in via AWS SSO
+  # Non-interactive CI login against prod using the api_auth_secret.
+  $ thinkwork login --stage prod --api-key "$THINKWORK_API_KEY" --tenant acme
+
+  # Print the URL instead of auto-opening (useful over SSH).
+  $ thinkwork login --stage dev --no-browser
+
+  # AWS SSO (no stage)
   $ thinkwork login --sso --profile work-sso
 
-After login, commands resolve the AWS profile in this order:
-  1. --profile <name>            (per-command override)
-  2. \$AWS_PROFILE env var
-  3. defaultProfile from ~/.thinkwork/config.json  (set by this command)
+How the session is stored:
+  ~/.thinkwork/config.json gains \`sessions["<stage>"]\` with either a Cognito
+  id/refresh token pair or the api-key secret + tenant. Subsequent commands
+  resolve auth from this file; Cognito tokens are refreshed transparently.
+
+Registered callback URL:
+  The Cognito admin client must list \`http://127.0.0.1:${CLI_LOOPBACK_PORT}/callback\` in its
+  callback URLs. The default terraform module already does — if you deployed
+  before that default existed, run \`terraform apply\` in the foundation tier
+  to pick it up. Or use \`--api-key\` to skip the browser entirely.
 `,
     )
-    .action(async (opts: { profile: string; sso?: boolean; keys?: boolean }) => {
-      printHeader("login", opts.profile);
+    .action(
+      async (opts: {
+        profile: string;
+        sso?: boolean;
+        keys?: boolean;
+        stage?: string;
+        region: string;
+        apiKey?: string;
+        tenant?: string;
+        port: string;
+        browser: boolean; // commander exposes --no-browser as `browser: false`
+      }) => {
+        // Stack-login branch.
+        if (opts.stage) {
+          const check = validateStage(opts.stage);
+          if (!check.valid) {
+            printError(check.error!);
+            process.exit(1);
+          }
+          if (opts.apiKey) {
+            await doApiKeyLogin({
+              stage: opts.stage,
+              region: opts.region,
+              apiKey: opts.apiKey,
+              tenantSlug: opts.tenant,
+            });
+            return;
+          }
+          const port = Number.parseInt(opts.port, 10);
+          if (!Number.isFinite(port) || port < 1 || port > 65535) {
+            printError(`Invalid --port value: "${opts.port}".`);
+            process.exit(1);
+          }
+          await doCognitoLogin({
+            stage: opts.stage,
+            region: opts.region,
+            port,
+            noBrowser: opts.browser === false,
+          });
+          return;
+        }
 
-      const awsOk = await ensureAwsCli();
-      if (!awsOk) process.exit(1);
+        // AWS-profile branch (unchanged).
+        printHeader("login", opts.profile);
 
-      if (opts.sso) {
-        if (!runSsoLogin(opts.profile)) process.exit(1);
-        process.env.AWS_PROFILE = opts.profile;
-        finalize(opts.profile, "SSO");
-        return;
-      }
-      if (opts.keys) {
-        if (!(await runKeyEntry(opts.profile))) process.exit(1);
-        process.env.AWS_PROFILE = opts.profile;
-        finalize(opts.profile, "access keys");
-        return;
-      }
+        const awsOk = await ensureAwsCli();
+        if (!awsOk) process.exit(1);
 
-      const profiles = listAwsProfiles();
+        if (opts.sso) {
+          if (!runSsoLogin(opts.profile)) process.exit(1);
+          process.env.AWS_PROFILE = opts.profile;
+          finalizeAws(opts.profile, "SSO");
+          return;
+        }
+        if (opts.keys) {
+          if (!(await runKeyEntry(opts.profile))) process.exit(1);
+          process.env.AWS_PROFILE = opts.profile;
+          finalizeAws(opts.profile, "access keys");
+          return;
+        }
 
-      if (profiles.length === 0) {
+        const profiles = listAwsProfiles();
+
+        if (profiles.length === 0) {
+          console.log("");
+          console.log(chalk.dim("  No AWS profiles found in ~/.aws/."));
+          console.log(
+            chalk.dim("  Falling through to access-key entry for a new profile."),
+          );
+          if (!(await runKeyEntry(opts.profile))) process.exit(1);
+          process.env.AWS_PROFILE = opts.profile;
+          finalizeAws(opts.profile, "access keys");
+          return;
+        }
+
+        const choice = await pickProfile(profiles);
+        if (choice.kind === "cancel") {
+          console.log("");
+          console.log(chalk.dim("  Cancelled. No changes made."));
+          return;
+        }
+
+        if (choice.kind === "keys") {
+          if (!(await runKeyEntry(opts.profile))) process.exit(1);
+          process.env.AWS_PROFILE = opts.profile;
+          finalizeAws(opts.profile, "access keys");
+          return;
+        }
+
+        if (choice.kind === "sso") {
+          if (!runSsoLogin(opts.profile)) process.exit(1);
+          process.env.AWS_PROFILE = opts.profile;
+          finalizeAws(opts.profile, "SSO");
+          return;
+        }
+
+        const picked = choice.name;
         console.log("");
-        console.log(chalk.dim("  No AWS profiles found in ~/.aws/."));
-        console.log(
-          chalk.dim("  Falling through to access-key entry for a new profile."),
-        );
-        if (!(await runKeyEntry(opts.profile))) process.exit(1);
-        process.env.AWS_PROFILE = opts.profile;
-        finalize(opts.profile, "access keys");
-        return;
-      }
-
-      const choice = await pickProfile(profiles);
-      if (choice.kind === "cancel") {
-        console.log("");
-        console.log(chalk.dim("  Cancelled. No changes made."));
-        return;
-      }
-
-      if (choice.kind === "keys") {
-        if (!(await runKeyEntry(opts.profile))) process.exit(1);
-        process.env.AWS_PROFILE = opts.profile;
-        finalize(opts.profile, "access keys");
-        return;
-      }
-
-      if (choice.kind === "sso") {
-        if (!runSsoLogin(opts.profile)) process.exit(1);
-        process.env.AWS_PROFILE = opts.profile;
-        finalize(opts.profile, "SSO");
-        return;
-      }
-
-      const picked = choice.name;
-      console.log("");
-      console.log(`  Verifying "${picked}"...`);
-      const identity = verifyProfile(picked);
-      if (!identity) {
-        printError(
-          `Could not authenticate with profile "${picked}". If it's an SSO profile, try \`aws sso login --profile ${picked}\` first.`,
-        );
-        process.exit(1);
-      }
-      process.env.AWS_PROFILE = picked;
-      finalize(picked, "existing profile");
-    });
+        console.log(`  Verifying "${picked}"...`);
+        const identity = verifyProfile(picked);
+        if (!identity) {
+          printError(
+            `Could not authenticate with profile "${picked}". If it's an SSO profile, try \`aws sso login --profile ${picked}\` first.`,
+          );
+          process.exit(1);
+        }
+        process.env.AWS_PROFILE = picked;
+        finalizeAws(picked, "existing profile");
+      },
+    );
 }

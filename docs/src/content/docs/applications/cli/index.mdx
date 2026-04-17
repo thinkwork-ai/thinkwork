@@ -1,11 +1,11 @@
 ---
 title: CLI Overview
-description: The thinkwork-cli npm package. Install, configure, and manage ThinkWork deployments from the command line.
+description: The thinkwork-cli npm package. Install, configure, deploy, and operate ThinkWork stacks from the command line.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-The ThinkWork CLI (`thinkwork-cli`) is the primary way to deploy and manage ThinkWork. It wraps Terraform with a developer-friendly interface, manages named environment profiles, and provides health-check and diagnostic commands.
+The ThinkWork CLI (`thinkwork-cli`) is the primary way to **deploy and manage** ThinkWork and to **operate** a running stack. It wraps Terraform for provisioning, authenticates to the deployed Cognito pool for day-two ops, and exposes every admin-site capability as scriptable + interactive commands.
 
 ## Installation
 
@@ -23,123 +23,145 @@ Verify the installation:
 
 ```bash
 thinkwork --version
-# 1.0.0
-
 thinkwork --help
-# Usage: thinkwork <command> [options]
-# ...
 ```
 
 ### Requirements
 
 - Node.js 20+
-- Terraform 1.6+ (must be on your `$PATH`)
+- Terraform 1.6+ on your `$PATH` (for deploy/plan/destroy)
 - AWS credentials (via `~/.aws/credentials`, environment variables, or EC2/ECS instance role)
+- A browser (for `thinkwork login --stage <s>` — optional; `--api-key` skips it)
 
-The CLI checks for Terraform on startup and prints a clear error if it's missing:
+## Two kinds of sign-in
 
+The CLI has **two separate login flows** — they do different things and are stored separately in `~/.thinkwork/config.json`.
+
+### `thinkwork login` — AWS credentials
+
+Configures the AWS credentials the CLI uses to shell out to `terraform` and the `aws` CLI. Arrow-key picker over your existing `~/.aws/` profiles, with fall-through to access-key entry or `aws sso login`.
+
+```bash
+thinkwork login                    # interactive profile picker
+thinkwork login --sso --profile work-sso
+thinkwork login --keys --profile thinkwork
 ```
-✗ Terraform not found. Install from https://developer.hashicorp.com/terraform/install
+
+The chosen profile is saved as `defaultProfile` and used by `plan`, `deploy`, `destroy`, `bootstrap`, `doctor`, `outputs`, `status`, `init`, etc.
+
+### `thinkwork login --stage <s>` — Cognito session
+
+Signs in to the deployed stack's Cognito user pool via OAuth2 authorization-code flow over a local loopback listener (port 42010). Supports Google OAuth through Cognito's hosted UI. The resulting id/refresh tokens plus the caller's default tenant are cached on `sessions["<stage>"]`.
+
+```bash
+# Interactive — opens browser
+thinkwork login --stage dev
+
+# Non-interactive — CI / service
+thinkwork login --stage prod --api-key "$THINKWORK_API_KEY" --tenant acme
 ```
 
-## Architecture
+API-backed commands (`thinkwork thread list`, `thinkwork agent create`, `thinkwork me`, …) consume this session. Cognito id-tokens are refreshed transparently from the refresh token.
 
-The CLI is a Commander.js application that:
+<Aside type="note">
+The Cognito callback URL `http://127.0.0.1:42010/callback` must be registered in the admin app client. The default terraform module already lists it — if you deployed before Phase-0 and the URL isn't there, run `terraform apply` in the foundation tier to pick it up, or use `--api-key` to skip the browser flow entirely.
+</Aside>
 
-1. **Manages environment profiles** — Named environments stored in `~/.thinkwork/environments/` as JSON files. Each profile holds the AWS region, profile name, and a pointer to the deployment directory.
+## Where state lives
 
-2. **Wraps Terraform** — `deploy`, `plan`, `destroy`, and `outputs` shell out to `terraform` with the correct working directory, variable files, and backend configuration.
+`~/.thinkwork/config.json`:
 
-3. **Validates deployments** — `doctor` runs a suite of health checks against the deployed infrastructure (Cognito reachable, Lambda responding, Aurora available, etc.)
-
-4. **Bootstraps state storage** — `bootstrap` creates the S3 bucket and DynamoDB table used for Terraform remote state before the first deploy.
-
-## Environment profiles
-
-An environment profile is a named configuration that maps to a ThinkWork deployment. Profiles are stored at `~/.thinkwork/environments/<name>.json`.
-
-```json
+```jsonc
 {
-  "name": "dev",
-  "region": "us-east-1",
-  "awsProfile": "default",
-  "deploymentDir": "/Users/alice/thinkwork-deploy",
-  "createdAt": "2024-04-01T10:00:00Z"
+  "defaultProfile": "thinkwork",
+  "defaultStage": "dev",
+  "sessions": {
+    "dev":  { "kind": "cognito", "idToken": "...", "refreshToken": "...", "expiresAt": 1234, "tenantSlug": "acme", ... },
+    "prod": { "kind": "api-key", "authSecret": "...", "tenantSlug": "acme", "tenantId": "..." }
+  }
 }
 ```
 
-You can have multiple profiles pointing at different AWS accounts, regions, or directories:
+`~/.thinkwork/environments/<stage>/config.json`:
 
-```bash
-thinkwork login   # Creates "dev" profile → us-east-1, account 111111111111
-thinkwork login   # Creates "prod" profile → us-east-1, account 222222222222
-thinkwork login   # Creates "eu-staging" profile → eu-west-1, account 111111111111
+```jsonc
+{
+  "stage": "dev",
+  "region": "us-east-1",
+  "accountId": "123456789012",
+  "terraformDir": "/Users/alice/thinkwork-deploy",
+  "databaseEngine": "aurora-serverless",
+  "enableHindsight": false,
+  "createdAt": "2026-04-16T10:00:00Z",
+  "updatedAt": "2026-04-16T10:00:00Z"
+}
 ```
 
-Then use `-s <name>` (or `--stage <name>`) to select the profile for each command:
+The environment registry is populated by `thinkwork init` and lets any command resolve the terraform working directory without needing a `cd` or a `--dir` flag.
+
+## Stage resolution
+
+Every API-backed command needs a stage. Resolution order:
+
+1. `-s / --stage <name>` flag
+2. `THINKWORK_STAGE` env var
+3. `defaultStage` in `~/.thinkwork/config.json` (set by a successful `thinkwork login --stage <s>`)
+4. The sole deployed stage in the configured AWS region, if there's only one
+5. Interactive picker (TTY only; errors in CI)
+
+## Tenant resolution
+
+API-backed commands also need a tenant (workspace). Resolution order:
+
+1. `-t / --tenant <slug>` flag
+2. `THINKWORK_TENANT` env var
+3. `tenantSlug` cached on the current stage's session (set at login time via `bootstrapUser`)
+4. Interactive picker of the caller's tenant memberships (TTY only)
+
+## Flag-driven and interactive modes
+
+Every command works two ways:
+
+- **Flag-driven** for agents and CI: pass every field as a flag. Missing required flags in a non-TTY context print a clear error and exit 1.
+- **Interactive walkthrough** for humans: missing fields are prompted with arrow-key pickers or text input. `Ctrl+C` cancels cleanly.
 
 ```bash
-thinkwork deploy -s dev
-thinkwork doctor -s prod
-thinkwork outputs -s eu-staging
+# Fully interactive
+thinkwork user invite
+
+# Fully scripted
+thinkwork user invite alice@example.com --tenant acme -s dev --role admin
+
+# Mix — pass the positional, prompt for everything else
+thinkwork user invite alice@example.com
 ```
 
-## Stage vs environment
+## Machine-readable output
 
-The CLI uses two related concepts:
-
-- **Stage** — The name of your deployment (e.g. `dev`, `prod`). This becomes the prefix for all AWS resource names (`dev-thinkwork-agentcore`, `prod-thinkwork-aurora`). Set in `terraform.tfvars` as `stage`.
-
-- **Environment** — The CLI profile name. By convention, the environment name matches the stage name, but they're independent. You can have an environment named `alice-dev` pointing at a stage named `dev`.
-
-Use `--stage` (or `-s`) in all CLI commands to select the environment profile.
-
-## Configuration files
-
-The CLI looks for configuration in this order:
-
-1. `~/.thinkwork/environments/<name>.json` — Profile file (created by `thinkwork login`)
-2. `terraform.tfvars` — Terraform variables (in the deployment directory)
-3. `.thinkwork/stage.json` — Local metadata in the deployment directory
-
-You can view the resolved configuration for a stage:
+Every API-backed command accepts `--json`:
 
 ```bash
-thinkwork config list -s dev
+thinkwork me --json | jq .tenantSlug
+thinkwork thread list --status IN_PROGRESS --json | jq '.[] | .id'
+thinkwork cost summary --json | jq .totalUsd
 ```
 
-## Remote state
-
-ThinkWork uses S3 + DynamoDB for Terraform remote state. The `bootstrap` command creates these resources before the first deploy:
-
-```bash
-thinkwork bootstrap -s dev
-```
-
-This creates:
-- S3 bucket: `thinkwork-{stage}-tfstate-{account_id}` (versioning enabled, encryption at rest)
-- DynamoDB table: `thinkwork-{stage}-tfstate-lock` (PAY_PER_REQUEST billing)
-
-The `terraform.tfvars` file is updated with the backend configuration after `bootstrap` runs.
-
-<Aside type="note">
-`thinkwork deploy` automatically runs `bootstrap` if remote state hasn't been configured yet. You only need to run `bootstrap` explicitly if you want to set up state storage before your first deploy (e.g., in a CI pipeline that runs `plan` before `apply`).
-</Aside>
+`--json` routes structured output to stdout; warnings, spinners, and errors always go to stderr so pipelines stay clean.
 
 ## Using the CLI in CI
 
-For CI/CD pipelines, use environment variables instead of the interactive `login` command:
-
 ```bash
-# Set credentials via environment
+# 1. AWS side (deploy / destroy / status) — credentials from env or IAM role.
 export AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
 export AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
 export AWS_REGION=us-east-1
-
-# Non-interactive deploy (skips confirmation prompt)
 thinkwork deploy -s prod --auto-approve
+
+# 2. API side (thread / agent / inbox / …) — api-key session, no browser.
+thinkwork login --stage prod --api-key "${{ secrets.THINKWORK_API_KEY }}" --tenant acme
+thinkwork thread list --status IN_PROGRESS --json | jq '.[].id'
 ```
 
-Or use an IAM role with `aws sts assume-role` before running deploy.
+The api-key path stores `authSecret` + tenant on the session. `resolveAuth(stage)` sends `Authorization: Bearer <secret>` + `x-tenant-id: <id>` for every subsequent call.
 
-See [Commands Reference](/applications/cli/commands/) for the full syntax and options for every command.
+See [Commands Reference](/applications/cli/commands/) for the full syntax and options for every command — flags, positional args, examples for both interactive and scripted invocations, and the full Phase 1–5 roadmap of scaffolded commands.
