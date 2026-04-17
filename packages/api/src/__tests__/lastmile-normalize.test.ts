@@ -236,7 +236,7 @@ describe("envelopeFromRaw", () => {
 		expect(env._type).toBe("external_task");
 		expect(env._source?.provider).toBe("lastmile");
 		expect(env._source?.tool).toBe("tasks_get");
-		expect(env._source?.params).toEqual({ task_id: "task_abc123" });
+		expect(env._source?.params).toEqual({ taskId: "task_abc123" });
 		expect(env.item.forms?.edit?.id).toBe("form_edit");
 		expect(env.blocks.length).toBeGreaterThan(0);
 	});

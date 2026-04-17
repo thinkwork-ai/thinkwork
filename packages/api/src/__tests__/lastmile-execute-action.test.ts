@@ -63,8 +63,8 @@ beforeEach(() => {
 	mockCallMcpTool.mockResolvedValue(undefined);
 });
 
-describe("executeLastmileAction — field names match MCP tool schemas", () => {
-	it("update_status passes { task_id, status_id }", async () => {
+describe("executeLastmileAction — wire format: camelCase MCP args", () => {
+	it("update_status passes { taskId, statusId }", async () => {
 		await executeLastmileAction({
 			actionType: "external_task.update_status",
 			externalTaskId: "task_1",
@@ -75,27 +75,42 @@ describe("executeLastmileAction — field names match MCP tool schemas", () => {
 		expect(mockCallMcpTool).toHaveBeenCalledWith(
 			expect.objectContaining({
 				tool: "task_update_status",
-				args: { task_id: "task_1", status_id: "status_new_id" },
+				args: { taskId: "task_1", statusId: "status_new_id" },
 			}),
 		);
 	});
 
-	it("update_status accepts explicit params.status_id as the source of truth", async () => {
+	it("update_status accepts explicit params.statusId as the source of truth", async () => {
 		await executeLastmileAction({
 			actionType: "external_task.update_status",
 			externalTaskId: "task_1",
-			params: { status_id: "status_explicit", value: "ignored" },
+			params: { statusId: "status_explicit", value: "ignored" },
 			ctx: BASE_CTX,
 		});
 
 		expect(mockCallMcpTool).toHaveBeenCalledWith(
 			expect.objectContaining({
-				args: { task_id: "task_1", status_id: "status_explicit" },
+				args: { taskId: "task_1", statusId: "status_explicit" },
 			}),
 		);
 	});
 
-	it("assign uses tool name task_update_assignee and passes { task_id, assignee_id }", async () => {
+	it("update_status still accepts legacy snake_case params.status_id (back-compat)", async () => {
+		await executeLastmileAction({
+			actionType: "external_task.update_status",
+			externalTaskId: "task_1",
+			params: { status_id: "status_legacy" },
+			ctx: BASE_CTX,
+		});
+
+		expect(mockCallMcpTool).toHaveBeenCalledWith(
+			expect.objectContaining({
+				args: { taskId: "task_1", statusId: "status_legacy" },
+			}),
+		);
+	});
+
+	it("assign uses tool name task_update_assignee and passes { taskId, assigneeId }", async () => {
 		await executeLastmileAction({
 			actionType: "external_task.assign",
 			externalTaskId: "task_2",
@@ -106,27 +121,27 @@ describe("executeLastmileAction — field names match MCP tool schemas", () => {
 		expect(mockCallMcpTool).toHaveBeenCalledWith(
 			expect.objectContaining({
 				tool: "task_update_assignee",
-				args: { task_id: "task_2", assignee_id: "user_lastmile_7" },
+				args: { taskId: "task_2", assigneeId: "user_lastmile_7" },
 			}),
 		);
 	});
 
-	it("assign accepts explicit params.assignee_id", async () => {
+	it("assign accepts explicit params.assigneeId", async () => {
 		await executeLastmileAction({
 			actionType: "external_task.assign",
 			externalTaskId: "task_2",
-			params: { assignee_id: "user_lastmile_9" },
+			params: { assigneeId: "user_lastmile_9" },
 			ctx: BASE_CTX,
 		});
 
 		expect(mockCallMcpTool).toHaveBeenCalledWith(
 			expect.objectContaining({
-				args: { task_id: "task_2", assignee_id: "user_lastmile_9" },
+				args: { taskId: "task_2", assigneeId: "user_lastmile_9" },
 			}),
 		);
 	});
 
-	it("edit_fields uses task_update with task_id + the remaining form fields", async () => {
+	it("edit_fields uses task_update with taskId + pass-through fields that already match MCP schema", async () => {
 		await executeLastmileAction({
 			actionType: "external_task.edit_fields",
 			externalTaskId: "task_3",
@@ -138,10 +153,58 @@ describe("executeLastmileAction — field names match MCP tool schemas", () => {
 			expect.objectContaining({
 				tool: "task_update",
 				args: {
-					task_id: "task_3",
+					taskId: "task_3",
 					title: "New title",
 					description: "New desc",
 				},
+			}),
+		);
+	});
+
+	it("edit_fields translates form keys (status→statusId, assignee→assigneeId, dueAt→dueDate)", async () => {
+		await executeLastmileAction({
+			actionType: "external_task.edit_fields",
+			externalTaskId: "task_4",
+			params: {
+				_formId: "form_edit",
+				status: "status_new",
+				assignee: "user_someone",
+				dueAt: "2026-05-01",
+				priority: "high",
+			},
+			ctx: BASE_CTX,
+		});
+
+		expect(mockCallMcpTool).toHaveBeenCalledWith(
+			expect.objectContaining({
+				tool: "task_update",
+				args: {
+					taskId: "task_4",
+					statusId: "status_new",
+					assigneeId: "user_someone",
+					dueDate: "2026-05-01",
+					priority: "high",
+				},
+			}),
+		);
+	});
+
+	it("edit_fields drops empty/null/undefined values before spreading into the MCP call", async () => {
+		await executeLastmileAction({
+			actionType: "external_task.edit_fields",
+			externalTaskId: "task_5",
+			params: {
+				_formId: "form_edit",
+				title: "Keep",
+				description: "",
+				priority: null,
+			},
+			ctx: BASE_CTX,
+		});
+
+		expect(mockCallMcpTool).toHaveBeenCalledWith(
+			expect.objectContaining({
+				args: { taskId: "task_5", title: "Keep" },
 			}),
 		);
 	});
