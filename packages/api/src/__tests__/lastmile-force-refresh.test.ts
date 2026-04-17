@@ -149,7 +149,7 @@ function queueHappyPathSelects(
 	selectResults.push([
 		{
 			id: MCP_ID,
-			url: "https://mcp-dev.lastmile-tei.com/tasks",
+			url: "https://dev-mcp.lastmile-tei.com/tasks",
 			enabled: true,
 			auth_config: authConfig,
 		},
@@ -203,7 +203,7 @@ describe("forceRefreshLastmileUserToken — load failures return null", () => {
 		selectResults.push([
 			{
 				id: "other-mcp",
-				url: "https://mcp-dev.lastmile-tei.com/crm", // wrong path
+				url: "https://dev-mcp.lastmile-tei.com/crm", // wrong path
 				enabled: true,
 				auth_config: {},
 			},
@@ -217,7 +217,7 @@ describe("forceRefreshLastmileUserToken — load failures return null", () => {
 		selectResults.push([
 			{
 				id: MCP_ID,
-				url: "https://mcp-dev.lastmile-tei.com/tasks",
+				url: "https://dev-mcp.lastmile-tei.com/tasks",
 				enabled: true,
 				auth_config: {
 					token_endpoint: "https://example/oauth2/token",

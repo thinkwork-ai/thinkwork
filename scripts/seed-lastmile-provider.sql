@@ -4,8 +4,11 @@
 --   psql $DATABASE_URL -f scripts/seed-lastmile-provider.sql
 --
 -- Prerequisites (set before users can connect):
---   env vars: LASTMILE_CLIENT_ID, LASTMILE_CLIENT_SECRET, LASTMILE_WEBHOOK_SECRET,
---             LASTMILE_MCP_BASE_URL, LASTMILE_MCP_SERVICE_KEY
+--   env vars: LASTMILE_CLIENT_ID, LASTMILE_CLIENT_SECRET, LASTMILE_WEBHOOK_SECRET
+--
+-- Note: MCP server URLs are NOT env-var driven. Register each MCP server
+-- per-tenant in `tenant_mcp_servers` (via Admin → Connectors). The runtime
+-- reads the URL from that record on every call — no hardcoded defaults.
 
 INSERT INTO connect_providers (id, name, display_name, provider_type, auth_type, config, is_available)
 VALUES (

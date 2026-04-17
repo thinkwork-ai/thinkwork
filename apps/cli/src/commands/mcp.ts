@@ -159,7 +159,7 @@ Examples:
       --auth-type tenant_api_key --api-key sk-abc -s dev -t acme
 
   # OAuth connector (users connect from the mobile app)
-  $ thinkwork mcp add lastmile --url https://mcp-dev.lastmile-tei.com/crm \\
+  $ thinkwork mcp add lastmile --url https://dev-mcp.lastmile-tei.com/crm \\
       --auth-type per_user_oauth --oauth-provider lastmile -s dev -t acme
 `,
     )

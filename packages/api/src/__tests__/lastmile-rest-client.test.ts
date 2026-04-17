@@ -49,7 +49,7 @@ function makeJwt(claims: Record<string, unknown>): string {
 const OLD_TOKEN = makeJwt({
 	iss: "https://straightforward-dragon-14-staging.authkit.app",
 	sub: "user_OLD",
-	aud: "https://mcp-dev.lastmile-tei.com/tasks",
+	aud: "https://dev-mcp.lastmile-tei.com/tasks",
 	exp: Math.floor(Date.now() / 1000) + 3600,
 	scope: "openid profile email",
 	jti: "old-jti",
@@ -57,7 +57,7 @@ const OLD_TOKEN = makeJwt({
 const NEW_TOKEN = makeJwt({
 	iss: "https://straightforward-dragon-14-staging.authkit.app",
 	sub: "user_OLD",
-	aud: "https://mcp-dev.lastmile-tei.com/tasks",
+	aud: "https://dev-mcp.lastmile-tei.com/tasks",
 	exp: Math.floor(Date.now() / 1000) + 3600,
 	scope: "openid profile email",
 	jti: "new-jti",
@@ -156,7 +156,7 @@ describe("listWorkflows — 401 refresh-retry path", () => {
 		expect(details.tokenIssuer).toBe(
 			"https://straightforward-dragon-14-staging.authkit.app",
 		);
-		expect(details.tokenAudience).toBe("https://mcp-dev.lastmile-tei.com/tasks");
+		expect(details.tokenAudience).toBe("https://dev-mcp.lastmile-tei.com/tasks");
 		expect(details.tokenSub).toBe("user_OLD");
 		expect(typeof details.tokenExp).toBe("number");
 		expect(typeof details.tokenExpiresInSec).toBe("number");

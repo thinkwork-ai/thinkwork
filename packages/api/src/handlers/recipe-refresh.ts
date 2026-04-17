@@ -15,8 +15,9 @@ import { eq } from "drizzle-orm";
 import { resolveTemplates } from "../lib/template-resolver.js";
 
 const API_AUTH_SECRET = process.env.API_AUTH_SECRET || "";
-const MCP_BASE_URL = process.env.LASTMILE_MCP_BASE_URL || "https://mcp-dev.lastmile-tei.com";
-const MCP_SERVICE_KEY = process.env.LASTMILE_MCP_SERVICE_KEY || "";
+// NOTE: MCP URL + service key are NOT read from env anymore. Look up
+// `tenant_mcp_servers.url` + `auth_config` by (tenantId, server slug)
+// when this handler is re-wired. TODO(mcp-url-record follow-up).
 
 interface LambdaEvent {
 	headers?: Record<string, string | undefined>;
@@ -38,34 +39,17 @@ function json(statusCode: number, body: unknown) {
 	};
 }
 
-async function callMcpTool(toolName: string, args: Record<string, unknown>, server: string): Promise<unknown> {
-	const mcpUrl = `${MCP_BASE_URL}/${server}`;
-	const rpcResponse = await fetch(mcpUrl, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			Authorization: `Bearer ${MCP_SERVICE_KEY}`,
-		},
-		body: JSON.stringify({
-			jsonrpc: "2.0",
-			id: 1,
-			method: "tools/call",
-			params: { name: toolName, arguments: args },
-		}),
-	});
-
-	const rpc = await rpcResponse.json();
-	if (rpc?.error) throw new Error(rpc.error.message || "MCP error");
-
-	const content = rpc?.result?.content;
-	if (Array.isArray(content)) {
-		for (const item of content) {
-			if (item?.type === "text" && item?.text) {
-				try { return JSON.parse(item.text); } catch { return item.text; }
-			}
-		}
-	}
-	return null;
+async function callMcpTool(
+	_toolName: string,
+	_args: Record<string, unknown>,
+	_server: string,
+): Promise<unknown> {
+	// TODO(mcp-url-record follow-up): look up URL + auth from
+	// tenant_mcp_servers (scoped by the recipe's tenant + server slug)
+	// instead of the previous env-var defaults.
+	throw new Error(
+		"[recipe-refresh] MCP call disabled pending tenant_mcp_servers wiring",
+	);
 }
 
 export async function handler(event: LambdaEvent) {
@@ -79,10 +63,6 @@ export async function handler(event: LambdaEvent) {
 	if (!API_AUTH_SECRET || !token || token !== API_AUTH_SECRET) {
 		return json(401, { ok: false, error: "Unauthorized" });
 	}
-	if (!MCP_SERVICE_KEY) {
-		return json(500, { ok: false, error: "MCP service key not configured" });
-	}
-
 	let body: Record<string, unknown>;
 	try {
 		body = event.body ? JSON.parse(event.body) : {};

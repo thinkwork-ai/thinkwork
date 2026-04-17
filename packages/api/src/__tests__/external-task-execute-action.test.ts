@@ -75,13 +75,15 @@ vi.mock("../integrations/external-work-items/index.js", () => ({
 
 // ── Mocks: OAuth token resolver ──────────────────────────────────────────────
 
-const { mockResolveOAuthToken } = vi.hoisted(() => {
+const { mockResolveOAuthToken, mockResolveLastmileTasksMcpServer } = vi.hoisted(() => {
 	const mockResolveOAuthToken = vi.fn();
-	return { mockResolveOAuthToken };
+	const mockResolveLastmileTasksMcpServer = vi.fn();
+	return { mockResolveOAuthToken, mockResolveLastmileTasksMcpServer };
 });
 
 vi.mock("../lib/oauth-token.js", () => ({
 	resolveOAuthToken: mockResolveOAuthToken,
+	resolveLastmileTasksMcpServer: mockResolveLastmileTasksMcpServer,
 }));
 
 // ── Import AFTER mocks ───────────────────────────────────────────────────────
@@ -153,6 +155,10 @@ beforeEach(() => {
 		provider: "lastmile",
 		executeAction: mockExecuteAction,
 	} as never);
+	mockResolveLastmileTasksMcpServer.mockResolvedValue({
+		id: "mcp-server-1",
+		url: "https://mcp-test.invalid/tasks",
+	});
 	mockSelectFrom.mockReturnValue({ where: mockSelectWhere });
 	mockSelect.mockReturnValue({ from: mockSelectFrom });
 	mockUpdateSet.mockReturnValue({ where: mockUpdateWhere });
@@ -282,6 +288,7 @@ describe("executeExternalTaskAction — happy path", () => {
 				userId: PRINCIPAL,
 				connectionId: CONNECTION_ID,
 				authToken: "token-fresh",
+				mcpServerUrl: "https://mcp-test.invalid/tasks",
 			},
 		});
 

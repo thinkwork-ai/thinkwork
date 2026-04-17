@@ -17,7 +17,10 @@ import type {
 	TaskProvider,
 } from "./types.js";
 import { getAdapter, hasAdapter } from "./index.js";
-import { resolveOAuthToken } from "../../lib/oauth-token.js";
+import {
+	resolveOAuthToken,
+	resolveLastmileTasksMcpServer,
+} from "../../lib/oauth-token.js";
 
 const { threads, messages } = schema;
 const db = getDb();
@@ -120,13 +123,19 @@ export async function executeExternalTaskAction(
 			`Thread metadata is missing external.providerId; re-link the thread with provider id for OAuth resolution`,
 		);
 	}
-	const authToken = await resolveOAuthToken(
-		external.connectionId,
-		tenantId,
-		external.providerId,
-	);
+	const [authToken, tasksMcp] = await Promise.all([
+		resolveOAuthToken(external.connectionId, tenantId, external.providerId),
+		external.provider === "lastmile"
+			? resolveLastmileTasksMcpServer(tenantId)
+			: Promise.resolve(null),
+	]);
 	if (!authToken) {
 		throw new Error(`Could not resolve OAuth token for connection ${external.connectionId}`);
+	}
+	if (external.provider === "lastmile" && !tasksMcp) {
+		throw new Error(
+			`No LastMile Tasks MCP server configured for tenant ${tenantId} — reconnect LastMile`,
+		);
 	}
 
 	const envelope = await adapter.executeAction({
@@ -138,6 +147,7 @@ export async function executeExternalTaskAction(
 			userId: principalId,
 			connectionId: external.connectionId,
 			authToken,
+			mcpServerUrl: tasksMcp?.url,
 		},
 	});
 

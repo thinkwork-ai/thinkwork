@@ -19,6 +19,7 @@ import type {
 import {
 	resolveConnectionByProviderUserId,
 	resolveOAuthToken,
+	resolveLastmileTasksMcpServer,
 } from "../../lib/oauth-token.js";
 import {
 	closeExternalTaskThread,
@@ -111,8 +112,12 @@ export async function ingestExternalTaskEvent(args: {
 		};
 	}
 
-	const authToken =
-		(await resolveOAuthToken(conn.connectionId, conn.tenantId, conn.providerId)) ?? undefined;
+	const [authToken, tasksMcp] = await Promise.all([
+		resolveOAuthToken(conn.connectionId, conn.tenantId, conn.providerId),
+		provider === "lastmile"
+			? resolveLastmileTasksMcpServer(conn.tenantId)
+			: Promise.resolve(null),
+	]);
 
 	let envelope: ExternalTaskEnvelope | undefined;
 	try {
@@ -122,7 +127,8 @@ export async function ingestExternalTaskEvent(args: {
 				tenantId: conn.tenantId,
 				userId: conn.userId,
 				connectionId: conn.connectionId,
-				authToken,
+				authToken: authToken ?? undefined,
+				mcpServerUrl: tasksMcp?.url,
 			},
 		});
 	} catch (err) {
