@@ -273,7 +273,6 @@ def _retrieve_kb_context(kb_config: list, query: str, max_results: int = 5) -> s
 
 
 from external_task_context import format_external_task_context
-from workflow_skill_context import format_workflow_skill_context
 
 
 def _build_system_prompt(skills_config: list | None = None, kb_config: list | None = None,
@@ -1482,7 +1481,6 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
         guardrail_config = payload.get("guardrail_config")
         mcp_configs = payload.get("mcp_configs") or []
         thread_metadata = payload.get("thread_metadata") or {}
-        workflow_skill = payload.get("workflow_skill") or None
         if mcp_configs:
             logger.info("MCP configs received: %d servers (%s)",
                         len(mcp_configs),
@@ -1531,6 +1529,17 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
 
         # Inject skill credentials from Secrets Manager
         injected_env_keys = _inject_skill_env(skills_config) if skills_config else []
+
+        # Tag every span emitted during this invocation with stable IDs so
+        # the eval-runner can query CloudWatch aws/spans by session.id and
+        # hand the resulting batch to AgentCore Evaluations.
+        from eval_span_attrs import attach_eval_context, detach_eval_context
+        _eval_ctx_token = attach_eval_context(
+            session_id=tenant_id,
+            tenant_id=workspace_tenant_id,
+            agent_id=assistant_id,
+            thread_id=ticket_id,
+        )
 
         try:
             if assistant_id:
@@ -1596,18 +1605,6 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                 system_prompt += "\n\n---\n\n" + external_block
                 logger.info("Injected external-task context into system prompt (%d chars)",
                             len(external_block))
-
-            # Workflow-skill injection: when the thread is attached to a
-            # LastMile workflow whose `skill` block is populated, append
-            # the workflow's custom instructions + form schema. The
-            # `lastmile-tasks` skill reads this block to decide whether
-            # to present the workflow-specific form (dynamic path) or
-            # the generic hardcoded intake form (fallback).
-            workflow_skill_block = format_workflow_skill_context(workflow_skill)
-            if workflow_skill_block:
-                system_prompt += "\n\n---\n\n" + workflow_skill_block
-                logger.info("Injected workflow-skill context into system prompt (%d chars)",
-                            len(workflow_skill_block))
 
             # Auto-retrieve relevant KB context — only for agents WITHOUT workspace map
             if knowledge_bases_config and not has_workspace_map:
@@ -1727,6 +1724,7 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                     logger.error("Strands agent invocation failed tenant_id=%s error=%s", tenant_id, e)
                     self._respond(500, _error_response(str(e)))
         finally:
+            detach_eval_context(_eval_ctx_token)
             _cleanup_skill_env(injected_env_keys)
 
     def do_DELETE(self):
@@ -1742,6 +1740,20 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
 
 
 def main():
+    # Register the eval-attribution span processor so every span carries
+    # session.id / tenant.id / agent.id / thread.id from baggage. Logs a
+    # warning if the global TracerProvider isn't an SDK provider yet, in
+    # which case spans go un-attributed (eval-runner falls back to trace
+    # ID correlation).
+    try:
+        from eval_span_attrs import register_processor
+        if register_processor():
+            logger.info("Registered EvalAttrSpanProcessor on TracerProvider")
+        else:
+            logger.warning("EvalAttrSpanProcessor not registered — TracerProvider lacks add_span_processor")
+    except Exception as e:
+        logger.warning("Failed to register EvalAttrSpanProcessor: %s", e)
+
     # Load Nova Act API key from SSM
     global _nova_act_api_key
     _nova_act_api_key = _load_nova_act_key()

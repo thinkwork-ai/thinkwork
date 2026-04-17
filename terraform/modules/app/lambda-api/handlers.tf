@@ -51,7 +51,7 @@ locals {
     # path. When unset, syncExternalTaskOnCreate writes sync_status='local'
     # and the workflow picker proxy returns 503. Set to the LMI develop /
     # staging / prod base URL per stage to enable real cross-system sync.
-    LASTMILE_TASKS_API_URL   = var.lastmile_tasks_api_url
+    LASTMILE_TASKS_API_URL = var.lastmile_tasks_api_url
   }
 
   # Per-handler env-var overrides. ARNs are constructed from the naming
@@ -111,14 +111,18 @@ resource "aws_lambda_function" "handler" {
     "agent-skills-list",
     "bootstrap-workspaces",
     "code-factory",
+    "eval-runner",
   ]) : toset([])
 
   function_name = "thinkwork-${var.stage}-api-${each.key}"
   role          = aws_iam_role.lambda.arn
   handler       = "index.handler"
   runtime       = local.runtime
-  timeout       = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : 30
-  memory_size   = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : 256
+  # eval-runner walks every test case sequentially, invoking an agent +
+  # waiting up to 2 min for spans to propagate per test, so a 10-test run
+  # can easily exceed the 30 s default. 900 s covers ~5-15 min sweeps.
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "eval-runner" ? 900 : 30
+  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "eval-runner" ? 512 : 256
 
   filename         = "${var.lambda_zips_dir}/${each.key}.zip"
   source_code_hash = filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip")
@@ -358,6 +362,7 @@ resource "aws_ssm_parameter" "lambda_arns" {
     "kb-manager-fn-arn"           = aws_lambda_function.handler["knowledge-base-manager"].arn
     "job-schedule-manager-fn-arn" = aws_lambda_function.handler["job-schedule-manager"].arn
     "memory-retain-fn-arn"        = aws_lambda_function.handler["memory-retain"].arn
+    "eval-runner-fn-arn"          = aws_lambda_function.handler["eval-runner"].arn
   } : {}
 
   name  = "/thinkwork/${var.stage}/${each.key}"

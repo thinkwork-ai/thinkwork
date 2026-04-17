@@ -6,12 +6,12 @@
 #   bash scripts/create-runtime.sh --stage ericodom --runtime chat
 #
 # The --stage flag determines resource names:
-#   ECR:  thinkwork-{stage}-agentcore-agent
-#   Role: thinkwork-{stage}-agentcore-execution-role
+#   ECR:  thinkwork-{stage}-agentcore
+#   Role: thinkwork-{stage}-agentcore-role
 #   SSM:  /thinkwork/{stage}/agentcore/runtime-id-{type}
 #
 # Prerequisites:
-#   - SST deployed (infra/agentcore.ts manages ECR + IAM)
+#   - Terraform applied (terraform/modules/app/agentcore-runtime manages ECR + IAM)
 #   - Agent container image pushed to ECR (scripts/build-and-push.sh)
 set -euo pipefail
 
@@ -45,8 +45,8 @@ case "$RUNTIME" in
 esac
 
 ACCOUNT_ID="487219502366"
-ECR_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/thinkwork-${STAGE}-agentcore-agent"
-ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/thinkwork-${STAGE}-agentcore-execution-role"
+ECR_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/thinkwork-${STAGE}-agentcore"
+ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/thinkwork-${STAGE}-agentcore-role"
 RUNTIME_NAME="${RUNTIME_NAME:-thinkwork-${STAGE}-runtime-${RUNTIME}}"
 
 # Type-specific SSM path

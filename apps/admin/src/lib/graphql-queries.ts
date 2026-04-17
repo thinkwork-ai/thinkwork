@@ -1626,3 +1626,202 @@ export const TurnInvocationLogsQuery = graphql(`
     }
   }
 `);
+
+// ---------------------------------------------------------------------------
+// Evaluations
+// ---------------------------------------------------------------------------
+
+export const EvalSummaryQuery = gql`
+  query EvalSummary($tenantId: ID!) {
+    evalSummary(tenantId: $tenantId) {
+      totalRuns
+      latestPassRate
+      avgPassRate
+      regressionCount
+    }
+  }
+`;
+
+export const EvalRunsQuery = gql`
+  query EvalRuns($tenantId: ID!, $limit: Int, $offset: Int, $agentId: ID) {
+    evalRuns(tenantId: $tenantId, limit: $limit, offset: $offset, agentId: $agentId) {
+      items {
+        id
+        status
+        model
+        categories
+        totalTests
+        passed
+        failed
+        passRate
+        regression
+        costUsd
+        agentId
+        agentName
+        startedAt
+        completedAt
+        createdAt
+      }
+      totalCount
+    }
+  }
+`;
+
+export const EvalRunQuery = gql`
+  query EvalRun($id: ID!) {
+    evalRun(id: $id) {
+      id
+      status
+      model
+      categories
+      totalTests
+      passed
+      failed
+      passRate
+      regression
+      costUsd
+      errorMessage
+      agentId
+      agentName
+      startedAt
+      completedAt
+      createdAt
+    }
+  }
+`;
+
+export const EvalRunResultsQuery = gql`
+  query EvalRunResults($runId: ID!) {
+    evalRunResults(runId: $runId) {
+      id
+      testCaseId
+      testCaseName
+      category
+      status
+      score
+      durationMs
+      input
+      actualOutput
+      evaluatorResults
+      assertions
+      errorMessage
+      createdAt
+    }
+  }
+`;
+
+export const EvalTimeSeriesQuery = gql`
+  query EvalTimeSeries($tenantId: ID!, $days: Int) {
+    evalTimeSeries(tenantId: $tenantId, days: $days) {
+      day
+      passRate
+      runCount
+      passed
+      failed
+    }
+  }
+`;
+
+export const EvalTestCasesQuery = gql`
+  query EvalTestCases($tenantId: ID!, $category: String, $search: String) {
+    evalTestCases(tenantId: $tenantId, category: $category, search: $search) {
+      id
+      name
+      category
+      query
+      systemPrompt
+      assertions
+      agentcoreEvaluatorIds
+      tags
+      enabled
+      source
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+export const EvalTestCaseQuery = gql`
+  query EvalTestCase($id: ID!) {
+    evalTestCase(id: $id) {
+      id
+      name
+      category
+      query
+      systemPrompt
+      assertions
+      agentcoreEvaluatorIds
+      tags
+      enabled
+      source
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+export const StartEvalRunMutation = gql`
+  mutation StartEvalRun($tenantId: ID!, $input: StartEvalRunInput!) {
+    startEvalRun(tenantId: $tenantId, input: $input) {
+      id
+      status
+      categories
+      createdAt
+    }
+  }
+`;
+
+export const CreateEvalTestCaseMutation = gql`
+  mutation CreateEvalTestCase($tenantId: ID!, $input: CreateEvalTestCaseInput!) {
+    createEvalTestCase(tenantId: $tenantId, input: $input) {
+      id
+      name
+      category
+      query
+      systemPrompt
+      assertions
+      agentcoreEvaluatorIds
+      enabled
+      createdAt
+    }
+  }
+`;
+
+export const UpdateEvalTestCaseMutation = gql`
+  mutation UpdateEvalTestCase($id: ID!, $input: UpdateEvalTestCaseInput!) {
+    updateEvalTestCase(id: $id, input: $input) {
+      id
+      name
+      category
+      query
+      systemPrompt
+      assertions
+      agentcoreEvaluatorIds
+      enabled
+      updatedAt
+    }
+  }
+`;
+
+export const DeleteEvalTestCaseMutation = gql`
+  mutation DeleteEvalTestCase($id: ID!) {
+    deleteEvalTestCase(id: $id)
+  }
+`;
+
+export const OnEvalRunUpdatedSubscription = gql`
+  subscription OnEvalRunUpdated($tenantId: ID!) {
+    onEvalRunUpdated(tenantId: $tenantId) {
+      runId
+      tenantId
+      agentId
+      status
+      totalTests
+      passed
+      failed
+      passRate
+      errorMessage
+      updatedAt
+    }
+  }
+`;

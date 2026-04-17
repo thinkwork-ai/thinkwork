@@ -259,6 +259,9 @@ build_handler "agentcore-admin" \
 build_handler "github-workspace" \
   "$REPO_ROOT/packages/lambda/github-workspace.ts"
 
+build_handler "eval-runner" \
+  "$REPO_ROOT/packages/api/src/handlers/eval-runner.ts"
+
 # ---------------------------------------------------------------------------
 # P2: Cron handlers
 # ---------------------------------------------------------------------------
