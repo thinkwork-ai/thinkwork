@@ -118,91 +118,6 @@ export interface LastmileWorkflow {
 	createdBy?: string | null;
 	createdAt?: string;
 	updatedAt?: string;
-	/** Per-workflow intake contract. When populated, ThinkWork presents
-	 *  `form` as a Question Card and forwards the submitted `formResponse`
-	 *  verbatim to `POST /workflows/{id}/tasks`. When absent, ThinkWork
-	 *  falls back to its generic 4-question intake + `POST /tasks`. */
-	skill?: LastmileWorkflowSkill | null;
-}
-
-/** Workflow-scoped intake skill returned by `GET /workflows/{id}`. The
- *  whole block is optional; so is every sub-field. ThinkWork treats an
- *  unknown `schemaVersion` as "fall back to the default form". */
-export interface LastmileWorkflowSkill {
-	schemaVersion: number;
-	instructions?: string | null;
-	form?: LastmileWorkflowForm | null;
-}
-
-/** Question Card form schema — mirrors the `present_form` tool contract
- *  used by the agent side. We carry the whole blob opaquely; LastMile
- *  owns the content, ThinkWork owns the rendering primitives. */
-export interface LastmileWorkflowForm {
-	id: string;
-	title?: string;
-	description?: string;
-	submit_label?: string;
-	fields: LastmileWorkflowFormField[];
-}
-
-export interface LastmileWorkflowFormField {
-	id: string;
-	label: string;
-	type: "text" | "textarea" | "select" | "boolean" | "date" | "user_picker";
-	required?: boolean;
-	placeholder?: string;
-	options?: Array<{ value: string; label: string }>;
-}
-
-/** Envelope accepted by `POST /workflows/{workflowId}/tasks`. LastMile
- *  owns the mapping from `formResponse.values` to task columns and/or
- *  `task.entity_data`; we just forward. */
-export interface CreateWorkflowTaskRequest {
-	workflowId: string;
-	threadId: string;
-	threadTitle: string;
-	formResponse: {
-		form_id: string;
-		values: Record<string, unknown>;
-	};
-	creator: {
-		userId: string;
-		email: string;
-	};
-}
-
-/** Latest skill schema version this client understands. Bump when the
- *  form / envelope shape changes in a non-backwards-compatible way. */
-export const SUPPORTED_WORKFLOW_SKILL_SCHEMA_VERSION = 1;
-
-export type WorkflowSkillValidationResult =
-	| { ok: true; skill: LastmileWorkflowSkill }
-	| { ok: false; reason: "absent" | "not_object" | "unknown_schema_version" | "invalid_form" };
-
-/** Cheap structural check on a workflow's `skill` blob. Does not deep-
- *  validate individual field shapes — we forward `form` to the agent's
- *  `present_form` tool which tolerates extra keys. The goal is to decide:
- *  "should we take the dynamic path, or fall back to the hardcoded form?" */
-export function validateWorkflowSkill(
-	raw: unknown,
-): WorkflowSkillValidationResult {
-	if (raw === null || raw === undefined) return { ok: false, reason: "absent" };
-	if (typeof raw !== "object") return { ok: false, reason: "not_object" };
-	const skill = raw as Partial<LastmileWorkflowSkill>;
-	if (skill.schemaVersion !== SUPPORTED_WORKFLOW_SKILL_SCHEMA_VERSION) {
-		return { ok: false, reason: "unknown_schema_version" };
-	}
-	if (skill.form !== undefined && skill.form !== null) {
-		const form = skill.form as Partial<LastmileWorkflowForm>;
-		if (
-			typeof form.id !== "string" ||
-			!Array.isArray(form.fields) ||
-			form.fields.length === 0
-		) {
-			return { ok: false, reason: "invalid_form" };
-		}
-	}
-	return { ok: true, skill: skill as LastmileWorkflowSkill };
 }
 
 /** LastMile status — workflow-scoped. `displayOrder=0` and `isFinal=false`
@@ -601,34 +516,6 @@ export async function createTask(
 	return doRequest<CreateTaskResponse, CreateTaskRequest>({
 		method: "POST",
 		path: "/tasks",
-		authToken: args.ctx.authToken,
-		baseUrl: ctxToBaseUrl(args.ctx),
-		body: args.input,
-		idempotencyKey: args.idempotencyKey,
-		refreshToken: args.ctx.refreshToken,
-	});
-}
-
-/** POST /workflows/{workflowId}/tasks — workflow-skill-driven create.
- *
- *  Used when the workflow's `skill` block is populated and the agent
- *  has collected a `formResponse` via the workflow's custom Question
- *  Card form. LastMile maps `formResponse.values` to task columns and
- *  workflow-specific `entity_data`; ThinkWork forwards the envelope
- *  opaquely.
- *
- *  Response mirrors `POST /tasks`: `{success, id}` on 201. */
-export async function createWorkflowTask(
-	args: {
-		workflowId: string;
-		input: CreateWorkflowTaskRequest;
-		idempotencyKey?: string;
-		ctx: LastmileRestCtx;
-	},
-): Promise<CreateTaskResponse> {
-	return doRequest<CreateTaskResponse, CreateWorkflowTaskRequest>({
-		method: "POST",
-		path: `/workflows/${encodeURIComponent(args.workflowId)}/tasks`,
 		authToken: args.ctx.authToken,
 		baseUrl: ctxToBaseUrl(args.ctx),
 		body: args.input,

@@ -12,20 +12,16 @@ type ExternalTaskActionResult {
 
 # Input for `createLastmileTask`, the mutation the agent invokes after
 # the user submits the LastMile task-intake form. The per-column fields
-# (description / priority / dueDate / assigneeEmail) drive the legacy
-# `POST /tasks` path and are used when the workflow has no `skill` block.
-#
-# When the workflow ships a populated `skill.form`, the agent instead
-# passes `formResponse` (the opaque `{form_id, values}` payload LastMile
-# renders against its workflow-specific schema), and the per-column
-# fields are ignored. See `lastmile-workflow-skill-proposal.md`.
+# (description / priority / dueDate / assigneeEmail) drive `POST /tasks`.
+# When a workflow needs workflow-specific intake, the agent uses the
+# LastMile MCP's `workflow_task_create` tool directly instead of this
+# mutation — no form-response plumbing lives on the ThinkWork side.
 input CreateLastmileTaskInput {
   threadId: ID!
   description: String
   priority: String
   dueDate: AWSDateTime
   assigneeEmail: String
-  formResponse: AWSJSON
 }
 
 extend type Mutation {

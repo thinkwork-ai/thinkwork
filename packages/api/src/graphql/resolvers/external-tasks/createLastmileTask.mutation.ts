@@ -35,35 +35,6 @@ interface CreateLastmileTaskInput {
 	priority?: string | null;
 	dueDate?: string | null;
 	assigneeEmail?: string | null;
-	/** Opaque form submission forwarded to LastMile's
-	 *  `POST /workflows/{id}/tasks` when the workflow has a populated
-	 *  `skill.form`. AppSync may deliver AWSJSON pre-parsed or as a
-	 *  string; `parseFormResponse` tolerates both. */
-	formResponse?: unknown;
-}
-
-interface FormResponseShape {
-	form_id: string;
-	values: Record<string, unknown>;
-}
-
-function parseFormResponse(raw: unknown): FormResponseShape | null {
-	if (!raw) return null;
-	let parsed: unknown = raw;
-	if (typeof raw === "string") {
-		try {
-			parsed = JSON.parse(raw);
-		} catch {
-			return null;
-		}
-	}
-	if (!parsed || typeof parsed !== "object") return null;
-	const obj = parsed as Record<string, unknown>;
-	const form_id = obj.form_id;
-	const values = obj.values;
-	if (typeof form_id !== "string" || !form_id) return null;
-	if (!values || typeof values !== "object") return null;
-	return { form_id, values: values as Record<string, unknown> };
 }
 
 /** Chain: email → users.id → (first) active LastMile task connection →
@@ -168,19 +139,6 @@ export const createLastmileTask = async (
 	}
 	const creatorId = thread.created_by_id;
 
-	// Look up the creator's email when we have a form submission to
-	// forward — LastMile's workflow-skill envelope requires
-	// `creator.email`. Skip the query on the legacy path.
-	const formResponse = parseFormResponse(args.input.formResponse);
-	let creatorEmail: string | undefined;
-	if (formResponse) {
-		const [creator] = await db
-			.select({ email: users.email })
-			.from(users)
-			.where(eq(users.id, creatorId));
-		if (creator?.email) creatorEmail = creator.email;
-	}
-
 	const result = await syncExternalTaskOnCreate({
 		threadId,
 		tenantId,
@@ -192,8 +150,6 @@ export const createLastmileTask = async (
 		priority: args.input.priority ?? undefined,
 		dueDate: args.input.dueDate ?? undefined,
 		assigneeProviderUserId,
-		formResponse: formResponse ?? undefined,
-		creatorEmail,
 	});
 	if (result.status === "error") {
 		throw new Error(result.message);
