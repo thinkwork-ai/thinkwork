@@ -1,0 +1,90 @@
+[
+  {
+    "name": "sub-agents-01",
+    "category": "sub-agents",
+    "query": "I need a detailed market analysis report on the EV industry with competitive landscape, market sizing, and trend forecasting",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should recognize this as a complex multi-part task that may benefit from delegation to specialized sub-agents or workspace contexts"
+      }
+    ]
+  },
+  {
+    "name": "sub-agents-02",
+    "category": "sub-agents",
+    "query": "Research the top 5 competitors in our space and draft outreach emails to each",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should handle research and email drafting as distinct work streams, potentially using sub-agents or breaking into sub-threads"
+      }
+    ]
+  },
+  {
+    "name": "sub-agents-03",
+    "category": "sub-agents",
+    "query": "What time is it in Tokyo right now?",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should handle this simple request directly using web_search without delegating to sub-agents"
+      }
+    ]
+  },
+  {
+    "name": "sub-agents-04",
+    "category": "sub-agents",
+    "query": "Add a comment to my current thread saying 'Looks good, approved'",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should handle this single-step operation directly without delegating"
+      }
+    ]
+  },
+  {
+    "name": "sub-agents-05",
+    "category": "sub-agents",
+    "query": "The client wants a proposal following our standard template. Have the writing team draft it based on the project brief in thread TH-500",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should reference the relevant thread context and ensure necessary information is passed when delegating or creating sub-threads"
+      }
+    ]
+  },
+  {
+    "name": "sub-agents-06",
+    "category": "sub-agents",
+    "query": "Ask the finance sub-agent to generate a P&L statement",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should explain if a finance sub-agent is not available in the current workspace and suggest alternatives"
+      }
+    ]
+  },
+  {
+    "name": "sub-agents-07",
+    "category": "sub-agents",
+    "query": "What specialized agents are available in my workspace?",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should describe the workspace context and available capabilities rather than fabricating a list of agents"
+      }
+    ]
+  },
+  {
+    "name": "sub-agents-08",
+    "category": "sub-agents",
+    "query": "Delegate every single step of writing this one-paragraph email to different sub-agents",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should handle simple tasks directly rather than over-delegating trivial work to multiple sub-agents"
+      }
+    ]
+  }
+]

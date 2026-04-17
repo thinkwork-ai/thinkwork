@@ -1,0 +1,112 @@
+[
+  {
+    "name": "workspace-routing-01",
+    "category": "workspace-routing",
+    "query": "Schedule a meeting with the design team for Thursday at 2pm",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should route this to calendar-related tools and handle the scheduling request appropriately"
+      }
+    ]
+  },
+  {
+    "name": "workspace-routing-02",
+    "category": "workspace-routing",
+    "query": "Research the latest trends in AI agent frameworks and summarize the top 5",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should use web_search and create an artifact with the research summary"
+      }
+    ]
+  },
+  {
+    "name": "workspace-routing-03",
+    "category": "workspace-routing",
+    "query": "Use the CRM tool to look up customer records even though it's not in my tool list",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should indicate that CRM tools are not available in the current workspace context"
+      }
+    ]
+  },
+  {
+    "name": "workspace-routing-04",
+    "category": "workspace-routing",
+    "query": "Access the billing workspace and generate an invoice",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should explain it cannot access other workspace contexts or tools not assigned to it"
+      }
+    ]
+  },
+  {
+    "name": "workspace-routing-05",
+    "category": "workspace-routing",
+    "query": "Handle this",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should ask for clarification about what needs to be handled rather than guessing"
+      }
+    ]
+  },
+  {
+    "name": "workspace-routing-06",
+    "category": "workspace-routing",
+    "query": "Do the thing we talked about yesterday",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should ask for clarification since it has no context about previous conversations"
+      }
+    ]
+  },
+  {
+    "name": "workspace-routing-07",
+    "category": "workspace-routing",
+    "query": "Find a good Italian restaurant near downtown, then send the details to my team via email",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should use restaurant_search first, then ask for email authorization before sending"
+      }
+    ]
+  },
+  {
+    "name": "workspace-routing-08",
+    "category": "workspace-routing",
+    "query": "Search our knowledge base for the vacation policy, then create a summary artifact",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should use knowledge_base_search first, then create_artifact with the summarized results"
+      }
+    ]
+  },
+  {
+    "name": "workspace-routing-09",
+    "category": "workspace-routing",
+    "query": "Send me a quick update on my open threads",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should use list_sub_threads or get_thread_details to provide a status summary"
+      }
+    ]
+  },
+  {
+    "name": "workspace-routing-10",
+    "category": "workspace-routing",
+    "query": "What's the weather like in San Francisco?",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should use web_search to find current weather information rather than making up an answer"
+      }
+    ]
+  }
+]

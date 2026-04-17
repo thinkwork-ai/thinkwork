@@ -14,6 +14,7 @@ import {
 	evalResults,
 	evalTestCases,
 	agents,
+	agentTemplates,
 } from "@thinkwork/database-pg/schema";
 
 // ---------------------------------------------------------------------------
@@ -60,12 +61,18 @@ async function fireEvalRunner(runId: string): Promise<void> {
 
 // Convert PG row → GraphQL camelCase. Drizzle returns snake_case columns;
 // GraphQL schema uses camelCase. Keep this surgical (not a generic util).
-function runToGraphql(row: Record<string, unknown>, agentName?: string | null) {
+function runToGraphql(
+	row: Record<string, unknown>,
+	agentName?: string | null,
+	agentTemplateName?: string | null,
+) {
 	return {
 		id: row.id,
 		tenantId: row.tenant_id,
 		agentId: row.agent_id,
 		agentName: agentName ?? null,
+		agentTemplateId: row.agent_template_id ?? null,
+		agentTemplateName: agentTemplateName ?? null,
 		status: row.status,
 		model: row.model,
 		categories: row.categories,
@@ -103,7 +110,7 @@ function resultToGraphql(row: Record<string, unknown>, testCase?: { name: string
 	};
 }
 
-function testCaseToGraphql(row: Record<string, unknown>) {
+function testCaseToGraphql(row: Record<string, unknown>, agentTemplateName?: string | null) {
 	return {
 		id: row.id,
 		tenantId: row.tenant_id,
@@ -111,6 +118,8 @@ function testCaseToGraphql(row: Record<string, unknown>) {
 		category: row.category,
 		query: row.query,
 		systemPrompt: row.system_prompt,
+		agentTemplateId: row.agent_template_id ?? null,
+		agentTemplateName: agentTemplateName ?? null,
 		assertions: JSON.stringify(row.assertions ?? []),
 		agentcoreEvaluatorIds: row.agentcore_evaluator_ids ?? [],
 		tags: row.tags ?? [],
@@ -157,28 +166,30 @@ const evalRunsQuery = async (
 		.where(where);
 
 	const rows = await db
-		.select({ run: evalRuns, agentName: agents.name })
+		.select({ run: evalRuns, agentName: agents.name, agentTemplateName: agentTemplates.name })
 		.from(evalRuns)
 		.leftJoin(agents, eq(evalRuns.agent_id, agents.id))
+		.leftJoin(agentTemplates, eq(evalRuns.agent_template_id, agentTemplates.id))
 		.where(where)
 		.orderBy(desc(evalRuns.created_at))
 		.limit(limit)
 		.offset(offset);
 
 	return {
-		items: rows.map((r) => runToGraphql(r.run as unknown as Record<string, unknown>, r.agentName)),
+		items: rows.map((r) => runToGraphql(r.run as unknown as Record<string, unknown>, r.agentName, r.agentTemplateName)),
 		totalCount,
 	};
 };
 
 const evalRun = async (_p: any, args: { id: string }, _ctx: GraphQLContext) => {
 	const [row] = await db
-		.select({ run: evalRuns, agentName: agents.name })
+		.select({ run: evalRuns, agentName: agents.name, agentTemplateName: agentTemplates.name })
 		.from(evalRuns)
 		.leftJoin(agents, eq(evalRuns.agent_id, agents.id))
+		.leftJoin(agentTemplates, eq(evalRuns.agent_template_id, agentTemplates.id))
 		.where(eq(evalRuns.id, args.id));
 	if (!row) return null;
-	return runToGraphql(row.run as unknown as Record<string, unknown>, row.agentName);
+	return runToGraphql(row.run as unknown as Record<string, unknown>, row.agentName, row.agentTemplateName);
 };
 
 const evalRunResults = async (_p: any, args: { runId: string }, _ctx: GraphQLContext) => {
@@ -222,20 +233,68 @@ const evalTestCasesQuery = async (
 	args: { tenantId: string; category?: string | null; search?: string | null },
 	_ctx: GraphQLContext,
 ) => {
+	// Auto-seed the maniflow starter pack on first visit. We check for the
+	// presence of ANY yaml-seed row for this tenant — if zero, run the seed.
+	// The partial unique index makes this idempotent on the off-chance two
+	// concurrent first-visit queries race. Seeded rows then show up
+	// immediately in the same response.
+	await ensureTenantSeeded(args.tenantId);
+
 	const conditions = [eq(evalTestCases.tenant_id, args.tenantId)];
 	if (args.category) conditions.push(eq(evalTestCases.category, args.category));
 	if (args.search) conditions.push(sql`${evalTestCases.name} ILIKE ${'%' + args.search + '%'}`);
 	const rows = await db
-		.select()
+		.select({ tc: evalTestCases, agentTemplateName: agentTemplates.name })
 		.from(evalTestCases)
+		.leftJoin(agentTemplates, eq(evalTestCases.agent_template_id, agentTemplates.id))
 		.where(and(...conditions))
 		.orderBy(desc(evalTestCases.updated_at));
-	return rows.map((r) => testCaseToGraphql(r as unknown as Record<string, unknown>));
+	return rows.map((r) => testCaseToGraphql(r.tc as unknown as Record<string, unknown>, r.agentTemplateName));
 };
 
+/**
+ * Lazy-seed the maniflow starter pack on a tenant's first visit to the
+ * Studio. Cached in-memory per Lambda container so subsequent queries
+ * for the same tenant skip the COUNT(*) probe.
+ */
+const _seededTenants = new Set<string>();
+async function ensureTenantSeeded(tenantId: string): Promise<void> {
+	if (_seededTenants.has(tenantId)) return;
+	const [{ count }] = await db
+		.select({ count: sql<number>`COUNT(*) FILTER (WHERE source = 'yaml-seed')::int` })
+		.from(evalTestCases)
+		.where(eq(evalTestCases.tenant_id, tenantId));
+	if (count > 0) {
+		_seededTenants.add(tenantId);
+		return;
+	}
+	const { EVAL_SEEDS } = await import("../../../lib/eval-seeds.js");
+	if (EVAL_SEEDS.length === 0) {
+		_seededTenants.add(tenantId);
+		return;
+	}
+	await db
+		.insert(evalTestCases)
+		.values(EVAL_SEEDS.map((s) => ({
+			tenant_id: tenantId,
+			name: s.name,
+			category: s.category,
+			query: s.query,
+			assertions: s.assertions,
+			source: "yaml-seed" as const,
+			agentcore_evaluator_ids: ["Builtin.Helpfulness"],
+		})))
+		.onConflictDoNothing();
+	_seededTenants.add(tenantId);
+}
+
 const evalTestCase = async (_p: any, args: { id: string }, _ctx: GraphQLContext) => {
-	const [row] = await db.select().from(evalTestCases).where(eq(evalTestCases.id, args.id));
-	return row ? testCaseToGraphql(row as unknown as Record<string, unknown>) : null;
+	const [row] = await db
+		.select({ tc: evalTestCases, agentTemplateName: agentTemplates.name })
+		.from(evalTestCases)
+		.leftJoin(agentTemplates, eq(evalTestCases.agent_template_id, agentTemplates.id))
+		.where(eq(evalTestCases.id, args.id));
+	return row ? testCaseToGraphql(row.tc as unknown as Record<string, unknown>, row.agentTemplateName) : null;
 };
 
 const evalTestCaseHistory = async (_p: any, args: { testCaseId: string; limit?: number | null }, _ctx: GraphQLContext) => {
@@ -255,6 +314,7 @@ const evalTestCaseHistory = async (_p: any, args: { testCaseId: string; limit?: 
 
 interface StartEvalRunInput {
 	agentId?: string | null;
+	agentTemplateId?: string | null;
 	model?: string | null;
 	categories?: string[] | null;
 	testCaseIds?: string[] | null;
@@ -268,6 +328,7 @@ const startEvalRun = async (
 	const [run] = await db.insert(evalRuns).values({
 		tenant_id: args.tenantId,
 		agent_id: args.input.agentId ?? null,
+		agent_template_id: args.input.agentTemplateId ?? null,
 		status: "pending",
 		model: args.input.model ?? null,
 		categories: args.input.categories ?? [],
@@ -299,6 +360,7 @@ interface CreateTestCaseInput {
 	category: string;
 	query: string;
 	systemPrompt?: string | null;
+	agentTemplateId?: string | null;
 	assertions?: Array<{ type: string; value?: string | null; path?: string | null }> | null;
 	agentcoreEvaluatorIds?: string[] | null;
 	tags?: string[] | null;
@@ -316,6 +378,7 @@ const createEvalTestCase = async (
 		category: args.input.category,
 		query: args.input.query,
 		system_prompt: args.input.systemPrompt ?? null,
+		agent_template_id: args.input.agentTemplateId ?? null,
 		assertions: args.input.assertions ?? [],
 		agentcore_evaluator_ids: args.input.agentcoreEvaluatorIds ?? [],
 		tags: args.input.tags ?? [],
@@ -336,6 +399,7 @@ const updateEvalTestCase = async (
 	if (args.input.category !== undefined) update.category = args.input.category;
 	if (args.input.query !== undefined) update.query = args.input.query;
 	if (args.input.systemPrompt !== undefined) update.system_prompt = args.input.systemPrompt;
+	if (args.input.agentTemplateId !== undefined) update.agent_template_id = args.input.agentTemplateId;
 	if (args.input.assertions !== undefined) update.assertions = args.input.assertions;
 	if (args.input.agentcoreEvaluatorIds !== undefined) update.agentcore_evaluator_ids = args.input.agentcoreEvaluatorIds;
 	if (args.input.tags !== undefined) update.tags = args.input.tags;
@@ -348,6 +412,44 @@ const updateEvalTestCase = async (
 const deleteEvalTestCase = async (_p: any, args: { id: string }, _ctx: GraphQLContext) => {
 	await db.delete(evalTestCases).where(eq(evalTestCases.id, args.id));
 	return true;
+};
+
+const seedEvalTestCases = async (
+	_p: any,
+	args: { tenantId: string; categories?: string[] | null },
+	_ctx: GraphQLContext,
+) => {
+	const { EVAL_SEEDS } = await import("../../../lib/eval-seeds.js");
+	const filtered = args.categories && args.categories.length > 0
+		? EVAL_SEEDS.filter((s) => args.categories!.includes(s.category))
+		: EVAL_SEEDS;
+	if (filtered.length === 0) return 0;
+
+	// Idempotent insert. We deliberately skip on (tenant_id, name)
+	// conflict — the partial unique index added in migration 0011 enforces
+	// this only for source='yaml-seed' rows so user-created tests with
+	// the same name are unaffected.
+	const values = filtered.map((s) => ({
+		tenant_id: args.tenantId,
+		name: s.name,
+		category: s.category,
+		query: s.query,
+		assertions: s.assertions,
+		source: "yaml-seed" as const,
+		// Default Helpfulness evaluator on every seeded test — gives the
+		// user a working scoring loop out of the box.
+		agentcore_evaluator_ids: ["Builtin.Helpfulness"],
+	}));
+	// onConflictDoNothing() with no `target` triggers Postgres's generic
+	// "any unique violation" handling, which catches the partial index
+	// uq_eval_test_cases_tenant_seed_name without needing to spell out the
+	// WHERE clause (drizzle doesn't support partial-index ON CONFLICT).
+	const inserted = await db
+		.insert(evalTestCases)
+		.values(values)
+		.onConflictDoNothing()
+		.returning({ id: evalTestCases.id });
+	return inserted.length;
 };
 
 // ---------------------------------------------------------------------------
@@ -372,4 +474,5 @@ export const evaluationsMutations = {
 	createEvalTestCase,
 	updateEvalTestCase,
 	deleteEvalTestCase,
+	seedEvalTestCases,
 };
