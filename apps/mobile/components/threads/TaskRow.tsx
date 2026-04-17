@@ -56,6 +56,9 @@ interface TaskRowProps {
    *  Replaces the subtitle row with a "Processing..." shimmer so the
    *  user sees work-in-progress between create → first response. */
   isActive?: boolean;
+  /** Shows a blue dot in the left gutter. Mirrors ThreadRow — driven by
+   *  the same useThreadReadState hook since tasks are threads. */
+  isUnread?: boolean;
 }
 
 /**
@@ -137,7 +140,7 @@ function SyncBadge({
   return inner;
 }
 
-export function TaskRow({ task, onPress, hideAssignee, onRetrySync, onArchive, isActive }: TaskRowProps) {
+export function TaskRow({ task, onPress, hideAssignee, onRetrySync, onArchive, isActive, isUnread }: TaskRowProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? COLORS.dark : COLORS.light;
@@ -239,10 +242,27 @@ export function TaskRow({ task, onPress, hideAssignee, onRetrySync, onArchive, i
   const content = (
     <Pressable
       onPress={onPress}
-      className="flex-row items-start py-2 px-4 active:bg-neutral-50 dark:active:bg-neutral-900"
+      className="flex-row items-start py-2 pr-4 active:bg-neutral-50 dark:active:bg-neutral-900"
       style={{ backgroundColor: colors.background }}
     >
-      {/* Content — no icon column; tasks tab is implicitly all tasks. */}
+      {/* Unread-dot gutter — 16-wide column at the left edge, flush with
+       *  the content. `paddingTop` hand-aligns the dot's vertical center
+       *  with the title line (identifier is line 1 at ~14px lineHeight,
+       *  title starts around y=13 with lineHeight 20 → center ~y=23).
+       *  Width is reserved whether or not the dot renders so content
+       *  doesn't shift when a task is marked read. */}
+      <View
+        style={{
+          width: 16,
+          paddingTop: 22,
+          alignItems: "center",
+        }}
+      >
+        {isUnread && (
+          <View className="w-2 h-2 rounded-full" style={{ backgroundColor: "#3b82f6" }} />
+        )}
+      </View>
+      {/* Content */}
       <View className="flex-1">
         {/* Line 1: identifier + assignee + due date + chevron */}
         <View className="flex-row items-center justify-between">
@@ -295,10 +315,16 @@ export function TaskRow({ task, onPress, hideAssignee, onRetrySync, onArchive, i
         >
           {task.title || "Untitled"}
         </Text>
-        {/* Line 3: workflow badge on the left, shimmer on the right
+        {/* Line 3: description (when present) — always stacked between
+         *  title and the workflow badge row below. */}
+        {task.description ? (
+          <Muted style={{ fontSize: 14, lineHeight: 18, marginBottom: 4 }} numberOfLines={1}>
+            {task.description}
+          </Muted>
+        ) : null}
+        {/* Line 4: workflow badge on the left, shimmer on the right
          *  while the agent runs. Badge stays visible during processing
-         *  so the user keeps the workflow context. If no badge, fall
-         *  back to description (when idle) or full shimmer (when active). */}
+         *  so the user keeps the workflow context. */}
         {workflowName ? (
           <View className="flex-row items-center gap-2">
             <View
@@ -333,10 +359,6 @@ export function TaskRow({ task, onPress, hideAssignee, onRetrySync, onArchive, i
               Need Information
             </Text>
           </View>
-        ) : task.description ? (
-          <Muted style={{ fontSize: 14, lineHeight: 18 }} numberOfLines={1}>
-            {task.description}
-          </Muted>
         ) : null}
       </View>
     </Pressable>
