@@ -120,7 +120,7 @@ function EvalStudioPage() {
                     <TableRow key={tc.id} className="h-10 max-h-10 [&>td]:py-1">
                       <TableCell className="font-medium">
                         <Link
-                          to="/evaluations/studio/edit/$testCaseId"
+                          to="/evaluations/studio/$testCaseId"
                           params={{ testCaseId: tc.id }}
                           className="hover:underline"
                         >
