@@ -75,7 +75,7 @@ Examples:
   kb
     .command("attach <kbId>")
     .description("Attach a knowledge base to an agent.")
-    .requiredOption("--agent <id>", "Agent ID")
+    .option("--agent <id>", "Agent ID")
     .option("--config <json>", "Retrieval config (topK, score threshold, …)")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
@@ -92,7 +92,7 @@ Examples:
   kb
     .command("detach <kbId>")
     .description("Detach a knowledge base from an agent.")
-    .requiredOption("--agent <id>", "Agent ID")
+    .option("--agent <id>", "Agent ID")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .action(() => notYetImplemented("kb detach", 2));

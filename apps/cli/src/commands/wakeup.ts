@@ -24,7 +24,7 @@ export function registerWakeupCommand(program: Command): void {
   wake
     .command("create")
     .description("Queue a wakeup for an agent (ad-hoc or deferred).")
-    .requiredOption("--agent <id>", "Target agent")
+    .option("--agent <id>", "Target agent")
     .option("--thread <id>", "Thread to operate on (optional)")
     .option("--delay-seconds <n>", "Wait N seconds before firing", "0")
     .option("--payload <json>", "Optional input payload")

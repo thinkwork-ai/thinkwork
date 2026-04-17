@@ -1,9 +1,10 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { execSync } from "node:child_process";
-import { validateStage } from "../config.js";
 import { getAwsIdentity } from "../aws.js";
-import { printHeader, printError } from "../ui.js";
+import { printHeader } from "../ui.js";
+import { resolveStage } from "../lib/resolve-stage.js";
+import { isCancellation } from "../lib/interactive.js";
 
 interface Check {
   name: string;
@@ -75,17 +76,19 @@ function checkBedrockAccess(): Check {
 export function registerDoctorCommand(program: Command): void {
   program
     .command("doctor")
-    .description("Check AWS account prerequisites for a Thinkwork deployment")
+    .description("Check AWS account prerequisites for a Thinkwork deployment. Prompts for stage in a TTY when omitted.")
     .option("-p, --profile <name>", "AWS profile")
-    .requiredOption("-s, --stage <name>", "Deployment stage")
-    .action((opts: { stage: string }) => {
-      const stageCheck = validateStage(opts.stage);
-      if (!stageCheck.valid) {
-        printError(stageCheck.error!);
-        process.exit(1);
+    .option("-s, --stage <name>", "Deployment stage")
+    .action(async (opts: { stage?: string }) => {
+      let stage: string;
+      try {
+        stage = await resolveStage({ flag: opts.stage });
+      } catch (err) {
+        if (isCancellation(err)) return;
+        throw err;
       }
 
-      printHeader("doctor", opts.stage);
+      printHeader("doctor", stage);
 
       const checks: Check[] = [
         checkAwsCli(),
