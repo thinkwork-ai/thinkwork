@@ -29,6 +29,11 @@ export async function callMcpTool({
 }: McpCallArgs): Promise<unknown> {
 	const mcpUrl = `${baseUrl || MCP_BASE_URL}/${server}`;
 	const bearer = authToken || MCP_SERVICE_KEY;
+	const bearerKind = authToken ? "user" : "service";
+	const bearerPreview = bearer ? `${bearer.slice(0, 12)}…len=${bearer.length}` : "NONE";
+	console.log(
+		`[mcp ${tool}] POST ${mcpUrl} bearer=${bearerKind}(${bearerPreview}) args=${JSON.stringify(args).slice(0, 200)}`,
+	);
 
 	const rpcResponse = await fetch(mcpUrl, {
 		method: "POST",
@@ -44,16 +49,42 @@ export async function callMcpTool({
 		}),
 	});
 
-	const rpc = (await rpcResponse.json()) as {
-		error?: { message?: string };
+	let rawBody = "";
+	try {
+		rawBody = await rpcResponse.text();
+	} catch (err) {
+		console.error(
+			`[mcp ${tool}] ERROR reading response body from ${mcpUrl}:`,
+			(err as Error)?.message,
+		);
+		throw err;
+	}
+	console.log(
+		`[mcp ${tool}] response status=${rpcResponse.status} bodyLen=${rawBody.length} preview=${rawBody.slice(0, 500)}`,
+	);
+
+	let rpc: {
+		error?: { code?: number; message?: string; data?: unknown };
 		result?: {
 			content?: Array<{ type?: string; text?: string }>;
 			isError?: boolean;
 		};
 	};
+	try {
+		rpc = JSON.parse(rawBody);
+	} catch (err) {
+		console.error(
+			`[mcp ${tool}] response body is not JSON (status=${rpcResponse.status}): ${rawBody.slice(0, 500)}`,
+		);
+		throw new Error(`MCP ${tool} returned non-JSON (status=${rpcResponse.status})`);
+	}
 
 	// Transport-level JSON-RPC error (server rejected the request shape).
-	if (rpc?.error) throw new Error(rpc.error.message || "MCP error");
+	if (rpc?.error) {
+		const fullMsg = `[mcp ${tool}] JSON-RPC error code=${rpc.error.code ?? "?"} message=${rpc.error.message ?? "(empty)"} data=${JSON.stringify(rpc.error.data ?? null)}`;
+		console.error(fullMsg);
+		throw new Error(rpc.error.message || `MCP error (code=${rpc.error.code ?? "?"})`);
+	}
 
 	// Tool-level error — LastMile (and the MCP spec) signals "the tool
 	// ran and failed" by returning `result.isError: true` with the failure
