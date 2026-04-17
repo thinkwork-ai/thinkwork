@@ -24,7 +24,6 @@ import {
 import { buildSkillEnvOverrides } from "../lib/oauth-token.js";
 import { buildMcpConfigs } from "../lib/mcp-configs.js";
 import { loadTenantBuiltinTools } from "./skills.js";
-import { fetchWorkflowSkillForAgent } from "../integrations/external-work-items/providers/lastmile/workflowSkillCache.js";
 // PRD-22: Signal protocol removed — agents use tools for thread state transitions
 
 /**
@@ -462,39 +461,10 @@ export async function handler(event: InvokeEvent): Promise<void> {
     const threadMetadata =
       (threadMetaRow?.metadata as Record<string, unknown> | null) ?? null;
 
-    // Workflow-skill lookup: when the thread is attached to a LastMile
-    // workflow, fetch the workflow's `skill` block so the agent sees the
-    // workflow-specific form + instructions in its system prompt. 5-min
-    // in-process cache inside `fetchWorkflowSkillForAgent`; `null` means
-    // "use the legacy hardcoded form" and is expected for any thread
-    // without a populated workflow.skill on the LastMile side.
-    let workflowSkill: unknown = undefined;
     const workflowIdFromMeta =
       typeof threadMetadata?.workflowId === "string"
         ? (threadMetadata.workflowId as string)
         : undefined;
-    if (workflowIdFromMeta && threadMetaRow?.created_by_id) {
-      try {
-        const skill = await fetchWorkflowSkillForAgent({
-          tenantId,
-          userId: threadMetaRow.created_by_id,
-          workflowId: workflowIdFromMeta,
-        });
-        // Decorate the skill blob with the workflowId itself. The agent
-        // needs this exact value to pass as `workflowId` when calling
-        // the LastMile MCP's `workflow_task_create` — and without it in
-        // the prompt, the agent tends to guess from other identifier-
-        // looking strings (e.g. its own instance_id) and gets
-        // "Workflow not found" on submit.
-        if (skill) workflowSkill = { ...skill, workflowId: workflowIdFromMeta };
-      } catch (err) {
-        // Non-fatal — agent just gets the legacy fallback path.
-        console.warn(
-          `[chat-agent-invoke] workflow-skill lookup failed for thread=${threadId}:`,
-          (err as Error)?.message,
-        );
-      }
-    }
 
     // Task-thread skill injection: any thread that was created against a
     // LastMile workflow (`metadata.workflowId` set) needs the
@@ -543,7 +513,6 @@ export async function handler(event: InvokeEvent): Promise<void> {
       guardrail_config: guardrailPayload || undefined,
       mcp_configs: mcpConfigs.length > 0 ? mcpConfigs : undefined,
       thread_metadata: threadMetadata || undefined,
-      workflow_skill: workflowSkill,
     };
 
     // The agentcore container runs an HTTP server behind Lambda Web Adapter;
