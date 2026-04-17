@@ -100,6 +100,8 @@ async function resolveAssigneeProviderUserId(
 	return typeof id === "string" && id.length > 0 ? id : null;
 }
 
+/** Kept for its fallback behavior against rows written before migration
+ *  0008. New code should read `threads.external_task_id` directly. */
 function extractExternalTaskId(metadata: unknown): string | null {
 	if (!metadata || typeof metadata !== "object") return null;
 	const external = (metadata as Record<string, unknown>).external as Record<string, unknown> | undefined;
@@ -133,8 +135,9 @@ export const createLastmileTask = async (
 
 	// Idempotency — if a prior run already minted the LastMile task,
 	// re-emit the current row without re-POSTing. The mobile/agent path
-	// can safely retry `create_task` in this shape.
-	if (extractExternalTaskId(thread.metadata)) {
+	// can safely retry `create_task` in this shape. Prefer the column;
+	// fall back to JSONB for rows written before migration 0008.
+	if (thread.external_task_id || extractExternalTaskId(thread.metadata)) {
 		return { ...threadToCamel(thread), commentCount: 0, childCount: 0 };
 	}
 

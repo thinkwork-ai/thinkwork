@@ -112,14 +112,19 @@ export type EnsureExternalTaskThreadResult = {
 export async function ensureExternalTaskThread(
 	args: EnsureExternalTaskThreadArgs,
 ): Promise<EnsureExternalTaskThreadResult> {
+	// Lookup is now primarily on the first-class column
+	// `threads.external_task_id` (migration 0008). We still require the
+	// connectionId + provider to match via JSONB so we don't accidentally
+	// collapse two different tenants' rows that happen to have the same
+	// external id into one row.
 	const existing = await db
 		.select({ id: threads.id, metadata: threads.metadata })
 		.from(threads)
 		.where(
 			and(
 				eq(threads.tenant_id, args.tenantId),
+				eq(threads.external_task_id, args.externalTaskId),
 				sql`${threads.metadata}->'external'->>'provider' = ${args.provider}`,
-				sql`${threads.metadata}->'external'->>'externalTaskId' = ${args.externalTaskId}`,
 				sql`${threads.metadata}->'external'->>'connectionId' = ${args.connectionId}`,
 			),
 		)
@@ -152,6 +157,7 @@ export async function ensureExternalTaskThread(
 				// better title that another code path (e.g. outbound
 				// syncExternalTaskOnCreate) already wrote onto the row.
 				...(args.envelope ? { title: args.title } : {}),
+				external_task_id: args.externalTaskId,
 				metadata: { ...currentMeta, external: nextExternal },
 				// Self-heal assignee on every upsert so pre-Phase-A threads recover.
 				...(args.userId
@@ -193,6 +199,7 @@ export async function ensureExternalTaskThread(
 	await db
 		.update(threads)
 		.set({
+			external_task_id: args.externalTaskId,
 			metadata: { external: externalMeta },
 			...(args.userId
 				? { assignee_type: "user", assignee_id: args.userId }
@@ -226,8 +233,8 @@ export async function closeExternalTaskThread(args: {
 		.where(
 			and(
 				eq(threads.tenant_id, args.tenantId),
+				eq(threads.external_task_id, args.externalTaskId),
 				sql`${threads.metadata}->'external'->>'provider' = ${args.provider}`,
-				sql`${threads.metadata}->'external'->>'externalTaskId' = ${args.externalTaskId}`,
 				sql`${threads.metadata}->'external'->>'connectionId' = ${args.connectionId}`,
 			),
 		)
