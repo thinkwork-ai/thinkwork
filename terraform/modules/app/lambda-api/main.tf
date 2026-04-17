@@ -418,6 +418,9 @@ resource "aws_iam_role_policy" "lambda_api_cross_invoke" {
         "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-chat-agent-invoke",
         "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-knowledge-base-manager",
         "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-job-schedule-manager",
+        # eval-runner: graphql-http's startEvalRun mutation Event-invokes
+        # this asynchronously after inserting the eval_runs row.
+        "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-eval-runner",
       ]
     }]
   })
