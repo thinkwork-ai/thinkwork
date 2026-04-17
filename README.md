@@ -29,7 +29,7 @@ If you're not on AWS, this isn't the right tool for you — and that's the point
 
 - **Six product modules:** Agents, Threads, Connectors, Automations, Control, Memory
 - **Two clients:** an admin/operator web app (`apps/admin`) and a mobile client (`apps/mobile`, Expo)
-- **A real CLI** (`thinkwork-cli`) for `login`, `init`, `deploy`, `doctor`, `plan`, `bootstrap`, `destroy`, `status`, `outputs`, `config`, `mcp`, `tools`, `update`, and `user`
+- **A real CLI** (`thinkwork-cli`) with two surfaces: **deploy-side** (`login`, `init`, `plan`, `deploy`, `bootstrap`, `destroy`, `doctor`, `status`, `outputs`, `config`, `update`) and **API-side** (`login --stage`, `logout`, `me`, `user`, `mcp`, `tools`, plus a scaffolded roadmap of `thread`, `agent`, `template`, `tenant`, `member`, `team`, `kb`, `routine`, `scheduled-job`, `turn`, `wakeup`, `webhook`, `connector`, `skill`, `memory`, `recipe`, `artifact`, `cost`, `budget`, `performance`, `trace`, `inbox`, `dashboard` — see [apps/cli/README.md#roadmap](./apps/cli/README.md#roadmap))
 - **Three connectors at launch:** Slack, GitHub, Google Workspace (plus a LastMile task connector for external task intake)
 - **Agentic Tasks** and **Question Cards** for structured task intake and execution
 - **Memory** as the umbrella layer for document knowledge, long-term memory, retrieval context, and portable memory contracts — including a **Knowledge Graph** view for inspecting per-agent memory relationships
@@ -70,13 +70,15 @@ We ship things only after they're load-bearing in production. Everything below i
 
 ```bash
 npm install -g thinkwork-cli
-thinkwork login
-thinkwork init -s dev
-thinkwork deploy -s dev
-thinkwork doctor -s dev
+thinkwork login                    # 1. Pick an AWS profile
+thinkwork init -s dev              # 2. Scaffold terraform.tfvars
+thinkwork deploy -s dev            # 3. Provision ~260 AWS resources
+thinkwork doctor -s dev            # 4. Sanity-check the stack
+thinkwork login --stage dev        # 5. Sign in to the Cognito pool (OAuth)
+thinkwork me                       # 6. Confirm identity + tenant
 ```
 
-Five commands, one AWS account, and you own a production-grade agent harness instead of renting a black box. Full walkthrough in the [Getting Started guide](https://docs.thinkwork.ai/getting-started/).
+Six commands, one AWS account, and you own a production-grade agent harness instead of renting a black box. Full walkthrough in the [Getting Started guide](https://docs.thinkwork.ai/getting-started/).
 
 ## Repo layout
 

@@ -1,6 +1,6 @@
 ---
 title: Commands Reference
-description: All CLI commands with syntax, options, and examples. login, init, doctor, plan, deploy, bootstrap, destroy, status, outputs, config, mcp.
+description: All CLI commands with syntax, options, and examples. Deploy side (login/init/plan/deploy/bootstrap/destroy/doctor/status/outputs/config) and API side (login --stage, me, logout, user, mcp, tools, thread, agent, inbox, routine, …).
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -8,43 +8,133 @@ import { Aside } from '@astrojs/starlight/components';
 All commands follow the pattern:
 
 ```bash
-thinkwork <command> [options]
+thinkwork <command> [subcommand] [options]
 ```
 
-The `-s` / `--stage` flag selects the named environment profile. It's required for most commands.
+The CLI has two command surfaces:
+
+- **Deploy side** — `login`, `init`, `plan`, `deploy`, `bootstrap`, `destroy`, `doctor`, `status`, `outputs`, `config`. Shells out to `terraform` and `aws`. Needs AWS credentials.
+- **API side** — `login --stage`, `me`, `logout`, `user`, `member`, `thread`, `agent`, `inbox`, `routine`, and everything else in the roadmap. Talks to the deployed GraphQL + REST APIs. Needs a Cognito or api-key session.
+
+Run `thinkwork <any-command> --help` for the definitive, up-to-date flags and examples — every command ships interactive + scripted examples inline.
+
+---
+
+## Global options
+
+These are accepted on **every** command:
+
+| Flag | Description |
+|------|-------------|
+| `-p, --profile <name>` | AWS profile (overrides `$AWS_PROFILE` and the CLI's `defaultProfile`) |
+| `--json` | Emit machine-readable JSON on stdout. Logs/spinners stay on stderr. |
+| `-h, --help` | Print help for the current command |
+| `-v, --version` | Print CLI version (program-level only) |
+
+API-backed commands additionally accept:
+
+| Flag | Description |
+|------|-------------|
+| `-s, --stage <name>` | Stage to target. Falls back to `$THINKWORK_STAGE`, then the saved `defaultStage`. |
+| `-t, --tenant <slug>` | Tenant slug. Falls back to `$THINKWORK_TENANT`, then the cached session tenant. |
+| `-y, --yes` | Skip confirmation on destructive verbs. |
 
 ---
 
 ## login
 
-Create or update a named environment profile.
+Two modes, selected by `--stage`.
 
 ```bash
 thinkwork login [options]
+thinkwork login --stage <s> [options]
 ```
 
-**Options:**
+**Without `--stage`** — configure AWS credentials (arrow-key picker over `~/.aws/` profiles, with fall-through to access-key entry or `aws sso login`):
 
 | Flag | Description |
 |------|-------------|
-| `--name <name>` | Environment name (skips the prompt) |
-| `--region <region>` | AWS region (skips the prompt) |
-| `--profile <profile>` | AWS credentials profile (skips the prompt) |
+| `--profile <name>` | AWS profile to create/update (default: `thinkwork`) |
+| `--sso` | Skip the picker and run `aws sso login` |
+| `--keys` | Skip the picker and prompt for fresh access keys |
 
-**Interactive example:**
+**With `--stage <s>`** — sign in to the deployed Cognito user pool:
+
+| Flag | Description |
+|------|-------------|
+| `-s, --stage <name>` | Deployed stage to sign in to |
+| `-r, --region <region>` | AWS region for the stack (default: `us-east-1`) |
+| `--api-key <secret>` | Non-interactive; skip the browser and store the api_auth_secret as the session |
+| `--tenant <slug>` | Cache this tenant slug on the session (with `--api-key`, or to override `bootstrapUser`'s default) |
+| `--port <number>` | Override the Cognito OAuth loopback port (default: 42010) |
+| `--no-browser` | Print the authorize URL instead of opening a browser (useful over SSH) |
+
+**Examples:**
 
 ```bash
+# AWS profile picker (before deploy/destroy/list)
 thinkwork login
-# ? Environment name: dev
-# ? AWS region: us-east-1
-# ? AWS credentials profile: default
-# ✓ Environment "dev" saved to ~/.thinkwork/environments/dev.json
+
+# Skip picker, enter fresh keys
+thinkwork login --keys --profile thinkwork
+
+# AWS SSO
+thinkwork login --sso --profile work-sso
+
+# Cognito OAuth (opens browser, supports Google sign-in)
+thinkwork login --stage dev
+
+# Cognito over SSH — print URL, paste into a local browser
+thinkwork login --stage dev --no-browser
+
+# Non-interactive CI login with the api_auth_secret
+thinkwork login --stage prod --api-key "$THINKWORK_API_KEY" --tenant acme
 ```
 
-**Non-interactive example (for scripting):**
+---
+
+## logout
+
+Forget stored stack sessions. Touches only `~/.thinkwork/config.json`; your AWS profile and Cognito pool are untouched.
 
 ```bash
-thinkwork login --name prod --region us-east-1 --profile prod-role
+thinkwork logout [options]
+```
+
+| Flag | Description |
+|------|-------------|
+| `-s, --stage <name>` | Stage whose session to forget |
+| `--all` | Forget every stage's session |
+
+**Examples:**
+
+```bash
+thinkwork logout --stage dev       # one stage
+thinkwork logout --all             # every stage
+thinkwork logout                   # interactive picker
+```
+
+---
+
+## me
+
+Print the identity behind the current session. Verifies the session works by round-tripping a live `me` GraphQL query.
+
+```bash
+thinkwork me [options]
+```
+
+| Flag | Description |
+|------|-------------|
+| `-s, --stage <name>` | Stage to introspect |
+| `-r, --region <region>` | AWS region (default: `us-east-1`) |
+
+**Examples:**
+
+```bash
+thinkwork me                                       # default stage
+thinkwork me --stage prod
+thinkwork me --stage dev --json | jq .tenantSlug   # scriptable
 ```
 
 ---
@@ -54,16 +144,14 @@ thinkwork login --name prod --region us-east-1 --profile prod-role
 Scaffold a new ThinkWork deployment directory.
 
 ```bash
-thinkwork init [options] [directory]
+thinkwork init -s <stage> [options]
 ```
-
-**Options:**
 
 | Flag | Description |
 |------|-------------|
 | `-s, --stage <name>` | Stage name (required) |
-| `--template <name>` | Starter template: `default`, `minimal`, `enterprise` |
-| `--no-git` | Skip creating `.gitignore` entries |
+| `-d, --dir <path>` | Target directory (default: `.`) |
+| `--defaults` | Skip interactive prompts, use all defaults |
 
 **Example:**
 
@@ -72,282 +160,149 @@ mkdir my-deploy && cd my-deploy
 thinkwork init -s dev
 ```
 
-Creates in the current directory:
-```
-terraform.tfvars          # Pre-filled with your AWS account ID and region
-.terraform.lock.hcl       # Provider version lock
-.gitignore                # Ignores .terraform/, *.tfstate, terraform.tfvars
-.thinkwork/
-  stage.json              # Links this directory to the "dev" environment
-```
-
-**Templates:**
-
-- `default` — Full deployment with all modules (recommended)
-- `minimal` — Agents and Threads only, no Connectors or Automations
-- `enterprise` — Full deployment with multi-AZ HA and Hindsight memory
+Creates `terraform.tfvars` + terraform module scaffolding + `~/.thinkwork/environments/<stage>/config.json`. See the [CLI Overview](/applications/cli/) for the registry layout.
 
 ---
 
 ## plan
 
-Preview Terraform changes without applying them.
+Preview Terraform changes.
 
 ```bash
 thinkwork plan -s <stage> [options]
 ```
 
-**Options:**
-
 | Flag | Description |
 |------|-------------|
 | `-s, --stage <name>` | Stage name (required) |
-| `--out <file>` | Save plan to file (for use with `deploy --plan-file`) |
-| `--target <resource>` | Limit plan to a specific resource (passed to `terraform plan -target`) |
+| `-c, --component <tier>` | `foundation`, `data`, `app`, or `all` (default: `all`) |
+| `-p, --profile <name>` | AWS profile override |
 
 **Example:**
 
 ```bash
 thinkwork plan -s dev
-```
-
-```
-Planning changes for stage: dev (us-east-1)
-
-~ 3 resources to update
-+ 1 resource to add
-- 0 resources to destroy
-
-  ~ aws_lambda_function.agentcore — container_image_uri changed
-  ~ aws_appsync_graphql_api.api — log_config changed
-  ~ aws_cloudfront_distribution.admin — viewer_certificate changed
-  + aws_ssm_parameter.new_setting
-
-Plan saved. Run `thinkwork deploy -s dev` to apply.
+thinkwork plan -s dev -c app     # only the app tier
 ```
 
 ---
 
 ## deploy
 
-Apply the Terraform plan and deploy ThinkWork.
+Apply the Terraform plan.
 
 ```bash
 thinkwork deploy -s <stage> [options]
 ```
 
-**Options:**
-
 | Flag | Description |
 |------|-------------|
 | `-s, --stage <name>` | Stage name (required) |
-| `--auto-approve` | Skip the confirmation prompt (for CI) |
-| `--plan-file <file>` | Apply a saved plan from `thinkwork plan --out` |
-| `--target <resource>` | Apply only a specific resource |
+| `-c, --component <tier>` | `foundation`, `data`, `app`, or `all` (default: `all`) |
+| `-y, --yes` | Skip confirmation (CI) |
+| `-p, --profile <name>` | AWS profile override |
 
-**Example — interactive:**
+**Examples:**
 
 ```bash
 thinkwork deploy -s dev
-# Shows plan summary, prompts: "Apply? (yes/no)"
-```
-
-**Example — CI (non-interactive):**
-
-```bash
-thinkwork deploy -s prod --auto-approve
-```
-
-**Example — targeted deploy:**
-
-```bash
-thinkwork deploy -s dev --target aws_lambda_function.agentcore
+thinkwork deploy -s prod --yes
+thinkwork deploy -s dev -c app
 ```
 
 <Aside type="caution">
-`--auto-approve` bypasses the confirmation prompt. Do not use in scripts that run against production without gating on a manual approval step in your CI pipeline.
+`--yes` bypasses the confirmation prompt. Do not use in scripts that run against production without a manual approval gate.
 </Aside>
 
 ---
 
 ## bootstrap
 
-Create the S3 bucket and DynamoDB table for Terraform remote state.
+Seed workspace defaults, the skill catalog, and per-tenant files for a deployed stack.
 
 ```bash
-thinkwork bootstrap -s <stage> [options]
+thinkwork bootstrap -s <stage>
 ```
-
-**Options:**
 
 | Flag | Description |
 |------|-------------|
 | `-s, --stage <name>` | Stage name (required) |
-| `--bucket-name <name>` | Override the default bucket name |
-| `--table-name <name>` | Override the default DynamoDB table name |
 
-**Example:**
-
-```bash
-thinkwork bootstrap -s prod
-# ✓ Created S3 bucket: thinkwork-prod-tfstate-123456789012
-# ✓ Created DynamoDB table: thinkwork-prod-tfstate-lock
-# ✓ Updated terraform.tfvars with backend configuration
-```
-
-Run this before the first `deploy` in a new environment. `deploy` runs `bootstrap` automatically if remote state isn't configured, but running it explicitly is useful in CI to separate state setup from apply.
+Idempotent — safe to re-run after every deploy.
 
 ---
 
 ## doctor
 
-Run health checks against a deployed ThinkWork environment.
+Check AWS account prerequisites for a Thinkwork deployment (Bedrock access, IAM, etc.).
 
 ```bash
-thinkwork doctor -s <stage> [options]
+thinkwork doctor -s <stage>
 ```
-
-**Options:**
 
 | Flag | Description |
 |------|-------------|
 | `-s, --stage <name>` | Stage name (required) |
-| `--check <name>` | Run only a specific check (e.g. `aurora`, `bedrock`, `appsync`) |
-| `--verbose` | Print full check output including response bodies |
-
-**Example:**
-
-```bash
-thinkwork doctor -s dev
-```
-
-**Checks performed:**
-
-| Check | What it tests |
-|-------|---------------|
-| `terraform-state` | Remote state bucket is readable |
-| `aurora` | Database cluster status is `available`, migrations are current |
-| `cognito` | User pool is `Active`, app client is configured |
-| `appsync` | API endpoint returns 200 on introspection |
-| `api-gateway` | Health endpoint returns 200 |
-| `agentcore` | Lambda invoke returns 200 (warm ping) |
-| `bedrock` | Default model is accessible in the region |
-| `s3-skills` | Skill catalog bucket is accessible |
-| `ses` | Sending identity is verified |
-| `knowledge-base` | Bedrock KB status is `ACTIVE` (if created) |
+| `-p, --profile <name>` | AWS profile override |
 
 ---
 
 ## destroy
 
-Destroy all ThinkWork infrastructure for a stage.
+Tear down the stack.
 
 ```bash
 thinkwork destroy -s <stage> [options]
 ```
 
-**Options:**
-
 | Flag | Description |
 |------|-------------|
 | `-s, --stage <name>` | Stage name (required) |
-| `--auto-approve` | Skip the confirmation prompt |
-| `--target <resource>` | Destroy only a specific resource |
-
-**Example:**
-
-```bash
-thinkwork destroy -s dev
-# ⚠ This will destroy ALL resources for stage "dev".
-# Type the stage name to confirm: dev
-# Destroying...
-```
+| `-c, --component <tier>` | `foundation`, `data`, `app`, or `all` |
+| `-y, --yes` | Skip confirmation |
 
 <Aside type="caution">
-`destroy` deletes your Aurora database, all S3 data, and all application infrastructure. This is irreversible. Aurora deletion protection is enabled by default — if `protect_aurora = true` (the default), you must manually disable deletion protection in the AWS console before `destroy` will proceed.
+`destroy` deletes your Aurora database, all S3 data, and all application infrastructure. Aurora deletion protection is enabled by default — if `protect_aurora = true`, you must disable it in the AWS console before `destroy` will proceed.
 </Aside>
 
 ---
 
 ## status
 
-Show the current status of all ThinkWork resources for a stage.
+Discover all deployed environments and their health.
 
 ```bash
-thinkwork status -s <stage>
+thinkwork status [-s <stage>]
 ```
 
-**Example:**
+Without `-s`, prints a table of every deployed stage across the account.
 
-```bash
-thinkwork status -s dev
-```
+With `-s`, prints the detailed view for one stage — Lambda counts, AgentCore, memory backends, etc.
 
-```
-Stage: dev (us-east-1)
-Last deployed: 2024-04-10 09:23 UTC
-
-Resource status:
-  Aurora cluster:    available
-  AgentCore Lambda:  active (last invoked: 2m ago)
-  AppSync API:       active
-  API Gateway:       active
-  CloudFront (admin): deployed
-  Step Functions:    0 running executions
-
-Agent summary:
-  3 agents active
-  12 threads open
-  847 total turns (last 30 days)
-```
+Aliases: `list`, `ls`.
 
 ---
 
 ## outputs
 
-Print the Terraform outputs for a deployed stage.
+Print Terraform outputs for a deployed stage.
 
 ```bash
 thinkwork outputs -s <stage> [options]
 ```
 
-**Options:**
-
 | Flag | Description |
 |------|-------------|
 | `-s, --stage <name>` | Stage name (required) |
-| `--json` | Output as JSON (useful for scripting) |
-| `--key <name>` | Print only a specific output value |
+| `-c, --component <tier>` | Tier to read from (default: `all`) |
 
-**Example:**
-
-```bash
-thinkwork outputs -s dev
-```
-
-```
-appsync_api_url:      https://abc123.appsync-api.us-east-1.amazonaws.com/graphql
-api_gateway_url:      https://xyz789.execute-api.us-east-1.amazonaws.com
-admin_app_url:        https://d1234567.cloudfront.net
-cognito_pool_id:      us-east-1_ABC123XYZ
-cognito_client_id:    1abc2def3ghi4jkl
-aurora_cluster_id:    dev-thinkwork-aurora
-s3_skill_bucket:      dev-thinkwork-skills
-audit_log_bucket:     dev-thinkwork-audit-logs
-```
-
-**Scripting example:**
-
-```bash
-API_URL=$(thinkwork outputs -s dev --key api_gateway_url)
-curl -H "Authorization: Bearer $TOKEN" "$API_URL/health"
-```
+Use `--json` to pipe the outputs to jq / terraform / other tools.
 
 ---
 
 ## config
 
-View and edit CLI configuration for a stage.
+View or edit CLI configuration for a stage.
 
 ```bash
 thinkwork config <subcommand> [options]
@@ -356,144 +311,378 @@ thinkwork config <subcommand> [options]
 ### config list
 
 ```bash
-thinkwork config list -s dev
+thinkwork config list [-s <stage>]
 ```
 
-Prints all configuration values for the stage (environment profile + terraform.tfvars parsed values).
+Without `-s`: table of all initialized environments.
+With `-s`: full config for that environment (secrets masked).
 
 ### config get
 
 ```bash
-thinkwork config get -s dev <key>
-```
-
-**Example:**
-
-```bash
-thinkwork config get -s dev region
-# us-east-1
-
-thinkwork config get -s dev default_model_id
-# anthropic.claude-3-5-sonnet-20241022-v2:0
+thinkwork config get <key> -s <stage>
 ```
 
 ### config set
 
 ```bash
-thinkwork config set -s dev <key> <value>
+thinkwork config set <key> <value> -s <stage>
 ```
 
-Updates a value in `terraform.tfvars` for the specified stage. The key must be a valid Terraform variable.
+Updates `terraform.tfvars`. Run `thinkwork deploy -s <stage>` to apply.
 
-**Example:**
+---
+
+## user
+
+User-management utilities for a deployed stack.
+
+### user invite
 
 ```bash
-thinkwork config set -s dev enable_hindsight true
-# ✓ Updated terraform.tfvars: enable_hindsight = true
-# Run `thinkwork deploy -s dev` to apply.
-
-thinkwork config set -s dev aurora_max_capacity 32
-# ✓ Updated terraform.tfvars: aurora_max_capacity = 32
+thinkwork user invite [email] [options]
 ```
 
-<Aside type="note">
-`config set` only updates `terraform.tfvars`. It does not apply the change — run `thinkwork deploy -s <stage>` to apply the updated configuration.
-</Aside>
+Creates the Cognito user (Cognito emails a temporary password) and adds them as a tenant member. Prompts interactively for any missing fields.
+
+| Flag | Description |
+|------|-------------|
+| `-s, --stage <name>` | Deployment stage |
+| `--tenant <slug>` | Tenant slug |
+| `--name <name>` | Display name |
+| `--role <role>` | `member` (default), `admin`, or `owner` |
+| `--region <region>` | AWS region (default: `us-east-1`) |
+
+**Examples:**
+
+```bash
+# Fully interactive
+thinkwork user invite
+
+# Scripted
+thinkwork user invite alice@example.com --tenant acme -s dev --role admin
+
+# Mix
+thinkwork user invite alice@example.com
+```
+
+### user reset-password
+
+```bash
+thinkwork user reset-password <email> -s <stage>
+```
+
+Triggers Cognito's admin-initiated forgot-password flow — useful when a user is locked out or in `FORCE_CHANGE_PASSWORD`.
 
 ---
 
 ## mcp
 
-Manage MCP (Model Context Protocol) servers for your tenant. MCP servers expose external tools that agents can call during conversations.
+Manage MCP servers (Model Context Protocol) for a tenant.
 
-```bash
-thinkwork mcp <subcommand> [options]
-```
-
-### mcp list
-
-List all registered MCP servers for a tenant.
+### mcp list / add / remove / test / assign / unassign
 
 ```bash
 thinkwork mcp list --tenant <slug> -s <stage>
-```
-
-### mcp add
-
-Register a new MCP server.
-
-```bash
 thinkwork mcp add <name> --url <url> --tenant <slug> -s <stage> [options]
-```
-
-**Options:**
-
-| Flag | Description |
-|------|-------------|
-| `--url <url>` | MCP server endpoint URL (required) |
-| `--tenant <slug>` | Tenant slug (required) |
-| `--transport <type>` | Transport: `streamable-http` (default) or `sse` |
-| `--auth-type <type>` | Auth: `none` (default), `tenant_api_key`, or `oauth` |
-| `--api-key <token>` | API key or bearer token (for `tenant_api_key`) |
-
-**Examples:**
-
-```bash
-# Register with API key auth
-thinkwork mcp add my-tools \
-  --url https://mcp.example.com/crm \
-  --auth-type tenant_api_key \
-  --api-key sk-abc123 \
-  --tenant my-tenant -s dev
-
-# Register with server-managed OAuth (users connect from mobile app)
-thinkwork mcp add lastmile-crm \
-  --url https://mcp-dev.lastmile-tei.com/crm \
-  --auth-type oauth \
-  --tenant my-tenant -s dev
-```
-
-### mcp remove
-
-Remove a registered MCP server. Also removes all agent assignments.
-
-```bash
 thinkwork mcp remove <server-id> --tenant <slug> -s <stage>
-```
-
-### mcp test
-
-Test connection to an MCP server and discover available tools.
-
-```bash
 thinkwork mcp test <server-id> --tenant <slug> -s <stage>
+thinkwork mcp assign <server-id> --agent <agent-id> -s <stage>
+thinkwork mcp unassign <server-id> --agent <agent-id> -s <stage>
 ```
 
-**Example output:**
+Run `thinkwork mcp <sub> --help` for the full options list on each subcommand, including `--auth-type` (`none` | `tenant_api_key` | `oauth`) and `--transport` (`streamable-http` | `sse`).
 
-```
-  ✓ Connection successful.
+---
 
-  Discovered tools (4):
+## tools
 
-    search_contacts - Search CRM contacts by name or email
-    get_account - Get account details by ID
-    create_task - Create a new task
-    list_opportunities - List open opportunities
-```
-
-### mcp assign
-
-Assign a registered MCP server to an agent.
+Manage tenant-enabled built-in tools (web search, file upload, etc.).
 
 ```bash
-thinkwork mcp assign <mcp-server-id> --agent <agent-id> -s <stage>
+thinkwork tools list
+thinkwork tools web-search set|test|disable|clear
 ```
 
-### mcp unassign
+Run `thinkwork tools --help` for the full subcommand tree.
 
-Remove an MCP server from an agent.
+---
+
+## update
+
+Upgrade the CLI's bundled Terraform modules to match the installed CLI version.
 
 ```bash
-thinkwork mcp unassign <mcp-server-id> --agent <agent-id> -s <stage>
+thinkwork update -s <stage>
 ```
+
+---
+
+## Roadmap — scaffolded commands
+
+The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` shows the final flags and examples today, but the action bodies return `not yet implemented` (exit code 2) until each phase PR lands.
+
+| Phase | Commands |
+|-------|----------|
+| 1 — Work & approvals | [`thread`](#thread), [`message`](#message), [`label`](#label), [`inbox`](#inbox) |
+| 2 — Agents & workspace | [`agent`](#agent), [`template`](#template), [`tenant`](#tenant), [`member`](#member), [`team`](#team), [`kb`](#kb) |
+| 3 — Automation & integrations | [`routine`](#routine), [`scheduled-job`](#scheduled-job), [`turn`](#turn), [`wakeup`](#wakeup), [`webhook`](#webhook), [`connector`](#connector), [`skill`](#skill) |
+| 4 — Memory & artifacts | [`memory`](#memory), [`recipe`](#recipe), [`artifact`](#artifact) |
+| 5 — Observability & spend | [`cost`](#cost), [`budget`](#budget), [`performance`](#performance), [`trace`](#trace), [`dashboard`](#dashboard) |
+
+The sections below summarize each group. For definitive, up-to-date flags + examples, run `thinkwork <cmd> --help`.
+
+### thread
+
+Create, list, update, close, comment, checkout/release, escalate, delegate, and delete threads (tasks, chats, bugs, questions).
+
+```bash
+thinkwork thread list [--status] [--priority] [--assignee] [--search] [--agent]
+thinkwork thread get <idOrNumber>
+thinkwork thread create [title] [--type] [--priority] [--assignee] [--body] [--due] [--label ...]
+thinkwork thread update <id> [--title] [--status] [--priority] [--assignee] [--due] [--body]
+thinkwork thread close|reopen <id>
+thinkwork thread checkout|release <id> [--agent]
+thinkwork thread comment <id> [content] [--file]
+thinkwork thread label assign|remove <threadId> <labelId>
+thinkwork thread escalate|delegate <id> --to-agent <id>
+thinkwork thread delete <id> [--yes]
+```
+
+### message
+
+```bash
+thinkwork message send <threadId> [content] [--file] [--as-agent <id>]
+thinkwork message list <threadId> [--limit] [--cursor]
+```
+
+### label
+
+```bash
+thinkwork label list | create [name] [--color] [--description] | update <id> | delete <id>
+```
+
+### inbox
+
+Approval flows for agent-proposed changes.
+
+```bash
+thinkwork inbox list [--status PENDING] [--mine]
+thinkwork inbox get <id>
+thinkwork inbox approve <id> [--notes]
+thinkwork inbox reject <id> [--notes]
+thinkwork inbox request-revision <id> --notes <text>
+thinkwork inbox resubmit <id> [--notes]
+thinkwork inbox cancel <id>
+thinkwork inbox comment <id> [content] [--file]
+```
+
+### agent
+
+Agent lifecycle + capabilities, skills, budgets, API keys, email, and version history. Largest command group.
+
+```bash
+thinkwork agent list | get <id> | create [name] [--template] [--role] [--type] [--system-prompt-file]
+thinkwork agent update <id> | delete <id> | status <id> <status> | unpause <id>
+thinkwork agent capabilities set <id> --capability <name> [--enabled|--disabled]
+thinkwork agent skills set <id> --skill <id> [--enabled|--disabled] [--config <json>] [--rate-limit]
+thinkwork agent budget set <id> --limit-usd <n> [--window] [--action PAUSE|ALERT]
+thinkwork agent budget clear <id>
+thinkwork agent api-key create <id> --name <n> [--expires]
+thinkwork agent api-key list <id> | revoke <keyId>
+thinkwork agent email enable <id> [--local-part] | disable <id> | allowlist <id> <senders...>
+thinkwork agent version list <id> | rollback <id> <versionId>
+```
+
+### template
+
+Agent templates (reusable config for spawning agents) and template-linked sync.
+
+```bash
+thinkwork template list | get <id> | create [name] [--from-agent] [--system-prompt-file]
+thinkwork template update <id> | delete <id>
+thinkwork template diff <templateId> <agentId>
+thinkwork template sync-agent <templateId> <agentId>
+thinkwork template sync-all <templateId>
+```
+
+### tenant
+
+Tenant (workspace) CRUD + settings.
+
+```bash
+thinkwork tenant list | get <idOrSlug> | create [name] [--slug] [--plan] [--issue-prefix]
+thinkwork tenant update <id> [--name] [--plan] [--issue-prefix]
+thinkwork tenant settings get|set [--default-model] [--monthly-budget-usd] [--max-agents] [--auto-close-after-days] [--feature key=value]
+```
+
+### member
+
+```bash
+thinkwork member list [--principal-type] [--role]
+thinkwork member invite [email] [--role] [--name]
+thinkwork member update <id> [--role] [--status]
+thinkwork member remove <id> [--yes]
+```
+
+### team
+
+```bash
+thinkwork team list | get <id> | create [name] [--description] [--budget-usd]
+thinkwork team update <id> | delete <id>
+thinkwork team add-agent|remove-agent <teamId> <agentId>
+thinkwork team add-user|remove-user <teamId> <userId>
+```
+
+### kb
+
+Knowledge bases (Bedrock-backed RAG) and agent attachments.
+
+```bash
+thinkwork kb list | get <id> | create [name] [--s3-uri] [--embedding-model]
+thinkwork kb update <id> | delete <id> | sync <id> [--wait]
+thinkwork kb attach|detach <kbId> --agent <id> [--config <json>]
+```
+
+### routine
+
+Saved workflows with triggers and run history.
+
+```bash
+thinkwork routine list | get <id> | create [name] [--agent|--team] [--config-file]
+thinkwork routine update <id> | delete <id>
+thinkwork routine trigger <id> [--wait] [--input <json>]
+thinkwork routine run list <routineId> | get <runId>
+thinkwork routine trigger-config set <routineId> --type CRON|WEBHOOK|EVENT [--schedule]
+thinkwork routine trigger-config delete <triggerId>
+```
+
+### scheduled-job
+
+AWS-Scheduler-backed recurring agent jobs. Alias: `cron`.
+
+```bash
+thinkwork scheduled-job list | get <id> | create [name] [--agent|--routine] --schedule <cron|rate>
+thinkwork scheduled-job update <id> | delete <id> | run <id> [--wait]
+```
+
+### turn
+
+Inspect and cancel in-flight agent invocations (thread turns).
+
+```bash
+thinkwork turn list [--agent] [--routine] [--thread] [--status] [--limit]
+thinkwork turn get <id>
+thinkwork turn cancel <id> [--yes]
+```
+
+### wakeup
+
+Queued deferred agent invocations.
+
+```bash
+thinkwork wakeup list
+thinkwork wakeup create --agent <id> [--thread] [--delay-seconds] [--payload <json>]
+```
+
+### webhook
+
+Inbound webhooks that dispatch agents or routines.
+
+```bash
+thinkwork webhook list | get <id> | create [name] --target-type AGENT|ROUTINE --target-id <id> [--rate-limit]
+thinkwork webhook update <id> | delete <id>
+thinkwork webhook test <id> [--payload <json>] | rotate <id> | deliveries <id> [--limit]
+```
+
+### connector
+
+Third-party integrations (Slack, GitHub, Linear, …).
+
+```bash
+thinkwork connector list [--enabled-only] | get <slug>
+thinkwork connector enable <slug> [--config <json>] [--config-file]
+thinkwork connector disable <slug> | test <slug>
+```
+
+### skill
+
+Browse the catalog, install, upgrade, or publish custom skills.
+
+```bash
+thinkwork skill catalog [--search] [--tag]
+thinkwork skill list [--custom-only]
+thinkwork skill install <slug> [--version]
+thinkwork skill upgrade <slug>
+thinkwork skill create [slug] [--name] [--description] [--manifest-file] [--endpoint]
+thinkwork skill update <slug> | delete <slug>
+```
+
+### memory
+
+Inspect, search, and edit an agent's managed memory (AgentCore / Hindsight) and memory graph.
+
+```bash
+thinkwork memory list --agent <id> [--namespace semantic|preferences|episodes|reflections]
+thinkwork memory search --agent <id> --query <q> [--strategy] [--limit]
+thinkwork memory get <recordId> | update <recordId> --content <text> | delete <recordId>
+thinkwork memory graph --agent <id>
+```
+
+### recipe
+
+Saved MCP tool invocations (parameterized one-click actions).
+
+```bash
+thinkwork recipe list [--thread] [--agent] | get <id>
+thinkwork recipe create [name] --tool <slug> [--params <json>] [--scope tenant|agent|thread]
+thinkwork recipe update <id> | delete <id>
+```
+
+### artifact
+
+Agent-produced markdown outputs (reports, data-views, notes, plans, drafts, digests). Read-only in v1.
+
+```bash
+thinkwork artifact list [--thread] [--agent] [--type] [--status]
+thinkwork artifact get <id> [--raw]
+```
+
+### cost
+
+```bash
+thinkwork cost summary [--from] [--to]
+thinkwork cost by-agent [--sort cost|requests]
+thinkwork cost by-model
+thinkwork cost series [--days]
+```
+
+### budget
+
+```bash
+thinkwork budget list | status
+thinkwork budget upsert --limit-usd <n> [--scope tenant|agent] [--agent] [--window] [--action PAUSE|ALERT]
+thinkwork budget delete <id>
+```
+
+### performance
+
+```bash
+thinkwork performance agents [--from] [--to] [--sort cost|errors|latency|requests]
+thinkwork performance agent <id> [--days]
+```
+
+### trace
+
+```bash
+thinkwork trace thread <threadId> [--since]
+thinkwork trace turn <turnId> [--raw]
+```
+
+### dashboard
+
+```bash
+thinkwork dashboard
+```
+
+One-screen snapshot — agents online, open threads, pending approvals, spend-to-date.

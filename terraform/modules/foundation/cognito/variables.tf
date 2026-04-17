@@ -88,11 +88,13 @@ variable "pre_signup_lambda_zip" {
 # ---------------------------------------------------------------------------
 
 variable "admin_callback_urls" {
-  description = "OAuth callback URLs for the web admin client"
+  description = "OAuth callback URLs for the web admin client (also used by `thinkwork login --stage <s>` — the CLI binds a loopback server on 127.0.0.1:42010 and must find that URL here for Cognito to accept the redirect)"
   type        = list(string)
   default = [
     "http://localhost:5174",
     "http://localhost:5174/auth/callback",
+    "http://127.0.0.1:42010/callback",
+    "http://localhost:42010/callback",
   ]
 }
 
