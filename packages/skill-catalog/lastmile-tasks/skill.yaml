@@ -6,8 +6,9 @@ version: "1.0.0"
 author: thinkwork
 icon: clipboard-list
 tags: [tasks, lastmile, intake, forms]
-execution: context
+execution: script
 mode: tool
+always_inject: true
 is_default: true
 triggers:
   - "create a lastmile task"
