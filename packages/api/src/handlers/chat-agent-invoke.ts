@@ -783,6 +783,22 @@ export async function handler(event: InvokeEvent): Promise<void> {
     // 3. Insert assistant message into DB (with GenUI tool results if present)
     const assistantMsg = await insertAssistantMessage(threadId, tenantId, agentId, displayResponse, toolInvocations);
 
+    // 3a-pre. Promote pre-sync LastMile task threads to synced by stamping
+    // metadata.external as soon as the MCP's `workflow_task_create` returns
+    // successfully. Without this, the first `task.created` webhook races
+    // against 3 follow-ups (assigned/status_changed/updated) and each one
+    // finds no matching thread via `externalTaskId` — they all create
+    // duplicate rows for the same external task. Stamping in-process here
+    // closes the correlation gap *before* LastMile even fires webhooks.
+    await stampThreadFromWorkflowTaskCreate({
+      threadId,
+      tenantId,
+      toolInvocations,
+      workflowIdFromMeta,
+    }).catch((err) => {
+      console.warn(`[chat-agent-invoke] workflow_task_create stamp failed:`, err);
+    });
+
     // 3a. Link orphan artifacts created during this turn to the thread + message.
     // The Strands runtime doesn't forward thread_id to MCP tools, so artifacts
     // created via create_artifact lack thread_id and source_message_id.
@@ -889,6 +905,70 @@ export async function handler(event: InvokeEvent): Promise<void> {
       console.error(`[chat-agent-invoke] Failed to insert error message:`, innerErr);
     }
   }
+}
+
+/** Extracts the new LastMile task id from the MCP's workflow_task_create
+ *  tool result and stamps metadata.external on the current thread so
+ *  inbound webhooks correlate back to this row instead of creating
+ *  duplicates. Safe to call on every turn — silently no-ops unless a
+ *  successful `workflow_task_create` invocation is present with a
+ *  parseable `{id}` payload. */
+async function stampThreadFromWorkflowTaskCreate(args: {
+  threadId: string;
+  tenantId: string;
+  toolInvocations: Array<Record<string, unknown>>;
+  workflowIdFromMeta: string | undefined;
+}): Promise<void> {
+  const inv = args.toolInvocations.find(
+    (i) => i.tool_name === "workflow_task_create" && i.status === "success",
+  );
+  if (!inv) return;
+
+  let externalTaskId: string | undefined;
+  const outputPreview = inv.output_preview;
+  if (typeof outputPreview === "string" && outputPreview) {
+    try {
+      const parsed = JSON.parse(outputPreview) as Record<string, unknown>;
+      const id = parsed.id ?? parsed.taskId ?? parsed.externalTaskId;
+      if (typeof id === "string" && id) externalTaskId = id;
+    } catch {
+      // Output wasn't JSON — nothing to stamp.
+    }
+  }
+  if (!externalTaskId) return;
+
+  const { threads } = await import("@thinkwork/database-pg/schema");
+  const [row] = await db
+    .select({ metadata: threads.metadata })
+    .from(threads)
+    .where(and(eq(threads.id, args.threadId), eq(threads.tenant_id, args.tenantId)));
+  if (!row) return;
+
+  const meta = (row.metadata as Record<string, unknown> | null) ?? {};
+  const existingExternal = (meta.external as Record<string, unknown> | undefined) ?? {};
+  if (typeof existingExternal.externalTaskId === "string" && existingExternal.externalTaskId) {
+    return; // Already stamped — idempotent no-op.
+  }
+
+  const mergedExternal = {
+    ...existingExternal,
+    provider: "lastmile",
+    externalTaskId,
+    syncStatus: "synced",
+    lastUpdatedAt: new Date().toISOString(),
+  };
+  await db
+    .update(threads)
+    .set({
+      metadata: { ...meta, external: mergedExternal },
+      sync_status: "synced",
+      updated_at: new Date(),
+    })
+    .where(and(eq(threads.id, args.threadId), eq(threads.tenant_id, args.tenantId)));
+
+  console.log(
+    `[chat-agent-invoke] Stamped thread ${args.threadId} with externalTaskId=${externalTaskId} (workflow=${args.workflowIdFromMeta ?? "unknown"})`,
+  );
 }
 
 async function insertAssistantMessage(
