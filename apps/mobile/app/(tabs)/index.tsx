@@ -676,11 +676,14 @@ export default function ThreadsScreen() {
             }}
           >
             <Text className="text-sm font-semibold" style={{ color: activeTab === "tasks" ? colors.foreground : colors.mutedForeground }}>Tasks</Text>
-            {filteredTasks.length > 0 && (
-              <View className="rounded-full min-w-[18px] h-[18px] items-center justify-center px-1" style={{ backgroundColor: activeTab === "tasks" ? colors.primary : (isDark ? "#404040" : "#d4d4d4") }}>
-                <Text style={{ color: activeTab === "tasks" ? (isDark ? "#000" : "#fff") : colors.mutedForeground, fontSize: 10, fontWeight: "700" }}>{filteredTasks.length}</Text>
-              </View>
-            )}
+            {(() => {
+              const unreadCount = filteredTasks.filter((t: any) => isUnread(t.id, t.lastTurnCompletedAt || t.createdAt, t.lastReadAt)).length;
+              return unreadCount > 0 ? (
+                <View className="rounded-full min-w-[18px] h-[18px] items-center justify-center px-1" style={{ backgroundColor: activeTab === "tasks" ? colors.primary : (isDark ? "#404040" : "#d4d4d4") }}>
+                  <Text style={{ color: activeTab === "tasks" ? (isDark ? "#000" : "#fff") : colors.mutedForeground, fontSize: 10, fontWeight: "700" }}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
+                </View>
+              ) : null;
+            })()}
           </Pressable>
         </View>
       </View>
@@ -705,6 +708,7 @@ export default function ThreadsScreen() {
                 onRetrySync={handleRetryTaskSync}
                 onArchive={handleArchive}
                 isActive={isThreadActive(item.id)}
+                isUnread={isUnread(item.id, item.lastTurnCompletedAt || item.createdAt, item.lastReadAt)}
               />
             )}
             ItemSeparatorComponent={() => (

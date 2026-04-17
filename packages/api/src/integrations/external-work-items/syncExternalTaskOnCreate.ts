@@ -115,7 +115,7 @@ function getProviderUserId(
 async function writeSyncState(
 	threadId: string,
 	state:
-		| { kind: "synced"; externalMeta: Record<string, unknown> }
+		| { kind: "synced"; externalMeta: Record<string, unknown>; description?: string | null }
 		| { kind: "local"; reason: string }
 		| { kind: "error"; message: string },
 ): Promise<void> {
@@ -133,6 +133,13 @@ async function writeSyncState(
 				sync_status: "synced",
 				sync_error: null,
 				...(externalTaskId ? { external_task_id: externalTaskId } : {}),
+				// Stamp description so the mobile Tasks list can show it as
+				// a subtitle immediately — we don't want to wait for the
+				// first webhook round-trip to populate it. Caller passes
+				// either what the user typed or what they put in the
+				// workflow form; webhook ingest later reconciles against
+				// LastMile's canonical copy.
+				...(state.description ? { description: state.description } : {}),
 				// JSONB merge keeps the broader metadata.external block
 				// available for downstream reads (latestEnvelope, provider,
 				// etc.) — just not the primary lookup key anymore.
@@ -364,6 +371,7 @@ export async function syncExternalTaskOnCreate(
 			await writeSyncState(args.threadId, {
 				kind: "synced",
 				externalMeta,
+				description: args.description ?? null,
 			});
 			return { status: "synced", externalTaskId: created.id };
 		}
