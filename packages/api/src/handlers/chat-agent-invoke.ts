@@ -480,7 +480,13 @@ export async function handler(event: InvokeEvent): Promise<void> {
           userId: threadMetaRow.created_by_id,
           workflowId: workflowIdFromMeta,
         });
-        if (skill) workflowSkill = skill;
+        // Decorate the skill blob with the workflowId itself. The agent
+        // needs this exact value to pass as `workflowId` when calling
+        // the LastMile MCP's `workflow_task_create` — and without it in
+        // the prompt, the agent tends to guess from other identifier-
+        // looking strings (e.g. its own instance_id) and gets
+        // "Workflow not found" on submit.
+        if (skill) workflowSkill = { ...skill, workflowId: workflowIdFromMeta };
       } catch (err) {
         // Non-fatal — agent just gets the legacy fallback path.
         console.warn(

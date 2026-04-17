@@ -38,6 +38,7 @@ def format_workflow_skill_context(workflow_skill: Any) -> str:
 
     instructions = workflow_skill.get("instructions")
     form = workflow_skill.get("form")
+    workflow_id = workflow_skill.get("workflowId")
 
     has_instructions = isinstance(instructions, str) and instructions.strip()
     has_form = isinstance(form, dict) and form.get("id") and form.get("fields")
@@ -54,6 +55,15 @@ def format_workflow_skill_context(workflow_skill: Any) -> str:
         "form when this block is present.",
         "",
     ]
+
+    if isinstance(workflow_id, str) and workflow_id:
+        # The agent MUST use this exact value as the `workflowId` argument
+        # when calling the LastMile MCP's `workflow_task_create` tool —
+        # guessing from other identifier-looking strings in context (the
+        # agent instance_id, the form's id, etc.) produces "Workflow not
+        # found" errors on the MCP side.
+        lines.append(f"- **Workflow ID (pass verbatim to `workflow_task_create`):** `{workflow_id}`")
+        lines.append("")
 
     if has_instructions:
         lines.append("### Instructions")
