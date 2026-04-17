@@ -238,6 +238,17 @@ export default function ThreadDetailRoute() {
         | Record<string, unknown>
         | undefined)?.latestEnvelope,
   );
+  // Pre-sync LastMile tasks: the mobile task composer stamps
+  // `metadata.workflowId` before the backend has POSTed to the external
+  // provider, so `external.latestEnvelope` is still missing. During that
+  // intake window we still want the timeline view so the agent's
+  // `present_form` message is visible — otherwise the user lands on the
+  // sub-task FlatList and can't fill the form.
+  const isPreSyncExternalTask = Boolean(
+    !hasExternalTask &&
+      typeof (thread?.metadata as Record<string, unknown> | undefined)?.workflowId ===
+        "string",
+  );
   // Monotonic counter: the "Edit Task" dropdown item increments this, and
   // the pinned ExternalTaskCard opens its edit sheet when it changes.
   const [editRequestCounter, setEditRequestCounter] = useState(0);
@@ -248,7 +259,7 @@ export default function ThreadDetailRoute() {
     () => (hasExternalTask ? getExternalProviderLabel(thread) : null),
     [hasExternalTask, thread],
   );
-  const useTaskFlatList = isTask && !hasExternalTask;
+  const useTaskFlatList = isTask && !hasExternalTask && !isPreSyncExternalTask;
   const isDone = thread?.status?.toUpperCase() === "DONE";
   const childThreads = (thread?.children ?? []) as any[];
   const allDescendantTasks = useMemo(() => {

@@ -490,6 +490,29 @@ export async function handler(event: InvokeEvent): Promise<void> {
       }
     }
 
+    // Task-thread skill injection: any thread that was created against a
+    // LastMile workflow (`metadata.workflowId` set) needs the
+    // `lastmile-tasks` skill so the agent can call `create_task` after the
+    // user submits the intake form. Without this, even the most capable
+    // agent sees the workflow-skill form in context but has no tool to fire
+    // the POST — it just summarizes and stops.
+    if (workflowIdFromMeta && !skillsConfig.some((s) => s.skillId === "lastmile-tasks")) {
+      skillsConfig.push({
+        skillId: "lastmile-tasks",
+        s3Key: "skills/catalog/lastmile-tasks",
+        secretRef: undefined,
+        envOverrides: {
+          THINKWORK_API_URL: THINKWORK_API_URL,
+          THINKWORK_API_SECRET: THINKWORK_API_SECRET,
+          GRAPHQL_API_KEY: APPSYNC_API_KEY,
+          AGENT_ID: agentId,
+        },
+      });
+      console.log(
+        `[chat-agent-invoke] Injected lastmile-tasks skill for workflow thread=${threadId}`,
+      );
+    }
+
     const invokeStart = Date.now();
     const invokePayload = {
       tenant_id: tenantId,
