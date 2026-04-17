@@ -21,10 +21,16 @@ import {
   checkBudgetAndPause,
   notifyCostRecorded,
 } from "../lib/cost-recording.js";
-import { buildSkillEnvOverrides } from "../lib/oauth-token.js";
+import {
+  buildSkillEnvOverrides,
+  resolveConnectionForUser,
+  forceRefreshLastmileUserToken,
+} from "../lib/oauth-token.js";
+import { getOrMintLastmilePat } from "../lib/lastmile-pat.js";
 import { buildMcpConfigs } from "../lib/mcp-configs.js";
 import { loadTenantBuiltinTools } from "./skills.js";
 import { fetchWorkflowSkillForAgent } from "../integrations/external-work-items/providers/lastmile/workflowSkillCache.js";
+import { refreshLastmileTask } from "../integrations/external-work-items/providers/lastmile/refresh.js";
 // PRD-22: Signal protocol removed — agents use tools for thread state transitions
 
 /**
@@ -807,6 +813,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
     await stampThreadFromWorkflowTaskCreate({
       threadId,
       tenantId,
+      userId: agent.human_pair_id || undefined,
       toolInvocations,
       workflowIdFromMeta,
     }).catch((err) => {
@@ -930,6 +937,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
 async function stampThreadFromWorkflowTaskCreate(args: {
   threadId: string;
   tenantId: string;
+  userId: string | undefined;
   toolInvocations: Array<Record<string, unknown>>;
   workflowIdFromMeta: string | undefined;
 }): Promise<void> {
@@ -978,10 +986,58 @@ async function stampThreadFromWorkflowTaskCreate(args: {
 
   const meta = (row.metadata as Record<string, unknown> | null) ?? {};
   const existingExternal = (meta.external as Record<string, unknown> | undefined) ?? {};
+
+  // Resolve the user's LastMile connection so we can (a) stamp
+  // connectionId/providerId alongside the task id (downstream refreshes
+  // need them) and (b) synchronously fetch the full task envelope so
+  // the mobile UI flips to task-card mode immediately instead of
+  // waiting for a webhook that may be delayed or never arrive.
+  let envelope: unknown;
+  let connMeta: { connectionId: string; providerId: string } | undefined;
+  if (args.userId) {
+    try {
+      const conn = await resolveConnectionForUser(
+        args.tenantId,
+        args.userId,
+        "lastmile",
+      );
+      if (conn) {
+        connMeta = conn;
+        const authToken = await getOrMintLastmilePat({
+          userId: args.userId,
+          getFreshWorkosJwt: () =>
+            forceRefreshLastmileUserToken(conn.connectionId, args.tenantId),
+        });
+        if (authToken) {
+          envelope = await refreshLastmileTask({
+            externalTaskId,
+            ctx: {
+              tenantId: args.tenantId,
+              userId: args.userId,
+              connectionId: conn.connectionId,
+              authToken,
+            },
+          });
+        }
+      }
+    } catch (err) {
+      // Non-fatal — the task id stamp still happens below, and the
+      // webhook will eventually populate latestEnvelope.
+      console.warn(
+        `[chat-agent-invoke] envelope fetch after stamp failed (non-fatal):`,
+        (err as Error)?.message,
+      );
+    }
+  }
+
   const mergedExternal = {
     ...existingExternal,
     provider: "lastmile",
     externalTaskId,
+    ...(connMeta
+      ? { connectionId: connMeta.connectionId, providerId: connMeta.providerId }
+      : {}),
+    ...(envelope ? { latestEnvelope: envelope } : {}),
     lastUpdatedAt: new Date().toISOString(),
   };
   await db
@@ -995,7 +1051,7 @@ async function stampThreadFromWorkflowTaskCreate(args: {
     .where(and(eq(threads.id, args.threadId), eq(threads.tenant_id, args.tenantId)));
 
   console.log(
-    `[chat-agent-invoke] Stamped thread ${args.threadId} with externalTaskId=${externalTaskId} (workflow=${args.workflowIdFromMeta ?? "unknown"})`,
+    `[chat-agent-invoke] Stamped thread ${args.threadId} with externalTaskId=${externalTaskId} (workflow=${args.workflowIdFromMeta ?? "unknown"}, envelope=${envelope ? "yes" : "no"})`,
   );
 }
 
