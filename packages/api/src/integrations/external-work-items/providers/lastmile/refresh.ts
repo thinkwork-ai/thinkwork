@@ -3,9 +3,12 @@
  * envelope (item + blocks + form). Used by both the Phase 5 refresh branch
  * and the Phase 2 executeAction path after a mutation.
  *
- * The tool name is `tasks_get` (pluralized) and the argument is `task_id`.
- * Earlier naming (`task_get` + `id`) was inferred, not probed, and caused the
- * "MCP error" banner on the mobile ExternalTaskCard refresh path.
+ * Tool name is `tasks_get`; required arg is `taskId` (camelCase). Probed
+ * against `tools/list` on dev-mcp — every tool schema uses camelCase.
+ * Earlier `task_id` was silently dropped by the server (the dispatcher
+ * doesn't enforce `required`), so the REST handler queried
+ * `WHERE id = 'undefined'` and returned "Task not found." — identical
+ * response to a real miss.
  *
  * The MCP URL is resolved from `tenant_mcp_servers.url` by the ctx-builder
  * upstream; this file has no hardcoded hostname.
@@ -37,7 +40,7 @@ export async function refreshLastmileTask(args: {
 	const raw = await callMcpTool({
 		url: ctx.mcpServerUrl,
 		tool: LASTMILE_TOOLS.get,
-		args: { task_id: externalTaskId },
+		args: { taskId: externalTaskId },
 		authToken: ctx.authToken,
 		refreshToken:
 			ctx.connectionId && ctx.tenantId
@@ -66,7 +69,7 @@ export function envelopeFromRaw(
 		_source: {
 			provider: "lastmile",
 			tool: LASTMILE_TOOLS.get,
-			params: { task_id: externalTaskId },
+			params: { taskId: externalTaskId },
 		},
 		item,
 		blocks,
