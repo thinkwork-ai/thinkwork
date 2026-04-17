@@ -94,15 +94,20 @@ vi.mock("../integrations/external-work-items/index.js", () => ({
 
 // ── OAuth + connection resolver ──────────────────────────────────────────────
 
-const { mockResolveConnection, mockResolveOAuthToken } = vi.hoisted(() => {
+const { mockResolveConnection, mockResolveOAuthToken, mockResolveLastmileTasksMcpServer } = vi.hoisted(() => {
 	const mockResolveConnection = vi.fn();
 	const mockResolveOAuthToken = vi.fn();
-	return { mockResolveConnection, mockResolveOAuthToken };
+	const mockResolveLastmileTasksMcpServer = vi.fn(async () => ({
+		id: "mcp-server-1",
+		url: "https://mcp-test.invalid/tasks",
+	}));
+	return { mockResolveConnection, mockResolveOAuthToken, mockResolveLastmileTasksMcpServer };
 });
 
 vi.mock("../lib/oauth-token.js", () => ({
 	resolveConnectionByProviderUserId: mockResolveConnection,
 	resolveOAuthToken: mockResolveOAuthToken,
+	resolveLastmileTasksMcpServer: mockResolveLastmileTasksMcpServer,
 }));
 
 // ── ensureExternalTaskThread + closeExternalTaskThread ───────────────────────
@@ -296,6 +301,7 @@ describe("ingestExternalTaskEvent — happy path", () => {
 				userId: "user-1",
 				connectionId: "conn-1",
 				authToken: "access-token-xyz",
+				mcpServerUrl: "https://mcp-test.invalid/tasks",
 			},
 		});
 		expect(mockEnsureThread).toHaveBeenCalledWith(

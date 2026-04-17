@@ -616,16 +616,11 @@ async function mcpOAuthCallback(
 		if (!isLastmileTasks) {
 			console.log(`[mcp-oauth] whoami hook skipped for slug=${mcpServer?.slug ?? "?"} url=${mcpServer?.url ?? "?"} — not a LastMile Tasks MCP`);
 		} else {
-			const parsed = new URL(mcpServer!.url);
-			const baseUrl = parsed.origin;
-			const serverPath = parsed.pathname.replace(/^\/+/, "").replace(/\/+$/, "");
-
 			const whoamiRaw = await callMcpTool({
-				server: serverPath,
+				url: mcpServer!.url,
 				tool: "user_whoami",
 				args: {},
 				authToken: tokenData.access_token,
-				baseUrl,
 			});
 			const whoami = whoamiRaw as {
 				id?: string;
