@@ -41,10 +41,12 @@ import {
 import { getConnectorBaseUrl } from "../../handlers/task-connectors.js";
 import {
 	createTask as restCreateTask,
+	createWorkflowTask as restCreateWorkflowTask,
 	getWorkflow as restGetWorkflow,
 	listStatuses as restListStatuses,
 	pickInitialStatus,
 	isLastmileRestConfigured,
+	validateWorkflowSkill,
 	LastmileRestError,
 } from "./providers/lastmile/restClient.js";
 
@@ -186,6 +188,20 @@ export interface SyncExternalTaskOnCreateArgs {
 	 *  `createLastmileTask` resolves this from a ThinkWork email before
 	 *  calling; other callers should pass an already-resolved id. */
 	assigneeProviderUserId?: string;
+	/** Opaque form submission forwarded verbatim to LastMile's new
+	 *  `POST /workflows/{id}/tasks` endpoint when the workflow has a
+	 *  populated `skill` block. When absent, or when the workflow's
+	 *  skill is missing/invalid/unknown schemaVersion, we fall back to
+	 *  the legacy per-column `POST /tasks` path. */
+	formResponse?: {
+		form_id: string;
+		values: Record<string, unknown>;
+	};
+	/** Creator email — required by the workflow-skill envelope. Resolved
+	 *  by the caller (the resolver already has the thread creator on
+	 *  hand). When absent, we can't build the envelope and fall back to
+	 *  the legacy path even if `formResponse` is present. */
+	creatorEmail?: string;
 }
 
 /** Idempotency key for the create call. Using the local thread id ensures
@@ -297,18 +313,85 @@ export async function syncExternalTaskOnCreate(
 	};
 
 	try {
-		// Resolve taskTypeId + teamId from the workflow, and the initial
-		// statusId from the workflow's status list. All three are required
-		// by POST /tasks but all three are fully derivable from workflowId.
-		const [workflow, statuses] = await Promise.all([
-			restGetWorkflow({ workflowId: args.workflowId, ctx }),
-			restListStatuses({ ctx, query: { workflowId: args.workflowId } }),
-		]);
+		const workflow = await restGetWorkflow({ workflowId: args.workflowId, ctx });
+
+		// Dynamic workflow-skill path: when the workflow ships a populated
+		// `skill` block with a `form` and the agent has collected a
+		// `formResponse`, forward the envelope opaquely to
+		// `POST /workflows/{id}/tasks`. LastMile owns the mapping from
+		// `formResponse.values` to task columns / entity_data.
+		const skillCheck = validateWorkflowSkill(workflow.skill);
+		const canTakeDynamicPath =
+			skillCheck.ok &&
+			!!skillCheck.skill.form &&
+			!!args.formResponse &&
+			!!args.creatorEmail &&
+			!!args.userId;
+
+		if (canTakeDynamicPath && skillCheck.ok) {
+			const created = await restCreateWorkflowTask({
+				workflowId: args.workflowId,
+				input: {
+					workflowId: args.workflowId,
+					threadId: args.threadId,
+					threadTitle: args.title,
+					formResponse: {
+						form_id: args.formResponse!.form_id,
+						values: args.formResponse!.values,
+					},
+					creator: {
+						userId: args.userId,
+						email: args.creatorEmail!,
+					},
+				},
+				idempotencyKey: idempotencyKeyForThread(args.threadId),
+				ctx,
+			});
+
+			const externalMeta = buildExternalMeta({
+				externalTaskId: created.id,
+				provider: conn.provider_name,
+				connectionId: conn.id,
+				providerId: conn.provider_id,
+				providerUserId,
+			});
+			await writeSyncState(args.threadId, {
+				kind: "synced",
+				externalMeta,
+			});
+			return { status: "synced", externalTaskId: created.id };
+		}
+
+		// Fallback path — legacy `POST /tasks`. Also used when skill is
+		// absent, unknown schemaVersion, invalid form, or the agent
+		// didn't run the dynamic flow (no formResponse). Log the reason
+		// so we can tell "this workflow has no skill yet" apart from
+		// "the agent skipped the form".
+		if (!skillCheck.ok) {
+			console.warn("[lastmile.skill.fallback]", {
+				reason: skillCheck.reason,
+				workflowId: args.workflowId,
+				tenantId: args.tenantId,
+				threadId: args.threadId,
+			});
+		} else if (!args.formResponse) {
+			console.warn("[lastmile.skill.fallback]", {
+				reason: "form_response_missing",
+				workflowId: args.workflowId,
+				tenantId: args.tenantId,
+				threadId: args.threadId,
+			});
+		}
+
 		if (!workflow.taskTypeId) {
 			const message = `LastMile workflow ${args.workflowId} has no taskTypeId — cannot create task.`;
 			await writeSyncState(args.threadId, { kind: "error", message });
 			return { status: "error", message };
 		}
+		const statuses = await restListStatuses({
+			ctx,
+			query: { workflowId: args.workflowId },
+		});
 		const initialStatus = pickInitialStatus(statuses);
 		if (!initialStatus) {
 			const message = `LastMile workflow ${args.workflowId} has no selectable status — cannot create task.`;
