@@ -271,12 +271,13 @@ export async function handler(event: EvalRunnerEvent): Promise<{ ok: boolean; ru
 	await db.update(evalRuns).set({ status: "running", started_at: startedAt, total_tests: cases.length }).where(eq(evalRuns.id, runId));
 	await notifyEvalRunUpdate({ runId, tenantId: run.tenant_id, agentId: run.agent_id, status: "running", totalTests: cases.length });
 
-	let passed = 0;
-	let failed = 0;
-	let totalCostUsd = 0;
+	// Run tests with bounded concurrency so the Lambda doesn't hit its 900s
+	// timeout on larger packs. Each test is independent: own session ID, own
+	// DB insert; the only shared state is the aggregate counters below, which
+	// we accumulate once every batch resolves.
+	const CONCURRENCY = 5;
 
-	for (let i = 0; i < cases.length; i++) {
-		const tc = cases[i];
+	async function runOneTest(tc: typeof cases[number], i: number): Promise<{ passed: boolean; costUsd: number }> {
 		const sessionId = uniqueSessionId(runId, tc.id, i);
 		console.log(`[eval-runner] test ${i + 1}/${cases.length} '${tc.name}' session=${sessionId.slice(0, 12)}`);
 
@@ -285,6 +286,7 @@ export async function handler(event: EvalRunnerEvent): Promise<{ ok: boolean; ru
 		let errorMessage: string | null = null;
 		const assertionResults: AssertionResult[] = [];
 		const evaluatorResults: EvaluatorResult[] = [];
+		let costUsd = 0;
 
 		try {
 			// Resolve which template config to load. Test-case-level pin
@@ -337,7 +339,7 @@ export async function handler(event: EvalRunnerEvent): Promise<{ ok: boolean; ru
 					const result = await callEvaluator(evaluatorId, sessionSpans);
 					evaluatorResults.push(result);
 					const tu = result.token_usage;
-					if (tu?.totalTokens) totalCostUsd += (tu.totalTokens / 1000) * 0.012; // rough Built-in pricing approximation
+					if (tu?.totalTokens) costUsd += (tu.totalTokens / 1000) * 0.012;
 				}
 			}
 		} catch (err) {
@@ -345,7 +347,6 @@ export async function handler(event: EvalRunnerEvent): Promise<{ ok: boolean; ru
 			console.error(`[eval-runner] test '${tc.name}' failed:`, errorMessage);
 		}
 
-		// Pass/fail = all deterministic assertions pass AND all evaluator scores >= threshold.
 		const assertionsPassed = assertionResults.every((a) => a.passed);
 		const evaluatorsPassed = evaluatorResults.every((r) => typeof r.value === "number" && r.value >= PASS_THRESHOLD);
 		const score = evaluatorResults.length > 0
@@ -354,7 +355,6 @@ export async function handler(event: EvalRunnerEvent): Promise<{ ok: boolean; ru
 				.reduce((acc, r, _, arr) => acc + (r.value as number) / arr.length, 0)
 			: assertionsPassed ? 1 : 0;
 		const status = errorMessage ? "error" : (assertionsPassed && evaluatorsPassed ? "pass" : "fail");
-		if (status === "pass") passed++; else failed++;
 
 		await db.insert(evalResults).values({
 			run_id: runId,
@@ -370,6 +370,21 @@ export async function handler(event: EvalRunnerEvent): Promise<{ ok: boolean; ru
 			assertions: assertionResults,
 			error_message: errorMessage,
 		});
+
+		return { passed: status === "pass", costUsd };
+	}
+
+	let passed = 0;
+	let failed = 0;
+	let totalCostUsd = 0;
+
+	for (let offset = 0; offset < cases.length; offset += CONCURRENCY) {
+		const batch = cases.slice(offset, offset + CONCURRENCY);
+		const results = await Promise.all(batch.map((tc, j) => runOneTest(tc, offset + j)));
+		for (const r of results) {
+			if (r.passed) passed++; else failed++;
+			totalCostUsd += r.costUsd;
+		}
 	}
 
 	// Aggregate.
