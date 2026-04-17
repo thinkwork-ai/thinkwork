@@ -84,29 +84,42 @@ def create_task(
     priority: str = "",
     due_date: str = "",
     assignee_email: str = "",
+    form_response_json: str = "",
 ) -> str:
-    """Fire the LastMile `POST /tasks` for the current thread using
-    details the user filled in on the intake form.
+    """Fire a LastMile task-create for the current thread using details
+    the user filled in on the intake form.
 
-    Call this **only after** you have received a `form_response` from
-    the user's task-intake form (see `references/task-intake-form.json`).
-    The form enforces required fields and pre-populates defaults;
-    forward the submitted values verbatim.
+    Two paths, picked based on what you pass:
+
+    1. **Workflow-skill path (preferred when available)** — when the
+       system prompt contains a `## Workflow Skill` block, the thread's
+       workflow ships its own form. Call `present_form(form_json=...)`
+       with the inline schema from that block, then pass the resulting
+       `form_response` payload verbatim as `form_response_json`. The
+       other kwargs are ignored on this path; LastMile owns the mapping
+       from form values to task columns.
+
+    2. **Legacy path (fallback)** — when there is no Workflow Skill
+       block in context, use the hardcoded intake form at
+       `references/task-intake-form.json` and pass the extracted fields
+       via the per-column kwargs below.
 
     The current thread's id, tenant id, workflow id, and creator are
-    all derived server-side — you don't need to pass them.
+    all derived server-side.
 
     Args:
-        description: From `form_response.values.description`. Empty
-            string if the user left it blank (the task will carry the
-            thread's own description, or none).
-        priority: From `form_response.values.priority`. One of
-            'urgent', 'high', 'medium', 'low'. Required.
-        due_date: From `form_response.values.due_date`, ISO-8601
-            YYYY-MM-DD. Empty string for "no deadline".
-        assignee_email: From `form_response.values.assignee_email`.
-            Empty string defaults the assignee to the thread creator
-            (usually the user who opened the thread).
+        description: Legacy path. From `form_response.values.description`.
+        priority: Legacy path. From `form_response.values.priority`. One
+            of 'urgent', 'high', 'medium', 'low'. Required on legacy
+            path; ignored on the workflow-skill path.
+        due_date: Legacy path. ISO-8601 YYYY-MM-DD; empty for no
+            deadline.
+        assignee_email: Legacy path. Empty defaults to the thread
+            creator.
+        form_response_json: Workflow-skill path. The complete
+            `form_response` payload as a JSON string — the whole
+            `{"form_id": "...", "values": {...}}` block the user
+            submitted. Forwarded opaquely to LastMile.
 
     Returns:
         JSON `{threadId, syncStatus, externalTaskId}` on success, or
@@ -115,18 +128,54 @@ def create_task(
     """
     if not THREAD_ID:
         return json.dumps({"error": "CURRENT_THREAD_ID not set"})
-    if not priority:
-        return json.dumps(
-            {"error": "priority is required — re-check the form_response"}
-        )
 
-    input_data: dict = {"threadId": THREAD_ID, "priority": priority}
-    if description:
-        input_data["description"] = description
-    if due_date:
-        input_data["dueDate"] = due_date
-    if assignee_email:
-        input_data["assigneeEmail"] = assignee_email
+    input_data: dict = {"threadId": THREAD_ID}
+
+    if form_response_json:
+        # Workflow-skill path — the whole form_response is opaque to us.
+        # Validate shape ({form_id, values}) before forwarding so a
+        # malformed blob surfaces as a clear error instead of a server
+        # 4xx. Server still re-validates, so this is a friendliness
+        # layer, not a trust boundary.
+        try:
+            parsed = json.loads(form_response_json)
+        except json.JSONDecodeError as exc:
+            return json.dumps(
+                {"error": f"form_response_json is not valid JSON: {exc}"}
+            )
+        if not isinstance(parsed, dict):
+            return json.dumps(
+                {"error": "form_response_json must decode to an object"}
+            )
+        form_id = parsed.get("form_id")
+        values = parsed.get("values")
+        if not isinstance(form_id, str) or not form_id:
+            return json.dumps(
+                {"error": "form_response_json missing string form_id"}
+            )
+        if not isinstance(values, dict):
+            return json.dumps(
+                {"error": "form_response_json missing values object"}
+            )
+        # AWSJSON travels as a JSON string on the GraphQL wire — AppSync
+        # requires the value to be a string, not a nested object. The
+        # resolver parses it back on arrival via parseFormResponse().
+        input_data["formResponse"] = json.dumps(
+            {"form_id": form_id, "values": values}
+        )
+    else:
+        # Legacy path — priority is the only required field.
+        if not priority:
+            return json.dumps(
+                {"error": "priority is required — re-check the form_response"}
+            )
+        input_data["priority"] = priority
+        if description:
+            input_data["description"] = description
+        if due_date:
+            input_data["dueDate"] = due_date
+        if assignee_email:
+            input_data["assigneeEmail"] = assignee_email
 
     result = _graphql(
         """mutation($i: CreateLastmileTaskInput!) {
