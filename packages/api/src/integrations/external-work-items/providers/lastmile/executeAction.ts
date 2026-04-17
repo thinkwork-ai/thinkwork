@@ -5,9 +5,13 @@
  * After the mutation succeeds, re-fetches the task so callers get a fresh
  * envelope (same shape as `refresh()`).
  *
- * All LastMile-specific tool-name strings live here. No call site above this
- * module should know a string like `task_update_status`. The MCP URL is
- * resolved from `tenant_mcp_servers.url` by the ctx-builder upstream.
+ * Wire format: every LastMile MCP tool uses camelCase argument keys
+ * (`taskId`, `statusId`, `assigneeId`, `dueDate`, …) — verified against
+ * `tools/list`. The server dispatcher does NOT enforce `required`, so a
+ * snake_case arg silently becomes `undefined` and the handler returns
+ * "Task not found." or writes nothing. This file is the one place that
+ * does the snake_case → camelCase translation at the wire boundary;
+ * call sites above pass the user-friendly ThinkWork keys.
  */
 
 import type {
@@ -19,6 +23,30 @@ import { callMcpTool } from "../../mcpClient.js";
 import { LASTMILE_TOOLS } from "./constants.js";
 import { refreshLastmileTask } from "./refresh.js";
 import { forceRefreshLastmileUserToken } from "../../../../lib/oauth-token.js";
+
+/**
+ * Translate edit-form field keys → LastMile `task_update` MCP arg names.
+ * The edit form (buildFormSchema.ts) emits user-friendly keys that differ
+ * from what `task_update` expects. Pass through any key we don't know
+ * about unchanged — LastMile validates + silently ignores unknowns.
+ */
+const EDIT_FIELD_MAP: Record<string, string> = {
+	status: "statusId",
+	assignee: "assigneeId",
+	dueAt: "dueDate",
+	// priority, description — keys already match MCP schema.
+};
+
+function translateEditFields(
+	fields: Record<string, unknown>,
+): Record<string, unknown> {
+	const out: Record<string, unknown> = {};
+	for (const [key, value] of Object.entries(fields)) {
+		if (value === undefined || value === null || value === "") continue;
+		out[EDIT_FIELD_MAP[key] ?? key] = value;
+	}
+	return out;
+}
 
 export async function executeLastmileAction(args: {
 	actionType: TaskActionType;
@@ -46,16 +74,17 @@ export async function executeLastmileAction(args: {
 
 	switch (actionType) {
 		case "external_task.update_status": {
-			const statusId = params.status_id ?? params.value ?? params.status;
+			const statusId =
+				params.statusId ?? params.status_id ?? params.value ?? params.status;
 			if (!statusId) {
 				throw new Error(
-					"[lastmile] update_status requires params.status_id (opaque LastMile status id, e.g. 'status_hfcqtycmuaix6pjfnu3mb3ot')",
+					"[lastmile] update_status requires params.statusId (opaque LastMile status id, e.g. 'status_hfcqtycmuaix6pjfnu3mb3ot')",
 				);
 			}
 			await callMcpTool({
 				url: ctx.mcpServerUrl,
 				tool: LASTMILE_TOOLS.updateStatus,
-				args: { task_id: externalTaskId, status_id: statusId },
+				args: { taskId: externalTaskId, statusId },
 				authToken: ctx.authToken,
 				refreshToken,
 			});
@@ -63,25 +92,26 @@ export async function executeLastmileAction(args: {
 		}
 		case "external_task.assign": {
 			const assigneeId =
-				params.assignee_id ?? params.userId ?? params.assignee ?? params.value;
+				params.assigneeId ??
+				params.assignee_id ??
+				params.userId ??
+				params.assignee ??
+				params.value;
 			if (!assigneeId) {
 				throw new Error(
-					"[lastmile] assign requires params.assignee_id (LastMile user id)",
+					"[lastmile] assign requires params.assigneeId (LastMile user id)",
 				);
 			}
 			await callMcpTool({
 				url: ctx.mcpServerUrl,
 				tool: LASTMILE_TOOLS.assign,
-				args: { task_id: externalTaskId, assignee_id: assigneeId },
+				args: { taskId: externalTaskId, assigneeId },
 				authToken: ctx.authToken,
 				refreshToken,
 			});
 			break;
 		}
 		case "external_task.comment": {
-			// LastMile MCP has no comment tool (verified via tools/list). Fail
-			// fast — the mobile card hides the Comment button via
-			// capabilities.commentOnTask, this is the defensive backstop.
 			throw new Error(
 				"[lastmile] comment is not supported — LastMile MCP exposes no comment tool",
 			);
@@ -91,7 +121,7 @@ export async function executeLastmileAction(args: {
 			await callMcpTool({
 				url: ctx.mcpServerUrl,
 				tool: LASTMILE_TOOLS.update,
-				args: { task_id: externalTaskId, ...fields },
+				args: { taskId: externalTaskId, ...translateEditFields(fields) },
 				authToken: ctx.authToken,
 				refreshToken,
 			});

@@ -11,10 +11,12 @@ import type { TaskOption } from "../../types.js";
 /** MCP tool names exposed by the LastMile Tasks server.
  *
  * Ground-truth names come from LastMile's `tools/list` JSON-RPC response
- * (re-probed 2026-04-15 for PR F). Reads are pluralized (`tasks_get`,
+ * against dev-mcp.lastmile-tei.com. Reads are pluralized (`tasks_get`,
  * `tasks_list`); writes are singular (`task_update`, `task_update_status`,
- * `task_update_assignee`). **Every write tool requires `task_id`** as its
- * argument key, not `id` — see `executeAction.ts` for the full list.
+ * `task_update_assignee`). **Every tool uses camelCase argument keys**
+ * (`taskId`, `statusId`, `assigneeId`, `dueDate`, …) — snake_case args
+ * are silently dropped by the dispatcher and produce "Task not found." /
+ * no-op writes. See `executeAction.ts` for the per-tool mapping.
  *
  * There is NO comment tool on the server. The Comment action is
  * unsupported for now; `executeLastmileAction` throws a clear error when
