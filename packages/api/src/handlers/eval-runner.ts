@@ -22,7 +22,7 @@
  * v1 keeps concurrency = 1 (sequential). p-limit can be added later.
  */
 
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { evalRuns, evalResults, evalTestCases, costEvents, agentTemplates } from "@thinkwork/database-pg/schema";
 import {
@@ -258,7 +258,7 @@ export async function handler(event: EvalRunnerEvent): Promise<{ ok: boolean; ru
 			eq(evalTestCases.tenant_id, run.tenant_id),
 			eq(evalTestCases.enabled, true),
 			run.categories.length > 0
-				? sql`${evalTestCases.category} = ANY(${run.categories})`
+				? inArray(evalTestCases.category, run.categories)
 				: sql`true`,
 		));
 
