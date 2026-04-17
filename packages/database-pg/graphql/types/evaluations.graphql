@@ -1,0 +1,183 @@
+# Evaluations — port of maniflow's eval product.
+#
+# v1 scope: dashboard summary, runs list/detail, Studio test-case CRUD,
+# scheduled runs, real-time run status. Trends-only routes and
+# Analyze-Threads are out of scope; AgentCore Evaluations covers the
+# scoring layer (no separate evaluator-config table).
+
+# ────────────────────────────────────────────────────────────────────
+# Test cases (Studio)
+# ────────────────────────────────────────────────────────────────────
+
+type EvalTestCase {
+  id: ID!
+  tenantId: ID!
+  name: String!
+  category: String!
+  query: String!
+  systemPrompt: String
+  # Deterministic checks (contains/regex/equals/json-path) evaluated by
+  # our custom code-based AgentCore evaluator. Stored as JSON because
+  # the shape varies per assertion type.
+  assertions: AWSJSON!
+  # Built-in or custom AgentCore evaluator IDs to invoke per test
+  # (e.g. ["Builtin.Helpfulness", "Builtin.ToolSelectionAccuracy"]).
+  agentcoreEvaluatorIds: [String!]!
+  tags: [String!]!
+  enabled: Boolean!
+  source: String!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+# ────────────────────────────────────────────────────────────────────
+# Runs
+# ────────────────────────────────────────────────────────────────────
+
+type EvalRun {
+  id: ID!
+  tenantId: ID!
+  agentId: ID
+  agentName: String
+  status: String!
+  model: String
+  categories: [String!]!
+  totalTests: Int!
+  passed: Int!
+  failed: Int!
+  passRate: Float
+  regression: Boolean!
+  costUsd: Float
+  errorMessage: String
+  startedAt: AWSDateTime
+  completedAt: AWSDateTime
+  createdAt: AWSDateTime!
+}
+
+# ────────────────────────────────────────────────────────────────────
+# Per-test results within a run
+# ────────────────────────────────────────────────────────────────────
+
+type EvalResult {
+  id: ID!
+  runId: ID!
+  testCaseId: ID
+  testCaseName: String
+  category: String
+  status: String!
+  score: Float
+  durationMs: Int
+  agentSessionId: String
+  input: String
+  expected: String
+  actualOutput: String
+  # Per-evaluator scores. JSON because the shape varies by evaluator
+  # (Builtin.Helpfulness vs ToolSelectionAccuracy vs custom). Each entry:
+  # { evaluatorId, source, value, label, explanation, tokenUsage }
+  evaluatorResults: AWSJSON!
+  # Snapshot of which deterministic assertions passed at run time.
+  assertions: AWSJSON!
+  errorMessage: String
+  createdAt: AWSDateTime!
+}
+
+# ────────────────────────────────────────────────────────────────────
+# Aggregates for dashboard
+# ────────────────────────────────────────────────────────────────────
+
+type EvalSummary {
+  totalRuns: Int!
+  latestPassRate: Float
+  avgPassRate: Float
+  regressionCount: Int!
+}
+
+type EvalTimeSeriesPoint {
+  day: String!
+  passRate: Float
+  runCount: Int!
+  passed: Int!
+  failed: Int!
+}
+
+type EvalRunsPage {
+  items: [EvalRun!]!
+  totalCount: Int!
+}
+
+# ────────────────────────────────────────────────────────────────────
+# Inputs
+# ────────────────────────────────────────────────────────────────────
+
+input EvalAssertionInput {
+  type: String!
+  value: String
+  path: String
+}
+
+input CreateEvalTestCaseInput {
+  name: String!
+  category: String!
+  query: String!
+  systemPrompt: String
+  assertions: [EvalAssertionInput!]
+  agentcoreEvaluatorIds: [String!]
+  tags: [String!]
+  enabled: Boolean
+}
+
+input UpdateEvalTestCaseInput {
+  name: String
+  category: String
+  query: String
+  systemPrompt: String
+  assertions: [EvalAssertionInput!]
+  agentcoreEvaluatorIds: [String!]
+  tags: [String!]
+  enabled: Boolean
+}
+
+input StartEvalRunInput {
+  agentId: ID
+  model: String
+  # Subset of categories to run; empty = all enabled test cases for the tenant.
+  categories: [String!]
+  # Subset of test case IDs to run; empty = use the categories filter above.
+  testCaseIds: [ID!]
+}
+
+# ────────────────────────────────────────────────────────────────────
+# Query / Mutation extensions
+# ────────────────────────────────────────────────────────────────────
+
+extend type Query {
+  evalSummary(tenantId: ID!): EvalSummary!
+  evalRuns(
+    tenantId: ID!
+    agentId: ID
+    limit: Int
+    offset: Int
+  ): EvalRunsPage!
+  evalRun(id: ID!): EvalRun
+  evalRunResults(runId: ID!): [EvalResult!]!
+  evalTimeSeries(tenantId: ID!, days: Int): [EvalTimeSeriesPoint!]!
+  evalTestCases(
+    tenantId: ID!
+    category: String
+    search: String
+  ): [EvalTestCase!]!
+  evalTestCase(id: ID!): EvalTestCase
+  evalTestCaseHistory(testCaseId: ID!, limit: Int): [EvalResult!]!
+}
+
+extend type Mutation {
+  startEvalRun(tenantId: ID!, input: StartEvalRunInput!): EvalRun!
+  cancelEvalRun(id: ID!): EvalRun!
+  deleteEvalRun(id: ID!): Boolean!
+  createEvalTestCase(
+    tenantId: ID!
+    input: CreateEvalTestCaseInput!
+  ): EvalTestCase!
+  updateEvalTestCase(id: ID!, input: UpdateEvalTestCaseInput!): EvalTestCase!
+  deleteEvalTestCase(id: ID!): Boolean!
+}

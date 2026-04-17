@@ -6,7 +6,8 @@
 #   bash scripts/build-and-push.sh --stage ericodom --runtime pi
 #
 # The --stage flag determines the ECR repository:
-#   thinkwork-{stage}-agentcore-agent (managed by SST — infra/agentcore.ts)
+#   thinkwork-{stage}-agentcore (managed by Terraform —
+#   terraform/modules/app/agentcore-runtime/main.tf)
 #
 # The --runtime flag selects the Dockerfile:
 #   sdk (default) → packages/agentcore-sdk/agent-container/Dockerfile
@@ -58,7 +59,7 @@ esac
 # ECR repository URI (managed by SST — infra/agentcore.ts)
 ACCOUNT_ID="487219502366"
 ECR_DOMAIN="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
-ECR_URI="${ECR_DOMAIN}/thinkwork-${STAGE}-agentcore-agent"
+ECR_URI="${ECR_DOMAIN}/thinkwork-${STAGE}-agentcore"
 
 echo "Building and pushing Agent Container..."
 echo "  Stage:      $STAGE"

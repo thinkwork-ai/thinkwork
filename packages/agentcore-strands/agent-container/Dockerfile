@@ -21,6 +21,7 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 # Copy runtime server + skill runner
 COPY packages/agentcore-strands/agent-container/server.py .
 COPY packages/agentcore-strands/agent-container/skill_runner.py .
+COPY packages/agentcore-strands/agent-container/eval_span_attrs.py .
 
 # Memory engine: managed (AgentCore) or hindsight (external service)
 # - memory_tools.py: remember/recall/forget for managed engine
@@ -29,7 +30,6 @@ COPY packages/agentcore-strands/agent-container/skill_runner.py .
 # - api_memory_client.py: bridge to API memory-retain Lambda for the
 #   per-turn auto-retention path (engine-agnostic)
 COPY packages/agentcore-strands/agent-container/external_task_context.py .
-COPY packages/agentcore-strands/agent-container/workflow_skill_context.py .
 COPY packages/agentcore-strands/agent-container/memory_tools.py .
 COPY packages/agentcore-strands/agent-container/hindsight_usage_capture.py .
 COPY packages/agentcore-strands/agent-container/hindsight_recall_filter.py .
@@ -71,6 +71,12 @@ ENV AGENTCORE_FILES_BUCKET=""
 # is also set in the environment.
 ENV AGENTCORE_MEMORY_ID=""
 
+# OpenTelemetry / ADOT — emit spans for AgentCore Evaluations to score.
+# AgentCore Runtime injects OTEL_EXPORTER_OTLP_ENDPOINT at start; the
+# distro + configurator below wire boto3/Strands/HTTP auto-instrumentation.
+ENV OTEL_PYTHON_DISTRO=aws_distro
+ENV OTEL_PYTHON_CONFIGURATOR=aws_configurator
+
 EXPOSE 8080
 
 # Lambda Web Adapter — bridges Lambda invoke events ↔ HTTP server.
@@ -78,4 +84,4 @@ COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt
 ENV AWS_LWA_PORT=8080
 ENV AWS_LWA_READINESS_CHECK_PATH=/ping
 
-CMD ["python", "server.py"]
+CMD ["opentelemetry-instrument", "python", "server.py"]
