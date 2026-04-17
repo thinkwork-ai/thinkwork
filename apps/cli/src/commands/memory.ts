@@ -17,7 +17,7 @@ export function registerMemoryCommand(program: Command): void {
     .command("list")
     .alias("ls")
     .description("List memory records for an agent in a namespace.")
-    .requiredOption("--agent <id>", "Agent (assistant) ID")
+    .option("--agent <id>", "Agent (assistant) ID")
     .option(
       "--namespace <ns>",
       "Memory namespace (semantic | preferences | episodes | reflections)",
@@ -30,8 +30,8 @@ export function registerMemoryCommand(program: Command): void {
   memory
     .command("search")
     .description("Search an agent's memory by query string.")
-    .requiredOption("--agent <id>", "Agent (assistant) ID")
-    .requiredOption("--query <q>", "Search query")
+    .option("--agent <id>", "Agent (assistant) ID")
+    .option("--query <q>", "Search query")
     .option("--strategy <s>", "Retrieval strategy (semantic | keyword | hybrid)", "semantic")
     .option("--limit <n>", "Max results", "10")
     .option("-s, --stage <name>", "Deployment stage")
@@ -56,7 +56,7 @@ Examples:
   memory
     .command("update <recordId>")
     .description("Replace a memory record's content.")
-    .requiredOption("--content <text>", "New content")
+    .option("--content <text>", "New content")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .action(() => notYetImplemented("memory update", 4));
@@ -72,7 +72,7 @@ Examples:
   memory
     .command("graph")
     .description("Print the agent's memory graph (summary in human mode; full JSON with --json).")
-    .requiredOption("--agent <id>", "Agent (assistant) ID")
+    .option("--agent <id>", "Agent (assistant) ID")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .action(() => notYetImplemented("memory graph", 4));

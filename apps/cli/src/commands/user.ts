@@ -17,6 +17,8 @@ import { resolveTierDir, ensureInit, ensureWorkspace } from "../terraform.js";
 import { apiFetch, apiFetchRaw, resolveApiConfig } from "../api-client.js";
 import { listDeployedStages } from "../aws-discovery.js";
 import { printHeader, printSuccess, printError, printWarning } from "../ui.js";
+import { resolveStage } from "../lib/resolve-stage.js";
+import { isCancellation } from "../lib/interactive.js";
 
 /** Run `terraform output -raw <key>` and return stdout. */
 function getTerraformOutput(cwd: string, key: string): Promise<string> {
@@ -73,10 +75,6 @@ function runAwsCognitoReset(
  * Prompt for a value when running interactively; error clearly when not.
  * Returns null if the user cancels (Ctrl+C) — caller should short-circuit.
  */
-function isCancellation(err: unknown): boolean {
-  return err instanceof Error && err.name === "ExitPromptError";
-}
-
 function requireTty(label: string): void {
   if (!process.stdin.isTTY) {
     printError(
@@ -323,10 +321,10 @@ Agents / scripts that pass all flags stay non-interactive.
   user
     .command("reset-password <email>")
     .description(
-      "Trigger Cognito's forgot-password flow for a user (admin-initiated). Sends them a verification code email.",
+      "Trigger Cognito's forgot-password flow for a user (admin-initiated). Prompts for stage in a TTY when omitted.",
     )
     .option("-p, --profile <name>", "AWS profile")
-    .requiredOption("-s, --stage <name>", "Deployment stage (e.g. dev, prod)")
+    .option("-s, --stage <name>", "Deployment stage (e.g. dev, prod)")
     .option(
       "-r, --region <name>",
       "AWS region (defaults to AWS CLI default / AWS_REGION)",
@@ -335,7 +333,10 @@ Agents / scripts that pass all flags stay non-interactive.
       "after",
       `
 Examples:
-  # Admin-triggered password reset — works even if the account is locked
+  # Fully interactive — picks stage from the deployed ones
+  $ thinkwork user reset-password alice@example.com
+
+  # Scripted
   $ thinkwork user reset-password alice@example.com -s dev
 
   # Target a specific AWS profile + region
@@ -350,12 +351,14 @@ FORCE_CHANGE_PASSWORD or has been disabled.
     .action(
       async (
         email: string,
-        opts: { stage: string; region?: string },
+        opts: { stage?: string; region?: string },
       ): Promise<void> => {
-        const stageCheck = validateStage(opts.stage);
-        if (!stageCheck.valid) {
-          printError(stageCheck.error!);
-          process.exit(1);
+        let stage: string;
+        try {
+          stage = await resolveStage({ flag: opts.stage, region: opts.region });
+        } catch (err) {
+          if (isCancellation(err)) return;
+          throw err;
         }
 
         if (!email || !email.includes("@")) {
@@ -365,13 +368,13 @@ FORCE_CHANGE_PASSWORD or has been disabled.
           process.exit(1);
         }
 
-        printHeader("user reset-password", opts.stage);
+        printHeader("user reset-password", stage);
 
         const terraformDir =
           process.env.THINKWORK_TERRAFORM_DIR || process.cwd();
-        const cwd = resolveTierDir(terraformDir, opts.stage, "app");
+        const cwd = resolveTierDir(terraformDir, stage, "app");
         await ensureInit(cwd);
-        await ensureWorkspace(cwd, opts.stage);
+        await ensureWorkspace(cwd, stage);
 
         let userPoolId: string;
         try {

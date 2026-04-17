@@ -78,7 +78,7 @@ Examples:
   inbox
     .command("request-revision <id>")
     .description("Ask for changes — the agent gets the item back with your notes.")
-    .requiredOption("--notes <text>", "What needs to change")
+    .option("--notes <text>", "What needs to change")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .action(() => notYetImplemented("inbox request-revision", 1));

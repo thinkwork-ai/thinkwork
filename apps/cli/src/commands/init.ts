@@ -115,19 +115,40 @@ function buildTfvars(config: Record<string, string>): string {
 export function registerInitCommand(program: Command): void {
   program
     .command("init")
-    .description("Initialize a new Thinkwork environment")
-    .requiredOption("-s, --stage <name>", "Stage name (e.g. dev, staging, prod)")
+    .description("Initialize a new Thinkwork environment. Prompts for a stage name in a TTY when omitted (init creates a stage — the picker isn't applicable here).")
+    .option("-s, --stage <name>", "Stage name (e.g. dev, staging, prod)")
     .option("-d, --dir <path>", "Target directory", ".")
     .option("--defaults", "Skip interactive prompts, use all defaults")
-    .action(async (opts: { stage: string; dir: string; defaults?: boolean }) => {
-      const stageCheck = validateStage(opts.stage);
+    .action(async (opts: { stage?: string; dir: string; defaults?: boolean }) => {
+      let stage = opts.stage;
+      if (!stage) {
+        if (!process.stdin.isTTY) {
+          printError("Stage name is required. Pass -s <name> or re-run in an interactive terminal.");
+          process.exit(1);
+        }
+        const { input } = await import("@inquirer/prompts");
+        try {
+          stage = await input({
+            message: "Stage name (e.g. dev, staging, prod):",
+            validate: (v) => validateStage(v).error ?? true,
+          });
+        } catch (err) {
+          if (err instanceof Error && err.name === "ExitPromptError") {
+            console.log("  Cancelled.");
+            return;
+          }
+          throw err;
+        }
+      }
+
+      const stageCheck = validateStage(stage);
       if (!stageCheck.valid) {
         printError(stageCheck.error!);
         process.exit(1);
       }
 
       const identity = getAwsIdentity();
-      printHeader("init", opts.stage, identity);
+      printHeader("init", stage, identity);
 
       // Auto-install AWS CLI + Terraform if missing
       const prereqsOk = await ensurePrerequisites();
@@ -159,10 +180,10 @@ export function registerInitCommand(program: Command): void {
       // ── Collect configuration ──────────────────────────────────────
 
       const config: Record<string, string> = {
-        stage: opts.stage,
+        stage: stage,
         account_id: identity.account,
         db_password: generateSecret(24),
-        api_auth_secret: `tw-${opts.stage}-${generateSecret(16)}`,
+        api_auth_secret: `tw-${stage}-${generateSecret(16)}`,
       };
 
       if (opts.defaults) {
@@ -450,7 +471,7 @@ output "agentcore_memory_id" {
       try {
         execSync("terraform init", { cwd: tfDir, stdio: "inherit" });
       } catch {
-        printWarning("Terraform init failed. Run `thinkwork doctor -s " + opts.stage + "` to check prerequisites.");
+        printWarning("Terraform init failed. Run `thinkwork doctor -s " + stage + "` to check prerequisites.");
         return;
       }
 
@@ -468,13 +489,13 @@ output "agentcore_memory_id" {
         updatedAt: now,
       });
 
-      printSuccess(`Environment "${opts.stage}" initialized`);
+      printSuccess(`Environment "${stage}" initialized`);
       console.log("");
       console.log("  Next steps:");
-      console.log(`    ${chalk.cyan("1.")} thinkwork plan -s ${opts.stage}        ${chalk.dim("# Review infrastructure plan")}`);
-      console.log(`    ${chalk.cyan("2.")} thinkwork deploy -s ${opts.stage}       ${chalk.dim("# Deploy to AWS (~5 min)")}`);
-      console.log(`    ${chalk.cyan("3.")} thinkwork bootstrap -s ${opts.stage}    ${chalk.dim("# Seed workspace files + skills")}`);
-      console.log(`    ${chalk.cyan("4.")} thinkwork outputs -s ${opts.stage}      ${chalk.dim("# Show API URL, Cognito IDs, etc.")}`);
+      console.log(`    ${chalk.cyan("1.")} thinkwork plan -s ${stage}        ${chalk.dim("# Review infrastructure plan")}`);
+      console.log(`    ${chalk.cyan("2.")} thinkwork deploy -s ${stage}       ${chalk.dim("# Deploy to AWS (~5 min)")}`);
+      console.log(`    ${chalk.cyan("3.")} thinkwork bootstrap -s ${stage}    ${chalk.dim("# Seed workspace files + skills")}`);
+      console.log(`    ${chalk.cyan("4.")} thinkwork outputs -s ${stage}      ${chalk.dim("# Show API URL, Cognito IDs, etc.")}`);
       console.log("");
     });
 }
