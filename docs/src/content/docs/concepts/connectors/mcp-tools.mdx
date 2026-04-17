@@ -54,6 +54,17 @@ Typical config includes:
 
 In the admin experience, this should appear under **Connectors → MCP Tools**.
 
+### URL is read from the record on every call
+
+The MCP endpoint URL lives in `tenant_mcp_servers.url`. The runtime resolves it on every outbound call — there are **no hardcoded defaults** and **no env-var fallbacks** for MCP base URLs. Rename the record in admin and the next request uses the new host; no code deploy required.
+
+This matters in two concrete cases:
+
+- The provider renames their host (e.g. `mcp-dev.example.com` → `dev-mcp.example.com`). You fix it in admin, not in code.
+- A provider serves two stacks at similar-looking hostnames (e.g. a legacy build alongside the current one). Whichever URL you register is the one that's hit — the code has no opinion.
+
+If a provider-side rename breaks a connection, update the record first and verify with a `tools/list` curl before suspecting deeper bugs.
+
 ## Authentication
 
 MCP tool connectors commonly use one of three patterns:
