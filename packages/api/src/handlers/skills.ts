@@ -1497,11 +1497,27 @@ async function mcpRegisterServer(
 	return json({ id: inserted.id, slug, created: true });
 }
 
+/**
+ * Short-circuit non-UUID path params so Postgres's UUID column doesn't throw
+ * `invalid input syntax for type uuid` and bubble up as a 500. CLI users who
+ * pass a slug to these endpoints should get a clean 404 pointing them at
+ * `mcp list` — not an opaque server error.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function requireUuid(serverId: string): APIGatewayProxyStructuredResultV2 | null {
+	if (UUID_RE.test(serverId)) return null;
+	return notFound(
+		`MCP server not found — path param must be a UUID (got "${serverId}"). Use \`thinkwork mcp list\` to see IDs, or pass a slug/name to the CLI which will resolve it client-side.`,
+	);
+}
+
 async function mcpUpdateServer(
 	tenantSlug: string,
 	serverId: string,
 	event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
+	const badUuid = requireUuid(serverId);
+	if (badUuid) return badUuid;
 	const tenantId = await resolveTenantId(tenantSlug);
 	if (!tenantId) return error("Tenant not found", 404);
 
@@ -1526,6 +1542,8 @@ async function mcpDeleteServer(
 	tenantSlug: string,
 	serverId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
+	const badUuid = requireUuid(serverId);
+	if (badUuid) return badUuid;
 	const tenantId = await resolveTenantId(tenantSlug);
 	if (!tenantId) return error("Tenant not found", 404);
 
@@ -1547,6 +1565,8 @@ async function mcpTestConnection(
 	tenantSlug: string,
 	serverId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
+	const badUuid = requireUuid(serverId);
+	if (badUuid) return badUuid;
 	const tenantId = await resolveTenantId(tenantSlug);
 	if (!tenantId) return error("Tenant not found", 404);
 
