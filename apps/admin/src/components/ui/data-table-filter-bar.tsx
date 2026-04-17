@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useState } from "react";
-import { Check, Filter, X, ArrowUpDown, Layers, Search, List, Columns3 } from "lucide-react";
+import { Check, Filter, X, ArrowUpDown, Layers, Search, Table2, Columns3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -228,8 +228,8 @@ export function FilterBarViewToggle({
   value,
   onChange,
   options = [
-    { value: "list", icon: <List className="h-3.5 w-3.5" />, label: "List view" },
-    { value: "board", icon: <Columns3 className="h-3.5 w-3.5" />, label: "Board view" },
+    { value: "list", icon: <Table2 className="h-3.5 w-3.5" />, label: "Table" },
+    { value: "board", icon: <Columns3 className="h-3.5 w-3.5" />, label: "Board" },
   ],
 }: FilterBarViewToggleProps) {
   return (
@@ -237,16 +237,17 @@ export function FilterBarViewToggle({
       type="single"
       value={value}
       onValueChange={(v) => v && onChange(v)}
-      className="mr-1"
+      className="mr-1 border border-border bg-background/50"
     >
       {options.map((opt) => (
         <ToggleGroupItem
           key={opt.value}
           value={opt.value}
           aria-label={opt.label}
-          className="h-7 w-7 p-0"
+          className="h-7 gap-1.5 px-2 text-xs"
         >
           {opt.icon}
+          <span className="hidden sm:inline">{opt.label}</span>
         </ToggleGroupItem>
       ))}
     </ToggleGroup>

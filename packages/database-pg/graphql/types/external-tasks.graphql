@@ -10,10 +10,29 @@ type ExternalTaskActionResult {
   auditMessageId: ID
 }
 
+# Input for `createLastmileTask`, the mutation the agent invokes after
+# the user submits the LastMile task-intake form. All fields except
+# `threadId` map one-to-one to the fields collected by
+# `lastmile-tasks/references/task-intake-form.json`.
+input CreateLastmileTaskInput {
+  threadId: ID!
+  description: String
+  priority: String
+  dueDate: AWSDateTime
+  assigneeEmail: String
+}
+
 extend type Mutation {
   executeExternalTaskAction(
     threadId: ID!
     actionType: String!
     params: AWSJSON
   ): ExternalTaskActionResult!
+
+  # Finalizes a user-created task thread: fires POST /tasks on LastMile
+  # using the thread's stored workflowId + the intake-form inputs, then
+  # stamps sync_status='synced' and metadata.external.externalTaskId on
+  # the thread row. Idempotent — re-running after a successful create
+  # short-circuits to the current row.
+  createLastmileTask(input: CreateLastmileTaskInput!): Thread!
 }

@@ -69,21 +69,40 @@ export interface LastmileMe {
 	companyId?: string | null;
 }
 
-/** Shape per LastMile OpenAPI `TaskCreate`. `terminalId` is required on
- *  their side; `workflowId` is kept on the ThinkWork side as thread
- *  metadata but is NOT part of the LastMile POST body.
+/** Shape that `POST /tasks` actually requires, verified empirically against
+ *  `dev-api.lastmile-tei.com` on 2026-04-16. The deployed server diverges
+ *  from the published OpenAPI spec in two ways:
  *
- *  If a caller wants "LastMile picks the status/team from a workflow",
- *  use `POST /workflows/{id}/tasks` instead — to be added as a helper
- *  when we need it. For now `/tasks` is the generic path. */
+ *    - `terminalId` is NOT required (spec says it is). The server accepts
+ *      creates without it and never validates it for tasks.
+ *    - The status field is `statusId` (opaque `status_…` id), not `status`
+ *      (string). Omitting it yields `400 "statusId is required."`
+ *
+ *  In addition, `workflowId`, `taskTypeId`, and `teamId` are ALL required.
+ *  `taskTypeId` and `teamId` are carried on the workflow itself
+ *  (`GET /workflows/{id}` returns both), so callers should derive them
+ *  via `getWorkflow()` rather than asking the user to pick them.
+ *
+ *  Optional: `description`, `priority` ("urgent" | "high" | "medium" |
+ *  "low"), `assigneeId`, `dueDate`. */
 export interface CreateTaskRequest {
 	title: string;
-	terminalId: string;
+	statusId: string;
+	workflowId: string;
+	taskTypeId: string;
+	teamId: string;
 	description?: string | null;
-	status?: string;
 	priority?: "urgent" | "high" | "medium" | "low" | string;
 	assigneeId?: string;
 	dueDate?: string;
+}
+
+/** Response from `POST /tasks`. The deployed server returns a minimal
+ *  `{success, id}` envelope — NOT the full LastmileTask. Callers that
+ *  need the full task should follow up with `getTask(id)`. */
+export interface CreateTaskResponse {
+	success: boolean;
+	id: string;
 }
 
 export interface LastmileWorkflow {
@@ -99,6 +118,41 @@ export interface LastmileWorkflow {
 	createdBy?: string | null;
 	createdAt?: string;
 	updatedAt?: string;
+}
+
+/** LastMile status — workflow-scoped. `displayOrder=0` and `isFinal=false`
+ *  marks the workflow's initial status (what a freshly-created task gets
+ *  when the caller doesn't specify). */
+export interface LastmileStatus {
+	id: string;
+	name: string;
+	workflowId: string;
+	displayOrder?: number;
+	isFinal?: boolean;
+	isActive?: boolean;
+	color?: string | null;
+	icon?: string | null;
+	description?: string | null;
+	companyId?: string;
+}
+
+/** LastMile terminal — required on `POST /tasks`. The agent picks one for
+ *  the user by calling `listTerminals()` and matching against the user's
+ *  free-form intent ("Houston", "CALSAN", etc.). We expose only the fields
+ *  useful for that disambiguation; nested `terminalProducts` /
+ *  `terminalServiceAreas` are dropped. */
+export interface LastmileTerminal {
+	id: string;
+	name: string;
+	externalId?: string | null;
+	abbv?: string | null;
+	locationId?: string | null;
+	location?: {
+		city?: string | null;
+		state?: string | null;
+		postalCode?: string | null;
+		fullAddress?: string | null;
+	} | null;
 }
 
 export interface UpdateTaskRequest {
@@ -449,11 +503,17 @@ function ctxToBaseUrl(ctx: LastmileRestCtx): string | undefined {
 	return ctx.baseUrl ?? undefined;
 }
 
-/** POST /tasks — create a task. Gated by `isLastmileRestConfigured()`. */
+/** POST /tasks — create a task. Gated by `isLastmileRestConfigured()`.
+ *
+ *  Returns the server's minimal `{success, id}` envelope. Callers that
+ *  need the full task (e.g. to populate `metadata.external` with a
+ *  title/status echo) should follow up with `getTask(id)`. We intentionally
+ *  don't chain that GET here: most callers only need the id, and the
+ *  round-trip isn't free. */
 export async function createTask(
 	args: { input: CreateTaskRequest; idempotencyKey?: string; ctx: LastmileRestCtx },
-): Promise<LastmileTask> {
-	return doRequest<LastmileTask, CreateTaskRequest>({
+): Promise<CreateTaskResponse> {
+	return doRequest<CreateTaskResponse, CreateTaskRequest>({
 		method: "POST",
 		path: "/tasks",
 		authToken: args.ctx.authToken,
@@ -519,6 +579,71 @@ export async function getMe(
 	});
 }
 
+/** GET /workflows/{id} — single workflow lookup. Needed at create-task
+ *  time because `POST /tasks` requires `taskTypeId` + `teamId`, both of
+ *  which live on the workflow record. Callers should prefer caching the
+ *  result per-workflow-per-tenant if they call this in a hot path. */
+export async function getWorkflow(
+	args: { workflowId: string; ctx: LastmileRestCtx },
+): Promise<LastmileWorkflow> {
+	return doRequest<LastmileWorkflow>({
+		method: "GET",
+		path: `/workflows/${encodeURIComponent(args.workflowId)}`,
+		authToken: args.ctx.authToken,
+		baseUrl: ctxToBaseUrl(args.ctx),
+		refreshToken: args.ctx.refreshToken,
+	});
+}
+
+/** GET /statuses?workflowId={id} — list a workflow's statuses. The
+ *  initial status (displayOrder=0, isFinal=false) is what the server
+ *  would have assigned if the caller hadn't specified; we surface it via
+ *  `pickInitialStatus()` below so the sync-on-create path can auto-pick
+ *  without prompting the user.
+ *
+ *  Envelope matches the standard `{data, total, page, pageSize, hasMore}`
+ *  shape. A tenant with >100 statuses per workflow seems unlikely, so
+ *  we fetch one page. */
+export async function listStatuses(
+	args: { ctx: LastmileRestCtx; query?: { workflowId?: string; isActive?: boolean; pageSize?: number } },
+): Promise<LastmileStatus[]> {
+	const query: Record<string, string | number | undefined> = {
+		pageSize: args.query?.pageSize ?? 100,
+	};
+	if (args.query?.workflowId) query.workflowId = args.query.workflowId;
+	if (typeof args.query?.isActive === "boolean") query.isActive = String(args.query.isActive);
+
+	const envelope = await doRequest<PaginatedResponse<LastmileStatus>>({
+		method: "GET",
+		path: "/statuses",
+		authToken: args.ctx.authToken,
+		baseUrl: ctxToBaseUrl(args.ctx),
+		query,
+		refreshToken: args.ctx.refreshToken,
+	});
+	if (Array.isArray(envelope)) return envelope as LastmileStatus[];
+	return envelope?.data ?? [];
+}
+
+/** Pick the initial status for a workflow: lowest displayOrder among
+ *  non-final, active statuses. Falls back to the first non-final status
+ *  if displayOrder is missing everywhere, then the first status overall
+ *  if every status is final (defensive; shouldn't happen in real data). */
+export function pickInitialStatus(
+	statuses: LastmileStatus[],
+): LastmileStatus | null {
+	const nonFinal = statuses.filter((s) => !s.isFinal && s.isActive !== false);
+	if (nonFinal.length > 0) {
+		return nonFinal.reduce((best, cur) =>
+			(cur.displayOrder ?? Number.MAX_SAFE_INTEGER) <
+			(best.displayOrder ?? Number.MAX_SAFE_INTEGER)
+				? cur
+				: best,
+		);
+	}
+	return statuses[0] ?? null;
+}
+
 /** GET /workflows — returns the company's workflows for the mobile
  *  task-picker. Paginated per spec; we fetch the first page (pageSize=100)
  *  and return `data`. If a tenant ever has >100 workflows we'll add
@@ -543,5 +668,31 @@ export async function listWorkflows(
 	// Spec guarantees `data: Workflow[]`. Defensively unwrap a bare array
 	// in case an older handler is still deployed on some stage.
 	if (Array.isArray(envelope)) return envelope as LastmileWorkflow[];
+	return envelope?.data ?? [];
+}
+
+/** GET /terminals — returns the company's terminals for the agent's
+ *  terminal-picker tool. Verified empirically: the envelope is
+ *  `{ data, total, page, pageSize, hasMore }` (flat `page`/`pageSize`, not
+ *  `totalCount`/`totalPages`). We only care about `.data` so the extra
+ *  fields are ignored. First page at `pageSize=100` covers every tenant
+ *  we've seen to date; we'll add follow-up paging if that stops being
+ *  true. */
+export async function listTerminals(
+	args: { ctx: LastmileRestCtx; query?: { pageSize?: number } },
+): Promise<LastmileTerminal[]> {
+	const query: Record<string, string | number | undefined> = {
+		pageSize: args.query?.pageSize ?? 100,
+	};
+
+	const envelope = await doRequest<PaginatedResponse<LastmileTerminal>>({
+		method: "GET",
+		path: "/terminals",
+		authToken: args.ctx.authToken,
+		baseUrl: ctxToBaseUrl(args.ctx),
+		query,
+		refreshToken: args.ctx.refreshToken,
+	});
+	if (Array.isArray(envelope)) return envelope as LastmileTerminal[];
 	return envelope?.data ?? [];
 }

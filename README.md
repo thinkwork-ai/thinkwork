@@ -30,9 +30,10 @@ If you're not on AWS, this isn't the right tool for you — and that's the point
 - **Six product modules:** Agents, Threads, Connectors, Automations, Control, Memory
 - **Two clients:** an admin/operator web app (`apps/admin`) and a mobile client (`apps/mobile`, Expo)
 - **A real CLI** (`thinkwork-cli`) with two surfaces: **deploy-side** (`login`, `init`, `plan`, `deploy`, `bootstrap`, `destroy`, `doctor`, `status`, `outputs`, `config`, `update`) and **API-side** (`login --stage`, `logout`, `me`, `user`, `mcp`, `tools`, plus a scaffolded roadmap of `thread`, `agent`, `template`, `tenant`, `member`, `team`, `kb`, `routine`, `scheduled-job`, `turn`, `wakeup`, `webhook`, `connector`, `skill`, `memory`, `recipe`, `artifact`, `cost`, `budget`, `performance`, `trace`, `inbox`, `dashboard` — see [apps/cli/README.md#roadmap](./apps/cli/README.md#roadmap))
-- **Three connectors at launch:** Slack, GitHub, Google Workspace
+- **Three connectors at launch:** Slack, GitHub, Google Workspace (plus a LastMile task connector for external task intake)
 - **Agentic Tasks** and **Question Cards** for structured task intake and execution
-- **Memory** as the umbrella layer for document knowledge, long-term memory, retrieval context, and portable memory contracts
+- **Memory** as the umbrella layer for document knowledge, long-term memory, retrieval context, and portable memory contracts — including a **Knowledge Graph** view for inspecting per-agent memory relationships
+- **Cost & budget analytics** — per-agent / per-model spend, time-series charts, and budget policies that auto-pause agents
 - **Agent Templates** for fleet-wide configuration
 - **Terraform Registry modules** at `thinkwork-ai/thinkwork/aws` — drops into your existing AWS Landing Zone with BYO-everywhere support
 
@@ -53,9 +54,17 @@ The operator surface. A React SPA at `apps/admin`, authenticated through Cognito
 
 The end-user surface. An Expo + React Native client at `apps/mobile`, currently shipping on iOS via TestFlight. Users get a unified inbox across chat threads, scheduled automations, emails, and **external tasks** routed in from systems like LastMile — tasks render as native GenUI cards with realtime activity, round-trip edits, and narrow-policy push notifications. The mobile app owns per-user OAuth and MCP tokens; tenant configuration stays on the admin side. See the [mobile docs](https://docs.thinkwork.ai/applications/mobile/) for the full surface.
 
-## What's not in v1
+## Roadmap
 
-Knowledge Graph + Ontology Studio, AutoResearch, the eval UI, cost tracking, the places service, and a web end-user client are all on the roadmap but not in v0.1.0. We ship things only after they're load-bearing in production. See the docs roadmap page once docs ship.
+We ship things only after they're load-bearing in production. Everything below is scoped but intentionally not in v0.1.0.
+
+| Item | Status | Notes |
+| --- | --- | --- |
+| Ontology Studio | Planned | Authoring UI on top of the shipped Knowledge Graph — schema editing, relation types, ontology versioning |
+| AutoResearch | Planned | Long-running research agents with structured citations; schema reserved, runtime not wired |
+| Eval UI | Planned | In-app eval authoring, runs, and regression tracking against agent templates |
+| Places service | Planned | Location/venue entity service for field- and route-based workflows |
+| Web end-user client | Planned | Browser counterpart to the mobile inbox; today the admin web app is operator-only |
 
 ## Quick start
 
