@@ -1,7 +1,8 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useSubscription, useMutation } from "urql";
-import { Beaker, Calendar, Play, ShieldAlert, ShieldCheck, TrendingUp } from "lucide-react";
+import { type ColumnDef } from "@tanstack/react-table";
+import { AlertTriangle, Beaker, Calendar, Loader2, Play, ShieldCheck } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 import { useTenant } from "@/context/TenantContext";
@@ -12,8 +13,8 @@ import { PageSkeleton } from "@/components/PageSkeleton";
 import { MetricCard } from "@/components/MetricCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { DataTable } from "@/components/ui/data-table";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -50,6 +51,158 @@ const CATEGORIES: Array<{ id: string; label: string }> = [
   { id: "workspace-routing", label: "Workspace Routing" },
 ];
 
+// ---------------------------------------------------------------------------
+// Recent Runs table — ported from maniflow for row clickability, colour-coded
+// pass rates, shortened model names, and "N Categories" summary.
+// ---------------------------------------------------------------------------
+
+function passRateColor(rate: number): string {
+  if (rate >= 90) return "text-green-500";
+  if (rate >= 70) return "text-yellow-500";
+  return "text-red-500";
+}
+
+function statusBadge(status: string) {
+  switch (status.toLowerCase()) {
+    case "pass":
+    case "completed":
+      return <Badge className="bg-green-600 hover:bg-green-600 text-white">{status.toLowerCase()}</Badge>;
+    case "fail":
+    case "failed":
+      return <Badge variant="destructive">{status.toLowerCase()}</Badge>;
+    case "running":
+      return (
+        <Badge variant="outline" className="gap-1">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          running
+        </Badge>
+      );
+    case "pending":
+      return (
+        <Badge variant="secondary" className="gap-1">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          pending
+        </Badge>
+      );
+    default:
+      return <Badge variant="secondary">{status.toLowerCase()}</Badge>;
+  }
+}
+
+type RunRow = {
+  id: string;
+  status: string;
+  model: string | null;
+  categories: string[];
+  passed: number | null;
+  failed: number | null;
+  totalTests: number | null;
+  passRate: number | null;
+  costUsd: number | null;
+  completedAt: string | null;
+  startedAt: string | null;
+  createdAt: string;
+};
+
+const runsColumns: ColumnDef<RunRow>[] = [
+  {
+    accessorKey: "status",
+    header: "Status",
+    cell: ({ row }) => statusBadge(row.original.status),
+  },
+  {
+    accessorKey: "categories",
+    header: "Categories",
+    cell: ({ row }) => {
+      const names = Array.isArray(row.original.categories) ? row.original.categories : [];
+      if (names.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
+      if (names.length === CATEGORIES.length) return <span className="text-sm whitespace-nowrap">All Categories</span>;
+      if (names.length === 1) return <span className="text-sm whitespace-nowrap">{names[0]}</span>;
+      return <span className="text-sm whitespace-nowrap">{names.length} Categories</span>;
+    },
+  },
+  {
+    accessorKey: "model",
+    header: "Model",
+    cell: ({ row }) => {
+      const model = row.original.model;
+      if (!model) return <span className="text-xs text-muted-foreground">—</span>;
+      const short = model
+        .replace(/^us\.anthropic\./, "")
+        .replace(/^anthropic\./, "")
+        .replace(/^moonshotai\./, "")
+        .replace(/^amazon\./, "")
+        .replace(/-v\d+:\d+$/, "")
+        .replace(/-\d{8}$/, "");
+      return <span className="text-xs text-muted-foreground whitespace-nowrap">{short}</span>;
+    },
+  },
+  {
+    id: "tests",
+    header: "Tests",
+    cell: ({ row }) => (
+      <span className="text-sm tabular-nums">
+        {row.original.passed ?? 0}/{row.original.totalTests ?? 0}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "passRate",
+    header: "Pass Rate",
+    cell: ({ row }) => {
+      const { passed, failed, passRate } = row.original;
+      const completed = (passed ?? 0) + (failed ?? 0);
+      const pct = completed > 0
+        ? ((passed ?? 0) / completed) * 100
+        : passRate != null ? passRate * 100 : null;
+      return (
+        <span className={`text-sm font-medium tabular-nums ${passRateColor(pct ?? 0)}`}>
+          {pct != null ? `${pct.toFixed(1)}%` : "—"}
+        </span>
+      );
+    },
+  },
+  {
+    accessorKey: "costUsd",
+    header: "Cost",
+    cell: ({ row }) => (
+      <span className="text-xs text-muted-foreground tabular-nums">
+        {row.original.costUsd != null ? `$${Number(row.original.costUsd).toFixed(4)}` : "—"}
+      </span>
+    ),
+  },
+  {
+    id: "date",
+    header: "Date",
+    cell: ({ row }) => (
+      <span className="text-xs text-muted-foreground whitespace-nowrap">
+        {row.original.completedAt
+          ? relativeTime(row.original.completedAt)
+          : row.original.startedAt
+            ? relativeTime(row.original.startedAt)
+            : relativeTime(row.original.createdAt)}
+      </span>
+    ),
+  },
+];
+
+// Zero-fill the last 30 days so the chart always renders with a consistent
+// x-axis even when there are few runs.
+function buildLast30Days(timeSeries: Array<{ day: string; passRate: number | null; passed?: number; failed?: number }>) {
+  const lookup = new Map(
+    timeSeries.map((d) => [d.day, { ...d, passRate: d.passRate != null ? d.passRate * 100 : null }]),
+  );
+  const days: Array<{ day: string; passRate: number | null }> = [];
+  const now = new Date();
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    days.push(lookup.get(key) ?? { day: key, passRate: null });
+  }
+  return days;
+}
+
 const INVOCATION_MODES = [
   { id: "end_to_end", label: "End-to-End (full agent runtime)" },
   { id: "direct", label: "Direct (Bedrock only)" },
@@ -61,6 +214,7 @@ export const Route = createFileRoute("/_authed/_tenant/evaluations/")({
 
 function EvaluationsPage() {
   const { tenantId } = useTenant();
+  const navigate = useNavigate();
   useBreadcrumbs([{ label: "Evaluations" }]);
 
   const [summary, refetchSummary] = useQuery({
@@ -96,8 +250,6 @@ function EvaluationsPage() {
   const items = runs.data?.evalRuns?.items ?? [];
   const points = series.data?.evalTimeSeries ?? [];
 
-  const fmtPct = (n?: number | null) => (typeof n === "number" ? `${(n * 100).toFixed(1)}%` : "—");
-
   return (
     <PageLayout
       header={
@@ -125,90 +277,79 @@ function EvaluationsPage() {
         />
       }
     >
-      <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="Total Runs" value={s?.totalRuns ?? 0} icon={<TrendingUp className="h-4 w-4" />} />
-        <MetricCard label="Latest Pass Rate" value={fmtPct(s?.latestPassRate)} icon={<ShieldCheck className="h-4 w-4" />} />
-        <MetricCard label="Average Score" value={fmtPct(s?.avgPassRate)} icon={<TrendingUp className="h-4 w-4" />} />
-        <MetricCard label="Regressions" value={s?.regressionCount ?? 0} icon={<ShieldAlert className="h-4 w-4" />} />
-      </div>
+      <div className="space-y-6">
+        {/* Summary metric cards */}
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 *:data-[slot=card]:shadow-xs dark:*:data-[slot=card]:bg-card">
+          <MetricCard
+            label="Total Runs"
+            value={s?.totalRuns ?? 0}
+            icon={<ShieldCheck className="h-4 w-4" />}
+          />
+          <MetricCard
+            label="Latest Pass Rate"
+            value={`${((s?.latestPassRate ?? 0) * 100).toFixed(1)}%`}
+            icon={<ShieldCheck className="h-4 w-4" />}
+            className={passRateColor(((s?.latestPassRate ?? 0) * 100))}
+          />
+          <MetricCard
+            label="Average Score"
+            value={`${((s?.avgPassRate ?? 0) * 100).toFixed(1)}%`}
+            icon={<ShieldCheck className="h-4 w-4" />}
+          />
+          <MetricCard
+            label="Regressions"
+            value={s?.regressionCount ?? 0}
+            icon={<AlertTriangle className="h-4 w-4" />}
+            className={(s?.regressionCount ?? 0) > 0 ? "text-red-500" : ""}
+          />
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Pass Rate Trend</CardTitle>
-          <p className="text-sm text-muted-foreground">Last 30 days</p>
-        </CardHeader>
-        <CardContent style={{ height: 280 }}>
-          {points.length === 0 ? (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              No completed runs yet
-            </div>
-          ) : (
+        {/* Pass Rate Trend — zero-filled 30 days so the chart stays consistent */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Pass Rate Trend</CardTitle>
+            <CardDescription>Last 30 days</CardDescription>
+          </CardHeader>
+          <CardContent style={{ height: 280 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={points.map((p: any) => ({ ...p, passRatePct: p.passRate ? p.passRate * 100 : null }))}>
+              <LineChart data={buildLast30Days(points)}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="day" />
                 <YAxis domain={[0, 100]} unit="%" />
                 <Tooltip />
-                <Line type="monotone" dataKey="passRatePct" stroke="#22c55e" strokeWidth={2} dot={{ r: 3 }} />
+                <Line
+                  type="monotone"
+                  dataKey="passRate"
+                  stroke="#22c55e"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  connectNulls
+                />
               </LineChart>
             </ResponsiveContainer>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Runs</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Status</TableHead>
-                <TableHead>Categories</TableHead>
-                <TableHead>Model</TableHead>
-                <TableHead>Tests</TableHead>
-                <TableHead>Pass Rate</TableHead>
-                <TableHead>Cost</TableHead>
-                <TableHead>Date</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
-                    No runs yet — click "Run Evaluation" to start.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                items.map((r: any) => (
-                  <TableRow key={r.id}>
-                    <TableCell>
-                      <Badge variant={r.status === "completed" ? "default" : r.status === "failed" ? "destructive" : "secondary"}>
-                        {r.status}
-                      </Badge>
-                      {r.regression && <Badge variant="destructive" className="ml-1">regression</Badge>}
-                    </TableCell>
-                    <TableCell>{r.categories?.length ? `${r.categories.length} categories` : "—"}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{r.model ?? "—"}</TableCell>
-                    <TableCell>{r.passed}/{r.totalTests}</TableCell>
-                    <TableCell className={r.passRate && r.passRate >= 0.9 ? "text-green-600" : r.passRate && r.passRate >= 0.7 ? "text-yellow-600" : "text-red-600"}>
-                      {fmtPct(r.passRate)}
-                    </TableCell>
-                    <TableCell className="text-xs">{r.costUsd ? `$${Number(r.costUsd).toFixed(4)}` : "—"}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      <Link to="/evaluations/$runId" params={{ runId: r.id }} className="hover:underline">
-                        {relativeTime(r.completedAt ?? r.createdAt)}
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+        {/* Recent Runs — DataTable with row-click → run detail */}
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold uppercase tracking-wide">Recent Runs</h3>
+          {items.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-muted-foreground">
+                No runs yet — click "Run Evaluation" to start.
+              </CardContent>
+            </Card>
+          ) : (
+            <DataTable
+              columns={runsColumns}
+              data={items as RunRow[]}
+              pageSize={25}
+              onRowClick={(run) =>
+                navigate({ to: "/evaluations/$runId", params: { runId: run.id } })
+              }
+            />
+          )}
+        </div>
       </div>
     </PageLayout>
   );
