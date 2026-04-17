@@ -1,6 +1,6 @@
 {
   "name": "thinkwork-cli",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "Thinkwork CLI — deploy, manage, and interact with your Thinkwork stack",
   "license": "MIT",
   "type": "module",
