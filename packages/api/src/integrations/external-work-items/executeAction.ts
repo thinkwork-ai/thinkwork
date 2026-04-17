@@ -159,9 +159,21 @@ export async function executeExternalTaskAction(
 			lastUpdatedAt: new Date().toISOString(),
 		},
 	};
+	// Denormalize the envelope's description onto the thread row so the
+	// mobile Tasks list can show it as a subtitle without reaching into
+	// metadata.external on every render. Mirrors the same write the
+	// webhook ingest path does in ensureExternalTaskThread.
+	const envelopeDescription =
+		typeof envelope.item?.core?.description === "string"
+			? envelope.item.core.description
+			: null;
 	await db
 		.update(threads)
-		.set({ metadata: nextMeta, updated_at: new Date() })
+		.set({
+			metadata: nextMeta,
+			description: envelopeDescription,
+			updated_at: new Date(),
+		})
 		.where(eq(threads.id, threadId));
 
 	const summary = summarizeAction(actionType, params, envelope.item.core.title);

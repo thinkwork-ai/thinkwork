@@ -4,7 +4,7 @@ import { View, FlatList, Pressable, Keyboard, KeyboardAvoidingView, Platform, Al
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ChevronLeft, ChevronRight, Info, Check, Circle, CheckSquare, ListChecks, AlertCircle, Clock, Trash2, Pencil } from "lucide-react-native";
+import { ChevronLeft, ChevronRight, Info, Check, Circle, CheckSquare, ListChecks, AlertCircle, Clock, Trash2, Pencil, RefreshCw } from "lucide-react-native";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { ShimmerText } from "@/components/ui/ShimmerText";
 import { getExternalProviderLabel, getThreadHeaderLabel } from "@/lib/thread-display";
@@ -15,7 +15,7 @@ import { WebViewSheet, type WebViewSheetRef } from "@/components/chat/WebViewShe
 import { useAuth } from "@/lib/auth-context";
 import { useThreadUpdatedSubscription, useNewMessageSubscription } from "@/lib/hooks/use-subscriptions";
 import { useTurnCompletion } from "@/lib/hooks/use-turn-completion";
-import { useThreadReadState } from "@/lib/hooks/use-thread-read-state";
+import { useThreadReadState, isLocallyRead } from "@/lib/hooks/use-thread-read-state";
 import { ActivityTimeline, type SaveRecipeInfo } from "@/components/threads/ActivityTimeline";
 import { MarkdownMessage } from "@/components/chat/MarkdownMessage";
 import { TaskRow } from "@/components/threads/TaskRow";
@@ -34,7 +34,9 @@ import {
   SendMessageMutation,
   MessagesQuery,
   UpdateThreadMutation,
+  ExecuteExternalTaskActionMutation,
 } from "@/lib/graphql-queries";
+import { buildExecuteExternalTaskActionVariables } from "@/lib/external-task-action";
 
 function LoadingTitle() {
   const [dots, setDots] = useState("");
@@ -207,9 +209,18 @@ export default function ThreadDetailRoute() {
   }, [msgEvent?.onNewMessage?.messageId]);
 
   // ── Read state ──
+  // The list-row tap already fires markRead (instant optimistic + server
+  // mutation), so on mount we skip the redundant mutation when the row
+  // was already locally marked. Without this guard, firing updateThread
+  // here invalidates our own ThreadQuery via urql's document cache and
+  // shows a brief "loading…" flash after the card first appears.
+  // Deep-link / fresh-session entries still fire the mutation because
+  // `isLocallyRead` returns false for them.
   const { markRead } = useThreadReadState();
   useEffect(() => {
-    if (threadId) setTimeout(() => markRead(threadId), 0);
+    if (!threadId) return;
+    if (isLocallyRead(threadId)) return;
+    setTimeout(() => markRead(threadId), 0);
   }, [threadId]);
   useEffect(() => {
     if (threadEvent?.onThreadUpdated?.threadId === threadId) {
@@ -337,6 +348,38 @@ export default function ThreadDetailRoute() {
     reexecuteThread({ requestPolicy: "network-only" });
     router.back();
   }, [threadId, allDescendantTasks, executeUpdateThread, reexecuteThread, router]);
+
+  // ── Manual Sync Task ──
+  // "Sync Task" in the header menu fires `external_task.refresh` through
+  // the shared executeExternalTaskAction path, which pulls the latest
+  // envelope from LastMile and denormalizes `description` onto the
+  // thread row (see executeAction.ts). Await + surface errors per the
+  // no-fire-and-forget rule for user-driven writes.
+  const [syncingTask, setSyncingTask] = useState(false);
+  const [, executeExternalTaskAction] = useMutation(ExecuteExternalTaskActionMutation);
+  const handleSyncTask = useCallback(async () => {
+    if (!threadId || syncingTask) return;
+    setSyncingTask(true);
+    try {
+      const result = await executeExternalTaskAction(
+        buildExecuteExternalTaskActionVariables({
+          threadId,
+          actionType: "external_task.refresh",
+          params: {},
+        }),
+      );
+      if (result.error) {
+        Alert.alert("Sync failed", result.error.message || "Could not refresh task.");
+        return;
+      }
+      reexecuteThread({ requestPolicy: "network-only" });
+    } catch (e) {
+      console.error("[ThreadDetail] Sync failed:", e);
+      Alert.alert("Sync failed", (e as Error)?.message ?? "Could not refresh task.");
+    } finally {
+      setSyncingTask(false);
+    }
+  }, [threadId, syncingTask, executeExternalTaskAction, reexecuteThread]);
 
   const quickActionsRef = useRef<QuickActionsSheetRef>(null);
   const webViewSheetRef = useRef<WebViewSheetRef>(null);
@@ -470,6 +513,13 @@ export default function ThreadDetailRoute() {
                         label: "Edit Task",
                         icon: Pencil,
                         onPress: () => setEditRequestCounter((n) => n + 1),
+                      }]
+                    : []),
+                  ...(hasExternalTask
+                    ? [{
+                        label: syncingTask ? "Syncing…" : "Sync Task",
+                        icon: RefreshCw,
+                        onPress: () => { void handleSyncTask(); },
                       }]
                     : []),
                   {
