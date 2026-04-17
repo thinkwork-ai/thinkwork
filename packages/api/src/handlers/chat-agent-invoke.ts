@@ -462,37 +462,51 @@ export async function handler(event: InvokeEvent): Promise<void> {
     const threadMetadata =
       (threadMetaRow?.metadata as Record<string, unknown> | null) ?? null;
 
-    // Workflow-skill lookup: when the thread is attached to a LastMile
-    // workflow, fetch the workflow's `skill` block so the agent sees the
-    // workflow-specific form + instructions in its system prompt. 5-min
-    // in-process cache inside `fetchWorkflowSkillForAgent`; `null` means
-    // "use the legacy hardcoded form" and is expected for any thread
-    // without a populated workflow.skill on the LastMile side.
+    // Workflow context for the agent. When the thread is bound to a LastMile
+    // workflow (`metadata.workflowId` set), we ALWAYS surface the workflowId
+    // so the agent can pass it verbatim to `workflow_task_create`. If the
+    // workflow additionally ships a populated `skill` block (form schema,
+    // instructions), we layer those on top. Order:
+    //   1. Seed the skill blob with just the workflowId (guaranteed floor).
+    //   2. Try to enrich with workflow.skill from LastMile.
+    // Either way, `format_workflow_skill_context` in the container renders
+    // the Workflow ID line; instructions/form are conditional on what
+    // LastMile returned.
     let workflowSkill: unknown = undefined;
     const workflowIdFromMeta =
       typeof threadMetadata?.workflowId === "string"
         ? (threadMetadata.workflowId as string)
         : undefined;
-    if (workflowIdFromMeta && threadMetaRow?.created_by_id) {
-      try {
-        const skill = await fetchWorkflowSkillForAgent({
-          tenantId,
-          userId: threadMetaRow.created_by_id,
-          workflowId: workflowIdFromMeta,
-        });
-        // Decorate the skill blob with the workflowId itself. The agent
-        // needs this exact value to pass as `workflowId` when calling
-        // the LastMile MCP's `workflow_task_create` — and without it in
-        // the prompt, the agent tends to guess from other identifier-
-        // looking strings (e.g. its own instance_id) and gets
-        // "Workflow not found" on submit.
-        if (skill) workflowSkill = { ...skill, workflowId: workflowIdFromMeta };
-      } catch (err) {
-        // Non-fatal — agent just gets the legacy fallback path.
-        console.warn(
-          `[chat-agent-invoke] workflow-skill lookup failed for thread=${threadId}:`,
-          (err as Error)?.message,
-        );
+    if (workflowIdFromMeta) {
+      const workflowNameFromMeta =
+        typeof threadMetadata?.workflowName === "string"
+          ? (threadMetadata.workflowName as string)
+          : undefined;
+      workflowSkill = {
+        workflowId: workflowIdFromMeta,
+        ...(workflowNameFromMeta ? { workflowName: workflowNameFromMeta } : {}),
+      };
+      if (threadMetaRow?.created_by_id) {
+        try {
+          const skill = await fetchWorkflowSkillForAgent({
+            tenantId,
+            userId: threadMetaRow.created_by_id,
+            workflowId: workflowIdFromMeta,
+          });
+          if (skill) {
+            workflowSkill = {
+              ...skill,
+              workflowId: workflowIdFromMeta,
+              ...(workflowNameFromMeta ? { workflowName: workflowNameFromMeta } : {}),
+            };
+          }
+        } catch (err) {
+          // Non-fatal — the workflowId-only floor still reaches the agent.
+          console.warn(
+            `[chat-agent-invoke] workflow-skill lookup failed for thread=${threadId}:`,
+            (err as Error)?.message,
+          );
+        }
       }
     }
 
