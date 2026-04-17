@@ -1,125 +1,114 @@
 ---
 name: lastmile-tasks
 description: >
-  Gather intake details for a new LastMile task via a Question Card,
-  then hand off to the LastMile MCP's `workflow_task_create` tool.
-  Use on user-created task threads where the external task hasn't been
-  minted yet (`syncStatus='local'`).
+  Collect task intake via a Question Card form, then create the task in
+  LastMile via the MCP's workflow_task_create tool. Runs automatically on
+  task-channel threads where the external task hasn't been minted yet.
 license: Proprietary
 metadata:
   author: thinkwork
-  version: "3.0.0"
+  version: "4.0.0"
 ---
 
 # LastMile Task Intake
 
-You help users create LastMile tasks by collecting intake details in a
-Question Card, then asking the LastMile MCP to create the task.
+**Your job on this thread is to run the form flow below. You MUST use the
+`present_form` tool to render a Question Card. You MUST NOT reply with a
+bullet list of questions in plain text — that's a regression we are
+actively preventing.**
 
 ## When to run
 
-A user creates a task-channel thread (mobile Tasks tab → `+` → pick a
-workflow → type a title → send). You receive their title as the first
-message. The thread has `channel=task`, `type=task`, and
-`metadata.workflowId` set. It sits in `syncStatus='local'` until this
-flow completes.
+Run this flow unconditionally on the first turn of any task-channel
+thread. You'll see these signals:
 
-Skip this flow if the thread already has
-`metadata.external.externalTaskId` — the task exists on LastMile
-already (webhook inbound or prior agent run).
+- The thread has `channel=task` and `type=task`.
+- `metadata.workflowId` is set (the LastMile workflow the user picked).
+- The user's first message is a short task title (e.g. "Fix the OAuth
+  issue").
+- `sync_status='local'` — the LastMile task hasn't been created yet.
 
-## Pick your path
+**Skip this flow only** when the thread already has
+`metadata.external.externalTaskId` set — that means the task was
+already minted in a previous turn and you shouldn't create a duplicate.
 
-Look at your system prompt. If you see a `## Workflow Skill` section
-(injected from the thread's LastMile workflow), take the
-**workflow-skill path** below. Otherwise, take the **legacy path**.
+## Flow — execute these steps, in order
 
-## Workflow-skill path
+### Step 1 — Present the form
 
-1. Read the form schema from the `## Workflow Skill → ### Form schema`
-   fenced JSON block in your system prompt. Copy it verbatim — do NOT
-   edit field ids or types.
-2. Call `present_form` with `form_json` set to the exact schema JSON:
+Call the `present_form` tool (from the `agent-thread-management` skill)
+with the intake schema shipped in this skill's references folder:
 
-   ```
-   present_form(
-     form_json=<the JSON block from ### Form schema>,
-     prefill_json=""
-   )
-   ```
+```
+present_form(
+  form_path="lastmile-tasks/references/task-intake-form.json",
+  prefill_json=""
+)
+```
 
-   Send one short message telling the user to fill in the form, then
-   STOP. Do not call any other tool in the same turn.
-3. The user's next message contains a fenced ```form_response block
-   with the submitted values. Call the LastMile MCP's
-   `workflow_task_create` tool, passing the workflowId and the entire
-   form_response object:
+Then send ONE short acknowledgement message to the user, for example:
+"Opened a short form — fill it in and tap Create task." Then **STOP**.
+Do not call any other tool in the same turn. Do not preview the form
+fields in text. Do not ask follow-up questions.
 
-   ```
-   workflow_task_create(
-     workflowId=<the exact value under "Workflow ID" in the ## Workflow Skill block — NOT the form id, NOT your agent instance_id, and NOT a slug-looking string. Copy it verbatim.>,
-     formResponse={"form_id": "<from form_response>", "values": {...}},
-     threadTitle=<thread title>,
-     creator={"email": "<user email>"}
-   )
-   ```
+### Step 2 — Wait for the form submission
 
-   Do not flatten values or resolve IDs yourself — LastMile maps the
-   form values against the workflow's own schema and picks the correct
-   team/status/taskType/default-assignee server-side. That's the whole
-   point of using `workflow_task_create` over `task_create`.
-4. On success, summarize in one sentence per any guidance in the
-   workflow's `### Instructions` block. If the workflow doesn't specify
-   a summary style, one short sentence naming the task id is fine.
-   Then stop.
+The user's next message will contain a fenced ```form_response``` block
+with their submitted values. The shape is:
 
-## Legacy path
+```
+{
+  "form_id": "lastmile_task_intake",
+  "values": {
+    "description": "...",
+    "priority": "high",
+    "due_date": "2026-04-20",
+    "assignee_email": ""
+  }
+}
+```
 
-Used when no `## Workflow Skill` block is present in context. This is
-the "generic" LastMile task — no workflow-specific form schema shipped
-by the workflow owner, so we fall back to a minimal 4-field intake.
+### Step 3 — Create the task in LastMile
 
-1. Call `present_form` with the hardcoded intake schema:
+Call the LastMile MCP's `workflow_task_create` tool. Pass the
+workflowId from `thread.metadata.workflowId` **verbatim** (don't guess;
+don't substitute your agent id or the form id). Pass the entire
+`form_response` block as-is under `formResponse`:
 
-   ```
-   present_form(
-     form_path="lastmile-tasks/references/task-intake-form.json",
-     prefill_json=""
-   )
-   ```
+```
+workflow_task_create(
+  workflowId=<thread.metadata.workflowId>,
+  formResponse={"form_id": "<from form_response>", "values": {...}},
+  threadTitle=<thread title>,
+  creator={"email": "<user email>"}
+)
+```
 
-   Send one short message, STOP.
-2. Read the `form_response` from the user's next message. Shape:
+Do not flatten `values` or translate priority / due_date into other
+formats — LastMile maps the submitted values against the workflow's
+own schema server-side. That's the whole point of using
+`workflow_task_create` over `task_create`.
 
-   ```
-   {
-     "form_id": "lastmile_task_intake",
-     "values": {
-       "description": "...",
-       "priority": "high",
-       "due_date": "2026-04-20",
-       "assignee_email": ""
-     }
-   }
-   ```
+### Step 4 — Confirm
 
-3. Call the LastMile MCP's `task_create` tool directly. You'll need to
-   resolve the workflow's default status + team + taskType first via
-   `workflows_get` and `workflow_statuses_list`. The workflowId is on
-   `thread.metadata.workflowId`.
-4. Summarize in one sentence with the task id and priority, e.g.
-   "Created `task_abc123` in LastMile (High priority)."
+On success, reply with **one short sentence** naming the new task id,
+e.g. "Created `task_abc123` in LastMile." Then stop.
 
-## Gotchas
+On error, tell the user plainly what went wrong and offer to try again.
+Do not silently retry.
 
-- `prefill_json` is a JSON-encoded string, not a Python dict. Pass `""`
-  when there's nothing to prefill.
-- `present_form` requires **exactly one** of `form_path` or `form_json`
-  — never both, never neither.
-- After `present_form`, STOP. Do not call any other tool in the same
-  turn.
-- On the workflow-skill path, pass the form_response as an **object**
-  (not a JSON string). The MCP's schema expects
-  `formResponse: {form_id, values}` directly.
-- If the MCP returns an error, tell the user plainly and offer to try
-  again — don't silently retry.
+## Hard rules
+
+- NEVER respond with a bullet list of intake questions. ALWAYS call
+  `present_form` on the first turn.
+- `prefill_json` is a JSON-encoded **string** (pass `""` when empty),
+  NOT a Python dict.
+- `present_form` takes EXACTLY ONE of `form_path` or `form_json` —
+  never both, never neither.
+- After `present_form`, STOP. No other tool in the same turn.
+- Pass `formResponse` to `workflow_task_create` as an **object**
+  (`{form_id, values}`), not as a JSON string.
+- If you can't find `workflow_task_create` in your tool list, the
+  LastMile MCP isn't connected — surface that to the user with
+  actionable next steps (Settings → MCP Servers → LastMile Tasks →
+  Connect). Do not fall back to typing questions.
