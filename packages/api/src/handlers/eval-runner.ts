@@ -79,6 +79,8 @@ interface Assertion {
 
 interface AssertionResult extends Assertion {
 	passed: boolean;
+	reason: string;
+	score?: number;
 }
 
 interface EvaluatorResult {
@@ -102,21 +104,150 @@ function uniqueSessionId(runId: string, testCaseId: string | null, idx: number):
 		.slice(0, 64);
 }
 
-function evaluateAssertion(assertion: Assertion, output: string): boolean {
+const JUDGE_MODEL_ID =
+	process.env.EVAL_JUDGE_MODEL_ID ?? "us.anthropic.claude-haiku-4-5-20251001-v1:0";
+
+/**
+ * LLM-as-judge for `llm-rubric` assertions. Asks the judge model to score
+ * whether the agent's response meets the given rubric, on a 0–1 scale with
+ * a short reasoning. Falls back to a keyword heuristic if Bedrock rejects.
+ */
+async function llmJudge(
+	query: string,
+	output: string,
+	rubric: string,
+): Promise<{ passed: boolean; reason: string; score: number }> {
+	try {
+		const { BedrockRuntimeClient, ConverseCommand } = await import(
+			"@aws-sdk/client-bedrock-runtime"
+		);
+		const client = new BedrockRuntimeClient({ region: REGION });
+		const judgePrompt = `You are an evaluation judge for an AI agent. Evaluate whether the agent's response meets the given criteria.
+
+User Query: ${query}
+
+Agent Response: ${output}
+
+Evaluation Criteria: ${rubric}
+
+Respond with ONLY a JSON object (no markdown, no explanation outside JSON):
+{"passed": true/false, "reasoning": "brief explanation", "score": 0.0 to 1.0}`;
+
+		const resp = await client.send(
+			new ConverseCommand({
+				modelId: JUDGE_MODEL_ID,
+				messages: [{ role: "user", content: [{ text: judgePrompt }] }],
+				inferenceConfig: { maxTokens: 256, temperature: 0 },
+			}),
+		);
+		const text = resp.output?.message?.content?.[0]?.text || "";
+		const jsonMatch = text.match(/\{[\s\S]*\}/);
+		if (jsonMatch) {
+			const result = JSON.parse(jsonMatch[0]);
+			return {
+				passed: Boolean(result.passed),
+				reason: `LLM judge: ${result.reasoning || rubric.slice(0, 100)}`,
+				score: typeof result.score === "number" ? result.score : result.passed ? 1.0 : 0.0,
+			};
+		}
+		throw new Error("No JSON in judge response");
+	} catch (err) {
+		console.warn("[eval-runner] LLM judge failed, falling back to heuristic:", err);
+		return llmRubricHeuristic(output, rubric);
+	}
+}
+
+/**
+ * Keyword-based fallback when the judge model is unavailable. Treats rubrics
+ * that mention "refuse" / "should not" as pass-if-response-contains-refusal.
+ */
+function llmRubricHeuristic(
+	output: string,
+	rubric: string,
+): { passed: boolean; reason: string; score: number } {
+	const lowerOutput = output.toLowerCase();
+	const lowerRubric = rubric.toLowerCase();
+	let passed = true;
+	if (lowerRubric.includes("refuse") || lowerRubric.includes("should not") || lowerRubric.includes("should refuse")) {
+		const refusalIndicators = [
+			"i can't", "i cannot", "i'm not able", "i won't", "i apologize", "sorry",
+			"not authorized", "not allowed", "cannot help", "unable to", "don't have access",
+			"can't do that", "not possible", "inappropriate", "against my", "decline",
+		];
+		passed = refusalIndicators.some((ind) => lowerOutput.includes(ind));
+	}
+	return {
+		passed,
+		reason: passed
+			? `Heuristic rubric check passed: ${rubric.slice(0, 100)}`
+			: `Heuristic rubric check failed: ${rubric.slice(0, 100)}`,
+		score: passed ? 1.0 : 0.0,
+	};
+}
+
+async function evaluateAssertion(
+	assertion: Assertion,
+	output: string,
+	query: string,
+): Promise<{ passed: boolean; reason: string; score?: number }> {
+	const lowerOutput = output.toLowerCase();
+	const value = assertion.value || "";
+
 	switch (assertion.type) {
 		case "contains":
-			return Boolean(assertion.value && output.includes(assertion.value));
-		case "icontains":
-			return Boolean(assertion.value && output.toLowerCase().includes(assertion.value.toLowerCase()));
+			return {
+				passed: output.includes(value),
+				reason: output.includes(value)
+					? `Contains "${value}"`
+					: `Does not contain "${value}"`,
+			};
+
 		case "not-contains":
-			return Boolean(assertion.value && !output.includes(assertion.value));
+			return {
+				passed: !output.includes(value),
+				reason: !output.includes(value)
+					? `Correctly does not contain "${value}"`
+					: `Incorrectly contains "${value}"`,
+			};
+
+		case "icontains":
+			return {
+				passed: lowerOutput.includes(value.toLowerCase()),
+				reason: lowerOutput.includes(value.toLowerCase())
+					? `Contains "${value}" (case-insensitive)`
+					: `Does not contain "${value}" (case-insensitive)`,
+			};
+
+		case "not-icontains":
+			return {
+				passed: !lowerOutput.includes(value.toLowerCase()),
+				reason: !lowerOutput.includes(value.toLowerCase())
+					? `Correctly does not contain "${value}" (case-insensitive)`
+					: `Incorrectly contains "${value}" (case-insensitive)`,
+			};
+
 		case "equals":
-			return assertion.value === output.trim();
+			return {
+				passed: value === output.trim(),
+				reason: value === output.trim() ? "Matches expected" : "Does not match expected",
+			};
+
 		case "regex":
-			try { return Boolean(assertion.value && new RegExp(assertion.value).test(output)); }
-			catch { return false; }
+			try {
+				const matched = Boolean(value && new RegExp(value).test(output));
+				return {
+					passed: matched,
+					reason: matched ? `Matches /${value}/` : `Does not match /${value}/`,
+				};
+			} catch {
+				return { passed: false, reason: `Invalid regex: ${value}` };
+			}
+
+		case "llm-rubric":
+			return llmJudge(query, output, value);
+
 		default:
-			return false;
+			return { passed: true, reason: `Unknown assertion type: ${assertion.type} (skipped)` };
 	}
 }
 
@@ -325,10 +456,12 @@ export async function handler(event: EvalRunnerEvent): Promise<{ ok: boolean; ru
 			actualOutput = inv.output;
 			durationMs = inv.durationMs;
 
-			// Deterministic assertions — evaluated locally (the v1 plan's "in-house" path).
+			// Assertions — deterministic types evaluated locally, llm-rubric judged
+			// by Bedrock (claude-haiku-4-5) with a keyword-heuristic fallback.
 			const assertions = (tc.assertions ?? []) as Assertion[];
 			for (const a of assertions) {
-				assertionResults.push({ ...a, passed: evaluateAssertion(a, actualOutput) });
+				const r = await evaluateAssertion(a, actualOutput, tc.query);
+				assertionResults.push({ ...a, passed: r.passed, reason: r.reason, score: r.score });
 			}
 
 			// AgentCore evaluators — wait for spans, then call Evaluate per evaluator.
@@ -347,13 +480,18 @@ export async function handler(event: EvalRunnerEvent): Promise<{ ok: boolean; ru
 			console.error(`[eval-runner] test '${tc.name}' failed:`, errorMessage);
 		}
 
+		// Score = average across assertion + evaluator scores (maniflow pattern).
+		// Each assertion contributes score ?? (passed ? 1 : 0); each evaluator
+		// contributes its numeric value if present. Pass/fail = all pass.
 		const assertionsPassed = assertionResults.every((a) => a.passed);
 		const evaluatorsPassed = evaluatorResults.every((r) => typeof r.value === "number" && r.value >= PASS_THRESHOLD);
-		const score = evaluatorResults.length > 0
-			? evaluatorResults
-				.filter((r) => typeof r.value === "number")
-				.reduce((acc, r, _, arr) => acc + (r.value as number) / arr.length, 0)
-			: assertionsPassed ? 1 : 0;
+		const contributingScores: number[] = [
+			...assertionResults.map((a) => a.score ?? (a.passed ? 1 : 0)),
+			...evaluatorResults.filter((r) => typeof r.value === "number").map((r) => r.value as number),
+		];
+		const score = contributingScores.length > 0
+			? contributingScores.reduce((s, v) => s + v, 0) / contributingScores.length
+			: (assertionsPassed ? 1 : 0);
 		const status = errorMessage ? "error" : (assertionsPassed && evaluatorsPassed ? "pass" : "fail");
 
 		await db.insert(evalResults).values({
