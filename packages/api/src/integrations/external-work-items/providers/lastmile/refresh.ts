@@ -15,6 +15,7 @@ import { LASTMILE_MCP_SERVER, LASTMILE_TOOLS } from "./constants.js";
 import { normalizeLastmileTask } from "./normalizeItem.js";
 import { buildLastmileBlocks } from "./buildBlocks.js";
 import { buildLastmileEditForm } from "./buildFormSchema.js";
+import { forceRefreshLastmileUserToken } from "../../../../lib/oauth-token.js";
 
 export async function refreshLastmileTask(args: {
 	externalTaskId: string;
@@ -27,6 +28,10 @@ export async function refreshLastmileTask(args: {
 		tool: LASTMILE_TOOLS.get,
 		args: { task_id: externalTaskId },
 		authToken: ctx.authToken,
+		refreshToken:
+			ctx.connectionId && ctx.tenantId
+				? () => forceRefreshLastmileUserToken(ctx.connectionId!, ctx.tenantId)
+				: undefined,
 	});
 
 	if (!raw || typeof raw !== "object") {

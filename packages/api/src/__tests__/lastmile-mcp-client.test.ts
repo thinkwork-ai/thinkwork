@@ -152,6 +152,116 @@ describe("callMcpTool — successful responses", () => {
 	});
 });
 
+describe("callMcpTool — 401 refresh-and-retry", () => {
+	function mockFetchSequence(responses: Array<{ status?: number; body: unknown; isJson?: boolean }>) {
+		let i = 0;
+		globalThis.fetch = vi.fn(async () => {
+			const r = responses[i++];
+			const bodyText =
+				r.isJson === false ? String(r.body) : JSON.stringify(r.body);
+			return new Response(bodyText, {
+				status: r.status ?? 200,
+				headers: { "Content-Type": "application/json" },
+			});
+		}) as unknown as typeof fetch;
+	}
+
+	it("retries once with a refreshed bearer on HTTP 401 and returns the second response", async () => {
+		mockFetchSequence([
+			{ status: 401, body: { error: "Failed to validate WorkOS user." } },
+			{
+				status: 200,
+				body: {
+					jsonrpc: "2.0",
+					id: 1,
+					result: {
+						content: [
+							{ type: "text", text: JSON.stringify({ id: "task_ok" }) },
+						],
+					},
+				},
+			},
+		]);
+
+		const refreshToken = vi.fn(async () => "new-bearer-token");
+		const result = await callMcpTool({
+			server: "tasks",
+			tool: "tasks_get",
+			args: { task_id: "task_ok" },
+			authToken: "stale-bearer-token",
+			refreshToken,
+		});
+
+		expect(result).toEqual({ id: "task_ok" });
+		expect(refreshToken).toHaveBeenCalledTimes(1);
+	});
+
+	it("propagates the original 401 when the refresh callback returns null", async () => {
+		mockFetchSequence([
+			{ status: 401, body: { error: "Failed to validate WorkOS user." } },
+		]);
+
+		const refreshToken = vi.fn(async () => null);
+		await expect(
+			callMcpTool({
+				server: "tasks",
+				tool: "tasks_get",
+				args: { task_id: "task_ok" },
+				authToken: "stale-bearer-token",
+				refreshToken,
+			}),
+		).rejects.toThrow(/auth rejected/);
+		expect(refreshToken).toHaveBeenCalledTimes(1);
+	});
+
+	it("propagates the original 401 with no retry when no refreshToken callback is provided", async () => {
+		const fetchMock = vi.fn(async () =>
+			new Response(JSON.stringify({ error: "Failed to validate WorkOS user." }), {
+				status: 401,
+				headers: { "Content-Type": "application/json" },
+			}),
+		);
+		globalThis.fetch = fetchMock as unknown as typeof fetch;
+		await expect(
+			callMcpTool({
+				server: "tasks",
+				tool: "tasks_get",
+				args: { task_id: "task_ok" },
+				authToken: "stale-bearer-token",
+			}),
+		).rejects.toThrow(/auth rejected/);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("retries when a 200 body matches the WorkOS-rejection signature (belt-and-suspenders)", async () => {
+		mockFetchSequence([
+			// Some proxy returns 200 but body is the auth-failure string.
+			{ status: 200, body: { error: "Failed to validate WorkOS user." } },
+			{
+				status: 200,
+				body: {
+					jsonrpc: "2.0",
+					id: 1,
+					result: {
+						content: [{ type: "text", text: JSON.stringify({ ok: true }) }],
+					},
+				},
+			},
+		]);
+
+		const refreshToken = vi.fn(async () => "new-bearer-token");
+		const result = await callMcpTool({
+			server: "tasks",
+			tool: "tasks_get",
+			args: { task_id: "task_ok" },
+			authToken: "stale-bearer-token",
+			refreshToken,
+		});
+		expect(result).toEqual({ ok: true });
+		expect(refreshToken).toHaveBeenCalledTimes(1);
+	});
+});
+
 describe("callMcpTool — transport-level errors", () => {
 	it("throws when the JSON-RPC response carries a top-level error", async () => {
 		mockFetchOnce({
