@@ -30,7 +30,7 @@ function AnalyticsPage() {
   const { tenantId } = useTenant();
   const { view } = Route.useSearch();
   const navigate = useNavigate();
-  const active: AnalyticsView = view ?? "activity";
+  const active: AnalyticsView = view ?? "cost";
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
   const [agentsResult] = useQuery({
@@ -43,7 +43,7 @@ function AnalyticsPage() {
   const setView = (next: AnalyticsView) => {
     navigate({
       to: "/analytics",
-      search: next === "activity" ? {} : { view: next },
+      search: next === "cost" ? {} : { view: next },
       replace: true,
     });
   };
@@ -61,8 +61,8 @@ function AnalyticsPage() {
                 onValueChange={(v) => v && isAnalyticsView(v) && setView(v)}
                 variant="outline"
               >
-                <ToggleGroupItem value="activity" className="px-3 text-xs">Activity</ToggleGroupItem>
                 <ToggleGroupItem value="cost" className="px-3 text-xs">Cost</ToggleGroupItem>
+                <ToggleGroupItem value="activity" className="px-3 text-xs">Activity</ToggleGroupItem>
                 <ToggleGroupItem value="performance" className="px-3 text-xs">Performance</ToggleGroupItem>
               </ToggleGroup>
               {active === "performance" && (
