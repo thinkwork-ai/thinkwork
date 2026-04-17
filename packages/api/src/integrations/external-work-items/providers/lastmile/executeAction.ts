@@ -17,6 +17,7 @@ import type {
 import { callMcpTool } from "../../mcpClient.js";
 import { LASTMILE_MCP_SERVER, LASTMILE_TOOLS } from "./constants.js";
 import { refreshLastmileTask } from "./refresh.js";
+import { forceRefreshLastmileUserToken } from "../../../../lib/oauth-token.js";
 
 export async function executeLastmileAction(args: {
 	actionType: TaskActionType;
@@ -31,6 +32,11 @@ export async function executeLastmileAction(args: {
 			"[lastmile] executeAction requires a per-user OAuth token in ctx.authToken",
 		);
 	}
+
+	const refreshToken =
+		ctx.connectionId && ctx.tenantId
+			? () => forceRefreshLastmileUserToken(ctx.connectionId!, ctx.tenantId)
+			: undefined;
 
 	switch (actionType) {
 		case "external_task.update_status": {
@@ -49,6 +55,7 @@ export async function executeLastmileAction(args: {
 				tool: LASTMILE_TOOLS.updateStatus,
 				args: { task_id: externalTaskId, status_id: statusId },
 				authToken: ctx.authToken,
+				refreshToken,
 			});
 			break;
 		}
@@ -67,6 +74,7 @@ export async function executeLastmileAction(args: {
 				tool: LASTMILE_TOOLS.assign,
 				args: { task_id: externalTaskId, assignee_id: assigneeId },
 				authToken: ctx.authToken,
+				refreshToken,
 			});
 			break;
 		}
@@ -88,6 +96,7 @@ export async function executeLastmileAction(args: {
 				tool: LASTMILE_TOOLS.update,
 				args: { task_id: externalTaskId, ...fields },
 				authToken: ctx.authToken,
+				refreshToken,
 			});
 			break;
 		}
