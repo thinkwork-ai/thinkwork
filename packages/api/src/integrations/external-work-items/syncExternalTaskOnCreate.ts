@@ -120,16 +120,22 @@ async function writeSyncState(
 		| { kind: "error"; message: string },
 ): Promise<void> {
 	if (state.kind === "synced") {
+		// Promote the externalTaskId to the first-class column (migration
+		// 0008) for the hot correlation path. The rest of metadata.external
+		// (provider, connectionId, latestEnvelope) stays in JSONB.
+		const externalTaskId =
+			typeof state.externalMeta.externalTaskId === "string"
+				? (state.externalMeta.externalTaskId as string)
+				: null;
 		await db
 			.update(threads)
 			.set({
 				sync_status: "synced",
 				sync_error: null,
-				// JSONB merge of metadata.external into the existing metadata
-				// column. We write the whole external block as a sub-object
-				// so ensureExternalTaskThread's lookup query (which reads
-				// metadata->'external'->>'externalTaskId') finds it on the
-				// next inbound webhook.
+				...(externalTaskId ? { external_task_id: externalTaskId } : {}),
+				// JSONB merge keeps the broader metadata.external block
+				// available for downstream reads (latestEnvelope, provider,
+				// etc.) — just not the primary lookup key anymore.
 				metadata: sql`COALESCE(${threads.metadata}, '{}'::jsonb) || ${JSON.stringify({ external: state.externalMeta })}::jsonb`,
 				updated_at: new Date(),
 			})
