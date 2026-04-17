@@ -453,6 +453,13 @@ export default function ThreadsScreen() {
       console.log("[Tasks] Task created:", newThread.id, (newThread as any).identifier);
       markRead(newThread.id);
 
+      // Reset the pinned workflow chip after a successful create so the
+      // user consciously picks the workflow for the next task rather
+      // than unintentionally filing three billing tickets in a row
+      // because the chip was sticky. The Tasks tab's + button re-opens
+      // the picker immediately — no lost taps.
+      setSelectedWorkflow(null);
+
       const { data: msgData, error: msgError } = await executeSendMessage({
         input: {
           threadId: newThread.id,
@@ -696,10 +703,12 @@ export default function ThreadsScreen() {
                 onPress={() => handleThreadPress(item)}
                 hideAssignee
                 onRetrySync={handleRetryTaskSync}
+                onArchive={handleArchive}
+                isActive={isThreadActive(item.id)}
               />
             )}
             ItemSeparatorComponent={() => (
-              <View className="h-px bg-neutral-200 dark:bg-neutral-800" style={{ marginLeft: 68 }} />
+              <View className="h-px bg-neutral-200 dark:bg-neutral-800" />
             )}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={() => { handleRefresh(); reexecuteTasks({ requestPolicy: "network-only" }); }} tintColor={colors.primary} />

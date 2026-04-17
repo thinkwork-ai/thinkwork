@@ -246,3 +246,4 @@ playwright/.cache/
 # Local PRDs (work-in-progress, not for source control)
 .prds/
 
+.claude/scheduled_tasks.lock

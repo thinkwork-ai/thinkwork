@@ -16,10 +16,10 @@ The sign-in screen (`/sign-in`) has two entry points:
 1. **Google button** — the primary path. Launches a federated OAuth flow through Cognito's Google identity provider.
 2. **Email / password fallback** — available for tenants that still provision password users through Cognito directly. Most tenants skip this.
 
-The Google flow uses Expo's `WebBrowser.openAuthSessionAsync` with `preferEphemeralSession: true` on iOS. That flag matters:
+The Google flow uses Expo's `WebBrowser.openAuthSessionAsync` on iOS with the **persistent** ASWebAuthenticationSession cookie jar (the two-argument form — no options object).
 
 <Aside type="caution">
-`preferEphemeralSession: true` is required. It tells iOS not to share cookies with Safari, which means the OAuth session is isolated per sign-in. Without it, signing out of the app does not actually sign the user out of Google in Safari, so the next sign-in silently picks up the last Safari cookie and the user cannot switch accounts. Always use `openAuthSessionAsync` with the ephemeral flag — never `openBrowserAsync`.
+Do **not** pass `preferEphemeralSession: true`. Earlier builds did this as a workaround for a Cognito `invalid_grant` bug — the actual fix was the redirect-URI parser (stopping code parsing at `&` **and** `#`). Forcing ephemeral sessions kills iOS keychain prefills, forgets the last-picked Google account, and makes every daily sign-in feel like a fresh forced login. Always use the plain `openAuthSessionAsync(url, redirectUri)` form — never `openBrowserAsync`.
 </Aside>
 
 The OAuth flow lands back at `/auth/callback` on web or is handled inline by the Expo WebBrowser on native. The callback exchanges the authorization code for an id token and a refresh token, and the app stores those in SecureStore.
@@ -71,10 +71,9 @@ Sign-out is a small but important flow:
 
 1. Clear the refresh token and tenant id from SecureStore.
 2. Clear any in-memory auth state.
-3. (On iOS) Do not attempt to clear Safari cookies — they weren't shared in the first place thanks to `preferEphemeralSession`.
-4. Route the user to `/sign-in`.
+3. Route the user to `/sign-in`.
 
-Because the OAuth session was ephemeral, the next sign-in starts from a clean state and the user can pick any Google account without the last one being silently reused.
+The persistent `ASWebAuthenticationSession` cookie jar means the next sign-in can reuse the Google session cookie for a one-tap re-entry. If the user wants to pick a different Google account, the Google account chooser still lets them — the persistent session is convenience, not a hard bind.
 
 ## The pre-signup gap
 
