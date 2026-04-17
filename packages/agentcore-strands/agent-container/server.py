@@ -273,6 +273,7 @@ def _retrieve_kb_context(kb_config: list, query: str, max_results: int = 5) -> s
 
 
 from external_task_context import format_external_task_context
+from workflow_skill_context import format_workflow_skill_context
 
 
 def _build_system_prompt(skills_config: list | None = None, kb_config: list | None = None,
@@ -1481,6 +1482,7 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
         guardrail_config = payload.get("guardrail_config")
         mcp_configs = payload.get("mcp_configs") or []
         thread_metadata = payload.get("thread_metadata") or {}
+        workflow_skill = payload.get("workflow_skill")
         if mcp_configs:
             logger.info("MCP configs received: %d servers (%s)",
                         len(mcp_configs),
@@ -1605,6 +1607,20 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                 system_prompt += "\n\n---\n\n" + external_block
                 logger.info("Injected external-task context into system prompt (%d chars)",
                             len(external_block))
+
+            # Workflow-skill injection: on task-creation threads the
+            # per-workflow `skill` block from LastMile carries the
+            # workflow's intake instructions, form schema, and — critically —
+            # the workflowId the agent must pass verbatim to
+            # `workflow_task_create`. Without this block the agent has no
+            # way to substitute the real workflow id and ends up passing
+            # the literal template string, which LastMile rejects with
+            # "Workflow not found".
+            workflow_block = format_workflow_skill_context(workflow_skill)
+            if workflow_block:
+                system_prompt += "\n\n---\n\n" + workflow_block
+                logger.info("Injected workflow-skill context into system prompt (%d chars)",
+                            len(workflow_block))
 
             # Auto-retrieve relevant KB context — only for agents WITHOUT workspace map
             if knowledge_bases_config and not has_workspace_map:

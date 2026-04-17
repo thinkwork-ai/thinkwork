@@ -30,6 +30,7 @@ COPY packages/agentcore-strands/agent-container/eval_span_attrs.py .
 # - api_memory_client.py: bridge to API memory-retain Lambda for the
 #   per-turn auto-retention path (engine-agnostic)
 COPY packages/agentcore-strands/agent-container/external_task_context.py .
+COPY packages/agentcore-strands/agent-container/workflow_skill_context.py .
 COPY packages/agentcore-strands/agent-container/memory_tools.py .
 COPY packages/agentcore-strands/agent-container/hindsight_usage_capture.py .
 COPY packages/agentcore-strands/agent-container/hindsight_recall_filter.py .
