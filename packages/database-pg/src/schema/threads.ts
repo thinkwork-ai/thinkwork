@@ -65,6 +65,11 @@ export const threads = pgTable(
 		// and the retryTaskSync mutation for the recovery path.
 		sync_status: text("sync_status"),
 		sync_error: text("sync_error"),
+		// Promoted out of `metadata.external.externalTaskId` (migration
+		// 0008) because it's the hot correlation key: every inbound
+		// webhook hits it and the duplicate-prevention unique index lives
+		// on it. Null for threads that don't mirror an external work item.
+		external_task_id: text("external_task_id"),
 		last_turn_completed_at: timestamp("last_turn_completed_at", { withTimezone: true }),
 		last_response_preview: text("last_response_preview"),
 		last_read_at: timestamp("last_read_at", { withTimezone: true }),

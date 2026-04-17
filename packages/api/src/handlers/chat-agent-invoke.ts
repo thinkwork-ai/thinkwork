@@ -939,27 +939,30 @@ async function stampThreadFromWorkflowTaskCreate(args: {
 
   const { threads } = await import("@thinkwork/database-pg/schema");
   const [row] = await db
-    .select({ metadata: threads.metadata })
+    .select({
+      metadata: threads.metadata,
+      external_task_id: threads.external_task_id,
+    })
     .from(threads)
     .where(and(eq(threads.id, args.threadId), eq(threads.tenant_id, args.tenantId)));
   if (!row) return;
 
-  const meta = (row.metadata as Record<string, unknown> | null) ?? {};
-  const existingExternal = (meta.external as Record<string, unknown> | undefined) ?? {};
-  if (typeof existingExternal.externalTaskId === "string" && existingExternal.externalTaskId) {
+  if (row.external_task_id) {
     return; // Already stamped — idempotent no-op.
   }
 
+  const meta = (row.metadata as Record<string, unknown> | null) ?? {};
+  const existingExternal = (meta.external as Record<string, unknown> | undefined) ?? {};
   const mergedExternal = {
     ...existingExternal,
     provider: "lastmile",
     externalTaskId,
-    syncStatus: "synced",
     lastUpdatedAt: new Date().toISOString(),
   };
   await db
     .update(threads)
     .set({
+      external_task_id: externalTaskId,
       metadata: { ...meta, external: mergedExternal },
       sync_status: "synced",
       updated_at: new Date(),
