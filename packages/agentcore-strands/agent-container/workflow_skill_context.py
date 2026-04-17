@@ -28,10 +28,12 @@ from typing import Any
 def format_workflow_skill_context(workflow_skill: Any) -> str:
     """Render the workflow's `skill` block as a system-prompt section.
 
-    Returns an empty string when `workflow_skill` is missing, isn't a
-    dict, or has neither `instructions` nor `form` populated. The
-    ThinkWork side already validated `schemaVersion=1` before shipping
-    the blob, so we don't re-check it here.
+    Returns an empty string when `workflow_skill` is missing/not-a-dict
+    OR when it has no workflowId and no instructions/form. When a
+    workflowId is present we ALWAYS render the block (even if
+    instructions/form are absent) because surfacing the workflowId is
+    the whole reason the agent can call `workflow_task_create` without
+    passing a placeholder like `{{thread.metadata.workflowId}}`.
     """
     if not isinstance(workflow_skill, dict):
         return ""
@@ -39,30 +41,36 @@ def format_workflow_skill_context(workflow_skill: Any) -> str:
     instructions = workflow_skill.get("instructions")
     form = workflow_skill.get("form")
     workflow_id = workflow_skill.get("workflowId")
+    workflow_name = workflow_skill.get("workflowName")
 
     has_instructions = isinstance(instructions, str) and instructions.strip()
     has_form = isinstance(form, dict) and form.get("id") and form.get("fields")
+    has_workflow_id = isinstance(workflow_id, str) and workflow_id
 
-    if not has_instructions and not has_form:
+    if not has_workflow_id and not has_instructions and not has_form:
         return ""
 
     lines: list[str] = [
         "## Workflow Skill",
         "",
         "The LastMile workflow attached to this thread ships its own intake",
-        "instructions and form. Follow the instructions below and present the",
-        "form (if any) as-is — do NOT fall back to the generic task-intake",
-        "form when this block is present.",
+        "instructions and/or form. Follow the instructions below and present",
+        "the form (if any) as-is. When only the Workflow ID is present,",
+        "fall back to the hardcoded `lastmile-tasks/references/task-intake-form.json`",
+        "via `present_form(form_path=...)` — but still pass the Workflow ID",
+        "verbatim to `workflow_task_create`.",
         "",
     ]
 
-    if isinstance(workflow_id, str) and workflow_id:
+    if has_workflow_id:
         # The agent MUST use this exact value as the `workflowId` argument
         # when calling the LastMile MCP's `workflow_task_create` tool —
         # guessing from other identifier-looking strings in context (the
         # agent instance_id, the form's id, etc.) produces "Workflow not
         # found" errors on the MCP side.
         lines.append(f"- **Workflow ID (pass verbatim to `workflow_task_create`):** `{workflow_id}`")
+        if isinstance(workflow_name, str) and workflow_name:
+            lines.append(f"- **Workflow name:** {workflow_name}")
         lines.append("")
 
     if has_instructions:
