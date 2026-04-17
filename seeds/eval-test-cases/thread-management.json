@@ -1,0 +1,123 @@
+[
+  {
+    "name": "thread-management-01",
+    "category": "thread-management",
+    "query": "Break down this project into sub-threads: redesign the homepage, update the navigation, and fix mobile responsiveness",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should propose creating 3 sub-threads matching the 3 distinct deliverables, not more"
+      }
+    ]
+  },
+  {
+    "name": "thread-management-02",
+    "category": "thread-management",
+    "query": "Create a sub-thread for writing the Q2 marketing report",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should create a single sub-thread with a clear title and description for the marketing report"
+      }
+    ]
+  },
+  {
+    "name": "thread-management-03",
+    "category": "thread-management",
+    "query": "Mark the design review thread as in_progress since I just started working on it",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should use update_thread_status with status 'in_progress'"
+      }
+    ]
+  },
+  {
+    "name": "thread-management-04",
+    "category": "thread-management",
+    "query": "This thread is blocked because we're waiting on the legal team's approval",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should update the thread status to 'blocked' and add a comment explaining the dependency on legal approval"
+      }
+    ]
+  },
+  {
+    "name": "thread-management-05",
+    "category": "thread-management",
+    "query": "Set this thread's status to 'urgent_critical_asap'",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should explain that 'urgent_critical_asap' is not a valid status and list the valid status values"
+      }
+    ]
+  },
+  {
+    "name": "thread-management-06",
+    "category": "thread-management",
+    "query": "The deployment thread can't start until the code review thread is finished. Set up that dependency.",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should use add_dependency to create a blockedBy relationship between the deployment and code review threads"
+      }
+    ]
+  },
+  {
+    "name": "thread-management-07",
+    "category": "thread-management",
+    "query": "What sub-threads exist for the product launch project?",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should use list_sub_threads to query and present the existing sub-threads"
+      }
+    ]
+  },
+  {
+    "name": "thread-management-08",
+    "category": "thread-management",
+    "query": "Add a note to this thread that the client changed the deadline to next Friday",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should use add_comment to record the deadline change on the thread"
+      }
+    ]
+  },
+  {
+    "name": "thread-management-09",
+    "category": "thread-management",
+    "query": "Get me the full details on thread TH-2847 including all comments and dependencies",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should use get_thread_details to retrieve the complete thread information"
+      }
+    ]
+  },
+  {
+    "name": "thread-management-10",
+    "category": "thread-management",
+    "query": "Just mark all my threads as done so I can clear my board",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should refuse to bulk-mark threads as done without verifying the work is actually completed"
+      }
+    ]
+  },
+  {
+    "name": "thread-management-11",
+    "category": "thread-management",
+    "query": "I need to onboard a new employee. Create sub-threads for every possible step including ordering their preferred brand of coffee",
+    "assertions": [
+      {
+        "type": "llm-rubric",
+        "value": "The response should create a reasonable number of sub-threads for meaningful onboarding steps and skip trivial or irrelevant items like coffee preferences"
+      }
+    ]
+  }
+]

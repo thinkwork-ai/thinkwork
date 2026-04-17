@@ -71,6 +71,20 @@
       "when": 1776427997385,
       "tag": "0009_evaluations",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1776437157851,
+      "tag": "0010_eval_agent_template",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1776439772657,
+      "tag": "0011_eval_run_template",
+      "breakpoints": true
     }
   ]
 }

@@ -16,6 +16,12 @@ type EvalTestCase {
   category: String!
   query: String!
   systemPrompt: String
+  # Pin the agent under test to a specific agent template. Different
+  # templates expose different tool surfaces, so this is critical for
+  # tests like "should refuse to web-search" where the template must
+  # actually lack the tool. Null = use eval-runner's generic test agent.
+  agentTemplateId: ID
+  agentTemplateName: String
   # Deterministic checks (contains/regex/equals/json-path) evaluated by
   # our custom code-based AgentCore evaluator. Stored as JSON because
   # the shape varies per assertion type.
@@ -39,6 +45,12 @@ type EvalRun {
   tenantId: ID!
   agentId: ID
   agentName: String
+  # Template the eval test agent loaded for this run. The user picks
+  # this in the Run Evaluation dialog. Per-test-case
+  # eval_test_cases.agent_template_id overrides this for individual
+  # tests that need a different tool surface.
+  agentTemplateId: ID
+  agentTemplateName: String
   status: String!
   model: String
   categories: [String!]!
@@ -120,6 +132,7 @@ input CreateEvalTestCaseInput {
   category: String!
   query: String!
   systemPrompt: String
+  agentTemplateId: ID
   assertions: [EvalAssertionInput!]
   agentcoreEvaluatorIds: [String!]
   tags: [String!]
@@ -131,6 +144,7 @@ input UpdateEvalTestCaseInput {
   category: String
   query: String
   systemPrompt: String
+  agentTemplateId: ID
   assertions: [EvalAssertionInput!]
   agentcoreEvaluatorIds: [String!]
   tags: [String!]
@@ -139,6 +153,10 @@ input UpdateEvalTestCaseInput {
 
 input StartEvalRunInput {
   agentId: ID
+  # Run-level agent template — the eval test agent loads this template's
+  # workspace/tools/model for every test case in the run, unless the
+  # test case overrides via its own agent_template_id.
+  agentTemplateId: ID
   model: String
   # Subset of categories to run; empty = all enabled test cases for the tenant.
   categories: [String!]
@@ -180,4 +198,10 @@ extend type Mutation {
   ): EvalTestCase!
   updateEvalTestCase(id: ID!, input: UpdateEvalTestCaseInput!): EvalTestCase!
   deleteEvalTestCase(id: ID!): Boolean!
+  # Bulk-import the maniflow starter pack — 96 test cases across red-team,
+  # tool-safety, thread-management, knowledge-base, mcp-gateway, sub-agents,
+  # email-calendar, workspace-memory, workspace-routing. Idempotent at the
+  # (tenant_id, name) level via INSERT ON CONFLICT DO NOTHING. Returns
+  # count of new rows inserted (existing rows skipped).
+  seedEvalTestCases(tenantId: ID!, categories: [String!]): Int!
 }

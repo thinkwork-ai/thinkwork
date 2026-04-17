@@ -1,11 +1,11 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useSubscription } from "urql";
-import { ArrowLeft } from "lucide-react";
 
 import { useTenant } from "@/context/TenantContext";
+import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageHeader } from "@/components/PageHeader";
+import { PageLayout } from "@/components/PageLayout";
 import { PageSkeleton } from "@/components/PageSkeleton";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -19,6 +19,10 @@ export const Route = createFileRoute("/_authed/_tenant/evaluations/$runId")({
 function EvalRunDetailPage() {
   const { runId } = Route.useParams();
   const { tenantId } = useTenant();
+  useBreadcrumbs([
+    { label: "Evaluations", href: "/evaluations" },
+    { label: `Run ${runId.slice(0, 8)}` },
+  ]);
 
   const [run, refetchRun] = useQuery({ query: EvalRunQuery, variables: { id: runId }, pause: !runId });
   const [results, refetchResults] = useQuery({ query: EvalRunResultsQuery, variables: { runId }, pause: !runId });
@@ -42,19 +46,15 @@ function EvalRunDetailPage() {
   const fmtPct = (n?: number | null) => (typeof n === "number" ? `${(n * 100).toFixed(1)}%` : "—");
 
   return (
-    <div className="flex flex-col gap-6 p-6">
-      <PageHeader
-        title={`Run ${r.id.slice(0, 8)}`}
-        description={`${r.status} · ${r.passed}/${r.totalTests} passed`}
-        actions={
-          <Button asChild variant="outline" size="sm">
-            <Link to="/evaluations">
-              <ArrowLeft className="mr-1 h-4 w-4" /> Back
-            </Link>
-          </Button>
-        }
-      />
-
+    <PageLayout
+      header={
+        <PageHeader
+          title={`Run ${r.id.slice(0, 8)}`}
+          description={`${r.status} · ${r.passed}/${r.totalTests} passed`}
+        />
+      }
+    >
+      <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
           <CardTitle>Run summary</CardTitle>
@@ -182,6 +182,7 @@ function EvalRunDetailPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </PageLayout>
   );
 }

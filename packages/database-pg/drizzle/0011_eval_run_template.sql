@@ -1,0 +1,2 @@
+ALTER TABLE "eval_runs" ADD COLUMN "agent_template_id" uuid;--> statement-breakpoint
+ALTER TABLE "eval_runs" ADD CONSTRAINT "eval_runs_agent_template_id_agent_templates_id_fk" FOREIGN KEY ("agent_template_id") REFERENCES "public"."agent_templates"("id") ON DELETE no action ON UPDATE no action;
