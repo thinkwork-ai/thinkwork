@@ -71,6 +71,7 @@ export async function buildMcpConfigs(
 				try {
 					const [userToken] = await db
 						.select({
+							id: userMcpTokens.id,
 							secret_ref: userMcpTokens.secret_ref,
 							status: userMcpTokens.status,
 							expires_at: userMcpTokens.expires_at,
@@ -92,6 +93,14 @@ export async function buildMcpConfigs(
 								new Date(userToken.expires_at).getTime() - Date.now() < EXPIRY_BUFFER_MS;
 
 							if (isExpired && parsed.refresh_token) {
+								// WorkOS public-client refresh REQUIRES client_id in the body.
+								// It's stored in tenant_mcp_servers.auth_config at DCR time.
+								const authCfg = (mcp.auth_config as Record<string, unknown>) || {};
+								const clientId = typeof authCfg.client_id === "string" ? authCfg.client_id : "";
+								if (!clientId) {
+									console.warn(`${logPrefix} MCP token for ${mcp.slug} needs refresh but auth_config.client_id is missing; user must reconnect from mobile to re-run DCR`);
+									token = parsed.access_token;
+								} else {
 								console.log(`${logPrefix} MCP token expired for ${mcp.slug}, refreshing...`);
 								try {
 									const mcpBaseUrl = mcp.url.replace(/\/+$/, "");
@@ -113,6 +122,7 @@ export async function buildMcpConfigs(
 													body: new URLSearchParams({
 														grant_type: "refresh_token",
 														refresh_token: parsed.refresh_token,
+														client_id: clientId,
 													}).toString(),
 													signal: AbortSignal.timeout(10000),
 												});
@@ -139,18 +149,20 @@ export async function buildMcpConfigs(
 													await db.update(userMcpTokens).set({
 														expires_at: newExpiry,
 														updated_at: new Date(),
-													}).where(eq(userMcpTokens.user_id, humanPairId));
+													}).where(eq(userMcpTokens.id, userToken.id));
 													console.log(`${logPrefix} MCP token refreshed for ${mcp.slug}`);
 												} else {
-													console.warn(`${logPrefix} MCP token refresh failed for ${mcp.slug}: ${refreshRes.status}`);
+													const errBody = await refreshRes.text().catch(() => "");
+													console.warn(`${logPrefix} MCP token refresh failed for ${mcp.slug}: ${refreshRes.status} ${errBody}`);
 													await db.update(userMcpTokens).set({ status: "expired", updated_at: new Date() })
-														.where(and(eq(userMcpTokens.user_id, humanPairId), eq(userMcpTokens.mcp_server_id, mcp.mcp_server_id)));
+														.where(eq(userMcpTokens.id, userToken.id));
 												}
 											}
 										}
 									}
 								} catch (refreshErr) {
 									console.warn(`${logPrefix} MCP token refresh error for ${mcp.slug}:`, refreshErr);
+								}
 								}
 							} else {
 								token = parsed.access_token;
