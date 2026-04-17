@@ -1,31 +1,25 @@
 /**
  * Shared JSON-RPC caller for MCP servers.
  *
- * Extracted from refreshGenUI.mutation.ts so the refresh path and the
- * external-task executeAction path can share one implementation. Accepts an
- * optional per-user auth token; falls back to the service key when absent.
+ * The `url` is the full MCP endpoint (e.g. `https://dev-mcp.lastmile-tei.com/tasks`).
+ * Callers must resolve it from the `tenant_mcp_servers` record — this module
+ * does not read any env vars or apply defaults. That way a hostname rename
+ * on the provider side takes effect the moment the record is updated in
+ * admin, with no code deploy.
  *
  * Self-healing auth: callers can pass a `refreshToken` callback. When the
- * remote returns 401 (or a body clearly indicating WorkOS JWT rejection),
- * we invoke the callback once, swap the bearer, and retry. Mirrors the same
- * pattern the REST client uses in `lastmile/restClient.ts`. Without this,
- * a stale WorkOS access_token (revoked, rotated, clock skew) forces the
- * user to manually reconnect from mobile every ~15 min even though our
- * refresh_token is still good.
+ * remote returns 401 (or a body clearly indicating bearer rejection), we
+ * invoke the callback once, swap the bearer, and retry. Mirrors the REST
+ * client pattern in `lastmile/restClient.ts`.
  */
 
-const MCP_BASE_URL =
-	process.env.LASTMILE_MCP_BASE_URL || "https://mcp-dev.lastmile-tei.com";
-const MCP_SERVICE_KEY = process.env.LASTMILE_MCP_SERVICE_KEY || "";
-
 export type McpCallArgs = {
-	server: string;
+	/** Full MCP endpoint URL, resolved from `tenant_mcp_servers.url`. */
+	url: string;
 	tool: string;
 	args: Record<string, unknown>;
-	/** Per-user OAuth access token. Overrides the service key when present. */
-	authToken?: string;
-	/** Override the base URL (defaults to LASTMILE_MCP_BASE_URL). */
-	baseUrl?: string;
+	/** Per-user OAuth access token. Required — no service-key fallback. */
+	authToken: string;
 	/** Called when the remote returns 401. Should return a freshly-refreshed
 	 *  access_token (bypassing any cache). Return null to signal unrecoverable
 	 *  auth — the original error will propagate. Invoked at most once per
@@ -44,14 +38,12 @@ function looksLikeAuthFailure(args: {
 	parsed: unknown;
 }): boolean {
 	if (args.status === 401 || args.status === 403) return true;
-	// LastMile's MCP returns plain 401 bodies that AREN'T JSON-RPC shape,
-	// e.g. `{"error":"Failed to validate WorkOS user."}` with HTTP 401.
-	// Belt-and-suspenders: also sniff the body text for the signature phrase
-	// in case status code gets massaged by some proxy.
+	// Some proxies strip status codes; sniff the body too.
 	const haystack = args.rawBody.toLowerCase();
 	return (
 		haystack.includes("failed to validate workos") ||
-		haystack.includes("invalid workos token")
+		haystack.includes("invalid workos token") ||
+		haystack.includes("invalid token")
 	);
 }
 
@@ -59,13 +51,12 @@ async function singleAttempt(opts: {
 	mcpUrl: string;
 	tool: string;
 	bearer: string;
-	bearerKind: string;
 	requestBody: string;
 }): Promise<SingleAttemptOutcome> {
-	const { mcpUrl, tool, bearer, bearerKind, requestBody } = opts;
+	const { mcpUrl, tool, bearer, requestBody } = opts;
 	const bearerPreview = bearer ? `${bearer.slice(0, 12)}…len=${bearer.length}` : "NONE";
 	console.log(
-		`[mcp ${tool}] POST ${mcpUrl} bearer=${bearerKind}(${bearerPreview}) args=${requestBody.slice(0, 200)}`,
+		`[mcp ${tool}] POST ${mcpUrl} bearer=${bearerPreview} args=${requestBody.slice(0, 200)}`,
 	);
 
 	const rpcResponse = await fetch(mcpUrl, {
@@ -95,7 +86,6 @@ async function singleAttempt(opts: {
 	try {
 		parsed = JSON.parse(rawBody);
 	} catch {
-		// Non-JSON body. If this was a 401 (auth), let the caller refresh + retry.
 		if (looksLikeAuthFailure({ status: rpcResponse.status, rawBody, parsed })) {
 			return {
 				kind: "auth_error",
@@ -115,8 +105,6 @@ async function singleAttempt(opts: {
 		};
 	}
 
-	// Auth-level failure (HTTP 401/403, or body signature match). Surface as
-	// auth_error so the caller can force-refresh and retry.
 	if (looksLikeAuthFailure({ status: rpcResponse.status, rawBody, parsed })) {
 		const p = parsed as { error?: unknown };
 		const errText =
@@ -179,15 +167,23 @@ async function singleAttempt(opts: {
 }
 
 export async function callMcpTool({
-	server,
+	url,
 	tool,
 	args,
 	authToken,
-	baseUrl,
 	refreshToken,
 }: McpCallArgs): Promise<unknown> {
-	const mcpUrl = `${baseUrl || MCP_BASE_URL}/${server}`;
-	const bearerKind = authToken ? "user" : "service";
+	if (!url) {
+		throw new Error(
+			`[mcp ${tool}] url is required — resolve from tenant_mcp_servers.url; no default is applied`,
+		);
+	}
+	if (!authToken) {
+		throw new Error(
+			`[mcp ${tool}] authToken is required — no service-key fallback`,
+		);
+	}
+
 	const requestBody = JSON.stringify({
 		jsonrpc: "2.0",
 		id: 1,
@@ -195,13 +191,12 @@ export async function callMcpTool({
 		params: { name: tool, arguments: args },
 	});
 
-	let currentBearer = authToken || MCP_SERVICE_KEY;
+	let currentBearer = authToken;
 
 	const first = await singleAttempt({
-		mcpUrl,
+		mcpUrl: url,
 		tool,
 		bearer: currentBearer,
-		bearerKind,
 		requestBody,
 	});
 	if (first.kind === "ok") return first.value;
@@ -229,10 +224,9 @@ export async function callMcpTool({
 	currentBearer = refreshed;
 
 	const second = await singleAttempt({
-		mcpUrl,
+		mcpUrl: url,
 		tool,
 		bearer: currentBearer,
-		bearerKind,
 		requestBody,
 	});
 	if (second.kind === "ok") return second.value;

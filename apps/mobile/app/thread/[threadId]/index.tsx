@@ -217,15 +217,6 @@ export default function ThreadDetailRoute() {
     }
   }, [threadEvent?.onThreadUpdated?.updatedAt]);
 
-  // Debug logging
-  if (__DEV__ && turns.length > 0) {
-    const t0 = turns[0];
-    const rj = t0?.resultJson;
-    const parsed = typeof rj === "string" ? (() => { try { return JSON.parse(rj); } catch { return null; } })() : rj;
-    console.log("[ThreadDetail] messages:", messages.length, "turns:", turns.length);
-    console.log("[ThreadDetail] turn[0]:", { status: t0?.status, resultJsonType: typeof rj, keys: parsed ? Object.keys(parsed) : null, responsePreview: (parsed?.response || parsed?.responseText || parsed?.content || "NONE")?.substring?.(0, 80) });
-  }
-
   // ── Task state ──
   const [, executeUpdateThread] = useMutation(UpdateThreadMutation);
   const isTask = thread?.channel?.toUpperCase() === "TASK";

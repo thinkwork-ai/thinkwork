@@ -3,15 +3,17 @@
  * envelope (item + blocks + form). Used by both the Phase 5 refresh branch
  * and the Phase 2 executeAction path after a mutation.
  *
- * The server's tool is `tasks_get` (pluralized) and it takes a `task_id`
- * argument — both confirmed against `tools/list` on mcp-dev.lastmile-tei.com.
+ * The tool name is `tasks_get` (pluralized) and the argument is `task_id`.
  * Earlier naming (`task_get` + `id`) was inferred, not probed, and caused the
  * "MCP error" banner on the mobile ExternalTaskCard refresh path.
+ *
+ * The MCP URL is resolved from `tenant_mcp_servers.url` by the ctx-builder
+ * upstream; this file has no hardcoded hostname.
  */
 
 import type { AdapterCallContext, ExternalTaskEnvelope } from "../../types.js";
 import { callMcpTool } from "../../mcpClient.js";
-import { LASTMILE_MCP_SERVER, LASTMILE_TOOLS } from "./constants.js";
+import { LASTMILE_TOOLS } from "./constants.js";
 import { normalizeLastmileTask } from "./normalizeItem.js";
 import { buildLastmileBlocks } from "./buildBlocks.js";
 import { buildLastmileEditForm } from "./buildFormSchema.js";
@@ -23,8 +25,17 @@ export async function refreshLastmileTask(args: {
 }): Promise<ExternalTaskEnvelope> {
 	const { externalTaskId, ctx } = args;
 
+	if (!ctx.mcpServerUrl) {
+		throw new Error(
+			"[lastmile] refresh requires ctx.mcpServerUrl — resolve from tenant_mcp_servers.url before calling",
+		);
+	}
+	if (!ctx.authToken) {
+		throw new Error("[lastmile] refresh requires ctx.authToken");
+	}
+
 	const raw = await callMcpTool({
-		server: LASTMILE_MCP_SERVER,
+		url: ctx.mcpServerUrl,
 		tool: LASTMILE_TOOLS.get,
 		args: { task_id: externalTaskId },
 		authToken: ctx.authToken,

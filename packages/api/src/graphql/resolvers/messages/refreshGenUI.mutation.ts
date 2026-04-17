@@ -18,7 +18,10 @@ import {
 import { callMcpTool } from "../../../integrations/external-work-items/mcpClient.js";
 import { getAdapter, hasAdapter } from "../../../integrations/external-work-items/index.js";
 import type { TaskProvider } from "../../../integrations/external-work-items/types.js";
-import { resolveOAuthToken } from "../../../lib/oauth-token.js";
+import {
+	resolveOAuthToken,
+	resolveLastmileTasksMcpServer,
+} from "../../../lib/oauth-token.js";
 import { GENUI_REFRESH_MAP, inferServerFromTool } from "./genui-refresh-legacy.js";
 
 type ExternalSource = {
@@ -69,10 +72,24 @@ export const refreshGenUI = async (_parent: unknown, args: { messageId: string; 
 		if (connectionId && tenantId && providerId) {
 			authToken = (await resolveOAuthToken(connectionId, tenantId, providerId)) ?? undefined;
 		}
+		const tasksMcp =
+			provider === "lastmile"
+				? await resolveLastmileTasksMcpServer(tenantId)
+				: null;
+		if (provider === "lastmile" && !tasksMcp) {
+			throw new Error(
+				`No LastMile Tasks MCP server configured for tenant ${tenantId} — reconnect LastMile`,
+			);
+		}
 
 		const envelope = await getAdapter(provider).refresh({
 			externalTaskId,
-			ctx: { tenantId, connectionId, authToken },
+			ctx: {
+				tenantId,
+				connectionId,
+				authToken,
+				mcpServerUrl: tasksMcp?.url,
+			},
 		});
 
 		const updatedResults = [...toolResults];
@@ -89,42 +106,15 @@ export const refreshGenUI = async (_parent: unknown, args: { messageId: string; 
 		return updated ? snakeToCamel(updated) : null;
 	}
 
-	// 3b. legacy path — prefer `_source.tool`, fall back to static map
-	let server: string;
-	let tool: string;
-	let params: Record<string, unknown>;
-	if (source?.tool) {
-		tool = source.tool;
-		params = source.params || {};
-		server = inferServerFromTool(tool);
-	} else {
-		const refreshConfig = GENUI_REFRESH_MAP[genuiType];
-		if (!refreshConfig) {
-			throw new Error(`No refresh mapping for GenUI type: ${genuiType}`);
-		}
-		server = refreshConfig.server;
-		tool = refreshConfig.tool;
-		params = refreshConfig.buildParams(currentResult);
-	}
-
-	const freshResult = await callMcpTool({ server, tool, args: params });
-
-	const updatedResults = [...toolResults];
-	if (freshResult && typeof freshResult === "object") {
-		const resultObj = freshResult as Record<string, unknown>;
-		updatedResults[toolIndex] = {
-			...resultObj,
-			_type: genuiType,
-			_source: source || { tool, params },
-			_refreshedAt: new Date().toISOString(),
-		};
-	}
-
-	const [updated] = await db
-		.update(messages)
-		.set({ tool_results: updatedResults })
-		.where(eq(messages.id, messageId))
-		.returning();
-
-	return updated ? snakeToCamel(updated) : null;
+	// 3b. legacy CRM/places path — not yet wired to tenant_mcp_servers.
+	// TODO(mcp-url-record): resolve URL + auth from tenant_mcp_servers by
+	// (tenantId, server-path-suffix) and re-enable. Failing loudly here
+	// beats silently pointing at a hardcoded host. External-task refresh
+	// (the common path) works via 3a above.
+	const legacyTool = source?.tool ?? GENUI_REFRESH_MAP[genuiType]?.tool;
+	void inferServerFromTool; // retain import until follow-up wires it back
+	void callMcpTool; // retain import until follow-up wires it back
+	throw new Error(
+		`[refreshGenUI] legacy refresh path disabled pending tenant_mcp_servers wiring (tool=${legacyTool ?? "?"}, genuiType=${genuiType}).`,
+	);
 };

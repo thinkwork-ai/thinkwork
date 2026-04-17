@@ -55,6 +55,7 @@ const BASE_CTX = {
 	userId: "user-1",
 	connectionId: "conn-1",
 	authToken: "access-token",
+	mcpServerUrl: "https://mcp-test.invalid/tasks",
 };
 
 beforeEach(() => {
@@ -168,7 +169,11 @@ describe("executeLastmileAction — missing auth token", () => {
 				actionType: "external_task.update_status",
 				externalTaskId: "task_1",
 				params: { value: "status_x" },
-				ctx: { tenantId: "tenant-1", userId: "user-1", connectionId: "conn-1" },
+				ctx: {
+					tenantId: "tenant-1",
+					userId: "user-1",
+					connectionId: "conn-1",
+				},
 			}),
 		).rejects.toThrow(/per-user OAuth token/i);
 

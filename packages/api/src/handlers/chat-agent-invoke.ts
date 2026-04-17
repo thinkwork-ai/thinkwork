@@ -25,6 +25,7 @@ import {
   buildSkillEnvOverrides,
   resolveConnectionForUser,
   forceRefreshLastmileUserToken,
+  resolveLastmileTasksMcpServer,
 } from "../lib/oauth-token.js";
 import { getOrMintLastmilePat } from "../lib/lastmile-pat.js";
 import { buildMcpConfigs } from "../lib/mcp-configs.js";
@@ -1003,12 +1004,15 @@ async function stampThreadFromWorkflowTaskCreate(args: {
       );
       if (conn) {
         connMeta = conn;
-        const authToken = await getOrMintLastmilePat({
-          userId: args.userId,
-          getFreshWorkosJwt: () =>
-            forceRefreshLastmileUserToken(conn.connectionId, args.tenantId),
-        });
-        if (authToken) {
+        const [authToken, tasksMcp] = await Promise.all([
+          getOrMintLastmilePat({
+            userId: args.userId,
+            getFreshWorkosJwt: () =>
+              forceRefreshLastmileUserToken(conn.connectionId, args.tenantId),
+          }),
+          resolveLastmileTasksMcpServer(args.tenantId),
+        ]);
+        if (authToken && tasksMcp) {
           envelope = await refreshLastmileTask({
             externalTaskId,
             ctx: {
@@ -1016,8 +1020,13 @@ async function stampThreadFromWorkflowTaskCreate(args: {
               userId: args.userId,
               connectionId: conn.connectionId,
               authToken,
+              mcpServerUrl: tasksMcp.url,
             },
           });
+        } else if (authToken && !tasksMcp) {
+          console.warn(
+            `[chat-agent-invoke] envelope fetch skipped — tenant ${args.tenantId} has no LastMile Tasks MCP record`,
+          );
         }
       }
     } catch (err) {

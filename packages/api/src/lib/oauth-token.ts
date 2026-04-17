@@ -164,6 +164,37 @@ export async function resolveConnectionForUser(
 }
 
 /**
+ * Resolve the tenant's LastMile Tasks MCP server record. Returns the
+ * stored `{ id, url }` pulled live from `tenant_mcp_servers` — NOT a
+ * cached default. Callers feed `url` straight into `callMcpTool` so a
+ * hostname rename in admin takes effect immediately with no deploy.
+ *
+ * Returns null when no matching record exists — callers should surface
+ * that as "reconnect LastMile on mobile" rather than falling back to
+ * any hardcoded URL.
+ */
+export async function resolveLastmileTasksMcpServer(
+	tenantId: string,
+): Promise<{ id: string; url: string } | null> {
+	const rows = await db
+		.select({
+			id: tenantMcpServers.id,
+			url: tenantMcpServers.url,
+			enabled: tenantMcpServers.enabled,
+		})
+		.from(tenantMcpServers)
+		.where(eq(tenantMcpServers.tenant_id, tenantId));
+	const match = rows.find(
+		(r) =>
+			r.enabled &&
+			r.url.toLowerCase().includes("lastmile") &&
+			r.url.toLowerCase().includes("/tasks"),
+	);
+	if (!match) return null;
+	return { id: match.id, url: match.url };
+}
+
+/**
  * Resolve a fresh OAuth access token for a given connection.
  * Returns the access token string, or null if resolution fails.
  *

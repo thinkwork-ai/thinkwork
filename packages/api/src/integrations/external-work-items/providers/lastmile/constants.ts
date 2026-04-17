@@ -8,9 +8,6 @@
 
 import type { TaskOption } from "../../types.js";
 
-/** MCP server subpath (appended to LASTMILE_MCP_BASE_URL). */
-export const LASTMILE_MCP_SERVER = "tasks";
-
 /** MCP tool names exposed by the LastMile Tasks server.
  *
  * Ground-truth names come from LastMile's `tools/list` JSON-RPC response

@@ -221,6 +221,12 @@ export type AdapterCallContext = {
 	connectionId?: string;
 	/** Per-user OAuth access token — required for mutating calls. */
 	authToken?: string;
+	/**
+	 * Full MCP server URL resolved from `tenant_mcp_servers.url`. Required for
+	 * any provider that talks to an MCP server. No hardcoded fallback — the
+	 * ctx-builder queries the record once per call.
+	 */
+	mcpServerUrl?: string;
 };
 
 export interface ExternalWorkItemAdapter {
