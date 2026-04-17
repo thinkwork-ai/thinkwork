@@ -26,6 +26,7 @@ import {
 import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core";
 import { agents } from "./agents";
+import { agentTemplates } from "./agent-templates";
 
 // ---------------------------------------------------------------------------
 // eval_test_cases — Studio-managed test definitions
@@ -44,6 +45,13 @@ export const evalTestCases = pgTable(
 		category: text("category").notNull(), // free-form grouping label (e.g. "tool-safety", "red-team")
 		query: text("query").notNull(), // user-facing prompt sent to the agent
 		system_prompt: text("system_prompt"), // optional override for the agent's system prompt
+		// agent_template_id: which agent template to instantiate as the
+		// "agent under test" for this case. Different templates expose
+		// different tool surfaces, so a test like "should refuse to web-
+		// search" only makes sense against a template that lacks web search.
+		// Null = use the run-level default (eval-runner falls back to a
+		// generic test agent).
+		agent_template_id: uuid("agent_template_id").references(() => agentTemplates.id),
 		// assertions: deterministic checks evaluated by our custom code-based
 		// AgentCore evaluator. Shape: [{ type: "contains" | "regex" | "equals" |
 		// "json-path", value: string, ... }]
@@ -90,6 +98,11 @@ export const evalRuns = pgTable(
 			.references(() => tenants.id)
 			.notNull(),
 		agent_id: uuid("agent_id").references(() => agents.id),
+		// Run-level agent template — picked when the user clicks Run
+		// Evaluation. Determines the workspace/tools/model the eval test
+		// agent loads for every test case in this run, unless the test
+		// case overrides via its own agent_template_id.
+		agent_template_id: uuid("agent_template_id").references(() => agentTemplates.id),
 		status: text("status").notNull().default("pending"), // 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
 		model: text("model"), // model_id used for the agent under test (informational)
 		categories: text("categories").array().notNull().default(sql`'{}'::text[]`),
@@ -180,6 +193,10 @@ export const evalTestCasesRelations = relations(
 			fields: [evalTestCases.tenant_id],
 			references: [tenants.id],
 		}),
+		agentTemplate: one(agentTemplates, {
+			fields: [evalTestCases.agent_template_id],
+			references: [agentTemplates.id],
+		}),
 		results: many(evalResults),
 	}),
 );
@@ -192,6 +209,10 @@ export const evalRunsRelations = relations(evalRuns, ({ one, many }) => ({
 	agent: one(agents, {
 		fields: [evalRuns.agent_id],
 		references: [agents.id],
+	}),
+	agentTemplate: one(agentTemplates, {
+		fields: [evalRuns.agent_template_id],
+		references: [agentTemplates.id],
 	}),
 	results: many(evalResults),
 }));

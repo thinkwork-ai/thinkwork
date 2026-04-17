@@ -24,7 +24,7 @@
 
 import { eq, and, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
-import { evalRuns, evalResults, evalTestCases, costEvents } from "@thinkwork/database-pg/schema";
+import { evalRuns, evalResults, evalTestCases, costEvents, agentTemplates } from "@thinkwork/database-pg/schema";
 import {
 	BedrockAgentCoreClient,
 	InvokeAgentRuntimeCommand,
@@ -120,6 +120,13 @@ function evaluateAssertion(assertion: Assertion, output: string): boolean {
 	}
 }
 
+interface AgentTemplateConfig {
+	model?: string | null;
+	system_prompt?: string | null;
+	skills?: unknown;
+	knowledge_base_ids?: unknown;
+}
+
 async function invokeAgent(
 	runtimeArn: string,
 	sessionId: string,
@@ -128,6 +135,7 @@ async function invokeAgent(
 	tenantSlug: string,
 	prompt: string,
 	systemPrompt: string | null,
+	templateConfig?: AgentTemplateConfig | null,
 ): Promise<{ output: string; durationMs: number }> {
 	const start = Date.now();
 	const payload: Record<string, unknown> = {
@@ -138,6 +146,23 @@ async function invokeAgent(
 		tenant_slug: tenantSlug,
 		use_memory: false,
 	};
+	// Apply agent-template overrides if the test case pinned one. The
+	// per-test system_prompt argument wins if set; otherwise the template's
+	// system_prompt does. Same precedence for model. Skills are passed
+	// through as-is so the agent under test gets the template's exact tool
+	// surface — this is what makes "the agent should refuse to web-search
+	// because the template doesn't grant it" actually verifiable.
+	//
+	// Knowledge-base IDs and MCP/guardrail bindings are stored on the
+	// template but require extra joins (KB configs, MCP gateway URLs,
+	// guardrail ARNs). Wiring those into the payload is a follow-up; for
+	// now the most load-bearing fields (model + system_prompt + skills)
+	// are honored.
+	if (templateConfig) {
+		if (templateConfig.model) payload.model = templateConfig.model;
+		if (templateConfig.skills) payload.skills = templateConfig.skills;
+		if (!systemPrompt && templateConfig.system_prompt) payload.system_prompt = templateConfig.system_prompt;
+	}
 	if (systemPrompt) payload.system_prompt = systemPrompt;
 	const resp = await ac.send(
 		new InvokeAgentRuntimeCommand({
@@ -262,7 +287,39 @@ export async function handler(event: EvalRunnerEvent): Promise<{ ok: boolean; ru
 		const evaluatorResults: EvaluatorResult[] = [];
 
 		try {
-			const inv = await invokeAgent(runtimeArn, sessionId, run.tenant_id, run.agent_id ?? "eval-test-agent", "dev", tc.query, tc.system_prompt);
+			// Resolve which template config to load. Test-case-level pin
+			// wins over run-level. If neither is set, no template config
+			// is applied and the runtime uses its built-in defaults.
+			const templateId = tc.agent_template_id ?? run.agent_template_id ?? null;
+			let templateConfig: AgentTemplateConfig | null = null;
+			if (templateId) {
+				const [tpl] = await db
+					.select({
+						model: agentTemplates.model,
+						config: agentTemplates.config,
+						skills: agentTemplates.skills,
+					})
+					.from(agentTemplates)
+					.where(eq(agentTemplates.id, templateId));
+				if (tpl) {
+					const cfg = (tpl.config ?? {}) as { system_prompt?: string };
+					templateConfig = {
+						model: tpl.model,
+						system_prompt: cfg.system_prompt ?? null,
+						skills: tpl.skills,
+					};
+				}
+			}
+			const inv = await invokeAgent(
+				runtimeArn,
+				sessionId,
+				run.tenant_id,
+				run.agent_id ?? "eval-test-agent",
+				"dev",
+				tc.query,
+				tc.system_prompt,
+				templateConfig,
+			);
 			actualOutput = inv.output;
 			durationMs = inv.durationMs;
 

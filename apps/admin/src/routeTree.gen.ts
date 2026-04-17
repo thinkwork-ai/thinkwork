@@ -53,6 +53,7 @@ import { Route as AuthedTenantAgentsAgentIdRouteImport } from './routes/_authed/
 import { Route as AuthedTenantAgentTemplatesDefaultsRouteImport } from './routes/_authed/_tenant/agent-templates/defaults'
 import { Route as AuthedTenantAgentTemplatesTemplateIdRouteImport } from './routes/_authed/_tenant/agent-templates/$templateId'
 import { Route as AuthedTenantEvaluationsStudioIndexRouteImport } from './routes/_authed/_tenant/evaluations/studio/index'
+import { Route as AuthedTenantEvaluationsStudioNewRouteImport } from './routes/_authed/_tenant/evaluations/studio/new'
 import { Route as AuthedTenantAgentsAgentIdWorkspacesRouteImport } from './routes/_authed/_tenant/agents/$agentId_.workspaces'
 import { Route as AuthedTenantAgentsAgentIdWorkspaceRouteImport } from './routes/_authed/_tenant/agents/$agentId_.workspace'
 import { Route as AuthedTenantAgentsAgentIdSubAgentsRouteImport } from './routes/_authed/_tenant/agents/$agentId_.sub-agents'
@@ -61,6 +62,7 @@ import { Route as AuthedTenantAgentsAgentIdMemoryRouteImport } from './routes/_a
 import { Route as AuthedTenantAgentsAgentIdKnowledgeRouteImport } from './routes/_authed/_tenant/agents/$agentId_.knowledge'
 import { Route as AuthedTenantAgentTemplatesTemplateIdSyncRouteImport } from './routes/_authed/_tenant/agent-templates/$templateId_.sync'
 import { Route as AuthedTenantAgentsAgentIdScheduledJobsIndexRouteImport } from './routes/_authed/_tenant/agents/$agentId_.scheduled-jobs.index'
+import { Route as AuthedTenantEvaluationsStudioEditTestCaseIdRouteImport } from './routes/_authed/_tenant/evaluations/studio/edit.$testCaseId'
 import { Route as AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRouteImport } from './routes/_authed/_tenant/agents/$agentId_.scheduled-jobs.$scheduledJobId'
 
 const SignInRoute = SignInRouteImport.update({
@@ -306,6 +308,12 @@ const AuthedTenantEvaluationsStudioIndexRoute =
     path: '/evaluations/studio/',
     getParentRoute: () => AuthedTenantRoute,
   } as any)
+const AuthedTenantEvaluationsStudioNewRoute =
+  AuthedTenantEvaluationsStudioNewRouteImport.update({
+    id: '/evaluations/studio/new',
+    path: '/evaluations/studio/new',
+    getParentRoute: () => AuthedTenantRoute,
+  } as any)
 const AuthedTenantAgentsAgentIdWorkspacesRoute =
   AuthedTenantAgentsAgentIdWorkspacesRouteImport.update({
     id: '/agents/$agentId_/workspaces',
@@ -352,6 +360,12 @@ const AuthedTenantAgentsAgentIdScheduledJobsIndexRoute =
   AuthedTenantAgentsAgentIdScheduledJobsIndexRouteImport.update({
     id: '/agents/$agentId_/scheduled-jobs/',
     path: '/agents/$agentId/scheduled-jobs/',
+    getParentRoute: () => AuthedTenantRoute,
+  } as any)
+const AuthedTenantEvaluationsStudioEditTestCaseIdRoute =
+  AuthedTenantEvaluationsStudioEditTestCaseIdRouteImport.update({
+    id: '/evaluations/studio/edit/$testCaseId',
+    path: '/evaluations/studio/edit/$testCaseId',
     getParentRoute: () => AuthedTenantRoute,
   } as any)
 const AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute =
@@ -410,8 +424,10 @@ export interface FileRoutesByFullPath {
   '/agents/$agentId/sub-agents': typeof AuthedTenantAgentsAgentIdSubAgentsRoute
   '/agents/$agentId/workspace': typeof AuthedTenantAgentsAgentIdWorkspaceRoute
   '/agents/$agentId/workspaces': typeof AuthedTenantAgentsAgentIdWorkspacesRoute
+  '/evaluations/studio/new': typeof AuthedTenantEvaluationsStudioNewRoute
   '/evaluations/studio/': typeof AuthedTenantEvaluationsStudioIndexRoute
   '/agents/$agentId/scheduled-jobs/$scheduledJobId': typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute
+  '/evaluations/studio/edit/$testCaseId': typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute
   '/agents/$agentId/scheduled-jobs/': typeof AuthedTenantAgentsAgentIdScheduledJobsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -463,8 +479,10 @@ export interface FileRoutesByTo {
   '/agents/$agentId/sub-agents': typeof AuthedTenantAgentsAgentIdSubAgentsRoute
   '/agents/$agentId/workspace': typeof AuthedTenantAgentsAgentIdWorkspaceRoute
   '/agents/$agentId/workspaces': typeof AuthedTenantAgentsAgentIdWorkspacesRoute
+  '/evaluations/studio/new': typeof AuthedTenantEvaluationsStudioNewRoute
   '/evaluations/studio': typeof AuthedTenantEvaluationsStudioIndexRoute
   '/agents/$agentId/scheduled-jobs/$scheduledJobId': typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute
+  '/evaluations/studio/edit/$testCaseId': typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute
   '/agents/$agentId/scheduled-jobs': typeof AuthedTenantAgentsAgentIdScheduledJobsIndexRoute
 }
 export interface FileRoutesById {
@@ -519,8 +537,10 @@ export interface FileRoutesById {
   '/_authed/_tenant/agents/$agentId_/sub-agents': typeof AuthedTenantAgentsAgentIdSubAgentsRoute
   '/_authed/_tenant/agents/$agentId_/workspace': typeof AuthedTenantAgentsAgentIdWorkspaceRoute
   '/_authed/_tenant/agents/$agentId_/workspaces': typeof AuthedTenantAgentsAgentIdWorkspacesRoute
+  '/_authed/_tenant/evaluations/studio/new': typeof AuthedTenantEvaluationsStudioNewRoute
   '/_authed/_tenant/evaluations/studio/': typeof AuthedTenantEvaluationsStudioIndexRoute
   '/_authed/_tenant/agents/$agentId_/scheduled-jobs/$scheduledJobId': typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute
+  '/_authed/_tenant/evaluations/studio/edit/$testCaseId': typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute
   '/_authed/_tenant/agents/$agentId_/scheduled-jobs/': typeof AuthedTenantAgentsAgentIdScheduledJobsIndexRoute
 }
 export interface FileRouteTypes {
@@ -574,8 +594,10 @@ export interface FileRouteTypes {
     | '/agents/$agentId/sub-agents'
     | '/agents/$agentId/workspace'
     | '/agents/$agentId/workspaces'
+    | '/evaluations/studio/new'
     | '/evaluations/studio/'
     | '/agents/$agentId/scheduled-jobs/$scheduledJobId'
+    | '/evaluations/studio/edit/$testCaseId'
     | '/agents/$agentId/scheduled-jobs/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -627,8 +649,10 @@ export interface FileRouteTypes {
     | '/agents/$agentId/sub-agents'
     | '/agents/$agentId/workspace'
     | '/agents/$agentId/workspaces'
+    | '/evaluations/studio/new'
     | '/evaluations/studio'
     | '/agents/$agentId/scheduled-jobs/$scheduledJobId'
+    | '/evaluations/studio/edit/$testCaseId'
     | '/agents/$agentId/scheduled-jobs'
   id:
     | '__root__'
@@ -682,8 +706,10 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/agents/$agentId_/sub-agents'
     | '/_authed/_tenant/agents/$agentId_/workspace'
     | '/_authed/_tenant/agents/$agentId_/workspaces'
+    | '/_authed/_tenant/evaluations/studio/new'
     | '/_authed/_tenant/evaluations/studio/'
     | '/_authed/_tenant/agents/$agentId_/scheduled-jobs/$scheduledJobId'
+    | '/_authed/_tenant/evaluations/studio/edit/$testCaseId'
     | '/_authed/_tenant/agents/$agentId_/scheduled-jobs/'
   fileRoutesById: FileRoutesById
 }
@@ -1006,6 +1032,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedTenantEvaluationsStudioIndexRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
+    '/_authed/_tenant/evaluations/studio/new': {
+      id: '/_authed/_tenant/evaluations/studio/new'
+      path: '/evaluations/studio/new'
+      fullPath: '/evaluations/studio/new'
+      preLoaderRoute: typeof AuthedTenantEvaluationsStudioNewRouteImport
+      parentRoute: typeof AuthedTenantRoute
+    }
     '/_authed/_tenant/agents/$agentId_/workspaces': {
       id: '/_authed/_tenant/agents/$agentId_/workspaces'
       path: '/agents/$agentId/workspaces'
@@ -1062,6 +1095,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedTenantAgentsAgentIdScheduledJobsIndexRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
+    '/_authed/_tenant/evaluations/studio/edit/$testCaseId': {
+      id: '/_authed/_tenant/evaluations/studio/edit/$testCaseId'
+      path: '/evaluations/studio/edit/$testCaseId'
+      fullPath: '/evaluations/studio/edit/$testCaseId'
+      preLoaderRoute: typeof AuthedTenantEvaluationsStudioEditTestCaseIdRouteImport
+      parentRoute: typeof AuthedTenantRoute
+    }
     '/_authed/_tenant/agents/$agentId_/scheduled-jobs/$scheduledJobId': {
       id: '/_authed/_tenant/agents/$agentId_/scheduled-jobs/$scheduledJobId'
       path: '/agents/$agentId/scheduled-jobs/$scheduledJobId'
@@ -1116,8 +1156,10 @@ interface AuthedTenantRouteChildren {
   AuthedTenantAgentsAgentIdSubAgentsRoute: typeof AuthedTenantAgentsAgentIdSubAgentsRoute
   AuthedTenantAgentsAgentIdWorkspaceRoute: typeof AuthedTenantAgentsAgentIdWorkspaceRoute
   AuthedTenantAgentsAgentIdWorkspacesRoute: typeof AuthedTenantAgentsAgentIdWorkspacesRoute
+  AuthedTenantEvaluationsStudioNewRoute: typeof AuthedTenantEvaluationsStudioNewRoute
   AuthedTenantEvaluationsStudioIndexRoute: typeof AuthedTenantEvaluationsStudioIndexRoute
   AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute: typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute
+  AuthedTenantEvaluationsStudioEditTestCaseIdRoute: typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute
   AuthedTenantAgentsAgentIdScheduledJobsIndexRoute: typeof AuthedTenantAgentsAgentIdScheduledJobsIndexRoute
 }
 
@@ -1173,10 +1215,13 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
     AuthedTenantAgentsAgentIdWorkspaceRoute,
   AuthedTenantAgentsAgentIdWorkspacesRoute:
     AuthedTenantAgentsAgentIdWorkspacesRoute,
+  AuthedTenantEvaluationsStudioNewRoute: AuthedTenantEvaluationsStudioNewRoute,
   AuthedTenantEvaluationsStudioIndexRoute:
     AuthedTenantEvaluationsStudioIndexRoute,
   AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute:
     AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute,
+  AuthedTenantEvaluationsStudioEditTestCaseIdRoute:
+    AuthedTenantEvaluationsStudioEditTestCaseIdRoute,
   AuthedTenantAgentsAgentIdScheduledJobsIndexRoute:
     AuthedTenantAgentsAgentIdScheduledJobsIndexRoute,
 }
