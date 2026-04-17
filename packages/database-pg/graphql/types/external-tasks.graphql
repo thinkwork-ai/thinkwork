@@ -11,15 +11,21 @@ type ExternalTaskActionResult {
 }
 
 # Input for `createLastmileTask`, the mutation the agent invokes after
-# the user submits the LastMile task-intake form. All fields except
-# `threadId` map one-to-one to the fields collected by
-# `lastmile-tasks/references/task-intake-form.json`.
+# the user submits the LastMile task-intake form. The per-column fields
+# (description / priority / dueDate / assigneeEmail) drive the legacy
+# `POST /tasks` path and are used when the workflow has no `skill` block.
+#
+# When the workflow ships a populated `skill.form`, the agent instead
+# passes `formResponse` (the opaque `{form_id, values}` payload LastMile
+# renders against its workflow-specific schema), and the per-column
+# fields are ignored. See `lastmile-workflow-skill-proposal.md`.
 input CreateLastmileTaskInput {
   threadId: ID!
   description: String
   priority: String
   dueDate: AWSDateTime
   assigneeEmail: String
+  formResponse: AWSJSON
 }
 
 extend type Mutation {

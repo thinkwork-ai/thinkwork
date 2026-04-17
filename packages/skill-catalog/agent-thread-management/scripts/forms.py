@@ -111,7 +111,11 @@ def _coerce_prefill(prefill: dict, schema: dict) -> dict:
 
 
 @_safe
-def present_form(form_path: str, prefill_json: str = "") -> str:
+def present_form(
+    form_path: str = "",
+    prefill_json: str = "",
+    form_json: str = "",
+) -> str:
     """Render a Question Card form for the user to fill out and submit.
 
     Use this tool when a task recipe needs structured intake from the user.
@@ -123,30 +127,47 @@ def present_form(form_path: str, prefill_json: str = "") -> str:
     with all the submitted values as JSON. Parse it and proceed.
 
     Args:
-        form_path: Path to the form schema JSON file. Either skill-relative
-            (e.g. 'customer-onboarding/references/intake-form.json') or
-            absolute under /app/skills.
+        form_path: Path to a form schema JSON file bundled with a skill.
+            Either skill-relative (e.g.
+            'customer-onboarding/references/intake-form.json') or absolute
+            under /app/skills. Use this for hardcoded forms shipped inside
+            a skill. Mutually exclusive with `form_json`.
         prefill_json: Optional JSON string mapping field id -> prefilled
             value. Extract obvious values from the user's first message.
             Example: '{"name": "Beta, LLC", "fuel_customer": true}'.
             Pass an empty string when there is nothing to prefill.
+        form_json: Inline JSON string of a form schema — use this when
+            the schema comes from system-prompt context (e.g. a
+            workflow-skill block) rather than a file on disk. Same shape
+            as the file contents pointed at by `form_path`. Mutually
+            exclusive with `form_path`.
 
     Returns:
         JSON envelope with `_type: "question_card"` that the frontend
         renders as a form. Returns `{"error": "..."}` on failure — the
         agent should fall back to conversational intake in that case.
     """
-    if not form_path:
-        raise ValueError("form_path is required")
+    if bool(form_path) == bool(form_json):
+        raise ValueError(
+            "exactly one of form_path or form_json is required"
+        )
 
-    resolved = _resolve_form_path(form_path)
-    if not os.path.isfile(resolved):
-        raise FileNotFoundError(f"form schema not found at {resolved}")
+    source_desc: str
+    if form_json:
+        try:
+            schema = json.loads(form_json)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"form_json is not valid JSON: {exc}") from exc
+        source_desc = f"inline(form_id={schema.get('id') if isinstance(schema, dict) else '?'})"
+    else:
+        resolved = _resolve_form_path(form_path)
+        if not os.path.isfile(resolved):
+            raise FileNotFoundError(f"form schema not found at {resolved}")
+        with open(resolved, encoding="utf-8") as f:
+            schema = json.load(f)
+        source_desc = form_path
 
-    with open(resolved, encoding="utf-8") as f:
-        schema = json.load(f)
-
-    _validate_schema(schema, form_path)
+    _validate_schema(schema, source_desc)
 
     prefill: dict = {}
     if prefill_json:
@@ -163,7 +184,12 @@ def present_form(form_path: str, prefill_json: str = "") -> str:
         "form_id": schema["id"],
         "schema": schema,
         "values": prefill,
-        "_source": {"tool": "present_form", "params": {"form_path": form_path}},
+        "_source": {
+            "tool": "present_form",
+            "params": (
+                {"form_json": "(inline)"} if form_json else {"form_path": form_path}
+            ),
+        },
         "_refreshedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
     return json.dumps(envelope)
