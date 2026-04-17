@@ -142,21 +142,15 @@ describe("GraphQL Schema Contract", () => {
 			"onThreadTurnUpdated",
 			"onOrgUpdated",
 			"onCostRecorded",
+			// Added in the evals migration (PR #147 — Phase 2 wires this
+			// subscription via @aws_subscribe so the Studio + dashboard
+			// live-update while the eval-runner Lambda processes a run).
+			"onEvalRunUpdated",
 		];
 
 		for (const s of expectedSubscriptions) {
 			it(`has Subscription.${s}`, () => {
 				expect(subFields).toContain(s);
-			});
-		}
-
-		const cutSubscriptions = [
-			"onEvalRunUpdated",
-		];
-
-		for (const s of cutSubscriptions) {
-			it(`does NOT have cut Subscription.${s}`, () => {
-				expect(subFields).not.toContain(s);
 			});
 		}
 	});
@@ -175,10 +169,14 @@ describe("GraphQL Schema Contract", () => {
 			expect(sdl).not.toContain("ontologyNodeTypes");
 		});
 
-		it("no eval types", () => {
-			expect(sdl).not.toContain("EvalRun");
-			expect(sdl).not.toContain("EvalTestCase");
-			expect(sdl).not.toContain("evalRuns");
+		// Eval types were originally cut from v1 but landed in PR #147
+		// (Evaluations migration from maniflow). Sanity-check the schema
+		// does carry the surface the Studio + eval-runner depend on.
+		it("has eval types", () => {
+			expect(sdl).toContain("type EvalRun");
+			expect(sdl).toContain("type EvalTestCase");
+			expect(sdl).toContain("evalRuns(");
+			expect(sdl).toContain("startEvalRun(");
 		});
 
 		it("no KG extract mutation", () => {

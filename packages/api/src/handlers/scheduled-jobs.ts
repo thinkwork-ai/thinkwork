@@ -30,6 +30,7 @@ import {
 	threadTurnEvents,
 	agentWakeupRequests,
 	agents,
+	evalRuns,
 } from "@thinkwork/database-pg/schema";
 import { db } from "../lib/db.js";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
@@ -403,6 +404,41 @@ async function fireScheduledJob(
 	if (!trig) return notFound("Trigger not found");
 
 	const isAgentTrigger = trig.trigger_type.startsWith("agent_");
+	const isEvalTrigger = trig.trigger_type === "eval_scheduled";
+
+	if (isEvalTrigger) {
+		// Manual fire of an eval schedule: insert a pending eval_run + fire
+		// the eval-runner Lambda. Mirrors the EventBridge path in
+		// packages/lambda/job-trigger.ts.
+		const cfg = (trig.config ?? {}) as {
+			agentId?: string;
+			model?: string;
+			categories?: string[];
+		};
+		const [run] = await db.insert(evalRuns).values({
+			tenant_id: tenantId,
+			agent_id: cfg.agentId ?? trig.agent_id ?? null,
+			status: "pending",
+			model: cfg.model ?? null,
+			categories: cfg.categories ?? [],
+		}).returning();
+
+		try {
+			const { LambdaClient, InvokeCommand } = await import("@aws-sdk/client-lambda");
+			const lambda = new LambdaClient({});
+			const stage = process.env.STAGE || "dev";
+			const fnName = process.env.EVAL_RUNNER_FN_ARN || `thinkwork-${stage}-api-eval-runner`;
+			await lambda.send(new InvokeCommand({
+				FunctionName: fnName,
+				InvocationType: "Event",
+				Payload: new TextEncoder().encode(JSON.stringify({ runId: run.id })),
+			}));
+		} catch (invokeErr) {
+			console.error(`[scheduled-jobs] Failed to invoke eval-runner for run ${run.id}:`, invokeErr);
+		}
+
+		return json({ ok: true, runId: run.id }, 201);
+	}
 
 	if (isAgentTrigger && trig.agent_id) {
 		// Create a thread to track this scheduled job execution

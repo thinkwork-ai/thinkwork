@@ -6,3 +6,4 @@ mcp>=1.8.0
 httpx
 hindsight-strands>=0.1.1
 hindsight-client>=0.4.0
+aws-opentelemetry-distro>=0.10.0

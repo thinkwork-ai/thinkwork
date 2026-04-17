@@ -20,6 +20,7 @@ import {
   Cable,
   Wrench,
   Plug,
+  Beaker,
 } from "lucide-react";
 import { useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
@@ -177,6 +178,7 @@ export function AppSidebar() {
     { to: "/knowledge-bases", icon: BookOpen, label: "Knowledge Base" },
     { to: "/analytics", icon: BarChart3, label: "Analytics" },
     { to: "/scheduled-jobs", icon: CalendarClock, label: "Automations" },
+    { to: "/evaluations", icon: Beaker, label: "Evaluations" },
     { to: "/connectors", icon: Plug, label: "Connectors" },
     { to: "/webhooks", icon: Webhook, label: "Webhooks" },
     { to: "/humans", icon: Users, label: "Humans" },

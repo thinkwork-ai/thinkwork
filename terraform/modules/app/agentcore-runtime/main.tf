@@ -154,10 +154,45 @@ resource "aws_iam_role_policy" "agentcore" {
         Resource = "*"
       },
       {
-        Sid      = "CloudWatchLogs"
-        Effect   = "Allow"
-        Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
-        Resource = "arn:aws:logs:${var.region}:${var.account_id}:log-group:/aws/lambda/thinkwork-${var.stage}-*"
+        Sid    = "CloudWatchLogs"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams",
+          "logs:PutLogEvents",
+        ]
+        # Lambda log group + AgentCore Runtime container log groups + the
+        # account-wide aws/spans log group (CloudWatch Transaction Search
+        # destination — required for AgentCore Evaluations to read spans).
+        # Each entry is doubled with `:*` so log-STREAM operations are
+        # allowed (log-group ARN without `:*` covers group-level ops only).
+        Resource = [
+          "arn:aws:logs:${var.region}:${var.account_id}:log-group:/aws/lambda/thinkwork-${var.stage}-*",
+          "arn:aws:logs:${var.region}:${var.account_id}:log-group:/aws/lambda/thinkwork-${var.stage}-*:*",
+          "arn:aws:logs:${var.region}:${var.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*",
+          "arn:aws:logs:${var.region}:${var.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*:*",
+          "arn:aws:logs:${var.region}:${var.account_id}:log-group:aws/spans",
+          "arn:aws:logs:${var.region}:${var.account_id}:log-group:aws/spans:*",
+        ]
+      },
+      {
+        # X-Ray ingestion — ADOT exporters publish spans here, which then
+        # flow to aws/spans via the Transaction Search policy. AgentCore
+        # Evaluations queries those spans by session.id when scoring runs.
+        Sid    = "XRayIngest"
+        Effect = "Allow"
+        Action = [
+          "xray:PutTraceSegments",
+          "xray:PutTelemetryRecords",
+          "xray:GetSamplingRules",
+          "xray:GetSamplingTargets",
+        ]
+        Resource = [
+          "arn:aws:xray:${var.region}:${var.account_id}:*",
+          "*",
+        ]
       },
       {
         Sid      = "ECRPull"

@@ -26,6 +26,7 @@ import { artifactMutations } from "./artifacts/index.js";
 import { orchestrationMutations } from "./orchestration/index.js";
 import { webhookMutations } from "./webhooks/index.js";
 import { externalTaskMutations } from "./external-tasks/index.js";
+import { evaluationsQueries, evaluationsMutations } from "./evaluations/index.js";
 
 export const queryResolvers: Record<string, any> = {
 	_empty: () => null,
@@ -44,6 +45,7 @@ export const queryResolvers: Record<string, any> = {
 	...memoryQueries,
 	...recipeQueries,
 	...templateQueries,
+	...evaluationsQueries,
 };
 
 export const mutationResolvers: Record<string, any> = {
@@ -64,6 +66,7 @@ export const mutationResolvers: Record<string, any> = {
 	...recipeMutations,
 	...templateMutations,
 	...externalTaskMutations,
+	...evaluationsMutations,
 };
 
 import { agentTypeResolvers } from "./agents/types.js";

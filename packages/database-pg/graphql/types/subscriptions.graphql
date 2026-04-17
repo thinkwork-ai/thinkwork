@@ -79,6 +79,19 @@ type CostRecordedEvent {
   updatedAt: AWSDateTime!
 }
 
+type EvalRunUpdateEvent {
+  runId: ID!
+  tenantId: ID!
+  agentId: ID
+  status: String!
+  totalTests: Int
+  passed: Int
+  failed: Int
+  passRate: Float
+  errorMessage: String
+  updatedAt: AWSDateTime!
+}
+
 # ────────────────────────────────────────────────────────────────────
 # Notification mutations
 #
@@ -151,6 +164,18 @@ extend type Mutation {
     amountUsd: Float!
     model: String
   ): CostRecordedEvent
+
+  notifyEvalRunUpdate(
+    runId: ID!
+    tenantId: ID!
+    agentId: ID
+    status: String!
+    totalTests: Int
+    passed: Int
+    failed: Int
+    passRate: Float
+    errorMessage: String
+  ): EvalRunUpdateEvent
 }
 
 # ────────────────────────────────────────────────────────────────────
@@ -181,4 +206,7 @@ extend type Subscription {
 
   onCostRecorded(tenantId: ID!): CostRecordedEvent
     @aws_subscribe(mutations: ["notifyCostRecorded"])
+
+  onEvalRunUpdated(tenantId: ID!): EvalRunUpdateEvent
+    @aws_subscribe(mutations: ["notifyEvalRunUpdate"])
 }
