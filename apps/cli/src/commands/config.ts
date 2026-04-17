@@ -1,11 +1,12 @@
 import { Command } from "commander";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import chalk from "chalk";
-import { validateStage } from "../config.js";
 import { getAwsIdentity } from "../aws.js";
 import { resolveTierDir, ensureInit, ensureWorkspace, runTerraform } from "../terraform.js";
 import { loadEnvironment, listEnvironments, resolveTerraformDir } from "../environments.js";
 import { printHeader, printSuccess, printError, printWarning } from "../ui.js";
+import { resolveStage } from "../lib/resolve-stage.js";
+import { isCancellation } from "../lib/interactive.js";
 
 function readTfVar(tfvarsPath: string, key: string): string | null {
   if (!existsSync(tfvarsPath)) return null;
@@ -148,16 +149,18 @@ export function registerConfigCommand(program: Command): void {
   // thinkwork config get <key> -s <stage>
   config
     .command("get <key>")
-    .description("Get a configuration value (e.g. enable-hindsight)")
-    .requiredOption("-s, --stage <name>", "Deployment stage")
-    .action((key: string, opts: { stage: string }) => {
-      const stageCheck = validateStage(opts.stage);
-      if (!stageCheck.valid) {
-        printError(stageCheck.error!);
-        process.exit(1);
+    .description("Get a configuration value (e.g. enable-hindsight). Prompts for stage in a TTY when omitted.")
+    .option("-s, --stage <name>", "Deployment stage")
+    .action(async (key: string, opts: { stage?: string }) => {
+      let stage: string;
+      try {
+        stage = await resolveStage({ flag: opts.stage });
+      } catch (err) {
+        if (isCancellation(err)) return;
+        throw err;
       }
 
-      const tfvarsPath = resolveTfvarsPath(opts.stage);
+      const tfvarsPath = resolveTfvarsPath(stage);
       const tfKey = key.replace(/-/g, "_");
       const value = readTfVar(tfvarsPath, tfKey);
 
@@ -171,21 +174,21 @@ export function registerConfigCommand(program: Command): void {
   // thinkwork config set <key> <value> -s <stage> [--apply]
   config
     .command("set <key> <value>")
-    .description("Set a configuration value and optionally deploy")
-    .requiredOption("-s, --stage <name>", "Deployment stage")
+    .description("Set a configuration value and optionally deploy. Prompts for stage in a TTY when omitted.")
+    .option("-s, --stage <name>", "Deployment stage")
     .option("--apply", "Run terraform apply after changing the value")
-    .action(async (key: string, value: string, opts: { stage: string; apply?: boolean }) => {
-      const stageCheck = validateStage(opts.stage);
-      if (!stageCheck.valid) {
-        printError(stageCheck.error!);
-        process.exit(1);
+    .action(async (key: string, value: string, opts: { stage?: string; apply?: boolean }) => {
+      let stage: string;
+      try {
+        stage = await resolveStage({ flag: opts.stage });
+      } catch (err) {
+        if (isCancellation(err)) return;
+        throw err;
       }
 
       let tfKey = key.replace(/-/g, "_");
       let tfValue = value;
 
-      // Deprecated: memory_engine → enable_hindsight translation.
-      // Kept for one release so existing scripts and muscle memory keep working.
       if (tfKey === "memory_engine") {
         if (value !== "managed" && value !== "hindsight") {
           printError(`Invalid memory engine "${value}". Must be 'managed' or 'hindsight'. Note: memory_engine is deprecated — use enable_hindsight instead.`);
@@ -202,16 +205,16 @@ export function registerConfigCommand(program: Command): void {
       }
 
       const identity = getAwsIdentity();
-      printHeader("config set", opts.stage, identity);
+      printHeader("config set", stage, identity);
 
-      const tfvarsPath = resolveTfvarsPath(opts.stage);
+      const tfvarsPath = resolveTfvarsPath(stage);
       const oldValue = readTfVar(tfvarsPath, tfKey);
       setTfVar(tfvarsPath, tfKey, tfValue);
 
       console.log(`  ${tfKey}: ${oldValue ?? "(unset)"} → ${tfValue}`);
 
       if (opts.apply) {
-        const tfDir = resolveTerraformDir(opts.stage);
+        const tfDir = resolveTerraformDir(stage);
         if (!tfDir) {
           printError("Cannot find terraform directory. Run `thinkwork init` first.");
           process.exit(1);
@@ -221,12 +224,12 @@ export function registerConfigCommand(program: Command): void {
         console.log("  Applying configuration change...");
 
         await ensureInit(tfDir);
-        await ensureWorkspace(tfDir, opts.stage);
+        await ensureWorkspace(tfDir, stage);
 
         const code = await runTerraform(tfDir, [
           "apply",
           "-auto-approve",
-          `-var=stage=${opts.stage}`,
+          `-var=stage=${stage}`,
         ]);
         if (code !== 0) {
           printError(`Deploy failed (exit ${code})`);

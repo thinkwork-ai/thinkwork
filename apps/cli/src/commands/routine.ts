@@ -112,7 +112,7 @@ Examples:
   trigger
     .command("set <routineId>")
     .description("Set or replace a trigger for a routine.")
-    .requiredOption("--type <t>", "CRON | WEBHOOK | EVENT")
+    .option("--type <t>", "CRON | WEBHOOK | EVENT")
     .option("--schedule <cron>", "Cron expression (for CRON triggers)")
     .option("--event <name>", "Event name (for EVENT triggers)")
     .option("-s, --stage <name>", "Deployment stage")

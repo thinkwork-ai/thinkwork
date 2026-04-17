@@ -133,7 +133,7 @@ Examples:
   capabilities
     .command("set <agentId>")
     .description("Enable/disable capabilities on an agent.")
-    .requiredOption("--capability <name>", "Capability name (email, web-search, file-upload, …)")
+    .option("--capability <name>", "Capability name (email, web-search, file-upload, …)")
     .option("--enabled", "Enable (default if flag present)")
     .option("--disabled", "Disable")
     .option("-s, --stage <name>", "Deployment stage")
@@ -149,7 +149,7 @@ Examples:
   skills
     .command("set <agentId>")
     .description("Enable/disable/configure a skill for an agent.")
-    .requiredOption("--skill <id>", "Skill ID (see `thinkwork skill list`)")
+    .option("--skill <id>", "Skill ID (see `thinkwork skill list`)")
     .option("--enabled", "Enable")
     .option("--disabled", "Disable")
     .option("--config <json>", "Inline JSON config for the skill")
@@ -167,7 +167,7 @@ Examples:
   budget
     .command("set <agentId>")
     .description("Set or update an agent's budget policy.")
-    .requiredOption("--limit-usd <amount>", "USD ceiling for the window")
+    .option("--limit-usd <amount>", "USD ceiling for the window")
     .option("--window <w>", "daily | weekly | monthly", "monthly")
     .option("--action <a>", "PAUSE | ALERT", "PAUSE")
     .option("-s, --stage <name>", "Deployment stage")
@@ -197,7 +197,7 @@ Examples:
   apiKey
     .command("create <agentId>")
     .description("Generate a new API key. The plaintext is printed once — save it.")
-    .requiredOption("--name <n>", "Human label for the key (e.g. 'GitHub Actions')")
+    .option("--name <n>", "Human label for the key (e.g. 'GitHub Actions')")
     .option("--expires <iso>", "Expiration (ISO-8601). Omit for no expiry.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")

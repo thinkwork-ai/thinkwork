@@ -191,7 +191,7 @@ Examples:
   thread
     .command("escalate <id>")
     .description("Escalate a thread to another agent (carries context, records actor).")
-    .requiredOption("--to-agent <id>", "Agent to escalate to")
+    .option("--to-agent <id>", "Agent to escalate to")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--reason <text>", "Reason note (appears in activity log)")
@@ -200,7 +200,7 @@ Examples:
   thread
     .command("delegate <id>")
     .description("Delegate ownership to another agent without the 'escalation' semantics.")
-    .requiredOption("--to-agent <id>", "Agent to delegate to")
+    .option("--to-agent <id>", "Agent to delegate to")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .action(() => notYetImplemented("thread delegate", 1));

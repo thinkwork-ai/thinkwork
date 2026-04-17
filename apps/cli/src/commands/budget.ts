@@ -31,7 +31,7 @@ export function registerBudgetCommand(program: Command): void {
   budget
     .command("upsert")
     .description("Create or update a budget policy.")
-    .requiredOption("--limit-usd <amount>", "USD ceiling for the window")
+    .option("--limit-usd <amount>", "USD ceiling for the window")
     .option("--scope <s>", "tenant | agent", "tenant")
     .option("--agent <id>", "Required if --scope=agent")
     .option("--window <w>", "daily | weekly | monthly", "monthly")
