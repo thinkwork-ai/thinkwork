@@ -198,11 +198,14 @@ This feature is in Beta. The following are known limits today, not hypothetical 
 
 The adapter seam is designed so a new provider is a single TypeScript file plus some configuration. The contract:
 
-1. **Implement the eight `ExternalWorkItemAdapter` methods.** The seam is provider-neutral; everything provider-specific lives inside these methods. See `packages/api/src/integrations/external-work-items/types.ts` for the full interface and `packages/api/src/integrations/external-work-items/providers/lastmile/` for a reference implementation.
-2. **Register the provider** in the adapter registry (`packages/api/src/integrations/external-work-items/index.ts`), so `getAdapter(provider)` and `hasAdapter(provider)` resolve it.
-3. **Seed a `connect_providers` row** for the provider. This is the tenant-level registration that webhooks resolve against.
-4. **Configure webhook delivery and a signing secret** in the provider's dashboard. Point it at `/integrations/<provider>/webhook` and store the secret on the webhook row's `config.secret`.
-5. **No mobile changes.** The mobile card renders whatever `buildBlocks()` returns through the existing block grammar. This is the payoff of the bounded grammar: adding a provider does not mean shipping a mobile release.
+1. **Probe the provider's MCP and REST empirically before mapping anything.** Curl `tools/list` on the MCP endpoint to see the exact tool names, argument keys, and `required` sets. Do the same for the REST endpoints you plan to hit. Do not trust spec docs or provider engineers' memory for field-name casing or required-flag enforcement — both are historically unreliable signals. Two specific traps the reference adapter has hit that a 5-minute probe would have caught:
+   - **Hostname lookalikes.** Providers sometimes serve a legacy stack at a visually similar hostname (e.g. `mcp-dev.example.com` alongside `dev-mcp.example.com`). Both may return MCP responses; only one is the current stack. Always register the URL the provider confirms, and re-verify `tools/list` after any rename.
+   - **Argument casing.** A provider's MCP dispatcher may declare camelCase tool args while the REST endpoints accept either. If the dispatcher does **not** enforce `required`, a snake_case arg silently becomes `undefined` and the handler returns a not-found or no-op response — indistinguishable from a legitimate miss. Lock the wire-format contract in a test near the adapter so regressions surface loudly.
+2. **Implement the eight `ExternalWorkItemAdapter` methods.** The seam is provider-neutral; everything provider-specific lives inside these methods. See `packages/api/src/integrations/external-work-items/types.ts` for the full interface and `packages/api/src/integrations/external-work-items/providers/lastmile/` for a reference implementation.
+3. **Register the provider** in the adapter registry (`packages/api/src/integrations/external-work-items/index.ts`), so `getAdapter(provider)` and `hasAdapter(provider)` resolve it.
+4. **Seed a `connect_providers` row** for the provider. This is the tenant-level registration that webhooks resolve against.
+5. **Configure webhook delivery and a signing secret** in the provider's dashboard. Point it at `/integrations/<provider>/webhook` and store the secret on the webhook row's `config.secret`.
+6. **No mobile changes.** The mobile card renders whatever `buildBlocks()` returns through the existing block grammar. This is the payoff of the bounded grammar: adding a provider does not mean shipping a mobile release.
 
 ## Related pages
 
