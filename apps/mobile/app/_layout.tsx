@@ -22,7 +22,7 @@ import { NAV_THEME } from "@/lib/theme";
 import { useAgents } from "@/lib/hooks/use-agents";
 import { usePushNotifications } from "@/lib/hooks/use-push-notifications";
 import { TurnCompletionProvider } from "@/lib/hooks/use-turn-completion";
-import { useThreadTurnUpdatedSubscription } from "@/lib/hooks/use-subscriptions";
+import { useThreadTurnUpdatedSubscription } from "@thinkwork/react-native-sdk";
 import { useBiometricAuth, getBiometricName } from "@/hooks/useBiometricAuth";
 import { BiometricLockScreen } from "@/components/BiometricLockScreen";
 import { GestureHandlerRootView } from "react-native-gesture-handler";

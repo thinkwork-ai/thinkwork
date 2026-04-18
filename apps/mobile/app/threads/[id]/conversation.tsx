@@ -124,7 +124,9 @@ export default function ThreadConversationScreen() {
     const mentionsToSend = pendingMentions.length > 0 ? pendingMentions : undefined;
     setPendingMentions([]);
     try {
-      await sendMessage(id, content);
+      await sendMessage(id, content, {
+        ...(currentUser?.id ? { senderId: currentUser.id } : {}),
+      });
       markThreadActive(id);
     } catch (e) {
       console.error("[ThreadChat] send failed:", e);
