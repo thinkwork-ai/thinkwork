@@ -40,10 +40,14 @@ export function useMessages(threadId: string | null | undefined) {
   };
 }
 
-export function useSendMessage(threadId: string | null | undefined) {
+// Unbound imperative sender. Pre-0.2.0 the hook took a threadId at render time,
+// which was a footgun for "create thread then send first message" flows: the
+// freshly-minted threadId wasn't available until after the component re-rendered.
+// Callers now pass the threadId at call time.
+export function useSendMessage() {
   const [, sendMessage] = useMutation<{ sendMessage: Message }>(SendMessageMutation);
   return useCallback(
-    async (content: string): Promise<Message> => {
+    async (threadId: string, content: string): Promise<Message> => {
       if (!threadId) throw new Error("useSendMessage: threadId is required");
       const result = await sendMessage({
         input: { threadId, role: "USER", content, senderType: "user" },
@@ -54,6 +58,6 @@ export function useSendMessage(threadId: string | null | undefined) {
       }
       return message;
     },
-    [sendMessage, threadId],
+    [sendMessage],
   );
 }
