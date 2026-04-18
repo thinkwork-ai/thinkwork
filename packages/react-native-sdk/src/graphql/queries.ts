@@ -196,3 +196,24 @@ export const CaptureMobileMemoryMutation = gql`
     }
   }
 `;
+
+export const MobileMemoryCapturesQuery = gql`
+  query MobileMemoryCaptures($agentId: ID!, $limit: Int) {
+    mobileMemoryCaptures(agentId: $agentId, limit: $limit) {
+      id
+      tenantId
+      agentId
+      content
+      factType
+      capturedAt
+      syncedAt
+      metadata
+    }
+  }
+`;
+
+export const DeleteMobileMemoryCaptureMutation = gql`
+  mutation DeleteMobileMemoryCapture($agentId: ID!, $captureId: ID!) {
+    deleteMobileMemoryCapture(agentId: $agentId, captureId: $captureId)
+  }
+`;

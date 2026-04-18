@@ -35,6 +35,10 @@ import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { useThreadReadState } from "@/lib/hooks/use-thread-read-state";
 import { MessageInputFooter, type MessageInputFooterRef, type SelectedWorkspace } from "@/components/input/MessageInputFooter";
 import { CaptureFooter } from "@/components/memory/CaptureFooter";
+import { CapturesList } from "@/components/memory/CapturesList";
+import { ToastHost } from "@/components/ui/toast";
+import { captureQueue } from "@/lib/offline/capture-queue";
+import { useCaptureQueueSender } from "@/lib/offline/use-capture-queue";
 import { QuickActionsSheet, type QuickActionsSheetRef } from "@/components/chat/QuickActionsSheet";
 import { QuickActionFormSheet, type QuickActionFormSheetRef, type QuickActionFormData } from "@/components/chat/QuickActionFormSheet";
 import { WorkspacePickerSheet, type WorkspacePickerSheetRef, type SubAgent } from "@/components/input/WorkspacePickerSheet";
@@ -238,6 +242,13 @@ export default function ThreadsScreen() {
   const workspacePickerRef = useRef<WorkspacePickerSheetRef>(null);
   const messageInputRef = useRef<MessageInputFooterRef>(null);
   const [selectedWorkspaces, setSelectedWorkspaces] = useState<SelectedWorkspace[]>([]);
+
+  // Wire the capture queue's sender to the authenticated SDK client and flush
+  // any entries that were stuck from a prior session.
+  useCaptureQueueSender();
+  useEffect(() => {
+    void captureQueue.flushPending();
+  }, []);
 
   // ── Quick Actions (per-user, per-scope, from DB) ──────────────────────
   const [{ data: qaThreadData }, reexecuteQAThread] = useQuickActions(tenantId, "thread");
@@ -499,10 +510,7 @@ export default function ThreadsScreen() {
             contentContainerStyle={filteredThreads.length === 0 ? { flexGrow: 1, justifyContent: "center" } : { paddingTop: 8 }}
           />
         ) : (
-          <View className="flex-1 items-center justify-center px-6 gap-2">
-            <ListChecks size={32} color={colors.mutedForeground} />
-            <Muted>No memories yet</Muted>
-          </View>
+          <CapturesList agentId={activeAgent?.id} colors={colors} />
         )}
       </WebContent>
       </View>
@@ -526,6 +534,7 @@ export default function ThreadsScreen() {
           <CaptureFooter
             agentId={activeAgent?.id}
             agentName={activeAgent?.name}
+            tenantId={tenantId}
             colors={colors}
             isDark={isDark}
           />
@@ -613,6 +622,8 @@ export default function ThreadsScreen() {
           });
         }}
       />
+
+      {activeTab === "memories" ? <ToastHost bottomOffset={96} /> : null}
 
     </KeyboardAvoidingView>
   );
