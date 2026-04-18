@@ -23,7 +23,11 @@ import {
 	RetrieveMemoryRecordsCommand,
 	type MemoryRecordSummary,
 } from "@aws-sdk/client-bedrock-agentcore";
-import type { MemoryAdapter } from "../adapter.js";
+import type {
+	ListRecordsUpdatedSinceRequest,
+	ListRecordsUpdatedSinceResult,
+	MemoryAdapter,
+} from "../adapter.js";
 import type {
 	ExportRequest,
 	InspectRequest,
@@ -326,5 +330,24 @@ export class AgentCoreAdapter implements MemoryAdapter {
 				score: typeof r.score === "number" ? r.score : null,
 			},
 		};
+	}
+
+	/**
+	 * AgentCore doesn't expose a monotonic `updated_at` on memory records
+	 * (ListMemoryRecords returns a flat listing keyed by createdAt only), so
+	 * the compile pipeline can't safely drive an incremental cursor against it
+	 * in v1. The memory-retain compile-enqueue path checks the adapter kind and
+	 * skips enqueue when it isn't Hindsight, so this method should never be
+	 * called at runtime — but we throw explicitly to make any misconfiguration
+	 * fail loudly rather than produce silent zero-row compiles.
+	 */
+	async listRecordsUpdatedSince(
+		_req: ListRecordsUpdatedSinceRequest,
+	): Promise<ListRecordsUpdatedSinceResult> {
+		throw new Error(
+			"[agentcore-adapter] listRecordsUpdatedSince is not implemented in v1. " +
+				"The Compounding Memory compile pipeline is Hindsight-only — see " +
+				".prds/compounding-memory-v1-build-plan.md.",
+		);
 	}
 }

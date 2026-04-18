@@ -18,6 +18,7 @@
  */
 
 import { getMemoryServices } from "../lib/memory/index.js";
+import { maybeEnqueuePostTurnCompile } from "../lib/wiki/enqueue.js";
 
 type MemoryRetainEvent = {
 	tenantId?: string;
@@ -74,6 +75,27 @@ export async function handler(event: MemoryRetainEvent): Promise<MemoryRetainRes
 			`[memory-retain] engine=${config.engine} tenant=${event.tenantId} ` +
 				`agent=${event.agentId} thread=${event.threadId} messages=${messages.length}`,
 		);
+
+		// Best-effort: trigger the Compounding Memory compile pipeline for this
+		// (tenant, agent) scope. Gated by tenants.wiki_compile_enabled + adapter
+		// kind. Failures here must not affect the retain response.
+		const compileOutcome = await maybeEnqueuePostTurnCompile({
+			tenantId: event.tenantId,
+			ownerId: event.agentId,
+			adapterKind: adapter.kind,
+		});
+		if (
+			compileOutcome.status === "enqueued" ||
+			compileOutcome.status === "enqueued_invoke_failed" ||
+			compileOutcome.status === "error"
+		) {
+			console.log(
+				`[memory-retain] wiki-compile ${compileOutcome.status}` +
+					(compileOutcome.jobId ? ` jobId=${compileOutcome.jobId}` : "") +
+					(compileOutcome.error ? ` error=${compileOutcome.error}` : ""),
+			);
+		}
+
 		return { ok: true, engine: config.engine };
 	} catch (err) {
 		const msg = (err as Error)?.message || String(err);
