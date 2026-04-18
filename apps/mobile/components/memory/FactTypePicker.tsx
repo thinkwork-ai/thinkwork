@@ -1,7 +1,13 @@
 import React from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
+import {
+	Modal,
+	Pressable,
+	StyleSheet,
+	Text as RNText,
+	TouchableOpacity,
+	View,
+} from "react-native";
 import { Lightbulb, CheckCircle2, Sparkles, MessageSquare } from "lucide-react-native";
-import { Text, Muted } from "@/components/ui/typography";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "@/lib/theme";
@@ -29,13 +35,14 @@ export function FactTypePicker({ visible, onClose, onSelect, current }: FactType
 	const colors = isDark ? COLORS.dark : COLORS.light;
 	const insets = useSafeAreaInsets();
 
+	// Fully custom sheet rendered via raw RN primitives. Prior attempts
+	// using the nativewind-wrapped Text inside a Pressable row kept
+	// collapsing flexDirection: row into a vertical stack — this version
+	// uses RNText + TouchableOpacity + StyleSheet.create to take
+	// className-driven styling out of the picture entirely.
 	return (
 		<Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
 			<Pressable onPress={onClose} style={styles.backdrop}>
-				{/* Anchor the sheet to the bottom and make it full-width via
-				    left/right: 0. Using justifyContent on the backdrop was
-				    letting the inner sheet size to its content on iOS, which
-				    in turn collapsed the row flex direction. */}
 				<View
 					style={[
 						styles.sheet,
@@ -50,38 +57,40 @@ export function FactTypePicker({ visible, onClose, onSelect, current }: FactType
 						<View style={[styles.handle, { backgroundColor: colors.border }]} />
 					</View>
 					<View style={styles.titleBlock}>
-						<Text style={[styles.title, { color: colors.foreground }]}>Memory type</Text>
-						<Muted style={styles.subtitle}>Pick how this memory should be retrieved later.</Muted>
+						<RNText style={[styles.title, { color: colors.foreground }]}>Memory type</RNText>
+						<RNText style={[styles.subtitle, { color: colors.mutedForeground }]}>
+							Pick how this memory should be retrieved later.
+						</RNText>
 					</View>
 					{ORDER.map((type) => {
 						const Icon = ICONS[type];
 						const active = current === type;
 						return (
-							<Pressable
+							<TouchableOpacity
 								key={type}
+								activeOpacity={0.6}
 								onPress={() => {
 									onSelect(type);
 									onClose();
 								}}
-								style={({ pressed }) => [
-									styles.row,
-									{ backgroundColor: pressed ? colors.secondary : "transparent" },
-								]}
+								style={styles.row}
 							>
 								<View style={styles.iconCol}>
 									<Icon size={22} color={active ? colors.primary : colors.foreground} />
 								</View>
-								<Text
+								<RNText
 									numberOfLines={1}
-									style={{
-										color: colors.foreground,
-										fontSize: 16,
-										fontWeight: active ? "600" : "500",
-									}}
+									style={[
+										styles.label,
+										{
+											color: colors.foreground,
+											fontWeight: active ? "600" : "500",
+										},
+									]}
 								>
 									{FACT_TYPE_LABELS[type]}
-								</Text>
-							</Pressable>
+								</RNText>
+							</TouchableOpacity>
 						);
 					})}
 				</View>
@@ -115,7 +124,7 @@ const styles = StyleSheet.create({
 	},
 	titleBlock: {
 		paddingHorizontal: 20,
-		paddingBottom: 8,
+		paddingBottom: 12,
 	},
 	title: {
 		fontSize: 17,
@@ -133,8 +142,12 @@ const styles = StyleSheet.create({
 	},
 	iconCol: {
 		width: 32,
+		marginRight: 12,
 		alignItems: "flex-start",
 		justifyContent: "center",
-		marginRight: 10,
+	},
+	label: {
+		fontSize: 16,
+		flexShrink: 1,
 	},
 });
