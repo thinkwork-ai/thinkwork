@@ -285,66 +285,137 @@ function buildSummary(row: JournalIdeaRow): string {
 			: `${joined.slice(0, SUMMARY_MAX - 1)}…`;
 }
 
-function buildMetadata(row: JournalIdeaRow): Record<string, unknown> {
-	const metadata: Record<string, unknown> = {
-		idea: {
-			external_id: row.external_id,
-			tags: row.tags ?? [],
-			is_visit: !!row.is_visit,
-			is_favorite: !!row.is_favorite,
-			images: row.images ?? [],
-			created: toIsoSafe(row.created) ?? toIsoSafe(row.date_created),
-			geo_lat: row.geo_lat,
-			geo_lon: row.geo_lon,
-		},
-		import: {
-			source: "journal.idea",
-			journal_idea_id: row.id,
-		},
-	};
+/**
+ * Build metadata as a FLAT string-only dict.
+ *
+ * Hindsight's memory_units metadata column is typed `Dict[str, str]` — nested
+ * objects and non-string values are rejected with HTTP 422. We flatten the
+ * (idea, place, journal, import) groups into `group_key` top-level strings
+ * so both Hindsight and the downstream compiler get something structured and
+ * scan-friendly. Booleans render as "true"/"false", arrays as
+ * comma-separated, nothing nested.
+ */
+function buildMetadata(row: JournalIdeaRow): Record<string, string> {
+	const meta: Record<string, string> = {};
+
+	setIf(meta, "idea_external_id", row.external_id);
+	setIf(meta, "idea_tags", joinList(row.tags));
+	setIf(meta, "idea_is_visit", row.is_visit ? "true" : undefined);
+	setIf(meta, "idea_is_favorite", row.is_favorite ? "true" : undefined);
+	setIf(meta, "idea_image_count", row.images ? row.images.length : undefined);
+	setIf(
+		meta,
+		"idea_created",
+		toIsoSafe(row.created) ?? toIsoSafe(row.date_created),
+	);
+	setIf(meta, "idea_geo_lat", row.geo_lat);
+	setIf(meta, "idea_geo_lon", row.geo_lon);
+
+	meta.import_source = "journal.idea";
+	meta.import_journal_idea_id = row.id;
+
 	if (row.place_id || row.place_name) {
-		metadata.place = {
-			id: row.place_id,
-			google_place_id: row.place_google_id,
-			name: row.place_name,
-			address: row.place_address,
-			types: row.place_types ?? [],
-			geo_lat: row.place_lat,
-			geo_lon: row.place_lon,
-			extra: compactPlaceMetadata(row.place_metadata),
-		};
+		setIf(meta, "place_id", row.place_id);
+		setIf(meta, "place_google_place_id", row.place_google_id);
+		setIf(meta, "place_name", row.place_name);
+		setIf(meta, "place_address", row.place_address);
+		setIf(meta, "place_types", joinList(row.place_types));
+		setIf(meta, "place_geo_lat", row.place_lat);
+		setIf(meta, "place_geo_lon", row.place_lon);
+		// Fold the non-noisy Google Places fields in too — rating/phone/hours
+		// are the ones the planner will actually use.
+		foldExtraPlaceFields(meta, row.place_metadata);
 	}
+
 	if (row.journal_id) {
-		metadata.journal = {
-			id: row.journal_id,
-			title: row.journal_title,
-			description: row.journal_description,
-			start_date: formatDate(row.journal_start_date),
-			end_date: formatDate(row.journal_end_date),
-			tags: row.journal_tags ?? [],
-		};
+		setIf(meta, "journal_id", row.journal_id);
+		setIf(meta, "journal_title", row.journal_title);
+		setIf(meta, "journal_description", row.journal_description);
+		setIf(meta, "journal_start_date", formatDate(row.journal_start_date));
+		setIf(meta, "journal_end_date", formatDate(row.journal_end_date));
+		setIf(meta, "journal_tags", joinList(row.journal_tags));
 	}
-	return metadata;
+
+	return meta;
+}
+
+/** Set `key` on the dict only when `value` stringifies to something non-empty. */
+function setIf(
+	dict: Record<string, string>,
+	key: string,
+	value: unknown,
+): void {
+	if (value == null) return;
+	if (typeof value === "string") {
+		if (value.length === 0) return;
+		dict[key] = value;
+		return;
+	}
+	if (typeof value === "number") {
+		if (!Number.isFinite(value)) return;
+		dict[key] = String(value);
+		return;
+	}
+	if (typeof value === "boolean") {
+		dict[key] = value ? "true" : "false";
+		return;
+	}
+	// Fallback — serialize; still a string so Hindsight accepts it.
+	try {
+		dict[key] = JSON.stringify(value);
+	} catch {
+		/* skip */
+	}
+}
+
+function joinList(values: string[] | null | undefined): string | undefined {
+	if (!values || values.length === 0) return undefined;
+	const joined = values
+		.map((v) => String(v).trim())
+		.filter((v) => v.length > 0)
+		.join(", ");
+	return joined.length === 0 ? undefined : joined;
 }
 
 /**
- * Google Places `metadata` carries huge photo reference arrays we don't want
- * the planner to pay tokens for. Strip them; keep name/phone/rating/website/
- * hours-style fields.
+ * Fold a small allow-list of useful Google Places fields into the flat dict,
+ * under `place_*` prefixes. Photos and pathological-size fields are skipped.
+ * Oversize strings are truncated so we stay under Hindsight's per-field
+ * length expectations.
  */
-function compactPlaceMetadata(
+function foldExtraPlaceFields(
+	dict: Record<string, string>,
 	metadata: Record<string, unknown> | null,
-): Record<string, unknown> | null {
-	if (!metadata) return null;
-	const out: Record<string, unknown> = {};
+): void {
+	if (!metadata) return;
+	const ALLOW = new Set([
+		"phone",
+		"rating",
+		"price_level",
+		"website",
+		"openingHours",
+		"opening_hours",
+		"hours",
+	]);
 	for (const [k, v] of Object.entries(metadata)) {
-		if (k === "photos") continue;
+		if (!ALLOW.has(k)) continue;
 		if (v == null) continue;
-		if (typeof v === "string" && v.length > 600) continue;
-		if (Array.isArray(v) && v.length > 30) continue;
-		out[k] = v;
+		const destKey = `place_${k.replace(/([A-Z])/g, "_$1").toLowerCase()}`;
+		if (Array.isArray(v)) {
+			const joined = joinList(v.filter((x) => typeof x === "string") as string[]);
+			if (joined) dict[destKey] = truncate(joined, 800);
+			continue;
+		}
+		if (typeof v === "string") {
+			dict[destKey] = truncate(v, 800);
+			continue;
+		}
+		setIf(dict, destKey, v);
 	}
-	return Object.keys(out).length === 0 ? null : out;
+}
+
+function truncate(s: string, n: number): string {
+	return s.length <= n ? s : `${s.slice(0, n - 1)}…`;
 }
 
 function formatDate(date: Date | string | null | undefined): string | null {
