@@ -78,29 +78,46 @@ export class HindsightAdapter implements MemoryAdapter {
 	async recall(req: RecallRequest): Promise<RecallResult[]> {
 		const bankId = await this.resolveBankId(req.ownerId);
 		const limit = req.limit ?? 10;
+		const url = `${this.endpoint}/v1/default/banks/${encodeURIComponent(bankId)}/memories/recall`;
+		// Per the Hindsight recall API, `types` filters which fact-types to
+		// search. Without it the service may default to a subset (we've seen
+		// observation-typed rows go missing). Explicitly ask for all three
+		// documented values so search covers the whole bank.
+		const body = {
+			query: req.query,
+			max_results: limit,
+			types: ["world", "experience", "observation"] as const,
+		};
 
 		let data: any;
 		try {
-			const resp = await fetch(
-				`${this.endpoint}/v1/default/banks/${encodeURIComponent(bankId)}/memories/recall`,
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ query: req.query, max_results: limit }),
-					signal: AbortSignal.timeout(this.timeoutMs),
-				},
-			);
+			const resp = await fetch(url, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(body),
+				signal: AbortSignal.timeout(this.timeoutMs),
+			});
 			if (!resp.ok) {
-				console.warn(`[hindsight-adapter] recall ${resp.status} for bank=${bankId}`);
+				const errText = await resp.text().catch(() => "");
+				console.warn(
+					`[hindsight-adapter] recall ${resp.status} url=${url} body=${errText.slice(0, 400)}`,
+				);
 				return [];
 			}
 			data = await resp.json();
 		} catch (err) {
-			console.warn(`[hindsight-adapter] recall threw: ${(err as Error)?.message}`);
+			console.warn(
+				`[hindsight-adapter] recall threw url=${url} message=${(err as Error)?.message}`,
+			);
 			return [];
 		}
 
 		const memories: any[] = data?.memory_units || data?.memories || data?.results || [];
+		if (memories.length === 0) {
+			console.log(
+				`[hindsight-adapter] recall returned 0 hits bank=${bankId} query=${JSON.stringify(req.query).slice(0, 200)} keys=${Object.keys(data || {}).join(",")}`,
+			);
+		}
 		return memories.map((m, idx): RecallResult => {
 			const score = typeof m.relevance_score === "number"
 				? m.relevance_score
