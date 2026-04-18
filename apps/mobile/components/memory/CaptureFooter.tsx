@@ -121,8 +121,10 @@ export function CaptureFooter({
 	}, []);
 
 	const toggleMode = useCallback(() => {
-		Keyboard.dismiss();
 		setMode((prev) => (prev === "search" ? "add" : "search"));
+		// Refocus the input so the keyboard stays up and the cursor is ready
+		// in the field the user just flipped into.
+		requestAnimationFrame(() => inputRef.current?.focus());
 	}, []);
 
 	const handleCapture = useCallback(async () => {
@@ -269,18 +271,20 @@ export function CaptureFooter({
 									<Search size={24} color={colors.mutedForeground} />
 								)}
 							</Pressable>
-							{mode === "add" ? (
-								<Pressable
-									onPress={() => {
-										Keyboard.dismiss();
-										setPickerOpen(true);
-									}}
-									className="p-1 active:opacity-70"
-									accessibilityLabel="Choose memory type"
-								>
-									<Tag size={22} color={colors.mutedForeground} />
-								</Pressable>
-							) : null}
+							<Pressable
+								onPress={() => {
+									if (mode !== "add") return;
+									Keyboard.dismiss();
+									setPickerOpen(true);
+								}}
+								disabled={mode !== "add"}
+								className="p-1 active:opacity-70"
+								accessibilityLabel="Choose memory type"
+								accessibilityState={{ disabled: mode !== "add" }}
+								style={{ opacity: mode === "add" ? 1 : 0.35 }}
+							>
+								<Tag size={22} color={colors.mutedForeground} />
+							</Pressable>
 						</View>
 						<View className="flex-row items-center gap-4">
 							{showCounter ? (
