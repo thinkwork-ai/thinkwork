@@ -3,8 +3,12 @@ import { View, Text, ScrollView, Pressable, Modal, ActivityIndicator, Alert } fr
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { DetailLayout } from "@/components/layout/detail-layout";
-import { useMessages } from "@/lib/hooks/use-messages";
-import { useAgents } from "@/lib/hooks/use-agents";
+import {
+  useAgents,
+  useMessages,
+  useThread,
+  useUpdateThread,
+} from "@thinkwork/react-native-sdk";
 import { useMe } from "@/lib/hooks/use-users";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,8 +23,6 @@ import {
 } from "lucide-react-native";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { COLORS } from "@/lib/theme";
-import { useQuery, useMutation } from "urql";
-import { ThreadQuery, UpdateThreadMutation } from "@/lib/graphql-queries";
 
 type ThreadStatus = "OPEN" | "IN_PROGRESS" | "CLOSED";
 
@@ -102,16 +104,13 @@ export default function ThreadDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
-  const [{ data: threadResult, fetching: threadFetching }] = useQuery({ query: ThreadQuery, variables: { id: id! }, pause: !id });
-  const thread = threadResult?.thread ?? undefined;
+  const { thread, loading: threadFetching } = useThread(id);
   const [meResult] = useMe();
   const tenantId = meResult.data?.me?.tenantId;
-  const [agentsResult] = useAgents(tenantId);
-  const agents = agentsResult.data?.agents ?? [];
-  const [messagesResult] = useMessages(id);
-  const messages = messagesResult.data?.messages?.edges ?? [];
+  const { agents } = useAgents({ tenantId });
+  const { messages } = useMessages(id);
 
-  const [, executeUpdateThread] = useMutation(UpdateThreadMutation);
+  const executeUpdateThread = useUpdateThread();
 
   // TODO: deleteThread — replace with GraphQL mutation
   const deleteThread = async (_args: { threadId: string }) => {
@@ -158,10 +157,7 @@ export default function ThreadDetailScreen() {
   };
 
   const handleStatusChange = async (newStatus: string) => {
-    await executeUpdateThread({
-      id: id as string,
-      input: { status: newStatus },
-    });
+    await executeUpdateThread(id as string, { status: newStatus });
   };
 
   const hasMeta = (thread as any).metadata != null && typeof (thread as any).metadata === "object" && Object.keys((thread as any).metadata).length > 0;

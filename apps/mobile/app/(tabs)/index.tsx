@@ -3,12 +3,21 @@ import { View, FlatList, RefreshControl, Pressable, Platform, KeyboardAvoidingVi
 import * as Updates from "expo-updates";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/lib/auth-context";
-import { useAgents } from "@/lib/hooks/use-agents";
+import {
+  useAgents,
+  useCreateThread,
+  useSendMessage,
+  useUpdateThread,
+} from "@thinkwork/react-native-sdk";
 import { useThreadUpdatedSubscription, useThreadTurnUpdatedSubscription } from "@/lib/hooks/use-subscriptions";
 import { useTurnCompletion } from "@/lib/hooks/use-turn-completion";
 import { useMe } from "@/lib/hooks/use-users";
-import { useQuery, useMutation } from "urql";
-import { ThreadsQuery, CreateThreadMutation, SendMessageMutation, UpdateThreadMutation, AgentWorkspacesQuery } from "@/lib/graphql-queries";
+import { useQuery } from "urql";
+// TODO(sdk): SDK `useThreads` lacks filter args + `Thread.identifier` +
+//            some thread fields used by the dashboard filter bar; keep
+//            local ThreadsQuery until SDK widens. useThreadUpdatedSubscription
+//            + useThreadTurnUpdatedSubscription are SDK gaps (tenant-wide).
+import { ThreadsQuery, AgentWorkspacesQuery } from "@/lib/graphql-queries";
 import { TabHeader } from "@/components/layout/tab-header";
 import { WebContent } from "@/components/layout/web-content";
 import { AgentPicker } from "@/components/chat/AgentPicker";
@@ -43,8 +52,7 @@ export default function ThreadsScreen() {
   const { hasNewCompletion, isThreadActive, markThreadActive, clearThreadActive, activeTriggers } = useTurnCompletion(tenantId);
 
   // ── Agents + Me ──────────────────────────────────────────────────────────
-  const [{ data: agentsData, fetching: agentsFetching }] = useAgents(tenantId);
-  const agents = agentsData?.agents ?? [];
+  const { agents, loading: agentsFetching } = useAgents({ tenantId });
 
   const [{ data: meData }] = useMe();
   const currentUser = meData?.me;
@@ -273,16 +281,16 @@ export default function ThreadsScreen() {
     }
     return map;
   }, [subAgents]);
-  const [, executeCreateThread] = useMutation(CreateThreadMutation);
-  const [, executeSendMessage] = useMutation(SendMessageMutation);
-  const [, executeUpdateThread] = useMutation(UpdateThreadMutation);
+  const createThread = useCreateThread();
+  const sendMessage = useSendMessage();
+  const executeUpdateThread = useUpdateThread();
 
   const handleArchive = useCallback(async (threadId: string): Promise<boolean> => {
     console.log("[Archive] Starting archive for thread:", threadId);
-    const { data, error } = await executeUpdateThread({ id: threadId, input: { archivedAt: new Date().toISOString() } });
-    console.log("[Archive] Result:", { data, error: error?.message });
-    if (error) {
-      console.error("[Archive] Failed:", error.message, error.graphQLErrors);
+    try {
+      await executeUpdateThread(threadId, { archivedAt: new Date().toISOString() });
+    } catch (e: any) {
+      console.error("[Archive] Failed:", e?.message);
       return false;
     }
     setArchivedIds((prev) => new Set(prev).add(threadId));
@@ -315,58 +323,30 @@ export default function ThreadsScreen() {
       : undefined;
 
     try {
-      const { data: createData, error: createError } = await executeCreateThread({
-        input: {
-          tenantId,
-          agentId: activeAgent.id,
-          title: text.length > 60 ? text.slice(0, 60) + "..." : text,
-          type: "TASK" as any,
-          channel: "CHAT" as any,
-          createdByType: "user",
-          createdById: currentUser?.id || user?.sub,
-          ...(metadata ? { metadata } : {}),
-        },
+      // Atomic create + first user message (SDK 0.2.0-beta.0+).
+      const newThread = await createThread({
+        tenantId,
+        agentId: activeAgent.id,
+        title: text.length > 60 ? text.slice(0, 60) + "..." : text,
+        type: "TASK",
+        channel: "CHAT",
+        createdByType: "user",
+        createdById: currentUser?.id || user?.sub,
+        firstMessage: messageContent,
+        ...(metadata ? ({ metadata } as any) : {}),
       });
 
-      if (createError) {
-        console.error("[Threads] CreateThread failed:", createError.message);
-        Alert.alert("Error", `Failed to create thread: ${createError.message}`);
-        return;
-      }
-
-      const newThread = createData?.createThread;
-      if (!newThread?.id) {
-        console.error("[Threads] CreateThread returned no ID", createData);
-        Alert.alert("Error", "Thread was not created — no ID returned");
-        return;
-      }
-
-      console.log("[Threads] Thread created:", newThread.id, (newThread as any).identifier);
+      console.log("[Threads] Thread created:", newThread.id);
       markRead(newThread.id);
-
-      const { data: msgData, error: msgError } = await executeSendMessage({
-        input: {
-          threadId: newThread.id,
-          role: "USER" as any,
-          content: messageContent,
-          senderType: "human",
-          senderId: currentUser?.id,
-        },
-      });
-
-      if (msgError) {
-        console.error("[Threads] SendMessage failed:", msgError.message, msgError.graphQLErrors);
-      } else {
-        console.log("[Threads] Message sent, navigating to chat", msgData?.sendMessage?.id);
-        markThreadActive(newThread.id);
-      }
+      markThreadActive(newThread.id);
 
       // Refresh thread list so the new thread appears on the home page
       reexecute({ requestPolicy: "network-only" });
-    } catch (e) {
+    } catch (e: any) {
       console.error("[Threads] Failed to create thread:", e);
+      Alert.alert("Error", `Failed to create thread: ${e?.message ?? "unknown"}`);
     }
-  }, [newThreadText, selectedWorkspaces, activeAgent?.id, tenantId, currentUser?.id, executeCreateThread, executeSendMessage, reexecute, markRead]);
+  }, [newThreadText, selectedWorkspaces, activeAgent?.id, tenantId, currentUser?.id, createThread, reexecute, markRead, markThreadActive, user?.sub]);
 
   // ── Render ─────────────────────────────────────────────────────────────
   const agentDisplayName = activeAgent?.name || (agentsFetching ? "" : "Agent");
