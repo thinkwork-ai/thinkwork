@@ -14,8 +14,6 @@ See the [Evaluations guide](/guides/evaluations/) for the architecture, assertio
 
 ## Dashboard
 
-![Evaluations dashboard](../../../../assets/admin-evaluations/dashboard.png)
-
 The dashboard at `/evaluations` is the operator's at-a-glance view.
 
 - **Summary metric cards** — Total Runs, Latest Pass Rate, Average Score, Regressions. The pass-rate card colours green ≥ 90%, yellow ≥ 70%, red below. Regressions turns red when > 0.
@@ -43,8 +41,6 @@ The model column shortens Bedrock IDs so `us.anthropic.claude-haiku-4-5-20251001
 
 ## Run Evaluation dialog
 
-![Run Evaluation dialog](../../../../assets/admin-evaluations/run-evaluation-dialog.png)
-
 The dialog is where a run gets started. It has four inputs, in this order:
 
 | Field | Purpose |
@@ -57,8 +53,6 @@ The dialog is where a run gets started. It has four inputs, in this order:
 **Start Evaluation** is disabled until a template is picked. On submit the dialog calls `startEvalRun`, the row shows up in Recent Runs as `pending`, and the `eval-runner` Lambda picks it up asynchronously.
 
 ## Studio — test case list
-
-![Studio list](../../../../assets/admin-evaluations/studio-list.png)
 
 The Studio at `/evaluations/studio` is the test-case CRUD surface. Every row is a test case stored in `eval_test_cases`; the row lives per-tenant and carries the assertion + evaluator config.
 
@@ -79,8 +73,6 @@ The Studio auto-seeds the 96-case starter pack on a tenant's first visit (the `e
 
 ## Test Case detail
 
-![Test Case detail](../../../../assets/admin-evaluations/test-case-detail.png)
-
 **Route:** `/evaluations/studio/$testCaseId`
 
 Two sections:
@@ -91,8 +83,6 @@ Two sections:
 The header shows the Enabled badge plus **Edit** and **Delete** actions.
 
 ## Test Case editor
-
-![Test Case editor](../../../../assets/admin-evaluations/test-case-editor.png)
 
 **Route:** `/evaluations/studio/edit/$testCaseId` (or `/evaluations/studio/new`)
 
@@ -107,8 +97,6 @@ See the [Evaluations guide](/guides/evaluations/#authoring-test-cases) for the a
 
 ## Run Results
 
-![Run Results](../../../../assets/admin-evaluations/run-results.png)
-
 **Route:** `/evaluations/$runId`
 
 The run-detail page is the operator's drill-in view. It has three layers:
@@ -118,8 +106,6 @@ The run-detail page is the operator's drill-in view. It has three layers:
 3. **Results DataTable** — per-test rows with test name, category badge, status, score, duration. **Click any row to open the [Result Detail Sheet](#result-detail-sheet)**.
 
 ### Result Detail Sheet
-
-![Result Detail Sheet](../../../../assets/admin-evaluations/result-detail-sheet.png)
 
 Clicking a row slides a right-docked Sheet over the table with:
 
