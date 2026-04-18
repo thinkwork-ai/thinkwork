@@ -1,0 +1,93 @@
+---
+title: Thread & Agent Model
+description: How threads, agents, and messages compose in ThinkWork, and the contract rules the SDK enforces around each.
+---
+
+The SDK is a thin client over a domain model that the server owns. This page covers the shapes the SDK surfaces, and the rules that matter when composing them.
+
+## Threads
+
+A **thread** is the top-level unit of conversation. Every thread has:
+
+- A **tenant** (the ThinkWork organization it lives in).
+- An **agent** that "owns" it — the one the user is addressing. Nullable on creation for edge cases, but effectively required for chat-style flows: without `agentId` set, no agent picks up new messages.
+- A **channel** distinguishing how the thread entered the system — `CHAT` for user-initiated conversations, `EMAIL` for inbound email, `SCHEDULE` for cron-fired threads, `WEBHOOK`/`API` for programmatic, `MANUAL` for admin-created.
+- A **type** separating task work (`TASK`, `BUG`, `FEATURE`) from questions (`QUESTION`).
+- A **status** following the lifecycle: `BACKLOG` → `TODO` → `IN_PROGRESS` → `IN_REVIEW` → (`BLOCKED`) → `DONE` / `CANCELLED`.
+- **Activity timestamps**: `createdAt`, `updatedAt`, `lastActivityAt` (most recent assistant message), `lastTurnCompletedAt` (most recent agent turn), `lastReadAt` (last time a user marked it read).
+
+### The agent-on-first-message contract
+
+Threads without an `agentId` are valid at rest but inert — they have no autoresponder. When building a "start a new conversation" UI, bind the thread to an agent at creation time:
+
+```tsx
+await createThread({
+  tenantId,
+  agentId: selectedAgent.id, // required for chat flows
+  title: "New conversation",
+  channel: "CHAT",
+  firstMessage: text,
+});
+```
+
+### The atomic `firstMessage` contract
+
+Pre-0.2.0, hosts had to call `createThread` then `sendMessage(newThread.id, content)` as two separate mutations. This footgun meant the new threadId wasn't available to bound hooks until after a re-render. **0.2.0 fixes this**: pass `firstMessage` on `CreateThreadInput` and the server atomically creates the thread plus its opening user message in a single transaction, dispatches the agent, and returns the thread row.
+
+For post-creation sends, use the unbound `useSendMessage()` which takes the threadId at call time.
+
+## Agents
+
+An **agent** is a configured AI persona the tenant can direct threads at. Agents have:
+
+- A **role** — `"team"`, `"personal"`, etc. Used for client-side grouping; the SDK doesn't enforce semantics.
+- A **type** — `"managed"`, `"adapter"`, `"local"`. `"local"` agents are scratch/sandbox agents and should be filtered out of end-user pickers (the SDK's `useAgents` returns everything; filter client-side).
+- A **status** — `"active"`, `"revoked"`, etc.
+
+`useAgents({ tenantId })` returns the raw list. Building a picker with persistent selection is a host concern — the SDK does not ship selection storage. The canonical host-side pattern:
+
+```tsx
+function useSelectedAgent(agents: Agent[]) {
+  // ... load selected ID from AsyncStorage/MMKV/Zustand, pick a default,
+  //     return { selectedAgent, setSelectedAgentId }
+}
+```
+
+See [Integration Recipes](/sdks/react-native/integration-recipes) for a complete example.
+
+## Messages
+
+A **message** belongs to exactly one thread. Fields:
+
+- `role` — `"USER" | "ASSISTANT" | "SYSTEM" | "TOOL"`. The SDK exposes this as-is; when passing messages to a chat UI that uses lowercase roles, map at the boundary.
+- `content` — the text body. Nullable for tool-call messages where content lives in side-channel fields.
+- `senderType` / `senderId` — attribution. For user messages, default `senderType: "user"`; pass `senderId` via `useSendMessage()`'s third arg if you need named attribution.
+- `createdAt` — authoritative ordering. Server returns newest-first.
+
+### Role casing
+
+The GraphQL schema uses uppercase (`"USER"`, `"ASSISTANT"`). Some host chat surfaces use lowercase. **Normalize at the boundary**, not inside the SDK:
+
+```tsx
+const role = (m.role === "USER" ? "user" : "assistant") as const;
+```
+
+### Subscription-driven refresh
+
+`useMessages(threadId)` subscribes to `onNewMessage(threadId)` internally and triggers a network refetch when events arrive. Hosts building a chat surface don't need to wire subscriptions manually — just render `useMessages` and the list stays live.
+
+## The thread-read-state dance
+
+Unread-state is cosmetic on the server and consensus on the client:
+
+- **Server truth**: `thread.lastReadAt`. Updated via `useUpdateThread(threadId, { lastReadAt })`.
+- **Derivation**: a thread is "unread" when `lastActivityAt > lastReadAt`, or `lastReadAt` is null and there's any activity.
+- **Badge count**: use `useUnreadThreadCount` rather than computing client-side — the server-side aggregate is O(1) per tenant, and `Thread` typename invalidation syncs the count with list changes automatically.
+
+Optimistic mark-read: hosts that want an instant dot-clearing UX (without waiting for the server round-trip) can maintain a local `Set<threadId>` of "just-read" IDs alongside the server state. See [Integration Recipes](/sdks/react-native/integration-recipes).
+
+## Tenancy is implicit
+
+Every hook that operates on a resource takes `tenantId` via `useThinkworkAuth().user.tenantId` — either directly (you pass it in) or indirectly (the provider injects it). You should never hard-code tenant IDs; always read from the authed user.
+
+If `user.tenantId` is undefined while `status === "signed-in"`, something went wrong in token parsing. This shouldn't happen in 0.2.0+ (the me-query fallback handles Google-federated users) — if you see it, file a bug.

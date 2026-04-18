@@ -1,0 +1,184 @@
+---
+title: Migration 0.1 → 0.2
+description: What changed in @thinkwork/react-native-sdk between 0.1.x and 0.2.0-beta, why, and how to update a host app.
+---
+
+## TL;DR
+
+| Change | Action |
+| --- | --- |
+| `useSendMessage(threadId)` → `useSendMessage()` returning `(threadId, content, opts?) => Promise<Message>` | Replace bound callers; pass threadId at call time. |
+| `useUpdateThread()` returning `(threadId, input) => Promise<Thread>` (new) | Replace raw `useMutation(UpdateThreadMutation)` call sites. |
+| `useThinkworkAuth().user.tenantId` is always populated when signed-in | Delete host-side `useThinkworkMe` workarounds. |
+| `CreateThreadInput.firstMessage?: string` (new) | Collapse two-step `createThread + sendMessage` to one atomic call. |
+| `useAgents({ tenantId })` (new, pure data) | Move selection + storage to host. |
+| `useThreads({ tenantId, agentId?, limit? })` (new) | Replace raw `useQuery(ThreadsQuery)` in list screens. |
+| `useUnreadThreadCount({ tenantId, agentId? })` (new) | Replace client-side thread-scan badge logic. |
+| Subscriptions renamed: `newMessage` → `onNewMessage` | Already handled by SDK — no host changes needed. |
+
+In 0.2.0-beta.2 additionally:
+
+| Change | Action |
+| --- | --- |
+| `useThreads` accepts filter args (`status`, `priority`, `type`, `channel`, `assigneeId`, `search`, `cursor`) | Replace local filter-aware queries. |
+| `Thread.identifier` + `Thread.assigneeId` exposed | Available without a custom query. |
+| `useThreadUpdatedSubscription(tenantId)` + `useThreadTurnUpdatedSubscription(tenantId)` (new, tenant-wide) | Replace local tenant-wide subscription hooks. |
+| `useSendMessage()` accepts optional `{ senderType?, senderId? }` third arg | Pass `senderId` for attribution without dropping back to raw mutations. |
+
+## Rewriting `useSendMessage`
+
+The single biggest ergonomic change. Pre-0.2.0 the hook bound a threadId at render time, which broke the common "create a thread then send its first message" flow — the newly-minted threadId wasn't available to the bound hook until after re-render.
+
+**Before**:
+
+```tsx
+const send = useSendMessage(threadId);
+
+async function submit(text: string) {
+  await send(text);
+}
+```
+
+**After**:
+
+```tsx
+const sendMessage = useSendMessage();
+
+async function submit(text: string) {
+  await sendMessage(threadId, text);
+}
+```
+
+If you need attribution (explicit senderId), use the options arg added in 0.2.0-beta.2:
+
+```tsx
+await sendMessage(threadId, text, { senderId: currentUser?.id });
+```
+
+## Removing the `useThinkworkMe` workaround
+
+Pre-0.2.0, Google-federated users had no `custom:tenant_id` claim in their Cognito ID token, so `useThinkworkAuth().user.tenantId` was undefined. Host apps worked around this by calling a `useThinkworkMe()` hook that fired the `me` query.
+
+**0.2.0**: `ThinkworkAuthProvider` handles the fallback internally — when the token claim is missing, it fires a raw `me` fetch post-sign-in and patches `user.tenantId` before flipping `status` to `"signed-in"`. Every downstream hook sees a tenantId either way.
+
+**Action**: delete any host-side `useThinkworkMe` helper, and replace calls to it with `useThinkworkAuth().user?.tenantId`.
+
+## Collapsing `createThread + sendMessage`
+
+The two-step "create thread, then send first message" pattern is now one call:
+
+**Before**:
+
+```tsx
+const createThread = useCreateThread();
+const sendMessage = useSendMessage(); // or the old bound form
+
+async function start(text: string) {
+  const thread = await createThread({ tenantId, agentId, title: text.slice(0, 60), channel: "CHAT" });
+  await sendMessage(thread.id, text); // or old bound form
+}
+```
+
+**After**:
+
+```tsx
+const createThread = useCreateThread();
+
+async function start(text: string) {
+  const thread = await createThread({
+    tenantId,
+    agentId,
+    title: text.slice(0, 60),
+    channel: "CHAT",
+    firstMessage: text,
+  });
+}
+```
+
+The backend inserts both rows in a single DB transaction, so there's no orphan-thread risk if the message insert fails.
+
+## Replacing the client-side unread-count scan
+
+Pre-0.2.0, some hosts kept an unread-count badge by fetching up to 200 threads and iterating client-side. This scales poorly and duplicates the threads list query.
+
+**Before**:
+
+```tsx
+// Raw urql query fetching 200 threads for the badge
+const [{ data }] = useQuery({ query: THREADS_FOR_UNREAD_QUERY, variables: { tenantId, agentId, limit: 200 } });
+const count = countUnread(data?.threads ?? []);
+```
+
+**After**:
+
+```tsx
+const { count } = useUnreadThreadCount({ tenantId, agentId });
+```
+
+The SDK hits a server-side aggregate resolver. urql's `Thread` typename invalidation keeps the count in sync with list mutations (mark-read, archive, etc.) without manual plumbing.
+
+## Replacing raw thread-list queries
+
+If you were writing inline `gql` for thread lists, replace with `useThreads`:
+
+**Before**:
+
+```tsx
+const [{ data, fetching }, reexecute] = useQuery({
+  query: gql`query Threads($tenantId: ID!, $agentId: ID, $limit: Int) {
+    threads(tenantId: $tenantId, agentId: $agentId, limit: $limit) { ...fields }
+  }`,
+  variables: { tenantId, agentId, limit: 100 },
+});
+const threads = data?.threads ?? [];
+```
+
+**After**:
+
+```tsx
+const { threads, loading, refetch } = useThreads({ tenantId, agentId, limit: 100 });
+```
+
+In 0.2.0-beta.2, `useThreads` accepts filter args: `status`, `priority`, `type`, `channel`, `assigneeId`, `search`, `cursor`.
+
+## Splitting `useAgents` from agent selection
+
+Pre-0.2.0 some hosts shipped a combined "list + selection + storage" hook. The 0.2.0 SDK returns data only; selection/storage moves to the host.
+
+**Before (host-owned combined hook)**:
+
+```tsx
+const { agents, selectedAgent, setSelectedAgentId } = useThinkworkAgents();
+```
+
+**After (SDK data + host selection)**:
+
+```tsx
+const { agents } = useAgents({ tenantId });
+const { selectedAgent, setSelectedAgentId } = useSelectedAgent(agents);
+```
+
+See [Integration Recipes](/sdks/react-native/integration-recipes) for the host-side `useSelectedAgent` implementation.
+
+## Package name and publishing
+
+0.2.0 is the first version published to **public npm** under `@thinkwork/react-native-sdk`. Pre-0.2.0 consumers may have been vendoring a tarball. Replace any `file:../../vendor/...tgz` dependency with a normal version constraint:
+
+```json
+{
+  "dependencies": {
+    "@thinkwork/react-native-sdk": "^0.2.0-beta.2"
+  }
+}
+```
+
+The `beta` dist-tag tracks the latest prerelease. Once 1.0 ships, `latest` will point at the stable line.
+
+## Future compatibility (0.3.0 preview)
+
+0.3.0 will replace the static `ThinkworkConfig` prop model with a **runtime-configurable** one, where host apps read per-company config from a synced settings store rather than build-time env vars. The `ThinkworkProvider` prop API does NOT change — the existing `config: ThinkworkConfig` prop already supports dynamic identity swaps via its `useMemo`-keyed deps. 0.3.0 will add:
+
+- A new `stageUrl` field on `ThinkworkConfig` (optional) used by a revised `signInWithGoogle` flow that fetches Cognito parameters from a `/.well-known/thinkwork-config.json` on the stage.
+- An OAuth relay at `https://<stage>/oauth/relay` so a single Cognito callback URL serves every host, eliminating per-host Terraform edits.
+
+Host code written for 0.2.0 requires no changes to take advantage of 0.3.0 — read the config from your synced store and pass a new config object identity when it changes. See the [0.3.0 PRD](https://github.com/thinkwork-ai/thinkwork/blob/main/.prds/0.3.0-admin-configurable-runtime.md).
