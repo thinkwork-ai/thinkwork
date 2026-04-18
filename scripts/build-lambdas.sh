@@ -70,7 +70,7 @@ build_handler() {
 
   mkdir -p "$out_dir"
   local flags_ref="ESBUILD_FLAGS[@]"
-  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "eval-runner" ] || [ "$name" = "wiki-compile" ]; then
+  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "eval-runner" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "wiki-bootstrap-import" ]; then
     flags_ref="BUNDLED_AGENTCORE_ESBUILD_FLAGS[@]"
   fi
   npx esbuild "$entry" \
