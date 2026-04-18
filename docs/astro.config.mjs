@@ -183,7 +183,7 @@ export default defineConfig({
             { label: "Skill Packs", slug: "guides/skill-packs" },
             { label: "Connectors", slug: "guides/connectors" },
             { label: "External Tasks", slug: "guides/external-tasks" },
-            { label: "Eval Packs", slug: "guides/eval-packs" },
+            { label: "Evaluations", slug: "guides/evaluations" },
           ],
         },
         { label: "Architecture", slug: "architecture" },
