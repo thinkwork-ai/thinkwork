@@ -128,3 +128,24 @@ export interface UpdateThreadInput {
   archivedAt?: string | null;
   lastReadAt?: string | null;
 }
+
+export type MobileCaptureFactType = "FACT" | "PREFERENCE" | "EXPERIENCE" | "OBSERVATION";
+
+export interface MobileMemoryCapture {
+  id: string;
+  tenantId: string;
+  agentId: string;
+  content: string;
+  factType: MobileCaptureFactType;
+  capturedAt: string;
+  syncedAt?: string | null;
+  metadata?: string | null;
+}
+
+export interface CaptureMobileMemoryInput {
+  agentId: string;
+  content: string;
+  factType?: MobileCaptureFactType;
+  metadata?: Record<string, unknown>;
+  clientCaptureId?: string;
+}

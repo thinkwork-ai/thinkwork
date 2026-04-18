@@ -96,6 +96,19 @@ type CostRecordedEvent {
   updatedAt: AWSDateTime!
 }
 
+type EvalRunUpdateEvent {
+  runId: ID!
+  tenantId: ID!
+  agentId: ID
+  status: String!
+  totalTests: Int
+  passed: Int
+  failed: Int
+  passRate: Float
+  errorMessage: String
+  updatedAt: AWSDateTime!
+}
+
 # ────────────────────────────────────────────────────────────────────
 # Notification mutations
 #
@@ -169,6 +182,18 @@ type Mutation {
     amountUsd: Float!
     model: String
   ): CostRecordedEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+
+  notifyEvalRunUpdate(
+    runId: ID!
+    tenantId: ID!
+    agentId: ID
+    status: String!
+    totalTests: Int
+    passed: Int
+    failed: Int
+    passRate: Float
+    errorMessage: String
+  ): EvalRunUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
 }
 
 type Subscription {
@@ -196,4 +221,7 @@ type Subscription {
 
   onCostRecorded(tenantId: ID!): CostRecordedEvent @aws_api_key @aws_cognito_user_pools @aws_iam
     @aws_subscribe(mutations: ["notifyCostRecorded"])
+
+  onEvalRunUpdated(tenantId: ID!): EvalRunUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+    @aws_subscribe(mutations: ["notifyEvalRunUpdate"])
 }

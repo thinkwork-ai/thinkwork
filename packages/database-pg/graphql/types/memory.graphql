@@ -91,4 +91,34 @@ extend type Query {
 extend type Mutation {
   deleteMemoryRecord(memoryRecordId: ID!): Boolean!
   updateMemoryRecord(memoryRecordId: ID!, content: String!): Boolean!
+  captureMobileMemory(
+    agentId: ID!
+    content: String!
+    factType: MobileCaptureFactType = FACT
+    metadata: AWSJSON
+    clientCaptureId: ID
+  ): MobileMemoryCapture!
+}
+
+"""
+Fact-type picker values exposed to the mobile quick-capture footer. Maps to
+Hindsight's native fact_type via the resolver. FACT is the default when the
+user doesn't override.
+"""
+enum MobileCaptureFactType {
+  FACT
+  PREFERENCE
+  EXPERIENCE
+  OBSERVATION
+}
+
+type MobileMemoryCapture {
+  id: ID!
+  tenantId: ID!
+  agentId: ID!
+  content: String!
+  factType: MobileCaptureFactType!
+  capturedAt: AWSDateTime!
+  syncedAt: AWSDateTime
+  metadata: AWSJSON
 }

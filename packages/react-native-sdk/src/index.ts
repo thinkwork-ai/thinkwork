@@ -23,6 +23,7 @@ export {
   type ThreadTurnUpdateEvent,
   type ThreadUpdateEvent,
 } from "./hooks/use-subscriptions";
+export { useCaptureMobileMemory } from "./hooks/use-capture-mobile-memory";
 
 export type {
   ThinkworkConfig,
@@ -37,4 +38,7 @@ export type {
   ThreadTurn,
   CreateThreadInput,
   UpdateThreadInput,
+  MobileCaptureFactType,
+  MobileMemoryCapture,
+  CaptureMobileMemoryInput,
 } from "./types";

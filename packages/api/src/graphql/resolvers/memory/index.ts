@@ -4,7 +4,8 @@ import { memoryGraph } from "./memoryGraph.query.js";
 import { memorySystemConfig } from "./memorySystemConfig.query.js";
 import { deleteMemoryRecord } from "./deleteMemoryRecord.mutation.js";
 import { updateMemoryRecord } from "./updateMemoryRecord.mutation.js";
+import { captureMobileMemory } from "./captureMobileMemory.mutation.js";
 
 export const memoryQueries = { memoryRecords, memorySearch, memoryGraph, memorySystemConfig };
 
-export const memoryMutations = { deleteMemoryRecord, updateMemoryRecord };
+export const memoryMutations = { deleteMemoryRecord, updateMemoryRecord, captureMobileMemory };
