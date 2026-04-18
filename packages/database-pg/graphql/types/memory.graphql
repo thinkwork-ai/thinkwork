@@ -122,3 +122,11 @@ type MobileMemoryCapture {
   syncedAt: AWSDateTime
   metadata: AWSJSON
 }
+
+extend type Query {
+  mobileMemoryCaptures(agentId: ID!, limit: Int = 50): [MobileMemoryCapture!]!
+}
+
+extend type Mutation {
+  deleteMobileMemoryCapture(agentId: ID!, captureId: ID!): Boolean!
+}
