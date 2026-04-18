@@ -242,11 +242,12 @@ function EvalRunDetailPage() {
       <div className="shrink-0 space-y-4 pb-4">
         <PageHeader
           title="Run Results"
-          description={
-            runDetail.agentName
-              ? `${runDetail.agentName} — ${runDetail.passed ?? 0} passed, ${runDetail.failed ?? 0} failed of ${runDetail.totalTests ?? 0} tests`
-              : `${runDetail.passed ?? 0} passed, ${runDetail.failed ?? 0} failed of ${runDetail.totalTests ?? 0} tests`
-          }
+          description={[
+            runDetail.agentTemplateName ?? runDetail.agentName,
+            `${runDetail.passed ?? 0} passed, ${runDetail.failed ?? 0} failed of ${runDetail.totalTests ?? 0} tests`,
+          ]
+            .filter(Boolean)
+            .join(" — ")}
           actions={
             <div className="flex items-center gap-2">
               {statusBadge(runDetail.status)}
