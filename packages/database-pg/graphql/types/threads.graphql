@@ -148,6 +148,10 @@ input CreateThreadInput {
   dueAt: AWSDateTime
   createdByType: String
   createdById: String
+  # Optional opening user message. When set, the resolver atomically
+  # creates the thread and the first message in a single transaction so
+  # hosts can avoid the two-round-trip "create then send" footgun.
+  firstMessage: String
 }
 
 input UpdateThreadInput {
@@ -227,6 +231,7 @@ extend type Query {
   thread(id: ID!): Thread
   threadByNumber(tenantId: ID!, number: Int!): Thread
   threadLabels(tenantId: ID!): [ThreadLabel!]!
+  unreadThreadCount(tenantId: ID!, agentId: ID): Int!
 }
 
 extend type Mutation {

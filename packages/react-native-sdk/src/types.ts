@@ -46,9 +46,29 @@ export interface ThinkworkAuthContextValue {
   getIdToken: () => Promise<string | null>;
 }
 
+export interface Agent {
+  id: string;
+  name: string;
+  slug?: string | null;
+  role?: string | null;
+  type?: string | null;
+  status?: string | null;
+  avatarUrl?: string | null;
+}
+
 export interface Thread {
   id: string;
+  tenantId?: string;
+  agentId?: string | null;
+  number?: number;
   title: string;
+  status?: string;
+  priority?: string;
+  type?: string;
+  channel?: string;
+  lastActivityAt?: string | null;
+  lastReadAt?: string | null;
+  archivedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -82,4 +102,26 @@ export interface CreateThreadInput {
   title: string;
   agentId?: string;
   description?: string;
+  channel?: string;
+  type?: string;
+  priority?: string;
+  createdByType?: string;
+  createdById?: string;
+  // Optional opening user message. Lets hosts avoid the "create thread then
+  // send message" round-trip by atomically minting a thread with its first
+  // user message in a single mutation.
+  firstMessage?: string;
+}
+
+export interface UpdateThreadInput {
+  title?: string;
+  description?: string;
+  status?: string;
+  priority?: string;
+  type?: string;
+  channel?: string;
+  assigneeType?: string;
+  assigneeId?: string;
+  archivedAt?: string | null;
+  lastReadAt?: string | null;
 }

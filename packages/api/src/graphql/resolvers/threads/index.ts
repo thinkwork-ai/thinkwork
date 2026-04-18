@@ -3,6 +3,7 @@ import { threadsPaged_query } from "./threadsPaged.query.js";
 import { thread } from "./thread.query.js";
 import { threadByNumber } from "./threadByNumber.query.js";
 import { threadLabels_query } from "./threadLabels.query.js";
+import { unreadThreadCount } from "./unreadThreadCount.query.js";
 
 import { createThread } from "./createThread.mutation.js";
 import { updateThread } from "./updateThread.mutation.js";
@@ -28,6 +29,7 @@ export const threadQueries = {
 	thread,
 	threadByNumber,
 	threadLabels: threadLabels_query,
+	unreadThreadCount,
 };
 
 export const threadMutations = {

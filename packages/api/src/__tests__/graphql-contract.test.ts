@@ -63,6 +63,7 @@ describe("GraphQL Schema Contract", () => {
 			"agent", "agents", "agentApiKeys", "modelCatalog",
 			// Threads
 			"thread", "threads", "threadsPaged", "threadByNumber", "threadLabels",
+			"unreadThreadCount",
 			// Messages
 			"messages",
 			// Core
@@ -181,6 +182,27 @@ describe("GraphQL Schema Contract", () => {
 
 		it("no KG extract mutation", () => {
 			expect(sdl).not.toContain("triggerKGExtract");
+		});
+	});
+
+	describe("0.2.0 SDK surface additions", () => {
+		const schema = buildSchema(loadFullSchema());
+
+		it("CreateThreadInput accepts firstMessage for atomic create-and-send", () => {
+			const inputType = schema.getType("CreateThreadInput");
+			expect(inputType).toBeDefined();
+			const fields = (inputType as any).getFields();
+			expect(fields.firstMessage).toBeDefined();
+			expect(String(fields.firstMessage.type)).toBe("String");
+		});
+
+		it("unreadThreadCount returns a non-null Int", () => {
+			const queryType = schema.getQueryType();
+			const field = queryType!.getFields().unreadThreadCount;
+			expect(field).toBeDefined();
+			expect(String(field.type)).toBe("Int!");
+			const argNames = field.args.map((a) => a.name).sort();
+			expect(argNames).toEqual(["agentId", "tenantId"]);
 		});
 	});
 
