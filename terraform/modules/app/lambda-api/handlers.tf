@@ -117,6 +117,7 @@ resource "aws_lambda_function" "handler" {
     "wiki-compile",
     "wiki-lint",
     "wiki-export",
+    "wiki-bootstrap-import",
     "artifact-deliver",
     "recipe-refresh",
     "agent-skills-list",
@@ -132,8 +133,11 @@ resource "aws_lambda_function" "handler" {
   # eval-runner walks every test case sequentially, invoking an agent +
   # waiting up to 2 min for spans to propagate per test, so a 10-test run
   # can easily exceed the 30 s default. 900 s covers ~5-15 min sweeps.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "eval-runner" ? 900 : each.key == "wiki-compile" ? 480 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : 30
-  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "eval-runner" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "wiki-export" ? 1024 : 256
+  # wiki-bootstrap-import runs a full Hindsight ingest for ~3,000 records;
+  # the LLM-backed retain path makes it the longest-running Lambda in the
+  # set. 900 s is Lambda's per-invocation max and matches eval-runner's ceiling.
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "eval-runner" ? 900 : each.key == "wiki-compile" ? 480 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : 30
+  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "eval-runner" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : 256
 
   filename         = "${var.lambda_zips_dir}/${each.key}.zip"
   source_code_hash = filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip")
