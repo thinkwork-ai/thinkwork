@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo } from "react";
 import { FlatList, RefreshControl, View } from "react-native";
-import { ListChecks, Search } from "lucide-react-native";
+import { Search } from "lucide-react-native";
+import { IconBrain } from "@tabler/icons-react-native";
 import { Muted } from "@/components/ui/typography";
 import {
 	useDeleteMobileMemoryCapture,
@@ -95,7 +96,7 @@ export function CapturesList({ agentId, colors, searchQuery }: CapturesListProps
 		}
 		return (
 			<View className="flex-1 items-center justify-center px-6 gap-2">
-				<ListChecks size={32} color={colors.mutedForeground} />
+				<IconBrain size={32} color={colors.mutedForeground} />
 				<Muted>No memories yet</Muted>
 			</View>
 		);
