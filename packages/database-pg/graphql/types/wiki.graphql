@@ -78,10 +78,53 @@ extend type Query {
   wikiBacklinks(pageId: ID!): [WikiPage!]!
 }
 
+type WikiJournalImportResult {
+  accountId: ID!
+  tenantId: ID!
+  agentId: ID!
+  recordsIngested: Int!
+  recordsSkipped: Int!
+  errors: Int!
+  compileJobId: ID
+  compileJobDeduped: Boolean!
+  latencyMs: Int!
+}
+
+type WikiResetCursorResult {
+  tenantId: ID!
+  ownerId: ID!
+  cursorCleared: Boolean!
+  pagesArchived: Int!
+}
+
 extend type Mutation {
   """
   Admin-only: enqueue an ad-hoc compile job for a specific (tenant, agent).
   Returns the job row (newly inserted or the in-flight dedupe hit).
   """
   compileWikiNow(tenantId: ID!, ownerId: ID!): WikiCompileJob!
+
+  """
+  Admin-only: bulk-import a journal-schema account's ideas into Hindsight
+  as normalized memory records under the given (tenant, agent) scope, then
+  enqueue a single terminal compile job. Not rate-limited — intended for
+  controlled seeds, not regular use.
+  """
+  bootstrapJournalImport(
+    accountId: ID!
+    tenantId: ID!
+    agentId: ID!
+    limit: Int
+  ): WikiJournalImportResult!
+
+  """
+  Admin-only replay: clear the compile cursor for (tenant, owner). If
+  `force` is true, also archives every active page in the scope so the
+  next compile rebuilds from scratch. Destructive when force=true.
+  """
+  resetWikiCursor(
+    tenantId: ID!
+    ownerId: ID!
+    force: Boolean = false
+  ): WikiResetCursorResult!
 }
