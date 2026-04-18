@@ -9,6 +9,7 @@ import {
 	integer,
 	timestamp,
 	jsonb,
+	boolean,
 	uniqueIndex,
 	index,
 } from "drizzle-orm/pg-core";
@@ -28,6 +29,12 @@ export const tenants = pgTable("tenants", {
 	issue_prefix: text("issue_prefix"),
 	issue_counter: integer("issue_counter").notNull().default(0),
 	channel_counters: jsonb("channel_counters").notNull().default({}),
+	// Compounding-memory feature gate. Off for every tenant at migration time;
+	// flipped on per tenant as the wiki-compile pipeline is rolled out. Checked
+	// by the memory-retain → wiki-compile enqueue path.
+	wiki_compile_enabled: boolean("wiki_compile_enabled")
+		.notNull()
+		.default(false),
 	created_at: timestamp("created_at", { withTimezone: true })
 		.notNull()
 		.default(sql`now()`),
