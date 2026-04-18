@@ -178,6 +178,24 @@ export default defineConfig({
           ],
         },
         {
+          label: "SDKs",
+          collapsed: true,
+          items: [
+            {
+              label: "React Native",
+              collapsed: true,
+              items: [
+                { label: "Overview", slug: "sdks/react-native" },
+                { label: "Install & Setup", slug: "sdks/react-native/install-and-setup" },
+                { label: "Hook Reference", slug: "sdks/react-native/hook-reference" },
+                { label: "Thread & Agent Model", slug: "sdks/react-native/thread-agent-model" },
+                { label: "Integration Recipes", slug: "sdks/react-native/integration-recipes" },
+                { label: "Migration 0.1 → 0.2", slug: "sdks/react-native/migration" },
+              ],
+            },
+          ],
+        },
+        {
           label: "Authoring Guides",
           collapsed: true,
           items: [

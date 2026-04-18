@@ -1,0 +1,117 @@
+---
+title: Install & Setup
+description: Get @thinkwork/react-native-sdk mounted in an Expo or React Native host app — peer dependencies, ThinkworkProvider wiring, Cognito callback configuration.
+---
+
+The ThinkWork React Native SDK is a **hooks-only** library. It ships no UI components and no host-specific vocabulary. Consumers build their own chat surface from the hooks.
+
+## Install
+
+```sh
+pnpm add @thinkwork/react-native-sdk
+pnpm add amazon-cognito-identity-js expo-crypto expo-secure-store expo-web-browser graphql urql
+```
+
+The SDK is published as a prerelease on the `beta` dist-tag:
+
+```sh
+pnpm add @thinkwork/react-native-sdk@beta
+```
+
+### Peer dependencies
+
+The SDK declares these as peer deps — your host app installs them, the SDK uses whatever version you have:
+
+| Package | Why |
+| --- | --- |
+| `react`, `react-native` | Host framework |
+| `urql` | GraphQL client + exchanges |
+| `graphql` | Document type definitions |
+| `amazon-cognito-identity-js` | Email/password + session restore |
+| `expo-web-browser` | Hosted-UI flow for Google sign-in |
+| `expo-secure-store`, `expo-crypto` | Token storage + device key material |
+
+## Provider setup
+
+Wrap your app's root with `ThinkworkProvider` and pass a static `ThinkworkConfig`. Every hook below needs to render inside this provider.
+
+```tsx
+import { ThinkworkProvider } from "@thinkwork/react-native-sdk";
+
+const config = {
+  apiBaseUrl: process.env.EXPO_PUBLIC_THINKWORK_API_URL!,
+  graphqlUrl: process.env.EXPO_PUBLIC_THINKWORK_GRAPHQL_URL!,
+  graphqlWsUrl: process.env.EXPO_PUBLIC_THINKWORK_GRAPHQL_WS_URL,
+  cognito: {
+    userPoolId: process.env.EXPO_PUBLIC_COGNITO_USER_POOL_ID!,
+    userPoolClientId: process.env.EXPO_PUBLIC_COGNITO_CLIENT_ID!,
+    region: "us-east-1",
+    hostedUiDomain: process.env.EXPO_PUBLIC_COGNITO_HOSTED_UI_DOMAIN,
+  },
+  oauthRedirectUri: "myapp://oauth/callback",
+};
+
+export default function App() {
+  return (
+    <ThinkworkProvider config={config}>
+      <YourAppScreens />
+    </ThinkworkProvider>
+  );
+}
+```
+
+### Provider composition
+
+Under the hood, `ThinkworkProvider` is `<ThinkworkGraphqlProvider> → <ThinkworkAuthProvider> → children`. The GraphQL client rebuilds when the `config` object identity changes; the auth provider re-runs its `restore()` flow on the same signal.
+
+If your config changes at runtime (for example, because your host reads it from a synced settings store), pass a new object reference and the providers will re-mount cleanly. The Cognito pool cache is keyed by `userPoolId + userPoolClientId`, so swapping stages is safe.
+
+### Environment variables in an Expo host
+
+Expo apps expose env vars via `EXPO_PUBLIC_*`. A complete example of the env block (matching the code above) is available at the host-side of the LastMile integration — see the `eas.json` in `lastmile/mobile-apps/apps/mobile/` for a working prod/preview/dev layout.
+
+## Cognito callback configuration
+
+Your host app's OAuth redirect URI (e.g. `myapp://oauth/callback`) must be in the Cognito mobile client's **Allowed callback URLs** on the ThinkWork stage you're connecting to.
+
+### Expo deep-link scheme
+
+In your `app.config.js`, set `scheme` to the prefix before `://`:
+
+```js
+// app.config.js
+export default {
+  expo: {
+    scheme: "myapp", // must match the scheme in oauthRedirectUri
+    // ...
+  },
+};
+```
+
+### Registering the scheme with ThinkWork
+
+For a ThinkWork stage you operate yourself, add the URI to the `mobile_callback_urls` list in `terraform/modules/foundation/cognito/variables.tf`, then `terraform apply`. The ThinkWork 0.2.x default list already includes `myapp://oauth/callback`, `thinkwork://`, and the Expo dev-server scheme.
+
+For a stage operated by a customer, the 0.3.0 [admin-configurable runtime](/roadmap) moves this to a runtime scheme-registration API so customer admins don't need Terraform access. Until 0.3.0 lands, coordinate with the stage operator.
+
+## Verify the install
+
+A minimal smoke component:
+
+```tsx
+import { useThinkworkAuth } from "@thinkwork/react-native-sdk";
+
+function AuthStatus() {
+  const { status, user } = useThinkworkAuth();
+  return <Text>{status === "signed-in" ? `Hi ${user?.email}` : status}</Text>;
+}
+```
+
+If `status` flips from `"unknown"` to `"signed-out"` (or `"signed-in"` if a session restored), the provider mounted and Cognito reached the pool. If `status` sticks at `"error"`, check the logger output for the failure mode.
+
+## Next steps
+
+- [Hook Reference](/sdks/react-native/hook-reference) — every hook the SDK exports, with signatures and cache semantics.
+- [Thread & Agent Model](/sdks/react-native/thread-agent-model) — how threads, agents, and messages compose.
+- [Integration Recipes](/sdks/react-native/integration-recipes) — copyable patterns for common host flows.
+- [Migration 0.1 → 0.2](/sdks/react-native/migration) — if you're upgrading from 0.1.x.
