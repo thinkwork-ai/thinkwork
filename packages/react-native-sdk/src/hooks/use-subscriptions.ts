@@ -33,6 +33,18 @@ const ThreadTurnUpdatedSubscription = gql`
   }
 `;
 
+const ThreadUpdatedSubscription = gql`
+  subscription OnThreadUpdated($tenantId: ID!) {
+    onThreadUpdated(tenantId: $tenantId) {
+      threadId
+      tenantId
+      status
+      title
+      updatedAt
+    }
+  }
+`;
+
 export interface NewMessageEvent {
   messageId: string;
   threadId: string;
@@ -52,6 +64,14 @@ export interface ThreadTurnUpdateEvent {
   agentId: string | null;
   status: string;
   triggerName: string | null;
+  updatedAt: string;
+}
+
+export interface ThreadUpdateEvent {
+  threadId: string;
+  tenantId: string;
+  status: string;
+  title: string;
   updatedAt: string;
 }
 
@@ -85,4 +105,36 @@ export function useThreadTurnSubscription(threadId: string | null | undefined) {
   }, [data, threadId]);
 
   return [{ data: filtered, error, fetching }] as const;
+}
+
+/**
+ * Tenant-wide agent turn subscription — no client-side thread filter.
+ * Use this when the consumer wants to react to turn updates across every
+ * thread in the tenant (e.g. dashboards, per-tenant activity feeds).
+ * For a thread-scoped stream, see `useThreadTurnSubscription`.
+ */
+export function useThreadTurnUpdatedSubscription(
+  tenantId: string | null | undefined,
+) {
+  return useSubscription<{ onThreadTurnUpdated: ThreadTurnUpdateEvent }>({
+    query: ThreadTurnUpdatedSubscription,
+    variables: { tenantId },
+    pause: !tenantId,
+  });
+}
+
+/**
+ * Tenant-wide thread-update subscription — fires whenever any thread's
+ * status or title changes. Use for dashboards that need to re-query the
+ * thread list on any mutation, or badges that reflect cross-thread
+ * activity.
+ */
+export function useThreadUpdatedSubscription(
+  tenantId: string | null | undefined,
+) {
+  return useSubscription<{ onThreadUpdated: ThreadUpdateEvent }>({
+    query: ThreadUpdatedSubscription,
+    variables: { tenantId },
+    pause: !tenantId,
+  });
 }

@@ -6,15 +6,22 @@ export { setAuthToken, getAuthToken, onAuthTokenChange } from "./graphql/token";
 export { defaultLogger } from "./logger";
 
 export { useAgents } from "./hooks/use-agents";
-export { useThreads } from "./hooks/use-threads";
+export { useThreads, type UseThreadsArgs } from "./hooks/use-threads";
 export { useUnreadThreadCount } from "./hooks/use-unread-count";
 export { useThread, useCreateThread, useUpdateThread } from "./hooks/use-thread";
-export { useMessages, useSendMessage } from "./hooks/use-messages";
+export {
+  useMessages,
+  useSendMessage,
+  type SendMessageOptions,
+} from "./hooks/use-messages";
 export {
   useNewMessageSubscription,
   useThreadTurnSubscription,
+  useThreadTurnUpdatedSubscription,
+  useThreadUpdatedSubscription,
   type NewMessageEvent,
   type ThreadTurnUpdateEvent,
+  type ThreadUpdateEvent,
 } from "./hooks/use-subscriptions";
 
 export type {

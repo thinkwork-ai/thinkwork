@@ -26,12 +26,36 @@ export const AgentsQuery = gql`
 `;
 
 export const ThreadsQuery = gql`
-  query Threads($tenantId: ID!, $agentId: ID, $limit: Int) {
-    threads(tenantId: $tenantId, agentId: $agentId, limit: $limit) {
+  query Threads(
+    $tenantId: ID!
+    $agentId: ID
+    $assigneeId: ID
+    $status: ThreadStatus
+    $priority: ThreadPriority
+    $type: ThreadType
+    $channel: ThreadChannel
+    $search: String
+    $limit: Int
+    $cursor: String
+  ) {
+    threads(
+      tenantId: $tenantId
+      agentId: $agentId
+      assigneeId: $assigneeId
+      status: $status
+      priority: $priority
+      type: $type
+      channel: $channel
+      search: $search
+      limit: $limit
+      cursor: $cursor
+    ) {
       id
       tenantId
       agentId
+      assigneeId
       number
+      identifier
       title
       status
       priority
@@ -59,7 +83,9 @@ export const ThreadQuery = gql`
       id
       tenantId
       agentId
+      assigneeId
       number
+      identifier
       title
       status
       priority
