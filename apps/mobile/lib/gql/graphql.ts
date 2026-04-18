@@ -507,6 +507,18 @@ export type CreateArtifactInput = {
   type: ArtifactType;
 };
 
+export type CreateEvalTestCaseInput = {
+  agentTemplateId?: InputMaybe<Scalars['ID']['input']>;
+  agentcoreEvaluatorIds?: InputMaybe<Array<Scalars['String']['input']>>;
+  assertions?: InputMaybe<Array<EvalAssertionInput>>;
+  category: Scalars['String']['input'];
+  enabled?: InputMaybe<Scalars['Boolean']['input']>;
+  name: Scalars['String']['input'];
+  query: Scalars['String']['input'];
+  systemPrompt?: InputMaybe<Scalars['String']['input']>;
+  tags?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
 export type CreateInboxItemInput = {
   config?: InputMaybe<Scalars['AWSJSON']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;
@@ -690,11 +702,109 @@ export type EscalateThreadInput = {
   threadId: Scalars['ID']['input'];
 };
 
-export type ExternalTaskActionResult = {
-  __typename?: 'ExternalTaskActionResult';
-  auditMessageId?: Maybe<Scalars['ID']['output']>;
-  envelope: Scalars['AWSJSON']['output'];
-  threadId: Scalars['ID']['output'];
+export type EvalAssertionInput = {
+  path?: InputMaybe<Scalars['String']['input']>;
+  type: Scalars['String']['input'];
+  value?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type EvalResult = {
+  __typename?: 'EvalResult';
+  actualOutput?: Maybe<Scalars['String']['output']>;
+  agentSessionId?: Maybe<Scalars['String']['output']>;
+  assertions: Scalars['AWSJSON']['output'];
+  category?: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  durationMs?: Maybe<Scalars['Int']['output']>;
+  errorMessage?: Maybe<Scalars['String']['output']>;
+  evaluatorResults: Scalars['AWSJSON']['output'];
+  expected?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  input?: Maybe<Scalars['String']['output']>;
+  runId: Scalars['ID']['output'];
+  score?: Maybe<Scalars['Float']['output']>;
+  status: Scalars['String']['output'];
+  testCaseId?: Maybe<Scalars['ID']['output']>;
+  testCaseName?: Maybe<Scalars['String']['output']>;
+};
+
+export type EvalRun = {
+  __typename?: 'EvalRun';
+  agentId?: Maybe<Scalars['ID']['output']>;
+  agentName?: Maybe<Scalars['String']['output']>;
+  agentTemplateId?: Maybe<Scalars['ID']['output']>;
+  agentTemplateName?: Maybe<Scalars['String']['output']>;
+  categories: Array<Scalars['String']['output']>;
+  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  costUsd?: Maybe<Scalars['Float']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  errorMessage?: Maybe<Scalars['String']['output']>;
+  failed: Scalars['Int']['output'];
+  id: Scalars['ID']['output'];
+  model?: Maybe<Scalars['String']['output']>;
+  passRate?: Maybe<Scalars['Float']['output']>;
+  passed: Scalars['Int']['output'];
+  regression: Scalars['Boolean']['output'];
+  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  totalTests: Scalars['Int']['output'];
+};
+
+export type EvalRunUpdateEvent = {
+  __typename?: 'EvalRunUpdateEvent';
+  agentId?: Maybe<Scalars['ID']['output']>;
+  errorMessage?: Maybe<Scalars['String']['output']>;
+  failed?: Maybe<Scalars['Int']['output']>;
+  passRate?: Maybe<Scalars['Float']['output']>;
+  passed?: Maybe<Scalars['Int']['output']>;
+  runId: Scalars['ID']['output'];
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  totalTests?: Maybe<Scalars['Int']['output']>;
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type EvalRunsPage = {
+  __typename?: 'EvalRunsPage';
+  items: Array<EvalRun>;
+  totalCount: Scalars['Int']['output'];
+};
+
+export type EvalSummary = {
+  __typename?: 'EvalSummary';
+  avgPassRate?: Maybe<Scalars['Float']['output']>;
+  latestPassRate?: Maybe<Scalars['Float']['output']>;
+  regressionCount: Scalars['Int']['output'];
+  totalRuns: Scalars['Int']['output'];
+};
+
+export type EvalTestCase = {
+  __typename?: 'EvalTestCase';
+  agentTemplateId?: Maybe<Scalars['ID']['output']>;
+  agentTemplateName?: Maybe<Scalars['String']['output']>;
+  agentcoreEvaluatorIds: Array<Scalars['String']['output']>;
+  assertions: Scalars['AWSJSON']['output'];
+  category: Scalars['String']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  enabled: Scalars['Boolean']['output'];
+  id: Scalars['ID']['output'];
+  name: Scalars['String']['output'];
+  query: Scalars['String']['output'];
+  source: Scalars['String']['output'];
+  systemPrompt?: Maybe<Scalars['String']['output']>;
+  tags: Array<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type EvalTimeSeriesPoint = {
+  __typename?: 'EvalTimeSeriesPoint';
+  day: Scalars['String']['output'];
+  failed: Scalars['Int']['output'];
+  passRate?: Maybe<Scalars['Float']['output']>;
+  passed: Scalars['Int']['output'];
+  runCount: Scalars['Int']['output'];
 };
 
 export type HeartbeatActivityEvent = {
@@ -839,6 +949,7 @@ export type MemoryGraphNode = {
   entityType?: Maybe<Scalars['String']['output']>;
   id: Scalars['ID']['output'];
   label: Scalars['String']['output'];
+  latestThreadId?: Maybe<Scalars['String']['output']>;
   strategy?: Maybe<Scalars['String']['output']>;
   type: Scalars['String']['output'];
 };
@@ -864,6 +975,7 @@ export type MemoryRecord = {
   strategy?: Maybe<Scalars['String']['output']>;
   strategyId?: Maybe<Scalars['String']['output']>;
   tags?: Maybe<Array<Scalars['String']['output']>>;
+  threadId?: Maybe<Scalars['String']['output']>;
   updatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
 };
 
@@ -1006,6 +1118,7 @@ export type Mutation = {
   approveInboxItem: InboxItem;
   assignThreadLabel: ThreadLabelAssignment;
   bootstrapUser: BootstrapResult;
+  cancelEvalRun: EvalRun;
   cancelInboxItem: InboxItem;
   cancelThreadTurn: ThreadTurn;
   checkoutThread: Thread;
@@ -1015,6 +1128,7 @@ export type Mutation = {
   createAgentFromTemplate: Agent;
   createAgentTemplate: AgentTemplate;
   createArtifact: Artifact;
+  createEvalTestCase: EvalTestCase;
   createInboxItem: InboxItem;
   createKnowledgeBase: KnowledgeBase;
   createQuickAction: UserQuickAction;
@@ -1034,6 +1148,8 @@ export type Mutation = {
   deleteAgentTemplate: Scalars['Boolean']['output'];
   deleteArtifact: Scalars['Boolean']['output'];
   deleteBudgetPolicy: Scalars['Boolean']['output'];
+  deleteEvalRun: Scalars['Boolean']['output'];
+  deleteEvalTestCase: Scalars['Boolean']['output'];
   deleteKnowledgeBase: Scalars['Boolean']['output'];
   deleteMemoryRecord: Scalars['Boolean']['output'];
   deleteMessage: Scalars['Boolean']['output'];
@@ -1047,10 +1163,10 @@ export type Mutation = {
   deleteThreadLabel: Scalars['Boolean']['output'];
   deleteWebhook: Scalars['Boolean']['output'];
   escalateThread: Thread;
-  executeExternalTaskAction: ExternalTaskActionResult;
   inviteMember: TenantMember;
   notifyAgentStatus?: Maybe<AgentStatusEvent>;
   notifyCostRecorded?: Maybe<CostRecordedEvent>;
+  notifyEvalRunUpdate?: Maybe<EvalRunUpdateEvent>;
   notifyHeartbeatActivity?: Maybe<HeartbeatActivityEvent>;
   notifyInboxItemUpdate?: Maybe<InboxItemStatusEvent>;
   notifyNewMessage?: Maybe<NewMessageEvent>;
@@ -1072,15 +1188,16 @@ export type Mutation = {
   reorderQuickActions: Array<UserQuickAction>;
   requestRevision: InboxItem;
   resubmitInboxItem: InboxItem;
-  retryTaskSync: Thread;
   revokeAgentApiKey: AgentApiKey;
   rollbackAgentVersion: Agent;
+  seedEvalTestCases: Scalars['Int']['output'];
   sendMessage: Message;
   setAgentBudgetPolicy: AgentBudgetPolicy;
   setAgentCapabilities: Array<AgentCapability>;
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
   setAgentSkills: Array<AgentSkill>;
   setRoutineTrigger: RoutineTrigger;
+  startEvalRun: EvalRun;
   syncKnowledgeBase: KnowledgeBase;
   syncTemplateToAgent: Agent;
   syncTemplateToAllAgents: SyncSummary;
@@ -1093,6 +1210,7 @@ export type Mutation = {
   updateAgentStatus: Agent;
   updateAgentTemplate: AgentTemplate;
   updateArtifact: Artifact;
+  updateEvalTestCase: EvalTestCase;
   updateKnowledgeBase: KnowledgeBase;
   updateMemoryRecord: Scalars['Boolean']['output'];
   updateQuickAction: UserQuickAction;
@@ -1163,6 +1281,11 @@ export type MutationAssignThreadLabelArgs = {
 };
 
 
+export type MutationCancelEvalRunArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
 export type MutationCancelInboxItemArgs = {
   id: Scalars['ID']['input'];
 };
@@ -1207,6 +1330,12 @@ export type MutationCreateAgentTemplateArgs = {
 
 export type MutationCreateArtifactArgs = {
   input: CreateArtifactInput;
+};
+
+
+export type MutationCreateEvalTestCaseArgs = {
+  input: CreateEvalTestCaseInput;
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -1306,6 +1435,16 @@ export type MutationDeleteBudgetPolicyArgs = {
 };
 
 
+export type MutationDeleteEvalRunArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type MutationDeleteEvalTestCaseArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
 export type MutationDeleteKnowledgeBaseArgs = {
   id: Scalars['ID']['input'];
 };
@@ -1371,13 +1510,6 @@ export type MutationEscalateThreadArgs = {
 };
 
 
-export type MutationExecuteExternalTaskActionArgs = {
-  actionType: Scalars['String']['input'];
-  params?: InputMaybe<Scalars['AWSJSON']['input']>;
-  threadId: Scalars['ID']['input'];
-};
-
-
 export type MutationInviteMemberArgs = {
   input: InviteMemberInput;
   tenantId: Scalars['ID']['input'];
@@ -1399,6 +1531,19 @@ export type MutationNotifyCostRecordedArgs = {
   eventType: Scalars['String']['input'];
   model?: InputMaybe<Scalars['String']['input']>;
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type MutationNotifyEvalRunUpdateArgs = {
+  agentId?: InputMaybe<Scalars['ID']['input']>;
+  errorMessage?: InputMaybe<Scalars['String']['input']>;
+  failed?: InputMaybe<Scalars['Int']['input']>;
+  passRate?: InputMaybe<Scalars['Float']['input']>;
+  passed?: InputMaybe<Scalars['Int']['input']>;
+  runId: Scalars['ID']['input'];
+  status: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
+  totalTests?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -1540,11 +1685,6 @@ export type MutationResubmitInboxItemArgs = {
 };
 
 
-export type MutationRetryTaskSyncArgs = {
-  threadId: Scalars['ID']['input'];
-};
-
-
 export type MutationRevokeAgentApiKeyArgs = {
   id: Scalars['ID']['input'];
 };
@@ -1553,6 +1693,12 @@ export type MutationRevokeAgentApiKeyArgs = {
 export type MutationRollbackAgentVersionArgs = {
   agentId: Scalars['ID']['input'];
   versionId: Scalars['ID']['input'];
+};
+
+
+export type MutationSeedEvalTestCasesArgs = {
+  categories?: InputMaybe<Array<Scalars['String']['input']>>;
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -1588,6 +1734,12 @@ export type MutationSetAgentSkillsArgs = {
 export type MutationSetRoutineTriggerArgs = {
   input: RoutineTriggerInput;
   routineId: Scalars['ID']['input'];
+};
+
+
+export type MutationStartEvalRunArgs = {
+  input: StartEvalRunInput;
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -1655,6 +1807,12 @@ export type MutationUpdateAgentTemplateArgs = {
 export type MutationUpdateArtifactArgs = {
   id: Scalars['ID']['input'];
   input: UpdateArtifactInput;
+};
+
+
+export type MutationUpdateEvalTestCaseArgs = {
+  id: Scalars['ID']['input'];
+  input: UpdateEvalTestCaseInput;
 };
 
 
@@ -1815,6 +1973,14 @@ export type Query = {
   costSummary: CostSummary;
   costTimeSeries: Array<DailyCostPoint>;
   deploymentStatus: DeploymentStatus;
+  evalRun?: Maybe<EvalRun>;
+  evalRunResults: Array<EvalResult>;
+  evalRuns: EvalRunsPage;
+  evalSummary: EvalSummary;
+  evalTestCase?: Maybe<EvalTestCase>;
+  evalTestCaseHistory: Array<EvalResult>;
+  evalTestCases: Array<EvalTestCase>;
+  evalTimeSeries: Array<EvalTimeSeriesPoint>;
   inboxItem?: Maybe<InboxItem>;
   inboxItems: Array<InboxItem>;
   knowledgeBase?: Maybe<KnowledgeBase>;
@@ -1998,6 +2164,53 @@ export type QueryCostSummaryArgs = {
 
 
 export type QueryCostTimeSeriesArgs = {
+  days?: InputMaybe<Scalars['Int']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryEvalRunArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QueryEvalRunResultsArgs = {
+  runId: Scalars['ID']['input'];
+};
+
+
+export type QueryEvalRunsArgs = {
+  agentId?: InputMaybe<Scalars['ID']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryEvalSummaryArgs = {
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryEvalTestCaseArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QueryEvalTestCaseHistoryArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  testCaseId: Scalars['ID']['input'];
+};
+
+
+export type QueryEvalTestCasesArgs = {
+  category?: InputMaybe<Scalars['String']['input']>;
+  search?: InputMaybe<Scalars['String']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryEvalTimeSeriesArgs = {
   days?: InputMaybe<Scalars['Int']['input']>;
   tenantId: Scalars['ID']['input'];
 };
@@ -2446,6 +2659,14 @@ export type SendMessageInput = {
   toolResults?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
+export type StartEvalRunInput = {
+  agentId?: InputMaybe<Scalars['ID']['input']>;
+  agentTemplateId?: InputMaybe<Scalars['ID']['input']>;
+  categories?: InputMaybe<Array<Scalars['String']['input']>>;
+  model?: InputMaybe<Scalars['String']['input']>;
+  testCaseIds?: InputMaybe<Array<Scalars['ID']['input']>>;
+};
+
 export type StatusCount = {
   __typename?: 'StatusCount';
   count: Scalars['Int']['output'];
@@ -2457,6 +2678,7 @@ export type Subscription = {
   _empty?: Maybe<Scalars['String']['output']>;
   onAgentStatusChanged?: Maybe<AgentStatusEvent>;
   onCostRecorded?: Maybe<CostRecordedEvent>;
+  onEvalRunUpdated?: Maybe<EvalRunUpdateEvent>;
   onHeartbeatActivity?: Maybe<HeartbeatActivityEvent>;
   onInboxItemStatusChanged?: Maybe<InboxItemStatusEvent>;
   onNewMessage?: Maybe<NewMessageEvent>;
@@ -2472,6 +2694,11 @@ export type SubscriptionOnAgentStatusChangedArgs = {
 
 
 export type SubscriptionOnCostRecordedArgs = {
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type SubscriptionOnEvalRunUpdatedArgs = {
   tenantId: Scalars['ID']['input'];
 };
 
@@ -2654,8 +2881,6 @@ export type Thread = {
   reporterId?: Maybe<Scalars['ID']['output']>;
   startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   status: ThreadStatus;
-  syncError?: Maybe<Scalars['String']['output']>;
-  syncStatus?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
   title: Scalars['String']['output'];
   type: ThreadType;
@@ -2687,7 +2912,6 @@ export enum ThreadChannel {
   Email = 'EMAIL',
   Manual = 'MANUAL',
   Schedule = 'SCHEDULE',
-  Task = 'TASK',
   Webhook = 'WEBHOOK'
 }
 
@@ -2886,6 +3110,18 @@ export type UpdateArtifactInput = {
   summary?: InputMaybe<Scalars['String']['input']>;
   title?: InputMaybe<Scalars['String']['input']>;
   type?: InputMaybe<ArtifactType>;
+};
+
+export type UpdateEvalTestCaseInput = {
+  agentTemplateId?: InputMaybe<Scalars['ID']['input']>;
+  agentcoreEvaluatorIds?: InputMaybe<Array<Scalars['String']['input']>>;
+  assertions?: InputMaybe<Array<EvalAssertionInput>>;
+  category?: InputMaybe<Scalars['String']['input']>;
+  enabled?: InputMaybe<Scalars['Boolean']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  query?: InputMaybe<Scalars['String']['input']>;
+  systemPrompt?: InputMaybe<Scalars['String']['input']>;
+  tags?: InputMaybe<Array<Scalars['String']['input']>>;
 };
 
 export type UpdateKnowledgeBaseInput = {
@@ -3163,15 +3399,6 @@ export type DeleteMessageMutationVariables = Exact<{
 
 
 export type DeleteMessageMutation = { __typename?: 'Mutation', deleteMessage: boolean };
-
-export type ExecuteExternalTaskActionMutationVariables = Exact<{
-  threadId: Scalars['ID']['input'];
-  actionType: Scalars['String']['input'];
-  params?: InputMaybe<Scalars['AWSJSON']['input']>;
-}>;
-
-
-export type ExecuteExternalTaskActionMutation = { __typename?: 'Mutation', executeExternalTaskAction: { __typename?: 'ExternalTaskActionResult', threadId: string, envelope: any, auditMessageId?: string | null } };
 
 export type MessagesQueryVariables = Exact<{
   threadId: Scalars['ID']['input'];
@@ -3688,13 +3915,6 @@ export type ReorderQuickActionsMutationVariables = Exact<{
 
 export type ReorderQuickActionsMutation = { __typename?: 'Mutation', reorderQuickActions: Array<{ __typename?: 'UserQuickAction', id: string, sortOrder: number }> };
 
-export type RetryTaskSyncMutationVariables = Exact<{
-  threadId: Scalars['ID']['input'];
-}>;
-
-
-export type RetryTaskSyncMutation = { __typename?: 'Mutation', retryTaskSync: { __typename?: 'Thread', id: string, syncStatus?: string | null, syncError?: string | null, metadata?: any | null } };
-
 export type RefreshGenUiMutationVariables = Exact<{
   messageId: Scalars['ID']['input'];
   toolIndex: Scalars['Int']['input'];
@@ -3723,7 +3943,6 @@ export const SetAgentSkillsDocument = {"kind":"Document","definitions":[{"kind":
 export const SetAgentBudgetPolicyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetAgentBudgetPolicy"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentBudgetPolicyInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setAgentBudgetPolicy"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"period"}},{"kind":"Field","name":{"kind":"Name","value":"limitUsd"}},{"kind":"Field","name":{"kind":"Name","value":"actionOnExceed"}}]}}]}}]} as unknown as DocumentNode<SetAgentBudgetPolicyMutation, SetAgentBudgetPolicyMutationVariables>;
 export const SendMessageDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SendMessage"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SendMessageInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sendMessage"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"senderType"}},{"kind":"Field","name":{"kind":"Name","value":"senderId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<SendMessageMutation, SendMessageMutationVariables>;
 export const DeleteMessageDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteMessage"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteMessage"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<DeleteMessageMutation, DeleteMessageMutationVariables>;
-export const ExecuteExternalTaskActionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ExecuteExternalTaskAction"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"actionType"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"params"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"AWSJSON"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"executeExternalTaskAction"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"threadId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}}},{"kind":"Argument","name":{"kind":"Name","value":"actionType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"actionType"}}},{"kind":"Argument","name":{"kind":"Name","value":"params"},"value":{"kind":"Variable","name":{"kind":"Name","value":"params"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"envelope"}},{"kind":"Field","name":{"kind":"Name","value":"auditMessageId"}}]}}]}}]} as unknown as DocumentNode<ExecuteExternalTaskActionMutation, ExecuteExternalTaskActionMutationVariables>;
 export const MessagesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"Messages"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"cursor"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"messages"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"threadId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"cursor"},"value":{"kind":"Variable","name":{"kind":"Name","value":"cursor"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"edges"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"node"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"senderType"}},{"kind":"Field","name":{"kind":"Name","value":"senderId"}},{"kind":"Field","name":{"kind":"Name","value":"toolCalls"}},{"kind":"Field","name":{"kind":"Name","value":"toolResults"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"tokenCount"}},{"kind":"Field","name":{"kind":"Name","value":"durableArtifact"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"summary"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"cursor"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}},{"kind":"Field","name":{"kind":"Name","value":"endCursor"}}]}}]}}]}}]} as unknown as DocumentNode<MessagesQuery, MessagesQueryVariables>;
 export const TeamsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"Teams"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"teams"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"budgetMonthlyCents"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<TeamsQuery, TeamsQueryVariables>;
 export const TeamDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"Team"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"team"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"budgetMonthlyCents"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"agents"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"joinedAt"}},{"kind":"Field","name":{"kind":"Name","value":"agent"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"users"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"joinedAt"}},{"kind":"Field","name":{"kind":"Name","value":"user"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"image"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<TeamQuery, TeamQueryVariables>;
@@ -3791,6 +4010,5 @@ export const CreateQuickActionDocument = {"kind":"Document","definitions":[{"kin
 export const UpdateQuickActionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateQuickAction"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateQuickActionInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateQuickAction"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"prompt"}},{"kind":"Field","name":{"kind":"Name","value":"workspaceAgentId"}},{"kind":"Field","name":{"kind":"Name","value":"sortOrder"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateQuickActionMutation, UpdateQuickActionMutationVariables>;
 export const DeleteQuickActionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteQuickAction"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteQuickAction"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<DeleteQuickActionMutation, DeleteQuickActionMutationVariables>;
 export const ReorderQuickActionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ReorderQuickActions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ReorderQuickActionsInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"reorderQuickActions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"sortOrder"}}]}}]}}]} as unknown as DocumentNode<ReorderQuickActionsMutation, ReorderQuickActionsMutationVariables>;
-export const RetryTaskSyncDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RetryTaskSync"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"retryTaskSync"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"threadId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"syncStatus"}},{"kind":"Field","name":{"kind":"Name","value":"syncError"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}}]}}]}}]} as unknown as DocumentNode<RetryTaskSyncMutation, RetryTaskSyncMutationVariables>;
 export const RefreshGenUiDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RefreshGenUI"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"messageId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"toolIndex"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"refreshGenUI"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"messageId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"messageId"}}},{"kind":"Argument","name":{"kind":"Name","value":"toolIndex"},"value":{"kind":"Variable","name":{"kind":"Name","value":"toolIndex"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"toolResults"}}]}}]}}]} as unknown as DocumentNode<RefreshGenUiMutation, RefreshGenUiMutationVariables>;
 export const CreateRecipeDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateRecipe"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateRecipeInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createRecipe"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"genuiType"}}]}}]}}]} as unknown as DocumentNode<CreateRecipeMutation, CreateRecipeMutationVariables>;

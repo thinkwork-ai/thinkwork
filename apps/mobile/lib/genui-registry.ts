@@ -23,27 +23,11 @@ export interface GenUIProps {
   context?: GenUIContext;
 }
 
-export type GenUIAction =
-  | {
-      type: 'tool.invoke';
-      tool: string;
-      args: Record<string, unknown>;
-    }
-  | {
-      /**
-       * Direct-path external task action — routed to
-       * `executeExternalTaskAction` without going through the agent.
-       * See .prds/external-task-integration.md §3.5.
-       */
-      type: 'external_task.action';
-      actionType:
-        | 'external_task.update_status'
-        | 'external_task.assign'
-        | 'external_task.comment'
-        | 'external_task.edit_fields'
-        | 'external_task.refresh';
-      params: Record<string, unknown>;
-    };
+export type GenUIAction = {
+  type: 'tool.invoke';
+  tool: string;
+  args: Record<string, unknown>;
+};
 
 export interface GenUIContext {
   /** Thread the card is rendered in. */
@@ -86,13 +70,11 @@ export interface GenUIContext {
 const TaskList = React.lazy(() => import('@/components/genui/TaskList'));
 const TaskCard = React.lazy(() => import('@/components/genui/TaskCard'));
 const QuestionCard = React.lazy(() => import('@/components/genui/QuestionCard'));
-const ExternalTaskCard = React.lazy(() => import('@/components/genui/external-task/ExternalTaskCard'));
 
 const REGISTRY: Record<string, React.LazyExoticComponent<React.ComponentType<GenUIProps>>> = {
   task_list: TaskList,
   task: TaskCard,
   question_card: QuestionCard,
-  external_task: ExternalTaskCard,
 };
 
 /**
