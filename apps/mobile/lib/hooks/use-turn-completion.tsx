@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, createContext, useContext, type ReactNode } from "react";
-import { useThreadTurnUpdatedSubscription } from "./use-subscriptions";
+import { useThreadTurnUpdatedSubscription } from "@thinkwork/react-native-sdk";
 
 type TurnStatus = "succeeded" | "failed";
 

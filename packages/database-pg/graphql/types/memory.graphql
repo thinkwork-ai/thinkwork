@@ -125,6 +125,15 @@ type MobileMemoryCapture {
 
 extend type Query {
   mobileMemoryCaptures(agentId: ID!, limit: Int = 50): [MobileMemoryCapture!]!
+  """
+  Free-text search across the full Hindsight bank for the given agent.
+  Hits Hindsight's recall endpoint (semantic + rerank) and normalizes results
+  back to MobileMemoryCapture so the Memories list can render search results
+  with the same rows it uses for captures. Not filtered by capture_source —
+  search is meant to answer "what does this agent know?", including chat-
+  derived observations.
+  """
+  mobileMemorySearch(agentId: ID!, query: String!, limit: Int = 20): [MobileMemoryCapture!]!
 }
 
 extend type Mutation {

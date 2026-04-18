@@ -217,3 +217,18 @@ export const DeleteMobileMemoryCaptureMutation = gql`
     deleteMobileMemoryCapture(agentId: $agentId, captureId: $captureId)
   }
 `;
+
+export const MobileMemorySearchQuery = gql`
+  query MobileMemorySearch($agentId: ID!, $query: String!, $limit: Int) {
+    mobileMemorySearch(agentId: $agentId, query: $query, limit: $limit) {
+      id
+      tenantId
+      agentId
+      content
+      factType
+      capturedAt
+      syncedAt
+      metadata
+    }
+  }
+`;
