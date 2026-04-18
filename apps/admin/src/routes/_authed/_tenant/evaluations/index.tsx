@@ -93,6 +93,8 @@ type RunRow = {
   status: string;
   model: string | null;
   categories: string[];
+  agentTemplateId: string | null;
+  agentTemplateName: string | null;
   passed: number | null;
   failed: number | null;
   totalTests: number | null;
@@ -118,6 +120,15 @@ const runsColumns: ColumnDef<RunRow>[] = [
       if (names.length === CATEGORIES.length) return <span className="text-sm whitespace-nowrap">All Categories</span>;
       if (names.length === 1) return <span className="text-sm whitespace-nowrap">{names[0]}</span>;
       return <span className="text-sm whitespace-nowrap">{names.length} Categories</span>;
+    },
+  },
+  {
+    accessorKey: "agentTemplateName",
+    header: "Template",
+    cell: ({ row }) => {
+      const name = row.original.agentTemplateName;
+      if (!name) return <span className="text-xs text-muted-foreground">—</span>;
+      return <span className="text-sm whitespace-nowrap">{name}</span>;
     },
   },
   {
