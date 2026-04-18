@@ -34,6 +34,7 @@ import { ThreadChannel } from "@/lib/gql/graphql";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { useThreadReadState } from "@/lib/hooks/use-thread-read-state";
 import { MessageInputFooter, type MessageInputFooterRef, type SelectedWorkspace } from "@/components/input/MessageInputFooter";
+import { CaptureFooter } from "@/components/memory/CaptureFooter";
 import { QuickActionsSheet, type QuickActionsSheetRef } from "@/components/chat/QuickActionsSheet";
 import { QuickActionFormSheet, type QuickActionFormSheetRef, type QuickActionFormData } from "@/components/chat/QuickActionFormSheet";
 import { WorkspacePickerSheet, type WorkspacePickerSheetRef, type SubAgent } from "@/components/input/WorkspacePickerSheet";
@@ -232,7 +233,6 @@ export default function ThreadsScreen() {
   // Each tab keeps its own draft text so switching tabs doesn't leak a
   // half-typed thread into a memory submit (or vice versa).
   const [newThreadText, setNewThreadText] = useState("");
-  const [newMemoryText, setNewMemoryText] = useState("");
   const quickActionsRef = useRef<QuickActionsSheetRef>(null);
   const quickActionFormRef = useRef<QuickActionFormSheetRef>(null);
   const workspacePickerRef = useRef<WorkspacePickerSheetRef>(null);
@@ -523,18 +523,11 @@ export default function ThreadsScreen() {
             onRemoveWorkspace={(id) => setSelectedWorkspaces((prev) => prev.filter((w) => w.id !== id))}
           />
         ) : (
-          <MessageInputFooter
-            value={newMemoryText}
-            onChangeText={setNewMemoryText}
-            onSubmit={() => {
-              // TODO: wire to memories create mutation when backend is ready.
-              setNewMemoryText("");
-              Keyboard.dismiss();
-            }}
-            placeholder="Add new memory..."
+          <CaptureFooter
+            agentId={activeAgent?.id}
+            agentName={activeAgent?.name}
             colors={colors}
             isDark={isDark}
-            onPlusPress={() => { Keyboard.dismiss(); /* TODO: add photo/doc picker */ }}
           />
         )}
       </View>

@@ -118,14 +118,16 @@ export class HindsightAdapter implements MemoryAdapter {
 
 	async retain(req: RetainRequest): Promise<RetainResult> {
 		const bankId = await this.resolveBankId(req.ownerId);
-		const factType = sourceTypeToFactType(req.sourceType);
+		const factType = resolveFactType(req);
 
+		const { fact_type_override: _omitOverride, ...callerMetadata } = (req.metadata ||
+			{}) as Record<string, unknown>;
 		const item: Record<string, unknown> = {
 			content: req.content,
 			context: req.sourceType,
 		};
 		const mergedMetadata: Record<string, unknown> = {
-			...(req.metadata || {}),
+			...callerMetadata,
 			fact_type: factType,
 		};
 		if (req.role) mergedMetadata.role = req.role;
@@ -448,6 +450,16 @@ function sourceTypeToFactType(sourceType: string): string {
 		default:
 			return "world";
 	}
+}
+
+const LEGAL_FACT_TYPE_OVERRIDES = new Set(["world", "experience", "opinion", "observation"]);
+
+function resolveFactType(req: RetainRequest): string {
+	const override = req.metadata?.fact_type_override;
+	if (typeof override === "string" && LEGAL_FACT_TYPE_OVERRIDES.has(override)) {
+		return override;
+	}
+	return sourceTypeToFactType(req.sourceType);
 }
 
 function inferSourceType(unit: any): ThinkWorkMemoryRecord["sourceType"] {
