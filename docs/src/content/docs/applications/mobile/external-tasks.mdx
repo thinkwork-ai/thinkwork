@@ -11,7 +11,7 @@ For the architecture (adapter seam, webhook pipeline, envelope shape, block gram
 
 ## When the Tasks tab appears
 
-The Tasks tab is **conditional**. The app bootstraps with two tabs (Threads + Settings). Once the user has at least one connected task integration from [Connectors](/applications/mobile/integrations-and-mcp-connect/) (currently LastMile; future: Linear), a third **Tasks** tab appears with a count badge of assigned tasks.
+The Tasks tab is **conditional**. The app bootstraps with two tabs (Threads + Settings). Once the user has at least one connected task integration from [Connectors](/applications/mobile/integrations-and-mcp-connect/) (currently LastMile; future: Linear), a third **Tasks** tab appears with a count badge of **unread** tasks (same semantics as the Threads tab — a task is unread when `lastTurnCompletedAt > lastReadAt`). A blue dot renders in the left gutter of each unread row. Tapping a row marks it read optimistically — the dot and badge drop before the server round-trip returns.
 
 If no task connector is active, the Tasks tab stays hidden.
 
@@ -70,6 +70,8 @@ Field types map to controls:
 - **Save changes** — right-aligned outlined button at the bottom
 
 On submit, the mobile card fires the `executeExternalTaskAction` GraphQL mutation with the action type (`edit_fields`) and the form values. The resolver dispatches to the adapter's `executeAction`, which translates into provider API calls, and then immediately calls `refresh()` so the envelope reflects the post-write state before returning. The card re-renders with the new values.
+
+Separately, the header dropdown menu on an external-task detail page exposes a **Sync Task** item. It fires `executeExternalTaskAction` with `actionType: "external_task.refresh"`, which pulls the latest envelope from the provider and denormalizes `envelope.item.core.description` back onto `threads.description` (so the Tasks list subtitle stays fresh without needing a webhook). Use it when a push update didn't land or after an out-of-band edit on the provider's side.
 
 <Aside type="caution">
 **Status and priority form edits currently fail upstream for LastMile.** The form's select options use curated value strings (`"todo"`, `"in_progress"`) but LastMile's status-update tool expects opaque workflow IDs. Status changes through the dedicated **Change status** button still work; the form-field path does not yet. Fix is in flight — see [Current limits](#current-limits).
