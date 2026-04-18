@@ -1,8 +1,14 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { useMessages, useSendMessage } from "@/lib/hooks/use-messages";
-import { useMutation } from "urql";
-import { CreateThreadMutation } from "@/lib/graphql-queries";
-import { useNewMessageSubscription } from "@thinkwork/react-native-sdk";
+import {
+  useCreateThread,
+  useNewMessageSubscription,
+  useSendMessage,
+} from "@thinkwork/react-native-sdk";
+// useMessages stays local — it fetches the ThinkWork-mobile-specific
+// `toolResults` + `durableArtifact` fields that the chat-oriented SDK
+// Message shape doesn't expose. The SDK's useMessages returns the common
+// subset; this hook needs the superset.
+import { useMessages } from "@/lib/hooks/use-messages";
 import type { ChatMessage } from "./useGatewayChat";
 
 export interface CallerIdentity {
@@ -31,8 +37,8 @@ export function useGraphQLChat(
   const [localThreadId, setLocalThreadId] = useState<string | undefined>(threadId);
   const activeThreadId = threadId || localThreadId;
 
-  // Thread creation
-  const [, executeCreateThread] = useMutation(CreateThreadMutation);
+  // Thread creation (SDK — imperative, supports atomic firstMessage)
+  const createThread = useCreateThread();
   const creatingThread = useRef(false);
 
   // Sync prop threadId into local state
@@ -41,7 +47,7 @@ export function useGraphQLChat(
   }, [threadId]);
 
   const [{ data, fetching }, reexecuteMessages] = useMessages(activeThreadId);
-  const [, executeSendMessage] = useSendMessage();
+  const sdkSendMessage = useSendMessage();
 
   // Subscribe to real-time new messages
   const [subResult] = useNewMessageSubscription(activeThreadId);
@@ -237,42 +243,6 @@ export function useGraphQLChat(
     ) => {
       console.log("[GraphQLChat] sendMessage called:", content, "agentId:", agentId);
 
-      let tid = activeThreadId;
-
-      // Auto-create thread if we don't have one
-      if (!tid && tenantId && !creatingThread.current) {
-        creatingThread.current = true;
-        try {
-          const result = await executeCreateThread({
-            input: {
-              tenantId,
-              agentId,
-              title: "Chat",
-              channel: "CHAT",
-            },
-          });
-          tid = result.data?.createThread?.id;
-          if (tid) {
-            setLocalThreadId(tid);
-            console.log("[GraphQLChat] Auto-created thread:", tid);
-          } else {
-            console.error("[GraphQLChat] Failed to create thread:", result.error);
-            creatingThread.current = false;
-            return;
-          }
-        } catch (e) {
-          console.error("[GraphQLChat] Thread creation failed:", e);
-          creatingThread.current = false;
-          return;
-        }
-        creatingThread.current = false;
-      }
-
-      if (!tid) {
-        console.error("[GraphQLChat] No threadId available, cannot send message");
-        return;
-      }
-
       // Optimistic: show message + typing indicator immediately
       const optimisticMsg: ChatMessage = {
         id: `optimistic-${Date.now()}`,
@@ -284,30 +254,49 @@ export function useGraphQLChat(
       setOptimisticMessages((prev) => [...prev, optimisticMsg]);
       setWaitingForResponse(true);
 
-      try {
-        const result = await executeSendMessage({
-          input: {
-            threadId: tid,
-            role: "USER",
-            content,
-            senderType: "user",
-          },
-        });
-        if (result.error) {
-          console.error("[GraphQLChat] sendMessage error:", result.error);
-          // Remove optimistic message on failure
+      // Atomic path: no thread yet → create thread + send first message in
+      // a single round-trip via the SDK's `firstMessage` passthrough. Saves
+      // the old "create, then sendMessage" two-step.
+      if (!activeThreadId && tenantId && !creatingThread.current) {
+        creatingThread.current = true;
+        try {
+          const thread = await createThread({
+            tenantId,
+            agentId,
+            title: "Chat",
+            channel: "CHAT",
+            firstMessage: content,
+          });
+          setLocalThreadId(thread.id);
+          console.log("[GraphQLChat] Auto-created thread with firstMessage:", thread.id);
+        } catch (e) {
+          console.error("[GraphQLChat] Thread creation failed:", e);
           setOptimisticMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
           setWaitingForResponse(false);
-        } else {
-          console.log("[GraphQLChat] sendMessage succeeded:", result.data?.sendMessage?.id);
+        } finally {
+          creatingThread.current = false;
         }
+        return;
+      }
+
+      if (!activeThreadId) {
+        console.error("[GraphQLChat] No threadId available, cannot send message");
+        setOptimisticMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
+        setWaitingForResponse(false);
+        return;
+      }
+
+      // Thread already exists — just send.
+      try {
+        await sdkSendMessage(activeThreadId, content);
+        console.log("[GraphQLChat] sendMessage succeeded");
       } catch (e) {
         console.error("[GraphQLChat] sendMessage FAILED:", e);
         setOptimisticMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
         setWaitingForResponse(false);
       }
     },
-    [activeThreadId, tenantId, agentId, executeCreateThread, executeSendMessage],
+    [activeThreadId, tenantId, agentId, createThread, sdkSendMessage],
   );
 
   return {
