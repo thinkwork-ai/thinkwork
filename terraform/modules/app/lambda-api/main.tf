@@ -430,6 +430,13 @@ resource "aws_iam_role_policy" "lambda_api_cross_invoke" {
         # eval-runner: graphql-http's startEvalRun mutation Event-invokes
         # this asynchronously after inserting the eval_runs row.
         "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-eval-runner",
+        # wiki-compile: memory-retain Event-invokes this after a successful
+        # retainTurn when the tenant's wiki_compile_enabled flag is on.
+        # compileWikiNow admin mutation also Event-invokes.
+        "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-wiki-compile",
+        # wiki-bootstrap-import: bootstrapJournalImport admin mutation
+        # Event-invokes this for the long-running ingest path.
+        "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-wiki-bootstrap-import",
       ]
     }]
   })
