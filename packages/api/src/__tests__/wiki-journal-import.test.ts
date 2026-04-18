@@ -170,7 +170,7 @@ describe("buildRetainPayload", () => {
 		expect(out!.content.startsWith("Visited.")).toBe(true);
 	});
 
-	it("drops google photos + oversize fields from place metadata", () => {
+	it("folds allow-listed google places fields and drops photos + unknown keys", () => {
 		const out = buildRetainPayload(
 			makeRow({
 				body: "n",
@@ -186,11 +186,13 @@ describe("buildRetainPayload", () => {
 			}),
 			owner,
 		);
-		const extra = (out!.metadata as any)?.place?.extra ?? {};
-		expect(extra.phone).toBe("123");
-		expect(extra.rating).toBe(4.5);
-		expect(extra).not.toHaveProperty("photos");
-		expect(extra).not.toHaveProperty("bigBlob");
+		const meta = (out!.metadata as any) ?? {};
+		expect(meta.place_phone).toBe("123");
+		expect(meta.place_website).toBe("https://x.example");
+		expect(meta.place_rating).toBe("4.5");
+		expect(meta.place_opening_hours).toBe("Mon: closed");
+		expect(meta).not.toHaveProperty("place_photos");
+		expect(meta).not.toHaveProperty("place_big_blob");
 	});
 
 	it("tolerates pg returning timestamp columns as strings (not Date)", () => {
@@ -219,9 +221,35 @@ describe("buildRetainPayload", () => {
 			makeRow({ id: "idea-42", body: "n" }),
 			owner,
 		);
-		const importMeta = (out!.metadata as any)?.import ?? {};
-		expect(importMeta.source).toBe("journal.idea");
-		expect(importMeta.journal_idea_id).toBe("idea-42");
+		const meta = (out!.metadata as any) ?? {};
+		expect(meta.import_source).toBe("journal.idea");
+		expect(meta.import_journal_idea_id).toBe("idea-42");
+	});
+
+	it("emits a fully flat string-only metadata dict (Hindsight requires Dict[str, str])", () => {
+		const out = buildRetainPayload(
+			makeRow({
+				body: "Great pastrami.",
+				tags: ["food", "restaurant"],
+				is_visit: true,
+				place_name: "Taberna",
+				place_types: ["restaurant", "food"],
+				journal_title: "Lisbon",
+				journal_start_date: new Date("2023-09-01T00:00:00Z"),
+			}),
+			owner,
+		);
+		const meta = out!.metadata as Record<string, unknown>;
+		for (const [k, v] of Object.entries(meta)) {
+			expect(typeof v, `metadata[${k}] must be string`).toBe("string");
+		}
+		// Spot-check the flattening conventions.
+		expect(meta.idea_tags).toBe("food, restaurant");
+		expect(meta.idea_is_visit).toBe("true");
+		expect(meta.place_name).toBe("Taberna");
+		expect(meta.place_types).toBe("restaurant, food");
+		expect(meta.journal_title).toBe("Lisbon");
+		expect(meta.journal_start_date).toBe("2023-09-01");
 	});
 });
 
