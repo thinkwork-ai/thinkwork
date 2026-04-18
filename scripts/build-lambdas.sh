@@ -244,6 +244,12 @@ build_handler "memory-retain" \
 build_handler "wiki-compile" \
   "$REPO_ROOT/packages/api/src/handlers/wiki-compile.ts"
 
+build_handler "wiki-lint" \
+  "$REPO_ROOT/packages/api/src/handlers/wiki-lint.ts"
+
+build_handler "wiki-export" \
+  "$REPO_ROOT/packages/api/src/handlers/wiki-export.ts"
+
 build_handler "artifact-deliver" \
   "$REPO_ROOT/packages/api/src/handlers/artifact-deliver.ts"
 
