@@ -72,27 +72,40 @@ export function FactTypePicker({ visible, onClose, onSelect, current }: FactType
 									onClose();
 								}}
 								style={({ pressed }) => ({
-									flexDirection: "row",
-									alignItems: "center",
-									paddingVertical: 14,
-									paddingHorizontal: 20,
-									gap: 14,
 									backgroundColor: pressed ? colors.secondary : "transparent",
 								})}
 							>
-								<Icon
-									size={22}
-									color={active ? colors.primary : colors.foreground}
-								/>
-								<Text
+								<View
 									style={{
-										color: colors.foreground,
-										fontWeight: active ? "600" : "500",
-										fontSize: 16,
+										flexDirection: "row",
+										alignItems: "center",
+										paddingVertical: 14,
+										paddingHorizontal: 20,
+										gap: 14,
 									}}
 								>
-									{FACT_TYPE_LABELS[type]}
-								</Text>
+									<View
+										style={{
+											width: 28,
+											alignItems: "center",
+											justifyContent: "center",
+										}}
+									>
+										<Icon
+											size={22}
+											color={active ? colors.primary : colors.foreground}
+										/>
+									</View>
+									<Text
+										style={{
+											color: colors.foreground,
+											fontWeight: active ? "600" : "500",
+											fontSize: 16,
+										}}
+									>
+										{FACT_TYPE_LABELS[type]}
+									</Text>
+								</View>
 							</Pressable>
 						);
 					})}
