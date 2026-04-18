@@ -61,11 +61,13 @@ export interface Thread {
   tenantId?: string;
   agentId?: string | null;
   number?: number;
+  identifier?: string | null;
   title: string;
   status?: string;
   priority?: string;
   type?: string;
   channel?: string;
+  assigneeId?: string | null;
   lastActivityAt?: string | null;
   lastReadAt?: string | null;
   archivedAt?: string | null;
