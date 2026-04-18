@@ -298,6 +298,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.90.21
         version: 5.97.0(react@19.1.0)
+      '@thinkwork/react-native-sdk':
+        specifier: workspace:*
+        version: link:../../packages/react-native-sdk
       '@urql/exchange-graphcache':
         specifier: ^8.0.0
         version: 8.1.0(@urql/core@5.2.0(graphql@16.13.2))(graphql@16.13.2)

@@ -8,10 +8,14 @@ import { ChatBubble } from "@/components/chat/ChatBubble";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { useAuth } from "@/lib/auth-context";
-import { useMessages, useSendMessage } from "@/lib/hooks/use-messages";
-import { useAgents } from "@/lib/hooks/use-agents";
+import {
+  useAgents,
+  useMessages,
+  useNewMessageSubscription,
+  useSendMessage,
+  useThread,
+} from "@thinkwork/react-native-sdk";
 import { useMe } from "@/lib/hooks/use-users";
-import { useNewMessageSubscription } from "@/lib/hooks/use-subscriptions";
 import { useTurnCompletion } from "@/lib/hooks/use-turn-completion";
 import type { ChatMessage } from "@/hooks/useGatewayChat";
 import { useColorScheme } from "nativewind";
@@ -20,8 +24,6 @@ import { WebContent } from "@/components/layout/web-content";
 import type { SelectedMention } from "@/components/chat/ChatInput";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { isSystemMessage } from "@/components/chat/system-message";
-import { useQuery } from "urql";
-import { ThreadQuery } from "@/lib/graphql-queries";
 
 // Discriminated union for FlatList items
 type MessageItem = {
@@ -43,20 +45,17 @@ export default function ThreadConversationScreen() {
   const { user } = useAuth();
   const tenantId = user?.tenantId;
 
-  const [{ data: threadResult }] = useQuery({ query: ThreadQuery, variables: { id: id! }, pause: !id });
-  const threadData = threadResult?.thread;
-  const [{ data: agentsData }] = useAgents(tenantId);
-  const agents = agentsData?.agents;
+  const { thread: threadData } = useThread(id);
+  const { agents } = useAgents({ tenantId });
 
-  const [{ data: messagesData }, reexecuteMessages] = useMessages(id);
-  const messages = messagesData?.messages?.edges?.map((e: any) => e.node) ?? undefined;
+  const { messages, refetch: reexecuteMessages } = useMessages(id);
 
   // Subscribe to new messages in real-time — refetch messages when event arrives
   const { markThreadActive, clearThreadActive } = useTurnCompletion();
   const [{ data: subData }] = useNewMessageSubscription(id);
   useEffect(() => {
     if (subData?.onNewMessage) {
-      reexecuteMessages({ requestPolicy: "network-only" });
+      reexecuteMessages();
       // Clear loading indicator — assistant responded
       if (id && subData.onNewMessage.role === "assistant") {
         clearThreadActive(id);
@@ -64,7 +63,7 @@ export default function ThreadConversationScreen() {
     }
   }, [subData]);
 
-  const [, executeSendMessage] = useSendMessage();
+  const sendMessage = useSendMessage();
   const [{ data: meData }] = useMe();
   const currentUser = meData?.me;
   // TODO: mentionCandidates query not yet available in GraphQL schema
@@ -78,11 +77,13 @@ export default function ThreadConversationScreen() {
     return agents?.find((a: any) => a.id === aid);
   }, [threadData, agents]);
 
-  // Convert messages to ChatMessage type with timestamp
+  // Convert messages to ChatMessage type with timestamp. SDK returns role as
+  // the uppercase enum literal ("USER" | "ASSISTANT" | ...) whereas the
+  // local ChatMessage type expects lowercase; normalize here.
   const chatMessages: ChatMessage[] = useMemo(() => {
-    return (messages ?? []).map((m: any) => ({
+    return messages.map((m) => ({
       id: m.id,
-      role: (m.role === "user" ? "user" : "assistant") as ChatMessage["role"],
+      role: (m.role === "USER" ? "user" : "assistant") as ChatMessage["role"],
       content: (m.content ?? "").trim(),
       timestamp: new Date(m.createdAt).getTime(),
       isStreaming: false,
@@ -123,15 +124,7 @@ export default function ThreadConversationScreen() {
     const mentionsToSend = pendingMentions.length > 0 ? pendingMentions : undefined;
     setPendingMentions([]);
     try {
-      await executeSendMessage({
-        input: {
-          threadId: id,
-          role: "user",
-          content,
-          senderType: "user",
-          senderId: currentUser?.id,
-        },
-      });
+      await sendMessage(id, content);
       markThreadActive(id);
     } catch (e) {
       console.error("[ThreadChat] send failed:", e);

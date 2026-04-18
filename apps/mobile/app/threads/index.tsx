@@ -3,7 +3,7 @@ import { View, ScrollView, Pressable, RefreshControl, Modal, TextInput, Alert, K
 import { FlashList } from "@shopify/flash-list";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/lib/auth-context";
-import { useAgents } from "@/lib/hooks/use-agents";
+import { useAgents, useCreateThread } from "@thinkwork/react-native-sdk";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Text, Muted } from "@/components/ui/typography";
@@ -14,8 +14,10 @@ import { Plus, X, ChevronDown } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { COLORS } from "@/lib/theme";
 import { DetailLayout } from "@/components/layout/detail-layout";
-import { useQuery, useMutation } from "urql";
-import { ThreadsQuery, CreateThreadMutation } from "@/lib/graphql-queries";
+import { useQuery } from "urql";
+// TODO(sdk): SDK `useThreads` lacks filter args + `Thread.identifier`.
+//            Keep local ThreadsQuery until SDK widens.
+import { ThreadsQuery } from "@/lib/graphql-queries";
 
 type ThreadType = "CHAT" | "TASK" | "EMAIL" | "SYSTEM";
 type ThreadStatus = "OPEN" | "IN_PROGRESS" | "CLOSED";
@@ -143,7 +145,7 @@ function CreateThreadModal({
 }) {
   const { user } = useAuth();
   const tenantId = user?.tenantId;
-  const [, executeCreateThread] = useMutation(CreateThreadMutation);
+  const createThread = useCreateThread();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
@@ -172,14 +174,13 @@ function CreateThreadModal({
 
     setCreating(true);
     try {
-      await executeCreateThread({
-        input: {
-          tenantId,
-          title: title.trim(),
-          description: description.trim() || undefined,
-          type: "TASK",
-          agentId: effectiveAgentId,
-        },
+      if (!tenantId) throw new Error("No tenant");
+      await createThread({
+        tenantId,
+        title: title.trim(),
+        description: description.trim() || undefined,
+        type: "TASK",
+        agentId: effectiveAgentId,
       });
       setTitle("");
       setDescription("");
@@ -330,9 +331,23 @@ export default function ThreadsScreen() {
     variables: { tenantId: tenantId! },
     pause: !tenantId,
   });
-  const [{ data: agentsData, fetching: agentsFetching }] = useAgents(mounted ? tenantId : undefined);
+  const { agents: sdkAgents, loading: agentsFetching } = useAgents({
+    tenantId: mounted ? tenantId : undefined,
+  });
   const threads = (threadsData?.threads ?? []) as Thread[];
-  const agents = agentsData?.agents ?? undefined;
+  // SDK's Agent type allows `status: string | null`; downstream row props
+  // expect `status?: string | undefined`. Normalize the null away.
+  const agents = useMemo(
+    () =>
+      sdkAgents.length > 0
+        ? sdkAgents.map((a) => ({
+            id: a.id,
+            name: a.name,
+            status: a.status ?? undefined,
+          }))
+        : undefined,
+    [sdkAgents],
+  );
   const [refreshing, setRefreshing] = useState(false);
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [showCreateModal, setShowCreateModal] = useState(false);

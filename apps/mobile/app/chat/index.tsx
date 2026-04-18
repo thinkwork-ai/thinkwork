@@ -5,15 +5,18 @@ import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronLeft, Check } from "lucide-react-native";
 import { useAuth } from "@/lib/auth-context";
-import { useAgents } from "@/lib/hooks/use-agents";
+import { useAgents, useUpdateThread } from "@thinkwork/react-native-sdk";
 import { useThreadUpdatedSubscription } from "@/lib/hooks/use-subscriptions";
 import { useMe } from "@/lib/hooks/use-users";
 import { ChatScreen } from "@/components/chat/ChatScreen";
 import { useThreadReadState } from "@/lib/hooks/use-thread-read-state";
 import { Text } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
-import { useQuery, useMutation } from "urql";
-import { ThreadsQuery, UpdateThreadMutation } from "@/lib/graphql-queries";
+import { useQuery } from "urql";
+// TODO(sdk): SDK `useThreads` lacks filter args (status/priority/channel/assigneeId)
+//            and `Thread.identifier` — keeping local ThreadsQuery until the SDK
+//            widens. `useThreadUpdatedSubscription` is also an SDK gap.
+import { ThreadsQuery } from "@/lib/graphql-queries";
 
 function statusColor(status: string, isDark: boolean): string {
   switch (status) {
@@ -44,8 +47,7 @@ export default function ChatRoute() {
   const [{ data: meData }] = useMe();
   const currentUser = meData?.me;
 
-  const [{ data: agentsData }] = useAgents(tenantId);
-  const agents = agentsData?.agents ?? [];
+  const { agents } = useAgents({ tenantId });
 
   // Server already scopes agents to the authed user. Just drop local scratch agents.
   const visibleAgents = useMemo(
@@ -101,7 +103,7 @@ export default function ChatRoute() {
     if (paramThreadId) markRead(paramThreadId);
   }, [paramThreadId]);
 
-  const [, executeUpdateThread] = useMutation(UpdateThreadMutation);
+  const updateThread = useUpdateThread();
   const [chatKey, setChatKey] = useState(0);
 
   const activeThread = useMemo(() => {
@@ -165,19 +167,21 @@ export default function ChatRoute() {
     if (!activeThread?.id) return;
     setStatusDropdownVisible(false);
     setStatusSaving(true);
-    const { error } = await executeUpdateThread({ id: activeThread.id, input: { status: newStatus as any } });
-    setStatusSaving(false);
-    if (error) {
+    try {
+      await updateThread(activeThread.id, { status: newStatus as any });
+    } catch {
+      setStatusSaving(false);
       Alert.alert("Error", "Failed to update status. Please try again.");
       return;
     }
+    setStatusSaving(false);
     setOptimisticStatus(newStatus);
     if (newStatus === "DONE") {
       router.back();
     } else {
       reexecuteThreads({ requestPolicy: "network-only" });
     }
-  }, [activeThread?.id, executeUpdateThread, router, reexecuteThreads]);
+  }, [activeThread?.id, updateThread, router, reexecuteThreads]);
 
   const openStatusDropdown = useCallback(() => {
     statusRef.current?.measureInWindow((x, y, width, height) => {
@@ -189,11 +193,11 @@ export default function ChatRoute() {
   const handleNewChat = useCallback(() => {
     if (!activeAgent?.id) return;
     if (activeThread?.id) {
-      executeUpdateThread({ id: activeThread.id, input: { status: "DONE" as any } })
+      updateThread(activeThread.id, { status: "DONE" as any })
         .catch((e: any) => console.error("[Chat] Failed to close thread:", e));
     }
     setChatKey((k) => k + 1);
-  }, [activeAgent?.id, activeThread?.id, executeUpdateThread]);
+  }, [activeAgent?.id, activeThread?.id, updateThread]);
 
   if (!activeAgent) {
     return <View className="flex-1 bg-white dark:bg-neutral-950" />;
