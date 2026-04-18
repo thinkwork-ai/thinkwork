@@ -7,16 +7,17 @@ import {
   useAgents,
   useCreateThread,
   useSendMessage,
+  useThreadTurnUpdatedSubscription,
+  useThreadUpdatedSubscription,
   useUpdateThread,
 } from "@thinkwork/react-native-sdk";
-import { useThreadUpdatedSubscription, useThreadTurnUpdatedSubscription } from "@/lib/hooks/use-subscriptions";
 import { useTurnCompletion } from "@/lib/hooks/use-turn-completion";
 import { useMe } from "@/lib/hooks/use-users";
 import { useQuery } from "urql";
-// TODO(sdk): SDK `useThreads` lacks filter args + `Thread.identifier` +
-//            some thread fields used by the dashboard filter bar; keep
-//            local ThreadsQuery until SDK widens. useThreadUpdatedSubscription
-//            + useThreadTurnUpdatedSubscription are SDK gaps (tenant-wide).
+// AgentWorkspacesQuery isn't in the SDK (host-domain concern), so keep it
+// here. ThreadsQuery stays local because the dashboard accesses richer
+// fields (`description`, `assignee { id name }`, `labels`, `metadata`,
+// `dueAt`, etc.) than the chat-oriented SDK surface exposes on `Thread`.
 import { ThreadsQuery, AgentWorkspacesQuery } from "@/lib/graphql-queries";
 import { TabHeader } from "@/components/layout/tab-header";
 import { WebContent } from "@/components/layout/web-content";

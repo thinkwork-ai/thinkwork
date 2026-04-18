@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useMessages, useSendMessage } from "@/lib/hooks/use-messages";
 import { useMutation } from "urql";
 import { CreateThreadMutation } from "@/lib/graphql-queries";
-import { useNewMessageSubscription } from "@/lib/hooks/use-subscriptions";
+import { useNewMessageSubscription } from "@thinkwork/react-native-sdk";
 import type { ChatMessage } from "./useGatewayChat";
 
 export interface CallerIdentity {

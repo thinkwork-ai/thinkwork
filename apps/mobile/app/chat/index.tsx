@@ -5,17 +5,20 @@ import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ChevronLeft, Check } from "lucide-react-native";
 import { useAuth } from "@/lib/auth-context";
-import { useAgents, useUpdateThread } from "@thinkwork/react-native-sdk";
-import { useThreadUpdatedSubscription } from "@/lib/hooks/use-subscriptions";
+import {
+  useAgents,
+  useThreadUpdatedSubscription,
+  useUpdateThread,
+} from "@thinkwork/react-native-sdk";
 import { useMe } from "@/lib/hooks/use-users";
 import { ChatScreen } from "@/components/chat/ChatScreen";
 import { useThreadReadState } from "@/lib/hooks/use-thread-read-state";
 import { Text } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
 import { useQuery } from "urql";
-// TODO(sdk): SDK `useThreads` lacks filter args (status/priority/channel/assigneeId)
-//            and `Thread.identifier` — keeping local ThreadsQuery until the SDK
-//            widens. `useThreadUpdatedSubscription` is also an SDK gap.
+// ThreadsQuery stays local — the chat dashboard accesses richer Thread
+// fields (`description`, labels, metadata, assignee detail) than the
+// chat-oriented SDK Thread type exposes.
 import { ThreadsQuery } from "@/lib/graphql-queries";
 
 function statusColor(status: string, isDark: boolean): string {

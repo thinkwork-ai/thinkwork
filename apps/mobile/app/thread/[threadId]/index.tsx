@@ -13,7 +13,10 @@ import { QuickActionsSheet, type QuickActionsSheetRef } from "@/components/chat/
 import { useQuickActions, useDeleteQuickAction, type QuickAction } from "@/lib/hooks/use-quick-actions";
 import { WebViewSheet, type WebViewSheetRef } from "@/components/chat/WebViewSheet";
 import { useAuth } from "@/lib/auth-context";
-import { useThreadUpdatedSubscription, useNewMessageSubscription } from "@/lib/hooks/use-subscriptions";
+import {
+	useNewMessageSubscription,
+	useThreadUpdatedSubscription,
+} from "@thinkwork/react-native-sdk";
 import { useTurnCompletion } from "@/lib/hooks/use-turn-completion";
 import { useThreadReadState, isLocallyRead } from "@/lib/hooks/use-thread-read-state";
 import { ActivityTimeline, type SaveRecipeInfo } from "@/components/threads/ActivityTimeline";
