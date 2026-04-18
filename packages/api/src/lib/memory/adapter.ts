@@ -54,4 +54,33 @@ export interface MemoryAdapter {
 	reflect?(request: RecallRequest): Promise<RecallResult[]>;
 
 	compact?(request: InspectRequest): Promise<void>;
+
+	/**
+	 * Cursor-based incremental read for the compiler pipeline. Returns records
+	 * whose `(updated_at, id)` is strictly greater than the supplied cursor,
+	 * ordered by `(updated_at, id)` ascending. The tiebreaker is required to
+	 * handle same-timestamp records without missing or double-reading.
+	 *
+	 * v1 is strictly agent-scoped (see .prds/compounding-memory-scoping.md);
+	 * `ownerId` is required and corresponds to one agent's Hindsight bank.
+	 * Engines that can't produce monotonic change records (AgentCore) should
+	 * throw a clear "not implemented" error so the compile enqueue path can
+	 * skip them explicitly.
+	 */
+	listRecordsUpdatedSince?(
+		request: ListRecordsUpdatedSinceRequest,
+	): Promise<ListRecordsUpdatedSinceResult>;
+}
+
+export interface ListRecordsUpdatedSinceRequest {
+	tenantId: string;
+	ownerId: string;
+	sinceUpdatedAt?: Date;
+	sinceRecordId?: string;
+	limit: number;
+}
+
+export interface ListRecordsUpdatedSinceResult {
+	records: ThinkWorkMemoryRecord[];
+	nextCursor: { updatedAt: Date; recordId: string } | null;
 }

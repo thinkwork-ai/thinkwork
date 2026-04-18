@@ -14,7 +14,11 @@
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { agents } from "@thinkwork/database-pg/schema";
-import type { MemoryAdapter } from "../adapter.js";
+import type {
+	ListRecordsUpdatedSinceRequest,
+	ListRecordsUpdatedSinceResult,
+	MemoryAdapter,
+} from "../adapter.js";
 import type {
 	ExportRequest,
 	InspectRequest,
@@ -256,6 +260,69 @@ export class HindsightAdapter implements MemoryAdapter {
 			SET text = ${content}, updated_at = NOW()
 			WHERE id = ${recordId}::uuid
 		`);
+	}
+
+	/**
+	 * Incremental changed-record read for the compile pipeline. Results are
+	 * ordered by `(updated_at, id)` ascending so the compiler can advance a
+	 * durable cursor without missing or double-reading same-timestamp rows.
+	 *
+	 * `COALESCE(updated_at, created_at)` handles older memory_units that pre-date
+	 * the `updated_at` column being set on insert.
+	 */
+	async listRecordsUpdatedSince(
+		req: ListRecordsUpdatedSinceRequest,
+	): Promise<ListRecordsUpdatedSinceResult> {
+		const bankId = await this.resolveBankId(req.ownerId);
+		const limit = Math.max(1, Math.min(req.limit, 500));
+		const sinceTs = req.sinceUpdatedAt ?? new Date(0);
+		const sinceId = req.sinceRecordId ?? "00000000-0000-0000-0000-000000000000";
+
+		let result: any;
+		try {
+			result = await this.db.execute(sql`
+				SELECT
+					id, bank_id, text, context, fact_type,
+					event_date, occurred_start, occurred_end,
+					mentioned_at, tags, access_count, proof_count,
+					metadata, created_at, updated_at,
+					COALESCE(updated_at, created_at) AS cursor_ts
+				FROM hindsight.memory_units
+				WHERE bank_id = ${bankId}
+				  AND (
+					COALESCE(updated_at, created_at) > ${sinceTs.toISOString()}::timestamptz
+					OR (
+						COALESCE(updated_at, created_at) = ${sinceTs.toISOString()}::timestamptz
+						AND id::text > ${sinceId}
+					)
+				  )
+				ORDER BY cursor_ts ASC, id ASC
+				LIMIT ${limit}
+			`);
+		} catch (err) {
+			console.warn(
+				`[hindsight-adapter] listRecordsUpdatedSince SQL failed: ${(err as Error)?.message}`,
+			);
+			return { records: [], nextCursor: null };
+		}
+
+		const rows: any[] = result.rows || [];
+		if (rows.length === 0) {
+			return { records: [], nextCursor: null };
+		}
+
+		const ownerRef = {
+			tenantId: req.tenantId,
+			ownerType: "agent" as const,
+			ownerId: req.ownerId,
+		};
+		const records = rows.map((row) => this.mapRow(row, ownerRef, bankId));
+		const last = rows[rows.length - 1];
+		const nextCursor = {
+			updatedAt: new Date(last.cursor_ts ?? last.updated_at ?? last.created_at),
+			recordId: String(last.id),
+		};
+		return { records, nextCursor };
 	}
 
 	private async resolveBankId(ownerId: string): Promise<string> {
