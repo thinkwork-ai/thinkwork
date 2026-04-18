@@ -5,7 +5,6 @@ import { Search, Check, Download, Loader2, Plus, Upload, FileText, X } from "luc
 import { toast } from "sonner";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
-import { PageLayout } from "@/components/PageLayout";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { DataTable } from "@/components/ui/data-table";
 
@@ -13,7 +12,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Dialog,
   DialogContent,
@@ -31,7 +29,7 @@ import {
   type InstalledSkill,
 } from "@/lib/skills-api";
 
-export const Route = createFileRoute("/_authed/_tenant/skills/")({
+export const Route = createFileRoute("/_authed/_tenant/capabilities/skills/")({
   component: SkillsPage,
 });
 
@@ -41,14 +39,16 @@ function SkillsPage() {
   const { tenant } = useTenant();
   const tenantSlug = tenant?.slug;
   const navigate = useNavigate();
-  useBreadcrumbs([{ label: "Skills Catalog" }]);
+  useBreadcrumbs([
+    { label: "Capabilities", href: "/capabilities" },
+    { label: "Skills" },
+  ]);
 
   const [catalog, setCatalog] = useState<CatalogSkill[]>([]);
   const [installed, setInstalled] = useState<InstalledSkill[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [installingSlug, setInstallingSlug] = useState<string | null>(null);
-  const [tab, setTab] = useState("all");
   const [upgradeMap, setUpgradeMap] = useState<Map<string, { upgradeable: boolean; latestVersion: string }>>(new Map());
 
   // Fetch catalog (no tenant dependency) + tenant installs (when slug ready)
@@ -236,7 +236,7 @@ function SkillsPage() {
       toast.success(`Skill "${uploadName}" uploaded (${uploadFiles.length} files)`);
       setUploadOpen(false);
       resetUpload();
-      navigate({ to: "/skills/$slug", params: { slug: result.slug } });
+      navigate({ to: "/capabilities/skills/$slug", params: { slug: result.slug } });
     } catch (err) {
       console.error("Upload failed:", err);
       toast.error(err instanceof Error ? err.message : "Failed to upload skill");
@@ -276,19 +276,7 @@ function SkillsPage() {
       } as SkillRow)),
   ];
 
-  // Filter by tab
-  const rows = (() => {
-    switch (tab) {
-      case "installed":
-        return allRows.filter((r) => r.installed);
-      case "custom":
-        return allRows.filter((r) => r.installedSource === "tenant");
-      case "catalog":
-        return allRows.filter((r) => r.installedSource !== "tenant" && !r.is_default);
-      default:
-        return allRows;
-    }
-  })().sort((a, b) => a.name.localeCompare(b.name));
+  const rows = [...allRows].sort((a, b) => a.name.localeCompare(b.name));
 
   const columns: ColumnDef<SkillRow, any>[] = [
     {
@@ -396,59 +384,44 @@ function SkillsPage() {
 
   return (
     <>
-    <PageLayout
-      header={
-        <>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-lg font-semibold">Skills Catalog</h1>
-              <p className="text-xs text-muted-foreground">Browse and install skills for your agents</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={() => { resetUpload(); setUploadOpen(true); }}
-              >
-                <Upload className="h-4 w-4" />
-                Upload Skill
-              </Button>
-              <Button onClick={() => navigate({ to: "/skills/builder" })}>
-                <Plus className="h-4 w-4" />
-                Create Skill
-              </Button>
-            </div>
+      <div className="flex flex-col h-full min-h-0">
+        <div className="shrink-0 flex items-center gap-4 mb-4">
+          <div className="relative" style={{ width: "16rem" }}>
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search skills..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
           </div>
-          <div className="flex items-center gap-4 mt-4">
-            <div className="relative" style={{ width: "16rem" }}>
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search skills..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <ToggleGroup type="single" value={tab} onValueChange={(v) => v && setTab(v)} variant="outline">
-              <ToggleGroupItem value="all" className="px-4">All</ToggleGroupItem>
-              <ToggleGroupItem value="installed" className="px-4">Installed</ToggleGroupItem>
-              <ToggleGroupItem value="custom" className="px-4">Custom</ToggleGroupItem>
-              <ToggleGroupItem value="catalog" className="px-4">Catalog</ToggleGroupItem>
-            </ToggleGroup>
+<div className="flex items-center gap-2 ml-auto">
+            <Button
+              variant="outline"
+              onClick={() => { resetUpload(); setUploadOpen(true); }}
+            >
+              <Upload className="h-4 w-4" />
+              Upload Skill
+            </Button>
+            <Button onClick={() => navigate({ to: "/capabilities/skills/builder" })}>
+              <Plus className="h-4 w-4" />
+              Create Skill
+            </Button>
           </div>
-        </>
-      }
-    >
-      <DataTable
-        columns={columns}
-        data={rows}
-        filterValue={search}
-        scrollable
-        tableClassName="table-fixed"
-        onRowClick={(row) =>
-          navigate({ to: "/skills/$slug", params: { slug: row.slug } })
-        }
-      />
-    </PageLayout>
+        </div>
+        <div className="flex-1 min-h-0">
+          <DataTable
+            columns={columns}
+            data={rows}
+            filterValue={search}
+            scrollable
+            tableClassName="table-fixed"
+            onRowClick={(row) =>
+              navigate({ to: "/capabilities/skills/$slug", params: { slug: row.slug } })
+            }
+          />
+        </div>
+      </div>
 
     {/* Upload Skill Dialog */}
     <Dialog open={uploadOpen} onOpenChange={(open) => { setUploadOpen(open); if (!open) resetUpload(); }}>

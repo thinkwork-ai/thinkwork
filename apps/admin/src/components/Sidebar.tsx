@@ -17,8 +17,6 @@ import {
   CalendarClock,
   BookOpen,
   LayoutTemplate,
-  Cable,
-  Wrench,
   Plug,
   ShieldCheck,
 } from "lucide-react";
@@ -167,9 +165,7 @@ export function AppSidebar() {
   const agentsItems: NavItem[] = [
     { to: "/agents", icon: Bot, label: "Agents", badge: agentCount },
     { to: "/agent-templates", icon: LayoutTemplate, label: "Agent Templates" },
-    { to: "/skills", icon: Puzzle, label: "Skills Catalog" },
-    { to: "/mcp-servers", icon: Cable, label: "MCP Servers" },
-    { to: "/builtin-tools", icon: Wrench, label: "Built-in Tools" },
+    { to: "/capabilities", icon: Puzzle, label: "Capabilities" },
     { to: "/security", icon: Shield, label: "Security Center" },
   ];
 

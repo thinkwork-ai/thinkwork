@@ -60,7 +60,7 @@ import {
   type InstalledSkill,
 } from "@/lib/skills-api";
 
-export const Route = createFileRoute("/_authed/_tenant/skills/$slug")({
+export const Route = createFileRoute("/_authed/_tenant/capabilities/skills/$slug")({
   component: SkillDetailPage,
 });
 
@@ -234,7 +234,8 @@ function SkillDetailPage() {
   const [dependencies, setDependencies] = useState<{ slug: string; name: string; installed: boolean }[]>([]);
 
   useBreadcrumbs([
-    { label: "Skills", href: "/skills" },
+    { label: "Capabilities", href: "/capabilities" },
+    { label: "Skills", href: "/capabilities/skills" },
     { label: skill?.name || slug },
   ]);
 
@@ -425,7 +426,7 @@ function SkillDetailPage() {
     return (
       <div className="text-center py-12 text-muted-foreground">
         <p>Skill not found.</p>
-        <Link to="/skills" className="text-sm underline mt-2 inline-block">
+        <Link to="/capabilities/skills" className="text-sm underline mt-2 inline-block">
           Back to Skills
         </Link>
       </div>
@@ -442,7 +443,7 @@ function SkillDetailPage() {
   const isBuiltin = skillSource === "builtin";
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 7rem)" }}>
+    <div className="flex flex-col h-full min-h-0">
       {/* Header */}
       <div className="flex items-start justify-between pb-4 shrink-0">
         <div className="flex items-center gap-3">
@@ -546,7 +547,7 @@ function SkillDetailPage() {
         <div className="flex items-center gap-2 flex-wrap pb-3 shrink-0">
           <span className="text-xs font-medium text-muted-foreground mr-1">Dependencies:</span>
           {dependencies.map((dep) => (
-            <Link key={dep.slug} to="/skills/$slug" params={{ slug: dep.slug }}>
+            <Link key={dep.slug} to="/capabilities/skills/$slug" params={{ slug: dep.slug }}>
               <Badge
                 variant="outline"
                 className={`gap-1 text-[10px] cursor-pointer hover:bg-accent ${
