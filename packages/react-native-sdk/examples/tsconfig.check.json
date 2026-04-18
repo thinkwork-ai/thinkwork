@@ -1,0 +1,15 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "react-native",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["react", "react-native"],
+    "baseUrl": "..",
+    "paths": {
+      "@thinkwork/react-native-sdk": ["./src/index.ts"]
+    }
+  },
+  "include": ["./chat-ui/**/*"]
+}

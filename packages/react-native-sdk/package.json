@@ -54,9 +54,15 @@
     "urql": "^4.0.0"
   },
   "peerDependenciesMeta": {
-    "expo-secure-store": { "optional": false },
-    "expo-crypto": { "optional": false },
-    "expo-web-browser": { "optional": false }
+    "expo-secure-store": {
+      "optional": false
+    },
+    "expo-crypto": {
+      "optional": false
+    },
+    "expo-web-browser": {
+      "optional": false
+    }
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
@@ -67,6 +73,9 @@
     "graphql": "^16.10.0",
     "react": "19.1.0",
     "react-native": "0.81.5",
+    "react-native-markdown-display": "^7.0.2",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-svg": "15.12.1",
     "typescript": "~5.9.2",
     "urql": "^4.2.2"
   },
