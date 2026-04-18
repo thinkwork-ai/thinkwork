@@ -1,6 +1,6 @@
 {
   "name": "@thinkwork/react-native-sdk",
-  "version": "0.2.0-alpha.2",
+  "version": "0.2.0-beta.0",
   "description": "Hooks-only SDK for embedding ThinkWork threads, messages, and streaming agent turns into any React Native / Expo host app.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -14,12 +14,34 @@
   "files": [
     "dist",
     "src",
-    "README.md"
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thinkwork-ai/thinkwork.git",
+    "directory": "packages/react-native-sdk"
+  },
+  "homepage": "https://github.com/thinkwork-ai/thinkwork/tree/main/packages/react-native-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/thinkwork-ai/thinkwork/issues"
+  },
+  "keywords": [
+    "thinkwork",
+    "react-native",
+    "expo",
+    "sdk",
+    "graphql",
+    "appsync",
+    "cognito",
+    "chat",
+    "agents"
   ],
   "scripts": {
     "build": "tsc --build",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist tsconfig.tsbuildinfo"
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "prepublishOnly": "pnpm clean && pnpm build"
   },
   "peerDependencies": {
     "amazon-cognito-identity-js": "^6.3.14",
@@ -48,9 +70,8 @@
     "typescript": "~5.9.2",
     "urql": "^4.2.2"
   },
-  "private": true,
   "publishConfig": {
-    "access": "restricted"
+    "access": "public"
   },
-  "license": "UNLICENSED"
+  "license": "MIT"
 }
