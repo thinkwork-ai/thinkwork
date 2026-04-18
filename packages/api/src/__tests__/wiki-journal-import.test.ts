@@ -193,6 +193,27 @@ describe("buildRetainPayload", () => {
 		expect(extra).not.toHaveProperty("bigBlob");
 	});
 
+	it("tolerates pg returning timestamp columns as strings (not Date)", () => {
+		// Regression: in some pg pool configs timestamps come back as strings;
+		// calling `.toISOString()` on them throws and crashes the whole
+		// import. The fix normalizes through `toIsoSafe` at every date path.
+		const out = buildRetainPayload(
+			makeRow({
+				body: "Visit",
+				place_name: "Somewhere",
+				created: "2026-04-17T10:00:00.000+0000" as any,
+				date_created: "2026-04-17T10:00:00.000+0000" as any,
+				journal_title: "T",
+				journal_start_date: "2026-04-17" as any,
+				journal_end_date: "2026-04-18" as any,
+			}),
+			owner,
+		);
+		expect(out).not.toBeNull();
+		expect((out!.metadata as any).idea.created).toMatch(/^2026-04-17T10:00:00/);
+		expect(out!.content).toContain("(2026-04-17–2026-04-18)");
+	});
+
 	it("attaches provenance to metadata for section-source tracking", () => {
 		const out = buildRetainPayload(
 			makeRow({ id: "idea-42", body: "n" }),
