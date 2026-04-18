@@ -26,7 +26,6 @@ type Documents = {
     "\n  mutation SetAgentBudgetPolicy($agentId: ID!, $input: AgentBudgetPolicyInput!) {\n    setAgentBudgetPolicy(agentId: $agentId, input: $input) {\n      id\n      period\n      limitUsd\n      actionOnExceed\n    }\n  }\n": typeof types.SetAgentBudgetPolicyDocument,
     "\n  mutation SendMessage($input: SendMessageInput!) {\n    sendMessage(input: $input) {\n      id\n      threadId\n      tenantId\n      role\n      content\n      senderType\n      senderId\n      createdAt\n    }\n  }\n": typeof types.SendMessageDocument,
     "\n  mutation DeleteMessage($id: ID!) {\n    deleteMessage(id: $id)\n  }\n": typeof types.DeleteMessageDocument,
-    "\n  mutation ExecuteExternalTaskAction(\n    $threadId: ID!\n    $actionType: String!\n    $params: AWSJSON\n  ) {\n    executeExternalTaskAction(\n      threadId: $threadId\n      actionType: $actionType\n      params: $params\n    ) {\n      threadId\n      envelope\n      auditMessageId\n    }\n  }\n": typeof types.ExecuteExternalTaskActionDocument,
     "\n  query Messages($threadId: ID!, $limit: Int, $cursor: String) {\n    messages(threadId: $threadId, limit: $limit, cursor: $cursor) {\n      edges {\n        node {\n          id\n          threadId\n          tenantId\n          role\n          content\n          senderType\n          senderId\n          toolCalls\n          toolResults\n          metadata\n          tokenCount\n          durableArtifact {\n            id\n            title\n            type\n            status\n            content\n            summary\n          }\n          createdAt\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": typeof types.MessagesDocument,
     "\n  query Teams($tenantId: ID!) {\n    teams(tenantId: $tenantId) {\n      id\n      tenantId\n      name\n      description\n      type\n      status\n      budgetMonthlyCents\n      metadata\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.TeamsDocument,
     "\n  query Team($id: ID!) {\n    team(id: $id) {\n      id\n      tenantId\n      name\n      description\n      type\n      status\n      budgetMonthlyCents\n      metadata\n      agents {\n        id\n        agentId\n        role\n        joinedAt\n        agent {\n          id\n          name\n          type\n          status\n          avatarUrl\n        }\n      }\n      users {\n        id\n        userId\n        role\n        joinedAt\n        user {\n          id\n          name\n          email\n          image\n        }\n      }\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.TeamDocument,
@@ -94,7 +93,6 @@ type Documents = {
     "\n  mutation UpdateQuickAction($id: ID!, $input: UpdateQuickActionInput!) {\n    updateQuickAction(id: $id, input: $input) {\n      id\n      userId\n      tenantId\n      title\n      prompt\n      workspaceAgentId\n      sortOrder\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.UpdateQuickActionDocument,
     "\n  mutation DeleteQuickAction($id: ID!) {\n    deleteQuickAction(id: $id)\n  }\n": typeof types.DeleteQuickActionDocument,
     "\n  mutation ReorderQuickActions($input: ReorderQuickActionsInput!) {\n    reorderQuickActions(input: $input) {\n      id\n      sortOrder\n    }\n  }\n": typeof types.ReorderQuickActionsDocument,
-    "\n  mutation RetryTaskSync($threadId: ID!) {\n    retryTaskSync(threadId: $threadId) {\n      id\n      syncStatus\n      syncError\n      metadata\n    }\n  }\n": typeof types.RetryTaskSyncDocument,
     "\n  mutation RefreshGenUI($messageId: ID!, $toolIndex: Int!) {\n    refreshGenUI(messageId: $messageId, toolIndex: $toolIndex) {\n      id\n      toolResults\n    }\n  }\n": typeof types.RefreshGenUiDocument,
     "\n  mutation CreateRecipe($input: CreateRecipeInput!) {\n    createRecipe(input: $input) {\n      id\n      title\n      genuiType\n    }\n  }\n": typeof types.CreateRecipeDocument,
 };
@@ -111,7 +109,6 @@ const documents: Documents = {
     "\n  mutation SetAgentBudgetPolicy($agentId: ID!, $input: AgentBudgetPolicyInput!) {\n    setAgentBudgetPolicy(agentId: $agentId, input: $input) {\n      id\n      period\n      limitUsd\n      actionOnExceed\n    }\n  }\n": types.SetAgentBudgetPolicyDocument,
     "\n  mutation SendMessage($input: SendMessageInput!) {\n    sendMessage(input: $input) {\n      id\n      threadId\n      tenantId\n      role\n      content\n      senderType\n      senderId\n      createdAt\n    }\n  }\n": types.SendMessageDocument,
     "\n  mutation DeleteMessage($id: ID!) {\n    deleteMessage(id: $id)\n  }\n": types.DeleteMessageDocument,
-    "\n  mutation ExecuteExternalTaskAction(\n    $threadId: ID!\n    $actionType: String!\n    $params: AWSJSON\n  ) {\n    executeExternalTaskAction(\n      threadId: $threadId\n      actionType: $actionType\n      params: $params\n    ) {\n      threadId\n      envelope\n      auditMessageId\n    }\n  }\n": types.ExecuteExternalTaskActionDocument,
     "\n  query Messages($threadId: ID!, $limit: Int, $cursor: String) {\n    messages(threadId: $threadId, limit: $limit, cursor: $cursor) {\n      edges {\n        node {\n          id\n          threadId\n          tenantId\n          role\n          content\n          senderType\n          senderId\n          toolCalls\n          toolResults\n          metadata\n          tokenCount\n          durableArtifact {\n            id\n            title\n            type\n            status\n            content\n            summary\n          }\n          createdAt\n        }\n        cursor\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": types.MessagesDocument,
     "\n  query Teams($tenantId: ID!) {\n    teams(tenantId: $tenantId) {\n      id\n      tenantId\n      name\n      description\n      type\n      status\n      budgetMonthlyCents\n      metadata\n      createdAt\n      updatedAt\n    }\n  }\n": types.TeamsDocument,
     "\n  query Team($id: ID!) {\n    team(id: $id) {\n      id\n      tenantId\n      name\n      description\n      type\n      status\n      budgetMonthlyCents\n      metadata\n      agents {\n        id\n        agentId\n        role\n        joinedAt\n        agent {\n          id\n          name\n          type\n          status\n          avatarUrl\n        }\n      }\n      users {\n        id\n        userId\n        role\n        joinedAt\n        user {\n          id\n          name\n          email\n          image\n        }\n      }\n      createdAt\n      updatedAt\n    }\n  }\n": types.TeamDocument,
@@ -179,7 +176,6 @@ const documents: Documents = {
     "\n  mutation UpdateQuickAction($id: ID!, $input: UpdateQuickActionInput!) {\n    updateQuickAction(id: $id, input: $input) {\n      id\n      userId\n      tenantId\n      title\n      prompt\n      workspaceAgentId\n      sortOrder\n      createdAt\n      updatedAt\n    }\n  }\n": types.UpdateQuickActionDocument,
     "\n  mutation DeleteQuickAction($id: ID!) {\n    deleteQuickAction(id: $id)\n  }\n": types.DeleteQuickActionDocument,
     "\n  mutation ReorderQuickActions($input: ReorderQuickActionsInput!) {\n    reorderQuickActions(input: $input) {\n      id\n      sortOrder\n    }\n  }\n": types.ReorderQuickActionsDocument,
-    "\n  mutation RetryTaskSync($threadId: ID!) {\n    retryTaskSync(threadId: $threadId) {\n      id\n      syncStatus\n      syncError\n      metadata\n    }\n  }\n": types.RetryTaskSyncDocument,
     "\n  mutation RefreshGenUI($messageId: ID!, $toolIndex: Int!) {\n    refreshGenUI(messageId: $messageId, toolIndex: $toolIndex) {\n      id\n      toolResults\n    }\n  }\n": types.RefreshGenUiDocument,
     "\n  mutation CreateRecipe($input: CreateRecipeInput!) {\n    createRecipe(input: $input) {\n      id\n      title\n      genuiType\n    }\n  }\n": types.CreateRecipeDocument,
 };
@@ -246,10 +242,6 @@ export function graphql(source: "\n  mutation SendMessage($input: SendMessageInp
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation DeleteMessage($id: ID!) {\n    deleteMessage(id: $id)\n  }\n"): (typeof documents)["\n  mutation DeleteMessage($id: ID!) {\n    deleteMessage(id: $id)\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  mutation ExecuteExternalTaskAction(\n    $threadId: ID!\n    $actionType: String!\n    $params: AWSJSON\n  ) {\n    executeExternalTaskAction(\n      threadId: $threadId\n      actionType: $actionType\n      params: $params\n    ) {\n      threadId\n      envelope\n      auditMessageId\n    }\n  }\n"): (typeof documents)["\n  mutation ExecuteExternalTaskAction(\n    $threadId: ID!\n    $actionType: String!\n    $params: AWSJSON\n  ) {\n    executeExternalTaskAction(\n      threadId: $threadId\n      actionType: $actionType\n      params: $params\n    ) {\n      threadId\n      envelope\n      auditMessageId\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -518,10 +510,6 @@ export function graphql(source: "\n  mutation DeleteQuickAction($id: ID!) {\n   
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation ReorderQuickActions($input: ReorderQuickActionsInput!) {\n    reorderQuickActions(input: $input) {\n      id\n      sortOrder\n    }\n  }\n"): (typeof documents)["\n  mutation ReorderQuickActions($input: ReorderQuickActionsInput!) {\n    reorderQuickActions(input: $input) {\n      id\n      sortOrder\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  mutation RetryTaskSync($threadId: ID!) {\n    retryTaskSync(threadId: $threadId) {\n      id\n      syncStatus\n      syncError\n      metadata\n    }\n  }\n"): (typeof documents)["\n  mutation RetryTaskSync($threadId: ID!) {\n    retryTaskSync(threadId: $threadId) {\n      id\n      syncStatus\n      syncError\n      metadata\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

@@ -21,7 +21,6 @@ import { addThreadDependency } from "./addThreadDependency.mutation.js";
 import { removeThreadDependency } from "./removeThreadDependency.mutation.js";
 import { escalateThread } from "./escalateThread.mutation.js";
 import { delegateThread } from "./delegateThread.mutation.js";
-import { retryTaskSync } from "./retryTaskSync.mutation.js";
 
 export const threadQueries = {
 	threads: threads_query,
@@ -49,5 +48,4 @@ export const threadMutations = {
 	removeThreadDependency,
 	escalateThread,
 	delegateThread,
-	retryTaskSync,
 };

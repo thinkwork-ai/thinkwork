@@ -179,24 +179,6 @@ export const DeleteMessageMutation = graphql(`
   }
 `);
 
-export const ExecuteExternalTaskActionMutation = graphql(`
-  mutation ExecuteExternalTaskAction(
-    $threadId: ID!
-    $actionType: String!
-    $params: AWSJSON
-  ) {
-    executeExternalTaskAction(
-      threadId: $threadId
-      actionType: $actionType
-      params: $params
-    ) {
-      threadId
-      envelope
-      auditMessageId
-    }
-  }
-`);
-
 // ---------------------------------------------------------------------------
 // Messages
 // ---------------------------------------------------------------------------
@@ -1268,24 +1250,6 @@ export const ReorderQuickActionsMutation = gql`
     reorderQuickActions(input: $input) {
       id
       sortOrder
-    }
-  }
-`;
-
-// ---------------------------------------------------------------------------
-// Task sync retry — re-fires outbound sync for task-channel threads that
-// ended up in sync_status='error' or 'local'. Response mirrors the minimal
-// subset the TaskRow badge needs to re-render; full thread state is
-// re-fetched via the Tasks query on the next polling tick.
-// ---------------------------------------------------------------------------
-
-export const RetryTaskSyncMutation = gql`
-  mutation RetryTaskSync($threadId: ID!) {
-    retryTaskSync(threadId: $threadId) {
-      id
-      syncStatus
-      syncError
-      metadata
     }
   }
 `;

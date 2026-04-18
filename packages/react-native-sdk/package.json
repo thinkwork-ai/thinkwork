@@ -1,0 +1,56 @@
+{
+  "name": "@thinkwork/react-native-sdk",
+  "version": "0.2.0-alpha.2",
+  "description": "Hooks-only SDK for embedding ThinkWork threads, messages, and streaming agent turns into any React Native / Expo host app.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo"
+  },
+  "peerDependencies": {
+    "amazon-cognito-identity-js": "^6.3.14",
+    "expo-crypto": "*",
+    "expo-secure-store": "*",
+    "expo-web-browser": "*",
+    "graphql": "^16.0.0",
+    "react": ">=18",
+    "react-native": ">=0.72",
+    "urql": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "expo-secure-store": { "optional": false },
+    "expo-crypto": { "optional": false },
+    "expo-web-browser": { "optional": false }
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.0",
+    "amazon-cognito-identity-js": "^6.3.14",
+    "expo-crypto": "^15.0.0",
+    "expo-secure-store": "^15.0.0",
+    "expo-web-browser": "^15.0.0",
+    "graphql": "^16.10.0",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "typescript": "~5.9.2",
+    "urql": "^4.2.2"
+  },
+  "private": true,
+  "publishConfig": {
+    "access": "restricted"
+  },
+  "license": "UNLICENSED"
+}
