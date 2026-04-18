@@ -6,7 +6,7 @@
  */
 
 import { createHash, randomUUID, randomBytes } from "node:crypto";
-import { eq, ne, and, asc, desc, lt, gt, gte, lte, sql, inArray } from "drizzle-orm";
+import { eq, ne, and, or, isNull, asc, desc, lt, gt, gte, lte, sql, inArray } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
 	// Core
@@ -75,7 +75,7 @@ import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
 
 // Re-export everything resolvers need
 export {
-	eq, ne, and, asc, desc, lt, gt, gte, lte, sql, inArray,
+	eq, ne, and, or, isNull, asc, desc, lt, gt, gte, lte, sql, inArray,
 	randomUUID, randomBytes,
 	tenants, tenantMembers, tenantSettings, users, userProfiles,
 	agents, agentCapabilities, agentSkills, modelCatalog,
