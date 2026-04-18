@@ -212,7 +212,7 @@ describe("buildRetainPayload", () => {
 			owner,
 		);
 		expect(out).not.toBeNull();
-		expect((out!.metadata as any).idea.created).toMatch(/^2026-04-17T10:00:00/);
+		expect((out!.metadata as any).idea_created).toMatch(/^2026-04-17T10:00:00/);
 		expect(out!.content).toContain("(2026-04-17–2026-04-18)");
 	});
 
@@ -234,6 +234,9 @@ describe("buildRetainPayload", () => {
 				is_visit: true,
 				place_name: "Taberna",
 				place_types: ["restaurant", "food"],
+				// journal_* fields only surface when joined from journal.journal,
+				// which always provides journal_id. Mirror that in the test.
+				journal_id: "journal-lisbon",
 				journal_title: "Lisbon",
 				journal_start_date: new Date("2023-09-01T00:00:00Z"),
 			}),
