@@ -1,35 +1,28 @@
 /**
  * mobileMemorySearch — keyword + semantic search over the selected
- * agent's full Hindsight bank. Returns results mapped to MobileMemoryCapture
- * so the mobile list can render captures and search hits with the same row
- * component. Unlike mobileMemoryCaptures, this is NOT filtered by
- * capture_source — search is "what does this agent know?", not "what did
- * I type into the Memories tab?".
+ * agent's full Hindsight bank.
  *
- * Strategy:
- *   1. Literal substring match over the inspect feed (matches user
- *      expectation: typing "Momofuku" should surface the row containing
- *      "Momofuku"). This is deterministic and does not depend on
- *      embedding availability or recall thresholds.
- *   2. Semantic recall, merged in after the literal hits. Dedupe by id.
- *      Semantic hits give us matches that don't contain the exact
- *      keyword but are topically related.
+ * Queries hindsight.memory_units directly with ILIKE (rather than
+ * adapter.inspect + client-side filter) so search is deterministic
+ * and debuggable. The previous implementations (recall-only, then
+ * recall + adapter inspect) silently returned [] whenever recall
+ * came back empty or the adapter swallowed a mismatch.
  *
- * Keeping literal first means the user always sees "the thing I typed"
- * even when recall returns nothing (e.g. fresh embeddings not yet
- * built, or recall endpoint transiently unavailable).
+ * Order of operations:
+ *   1. ILIKE match against memory_units.text — literal keyword hits.
+ *   2. Semantic fallback via recall, merged in after literal matches
+ *      so "Korean restaurant" still surfaces a unit that says
+ *      "Momofuku" when the user searches by theme.
  */
 
+import { sql, eq } from "drizzle-orm";
 import type { GraphQLContext } from "../../context.js";
-import { db, eq, agents } from "../../utils.js";
+import { db, agents } from "../../utils.js";
 import { getMemoryServices } from "../../../lib/memory/index.js";
 import type { ThinkWorkMemoryRecord } from "../../../lib/memory/index.js";
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
-// How many records inspect pulls before we filter. Hindsight adapter caps
-// inspect at 500 anyway, so this is the practical scan window.
-const INSPECT_SCAN = 500;
 
 type MobileCaptureFactType = "FACT" | "PREFERENCE" | "EXPERIENCE" | "OBSERVATION";
 
@@ -38,6 +31,17 @@ const FACT_TYPE_FROM_HINDSIGHT: Record<string, MobileCaptureFactType> = {
 	opinion: "PREFERENCE",
 	experience: "EXPERIENCE",
 	observation: "OBSERVATION",
+};
+
+type MobileCaptureShape = {
+	id: string;
+	tenantId: string;
+	agentId: string;
+	content: string;
+	factType: MobileCaptureFactType;
+	capturedAt: string;
+	syncedAt: string | null;
+	metadata: string;
 };
 
 export const mobileMemorySearch = async (
@@ -63,47 +67,93 @@ export const mobileMemorySearch = async (
 		throw new Error("Agent not found or access denied");
 	}
 
-	const { adapter, recall } = getMemoryServices();
+	const bankId = (agent.slug as string) || (agent.id as string);
 	const cappedLimit = Math.min(Math.max(1, limit), MAX_LIMIT);
-	const needle = trimmed.toLowerCase();
-	const ownerRef = {
-		tenantId: ctx.auth.tenantId,
-		ownerType: "agent" as const,
-		ownerId: agent.id as string,
-	};
+	const pattern = `%${escapeLike(trimmed)}%`;
+	const matches = new Map<string, MobileCaptureShape>();
 
-	// Run inspect (for literal match) and recall (for semantic) in parallel.
-	// Either call is allowed to fail softly — search should degrade, not 500.
-	const [inspectRecords, recallHits] = await Promise.all([
-		adapter.inspect
-			? adapter.inspect({ ...ownerRef, limit: INSPECT_SCAN }).catch(() => [] as ThinkWorkMemoryRecord[])
-			: Promise.resolve([] as ThinkWorkMemoryRecord[]),
-		recall
-			.recall({ ...ownerRef, query: trimmed, limit: cappedLimit })
-			.catch(() => []),
-	]);
-
-	const merged = new Map<string, ReturnType<typeof toMobileCapture>>();
-
-	// Literal text matches first — sorted newest-first (inspect returns that way).
-	for (const r of inspectRecords) {
-		if (merged.size >= cappedLimit) break;
-		const text = (r.content?.text || "").toLowerCase();
-		if (!text.includes(needle)) continue;
-		merged.set(r.id, toMobileCapture(r));
+	// 1. Literal ILIKE match — matches whether the embeddings are stale
+	//    or the recall endpoint is down. Deterministic.
+	try {
+		const result: any = await db.execute(sql`
+			SELECT
+				id, bank_id, text, context, fact_type, metadata,
+				created_at, updated_at
+			FROM hindsight.memory_units
+			WHERE bank_id = ${bankId}
+			  AND text ILIKE ${pattern}
+			ORDER BY created_at DESC
+			LIMIT ${cappedLimit}
+		`);
+		for (const row of result.rows || []) {
+			matches.set(String(row.id), rowToMobileCapture(row, ctx.auth.tenantId, agent.id as string));
+			if (matches.size >= cappedLimit) break;
+		}
+	} catch (err) {
+		console.warn(
+			`[mobileMemorySearch] ILIKE scan failed for bank=${bankId}: ${(err as Error)?.message}`,
+		);
 	}
 
-	// Semantic hits fill remaining capacity.
-	for (const hit of recallHits) {
-		if (merged.size >= cappedLimit) break;
-		if (merged.has(hit.record.id)) continue;
-		merged.set(hit.record.id, toMobileCapture(hit.record));
+	// 2. Semantic recall for the remaining slots. Failures here are
+	//    non-fatal; literal results already dominate.
+	if (matches.size < cappedLimit) {
+		try {
+			const hits = await getMemoryServices().recall.recall({
+				tenantId: ctx.auth.tenantId,
+				ownerType: "agent",
+				ownerId: agent.id as string,
+				query: trimmed,
+				limit: cappedLimit,
+			});
+			for (const hit of hits) {
+				if (matches.size >= cappedLimit) break;
+				if (matches.has(hit.record.id)) continue;
+				matches.set(hit.record.id, recordToMobileCapture(hit.record));
+			}
+		} catch (err) {
+			console.warn(`[mobileMemorySearch] recall failed: ${(err as Error)?.message}`);
+		}
 	}
 
-	return [...merged.values()];
+	return [...matches.values()];
 };
 
-function toMobileCapture(record: ThinkWorkMemoryRecord) {
+function escapeLike(value: string): string {
+	return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+function rowToMobileCapture(
+	row: any,
+	tenantId: string,
+	ownerId: string,
+): MobileCaptureShape {
+	const rawMeta = parseMetadata(row.metadata);
+	const factTypeOverride =
+		typeof rawMeta.fact_type_override === "string" ? rawMeta.fact_type_override : null;
+	const nativeFactType = typeof row.fact_type === "string" ? row.fact_type : null;
+	const resolvedFactType: MobileCaptureFactType =
+		(factTypeOverride && FACT_TYPE_FROM_HINDSIGHT[factTypeOverride]) ||
+		(nativeFactType && FACT_TYPE_FROM_HINDSIGHT[nativeFactType]) ||
+		"FACT";
+
+	const createdAtIso = toIso(row.created_at) || new Date().toISOString();
+	const capturedAt =
+		(typeof rawMeta.captured_at === "string" ? rawMeta.captured_at : null) || createdAtIso;
+
+	return {
+		id: String(row.id),
+		tenantId,
+		agentId: ownerId,
+		content: String(row.text || ""),
+		factType: resolvedFactType,
+		capturedAt,
+		syncedAt: createdAtIso,
+		metadata: JSON.stringify(rawMeta),
+	};
+}
+
+function recordToMobileCapture(record: ThinkWorkMemoryRecord): MobileCaptureShape {
 	const meta = (record.metadata || {}) as Record<string, unknown>;
 	const raw = (meta.raw || {}) as Record<string, unknown>;
 
@@ -131,4 +181,31 @@ function toMobileCapture(record: ThinkWorkMemoryRecord) {
 		syncedAt: record.createdAt || null,
 		metadata: JSON.stringify(raw),
 	};
+}
+
+function parseMetadata(raw: unknown): Record<string, unknown> {
+	if (!raw) return {};
+	if (typeof raw === "string") {
+		try {
+			const parsed = JSON.parse(raw);
+			return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+				? (parsed as Record<string, unknown>)
+				: {};
+		} catch {
+			return {};
+		}
+	}
+	if (typeof raw === "object" && !Array.isArray(raw)) {
+		return raw as Record<string, unknown>;
+	}
+	return {};
+}
+
+function toIso(value: unknown): string | null {
+	if (!value) return null;
+	try {
+		return new Date(value as any).toISOString();
+	} catch {
+		return null;
+	}
 }
