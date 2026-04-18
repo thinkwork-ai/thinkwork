@@ -96,7 +96,6 @@ resource "aws_lambda_function" "handler" {
     "webhooks",
     "webhooks-admin",
     "webhook-deliveries-cleanup",
-    "task-connectors",
     "workspace-files",
     "knowledge-base-manager",
     "knowledge-base-files",
@@ -225,10 +224,6 @@ locals {
     # Webhooks admin
     "ANY /api/webhooks/{proxy+}" = "webhooks-admin"
     "ANY /api/webhooks"          = "webhooks-admin"
-
-    # Task Connectors admin
-    "ANY /api/task-connectors/{proxy+}" = "task-connectors"
-    "ANY /api/task-connectors"          = "task-connectors"
 
     # Workspace files
     "ANY /api/workspaces/{proxy+}" = "workspace-files"
