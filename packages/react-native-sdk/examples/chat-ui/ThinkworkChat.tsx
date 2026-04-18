@@ -31,12 +31,34 @@ import {
   type Message,
 } from "@thinkwork/react-native-sdk";
 
-interface Props {
+export interface ThinkworkChatProps {
   threadId: string;
   /** Called when the user taps the back chevron. If omitted, the header is still rendered with a non-interactive chevron. */
   onBack?: () => void;
   /** Override the default title when the thread hasn't loaded yet. */
   fallbackTitle?: string;
+  /**
+   * Optional user id to stamp on sent messages for attribution. Passed
+   * through to the SDK's `useSendMessage` `senderId` option. Omit and
+   * the backend derives sender from the auth context.
+   */
+  currentUserId?: string;
+  /**
+   * Host apps with a bottom tab bar typically need to offset the
+   * `KeyboardAvoidingView` so the composer doesn't slide behind the tabs
+   * on focus. Defaults to `0`.
+   */
+  keyboardVerticalOffset?: number;
+  /**
+   * Called when a message send fails. Use this to surface a toast /
+   * retry affordance. If omitted, the error is logged and swallowed.
+   */
+  onSendError?: (err: unknown) => void;
+  /**
+   * Custom text for the empty state shown when a thread has no messages
+   * yet. Defaults to "Send a message to start the conversation."
+   */
+  emptyStateText?: string;
 }
 
 function ChevronLeftIcon({
@@ -67,7 +89,15 @@ function ChevronLeftIcon({
  * uses the unbound `useSendMessage()` from 0.2.0, so the same hook works
  * whether the thread was mounted or just created.
  */
-export function ThinkworkChat({ threadId, onBack, fallbackTitle = "Chat" }: Props) {
+export function ThinkworkChat({
+  threadId,
+  onBack,
+  fallbackTitle = "Chat",
+  currentUserId,
+  keyboardVerticalOffset = 0,
+  onSendError,
+  emptyStateText = "Send a message to start the conversation.",
+}: ThinkworkChatProps) {
   const { thread } = useThread(threadId);
   const { messages, loading } = useMessages(threadId);
   const sendMessage = useSendMessage();
@@ -125,6 +155,7 @@ export function ThinkworkChat({ threadId, onBack, fallbackTitle = "Chat" }: Prop
       return () => clearTimeout(handle);
     }
     prevCountRef.current = timeline.length;
+    return;
   }, [timeline.length]);
 
   const submit = async () => {
@@ -133,7 +164,16 @@ export function ThinkworkChat({ threadId, onBack, fallbackTitle = "Chat" }: Prop
     setDraft("");
     setSending(true);
     try {
-      await sendMessage(threadId, text);
+      await sendMessage(
+        threadId,
+        text,
+        currentUserId ? { senderId: currentUserId } : undefined,
+      );
+    } catch (err) {
+      // Restore the draft so the user can retry without retyping.
+      setDraft(text);
+      if (onSendError) onSendError(err);
+      else console.error("[ThinkworkChat] send failed:", err);
     } finally {
       setSending(false);
     }
@@ -148,11 +188,14 @@ export function ThinkworkChat({ threadId, onBack, fallbackTitle = "Chat" }: Prop
         <Text style={styles.title} numberOfLines={1}>
           {thread?.title || fallbackTitle}
         </Text>
-        <View style={styles.headerRight} />
       </Pressable>
       {loading && messages.length === 0 ? (
         <View style={[styles.center, styles.chatArea]}>
           <ActivityIndicator />
+        </View>
+      ) : !loading && messages.length === 0 ? (
+        <View style={[styles.center, styles.chatArea]}>
+          <Text style={styles.emptyText}>{emptyStateText}</Text>
         </View>
       ) : (
         <FlatList
@@ -177,7 +220,10 @@ export function ThinkworkChat({ threadId, onBack, fallbackTitle = "Chat" }: Prop
           }}
         />
       )}
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={keyboardVerticalOffset}
+      >
         <View style={styles.composer}>
           <TextInput
             value={draft}
@@ -294,15 +340,19 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   backBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  headerRight: { width: 40 },
   title: {
     flex: 1,
     fontSize: 16,
     fontWeight: "600",
     color: "#111827",
-    textAlign: "center",
   },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  emptyText: {
+    color: "#6B7280",
+    fontSize: 15,
+    textAlign: "center",
+    paddingHorizontal: 32,
+  },
   listContent: { padding: 12, gap: 8 },
   bubbleRow: { flexDirection: "row" },
   bubbleRowUser: { justifyContent: "flex-end" },
