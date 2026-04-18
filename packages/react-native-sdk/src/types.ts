@@ -69,6 +69,7 @@ export interface Thread {
   lastActivityAt?: string | null;
   lastReadAt?: string | null;
   archivedAt?: string | null;
+  lastResponsePreview?: string | null;
   createdAt: string;
   updatedAt: string;
 }
