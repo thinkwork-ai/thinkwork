@@ -68,6 +68,9 @@ locals {
     "wiki-compile" = {
       BEDROCK_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
     }
+    "wiki-export" = {
+      WIKI_EXPORT_BUCKET = aws_s3_bucket.wiki_exports.bucket
+    }
   }
 }
 
@@ -112,6 +115,8 @@ resource "aws_lambda_function" "handler" {
     "memory",
     "memory-retain",
     "wiki-compile",
+    "wiki-lint",
+    "wiki-export",
     "artifact-deliver",
     "recipe-refresh",
     "agent-skills-list",
@@ -127,8 +132,8 @@ resource "aws_lambda_function" "handler" {
   # eval-runner walks every test case sequentially, invoking an agent +
   # waiting up to 2 min for spans to propagate per test, so a 10-test run
   # can easily exceed the 30 s default. 900 s covers ~5-15 min sweeps.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "eval-runner" ? 900 : each.key == "wiki-compile" ? 480 : 30
-  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "eval-runner" ? 512 : each.key == "wiki-compile" ? 1024 : 256
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "eval-runner" ? 900 : each.key == "wiki-compile" ? 480 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : 30
+  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "eval-runner" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "wiki-export" ? 1024 : 256
 
   filename         = "${var.lambda_zips_dir}/${each.key}.zip"
   source_code_hash = filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip")
@@ -325,6 +330,94 @@ resource "aws_scheduler_schedule" "webhook_deliveries_cleanup" {
     arn      = aws_lambda_function.handler["webhook-deliveries-cleanup"].arn
     role_arn = aws_iam_role.scheduler.arn
   }
+}
+
+# ---------------------------------------------------------------------------
+# Compounding Memory — nightly hygiene + export
+# ---------------------------------------------------------------------------
+
+resource "aws_scheduler_schedule" "wiki_lint" {
+  count = local.use_local_zips ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-wiki-lint"
+  group_name          = "default"
+  schedule_expression = "cron(0 2 * * ? *)" # daily at 02:00 UTC
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["wiki-lint"].arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+resource "aws_scheduler_schedule" "wiki_export" {
+  count = local.use_local_zips ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-wiki-export"
+  group_name          = "default"
+  schedule_expression = "cron(0 3 * * ? *)" # daily at 03:00 UTC (after lint)
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["wiki-export"].arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# S3 bucket for markdown vault exports. One bundle per (tenant, owner, date).
+# Retention is handled by the lifecycle rule below (30 days).
+resource "aws_s3_bucket" "wiki_exports" {
+  bucket        = "thinkwork-${var.stage}-wiki-exports"
+  force_destroy = var.stage == "dev"
+
+  tags = {
+    Name = "thinkwork-${var.stage}-wiki-exports"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "wiki_exports" {
+  bucket                  = aws_s3_bucket.wiki_exports.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "wiki_exports" {
+  bucket = aws_s3_bucket.wiki_exports.id
+
+  rule {
+    id     = "expire-old-bundles"
+    status = "Enabled"
+
+    filter {}
+
+    expiration {
+      days = 30
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_wiki_exports_s3" {
+  name = "wiki-exports-s3"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = ["s3:PutObject", "s3:AbortMultipartUpload"]
+      Resource = "${aws_s3_bucket.wiki_exports.arn}/*"
+    }]
+  })
 }
 
 resource "aws_iam_role" "scheduler" {
