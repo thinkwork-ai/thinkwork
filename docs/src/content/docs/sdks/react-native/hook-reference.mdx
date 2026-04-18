@@ -1,0 +1,164 @@
+---
+title: Hook Reference
+description: Every hook exported by @thinkwork/react-native-sdk — signatures, return shapes, cache and subscription semantics, and when to reach for each one.
+---
+
+All hooks must render inside `<ThinkworkProvider>`. Imperative mutations (`useCreateThread`, `useSendMessage`, `useUpdateThread`) return functions you call at event time — not urql-style tuples.
+
+## Auth & identity
+
+### `useThinkworkAuth()`
+
+```tsx
+const { status, user, signIn, signInWithGoogle, signOut, getIdToken } = useThinkworkAuth();
+```
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `status` | `"unknown" \| "signed-out" \| "signed-in" \| "error"` | Flip `"unknown"` → `"signed-in"` after initial session restore completes. |
+| `user` | `ThinkworkUser \| null` | Populated when `status === "signed-in"`. **`user.tenantId` is always set** when signed-in — the provider internally falls back to a `me` query for Google-federated users whose Cognito ID token is missing the `custom:tenant_id` claim. |
+| `signIn(email, pw)` | `Promise<void>` | USER_PASSWORD_AUTH flow. |
+| `signInWithGoogle()` | `Promise<void>` | Opens Cognito Hosted UI via `expo-web-browser`; redirects back to your scheme. |
+| `signOut()` | `Promise<void>` | Clears the Cognito session and in-memory token. |
+| `getIdToken()` | `Promise<string \| null>` | Refreshed token; safe to call from any hook. |
+
+## Thread list & reads
+
+### `useThreads(args)` → `{ threads, loading, error, refetch }`
+
+```tsx
+const { threads, loading, refetch } = useThreads({
+  tenantId,
+  agentId,        // optional — omit for tenant-wide
+  assigneeId,     // optional
+  status,         // "BACKLOG" | "TODO" | "IN_PROGRESS" | ...
+  priority,       // "LOW" | "MEDIUM" | "HIGH" | ...
+  type,           // "TASK" | "BUG" | "FEATURE" | "QUESTION"
+  channel,        // "CHAT" | "EMAIL" | "SCHEDULE" | ...
+  search,         // full-text search
+  limit,          // default backend caps at 500
+  cursor,         // opaque cursor for pagination
+});
+```
+
+**Cache**: `cache-and-network` with `additionalTypenames: ["Thread"]`. Mutations that touch any `Thread` row (`createThread`, `updateThread`, archive, mark-read) invalidate the list automatically — no manual refetch plumbing.
+
+### `useThread(threadId)` → `{ thread, loading, error, refetch }`
+
+Single-thread fetch. Paused when `threadId` is falsy.
+
+### `useUnreadThreadCount(args)` → `{ count, loading, error }`
+
+```tsx
+const { count } = useUnreadThreadCount({ tenantId, agentId });
+```
+
+Server-side aggregate — **no client-side thread scan**. Uses the same `Thread` typename invalidation as `useThreads`, so marking a thread read decrements the badge on the next render without explicit refetches.
+
+## Agents
+
+### `useAgents(args)` → `{ agents, loading, error, refetch }`
+
+```tsx
+const { agents } = useAgents({ tenantId });
+```
+
+Pure data hook. **Selection state is a host concern** — build your own `useSelectedAgent` wrapper with whatever storage fits your app (AsyncStorage, MMKV, Zustand). The SDK intentionally does not ship persistence because different hosts want different storage semantics.
+
+## Messages
+
+### `useMessages(threadId)` → `{ messages, loading, error, refetch }`
+
+```tsx
+const { messages, loading } = useMessages(threadId);
+```
+
+Returns messages in descending creation order. Internally subscribed to `onNewMessage(threadId)`, so new messages land automatically; no manual subscription wiring required.
+
+### `useSendMessage()` → `(threadId, content, opts?) => Promise<Message>`
+
+**Unbound** — not tied to a specific threadId at hook time. This is the 0.2.0 fix for the "create thread then send first message" footgun where a freshly-minted threadId wasn't available until after a re-render.
+
+```tsx
+const sendMessage = useSendMessage();
+
+await sendMessage(threadId, "Hello", {
+  senderId: currentUser?.id, // optional attribution
+  senderType: "user",         // default
+});
+```
+
+## Threads (write)
+
+### `useCreateThread()` → `(input) => Promise<Thread>`
+
+```tsx
+const createThread = useCreateThread();
+
+// Plain thread
+const thread = await createThread({
+  tenantId,
+  agentId,
+  title: "New conversation",
+  channel: "CHAT",
+});
+
+// Atomic thread + first user message (single round-trip).
+// Eliminates the two-step "create then send" pattern.
+const thread = await createThread({
+  tenantId,
+  agentId,
+  title: "New conversation",
+  channel: "CHAT",
+  firstMessage: "Hey, can you look into X?",
+});
+```
+
+### `useUpdateThread()` → `(threadId, input) => Promise<Thread>`
+
+```tsx
+const updateThread = useUpdateThread();
+
+// Mark read
+await updateThread(threadId, { lastReadAt: new Date().toISOString() });
+
+// Archive
+await updateThread(threadId, { archivedAt: new Date().toISOString() });
+
+// Status change
+await updateThread(threadId, { status: "DONE" });
+```
+
+Like `useSendMessage`, unbound at hook time — takes the threadId at call time.
+
+## Subscriptions
+
+### `useNewMessageSubscription(threadId)` → urql subscription tuple
+
+Thread-scoped stream of new messages. `useMessages` already subscribes internally, so reach for this hook directly only when you need to react to message arrivals outside a messages list (e.g. toast notifications, typing indicators).
+
+### `useThreadTurnSubscription(threadId)` → urql subscription tuple
+
+Thread-scoped agent turn updates, filtered client-side. Fires when an agent starts/progresses/completes a turn on the given thread.
+
+### `useThreadTurnUpdatedSubscription(tenantId)` → urql subscription tuple
+
+**Tenant-wide** turn stream without a client filter. Use for dashboards or badges that care about turn activity across every thread in the tenant.
+
+### `useThreadUpdatedSubscription(tenantId)` → urql subscription tuple
+
+Tenant-wide thread-status stream. Fires whenever any thread's status or title changes in the tenant — useful for dashboards that need to re-query the thread list on any mutation.
+
+## Types
+
+All major types re-export from the package root:
+
+```tsx
+import type {
+  Agent, Thread, Message, ThreadTurn,
+  CreateThreadInput, UpdateThreadInput,
+  NewMessageEvent, ThreadTurnUpdateEvent, ThreadUpdateEvent,
+  SendMessageOptions, UseThreadsArgs,
+  ThinkworkConfig, ThinkworkUser, ThinkworkAuthStatus,
+} from "@thinkwork/react-native-sdk";
+```
