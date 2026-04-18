@@ -24,6 +24,10 @@ export {
   type ThreadUpdateEvent,
 } from "./hooks/use-subscriptions";
 export { useCaptureMobileMemory } from "./hooks/use-capture-mobile-memory";
+export {
+  useMobileMemoryCaptures,
+  useDeleteMobileMemoryCapture,
+} from "./hooks/use-mobile-memory-captures";
 
 export type {
   ThinkworkConfig,
