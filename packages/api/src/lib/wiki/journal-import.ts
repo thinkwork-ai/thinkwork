@@ -49,12 +49,16 @@ export interface JournalImportResult {
 	latencyMs: number;
 }
 
+// `pg` returns timestamp columns as Date by default but as string in some
+// pool configurations (no type parser bound for OID 1114/1184). Accept both
+// shapes; the prose + metadata path routes every timestamp through
+// toIsoSafe() so neither case throws.
 interface JournalIdeaRow {
 	id: string;
 	body: string | null;
 	tags: string[] | null;
-	created: Date | null;
-	date_created: Date | null;
+	created: Date | string | null;
+	date_created: Date | string | null;
 	is_visit: boolean | null;
 	is_favorite: boolean | null;
 	geo_lat: number | null;
@@ -73,8 +77,8 @@ interface JournalIdeaRow {
 	journal_id: string | null;
 	journal_title: string | null;
 	journal_description: string | null;
-	journal_start_date: Date | null;
-	journal_end_date: Date | null;
+	journal_start_date: Date | string | null;
+	journal_end_date: Date | string | null;
 	journal_tags: string[] | null;
 }
 
@@ -93,8 +97,12 @@ export async function runJournalImport(
 	let recordsSkipped = 0;
 	let errors = 0;
 
-	while (recordsIngested + recordsSkipped < hardLimit) {
-		const remaining = hardLimit - (recordsIngested + recordsSkipped);
+	// Include errors in the processed-count so a scope-wide failure still
+	// respects the limit. Otherwise 338 broken rows would spin through the
+	// whole account even when the caller asked for 10.
+	const processed = () => recordsIngested + recordsSkipped + errors;
+	while (processed() < hardLimit) {
+		const remaining = hardLimit - processed();
 		const pageSize = Math.min(BATCH_SIZE, remaining);
 		const rows = await fetchPage(args.accountId, lastId, pageSize);
 		if (rows.length === 0) break;
@@ -285,7 +293,7 @@ function buildMetadata(row: JournalIdeaRow): Record<string, unknown> {
 			is_visit: !!row.is_visit,
 			is_favorite: !!row.is_favorite,
 			images: row.images ?? [],
-			created: row.created?.toISOString() ?? row.date_created?.toISOString() ?? null,
+			created: toIsoSafe(row.created) ?? toIsoSafe(row.date_created),
 			geo_lat: row.geo_lat,
 			geo_lon: row.geo_lon,
 		},
@@ -339,10 +347,26 @@ function compactPlaceMetadata(
 	return Object.keys(out).length === 0 ? null : out;
 }
 
-function formatDate(date: Date | null | undefined): string | null {
-	if (!date) return null;
+function formatDate(date: Date | string | null | undefined): string | null {
+	const iso = toIsoSafe(date);
+	return iso ? iso.slice(0, 10) : null;
+}
+
+/**
+ * pg returns timestamp columns as Date in some configs but as string in
+ * others (esp. when the column has no `pg` parser installed on the pool).
+ * Normalize to ISO string or null — never throw.
+ */
+function toIsoSafe(
+	value: Date | string | number | null | undefined,
+): string | null {
+	if (value == null) return null;
+	if (value instanceof Date) {
+		return Number.isNaN(value.getTime()) ? null : value.toISOString();
+	}
 	try {
-		return date.toISOString().slice(0, 10);
+		const d = new Date(value as any);
+		return Number.isNaN(d.getTime()) ? null : d.toISOString();
 	} catch {
 		return null;
 	}
