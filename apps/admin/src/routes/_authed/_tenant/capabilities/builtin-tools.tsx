@@ -6,12 +6,12 @@ import {
   CheckCircle2,
   AlertCircle,
   TestTube,
-  Wrench,
   Trash2,
+  Wrench,
+  Search,
 } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
-import { PageLayout } from "@/components/PageLayout";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -42,7 +42,7 @@ import {
   type BuiltinTool,
 } from "@/lib/builtin-tools-api";
 
-export const Route = createFileRoute("/_authed/_tenant/builtin-tools")({
+export const Route = createFileRoute("/_authed/_tenant/capabilities/builtin-tools")({
   component: BuiltinToolsPage,
 });
 
@@ -159,11 +159,15 @@ const columns: ColumnDef<Row>[] = [
 function BuiltinToolsPage() {
   const { tenant } = useTenant();
   const tenantSlug = tenant?.slug;
-  useBreadcrumbs([{ label: "Built-in Tools" }]);
+  useBreadcrumbs([
+    { label: "Capabilities", href: "/capabilities" },
+    { label: "Built-in Tools" },
+  ]);
 
   const [tools, setTools] = useState<BuiltinTool[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeRow, setActiveRow] = useState<Row | null>(null);
+  const [search, setSearch] = useState("");
 
   const refresh = useCallback(() => {
     if (!tenantSlug) return;
@@ -187,23 +191,30 @@ function BuiltinToolsPage() {
   }));
 
   return (
-    <PageLayout
-      header={
-        <div className="flex items-center gap-2">
-          <Wrench className="h-5 w-5 text-muted-foreground" />
-          <h1 className="text-2xl font-bold tracking-tight leading-tight text-foreground">
-            Built-in Tools
-          </h1>
+    <>
+      <div className="flex flex-col h-full min-h-0">
+        <div className="shrink-0 flex items-center gap-4 mb-4">
+          <div className="relative" style={{ width: "16rem" }}>
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search tools..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
         </div>
-      }
-    >
-      <DataTable
-        columns={columns}
-        data={rows}
-        pageSize={0}
-        tableClassName="table-fixed [&_tbody_tr]:h-10"
-        onRowClick={(r) => setActiveRow(r)}
-      />
+        <div className="flex-1 min-h-0">
+          <DataTable
+            columns={columns}
+            data={rows}
+            filterValue={search}
+            scrollable
+            tableClassName="table-fixed [&_tbody_tr]:h-10"
+            onRowClick={(r) => setActiveRow(r)}
+          />
+        </div>
+      </div>
 
       {activeRow && (
         <ConfigureDialog
@@ -213,7 +224,7 @@ function BuiltinToolsPage() {
           onChanged={refresh}
         />
       )}
-    </PageLayout>
+    </>
   );
 }
 

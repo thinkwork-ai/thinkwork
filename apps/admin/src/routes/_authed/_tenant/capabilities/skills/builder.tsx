@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/select";
 import { createTenantSkill, saveTenantFile } from "@/lib/skills-api";
 
-export const Route = createFileRoute("/_authed/_tenant/skills/builder")({
+export const Route = createFileRoute("/_authed/_tenant/capabilities/skills/builder")({
   component: SkillBuilderPage,
 });
 
@@ -221,7 +221,8 @@ function SkillBuilderPage() {
   const tenantSlug = tenant?.slug;
   const navigate = useNavigate();
   useBreadcrumbs([
-    { label: "Skills", href: "/skills" },
+    { label: "Capabilities", href: "/capabilities" },
+    { label: "Skills", href: "/capabilities/skills" },
     { label: "Build New Skill" },
   ]);
 
@@ -307,7 +308,7 @@ function SkillBuilderPage() {
       }
 
       // 4. Navigate to the skill detail page
-      navigate({ to: "/skills/$slug", params: { slug: result.slug } });
+      navigate({ to: "/capabilities/skills/$slug", params: { slug: result.slug } });
     } catch (err) {
       console.error("Failed to create skill:", err);
       toast.error(err instanceof Error ? err.message : "Failed to create skill");
@@ -500,7 +501,7 @@ function SkillBuilderPage() {
   ];
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 7rem)" }}>
+    <div className="flex flex-col h-full min-h-0">
       {/* Header with step indicator */}
       <div className="flex items-center justify-between pb-4 shrink-0">
         <div>
@@ -533,7 +534,7 @@ function SkillBuilderPage() {
       <div className="flex items-center justify-between pt-4 shrink-0">
         <Button
           variant="outline"
-          onClick={step === 1 ? () => navigate({ to: "/skills" }) : goBack}
+          onClick={step === 1 ? () => navigate({ to: "/capabilities/skills" }) : goBack}
         >
           <ArrowLeft className="h-3.5 w-3.5 mr-1.5" />
           {step === 1 ? "Cancel" : "Back"}
