@@ -62,6 +62,12 @@ locals {
       JOB_TRIGGER_ARN      = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-job-trigger"
       JOB_TRIGGER_ROLE_ARN = var.job_scheduler_role_arn
     }
+    # Compounding Memory compile Lambda. Claude Haiku 4.5 via Bedrock; the
+    # planner + section-writer cap themselves at ~500 records / 25 new pages
+    # per invocation, so a 480 s timeout covers the worst case comfortably.
+    "wiki-compile" = {
+      BEDROCK_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    }
   }
 }
 
@@ -105,6 +111,7 @@ resource "aws_lambda_function" "handler" {
     "github-repos",
     "memory",
     "memory-retain",
+    "wiki-compile",
     "artifact-deliver",
     "recipe-refresh",
     "agent-skills-list",
@@ -120,8 +127,8 @@ resource "aws_lambda_function" "handler" {
   # eval-runner walks every test case sequentially, invoking an agent +
   # waiting up to 2 min for spans to propagate per test, so a 10-test run
   # can easily exceed the 30 s default. 900 s covers ~5-15 min sweeps.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "eval-runner" ? 900 : 30
-  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "eval-runner" ? 512 : 256
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "eval-runner" ? 900 : each.key == "wiki-compile" ? 480 : 30
+  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "eval-runner" ? 512 : each.key == "wiki-compile" ? 1024 : 256
 
   filename         = "${var.lambda_zips_dir}/${each.key}.zip"
   source_code_hash = filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip")
