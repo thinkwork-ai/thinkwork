@@ -850,6 +850,30 @@ def _call_strands_agent(system_prompt: str, messages: list,
                 tools.append(hindsight_reflect)
                 logger.info("Hindsight tools registered: retain (vendor) + custom hindsight_recall/reflect bank=%s tags=%s timeout=300s",
                             hs_bank, hs_tags)
+
+                # Compounding Memory (wiki) tools — same scope as hindsight
+                # (tenant + agent). Owner id is captured in the closure so the
+                # model can never address a different agent's wiki. Tools
+                # return a graceful "not enabled" string if the graphql-http
+                # URL/secret env vars aren't set on this deployment.
+                if hs_tenant and hs_assistant:
+                    try:
+                        from wiki_tools import make_wiki_tools
+                        search_wiki, read_wiki_page = make_wiki_tools(
+                            _strands_tool,
+                            tenant_id=hs_tenant,
+                            owner_id=hs_assistant,
+                        )
+                        tools.append(search_wiki)
+                        tools.append(read_wiki_page)
+                        logger.info(
+                            "Wiki tools registered: search_wiki + read_wiki_page "
+                            "tenant=%s agent=%s", hs_tenant, hs_assistant,
+                        )
+                    except Exception as _wiki_err:
+                        logger.warning(
+                            "Wiki tools registration failed: %s", _wiki_err,
+                        )
             else:
                 logger.warning("Hindsight tools not registered: missing endpoint or bank_id (endpoint=%s bank=%s)",
                                "set" if hs_endpoint else "MISSING", hs_bank or "MISSING")

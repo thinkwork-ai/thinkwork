@@ -1,0 +1,87 @@
+"""
+Compounding Memory (wiki) read path.
+
+v1 is strictly agent-scoped: every read requires both `tenantId` and
+`ownerId`. See .prds/compounding-memory-scoping.md.
+"""
+
+enum WikiPageType {
+  ENTITY
+  TOPIC
+  DECISION
+}
+
+type WikiPageSection {
+  id: ID!
+  sectionSlug: String!
+  heading: String!
+  bodyMd: String!
+  position: Int!
+  lastSourceAt: AWSDateTime
+}
+
+type WikiPage {
+  id: ID!
+  tenantId: ID!
+  ownerId: ID!
+  type: WikiPageType!
+  slug: String!
+  title: String!
+  summary: String
+  bodyMd: String
+  status: String!
+  lastCompiledAt: AWSDateTime
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  sections: [WikiPageSection!]!
+  aliases: [String!]!
+}
+
+type WikiSearchResult {
+  page: WikiPage!
+  score: Float!
+  matchedAlias: String
+}
+
+type WikiCompileJob {
+  id: ID!
+  tenantId: ID!
+  ownerId: ID!
+  status: String!
+  trigger: String!
+  dedupeKey: String!
+  attempt: Int!
+  claimedAt: AWSDateTime
+  startedAt: AWSDateTime
+  finishedAt: AWSDateTime
+  error: String
+  metrics: AWSJSON
+  createdAt: AWSDateTime!
+}
+
+extend type Query {
+  """
+  Read one compiled page by slug. `ownerId` is required.
+  """
+  wikiPage(tenantId: ID!, ownerId: ID!, type: WikiPageType!, slug: String!): WikiPage
+
+  """
+  Postgres full-text search over compiled pages in a single (tenant, owner)
+  scope. Also matches exact aliases. Ranked by ts_rank + alias-hit boost.
+  """
+  wikiSearch(tenantId: ID!, ownerId: ID!, query: String!, limit: Int = 20): [WikiSearchResult!]!
+
+  """
+  Pages that link to the given page. Visibility is derived from the target
+  page's owner scope; caller must be that owner or an admin.
+  """
+  wikiBacklinks(pageId: ID!): [WikiPage!]!
+}
+
+extend type Mutation {
+  """
+  Admin-only: enqueue an ad-hoc compile job for a specific (tenant, agent).
+  Returns the job row (newly inserted or the in-flight dedupe hit).
+  """
+  compileWikiNow(tenantId: ID!, ownerId: ID!): WikiCompileJob!
+}
