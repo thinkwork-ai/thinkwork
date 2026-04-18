@@ -26,21 +26,6 @@ import {
 	ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
 
-import {
-	resolveOAuthToken,
-	forceRefreshLastmileUserToken,
-} from "../lib/oauth-token.js";
-import {
-	getOrMintLastmilePat,
-	forceRefreshLastmilePat,
-} from "../lib/lastmile-pat.js";
-import {
-	listWorkflows as lastmileListWorkflows,
-	isLastmileRestConfigured,
-	LastmileRestError,
-} from "../integrations/external-work-items/providers/lastmile/restClient.js";
-import { getConnectorBaseUrl } from "./task-connectors.js";
-
 const { connections, connectProviders, credentials } = schema;
 
 const STAGE = process.env.STAGE || "dev";
@@ -82,13 +67,6 @@ export async function handler(
 	const { id, sub } = parsePath(event.rawPath);
 
 	try {
-		// Sub-resource: GET /api/connections/lastmile/workflows
-		// Proxies the LastMile REST API so mobile can discover available
-		// workflows for the task-creation picker. Uses the user's existing
-		// OAuth token — same one the MCP and webhook paths already share.
-		if (method === "GET" && id === "lastmile" && sub === "workflows") {
-			return listLastmileWorkflows(tenantId, userId);
-		}
 
 		switch (method) {
 			case "GET":
@@ -344,130 +322,3 @@ async function deleteConnection(
 	return json({ ok: true, id });
 }
 
-// ---------------------------------------------------------------------------
-// GET /api/connections/lastmile/workflows — proxy to LastMile REST API
-// ---------------------------------------------------------------------------
-
-async function listLastmileWorkflows(
-	tenantId: string,
-	userId: string,
-): Promise<APIGatewayProxyStructuredResultV2> {
-	// Per-tenant baseUrl from webhooks.config.baseUrl (admin-settable on the
-	// Connectors → LastMile page); falls back to the LASTMILE_TASKS_API_URL
-	// Lambda env var if unset.
-	const baseUrl = await getConnectorBaseUrl(tenantId, "lastmile");
-	if (!isLastmileRestConfigured({ baseUrl })) {
-		return error(
-			"LastMile REST API not configured — set the base URL on the Connectors → LastMile page, or wire LASTMILE_TASKS_API_URL as a fallback.",
-			503,
-		);
-	}
-	if (!userId) return error("Missing x-principal-id header");
-
-	// Find the user's active task-kind connection. We need it twice: to
-	// look up the user's WorkOS JWT (for PAT exchange) and to pass back
-	// into forceRefresh if the PAT we cached gets invalidated server-side.
-	const [conn] = await db
-		.select({
-			id: connections.id,
-			provider_id: connections.provider_id,
-		})
-		.from(connections)
-		.innerJoin(connectProviders, eq(connections.provider_id, connectProviders.id))
-		.where(
-			and(
-				eq(connections.tenant_id, tenantId),
-				eq(connections.user_id, userId),
-				eq(connections.status, "active"),
-				eq(connectProviders.provider_type, "task"),
-			),
-		)
-		.limit(1);
-
-	if (!conn) {
-		return error("No active task connector for this user", 404);
-	}
-
-	// LastMile recommends PATs over the raw WorkOS JWT path because PATs
-	// don't hit the Clerk user lookup (the original cause of "Failed to
-	// validate WorkOS user"). Exchange the user's WorkOS JWT for a PAT
-	// once, cache in SSM, and use it for every subsequent call.
-	const patToken = await getOrMintLastmilePat({
-		userId,
-		getFreshWorkosJwt: () =>
-			resolveOAuthToken(conn.id, tenantId, conn.provider_id),
-	});
-	if (!patToken) {
-		return json(
-			{
-				error: "reconnect_needed",
-				detail:
-					"Unable to obtain a LastMile API token — your WorkOS session may have expired. Reconnect in Settings → MCP Servers.",
-			},
-			401,
-		);
-	}
-
-	try {
-		const workflows = await lastmileListWorkflows({
-			ctx: {
-				authToken: patToken,
-				baseUrl,
-				// If LastMile rejects the PAT (revoked, expired early), mint
-				// a fresh one by re-exchanging the user's WorkOS JWT.
-				refreshToken: () =>
-					forceRefreshLastmilePat({
-						userId,
-						getFreshWorkosJwt: () =>
-							// On the retry, prefer a forcibly refreshed WorkOS JWT
-							// too — covers the case where BOTH tokens expired while
-							// the adapter was dormant.
-							forceRefreshLastmileUserToken(conn.id, tenantId),
-					}),
-			},
-		});
-		return json(workflows);
-	} catch (err) {
-		return mapLastmileError(err, "listLastmileWorkflows");
-	}
-}
-
-function mapLastmileError(
-	err: unknown,
-	tag: string,
-): APIGatewayProxyStructuredResultV2 {
-	if (err instanceof LastmileRestError) {
-		console.error(`[connections] ${tag} LastmileRestError:`, {
-			status: err.status,
-			code: err.code,
-			message: err.message,
-			requestId: err.requestId,
-			responseBody: err.responseBody,
-		});
-		if (err.status === 401) {
-			return json(
-				{
-					error: "reconnect_needed",
-					detail: err.message,
-					lastmile_code: err.code,
-				},
-				401,
-			);
-		}
-		return json(
-			{
-				error: "lastmile_api_error",
-				detail: err.message,
-				lastmile_status: err.status,
-				lastmile_code: err.code,
-				lastmile_request_id: err.requestId,
-			},
-			502,
-		);
-	}
-	console.error(`[connections] ${tag} failed:`, err);
-	return error(
-		`Failed to fetch workflows: ${(err as Error)?.message || "unknown error"}`,
-		502,
-	);
-}

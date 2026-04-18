@@ -25,7 +25,6 @@ import { knowledgeMutations } from "./knowledge/index.js";
 import { artifactMutations } from "./artifacts/index.js";
 import { orchestrationMutations } from "./orchestration/index.js";
 import { webhookMutations } from "./webhooks/index.js";
-import { externalTaskMutations } from "./external-tasks/index.js";
 import { evaluationsQueries, evaluationsMutations } from "./evaluations/index.js";
 
 export const queryResolvers: Record<string, any> = {
@@ -65,7 +64,6 @@ export const mutationResolvers: Record<string, any> = {
 	...memoryMutations,
 	...recipeMutations,
 	...templateMutations,
-	...externalTaskMutations,
 	...evaluationsMutations,
 };
 

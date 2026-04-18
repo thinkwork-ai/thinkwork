@@ -26,7 +26,6 @@ import { parse as parseYaml } from "yaml";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
 import { handleCors, json, error, notFound, unauthorized } from "../lib/response.js";
 import { resolveTenantId } from "../lib/tenants.js";
-import { callMcpTool } from "../integrations/external-work-items/mcpClient.js";
 
 const s3 = new S3Client({});
 const sm = new SecretsManagerClient({});
@@ -591,103 +590,6 @@ async function mcpOAuthCallback(
 	}
 
 	console.log(`[mcp-oauth] Token stored for user ${state.userId}, MCP server ${state.mcpServerId}`);
-
-	// LastMile Tasks post-OAuth hook: call user_whoami on the MCP server to
-	// learn the user's LastMile internal id, then upsert a connections row
-	// with metadata.lastmile.userId so the webhook resolver
-	// (resolveConnectionByProviderUserId) can route inbound task events back
-	// to this user. Failures here are logged and swallowed — we never want
-	// a post-hook bug to break the OAuth success experience.
-	try {
-		const [mcpServer] = await db
-			.select({
-				slug: tenantMcpServers.slug,
-				url: tenantMcpServers.url,
-			})
-			.from(tenantMcpServers)
-			.where(and(
-				eq(tenantMcpServers.id, state.mcpServerId),
-				eq(tenantMcpServers.tenant_id, state.tenantId),
-			));
-
-		const isLastmileTasks = !!mcpServer?.url
-			&& mcpServer.url.toLowerCase().includes("lastmile")
-			&& mcpServer.url.toLowerCase().includes("/tasks");
-
-		if (!isLastmileTasks) {
-			console.log(`[mcp-oauth] whoami hook skipped for slug=${mcpServer?.slug ?? "?"} url=${mcpServer?.url ?? "?"} — not a LastMile Tasks MCP`);
-		} else {
-			const whoamiRaw = await callMcpTool({
-				url: mcpServer!.url,
-				tool: "user_whoami",
-				args: {},
-				authToken: tokenData.access_token,
-			});
-			const whoami = whoamiRaw as {
-				id?: string;
-				email?: string;
-				first_name?: string;
-				last_name?: string;
-			} | null;
-			const lastmileUserId = whoami?.id;
-
-			if (!lastmileUserId) {
-				console.warn(`[mcp-oauth] user_whoami returned no id for user ${state.userId} — skipping connections upsert`);
-			} else {
-				const [provider] = await db
-					.select({ id: connectProviders.id })
-					.from(connectProviders)
-					.where(eq(connectProviders.name, "lastmile"));
-
-				if (!provider) {
-					console.warn(`[mcp-oauth] connect_providers row for name='lastmile' not found — seed with scripts/seed-lastmile-provider.sql`);
-				} else {
-					const metadataPayload = {
-						lastmile: {
-							userId: lastmileUserId,
-							email: whoami?.email,
-							name: [whoami?.first_name, whoami?.last_name].filter(Boolean).join(" ") || undefined,
-						},
-					};
-					const metadataJson = JSON.stringify(metadataPayload);
-
-					const [existingConn] = await db
-						.select({ id: connections.id })
-						.from(connections)
-						.where(and(
-							eq(connections.tenant_id, state.tenantId),
-							eq(connections.user_id, state.userId),
-							eq(connections.provider_id, provider.id),
-						));
-
-					if (existingConn) {
-						await db.update(connections).set({
-							status: "active",
-							external_id: lastmileUserId,
-							metadata: sql`COALESCE(metadata, '{}'::jsonb) || ${metadataJson}::jsonb`,
-							connected_at: new Date(),
-							disconnected_at: null,
-							updated_at: new Date(),
-						}).where(eq(connections.id, existingConn.id));
-					} else {
-						await db.insert(connections).values({
-							tenant_id: state.tenantId,
-							user_id: state.userId,
-							provider_id: provider.id,
-							status: "active",
-							external_id: lastmileUserId,
-							metadata: metadataPayload,
-							connected_at: new Date(),
-						});
-					}
-
-					console.log(`[mcp-oauth] LastMile connection row upserted for user ${state.userId}, lastmile user ${lastmileUserId}`);
-				}
-			}
-		}
-	} catch (hookErr) {
-		console.warn(`[mcp-oauth] LastMile whoami hook failed for user ${state.userId}:`, hookErr);
-	}
 
 	// Redirect to the mobile deep link — ASWebAuthenticationSession on
 	// the mobile side detects the `thinkwork://` scheme and auto-closes
