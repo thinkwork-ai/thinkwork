@@ -36,3 +36,4 @@ export * from "./workflow-configs";
 export * from "./mcp-servers";
 export * from "./builtin-tools";
 export * from "./evaluations";
+export * from "./wiki";
