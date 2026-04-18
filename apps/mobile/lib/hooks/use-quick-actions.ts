@@ -1,4 +1,6 @@
+import { useCallback, useState } from "react";
 import { useQuery, useMutation } from "urql";
+import { useFocusEffect } from "expo-router";
 import {
   UserQuickActionsQuery,
   CreateQuickActionMutation,
@@ -37,10 +39,24 @@ export function useQuickActions(
   tenantId: string | undefined,
   _scope: QuickActionScope = "thread",
 ) {
+  // Pause when the caller's screen isn't focused. Both ThreadsScreen and
+  // ThreadDetailRoute subscribe to this query — without this guard, a cache
+  // update driven by one screen fans out to the other's still-mounted
+  // subscription and React logs a "Cannot update component A while rendering
+  // component B" warning. `useFocusEffect` toggles a local flag that urql
+  // uses to pause the subscription when the screen is covered by another
+  // stack entry.
+  const [isFocused, setIsFocused] = useState(true);
+  useFocusEffect(
+    useCallback(() => {
+      setIsFocused(true);
+      return () => setIsFocused(false);
+    }, []),
+  );
   return useQuery({
     query: UserQuickActionsQuery,
     variables: { tenantId: tenantId! },
-    pause: !tenantId,
+    pause: !tenantId || !isFocused,
   });
 }
 

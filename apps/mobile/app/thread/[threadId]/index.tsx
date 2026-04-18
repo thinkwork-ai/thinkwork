@@ -18,8 +18,6 @@ import { useTurnCompletion } from "@/lib/hooks/use-turn-completion";
 import { useThreadReadState, isLocallyRead } from "@/lib/hooks/use-thread-read-state";
 import { ActivityTimeline, type SaveRecipeInfo } from "@/components/threads/ActivityTimeline";
 import { MarkdownMessage } from "@/components/chat/MarkdownMessage";
-import { TaskRow } from "@/components/threads/TaskRow";
-import { PinnedExternalTaskHeader } from "@/components/thread/PinnedExternalTaskHeader";
 import { SaveRecipeSheet, type SaveRecipeSheetRef } from "@/components/genui/SaveRecipeSheet";
 import { CreateRecipeMutation } from "@/lib/graphql-queries";
 import { useAppMode } from "@/lib/hooks/use-app-mode";
@@ -34,9 +32,7 @@ import {
   SendMessageMutation,
   MessagesQuery,
   UpdateThreadMutation,
-  ExecuteExternalTaskActionMutation,
 } from "@/lib/graphql-queries";
-import { buildExecuteExternalTaskActionVariables } from "@/lib/external-task-action";
 
 function LoadingTitle() {
   const [dots, setDots] = useState("");
@@ -228,82 +224,16 @@ export default function ThreadDetailRoute() {
     }
   }, [threadEvent?.onThreadUpdated?.updatedAt]);
 
-  // ── Task state ──
   const [, executeUpdateThread] = useMutation(UpdateThreadMutation);
-  const isTask = thread?.channel?.toUpperCase() === "TASK";
-  // External-task threads (LastMile etc.) ride channel=task but render the
-  // timeline + pinned external-task header instead of the sub-task FlatList,
-  // so the user can chat with their attached agent and use the action bar.
-  //
-  // Flip on the presence of EITHER an `externalTaskId` (just-stamped mobile
-  // creation) or a cached `latestEnvelope` (webhook-ingested). The pinned
-  // card handles the "id set but envelope missing" case by firing a live
-  // refresh on mount — fresh MCP data preferred; cached envelope is the
-  // graceful fallback.
-  const hasExternalTask = Boolean(
-    (() => {
-      const external = (
-        (thread?.metadata ?? {}) as Record<string, unknown>
-      ).external as Record<string, unknown> | undefined;
-      if (!external) return false;
-      return Boolean(external.externalTaskId) || Boolean(external.latestEnvelope);
-    })(),
-  );
-  // Pre-sync LastMile tasks: the mobile task composer stamps
-  // `metadata.workflowId` before the backend has POSTed to the external
-  // provider, so `external.latestEnvelope` is still missing. During that
-  // intake window we still want the timeline view so the agent's
-  // `present_form` message is visible — otherwise the user lands on the
-  // sub-task FlatList and can't fill the form.
-  const isPreSyncExternalTask = Boolean(
-    !hasExternalTask &&
-      typeof (thread?.metadata as Record<string, unknown> | undefined)?.workflowId ===
-        "string",
-  );
-  // Monotonic counter: the "Edit Task" dropdown item increments this, and
-  // the pinned ExternalTaskCard opens its edit sheet when it changes.
-  const [editRequestCounter, setEditRequestCounter] = useState(0);
-  // Derive a human-friendly provider label from the external envelope for
-  // the page header ("LastMile Task"), so we don't repeat the task title
-  // both in the header and inside the card.
-  const externalProviderLabel = useMemo(
-    () => (hasExternalTask ? getExternalProviderLabel(thread) : null),
-    [hasExternalTask, thread],
-  );
-  const useTaskFlatList = isTask && !hasExternalTask && !isPreSyncExternalTask;
+  const isTask = false;
+  const hasExternalTask = false;
+  const isPreSyncExternalTask = false;
+  const externalProviderLabel: string | null = null;
+  const useTaskFlatList = false;
   const isDone = thread?.status?.toUpperCase() === "DONE";
 
-  // Once a task has been minted on LastMile, collapse the intake chatter
-  // (user's title, agent "opened a form", form card, form_response, and the
-  // "task created successfully" confirmation) from the timeline. The pinned
-  // Task Card covers "what is this task"; the user only needs to see
-  // follow-up questions / comments made AFTER creation. Threshold is the
-  // `lastUpdatedAt` written by `stampThreadFromWorkflowTaskCreate` — anything
-  // strictly after that timestamp is post-creation.
-  const taskStampedAt = useMemo<number | null>(() => {
-    const external = (thread?.metadata as Record<string, unknown> | undefined)
-      ?.external as { externalTaskId?: string; lastUpdatedAt?: string } | undefined;
-    if (!external?.externalTaskId || !external?.lastUpdatedAt) return null;
-    const t = new Date(external.lastUpdatedAt).getTime();
-    return Number.isFinite(t) ? t : null;
-  }, [thread?.metadata]);
-
-  const visibleMessages = useMemo(() => {
-    if (taskStampedAt === null) return messages;
-    return messages.filter((m: { createdAt: string }) => {
-      const t = new Date(m.createdAt).getTime();
-      return Number.isFinite(t) && t > taskStampedAt;
-    });
-  }, [messages, taskStampedAt]);
-
-  const visibleTurns = useMemo(() => {
-    if (taskStampedAt === null) return turns;
-    return turns.filter((t: { startedAt?: string; createdAt: string }) => {
-      const raw = t.startedAt ?? t.createdAt;
-      const at = new Date(raw).getTime();
-      return Number.isFinite(at) && at > taskStampedAt;
-    });
-  }, [turns, taskStampedAt]);
+  const visibleMessages = messages;
+  const visibleTurns = turns;
   const childThreads = (thread?.children ?? []) as any[];
   const allDescendantTasks = useMemo(() => {
     const result: any[] = [];
@@ -348,38 +278,6 @@ export default function ThreadDetailRoute() {
     reexecuteThread({ requestPolicy: "network-only" });
     router.back();
   }, [threadId, allDescendantTasks, executeUpdateThread, reexecuteThread, router]);
-
-  // ── Manual Sync Task ──
-  // "Sync Task" in the header menu fires `external_task.refresh` through
-  // the shared executeExternalTaskAction path, which pulls the latest
-  // envelope from LastMile and denormalizes `description` onto the
-  // thread row (see executeAction.ts). Await + surface errors per the
-  // no-fire-and-forget rule for user-driven writes.
-  const [syncingTask, setSyncingTask] = useState(false);
-  const [, executeExternalTaskAction] = useMutation(ExecuteExternalTaskActionMutation);
-  const handleSyncTask = useCallback(async () => {
-    if (!threadId || syncingTask) return;
-    setSyncingTask(true);
-    try {
-      const result = await executeExternalTaskAction(
-        buildExecuteExternalTaskActionVariables({
-          threadId,
-          actionType: "external_task.refresh",
-          params: {},
-        }),
-      );
-      if (result.error) {
-        Alert.alert("Sync failed", result.error.message || "Could not refresh task.");
-        return;
-      }
-      reexecuteThread({ requestPolicy: "network-only" });
-    } catch (e) {
-      console.error("[ThreadDetail] Sync failed:", e);
-      Alert.alert("Sync failed", (e as Error)?.message ?? "Could not refresh task.");
-    } finally {
-      setSyncingTask(false);
-    }
-  }, [threadId, syncingTask, executeExternalTaskAction, reexecuteThread]);
 
   const quickActionsRef = useRef<QuickActionsSheetRef>(null);
   const webViewSheetRef = useRef<WebViewSheetRef>(null);
@@ -482,7 +380,7 @@ export default function ThreadDetailRoute() {
         style={{ paddingTop: insets.top, backgroundColor: colors.background }}
         className="border-b border-neutral-200 dark:border-neutral-800"
       >
-        <View className="flex-row items-center justify-between pl-2 pr-4" style={{ height: 44 }}>
+        <View className="flex-row items-center justify-between pl-2 pr-4" style={{ height: 48 }}>
           {/* Left: back + title */}
           <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace("/")} className="flex-row items-center gap-1.5 active:opacity-70 flex-shrink" style={{ maxWidth: useTaskFlatList ? "65%" : "80%" }}>
             <ChevronLeft size={24} color={colors.foreground} />
@@ -500,41 +398,21 @@ export default function ThreadDetailRoute() {
           {/* Right actions */}
           {isLoaded && (
             <View className="flex-row items-center gap-2">
-              {useTaskFlatList && !isDone && (
-                <Pressable onPress={handleMarkDone} className="flex-row items-center gap-1 px-3 py-1.5 rounded-full active:opacity-70" style={{ backgroundColor: isDark ? "#166534" : "#16a34a" }}>
-                  <Check size={14} color="#fff" strokeWidth={2.5} />
-                  <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>Done</Text>
-                </Pressable>
-              )}
               <HeaderContextMenu
                 items={[
-                  ...(hasExternalTask
-                    ? [{
-                        label: "Edit Task",
-                        icon: Pencil,
-                        onPress: () => setEditRequestCounter((n) => n + 1),
-                      }]
-                    : []),
-                  ...(hasExternalTask
-                    ? [{
-                        label: syncingTask ? "Syncing…" : "Sync Task",
-                        icon: RefreshCw,
-                        onPress: () => { void handleSyncTask(); },
-                      }]
-                    : []),
                   {
-                    label: useTaskFlatList || hasExternalTask ? "Task Info" : "Thread Info",
+                    label: "Thread Info",
                     icon: Info,
                     onPress: () => router.push(`/thread/${threadId}/info`),
                   },
                   {
-                    label: useTaskFlatList || hasExternalTask ? "Delete Task" : "Delete Thread",
+                    label: "Delete Thread",
                     icon: Trash2,
                     destructive: true,
                     separator: true,
                     onPress: () => {
                       Alert.alert(
-                        useTaskFlatList || hasExternalTask ? "Delete Task?" : "Delete Thread?",
+                        "Delete Thread?",
                         "This action cannot be undone.",
                         [
                           { text: "Cancel", style: "cancel" },
@@ -567,102 +445,19 @@ export default function ThreadDetailRoute() {
       {/* Content area — single scrollable page via ActivityTimeline's FlatList */}
       <View className="flex-1" style={{ backgroundColor: colors.background }}>
         {isLoaded ? (
-          useTaskFlatList ? (
-            /* Task view: scrollable card + sub-tasks, no timeline */
-            <FlatList
-              data={allDescendantTasks}
-              keyExtractor={(item: any) => item.id}
-              renderItem={({ item, index }) => (
-                <View>
-                  {index > 0 && <View className="h-px bg-neutral-200 dark:bg-neutral-800" style={{ marginLeft: 68 }} />}
-                  <TaskRow task={item} onPress={() => {
-                    const headerLabel = getThreadHeaderLabel(item);
-                    router.push({ pathname: `/thread/${item.id}`, params: headerLabel ? { title: headerLabel } : {} });
-                  }} />
-                </View>
-              )}
-              ListHeaderComponent={
-                <>
-                  {/* Task detail card */}
-                  <View className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800">
-                    <View className="flex-row items-center gap-2 mb-1">
-                      <Text className="text-xs font-mono text-neutral-500 dark:text-neutral-400">{thread.identifier}</Text>
-                      <View className="flex-row items-center gap-1">
-                        <Circle size={8} color={
-                          isDone ? (isDark ? "#4ade80" : "#16a34a")
-                            : thread.status?.toUpperCase() === "IN_PROGRESS" ? (isDark ? "#60a5fa" : "#2563eb")
-                            : (isDark ? "#a78bfa" : "#7c3aed")
-                        } />
-                        <Text className="text-xs text-neutral-500 dark:text-neutral-400">{(thread.status || "").replace("_", " ")}</Text>
-                      </View>
-                      {thread.priority && (
-                        <Text className="text-xs text-neutral-500 dark:text-neutral-400">· {thread.priority}</Text>
-                      )}
-                    </View>
-                    {thread.description && (
-                      <View className="mt-1">
-                        <MarkdownMessage content={thread.description} variant="assistant" />
-                      </View>
-                    )}
-                    {thread.dueAt && (
-                      <View className="flex-row items-center gap-1 mt-1.5">
-                        <Clock size={12} color={new Date(thread.dueAt) < new Date() && !isDone ? (isDark ? "#f87171" : "#dc2626") : colors.mutedForeground} />
-                        <Text className="text-xs" style={{ color: new Date(thread.dueAt) < new Date() && !isDone ? (isDark ? "#f87171" : "#dc2626") : colors.mutedForeground }}>
-                          Due {new Date(thread.dueAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                  {/* Sub-Tasks header */}
-                  {hasChildren && (
-                    <View className="px-4 pt-3 pb-1.5">
-                      <Text className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                        Sub-Tasks ({allDescendantTasks.length})
-                      </Text>
-                    </View>
-                  )}
-                </>
-              }
-              ListFooterComponent={<View style={{ height: 20 }} />}
-              refreshControl={
-                <RefreshControl
-                  refreshing={pullRefreshing}
-                  onRefresh={handleRefresh}
-                  tintColor={colors.mutedForeground}
-                />
-              }
-            />
-          ) : (
-            /* Timeline view: pinned external-task header (if present) above
-               the activity timeline. Used by both regular chat threads and
-               external-task threads (channel=task with metadata.external). */
-            <ActivityTimeline
-              key={threadId}
-              messages={visibleMessages}
-              turns={visibleTurns}
-              agentName={agentName}
-              isAdmin={isAdmin}
-              isAgentRunning={!!threadId && isThreadActive(threadId)}
-              onLinkPress={handleLinkPress}
-              onSaveRecipe={handleSaveRecipe}
-              hideEmptyState={hasExternalTask}
-              refreshing={pullRefreshing}
-              onRefresh={handleRefresh}
-              listHeaderComponent={
-                hasExternalTask ? (
-                  <PinnedExternalTaskHeader
-                    threadMetadata={thread.metadata}
-                    threadId={thread.id}
-                    tenantId={thread.tenantId}
-                    currentUserId={currentUser?.id}
-                    activityRows={activityRows}
-                    editRequestCounter={editRequestCounter}
-                  />
-                ) : null
-              }
-              currentUserId={currentUser?.id}
-            />
-          )
+          <ActivityTimeline
+            key={threadId}
+            messages={visibleMessages}
+            turns={visibleTurns}
+            agentName={agentName}
+            isAdmin={isAdmin}
+            isAgentRunning={!!threadId && isThreadActive(threadId)}
+            onLinkPress={handleLinkPress}
+            onSaveRecipe={handleSaveRecipe}
+            refreshing={pullRefreshing}
+            onRefresh={handleRefresh}
+            currentUserId={currentUser?.id}
+          />
         ) : (
           <View className="flex-1 items-center justify-center">
             <ShimmerText

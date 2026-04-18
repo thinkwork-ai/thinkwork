@@ -30,11 +30,6 @@ import {
 import { db } from "../lib/db.js";
 import { json, error, notFound } from "../lib/response.js";
 import { ensureThreadForWork } from "../lib/thread-helpers.js";
-import {
-	ingestExternalTaskEvent,
-	type IngestResult,
-} from "../integrations/external-work-items/ingestEvent.js";
-import type { TaskProvider } from "../integrations/external-work-items/types.js";
 
 // ---------------------------------------------------------------------------
 // In-memory rate limiter (sliding window, resets on cold start)
@@ -69,7 +64,6 @@ const HEADER_WHITELIST = new Set([
 ]);
 
 const HEADER_PREFIX_WHITELIST = [
-	"x-lastmile-",
 	"x-linear-",
 	"x-hub-signature",
 	"x-github-",
@@ -313,16 +307,14 @@ async function triggerByToken(
 		}
 	}
 
-	// 4. Parse body (not needed for task branch — it passes rawBody through)
+	// 4. Parse body
 	let parsedBody: Record<string, unknown> = {};
-	if (webhook.target_type !== "task") {
-		try {
-			parsedBody = rawBody ? JSON.parse(rawBody) : {};
-		} catch {
-			record.resolution_status = "invalid_body";
-			record.status_code = 400;
-			return error("Invalid JSON body");
-		}
+	try {
+		parsedBody = rawBody ? JSON.parse(rawBody) : {};
+	} catch {
+		record.resolution_status = "invalid_body";
+		record.status_code = 400;
+		return error("Invalid JSON body");
 	}
 
 	// 5. Dispatch based on target type
@@ -332,9 +324,6 @@ async function triggerByToken(
 	}
 	if (webhook.target_type === "routine" && webhook.routine_id) {
 		return dispatchRoutine(webhook, parsedBody, idempotencyKey, record);
-	}
-	if (webhook.target_type === "task" && webhook.connect_provider_id) {
-		return dispatchTask(webhook, rawBody, headers, record);
 	}
 
 	record.resolution_status = "error";
@@ -468,105 +457,7 @@ async function dispatchRoutine(
 }
 
 // ---------------------------------------------------------------------------
-// Task dispatch — route inbound external-task events through the adapter
-// ingest pipeline. The per-tenant signing secret lives on webhook.config.secret
-// and is passed into adapter.verifySignature; when absent, the token in the
-// URL is the sole auth (see verifyLastmileSignature).
+// Task dispatch removed in Phase C — external task webhook ingest is no
+// longer part of ThinkWork. Webhooks with target_type="task" now fall
+// through to the "no valid target configured" branch.
 // ---------------------------------------------------------------------------
-
-async function dispatchTask(
-	webhook: typeof webhooks.$inferSelect,
-	rawBody: string,
-	headers: Record<string, string>,
-	record: DeliveryRecord,
-): Promise<APIGatewayProxyStructuredResultV2> {
-	if (!webhook.connect_provider_id) {
-		record.resolution_status = "error";
-		record.error_message = "Task webhook missing connect_provider_id";
-		record.status_code = 500;
-		return error("Webhook has no valid target configured");
-	}
-
-	const [provider] = await db
-		.select({ id: connectProviders.id, name: connectProviders.name })
-		.from(connectProviders)
-		.where(eq(connectProviders.id, webhook.connect_provider_id));
-	if (!provider) {
-		record.resolution_status = "error";
-		record.error_message = "connect_providers row not found";
-		record.status_code = 500;
-		return error("Webhook provider not found", 500);
-	}
-	record.provider_id = provider.id;
-	record.provider_name = provider.name;
-
-	const cfg = (webhook.config as Record<string, unknown> | null) ?? {};
-	const secret = typeof cfg.secret === "string" ? cfg.secret : undefined;
-
-	const result: IngestResult = await ingestExternalTaskEvent({
-		provider: provider.name as TaskProvider,
-		rawBody,
-		headers,
-		tenantId: webhook.tenant_id,
-		secret,
-	});
-
-	// Populate delivery fields from the ingest result
-	if (result.status === "ok" && result.event) {
-		record.external_task_id = result.event.externalTaskId;
-		record.provider_user_id = result.event.providerUserId;
-		record.normalized_kind = result.event.kind;
-		record.provider_event_id = result.event.providerEventId;
-		record.thread_id = result.threadId;
-		record.thread_created = result.created;
-	} else if (result.status === "unresolved_connection") {
-		if (result.event) {
-			record.external_task_id = result.event.externalTaskId;
-			record.provider_user_id = result.event.providerUserId ?? result.providerUserId;
-			record.normalized_kind = result.event.kind;
-			record.provider_event_id = result.event.providerEventId;
-		} else {
-			record.provider_user_id = result.providerUserId;
-		}
-	}
-
-	switch (result.status) {
-		case "ignored":
-			record.resolution_status = "ignored";
-			record.error_message = result.reason;
-			record.status_code = 202;
-			return json({ ok: false, reason: result.reason }, 202);
-		case "unverified":
-			record.resolution_status = "unverified";
-			record.signature_status = "invalid";
-			record.status_code = 401;
-			return error("Invalid signature", 401);
-		case "unresolved_connection":
-			record.resolution_status = "unresolved_connection";
-			record.status_code = 202;
-			return json(
-				{ ok: false, reason: "no matching user connection", providerUserId: result.providerUserId },
-				202,
-			);
-		case "ok":
-			record.resolution_status = "ok";
-			record.signature_status = secret ? "verified" : "not_required";
-			record.status_code = 201;
-			await db
-				.update(webhooks)
-				.set({
-					last_invoked_at: new Date(),
-					invocation_count: sql`${webhooks.invocation_count} + 1`,
-				})
-				.where(eq(webhooks.id, webhook.id));
-			return json(
-				{
-					ok: true,
-					threadId: result.threadId,
-					created: result.created,
-					event: { kind: result.event.kind, externalTaskId: result.event.externalTaskId },
-				},
-				201,
-			);
-	}
-}

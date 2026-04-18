@@ -24,14 +24,9 @@ import {
 import {
   buildSkillEnvOverrides,
   resolveConnectionForUser,
-  forceRefreshLastmileUserToken,
-  resolveLastmileTasksMcpServer,
 } from "../lib/oauth-token.js";
-import { getOrMintLastmilePat } from "../lib/lastmile-pat.js";
 import { buildMcpConfigs } from "../lib/mcp-configs.js";
 import { loadTenantBuiltinTools } from "./skills.js";
-import { fetchWorkflowSkillForAgent } from "../integrations/external-work-items/providers/lastmile/workflowSkillCache.js";
-import { refreshLastmileTask } from "../integrations/external-work-items/providers/lastmile/refresh.js";
 // PRD-22: Signal protocol removed — agents use tools for thread state transitions
 
 /**
@@ -458,87 +453,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
       throw new Error("AGENTCORE_FUNCTION_NAME env var not set");
     }
 
-    // Load thread metadata so the agent runtime can see external-task context
-    // (e.g. LastMile envelope) alongside message history. Without this, an
-    // agent attached to an external-task thread has no idea what task it is
-    // looking at and can only respond to the literal user message.
-    const [threadMetaRow] = await db
-      .select({ metadata: threads.metadata, created_by_id: threads.created_by_id })
-      .from(threads)
-      .where(eq(threads.id, threadId));
-    const threadMetadata =
-      (threadMetaRow?.metadata as Record<string, unknown> | null) ?? null;
-
-    // Workflow context for the agent. When the thread is bound to a LastMile
-    // workflow (`metadata.workflowId` set), we ALWAYS surface the workflowId
-    // so the agent can pass it verbatim to `workflow_task_create`. If the
-    // workflow additionally ships a populated `skill` block (form schema,
-    // instructions), we layer those on top. Order:
-    //   1. Seed the skill blob with just the workflowId (guaranteed floor).
-    //   2. Try to enrich with workflow.skill from LastMile.
-    // Either way, `format_workflow_skill_context` in the container renders
-    // the Workflow ID line; instructions/form are conditional on what
-    // LastMile returned.
     let workflowSkill: unknown = undefined;
-    const workflowIdFromMeta =
-      typeof threadMetadata?.workflowId === "string"
-        ? (threadMetadata.workflowId as string)
-        : undefined;
-    if (workflowIdFromMeta) {
-      const workflowNameFromMeta =
-        typeof threadMetadata?.workflowName === "string"
-          ? (threadMetadata.workflowName as string)
-          : undefined;
-      workflowSkill = {
-        workflowId: workflowIdFromMeta,
-        ...(workflowNameFromMeta ? { workflowName: workflowNameFromMeta } : {}),
-      };
-      if (threadMetaRow?.created_by_id) {
-        try {
-          const skill = await fetchWorkflowSkillForAgent({
-            tenantId,
-            userId: threadMetaRow.created_by_id,
-            workflowId: workflowIdFromMeta,
-          });
-          if (skill) {
-            workflowSkill = {
-              ...skill,
-              workflowId: workflowIdFromMeta,
-              ...(workflowNameFromMeta ? { workflowName: workflowNameFromMeta } : {}),
-            };
-          }
-        } catch (err) {
-          // Non-fatal — the workflowId-only floor still reaches the agent.
-          console.warn(
-            `[chat-agent-invoke] workflow-skill lookup failed for thread=${threadId}:`,
-            (err as Error)?.message,
-          );
-        }
-      }
-    }
-
-    // Task-thread skill injection: any thread that was created against a
-    // LastMile workflow (`metadata.workflowId` set) needs the
-    // `lastmile-tasks` skill so the agent can call `create_task` after the
-    // user submits the intake form. Without this, even the most capable
-    // agent sees the workflow-skill form in context but has no tool to fire
-    // the POST — it just summarizes and stops.
-    if (workflowIdFromMeta && !skillsConfig.some((s) => s.skillId === "lastmile-tasks")) {
-      skillsConfig.push({
-        skillId: "lastmile-tasks",
-        s3Key: "skills/catalog/lastmile-tasks",
-        secretRef: undefined,
-        envOverrides: {
-          THINKWORK_API_URL: THINKWORK_API_URL,
-          THINKWORK_API_SECRET: THINKWORK_API_SECRET,
-          GRAPHQL_API_KEY: APPSYNC_API_KEY,
-          AGENT_ID: agentId,
-        },
-      });
-      console.log(
-        `[chat-agent-invoke] Injected lastmile-tasks skill for workflow thread=${threadId}`,
-      );
-    }
 
     const invokeStart = Date.now();
     const invokePayload = {
@@ -563,7 +478,6 @@ export async function handler(event: InvokeEvent): Promise<void> {
       trigger_channel: "chat",
       guardrail_config: guardrailPayload || undefined,
       mcp_configs: mcpConfigs.length > 0 ? mcpConfigs : undefined,
-      thread_metadata: threadMetadata || undefined,
       workflow_skill: workflowSkill,
     };
 
@@ -804,23 +718,6 @@ export async function handler(event: InvokeEvent): Promise<void> {
     // 3. Insert assistant message into DB (with GenUI tool results if present)
     const assistantMsg = await insertAssistantMessage(threadId, tenantId, agentId, displayResponse, toolInvocations);
 
-    // 3a-pre. Promote pre-sync LastMile task threads to synced by stamping
-    // metadata.external as soon as the MCP's `workflow_task_create` returns
-    // successfully. Without this, the first `task.created` webhook races
-    // against 3 follow-ups (assigned/status_changed/updated) and each one
-    // finds no matching thread via `externalTaskId` — they all create
-    // duplicate rows for the same external task. Stamping in-process here
-    // closes the correlation gap *before* LastMile even fires webhooks.
-    await stampThreadFromWorkflowTaskCreate({
-      threadId,
-      tenantId,
-      userId: agent.human_pair_id || undefined,
-      toolInvocations,
-      workflowIdFromMeta,
-    }).catch((err) => {
-      console.warn(`[chat-agent-invoke] workflow_task_create stamp failed:`, err);
-    });
-
     // 3a. Link orphan artifacts created during this turn to the thread + message.
     // The Strands runtime doesn't forward thread_id to MCP tools, so artifacts
     // created via create_artifact lack thread_id and source_message_id.
@@ -927,141 +824,6 @@ export async function handler(event: InvokeEvent): Promise<void> {
       console.error(`[chat-agent-invoke] Failed to insert error message:`, innerErr);
     }
   }
-}
-
-/** Extracts the new LastMile task id from the MCP's workflow_task_create
- *  tool result and stamps metadata.external on the current thread so
- *  inbound webhooks correlate back to this row instead of creating
- *  duplicates. Safe to call on every turn — silently no-ops unless a
- *  successful `workflow_task_create` invocation is present with a
- *  parseable `{id}` payload. */
-async function stampThreadFromWorkflowTaskCreate(args: {
-  threadId: string;
-  tenantId: string;
-  userId: string | undefined;
-  toolInvocations: Array<Record<string, unknown>>;
-  workflowIdFromMeta: string | undefined;
-}): Promise<void> {
-  const inv = args.toolInvocations.find(
-    (i) => i.tool_name === "workflow_task_create" && i.status === "success",
-  );
-  if (!inv) return;
-
-  let externalTaskId: string | undefined;
-  const outputPreview = inv.output_preview;
-  if (typeof outputPreview === "string" && outputPreview) {
-    try {
-      const parsed = JSON.parse(outputPreview) as Record<string, unknown>;
-      // The LastMile MCP returns
-      //   `{_type:"task_mutation_result", success:true, task:{id:"task_..."}}`
-      // so the id lives one level down under `task`. Keep the top-level
-      // keys as fallbacks for providers/tools that return the id directly.
-      const task = parsed.task as Record<string, unknown> | undefined;
-      const id =
-        task?.id ??
-        task?.taskId ??
-        task?.externalTaskId ??
-        parsed.id ??
-        parsed.taskId ??
-        parsed.externalTaskId;
-      if (typeof id === "string" && id) externalTaskId = id;
-    } catch {
-      // Output wasn't JSON — nothing to stamp.
-    }
-  }
-  if (!externalTaskId) return;
-
-  const { threads } = await import("@thinkwork/database-pg/schema");
-  const [row] = await db
-    .select({
-      metadata: threads.metadata,
-      external_task_id: threads.external_task_id,
-    })
-    .from(threads)
-    .where(and(eq(threads.id, args.threadId), eq(threads.tenant_id, args.tenantId)));
-  if (!row) return;
-
-  if (row.external_task_id) {
-    return; // Already stamped — idempotent no-op.
-  }
-
-  const meta = (row.metadata as Record<string, unknown> | null) ?? {};
-  const existingExternal = (meta.external as Record<string, unknown> | undefined) ?? {};
-
-  // Resolve the user's LastMile connection so we can (a) stamp
-  // connectionId/providerId alongside the task id (downstream refreshes
-  // need them) and (b) synchronously fetch the full task envelope so
-  // the mobile UI flips to task-card mode immediately instead of
-  // waiting for a webhook that may be delayed or never arrive.
-  let envelope: unknown;
-  let connMeta: { connectionId: string; providerId: string } | undefined;
-  if (args.userId) {
-    try {
-      const conn = await resolveConnectionForUser(
-        args.tenantId,
-        args.userId,
-        "lastmile",
-      );
-      if (conn) {
-        connMeta = conn;
-        const [authToken, tasksMcp] = await Promise.all([
-          getOrMintLastmilePat({
-            userId: args.userId,
-            getFreshWorkosJwt: () =>
-              forceRefreshLastmileUserToken(conn.connectionId, args.tenantId),
-          }),
-          resolveLastmileTasksMcpServer(args.tenantId),
-        ]);
-        if (authToken && tasksMcp) {
-          envelope = await refreshLastmileTask({
-            externalTaskId,
-            ctx: {
-              tenantId: args.tenantId,
-              userId: args.userId,
-              connectionId: conn.connectionId,
-              authToken,
-              mcpServerUrl: tasksMcp.url,
-            },
-          });
-        } else if (authToken && !tasksMcp) {
-          console.warn(
-            `[chat-agent-invoke] envelope fetch skipped — tenant ${args.tenantId} has no LastMile Tasks MCP record`,
-          );
-        }
-      }
-    } catch (err) {
-      // Non-fatal — the task id stamp still happens below, and the
-      // webhook will eventually populate latestEnvelope.
-      console.warn(
-        `[chat-agent-invoke] envelope fetch after stamp failed (non-fatal):`,
-        (err as Error)?.message,
-      );
-    }
-  }
-
-  const mergedExternal = {
-    ...existingExternal,
-    provider: "lastmile",
-    externalTaskId,
-    ...(connMeta
-      ? { connectionId: connMeta.connectionId, providerId: connMeta.providerId }
-      : {}),
-    ...(envelope ? { latestEnvelope: envelope } : {}),
-    lastUpdatedAt: new Date().toISOString(),
-  };
-  await db
-    .update(threads)
-    .set({
-      external_task_id: externalTaskId,
-      metadata: { ...meta, external: mergedExternal },
-      sync_status: "synced",
-      updated_at: new Date(),
-    })
-    .where(and(eq(threads.id, args.threadId), eq(threads.tenant_id, args.tenantId)));
-
-  console.log(
-    `[chat-agent-invoke] Stamped thread ${args.threadId} with externalTaskId=${externalTaskId} (workflow=${args.workflowIdFromMeta ?? "unknown"}, envelope=${envelope ? "yes" : "no"})`,
-  );
 }
 
 async function insertAssistantMessage(

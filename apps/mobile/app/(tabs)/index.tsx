@@ -8,13 +8,12 @@ import { useThreadUpdatedSubscription, useThreadTurnUpdatedSubscription } from "
 import { useTurnCompletion } from "@/lib/hooks/use-turn-completion";
 import { useMe } from "@/lib/hooks/use-users";
 import { useQuery, useMutation } from "urql";
-import { ThreadsQuery, CreateThreadMutation, SendMessageMutation, UpdateThreadMutation, AgentWorkspacesQuery, RetryTaskSyncMutation } from "@/lib/graphql-queries";
+import { ThreadsQuery, CreateThreadMutation, SendMessageMutation, UpdateThreadMutation, AgentWorkspacesQuery } from "@/lib/graphql-queries";
 import { TabHeader } from "@/components/layout/tab-header";
 import { WebContent } from "@/components/layout/web-content";
 import { AgentPicker } from "@/components/chat/AgentPicker";
 import { ThreadFilterBar, type ThreadFilters } from "@/components/threads/ThreadFilterBar";
 import { ThreadRow } from "@/components/threads/ThreadRow";
-import { TaskRow } from "@/components/threads/TaskRow";
 import { Muted, Text } from "@/components/ui/typography";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -28,10 +27,7 @@ import { MessageInputFooter, type MessageInputFooterRef, type SelectedWorkspace 
 import { QuickActionsSheet, type QuickActionsSheetRef } from "@/components/chat/QuickActionsSheet";
 import { QuickActionFormSheet, type QuickActionFormSheetRef, type QuickActionFormData } from "@/components/chat/QuickActionFormSheet";
 import { WorkspacePickerSheet, type WorkspacePickerSheetRef, type SubAgent } from "@/components/input/WorkspacePickerSheet";
-import { WorkflowPickerSheet, type WorkflowPickerSheetRef, type Workflow } from "@/components/input/WorkflowPickerSheet";
 import { useQuickActions, useCreateQuickAction, useUpdateQuickAction, useDeleteQuickAction, type QuickAction } from "@/lib/hooks/use-quick-actions";
-import { useConnections } from "@/lib/hooks/use-connections";
-import { useLastmileWorkflows } from "@/lib/hooks/use-lastmile-workflows";
 import { getThreadHeaderLabel } from "@/lib/thread-display";
 
 export default function ThreadsScreen() {
@@ -78,24 +74,6 @@ export default function ThreadsScreen() {
     return map;
   }, [agents]);
 
-  // ── Task connector gating ──────────────────────────────────────────────
-  // The Tasks tab only exists when a task-kind connector (e.g. LastMile) is
-  // active for the user. `useConnections()` is shared with the Connectors
-  // screen so flipping connection state there is visible here without a
-  // screen reload.
-  const { hasTaskConnector, activeTaskConnectors } = useConnections();
-
-  // ── Threads / Tasks toggle ──────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<"threads" | "tasks">("threads");
-
-  // If a task connector gets disconnected while the user is sitting on the
-  // Tasks tab, bounce them back to Threads so they don't stare at a dead UI.
-  useEffect(() => {
-    if (!hasTaskConnector && activeTab === "tasks") {
-      setActiveTab("threads");
-    }
-  }, [hasTaskConnector, activeTab]);
-
   // ── Thread filters + query (scoped to active agent) ────────────────────
   const [filters, setFilters] = useState<ThreadFilters>({ statuses: [], channels: [], agentId: "", showArchived: false });
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -121,35 +99,6 @@ export default function ThreadsScreen() {
     pause: !tenantId || !effectiveAgentId,
   });
 
-  // ── Tasks query (runs when a task connector is configured) ──────────
-  // Paused when the user has no task connector — no point pulling task
-  // rows if we're not going to render the tab.
-  const [{ data: tasksData }, reexecuteTasks] = useQuery({
-    query: ThreadsQuery,
-    variables: {
-      tenantId: tenantId!,
-      channel: ThreadChannel.Task,
-      assigneeId: user?.sub,
-    },
-    pause: !tenantId || !user?.sub || !hasTaskConnector,
-  });
-
-  const filteredTasks = useMemo(() => {
-    let tasks = (tasksData?.threads ?? []) as any[];
-    // Drop terminal statuses AND soft-archived rows. "Delete Task" in the
-    // thread detail menu sets `archivedAt` (same pattern Threads uses);
-    // without this filter archived tasks keep showing up in the list,
-    // which reads as a broken delete.
-    tasks = tasks.filter((t: any) => {
-      const s = (t.status || "").toUpperCase();
-      if (s === "DONE" || s === "CANCELLED") return false;
-      if (t.archivedAt) return false;
-      return true;
-    });
-    return tasks.sort((a: any, b: any) => {
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-  }, [tasksData?.threads]);
 
   // Polling fallback — refetch every 15s, but only while app is in foreground
   const appStateRef = useRef(AppState.currentState);
@@ -267,48 +216,26 @@ export default function ThreadsScreen() {
     }, 0);
   }, [router, markRead]);
 
-  // ── New thread / task input ────────────────────────────────────────────
+  // ── Tabs: Threads | Memories ─────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<"threads" | "memories">("threads");
+
+  // ── New thread / memory input ────────────────────────────────────────
   // Each tab keeps its own draft text so switching tabs doesn't leak a
-  // half-typed thread into a task submit (or vice versa).
+  // half-typed thread into a memory submit (or vice versa).
   const [newThreadText, setNewThreadText] = useState("");
-  const [newTaskText, setNewTaskText] = useState("");
+  const [newMemoryText, setNewMemoryText] = useState("");
   const quickActionsRef = useRef<QuickActionsSheetRef>(null);
   const quickActionFormRef = useRef<QuickActionFormSheetRef>(null);
   const workspacePickerRef = useRef<WorkspacePickerSheetRef>(null);
-  const workflowPickerRef = useRef<WorkflowPickerSheetRef>(null);
   const messageInputRef = useRef<MessageInputFooterRef>(null);
   const [selectedWorkspaces, setSelectedWorkspaces] = useState<SelectedWorkspace[]>([]);
 
-  // ── Task workflow picker ──────────────────────────────────────────────
-  // The `+` button on the Tasks footer opens a workflow picker — each
-  // workflow represents a kind of task with its own team, statuses, and
-  // automation rules. The selected workflow is shown as a chip and
-  // included in the createTask call. Workflows are fetched from the
-  // LastMile REST API via ThinkWork's connections proxy.
-  const {
-    workflows,
-    loading: workflowsLoading,
-    error: workflowsError,
-    needsReconnect: workflowsNeedsReconnect,
-    refetch: refetchWorkflows,
-  } = useLastmileWorkflows();
-  const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
-
   // ── Quick Actions (per-user, per-scope, from DB) ──────────────────────
-  // Thread and Task footers each have their own canned-prompt list; we
-  // keep one hook per scope so urql caches them separately and the
-  // user can reorder one without disturbing the other. The sheet below
-  // picks which list to show based on activeTab.
   const [{ data: qaThreadData }, reexecuteQAThread] = useQuickActions(tenantId, "thread");
-  const [{ data: qaTaskData }, reexecuteQATask] = useQuickActions(tenantId, "task");
   const threadQuickActions: QuickAction[] = (qaThreadData?.userQuickActions ?? []) as QuickAction[];
-  const taskQuickActions: QuickAction[] = (qaTaskData?.userQuickActions ?? []) as QuickAction[];
-  const activeQuickActions = activeTab === "tasks" ? taskQuickActions : threadQuickActions;
-  const reexecuteActiveQA = activeTab === "tasks" ? reexecuteQATask : reexecuteQAThread;
-  // The scope the add/edit form should save into is whichever footer the
-  // user just opened the sheet from. We snapshot at sheet-open time so
-  // tab-switching while the form is up doesn't re-target mid-edit.
-  const [qaFormScope, setQaFormScope] = useState<"thread" | "task">("thread");
+  const activeQuickActions = threadQuickActions;
+  const reexecuteActiveQA = reexecuteQAThread;
+  const qaFormScope: "thread" = "thread";
   const [, executeCreateQA] = useCreateQuickAction();
   const [, executeUpdateQA] = useUpdateQuickAction();
   const [, executeDeleteQA] = useDeleteQuickAction();
@@ -349,7 +276,6 @@ export default function ThreadsScreen() {
   const [, executeCreateThread] = useMutation(CreateThreadMutation);
   const [, executeSendMessage] = useMutation(SendMessageMutation);
   const [, executeUpdateThread] = useMutation(UpdateThreadMutation);
-  const [, executeRetryTaskSync] = useMutation(RetryTaskSyncMutation);
 
   const handleArchive = useCallback(async (threadId: string): Promise<boolean> => {
     console.log("[Archive] Starting archive for thread:", threadId);
@@ -362,127 +288,6 @@ export default function ThreadsScreen() {
     setArchivedIds((prev) => new Set(prev).add(threadId));
     return true;
   }, [executeUpdateThread]);
-
-  // Retry outbound sync for a task row that ended up in sync_status='error'
-  // or 'local'. The backend resolver re-fires syncExternalTaskOnCreate and
-  // returns the reconciled row; we refetch the Tasks query so the badge
-  // updates. No local optimistic state — the round-trip is fast enough
-  // that the user sees the spinner → new badge without a skeleton flash.
-  const handleRetryTaskSync = useCallback(async (threadId: string) => {
-    console.log("[RetryTaskSync] Starting retry for thread:", threadId);
-    const { error } = await executeRetryTaskSync({ threadId });
-    if (error) {
-      console.error("[RetryTaskSync] Failed:", error.message, error.graphQLErrors);
-      Alert.alert("Retry failed", error.message);
-      return;
-    }
-    reexecuteTasks({ requestPolicy: "network-only" });
-  }, [executeRetryTaskSync, reexecuteTasks]);
-
-  // Default task agent comes off the connection metadata (set in
-  // Connectors → LastMile Tasks → Default task agent). When unset we fall
-  // back to the user's active agent from the header picker — the user can
-  // still create tasks, they just won't be auto-attached to a specific
-  // agent until they pick one. Read from the first active task-kind
-  // connector; multi-provider support can refine this later.
-  const defaultTaskAgentId = useMemo(() => {
-    for (const conn of activeTaskConnectors) {
-      const meta = (conn.metadata ?? {}) as Record<string, unknown>;
-      const providerMeta = (meta[conn.provider_name] as Record<string, unknown> | undefined) ?? {};
-      const agentId = providerMeta.default_agent_id;
-      if (typeof agentId === "string" && agentId.length > 0) return agentId;
-    }
-    return null;
-  }, [activeTaskConnectors]);
-
-  const handleCreateTask = useCallback(async (overrideText?: string) => {
-    const text = (overrideText ?? newTaskText).trim();
-    const agentId = defaultTaskAgentId || activeAgent?.id;
-    console.log("[handleCreateTask]", {
-      text: text.slice(0, 20),
-      agentId,
-      tenantId,
-      userId: currentUser?.id,
-      defaultTaskAgentId,
-    });
-    if (!text || !agentId || !tenantId) {
-      console.warn("[handleCreateTask] Bailed — missing:", { text: !!text, agentId: !!agentId, tenantId: !!tenantId });
-      return;
-    }
-
-    setNewTaskText("");
-    Keyboard.dismiss();
-
-    const creatorId = currentUser?.id || user?.sub;
-    // Include the selected workflow_id in metadata so the backend's
-    // syncExternalTaskOnCreate helper can pass it to LastMile's
-    // `POST /tasks { title, workflow_id }` — the minimum info the API
-    // needs to auto-resolve team, status, and task_type.
-    const taskMetadata = selectedWorkflow
-      ? JSON.stringify({ workflowId: selectedWorkflow.id, workflowName: selectedWorkflow.name })
-      : undefined;
-    try {
-      const { data: createData, error: createError } = await executeCreateThread({
-        input: {
-          tenantId,
-          agentId,
-          title: text.length > 60 ? text.slice(0, 60) + "..." : text,
-          type: "TASK" as any,
-          channel: "TASK" as any,
-          createdByType: "user",
-          createdById: creatorId,
-          assigneeType: "user",
-          assigneeId: creatorId,
-          ...(taskMetadata ? { metadata: taskMetadata } : {}),
-        },
-      });
-
-      if (createError) {
-        console.error("[Tasks] CreateThread failed:", createError.message);
-        Alert.alert("Error", `Failed to create task: ${createError.message}`);
-        return;
-      }
-
-      const newThread = createData?.createThread;
-      if (!newThread?.id) {
-        console.error("[Tasks] CreateThread returned no ID", createData);
-        Alert.alert("Error", "Task was not created — no ID returned");
-        return;
-      }
-
-      console.log("[Tasks] Task created:", newThread.id, (newThread as any).identifier);
-      markRead(newThread.id);
-
-      // Reset the pinned workflow chip after a successful create so the
-      // user consciously picks the workflow for the next task rather
-      // than unintentionally filing three billing tickets in a row
-      // because the chip was sticky. The Tasks tab's + button re-opens
-      // the picker immediately — no lost taps.
-      setSelectedWorkflow(null);
-
-      const { data: msgData, error: msgError } = await executeSendMessage({
-        input: {
-          threadId: newThread.id,
-          role: "USER" as any,
-          content: text,
-          senderType: "human",
-          senderId: currentUser?.id,
-        },
-      });
-
-      if (msgError) {
-        console.error("[Tasks] SendMessage failed:", msgError.message, msgError.graphQLErrors);
-      } else {
-        console.log("[Tasks] Message sent", msgData?.sendMessage?.id);
-        markThreadActive(newThread.id);
-      }
-
-      // Refresh the tasks list so the new row appears immediately.
-      reexecuteTasks({ requestPolicy: "network-only" });
-    } catch (e) {
-      console.error("[Tasks] Failed to create task:", e);
-    }
-  }, [newTaskText, defaultTaskAgentId, activeAgent?.id, tenantId, currentUser?.id, user?.sub, selectedWorkflow, executeCreateThread, executeSendMessage, reexecuteTasks, markRead, markThreadActive]);
 
   const handleCreateThread = useCallback(async (overrideText?: string, overrideWorkspaces?: SelectedWorkspace[]) => {
     const text = (overrideText ?? newThreadText).trim();
@@ -579,7 +384,7 @@ export default function ThreadsScreen() {
         <TabHeader title={agentDisplayName} />
       ) : (
         <View style={{ paddingTop: insets.top }} className="bg-white dark:bg-neutral-950">
-          <View className="flex-row items-center justify-between px-4" style={{ height: 44 }}>
+          <View className="flex-row items-center justify-between px-4" style={{ height: 48 }}>
             {/* Left: Agent name + picker */}
             <AgentPicker
               agents={pickerAgents}
@@ -638,10 +443,7 @@ export default function ThreadsScreen() {
         </View>
       )}
 
-      {/* Threads / Tasks segmented control — only shown when the user has a
-          task-kind connector configured. Without one, Tasks is dead weight so
-          we render the inbox as Threads-only. */}
-      {hasTaskConnector && (
+      {/* Threads / Memories segmented control */}
       <View
         className="border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 items-center justify-center"
         style={{ height: 52, paddingBottom: 8 }}
@@ -667,27 +469,18 @@ export default function ThreadsScreen() {
             })()}
           </Pressable>
           <Pressable
-            onPress={() => setActiveTab("tasks")}
+            onPress={() => setActiveTab("memories")}
             className="flex-row items-center justify-center gap-1.5 rounded-full"
             style={{
               paddingHorizontal: 16,
               paddingVertical: 5,
-              backgroundColor: activeTab === "tasks" ? (isDark ? "#525252" : "#ffffff") : "transparent",
+              backgroundColor: activeTab === "memories" ? (isDark ? "#525252" : "#ffffff") : "transparent",
             }}
           >
-            <Text className="text-sm font-semibold" style={{ color: activeTab === "tasks" ? colors.foreground : colors.mutedForeground }}>Tasks</Text>
-            {(() => {
-              const unreadCount = filteredTasks.filter((t: any) => isUnread(t.id, t.lastTurnCompletedAt || t.createdAt, t.lastReadAt)).length;
-              return unreadCount > 0 ? (
-                <View className="rounded-full min-w-[18px] h-[18px] items-center justify-center px-1" style={{ backgroundColor: activeTab === "tasks" ? colors.primary : (isDark ? "#404040" : "#d4d4d4") }}>
-                  <Text style={{ color: activeTab === "tasks" ? (isDark ? "#000" : "#fff") : colors.mutedForeground, fontSize: 10, fontWeight: "700" }}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
-                </View>
-              ) : null;
-            })()}
+            <Text className="text-sm font-semibold" style={{ color: activeTab === "memories" ? colors.foreground : colors.mutedForeground }}>Memories</Text>
           </Pressable>
         </View>
       </View>
-      )}
 
       <View className="flex-1" style={{ backgroundColor: colors.background }}>
       <WebContent>
@@ -695,75 +488,44 @@ export default function ThreadsScreen() {
           <ThreadFilterBar filters={filters} onFiltersChange={setFilters} />
         )}
 
-        {activeTab === "tasks" ? (
+        {activeTab === "threads" ? (
           <FlatList
             style={{ flex: 1 }}
-            data={filteredTasks}
+            data={filteredThreads}
             keyExtractor={(item: any) => item.id}
             renderItem={({ item }) => (
-              <TaskRow
-                task={item}
-                onPress={() => handleThreadPress(item)}
-                hideAssignee
-                onRetrySync={handleRetryTaskSync}
-                onArchive={handleArchive}
-                isActive={isThreadActive(item.id)}
+              <ThreadRow
+                thread={item}
                 isUnread={isUnread(item.id, item.lastTurnCompletedAt || item.createdAt, item.lastReadAt)}
+                isActive={isThreadActive(item.id)}
+                onArchive={handleArchive}
+                onPress={() => handleThreadPress(item)}
               />
             )}
             ItemSeparatorComponent={() => (
-              <View className="h-px bg-neutral-200 dark:bg-neutral-800" />
+              <View className="h-px bg-neutral-200 dark:bg-neutral-800" style={{ marginLeft: 68 }} />
             )}
             refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={() => { handleRefresh(); reexecuteTasks({ requestPolicy: "network-only" }); }} tintColor={colors.primary} />
+              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />
             }
+            scrollEnabled={filteredThreads.length > 0}
             ListEmptyComponent={
               <View className="items-center gap-2">
-                <CheckSquare size={32} color={colors.mutedForeground} />
-                <Muted>No active tasks</Muted>
+                <ListTodo size={32} color={colors.mutedForeground} />
+                <Muted>No threads found</Muted>
               </View>
             }
-            contentContainerStyle={filteredTasks.length === 0 ? { flexGrow: 1, justifyContent: "center" } : { paddingTop: 8, paddingBottom: 80 }}
+            contentContainerStyle={filteredThreads.length === 0 ? { flexGrow: 1, justifyContent: "center" } : { paddingTop: 8 }}
           />
         ) : (
-        <FlatList
-          style={{ flex: 1 }}
-          data={filteredThreads}
-          keyExtractor={(item: any) => item.id}
-          renderItem={({ item }) => (
-            <ThreadRow
-              thread={item}
-              isUnread={isUnread(item.id, item.lastTurnCompletedAt || item.createdAt, item.lastReadAt)}
-              isActive={isThreadActive(item.id)}
-              onArchive={handleArchive}
-              onPress={() => handleThreadPress(item)}
-            />
-          )}
-          ItemSeparatorComponent={() => (
-            <View className="h-px bg-neutral-200 dark:bg-neutral-800" style={{ marginLeft: 68 }} />
-          )}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />
-          }
-          scrollEnabled={filteredThreads.length > 0}
-          ListEmptyComponent={
-            <View className="items-center gap-2">
-              <ListTodo size={32} color={colors.mutedForeground} />
-              <Muted>No threads found</Muted>
-            </View>
-          }
-          contentContainerStyle={filteredThreads.length === 0 ? { flexGrow: 1, justifyContent: "center" } : { paddingTop: 8 }}
-        />
+          <View className="flex-1 items-center justify-center px-6 gap-2">
+            <ListChecks size={32} color={colors.mutedForeground} />
+            <Muted>No memories yet</Muted>
+          </View>
         )}
       </WebContent>
       </View>
 
-      {/* Bottom input area. Rendered on both tabs — the placeholder and
-          submit handler swap based on activeTab, and each tab owns its own
-          draft so half-typed text can't leak across. On the Tasks tab the
-          `+` button is a placeholder for a richer add-task form and the
-          `⚡` Quick Actions button is dimmed until Task-scoped Quick
-          Actions ship. */}
       <View>
         {activeTab === "threads" ? (
           <MessageInputFooter
@@ -781,76 +543,49 @@ export default function ThreadsScreen() {
           />
         ) : (
           <MessageInputFooter
-            ref={messageInputRef}
-            value={newTaskText}
-            onChangeText={setNewTaskText}
-            onSubmit={() => handleCreateTask()}
-            placeholder="Create a new task..."
+            value={newMemoryText}
+            onChangeText={setNewMemoryText}
+            onSubmit={() => {
+              // TODO: wire to memories create mutation when backend is ready.
+              setNewMemoryText("");
+              Keyboard.dismiss();
+            }}
+            placeholder="Add new memory..."
             colors={colors}
             isDark={isDark}
-            // `+` opens the workflow picker — the user picks what kind of
-            // task to create (each workflow = a task type with its own
-            // team, statuses, and automation rules in LastMile).
-            onPlusPress={() => { Keyboard.dismiss(); workflowPickerRef.current?.present(); }}
-            // Show the selected workflow as a chip (reuses the workspace
-            // chip layout — same visual, different semantic).
-            selectedWorkspaces={selectedWorkflow ? [{ id: selectedWorkflow.id, name: selectedWorkflow.name }] : []}
-            onRemoveWorkspace={() => setSelectedWorkflow(null)}
-            // `⚡` opens the same sheet the Threads footer uses, but the
-            // upstream hook passes `scope="task"` so the list is filtered
-            // to task-scoped actions only. The `activeQuickActions` and
-            // `qaFormScope` state (set in `useMemo`s above) take care of
-            // routing saves back to the right scope.
-            onQuickActions={() => { Keyboard.dismiss(); quickActionsRef.current?.present(); }}
+            onPlusPress={() => { Keyboard.dismiss(); /* TODO: add photo/doc picker */ }}
           />
         )}
       </View>
 
-      {/* Quick Actions Bottom Sheet — a single instance serves both tabs.
-          `activeQuickActions` is swapped upstream based on activeTab so
-          the sheet always shows the list for the footer the user just
-          opened it from. Selecting an action fills the *active* tab's
-          input, since that's the footer the ⚡ button lives on. */}
       <QuickActionsSheet
         ref={quickActionsRef}
         actions={activeQuickActions}
         subAgentNames={subAgentNames}
         onSelect={(action) => {
           quickActionsRef.current?.dismiss();
-          if (activeTab === "tasks") {
-            setNewTaskText(action.prompt);
-          } else {
-            setNewThreadText(action.prompt);
-            if (action.workspaceAgentId && subAgentNames[action.workspaceAgentId]) {
-              const slug = agentIdToSlug[action.workspaceAgentId] ?? action.workspaceAgentId;
-              setSelectedWorkspaces([{ id: slug, name: subAgentNames[action.workspaceAgentId] }]);
-            }
+          setNewThreadText(action.prompt);
+          if (action.workspaceAgentId && subAgentNames[action.workspaceAgentId]) {
+            const slug = agentIdToSlug[action.workspaceAgentId] ?? action.workspaceAgentId;
+            setSelectedWorkspaces([{ id: slug, name: subAgentNames[action.workspaceAgentId] }]);
           }
           setTimeout(() => messageInputRef.current?.focus(), 300);
         }}
         onLongPress={(action) => {
           quickActionsRef.current?.dismiss();
-          if (activeTab === "tasks") {
-            setNewTaskText(action.prompt);
-          } else {
-            setNewThreadText(action.prompt);
-            if (action.workspaceAgentId && subAgentNames[action.workspaceAgentId]) {
-              const slug = agentIdToSlug[action.workspaceAgentId] ?? action.workspaceAgentId;
-              setSelectedWorkspaces([{ id: slug, name: subAgentNames[action.workspaceAgentId] }]);
-            }
+          setNewThreadText(action.prompt);
+          if (action.workspaceAgentId && subAgentNames[action.workspaceAgentId]) {
+            const slug = agentIdToSlug[action.workspaceAgentId] ?? action.workspaceAgentId;
+            setSelectedWorkspaces([{ id: slug, name: subAgentNames[action.workspaceAgentId] }]);
           }
           setTimeout(() => messageInputRef.current?.focus(), 300);
         }}
         onAdd={() => {
           quickActionsRef.current?.dismiss();
-          // Snapshot the scope the user opened the sheet from so form
-          // saves land in the correct list even if they switch tabs.
-          setQaFormScope(activeTab === "tasks" ? "task" : "thread");
           setTimeout(() => quickActionFormRef.current?.present(), 300);
         }}
         onEdit={(action) => {
           quickActionsRef.current?.dismiss();
-          setQaFormScope(action.scope ?? (activeTab === "tasks" ? "task" : "thread"));
           setTimeout(() => {
             quickActionFormRef.current?.present({
               id: action.id,
@@ -862,7 +597,6 @@ export default function ThreadsScreen() {
         }}
       />
 
-      {/* Workspace Picker Bottom Sheet */}
       <WorkspacePickerSheet
         ref={workspacePickerRef}
         subAgents={subAgents}
@@ -876,28 +610,6 @@ export default function ThreadsScreen() {
         }}
       />
 
-      {/* Workflow picker for the Tasks footer `+` button */}
-      <WorkflowPickerSheet
-        ref={workflowPickerRef}
-        workflows={workflows}
-        loading={workflowsLoading}
-        error={workflowsError}
-        needsReconnect={workflowsNeedsReconnect}
-        selectedId={selectedWorkflow?.id ?? null}
-        onSelect={(wf) => setSelectedWorkflow(wf)}
-        onRefresh={refetchWorkflows}
-        onReconnect={() => {
-          workflowPickerRef.current?.dismiss();
-          router.push("/settings/mcp-servers");
-        }}
-      />
-
-      {/* Quick Action Add/Edit Form. Saves into `qaFormScope` (captured
-          when the form was opened) so edits don't accidentally flip an
-          action between scopes just because the user switched tabs mid-
-          edit. After save/delete we refresh *both* scope queries — one
-          of them is a cheap no-op and it keeps the in-memory state
-          consistent if the backend ever moves an action between scopes. */}
       <QuickActionFormSheet
         ref={quickActionFormRef}
         subAgents={subAgents}
@@ -920,12 +632,10 @@ export default function ThreadsScreen() {
             });
           }
           reexecuteQAThread({ requestPolicy: "network-only" });
-          reexecuteQATask({ requestPolicy: "network-only" });
         }}
         onDelete={(id) => {
           executeDeleteQA({ id }).then(() => {
             reexecuteQAThread({ requestPolicy: "network-only" });
-            reexecuteQATask({ requestPolicy: "network-only" });
           });
         }}
       />

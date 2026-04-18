@@ -688,6 +688,39 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/react-native-sdk:
+    devDependencies:
+      '@types/react':
+        specifier: ~19.1.0
+        version: 19.1.17
+      amazon-cognito-identity-js:
+        specifier: ^6.3.14
+        version: 6.3.16
+      expo-crypto:
+        specifier: ^15.0.0
+        version: 15.0.8(expo@54.0.33)
+      expo-secure-store:
+        specifier: ^15.0.0
+        version: 15.0.8(expo@54.0.33)
+      expo-web-browser:
+        specifier: ^15.0.0
+        version: 15.0.10(expo@54.0.33)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))
+      graphql:
+        specifier: ^16.10.0
+        version: 16.13.2
+      react:
+        specifier: 19.1.0
+        version: 19.1.0
+      react-native:
+        specifier: 0.81.5
+        version: 0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0)
+      typescript:
+        specifier: ~5.9.2
+        version: 5.9.3
+      urql:
+        specifier: ^4.2.2
+        version: 4.2.2(@urql/core@6.0.1(graphql@16.13.2))(react@19.1.0)
+
   packages/skill-catalog: {}
 
 packages:
@@ -22271,7 +22304,7 @@ snapshots:
       jsonwebtoken: 9.0.3
       load-esm: 1.0.3
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.15.0(debug@4.4.3))
+      retry-axios: 2.6.0(axios@1.15.0)
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -25741,7 +25774,7 @@ snapshots:
       retext-stringify: 4.0.0
       unified: 11.0.5
 
-  retry-axios@2.6.0(axios@1.15.0(debug@4.4.3)):
+  retry-axios@2.6.0(axios@1.15.0):
     dependencies:
       axios: 1.15.0(debug@4.4.3)
 
@@ -26907,6 +26940,12 @@ snapshots:
   urql@4.2.2(@urql/core@5.2.0(graphql@16.13.2))(react@19.1.0):
     dependencies:
       '@urql/core': 5.2.0(graphql@16.13.2)
+      react: 19.1.0
+      wonka: 6.3.6
+
+  urql@4.2.2(@urql/core@6.0.1(graphql@16.13.2))(react@19.1.0):
+    dependencies:
+      '@urql/core': 6.0.1(graphql@16.13.2)
       react: 19.1.0
       wonka: 6.3.6
 
