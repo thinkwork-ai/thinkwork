@@ -127,6 +127,7 @@ export default defineConfig({
                     { label: "Knowledge Bases", slug: "applications/admin/knowledge-bases" },
                     { label: "Analytics", slug: "applications/admin/analytics" },
                     { label: "Scheduled Jobs", slug: "applications/admin/scheduled-jobs" },
+                    { label: "Evaluations", slug: "applications/admin/evaluations" },
                     { label: "Routines", slug: "applications/admin/routines" },
                     { label: "Connectors", slug: "applications/admin/connectors" },
                     { label: "Webhooks", slug: "applications/admin/webhooks" },
