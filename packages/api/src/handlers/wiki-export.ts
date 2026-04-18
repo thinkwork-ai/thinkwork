@@ -13,7 +13,7 @@
  * old bundles.
  */
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import {
 	agents,
 	tenants,
@@ -89,14 +89,18 @@ export async function handler(
 		const tenantIds = [...new Set(scopes.map((s) => s.tenant_id))];
 		const ownerIds = [...new Set(scopes.map((s) => s.owner_id))];
 
-		const tenantRows = await db
-			.select({ id: tenants.id, slug: tenants.slug })
-			.from(tenants)
-			.where(inAnyOf(tenants.id, tenantIds));
-		const agentRows = await db
-			.select({ id: agents.id, slug: agents.slug })
-			.from(agents)
-			.where(inAnyOf(agents.id, ownerIds));
+		const tenantRows = tenantIds.length
+			? await db
+					.select({ id: tenants.id, slug: tenants.slug })
+					.from(tenants)
+					.where(inArray(tenants.id, tenantIds))
+			: [];
+		const agentRows = ownerIds.length
+			? await db
+					.select({ id: agents.id, slug: agents.slug })
+					.from(agents)
+					.where(inArray(agents.id, ownerIds))
+			: [];
 		const tenantSlug = new Map(
 			tenantRows.map((r) => [r.id, r.slug || r.id]),
 		);
@@ -243,17 +247,3 @@ function renderPageMarkdown(
 	return `${frontmatter}\n\n${head}\n${summary}\n${body}\n`;
 }
 
-/**
- * Drizzle doesn't expose `inArray` from its core for dynamic id lists that
- * could be empty; wrap it so empty arrays return a false predicate cleanly.
- */
-function inAnyOf<T>(col: T, ids: string[]) {
-	if (ids.length === 0) {
-		// `1=0` — false predicate when the list is empty; prevents `IN ()`
-		// which is a SQL parse error.
-		return eq(col as any, "\0"); // never matches a real UUID
-	}
-	// drizzle supports `sql.raw` but safer: use a templated ANY comparison.
-	const { sql } = require("drizzle-orm") as typeof import("drizzle-orm");
-	return sql`${col} = ANY(${ids}::uuid[])`;
-}

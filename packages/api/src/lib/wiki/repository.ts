@@ -16,7 +16,7 @@
  * .prds/compounding-memory-v1-build-plan.md.
  */
 
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import type { PgTransaction } from "drizzle-orm/pg-core";
 import {
 	wikiPages,
@@ -439,10 +439,15 @@ export async function listPagesForScope(
 	if (pageRows.length === 0) return [];
 
 	const ids = pageRows.map((r) => r.id);
+	// pg's node driver doesn't auto-marshal raw JS arrays as Postgres arrays
+	// on the right side of `= ANY (...)`, so the `sql\`ANY\`` form we used
+	// earlier failed at runtime with `requires array on right side`. Drizzle's
+	// `inArray()` emits a parameterized `IN ($1, $2, …)` which works
+	// correctly regardless of driver version.
 	const aliasRows = await db
 		.select({ page_id: wikiPageAliases.page_id, alias: wikiPageAliases.alias })
 		.from(wikiPageAliases)
-		.where(sql`${wikiPageAliases.page_id} = ANY (${ids})`);
+		.where(inArray(wikiPageAliases.page_id, ids));
 
 	const aliasesByPage = new Map<string, string[]>();
 	for (const a of aliasRows) {
