@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import Constants from "expo-constants";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowUp, Mic, Plus, Search, Tag } from "lucide-react-native";
+import { ArrowUp, Mic, Plus, Search, Tag, XCircle } from "lucide-react-native";
 import { useDeleteMobileMemoryCapture } from "@thinkwork/react-native-sdk";
 import { Text } from "@/components/ui/typography";
 import { toast } from "@/components/ui/toast";
@@ -210,7 +210,7 @@ export function CaptureFooter({
 					</ScrollView>
 				) : null}
 
-				<View className="px-4 pt-3">
+				<View className="px-4 pt-3" style={{ flexDirection: "row", alignItems: "flex-start" }}>
 					<TextInput
 						ref={inputRef}
 						value={text}
@@ -220,16 +220,28 @@ export function CaptureFooter({
 						multiline
 						className="max-h-[120px]"
 						style={{
+							flex: 1,
 							color: colors.foreground,
 							fontSize: 18,
 							lineHeight: 24,
 							paddingTop: 4,
 							paddingBottom: 4,
+							paddingRight: text.length > 0 ? 32 : 0,
 						}}
 						returnKeyType={mode === "search" ? "search" : "default"}
 						blurOnSubmit={false}
 						onSubmitEditing={Platform.OS === "web" ? handleSubmit : undefined}
 					/>
+					{text.length > 0 ? (
+						<Pressable
+							onPress={() => setText("")}
+							accessibilityLabel="Clear input"
+							hitSlop={8}
+							style={{ paddingTop: 4, paddingLeft: 4 }}
+						>
+							<XCircle size={20} color={colors.mutedForeground} />
+						</Pressable>
+					) : null}
 				</View>
 
 				{isDictating ? (
