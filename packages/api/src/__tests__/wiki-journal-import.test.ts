@@ -388,18 +388,20 @@ describe("bootstrapJournalImport", () => {
 		).rejects.toThrow(/Admin-only/);
 	});
 
-	it("accepts an api-key caller and delegates to runJournalImport", async () => {
-		mockFetchPage.mockReturnValueOnce([]);
-		mockEnqueue.mockResolvedValueOnce({
-			inserted: true,
-			job: { id: "job-x" },
-		});
+	it("accepts an api-key caller and dispatches (returns immediately, no await)", async () => {
+		// Mutation is now fire-and-forget — it async-invokes the
+		// wiki-bootstrap-import Lambda. Without STAGE / WIKI_BOOTSTRAP_IMPORT_FN
+		// the resolver returns `dispatched: false` with an error string
+		// instead of throwing, which is the shape the admin UI renders.
 		const res = await bootstrapJournalImport(
 			{},
 			{ accountId: "acct_1", tenantId: "t1", agentId: "a1" },
 			makeCtx("apikey"),
 		);
 		expect(res.accountId).toBe("acct_1");
-		expect(res.recordsIngested).toBe(0);
+		expect(res.tenantId).toBe("t1");
+		expect(res.agentId).toBe("a1");
+		expect(typeof res.dispatched).toBe("boolean");
+		expect(typeof res.dispatchedAt).toBe("string");
 	});
 });

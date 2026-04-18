@@ -250,6 +250,9 @@ build_handler "wiki-lint" \
 build_handler "wiki-export" \
   "$REPO_ROOT/packages/api/src/handlers/wiki-export.ts"
 
+build_handler "wiki-bootstrap-import" \
+  "$REPO_ROOT/packages/api/src/handlers/wiki-bootstrap-import.ts"
+
 build_handler "artifact-deliver" \
   "$REPO_ROOT/packages/api/src/handlers/artifact-deliver.ts"
 

@@ -78,16 +78,20 @@ extend type Query {
   wikiBacklinks(pageId: ID!): [WikiPage!]!
 }
 
-type WikiJournalImportResult {
+"""
+Dispatch acknowledgement for `bootstrapJournalImport`. The actual ingest
+runs on a dedicated worker Lambda (`wiki-bootstrap-import`) because
+Hindsight's LLM-backed retain is too slow to complete within API Gateway's
+30-second HTTP ceiling. Operator watches CloudWatch + wiki_compile_jobs
+for the terminal compile the ingest enqueues.
+"""
+type WikiJournalImportDispatch {
   accountId: ID!
   tenantId: ID!
   agentId: ID!
-  recordsIngested: Int!
-  recordsSkipped: Int!
-  errors: Int!
-  compileJobId: ID
-  compileJobDeduped: Boolean!
-  latencyMs: Int!
+  dispatched: Boolean!
+  error: String
+  dispatchedAt: AWSDateTime!
 }
 
 type WikiResetCursorResult {
@@ -105,17 +109,18 @@ extend type Mutation {
   compileWikiNow(tenantId: ID!, ownerId: ID!): WikiCompileJob!
 
   """
-  Admin-only: bulk-import a journal-schema account's ideas into Hindsight
-  as normalized memory records under the given (tenant, agent) scope, then
-  enqueue a single terminal compile job. Not rate-limited — intended for
-  controlled seeds, not regular use.
+  Admin-only fire-and-forget dispatch of a journal-schema bulk ingest onto
+  a dedicated worker Lambda. Returns immediately with a dispatch
+  acknowledgement — the actual ingest + terminal compile happen
+  asynchronously. Track progress via the wiki-bootstrap-import Lambda's
+  CloudWatch logs and the resulting compile job in wiki_compile_jobs.
   """
   bootstrapJournalImport(
     accountId: ID!
     tenantId: ID!
     agentId: ID!
     limit: Int
-  ): WikiJournalImportResult!
+  ): WikiJournalImportDispatch!
 
   """
   Admin-only replay: clear the compile cursor for (tenant, owner). If
