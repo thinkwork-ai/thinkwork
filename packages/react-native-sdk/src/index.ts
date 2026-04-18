@@ -28,6 +28,7 @@ export {
   useMobileMemoryCaptures,
   useDeleteMobileMemoryCapture,
 } from "./hooks/use-mobile-memory-captures";
+export { useMobileMemorySearch } from "./hooks/use-mobile-memory-search";
 
 export type {
   ThinkworkConfig,

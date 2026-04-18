@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import Constants from "expo-constants";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowUp, Mic, Plus } from "lucide-react-native";
+import { ArrowUp, Mic, Plus, Search, Tag } from "lucide-react-native";
 import { useDeleteMobileMemoryCapture } from "@thinkwork/react-native-sdk";
 import { Text } from "@/components/ui/typography";
 import { toast } from "@/components/ui/toast";
@@ -27,12 +27,20 @@ import { FactTypePicker } from "./FactTypePicker";
 const MAX_CHARS = 2000;
 const SOFT_WARN_CHARS = 1500;
 
+export type CaptureFooterMode = "search" | "add";
+
 interface CaptureFooterProps {
 	agentId: string | null | undefined;
 	agentName: string | null | undefined;
 	tenantId: string | null | undefined;
 	colors: (typeof COLORS)["dark"];
 	isDark: boolean;
+	/**
+	 * Fired whenever the effective search query changes (live while the user
+	 * types in search mode; empty string otherwise). The parent should
+	 * debounce this value before passing it to the search query.
+	 */
+	onSearchQueryChange?: (query: string) => void;
 }
 
 export function CaptureFooter({
@@ -41,7 +49,9 @@ export function CaptureFooter({
 	tenantId,
 	colors,
 	isDark,
+	onSearchQueryChange,
 }: CaptureFooterProps) {
+	const [mode, setMode] = useState<CaptureFooterMode>("search");
 	const [text, setText] = useState("");
 	const [factType, setFactType] = useState<FactType>("FACT");
 	const [pickerOpen, setPickerOpen] = useState(false);
@@ -55,7 +65,12 @@ export function CaptureFooter({
 	const entries = useCaptureQueue();
 	const deleteCapture = useDeleteMobileMemoryCapture();
 
-	// When the last-submitted entry flips to synced, show the Undo toast.
+	// Keep the parent's search query in sync with text+mode. Empty in add mode.
+	useEffect(() => {
+		onSearchQueryChange?.(mode === "search" ? text : "");
+	}, [mode, text, onSearchQueryChange]);
+
+	// When the last-submitted capture flips to synced, show the Undo toast.
 	useEffect(() => {
 		const cid = pendingCid.current;
 		if (!cid) return;
@@ -89,7 +104,7 @@ export function CaptureFooter({
 	const charCount = text.length;
 	const atHardLimit = charCount >= MAX_CHARS;
 	const atSoftWarn = charCount >= SOFT_WARN_CHARS;
-	const sendDisabled = !text.trim() || submitting || atHardLimit;
+	const sendDisabled = !text.trim() || submitting || (mode === "add" && atHardLimit);
 
 	const counterColor = atHardLimit
 		? colors.destructive
@@ -97,18 +112,20 @@ export function CaptureFooter({
 			? "#f59e0b"
 			: colors.mutedForeground;
 
-	const handleChangeText = useCallback(
-		(next: string) => {
-			if (next.length > MAX_CHARS) {
-				setText(next.slice(0, MAX_CHARS));
-				return;
-			}
-			setText(next);
-		},
-		[],
-	);
+	const handleChangeText = useCallback((next: string) => {
+		if (next.length > MAX_CHARS) {
+			setText(next.slice(0, MAX_CHARS));
+			return;
+		}
+		setText(next);
+	}, []);
 
-	const handleSubmit = useCallback(async () => {
+	const toggleMode = useCallback(() => {
+		Keyboard.dismiss();
+		setMode((prev) => (prev === "search" ? "add" : "search"));
+	}, []);
+
+	const handleCapture = useCallback(async () => {
 		const trimmed = text.trim();
 		if (!trimmed || submitting || atHardLimit) return;
 		if (!agentId || !tenantId) {
@@ -148,14 +165,24 @@ export function CaptureFooter({
 		}
 	}, [text, submitting, atHardLimit, agentId, tenantId, factType]);
 
+	const handleSubmit = useCallback(() => {
+		if (mode === "add") {
+			void handleCapture();
+			return;
+		}
+		// Search: submit just blurs the keyboard — the query is already
+		// live-fed via onSearchQueryChange; parent debounces and queries.
+		Keyboard.dismiss();
+	}, [mode, handleCapture]);
+
 	const handleMicPress = useCallback(() => {
 		dictationUsedRef.current = true;
 		setIsDictating(true);
 	}, []);
 
-	const placeholder = agentName ? `Add new memory for ${agentName}...` : "Add new memory...";
-	const hasChip = factType !== "FACT";
-	const showCounter = charCount >= SOFT_WARN_CHARS;
+	const placeholder = mode === "search" ? "Search memories..." : "Add new memory...";
+	const hasChip = mode === "add" && factType !== "FACT";
+	const showCounter = mode === "add" && charCount >= SOFT_WARN_CHARS;
 
 	return (
 		<>
@@ -199,7 +226,7 @@ export function CaptureFooter({
 							paddingTop: 4,
 							paddingBottom: 4,
 						}}
-						returnKeyType="default"
+						returnKeyType={mode === "search" ? "search" : "default"}
 						blurOnSubmit={false}
 						onSubmitEditing={Platform.OS === "web" ? handleSubmit : undefined}
 					/>
@@ -220,14 +247,28 @@ export function CaptureFooter({
 					<View className="flex-row items-center justify-between px-4 pt-1 pb-2">
 						<View className="flex-row items-center gap-4">
 							<Pressable
-								onPress={() => {
-									Keyboard.dismiss();
-									setPickerOpen(true);
-								}}
+								onPress={toggleMode}
 								className="p-1 active:opacity-70"
+								accessibilityLabel={mode === "search" ? "Switch to add memory" : "Switch to search"}
 							>
-								<Plus size={26} color={colors.mutedForeground} />
+								{mode === "search" ? (
+									<Plus size={26} color={colors.mutedForeground} />
+								) : (
+									<Search size={24} color={colors.mutedForeground} />
+								)}
 							</Pressable>
+							{mode === "add" ? (
+								<Pressable
+									onPress={() => {
+										Keyboard.dismiss();
+										setPickerOpen(true);
+									}}
+									className="p-1 active:opacity-70"
+									accessibilityLabel="Choose memory type"
+								>
+									<Tag size={22} color={colors.mutedForeground} />
+								</Pressable>
+							) : null}
 						</View>
 						<View className="flex-row items-center gap-4">
 							{showCounter ? (
@@ -285,4 +326,3 @@ export function CaptureFooter({
 		</>
 	);
 }
-
