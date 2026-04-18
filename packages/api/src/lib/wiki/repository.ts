@@ -398,6 +398,108 @@ export async function findPageById(
 	return (rows[0] as WikiPageRow | undefined) ?? null;
 }
 
+/**
+ * List active pages in a (tenant, owner) scope with their aliases. Used by
+ * the compiler to feed candidate pages into the planner so it can choose
+ * update-vs-create against a finite set it has already seen.
+ */
+export async function listPagesForScope(
+	args: { tenantId: string; ownerId: string; limit?: number },
+	db: DbClient = defaultDb,
+): Promise<
+	Array<{
+		id: string;
+		type: WikiPageType;
+		slug: string;
+		title: string;
+		summary: string | null;
+		aliases: string[];
+	}>
+> {
+	const limit = Math.max(1, Math.min(args.limit ?? 200, 500));
+	const pageRows = await db
+		.select({
+			id: wikiPages.id,
+			type: wikiPages.type,
+			slug: wikiPages.slug,
+			title: wikiPages.title,
+			summary: wikiPages.summary,
+		})
+		.from(wikiPages)
+		.where(
+			and(
+				eq(wikiPages.tenant_id, args.tenantId),
+				eq(wikiPages.owner_id, args.ownerId),
+				eq(wikiPages.status, "active"),
+			),
+		)
+		.orderBy(desc(wikiPages.last_compiled_at))
+		.limit(limit);
+
+	if (pageRows.length === 0) return [];
+
+	const ids = pageRows.map((r) => r.id);
+	const aliasRows = await db
+		.select({ page_id: wikiPageAliases.page_id, alias: wikiPageAliases.alias })
+		.from(wikiPageAliases)
+		.where(sql`${wikiPageAliases.page_id} = ANY (${ids})`);
+
+	const aliasesByPage = new Map<string, string[]>();
+	for (const a of aliasRows) {
+		const list = aliasesByPage.get(a.page_id) || [];
+		list.push(a.alias);
+		aliasesByPage.set(a.page_id, list);
+	}
+
+	return pageRows.map((p) => ({
+		id: p.id,
+		type: p.type as WikiPageType,
+		slug: p.slug,
+		title: p.title,
+		summary: p.summary,
+		aliases: aliasesByPage.get(p.id) ?? [],
+	}));
+}
+
+/**
+ * List open unresolved mentions in a scope — fed to the planner so it can
+ * either reinforce a mention (increment count by proposing it again) or
+ * promote one explicitly.
+ */
+export async function listOpenMentions(
+	args: { tenantId: string; ownerId: string; limit?: number },
+	db: DbClient = defaultDb,
+): Promise<
+	Array<{
+		id: string;
+		alias: string;
+		alias_normalized: string;
+		mention_count: number;
+		suggested_type: WikiPageType | null;
+	}>
+> {
+	const limit = Math.max(1, Math.min(args.limit ?? 200, 500));
+	const rows = await db
+		.select({
+			id: wikiUnresolvedMentions.id,
+			alias: wikiUnresolvedMentions.alias,
+			alias_normalized: wikiUnresolvedMentions.alias_normalized,
+			mention_count: wikiUnresolvedMentions.mention_count,
+			suggested_type: wikiUnresolvedMentions.suggested_type,
+		})
+		.from(wikiUnresolvedMentions)
+		.where(
+			and(
+				eq(wikiUnresolvedMentions.tenant_id, args.tenantId),
+				eq(wikiUnresolvedMentions.owner_id, args.ownerId),
+				eq(wikiUnresolvedMentions.status, "open"),
+			),
+		)
+		.orderBy(desc(wikiUnresolvedMentions.mention_count))
+		.limit(limit);
+	return rows as any;
+}
+
 /** Read all sections for a page ordered by position. */
 export async function listPageSections(
 	pageId: string,
