@@ -35,7 +35,7 @@ These features are complete and supported in v1:
 | CLI (`thinkwork-cli`) | Beta |
 | Terraform module (`thinkwork-ai/thinkwork/aws`) | Beta |
 | BYO VPC, database, Cognito | Stable |
-| Eval packs (code-first evals via CLI) | Beta |
+| Evaluations (in-app authoring, runs, scoring) | Beta |
 | Multi-tenancy (Postgres RLS) | Stable |
 
 <Aside type="note">
@@ -57,12 +57,6 @@ A Postgres-backed knowledge graph with entity extraction, relationship modeling,
 A multi-step research automation that uses Step Functions loops to iteratively search, synthesize, and refine findings. Includes GitHub workspace integration for persisting research artifacts and pluggable measurement functions for evaluating research quality.
 
 **Not in v1 because:** The single-turn agent loop in v1 handles most research tasks adequately. AutoResearch adds orchestration complexity that requires more production testing.
-
-### Eval UI
-
-A visual interface in the admin app for viewing eval run results, comparing runs across agent versions, and drilling into individual test case failures.
-
-**Not in v1 because:** Eval packs are fully functional via CLI and S3 JSON output. The UI is a quality-of-life improvement, not a blocker.
 
 ### Holistic cost tracking
 
@@ -92,11 +86,11 @@ An evaluation agent that can perform end-to-end tests using a browser (Nova Act 
 
 These are the highest-priority items being actively worked on:
 
-1. **Eval UI** — Admin app integration for viewing and comparing eval runs
-2. **Cost tracking** — Aggregated cost reports by tenant, agent, and time period
-3. **Places module** — Location intelligence as an optional Terraform module
-4. **AutoResearch** — Step Functions-based iterative research loop
-5. **End-user web client** — White-label React app for end users
+1. **Cost tracking** — Aggregated cost reports by tenant, agent, and time period
+2. **Places module** — Location intelligence as an optional Terraform module
+3. **AutoResearch** — Step Functions-based iterative research loop
+4. **End-user web client** — White-label React app for end users
+5. **Eval agent with browser automation** — Nova Act or similar for UI-driven agent tests
 
 ## Contributing
 
