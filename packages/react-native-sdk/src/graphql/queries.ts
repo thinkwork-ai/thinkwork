@@ -169,3 +169,30 @@ export const SendMessageMutation = gql`
     }
   }
 `;
+
+export const CaptureMobileMemoryMutation = gql`
+  mutation CaptureMobileMemory(
+    $agentId: ID!
+    $content: String!
+    $factType: MobileCaptureFactType
+    $metadata: AWSJSON
+    $clientCaptureId: ID
+  ) {
+    captureMobileMemory(
+      agentId: $agentId
+      content: $content
+      factType: $factType
+      metadata: $metadata
+      clientCaptureId: $clientCaptureId
+    ) {
+      id
+      tenantId
+      agentId
+      content
+      factType
+      capturedAt
+      syncedAt
+      metadata
+    }
+  }
+`;
