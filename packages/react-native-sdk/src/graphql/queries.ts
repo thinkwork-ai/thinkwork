@@ -40,6 +40,7 @@ export const ThreadsQuery = gql`
       lastActivityAt
       lastReadAt
       archivedAt
+      lastResponsePreview
       createdAt
       updatedAt
     }
@@ -67,6 +68,7 @@ export const ThreadQuery = gql`
       lastActivityAt
       lastReadAt
       archivedAt
+      lastResponsePreview
       createdAt
       updatedAt
     }
