@@ -85,6 +85,13 @@
       "when": 1776439772657,
       "tag": "0011_eval_run_template",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1776537470281,
+      "tag": "0012_motionless_white_queen",
+      "breakpoints": true
     }
   ]
 }
