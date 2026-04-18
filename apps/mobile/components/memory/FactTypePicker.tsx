@@ -1,5 +1,5 @@
 import React from "react";
-import { Modal, Pressable, View } from "react-native";
+import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { Lightbulb, CheckCircle2, Sparkles, MessageSquare } from "lucide-react-native";
 import { Text, Muted } from "@/components/ui/typography";
 import { useColorScheme } from "nativewind";
@@ -30,36 +30,28 @@ export function FactTypePicker({ visible, onClose, onSelect, current }: FactType
 	const insets = useSafeAreaInsets();
 
 	return (
-		<Modal
-			visible={visible}
-			transparent
-			animationType="slide"
-			onRequestClose={onClose}
-		>
-			<Pressable
-				onPress={onClose}
-				style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}
-			>
-				<Pressable
-					onPress={() => {}}
-					style={{
-						backgroundColor: colors.card,
-						borderTopLeftRadius: 20,
-						borderTopRightRadius: 20,
-						paddingTop: 12,
-						paddingBottom: Math.max(insets.bottom, 16),
-					}}
+		<Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+			<Pressable onPress={onClose} style={styles.backdrop}>
+				{/* Anchor the sheet to the bottom and make it full-width via
+				    left/right: 0. Using justifyContent on the backdrop was
+				    letting the inner sheet size to its content on iOS, which
+				    in turn collapsed the row flex direction. */}
+				<View
+					style={[
+						styles.sheet,
+						{
+							backgroundColor: colors.card,
+							paddingBottom: Math.max(insets.bottom, 16),
+						},
+					]}
+					onStartShouldSetResponder={() => true}
 				>
-					<View style={{ alignItems: "center", paddingVertical: 8 }}>
-						<View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border }} />
+					<View style={styles.handleRow}>
+						<View style={[styles.handle, { backgroundColor: colors.border }]} />
 					</View>
-					<View style={{ paddingHorizontal: 20, paddingBottom: 8 }}>
-						<Text style={{ fontSize: 17, fontWeight: "600", color: colors.foreground }}>
-							Memory type
-						</Text>
-						<Muted style={{ fontSize: 13, marginTop: 2 }}>
-							Pick how this memory should be retrieved later.
-						</Muted>
+					<View style={styles.titleBlock}>
+						<Text style={[styles.title, { color: colors.foreground }]}>Memory type</Text>
+						<Muted style={styles.subtitle}>Pick how this memory should be retrieved later.</Muted>
 					</View>
 					{ORDER.map((type) => {
 						const Icon = ICONS[type];
@@ -71,46 +63,78 @@ export function FactTypePicker({ visible, onClose, onSelect, current }: FactType
 									onSelect(type);
 									onClose();
 								}}
-								style={({ pressed }) => ({
-									backgroundColor: pressed ? colors.secondary : "transparent",
-								})}
+								style={({ pressed }) => [
+									styles.row,
+									{ backgroundColor: pressed ? colors.secondary : "transparent" },
+								]}
 							>
-								<View
+								<View style={styles.iconCol}>
+									<Icon size={22} color={active ? colors.primary : colors.foreground} />
+								</View>
+								<Text
+									numberOfLines={1}
 									style={{
-										flexDirection: "row",
-										alignItems: "center",
-										paddingVertical: 14,
-										paddingHorizontal: 20,
-										gap: 14,
+										color: colors.foreground,
+										fontSize: 16,
+										fontWeight: active ? "600" : "500",
 									}}
 								>
-									<View
-										style={{
-											width: 28,
-											alignItems: "center",
-											justifyContent: "center",
-										}}
-									>
-										<Icon
-											size={22}
-											color={active ? colors.primary : colors.foreground}
-										/>
-									</View>
-									<Text
-										style={{
-											color: colors.foreground,
-											fontWeight: active ? "600" : "500",
-											fontSize: 16,
-										}}
-									>
-										{FACT_TYPE_LABELS[type]}
-									</Text>
-								</View>
+									{FACT_TYPE_LABELS[type]}
+								</Text>
 							</Pressable>
 						);
 					})}
-				</Pressable>
+				</View>
 			</Pressable>
 		</Modal>
 	);
 }
+
+const styles = StyleSheet.create({
+	backdrop: {
+		flex: 1,
+		backgroundColor: "rgba(0,0,0,0.45)",
+	},
+	sheet: {
+		position: "absolute",
+		left: 0,
+		right: 0,
+		bottom: 0,
+		borderTopLeftRadius: 20,
+		borderTopRightRadius: 20,
+		paddingTop: 12,
+	},
+	handleRow: {
+		alignItems: "center",
+		paddingVertical: 8,
+	},
+	handle: {
+		width: 40,
+		height: 4,
+		borderRadius: 2,
+	},
+	titleBlock: {
+		paddingHorizontal: 20,
+		paddingBottom: 8,
+	},
+	title: {
+		fontSize: 17,
+		fontWeight: "600",
+	},
+	subtitle: {
+		fontSize: 13,
+		marginTop: 2,
+	},
+	row: {
+		flexDirection: "row",
+		alignItems: "center",
+		paddingVertical: 14,
+		paddingHorizontal: 20,
+	},
+	iconCol: {
+		width: 32,
+		alignItems: "flex-start",
+		justifyContent: "center",
+		marginRight: 10,
+	},
+});
