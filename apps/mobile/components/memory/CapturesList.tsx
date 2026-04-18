@@ -1,10 +1,11 @@
 import React, { useCallback, useMemo } from "react";
 import { FlatList, RefreshControl, View } from "react-native";
-import { ListChecks } from "lucide-react-native";
+import { ListChecks, Search } from "lucide-react-native";
 import { Muted } from "@/components/ui/typography";
 import {
 	useDeleteMobileMemoryCapture,
 	useMobileMemoryCaptures,
+	useMobileMemorySearch,
 	type MobileMemoryCapture,
 } from "@thinkwork/react-native-sdk";
 import { COLORS } from "@/lib/theme";
@@ -16,20 +17,47 @@ import { toast } from "@/components/ui/toast";
 interface CapturesListProps {
 	agentId: string | null | undefined;
 	colors: (typeof COLORS)["dark"];
+	/**
+	 * Debounced search query. When empty (or whitespace), the list shows
+	 * the captures feed. When non-empty, the list replaces captures with
+	 * Hindsight recall results scoped to the agent's bank.
+	 */
+	searchQuery?: string;
 }
 
-export function CapturesList({ agentId, colors }: CapturesListProps) {
-	const { captures, loading, refetch } = useMobileMemoryCaptures({ agentId });
+export function CapturesList({ agentId, colors, searchQuery }: CapturesListProps) {
+	const trimmedQuery = (searchQuery || "").trim();
+	const isSearching = trimmedQuery.length > 0;
+
+	const { captures, loading: capturesLoading, refetch: refetchCaptures } =
+		useMobileMemoryCaptures({ agentId });
+	const { results: searchResults, loading: searchLoading, refetch: refetchSearch } =
+		useMobileMemorySearch({ agentId, query: trimmedQuery });
 	const queueEntries = useCaptureQueue();
 	const deleteCapture = useDeleteMobileMemoryCapture();
 
-	const rows = useMemo(
-		() => mergeRows(captures, queueEntries, agentId),
-		[captures, queueEntries, agentId],
-	);
+	const rows = useMemo<CaptureRowItem[]>(() => {
+		if (isSearching) {
+			return searchResults.map((r) => ({
+				id: r.id,
+				content: r.content,
+				factType: r.factType,
+				capturedAt: r.capturedAt,
+				status: "synced" as const,
+			}));
+		}
+		return mergeRows(captures, queueEntries, agentId);
+	}, [isSearching, searchResults, captures, queueEntries, agentId]);
+
+	const loading = isSearching ? searchLoading : capturesLoading;
+	const refetch = isSearching ? refetchSearch : refetchCaptures;
 
 	const handleDelete = useCallback(
 		async (item: CaptureRowItem) => {
+			// In search mode we surface the whole agent bank, including chat-derived
+			// units. Don't wire delete on search rows — the mobile delete endpoint
+			// is scoped to quick-capture entries only and would reject most of them.
+			if (isSearching) return;
 			// Local-only row (never made it to the server): drop from queue.
 			if (item.clientCaptureId && !isSyncedServerRow(item, captures)) {
 				await captureQueue.remove(item.clientCaptureId);
@@ -47,7 +75,7 @@ export function CapturesList({ agentId, colors }: CapturesListProps) {
 				toast.show({ message: `Couldn't delete: ${message}`, tone: "error", durationMs: 3000 });
 			}
 		},
-		[agentId, captures, deleteCapture, refetch],
+		[isSearching, agentId, captures, deleteCapture, refetch],
 	);
 
 	const handleRetry = useCallback((clientCaptureId: string) => {
@@ -55,6 +83,16 @@ export function CapturesList({ agentId, colors }: CapturesListProps) {
 	}, []);
 
 	if (rows.length === 0) {
+		if (isSearching) {
+			return (
+				<View className="flex-1 items-center justify-center px-6 gap-2">
+					<Search size={32} color={colors.mutedForeground} />
+					<Muted>
+						{loading ? "Searching..." : `No memories matching "${trimmedQuery}"`}
+					</Muted>
+				</View>
+			);
+		}
 		return (
 			<View className="flex-1 items-center justify-center px-6 gap-2">
 				<ListChecks size={32} color={colors.mutedForeground} />

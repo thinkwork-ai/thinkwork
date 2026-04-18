@@ -250,6 +250,16 @@ export default function ThreadsScreen() {
     void captureQueue.flushPending();
   }, []);
 
+  // Memories-tab search: the footer feeds a raw query, debounced here
+  // before reaching the search hook so we don't hammer Hindsight on every
+  // keystroke.
+  const [memoryQueryRaw, setMemoryQueryRaw] = useState("");
+  const [memoryQueryDebounced, setMemoryQueryDebounced] = useState("");
+  useEffect(() => {
+    const handle = setTimeout(() => setMemoryQueryDebounced(memoryQueryRaw), 400);
+    return () => clearTimeout(handle);
+  }, [memoryQueryRaw]);
+
   // ── Quick Actions (per-user, per-scope, from DB) ──────────────────────
   const [{ data: qaThreadData }, reexecuteQAThread] = useQuickActions(tenantId, "thread");
   const threadQuickActions: QuickAction[] = (qaThreadData?.userQuickActions ?? []) as QuickAction[];
@@ -510,7 +520,11 @@ export default function ThreadsScreen() {
             contentContainerStyle={filteredThreads.length === 0 ? { flexGrow: 1, justifyContent: "center" } : { paddingTop: 8 }}
           />
         ) : (
-          <CapturesList agentId={activeAgent?.id} colors={colors} />
+          <CapturesList
+            agentId={activeAgent?.id}
+            colors={colors}
+            searchQuery={memoryQueryDebounced}
+          />
         )}
       </WebContent>
       </View>
@@ -537,6 +551,7 @@ export default function ThreadsScreen() {
             tenantId={tenantId}
             colors={colors}
             isDark={isDark}
+            onSearchQueryChange={setMemoryQueryRaw}
           />
         )}
       </View>
