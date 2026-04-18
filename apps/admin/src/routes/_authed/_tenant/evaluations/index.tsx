@@ -16,7 +16,6 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -368,7 +367,6 @@ function RunEvaluationButton({ tenantId, onStarted }: { tenantId: string; onStar
   const [model, setModel] = useState<string>("");
   const [invocationMode, setInvocationMode] = useState<string>("end_to_end");
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
-  const [runImprovement, setRunImprovement] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState(false);
   const [, startEvalRun] = useMutation(StartEvalRunMutation);
 
@@ -489,14 +487,6 @@ function RunEvaluationButton({ tenantId, onStarted }: { tenantId: string; onStar
                   {c.label}
                 </Chip>
               ))}
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3 rounded-md border p-3">
-            <Switch id="re-improve" checked={runImprovement} onCheckedChange={setRunImprovement} />
-            <div className="flex flex-col">
-              <Label htmlFor="re-improve" className="font-medium">Run Improvement Agent</Label>
-              <p className="text-xs text-muted-foreground">Analyze failures and suggest fixes after eval completes</p>
             </div>
           </div>
         </div>
