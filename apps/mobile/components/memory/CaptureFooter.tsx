@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import Constants from "expo-constants";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowUp, Mic, Plus, Search, Tag, XCircle } from "lucide-react-native";
+import { ArrowUp, Mic, Plus, Search, Tag } from "lucide-react-native";
 import { useDeleteMobileMemoryCapture } from "@thinkwork/react-native-sdk";
 import { Text } from "@/components/ui/typography";
 import { toast } from "@/components/ui/toast";
@@ -226,7 +226,7 @@ export function CaptureFooter({
 							lineHeight: 24,
 							paddingTop: 4,
 							paddingBottom: 4,
-							paddingRight: text.length > 0 ? 32 : 0,
+							paddingRight: text.length > 0 ? 40 : 0,
 						}}
 						returnKeyType={mode === "search" ? "search" : "default"}
 						blurOnSubmit={false}
@@ -237,9 +237,9 @@ export function CaptureFooter({
 							onPress={() => setText("")}
 							accessibilityLabel="Clear input"
 							hitSlop={8}
-							style={{ paddingTop: 4, paddingLeft: 4 }}
+							style={{ paddingTop: 6, paddingLeft: 8 }}
 						>
-							<XCircle size={20} color={colors.mutedForeground} />
+							<Text style={{ color: colors.mutedForeground, fontSize: 13 }}>Clear</Text>
 						</Pressable>
 					) : null}
 				</View>
