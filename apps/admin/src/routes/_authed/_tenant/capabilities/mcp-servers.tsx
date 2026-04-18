@@ -9,10 +9,10 @@ import {
   Trash2,
   TestTube,
   Cable,
+  Search,
 } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
-import { PageLayout } from "@/components/PageLayout";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -44,7 +44,7 @@ import {
   type McpServer,
 } from "@/lib/mcp-api";
 
-export const Route = createFileRoute("/_authed/_tenant/mcp-servers")({
+export const Route = createFileRoute("/_authed/_tenant/capabilities/mcp-servers")({
   component: McpServersPage,
 });
 
@@ -123,12 +123,16 @@ const columns: ColumnDef<McpServer>[] = [
 function McpServersPage() {
   const { tenant } = useTenant();
   const tenantSlug = tenant?.slug;
-  useBreadcrumbs([{ label: "MCP Servers" }]);
+  useBreadcrumbs([
+    { label: "Capabilities", href: "/capabilities" },
+    { label: "MCP Servers" },
+  ]);
 
   const [servers, setServers] = useState<McpServer[]>([]);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [detailServer, setDetailServer] = useState<McpServer | null>(null);
+  const [search, setSearch] = useState("");
 
   const refresh = useCallback(() => {
     if (!tenantSlug) return;
@@ -145,38 +149,45 @@ function McpServersPage() {
   if (loading && servers.length === 0) return <PageSkeleton />;
 
   return (
-    <PageLayout
-      header={
-        <div className="flex items-center justify-between w-full">
-          <div className="flex items-center gap-2">
-            <Cable className="h-5 w-5 text-muted-foreground" />
-            <h1 className="text-2xl font-bold tracking-tight leading-tight text-foreground">
-              MCP Servers
-            </h1>
+    <>
+      <div className="flex flex-col h-full min-h-0">
+        <div className="shrink-0 flex items-center gap-4 mb-4">
+          <div className="relative" style={{ width: "16rem" }}>
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search servers..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
           </div>
-          <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
-            <Plus className="h-3.5 w-3.5 mr-1.5" />
-            Register Server
-          </Button>
+          <div className="ml-auto">
+            <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              Register Server
+            </Button>
+          </div>
         </div>
-      }
-    >
-      {servers.length === 0 ? (
-        <div className="text-center py-12">
-          <Cable className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
-            No MCP servers registered. Add one to connect external tools to your agents.
-          </p>
+        <div className="flex-1 min-h-0">
+          {servers.length === 0 ? (
+            <div className="text-center py-12">
+              <Cable className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                No MCP servers registered. Add one to connect external tools to your agents.
+              </p>
+            </div>
+          ) : (
+            <DataTable
+              columns={columns}
+              data={servers}
+              filterValue={search}
+              scrollable
+              tableClassName="table-fixed [&_tbody_tr]:h-10"
+              onRowClick={(row) => setDetailServer(row)}
+            />
+          )}
         </div>
-      ) : (
-        <DataTable
-          columns={columns}
-          data={servers}
-          pageSize={0}
-          tableClassName="table-fixed [&_tbody_tr]:h-10"
-          onRowClick={(row) => setDetailServer(row)}
-        />
-      )}
+      </div>
 
       {/* Add Server Dialog */}
       <AddServerDialog
@@ -195,7 +206,7 @@ function McpServersPage() {
           onChanged={refresh}
         />
       )}
-    </PageLayout>
+    </>
   );
 }
 
