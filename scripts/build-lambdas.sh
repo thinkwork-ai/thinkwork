@@ -28,11 +28,12 @@ ESBUILD_FLAGS=(
   --external:aws-sdk
 )
 
-# graphql-http, memory-retain, and eval-runner use @aws-sdk/client-bedrock-agentcore
-# commands (memory adapter BatchCreate/BatchUpdate/Delete/CreateEvent; eval-runner's
-# EvaluateCommand) that are newer than the SDK version shipped in the Lambda Node 20
-# runtime. Bundle that one SDK package inline for these handlers so the pinned
-# node_modules version is used instead of the runtime's.
+# graphql-http, memory-retain, eval-runner, and wiki-compile use AWS Bedrock
+# SDKs (@aws-sdk/client-bedrock-agentcore for the first three + memory adapter
+# commands; @aws-sdk/client-bedrock-runtime for eval-runner's Converse judge
+# and wiki-compile's InvokeModel planner/section-writer) that aren't in the
+# default Lambda Node 20 runtime's built-in SDK, or are newer than what ships
+# there. Bundle them inline so the pinned node_modules version is used.
 BUNDLED_AGENTCORE_ESBUILD_FLAGS=(
   --bundle
   --platform=node
@@ -69,7 +70,7 @@ build_handler() {
 
   mkdir -p "$out_dir"
   local flags_ref="ESBUILD_FLAGS[@]"
-  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "eval-runner" ]; then
+  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "eval-runner" ] || [ "$name" = "wiki-compile" ]; then
     flags_ref="BUNDLED_AGENTCORE_ESBUILD_FLAGS[@]"
   fi
   npx esbuild "$entry" \
@@ -239,6 +240,9 @@ build_handler "memory" \
 
 build_handler "memory-retain" \
   "$REPO_ROOT/packages/api/src/handlers/memory-retain.ts"
+
+build_handler "wiki-compile" \
+  "$REPO_ROOT/packages/api/src/handlers/wiki-compile.ts"
 
 build_handler "artifact-deliver" \
   "$REPO_ROOT/packages/api/src/handlers/artifact-deliver.ts"
