@@ -48,30 +48,38 @@ export interface ThinkworkAuthContextValue {
 
 export interface Thread {
   id: string;
-  title: string | null;
+  title: string;
   createdAt: string;
   updatedAt: string;
 }
+
+export type MessageRole = "USER" | "ASSISTANT" | "SYSTEM" | "TOOL";
 
 export interface Message {
   id: string;
   threadId: string;
-  authorId: string | null;
-  role: string;
-  kind: string;
-  content: string;
+  tenantId: string;
+  role: MessageRole;
+  content: string | null;
+  senderType: string | null;
+  senderId: string | null;
   createdAt: string;
 }
 
 export interface ThreadTurn {
-  turnId: string;
-  threadId: string;
+  runId: string;
+  triggerId: string | null;
+  tenantId: string;
+  threadId: string | null;
+  agentId: string | null;
   status: string;
+  triggerName: string | null;
   updatedAt: string;
 }
 
 export interface CreateThreadInput {
-  title?: string;
-  agentId?: string;
   tenantId: string;
+  title: string;
+  agentId?: string;
+  description?: string;
 }

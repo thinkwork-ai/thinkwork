@@ -4,8 +4,17 @@ import { MessagesQuery, SendMessageMutation } from "../graphql/queries";
 import type { Message } from "../types";
 import { useNewMessageSubscription } from "./use-subscriptions";
 
+interface MessageEdge {
+  node: Message;
+  cursor: string;
+}
+interface MessageConnection {
+  edges: MessageEdge[];
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
+}
+
 export function useMessages(threadId: string | null | undefined) {
-  const [{ data, fetching, error }, refetch] = useQuery<{ messages: Message[] }>({
+  const [{ data, fetching, error }, refetch] = useQuery<{ messages: MessageConnection }>({
     query: MessagesQuery,
     variables: { threadId },
     pause: !threadId,
@@ -18,7 +27,10 @@ export function useMessages(threadId: string | null | undefined) {
     if (sub.data && threadId) refetch({ requestPolicy: "network-only" });
   }, [sub.data, threadId, refetch]);
 
-  const messages = useMemo(() => data?.messages ?? [], [data]);
+  const messages = useMemo(
+    () => data?.messages?.edges.map((e) => e.node) ?? [],
+    [data],
+  );
 
   return {
     messages,
@@ -34,7 +46,7 @@ export function useSendMessage(threadId: string | null | undefined) {
     async (content: string): Promise<Message> => {
       if (!threadId) throw new Error("useSendMessage: threadId is required");
       const result = await sendMessage({
-        input: { threadId, content, kind: "text" },
+        input: { threadId, role: "USER", content, senderType: "user" },
       });
       const message = result.data?.sendMessage;
       if (!message) {

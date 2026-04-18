@@ -1,6 +1,6 @@
 {
   "name": "@thinkwork/react-native-sdk",
-  "version": "0.2.0-alpha.1",
+  "version": "0.2.0-alpha.2",
   "description": "Hooks-only SDK for embedding ThinkWork threads, messages, and streaming agent turns into any React Native / Expo host app.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

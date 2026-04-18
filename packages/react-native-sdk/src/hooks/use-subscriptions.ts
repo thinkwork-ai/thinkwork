@@ -4,25 +4,30 @@ import { gql } from "urql";
 import { useThinkworkAuth } from "../auth/provider";
 
 const NewMessageSubscription = gql`
-  subscription NewMessage($threadId: ID!) {
-    newMessage(threadId: $threadId) {
+  subscription OnNewMessage($threadId: ID!) {
+    onNewMessage(threadId: $threadId) {
       messageId
       threadId
-      authorId
+      tenantId
       role
-      kind
       content
+      senderType
+      senderId
       createdAt
     }
   }
 `;
 
 const ThreadTurnUpdatedSubscription = gql`
-  subscription ThreadTurnUpdated($tenantId: ID!) {
-    threadTurnUpdated(tenantId: $tenantId) {
-      turnId
+  subscription OnThreadTurnUpdated($tenantId: ID!) {
+    onThreadTurnUpdated(tenantId: $tenantId) {
+      runId
+      triggerId
+      tenantId
       threadId
+      agentId
       status
+      triggerName
       updatedAt
     }
   }
@@ -31,22 +36,27 @@ const ThreadTurnUpdatedSubscription = gql`
 export interface NewMessageEvent {
   messageId: string;
   threadId: string;
-  authorId: string | null;
+  tenantId: string;
   role: string;
-  kind: string;
-  content: string;
+  content: string | null;
+  senderType: string | null;
+  senderId: string | null;
   createdAt: string;
 }
 
 export interface ThreadTurnUpdateEvent {
-  turnId: string;
-  threadId: string;
+  runId: string;
+  triggerId: string | null;
+  tenantId: string;
+  threadId: string | null;
+  agentId: string | null;
   status: string;
+  triggerName: string | null;
   updatedAt: string;
 }
 
 export function useNewMessageSubscription(threadId: string | null | undefined) {
-  return useSubscription<{ newMessage: NewMessageEvent }>({
+  return useSubscription<{ onNewMessage: NewMessageEvent }>({
     query: NewMessageSubscription,
     variables: { threadId },
     pause: !threadId,
@@ -62,7 +72,7 @@ export function useThreadTurnSubscription(threadId: string | null | undefined) {
   const { user } = useThinkworkAuth();
   const tenantId = user?.tenantId ?? null;
   const [{ data, error, fetching }] = useSubscription<{
-    threadTurnUpdated: ThreadTurnUpdateEvent;
+    onThreadTurnUpdated: ThreadTurnUpdateEvent;
   }>({
     query: ThreadTurnUpdatedSubscription,
     variables: { tenantId },
@@ -71,7 +81,7 @@ export function useThreadTurnSubscription(threadId: string | null | undefined) {
 
   const filtered = useMemo(() => {
     if (!data || !threadId) return undefined;
-    return data.threadTurnUpdated.threadId === threadId ? data : undefined;
+    return data.onThreadTurnUpdated.threadId === threadId ? data : undefined;
   }, [data, threadId]);
 
   return [{ data: filtered, error, fetching }] as const;

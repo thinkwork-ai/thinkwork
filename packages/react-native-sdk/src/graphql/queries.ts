@@ -23,15 +23,25 @@ export const ThreadQuery = gql`
 `;
 
 export const MessagesQuery = gql`
-  query Messages($threadId: ID!) {
-    messages(threadId: $threadId) {
-      id
-      threadId
-      authorId
-      role
-      kind
-      content
-      createdAt
+  query Messages($threadId: ID!, $limit: Int, $cursor: String) {
+    messages(threadId: $threadId, limit: $limit, cursor: $cursor) {
+      edges {
+        node {
+          id
+          threadId
+          tenantId
+          role
+          content
+          senderType
+          senderId
+          createdAt
+        }
+        cursor
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
     }
   }
 `;
@@ -52,10 +62,11 @@ export const SendMessageMutation = gql`
     sendMessage(input: $input) {
       id
       threadId
-      authorId
+      tenantId
       role
-      kind
       content
+      senderType
+      senderId
       createdAt
     }
   }
