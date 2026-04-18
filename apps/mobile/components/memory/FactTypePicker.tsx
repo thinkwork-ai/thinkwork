@@ -5,7 +5,7 @@ import { Text, Muted } from "@/components/ui/typography";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS } from "@/lib/theme";
-import { FACT_TYPE_DESCRIPTIONS, FACT_TYPE_LABELS, type FactType } from "./FactTypeChip";
+import { FACT_TYPE_LABELS, type FactType } from "./FactTypeChip";
 
 interface FactTypePickerProps {
 	visible: boolean;
@@ -80,24 +80,19 @@ export function FactTypePicker({ visible, onClose, onSelect, current }: FactType
 									backgroundColor: pressed ? colors.secondary : "transparent",
 								})}
 							>
-								<View
+								<Icon
+									size={22}
+									color={active ? colors.primary : colors.foreground}
+								/>
+								<Text
 									style={{
-										width: 36,
-										height: 36,
-										borderRadius: 18,
-										backgroundColor: active ? colors.primary : colors.secondary,
-										alignItems: "center",
-										justifyContent: "center",
+										color: colors.foreground,
+										fontWeight: active ? "600" : "500",
+										fontSize: 16,
 									}}
 								>
-									<Icon size={18} color={active ? colors.primaryForeground : colors.foreground} />
-								</View>
-								<View style={{ flex: 1 }}>
-									<Text style={{ color: colors.foreground, fontWeight: active ? "600" : "500", fontSize: 15 }}>
-										{FACT_TYPE_LABELS[type]}
-									</Text>
-									<Muted style={{ fontSize: 12 }}>{FACT_TYPE_DESCRIPTIONS[type]}</Muted>
-								</View>
+									{FACT_TYPE_LABELS[type]}
+								</Text>
 							</Pressable>
 						);
 					})}
