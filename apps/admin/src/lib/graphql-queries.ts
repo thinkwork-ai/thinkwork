@@ -1658,6 +1658,8 @@ export const EvalRunsQuery = gql`
         costUsd
         agentId
         agentName
+        agentTemplateId
+        agentTemplateName
         startedAt
         completedAt
         createdAt
