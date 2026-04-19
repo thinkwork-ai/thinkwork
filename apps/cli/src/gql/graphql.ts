@@ -543,15 +543,6 @@ export type CreateKnowledgeBaseInput = {
   tenantId: Scalars['ID']['input'];
 };
 
-export type CreateLastmileTaskInput = {
-  assigneeEmail?: InputMaybe<Scalars['String']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  dueDate?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  formResponse?: InputMaybe<Scalars['AWSJSON']['input']>;
-  priority?: InputMaybe<Scalars['String']['input']>;
-  threadId: Scalars['ID']['input'];
-};
-
 export type CreateQuickActionInput = {
   prompt: Scalars['String']['input'];
   scope?: InputMaybe<QuickActionScope>;
@@ -628,6 +619,7 @@ export type CreateThreadInput = {
   createdByType?: InputMaybe<Scalars['String']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;
   dueAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  firstMessage?: InputMaybe<Scalars['String']['input']>;
   labels?: InputMaybe<Scalars['AWSJSON']['input']>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
   parentId?: InputMaybe<Scalars['ID']['input']>;
@@ -816,13 +808,6 @@ export type EvalTimeSeriesPoint = {
   runCount: Scalars['Int']['output'];
 };
 
-export type ExternalTaskActionResult = {
-  __typename?: 'ExternalTaskActionResult';
-  auditMessageId?: Maybe<Scalars['ID']['output']>;
-  envelope: Scalars['AWSJSON']['output'];
-  threadId: Scalars['ID']['output'];
-};
-
 export type HeartbeatActivityEvent = {
   __typename?: 'HeartbeatActivityEvent';
   createdAt: Scalars['AWSDateTime']['output'];
@@ -993,6 +978,14 @@ export type MemoryRecord = {
   tags?: Maybe<Array<Scalars['String']['output']>>;
   threadId?: Maybe<Scalars['String']['output']>;
   updatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  /**
+   * Compiled wiki pages (Compounding Memory) that cite this memory unit as
+   * a source. Populated from wiki_section_sources.source_ref. Returns pages
+   * scoped to the same agent as this memory (there is no cross-agent
+   * citation in v1). Returned pages have empty `sections`/`aliases` — fetch
+   * `wikiPage(tenantId, ownerId, type, slug)` for full detail.
+   */
+  wikiPages: Array<WikiPage>;
 };
 
 export type MemorySearchResult = {
@@ -1082,6 +1075,46 @@ export enum MessageRole {
   User = 'USER'
 }
 
+/**
+ * Fact-type picker values exposed to the mobile quick-capture footer. Maps to
+ * Hindsight's native fact_type via the resolver. FACT is the default when the
+ * user doesn't override.
+ */
+export enum MobileCaptureFactType {
+  Experience = 'EXPERIENCE',
+  Fact = 'FACT',
+  Observation = 'OBSERVATION',
+  Preference = 'PREFERENCE'
+}
+
+export type MobileMemoryCapture = {
+  __typename?: 'MobileMemoryCapture';
+  agentId: Scalars['ID']['output'];
+  capturedAt: Scalars['AWSDateTime']['output'];
+  content: Scalars['String']['output'];
+  factType: MobileCaptureFactType;
+  id: Scalars['ID']['output'];
+  metadata?: Maybe<Scalars['AWSJSON']['output']>;
+  syncedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  tenantId: Scalars['ID']['output'];
+};
+
+export type MobileWikiSearchResult = {
+  __typename?: 'MobileWikiSearchResult';
+  /**
+   * Source memory unit ids whose recall hits caused this page to appear, in
+   * Hindsight rank order (best-ranked first).
+   */
+  matchingMemoryIds: Array<Scalars['ID']['output']>;
+  page: WikiPage;
+  /**
+   * Reciprocal-rank surfacing score = 1 / (bestRank + 60), where bestRank
+   * is the lowest Hindsight position of any memory citing this page.
+   * Higher is better. Not comparable across queries.
+   */
+  score: Scalars['Float']['output'];
+};
+
 export type ModelCatalogEntry = {
   __typename?: 'ModelCatalogEntry';
   contextWindow?: Maybe<Scalars['Int']['output']>;
@@ -1133,12 +1166,32 @@ export type Mutation = {
   addThreadDependency: ThreadDependency;
   approveInboxItem: InboxItem;
   assignThreadLabel: ThreadLabelAssignment;
+  /**
+   * Admin-only fire-and-forget dispatch of a journal-schema bulk ingest onto
+   * a dedicated worker Lambda. Returns immediately with a dispatch
+   * acknowledgement — the actual ingest + terminal compile happen
+   * asynchronously. Track progress via the wiki-bootstrap-import Lambda's
+   * CloudWatch logs and the resulting compile job in wiki_compile_jobs.
+   */
+  bootstrapJournalImport: WikiJournalImportDispatch;
   bootstrapUser: BootstrapResult;
   cancelEvalRun: EvalRun;
   cancelInboxItem: InboxItem;
   cancelThreadTurn: ThreadTurn;
+  captureMobileMemory: MobileMemoryCapture;
   checkoutThread: Thread;
   claimVanityEmailAddress: AgentCapability;
+  /**
+   * Admin-only: enqueue an ad-hoc compile job for a specific (tenant, agent).
+   * Returns the job row (newly inserted or the in-flight dedupe hit).
+   *
+   * When `modelId` is supplied, it is forwarded to the compile Lambda event
+   * payload so a single run can override `BEDROCK_MODEL_ID` without a
+   * redeploy. The override takes effect only on the direct Event-invoke
+   * path; if the invoke fails and a polling worker claims the job later, the
+   * compile falls back to the env-default model.
+   */
+  compileWikiNow: WikiCompileJob;
   createAgent: Agent;
   createAgentApiKey: CreateAgentApiKeyResult;
   createAgentFromTemplate: Agent;
@@ -1147,7 +1200,6 @@ export type Mutation = {
   createEvalTestCase: EvalTestCase;
   createInboxItem: InboxItem;
   createKnowledgeBase: KnowledgeBase;
-  createLastmileTask: Thread;
   createQuickAction: UserQuickAction;
   createRecipe: Recipe;
   createRoutine: Routine;
@@ -1170,6 +1222,7 @@ export type Mutation = {
   deleteKnowledgeBase: Scalars['Boolean']['output'];
   deleteMemoryRecord: Scalars['Boolean']['output'];
   deleteMessage: Scalars['Boolean']['output'];
+  deleteMobileMemoryCapture: Scalars['Boolean']['output'];
   deleteQuickAction: Scalars['Boolean']['output'];
   deleteRecipe: Scalars['Boolean']['output'];
   deleteRoutine: Scalars['Boolean']['output'];
@@ -1180,7 +1233,6 @@ export type Mutation = {
   deleteThreadLabel: Scalars['Boolean']['output'];
   deleteWebhook: Scalars['Boolean']['output'];
   escalateThread: Thread;
-  executeExternalTaskAction: ExternalTaskActionResult;
   inviteMember: TenantMember;
   notifyAgentStatus?: Maybe<AgentStatusEvent>;
   notifyCostRecorded?: Maybe<CostRecordedEvent>;
@@ -1205,8 +1257,13 @@ export type Mutation = {
   removeThreadLabel: Scalars['Boolean']['output'];
   reorderQuickActions: Array<UserQuickAction>;
   requestRevision: InboxItem;
+  /**
+   * Admin-only replay: clear the compile cursor for (tenant, owner). If
+   * `force` is true, also archives every active page in the scope so the
+   * next compile rebuilds from scratch. Destructive when force=true.
+   */
+  resetWikiCursor: WikiResetCursorResult;
   resubmitInboxItem: InboxItem;
-  retryTaskSync: Thread;
   revokeAgentApiKey: AgentApiKey;
   rollbackAgentVersion: Agent;
   seedEvalTestCases: Scalars['Int']['output'];
@@ -1300,6 +1357,14 @@ export type MutationAssignThreadLabelArgs = {
 };
 
 
+export type MutationBootstrapJournalImportArgs = {
+  accountId: Scalars['ID']['input'];
+  agentId: Scalars['ID']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
+
 export type MutationCancelEvalRunArgs = {
   id: Scalars['ID']['input'];
 };
@@ -1315,6 +1380,15 @@ export type MutationCancelThreadTurnArgs = {
 };
 
 
+export type MutationCaptureMobileMemoryArgs = {
+  agentId: Scalars['ID']['input'];
+  clientCaptureId?: InputMaybe<Scalars['ID']['input']>;
+  content: Scalars['String']['input'];
+  factType?: InputMaybe<MobileCaptureFactType>;
+  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+};
+
+
 export type MutationCheckoutThreadArgs = {
   id: Scalars['ID']['input'];
   input: CheckoutThreadInput;
@@ -1324,6 +1398,13 @@ export type MutationCheckoutThreadArgs = {
 export type MutationClaimVanityEmailAddressArgs = {
   agentId: Scalars['ID']['input'];
   localPart: Scalars['String']['input'];
+};
+
+
+export type MutationCompileWikiNowArgs = {
+  modelId?: InputMaybe<Scalars['String']['input']>;
+  ownerId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -1365,11 +1446,6 @@ export type MutationCreateInboxItemArgs = {
 
 export type MutationCreateKnowledgeBaseArgs = {
   input: CreateKnowledgeBaseInput;
-};
-
-
-export type MutationCreateLastmileTaskArgs = {
-  input: CreateLastmileTaskInput;
 };
 
 
@@ -1484,6 +1560,12 @@ export type MutationDeleteMessageArgs = {
 };
 
 
+export type MutationDeleteMobileMemoryCaptureArgs = {
+  agentId: Scalars['ID']['input'];
+  captureId: Scalars['ID']['input'];
+};
+
+
 export type MutationDeleteQuickActionArgs = {
   id: Scalars['ID']['input'];
 };
@@ -1531,13 +1613,6 @@ export type MutationDeleteWebhookArgs = {
 
 export type MutationEscalateThreadArgs = {
   input: EscalateThreadInput;
-};
-
-
-export type MutationExecuteExternalTaskActionArgs = {
-  actionType: Scalars['String']['input'];
-  params?: InputMaybe<Scalars['AWSJSON']['input']>;
-  threadId: Scalars['ID']['input'];
 };
 
 
@@ -1710,14 +1785,16 @@ export type MutationRequestRevisionArgs = {
 };
 
 
-export type MutationResubmitInboxItemArgs = {
-  id: Scalars['ID']['input'];
-  input?: InputMaybe<ResubmitInboxItemInput>;
+export type MutationResetWikiCursorArgs = {
+  force?: InputMaybe<Scalars['Boolean']['input']>;
+  ownerId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 
-export type MutationRetryTaskSyncArgs = {
-  threadId: Scalars['ID']['input'];
+export type MutationResubmitInboxItemArgs = {
+  id: Scalars['ID']['input'];
+  input?: InputMaybe<ResubmitInboxItemInput>;
 };
 
 
@@ -2028,9 +2105,37 @@ export type Query = {
   memorySearch: MemorySearchResult;
   memorySystemConfig: MemorySystemConfig;
   messages: MessageConnection;
+  mobileMemoryCaptures: Array<MobileMemoryCapture>;
+  /**
+   * Free-text search across the full Hindsight bank for the given agent.
+   * Hits Hindsight's recall endpoint (semantic + rerank) and normalizes results
+   * back to MobileMemoryCapture so the Memories list can render search results
+   * with the same rows it uses for captures. Not filtered by capture_source —
+   * search is meant to answer "what does this agent know?", including chat-
+   * derived observations.
+   */
+  mobileMemorySearch: Array<MobileMemoryCapture>;
+  /**
+   * Ranked wiki-page search for mobile. Runs the same Hindsight recall the
+   * mobile memory search does, then reverse-joins each hit through
+   * `wiki_section_sources` to the compiled pages that cite it. Pages are
+   * deduplicated (one row per page) and ranked by the sum of Hindsight hit
+   * scores across all of the page's matching source memories — so a page
+   * cited by multiple strong hits ranks higher than one cited by a single
+   * weak hit. `matchingMemoryIds` preserves input rank order so the client
+   * can show "why this page matched" without a second round trip.
+   */
+  mobileWikiSearch: Array<MobileWikiSearchResult>;
   modelCatalog: Array<ModelCatalogEntry>;
   performanceTimeSeries: Array<PerformanceTimeSeries>;
   queuedWakeups: Array<AgentWakeupRequest>;
+  /**
+   * Newest compiled wiki pages for the given agent, ordered by
+   * last_compiled_at DESC (falling back to updated_at when the page hasn't
+   * been recompiled yet). Intended as the default Memories-tab feed so
+   * the user sees fresh pages before they type a search query.
+   */
+  recentWikiPages: Array<WikiPage>;
   recipe?: Maybe<Recipe>;
   recipes: Array<Recipe>;
   routine?: Maybe<Routine>;
@@ -2056,10 +2161,31 @@ export type Query = {
   threads: Array<Thread>;
   threadsPaged: ThreadsPage;
   turnInvocationLogs: Array<ModelInvocation>;
+  unreadThreadCount: Scalars['Int']['output'];
   user?: Maybe<User>;
   userQuickActions: Array<UserQuickAction>;
   webhook?: Maybe<Webhook>;
   webhooks: Array<Webhook>;
+  /**
+   * Pages that link to the given page. Visibility is derived from the target
+   * page's owner scope; caller must be that owner or an admin.
+   */
+  wikiBacklinks: Array<WikiPage>;
+  /**
+   * Admin-only: list recent compile jobs for a tenant. When `ownerId` is
+   * provided, restricts to that agent's jobs; when null/absent, returns
+   * jobs across every agent in the tenant. Ordered newest-first.
+   *
+   * Powers the `thinkwork wiki status` CLI command.
+   */
+  wikiCompileJobs: Array<WikiCompileJob>;
+  /** Read one compiled page by slug. `ownerId` is required. */
+  wikiPage?: Maybe<WikiPage>;
+  /**
+   * Postgres full-text search over compiled pages in a single (tenant, owner)
+   * scope. Also matches exact aliases. Ranked by ts_rank + alias-hit boost.
+   */
+  wikiSearch: Array<WikiSearchResult>;
 };
 
 
@@ -2307,6 +2433,26 @@ export type QueryMessagesArgs = {
 };
 
 
+export type QueryMobileMemoryCapturesArgs = {
+  agentId: Scalars['ID']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryMobileMemorySearchArgs = {
+  agentId: Scalars['ID']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  query: Scalars['String']['input'];
+};
+
+
+export type QueryMobileWikiSearchArgs = {
+  agentId: Scalars['ID']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  query: Scalars['String']['input'];
+};
+
+
 export type QueryPerformanceTimeSeriesArgs = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
   days?: InputMaybe<Scalars['Int']['input']>;
@@ -2316,6 +2462,12 @@ export type QueryPerformanceTimeSeriesArgs = {
 
 export type QueryQueuedWakeupsArgs = {
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryRecentWikiPagesArgs = {
+  agentId: Scalars['ID']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -2489,6 +2641,12 @@ export type QueryTurnInvocationLogsArgs = {
 };
 
 
+export type QueryUnreadThreadCountArgs = {
+  agentId?: InputMaybe<Scalars['ID']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
+
 export type QueryUserArgs = {
   id: Scalars['ID']['input'];
 };
@@ -2509,6 +2667,34 @@ export type QueryWebhooksArgs = {
   enabled?: InputMaybe<Scalars['Boolean']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   targetType?: InputMaybe<Scalars['String']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryWikiBacklinksArgs = {
+  pageId: Scalars['ID']['input'];
+};
+
+
+export type QueryWikiCompileJobsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  ownerId?: InputMaybe<Scalars['ID']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryWikiPageArgs = {
+  ownerId: Scalars['ID']['input'];
+  slug: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
+  type: WikiPageType;
+};
+
+
+export type QueryWikiSearchArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  ownerId: Scalars['ID']['input'];
+  query: Scalars['String']['input'];
   tenantId: Scalars['ID']['input'];
 };
 
@@ -2917,8 +3103,6 @@ export type Thread = {
   reporterId?: Maybe<Scalars['ID']['output']>;
   startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   status: ThreadStatus;
-  syncError?: Maybe<Scalars['String']['output']>;
-  syncStatus?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
   title: Scalars['String']['output'];
   type: ThreadType;
@@ -2950,7 +3134,6 @@ export enum ThreadChannel {
   Email = 'EMAIL',
   Manual = 'MANUAL',
   Schedule = 'SCHEDULE',
-  Task = 'TASK',
   Webhook = 'WEBHOOK'
 }
 
@@ -3348,6 +3531,95 @@ export type Webhook = {
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
+export type WikiCompileJob = {
+  __typename?: 'WikiCompileJob';
+  attempt: Scalars['Int']['output'];
+  claimedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  dedupeKey: Scalars['String']['output'];
+  error?: Maybe<Scalars['String']['output']>;
+  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  id: Scalars['ID']['output'];
+  metrics?: Maybe<Scalars['AWSJSON']['output']>;
+  ownerId: Scalars['ID']['output'];
+  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  trigger: Scalars['String']['output'];
+};
+
+/**
+ * Dispatch acknowledgement for `bootstrapJournalImport`. The actual ingest
+ * runs on a dedicated worker Lambda (`wiki-bootstrap-import`) because
+ * Hindsight's LLM-backed retain is too slow to complete within API Gateway's
+ * 30-second HTTP ceiling. Operator watches CloudWatch + wiki_compile_jobs
+ * for the terminal compile the ingest enqueues.
+ */
+export type WikiJournalImportDispatch = {
+  __typename?: 'WikiJournalImportDispatch';
+  accountId: Scalars['ID']['output'];
+  agentId: Scalars['ID']['output'];
+  dispatched: Scalars['Boolean']['output'];
+  dispatchedAt: Scalars['AWSDateTime']['output'];
+  error?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+};
+
+export type WikiPage = {
+  __typename?: 'WikiPage';
+  aliases: Array<Scalars['String']['output']>;
+  bodyMd?: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  lastCompiledAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  ownerId: Scalars['ID']['output'];
+  sections: Array<WikiPageSection>;
+  slug: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+  summary?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  title: Scalars['String']['output'];
+  type: WikiPageType;
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type WikiPageSection = {
+  __typename?: 'WikiPageSection';
+  bodyMd: Scalars['String']['output'];
+  heading: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  lastSourceAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  position: Scalars['Int']['output'];
+  sectionSlug: Scalars['String']['output'];
+};
+
+/**
+ * Compounding Memory (wiki) read path.
+ *
+ * v1 is strictly agent-scoped: every read requires both `tenantId` and
+ * `ownerId`. See .prds/compounding-memory-scoping.md.
+ */
+export enum WikiPageType {
+  Decision = 'DECISION',
+  Entity = 'ENTITY',
+  Topic = 'TOPIC'
+}
+
+export type WikiResetCursorResult = {
+  __typename?: 'WikiResetCursorResult';
+  cursorCleared: Scalars['Boolean']['output'];
+  ownerId: Scalars['ID']['output'];
+  pagesArchived: Scalars['Int']['output'];
+  tenantId: Scalars['ID']['output'];
+};
+
+export type WikiSearchResult = {
+  __typename?: 'WikiSearchResult';
+  matchedAlias?: Maybe<Scalars['String']['output']>;
+  page: WikiPage;
+  score: Scalars['Float']['output'];
+};
+
 export type CliEvalRunsQueryVariables = Exact<{
   tenantId: Scalars['ID']['input'];
   agentId?: InputMaybe<Scalars['ID']['input']>;
@@ -3460,6 +3732,47 @@ export type CliMeQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type CliMeQuery = { __typename?: 'Query', me?: { __typename?: 'User', id: string, email: string, name?: string | null, tenantId: string } | null };
 
+export type CliWikiTenantBySlugQueryVariables = Exact<{
+  slug: Scalars['String']['input'];
+}>;
+
+
+export type CliWikiTenantBySlugQuery = { __typename?: 'Query', tenantBySlug?: { __typename?: 'Tenant', id: string, slug: string, name: string } | null };
+
+export type CliAllTenantAgentsForWikiQueryVariables = Exact<{
+  tenantId: Scalars['ID']['input'];
+}>;
+
+
+export type CliAllTenantAgentsForWikiQuery = { __typename?: 'Query', allTenantAgents: Array<{ __typename?: 'Agent', id: string, name: string, slug?: string | null, type: AgentType, status: AgentStatus }> };
+
+export type CliCompileWikiNowMutationVariables = Exact<{
+  tenantId: Scalars['ID']['input'];
+  ownerId: Scalars['ID']['input'];
+  modelId?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type CliCompileWikiNowMutation = { __typename?: 'Mutation', compileWikiNow: { __typename?: 'WikiCompileJob', id: string, tenantId: string, ownerId: string, status: string, trigger: string, dedupeKey: string, attempt: number, createdAt: any } };
+
+export type CliResetWikiCursorMutationVariables = Exact<{
+  tenantId: Scalars['ID']['input'];
+  ownerId: Scalars['ID']['input'];
+  force?: InputMaybe<Scalars['Boolean']['input']>;
+}>;
+
+
+export type CliResetWikiCursorMutation = { __typename?: 'Mutation', resetWikiCursor: { __typename?: 'WikiResetCursorResult', tenantId: string, ownerId: string, cursorCleared: boolean, pagesArchived: number } };
+
+export type CliWikiCompileJobsQueryVariables = Exact<{
+  tenantId: Scalars['ID']['input'];
+  ownerId?: InputMaybe<Scalars['ID']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type CliWikiCompileJobsQuery = { __typename?: 'Query', wikiCompileJobs: Array<{ __typename?: 'WikiCompileJob', id: string, tenantId: string, ownerId: string, status: string, trigger: string, dedupeKey: string, attempt: number, claimedAt?: any | null, startedAt?: any | null, finishedAt?: any | null, error?: string | null, metrics?: any | null, createdAt: any }> };
+
 
 export const CliEvalRunsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliEvalRuns"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalRuns"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"totalCount"}},{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"categories"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"agentName"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateId"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateName"}},{"kind":"Field","name":{"kind":"Name","value":"totalTests"}},{"kind":"Field","name":{"kind":"Name","value":"passed"}},{"kind":"Field","name":{"kind":"Name","value":"failed"}},{"kind":"Field","name":{"kind":"Name","value":"passRate"}},{"kind":"Field","name":{"kind":"Name","value":"regression"}},{"kind":"Field","name":{"kind":"Name","value":"costUsd"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<CliEvalRunsQuery, CliEvalRunsQueryVariables>;
 export const CliEvalRunDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliEvalRun"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"categories"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"agentName"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateId"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateName"}},{"kind":"Field","name":{"kind":"Name","value":"totalTests"}},{"kind":"Field","name":{"kind":"Name","value":"passed"}},{"kind":"Field","name":{"kind":"Name","value":"failed"}},{"kind":"Field","name":{"kind":"Name","value":"passRate"}},{"kind":"Field","name":{"kind":"Name","value":"regression"}},{"kind":"Field","name":{"kind":"Name","value":"costUsd"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliEvalRunQuery, CliEvalRunQueryVariables>;
@@ -3476,3 +3789,8 @@ export const CliUpdateEvalTestCaseDocument = {"kind":"Document","definitions":[{
 export const CliDeleteEvalTestCaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliDeleteEvalTestCase"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteEvalTestCase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<CliDeleteEvalTestCaseMutation, CliDeleteEvalTestCaseMutationVariables>;
 export const CliSeedEvalTestCasesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliSeedEvalTestCases"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"categories"}},"type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"seedEvalTestCases"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"categories"},"value":{"kind":"Variable","name":{"kind":"Name","value":"categories"}}}]}]}}]} as unknown as DocumentNode<CliSeedEvalTestCasesMutation, CliSeedEvalTestCasesMutationVariables>;
 export const CliMeDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliMe"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"me"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}}]}}]}}]} as unknown as DocumentNode<CliMeQuery, CliMeQueryVariables>;
+export const CliWikiTenantBySlugDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliWikiTenantBySlug"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantBySlug"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]} as unknown as DocumentNode<CliWikiTenantBySlugQuery, CliWikiTenantBySlugQueryVariables>;
+export const CliAllTenantAgentsForWikiDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliAllTenantAgentsForWiki"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"allTenantAgents"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"includeSystem"},"value":{"kind":"BooleanValue","value":false}},{"kind":"Argument","name":{"kind":"Name","value":"includeSubAgents"},"value":{"kind":"BooleanValue","value":false}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}}]}}]} as unknown as DocumentNode<CliAllTenantAgentsForWikiQuery, CliAllTenantAgentsForWikiQueryVariables>;
+export const CliCompileWikiNowDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliCompileWikiNow"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"ownerId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"modelId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"compileWikiNow"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"ownerId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"ownerId"}}},{"kind":"Argument","name":{"kind":"Name","value":"modelId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"modelId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"trigger"}},{"kind":"Field","name":{"kind":"Name","value":"dedupeKey"}},{"kind":"Field","name":{"kind":"Name","value":"attempt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliCompileWikiNowMutation, CliCompileWikiNowMutationVariables>;
+export const CliResetWikiCursorDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliResetWikiCursor"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"ownerId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"force"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"resetWikiCursor"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"ownerId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"ownerId"}}},{"kind":"Argument","name":{"kind":"Name","value":"force"},"value":{"kind":"Variable","name":{"kind":"Name","value":"force"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerId"}},{"kind":"Field","name":{"kind":"Name","value":"cursorCleared"}},{"kind":"Field","name":{"kind":"Name","value":"pagesArchived"}}]}}]}}]} as unknown as DocumentNode<CliResetWikiCursorMutation, CliResetWikiCursorMutationVariables>;
+export const CliWikiCompileJobsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliWikiCompileJobs"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"ownerId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"wikiCompileJobs"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"ownerId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"ownerId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"trigger"}},{"kind":"Field","name":{"kind":"Name","value":"dedupeKey"}},{"kind":"Field","name":{"kind":"Name","value":"attempt"}},{"kind":"Field","name":{"kind":"Name","value":"claimedAt"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"metrics"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliWikiCompileJobsQuery, CliWikiCompileJobsQueryVariables>;

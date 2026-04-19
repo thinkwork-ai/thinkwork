@@ -76,6 +76,19 @@ extend type Query {
   page's owner scope; caller must be that owner or an admin.
   """
   wikiBacklinks(pageId: ID!): [WikiPage!]!
+
+  """
+  Admin-only: list recent compile jobs for a tenant. When `ownerId` is
+  provided, restricts to that agent's jobs; when null/absent, returns
+  jobs across every agent in the tenant. Ordered newest-first.
+
+  Powers the `thinkwork wiki status` CLI command.
+  """
+  wikiCompileJobs(
+    tenantId: ID!
+    ownerId: ID
+    limit: Int = 10
+  ): [WikiCompileJob!]!
 }
 
 """
@@ -105,8 +118,14 @@ extend type Mutation {
   """
   Admin-only: enqueue an ad-hoc compile job for a specific (tenant, agent).
   Returns the job row (newly inserted or the in-flight dedupe hit).
+
+  When `modelId` is supplied, it is forwarded to the compile Lambda event
+  payload so a single run can override `BEDROCK_MODEL_ID` without a
+  redeploy. The override takes effect only on the direct Event-invoke
+  path; if the invoke fails and a polling worker claims the job later, the
+  compile falls back to the env-default model.
   """
-  compileWikiNow(tenantId: ID!, ownerId: ID!): WikiCompileJob!
+  compileWikiNow(tenantId: ID!, ownerId: ID!, modelId: String): WikiCompileJob!
 
   """
   Admin-only fire-and-forget dispatch of a journal-schema bulk ingest onto
