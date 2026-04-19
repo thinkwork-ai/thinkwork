@@ -60,7 +60,7 @@ export default function WikiPageScreen() {
 					</View>
 				) : !page ? (
 					<View className="items-center justify-center py-10 px-6">
-						<Muted>This memory couldn't be loaded.</Muted>
+						<Muted>This wiki page couldn't be loaded.</Muted>
 					</View>
 				) : (
 					<View style={{ paddingHorizontal: 24, paddingTop: 16, gap: 20 }}>
