@@ -212,7 +212,17 @@ export function deriveParentCandidatesFromPageSummaries(
 
 	for (const p of pages) {
 		if (!p.summary) continue;
-		const city = extractCityFromSummary(p.summary);
+		// Try two extractors in order:
+		// 1. Preposition pattern catches "restaurant in Toronto" /
+		//    "located on Queen Street in Austin".
+		// 2. Address-style fallback reuses extractCityFromAddress on the
+		//    summary itself, since LLM-generated summaries frequently include
+		//    full postal addresses inline ("… at 785 Queen St W, Toronto,
+		//    ON M6J 1G1, Canada."). Without this fallback the expander misses
+		//    every address-style page on real data.
+		const city =
+			extractCityFromSummary(p.summary) ??
+			extractCityFromAddress(p.summary);
 		if (!city) continue;
 		const title = titleCase(city);
 		const key = title.toLowerCase();

@@ -253,6 +253,44 @@ describe("deriveParentCandidatesFromPageSummaries", () => {
 			2,
 		);
 	});
+
+	// Address-style summaries are what gpt-oss actually writes — the
+	// preposition regex alone missed them on real Marco data.
+	it("extracts city from inline postal address in summary", () => {
+		const out = deriveParentCandidatesFromPageSummaries([
+			{
+				id: "p1",
+				title: "Momofuku Daishō",
+				summary: "Korean restaurant at 190 University Avenue, Toronto, ON M5H 0A3, Canada.",
+			},
+			{
+				id: "p2",
+				title: "Nana",
+				summary: "Thai joint at 785 Queen St W, Toronto, ON M6J 1G1, Canada.",
+			},
+		]);
+		const toronto = out.find((c) => c.parentTitle === "Toronto");
+		expect(toronto?.supportingCount).toBe(2);
+	});
+
+	it("prefers preposition match over address fallback", () => {
+		// Both patterns would match "Austin" here — just make sure we don't
+		// double-count by using both paths on the same summary.
+		const out = deriveParentCandidatesFromPageSummaries([
+			{
+				id: "p1",
+				title: "Foo",
+				summary: "Restaurant in Austin, at 123 Main St, Austin, TX 78701, USA.",
+			},
+			{
+				id: "p2",
+				title: "Bar",
+				summary: "Restaurant in Austin, at 456 Other St, Austin, TX 78702, USA.",
+			},
+		]);
+		const austin = out.find((c) => c.parentTitle === "Austin");
+		expect(austin?.supportingCount).toBe(2);
+	});
 });
 
 describe("mergeParentCandidates", () => {
