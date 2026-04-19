@@ -178,6 +178,20 @@ type DbClient = typeof defaultDb | PgTransaction<any, any, any>;
 // ---------------------------------------------------------------------------
 
 /**
+ * Cheap guard against garbage IDs flowing in from LLM output. Postgres
+ * raises `invalid input syntax for type uuid` on any non-conforming string,
+ * which would otherwise crash a whole compile job when the planner
+ * hallucinates / truncates a page id. Anywhere we trust model-provided IDs,
+ * filter through this first and skip rows that fail.
+ */
+export function isValidUuid(raw: unknown): raw is string {
+	if (typeof raw !== "string") return false;
+	return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+		raw,
+	);
+}
+
+/**
  * Normalize an alias for matching. Lowercases, strips punctuation (except
  * internal hyphens/apostrophes), collapses whitespace, trims.
  *
@@ -297,6 +311,7 @@ export async function getCompileJob(
 	jobId: string,
 	db: DbClient = defaultDb,
 ): Promise<WikiCompileJobRow | null> {
+	if (!isValidUuid(jobId)) return null;
 	const rows = await db
 		.select()
 		.from(wikiCompileJobs)
@@ -430,6 +445,9 @@ export async function findPageById(
 	pageId: string,
 	db: DbClient = defaultDb,
 ): Promise<WikiPageRow | null> {
+	// LLM-provided plans sometimes carry truncated or fabricated ids; return
+	// null silently so applyPlan skips the update instead of failing the job.
+	if (!isValidUuid(pageId)) return null;
 	const rows = await db
 		.select()
 		.from(wikiPages)
@@ -881,6 +899,8 @@ export async function markUnresolvedPromoted(
 	args: { mentionId: string; pageId: string },
 	db: DbClient = defaultDb,
 ): Promise<void> {
+	// Guard against hallucinated mention ids from the planner.
+	if (!isValidUuid(args.mentionId) || !isValidUuid(args.pageId)) return;
 	await db
 		.update(wikiUnresolvedMentions)
 		.set({
