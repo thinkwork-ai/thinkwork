@@ -16,6 +16,7 @@ import { wikiPages } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db, agents } from "../../utils.js";
 import { toGraphQLPage } from "../wiki/mappers.js";
+import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
@@ -26,13 +27,14 @@ export const recentWikiPages = async (
 	ctx: GraphQLContext,
 ) => {
 	const { agentId, limit = DEFAULT_LIMIT } = args;
-	if (!ctx.auth.tenantId) throw new Error("Tenant context required");
+	const tenantId = ctx.auth.tenantId ?? (await resolveCallerTenantId(ctx));
+	if (!tenantId) throw new Error("Tenant context required");
 
 	const [agent] = await db
 		.select({ id: agents.id, tenant_id: agents.tenant_id })
 		.from(agents)
 		.where(eq(agents.id, agentId));
-	if (!agent || agent.tenant_id !== ctx.auth.tenantId) {
+	if (!agent || agent.tenant_id !== tenantId) {
 		throw new Error("Agent not found or access denied");
 	}
 
@@ -43,7 +45,7 @@ export const recentWikiPages = async (
 		.from(wikiPages)
 		.where(
 			and(
-				eq(wikiPages.tenant_id, ctx.auth.tenantId),
+				eq(wikiPages.tenant_id, tenantId),
 				eq(wikiPages.owner_id, agent.id as string),
 				eq(wikiPages.status, "active"),
 			),
