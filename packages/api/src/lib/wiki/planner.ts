@@ -224,7 +224,9 @@ Return a JSON object with these five arrays. Any can be empty. Bias toward \`unr
 4. When a record clearly refers to an existing candidate page (by slug, alias, or title), update that page. Don't duplicate.
 5. If unsure whether a subject is an entity / topic / decision, treat it as an unresolved mention.
 6. Links should only reference \`(type, slug)\` pairs that exist in \`candidatePages\` OR are being created in this same response's \`newPages\`. Never invent pages by link alone.
-7. Output **only valid JSON**. No prose, no markdown fences.`;
+7. **Never write record IDs, UUIDs, hex identifiers, or internal keys into section prose.** Phrases like "see records 1c907c71-...", "id=abc-123", or dumps of Hindsight unit ids are forbidden in \`proposed_body_md\` / \`body_md\`. Provenance belongs in \`source_refs\` only; the body is for human-readable content.
+8. **Use wikilinks in the prose when referring to another page in scope.** Write \`[[Title]]\` around any name that matches a page in \`candidatePages\` or a \`newPages\` entry you are creating. Example: instead of "Marco is an AI assistant powered by ThinkWork", write "[[Marco]] is an AI assistant powered by [[ThinkWork]]" when those pages exist in scope. This makes cross-page references clickable in the rendered wiki.
+9. Output **only valid JSON**. No prose, no markdown fences.`;
 
 const PLANNER_OUTPUT_SCHEMA = `{
   "pageUpdates": [
