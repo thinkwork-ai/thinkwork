@@ -247,3 +247,7 @@ playwright/.cache/
 .prds/
 
 .claude/scheduled_tasks.lock
+
+# Local claude worktrees (embedded git repos) and per-machine config
+.claude/worktrees/
+.compound-engineering/
