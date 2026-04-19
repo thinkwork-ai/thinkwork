@@ -305,6 +305,31 @@ export async function claimNextCompileJob(
 }
 
 /**
+ * List recent compile jobs for a scope. If `ownerId` is provided, filters to
+ * that agent; otherwise returns the tenant's jobs across all owners. Ordered
+ * by `created_at DESC`, capped at `limit`.
+ */
+export async function listCompileJobsForScope(
+	args: { tenantId: string; ownerId?: string | null; limit?: number | null },
+	db: DbClient = defaultDb,
+): Promise<WikiCompileJobRow[]> {
+	const cap = Math.min(Math.max(args.limit ?? 10, 1), 100);
+	const conditions = args.ownerId
+		? and(
+				eq(wikiCompileJobs.tenant_id, args.tenantId),
+				eq(wikiCompileJobs.owner_id, args.ownerId),
+			)
+		: eq(wikiCompileJobs.tenant_id, args.tenantId);
+	const rows = await db
+		.select()
+		.from(wikiCompileJobs)
+		.where(conditions)
+		.orderBy(desc(wikiCompileJobs.created_at))
+		.limit(cap);
+	return rows as WikiCompileJobRow[];
+}
+
+/**
  * Load a specific compile job (used by admin/compile-now paths).
  */
 export async function getCompileJob(
