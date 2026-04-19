@@ -276,3 +276,17 @@ export const MobileMemorySearchQuery = gql`
     }
   }
 `;
+
+export const RecentWikiPagesQuery = gql`
+  query RecentWikiPages($agentId: ID!, $limit: Int) {
+    recentWikiPages(agentId: $agentId, limit: $limit) {
+      id
+      type
+      slug
+      title
+      summary
+      lastCompiledAt
+      updatedAt
+    }
+  }
+`;

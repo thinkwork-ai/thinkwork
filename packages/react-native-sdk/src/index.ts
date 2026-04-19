@@ -29,6 +29,7 @@ export {
   useDeleteMobileMemoryCapture,
 } from "./hooks/use-mobile-memory-captures";
 export { useMobileMemorySearch } from "./hooks/use-mobile-memory-search";
+export { useRecentWikiPages } from "./hooks/use-recent-wiki-pages";
 export {
   useWikiPage,
   useWikiBacklinks,
