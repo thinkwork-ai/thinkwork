@@ -1,20 +1,19 @@
 ---
 title: Integration Recipes
-description: Copyable patterns for the most common host flows — agent picker with persistent selection, a chat screen, a tab-bar unread badge, and a sign-in gate.
+description: Copy‑paste patterns for the screens you're actually going to build.
 ---
 
-These recipes are intentionally self-contained. Copy them into your host app and adjust the styles to match your design system.
+A handful of common screens, with the code and a sentence of why you'd use each. Take them, paste them, restyle them.
 
-## Sign-in gate
+## Sign‑in gate
 
-Show a sign-in screen until the user is authenticated, then render the app:
+**When**: on app load, you want to show a sign‑in screen until the user has authenticated.
 
 ```tsx
 import { useThinkworkAuth } from "@thinkwork/react-native-sdk";
 
-export function App() {
+function App() {
   const { status } = useThinkworkAuth();
-
   if (status === "unknown") return <Splash />;
   if (status !== "signed-in") return <SignInScreen />;
   return <AppShell />;
@@ -22,62 +21,37 @@ export function App() {
 
 function SignInScreen() {
   const { signInWithGoogle } = useThinkworkAuth();
-  return (
-    <Button onPress={signInWithGoogle} title="Continue with Google" />
-  );
+  return <Button onPress={signInWithGoogle} title="Continue with Google" />;
 }
 ```
 
 ## Agent picker with persistent selection
 
-The SDK returns agents as data. Persistence is a host concern — this recipe uses AsyncStorage.
+**When**: the user has several agents and you want their last choice to stick across app launches.
+
+The SDK gives you the agent list but intentionally stays out of persistence — different apps want different storage (AsyncStorage, MMKV, whatever). This is the typical shape:
 
 ```tsx
-import * as React from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { Agent } from "@thinkwork/react-native-sdk";
 
 const KEY = "myapp.selectedAgentId";
 
 export function useSelectedAgent(agents: Agent[]) {
-  const effective = React.useMemo(
-    () => agents.filter((a) => a.type !== "local"),
-    [agents],
-  );
-
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
-  const [hydrated, setHydrated] = React.useState(false);
 
   React.useEffect(() => {
-    AsyncStorage.getItem(KEY).then((v) => {
-      setSelectedId(v ?? null);
-      setHydrated(true);
-    });
+    AsyncStorage.getItem(KEY).then(setSelectedId);
   }, []);
 
-  React.useEffect(() => {
-    if (!hydrated || selectedId || effective.length === 0) return;
-    const fallback = effective.find((a) => a.role === "team") ?? effective[0];
-    setSelectedId(fallback?.id ?? null);
-  }, [hydrated, selectedId, effective]);
+  const selected = agents.find(a => a.id === selectedId) ?? agents[0] ?? null;
 
-  const setId = React.useCallback((id: string | null) => {
+  const setId = (id: string | null) => {
     setSelectedId(id);
-    if (id) AsyncStorage.setItem(KEY, id).catch(() => {});
-    else AsyncStorage.removeItem(KEY).catch(() => {});
-  }, []);
-
-  const selected = React.useMemo(
-    () => effective.find((a) => a.id === selectedId) ?? null,
-    [effective, selectedId],
-  );
-
-  return {
-    agents: effective,
-    selectedAgent: selected,
-    selectedAgentId: selectedId,
-    setSelectedAgentId: setId,
+    id ? AsyncStorage.setItem(KEY, id) : AsyncStorage.removeItem(KEY);
   };
+
+  return { selectedAgent: selected, setSelectedAgentId: setId };
 }
 ```
 
@@ -89,70 +63,72 @@ const { agents } = useAgents({ tenantId: user?.tenantId });
 const { selectedAgent, setSelectedAgentId } = useSelectedAgent(agents);
 ```
 
-## Chat screen
+## Thread list screen
 
-The complete chat surface — header, inverted message list, composer — as shipped in the SDK's `examples/chat-ui/ThinkworkChat.tsx`:
+**When**: you're showing the user their threads.
 
 ```tsx
-import { useMessages, useSendMessage, useThread } from "@thinkwork/react-native-sdk";
+const { threads, loading, refetch } = useThreads({ tenantId, agentId: selectedAgent?.id });
 
-export function ChatScreen({ threadId, onBack }: { threadId: string; onBack?: () => void }) {
+return (
+  <FlatList
+    data={threads}
+    keyExtractor={(t) => t.id}
+    renderItem={({ item }) => <ThreadRow thread={item} />}
+    refreshing={loading}
+    onRefresh={refetch}
+  />
+);
+```
+
+## Chat screen
+
+**When**: the user has tapped into a thread and you're showing messages and a composer.
+
+A minimal version:
+
+```tsx
+function ChatScreen({ threadId }: { threadId: string }) {
   const { thread } = useThread(threadId);
-  const { messages, loading } = useMessages(threadId);
+  const { messages } = useMessages(threadId);
   const sendMessage = useSendMessage();
-
   const [draft, setDraft] = React.useState("");
-  const [sending, setSending] = React.useState(false);
 
   const submit = async () => {
     const text = draft.trim();
-    if (!text || sending) return;
+    if (!text) return;
     setDraft("");
-    setSending(true);
-    try {
-      await sendMessage(threadId, text);
-    } finally {
-      setSending(false);
-    }
+    await sendMessage(threadId, text);
   };
 
-  // Messages arrive newest-first; reverse for display.
-  const timeline = React.useMemo(() => [...messages].reverse(), [messages]);
-
   return (
-    <View>
-      <Header title={thread?.title ?? "Chat"} onBack={onBack} />
-      {loading && messages.length === 0 ? (
-        <ActivityIndicator />
-      ) : (
-        <FlatList
-          data={timeline}
-          keyExtractor={(m) => m.id}
-          renderItem={({ item }) => (
-            <MessageBubble role={item.role} content={item.content ?? ""} />
-          )}
-        />
-      )}
-      <Composer value={draft} onChange={setDraft} onSend={submit} disabled={sending} />
-    </View>
+    <>
+      <Header title={thread?.title ?? "Chat"} />
+      <FlatList
+        data={[...messages].reverse()}
+        keyExtractor={(m) => m.id}
+        renderItem={({ item }) => <Bubble role={item.role} text={item.content} />}
+      />
+      <Composer value={draft} onChange={setDraft} onSend={submit} />
+    </>
   );
 }
 ```
 
-The full version with markdown rendering and scroll-to-last-assistant behavior lives at [`examples/chat-ui/ThinkworkChat.tsx`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/react-native-sdk/examples/chat-ui/ThinkworkChat.tsx) in the repo.
+A full‑featured version with markdown rendering and auto‑scroll lives in [`examples/chat-ui/ThinkworkChat.tsx`](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/react-native-sdk/examples/chat-ui/ThinkworkChat.tsx) — copy it, restyle it.
 
-## Atomic thread creation with first message
+## Start a new thread (atomic)
 
-The dashboard "start a new thread" composer calls a single mutation that creates the thread *and* sends the opening user message in one round-trip:
+**When**: your user types a message in a "compose" box and you want both the thread and the first message created in one call.
 
 ```tsx
 const createThread = useCreateThread();
 
-async function startThread(text: string, agentId: string, tenantId: string) {
+async function start(text: string) {
   const thread = await createThread({
     tenantId,
-    agentId,
-    title: text.length > 60 ? text.slice(0, 60) + "…" : text,
+    agentId: selectedAgent.id,
+    title: text.slice(0, 60),
     channel: "CHAT",
     firstMessage: text,
   });
@@ -160,33 +136,53 @@ async function startThread(text: string, agentId: string, tenantId: string) {
 }
 ```
 
-No post-creation `useSendMessage` call is needed; the server has already dispatched the agent response path.
+One round trip. The agent starts responding as soon as the thread is created.
 
-## Tab-bar unread badge
+## Tab‑bar badge
 
-Drive a tab-bar badge count with the server-side aggregate so it stays O(1) as the thread list grows:
+**When**: you have a "Chat" or "Brain" tab and want the standard red unread count dot.
 
 ```tsx
-import { useAgents, useThinkworkAuth, useUnreadThreadCount } from "@thinkwork/react-native-sdk";
-
-export function BrainTabBadge({ render }: { render: (count: number) => React.ReactNode }) {
+function ChatTabBadge() {
   const { user } = useThinkworkAuth();
-  const tenantId = user?.tenantId;
-  const { agents } = useAgents({ tenantId });
+  const { agents } = useAgents({ tenantId: user?.tenantId });
   const { selectedAgent } = useSelectedAgent(agents);
   const { count } = useUnreadThreadCount({
-    tenantId,
+    tenantId: user?.tenantId,
     agentId: selectedAgent?.id,
   });
-  return <>{render(count)}</>;
+  return count > 0 ? <Badge>{count}</Badge> : null;
 }
 ```
 
-Because the unread-count query and the thread-list query share the `Thread` typename in urql's document cache, `useUpdateThread(threadId, { lastReadAt })` decrements the badge *and* updates the list row atomically — no manual refetch wiring.
+When the user reads a thread, the count goes down automatically — no manual plumbing needed.
 
-## Handling "not configured" gracefully
+## Optimistic "just read" (optional polish)
 
-If your host has stages (dev, prod) or embedding contexts where ThinkWork isn't available, gate the provider mount on a host-level check:
+**When**: you want the unread dot to disappear the instant a user taps a thread, before the server round trip returns.
+
+Keep a local set alongside the server state:
+
+```tsx
+const locallyRead = useRef(new Set<string>());
+
+function openThread(t: Thread) {
+  locallyRead.current.add(t.id);
+  updateThread(t.id, { lastReadAt: new Date().toISOString() });
+  router.push(`/thread/${t.id}`);
+}
+
+function isUnread(t: Thread) {
+  if (locallyRead.current.has(t.id)) return false;
+  return /* normal unread logic */;
+}
+```
+
+The server truth still catches up; the local set just shortcuts the UX.
+
+## What to do when ThinkWork isn't configured
+
+**When**: your app ships to environments where ThinkWork isn't set up (dev builds, pre‑activation, etc.) and you want to hide the features gracefully.
 
 ```tsx
 const isThinkworkConfigured = Boolean(
@@ -195,12 +191,8 @@ const isThinkworkConfigured = Boolean(
 );
 
 return isThinkworkConfigured ? (
-  <ThinkworkProvider config={config}>
-    <YourApp />
-  </ThinkworkProvider>
-) : (
-  <YourAppWithoutThinkwork />
-);
+  <ThinkworkProvider config={config}><App /></ThinkworkProvider>
+) : <App />;
 ```
 
-Hide tab-bar entries that depend on ThinkWork behind the same check so users never see broken Brain tabs.
+Hide tab‑bar entries that depend on ThinkWork behind the same check so users never see a broken tab.
