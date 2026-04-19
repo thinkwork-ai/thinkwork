@@ -49,6 +49,10 @@ export function CaptureFooter({
 	const [mode, setMode] = useState<CaptureFooterMode>("search");
 	const [text, setText] = useState("");
 	const [factType, setFactType] = useState<FactType>("FACT");
+	// FACT is the submission default, but we don't mark it "active" in the
+	// picker unless the user has explicitly chosen a type. This keeps the
+	// picker from showing a pre-selected blue row on first open.
+	const [userPickedType, setUserPickedType] = useState(false);
 	const [pickerOpen, setPickerOpen] = useState(false);
 	const [isDictating, setIsDictating] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
@@ -115,6 +119,7 @@ export function CaptureFooter({
 			});
 			setText("");
 			setFactType("FACT");
+			setUserPickedType(false);
 			dictationUsedRef.current = false;
 			Keyboard.dismiss();
 			const label = agentName || "your agent";
@@ -172,7 +177,10 @@ export function CaptureFooter({
 							type={factType}
 							colors={colors}
 							onPress={() => setPickerOpen(true)}
-							onClear={() => setFactType("FACT")}
+							onClear={() => {
+								setFactType("FACT");
+								setUserPickedType(false);
+							}}
 						/>
 					</ScrollView>
 				) : null}
@@ -301,8 +309,11 @@ export function CaptureFooter({
 			<FactTypePicker
 				visible={pickerOpen}
 				onClose={() => setPickerOpen(false)}
-				onSelect={(next) => setFactType(next)}
-				current={factType}
+				onSelect={(next) => {
+					setFactType(next);
+					setUserPickedType(true);
+				}}
+				current={userPickedType ? factType : undefined}
 			/>
 		</>
 	);
