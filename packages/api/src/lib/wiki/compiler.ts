@@ -282,6 +282,15 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 				return "max_sections_rewritten";
 			}
 
+			// Provenance: only the records the planner explicitly cited for
+			// this section — never the full batch. Zero refs → zero
+			// provenance rows is preferred over polluting with unrelated
+			// sibling records.
+			const sectionSources = resolveCitedRecords(
+				recordById,
+				sec.source_refs,
+			);
+
 			const writeRes: SectionWriteResult = await writeSection({
 				pageType: existing.type,
 				pageTitle: existing.title,
@@ -290,7 +299,9 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 					existingSec?.heading ?? formatHeadingFromSlug(sec.slug),
 				existingBodyMd: existingBody,
 				proposedBodyMd: sec.proposed_body_md,
-				sourceRecords: resolveSourceRecords(records, recordById),
+				// Section writer only sees the cited records for grounding;
+				// it used to see the whole batch which produced drift.
+				sourceRecords: sectionSources,
 			});
 			metrics.section_writer_calls += 1;
 			metrics.sections_rewritten += 1;
@@ -304,8 +315,8 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 				position:
 					existingSec?.position ??
 					nextFreePosition(existingSections),
-				sources: records.map((r) => ({
-					kind: "memory_unit",
+				sources: sectionSources.map((r) => ({
+					kind: "memory_unit" as const,
 					ref: r.id,
 				})),
 			});
@@ -336,7 +347,10 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			return "max_new_pages";
 		}
 		const slug = slugifyTitle(np.title) || np.slug;
-		const sources = resolveSourceRecords(records, recordById, np.source_refs);
+		// Page-level source_refs act as a fallback for sections that don't
+		// carry their own refs; both are narrowly resolved against the batch
+		// so invented/out-of-batch ids are dropped.
+		const pageFallbackSources = resolveCitedRecords(recordById, np.source_refs);
 		await upsertPage({
 			tenant_id: job.tenant_id,
 			owner_id: job.owner_id,
@@ -345,16 +359,22 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			title: np.title,
 			summary: np.summary ?? null,
 			markCompiled: true,
-			sections: np.sections.map((s, i) => ({
-				section_slug: s.slug,
-				heading: s.heading,
-				body_md: s.body_md,
-				position: i + 1,
-				sources: sources.map((r) => ({
-					kind: "memory_unit" as const,
-					ref: r.id,
-				})),
-			})),
+			sections: np.sections.map((s, i) => {
+				const sectionSources =
+					s.source_refs && s.source_refs.length > 0
+						? resolveCitedRecords(recordById, s.source_refs)
+						: pageFallbackSources;
+				return {
+					section_slug: s.slug,
+					heading: s.heading,
+					body_md: s.body_md,
+					position: i + 1,
+					sources: sectionSources.map((r) => ({
+						kind: "memory_unit" as const,
+						ref: r.id,
+					})),
+				};
+			}),
 			aliases: [
 				...seedAliasesForTitle(np.title),
 				...((np.aliases ?? []).map(normalizeAlias)),
@@ -393,16 +413,22 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			slug,
 			title: pr.title,
 			markCompiled: true,
-			sections: pr.sections.map((s, i) => ({
-				section_slug: s.slug,
-				heading: s.heading,
-				body_md: s.body_md,
-				position: i + 1,
-				sources: records.map((r) => ({
-					kind: "memory_unit" as const,
-					ref: r.id,
-				})),
-			})),
+			sections: pr.sections.map((s, i) => {
+				const sectionSources = resolveCitedRecords(
+					recordById,
+					s.source_refs,
+				);
+				return {
+					section_slug: s.slug,
+					heading: s.heading,
+					body_md: s.body_md,
+					position: i + 1,
+					sources: sectionSources.map((r) => ({
+						kind: "memory_unit" as const,
+						ref: r.id,
+					})),
+				};
+			}),
 			aliases: seedAliasesForTitle(pr.title).map((alias) => ({
 				alias,
 				source: "compiler",
@@ -507,20 +533,21 @@ function nextFreePosition(
 }
 
 /**
- * Resolve source record IDs to full records from the batch. If no explicit
- * IDs are given, fall back to all records in the batch (the planner cited
- * the whole batch implicitly).
+ * Resolve explicitly-cited record IDs to full records from the batch. Unlike
+ * the earlier `resolveSourceRecords` helper this does NOT fall back to "all
+ * records in the batch" when the planner omits refs or cites unknown ids —
+ * blank provenance is preferred over wrongly citing every sibling record,
+ * which produced spurious memory→wiki links pre-fix.
  */
-function resolveSourceRecords(
-	all: ThinkWorkMemoryRecord[],
+function resolveCitedRecords(
 	byId: Map<string, ThinkWorkMemoryRecord>,
-	ids?: string[],
+	ids: string[] | undefined,
 ): ThinkWorkMemoryRecord[] {
-	if (!ids || ids.length === 0) return all;
+	if (!ids || ids.length === 0) return [];
 	const out: ThinkWorkMemoryRecord[] = [];
 	for (const id of ids) {
 		const r = byId.get(id);
 		if (r) out.push(r);
 	}
-	return out.length > 0 ? out : all;
+	return out;
 }
