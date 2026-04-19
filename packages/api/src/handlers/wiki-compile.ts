@@ -15,6 +15,13 @@ import { claimNextCompileJob } from "../lib/wiki/repository.js";
 
 type WikiCompileEvent = {
 	jobId?: string;
+	/**
+	 * Optional Bedrock model override for this invocation. Threads through
+	 * to the planner, aggregation planner, and section writer so the whole
+	 * pipeline for this job lands on the same model. Leave unset to use the
+	 * Lambda's BEDROCK_MODEL_ID env (or the code default).
+	 */
+	modelId?: string;
 };
 
 type WikiCompileResult = {
@@ -29,8 +36,9 @@ export async function handler(
 	event: WikiCompileEvent = {},
 ): Promise<WikiCompileResult> {
 	try {
+		const opts = event.modelId ? { modelId: event.modelId } : {};
 		if (event?.jobId) {
-			const result = await runJobById(event.jobId);
+			const result = await runJobById(event.jobId, opts);
 			if (!result) {
 				return { ok: true, jobId: event.jobId, status: "already_done" };
 			}
@@ -47,7 +55,7 @@ export async function handler(
 		if (!claimed) {
 			return { ok: true, status: "no_job" };
 		}
-		const result = await runCompileJob(claimed);
+		const result = await runCompileJob(claimed, opts);
 		return {
 			ok: result.status === "succeeded",
 			jobId: result.jobId,

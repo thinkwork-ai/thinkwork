@@ -117,13 +117,24 @@ export function isAggregationPassEnabled(): boolean {
 	return raw === "true" || raw === "1" || raw === "yes";
 }
 
+export interface RunCompileJobOpts {
+	adapter?: MemoryAdapter;
+	/**
+	 * Per-job Bedrock model override. Threads through to `runPlanner`,
+	 * `runAggregationPlanner`, and `writeSection` so the whole pipeline for
+	 * this invocation lands on the same model. When unset the env var
+	 * `BEDROCK_MODEL_ID` (or the code default) applies.
+	 */
+	modelId?: string;
+}
+
 /**
  * Execute a compile job end-to-end. Intended to be called from the Lambda
  * handler after it resolves which job to run.
  */
 export async function runCompileJob(
 	job: WikiCompileJobRow,
-	opts: { adapter?: MemoryAdapter } = {},
+	opts: RunCompileJobOpts = {},
 ): Promise<RunJobResult> {
 	const started = Date.now();
 	const adapter = opts.adapter ?? getMemoryServices().adapter;
@@ -181,19 +192,22 @@ export async function runCompileJob(
 				}),
 			]);
 
-			const plan = await runPlanner({
-				tenantId: job.tenant_id,
-				ownerId: job.owner_id,
-				records,
-				candidatePages,
-				openMentions: openMentions.map((m) => ({
-					id: m.id,
-					alias: m.alias,
-					aliasNormalized: m.alias_normalized,
-					mentionCount: m.mention_count,
-					suggestedType: m.suggested_type,
-				})),
-			});
+			const plan = await runPlanner(
+				{
+					tenantId: job.tenant_id,
+					ownerId: job.owner_id,
+					records,
+					candidatePages,
+					openMentions: openMentions.map((m) => ({
+						id: m.id,
+						alias: m.alias,
+						aliasNormalized: m.alias_normalized,
+						mentionCount: m.mention_count,
+						suggestedType: m.suggested_type,
+					})),
+				},
+				{ modelId: opts.modelId },
+			);
 			metrics.planner_calls += 1;
 			metrics.input_tokens += plan.usage.inputTokens;
 			metrics.output_tokens += plan.usage.outputTokens;
@@ -203,6 +217,7 @@ export async function runCompileJob(
 				records,
 				plan,
 				metrics,
+				modelId: opts.modelId,
 			});
 
 			// Advance cursor only after a clean apply.
@@ -239,6 +254,7 @@ export async function runCompileJob(
 					records: allRecordsThisJob,
 					jobStartedAt,
 					metrics,
+					modelId: opts.modelId,
 				});
 			} catch (aggErr) {
 				const msg = (aggErr as Error)?.message || String(aggErr);
@@ -282,7 +298,7 @@ export async function runCompileJob(
  */
 export async function runJobById(
 	jobId: string,
-	opts: { adapter?: MemoryAdapter } = {},
+	opts: RunCompileJobOpts = {},
 ): Promise<RunJobResult | null> {
 	const job = await getCompileJob(jobId);
 	if (!job) return null;
@@ -299,6 +315,7 @@ interface ApplyPlanArgs {
 	records: ThinkWorkMemoryRecord[];
 	plan: PlannerResult;
 	metrics: RunJobResult["metrics"];
+	modelId?: string;
 }
 
 /**
@@ -369,6 +386,7 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 				// Section writer only sees the cited records for grounding;
 				// it used to see the whole batch which produced drift.
 				sourceRecords: sectionSources,
+				modelId: args.modelId,
 			});
 			metrics.section_writer_calls += 1;
 			metrics.sections_rewritten += 1;
@@ -551,6 +569,7 @@ interface AggregationArgs {
 	records: ThinkWorkMemoryRecord[];
 	jobStartedAt: Date;
 	metrics: RunJobResult["metrics"];
+	modelId?: string;
 }
 
 /**
@@ -559,7 +578,7 @@ interface AggregationArgs {
  * without failing the job.
  */
 export async function runAggregationPass(args: AggregationArgs): Promise<void> {
-	const { job, records, metrics } = args;
+	const { job, records, metrics, modelId } = args;
 
 	const parentCandidates = deriveParentCandidates(records);
 	metrics.deterministic_parents_derived = parentCandidates.length;
@@ -580,13 +599,16 @@ export async function runAggregationPass(args: AggregationArgs): Promise<void> {
 	const candidatePages = await hydrateAggregationCandidates(recentPages);
 	const linkNeighborhoods = await computeLinkNeighborhoods(recentPages);
 
-	const plan = await runAggregationPlanner({
-		tenantId: job.tenant_id,
-		ownerId: job.owner_id,
-		recentlyChangedPages: candidatePages,
-		parentCandidates,
-		linkNeighborhoods,
-	});
+	const plan = await runAggregationPlanner(
+		{
+			tenantId: job.tenant_id,
+			ownerId: job.owner_id,
+			recentlyChangedPages: candidatePages,
+			parentCandidates,
+			linkNeighborhoods,
+		},
+		{ modelId },
+	);
 
 	metrics.aggregation_planner_calls =
 		(metrics.aggregation_planner_calls ?? 0) + 1;
@@ -595,7 +617,7 @@ export async function runAggregationPass(args: AggregationArgs): Promise<void> {
 	metrics.aggregation_output_tokens =
 		(metrics.aggregation_output_tokens ?? 0) + plan.usage.outputTokens;
 
-	await applyAggregationPlan({ job, records, plan, metrics });
+	await applyAggregationPlan({ job, records, plan, metrics, modelId });
 }
 
 async function hydrateAggregationCandidates(
@@ -676,12 +698,13 @@ interface ApplyAggregationArgs {
 	records: ThinkWorkMemoryRecord[];
 	plan: PlannerResult;
 	metrics: RunJobResult["metrics"];
+	modelId?: string;
 }
 
 async function applyAggregationPlan(
 	args: ApplyAggregationArgs,
 ): Promise<void> {
-	const { job, records, plan, metrics } = args;
+	const { job, records, plan, metrics, modelId } = args;
 	const recordById = new Map(records.map((r) => [r.id, r]));
 
 	// Track pages touched by this pass so we can recompute hubness at the end.
@@ -768,6 +791,7 @@ async function applyAggregationPlan(
 			existingBodyMd: existingBody,
 			proposedBodyMd: upd.proposed_body_md,
 			sourceRecords: citedRecords,
+			modelId,
 		});
 		metrics.section_writer_calls += 1;
 		metrics.sections_rewritten += 1;
