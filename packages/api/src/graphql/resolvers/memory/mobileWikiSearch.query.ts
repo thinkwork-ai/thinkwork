@@ -1,34 +1,23 @@
 /**
- * mobileWikiSearch — Hindsight recall + Postgres FTS → ranked wiki pages.
+ * mobileWikiSearch — wiki pages ranked by Hindsight recall order.
  *
- * Hybrid scoring is the key thing to get right here. Two signals converge
- * on one ranked list:
+ * Hindsight already does the hard part (BM25 + vector + rerank). Our job is
+ * to reverse-join its ranked memory hits to the compiled pages that cite
+ * them and preserve that rank order — NOT to re-score with a second engine.
  *
- *   - semantic (Hindsight): for each recalled memory, reverse-join through
- *     wiki_section_sources to the pages that cite it. A page's semantic
- *     contribution is the MAX hit score across its citing memories — NOT
- *     the sum. Summing penalizes focused pages against "hub" pages (e.g. a
- *     CRM sales rep entity cited by 200 memories would always outrank a
- *     focused "Austin, Texas" entity cited by 9, even when only a minority
- *     of the hub's memories actually match the query).
- *
- *   - lexical (Postgres FTS): rank pages directly against their own
- *     search_tsv (title + summary + body), heavily weighting alias and
- *     title hits. For a query like "austin" this floats the page titled
- *     "Austin, Texas" above CRM pages where "Austin" only appears as an
- *     address.
- *
- * Final score = SEMANTIC_WEIGHT * semantic_max + LEXICAL_WEIGHT * fts_rank
- *             + ALIAS_BONUS (if any alias matches exactly)
- *             + TITLE_EXACT_BONUS (if title ILIKE '%query%')
- *
- * A page can surface via EITHER signal — FTS-only matches (no recalled
- * memory cites them) still appear in the result set.
+ * Scoring: reciprocal rank over Hindsight's returned position.
+ *   - A page's primary score is the BEST (lowest-rank) Hindsight hit that
+ *     cites it.
+ *   - Tiebreaker is the count of distinct Hindsight hits citing the page.
+ *   - We intentionally do NOT sum recall-derived scores, because Hindsight
+ *     returns no score field (the adapter synthesizes `1 - idx*0.05`), and
+ *     summing penalizes focused pages against "hub" pages with many
+ *     citations regardless of their position.
  *
  * v1 is strictly agent-scoped: every candidate page is owned by `agentId`.
  */
 
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
 	wikiPageSections,
 	wikiPages,
@@ -41,21 +30,11 @@ import { toGraphQLPage } from "../wiki/mappers.js";
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
-// Recall wider than we return — many hits collapse to the same page (or
-// cite no page at all).
-const RECALL_OVERFETCH = 3;
-const RECALL_MAX = 150;
-// Candidate set for FTS: we fetch a wider page pool than the final limit,
-// then blend + trim. Larger than cappedLimit so Hindsight-only matches
-// aren't crowded out by lexical hits.
-const FTS_CANDIDATE_LIMIT = 50;
-
-// Scoring weights. Tuned against the "Austin for Marco" case where
-// austin-texas (9 sources) was being beaten by CRM hub pages (200 sources).
-const SEMANTIC_WEIGHT = 1.0;
-const LEXICAL_WEIGHT = 2.0;
-const ALIAS_EXACT_BONUS = 1.5;
-const TITLE_EXACT_BONUS = 1.0;
+// Ask Hindsight for more than we'll return — many hits collapse to the
+// same page (or cite no page at all), but we still want enough depth to
+// discover lower-ranked pages past the duplicates.
+const RECALL_OVERFETCH = 5;
+const RECALL_MAX = 200;
 
 export const mobileWikiSearch = async (
 	_parent: unknown,
@@ -75,87 +54,78 @@ export const mobileWikiSearch = async (
 		throw new Error("Agent not found or access denied");
 	}
 
-	const cappedLimit = Math.max(1, Math.min(limit, MAX_LIMIT));
-	const recallLimit = Math.min(cappedLimit * RECALL_OVERFETCH, RECALL_MAX);
 	const tenantId = ctx.auth.tenantId;
 	const ownerId = agent.id as string;
+	const cappedLimit = Math.max(1, Math.min(limit, MAX_LIMIT));
+	const recallLimit = Math.min(cappedLimit * RECALL_OVERFETCH, RECALL_MAX);
 
-	// Fan out the two lookups in parallel: semantic recall against Hindsight,
-	// lexical FTS against compiled pages. Either can dominate the result.
 	const { recall } = getMemoryServices();
-	const [hits, ftsRows] = await Promise.all([
-		recall
-			.recall({
-				tenantId,
-				ownerType: "agent",
-				ownerId,
-				query: trimmed,
-				limit: recallLimit,
-			})
-			.catch((err) => {
-				console.warn(
-					`[mobileWikiSearch] recall failed: ${(err as Error)?.message}`,
-				);
-				return [] as Awaited<ReturnType<typeof recall.recall>>;
-			}),
-		fetchFtsCandidates(tenantId, ownerId, trimmed),
-	]);
+	const hits = await recall.recall({
+		tenantId,
+		ownerType: "agent",
+		ownerId,
+		query: trimmed,
+		limit: recallLimit,
+	});
 
-	// Semantic side: memory id → best score + input rank.
-	const memoryScores = new Map<string, number>();
+	if (hits.length === 0) {
+		console.log(
+			`[mobileWikiSearch] agent=${agent.slug ?? agent.id} query=${JSON.stringify(trimmed)} hits=0 pages=0`,
+		);
+		return [];
+	}
+
+	// memory id → first position Hindsight returned it. Rank 0 is best.
 	const memoryRank = new Map<string, number>();
 	hits.forEach((hit, idx) => {
 		const id = hit.record.id;
 		if (!id || typeof id !== "string") return;
-		const prev = memoryScores.get(id);
-		if (prev === undefined || hit.score > prev) {
-			memoryScores.set(id, hit.score);
-		}
 		if (!memoryRank.has(id)) memoryRank.set(id, idx);
 	});
-	const memoryIds = Array.from(memoryScores.keys());
+	const memoryIds = Array.from(memoryRank.keys());
 
-	// Reverse-join memory ids → pages. Skip the DB round-trip entirely when
-	// Hindsight returned nothing.
-	const sourceRows =
-		memoryIds.length === 0
-			? []
-			: await db
-					.select({
-						section_id: wikiSectionSources.section_id,
-						source_ref: wikiSectionSources.source_ref,
-						page_id: wikiPageSections.page_id,
-					})
-					.from(wikiSectionSources)
-					.innerJoin(
-						wikiPageSections,
-						eq(wikiPageSections.id, wikiSectionSources.section_id),
-					)
-					.where(
-						and(
-							eq(wikiSectionSources.source_kind, "memory_unit"),
-							inArray(wikiSectionSources.source_ref, memoryIds),
-						),
-					);
+	// Reverse-join: which pages cite any of the recalled memories?
+	const sourceRows = await db
+		.select({
+			source_ref: wikiSectionSources.source_ref,
+			page_id: wikiPageSections.page_id,
+		})
+		.from(wikiSectionSources)
+		.innerJoin(
+			wikiPageSections,
+			eq(wikiPageSections.id, wikiSectionSources.section_id),
+		)
+		.where(
+			and(
+				eq(wikiSectionSources.source_kind, "memory_unit"),
+				inArray(wikiSectionSources.source_ref, memoryIds),
+			),
+		);
 
-	// Aggregate semantic signal per page: max score, distinct matching
-	// memory ids preserved in Hindsight rank order.
-	type SemanticAgg = {
-		maxScore: number;
-		matchCount: number;
+	if (sourceRows.length === 0) {
+		console.log(
+			`[mobileWikiSearch] agent=${agent.slug ?? agent.id} query=${JSON.stringify(trimmed)} hits=${hits.length} pages=0`,
+		);
+		return [];
+	}
+
+	// Aggregate per page. Deduplicate (page, memory) pairs so a memory
+	// cited by multiple sections of the same page only counts once.
+	type Agg = {
+		bestRank: number;
 		memoryIds: string[];
 		memorySet: Set<string>;
 	};
-	const semanticByPage = new Map<string, SemanticAgg>();
+	const byPage = new Map<string, Agg>();
 	for (const row of sourceRows) {
 		const memId = row.source_ref as string;
-		const score = memoryScores.get(memId) ?? 0;
+		const rank = memoryRank.get(memId);
+		if (rank === undefined) continue;
 		const pageId = row.page_id as string;
-		const agg = semanticByPage.get(pageId);
+		const agg = byPage.get(pageId);
 		if (!agg) {
-			semanticByPage.set(pageId, {
-				maxScore: score,
-				matchCount: 1,
+			byPage.set(pageId, {
+				bestRank: rank,
 				memoryIds: [memId],
 				memorySet: new Set([memId]),
 			});
@@ -164,33 +134,16 @@ export const mobileWikiSearch = async (
 		if (agg.memorySet.has(memId)) continue;
 		agg.memorySet.add(memId);
 		agg.memoryIds.push(memId);
-		agg.matchCount += 1;
-		if (score > agg.maxScore) agg.maxScore = score;
+		if (rank < agg.bestRank) agg.bestRank = rank;
 	}
 
-	// Lexical signal per page comes straight from fetchFtsCandidates.
-	const lexicalByPage = new Map<string, FtsRow>(
-		ftsRows.map((r) => [r.id, r]),
-	);
-
-	// Union of candidates from both signals.
-	const candidatePageIds = new Set<string>([
-		...semanticByPage.keys(),
-		...lexicalByPage.keys(),
-	]);
-	if (candidatePageIds.size === 0) {
-		console.log(
-			`[mobileWikiSearch] agent=${agent.slug ?? agent.id} query=${JSON.stringify(trimmed)} hits=${hits.length} pages=0`,
-		);
-		return [];
-	}
-
+	const pageIds = Array.from(byPage.keys());
 	const pageRows = await db
 		.select()
 		.from(wikiPages)
 		.where(
 			and(
-				inArray(wikiPages.id, Array.from(candidatePageIds)),
+				inArray(wikiPages.id, pageIds),
 				eq(wikiPages.status, "active"),
 				eq(wikiPages.owner_id, ownerId),
 				eq(wikiPages.tenant_id, tenantId),
@@ -199,49 +152,34 @@ export const mobileWikiSearch = async (
 
 	const ranked = pageRows
 		.map((row) => {
-			const pageId = row.id as string;
-			const semantic = semanticByPage.get(pageId);
-			const lexical = lexicalByPage.get(pageId);
-
-			const semanticScore = semantic?.maxScore ?? 0;
-			const ftsRank = lexical?.rank ?? 0;
-			const aliasBonus = lexical?.aliasHit ? ALIAS_EXACT_BONUS : 0;
-			const titleBonus = lexical?.titleHit ? TITLE_EXACT_BONUS : 0;
-
-			const finalScore =
-				SEMANTIC_WEIGHT * semanticScore +
-				LEXICAL_WEIGHT * ftsRank +
-				aliasBonus +
-				titleBonus;
-
-			const sortedMemoryIds = (semantic?.memoryIds ?? [])
-				.slice()
-				.sort((a, b) => {
-					const ra = memoryRank.get(a) ?? Number.POSITIVE_INFINITY;
-					const rb = memoryRank.get(b) ?? Number.POSITIVE_INFINITY;
-					return ra - rb;
-				});
-
+			const agg = byPage.get(row.id as string)!;
+			// Reciprocal-rank score for surfacing: higher is better.
+			const rrfScore = 1 / (agg.bestRank + 60);
+			const sortedMemoryIds = agg.memoryIds.slice().sort((a, b) => {
+				const ra = memoryRank.get(a) ?? Number.POSITIVE_INFINITY;
+				const rb = memoryRank.get(b) ?? Number.POSITIVE_INFINITY;
+				return ra - rb;
+			});
 			return {
 				row,
-				score: finalScore,
-				semanticScore,
-				ftsRank,
+				score: rrfScore,
+				bestRank: agg.bestRank,
+				matchCount: agg.memorySet.size,
 				matchingMemoryIds: sortedMemoryIds,
 				lastCompiled: (row.last_compiled_at as Date | null)?.getTime() ?? 0,
 			};
 		})
+		// Sort by Hindsight rank order first (smaller bestRank = better),
+		// then by number of distinct matches, then by recency.
 		.sort((a, b) => {
-			if (b.score !== a.score) return b.score - a.score;
-			if (b.semanticScore !== a.semanticScore)
-				return b.semanticScore - a.semanticScore;
-			if (b.ftsRank !== a.ftsRank) return b.ftsRank - a.ftsRank;
+			if (a.bestRank !== b.bestRank) return a.bestRank - b.bestRank;
+			if (b.matchCount !== a.matchCount) return b.matchCount - a.matchCount;
 			return b.lastCompiled - a.lastCompiled;
 		})
 		.slice(0, cappedLimit);
 
 	console.log(
-		`[mobileWikiSearch] agent=${agent.slug ?? agent.id} query=${JSON.stringify(trimmed)} hits=${hits.length} semantic_pages=${semanticByPage.size} fts_pages=${lexicalByPage.size} returned=${ranked.length}`,
+		`[mobileWikiSearch] agent=${agent.slug ?? agent.id} query=${JSON.stringify(trimmed)} hits=${hits.length} pages=${ranked.length}`,
 	);
 
 	return ranked.map((r) => ({
@@ -250,74 +188,3 @@ export const mobileWikiSearch = async (
 		matchingMemoryIds: r.matchingMemoryIds,
 	}));
 };
-
-interface FtsRow {
-	id: string;
-	rank: number;
-	titleHit: boolean;
-	aliasHit: boolean;
-}
-
-/**
- * Postgres FTS over wiki_pages.search_tsv + alias lookup, scoped to one
- * (tenant, owner). Returns a candidate pool that's merged with semantic
- * hits upstream. We only return (pageId, rank, titleHit, aliasHit) — the
- * full row is fetched once after the two signals unify their candidate
- * set, to avoid double-fetching.
- */
-async function fetchFtsCandidates(
-	tenantId: string,
-	ownerId: string,
-	query: string,
-): Promise<FtsRow[]> {
-	const needle = query.toLowerCase();
-	const like = `%${needle}%`;
-	try {
-		const result = await db.execute(sql`
-			WITH alias_hits AS (
-				SELECT DISTINCT a.page_id, MAX(CASE WHEN a.alias = ${needle} THEN 1 ELSE 0 END) AS exact
-				FROM wiki_page_aliases a
-				INNER JOIN wiki_pages p ON p.id = a.page_id
-				WHERE p.tenant_id = ${tenantId}
-				  AND p.owner_id = ${ownerId}
-				  AND p.status = 'active'
-				  AND (a.alias = ${needle} OR a.alias ILIKE ${like})
-				GROUP BY a.page_id
-			)
-			SELECT
-				p.id::text AS id,
-				COALESCE(ts_rank(p.search_tsv, plainto_tsquery('english', ${query})), 0)::float AS rank,
-				(p.title ILIKE ${like}) AS title_hit,
-				(ah.page_id IS NOT NULL) AS alias_hit
-			FROM wiki_pages p
-			LEFT JOIN alias_hits ah ON ah.page_id = p.id
-			WHERE p.tenant_id = ${tenantId}
-			  AND p.owner_id = ${ownerId}
-			  AND p.status = 'active'
-			  AND (
-			    p.search_tsv @@ plainto_tsquery('english', ${query})
-			    OR p.title ILIKE ${like}
-			    OR ah.page_id IS NOT NULL
-			  )
-			ORDER BY rank DESC, p.last_compiled_at DESC NULLS LAST
-			LIMIT ${FTS_CANDIDATE_LIMIT}
-		`);
-		const rows = ((result as unknown as { rows?: any[] }).rows ?? []) as Array<{
-			id: string;
-			rank: number;
-			title_hit: boolean;
-			alias_hit: boolean;
-		}>;
-		return rows.map((r) => ({
-			id: r.id,
-			rank: Number(r.rank) || 0,
-			titleHit: Boolean(r.title_hit),
-			aliasHit: Boolean(r.alias_hit),
-		}));
-	} catch (err) {
-		console.warn(
-			`[mobileWikiSearch] FTS candidate query failed: ${(err as Error)?.message}`,
-		);
-		return [];
-	}
-}
