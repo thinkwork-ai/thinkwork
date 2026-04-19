@@ -4,7 +4,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import Markdown from "react-native-markdown-display";
 import { useColorScheme } from "nativewind";
 import { useAuth } from "@/lib/auth-context";
-import { useMe } from "@/lib/hooks/use-users";
 import {
 	useWikiBacklinks,
 	useWikiPage,
@@ -42,14 +41,13 @@ function isWikiPageType(v: string | undefined): v is WikiPageType {
 
 export default function WikiPageScreen() {
 	const router = useRouter();
-	const params = useLocalSearchParams<{ type?: string; slug?: string }>();
+	const params = useLocalSearchParams<{ type?: string; slug?: string; agentId?: string }>();
 	const type = isWikiPageType(params.type) ? params.type : undefined;
 	const slug = params.slug ? decodeURIComponent(params.slug) : undefined;
 
 	const { user } = useAuth();
 	const tenantId = user?.tenantId;
-	const [{ data: meData }] = useMe();
-	const ownerId = meData?.me?.id;
+	const ownerId = params.agentId ? decodeURIComponent(params.agentId) : undefined;
 
 	const { colorScheme } = useColorScheme();
 	const isDark = colorScheme === "dark";
@@ -166,11 +164,10 @@ export default function WikiPageScreen() {
 									return (
 										<Pressable
 											key={b.id}
-											onPress={() =>
-												router.push(
-													`/wiki/${encodeURIComponent(b.type)}/${encodeURIComponent(b.slug)}`,
-												)
-											}
+											onPress={() => {
+												const bp = `/wiki/${encodeURIComponent(b.type)}/${encodeURIComponent(b.slug)}`;
+												router.push(ownerId ? `${bp}?agentId=${encodeURIComponent(ownerId)}` : bp);
+											}}
 											style={({ pressed }) => ({
 												paddingHorizontal: 12,
 												paddingVertical: 10,

@@ -39,9 +39,10 @@ export function CapturesList({ agentId, colors, searchQuery }: CapturesListProps
 
 	const handlePress = useCallback(
 		(hit: WikiSearchHit) => {
-			router.push(`/wiki/${encodeURIComponent(hit.type)}/${encodeURIComponent(hit.slug)}`);
+			const path = `/wiki/${encodeURIComponent(hit.type)}/${encodeURIComponent(hit.slug)}`;
+			router.push(agentId ? `${path}?agentId=${encodeURIComponent(agentId)}` : path);
 		},
-		[router],
+		[router, agentId],
 	);
 
 	if (results.length === 0) {
