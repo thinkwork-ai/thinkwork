@@ -33,6 +33,15 @@ export interface GraphQLWikiPage {
 	// Backlinks are resolved lazily by the `WikiPage.backlinks` field resolver.
 }
 
+// Timestamps may arrive as `Date` (drizzle's typed `select`) or as ISO
+// strings (raw `db.execute(sql`…`)` through postgres-js), so normalize
+// before serializing. `new Date(x).toISOString()` works for both shapes
+// and preserves null.
+function toIsoString(value: Date | string | null | undefined): string | null {
+	if (value == null) return null;
+	return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
 export function toGraphQLPage(
 	row: {
 		id: string;
@@ -44,9 +53,9 @@ export function toGraphQLPage(
 		summary: string | null;
 		body_md: string | null;
 		status: string;
-		last_compiled_at: Date | null;
-		created_at: Date;
-		updated_at: Date;
+		last_compiled_at: Date | string | null;
+		created_at: Date | string;
+		updated_at: Date | string;
 	},
 	extras: { sections: GraphQLWikiSection[]; aliases: string[] },
 ): GraphQLWikiPage {
@@ -60,9 +69,9 @@ export function toGraphQLPage(
 		summary: row.summary,
 		bodyMd: row.body_md,
 		status: row.status,
-		lastCompiledAt: row.last_compiled_at?.toISOString() ?? null,
-		createdAt: row.created_at.toISOString(),
-		updatedAt: row.updated_at.toISOString(),
+		lastCompiledAt: toIsoString(row.last_compiled_at),
+		createdAt: toIsoString(row.created_at) as string,
+		updatedAt: toIsoString(row.updated_at) as string,
 		sections: extras.sections,
 		aliases: extras.aliases,
 	};
