@@ -141,8 +141,8 @@ const styles = StyleSheet.create({
 		paddingHorizontal: 20,
 	},
 	iconCol: {
-		width: 32,
-		marginRight: 12,
+		width: 24,
+		marginRight: 8,
 		alignItems: "flex-start",
 		justifyContent: "center",
 	},
