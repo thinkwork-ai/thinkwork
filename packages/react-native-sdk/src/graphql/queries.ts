@@ -260,6 +260,18 @@ export const WikiBacklinksQuery = gql`
   }
 `;
 
+export const WikiConnectedPagesQuery = gql`
+  query WikiConnectedPages($pageId: ID!) {
+    wikiConnectedPages(pageId: $pageId) {
+      id
+      type
+      slug
+      title
+      summary
+    }
+  }
+`;
+
 export const MobileMemorySearchQuery = gql`
   query MobileMemorySearch($agentId: ID!, $query: String!, $limit: Int) {
     mobileWikiSearch(agentId: $agentId, query: $query, limit: $limit) {

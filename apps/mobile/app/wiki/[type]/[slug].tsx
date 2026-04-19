@@ -7,6 +7,7 @@ import { useColorScheme } from "nativewind";
 import { useAuth } from "@/lib/auth-context";
 import {
 	useWikiBacklinks,
+	useWikiConnectedPages,
 	useWikiPage,
 	type WikiPageType,
 } from "@thinkwork/react-native-sdk";
@@ -97,6 +98,7 @@ export default function WikiPageScreen() {
 
 	const { page, loading } = useWikiPage({ tenantId, ownerId, type, slug });
 	const { backlinks } = useWikiBacklinks(page?.id);
+	const { connectedPages } = useWikiConnectedPages(page?.id);
 
 	const markdownStyles = useMemo(
 		() => buildMarkdownStyles(colors, isDark),
@@ -178,6 +180,59 @@ export default function WikiPageScreen() {
 								</Markdown>
 							</View>
 						))}
+
+						{connectedPages.length > 0 ? (
+							<View style={{ gap: 8, marginTop: 12 }}>
+								<Text
+									style={{
+										color: colors.mutedForeground,
+										fontSize: 12,
+										fontWeight: "600",
+										letterSpacing: 0.5,
+										textTransform: "uppercase",
+									}}
+								>
+									Connected pages
+								</Text>
+								{connectedPages.map((c) => (
+									<Pressable
+										key={c.id}
+										onPress={() => {
+											const bp = `/wiki/${encodeURIComponent(c.type)}/${encodeURIComponent(c.slug)}`;
+											router.push(ownerId ? `${bp}?agentId=${encodeURIComponent(ownerId)}` : bp);
+										}}
+										style={({ pressed }) => ({
+											paddingHorizontal: 12,
+											paddingVertical: 10,
+											borderRadius: 12,
+											borderWidth: 1,
+											borderColor: colors.border,
+											backgroundColor: pressed ? colors.secondary : "transparent",
+											gap: 4,
+										})}
+									>
+										<Muted
+											style={{
+												fontSize: 10,
+												fontWeight: "600",
+												textTransform: "uppercase",
+												letterSpacing: 0.5,
+											}}
+										>
+											{TYPE_LABELS[c.type]}
+										</Muted>
+										<Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 15, fontWeight: "500" }}>
+											{c.title}
+										</Text>
+										{c.summary ? (
+											<Muted numberOfLines={1} style={{ fontSize: 13 }}>
+												{c.summary}
+											</Muted>
+										) : null}
+									</Pressable>
+								))}
+							</View>
+						) : null}
 
 						{backlinks.length > 0 ? (
 							<View style={{ gap: 8, marginTop: 12 }}>
