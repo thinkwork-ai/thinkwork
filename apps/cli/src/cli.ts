@@ -51,6 +51,7 @@ import { registerPerformanceCommand } from "./commands/performance.js";
 import { registerTraceCommand } from "./commands/trace.js";
 import { registerDashboardCommand } from "./commands/dashboard.js";
 import { registerEvalCommand } from "./commands/eval.js";
+import { registerWikiCommand } from "./commands/wiki.js";
 
 const program = new Command();
 
@@ -146,6 +147,9 @@ registerPerformanceCommand(program);
 registerTraceCommand(program);
 registerDashboardCommand(program);
 registerEvalCommand(program);
+
+// Wiki (Compounding Memory) pipeline controls — admin-only.
+registerWikiCommand(program);
 
 // Accept `--json` after any subcommand too (not just right after `thinkwork`).
 // Keeps individual registerXxxCommand functions free of plumbing. Walk only
