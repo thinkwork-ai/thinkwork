@@ -1,44 +1,49 @@
 ---
 title: React Native SDK
-description: A hooks-only client for embedding ThinkWork threads, messages, and streaming agent turns into any React Native or Expo host app.
+description: Drop a ThinkWork chat experience into any React Native or Expo app without rebuilding the plumbing.
 ---
 
-The ThinkWork React Native SDK (`@thinkwork/react-native-sdk`) gives host apps — LastMile, ThinkWork mobile, any third-party consumer — a uniform hook surface for talking to a ThinkWork stage. It handles Cognito auth, the GraphQL client, AppSync subscriptions, and token lifecycle internally.
+If you're building a mobile app and you want it to talk to ThinkWork — agent chat, thread lists, real‑time updates — this SDK does the plumbing for you. Sign‑in, data fetching, WebSocket subscriptions, token refresh: handled. You write the UI.
 
-**It ships no UI and no host-specific vocabulary.** Consumers build their own chat surface from the hooks.
+No visual components. No opinions about how your app should look. Just hooks you call, and data comes back.
 
-## Start here
+## When to reach for this
 
-- **[Install & Setup](/sdks/react-native/install-and-setup)** — install, peer deps, provider wiring, Cognito callback configuration.
-- **[Hook Reference](/sdks/react-native/hook-reference)** — every hook with signatures, return shapes, and cache/subscription semantics.
-- **[Thread & Agent Model](/sdks/react-native/thread-agent-model)** — how threads, agents, and messages compose, and the contracts the SDK enforces.
-- **[Integration Recipes](/sdks/react-native/integration-recipes)** — copyable patterns for agent pickers, chat screens, unread badges, and sign-in gates.
-- **[Migration 0.1 → 0.2](/sdks/react-native/migration)** — if you're upgrading from a pre-0.2 version.
+- You have a mobile app (LastMile, your own, a customer's).
+- You want it to let users talk to their ThinkWork agents.
+- You don't want to think about Cognito, GraphQL, AppSync, or any of that.
+
+## The 30‑second version
+
+```tsx
+import { ThinkworkProvider, useThreads, useSendMessage } from "@thinkwork/react-native-sdk";
+
+function App() {
+  return (
+    <ThinkworkProvider config={config}>
+      <Inbox />
+    </ThinkworkProvider>
+  );
+}
+
+function Inbox() {
+  const { threads } = useThreads({ tenantId });
+  return threads.map(t => <ThreadRow key={t.id} thread={t} />);
+}
+```
+
+That's the shape of every consumer: wrap your app in a provider, call hooks, build UI.
+
+## Where to go next
+
+- **[Install & Setup](/sdks/react-native/install-and-setup)** — get it running in your app, start to finish.
+- **[Hook Guide](/sdks/react-native/hook-reference)** — what each hook does and when to use it.
+- **[Thread & Agent Model](/sdks/react-native/thread-agent-model)** — how ThinkWork thinks about conversations and who owns them.
+- **[Integration Recipes](/sdks/react-native/integration-recipes)** — copy‑paste patterns for the usual screens.
+- **[Upgrading from 0.1](/sdks/react-native/migration)** — if you're on an older version.
+
+For exact function signatures and implementation detail, see the [package README on GitHub](https://github.com/thinkwork-ai/thinkwork/blob/main/packages/react-native-sdk/README.md).
 
 ## Current version
 
-`0.2.0-beta.2` on the `beta` dist-tag.
-
-```sh
-pnpm add @thinkwork/react-native-sdk@beta
-```
-
-## What's in the box
-
-| Category | Hooks |
-| --- | --- |
-| Auth | `useThinkworkAuth` |
-| Agents | `useAgents` |
-| Threads (read) | `useThreads`, `useThread`, `useUnreadThreadCount` |
-| Threads (write) | `useCreateThread`, `useUpdateThread` |
-| Messages | `useMessages`, `useSendMessage` |
-| Subscriptions | `useNewMessageSubscription`, `useThreadTurnSubscription`, `useThreadTurnUpdatedSubscription`, `useThreadUpdatedSubscription` |
-
-Plus the root `ThinkworkProvider` and exported types for `Agent`, `Thread`, `Message`, `CreateThreadInput`, `UpdateThreadInput`, and event shapes for each subscription.
-
-## Design principles
-
-1. **Hooks-only.** The SDK never renders UI. Host apps build their own visual language on top.
-2. **Imperative mutations, not tuples.** `useSendMessage`, `useCreateThread`, `useUpdateThread` return callbacks you invoke at event time. Cleaner in typical `onPress`/`onSubmit` handlers than urql's tuple convention.
-3. **Cache coherence by default.** Every hook that reads threads registers the `Thread` typename in urql's document cache, so mutations automatically invalidate dependent queries. No manual refetch plumbing.
-4. **Selection and storage stay host-side.** The SDK returns raw data (agents, threads, messages) and trusts hosts to handle UI state (selection persistence, optimistic updates, scroll position). Different hosts want different choices; the SDK doesn't dictate.
+`0.2.0-beta.2` on the `beta` dist‑tag — `pnpm add @thinkwork/react-native-sdk@beta`.

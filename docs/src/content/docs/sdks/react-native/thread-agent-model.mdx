@@ -1,93 +1,73 @@
 ---
-title: Thread & Agent Model
-description: How threads, agents, and messages compose in ThinkWork, and the contract rules the SDK enforces around each.
+title: How Threads & Agents Work
+description: The mental model behind ThinkWork threads — what lives where, and a few rules the SDK assumes you'll follow.
 ---
 
-The SDK is a thin client over a domain model that the server owns. This page covers the shapes the SDK surfaces, and the rules that matter when composing them.
+You don't need to know most of this to use the SDK. But knowing the shape of the world makes the hooks feel less arbitrary.
 
-## Threads
+## The pieces
 
-A **thread** is the top-level unit of conversation. Every thread has:
+A **tenant** is an organization using ThinkWork. Everything lives inside one.
 
-- A **tenant** (the ThinkWork organization it lives in).
-- An **agent** that "owns" it — the one the user is addressing. Nullable on creation for edge cases, but effectively required for chat-style flows: without `agentId` set, no agent picks up new messages.
-- A **channel** distinguishing how the thread entered the system — `CHAT` for user-initiated conversations, `EMAIL` for inbound email, `SCHEDULE` for cron-fired threads, `WEBHOOK`/`API` for programmatic, `MANUAL` for admin-created.
-- A **type** separating task work (`TASK`, `BUG`, `FEATURE`) from questions (`QUESTION`).
-- A **status** following the lifecycle: `BACKLOG` → `TODO` → `IN_PROGRESS` → `IN_REVIEW` → (`BLOCKED`) → `DONE` / `CANCELLED`.
-- **Activity timestamps**: `createdAt`, `updatedAt`, `lastActivityAt` (most recent assistant message), `lastTurnCompletedAt` (most recent agent turn), `lastReadAt` (last time a user marked it read).
+An **agent** is an AI persona the tenant has configured — "Marco the support lead", "a research assistant", whatever. Agents can respond to messages and take actions.
 
-### The agent-on-first-message contract
+A **thread** is a conversation. One user talking to one agent about one topic. Threads have statuses (`BACKLOG`, `TODO`, `IN_PROGRESS`, `DONE`…) so they double as work items when you want them to.
 
-Threads without an `agentId` are valid at rest but inert — they have no autoresponder. When building a "start a new conversation" UI, bind the thread to an agent at creation time:
+A **message** belongs to a thread. It's either from the user (`USER`) or from an agent (`ASSISTANT`, sometimes `TOOL` for agent‑internal reasoning).
+
+## Threads need agents to be useful
+
+A thread without an agent attached is a thread nobody will respond to. The SDK lets you create agentless threads because there are edge cases where that's what you want, but for chat flows you should always set an `agentId` at creation time:
 
 ```tsx
 await createThread({
   tenantId,
-  agentId: selectedAgent.id, // required for chat flows
-  title: "New conversation",
+  agentId: selectedAgent.id, // this is the one that matters
+  title: "...",
   channel: "CHAT",
-  firstMessage: text,
 });
 ```
 
-### The atomic `firstMessage` contract
+If you forget `agentId`, your user will type, nothing will happen, and they'll wonder if the app is broken.
 
-Pre-0.2.0, hosts had to call `createThread` then `sendMessage(newThread.id, content)` as two separate mutations. This footgun meant the new threadId wasn't available to bound hooks until after a re-render. **0.2.0 fixes this**: pass `firstMessage` on `CreateThreadInput` and the server atomically creates the thread plus its opening user message in a single transaction, dispatches the agent, and returns the thread row.
+## Start a thread + send its first message in one shot
 
-For post-creation sends, use the unbound `useSendMessage()` which takes the threadId at call time.
+The old way (pre‑0.2) was: create a thread, then send a message to it. Two round trips, and the timing was awkward because the second call needs the first call's result.
 
-## Agents
-
-An **agent** is a configured AI persona the tenant can direct threads at. Agents have:
-
-- A **role** — `"team"`, `"personal"`, etc. Used for client-side grouping; the SDK doesn't enforce semantics.
-- A **type** — `"managed"`, `"adapter"`, `"local"`. `"local"` agents are scratch/sandbox agents and should be filtered out of end-user pickers (the SDK's `useAgents` returns everything; filter client-side).
-- A **status** — `"active"`, `"revoked"`, etc.
-
-`useAgents({ tenantId })` returns the raw list. Building a picker with persistent selection is a host concern — the SDK does not ship selection storage. The canonical host-side pattern:
+The new way:
 
 ```tsx
-function useSelectedAgent(agents: Agent[]) {
-  // ... load selected ID from AsyncStorage/MMKV/Zustand, pick a default,
-  //     return { selectedAgent, setSelectedAgentId }
-}
+await createThread({
+  tenantId,
+  agentId,
+  title: "...",
+  channel: "CHAT",
+  firstMessage: "What are the last five opportunities?",
+});
 ```
 
-See [Integration Recipes](/sdks/react-native/integration-recipes) for a complete example.
+One call. The backend creates the thread and the opening message together. The agent starts responding immediately.
 
-## Messages
+## Read state lives on the server, but feels instant
 
-A **message** belongs to exactly one thread. Fields:
-
-- `role` — `"USER" | "ASSISTANT" | "SYSTEM" | "TOOL"`. The SDK exposes this as-is; when passing messages to a chat UI that uses lowercase roles, map at the boundary.
-- `content` — the text body. Nullable for tool-call messages where content lives in side-channel fields.
-- `senderType` / `senderId` — attribution. For user messages, default `senderType: "user"`; pass `senderId` via `useSendMessage()`'s third arg if you need named attribution.
-- `createdAt` — authoritative ordering. Server returns newest-first.
-
-### Role casing
-
-The GraphQL schema uses uppercase (`"USER"`, `"ASSISTANT"`). Some host chat surfaces use lowercase. **Normalize at the boundary**, not inside the SDK:
+When a user opens a thread, you mark it read:
 
 ```tsx
-const role = (m.role === "USER" ? "user" : "assistant") as const;
+await updateThread(threadId, { lastReadAt: new Date().toISOString() });
 ```
 
-### Subscription-driven refresh
+The server remembers. The unread count decrements automatically on the next render because `useUnreadThreadCount` and `useThreads` share a cache that knows they both care about the same `Thread`. You don't wire any of that; it just works.
 
-`useMessages(threadId)` subscribes to `onNewMessage(threadId)` internally and triggers a network refetch when events arrive. Hosts building a chat surface don't need to wire subscriptions manually — just render `useMessages` and the list stays live.
+If you want the dot to disappear before the round trip finishes (instant feedback), keep a local "just read" set alongside. There's a recipe for that on the next page.
 
-## The thread-read-state dance
+## Message roles are uppercase
 
-Unread-state is cosmetic on the server and consensus on the client:
+One small gotcha: roles come back as `"USER"` / `"ASSISTANT"`, not `"user"` / `"assistant"`. If your chat UI uses lowercase, normalize at the boundary:
 
-- **Server truth**: `thread.lastReadAt`. Updated via `useUpdateThread(threadId, { lastReadAt })`.
-- **Derivation**: a thread is "unread" when `lastActivityAt > lastReadAt`, or `lastReadAt` is null and there's any activity.
-- **Badge count**: use `useUnreadThreadCount` rather than computing client-side — the server-side aggregate is O(1) per tenant, and `Thread` typename invalidation syncs the count with list changes automatically.
+```tsx
+const role = m.role === "USER" ? "user" : "assistant";
+```
 
-Optimistic mark-read: hosts that want an instant dot-clearing UX (without waiting for the server round-trip) can maintain a local `Set<threadId>` of "just-read" IDs alongside the server state. See [Integration Recipes](/sdks/react-native/integration-recipes).
+## Tenancy is everywhere
 
-## Tenancy is implicit
-
-Every hook that operates on a resource takes `tenantId` via `useThinkworkAuth().user.tenantId` — either directly (you pass it in) or indirectly (the provider injects it). You should never hard-code tenant IDs; always read from the authed user.
-
-If `user.tenantId` is undefined while `status === "signed-in"`, something went wrong in token parsing. This shouldn't happen in 0.2.0+ (the me-query fallback handles Google-federated users) — if you see it, file a bug.
+Every hook that touches data takes a `tenantId`. Don't hard‑code it — read it from `useThinkworkAuth().user.tenantId`. That value is populated as soon as the user is signed in, even for Google accounts where the tenant info lives in a different place than you'd expect. The SDK takes care of it.
