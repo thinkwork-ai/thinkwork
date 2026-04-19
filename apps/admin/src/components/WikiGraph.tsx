@@ -23,22 +23,15 @@ import { useQuery, useClient } from "urql";
 import { Loader2, Sparkles } from "lucide-react";
 import * as d3 from "d3-force";
 import { WikiGraphQuery } from "@/lib/graphql-queries";
+import {
+  PAGE_TYPES,
+  PAGE_TYPE_FORCE_COLORS,
+  PAGE_TYPE_DEFAULT_FORCE_COLOR,
+  PAGE_TYPE_LABELS,
+  type WikiPageType,
+} from "@/lib/wiki-palette";
 
-// Page-type palette. Three active types in v1; Untyped is impossible.
-const TYPE_COLORS: Record<string, string> = {
-  ENTITY: "#7dd3fc", // sky
-  TOPIC: "#fbbf24", // amber
-  DECISION: "#fb7185", // rose
-};
-const DEFAULT_COLOR = "#94a3b8"; // slate — only used if entityType is ever missing
-
-const TYPE_LABELS: Record<string, string> = {
-  ENTITY: "Entity",
-  TOPIC: "Topic",
-  DECISION: "Decision",
-};
-
-export type WikiPageType = "ENTITY" | "TOPIC" | "DECISION";
+export type { WikiPageType };
 
 export interface WikiGraphNode {
   id: string;
@@ -212,7 +205,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       if (!onTypesLoaded || allNodes.length === 0) return;
       const types = new Set<string>();
       for (const n of allNodes) {
-        types.add(TYPE_LABELS[n.entityType] ?? n.entityType);
+        types.add(PAGE_TYPE_LABELS[n.entityType] ?? n.entityType);
       }
       const sorted = Array.from(types).sort();
       const key = sorted.join(",");
@@ -230,7 +223,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       if (typeFilter && typeFilter.length > 0) {
         const filterSet = new Set(typeFilter);
         filtered = filtered.filter((n) =>
-          filterSet.has(TYPE_LABELS[n.entityType] ?? n.entityType),
+          filterSet.has(PAGE_TYPE_LABELS[n.entityType] ?? n.entityType),
         );
       }
       if (searchQuery) {
@@ -318,7 +311,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       const matched = matchedIdsRef.current;
       const muted = matched ? !matched.has(node.id) : false;
       const entityType = node.entityType as WikiPageType;
-      const color = TYPE_COLORS[entityType] ?? DEFAULT_COLOR;
+      const color = PAGE_TYPE_FORCE_COLORS[entityType] ?? PAGE_TYPE_DEFAULT_FORCE_COLOR;
       // Clip the label to keep the canvas readable without losing the full
       // title from the tooltip (nodeLabel callback below passes the raw
       // title to ForceGraph3D).
@@ -444,14 +437,12 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       );
     }
 
-    const typeCounts = (["ENTITY", "TOPIC", "DECISION"] as const).map(
-      (t) => ({
-        type: t,
-        count: graphData.nodes.filter(
-          (n: any) => (n.entityType as WikiPageType) === t,
-        ).length,
-      }),
-    );
+    const typeCounts = PAGE_TYPES.map((t) => ({
+      type: t,
+      count: graphData.nodes.filter(
+        (n: any) => (n.entityType as WikiPageType) === t,
+      ).length,
+    }));
 
     return (
       <div ref={containerRef} className="absolute inset-0 overflow-hidden">
@@ -474,7 +465,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
           nodeLabel={(node: any) =>
             `${node.label}${
               node.entityType
-                ? ` (${TYPE_LABELS[node.entityType] ?? node.entityType})`
+                ? ` (${PAGE_TYPE_LABELS[node.entityType as WikiPageType] ?? node.entityType})`
                 : ""
             }${node.edgeCount ? ` — ${node.edgeCount} link${node.edgeCount === 1 ? "" : "s"}` : ""}`
           }
@@ -519,9 +510,9 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
               <span key={t.type} className="flex items-center gap-1">
                 <span
                   className="inline-block w-2.5 h-2.5 rounded-full"
-                  style={{ background: TYPE_COLORS[t.type] }}
+                  style={{ background: PAGE_TYPE_FORCE_COLORS[t.type] }}
                 />
-                {TYPE_LABELS[t.type]} ({t.count})
+                {PAGE_TYPE_LABELS[t.type]} ({t.count})
               </span>
             ))}
         </div>
