@@ -63,7 +63,7 @@ Your only output is the final markdown body for the named section. Do not return
 ## Formatting rules (strict)
 
 - **Never write record ids, UUIDs, or hex identifiers into the prose.** Phrases like "see records 1c907c71-c17c-...", "(record id abc-123)", or any dump of Hindsight unit ids are forbidden. Provenance is stored separately — the body is for human-readable content only.
-- **Use wikilinks when referring to other pages in scope.** Wrap any name that matches a known page (see "Known pages in scope" below) in double brackets, e.g. write "[[Austin]]" instead of "Austin" when the Austin page exists. This makes the reference clickable in the rendered wiki.
+- **Do NOT use \`[[Title]]\` wikilink syntax anywhere in the body.** Write entity names as plain prose. Cross-page links are rendered separately from \`wiki_page_links\`; bracket syntax in the body renders as literal noise on mobile.
 - Do not inline-cite with "(see record …)" or similar parenthetical references — those belong in \`source_refs\`, not the body.`;
 
 /**
@@ -99,7 +99,6 @@ export async function writeSection(
 		sectionTemplate?.prompt ??
 		"A named section on the page; respect its existing role.";
 
-	const knownTitles = (args.knownPageTitles ?? []).slice(0, 50);
 	const user = [
 		`Page: ${args.pageTitle}  (type: ${args.pageType})`,
 		`Section: ${args.sectionHeading}  (slug: ${args.sectionSlug})`,
@@ -118,12 +117,7 @@ export async function writeSection(
 					.map((r) => `- ${truncate(r.content.text, 400)}`)
 					.join("\n"),
 		"",
-		"## Known pages in scope (wrap matching names in [[Title]])",
-		knownTitles.length === 0
-			? "(none — skip wikilinking this batch)"
-			: knownTitles.map((t) => `- ${t}`).join("\n"),
-		"",
-		"Return only the final markdown body for this one section. Do not include the heading line.",
+		"Return only the final markdown body for this one section. Do not include the heading line. Use plain prose — no [[wikilink]] brackets.",
 	].join("\n");
 
 	const resp = await invokeClaude({

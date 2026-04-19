@@ -120,7 +120,7 @@ Keep bodies factual and grounded. Do not speculate. Every section body in your o
 
 **Never write record ids, UUIDs, hex identifiers, or internal keys into body prose.** Provenance belongs in \`source_refs\` only. Phrases like "see records 1c907c71-..." or "id=abc-123" are forbidden in any \`body_md\` / \`proposed_body_md\` field.
 
-**Use \`[[Page Title]]\` wikilinks in prose when referring to other pages in scope.** For any name in your body text that matches a page in \`recentlyChangedPages\` or a \`newPages\` entry in this response, wrap it in double brackets so the rendered wiki hyperlinks it.
+**Do NOT use \`[[Title]]\` wikilink syntax in body prose.** Cross-page links go in \`pageLinks\` on the JSON root — the rendered wiki reads them from \`wiki_page_links\` and surfaces them separately. Bracket syntax inside body_md renders as literal noise.
 
 Output ONLY valid JSON. No prose, no markdown fences.`;
 

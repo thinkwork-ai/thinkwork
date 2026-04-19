@@ -178,6 +178,22 @@ type DbClient = typeof defaultDb | PgTransaction<any, any, any>;
 // ---------------------------------------------------------------------------
 
 /**
+ * Strip `[[wikilink]]` bracket syntax from section body markdown. Models
+ * sometimes add it even when the prompt forbids it; brackets render as
+ * literal noise on the mobile wiki view because cross-page links come
+ * from `wiki_page_links`, not body prose.
+ *
+ * Handles both `[[Name]]` and Obsidian-style `[[Name|Display]]` (keeps
+ * the display text).
+ */
+export function stripWikilinks(md: string | null | undefined): string {
+	if (!md) return "";
+	return md.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, plain, display) =>
+		(display ?? plain).trim(),
+	);
+}
+
+/**
  * Cheap guard against garbage IDs flowing in from LLM output. Postgres
  * raises `invalid input syntax for type uuid` on any non-conforming string,
  * which would otherwise crash a whole compile job when the planner
@@ -735,6 +751,12 @@ export async function upsertSections(
 	db: DbClient = defaultDb,
 ): Promise<void> {
 	for (const section of sections) {
+		// Belt-and-suspenders: strip `[[wikilink]]` brackets before persist.
+		// Prompts already forbid them, but models slip and they render as
+		// literal noise on mobile (links come from wiki_page_links, not
+		// prose). Do this at the repo boundary so every write path is
+		// covered, not just the section-writer path.
+		const cleanBody = stripWikilinks(section.body_md);
 		const existing = await db
 			.select({ id: wikiPageSections.id })
 			.from(wikiPageSections)
@@ -753,7 +775,7 @@ export async function upsertSections(
 				.update(wikiPageSections)
 				.set({
 					heading: section.heading,
-					body_md: section.body_md,
+					body_md: cleanBody,
 					position: section.position,
 					last_source_at: sql`now()` as any,
 					updated_at: sql`now()` as any,
@@ -766,7 +788,7 @@ export async function upsertSections(
 					page_id: pageId,
 					section_slug: section.section_slug,
 					heading: section.heading,
-					body_md: section.body_md,
+					body_md: cleanBody,
 					position: section.position,
 					last_source_at: sql`now()` as any,
 				})
