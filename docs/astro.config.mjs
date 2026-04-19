@@ -53,6 +53,9 @@ export default defineConfig({
                 { label: "Overview", slug: "concepts/knowledge" },
                 { label: "Document Knowledge", slug: "concepts/knowledge/document-knowledge" },
                 { label: "Long-term Memory", slug: "concepts/knowledge/memory" },
+                { label: "Compounding Memory", slug: "concepts/knowledge/compounding-memory" },
+                { label: "Compounding Memory: Pipeline", slug: "concepts/knowledge/compounding-memory-pipeline" },
+                { label: "Compounding Memory: Pages", slug: "concepts/knowledge/compounding-memory-pages" },
                 { label: "Retrieval and Context", slug: "concepts/knowledge/retrieval-and-context" },
                 { label: "Knowledge Graph Direction", slug: "concepts/knowledge/knowledge-graph" },
               ],
@@ -175,6 +178,7 @@ export default defineConfig({
           collapsed: true,
           items: [
             { label: "GraphQL Schema", slug: "api/graphql" },
+            { label: "Compounding Memory", slug: "api/compounding-memory" },
           ],
         },
         {
@@ -203,6 +207,7 @@ export default defineConfig({
             { label: "Connectors", slug: "guides/connectors" },
             { label: "External Tasks", slug: "guides/external-tasks" },
             { label: "Evaluations", slug: "guides/evaluations" },
+            { label: "Operating Compounding Memory", slug: "guides/compounding-memory-operations" },
           ],
         },
         { label: "Architecture", slug: "architecture" },
