@@ -34,6 +34,13 @@ vi.mock("../graphql/utils.js", () => ({
 	db: mockDb,
 	eq: (a: unknown, b: unknown) => ({ __eq: [a, b] }),
 	agents: { id: "agents.id", tenant_id: "agents.tenant_id" },
+	users: { id: "users.id", tenant_id: "users.tenant_id", email: "users.email" },
+}));
+
+vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
+	resolveCallerTenantId: vi.fn().mockResolvedValue(null),
+	resolveCaller: vi.fn().mockResolvedValue({ userId: null, tenantId: null }),
+	resolveCallerUserId: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("../lib/wiki/repository.js", async (importOriginal) => {
