@@ -92,7 +92,26 @@ export const mobileWikiSearch = async (
 		`[mobileWikiSearch] agent=${agent.slug ?? agent.id} query=${JSON.stringify(trimmed)} pages=${rows.length}`,
 	);
 
-	return rows.map((r) => ({
+	// Diagnostic: mobile clients report receiving 0 results even when the
+	// Lambda logs pages>0. Dump the raw first row and the shape of the
+	// first mapped result so we can see whether a field type mismatch is
+	// causing GraphQL to null out the response. Remove once the root
+	// cause is identified.
+	if (rows.length > 0) {
+		const sample = rows[0];
+		console.log(
+			`[mobileWikiSearch][diag] rawFirstRow keys=${Object.keys(sample).join(",")} types=${Object.entries(
+				sample,
+			)
+				.map(
+					([k, v]) =>
+						`${k}:${v === null ? "null" : v instanceof Date ? "Date" : typeof v}`,
+				)
+				.join("|")}`,
+		);
+	}
+
+	const mapped = rows.map((r) => ({
 		page: toGraphQLPage(
 			{
 				id: r.id,
@@ -113,4 +132,13 @@ export const mobileWikiSearch = async (
 		score: r.score,
 		matchingMemoryIds: [] as string[],
 	}));
+
+	if (mapped.length > 0) {
+		const first = mapped[0];
+		console.log(
+			`[mobileWikiSearch][diag] mappedFirst score=${first.score}(${typeof first.score}) matchingMemoryIds=${JSON.stringify(first.matchingMemoryIds)} page.id=${first.page.id} page.type=${first.page.type} page.createdAt=${first.page.createdAt} page.updatedAt=${first.page.updatedAt}`,
+		);
+	}
+
+	return mapped;
 };
