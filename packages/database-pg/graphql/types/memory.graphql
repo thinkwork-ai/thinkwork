@@ -144,14 +144,17 @@ extend type Query {
   mobileMemorySearch(agentId: ID!, query: String!, limit: Int = 20): [MobileMemoryCapture!]!
 
   """
-  Ranked wiki-page search for mobile. Runs the same Hindsight recall the
-  mobile memory search does, then reverse-joins each hit through
-  `wiki_section_sources` to the compiled pages that cite it. Pages are
-  deduplicated (one row per page) and ranked by the sum of Hindsight hit
-  scores across all of the page's matching source memories — so a page
-  cited by multiple strong hits ranks higher than one cited by a single
-  weak hit. `matchingMemoryIds` preserves input rank order so the client
-  can show "why this page matched" without a second round trip.
+  Ranked wiki-page search for mobile. Runs a Postgres full-text query
+  (`plainto_tsquery('english', …)` + `ts_rank`) against the GIN-indexed
+  `search_tsv` generated column on `wiki_pages` (title || summary ||
+  body_md), scoped to one (tenant, agent) pair. Returns results in
+  `ts_rank` DESC order, tie-broken by `last_compiled_at` DESC.
+
+  Previously routed through Hindsight semantic recall; on the compiled
+  wiki corpus FTS is near-instant and matches the query shape mobile
+  users actually type (page titles, keywords). `matchingMemoryIds` is
+  retained for wire-format compatibility and is always [] on this path —
+  pages match their own compiled text, not source memory units.
   """
   mobileWikiSearch(agentId: ID!, query: String!, limit: Int = 20): [MobileWikiSearchResult!]!
 
@@ -167,14 +170,15 @@ extend type Query {
 type MobileWikiSearchResult {
   page: WikiPage!
   """
-  Reciprocal-rank surfacing score = 1 / (bestRank + 60), where bestRank
-  is the lowest Hindsight position of any memory citing this page.
-  Higher is better. Not comparable across queries.
+  Postgres `ts_rank(search_tsv, plainto_tsquery('english', query))` on
+  the page's compiled text. Higher is better. Not comparable across
+  queries.
   """
   score: Float!
   """
-  Source memory unit ids whose recall hits caused this page to appear, in
-  Hindsight rank order (best-ranked first).
+  Retained for wire-format compatibility with older mobile clients.
+  Always [] on the FTS path; pages match their own compiled text, not
+  source memory units.
   """
   matchingMemoryIds: [ID!]!
 }
