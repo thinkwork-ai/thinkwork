@@ -149,3 +149,16 @@ export interface CaptureMobileMemoryInput {
   metadata?: Record<string, unknown>;
   clientCaptureId?: string;
 }
+
+export type WikiPageType = "ENTITY" | "TOPIC" | "DECISION";
+
+export interface WikiSearchHit {
+  id: string;
+  type: WikiPageType;
+  slug: string;
+  title: string;
+  summary?: string | null;
+  lastCompiledAt?: string | null;
+  score: number;
+  matchedAlias?: string | null;
+}

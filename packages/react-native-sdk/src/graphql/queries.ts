@@ -219,18 +219,30 @@ export const DeleteMobileMemoryCaptureMutation = gql`
 `;
 
 export const MobileMemorySearchQuery = gql`
-  query MobileMemorySearch($agentId: ID!, $query: String!, $limit: Int) {
-    memorySearch(assistantId: $agentId, query: $query, limit: $limit) {
-      records {
-        memoryRecordId
-        content {
-          text
-        }
-        createdAt
-        factType
-        score
+  query MobileMemorySearch(
+    $tenantId: ID!
+    $ownerId: ID!
+    $query: String!
+    $limit: Int
+  ) {
+    wikiSearch(
+      tenantId: $tenantId
+      ownerId: $ownerId
+      query: $query
+      limit: $limit
+    ) {
+      score
+      matchedAlias
+      page {
+        id
+        type
+        slug
+        title
+        summary
+        status
+        lastCompiledAt
+        updatedAt
       }
-      totalCount
     }
   }
 `;

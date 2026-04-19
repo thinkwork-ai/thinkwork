@@ -46,4 +46,6 @@ export type {
   MobileCaptureFactType,
   MobileMemoryCapture,
   CaptureMobileMemoryInput,
+  WikiPageType,
+  WikiSearchHit,
 } from "./types";

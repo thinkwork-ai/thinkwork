@@ -520,7 +520,8 @@ export default function ThreadsScreen() {
           />
         ) : (
           <CapturesList
-            agentId={activeAgent?.id}
+            tenantId={tenantId}
+            ownerId={currentUser?.id}
             colors={colors}
             searchQuery={memoryQueryDebounced}
           />
