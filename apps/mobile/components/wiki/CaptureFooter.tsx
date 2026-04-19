@@ -158,7 +158,7 @@ export function CaptureFooter({
 		setIsDictating(true);
 	}, []);
 
-	const placeholder = mode === "search" ? "Search memories..." : "Add new memory...";
+	const placeholder = mode === "search" ? "Search wiki..." : "Add new memory...";
 	const hasChip = mode === "add" && factType !== "FACT";
 	const showCounter = mode === "add" && charCount >= SOFT_WARN_CHARS;
 

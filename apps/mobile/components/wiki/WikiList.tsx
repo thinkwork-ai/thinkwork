@@ -13,13 +13,13 @@ import {
 import { COLORS } from "@/lib/theme";
 import { WikiResultRow } from "./WikiResultRow";
 
-interface CapturesListProps {
+interface WikiListProps {
 	agentId: string | null | undefined;
 	colors: (typeof COLORS)["dark"];
 	searchQuery?: string;
 }
 
-export function CapturesList({ agentId, colors, searchQuery }: CapturesListProps) {
+export function WikiList({ agentId, colors, searchQuery }: WikiListProps) {
 	const router = useRouter();
 	const trimmedQuery = (searchQuery || "").trim();
 	const isSearching = trimmedQuery.length > 0;
@@ -38,7 +38,7 @@ export function CapturesList({ agentId, colors, searchQuery }: CapturesListProps
 	useEffect(() => {
 		if (!error) return;
 		console.warn(
-			`[CapturesList] ${isSearching ? "search" : "recent"} error query=${JSON.stringify(trimmedQuery)} agentId=${agentId} error=${error.message}`,
+			`[WikiList] ${isSearching ? "search" : "recent"} error query=${JSON.stringify(trimmedQuery)} agentId=${agentId} error=${error.message}`,
 			error,
 		);
 	}, [error, isSearching, trimmedQuery, agentId]);
@@ -63,7 +63,7 @@ export function CapturesList({ agentId, colors, searchQuery }: CapturesListProps
 						<Search size={32} color={colors.mutedForeground} />
 					)}
 					<Muted>
-						{loading ? `Searching for "${trimmedQuery}"…` : `No memories matching "${trimmedQuery}"`}
+						{loading ? `Searching for "${trimmedQuery}"…` : `No wiki pages matching "${trimmedQuery}"`}
 					</Muted>
 				</View>
 			);
@@ -71,7 +71,7 @@ export function CapturesList({ agentId, colors, searchQuery }: CapturesListProps
 		return (
 			<View className="flex-1 items-center justify-center px-6 gap-2">
 				<IconBrain size={32} color={colors.mutedForeground} />
-				<Muted>{loading ? "Loading memories..." : "No memories yet"}</Muted>
+				<Muted>{loading ? "Loading wiki…" : "No wiki pages yet"}</Muted>
 			</View>
 		);
 	}
