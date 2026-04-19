@@ -131,12 +131,58 @@ export interface PlannedPageLink {
 	context?: string;
 }
 
+/**
+ * Update a section that lives on a parent/hub page and acts as a rollup
+ * across multiple child entities. Emitted by the aggregation pass (not the
+ * leaf planner) — the shape is parallel to PlannedSectionUpdate but carries
+ * the additional linked-page set and optional tag observations so the
+ * compiler can update `wiki_page_sections.aggregation` metadata in one go.
+ */
+export interface PlannedParentSectionUpdate {
+	pageId: string; // existing parent/hub page id (must be in candidatePages)
+	sectionSlug: string;
+	heading: string;
+	proposed_body_md: string;
+	rationale: string;
+	linked_page_slugs: Array<{ type: WikiPageType; slug: string }>;
+	source_refs: string[];
+	observed_tags?: string[];
+}
+
+/**
+ * Promote a section on a parent page into its own topic page. The compiler
+ * creates the new page, rewrites the parent section down to the summary +
+ * highlights, and links parent ⇄ child with kind='parent_of'/'child_of'.
+ * Promotion is sticky — the aggregation planner must not re-promote an
+ * already-promoted section.
+ */
+export interface PlannedSectionPromotion {
+	pageId: string;
+	sectionSlug: string;
+	reason: string;
+	newPage: PlannedNewPage;
+	parentSummary: string;
+	topHighlights: string[];
+}
+
 export interface PlannerResult {
 	pageUpdates: PlannedPageUpdate[];
 	newPages: PlannedNewPage[];
 	unresolvedMentions: PlannedUnresolvedMention[];
 	promotions: PlannedPromotion[];
 	pageLinks: PlannedPageLink[];
+	/**
+	 * Hub/rollup section updates on existing parent pages. Emitted primarily
+	 * by the aggregation pass; the leaf planner may also set them but should
+	 * stay conservative — mis-rollups are expensive to unwind.
+	 */
+	parentSectionUpdates: PlannedParentSectionUpdate[];
+	/**
+	 * Sections that have earned promotion into their own topic pages. Applied
+	 * after parentSectionUpdates so the planner sees fresh aggregation metadata
+	 * before deciding which sections to promote.
+	 */
+	sectionPromotions: PlannedSectionPromotion[];
 	usage: { inputTokens: number; outputTokens: number };
 }
 
@@ -350,6 +396,75 @@ export function validatePlannerResult(value: unknown): asserts value is PlannerR
 		v.pageLinks = [];
 	} else if (!Array.isArray(v.pageLinks)) {
 		throw new Error("planner response pageLinks must be an array");
+	}
+
+	// parentSectionUpdates / sectionPromotions are PR-B additions. The leaf
+	// planner prompt does not ask for them, so default to [] when absent.
+	if (v.parentSectionUpdates === undefined) {
+		v.parentSectionUpdates = [];
+	} else if (!Array.isArray(v.parentSectionUpdates)) {
+		throw new Error("planner response parentSectionUpdates must be an array");
+	}
+	if (v.sectionPromotions === undefined) {
+		v.sectionPromotions = [];
+	} else if (!Array.isArray(v.sectionPromotions)) {
+		throw new Error("planner response sectionPromotions must be an array");
+	}
+
+	for (const p of v.parentSectionUpdates as unknown[]) {
+		if (!p || typeof p !== "object") {
+			throw new Error("parentSectionUpdates entry not object");
+		}
+		const psu = p as Record<string, unknown>;
+		if (typeof psu.pageId !== "string" || psu.pageId.length === 0) {
+			throw new Error("parentSectionUpdates.pageId missing");
+		}
+		if (
+			typeof psu.sectionSlug !== "string" ||
+			psu.sectionSlug.length === 0
+		) {
+			throw new Error("parentSectionUpdates.sectionSlug missing");
+		}
+		if (!Array.isArray(psu.linked_page_slugs)) {
+			psu.linked_page_slugs = [];
+		}
+		if (!Array.isArray(psu.source_refs)) {
+			psu.source_refs = [];
+		}
+	}
+
+	for (const p of v.sectionPromotions as unknown[]) {
+		if (!p || typeof p !== "object") {
+			throw new Error("sectionPromotions entry not object");
+		}
+		const sp = p as Record<string, unknown>;
+		if (typeof sp.pageId !== "string" || sp.pageId.length === 0) {
+			throw new Error("sectionPromotions.pageId missing");
+		}
+		if (typeof sp.sectionSlug !== "string" || sp.sectionSlug.length === 0) {
+			throw new Error("sectionPromotions.sectionSlug missing");
+		}
+		if (!sp.newPage || typeof sp.newPage !== "object") {
+			throw new Error("sectionPromotions.newPage missing");
+		}
+		const np = sp.newPage as Record<string, unknown>;
+		if (!isPageType(np.type)) {
+			throw new Error(
+				`sectionPromotions.newPage.type invalid: ${np.type}`,
+			);
+		}
+		if (typeof np.title !== "string" || np.title.length === 0) {
+			throw new Error("sectionPromotions.newPage.title missing");
+		}
+		if (typeof np.slug !== "string" || np.slug.length === 0) {
+			throw new Error("sectionPromotions.newPage.slug missing");
+		}
+		if (!Array.isArray(np.sections)) {
+			throw new Error("sectionPromotions.newPage.sections missing");
+		}
+		if (!Array.isArray(sp.topHighlights)) {
+			sp.topHighlights = [];
+		}
 	}
 
 	for (const l of v.pageLinks as unknown[]) {

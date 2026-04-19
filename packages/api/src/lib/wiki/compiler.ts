@@ -16,6 +16,7 @@ import type { ThinkWorkMemoryRecord } from "../memory/types.js";
 import { getMemoryServices } from "../memory/index.js";
 import {
 	completeCompileJob,
+	emptySectionAggregation,
 	findPageById,
 	findPageBySlug,
 	getCompileJob,
@@ -23,13 +24,20 @@ import {
 	listOpenMentions,
 	listPageSections,
 	listPagesForScope,
+	listRecentlyChangedPagesForAggregation,
 	markUnresolvedPromoted,
+	mergeSectionAggregation,
+	recomputeHubness,
 	setCursor,
+	setParentPage,
 	upsertPage,
 	upsertPageLink,
+	upsertSectionAggregation,
 	upsertUnresolvedMention,
 	normalizeAlias,
+	type SectionAggregation,
 	type WikiCompileJobRow,
+	type WikiPageRow,
 } from "./repository.js";
 import { runPlanner, type PlannerResult } from "./planner.js";
 import {
@@ -38,6 +46,18 @@ import {
 	type SectionWriteResult,
 } from "./section-writer.js";
 import { slugifyTitle, seedAliasesForTitle } from "./aliases.js";
+import {
+	deriveParentCandidates,
+	type DerivedParentCandidate,
+} from "./parent-expander.js";
+import {
+	runAggregationPlanner,
+	type AggregationCandidatePage,
+} from "./aggregation-planner.js";
+import { scoreSectionAggregation } from "./promotion-scorer.js";
+import { db as defaultDb } from "../db.js";
+import { wikiPageSections, wikiPageLinks } from "@thinkwork/database-pg/schema";
+import { and, eq, sql } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
 // Budgets / caps (from build plan PR 3 "Guardrails")
@@ -75,8 +95,26 @@ export interface RunJobResult {
 		cost_usd: number;
 		latency_ms: number;
 		cap_hit?: string;
+		// --- Hierarchical-aggregation metrics (PR B) --------------------
+		parent_sections_updated?: number;
+		sections_promoted?: number;
+		deterministic_parents_derived?: number;
+		aggregation_planner_calls?: number;
+		aggregation_input_tokens?: number;
+		aggregation_output_tokens?: number;
+		/** Set when the aggregation pass errored; leaf work still succeeded. */
+		aggregation_error?: string;
 	};
 	error?: string;
+}
+
+/**
+ * Feature flag for the aggregation pass. Defaults to false so it's opt-in
+ * per deploy. Accepts 'true' / '1' / 'yes' (case-insensitive).
+ */
+export function isAggregationPassEnabled(): boolean {
+	const raw = (process.env.WIKI_AGGREGATION_PASS_ENABLED ?? "").toLowerCase();
+	return raw === "true" || raw === "1" || raw === "yes";
 }
 
 /**
@@ -102,6 +140,10 @@ export async function runCompileJob(
 	}
 
 	const metrics = emptyMetrics();
+	// Accumulate records across batches so the aggregation pass has the full
+	// input slice (not just the last batch) when it derives parent candidates.
+	const allRecordsThisJob: ThinkWorkMemoryRecord[] = [];
+	const jobStartedAt = new Date();
 
 	try {
 		let cursor = await getCursor({
@@ -124,6 +166,7 @@ export async function runCompileJob(
 
 			if (records.length === 0) break;
 			metrics.records_read += records.length;
+			allRecordsThisJob.push(...records);
 
 			const [candidatePages, openMentions] = await Promise.all([
 				listPagesForScope({
@@ -180,6 +223,30 @@ export async function runCompileJob(
 
 			// If we got fewer records than asked for, we've drained the cursor.
 			if (records.length < pageSize) break;
+		}
+
+		// ---------------------------------------------------------------
+		// Aggregation pass — one call per job after leaf work has landed.
+		// Gated by the WIKI_AGGREGATION_PASS_ENABLED flag. Failures here are
+		// caught and recorded in metrics, but do NOT fail the whole job —
+		// the leaf writes are already durable and the aggregation pass can
+		// retry cleanly on the next compile.
+		// ---------------------------------------------------------------
+		if (isAggregationPassEnabled() && allRecordsThisJob.length > 0) {
+			try {
+				await runAggregationPass({
+					job,
+					records: allRecordsThisJob,
+					jobStartedAt,
+					metrics,
+				});
+			} catch (aggErr) {
+				const msg = (aggErr as Error)?.message || String(aggErr);
+				console.warn(
+					`[wiki-compiler] aggregation pass failed for job=${job.id}: ${msg}`,
+				);
+				metrics.aggregation_error = msg;
+			}
 		}
 
 		metrics.cost_usd = estimateCostUsd(
@@ -471,6 +538,465 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 	}
 
 	return null;
+}
+
+// ---------------------------------------------------------------------------
+// Aggregation pass (PR B)
+// ---------------------------------------------------------------------------
+
+const MAX_AGGREGATION_PAGES = 60;
+
+interface AggregationArgs {
+	job: WikiCompileJobRow;
+	records: ThinkWorkMemoryRecord[];
+	jobStartedAt: Date;
+	metrics: RunJobResult["metrics"];
+}
+
+/**
+ * Run one aggregation pass over the scope's recently-changed pages. Errors
+ * bubble up to the caller so the surrounding try/catch can record them
+ * without failing the job.
+ */
+export async function runAggregationPass(args: AggregationArgs): Promise<void> {
+	const { job, records, metrics } = args;
+
+	const parentCandidates = deriveParentCandidates(records);
+	metrics.deterministic_parents_derived = parentCandidates.length;
+
+	const recentPages = await listRecentlyChangedPagesForAggregation({
+		tenantId: job.tenant_id,
+		ownerId: job.owner_id,
+		// Use a wider window than just this job's start so we catch pages
+		// still warm from the prior compile but not yet reorganized.
+		sinceUpdatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24),
+		limit: MAX_AGGREGATION_PAGES,
+	});
+
+	if (recentPages.length === 0 && parentCandidates.length === 0) {
+		return;
+	}
+
+	const candidatePages = await hydrateAggregationCandidates(recentPages);
+	const linkNeighborhoods = await computeLinkNeighborhoods(recentPages);
+
+	const plan = await runAggregationPlanner({
+		tenantId: job.tenant_id,
+		ownerId: job.owner_id,
+		recentlyChangedPages: candidatePages,
+		parentCandidates,
+		linkNeighborhoods,
+	});
+
+	metrics.aggregation_planner_calls =
+		(metrics.aggregation_planner_calls ?? 0) + 1;
+	metrics.aggregation_input_tokens =
+		(metrics.aggregation_input_tokens ?? 0) + plan.usage.inputTokens;
+	metrics.aggregation_output_tokens =
+		(metrics.aggregation_output_tokens ?? 0) + plan.usage.outputTokens;
+
+	await applyAggregationPlan({ job, records, plan, metrics });
+}
+
+async function hydrateAggregationCandidates(
+	pages: WikiPageRow[],
+): Promise<AggregationCandidatePage[]> {
+	const out: AggregationCandidatePage[] = [];
+	for (const p of pages) {
+		const sections = await defaultDb
+			.select({
+				id: wikiPageSections.id,
+				section_slug: wikiPageSections.section_slug,
+				heading: wikiPageSections.heading,
+				body_md: wikiPageSections.body_md,
+				aggregation: wikiPageSections.aggregation,
+			})
+			.from(wikiPageSections)
+			.where(eq(wikiPageSections.page_id, p.id));
+		out.push({
+			id: p.id,
+			type: p.type,
+			slug: p.slug,
+			title: p.title,
+			summary: p.summary,
+			parent_page_id: p.parent_page_id,
+			hubness_score: p.hubness_score,
+			tags: p.tags ?? [],
+			sections: sections.map((s) => ({
+				id: s.id,
+				section_slug: s.section_slug,
+				heading: s.heading,
+				body_md: s.body_md,
+				aggregation: (s.aggregation as SectionAggregation | null) ?? null,
+				promotion_score:
+					(s.aggregation as SectionAggregation | null)?.promotion_score ??
+					undefined,
+				promotion_status:
+					(s.aggregation as SectionAggregation | null)?.promotion_status ??
+					undefined,
+			})),
+		});
+	}
+	return out;
+}
+
+async function computeLinkNeighborhoods(
+	pages: WikiPageRow[],
+): Promise<
+	Array<{
+		pageId: string;
+		inboundCount: number;
+		outboundSlugs: Array<{ type: "entity" | "topic" | "decision"; slug: string }>;
+	}>
+> {
+	const out: Array<{
+		pageId: string;
+		inboundCount: number;
+		outboundSlugs: Array<{
+			type: "entity" | "topic" | "decision";
+			slug: string;
+		}>;
+	}> = [];
+	for (const p of pages) {
+		const [inbound] = await defaultDb
+			.select({ count: sql<number>`count(*)::int` })
+			.from(wikiPageLinks)
+			.where(eq(wikiPageLinks.to_page_id, p.id));
+		out.push({
+			pageId: p.id,
+			inboundCount: inbound?.count ?? 0,
+			outboundSlugs: [],
+		});
+	}
+	return out;
+}
+
+interface ApplyAggregationArgs {
+	job: WikiCompileJobRow;
+	records: ThinkWorkMemoryRecord[];
+	plan: PlannerResult;
+	metrics: RunJobResult["metrics"];
+}
+
+async function applyAggregationPlan(
+	args: ApplyAggregationArgs,
+): Promise<void> {
+	const { job, records, plan, metrics } = args;
+	const recordById = new Map(records.map((r) => [r.id, r]));
+
+	// Track pages touched by this pass so we can recompute hubness at the end.
+	const touchedPageIds = new Set<string>();
+
+	// 1. Create new hub pages first so later steps can link to them.
+	for (const np of plan.newPages) {
+		const existing = await findPageBySlug({
+			tenantId: job.tenant_id,
+			ownerId: job.owner_id,
+			type: np.type,
+			slug: np.slug,
+		});
+		if (existing) {
+			touchedPageIds.add(existing.id);
+			continue; // never resurrect a hub the leaf planner already built
+		}
+		const slug = slugifyTitle(np.title) || np.slug;
+		const sources = resolveCitedRecords(recordById, np.source_refs);
+		const created = await upsertPage({
+			tenant_id: job.tenant_id,
+			owner_id: job.owner_id,
+			type: np.type,
+			slug,
+			title: np.title,
+			summary: np.summary ?? null,
+			markCompiled: true,
+			sections: np.sections.map((s, i) => {
+				const sectionSources =
+					s.source_refs && s.source_refs.length > 0
+						? resolveCitedRecords(recordById, s.source_refs)
+						: sources;
+				return {
+					section_slug: s.slug,
+					heading: s.heading,
+					body_md: s.body_md,
+					position: i + 1,
+					sources: sectionSources.map((r) => ({
+						kind: "memory_unit" as const,
+						ref: r.id,
+					})),
+				};
+			}),
+			aliases: [
+				...seedAliasesForTitle(np.title),
+				...((np.aliases ?? []).map(normalizeAlias)),
+			]
+				.filter((a, i, arr) => a && arr.indexOf(a) === i)
+				.map((alias) => ({ alias, source: "compiler" })),
+		});
+		touchedPageIds.add(created.id);
+		metrics.pages_upserted += 1;
+	}
+
+	// 2. Parent section updates — rewrite rollup sections on hub pages.
+	for (const upd of plan.parentSectionUpdates) {
+		const parent = await findPageById(upd.pageId);
+		if (!parent) continue;
+		if (
+			parent.tenant_id !== job.tenant_id ||
+			parent.owner_id !== job.owner_id
+		) {
+			continue; // scope safety net
+		}
+
+		const existingSections = await listPageSections(parent.id);
+		const existingSec = existingSections.find(
+			(s) => s.section_slug === upd.sectionSlug,
+		);
+		const existingBody = existingSec?.body_md ?? null;
+
+		if (!isMeaningfulChange(existingBody, upd.proposed_body_md)) {
+			metrics.sections_skipped += 1;
+			continue;
+		}
+
+		const citedRecords = resolveCitedRecords(recordById, upd.source_refs);
+
+		const writeRes: SectionWriteResult = await writeSection({
+			pageType: parent.type,
+			pageTitle: parent.title,
+			sectionSlug: upd.sectionSlug,
+			sectionHeading: existingSec?.heading ?? upd.heading,
+			existingBodyMd: existingBody,
+			proposedBodyMd: upd.proposed_body_md,
+			sourceRecords: citedRecords,
+		});
+		metrics.section_writer_calls += 1;
+		metrics.sections_rewritten += 1;
+		metrics.input_tokens += writeRes.inputTokens;
+		metrics.output_tokens += writeRes.outputTokens;
+
+		// Resolve linked_page_slugs → page ids for aggregation metadata.
+		const linkedIds: string[] = [];
+		for (const slugRef of upd.linked_page_slugs) {
+			const child = await findPageBySlug({
+				tenantId: job.tenant_id,
+				ownerId: job.owner_id,
+				type: slugRef.type,
+				slug: slugRef.slug,
+			});
+			if (child) linkedIds.push(child.id);
+		}
+
+		await upsertPage({
+			tenant_id: parent.tenant_id,
+			owner_id: parent.owner_id,
+			type: parent.type,
+			slug: parent.slug,
+			title: parent.title,
+			summary: parent.summary,
+			markCompiled: true,
+			sections: [
+				{
+					section_slug: upd.sectionSlug,
+					heading: existingSec?.heading ?? upd.heading,
+					body_md: writeRes.body_md,
+					position: existingSec?.position ?? nextFreePosition(existingSections),
+					sources: citedRecords.map((r) => ({
+						kind: "memory_unit" as const,
+						ref: r.id,
+					})),
+				},
+			],
+		});
+
+		const refreshedSections = await listPageSections(parent.id);
+		const freshSection = refreshedSections.find(
+			(s) => s.section_slug === upd.sectionSlug,
+		);
+		if (freshSection) {
+			const nowIso = new Date().toISOString();
+			const current: SectionAggregation =
+				existingSec?.aggregation ?? emptySectionAggregation();
+			const merged = mergeSectionAggregation(current, {
+				linked_page_ids: linkedIds,
+				supporting_record_count:
+					current.supporting_record_count + citedRecords.length,
+				first_source_at: current.first_source_at ?? nowIso,
+				last_source_at: nowIso,
+				observed_tags: upd.observed_tags ?? current.observed_tags,
+			});
+			const scoreResult = scoreSectionAggregation({
+				aggregation: merged,
+				bodyMd: writeRes.body_md,
+			});
+			const promotion_status: SectionAggregation["promotion_status"] =
+				merged.promotion_status === "promoted"
+					? "promoted" // sticky
+					: scoreResult.status === "promote_ready" ||
+						  scoreResult.status === "candidate"
+						? "candidate"
+						: "none";
+			await upsertSectionAggregation({
+				sectionId: freshSection.id,
+				patch: {
+					...merged,
+					promotion_score: scoreResult.score,
+					promotion_status,
+				},
+			});
+		}
+
+		metrics.parent_sections_updated =
+			(metrics.parent_sections_updated ?? 0) + 1;
+		touchedPageIds.add(parent.id);
+	}
+
+	// 3. Section promotions — spin off dense sections into their own pages.
+	for (const promo of plan.sectionPromotions) {
+		const parent = await findPageById(promo.pageId);
+		if (!parent) continue;
+		if (
+			parent.tenant_id !== job.tenant_id ||
+			parent.owner_id !== job.owner_id
+		) {
+			continue;
+		}
+		const parentSections = await listPageSections(parent.id);
+		const parentSection = parentSections.find(
+			(s) => s.section_slug === promo.sectionSlug,
+		);
+		if (!parentSection) continue;
+
+		// Hysteresis: never re-promote a section that's already been promoted.
+		const currentAgg =
+			parentSection.aggregation ?? emptySectionAggregation();
+		if (currentAgg.promotion_status === "promoted") continue;
+
+		const newSlug = slugifyTitle(promo.newPage.title) || promo.newPage.slug;
+		const pageFallbackSources = resolveCitedRecords(
+			recordById,
+			promo.newPage.source_refs,
+		);
+		const newPage = await upsertPage({
+			tenant_id: job.tenant_id,
+			owner_id: job.owner_id,
+			type: promo.newPage.type,
+			slug: newSlug,
+			title: promo.newPage.title,
+			summary: promo.newPage.summary ?? null,
+			markCompiled: true,
+			sections: promo.newPage.sections.map((s, i) => {
+				const sectionSources =
+					s.source_refs && s.source_refs.length > 0
+						? resolveCitedRecords(recordById, s.source_refs)
+						: pageFallbackSources;
+				return {
+					section_slug: s.slug,
+					heading: s.heading,
+					body_md: s.body_md,
+					position: i + 1,
+					sources: sectionSources.map((r) => ({
+						kind: "memory_unit" as const,
+						ref: r.id,
+					})),
+				};
+			}),
+			aliases: [
+				...seedAliasesForTitle(promo.newPage.title),
+				...((promo.newPage.aliases ?? []).map(normalizeAlias)),
+			]
+				.filter((a, i, arr) => a && arr.indexOf(a) === i)
+				.map((alias) => ({ alias, source: "compiler" })),
+		});
+		metrics.pages_upserted += 1;
+
+		// Wire hierarchy: parent_page_id + parent_of / child_of links.
+		await setParentPage({
+			pageId: newPage.id,
+			parentPageId: parent.id,
+		});
+
+		// Rewrite the parent section to summary + highlights, leaving the
+		// detailed rollup on the promoted page.
+		const highlights = promo.topHighlights
+			.map((h) => `- ${h.replace(/^[-•\s]+/, "")}`)
+			.join("\n");
+		const newParentBody =
+			[
+				promo.parentSummary.trim(),
+				highlights,
+				`See: [[${promo.newPage.title}]]`,
+			]
+				.filter((x) => x && x.length > 0)
+				.join("\n\n") + "\n";
+
+		await upsertPage({
+			tenant_id: parent.tenant_id,
+			owner_id: parent.owner_id,
+			type: parent.type,
+			slug: parent.slug,
+			title: parent.title,
+			summary: parent.summary,
+			markCompiled: true,
+			sections: [
+				{
+					section_slug: parentSection.section_slug,
+					heading: parentSection.heading,
+					body_md: newParentBody,
+					position: parentSection.position,
+				},
+			],
+		});
+
+		// Freshen the aggregation record with the promoted pointer.
+		const refreshedSections = await listPageSections(parent.id);
+		const freshSection = refreshedSections.find(
+			(s) => s.section_slug === promo.sectionSlug,
+		);
+		if (freshSection) {
+			await upsertSectionAggregation({
+				sectionId: freshSection.id,
+				patch: {
+					promotion_status: "promoted",
+					promoted_page_id: newPage.id,
+				},
+			});
+		}
+
+		metrics.sections_promoted = (metrics.sections_promoted ?? 0) + 1;
+		touchedPageIds.add(parent.id);
+		touchedPageIds.add(newPage.id);
+	}
+
+	// 4. Page links (aggregation-pass can emit references + hierarchy links).
+	if (plan.pageLinks && plan.pageLinks.length > 0) {
+		for (const link of plan.pageLinks) {
+			const from = await findPageBySlug({
+				tenantId: job.tenant_id,
+				ownerId: job.owner_id,
+				type: link.fromType,
+				slug: link.fromSlug,
+			});
+			if (!from) continue;
+			const to = await findPageBySlug({
+				tenantId: job.tenant_id,
+				ownerId: job.owner_id,
+				type: link.toType,
+				slug: link.toSlug,
+			});
+			if (!to) continue;
+			await upsertPageLink({
+				fromPageId: from.id,
+				toPageId: to.id,
+				context: link.context ?? null,
+			});
+			metrics.links_upserted = (metrics.links_upserted ?? 0) + 1;
+		}
+	}
+
+	// 5. Refresh hubness for every touched page. Cheap enough to batch.
+	for (const pageId of touchedPageIds) {
+		await recomputeHubness(pageId);
+	}
 }
 
 // ---------------------------------------------------------------------------
