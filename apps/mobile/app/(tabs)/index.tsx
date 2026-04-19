@@ -249,15 +249,9 @@ export default function ThreadsScreen() {
     void AsyncStorage.removeItem("thinkwork:capture-queue:v1").catch(() => {});
   }, []);
 
-  // Memories-tab search: the footer feeds a raw query, debounced here
-  // before reaching the search hook so we don't hammer Hindsight on every
-  // keystroke.
-  const [memoryQueryRaw, setMemoryQueryRaw] = useState("");
-  const [memoryQueryDebounced, setMemoryQueryDebounced] = useState("");
-  useEffect(() => {
-    const handle = setTimeout(() => setMemoryQueryDebounced(memoryQueryRaw), 400);
-    return () => clearTimeout(handle);
-  }, [memoryQueryRaw]);
+  // Memories-tab search: the footer only emits on explicit submit
+  // (Enter or send tap), so no debounce layer is needed here.
+  const [memoryQuery, setMemoryQuery] = useState("");
 
   // ── Quick Actions (per-user, per-scope, from DB) ──────────────────────
   const [{ data: qaThreadData }, reexecuteQAThread] = useQuickActions(tenantId, "thread");
@@ -522,7 +516,7 @@ export default function ThreadsScreen() {
           <CapturesList
             agentId={activeAgent?.id}
             colors={colors}
-            searchQuery={memoryQueryDebounced}
+            searchQuery={memoryQuery}
           />
         )}
       </WebContent>
@@ -550,7 +544,7 @@ export default function ThreadsScreen() {
             tenantId={tenantId}
             colors={colors}
             isDark={isDark}
-            onSearchQueryChange={setMemoryQueryRaw}
+            onSearchQueryChange={setMemoryQuery}
           />
         )}
       </View>

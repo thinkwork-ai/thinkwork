@@ -62,10 +62,13 @@ export function CaptureFooter({
 
 	const captureMobileMemory = useCaptureMobileMemory();
 
-	// Keep the parent's search query in sync with text+mode. Empty in add mode.
+	// Search is no longer live — query is pushed to the parent only on
+	// explicit submit (send tap or Enter key). Switching to add mode
+	// always wipes the active query so results snap back to the recent
+	// feed and don't leak across modes.
 	useEffect(() => {
-		onSearchQueryChange?.(mode === "search" ? text : "");
-	}, [mode, text, onSearchQueryChange]);
+		if (mode === "add") onSearchQueryChange?.("");
+	}, [mode, onSearchQueryChange]);
 
 	const charCount = text.length;
 	const atHardLimit = charCount >= MAX_CHARS;
@@ -79,12 +82,14 @@ export function CaptureFooter({
 			: colors.mutedForeground;
 
 	const handleChangeText = useCallback((next: string) => {
-		if (next.length > MAX_CHARS) {
-			setText(next.slice(0, MAX_CHARS));
-			return;
+		const clipped = next.length > MAX_CHARS ? next.slice(0, MAX_CHARS) : next;
+		setText(clipped);
+		// Clearing the search input should snap back to the recent feed
+		// immediately, without requiring another submit.
+		if (mode === "search" && clipped.length === 0) {
+			onSearchQueryChange?.("");
 		}
-		setText(next);
-	}, []);
+	}, [mode, onSearchQueryChange]);
 
 	const toggleMode = useCallback(() => {
 		setMode((prev) => (prev === "search" ? "add" : "search"));
@@ -144,8 +149,9 @@ export function CaptureFooter({
 			void handleCapture();
 			return;
 		}
+		onSearchQueryChange?.(text.trim());
 		Keyboard.dismiss();
-	}, [mode, handleCapture]);
+	}, [mode, handleCapture, text, onSearchQueryChange]);
 
 	const handleMicPress = useCallback(() => {
 		dictationUsedRef.current = true;
@@ -192,7 +198,10 @@ export function CaptureFooter({
 						onChangeText={handleChangeText}
 						placeholder={placeholder}
 						placeholderTextColor={colors.mutedForeground}
-						multiline
+						// Search is single-line so Enter fires onSubmitEditing
+						// without flashing a newline first. Add stays multiline
+						// so Enter inserts a line break as the user expects.
+						multiline={mode === "add"}
 						className="max-h-[120px]"
 						style={{
 							flex: 1,
@@ -204,12 +213,15 @@ export function CaptureFooter({
 							paddingRight: text.length > 0 ? 40 : 0,
 						}}
 						returnKeyType={mode === "search" ? "search" : "default"}
-						blurOnSubmit={false}
-						onSubmitEditing={Platform.OS === "web" ? handleSubmit : undefined}
+						blurOnSubmit={mode === "search"}
+						onSubmitEditing={mode === "search" ? handleSubmit : undefined}
 					/>
 					{text.length > 0 ? (
 						<Pressable
-							onPress={() => setText("")}
+							onPress={() => {
+								setText("");
+								if (mode === "search") onSearchQueryChange?.("");
+							}}
 							accessibilityLabel="Clear input"
 							hitSlop={8}
 							style={{ paddingTop: 6, paddingLeft: 8 }}

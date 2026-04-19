@@ -18,6 +18,7 @@ type ServerHit = {
     title: string;
     summary: string | null;
     lastCompiledAt: string | null;
+    updatedAt: string | null;
   };
 };
 
@@ -48,6 +49,7 @@ export function useMobileMemorySearch({ agentId, query, limit }: UseMobileMemory
     title: h.page.title,
     summary: h.page.summary,
     lastCompiledAt: h.page.lastCompiledAt,
+    updatedAt: h.page.updatedAt,
     score: h.score,
     matchedAlias: null,
     matchingMemoryIds: h.matchingMemoryIds ?? [],

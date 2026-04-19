@@ -272,6 +272,7 @@ export const MobileMemorySearchQuery = gql`
         title
         summary
         lastCompiledAt
+        updatedAt
       }
     }
   }

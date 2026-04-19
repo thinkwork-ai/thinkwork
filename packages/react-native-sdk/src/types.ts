@@ -159,6 +159,7 @@ export interface WikiSearchHit {
   title: string;
   summary?: string | null;
   lastCompiledAt?: string | null;
+  updatedAt?: string | null;
   score: number;
   matchedAlias?: string | null;
   /**
