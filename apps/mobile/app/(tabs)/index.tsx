@@ -37,8 +37,7 @@ import { MessageInputFooter, type MessageInputFooterRef, type SelectedWorkspace 
 import { CaptureFooter } from "@/components/memory/CaptureFooter";
 import { CapturesList } from "@/components/memory/CapturesList";
 import { ToastHost } from "@/components/ui/toast";
-import { captureQueue } from "@/lib/offline/capture-queue";
-import { useCaptureQueueSender } from "@/lib/offline/use-capture-queue";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { QuickActionsSheet, type QuickActionsSheetRef } from "@/components/chat/QuickActionsSheet";
 import { QuickActionFormSheet, type QuickActionFormSheetRef, type QuickActionFormData } from "@/components/chat/QuickActionFormSheet";
 import { WorkspacePickerSheet, type WorkspacePickerSheetRef, type SubAgent } from "@/components/input/WorkspacePickerSheet";
@@ -243,11 +242,11 @@ export default function ThreadsScreen() {
   const messageInputRef = useRef<MessageInputFooterRef>(null);
   const [selectedWorkspaces, setSelectedWorkspaces] = useState<SelectedWorkspace[]>([]);
 
-  // Wire the capture queue's sender to the authenticated SDK client and flush
-  // any entries that were stuck from a prior session.
-  useCaptureQueueSender();
+  // One-time cleanup: earlier builds persisted an offline capture queue
+  // at this key. We removed that surface entirely, so purge any leftover
+  // sync_pending entries so they stop hanging around on the device.
   useEffect(() => {
-    void captureQueue.flushPending();
+    void AsyncStorage.removeItem("thinkwork:capture-queue:v1").catch(() => {});
   }, []);
 
   // Memories-tab search: the footer feeds a raw query, debounced here
