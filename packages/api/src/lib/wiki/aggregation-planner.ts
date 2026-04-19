@@ -98,6 +98,15 @@ Type describes shape, not scope. Hub pages are topics.
 - Do not promote a section whose \`aggregation.promotion_status\` is already \`"promoted"\`. Promotion is sticky.
 - Do not invent page ids or slugs. Every reference must match the input.
 
+## Rollup discipline — STRICT
+
+You MUST ground every rollup in evidence visible in the input. Common failure mode: bucketing every restaurant under "Austin Restaurants" regardless of where each one actually is.
+
+- **Only include a page in \`linked_page_slugs\` (or a hub's linked-entities list) when the page's own \`summary\` or \`title\` contains clear evidence it belongs in that hub.** A page titled "Momofuku Daishō" with summary "Korean-inspired restaurant in Toronto" does NOT belong in "Austin Restaurants". If the summary doesn't prove membership, leave the page out.
+- **If fewer than 3 pages in the input clearly match a hub's scope, do not create or reinforce that hub this batch.** Under-rolling is safe; over-rolling pollutes the wiki.
+- **Prefer \`Derived parent candidates\` as seed hubs** — those come from deterministic metadata extraction and are already grounded. If the derived-parents list is empty, be extra conservative about inventing hubs.
+- **City / place-based hubs require matching place evidence** in each linked page's summary. When in doubt, leave the page out.
+
 ## Output actions
 
 Return a JSON object with these arrays (all can be empty):
@@ -184,6 +193,13 @@ export function buildAggregationUserPrompt(batch: AggregationBatch): string {
 					` hubness=${p.hubness_score}` +
 					(p.tags.length > 0 ? ` tags=${JSON.stringify(p.tags.slice(0, 8))}` : ""),
 			);
+			// Surface the page summary so the aggregation planner has real
+			// evidence to judge membership. Without it the model sees only
+			// slug+title and over-groups (e.g. putting every restaurant under
+			// "Austin Restaurants" regardless of actual geography).
+			if (p.summary) {
+				lines.push(`    summary: ${truncate(p.summary, 300)}`);
+			}
 			for (const s of p.sections) {
 				const agg = s.aggregation;
 				const aggStr = agg
@@ -286,6 +302,10 @@ export function emptyAggregationResult(): PlannerResult {
 		sectionPromotions: [],
 		usage: { inputTokens: 0, outputTokens: 0 },
 	};
+}
+
+function truncate(s: string, n: number): string {
+	return s.length <= n ? s : `${s.slice(0, n)}…`;
 }
 
 // Test-only exports.
