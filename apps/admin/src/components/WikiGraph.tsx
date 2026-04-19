@@ -118,8 +118,12 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
               const res = await client
                 .query(WikiGraphQuery, { tenantId, ownerId: id })
                 .toPromise();
+              if (res.error) {
+                console.warn(`[WikiGraph] wikiGraph failed for agent ${id}:`, res.error.message);
+              }
               results[id] = res.data?.wikiGraph;
-            } catch {
+            } catch (err) {
+              console.warn(`[WikiGraph] wikiGraph threw for agent ${id}:`, err);
               results[id] = { nodes: [], edges: [] };
             }
           }),

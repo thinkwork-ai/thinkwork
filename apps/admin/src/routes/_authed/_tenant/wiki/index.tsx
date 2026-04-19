@@ -244,14 +244,7 @@ function WikiPage() {
       accessorKey: "title",
       header: "Title",
       cell: ({ row }) => (
-        <div className="min-w-0">
-          <p className="font-medium truncate">{row.original.title}</p>
-          {row.original.summary && (
-            <p className="text-xs text-muted-foreground truncate">
-              {row.original.summary}
-            </p>
-          )}
-        </div>
+        <span className="font-medium truncate block">{row.original.title}</span>
       ),
     },
   ];
