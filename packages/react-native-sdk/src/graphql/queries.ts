@@ -220,15 +220,17 @@ export const DeleteMobileMemoryCaptureMutation = gql`
 
 export const MobileMemorySearchQuery = gql`
   query MobileMemorySearch($agentId: ID!, $query: String!, $limit: Int) {
-    mobileMemorySearch(agentId: $agentId, query: $query, limit: $limit) {
-      id
-      tenantId
-      agentId
-      content
-      factType
-      capturedAt
-      syncedAt
-      metadata
+    memorySearch(assistantId: $agentId, query: $query, limit: $limit) {
+      records {
+        memoryRecordId
+        content {
+          text
+        }
+        createdAt
+        factType
+        score
+      }
+      totalCount
     }
   }
 `;
