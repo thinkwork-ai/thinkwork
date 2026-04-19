@@ -48,9 +48,18 @@ export interface PromotionThresholds {
 	promoteReady: number;
 }
 
+/**
+ * Initial thresholds were calibrated against a synthetic Austin fixture that
+ * assumed ~20 linked children + ~30 supporting records per hub. Real Marco
+ * data has thinner per-batch density, so nothing ever crossed the bar and
+ * zero promotions happened on four consecutive rebuilds. Lowering both
+ * knobs so the aggregation pass actually produces topic pages; we can tune
+ * back up once the scorer's inputs (page-based parent-expansion, better
+ * coherence) are feeding it richer signals.
+ */
 export const DEFAULT_PROMOTION_THRESHOLDS: PromotionThresholds = {
-	candidate: 0.55,
-	promoteReady: 0.75,
+	candidate: 0.4,
+	promoteReady: 0.55,
 };
 
 const WEIGHTS = {

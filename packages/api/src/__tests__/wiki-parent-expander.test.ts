@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { deriveParentCandidates } from "../lib/wiki/parent-expander.js";
+import {
+	deriveParentCandidates,
+	deriveParentCandidatesFromPageSummaries,
+	mergeParentCandidates,
+} from "../lib/wiki/parent-expander.js";
 import type { ThinkWorkMemoryRecord } from "../lib/memory/types.js";
 
 function makeRecord(
@@ -202,5 +206,75 @@ describe("deriveParentCandidates", () => {
 			makeRecord("r2", { place_address: "10 Soho Sq, London, UK" }),
 		]);
 		expect(out.find((c) => c.reason === "city")?.parentTitle).toBe("London");
+	});
+});
+
+describe("deriveParentCandidatesFromPageSummaries", () => {
+	it("extracts a city cluster from page summaries", () => {
+		const out = deriveParentCandidatesFromPageSummaries([
+			{ id: "p1", title: "Momofuku Daishō", summary: "Korean-inspired restaurant in Toronto." },
+			{ id: "p2", title: "Nana", summary: "Thai restaurant in Toronto." },
+			{ id: "p3", title: "Franklin Barbecue", summary: "BBQ joint in Austin, TX." },
+		]);
+		const toronto = out.find((c) => c.parentTitle === "Toronto");
+		expect(toronto?.supportingCount).toBe(2);
+		expect(toronto?.sourceRecordIds.sort()).toEqual(["p1", "p2"]);
+		// Austin only has 1 page — below default minClusterSize, so no hub.
+		expect(out.find((c) => c.parentTitle === "Austin")).toBeUndefined();
+	});
+
+	it("respects minClusterSize=1 for single-page hubs", () => {
+		const out = deriveParentCandidatesFromPageSummaries(
+			[{ id: "p1", title: "Franklin", summary: "BBQ joint in Austin." }],
+			{ minClusterSize: 1 },
+		);
+		expect(out.find((c) => c.parentTitle === "Austin")?.supportingCount).toBe(
+			1,
+		);
+	});
+
+	it("ignores pages with no usable summary", () => {
+		const out = deriveParentCandidatesFromPageSummaries([
+			{ id: "p1", title: "X", summary: null },
+			{ id: "p2", title: "Y", summary: "" },
+			{ id: "p3", title: "Z", summary: "a thing with no city reference" },
+		]);
+		expect(out).toEqual([]);
+	});
+
+	it("strips trailing state codes from matches", () => {
+		const out = deriveParentCandidatesFromPageSummaries(
+			[
+				{ id: "p1", title: "X", summary: "Located in Austin, TX and popular." },
+				{ id: "p2", title: "Y", summary: "A spot in Austin, TX with great views." },
+			],
+		);
+		expect(out.find((c) => c.parentTitle === "Austin")?.supportingCount).toBe(
+			2,
+		);
+	});
+});
+
+describe("mergeParentCandidates", () => {
+	it("unions supporting ids across lists keyed by slug", () => {
+		const a = deriveParentCandidates([
+			makeRecord("r1", { place_address: "1 A, Toronto, ON M6J 1G1, Canada" }),
+			makeRecord("r2", { place_address: "2 B, Toronto, ON M6J 1G2, Canada" }),
+		]);
+		const b = deriveParentCandidatesFromPageSummaries([
+			{ id: "p9", title: "Pai", summary: "Thai kitchen in Toronto." },
+			{ id: "p10", title: "Canoe", summary: "Fine dining in Toronto." },
+		]);
+		const merged = mergeParentCandidates(a, b);
+		const toronto = merged.find((c) => c.parentSlug === "toronto");
+		expect(toronto?.supportingCount).toBe(4);
+		expect(new Set(toronto?.sourceRecordIds)).toEqual(
+			new Set(["r1", "r2", "p9", "p10"]),
+		);
+	});
+
+	it("returns [] when no inputs", () => {
+		expect(mergeParentCandidates()).toEqual([]);
+		expect(mergeParentCandidates([], [])).toEqual([]);
 	});
 });

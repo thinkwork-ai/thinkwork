@@ -172,6 +172,149 @@ export function deriveParentCandidates(
 	return out;
 }
 
+/**
+ * Parent candidates derived from the SUMMARIES of recent scope pages rather
+ * than the current job's raw records. Per-batch `deriveParentCandidates` is
+ * batch-local — Marco's Toronto/Austin/Napa visits are spread across many
+ * compile batches, so a single batch rarely has enough records to cross
+ * `minClusterSize` even when the scope clearly has a durable city cluster.
+ *
+ * This expander side-steps that by scanning page summaries the aggregation
+ * pass already hydrates. Summaries like "Korean-inspired restaurant in
+ * Toronto" or "Cafe in Austin, TX" carry enough geography to seed city
+ * hubs even when no record-level metadata is in the current batch.
+ *
+ * Deliberately cheap heuristic: looks for capitalized place-name tokens
+ * after a preposition like "in / at / on". No LLM, no DB hit. Pages
+ * whose summaries don't fit the pattern contribute nothing — that's
+ * safer than over-grouping.
+ */
+export interface PageSummaryCandidateInput {
+	id: string;
+	summary: string | null;
+	title: string;
+	tags?: string[];
+}
+
+export function deriveParentCandidatesFromPageSummaries(
+	pages: PageSummaryCandidateInput[],
+	options: ParentExpanderOptions = {},
+): DerivedParentCandidate[] {
+	const min = options.minClusterSize ?? DEFAULT_MIN_CLUSTER_SIZE;
+	const byCity = new Map<
+		string,
+		{
+			title: string;
+			pageIds: Set<string>;
+			tags: Set<string>;
+		}
+	>();
+
+	for (const p of pages) {
+		if (!p.summary) continue;
+		const city = extractCityFromSummary(p.summary);
+		if (!city) continue;
+		const title = titleCase(city);
+		const key = title.toLowerCase();
+		let entry = byCity.get(key);
+		if (!entry) {
+			entry = { title, pageIds: new Set(), tags: new Set() };
+			byCity.set(key, entry);
+		}
+		entry.pageIds.add(p.id);
+		for (const t of p.tags ?? []) entry.tags.add(t);
+	}
+
+	const out: DerivedParentCandidate[] = [];
+	for (const entry of byCity.values()) {
+		if (entry.pageIds.size < min) continue;
+		out.push({
+			reason: "city",
+			parentTitle: entry.title,
+			parentSlug: slugifyTitle(entry.title),
+			parentType: "topic",
+			suggestedSectionSlug: "overview",
+			suggestedSectionHeading: "Overview",
+			// These are page ids, not memory-record ids — same semantic role
+			// as "source of this candidacy" so we reuse the field.
+			sourceRecordIds: Array.from(entry.pageIds),
+			observedTags: Array.from(entry.tags),
+			supportingCount: entry.pageIds.size,
+		});
+	}
+	out.sort((a, b) => b.supportingCount - a.supportingCount);
+	return out;
+}
+
+/**
+ * Merge two candidate lists keyed on parentSlug. Later entries union their
+ * sourceRecordIds + observedTags into earlier ones, bumping supportingCount
+ * to reflect the combined evidence.
+ */
+export function mergeParentCandidates(
+	...lists: DerivedParentCandidate[][]
+): DerivedParentCandidate[] {
+	const bySlug = new Map<string, DerivedParentCandidate>();
+	for (const list of lists) {
+		for (const c of list) {
+			const existing = bySlug.get(c.parentSlug);
+			if (!existing) {
+				bySlug.set(c.parentSlug, {
+					...c,
+					sourceRecordIds: [...c.sourceRecordIds],
+					observedTags: [...c.observedTags],
+				});
+				continue;
+			}
+			const ids = new Set([
+				...existing.sourceRecordIds,
+				...c.sourceRecordIds,
+			]);
+			const tags = new Set([...existing.observedTags, ...c.observedTags]);
+			existing.sourceRecordIds = Array.from(ids);
+			existing.observedTags = Array.from(tags);
+			existing.supportingCount = ids.size;
+		}
+	}
+	return Array.from(bySlug.values()).sort(
+		(a, b) => b.supportingCount - a.supportingCount,
+	);
+}
+
+/**
+ * Pull a city-like token out of a page summary. Looks for "in / at / on"
+ * followed by a capitalized word or pair ("Austin", "Mexico City",
+ * "New York"). Optional trailing ", ST" is stripped. Returns null when
+ * nothing plausibly looks like a place.
+ */
+function extractCityFromSummary(summary: string): string | null {
+	// "… in Toronto", "located in Austin, TX", "on the outskirts of Napa"
+	const re =
+		/\b(?:in|at|on|near|from|of)\s+([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?)(?:,\s*[A-Z]{2})?\b/;
+	const match = summary.match(re);
+	if (!match) return null;
+	const token = match[1]!.trim();
+	// Filter out obvious false positives we see on real data.
+	const blocklist = new Set([
+		"The",
+		"A",
+		"An",
+		"This",
+		"These",
+		"That",
+		"It",
+		"My",
+		"His",
+		"Her",
+		"Their",
+		"Our",
+		"Your",
+		"I",
+	]);
+	if (blocklist.has(token)) return null;
+	return token;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers — intentionally forgiving because metadata shapes drift between
 // sources (Hindsight turn facts, journal imports, connector events).
