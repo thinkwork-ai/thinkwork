@@ -1,12 +1,3 @@
-/**
- * @deprecated Prefer WikiGraph (apps/admin/src/components/WikiGraph.tsx)
- * for the compiled-memory knowledge graph. The top-level Memories →
- * Graph tab no longer uses this component; only the per-agent legacy
- * view at `routes/_authed/_tenant/agents/$agentId_.memory.tsx` still
- * imports it. Plan to delete both this file and the server-side
- * `memoryGraph` resolver once that route is migrated. See
- * plans/2026-04-19-003-refactor-admin-wiki-graph-plan.md.
- */
 import { useCallback, useEffect, useMemo, useRef, useState, useImperativeHandle, forwardRef } from "react";
 import ForceGraph3D from "react-force-graph-3d";
 import * as THREE from "three";

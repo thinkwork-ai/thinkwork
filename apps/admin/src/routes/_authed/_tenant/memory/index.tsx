@@ -10,9 +10,8 @@ import {
   MemorySystemConfigQuery,
   DeleteMemoryRecordMutation,
   UpdateMemoryRecordMutation,
-  WikiPageQuery,
 } from "@/lib/graphql-queries";
-import { WikiGraph, type WikiGraphHandle, type WikiGraphNode } from "@/components/WikiGraph";
+import { MemoryGraph, type MemoryGraphHandle, type MemoryGraphNode } from "@/components/MemoryGraph";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -141,22 +140,28 @@ function MemoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
   const [view, setView] = useState<"memories" | "graph">("memories");
-  const graphRef = useRef<WikiGraphHandle>(null);
+  const graphRef = useRef<MemoryGraphHandle>(null);
 
   // Graph node detail sheet
-  const [graphNode, setGraphNode] = useState<WikiGraphNode | null>(null);
+  const [graphNode, setGraphNode] = useState<MemoryGraphNode | null>(null);
   const [graphNodeEdges, setGraphNodeEdges] = useState<{ label: string; targetLabel: string; targetType: string; targetId: string }[]>([]);
   const [graphSheetOpen, setGraphSheetOpen] = useState(false);
-  const [graphNodeHistory, setGraphNodeHistory] = useState<{ node: WikiGraphNode; edges: { label: string; targetLabel: string; targetType: string; targetId: string }[] }[]>([]);
+  const [graphNodeHistory, setGraphNodeHistory] = useState<{ node: MemoryGraphNode; edges: { label: string; targetLabel: string; targetType: string; targetId: string }[] }[]>([]);
 
-  // Still consulted for the list-view edit UI — AgentCore deployments
-  // keep memory records immutable. The Graph toggle, on the other hand,
-  // is driven by compiled-wiki content that lives in Aurora regardless
-  // of the active memory engine, so it stays visible unconditionally.
+  // Detect which memory backends are wired up at runtime. The Knowledge
+  // Graph view is only meaningful when Hindsight is deployed, so hide the
+  // toggle entirely when it's disabled — managed AgentCore Memory alone
+  // has no entity graph to render.
   const [memorySystemConfigResult] = useQuery({
     query: MemorySystemConfigQuery,
   });
   const hindsightEnabled = memorySystemConfigResult.data?.memorySystemConfig?.hindsightEnabled ?? false;
+
+  // If Hindsight is disabled mid-session (e.g. after a deploy), force the
+  // view back to memories so we never render an empty graph.
+  useEffect(() => {
+    if (!hindsightEnabled && view === "graph") setView("memories");
+  }, [hindsightEnabled, view]);
 
   const [agentsResult] = useQuery({
     query: AgentsListQuery,
@@ -386,10 +391,12 @@ function MemoryPage() {
             <p className="text-xs text-muted-foreground">{memoryCount}</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <ToggleGroup type="single" value={view} onValueChange={(v) => v && setView(v as "memories" | "graph")} variant="outline">
-              <ToggleGroupItem value="memories" className="px-3 text-xs">Memories</ToggleGroupItem>
-              <ToggleGroupItem value="graph" className="px-3 text-xs">Graph</ToggleGroupItem>
-            </ToggleGroup>
+            {hindsightEnabled && (
+              <ToggleGroup type="single" value={view} onValueChange={(v) => v && setView(v as "memories" | "graph")} variant="outline">
+                <ToggleGroupItem value="memories" className="px-3 text-xs">Memories</ToggleGroupItem>
+                <ToggleGroupItem value="graph" className="px-3 text-xs">Graph</ToggleGroupItem>
+              </ToggleGroup>
+            )}
             <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
               <SelectTrigger className="w-44">
                 <SelectValue placeholder="Select agent" />
@@ -429,11 +436,11 @@ function MemoryPage() {
       <div className="flex-1 min-h-0 px-4">
         {view === "graph" ? (
           <div className="h-full relative border border-border rounded-lg overflow-hidden">
-            <WikiGraph
+            <MemoryGraph
               ref={graphRef}
-              tenantId={tenantId ?? ""}
               agentId={isAllAgents ? undefined : selectedAgentId}
               agentIds={isAllAgents ? effectiveAgentIds : undefined}
+              agentNames={agentNames}
               searchQuery={searchQuery || undefined}
               onNodeClick={(node, edges) => {
                 setGraphNode(node);
@@ -638,224 +645,110 @@ function MemoryPage() {
         </SheetContent>
       </Sheet>
 
-      {/* Graph node detail sheet — rendered only while the graph view is
-          open and a node is selected so the embedded WikiPageQuery stays
-          paused between interactions. */}
+      {/* Graph node detail sheet */}
       <Sheet open={graphSheetOpen} onOpenChange={setGraphSheetOpen}>
         <SheetContent className="sm:max-w-lg flex flex-col">
-          <WikiPageSheetBody
-            tenantId={tenantId ?? ""}
-            graphNode={graphNode}
-            graphNodeEdges={graphNodeEdges}
-            graphNodeHistory={graphNodeHistory}
-            onBack={() => {
-              const prev = graphNodeHistory[graphNodeHistory.length - 1];
-              if (!prev) return;
-              setGraphNodeHistory((h) => h.slice(0, -1));
-              setGraphNode(prev.node);
-              setGraphNodeEdges(prev.edges);
-            }}
-            onEdgeClick={(edge) => {
-              const result = graphRef.current?.getNodeWithEdges(edge.targetId);
-              if (result && graphNode) {
-                setGraphNodeHistory((h) => [...h, { node: graphNode, edges: graphNodeEdges }]);
-                setGraphNode(result.node);
-                setGraphNodeEdges(result.edges);
-              }
-            }}
-          />
+          <SheetHeader className="p-6 pb-0">
+            <SheetTitle className="flex items-center gap-2">
+              {graphNodeHistory.length > 0 && (
+                <button
+                  onClick={() => {
+                    const prev = graphNodeHistory[graphNodeHistory.length - 1];
+                    setGraphNodeHistory((h) => h.slice(0, -1));
+                    setGraphNode(prev.node);
+                    setGraphNodeEdges(prev.edges);
+                  }}
+                  className="text-muted-foreground hover:text-foreground -ml-1 mr-1"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+              )}
+              {graphNode?.nodeType === "memory" ? "Memory" : graphNode?.label}
+              <Badge
+                className={`font-normal text-xs ${
+                  graphNode?.nodeType === "memory"
+                    ? "bg-pink-500/20 text-pink-400"
+                    : "bg-sky-500/20 text-sky-400"
+                }`}
+              >
+                {graphNode?.nodeType === "memory"
+                  ? graphNode?.strategy ?? "memory"
+                  : graphNode?.entityType ?? "entity"}
+              </Badge>
+            </SheetTitle>
+            <SheetDescription>
+              {graphNode?.nodeType === "memory"
+                ? `Memory node — ${graphNodeEdges.length} connection${graphNodeEdges.length !== 1 ? "s" : ""}`
+                : `Entity — ${graphNodeEdges.length} mention${graphNodeEdges.length !== 1 ? "s" : ""}`}
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="flex-1 overflow-y-auto px-6 pt-4 space-y-4">
+            {graphNode?.nodeType === "memory" && (
+              <MemoryContent text={graphNode.label} />
+            )}
+
+            {graphNode?.latestThreadId && (
+              <Link
+                to="/threads/$threadId"
+                params={{ threadId: graphNode.latestThreadId }}
+                className="inline-flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300 hover:underline"
+              >
+                View source thread →
+              </Link>
+            )}
+
+{graphNodeEdges.length > 0 && (
+              <div>
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                  {graphNode?.nodeType === "memory" ? "Mentions" : "Mentioned by"}
+                </h4>
+                <div className="space-y-2">
+                  {graphNodeEdges.map((edge, i) => (
+                    <div
+                      key={i}
+                      className="flex items-start gap-2 text-sm rounded-md bg-muted/30 px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => {
+                        const result = graphRef.current?.getNodeWithEdges(edge.targetId);
+                        if (result && graphNode) {
+                          setGraphNodeHistory((h) => [...h, { node: graphNode, edges: graphNodeEdges }]);
+                          setGraphNode(result.node);
+                          setGraphNodeEdges(result.edges);
+                        }
+                      }}
+                    >
+                      <Badge
+                        variant="outline"
+                        className={`shrink-0 text-[10px] mt-0.5 ${
+                          edge.targetType === "memory"
+                            ? "border-pink-500/30 text-pink-400"
+                            : "border-sky-500/30 text-sky-400"
+                        }`}
+                      >
+                        {edge.targetType === "memory" ? "Memory" : "Entity"}
+                      </Badge>
+                      <div className="min-w-0">
+                        <p className="font-medium text-foreground truncate">{stripTopicTags(edge.targetLabel)}</p>
+                        {edge.label && (
+                          <p className="text-xs text-muted-foreground">{edge.label}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {graphNodeEdges.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No connections found for this node.
+              </p>
+            )}
+          </div>
         </SheetContent>
       </Sheet>
 
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// WikiPageSheetBody
-// Fetches and renders the compiled wiki page for a clicked graph node. The
-// graph already has the page's title/type/slug; this component adds
-// summary + sections + aliases via WikiPageQuery. Connected-page rows
-// come straight from the graph (getNodeWithEdges), so the sheet can
-// re-anchor without a round-trip.
-// ---------------------------------------------------------------------------
-
-const PAGE_TYPE_BADGE: Record<string, string> = {
-  ENTITY: "bg-sky-500/20 text-sky-400",
-  TOPIC: "bg-amber-500/20 text-amber-400",
-  DECISION: "bg-rose-500/20 text-rose-400",
-};
-
-const PAGE_TYPE_BORDER: Record<string, string> = {
-  ENTITY: "border-sky-500/30 text-sky-400",
-  TOPIC: "border-amber-500/30 text-amber-400",
-  DECISION: "border-rose-500/30 text-rose-400",
-};
-
-function pageTypeLabel(t: string | undefined): string {
-  if (!t) return "Page";
-  return t.charAt(0) + t.slice(1).toLowerCase();
-}
-
-interface GraphEdge {
-  label: string;
-  targetLabel: string;
-  targetType: string;
-  targetId: string;
-}
-
-interface WikiPageSheetBodyProps {
-  tenantId: string;
-  graphNode: WikiGraphNode | null;
-  graphNodeEdges: GraphEdge[];
-  graphNodeHistory: { node: WikiGraphNode; edges: GraphEdge[] }[];
-  onBack: () => void;
-  onEdgeClick: (edge: GraphEdge) => void;
-}
-
-function WikiPageSheetBody({
-  tenantId,
-  graphNode,
-  graphNodeEdges,
-  graphNodeHistory,
-  onBack,
-  onEdgeClick,
-}: WikiPageSheetBodyProps) {
-  const [pageResult] = useQuery({
-    query: WikiPageQuery,
-    variables: {
-      tenantId,
-      ownerId: graphNode?.agentId ?? "",
-      type: (graphNode?.entityType ?? "ENTITY") as any,
-      slug: graphNode?.slug ?? "",
-    },
-    pause: !graphNode || !tenantId,
-  });
-
-  const page = pageResult.data?.wikiPage;
-  const loadingPage = pageResult.fetching && !pageResult.data;
-
-  return (
-    <>
-      <SheetHeader className="p-6 pb-0">
-        <SheetTitle className="flex items-center gap-2">
-          {graphNodeHistory.length > 0 && (
-            <button
-              onClick={onBack}
-              className="text-muted-foreground hover:text-foreground -ml-1 mr-1"
-              aria-label="Back"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
-          )}
-          <span className="truncate">{graphNode?.label ?? ""}</span>
-          {graphNode?.entityType && (
-            <Badge
-              className={`font-normal text-xs ${
-                PAGE_TYPE_BADGE[graphNode.entityType] ?? "bg-muted text-muted-foreground"
-              }`}
-            >
-              {pageTypeLabel(graphNode.entityType)}
-            </Badge>
-          )}
-        </SheetTitle>
-        <SheetDescription>
-          {pageTypeLabel(graphNode?.entityType)} page — {graphNodeEdges.length} link
-          {graphNodeEdges.length !== 1 ? "s" : ""}
-          {page?.lastCompiledAt
-            ? ` · compiled ${new Date(page.lastCompiledAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-            : ""}
-        </SheetDescription>
-      </SheetHeader>
-
-      <div className="flex-1 overflow-y-auto px-6 pt-4 space-y-5">
-        {loadingPage ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading page…
-          </div>
-        ) : !page ? (
-          <p className="text-sm text-muted-foreground">
-            This page couldn't be loaded. It may have been archived since the
-            graph was last fetched.
-          </p>
-        ) : (
-          <>
-            {page.summary && (
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">{page.summary}</p>
-            )}
-
-            {page.aliases && page.aliases.length > 0 && (
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-1">
-                  Also known as
-                </p>
-                <div className="flex flex-wrap gap-1">
-                  {page.aliases.map((a: string) => (
-                    <Badge key={a} variant="outline" className="font-normal text-xs">
-                      {a}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {page.sections && page.sections.length > 0 && (
-              <div className="space-y-4">
-                {[...page.sections]
-                  .sort((a: any, b: any) => a.position - b.position)
-                  .map((s: any) => (
-                    <div key={s.id}>
-                      <h4 className="text-sm font-semibold text-foreground mb-1">{s.heading}</h4>
-                      <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
-                        {s.bodyMd}
-                      </p>
-                    </div>
-                  ))}
-              </div>
-            )}
-          </>
-        )}
-
-        {graphNodeEdges.length > 0 && (
-          <div>
-            <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-              Connected pages
-            </h4>
-            <div className="space-y-2">
-              {graphNodeEdges.map((edge, i) => (
-                <div
-                  key={i}
-                  className="flex items-start gap-2 text-sm rounded-md bg-muted/30 px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors"
-                  onClick={() => onEdgeClick(edge)}
-                >
-                  <Badge
-                    variant="outline"
-                    className={`shrink-0 text-[10px] mt-0.5 ${
-                      PAGE_TYPE_BORDER[edge.targetType?.toUpperCase()] ??
-                      "border-muted text-muted-foreground"
-                    }`}
-                  >
-                    Page
-                  </Badge>
-                  <div className="min-w-0">
-                    <p className="font-medium text-foreground truncate">{edge.targetLabel}</p>
-                    {edge.label && edge.label !== "references" && (
-                      <p className="text-xs text-muted-foreground">{edge.label}</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {!loadingPage && page && graphNodeEdges.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            No links to or from this page yet.
-          </p>
-        )}
-      </div>
-    </>
   );
 }
 
