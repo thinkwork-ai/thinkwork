@@ -21,6 +21,7 @@ import { Route as AuthedTenantOrgRouteImport } from './routes/_authed/_tenant/or
 import { Route as AuthedTenantDashboardRouteImport } from './routes/_authed/_tenant/dashboard'
 import { Route as AuthedTenantCapabilitiesRouteImport } from './routes/_authed/_tenant/capabilities'
 import { Route as AuthedTenantAnalyticsRouteImport } from './routes/_authed/_tenant/analytics'
+import { Route as AuthedTenantWikiIndexRouteImport } from './routes/_authed/_tenant/wiki/index'
 import { Route as AuthedTenantWebhooksIndexRouteImport } from './routes/_authed/_tenant/webhooks/index'
 import { Route as AuthedTenantThreadsIndexRouteImport } from './routes/_authed/_tenant/threads/index'
 import { Route as AuthedTenantSecurityIndexRouteImport } from './routes/_authed/_tenant/security/index'
@@ -125,6 +126,11 @@ const AuthedTenantCapabilitiesRoute =
 const AuthedTenantAnalyticsRoute = AuthedTenantAnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
+  getParentRoute: () => AuthedTenantRoute,
+} as any)
+const AuthedTenantWikiIndexRoute = AuthedTenantWikiIndexRouteImport.update({
+  id: '/wiki/',
+  path: '/wiki/',
   getParentRoute: () => AuthedTenantRoute,
 } as any)
 const AuthedTenantWebhooksIndexRoute =
@@ -440,6 +446,7 @@ export interface FileRoutesByFullPath {
   '/security/': typeof AuthedTenantSecurityIndexRoute
   '/threads/': typeof AuthedTenantThreadsIndexRoute
   '/webhooks/': typeof AuthedTenantWebhooksIndexRoute
+  '/wiki/': typeof AuthedTenantWikiIndexRoute
   '/agent-templates/$templateId/sync': typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute
   '/agents/$agentId/knowledge': typeof AuthedTenantAgentsAgentIdKnowledgeRoute
   '/agents/$agentId/memory': typeof AuthedTenantAgentsAgentIdMemoryRoute
@@ -497,6 +504,7 @@ export interface FileRoutesByTo {
   '/security': typeof AuthedTenantSecurityIndexRoute
   '/threads': typeof AuthedTenantThreadsIndexRoute
   '/webhooks': typeof AuthedTenantWebhooksIndexRoute
+  '/wiki': typeof AuthedTenantWikiIndexRoute
   '/agent-templates/$templateId/sync': typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute
   '/agents/$agentId/knowledge': typeof AuthedTenantAgentsAgentIdKnowledgeRoute
   '/agents/$agentId/memory': typeof AuthedTenantAgentsAgentIdMemoryRoute
@@ -558,6 +566,7 @@ export interface FileRoutesById {
   '/_authed/_tenant/security/': typeof AuthedTenantSecurityIndexRoute
   '/_authed/_tenant/threads/': typeof AuthedTenantThreadsIndexRoute
   '/_authed/_tenant/webhooks/': typeof AuthedTenantWebhooksIndexRoute
+  '/_authed/_tenant/wiki/': typeof AuthedTenantWikiIndexRoute
   '/_authed/_tenant/agent-templates/$templateId_/sync': typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute
   '/_authed/_tenant/agents/$agentId_/knowledge': typeof AuthedTenantAgentsAgentIdKnowledgeRoute
   '/_authed/_tenant/agents/$agentId_/memory': typeof AuthedTenantAgentsAgentIdMemoryRoute
@@ -618,6 +627,7 @@ export interface FileRouteTypes {
     | '/security/'
     | '/threads/'
     | '/webhooks/'
+    | '/wiki/'
     | '/agent-templates/$templateId/sync'
     | '/agents/$agentId/knowledge'
     | '/agents/$agentId/memory'
@@ -675,6 +685,7 @@ export interface FileRouteTypes {
     | '/security'
     | '/threads'
     | '/webhooks'
+    | '/wiki'
     | '/agent-templates/$templateId/sync'
     | '/agents/$agentId/knowledge'
     | '/agents/$agentId/memory'
@@ -735,6 +746,7 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/security/'
     | '/_authed/_tenant/threads/'
     | '/_authed/_tenant/webhooks/'
+    | '/_authed/_tenant/wiki/'
     | '/_authed/_tenant/agent-templates/$templateId_/sync'
     | '/_authed/_tenant/agents/$agentId_/knowledge'
     | '/_authed/_tenant/agents/$agentId_/memory'
@@ -846,6 +858,13 @@ declare module '@tanstack/react-router' {
       path: '/analytics'
       fullPath: '/analytics'
       preLoaderRoute: typeof AuthedTenantAnalyticsRouteImport
+      parentRoute: typeof AuthedTenantRoute
+    }
+    '/_authed/_tenant/wiki/': {
+      id: '/_authed/_tenant/wiki/'
+      path: '/wiki'
+      fullPath: '/wiki/'
+      preLoaderRoute: typeof AuthedTenantWikiIndexRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
     '/_authed/_tenant/webhooks/': {
@@ -1235,6 +1254,7 @@ interface AuthedTenantRouteChildren {
   AuthedTenantSecurityIndexRoute: typeof AuthedTenantSecurityIndexRoute
   AuthedTenantThreadsIndexRoute: typeof AuthedTenantThreadsIndexRoute
   AuthedTenantWebhooksIndexRoute: typeof AuthedTenantWebhooksIndexRoute
+  AuthedTenantWikiIndexRoute: typeof AuthedTenantWikiIndexRoute
   AuthedTenantAgentTemplatesTemplateIdSyncRoute: typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute
   AuthedTenantAgentsAgentIdKnowledgeRoute: typeof AuthedTenantAgentsAgentIdKnowledgeRoute
   AuthedTenantAgentsAgentIdMemoryRoute: typeof AuthedTenantAgentsAgentIdMemoryRoute
@@ -1286,6 +1306,7 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantSecurityIndexRoute: AuthedTenantSecurityIndexRoute,
   AuthedTenantThreadsIndexRoute: AuthedTenantThreadsIndexRoute,
   AuthedTenantWebhooksIndexRoute: AuthedTenantWebhooksIndexRoute,
+  AuthedTenantWikiIndexRoute: AuthedTenantWikiIndexRoute,
   AuthedTenantAgentTemplatesTemplateIdSyncRoute:
     AuthedTenantAgentTemplatesTemplateIdSyncRoute,
   AuthedTenantAgentsAgentIdKnowledgeRoute:

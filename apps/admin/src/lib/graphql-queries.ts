@@ -1589,6 +1589,84 @@ export const MemoryGraphQuery = graphql(`
   }
 `);
 
+export const WikiGraphQuery = graphql(`
+  query WikiGraph($tenantId: ID!, $ownerId: ID!) {
+    wikiGraph(tenantId: $tenantId, ownerId: $ownerId) {
+      nodes { id label type entityType slug strategy edgeCount latestThreadId }
+      edges { source target label weight }
+    }
+  }
+`);
+
+export const WikiPageQuery = graphql(`
+  query AdminWikiPage($tenantId: ID!, $ownerId: ID!, $type: WikiPageType!, $slug: String!) {
+    wikiPage(tenantId: $tenantId, ownerId: $ownerId, type: $type, slug: $slug) {
+      id
+      type
+      slug
+      title
+      summary
+      bodyMd
+      status
+      lastCompiledAt
+      updatedAt
+      aliases
+      sections {
+        id
+        sectionSlug
+        heading
+        bodyMd
+        position
+        lastSourceAt
+      }
+    }
+  }
+`);
+
+export const WikiBacklinksQuery = graphql(`
+  query AdminWikiBacklinks($pageId: ID!) {
+    wikiBacklinks(pageId: $pageId) {
+      id
+      type
+      slug
+      title
+      summary
+    }
+  }
+`);
+
+export const RecentWikiPagesQuery = graphql(`
+  query AdminRecentWikiPages($agentId: ID!, $limit: Int) {
+    recentWikiPages(agentId: $agentId, limit: $limit) {
+      id
+      type
+      slug
+      title
+      summary
+      lastCompiledAt
+      updatedAt
+    }
+  }
+`);
+
+export const WikiSearchQuery = graphql(`
+  query AdminWikiSearch($tenantId: ID!, $ownerId: ID!, $query: String!, $limit: Int) {
+    wikiSearch(tenantId: $tenantId, ownerId: $ownerId, query: $query, limit: $limit) {
+      score
+      matchedAlias
+      page {
+        id
+        type
+        slug
+        title
+        summary
+        lastCompiledAt
+        updatedAt
+      }
+    }
+  }
+`);
+
 export const ThreadTracesQuery = graphql(`
   query ThreadTraces($threadId: ID!, $tenantId: ID!) {
     threadTraces(threadId: $threadId, tenantId: $tenantId) {
