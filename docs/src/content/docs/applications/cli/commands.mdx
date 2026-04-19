@@ -418,6 +418,64 @@ thinkwork update -s <stage>
 
 ---
 
+## wiki
+
+**Admin-only.** Operator controls for the Compounding Memory (wiki) compile
+pipeline. Enqueue compiles, rebuild from scratch, and inspect recent job
+activity from a terminal.
+
+The underlying GraphQL mutations assert api-key or admin-promoted tenant
+membership — Cognito end-user sessions get a clear "admin access required"
+hint and exit code 2.
+
+### wiki compile
+
+Enqueue a compile for one agent or fan out across every tenant agent.
+
+```bash
+thinkwork wiki compile [-t <tenant>] [--agent <id>] [--all] [--model <id>] [--watch] [--json]
+```
+
+- `--agent <id|slug|name>` — single-agent mode. Bypasses the picker.
+- `--all` — fan out to every non-system agent in the tenant. One enqueue per agent; dedupe is handled server-side.
+- `--model <id>` — Bedrock model override for this run only (e.g.
+  `anthropic.claude-sonnet-4-6-v1:0`). Defaults to the server's
+  `BEDROCK_MODEL_ID`. The override travels via the Lambda Event payload;
+  if the invoke fails and a polling worker later claims the job, the
+  env-default model is used.
+- `--watch` — after enqueue, poll `wiki_compile_jobs` until the job reaches a
+  terminal state. Single-agent only; ignored with `--all`.
+
+### wiki rebuild
+
+**Destructive.** Archive the agent's active wiki pages, clear the compile
+cursor, then enqueue a fresh compile. Single-agent only — `--all` is
+rejected to avoid accidental tenant-wide rebuilds.
+
+```bash
+thinkwork wiki rebuild -t <tenant> --agent <id> [--model <id>] [--yes] [--watch] [--json]
+```
+
+- Prompts for confirmation unless `--yes` or `--json`.
+- If the reset succeeds but the compile enqueue fails, the command exits 1
+  with the exact retry command (`thinkwork wiki compile --agent <id>`) so
+  you don't need to re-run the destructive step.
+
+### wiki status
+
+Show recent compile jobs for a tenant, optionally filtered to a single agent.
+
+```bash
+thinkwork wiki status [-t <tenant>] [--agent <id>] [-n <limit>] [--watch] [--timeout <sec>] [--json]
+```
+
+- Omit `--agent` for tenant-wide recent activity (useful for spotting
+  stalled or repeatedly-failing agents).
+- `--watch` polls the most-recent job until it reaches a terminal state,
+  with a 15-minute default timeout (`--timeout`).
+
+---
+
 ## Roadmap — scaffolded commands
 
 The commands below are **scaffolded in Phase 0** — `thinkwork <cmd> --help` shows the final flags and examples today, but the action bodies return `not yet implemented` (exit code 2) until each phase PR lands.

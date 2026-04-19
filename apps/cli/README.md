@@ -97,6 +97,22 @@ No repo clone required — `thinkwork init` scaffolds all Terraform modules from
 | `thinkwork config get <key> -s <stage>` | Read a configuration value |
 | `thinkwork config set <key> <value> -s <stage>` | Update a configuration value |
 
+### Wiki (Compounding Memory)
+
+Admin-only. Operator controls for the wiki compile pipeline — kick a compile,
+rebuild from scratch, or inspect recent compile jobs without leaving the
+terminal.
+
+| Command | Description |
+|---------|-------------|
+| `thinkwork wiki compile` | Enqueue a compile for one agent (`--agent`) or every tenant agent (`--all`). `--model <id>` spikes a non-default Bedrock model for one run. `--watch` follows the job (single-agent only). |
+| `thinkwork wiki rebuild --agent <id>` | Destructive: archive the agent's active pages, clear the compile cursor, and enqueue a fresh compile. Confirm unless `--yes`. `--all` is intentionally rejected. |
+| `thinkwork wiki status` | Show recent compile jobs for a tenant. `--agent <id>` restricts to one scope. `--watch` polls until the latest job reaches a terminal state. |
+
+Requires admin credentials (api-key session, or an admin-promoted tenant
+membership). Cognito end-user sessions see a clear "admin access required"
+hint and exit 2.
+
 ## Options
 
 ```
