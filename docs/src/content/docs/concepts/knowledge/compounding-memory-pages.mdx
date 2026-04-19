@@ -18,6 +18,9 @@ A page has:
 - A **slug** — URL-safe. "austin-texas."
 - A **summary** — a one-liner. "The city in Texas where Eric lives."
 - A **body** — longer-form markdown assembled from the sections below.
+- A **parent page id** — set when this page was promoted from a section on another page. See [Hierarchy](#hierarchy) below.
+- A **hubness score** — a coarse monotonic number that orders pages by "how much of a hub is this." Recomputed whenever the page is touched.
+- A set of **tags** — soft hints used for clustering, never structural forcing. Populated by the aggregation planner from record metadata.
 - A **last-compiled timestamp** — when the agent last touched this page.
 - A **status** — active or archived.
 
@@ -37,6 +40,40 @@ The default sections depend on page type:
 
 The planner isn't locked into these defaults. If a batch of memories clearly justifies a section called `food_recommendations` on an entity page, the planner can propose it and the compiler will write it. The defaults just bias toward consistency.
 
+### Rollup sections
+
+Some sections are *rollups* — their body is a list of links to other pages in the scope. When the aggregation pass emits `parentSectionUpdates` with `linked_page_slugs` populated, the compiler skips the section writer and renders the body deterministically:
+
+```markdown
+- [**Franklin Barbecue**](/wiki/entity/franklin-barbecue) — BBQ joint in Austin, TX.
+- [**Momofuku Daishō**](/wiki/entity/momofuku-daisho) — Korean-inspired restaurant in Toronto.
+```
+
+Every bullet is a real markdown link pointing at `/wiki/<type>/<slug>` — the mobile router path. Rollup sections also carry **aggregation metadata**: the list of linked page ids, the count of supporting records, the sections's promotion score, and the timestamps of first and last evidence. That metadata is what drives section promotion (next section).
+
+### Section promotion
+
+When a rollup section gets dense, coherent, and durable enough — more than about 15 linked children, 20+ supporting records, 30+ days of evidence, and visible tag overlap — the aggregation pass promotes it into its own topic page.
+
+The promotion:
+1. Creates a new topic page with the promoted section's content.
+2. Sets `parent_page_id` on the new page, pointing back at the original.
+3. Writes `parent_of` / `child_of` link rows so graph traversal works both directions.
+4. Rewrites the parent's section body down to a short summary + top highlights + a `See:` link to the promoted child.
+5. Marks the parent section's `aggregation.promotion_status = "promoted"` — sticky, no flapping.
+
+An example from Marco's wiki: `Austin` (parent topic) → `Austin Activities` (promoted child topic) was born when the `Activities` section on Austin crossed the threshold.
+
+## Hierarchy
+
+Pages can have a parent. `parent_page_id` is set when the page was promoted from a section on another page. The full hierarchy is also mirrored in `wiki_page_links` as `parent_of` / `child_of` edges — the `kind` column on a link row captures which role it plays:
+
+- `reference` — the ordinary "A mentions B" wikilink.
+- `parent_of` — parent → promoted child.
+- `child_of` — promoted child → parent.
+
+Hierarchy is deliberately emergent, not declared. The planner doesn't decide "this is a hub page"; the aggregation pass notices that a section has become dense enough to deserve its own page and promotes it. The parent keeps a summary and a link to the child; the child becomes its own compounding surface that can itself grow sections and eventually promote again.
+
 ## Aliases
 
 An alias is a name that points to a page.
@@ -53,7 +90,13 @@ Aliases come from three places:
 
 Links are directed references between pages. "Taberna dos Mercadores" has a link to "Lisbon"; "Lisbon" has a link back to "Taberna dos Mercadores" (they're different rows because links are directional).
 
-The planner proposes links whenever it sees one page meaningfully referenced from another. This is where the wiki starts to behave like a real knowledge graph — when you open "Lisbon" you see the restaurants; when you open "Taberna" you see it's in Lisbon.
+Each link carries a `kind`:
+
+- `reference` (the default) — ordinary wikilink. "Taberna mentions Lisbon."
+- `parent_of` — parent hub → promoted child. Written by `setParentPage`.
+- `child_of` — promoted child → parent. Written by `setParentPage`.
+
+The planner proposes `reference` links whenever it sees one page meaningfully referenced from another. The compiler auto-writes `parent_of` / `child_of` pairs when a section is promoted. This is where the wiki starts to behave like a real knowledge graph — when you open "Austin" you see the child topics; when you open "Austin Activities" you can jump back to its parent.
 
 Links only exist between pages in the same scope. An agent can't link to another agent's page, even in the same workspace.
 
@@ -119,12 +162,28 @@ To actually purge a page — including its provenance rows — it has to be hard
 All defined in `packages/database-pg/src/schema/wiki.ts`:
 
 - `wiki_pages` — the page rows. `owner_id NOT NULL`; unique on `(tenant, owner, type, slug)`. Generated `search_tsv` tsvector column with GIN index for full-text search.
+  - Hierarchy columns: `parent_page_id uuid` (self-ref, nullable), `hubness_score int`, `tags text[]`.
+  - Index on `parent_page_id` for child-page listing.
 - `wiki_page_sections` — one row per section. Unique on `(page, section_slug)`. Has a nullable `body_embedding vector(1024)` column reserved for semantic retrieval, not populated in v1.
+  - Aggregation metadata in a nullable `aggregation jsonb` column:
+    ```json
+    {
+      "linked_page_ids": ["<uuid>", "..."],
+      "supporting_record_count": 12,
+      "first_source_at": "2026-04-01T00:00:00Z",
+      "last_source_at":  "2026-04-19T00:00:00Z",
+      "observed_tags":   ["bbq", "food"],
+      "promotion_status": "none|candidate|promoted|suppressed",
+      "promotion_score":  0.62,
+      "promoted_page_id": null
+    }
+    ```
+    Leaf-style sections (overview / notes / visits) leave this NULL.
 - `wiki_page_aliases` — normalized alternate names. Unique on `(page, alias)`. Index on `alias` backs reverse lookup.
-- `wiki_page_links` — directed `(from_page_id, to_page_id)` pairs. Unique on the pair; index on `to_page_id` backs `wikiBacklinks`.
-- `wiki_unresolved_mentions` — accumulating mentions. Unique on `(tenant, owner, alias_normalized, status)` so the same alias can exist in `open`, `promoted`, and `ignored` states.
+- `wiki_page_links` — directed `(from_page_id, to_page_id, kind)` triples. `kind` is `'reference'` / `'parent_of'` / `'child_of'`; unique on the full triple so the same two pages can have a `reference` AND a hierarchy edge. Index on `to_page_id` backs `wikiBacklinks`; index on `kind` filters hierarchy vs references.
+- `wiki_unresolved_mentions` — accumulating mentions. Unique on `(tenant, owner, alias_normalized, status)` so the same alias can exist in `open`, `promoted`, and `ignored` states. Optional `cluster jsonb` column carries richer context (`co_mentions`, `candidate_parent_page_id`, `observed_tags`) for the aggregation pipeline.
 - `wiki_section_sources` — provenance. `section_id → wiki_page_sections(id) ON DELETE CASCADE`. Unique on `(section, source_kind, source_ref)`. Index on `(source_kind, source_ref)` for reverse lookup.
-- `wiki_compile_jobs` — the job ledger.
+- `wiki_compile_jobs` — the job ledger. Metrics JSON captures leaf stats AND aggregation stats (`parent_sections_updated`, `sections_promoted`, `deterministic_parents_derived`, `aggregation_planner_calls`, `aggregation_input_tokens`, `aggregation_output_tokens`, `aggregation_error`).
 - `wiki_compile_cursors` — per-scope pagination state, composite primary key `(tenant_id, owner_id)`.
 
 ### Page template defaults
