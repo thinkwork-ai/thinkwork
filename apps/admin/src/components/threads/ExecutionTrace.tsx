@@ -969,7 +969,7 @@ const MessageRow = memo(function MessageRow({
   const label = isUser ? "User" : (message.senderId && agentMap?.get(message.senderId)?.name) || "Agent";
   const content = (message.content || "").trim();
   const firstLine = content.split("\n")[0].slice(0, 120);
-  const isLong = content.length > firstLine.length + 5;
+  const hasContent = content.length > 0;
   const artifact = message.durableArtifact;
 
   function handleCopy(e: React.MouseEvent) {
@@ -986,12 +986,14 @@ const MessageRow = memo(function MessageRow({
       </div>
       <div className="flex-1 min-w-0 overflow-hidden">
         <div
-          className={`flex items-center gap-2 mb-0.5 ${isLong ? "cursor-pointer" : ""}`}
-          onClick={isLong ? () => setExpanded((v) => !v) : undefined}
+          className={`flex items-center gap-2 mb-0.5 ${hasContent ? "cursor-pointer" : ""}`}
+          onClick={hasContent ? () => setExpanded((v) => !v) : undefined}
         >
           <span className="text-sm font-medium">{label}</span>
-          {isLong && (
-            <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${expanded ? "" : "-rotate-90"}`} />
+          {hasContent && (
+            expanded
+              ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           )}
           <span className="ml-auto text-xs text-muted-foreground shrink-0">{relativeTime(message.createdAt)}</span>
         </div>
