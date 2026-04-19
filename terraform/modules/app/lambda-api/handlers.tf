@@ -62,11 +62,15 @@ locals {
       JOB_TRIGGER_ARN      = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-job-trigger"
       JOB_TRIGGER_ROLE_ARN = var.job_scheduler_role_arn
     }
-    # Compounding Memory compile Lambda. Claude Haiku 4.5 via Bedrock; the
-    # planner + section-writer cap themselves at ~500 records / 25 new pages
-    # per invocation, so a 480 s timeout covers the worst case comfortably.
+    # Compounding Memory compile Lambda. Any Converse-compatible Bedrock
+    # model works; the planner + section-writer cap themselves at ~500
+    # records / 25 new pages per invocation so a 480 s timeout covers
+    # the worst case comfortably. Env vars come from variables so
+    # unrelated deploys don't wipe them back to defaults (the aggregation
+    # flag got reset on every terraform apply before this was pinned).
     "wiki-compile" = {
-      BEDROCK_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+      BEDROCK_MODEL_ID              = var.wiki_compile_model_id
+      WIKI_AGGREGATION_PASS_ENABLED = var.wiki_aggregation_pass_enabled
     }
     "wiki-export" = {
       WIKI_EXPORT_BUCKET = aws_s3_bucket.wiki_exports.bucket
@@ -417,8 +421,8 @@ resource "aws_iam_role_policy" "lambda_wiki_exports_s3" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect = "Allow"
-      Action = ["s3:PutObject", "s3:AbortMultipartUpload"]
+      Effect   = "Allow"
+      Action   = ["s3:PutObject", "s3:AbortMultipartUpload"]
       Resource = "${aws_s3_bucket.wiki_exports.arn}/*"
     }]
   })

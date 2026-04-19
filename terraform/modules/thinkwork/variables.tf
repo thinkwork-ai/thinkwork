@@ -323,3 +323,15 @@ variable "lastmile_tasks_api_url" {
   type        = string
   default     = ""
 }
+
+variable "wiki_compile_model_id" {
+  description = "Bedrock model id used by the wiki-compile Lambda (leaf planner + aggregation planner + section writer). Any Converse-compatible model works; change without a code deploy."
+  type        = string
+  default     = "openai.gpt-oss-120b-1:0"
+}
+
+variable "wiki_aggregation_pass_enabled" {
+  description = "Feature flag for the wiki aggregation pass (parent section rollups + section promotion). 'true' to enable, anything else disables. Pinned in terraform so unrelated deploys don't reset it."
+  type        = string
+  default     = "true"
+}

@@ -152,6 +152,35 @@ variable "lastmile_tasks_api_url" {
   default     = ""
 }
 
+variable "wiki_compile_model_id" {
+  description = <<-EOT
+    Bedrock model id the wiki-compile Lambda uses for the leaf planner,
+    aggregation planner, and section writer. Any Converse-compatible
+    model works; change without a code deploy.
+
+    Default: openai.gpt-oss-120b-1:0 (strong output quality at a lower
+    per-minute throttle risk than Claude Haiku 4.5 on shared dev
+    accounts). Swap to us.anthropic.claude-haiku-4-5-20251001-v1:0 for
+    Claude, or amazon.nova-micro-v1:0 for a low-cost spike.
+  EOT
+  type        = string
+  default     = "openai.gpt-oss-120b-1:0"
+}
+
+variable "wiki_aggregation_pass_enabled" {
+  description = <<-EOT
+    Feature flag for the wiki aggregation pass — the second LLM call
+    per compile job that builds parent/hub rollup sections and promotes
+    dense sections into their own topic pages.
+
+    Accepts a string so the Lambda reads the env var verbatim; must be
+    "true" / "1" / "yes" to enable. Set to "false" to stop the pipeline
+    after the leaf pass (no rollups, no promotions).
+  EOT
+  type        = string
+  default     = "true"
+}
+
 locals {
   www_dns_enabled = var.www_domain != "" && var.cloudflare_zone_id != ""
   docs_domain     = var.www_domain != "" ? "docs.${var.www_domain}" : ""
@@ -194,6 +223,12 @@ module "thinkwork" {
   # LastMile Tasks REST API base URL — feature-flags the outbound task
   # sync. Empty string keeps mobile-created tasks in sync_status='local'.
   lastmile_tasks_api_url = var.lastmile_tasks_api_url
+
+  # Wiki compile Lambda config. Pinned so unrelated terraform applies
+  # don't wipe the Bedrock model or the aggregation flag back to
+  # whatever the Lambda env defaults to.
+  wiki_compile_model_id         = var.wiki_compile_model_id
+  wiki_aggregation_pass_enabled = var.wiki_aggregation_pass_enabled
 
   # Greenfield: create everything (all defaults are true)
 }

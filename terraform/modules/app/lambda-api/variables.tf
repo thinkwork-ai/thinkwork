@@ -209,3 +209,15 @@ variable "lastmile_tasks_api_url" {
   type        = string
   default     = ""
 }
+
+variable "wiki_compile_model_id" {
+  description = "Bedrock model id the wiki-compile Lambda uses for the leaf planner, aggregation planner, and section writer. Any Converse-compatible model works. Override per-env if you want to spike a different model without re-deploying code."
+  type        = string
+  default     = "openai.gpt-oss-120b-1:0"
+}
+
+variable "wiki_aggregation_pass_enabled" {
+  description = "Feature flag for the wiki aggregation pass (parent section rollups + section promotion). Pipeline stops after leaf compile when this is off and never populates hub rollups. Stored as a string because the Lambda reads it verbatim from env; must be 'true' / '1' / 'yes' to enable."
+  type        = string
+  default     = "true"
+}
