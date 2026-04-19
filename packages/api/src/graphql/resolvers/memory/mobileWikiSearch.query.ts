@@ -1,21 +1,20 @@
 /**
- * mobileWikiSearch — Hindsight recall → compiled wiki pages, ranked.
+ * mobileWikiSearch — wiki pages ranked by Hindsight recall order.
  *
- * Pipeline:
- *   1. Resolve the agent and authorize against the caller's tenant.
- *   2. Run the same Hindsight recall that mobileMemorySearch uses. Each hit
- *      has a normalized `score` plus the memory unit id.
- *   3. Reverse-join the memory unit ids through wiki_section_sources to
- *      wiki_page_sections to wiki_pages. Multiple sections can cite the
- *      same memory; multiple memories can cite the same page — so aggregate
- *      per-page and keep distinct matching memory ids.
- *   4. Rank pages by the sum of Hindsight scores across their matching
- *      memories, tie-break on best (max) single-hit score, and finally on
- *      most-recently-compiled.
+ * Hindsight already does the hard part (BM25 + vector + rerank). Our job is
+ * to reverse-join its ranked memory hits to the compiled pages that cite
+ * them and preserve that rank order — NOT to re-score with a second engine.
  *
- * v1 is strictly agent-scoped: every matching page is guaranteed to be
- * owned by `agentId` because the source memories are, and the compile
- * pipeline never writes a source row onto a page owned by another agent.
+ * Scoring: reciprocal rank over Hindsight's returned position.
+ *   - A page's primary score is the BEST (lowest-rank) Hindsight hit that
+ *     cites it.
+ *   - Tiebreaker is the count of distinct Hindsight hits citing the page.
+ *   - We intentionally do NOT sum recall-derived scores, because Hindsight
+ *     returns no score field (the adapter synthesizes `1 - idx*0.05`), and
+ *     summing penalizes focused pages against "hub" pages with many
+ *     citations regardless of their position.
+ *
+ * v1 is strictly agent-scoped: every candidate page is owned by `agentId`.
  */
 
 import { and, eq, inArray } from "drizzle-orm";
@@ -32,10 +31,11 @@ import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
-// Recall a larger set than we ultimately return, because many hits may
-// collapse to the same page (or cite no page at all).
-const RECALL_OVERFETCH = 3;
-const RECALL_MAX = 150;
+// Ask Hindsight for more than we'll return — many hits collapse to the
+// same page (or cite no page at all), but we still want enough depth to
+// discover lower-ranked pages past the duplicates.
+const RECALL_OVERFETCH = 5;
+const RECALL_MAX = 200;
 
 export const mobileWikiSearch = async (
 	_parent: unknown,
@@ -56,14 +56,15 @@ export const mobileWikiSearch = async (
 		throw new Error("Agent not found or access denied");
 	}
 
+	const ownerId = agent.id as string;
 	const cappedLimit = Math.max(1, Math.min(limit, MAX_LIMIT));
 	const recallLimit = Math.min(cappedLimit * RECALL_OVERFETCH, RECALL_MAX);
 
 	const { recall } = getMemoryServices();
 	const hits = await recall.recall({
-		tenantId: tenantId,
+		tenantId,
 		ownerType: "agent",
-		ownerId: agent.id as string,
+		ownerId,
 		query: trimmed,
 		limit: recallLimit,
 	});
@@ -75,27 +76,18 @@ export const mobileWikiSearch = async (
 		return [];
 	}
 
-	// Preserve input rank so matchingMemoryIds stays ordered best-first.
-	const memoryScores = new Map<string, number>();
+	// memory id → first position Hindsight returned it. Rank 0 is best.
 	const memoryRank = new Map<string, number>();
 	hits.forEach((hit, idx) => {
 		const id = hit.record.id;
 		if (!id || typeof id !== "string") return;
-		if (!memoryScores.has(id)) {
-			memoryScores.set(id, hit.score);
-			memoryRank.set(id, idx);
-		} else {
-			// Same memory unit hit twice (different strategies) — keep max score.
-			const prev = memoryScores.get(id) ?? 0;
-			if (hit.score > prev) memoryScores.set(id, hit.score);
-		}
+		if (!memoryRank.has(id)) memoryRank.set(id, idx);
 	});
-	const memoryIds = Array.from(memoryScores.keys());
+	const memoryIds = Array.from(memoryRank.keys());
 
-	// Section → source memory rows that match any recalled memory.
+	// Reverse-join: which pages cite any of the recalled memories?
 	const sourceRows = await db
 		.select({
-			section_id: wikiSectionSources.section_id,
 			source_ref: wikiSectionSources.source_ref,
 			page_id: wikiPageSections.page_id,
 		})
@@ -118,41 +110,32 @@ export const mobileWikiSearch = async (
 		return [];
 	}
 
-	// Aggregate per page: sum score, max score, distinct matching memory ids
-	// (preserving Hindsight rank order).
+	// Aggregate per page. Deduplicate (page, memory) pairs so a memory
+	// cited by multiple sections of the same page only counts once.
 	type Agg = {
-		pageId: string;
-		sumScore: number;
-		maxScore: number;
+		bestRank: number;
 		memoryIds: string[];
 		memorySet: Set<string>;
-		bestRank: number;
 	};
 	const byPage = new Map<string, Agg>();
 	for (const row of sourceRows) {
 		const memId = row.source_ref as string;
-		const score = memoryScores.get(memId) ?? 0;
-		const rank = memoryRank.get(memId) ?? Number.POSITIVE_INFINITY;
+		const rank = memoryRank.get(memId);
+		if (rank === undefined) continue;
 		const pageId = row.page_id as string;
-		const existing = byPage.get(pageId);
-		if (!existing) {
+		const agg = byPage.get(pageId);
+		if (!agg) {
 			byPage.set(pageId, {
-				pageId,
-				sumScore: score,
-				maxScore: score,
+				bestRank: rank,
 				memoryIds: [memId],
 				memorySet: new Set([memId]),
-				bestRank: rank,
 			});
 			continue;
 		}
-		if (!existing.memorySet.has(memId)) {
-			existing.memorySet.add(memId);
-			existing.memoryIds.push(memId);
-			existing.sumScore += score;
-			if (score > existing.maxScore) existing.maxScore = score;
-			if (rank < existing.bestRank) existing.bestRank = rank;
-		}
+		if (agg.memorySet.has(memId)) continue;
+		agg.memorySet.add(memId);
+		agg.memoryIds.push(memId);
+		if (rank < agg.bestRank) agg.bestRank = rank;
 	}
 
 	const pageIds = Array.from(byPage.keys());
@@ -163,32 +146,35 @@ export const mobileWikiSearch = async (
 			and(
 				inArray(wikiPages.id, pageIds),
 				eq(wikiPages.status, "active"),
-				eq(wikiPages.owner_id, agent.id as string),
+				eq(wikiPages.owner_id, ownerId),
 				eq(wikiPages.tenant_id, tenantId),
 			),
 		);
 
 	const ranked = pageRows
 		.map((row) => {
-			const agg = byPage.get(row.id as string);
-			// Sort matching memory ids by their original Hindsight rank so the
-			// client can trust the order as "best-matching first."
-			const sortedMemoryIds = (agg?.memoryIds ?? []).slice().sort((a, b) => {
+			const agg = byPage.get(row.id as string)!;
+			// Reciprocal-rank score for surfacing: higher is better.
+			const rrfScore = 1 / (agg.bestRank + 60);
+			const sortedMemoryIds = agg.memoryIds.slice().sort((a, b) => {
 				const ra = memoryRank.get(a) ?? Number.POSITIVE_INFINITY;
 				const rb = memoryRank.get(b) ?? Number.POSITIVE_INFINITY;
 				return ra - rb;
 			});
 			return {
 				row,
-				score: agg?.sumScore ?? 0,
-				maxScore: agg?.maxScore ?? 0,
+				score: rrfScore,
+				bestRank: agg.bestRank,
+				matchCount: agg.memorySet.size,
 				matchingMemoryIds: sortedMemoryIds,
 				lastCompiled: (row.last_compiled_at as Date | null)?.getTime() ?? 0,
 			};
 		})
+		// Sort by Hindsight rank order first (smaller bestRank = better),
+		// then by number of distinct matches, then by recency.
 		.sort((a, b) => {
-			if (b.score !== a.score) return b.score - a.score;
-			if (b.maxScore !== a.maxScore) return b.maxScore - a.maxScore;
+			if (a.bestRank !== b.bestRank) return a.bestRank - b.bestRank;
+			if (b.matchCount !== a.matchCount) return b.matchCount - a.matchCount;
 			return b.lastCompiled - a.lastCompiled;
 		})
 		.slice(0, cappedLimit);

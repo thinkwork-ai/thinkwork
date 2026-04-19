@@ -167,9 +167,9 @@ extend type Query {
 type MobileWikiSearchResult {
   page: WikiPage!
   """
-  Aggregated score — sum of the Hindsight hit scores for all memories cited
-  by this page. Higher is better. Not a ts_rank; not comparable across
-  queries.
+  Reciprocal-rank surfacing score = 1 / (bestRank + 60), where bestRank
+  is the lowest Hindsight position of any memory citing this page.
+  Higher is better. Not comparable across queries.
   """
   score: Float!
   """
