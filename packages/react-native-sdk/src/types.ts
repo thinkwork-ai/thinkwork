@@ -162,3 +162,27 @@ export interface WikiSearchHit {
   score: number;
   matchedAlias?: string | null;
 }
+
+export interface WikiPageRef {
+  id: string;
+  type: WikiPageType;
+  slug: string;
+  title: string;
+  summary?: string | null;
+}
+
+/**
+ * A single mobile-search hit. When the matched memory record has been
+ * compiled into one or more wiki pages, `wikiPages` is populated and the
+ * UI can render a wiki-style card that navigates to the detail view.
+ * When it hasn't been compiled yet, `wikiPages` is empty and the UI
+ * falls back to showing the raw record text.
+ */
+export interface MemorySearchHit {
+  id: string;
+  content: string;
+  factType: string | null;
+  createdAt: string | null;
+  score: number | null;
+  wikiPages: WikiPageRef[];
+}

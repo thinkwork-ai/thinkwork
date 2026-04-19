@@ -5,39 +5,37 @@ import { useRouter } from "expo-router";
 import { Search } from "lucide-react-native";
 import { IconBrain } from "@tabler/icons-react-native";
 import { Muted } from "@/components/ui/typography";
-import { useMobileMemorySearch, type WikiSearchHit } from "@thinkwork/react-native-sdk";
+import { useMobileMemorySearch, type WikiPageRef } from "@thinkwork/react-native-sdk";
 import { COLORS } from "@/lib/theme";
 import { WikiResultRow } from "./WikiResultRow";
 
 interface CapturesListProps {
-	tenantId: string | null | undefined;
-	ownerId: string | null | undefined;
+	agentId: string | null | undefined;
 	colors: (typeof COLORS)["dark"];
 	searchQuery?: string;
 }
 
-export function CapturesList({ tenantId, ownerId, colors, searchQuery }: CapturesListProps) {
+export function CapturesList({ agentId, colors, searchQuery }: CapturesListProps) {
 	const router = useRouter();
 	const trimmedQuery = (searchQuery || "").trim();
 	const isSearching = trimmedQuery.length > 0;
 
 	const { results, loading, error, refetch } = useMobileMemorySearch({
-		tenantId,
-		ownerId,
+		agentId,
 		query: trimmedQuery,
 	});
 
 	useEffect(() => {
 		if (!error) return;
 		console.warn(
-			`[CapturesList] wikiSearch error query=${JSON.stringify(trimmedQuery)} tenantId=${tenantId} ownerId=${ownerId} error=${error.message}`,
+			`[CapturesList] memorySearch error query=${JSON.stringify(trimmedQuery)} agentId=${agentId} error=${error.message}`,
 			error,
 		);
-	}, [error, trimmedQuery, tenantId, ownerId]);
+	}, [error, trimmedQuery, agentId]);
 
-	const handlePress = useCallback(
-		(hit: WikiSearchHit) => {
-			router.push(`/wiki/${encodeURIComponent(hit.type)}/${encodeURIComponent(hit.slug)}`);
+	const handlePressWiki = useCallback(
+		(page: WikiPageRef) => {
+			router.push(`/wiki/${encodeURIComponent(page.type)}/${encodeURIComponent(page.slug)}`);
 		},
 		[router],
 	);
@@ -67,7 +65,7 @@ export function CapturesList({ tenantId, ownerId, colors, searchQuery }: Capture
 			data={results}
 			keyExtractor={(hit) => hit.id}
 			renderItem={({ item }) => (
-				<WikiResultRow hit={item} colors={colors} onPress={handlePress} />
+				<WikiResultRow hit={item} colors={colors} onPressWiki={handlePressWiki} />
 			)}
 			ItemSeparatorComponent={() => (
 				<View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: 16 }} />

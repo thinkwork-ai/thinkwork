@@ -55,4 +55,6 @@ export type {
   CaptureMobileMemoryInput,
   WikiPageType,
   WikiSearchHit,
+  WikiPageRef,
+  MemorySearchHit,
 } from "./types";

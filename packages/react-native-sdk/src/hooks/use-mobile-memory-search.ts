@@ -1,62 +1,53 @@
 import { useQuery } from "urql";
 import { MobileMemorySearchQuery } from "../graphql/queries";
-import type { WikiPageType, WikiSearchHit } from "../types";
+import type { MemorySearchHit, WikiPageRef } from "../types";
 
 interface UseMobileMemorySearchArgs {
-  tenantId: string | null | undefined;
-  ownerId: string | null | undefined;
+  agentId: string | null | undefined;
   query: string;
   limit?: number;
 }
 
-type ServerHit = {
-  score: number;
-  matchedAlias: string | null;
-  page: {
-    id: string;
-    type: WikiPageType;
-    slug: string;
-    title: string;
-    summary: string | null;
-    status: string;
-    lastCompiledAt: string | null;
-    updatedAt: string;
-  };
+type ServerRecord = {
+  memoryRecordId: string;
+  content: { text: string | null } | null;
+  createdAt: string | null;
+  factType: string | null;
+  score: number | null;
+  wikiPages: WikiPageRef[] | null;
 };
 
 type ServerResponse = {
-  wikiSearch: ServerHit[] | null;
+  memorySearch: {
+    records: ServerRecord[];
+    totalCount: number;
+  } | null;
 };
 
 /**
- * Searches compiled wiki pages (Entity / Topic / Decision) scoped to
- * (tenantId, ownerId). Paused until both ids and a non-empty query are
- * present. Results are returned in rank order (alias hits boosted).
+ * Searches the active agent's memory bank via the canonical memorySearch
+ * resolver. Each raw memory record carries any wiki pages it has been
+ * compiled into (via wiki_section_sources); the UI prefers the wiki
+ * page for display but falls back to raw content when nothing has been
+ * compiled yet. Paused until agentId and a non-empty query are present.
  */
-export function useMobileMemorySearch({
-  tenantId,
-  ownerId,
-  query,
-  limit,
-}: UseMobileMemorySearchArgs) {
+export function useMobileMemorySearch({ agentId, query, limit }: UseMobileMemorySearchArgs) {
   const trimmed = (query || "").trim();
   const [{ data, fetching, error }, refetch] = useQuery<ServerResponse>({
     query: MobileMemorySearchQuery,
-    variables: { tenantId, ownerId, query: trimmed, limit },
-    pause: !tenantId || !ownerId || trimmed.length === 0,
+    variables: { agentId, query: trimmed, limit },
+    pause: !agentId || trimmed.length === 0,
     requestPolicy: "cache-and-network",
   });
 
-  const hits = data?.wikiSearch ?? [];
-  const results: WikiSearchHit[] = hits.map((h) => ({
-    id: h.page.id,
-    type: h.page.type,
-    slug: h.page.slug,
-    title: h.page.title,
-    summary: h.page.summary,
-    lastCompiledAt: h.page.lastCompiledAt,
-    score: h.score,
-    matchedAlias: h.matchedAlias,
+  const records = data?.memorySearch?.records ?? [];
+  const results: MemorySearchHit[] = records.map((r) => ({
+    id: r.memoryRecordId,
+    content: r.content?.text || "",
+    factType: r.factType ?? null,
+    createdAt: r.createdAt ?? null,
+    score: r.score ?? null,
+    wikiPages: r.wikiPages ?? [],
   }));
 
   return {
