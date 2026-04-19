@@ -1635,6 +1635,38 @@ export const WikiBacklinksQuery = graphql(`
   }
 `);
 
+export const RecentWikiPagesQuery = graphql(`
+  query AdminRecentWikiPages($agentId: ID!, $limit: Int) {
+    recentWikiPages(agentId: $agentId, limit: $limit) {
+      id
+      type
+      slug
+      title
+      summary
+      lastCompiledAt
+      updatedAt
+    }
+  }
+`);
+
+export const WikiSearchQuery = graphql(`
+  query AdminWikiSearch($tenantId: ID!, $ownerId: ID!, $query: String!, $limit: Int) {
+    wikiSearch(tenantId: $tenantId, ownerId: $ownerId, query: $query, limit: $limit) {
+      score
+      matchedAlias
+      page {
+        id
+        type
+        slug
+        title
+        summary
+        lastCompiledAt
+        updatedAt
+      }
+    }
+  }
+`);
+
 export const ThreadTracesQuery = graphql(`
   query ThreadTraces($threadId: ID!, $tenantId: ID!) {
     threadTraces(threadId: $threadId, tenantId: $tenantId) {
