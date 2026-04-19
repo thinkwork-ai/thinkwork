@@ -1,99 +1,102 @@
 ---
 title: Compounding Memory
-description: A compiled layer on top of normalized memory that surfaces durable entities, topics, and decisions with provenance back to the raw memory units.
+description: What happens when your agent keeps learning — scattered memories get distilled into a wiki of durable pages about the people, places, and decisions that matter.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Compounding Memory is a compiled layer on top of long-term memory. It reads new and changed memory records, and materializes them into a per-agent wiki of **pages** — durable entities, topics, and decisions — each with sections, aliases, links, and provenance back to the raw memory units.
+Ask your agent about a place it's been helping you think about for months. In most systems, it answers by pulling twenty different memory snippets and summarizing them on the fly — new summary every time, never the same twice.
 
-The raw memory (Hindsight or AgentCore) stays the canonical record. The wiki is a derived view, rebuildable from canonical memory at any time.
+With Compounding Memory, the agent maintains a real page about that place. You mention Austin over a hundred chats and trips; the agent writes it all into one page titled "Austin, Texas" — with sections like an overview, your visits, and related activities. The page grows as you do. Over time, your agent builds a small encyclopedia about the things it knows you care about.
 
-## Why it exists
+## What it feels like
 
-Raw memory recall answers "which memory units look relevant to this query?" That's semantic retrieval over untouched records.
+Three things change when memory compounds into pages.
 
-The wiki layer answers a different question: "what does this agent actually know about X?"
+**Your agent stops starting from scratch.** The tenth conversation about a restaurant doesn't retrace the first nine. The agent opens the page and reads what's already there.
 
-Three things become possible once memories compile into pages:
+**You can actually see what your agent knows.** Pages are markdown. They have titles, sections, and links to each other. You can browse them. You can export them.
 
-- **Durable subjects.** Every time a conversation mentions the same place or decision, the agent writes into the same page instead of producing disconnected summaries.
-- **Readable outputs.** A compiled page is markdown, with sections. It can be exported, inspected, or diffed.
-- **Cheap re-grounding.** An agent looking up "Austin, TX" pulls one compiled page instead of re-summarizing dozens of memory units every turn.
+**Context gets precise.** When the agent needs to answer "what restaurants do I like in Lisbon?", it reads one page instead of re-reading fifty memories.
 
-<Aside type="tip">
-Raw long-term memory is still the primary recall path. The wiki is a compounding sidecar — high-value for durable subjects, unnecessary for ephemeral ones.
-</Aside>
+## The three kinds of pages
 
-## The page mental model
+Every page is one of three types. The type shapes what kind of page it is.
 
-Every compiled object is a **page**. A page has one of three types:
+**Entity** pages are about a specific thing — a person, a place, a company, a product, a project. "Austin, Texas." "Taberna dos Mercadores." "Marco's Portugal Trip, 2026."
 
-- **`entity`** — a specific thing (a person, a place, a company, a product, a project).
-- **`topic`** — a collection of related items under a theme (e.g. "Austin kids activities, April 2026").
-- **`decision`** — a choice that was made, with context and rationale.
+**Topic** pages are collections under a theme. "Austin kids activities, April 2026." "Portuguese restaurants I've tried." "Open questions about the backend migration."
 
-Type describes **shape** (which sections the page has, what kind of prose the section writer produces), not sharing.
+**Decision** pages record choices — what was decided, why, and what followed. "Decision: use Hindsight as the primary memory engine." "Decision: book the hotel in Bairro Alto instead of Chiado."
 
-Every page belongs to exactly one `(tenant, agent)` scope. There are no tenant-wide pages, no cross-agent merges, and no `owner_id IS NULL` escape hatch. Team and company scopes are explicitly deferred.
+## What's inside a page
 
-Inside a page:
+Pages have four moving parts.
 
-- **Sections** — markdown blocks keyed by slug (`overview`, `notes`, `visits`, `related`…). Each section is patched independently; a rewrite only touches sections whose content materially changes.
-- **Aliases** — normalized alternate names ("austin texas", "austin tx"). Aliases resolve a mention to a page.
-- **Links** — directed references to other pages in the same scope. Populated by the planner whenever one page meaningfully references another.
-- **Provenance** — every section tracks the specific memory records the compiler cited when it wrote that section.
+**Sections** are the body — markdown blocks with headings. Your agent patches one section at a time instead of rewriting the whole page. Add a new memory about a visit, only the "Visits" section updates.
 
-See [Compounding Memory: Pages](/concepts/knowledge/compounding-memory-pages/) for the full data model.
+**Aliases** are alternate names that all point to the same page. "Austin", "Austin TX", and "ATX" all resolve to "Austin, Texas." When you mention any of them, the agent knows which page to open.
+
+**Links** connect pages. If your "Taberna dos Mercadores" page keeps mentioning Lisbon, there's a link between the two pages — so when you ask about Lisbon, Taberna shows up too.
+
+**Sources** track where every section's content came from. Each line in the "Visits" section was written from specific memories. You can always trace a claim back to the raw memory that produced it.
 
 ## How a memory becomes a page
 
-The compile pipeline is owned by a job worker that runs per `(tenant, agent)` scope:
+Compounding happens in the background. Here's the shape of it without the plumbing:
 
-1. **Claim a job.** Jobs get enqueued post-retain (fire-and-forget), by admin mutation, or by the nightly lint sweep.
-2. **Read the cursor.** A cursor stores the last processed `(updated_at, record_id)` so compiles are incremental and replayable.
-3. **Pull new records.** The memory adapter exposes `listRecordsUpdatedSince` so the compiler can paginate over just what changed.
-4. **Planner pass.** An LLM receives the records plus the scope's candidate pages and open unresolved mentions, and returns a plan: which pages to update, which to create, which aliases to hold as unresolved, which to promote, and which links to add.
-5. **Section writer pass.** For each section the plan wants to change, an LLM patches only that section's markdown — not the whole page.
-6. **Write provenance.** Each section records the specific memory records the planner cited for it. Pollution (a memory cited as a source for unrelated sections) is explicitly avoided.
-7. **Advance the cursor.** Only after a successful apply, so mid-job failures replay safely.
+1. You have a conversation. Something memorable happens.
+2. Your agent saves a raw memory — a short text note.
+3. A compile job notices new memories exist.
+4. The compile planner reads the new memories alongside the pages you already have, and decides: update an existing page? create a new one? hold this mention until you see it a few more times?
+5. The section writer patches the markdown.
+6. You can now read the page, search for it, or ask the agent about it.
 
-The full walk-through is in [Compounding Memory: Pipeline](/concepts/knowledge/compounding-memory-pipeline/).
+The important thing is that step 4 is deliberately conservative. Your agent won't create a page the first time it sees a new name. It holds that name as an **unresolved mention** and waits until it sees the same thing a few more times before giving it a real page. This keeps the wiki from filling up with noise.
 
-## v1 scope guarantees
+## What your agent does vs. what you see
 
-- **Agent-scoped, everywhere.** Pages, sections, aliases, mentions, jobs, cursors — all rows carry `owner_id NOT NULL`. No cross-agent lookup within a tenant.
-- **One adapter in v1.** `listRecordsUpdatedSince` is implemented for Hindsight only. AgentCore returns `NotImplemented`.
-- **Flag-gated.** Compiles only run for tenants with `wiki_compile_enabled = true`. Other tenants are untouched.
-- **Flattened provenance.** Each `wiki_section_sources` row points at one memory unit; no nested metadata structures.
+From the agent's side, nothing changes about how it learns. It still captures memories the same way.
 
-## Reading the compiled wiki
+From your side, two new surfaces appear in the mobile app:
 
-Four surfaces read from the wiki:
+- **Search for a page** — type "austin" and you get the Austin, Texas page back, with a note telling you which memory matched. The search is smart: it runs the same ranking your agent uses for recall, then shows you the pages those memories feed into.
+- **Jump from a memory to its page** — tap any memory in your timeline and see which pages that memory helped build.
 
-- **GraphQL `wikiPage` / `wikiSearch` / `wikiBacklinks`** — admin and internal clients. Owner-scoped; `ownerId` is required on every read.
-- **GraphQL `mobileWikiSearch`** — mobile clients. Takes a free-text query, runs Hindsight recall, and returns compiled pages ranked by Hindsight's own rank order (reciprocal rank over the hit position of any citing memory).
-- **GraphQL `MemoryRecord.wikiPages`** — field resolver. For any memory surfaced by `memorySearch` or `memoryRecords`, the client can ask for the pages that cite it.
-- **Nightly export Lambda** — renders the vault as a zip at `s3://thinkwork-${stage}-wiki-exports/<tenant>/<agent>/<date>/vault.zip`.
+## Scope: one agent, one wiki
 
-Agent tools for `search_wiki` / `read_wiki_page` are deferred; agents currently read the wiki via GraphQL, not as a direct tool.
+Right now, every page belongs to one agent. If you have two agents in the same workspace, they have independent wikis. Nothing bleeds across.
 
-See [Compounding Memory (API)](/api/compounding-memory/) for the full GraphQL surface.
-
-## Design intent references
-
-The product and architecture decisions behind this system live in the following PRDs. They are read-only design intent; code and these docs are the source of truth for behavior.
-
-- `.prds/compounding-memory-scoping.md` — v1 agent-scope rule authority.
-- `.prds/compounding-memory-implementation-plan.md` — phased delivery plan.
-- `.prds/thinkwork-memory-compounding-pipeline-deep-dive.md` — pipeline philosophy.
-- `.prds/compiled-memory-layer-engineering-prd.md` — engineering architecture.
-- `.prds/compounding-memory-company-second-brain-prd.md` — product framing.
+This is deliberate. Shared wikis across a team raise real questions — who sees what, what gets merged, what stays private — and we'd rather answer those questions explicitly than smuggle them in through a default. Team and company wikis will come later, with their own rules.
 
 ## Related pages
 
-- [Compounding Memory: Pipeline](/concepts/knowledge/compounding-memory-pipeline/)
-- [Compounding Memory: Pages](/concepts/knowledge/compounding-memory-pages/)
-- [Operating Compounding Memory](/guides/compounding-memory-operations/)
-- [Compounding Memory (API)](/api/compounding-memory/)
-- [Long-term Memory](/concepts/knowledge/memory/)
+- [Compounding Memory: Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — how a memory actually becomes a page
+- [Compounding Memory: Pages](/concepts/knowledge/compounding-memory-pages/) — the full data model
+- [Operating Compounding Memory](/guides/compounding-memory-operations/) — turning it on, troubleshooting
+- [Compounding Memory (API)](/api/compounding-memory/) — GraphQL reference
+- [Long-term Memory](/concepts/knowledge/memory/) — the raw memory the wiki sits on top of
+
+---
+
+## Under the hood
+
+### What's really happening
+
+Raw long-term memory (Hindsight or AgentCore) stays the canonical record. The wiki is a derived, rebuildable view — every page can be reconstructed by replaying the compile pipeline over the same memory records.
+
+### Where scope lives
+
+Every `wiki_*` table row carries both `tenant_id` and `owner_id`, both `NOT NULL`. The `owner_id` is the agent id. There's no tenant-wide read path and no `owner_id IS NULL` escape hatch. Team and company scope are deferred to a future `scope_type` model.
+
+### Which adapter drives compiles
+
+Only Hindsight implements the `listRecordsUpdatedSince` cursor method. Tenants on AgentCore Memory won't run compiles in v1 — the enqueue path short-circuits with `skipped_adapter`.
+
+### Design intent references
+
+- `.prds/compounding-memory-scoping.md` — v1 scope authority
+- `.prds/compounding-memory-implementation-plan.md` — phased delivery plan
+- `.prds/thinkwork-memory-compounding-pipeline-deep-dive.md` — pipeline philosophy
+- `.prds/compiled-memory-layer-engineering-prd.md` — engineering architecture
+- `.prds/compounding-memory-company-second-brain-prd.md` — product framing

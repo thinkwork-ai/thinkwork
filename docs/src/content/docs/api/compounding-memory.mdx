@@ -1,76 +1,51 @@
 ---
-title: Compounding Memory (GraphQL)
-description: GraphQL surface for the compiled wiki — queries, mutations, scoring model, and example requests.
+title: Compounding Memory (API)
+description: Programmatic access to the wiki — reading pages, searching, compiling on demand, bulk-importing.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-The Compounding Memory read and write paths are all GraphQL. This doc covers the types, queries, mutations, and the scoring model a mobile client needs to understand when rendering `mobileWikiSearch` results.
+Everything you can do with the wiki — reading pages, searching, compiling, importing — is exposed through the GraphQL API. This page tells you what queries exist, who can call them, and what they return.
 
-Schema lives in `packages/database-pg/graphql/types/wiki.graphql` (wiki surface) and `packages/database-pg/graphql/types/memory.graphql` (memory ↔ wiki join + mobile-specific queries).
+Start here if you're building a client (the mobile app, an SDK, another service) that needs to talk to the wiki.
 
-## Authentication and scope
+## What you can do
 
-Every wiki read is owner-scoped. The caller's tenant is derived from the Cognito JWT and checked against the request's `tenantId`. The caller must either be the owning agent, or have the tenant-admin role.
+**Read a page** when you know its slug. Returns the full page including every section and alias.
 
-- There is no tenant-wide wiki read. Cross-agent inspection requires admin role.
-- Agent tools for `search_wiki` / `read_wiki_page` are not part of v1; agents read the wiki via GraphQL like any other client.
-- `ownerId` is required on every wiki query. Mobile queries (e.g. `mobileWikiSearch`) take `agentId` and derive scope from it.
+**Search an agent's wiki** with a free-text query. Two flavors:
+- Lexical search — looks for your query in titles, summaries, and body text.
+- Ranked wiki search for mobile — runs the same semantic recall your agent uses, then shows you the pages those memories feed into.
 
-Mutations (`compileWikiNow`, `bootstrapJournalImport`, `resetWikiCursor`) are admin-only.
+**Find what links to a page.** Given a page id, get the list of pages that link to it.
 
-## Types
+**Go from a memory to its pages.** Any `MemoryRecord` you pull from the API has a `wikiPages` field that returns the pages citing it as a source.
 
-```graphql
-enum WikiPageType { ENTITY TOPIC DECISION }
+**Compile on demand** (admin only). Queue a compile job for a specific agent.
 
-type WikiPage {
-  id: ID!
-  tenantId: ID!
-  ownerId: ID!
-  type: WikiPageType!
-  slug: String!
-  title: String!
-  summary: String
-  bodyMd: String
-  status: String!                 # 'active' | 'archived'
-  lastCompiledAt: AWSDateTime
-  createdAt: AWSDateTime!
-  updatedAt: AWSDateTime!
-  sections: [WikiPageSection!]!   # only populated by wikiPage, empty on list results
-  aliases: [String!]!             # only populated by wikiPage, empty on list results
-}
+**Bulk-import from journal data** (admin only). Kick off a background job that ingests everything and compiles at the end.
 
-type WikiPageSection {
-  id: ID!
-  sectionSlug: String!
-  heading: String!
-  bodyMd: String!
-  position: Int!
-  lastSourceAt: AWSDateTime
-}
-```
+**Reset an agent's wiki** (admin only). Clear the cursor, optionally archive pages.
 
-List-style responses (`wikiSearch`, `wikiBacklinks`, `mobileWikiSearch`, `MemoryRecord.wikiPages`) return `WikiPage` rows with `sections` and `aliases` empty. Fetch the full page detail with `wikiPage(tenantId, ownerId, type, slug)` when the user clicks through.
+## Who can call what
 
-## Queries
+All wiki reads are **agent-scoped**. Every query requires `ownerId` (the agent id), and the system checks that you're either that agent yourself or an admin of the tenant.
 
-### `wikiPage`
+There is no tenant-wide read path. If you want to know what's in another agent's wiki in the same tenant, you need admin rights.
 
-Read one compiled page by slug.
+Mutations (`compileWikiNow`, `bootstrapJournalImport`, `resetWikiCursor`) are admin-only across the board.
+
+## Reading one page
 
 ```graphql
-query WikiPage(
-  $tenantId: ID!
-  $ownerId: ID!
-  $type: WikiPageType!
-  $slug: String!
-) {
+query GetPage($tenantId: ID!, $ownerId: ID!, $type: WikiPageType!, $slug: String!) {
   wikiPage(tenantId: $tenantId, ownerId: $ownerId, type: $type, slug: $slug) {
     id
     title
     summary
     bodyMd
+    lastCompiledAt
+    aliases
     sections {
       sectionSlug
       heading
@@ -78,25 +53,20 @@ query WikiPage(
       position
       lastSourceAt
     }
-    aliases
-    lastCompiledAt
   }
 }
 ```
 
-Returns `null` when no page matches. `wikiPages.status = 'archived'` pages are returned — filter on `status` client-side if you want only active ones.
+Returns `null` if no such page exists. Page types are `ENTITY`, `TOPIC`, or `DECISION`.
 
-### `wikiSearch`
+## Searching the wiki
 
-Postgres FTS + alias lookup over one scope.
+Two options depending on what you're building.
+
+### Lexical search (admin/internal clients)
 
 ```graphql
-query WikiSearch(
-  $tenantId: ID!
-  $ownerId: ID!
-  $query: String!
-  $limit: Int = 20
-) {
+query Search($tenantId: ID!, $ownerId: ID!, $query: String!, $limit: Int = 20) {
   wikiSearch(tenantId: $tenantId, ownerId: $ownerId, query: $query, limit: $limit) {
     page { id type slug title summary }
     score
@@ -105,36 +75,12 @@ query WikiSearch(
 }
 ```
 
-Ranked by `ts_rank(search_tsv, plainto_tsquery('english', query))` + `1.0` when any alias matched (exact or substring). `matchedAlias` is the alias that fired the boost, or `null` if only the FTS path hit. Status filter: `active` only.
+This is Postgres full-text search over the page's title, summary, and body, with a +1.0 boost for any alias matching the query. Results are ranked by a `ts_rank` score + alias bonus.
 
-### `wikiBacklinks`
-
-Pages that link to a given page.
+### Ranked search (mobile)
 
 ```graphql
-query Backlinks($pageId: ID!) {
-  wikiBacklinks(pageId: $pageId) {
-    id
-    type
-    slug
-    title
-    summary
-  }
-}
-```
-
-Visibility is derived from the target page's owner scope; caller must be that owner or admin.
-
-### `mobileWikiSearch`
-
-Hindsight recall → compiled pages, ranked by Hindsight's own order.
-
-```graphql
-query MobileWikiSearch(
-  $agentId: ID!
-  $query: String!
-  $limit: Int = 20
-) {
+query MobileSearch($agentId: ID!, $query: String!, $limit: Int = 20) {
   mobileWikiSearch(agentId: $agentId, query: $query, limit: $limit) {
     score
     matchingMemoryIds
@@ -150,51 +96,62 @@ query MobileWikiSearch(
 }
 ```
 
-Resolver: `packages/api/src/graphql/resolvers/memory/mobileWikiSearch.query.ts`.
+This is different. It doesn't do its own search over the wiki pages — it asks the memory engine (Hindsight) to find the most relevant memories for the query, then returns the pages those memories cite.
 
-**Scoring model — this is important for client expectations:**
+**The ranking trusts Hindsight's order.** If Hindsight's #1 hit cites page A, page A wins. If Hindsight's #5 hit cites page B, page B ranks lower. The `score` is a reciprocal-rank value (higher is better, not comparable across queries).
 
-1. Run Hindsight recall (`recall.recall({ ownerId: agentId, query, limit })`) with an overfetch — ~5× the requested limit.
-2. For each hit, record its position (rank 0 = best).
-3. Reverse-join memory ids through `wiki_section_sources` to find the pages that cite each recalled memory.
-4. For each candidate page:
-   - `bestRank` = the **smallest** Hindsight rank of any memory citing it.
-   - `matchCount` = the number of distinct Hindsight hits citing it.
-5. Sort by `bestRank ASC`, then `matchCount DESC`, then `lastCompiledAt DESC`.
-6. Return the API's `score = 1 / (bestRank + 60)` — a reciprocal-rank surfacing score. Higher is better, not comparable across queries.
-
-`matchingMemoryIds` is returned in Hindsight rank order (best-first) so the client can render a "why this matched" cue without a second round trip.
+`matchingMemoryIds` tells you which memories caused each page to surface, in Hindsight's rank order. You can use this to render a "why this matched" explanation in the UI.
 
 <Aside type="tip">
-The client should treat `score` as a ranking signal, not an absolute confidence. Two different queries can yield very different score magnitudes for pages the user would consider equally relevant.
+If you're building a user-facing search, this is probably what you want. The lexical search is better for exact title lookups; this one is better when users ask in natural language.
 </Aside>
 
-### `MemoryRecord.wikiPages`
+## Jumping from a memory to its pages
 
-Field resolver on `MemoryRecord` that returns the compiled pages citing this memory as a source. Useful in the mobile memory surface to show "this memory is distilled into page X."
+Any `MemoryRecord` you get back from `memorySearch` or `memoryRecords` has a `wikiPages` field:
 
 ```graphql
-query MemoryWithWiki($assistantId: ID!, $query: String!) {
+query MemoriesWithPages($assistantId: ID!, $query: String!) {
   memorySearch(assistantId: $assistantId, query: $query) {
     records {
       memoryRecordId
       content { text }
-      wikiPages { id type slug title summary }
+      wikiPages {
+        id
+        type
+        slug
+        title
+        summary
+      }
     }
     totalCount
   }
 }
 ```
 
-Implementation: `packages/api/src/graphql/resolvers/memory/types.ts`. Owner scope is enforced by construction — the field joins through `wiki_section_sources`, which only contains rows for pages in the memory's owner scope, so no cross-agent leakage is possible here.
+This is how the mobile timeline shows "this memory helped build these pages." The list is scoped to the same agent as the memory — there's no cross-agent leakage possible here.
 
-One DB round-trip per memory record in the result set. Fine for typical `memorySearch` sizes (≤25 records); a DataLoader should be added when bulk-annotating larger result sets.
+One caveat: the `wikiPages` resolver does one DB round-trip per memory record in the result set. Fine for typical result sizes (≤25); if you're annotating large result sets, you'll want a DataLoader on the server side.
 
-## Mutations (admin-only)
+## Finding backlinks
 
-### `compileWikiNow`
+```graphql
+query Backlinks($pageId: ID!) {
+  wikiBacklinks(pageId: $pageId) {
+    id
+    type
+    slug
+    title
+    summary
+  }
+}
+```
 
-Enqueue an ad-hoc compile job for a specific `(tenant, agent)`. Returns the job row — either freshly inserted or the in-flight dedupe hit.
+Given a page, returns every page that links to it. Useful for "what references this?" UI affordances.
+
+## Triggering a compile
+
+Admin only.
 
 ```graphql
 mutation CompileNow($tenantId: ID!, $ownerId: ID!) {
@@ -209,26 +166,20 @@ mutation CompileNow($tenantId: ID!, $ownerId: ID!) {
 }
 ```
 
-### `bootstrapJournalImport`
+Returns the job row — either a fresh insert, or (if a compile is already running for that agent) the existing in-flight job. Check `trigger` to distinguish (`admin` for your request, `memory_retain` for a pre-existing post-retain job).
 
-Fire-and-forget dispatch of a bulk ingest from the `journal.*` schema into `(tenant, agent)`. Returns immediately; the actual work runs on a dedicated worker Lambda. Track via CloudWatch + `wiki_compile_jobs`.
+## Bulk-importing
+
+Admin only. Fire-and-forget — the mutation acknowledges immediately, the actual work happens on a dedicated worker Lambda.
 
 ```graphql
-mutation BulkImport(
-  $accountId: ID!
-  $tenantId: ID!
-  $agentId: ID!
-  $limit: Int
-) {
+mutation BulkImport($accountId: ID!, $tenantId: ID!, $agentId: ID!, $limit: Int) {
   bootstrapJournalImport(
     accountId: $accountId
     tenantId: $tenantId
     agentId: $agentId
     limit: $limit
   ) {
-    accountId
-    tenantId
-    agentId
     dispatched
     dispatchedAt
     error
@@ -236,34 +187,69 @@ mutation BulkImport(
 }
 ```
 
-### `resetWikiCursor`
+Watch progress through CloudWatch logs and the `wiki_compile_jobs` table. The terminal compile shows up as a row with `trigger = 'bootstrap_import'`.
 
-Clear the compile cursor for `(tenant, agent)`. With `force: true`, also archives every active page in the scope.
+## Resetting an agent's wiki
+
+Admin only. Destructive when `force: true`.
 
 ```graphql
 mutation Reset($tenantId: ID!, $ownerId: ID!, $force: Boolean) {
   resetWikiCursor(tenantId: $tenantId, ownerId: $ownerId, force: $force) {
-    tenantId
-    ownerId
     cursorCleared
     pagesArchived
   }
 }
 ```
 
-`force: true` is destructive. See [Operating Compounding Memory](/guides/compounding-memory-operations/#replay--rebuild-from-scratch) for when to reset vs. hard-delete.
+- `force: false` (default) — clears the cursor. Next compile re-reads everything but likely makes no meaningful changes.
+- `force: true` — clears the cursor and archives every active page. Use when you want the next compile to visibly rebuild.
 
-## Error conventions
+For a truly clean rebuild (including deleting provenance rows), see [the operations guide](/guides/compounding-memory-operations/#rebuilding-an-agents-wiki-from-scratch).
 
-- **Auth failures** — the resolver throws `Agent not found or access denied` (mobile paths) or `Forbidden: caller must be the owning agent or admin` (admin paths).
-- **Scope mismatch** — the request passed a `(tenantId, ownerId)` the caller doesn't own: same error as auth failure. Scope leakage is treated as unauthorized, not "not found".
-- **Rate errors from downstream LLMs** — surface from compile jobs as `failed` status with `error` containing `Too many requests`. Read paths don't call LLMs, so they don't see these.
-- **Adapter not-implemented** — compile jobs fail with `adapter <kind> does not implement listRecordsUpdatedSince` when the tenant's active adapter isn't Hindsight.
+## Errors
+
+- **Auth or scope failures** surface as `Agent not found or access denied` (mobile paths) or `Forbidden` (admin paths). Scope mismatch is treated as unauthorized, not "not found."
+- **Compile job failures** show up in the job row's `error` field — common ones are `Too many requests` (Bedrock throttling) and adapter-not-implemented errors.
+- **Read paths don't call LLMs,** so they don't see Bedrock errors.
 
 ## Related pages
 
-- [Compounding Memory](/concepts/knowledge/compounding-memory/)
-- [Compounding Memory: Pipeline](/concepts/knowledge/compounding-memory-pipeline/)
-- [Compounding Memory: Pages](/concepts/knowledge/compounding-memory-pages/)
-- [Operating Compounding Memory](/guides/compounding-memory-operations/)
-- [GraphQL Schema](/api/graphql/)
+- [Compounding Memory](/concepts/knowledge/compounding-memory/) — the overview
+- [Compounding Memory: Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — what compiles do
+- [Compounding Memory: Pages](/concepts/knowledge/compounding-memory-pages/) — the data model
+- [Operating Compounding Memory](/guides/compounding-memory-operations/) — hands-on recipes
+- [GraphQL Schema](/api/graphql/) — the full ThinkWork GraphQL API
+
+---
+
+## Under the hood
+
+### Schema files
+
+- `packages/database-pg/graphql/types/wiki.graphql` — wiki types, queries, mutations
+- `packages/database-pg/graphql/types/memory.graphql` — `MemoryRecord.wikiPages` + `mobileWikiSearch`
+
+### `mobileWikiSearch` scoring (implementation)
+
+```ts
+// packages/api/src/graphql/resolvers/memory/mobileWikiSearch.query.ts
+// 1. Hindsight recall returns memories in rank order (rank 0 = best).
+// 2. Reverse-join through wiki_section_sources to candidate pages.
+// 3. For each page:
+//    bestRank  = min(rank of any memory citing the page)
+//    matchCount = count of distinct hits citing the page
+// 4. Sort by bestRank ASC, then matchCount DESC, then lastCompiledAt DESC.
+// 5. Return score = 1 / (bestRank + 60)  (reciprocal rank surfacing score)
+```
+
+### Resolver paths
+
+- `packages/api/src/graphql/resolvers/wiki/wikiPage.query.ts`
+- `packages/api/src/graphql/resolvers/wiki/wikiSearch.query.ts`
+- `packages/api/src/graphql/resolvers/wiki/wikiBacklinks.query.ts`
+- `packages/api/src/graphql/resolvers/wiki/compileWikiNow.mutation.ts`
+- `packages/api/src/graphql/resolvers/wiki/bootstrapJournalImport.mutation.ts`
+- `packages/api/src/graphql/resolvers/wiki/resetWikiCursor.mutation.ts`
+- `packages/api/src/graphql/resolvers/memory/mobileWikiSearch.query.ts`
+- `packages/api/src/graphql/resolvers/memory/types.ts` (the `MemoryRecord.wikiPages` field)
