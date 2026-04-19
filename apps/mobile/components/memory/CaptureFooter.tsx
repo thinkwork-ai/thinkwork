@@ -11,16 +11,11 @@ import {
 import Constants from "expo-constants";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowUp, Mic, Plus, Search, Tag } from "lucide-react-native";
-import { useDeleteMobileMemoryCapture } from "@thinkwork/react-native-sdk";
+import { useCaptureMobileMemory } from "@thinkwork/react-native-sdk";
 import { Text } from "@/components/ui/typography";
 import { toast } from "@/components/ui/toast";
 import { VoiceDictationBar } from "@/components/input/VoiceDictationBar";
 import type { COLORS } from "@/lib/theme";
-import { captureQueue } from "@/lib/offline/capture-queue";
-import {
-	newClientCaptureId,
-	useCaptureQueue,
-} from "@/lib/offline/use-capture-queue";
 import { FactTypeChip, type FactType } from "./FactTypeChip";
 import { FactTypePicker } from "./FactTypePicker";
 
@@ -57,49 +52,16 @@ export function CaptureFooter({
 	const [pickerOpen, setPickerOpen] = useState(false);
 	const [isDictating, setIsDictating] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
-	const pendingCid = useRef<string | null>(null);
 	const dictationUsedRef = useRef(false);
 	const inputRef = useRef<TextInput>(null);
 	const insets = useSafeAreaInsets();
 
-	const entries = useCaptureQueue();
-	const deleteCapture = useDeleteMobileMemoryCapture();
+	const captureMobileMemory = useCaptureMobileMemory();
 
 	// Keep the parent's search query in sync with text+mode. Empty in add mode.
 	useEffect(() => {
 		onSearchQueryChange?.(mode === "search" ? text : "");
 	}, [mode, text, onSearchQueryChange]);
-
-	// When the last-submitted capture flips to synced, show the Undo toast.
-	useEffect(() => {
-		const cid = pendingCid.current;
-		if (!cid) return;
-		const entry = entries.find((e) => e.clientCaptureId === cid);
-		if (!entry) return;
-		if (entry.status === "synced" && entry.syncedId && entry.agentId) {
-			pendingCid.current = null;
-			const label = agentName || "your agent";
-			const syncedId = entry.syncedId;
-			const agentForUndo = entry.agentId;
-			toast.show({
-				message: `Saved to ${label}'s memory`,
-				actionLabel: "Undo",
-				durationMs: 5000,
-				onAction: async () => {
-					try {
-						await deleteCapture({ agentId: agentForUndo, captureId: syncedId });
-						await captureQueue.remove(cid);
-					} catch {
-						toast.show({
-							message: "Couldn't undo — tap the memory to delete it.",
-							tone: "error",
-							durationMs: 3000,
-						});
-					}
-				},
-			});
-		}
-	}, [entries, agentName, deleteCapture]);
 
 	const charCount = text.length;
 	const atHardLimit = charCount >= MAX_CHARS;
@@ -122,11 +84,12 @@ export function CaptureFooter({
 
 	const toggleMode = useCallback(() => {
 		setMode((prev) => (prev === "search" ? "add" : "search"));
-		// Refocus the input so the keyboard stays up and the cursor is ready
-		// in the field the user just flipped into.
 		requestAnimationFrame(() => inputRef.current?.focus());
 	}, []);
 
+	// Synchronous capture — sends to Hindsight now. No offline queue, no
+	// client-side persistence. If the request fails, we surface an error
+	// toast and keep the draft text so the user can retry.
 	const handleCapture = useCallback(async () => {
 		const trimmed = text.trim();
 		if (!trimmed || submitting || atHardLimit) return;
@@ -136,15 +99,11 @@ export function CaptureFooter({
 		}
 		setSubmitting(true);
 		try {
-			const cid = newClientCaptureId();
-			pendingCid.current = cid;
 			const capturedVia: "text" | "dictation" = dictationUsedRef.current ? "dictation" : "text";
 			const appVersion =
 				Constants.expoConfig?.version ??
 				((Constants as unknown as { nativeAppVersion?: string }).nativeAppVersion ?? "unknown");
-			await captureQueue.enqueue({
-				clientCaptureId: cid,
-				tenantId,
+			await captureMobileMemory({
 				agentId,
 				content: trimmed,
 				factType,
@@ -158,22 +117,28 @@ export function CaptureFooter({
 			setFactType("FACT");
 			dictationUsedRef.current = false;
 			Keyboard.dismiss();
+			const label = agentName || "your agent";
+			toast.show({
+				message: `Saved to ${label}'s memory`,
+				durationMs: 3000,
+			});
 		} catch (err) {
-			pendingCid.current = null;
 			const message = err instanceof Error ? err.message : "Try again in a moment.";
-			toast.show({ message: `Couldn't save: ${message}`, tone: "error", durationMs: 3000 });
+			toast.show({
+				message: `Couldn't save: ${message}`,
+				tone: "error",
+				durationMs: 3000,
+			});
 		} finally {
 			setSubmitting(false);
 		}
-	}, [text, submitting, atHardLimit, agentId, tenantId, factType]);
+	}, [text, submitting, atHardLimit, agentId, tenantId, factType, agentName, captureMobileMemory]);
 
 	const handleSubmit = useCallback(() => {
 		if (mode === "add") {
 			void handleCapture();
 			return;
 		}
-		// Search: submit just blurs the keyboard — the query is already
-		// live-fed via onSearchQueryChange; parent debounces and queries.
 		Keyboard.dismiss();
 	}, [mode, handleCapture]);
 
