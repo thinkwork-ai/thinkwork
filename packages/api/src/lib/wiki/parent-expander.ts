@@ -89,7 +89,16 @@ export function deriveParentCandidates(
 		const meta = (r.metadata ?? {}) as Record<string, unknown>;
 
 		// --- City / place.city -----------------------------------------------
-		const city = readString(meta, ["place", "city"]) ?? readString(meta, ["city"]);
+		// Accepts several metadata shapes seen in the wild:
+		//   - nested: metadata.place.city (future/hindsight-adapter shape)
+		//   - flat:   metadata.place_city / metadata.city
+		//   - derive: extract city from metadata.place_address for journal
+		//             imports ("123 Main St, Austin, TX 78701, USA")
+		const city =
+			readString(meta, ["place", "city"]) ??
+			readString(meta, ["place_city"]) ??
+			readString(meta, ["city"]) ??
+			extractCityFromAddress(readString(meta, ["place_address"]));
 		if (city) {
 			const title = titleCase(city);
 			const key = `city:${title.toLowerCase()}`;
@@ -189,19 +198,70 @@ function readPlaceTypes(meta: Record<string, unknown>): string[] {
 	if (Array.isArray(direct)) {
 		return direct.filter((x): x is string => typeof x === "string");
 	}
+	// Journal-import shape emits place_types as a comma-separated string
+	// (e.g. "restaurant, food"). Accept that too so clustering works.
+	if (typeof direct === "string") {
+		return splitCsv(direct);
+	}
 	const nested = (meta["place"] as Record<string, unknown> | undefined)?.[
 		"types"
 	];
 	if (Array.isArray(nested)) {
 		return nested.filter((x): x is string => typeof x === "string");
 	}
+	if (typeof nested === "string") {
+		return splitCsv(nested);
+	}
 	return [];
 }
 
 function readTags(meta: Record<string, unknown>): string[] {
-	const tags = meta["tags"];
-	if (!Array.isArray(tags)) return [];
-	return tags.filter((x): x is string => typeof x === "string");
+	const out: string[] = [];
+	const append = (raw: unknown): void => {
+		if (Array.isArray(raw)) {
+			for (const x of raw) if (typeof x === "string") out.push(x);
+		} else if (typeof raw === "string") {
+			out.push(...splitCsv(raw));
+		}
+	};
+	// `tags` is the canonical key; `idea_tags` shows up on journal-import
+	// shaped records. Merge whatever is present; dedup happens downstream.
+	append(meta["tags"]);
+	append(meta["idea_tags"]);
+	return out;
+}
+
+function splitCsv(raw: string): string[] {
+	return raw
+		.split(/[,;]/)
+		.map((s) => s.trim())
+		.filter((s) => s.length > 0);
+}
+
+/**
+ * Extract a city from a postal-style address. The usual shape from Google
+ * Places is "<street>, <city>, <state/region zip>, <country>" — we walk the
+ * comma-separated parts from the end and pick the token directly before a
+ * state+zip pattern (two capital letters, optionally followed by a postal
+ * code). Falls back to the second-to-last part for non-US formats, and
+ * returns null if we can't isolate a plausible city.
+ */
+function extractCityFromAddress(address: string | null): string | null {
+	if (!address) return null;
+	const parts = address
+		.split(",")
+		.map((p) => p.trim())
+		.filter((p) => p.length > 0);
+	if (parts.length < 2) return null;
+
+	for (let i = parts.length - 1; i > 0; i--) {
+		// Matches "TX 78701", "ON M6J 1G1", and bare two-letter codes like "UK".
+		if (/^[A-Z]{2}(\s|$)/.test(parts[i]!)) {
+			return parts[i - 1] ?? null;
+		}
+	}
+	// Fallback: "..., City, Country" shape.
+	return parts[parts.length - 2] ?? null;
 }
 
 /**
@@ -214,11 +274,14 @@ function sectionForPlaceTypes(types: string[]): {
 	heading: string;
 } {
 	const set = new Set(types.map((t) => t.toLowerCase()));
-	if (set.has("restaurant") || set.has("food") || set.has("meal_takeaway")) {
-		return { slug: "restaurants", heading: "Restaurants" };
-	}
+	// Check narrower categories first — Google Places tags often include
+	// "food" alongside "cafe" for coffee shops, which would otherwise get
+	// routed to the generic restaurants rollup.
 	if (set.has("cafe") || set.has("coffee")) {
 		return { slug: "coffee", heading: "Coffee" };
+	}
+	if (set.has("restaurant") || set.has("food") || set.has("meal_takeaway")) {
+		return { slug: "restaurants", heading: "Restaurants" };
 	}
 	if (set.has("park") || set.has("natural_feature")) {
 		return { slug: "parks-and-outdoors", heading: "Parks & Outdoors" };
