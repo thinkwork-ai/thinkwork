@@ -1,5 +1,9 @@
 import { useQuery } from "urql";
-import { WikiBacklinksQuery, WikiPageQuery } from "../graphql/queries";
+import {
+  WikiBacklinksQuery,
+  WikiConnectedPagesQuery,
+  WikiPageQuery,
+} from "../graphql/queries";
 import type { WikiPageType } from "../types";
 
 export interface WikiPageSection {
@@ -78,6 +82,30 @@ export function useWikiBacklinks(pageId: string | null | undefined) {
 
   return {
     backlinks: data?.wikiBacklinks ?? [],
+    loading: fetching,
+    error,
+    refetch: () => refetch({ requestPolicy: "network-only" }),
+  };
+}
+
+/**
+ * Lists pages this page links OUT to — the "Connected Pages" surface,
+ * complementing useWikiBacklinks. Results are deduplicated on the
+ * server so a parent/child with both `reference` and `parent_of`
+ * edges shows up once.
+ */
+export function useWikiConnectedPages(pageId: string | null | undefined) {
+  const [{ data, fetching, error }, refetch] = useQuery<{
+    wikiConnectedPages: WikiBacklink[] | null;
+  }>({
+    query: WikiConnectedPagesQuery,
+    variables: { pageId },
+    pause: !pageId,
+    requestPolicy: "cache-and-network",
+  });
+
+  return {
+    connectedPages: data?.wikiConnectedPages ?? [],
     loading: fetching,
     error,
     refetch: () => refetch({ requestPolicy: "network-only" }),

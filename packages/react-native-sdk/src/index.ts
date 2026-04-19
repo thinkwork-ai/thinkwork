@@ -33,6 +33,7 @@ export { useRecentWikiPages } from "./hooks/use-recent-wiki-pages";
 export {
   useWikiPage,
   useWikiBacklinks,
+  useWikiConnectedPages,
   type WikiPageDetail,
   type WikiPageSection,
   type WikiBacklink,

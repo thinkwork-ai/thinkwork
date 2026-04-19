@@ -1,6 +1,7 @@
 import { wikiPage } from "./wikiPage.query.js";
 import { wikiSearch } from "./wikiSearch.query.js";
 import { wikiBacklinks } from "./wikiBacklinks.query.js";
+import { wikiConnectedPages } from "./wikiConnectedPages.query.js";
 import { wikiCompileJobs } from "./wikiCompileJobs.query.js";
 import { wikiGraph } from "./wikiGraph.query.js";
 import { compileWikiNow } from "./compileWikiNow.mutation.js";
@@ -11,6 +12,7 @@ export const wikiQueries = {
 	wikiPage,
 	wikiSearch,
 	wikiBacklinks,
+	wikiConnectedPages,
 	wikiCompileJobs,
 	wikiGraph,
 };
