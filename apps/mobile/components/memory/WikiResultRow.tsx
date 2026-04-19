@@ -42,8 +42,6 @@ export function WikiResultRow({ hit, colors, onPress }: WikiResultRowProps) {
 				paddingHorizontal: 16,
 				paddingVertical: 14,
 				backgroundColor: pressed ? colors.secondary : "transparent",
-				borderBottomWidth: 1,
-				borderBottomColor: colors.border,
 			})}
 		>
 			<View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4, gap: 8 }}>

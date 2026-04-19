@@ -29,6 +29,13 @@ export {
   useDeleteMobileMemoryCapture,
 } from "./hooks/use-mobile-memory-captures";
 export { useMobileMemorySearch } from "./hooks/use-mobile-memory-search";
+export {
+  useWikiPage,
+  useWikiBacklinks,
+  type WikiPageDetail,
+  type WikiPageSection,
+  type WikiBacklink,
+} from "./hooks/use-wiki-page";
 
 export type {
   ThinkworkConfig,
