@@ -10,6 +10,7 @@
 
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, agents } from "../../utils.js";
+import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
 
 export class WikiAuthError extends Error {
 	constructor(message: string) {
@@ -40,10 +41,12 @@ export async function assertCanReadWikiScope(
 	ctx: GraphQLContext,
 	args: { tenantId: string; ownerId: string },
 ): Promise<void> {
-	if (!ctx.auth.tenantId) {
+	const callerTenantId =
+		ctx.auth.tenantId ?? (await resolveCallerTenantId(ctx));
+	if (!callerTenantId) {
 		throw new WikiAuthError("Tenant context required");
 	}
-	if (ctx.auth.tenantId !== args.tenantId) {
+	if (callerTenantId !== args.tenantId) {
 		throw new WikiAuthError("Access denied: tenant mismatch");
 	}
 	const [agent] = await db
