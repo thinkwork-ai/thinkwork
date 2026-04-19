@@ -1,102 +1,213 @@
 ---
 title: 'Compounding Memory: Pipeline'
-description: How raw memories turn into wiki pages — the thinking behind each stage, and what can go wrong.
+description: How raw memories become a navigable wiki — step by step, in plain language, then in technical detail.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-A memory lands in your agent's head. Some time later, a wiki page exists that weaves that memory together with everything else your agent knows about the same subject. The pipeline is what happens in between.
+This doc is a walking tour of how raw memories become wiki pages. It's written to be read top to bottom; each step covers one thing the pipeline does, why it does it, and what can go wrong.
 
-This page walks through that journey in plain terms, then gets technical toward the end for anyone who needs to modify or debug the pipeline itself.
+The first half is plain-language narrative. The second half (["Under the hood"](#under-the-hood)) has the code paths, SQL, and prompt contracts for anyone who needs to modify or debug the pipeline itself.
 
-## The story
+## High-level shape
 
-### Something memorable happens
+There are two compile passes that run in the same job:
 
-You tell your agent about a new restaurant you tried. The agent decides it's worth keeping and writes a short memory note — just a sentence or two summarizing what happened.
+1. **Leaf pass.** Reads new memories, decides which concrete *entity* pages should be created or updated. Produces pages like `Momofuku Daishō`, `Franklin Barbecue`, `Biscuit (dog)`. This is where most wiki content originates.
+2. **Aggregation pass.** Runs *after* the leaf pass completes. Looks across the agent's recently-changed pages and decides which *hub* topics deserve rollup sections (e.g. `Toronto` with a `Restaurants` section) and which sections have become dense enough to promote into their own page (e.g. a `Restaurants` section on `Austin` promotes into a standalone `Austin Restaurants` topic page).
 
-That note lands in the raw memory store. It's the source of truth, but it isn't organized. It's just one of thousands of notes sitting in a timeline.
+Both passes are driven by one compile job. The job is always scoped to one `(tenant, owner)` pair. If anything fails, the cursor stays where it was and the next job safely replays.
 
-### A compile job gets queued
+<Aside type="tip">
+  If you only remember one thing: **leaf creates entities, aggregation makes them cohere**. The leaf planner is conservative; the aggregation planner is what makes the wiki feel compounded instead of just piled up.
+</Aside>
 
-Not long after, a small background bit of code notices there are new memories to think about. It drops a compile job on the queue.
+## Pass 1: Leaf compile
 
-Compile jobs also get created in two other ways. An operator can explicitly trigger one for a specific agent ("go compile everything you know, right now"). And a nightly lint pass schedules jobs for mentions that have accumulated enough evidence to promote into real pages.
+### Step 1.1 — A compile job gets queued
 
-### The compile worker wakes up
+A job row lands in `wiki_compile_jobs` in one of four ways:
 
-The job gets picked up by the compile worker. The worker does one thing: turn a batch of new memories into updates for wiki pages.
+- **After a retain.** The `memory-retain` Lambda fires `maybeEnqueuePostTurnCompile` after every successful `retainTurn`. Jobs dedupe on a 5-minute bucket, so a burst of turns collapses into one queued compile.
+- **Admin trigger.** The `compileWikiNow(tenantId, ownerId)` mutation enqueues a job directly.
+- **Lint sweep.** The nightly lint pass enqueues promotion jobs for unresolved mentions that have crossed the `≥ 3 mentions in 30 days` threshold.
+- **CLI.** `thinkwork wiki compile` wraps the admin mutation for operator use.
 
-It starts by asking, "what memories haven't I seen yet?" The worker keeps a bookmark called a **cursor** — the last memory it processed. It asks the memory store for everything that's changed since the bookmark, in order, up to 50 at a time.
+### Step 1.2 — The compile worker wakes up
 
-### The planner reads everything in context
+`wiki-compile` Lambda claims the pending job (FOR UPDATE SKIP LOCKED) and reads the cursor for that `(tenant, owner)` — a bookmark of the last memory the worker processed.
 
-The worker hands the new memories to the **planner** — an LLM whose only job is to look at the memories alongside the agent's existing pages and say "here's what should change."
+Then it reads the next 50 memories from Hindsight where `updated_at > cursor`. Hindsight is the canonical memory substrate; the wiki is a derived store.
+
+### Step 1.3 — The planner reads memories in context
+
+The batch of memories plus the scope's existing pages plus any open unresolved mentions get handed to the **leaf planner** — Bedrock via the Converse API, defaulting to Claude Haiku 4.5 but swappable via the `modelId` event parameter.
 
 The planner sees:
+
 - The new memories, in full.
-- A summary of the pages that already exist in this agent's scope — titles, aliases, short summaries.
-- Any unresolved mentions the agent has been holding (names that showed up but didn't justify a page yet).
+- Titles, slugs, and summaries of every active page in scope.
+- Every open unresolved mention with its accumulated context.
 
-The planner is explicitly biased toward caution. It knows that creating a spurious page is expensive — once a bad page exists it takes work to get rid of — while holding an alias as "unresolved" costs basically nothing. Given ambiguity, it holds.
+The planner is explicitly biased toward caution. Holding an alias as "unresolved" is almost free; creating a spurious page is expensive to undo. When in doubt, it holds.
 
-### The planner produces a plan
+### Step 1.4 — The planner produces a plan
 
-The plan is a small JSON document with five sections:
+The plan is a small JSON document with six arrays:
 
 **Page updates.** "This existing page should have its Visits section rewritten given this new memory."
 
-**New pages.** "There's enough evidence for a new page about Taberna dos Mercadores. Here's a title, an initial set of sections, and some aliases."
+**New pages.** "There's enough evidence for a new page about Taberna dos Mercadores. Here's a title, sections, aliases."
 
-**Unresolved mentions.** "Someone named 'Chef João' showed up in this batch. I don't have enough context to give him a page, but I'll note the mention — if he shows up three more times in the next thirty days, we should promote."
+**Unresolved mentions.** "Someone named 'Chef João' showed up but doesn't justify a page yet — hold the alias."
 
-**Promotions.** "Remember 'Bairro Alto' that's been held as unresolved for a while? The new memories push it over the threshold. Promote it to a real topic page, here are the sections."
+**Promotions.** "Chef João has been held for months and three new memories push him over the threshold. Promote to a real page, here are the sections."
 
-**Page links.** "Austin, Texas should link to Austin Kids Activities. Both pages exist; here's the context."
+**Page links.** "Taberna dos Mercadores should link to Lisbon. Both pages exist or are being created in this plan."
 
-The planner never writes anything to the database. It just produces the plan.
+**Parent section updates** and **section promotions** are also emitted by the planner contract but the leaf planner rarely fills them — the aggregation pass does that work.
 
-### The section writer patches one section at a time
+The planner never writes to the database. It produces a plan; the compiler applies it.
 
-For every section the plan wants to update, the compile worker calls a second LLM — the **section writer**. Its job is narrower: take the existing section markdown, the rough draft the planner proposed, and the specific memories the planner cited. Produce the new markdown for just this one section.
+### Step 1.5 — The section writer patches one section at a time
 
-Before calling the section writer, the worker asks "is this actually a meaningful change?" If the proposal is nearly identical to what's already there, the worker skips it entirely. No point burning tokens polishing prose that already says the same thing.
+For every section the plan wants to update, the compiler calls a second Bedrock model — the **section writer**. It's narrow: take the existing section markdown, the planner's proposed body, and the specific memories cited — produce final markdown for *this one section only*.
 
-### Provenance gets written with deliberate care
+Before calling, the compiler checks `isMeaningfulChange` — a cheap edit-distance filter that skips sections when the proposal is effectively identical to the stored body. No point burning tokens polishing prose that already says the same thing.
+
+### Step 1.6 — Hallucinated IDs and stray wikilinks get filtered
+
+Before the model output is trusted:
+
+- **`isValidUuid()`** gates every page-id and mention-id lookup. Smaller models sometimes emit truncated ids like `"814e6b70"`; Postgres would reject those as invalid UUIDs and kill the job. The guard silently skips invalid rows instead.
+- **`stripWikilinks()`** removes `[[Obsidian-style]]` syntax from section bodies at the repo boundary. Models were told not to emit it, but they slip; the strip runs inside `upsertSections` so every write path is covered.
+- **`linkifyKnownEntities()`** rewrites `**Entity Name**` bolded mentions into real `[**Entity Name**](/wiki/<type>/<slug>)` markdown links when the name matches a page in scope. Longest-title-first match prevents shadowing.
+- **Invalid `pageLinks`** (bad page types, blank slugs) are dropped with a CloudWatch warning rather than failing the whole plan.
+
+All five filters exist because *some* model has produced the exact failure mode we're guarding against. Prompts are the first line of defense; these repo-level guards are the second.
+
+### Step 1.7 — Provenance gets written with deliberate care
 
 Every section carries a list of which memories were used as sources. The rule is strict: **only the specific memories the planner cited for this section**. Not "all the memories in the batch." Not "every memory that looks related."
 
-This rule exists because breaking it destroys the system. An earlier version of the compiler fell back to "use the whole batch as sources" when the planner omitted citations. The result was nonsense: a memory about Austin weather got written as a source for unrelated CRM pages that happened to be in the same batch. The reverse-lookup (`MemoryRecord.wikiPages`) then returned those CRM pages when you tapped the weather memory. Search surfaced them. Everything downstream broke.
+An earlier version of the compiler fell back to "use the whole batch as sources" when the planner omitted citations. The result was nonsense: a memory about Austin weather got written as a source for unrelated CRM pages that happened to be in the same batch. The reverse-lookup (`MemoryRecord.wikiPages`) then returned those CRM pages when you tapped the weather memory. Everything downstream broke.
 
-The fix was to stop the fallback. Zero cited memories means zero source rows. Blank provenance is always preferable to wrong provenance.
+The fix: zero cited memories means zero source rows. **Blank provenance is always preferable to wrong provenance.** `resolveCitedRecords` encodes this rule and no path bypasses it.
 
-### The cursor advances
+### Step 1.8 — The cursor advances
 
-Once the plan applies cleanly, the worker moves its bookmark forward to the last memory it just processed. If anything failed mid-batch, the bookmark stays where it was — the next worker will re-read the same memories safely.
+Once the plan applies cleanly, the worker moves its bookmark to the last memory it processed. If anything failed mid-batch, the bookmark stays and the next worker replays. Safe to retry.
 
-### The worker loops
+### Step 1.9 — The worker loops
 
-The worker keeps grabbing the next batch of 50 memories and running them through the planner + section writer until it runs out of new memories, hits a hard cap (25 new pages per job, 100 section rewrites per job), or Bedrock rate-limits it. Then the job finishes, records its metrics, and exits.
+Keep fetching 50-memory batches until: cursor drains, hard cap (500 records / 25 new pages / 100 section rewrites), or Bedrock rate-limits. Then the job finishes and emits metrics.
 
-If the cursor still isn't at the end, a subsequent job picks up where this one left off. Large backfills naturally spread across several jobs.
+Large backfills naturally spread across multiple jobs — cursor-preserving means no replay hazard.
+
+## Pass 2: Aggregation
+
+<Aside type="note">
+  Aggregation is gated behind `WIKI_AGGREGATION_PASS_ENABLED`. When the flag is off (default), the pipeline stops at the leaf pass. Everything below runs only when the flag is on — currently per-agent allowlist until thresholds stabilize.
+</Aside>
+
+The leaf pass ends with fresh entity pages in the scope, but they're not yet *organized*. Marco now has 90 restaurants, events, and places — but there's no "Austin" topic page tying his Austin ones together, no "Restaurants" hub, no rollups you can scroll through. That's what the aggregation pass builds.
+
+### Step 2.1 — Derive parent candidates
+
+Two deterministic expanders scan the current job's records + the scope's recently-changed pages to suggest hubs that *obviously* need to exist:
+
+- **`deriveParentCandidates(records)`** — pulls city, journal, and tag clusters out of raw record metadata. Records with `place.city = "Austin"` group into an Austin candidate. Shared `journal_id`s group into a trip topic. Repeated tags group into a tag-collection hub.
+- **`deriveParentCandidatesFromPageSummaries(pages)`** — scans each scope page's *summary* text for city names. Catches "Korean restaurant in Toronto." style summaries where raw metadata isn't in the current batch. Walks comma-separated postal addresses from the end to pull `Toronto` out of `", Toronto, ON M6J 1G1, Canada."`.
+
+Both expanders are cheap — no LLM, no extra DB hits beyond the already-hydrated pages. They exist so the LLM gets grounded seed hubs instead of inventing them.
+
+### Step 2.2 — The aggregation planner
+
+A second Bedrock call, with its own system prompt, receives:
+
+- Every recently-changed page in scope (with summary, sections, existing aggregation metadata).
+- Parent candidates from Step 2.1.
+- Link neighborhoods (inbound link counts).
+
+The prompt is strict about membership: **every page listed under a hub must have visible evidence in its summary**. An earlier version hallucinated an `Austin Restaurants` hub containing Toronto, Tokyo, and Bogotá restaurants — the prompt now requires geographic proof per linked page and refuses to create a hub when fewer than 3 pages clearly match.
+
+Output: `parentSectionUpdates`, `sectionPromotions`, hub `newPages`, hierarchy `pageLinks`.
+
+### Step 2.3 — Rollup bodies are rendered deterministically
+
+When a `parentSectionUpdate` carries `linked_page_slugs`, the compiler **skips the section writer** and renders the body with `renderRollupList`:
+
+```
+- [**Franklin Barbecue**](/wiki/entity/franklin-barbecue) — BBQ joint in Austin, TX.
+- [**Momofuku Daishō**](/wiki/entity/momofuku-daisho) — Korean-inspired restaurant in Toronto.
+```
+
+Why deterministic: the LLM was previously writing prose ("Franklin Barbecue is a BBQ joint…") that mentioned entity names as plain text with no hyperlinks. A structured list with real markdown links is cheaper, consistent, and clickable. Summaries are trimmed to the first sentence — the full summary lives on the child page.
+
+The markdown URL `/wiki/<type>/<slug>` matches the mobile router path. Mobile's wiki detail view hooks `onLinkPress` to intercept these and route internally rather than handing off to the OS Linking API.
+
+### Step 2.4 — Dedupe across sections on the same parent
+
+A single parent page like `Austin Activities` previously listed `Lady Bird Lake Hike & Bike Trail` under *both* `Overview` AND `Outdoor & Family Attractions`. The aggregation planner was emitting the same child under multiple sections.
+
+The compiler now tracks `claimedChildrenByParent` per job — first section to claim a child wins; later sections on the same parent drop the duplicate before rendering. The aggregation prompt was also updated to forbid emitting the same child twice.
+
+### Step 2.5 — Section promotion scoring
+
+Every section with aggregation metadata gets scored by `scoreSectionAggregation`. A pure function, no LLM:
+
+```
+score = 0.25·linked_page_count_signal     // saturates at 20 child pages
+      + 0.25·supporting_record_signal      // saturates at 30 records
+      + 0.20·temporal_spread_signal        // saturates at 30 days
+      + 0.15·coherence_signal              // tag overlap ratio
+      + 0.15·readability_pressure_signal   // body length >1200 chars
+```
+
+Thresholds: `candidate >= 0.4`, `promote_ready >= 0.55`. When a section crosses `promote_ready`, its `aggregation.promotion_status` flips to `candidate` and it's eligible for promotion on the next aggregation pass. Stickiness: once `promotion_status = "promoted"`, never flaps back — operator override only.
+
+### Step 2.6 — Section promotion
+
+When the aggregation planner emits a `sectionPromotion`, the compiler:
+
+1. Creates the new topic page from `newPage.seed`.
+2. Calls `setParentPage({ pageId: newPage.id, parentPageId: parent.id })` — writes `parent_page_id` AND mirrors into `wiki_page_links` with `kind='parent_of'/'child_of'`.
+3. Rewrites the parent's section body down to the `parentSummary` + `topHighlights` the planner wrote, followed by `See: [Title](/wiki/...)` as a real markdown link.
+4. Marks the parent section `promotion_status = "promoted"` with the child's page id stored in `aggregation.promoted_page_id`.
+
+This is the compounding loop — a section outgrows its parent, spins off its own page, and that new page can itself grow sections that eventually promote. Austin → Austin Activities → (eventually) Austin Kid-Friendly Activities, on and on as data accumulates.
+
+### Step 2.7 — Hubness recompute
+
+Every page the aggregation pass touched gets its `hubness_score` recomputed:
+
+```
+hubness = inbound_reference_links
+        + 2 · promoted_child_count
+        + floor(avg(section.supporting_record_count) / 10)
+```
+
+The score is coarse and monotonic — it's used for ordering, not as a precise ranking number. A page that gains a promoted child jumps ahead of one with only inbound references.
 
 ## What can go wrong
 
-**Bedrock throttling.** The planner and section writer both call Claude through Bedrock. Under load, Bedrock returns "too many requests" errors. The job fails, but because the cursor only advanced on successful applies, no memories are lost — the next invoke picks up where the throttle hit.
+**Bedrock throttling.** `ThrottlingException` comes back when Claude's per-minute quota is exhausted. The job fails, cursor stays put, next invoke retries clean.
 
-**JSON truncation.** If the planner produces more output than its token budget allows, the JSON comes back malformed. Parsing fails, the job fails, the cursor holds. The mitigation is a large `maxTokens` budget (currently 24,000) — enough for dense batches without being wasteful.
+**JSON truncation.** Model output that exceeds `maxTokens` comes back malformed. `maxTokens` is clamped per-model via `MODEL_MAX_OUTPUT_TOKENS` so Nova Micro (10k hard limit) doesn't reject outright; Haiku/gpt-oss get the full 24k planner budget.
 
-**Runaway new pages.** A hallucinating planner could try to create dozens of spurious pages in one batch. A hard cap of 25 new pages per job stops that cold. The job exits with a `cap_hit` flag in its metrics; the next job continues.
+**Hallucinated IDs.** Covered in [Step 1.6](#step-16--hallucinated-ids-and-stray-wikilinks-get-filtered) — caught at repo boundary, not the prompt.
 
-**Cross-scope writes.** Before writing, the worker double-checks every page update references a page in the job's `(tenant, owner)` scope. If the planner hallucinates a foreign page id, the worker silently skips it rather than corrupting another agent's wiki.
+**Over-grouping in aggregation.** The `Austin Restaurants = Toronto restaurants` bug. Fixed by adding evidence requirements to the prompt *and* showing the planner per-page summaries (previously only titles were visible to the LLM).
 
-**Cursor precision drift.** Memories are timestamped with microsecond precision in Postgres, but JavaScript `Date` only carries milliseconds. The cursor query truncates the database side to milliseconds so a memory at `xx:yy:zz.689019` doesn't appear to be "after" a stored cursor of `xx:yy:zz.689` forever. Without this, the drain loops on the tail record indefinitely.
+**Env vars reset on deploy.** Terraform apply on an unrelated merge re-applies Lambda env config, wiping `WIKI_AGGREGATION_PASS_ENABLED`. Known paper cut; pin in terraform is the fix.
+
+**Cursor precision drift.** Postgres timestamps are microsecond-precision but JS `Date` only carries milliseconds. The cursor query `date_trunc('milliseconds', …)` on both sides so a record at `xx:yy:zz.689019` isn't seen as "after" a stored cursor of `xx:yy:zz.689` forever.
 
 ## Cost
 
-One full compile of an agent with a few hundred memory units runs around $0.50 to $1.00 in Bedrock costs. That's end-to-end — planner + section writer, all batches. Per-batch cost is typically $0.04 to $0.12 depending on how much the planner has to say.
+Typical full recompile of an agent with ~700 memory units runs $0.50 – $1.00 in Bedrock costs. Per-batch cost: $0.04 – $0.12. Aggregation pass adds ~$0.01 – $0.05 per job on top of leaf cost.
 
-The metrics JSON on each compile job row records `input_tokens`, `output_tokens`, and a rough `cost_usd` estimate. Watch that number when you're tuning prompts.
+Every job's `metrics` JSON records `input_tokens`, `output_tokens`, `cost_usd`, and aggregation-specific counters (`aggregation_planner_calls`, `deterministic_parents_derived`, `parent_sections_updated`, `sections_promoted`). Watch those when tuning prompts or thresholds.
 
 ## Related pages
 
@@ -111,11 +222,12 @@ The metrics JSON on each compile job row records `input_tokens`, `output_tokens`
 
 ### Triggers
 
-- **Post-retain** — `maybeEnqueuePostTurnCompile` in `packages/api/src/lib/wiki/enqueue.ts`. Checks `tenants.wiki_compile_enabled`, confirms the adapter is Hindsight, inserts a job row with dedupe key `${tenantId}:${ownerId}:${floor(epoch_s/300)}`, fires `Lambda.invoke` with `InvocationType: "Event"`.
-- **Admin mutation** — `compileWikiNow(tenantId, ownerId)` resolver.
-- **Nightly lint sweep** — `packages/api/src/handlers/wiki-lint.ts` enqueues promotion jobs for mentions that cross the threshold.
+- **Post-retain** — `maybeEnqueuePostTurnCompile` in `packages/api/src/lib/wiki/enqueue.ts`. Checks `tenants.wiki_compile_enabled`, confirms adapter is Hindsight, inserts a job row with dedupe key `${tenantId}:${ownerId}:${floor(epoch_s/300)}`, fires `Lambda.invoke` with `InvocationType: "Event"` and `{jobId}` payload.
+- **Admin mutation** — `compileWikiNow(tenantId, ownerId, modelId?)` resolver.
+- **Nightly lint** — `packages/api/src/handlers/wiki-lint.ts`.
+- **CLI** — `thinkwork wiki compile --tenant … --owner …`.
 
-### Caps
+### Caps (leaf pass)
 
 ```ts
 // packages/api/src/lib/wiki/compiler.ts
@@ -123,6 +235,12 @@ const RECORD_PAGE_SIZE = 50;
 const MAX_RECORDS_PER_JOB = 500;
 const MAX_NEW_PAGES_PER_JOB = 25;
 const MAX_SECTIONS_REWRITTEN_PER_JOB = 100;
+```
+
+### Caps (aggregation pass)
+
+```ts
+const MAX_AGGREGATION_PAGES = 60;  // top-N recently-changed pages fed to the aggregation planner
 ```
 
 ### Cursor SQL
@@ -139,7 +257,7 @@ WHERE bank_id = ${bankId}
   )
 ```
 
-### Planner output contract
+### Leaf planner output contract
 
 ```jsonc
 {
@@ -158,9 +276,77 @@ WHERE bank_id = ${bankId}
   ],
   "pageLinks": [
     { "fromType": "entity", "fromSlug": "...", "toType": "topic", "toSlug": "...", "context": "why this link exists" }
-  ]
+  ],
+  "parentSectionUpdates": [],  // reserved for leaf planner, rarely populated
+  "sectionPromotions": []       // same
 }
 ```
+
+### Aggregation planner output contract
+
+```jsonc
+{
+  "parentSectionUpdates": [
+    {
+      "pageId": "<parent hub page id>",
+      "sectionSlug": "restaurants",
+      "heading": "Restaurants",
+      "proposed_body_md": "...",                // ignored when linked_page_slugs is populated
+      "linked_page_slugs": [{ "type": "entity", "slug": "franklin-barbecue" }],
+      "source_refs": ["<memory_unit_id>"],
+      "observed_tags": ["bbq", "food"],
+      "rationale": "…"
+    }
+  ],
+  "sectionPromotions": [
+    {
+      "pageId": "<parent page id>",
+      "sectionSlug": "restaurants",
+      "reason": "Section has 20+ linked entities and 30+ days of provenance.",
+      "parentSummary": "Short paragraph to leave on the parent section.",
+      "topHighlights": ["- Franklin Barbecue", "- Uchi", "- Suerte"],
+      "newPage": { /* same shape as leaf newPages[] */ }
+    }
+  ],
+  "newPages": [],      // hub topic pages only — banned from creating leaf entities
+  "pageLinks": []
+  // all other fields forced to [] — aggregation planner is prevented from re-entering the leaf planner's job
+}
+```
+
+### Repo-boundary guards
+
+```ts
+// packages/api/src/lib/wiki/repository.ts
+export function isValidUuid(raw: unknown): raw is string { … }
+export function stripWikilinks(md: string | null | undefined): string { … }
+// and inside compiler.ts:
+export function linkifyKnownEntities(body, refs): string { … }
+```
+
+### Promotion scorer
+
+```ts
+// packages/api/src/lib/wiki/promotion-scorer.ts
+export const DEFAULT_PROMOTION_THRESHOLDS = { candidate: 0.4, promoteReady: 0.55 };
+const WEIGHTS = { linked: 0.25, supporting: 0.25, temporal: 0.2, coherence: 0.15, readability: 0.15 };
+const SATURATION = { linkedPageCount: 20, supportingRecordCount: 30, temporalSpreadDays: 30, bodyLength: 1800 };
+```
+
+### Parent expanders
+
+```ts
+// packages/api/src/lib/wiki/parent-expander.ts
+export function deriveParentCandidates(records): DerivedParentCandidate[];        // record metadata
+export function deriveParentCandidatesFromPageSummaries(pages): DerivedParentCandidate[]; // page summaries
+export function mergeParentCandidates(...lists): DerivedParentCandidate[];
+```
+
+### Model selection
+
+- Default: `openai.gpt-oss-120b-1:0` (env: `BEDROCK_MODEL_ID`).
+- Per-job override: `{ modelId: "…" }` in the compile Lambda event payload.
+- Known-model output caps (Nova Micro's 10k limit, etc.) live in `MODEL_MAX_OUTPUT_TOKENS` inside `bedrock.ts` so large `maxTokens` requests get clamped, not rejected.
 
 ### Provenance rule
 
@@ -180,12 +366,15 @@ function resolveCitedRecords(
 }
 ```
 
-No fallback to batch-wide sources. This function is the single most important correctness invariant in the pipeline.
+No fallback to batch-wide sources. Single most important correctness invariant in the pipeline.
 
-### Measured cost
+### Measured cost + shape
 
-Against a full recompile of one agent (643 source memory units):
+Against a full recompile of one agent (~700 source memory units) running gpt-oss-120b with aggregation on:
 
-- ~$0.50 – $1.00 total compile cost.
-- 99 pages, 66 page links, 548 provenance rows, 331 distinct source memories, 10 unresolved mentions.
-- Per-batch cost $0.04 – $0.12.
+- ~90 pages created (mix of entity and topic, ~5–10% topics).
+- ~115 page links across the graph (`reference` + `parent_of`/`child_of`).
+- 1–3 sections promoted per full rebuild depending on density.
+- ~$0.50–$1.00 total compile cost.
+- 4–6 aggregation rollup sections populated on hub pages.
+- Per-batch cost $0.04–$0.12; aggregation pass adds $0.01–$0.05.
