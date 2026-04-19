@@ -564,12 +564,22 @@ export async function upsertPage(
 
 		let page: WikiPageRow;
 		if (existing) {
+			// Status resolution: explicit input.status wins; otherwise if we're
+			// compiling (markCompiled) treat this as a resurrection of the page
+			// and flip it back to 'active'. Falling through to existing.status
+			// without that step left archived pages archived forever after a
+			// `resetWikiCursor(force: true)` cycle, which silently lost content.
+			const nextStatus: WikiPageStatus =
+				input.status ??
+				(input.markCompiled
+					? "active"
+					: (existing.status as WikiPageStatus));
 			const [updated] = await tx
 				.update(wikiPages)
 				.set({
 					title: input.title,
 					summary: input.summary ?? existing.summary,
-					status: input.status ?? existing.status,
+					status: nextStatus,
 					...(body_md !== undefined ? { body_md } : {}),
 					...(input.markCompiled
 						? { last_compiled_at: sql`now()` as any }
