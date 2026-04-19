@@ -27,9 +27,16 @@ export interface SectionWriteArgs {
 	/**
 	 * Records the planner said informed this update. The writer uses them to
 	 * ground the final body — not to invent new claims, just to prefer concrete
-	 * quotes over rewrites that drift.
+	 * quotes over rewrites that drift. Source record ids are intentionally NOT
+	 * shown to the writer; it tends to splice them into prose.
 	 */
 	sourceRecords: ThinkWorkMemoryRecord[];
+	/**
+	 * Titles of other pages in the same (tenant, owner) scope. The writer is
+	 * instructed to wrap matching names in `[[Title]]` so the rendered wiki
+	 * can hyperlink. Pass at most ~50; the prompt truncates anyway.
+	 */
+	knownPageTitles?: string[];
 	modelId?: string;
 	signal?: AbortSignal;
 }
@@ -51,7 +58,13 @@ Your only output is the final markdown body for the named section. Do not return
 - Preserve specific details (names, dates, places) from the existing body when they're still correct.
 - Prefer short prose over bullet spam. Use bullets when the content is genuinely list-like.
 - If the existing body is meaningfully correct and the new evidence only reinforces it, return the existing body (possibly with small factual updates).
-- Never speculate, moralize, or summarize the user's emotions beyond what the records show.`;
+- Never speculate, moralize, or summarize the user's emotions beyond what the records show.
+
+## Formatting rules (strict)
+
+- **Never write record ids, UUIDs, or hex identifiers into the prose.** Phrases like "see records 1c907c71-c17c-...", "(record id abc-123)", or any dump of Hindsight unit ids are forbidden. Provenance is stored separately — the body is for human-readable content only.
+- **Use wikilinks when referring to other pages in scope.** Wrap any name that matches a known page (see "Known pages in scope" below) in double brackets, e.g. write "[[Austin]]" instead of "Austin" when the Austin page exists. This makes the reference clickable in the rendered wiki.
+- Do not inline-cite with "(see record …)" or similar parenthetical references — those belong in \`source_refs\`, not the body.`;
 
 /**
  * Quick heuristic: is the planner's proposed body different enough from the
@@ -86,6 +99,7 @@ export async function writeSection(
 		sectionTemplate?.prompt ??
 		"A named section on the page; respect its existing role.";
 
+	const knownTitles = (args.knownPageTitles ?? []).slice(0, 50);
 	const user = [
 		`Page: ${args.pageTitle}  (type: ${args.pageType})`,
 		`Section: ${args.sectionHeading}  (slug: ${args.sectionSlug})`,
@@ -97,15 +111,17 @@ export async function writeSection(
 		"## Planner's proposed body",
 		args.proposedBodyMd.trim(),
 		"",
-		"## Source records",
+		"## Source records (grounding only — do NOT cite ids in the body)",
 		args.sourceRecords.length === 0
 			? "(none explicitly cited — stay close to the planner's draft)"
 			: args.sourceRecords
-					.map(
-						(r) =>
-							`- id=${r.id}: ${truncate(r.content.text, 400)}`,
-					)
+					.map((r) => `- ${truncate(r.content.text, 400)}`)
 					.join("\n"),
+		"",
+		"## Known pages in scope (wrap matching names in [[Title]])",
+		knownTitles.length === 0
+			? "(none — skip wikilinking this batch)"
+			: knownTitles.map((t) => `- ${t}`).join("\n"),
 		"",
 		"Return only the final markdown body for this one section. Do not include the heading line.",
 	].join("\n");

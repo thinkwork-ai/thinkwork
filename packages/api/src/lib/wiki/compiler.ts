@@ -212,12 +212,21 @@ export async function runCompileJob(
 			metrics.input_tokens += plan.usage.inputTokens;
 			metrics.output_tokens += plan.usage.outputTokens;
 
+			// Pre-compute the list of titles the section writer should linkify.
+			// Includes pages that already exist in scope AND any brand-new pages
+			// this batch is about to create — so prose on page X can reference
+			// page Y even when both land in the same planner response.
+			const knownPageTitles = [
+				...candidatePages.map((p) => p.title),
+				...plan.newPages.map((p) => p.title),
+			];
 			const capHit = await applyPlan({
 				job,
 				records,
 				plan,
 				metrics,
 				modelId: opts.modelId,
+				knownPageTitles,
 			});
 
 			// Advance cursor only after a clean apply.
@@ -316,6 +325,8 @@ interface ApplyPlanArgs {
 	plan: PlannerResult;
 	metrics: RunJobResult["metrics"];
 	modelId?: string;
+	/** Titles of scope-active pages the section writer should linkify. */
+	knownPageTitles?: string[];
 }
 
 /**
@@ -386,6 +397,7 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 				// Section writer only sees the cited records for grounding;
 				// it used to see the whole batch which produced drift.
 				sourceRecords: sectionSources,
+				knownPageTitles: args.knownPageTitles,
 				modelId: args.modelId,
 			});
 			metrics.section_writer_calls += 1;
@@ -617,7 +629,18 @@ export async function runAggregationPass(args: AggregationArgs): Promise<void> {
 	metrics.aggregation_output_tokens =
 		(metrics.aggregation_output_tokens ?? 0) + plan.usage.outputTokens;
 
-	await applyAggregationPlan({ job, records, plan, metrics, modelId });
+	const knownPageTitles = [
+		...candidatePages.map((p) => p.title),
+		...plan.newPages.map((p) => p.title),
+	];
+	await applyAggregationPlan({
+		job,
+		records,
+		plan,
+		metrics,
+		modelId,
+		knownPageTitles,
+	});
 }
 
 async function hydrateAggregationCandidates(
@@ -699,12 +722,13 @@ interface ApplyAggregationArgs {
 	plan: PlannerResult;
 	metrics: RunJobResult["metrics"];
 	modelId?: string;
+	knownPageTitles?: string[];
 }
 
 async function applyAggregationPlan(
 	args: ApplyAggregationArgs,
 ): Promise<void> {
-	const { job, records, plan, metrics, modelId } = args;
+	const { job, records, plan, metrics, modelId, knownPageTitles } = args;
 	const recordById = new Map(records.map((r) => [r.id, r]));
 
 	// Track pages touched by this pass so we can recompute hubness at the end.
@@ -791,6 +815,7 @@ async function applyAggregationPlan(
 			existingBodyMd: existingBody,
 			proposedBodyMd: upd.proposed_body_md,
 			sourceRecords: citedRecords,
+			knownPageTitles,
 			modelId,
 		});
 		metrics.section_writer_calls += 1;
