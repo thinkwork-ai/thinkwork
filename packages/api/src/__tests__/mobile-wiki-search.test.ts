@@ -288,6 +288,33 @@ describe("mobileWikiSearch — FTS path", () => {
 		expect(flattened).not.toContain("to_tsquery('english', $");
 	});
 
+	it("coerces ISO-string timestamps from raw SQL (postgres-js returns strings for db.execute)", async () => {
+		// Regression guard: `db.execute(sql`…`)` returns timestamp columns as
+		// ISO strings, not Date objects. `toGraphQLPage` must tolerate both,
+		// otherwise GraphQL bubbles a `.toISOString is not a function` error
+		// up to the field root and the client receives `mobileWikiSearch:
+		// null`. This was the root cause of the empty mobile Wiki search
+		// after the FTS rewrite.
+		mockExecute.mockResolvedValueOnce({
+			rows: [
+				makeRow({
+					last_compiled_at: "2026-04-18T12:00:00Z",
+					created_at: "2026-04-01T00:00:00Z",
+					updated_at: "2026-04-18T12:00:00Z",
+				}),
+			],
+		});
+		const out = await mobileWikiSearch(
+			{},
+			{ agentId: "agent-1", query: "austin" },
+			makeCtx(),
+		);
+		expect(out).toHaveLength(1);
+		expect(out[0].page.lastCompiledAt).toBe("2026-04-18T12:00:00.000Z");
+		expect(out[0].page.createdAt).toBe("2026-04-01T00:00:00.000Z");
+		expect(out[0].page.updatedAt).toBe("2026-04-18T12:00:00.000Z");
+	});
+
 	it("never invokes Hindsight recall", async () => {
 		mockExecute.mockResolvedValueOnce({ rows: [makeRow()] });
 		const recall = vi.fn();
