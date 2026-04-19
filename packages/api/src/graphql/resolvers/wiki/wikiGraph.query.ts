@@ -64,9 +64,11 @@ export const wikiGraph = async (
 		ownerId: args.ownerId,
 	});
 
-	// Pages + degree in one query. Degree counts any link row where the page
-	// is either source or target, and only over edges both endpoints of
-	// which are active pages in the scope — matches the edge query below.
+	// Pages + degree in one query. Degree counts distinct connected pages,
+	// NOT link rows — wiki_page_links can carry multiple rows per (from,
+	// to) pair (reference + parent_of under different `kind` values, see
+	// the unique index on wiki_page_links.kind). A page with two rows to
+	// the same neighbor should still render as one edge with degree 1.
 	const pageResult = await db.execute(sql`
 		WITH scope_pages AS (
 			SELECT id, type, slug, title
@@ -76,7 +78,7 @@ export const wikiGraph = async (
 			  AND status = 'active'
 		),
 		scope_links AS (
-			SELECT l.from_page_id, l.to_page_id
+			SELECT DISTINCT l.from_page_id, l.to_page_id
 			FROM wiki_page_links l
 			JOIN scope_pages sp1 ON sp1.id = l.from_page_id
 			JOIN scope_pages sp2 ON sp2.id = l.to_page_id
@@ -102,7 +104,7 @@ export const wikiGraph = async (
 		.rows ?? []) as WikiGraphNodeRow[];
 
 	const edgeResult = await db.execute(sql`
-		SELECT l.from_page_id AS source, l.to_page_id AS target
+		SELECT DISTINCT l.from_page_id AS source, l.to_page_id AS target
 		FROM wiki_page_links l
 		JOIN wiki_pages p1 ON p1.id = l.from_page_id
 		JOIN wiki_pages p2 ON p2.id = l.to_page_id
