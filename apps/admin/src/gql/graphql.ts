@@ -1184,6 +1184,12 @@ export type Mutation = {
   /**
    * Admin-only: enqueue an ad-hoc compile job for a specific (tenant, agent).
    * Returns the job row (newly inserted or the in-flight dedupe hit).
+   *
+   * When `modelId` is supplied, it is forwarded to the compile Lambda event
+   * payload so a single run can override `BEDROCK_MODEL_ID` without a
+   * redeploy. The override takes effect only on the direct Event-invoke
+   * path; if the invoke fails and a polling worker claims the job later, the
+   * compile falls back to the env-default model.
    */
   compileWikiNow: WikiCompileJob;
   createAgent: Agent;
@@ -1396,6 +1402,7 @@ export type MutationClaimVanityEmailAddressArgs = {
 
 
 export type MutationCompileWikiNowArgs = {
+  modelId?: InputMaybe<Scalars['String']['input']>;
   ownerId: Scalars['ID']['input'];
   tenantId: Scalars['ID']['input'];
 };
@@ -2165,6 +2172,14 @@ export type Query = {
    */
   wikiBacklinks: Array<WikiPage>;
   /**
+   * Admin-only: list recent compile jobs for a tenant. When `ownerId` is
+   * provided, restricts to that agent's jobs; when null/absent, returns
+   * jobs across every agent in the tenant. Ordered newest-first.
+   *
+   * Powers the `thinkwork wiki status` CLI command.
+   */
+  wikiCompileJobs: Array<WikiCompileJob>;
+  /**
    * Agent-scoped force-graph: every active wiki page + every page-to-page
    * link whose endpoints are both active in the same `(tenant, owner)`
    * scope. Links that reference archived pages are excluded. One round-trip.
@@ -2664,6 +2679,13 @@ export type QueryWebhooksArgs = {
 
 export type QueryWikiBacklinksArgs = {
   pageId: Scalars['ID']['input'];
+};
+
+
+export type QueryWikiCompileJobsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  ownerId?: InputMaybe<Scalars['ID']['input']>;
+  tenantId: Scalars['ID']['input'];
 };
 
 
