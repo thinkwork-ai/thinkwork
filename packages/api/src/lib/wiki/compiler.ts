@@ -17,6 +17,7 @@ import { getMemoryServices } from "../memory/index.js";
 import {
 	completeCompileJob,
 	emptySectionAggregation,
+	findAliasMatches,
 	findPageById,
 	findPageBySlug,
 	getCompileJob,
@@ -107,6 +108,9 @@ export interface RunJobResult {
 		aggregation_output_tokens?: number;
 		/** Set when the aggregation pass errored; leaf work still succeeded. */
 		aggregation_error?: string;
+		/** newPages that got folded into an existing page via alias match,
+		 * preventing duplicate entities like "Nana" + "Nana Restaurant". */
+		alias_dedup_merged?: number;
 	};
 	error?: string;
 }
@@ -469,6 +473,31 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 		// carry their own refs; both are narrowly resolved against the batch
 		// so invented/out-of-batch ids are dropped.
 		const pageFallbackSources = resolveCitedRecords(recordById, np.source_refs);
+
+		// Alias-dedup: before creating a new page, check whether an active
+		// page in scope already claims this exact title as an alias.
+		// The planner is told to update-don't-duplicate but still emits
+		// collisions when the new title only differs by diacritic, case,
+		// or punctuation from an existing page's alias. Routing to the
+		// existing page keeps the wiki from splintering into "Momofuku
+		// Daishō" + "Momofuku Daisho" or "Nana" + "Nana ". Only exact
+		// normalized match triggers a merge — titles like "Eric" vs
+		// "Eric Odom" are left alone because they're legitimately
+		// different entities.
+		const merged = await maybeMergeIntoExistingPage({
+			proposed: np,
+			proposedSlug: slug,
+			job,
+			recordById,
+			knownPageRefs: args.knownPageRefs ?? [],
+			pageFallbackSources,
+		});
+		if (merged) {
+			metrics.pages_upserted += 1;
+			metrics.alias_dedup_merged = (metrics.alias_dedup_merged ?? 0) + 1;
+			continue;
+		}
+
 		await upsertPage({
 			tenant_id: job.tenant_id,
 			owner_id: job.owner_id,
@@ -1290,6 +1319,124 @@ export function linkifyKnownEntities(
 
 function escapeRegExp(s: string): string {
 	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * If a `newPage` the leaf planner proposes collides (via its
+ * normalised title) with an existing page's alias in the same
+ * (tenant, owner) scope, merge the proposal into that existing page
+ * instead of creating a duplicate. Returns `true` when a merge
+ * happened so the caller can skip the normal newPage creation path
+ * and bump the `alias_dedup_merged` metric.
+ *
+ * Matching rule: exact match on `normalizeAlias(title)` against the
+ * existing page's alias set. Substring / prefix matches are NOT
+ * merged — "Eric" and "Eric Odom" are legitimately different
+ * entities and deserve separate pages.
+ *
+ * Merge strategy: keep the existing page's type/slug/title, apply
+ * the proposal's sections (upsertSections diffs per-slug, so
+ * overlapping slugs get rewritten and new slugs get inserted), union
+ * aliases from the proposal into the existing set.
+ */
+async function maybeMergeIntoExistingPage(args: {
+	proposed: {
+		type: WikiPageType;
+		title: string;
+		summary?: string | null;
+		sections: Array<{
+			slug: string;
+			heading: string;
+			body_md: string;
+			source_refs?: string[];
+		}>;
+		aliases?: string[];
+		source_refs?: string[];
+	};
+	proposedSlug: string;
+	job: WikiCompileJobRow;
+	recordById: Map<string, ThinkWorkMemoryRecord>;
+	knownPageRefs: Array<{ type: WikiPageType; slug: string; title: string }>;
+	pageFallbackSources: ThinkWorkMemoryRecord[];
+}): Promise<boolean> {
+	const aliasNormalized = normalizeAlias(args.proposed.title);
+	if (!aliasNormalized) return false;
+
+	const matches = await findAliasMatches({
+		tenantId: args.job.tenant_id,
+		ownerId: args.job.owner_id,
+		aliasNormalized,
+	});
+	if (matches.length === 0) return false;
+
+	// Prefer a match whose existing page is the same type as the
+	// proposal when possible — an `entity` and `topic` that happen
+	// to share a title (e.g. "Austin") shouldn't collapse into one.
+	let existing: WikiPageRow | null = null;
+	for (const m of matches) {
+		const candidate = await findPageById(m.pageId);
+		if (!candidate) continue;
+		if (
+			candidate.tenant_id !== args.job.tenant_id ||
+			candidate.owner_id !== args.job.owner_id
+		) {
+			continue;
+		}
+		if (candidate.status !== "active") continue;
+		if (candidate.type === args.proposed.type) {
+			existing = candidate;
+			break;
+		}
+		if (!existing) existing = candidate;
+	}
+	if (!existing) return false;
+	// Don't merge when the existing page already has the exact slug
+	// the proposal would generate — upsertPage's slug-based upsert
+	// will handle that natively.
+	if (existing.slug === args.proposedSlug) return false;
+
+	console.log(
+		`[wiki-compiler] alias_dedup_merged: proposed newPage "${args.proposed.title}" → existing page ${existing.id} (${existing.type}/${existing.slug})`,
+	);
+
+	const existingSections = await listPageSections(existing.id);
+	const basePosition = nextFreePosition(existingSections);
+
+	await upsertPage({
+		tenant_id: existing.tenant_id,
+		owner_id: existing.owner_id,
+		type: existing.type,
+		slug: existing.slug,
+		title: existing.title,
+		summary: existing.summary ?? args.proposed.summary ?? null,
+		markCompiled: true,
+		sections: args.proposed.sections.map((s, i) => {
+			const sectionSources =
+				s.source_refs && s.source_refs.length > 0
+					? resolveCitedRecords(args.recordById, s.source_refs)
+					: args.pageFallbackSources;
+			const existingSec = existingSections.find(
+				(es) => es.section_slug === s.slug,
+			);
+			return {
+				section_slug: s.slug,
+				heading: existingSec?.heading ?? s.heading,
+				body_md: linkifyKnownEntities(s.body_md, args.knownPageRefs),
+				position: existingSec?.position ?? basePosition + i,
+				sources: sectionSources.map((r) => ({
+					kind: "memory_unit" as const,
+					ref: r.id,
+				})),
+			};
+		}),
+		aliases: [
+			normalizeAlias(args.proposed.title),
+			...((args.proposed.aliases ?? []).map(normalizeAlias)),
+		]
+			.filter((a, i, arr) => a && arr.indexOf(a) === i)
+			.map((alias) => ({ alias, source: "compiler" })),
+	});
+	return true;
 }
 
 function firstSentenceOf(s: string | null): string {
