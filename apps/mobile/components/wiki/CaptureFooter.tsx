@@ -60,6 +60,23 @@ export function CaptureFooter({
 	const inputRef = useRef<TextInput>(null);
 	const insets = useSafeAreaInsets();
 
+	// When the keyboard is visible, the parent `KeyboardAvoidingView` already
+	// slides the footer above the keyboard — the home-indicator inset would
+	// then render as an empty dead zone between the input and the keyboard.
+	// Collapse the inset to zero while the keyboard is up.
+	const [keyboardVisible, setKeyboardVisible] = useState(false);
+	useEffect(() => {
+		const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+		const hideEvt = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+		const showSub = Keyboard.addListener(showEvt, () => setKeyboardVisible(true));
+		const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardVisible(false));
+		return () => {
+			showSub.remove();
+			hideSub.remove();
+		};
+	}, []);
+	const effectiveBottomInset = keyboardVisible ? 4 : insets.bottom || 4;
+
 	const captureMobileMemory = useCaptureMobileMemory();
 
 	// Search is no longer live — query is pushed to the parent only on
@@ -170,7 +187,7 @@ export function CaptureFooter({
 					borderTopLeftRadius: 16,
 					borderTopRightRadius: 16,
 					overflow: "hidden",
-					paddingBottom: insets.bottom || 4,
+					paddingBottom: effectiveBottomInset,
 				}}
 			>
 				{hasChip ? (
