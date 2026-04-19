@@ -34,8 +34,8 @@ import { ThreadChannel } from "@/lib/gql/graphql";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { useThreadReadState } from "@/lib/hooks/use-thread-read-state";
 import { MessageInputFooter, type MessageInputFooterRef, type SelectedWorkspace } from "@/components/input/MessageInputFooter";
-import { CaptureFooter } from "@/components/memory/CaptureFooter";
-import { CapturesList } from "@/components/memory/CapturesList";
+import { CaptureFooter } from "@/components/wiki/CaptureFooter";
+import { WikiList } from "@/components/wiki/WikiList";
 import { ToastHost } from "@/components/ui/toast";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { QuickActionsSheet, type QuickActionsSheetRef } from "@/components/chat/QuickActionsSheet";
@@ -229,8 +229,8 @@ export default function ThreadsScreen() {
     }, 0);
   }, [router, markRead]);
 
-  // ── Tabs: Threads | Memories ─────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<"threads" | "memories">("threads");
+  // ── Tabs: Threads | Wiki ─────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<"threads" | "wiki">("threads");
 
   // ── New thread / memory input ────────────────────────────────────────
   // Each tab keeps its own draft text so switching tabs doesn't leak a
@@ -249,9 +249,9 @@ export default function ThreadsScreen() {
     void AsyncStorage.removeItem("thinkwork:capture-queue:v1").catch(() => {});
   }, []);
 
-  // Memories-tab search: the footer only emits on explicit submit
+  // Wiki-tab search: the footer only emits on explicit submit
   // (Enter or send tap), so no debounce layer is needed here.
-  const [memoryQuery, setMemoryQuery] = useState("");
+  const [wikiQuery, setWikiQuery] = useState("");
 
   // ── Quick Actions (per-user, per-scope, from DB) ──────────────────────
   const [{ data: qaThreadData }, reexecuteQAThread] = useQuickActions(tenantId, "thread");
@@ -438,7 +438,7 @@ export default function ThreadsScreen() {
         </View>
       )}
 
-      {/* Threads / Memories segmented control */}
+      {/* Threads / Wiki segmented control */}
       <View
         className="border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 items-center justify-center"
         style={{ height: 52, paddingBottom: 8 }}
@@ -448,6 +448,7 @@ export default function ThreadsScreen() {
             onPress={() => setActiveTab("threads")}
             className="flex-row items-center justify-center gap-1.5 rounded-full"
             style={{
+              minWidth: 96,
               paddingHorizontal: 16,
               paddingVertical: 5,
               backgroundColor: activeTab === "threads" ? (isDark ? "#525252" : "#ffffff") : "transparent",
@@ -464,15 +465,16 @@ export default function ThreadsScreen() {
             })()}
           </Pressable>
           <Pressable
-            onPress={() => setActiveTab("memories")}
+            onPress={() => setActiveTab("wiki")}
             className="flex-row items-center justify-center gap-1.5 rounded-full"
             style={{
+              minWidth: 96,
               paddingHorizontal: 16,
               paddingVertical: 5,
-              backgroundColor: activeTab === "memories" ? (isDark ? "#525252" : "#ffffff") : "transparent",
+              backgroundColor: activeTab === "wiki" ? (isDark ? "#525252" : "#ffffff") : "transparent",
             }}
           >
-            <Text className="text-sm font-semibold" style={{ color: activeTab === "memories" ? colors.foreground : colors.mutedForeground }}>Memories</Text>
+            <Text className="text-sm font-semibold" style={{ color: activeTab === "wiki" ? colors.foreground : colors.mutedForeground }}>Wiki</Text>
           </Pressable>
         </View>
       </View>
@@ -513,10 +515,10 @@ export default function ThreadsScreen() {
             contentContainerStyle={filteredThreads.length === 0 ? { flexGrow: 1, justifyContent: "center" } : { paddingTop: 8 }}
           />
         ) : (
-          <CapturesList
+          <WikiList
             agentId={activeAgent?.id}
             colors={colors}
-            searchQuery={memoryQuery}
+            searchQuery={wikiQuery}
           />
         )}
       </WebContent>
@@ -544,7 +546,7 @@ export default function ThreadsScreen() {
             tenantId={tenantId}
             colors={colors}
             isDark={isDark}
-            onSearchQueryChange={setMemoryQuery}
+            onSearchQueryChange={setWikiQuery}
           />
         )}
       </View>
@@ -631,7 +633,7 @@ export default function ThreadsScreen() {
         }}
       />
 
-      {activeTab === "memories" ? <ToastHost bottomOffset={96} /> : null}
+      {activeTab === "wiki" ? <ToastHost bottomOffset={96} /> : null}
 
     </KeyboardAvoidingView>
   );
