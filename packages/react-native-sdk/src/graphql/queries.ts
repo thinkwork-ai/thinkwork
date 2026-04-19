@@ -261,29 +261,17 @@ export const WikiBacklinksQuery = gql`
 `;
 
 export const MobileMemorySearchQuery = gql`
-  query MobileMemorySearch(
-    $tenantId: ID!
-    $ownerId: ID!
-    $query: String!
-    $limit: Int
-  ) {
-    wikiSearch(
-      tenantId: $tenantId
-      ownerId: $ownerId
-      query: $query
-      limit: $limit
-    ) {
+  query MobileMemorySearch($agentId: ID!, $query: String!, $limit: Int) {
+    mobileWikiSearch(agentId: $agentId, query: $query, limit: $limit) {
       score
-      matchedAlias
+      matchingMemoryIds
       page {
         id
         type
         slug
         title
         summary
-        status
         lastCompiledAt
-        updatedAt
       }
     }
   }
