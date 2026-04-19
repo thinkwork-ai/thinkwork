@@ -38,6 +38,7 @@ import {
 	type SectionAggregation,
 	type WikiCompileJobRow,
 	type WikiPageRow,
+	type WikiPageType,
 } from "./repository.js";
 import { runPlanner, type PlannerResult } from "./planner.js";
 import {
@@ -802,6 +803,12 @@ async function applyAggregationPlan(
 	}
 
 	// 2. Parent section updates — rewrite rollup sections on hub pages.
+	// Track child pages already rolled up on each parent this job, so a
+	// single page like "Austin Activities" doesn't list "Lady Bird Lake"
+	// under "Overview" AND "Outdoor & Family Attractions". First section
+	// to claim a child wins; later sections on the same parent drop the
+	// duplicate.
+	const claimedChildrenByParent = new Map<string, Set<string>>();
 	for (const upd of plan.parentSectionUpdates) {
 		const parent = await findPageById(upd.pageId);
 		if (!parent) continue;
@@ -825,24 +832,22 @@ async function applyAggregationPlan(
 
 		const citedRecords = resolveCitedRecords(recordById, upd.source_refs);
 
-		const writeRes: SectionWriteResult = await writeSection({
-			pageType: parent.type,
-			pageTitle: parent.title,
-			sectionSlug: upd.sectionSlug,
-			sectionHeading: existingSec?.heading ?? upd.heading,
-			existingBodyMd: existingBody,
-			proposedBodyMd: upd.proposed_body_md,
-			sourceRecords: citedRecords,
-			knownPageTitles,
-			modelId,
-		});
-		metrics.section_writer_calls += 1;
-		metrics.sections_rewritten += 1;
-		metrics.input_tokens += writeRes.inputTokens;
-		metrics.output_tokens += writeRes.outputTokens;
-
-		// Resolve linked_page_slugs → page ids for aggregation metadata.
+		// Resolve linked_page_slugs to full page rows for both (a) aggregation
+		// metadata and (b) rollup body rendering. We need title + summary +
+		// type for each child to render a clean markdown list.
+		//
+		// Dedupe against any child already rolled up under a prior section
+		// on this same parent so the body doesn't repeat "Lady Bird Lake"
+		// across "Overview" and "Outdoor & Family Attractions".
+		const claimedOnParent =
+			claimedChildrenByParent.get(parent.id) ?? new Set<string>();
 		const linkedIds: string[] = [];
+		const linkedChildren: Array<{
+			type: WikiPageType;
+			slug: string;
+			title: string;
+			summary: string | null;
+		}> = [];
 		for (const slugRef of upd.linked_page_slugs) {
 			const child = await findPageBySlug({
 				tenantId: job.tenant_id,
@@ -850,8 +855,49 @@ async function applyAggregationPlan(
 				type: slugRef.type,
 				slug: slugRef.slug,
 			});
-			if (child) linkedIds.push(child.id);
+			if (!child) continue;
+			if (claimedOnParent.has(child.id)) continue; // drop dup
+			claimedOnParent.add(child.id);
+			linkedIds.push(child.id);
+			linkedChildren.push({
+				type: child.type,
+				slug: child.slug,
+				title: child.title,
+				summary: child.summary,
+			});
 		}
+		claimedChildrenByParent.set(parent.id, claimedOnParent);
+
+		// For rollup sections with real children, render a deterministic
+		// bullet list instead of calling the section-writer LLM. Users want
+		// "a list of links with a summary", not flat prose — and the markdown
+		// `[text](/wiki/<type>/<slug>)` links point at the mobile wiki route
+		// so clients that hook onLinkPress can navigate internally.
+		//
+		// Fall back to the LLM path when no children resolved (nothing
+		// concrete to list — the section is probably describing something
+		// abstract).
+		let bodyForUpsert: string;
+		if (linkedChildren.length >= 1) {
+			bodyForUpsert = renderRollupList(linkedChildren);
+		} else {
+			const writeRes: SectionWriteResult = await writeSection({
+				pageType: parent.type,
+				pageTitle: parent.title,
+				sectionSlug: upd.sectionSlug,
+				sectionHeading: existingSec?.heading ?? upd.heading,
+				existingBodyMd: existingBody,
+				proposedBodyMd: upd.proposed_body_md,
+				sourceRecords: citedRecords,
+				knownPageTitles,
+				modelId,
+			});
+			metrics.section_writer_calls += 1;
+			metrics.input_tokens += writeRes.inputTokens;
+			metrics.output_tokens += writeRes.outputTokens;
+			bodyForUpsert = writeRes.body_md;
+		}
+		metrics.sections_rewritten += 1;
 
 		await upsertPage({
 			tenant_id: parent.tenant_id,
@@ -865,7 +911,7 @@ async function applyAggregationPlan(
 				{
 					section_slug: upd.sectionSlug,
 					heading: existingSec?.heading ?? upd.heading,
-					body_md: writeRes.body_md,
+					body_md: bodyForUpsert,
 					position: existingSec?.position ?? nextFreePosition(existingSections),
 					sources: citedRecords.map((r) => ({
 						kind: "memory_unit" as const,
@@ -874,6 +920,19 @@ async function applyAggregationPlan(
 				},
 			],
 		});
+
+		// Make sure every linked child in the body is also a first-class
+		// pageLink in the graph — the renderer uses this for backlinks /
+		// navigation, and the body list on its own isn't enough for clients
+		// that don't (yet) intercept markdown links.
+		for (const childId of linkedIds) {
+			await upsertPageLink({
+				fromPageId: parent.id,
+				toPageId: childId,
+				context: `rolled up under ${upd.sectionSlug}`,
+			});
+			metrics.links_upserted = (metrics.links_upserted ?? 0) + 1;
+		}
 
 		const refreshedSections = await listPageSections(parent.id);
 		const freshSection = refreshedSections.find(
@@ -893,7 +952,7 @@ async function applyAggregationPlan(
 			});
 			const scoreResult = scoreSectionAggregation({
 				aggregation: merged,
-				bodyMd: writeRes.body_md,
+				bodyMd: bodyForUpsert,
 			});
 			const promotion_status: SectionAggregation["promotion_status"] =
 				merged.promotion_status === "promoted"
@@ -1108,6 +1167,42 @@ function estimateCostUsd(inputTokens: number, outputTokens: number): number {
 		(outputTokens / 1_000_000) * HAIKU_OUTPUT_USD_PER_MTOKEN;
 	// Round to 4 decimals so metrics JSON stays compact.
 	return Math.round(usd * 10_000) / 10_000;
+}
+
+/**
+ * Render a rollup/aggregation section body as a clean bullet list. Each
+ * child becomes `- [**Title**](/wiki/<type>/<slug>) — summary-first-sentence`.
+ * Markdown link target matches the mobile router path, so clients that
+ * hook onLinkPress can navigate internally. Summaries are trimmed to the
+ * first sentence so the list stays scannable — the full summary lives on
+ * the child page.
+ */
+function renderRollupList(
+	children: Array<{
+		type: WikiPageType;
+		slug: string;
+		title: string;
+		summary: string | null;
+	}>,
+): string {
+	return children
+		.map((c) => {
+			const href = `/wiki/${encodeURIComponent(c.type)}/${encodeURIComponent(c.slug)}`;
+			const firstSentence = firstSentenceOf(c.summary);
+			const tail = firstSentence ? ` — ${firstSentence}` : "";
+			return `- [**${c.title}**](${href})${tail}`;
+		})
+		.join("\n");
+}
+
+function firstSentenceOf(s: string | null): string {
+	if (!s) return "";
+	const trimmed = s.trim();
+	if (trimmed.length === 0) return "";
+	// Split on sentence enders; fall back to first ~160 chars.
+	const match = trimmed.match(/^.*?[.!?](?=\s|$)/);
+	if (match) return match[0].trim();
+	return trimmed.length > 160 ? `${trimmed.slice(0, 160).trim()}…` : trimmed;
 }
 
 function formatHeadingFromSlug(slug: string): string {
