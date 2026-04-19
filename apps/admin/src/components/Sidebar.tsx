@@ -12,6 +12,7 @@ import {
   Puzzle,
   Brain,
   FileText,
+  Network,
   Webhook,
   Shield,
   CalendarClock,
@@ -167,6 +168,7 @@ export function AppSidebar() {
     { to: "/agent-templates", icon: LayoutTemplate, label: "Agent Templates" },
     { to: "/capabilities", icon: Puzzle, label: "Capabilities" },
     { to: "/memory", icon: Brain, label: "Memories" },
+    { to: "/wiki", icon: Network, label: "Wiki" },
     { to: "/security", icon: Shield, label: "Security Center" },
   ];
 
