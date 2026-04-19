@@ -99,11 +99,28 @@ export interface PlannedPromotion {
 	sections: PlannedNewPageSection[];
 }
 
+/**
+ * Directed link between two pages in the same (tenant, owner) scope.
+ * Referenced by `(type, slug)` so the planner doesn't need to know page IDs —
+ * the compiler resolves them after applying all upserts in the batch, which
+ * means a newly-created page can be the target of a link from another new
+ * page in the same plan.
+ */
+export interface PlannedPageLink {
+	fromType: WikiPageType;
+	fromSlug: string;
+	toType: WikiPageType;
+	toSlug: string;
+	/** One-line description of why the link exists (for backlink context). */
+	context?: string;
+}
+
 export interface PlannerResult {
 	pageUpdates: PlannedPageUpdate[];
 	newPages: PlannedNewPage[];
 	unresolvedMentions: PlannedUnresolvedMention[];
 	promotions: PlannedPromotion[];
+	pageLinks: PlannedPageLink[];
 	usage: { inputTokens: number; outputTokens: number };
 }
 
@@ -123,12 +140,19 @@ Type describes page *shape*, not sharing. All pages are owner-scoped.
 
 ## Output actions
 
-Return a JSON object with these four arrays. Any can be empty. Bias toward \`unresolvedMentions\` over \`newPages\`: creating noise is expensive; holding an alias costs almost nothing.
+Return a JSON object with these five arrays. Any can be empty. Bias toward \`unresolvedMentions\` over \`newPages\`: creating noise is expensive; holding an alias costs almost nothing.
 
 - **pageUpdates** — existing pages whose sections should be refreshed. Only include a section when its body materially changes given the new evidence. Do not rewrite for stylistic polish.
 - **newPages** — new pages backed by strong evidence. Use this only when (a) the subject is durable, (b) at least two records reinforce it, and (c) no existing candidate page covers it.
 - **unresolvedMentions** — alias references the records make that aren't clearly covered by an existing page or strong enough for a new one. Hold them for later promotion.
 - **promotions** — open mentions that should now become real pages because the batch pushes them past the threshold (≥3 mentions, recent activity).
+- **pageLinks** — directed relationships between pages. Emit a link whenever one page *meaningfully references* another in the same scope. Examples to be aggressive about:
+    - a restaurant entity → the topic page for the trip/journal it appears in ("Momofuku Daishō → Toronto Life")
+    - a place inside a city or park → the parent place ("Barton Springs Pool → Zilker Metropolitan Park")
+    - a person → the organization or family they belong to
+    - a decision → the subject entities it references
+    - a topic → each of its constituent entities
+  You may reference pages from \`candidatePages\` input AND any \`newPages\` you're creating in this same response. Links are directional — emit both directions if they're both meaningful.
 
 ## Rules
 
@@ -137,7 +161,8 @@ Return a JSON object with these four arrays. Any can be empty. Bias toward \`unr
 3. Prefer short, factual section bodies. No speculation, no generalization beyond the records.
 4. When a record clearly refers to an existing candidate page (by slug, alias, or title), update that page. Don't duplicate.
 5. If unsure whether a subject is an entity / topic / decision, treat it as an unresolved mention.
-6. Output **only valid JSON**. No prose, no markdown fences.`;
+6. Links should only reference \`(type, slug)\` pairs that exist in \`candidatePages\` OR are being created in this same response's \`newPages\`. Never invent pages by link alone.
+7. Output **only valid JSON**. No prose, no markdown fences.`;
 
 const PLANNER_OUTPUT_SCHEMA = `{
   "pageUpdates": [
@@ -176,6 +201,15 @@ const PLANNER_OUTPUT_SCHEMA = `{
       "suggestedType": "entity | topic | decision | null",
       "context": "<a short quote or summary of where it appeared>",
       "source_ref": "<record id>"
+    }
+  ],
+  "pageLinks": [
+    {
+      "fromType": "entity | topic | decision",
+      "fromSlug": "<slug of source page; must exist in candidatePages or newPages>",
+      "toType": "entity | topic | decision",
+      "toSlug": "<slug of target page; must exist in candidatePages or newPages>",
+      "context": "<one-line description of why the link exists; shown to the user on backlinks>"
     }
   ],
   "promotions": [
@@ -289,6 +323,29 @@ export function validatePlannerResult(value: unknown): asserts value is PlannerR
 	requireArray(v, "newPages");
 	requireArray(v, "unresolvedMentions");
 	requireArray(v, "promotions");
+	// pageLinks is newer than the other fields — accept plans that omit it.
+	if (v.pageLinks === undefined) {
+		v.pageLinks = [];
+	} else if (!Array.isArray(v.pageLinks)) {
+		throw new Error("planner response pageLinks must be an array");
+	}
+
+	for (const l of v.pageLinks as unknown[]) {
+		if (!l || typeof l !== "object") throw new Error("pageLinks entry not object");
+		const link = l as Record<string, unknown>;
+		if (!isPageType(link.fromType)) {
+			throw new Error(`pageLinks.fromType invalid: ${link.fromType}`);
+		}
+		if (!isPageType(link.toType)) {
+			throw new Error(`pageLinks.toType invalid: ${link.toType}`);
+		}
+		if (typeof link.fromSlug !== "string" || link.fromSlug.length === 0) {
+			throw new Error("pageLinks.fromSlug missing");
+		}
+		if (typeof link.toSlug !== "string" || link.toSlug.length === 0) {
+			throw new Error("pageLinks.toSlug missing");
+		}
+	}
 
 	for (const u of v.pageUpdates as unknown[]) {
 		if (!u || typeof u !== "object") throw new Error("pageUpdates entry not object");
