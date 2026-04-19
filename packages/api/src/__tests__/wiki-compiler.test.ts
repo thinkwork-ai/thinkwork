@@ -298,6 +298,7 @@ const { mockAdapter, mockRepo, mockPlanner, mockWriter, mockGetServices } =
 			setCursor: vi.fn(),
 			completeCompileJob: vi.fn(),
 			findPageById: vi.fn(),
+			findAliasMatches: vi.fn().mockResolvedValue([]),
 			listPagesForScope: vi.fn().mockResolvedValue([]),
 			listOpenMentions: vi.fn().mockResolvedValue([]),
 			listPageSections: vi.fn().mockResolvedValue([]),
@@ -327,6 +328,8 @@ vi.mock("../lib/wiki/repository.js", async (importOriginal) => {
 		completeCompileJob: (...args: unknown[]) =>
 			mockRepo.completeCompileJob(...args),
 		findPageById: (...args: unknown[]) => mockRepo.findPageById(...args),
+		findAliasMatches: (...args: unknown[]) =>
+			mockRepo.findAliasMatches(...args),
 		listPagesForScope: (...args: unknown[]) =>
 			mockRepo.listPagesForScope(...args),
 		listOpenMentions: (...args: unknown[]) =>
@@ -430,6 +433,9 @@ describe("runCompileJob", () => {
 		mockRepo.listOpenMentions.mockResolvedValue([]);
 		mockRepo.listPageSections.mockResolvedValue([]);
 		mockRepo.upsertPage.mockResolvedValue({ id: "page-new" });
+		// No alias collisions by default; individual tests override when
+		// exercising the dedup path.
+		mockRepo.findAliasMatches.mockResolvedValue([]);
 	});
 
 	it("creates a new page from the planner's newPages output", async () => {
