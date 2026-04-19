@@ -1,0 +1,261 @@
+---
+title: Operating Compounding Memory
+description: Turn the wiki on, compile an agent's memories, bulk-import from journal data, fix bad rankings, and keep an eye on cost.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+This is the hands-on guide for people running Compounding Memory on a live environment — turning it on, triggering compiles, bulk-importing data, investigating bad results, and monitoring cost.
+
+It assumes you've read the [overview](/concepts/knowledge/compounding-memory/) and have at least skimmed [the pipeline](/concepts/knowledge/compounding-memory-pipeline/). You don't need to be a database expert to use these recipes, but you do need access to run GraphQL mutations against the API and, occasionally, SQL against the warehouse.
+
+## Turning the wiki on for a tenant
+
+The wiki is off by default for every tenant. To turn it on, flip a flag:
+
+```sql
+UPDATE tenants
+SET wiki_compile_enabled = true
+WHERE id = '<tenant-uuid>';
+```
+
+That's it. No redeploy. The next time anyone in that tenant has a conversation that generates a memory, a compile job will get queued automatically.
+
+Two things have to also be true for compiles to run:
+
+1. **The tenant is using Hindsight as its memory engine.** AgentCore tenants will silently skip compiles in v1 — the cursor method isn't implemented there yet.
+2. **Memories are being written with an owning agent.** If a retain call can't identify which agent the memory belongs to, it skips the enqueue rather than failing the retain.
+
+Both of these are usually true; this is mostly a heads-up for when you're wondering why compiles aren't happening.
+
+## Triggering a compile on demand
+
+Sometimes you want to compile right now — you just bulk-imported data, or you want to see what happens with some new memories without waiting for the next turn.
+
+The admin-only GraphQL mutation:
+
+```graphql
+mutation CompileNow($tenantId: ID!, $ownerId: ID!) {
+  compileWikiNow(tenantId: $tenantId, ownerId: $ownerId) {
+    id
+    status
+    trigger
+    createdAt
+  }
+}
+```
+
+`ownerId` is the agent id. The mutation queues a job and fires the compile Lambda in the background. If a job is already running for the same agent, the mutation will return the in-flight job rather than starting a new one — that's the 5-minute dedupe window doing its thing.
+
+If you need to drive a compile synchronously (e.g. you're draining a huge backlog and want per-job error messages), invoke the Lambda directly:
+
+```bash
+aws lambda invoke \
+  --function-name thinkwork-${STAGE}-api-wiki-compile \
+  --payload "{\"jobId\":\"<job-uuid>\"}" \
+  --cli-binary-format raw-in-base64-out \
+  /tmp/resp.json
+```
+
+## Bulk-importing journal data
+
+If you're seeding a new agent from pre-existing content (like a user's journal entries), run the bulk importer.
+
+```graphql
+mutation BulkImport(
+  $accountId: ID!
+  $tenantId: ID!
+  $agentId: ID!
+  $limit: Int
+) {
+  bootstrapJournalImport(
+    accountId: $accountId
+    tenantId: $tenantId
+    agentId: $agentId
+    limit: $limit
+  ) {
+    dispatched
+    dispatchedAt
+    error
+  }
+}
+```
+
+The mutation returns immediately with a "dispatched" acknowledgement. The actual work — reading every journal entry, writing memories, and triggering a final compile — happens on a dedicated worker Lambda that can run for up to 15 minutes.
+
+To watch progress:
+
+- Tail the worker Lambda's CloudWatch logs (`/aws/lambda/thinkwork-${STAGE}-api-wiki-bootstrap-import`).
+- Query the job ledger:
+  ```sql
+  SELECT status, metrics->>'records_read' AS records,
+         metrics->>'pages_upserted' AS pages, created_at
+  FROM wiki_compile_jobs
+  WHERE trigger = 'bootstrap_import'
+    AND owner_id = '<agent-uuid>'
+  ORDER BY created_at DESC
+  LIMIT 5;
+  ```
+
+## Rebuilding an agent's wiki from scratch
+
+Sometimes you need to start over — maybe a bad planner prompt wrote polluted pages, or you changed the page templates, or you just want to verify the wiki replays identically.
+
+**The polite way:**
+
+```graphql
+mutation Reset($tenantId: ID!, $ownerId: ID!) {
+  resetWikiCursor(tenantId: $tenantId, ownerId: $ownerId, force: true) {
+    cursorCleared
+    pagesArchived
+  }
+}
+```
+
+`force: true` clears the cursor and archives every active page. The next compile walks every memory from the beginning and resurrects pages as it touches them. Their provenance rows stay attached — which is fine if you trust the old provenance but want a fresh pass.
+
+**The nuclear way** — when you don't trust the old provenance and want a clean slate:
+
+```sql
+-- Run as one transaction.
+BEGIN;
+DELETE FROM wiki_unresolved_mentions WHERE owner_id = '<agent-uuid>';
+DELETE FROM wiki_pages               WHERE owner_id = '<agent-uuid>';
+DELETE FROM wiki_compile_cursors     WHERE owner_id = '<agent-uuid>';
+UPDATE wiki_compile_jobs
+  SET status = 'skipped',
+      finished_at = now(),
+      error = 'reset by operator before recompile'
+  WHERE owner_id = '<agent-uuid>'
+    AND status IN ('pending', 'running');
+COMMIT;
+```
+
+`ON DELETE CASCADE` handles the sections, aliases, links, and source rows. Then kick off a compile and let it drain.
+
+## Draining a big backfill
+
+A single compile job processes at most 500 memories. For an agent with thousands of memories, you'll need to run several jobs back-to-back.
+
+The pattern that works:
+
+```bash
+# Until the job returns zero records two iterations in a row.
+while true; do
+  JOB=$(psql -c "INSERT INTO wiki_compile_jobs (...) VALUES (...) RETURNING id")
+  aws lambda invoke --function-name thinkwork-${STAGE}-api-wiki-compile \
+    --payload "{\"jobId\":\"$JOB\"}" --cli-binary-format raw-in-base64-out /tmp/resp
+  # Read the job row. If status == 'succeeded' and records_read == 0, you're done.
+  # If status == 'failed' with 'Too many requests' in the error, sleep 30s and retry.
+  sleep 15
+done
+```
+
+Expect Bedrock throttling on dense scopes. The cursor only advances on successful batches, so retrying after a throttle is safe — nothing gets lost.
+
+## Investigating a "weird ranking" report
+
+A user reports: "I searched for X in my wiki and got Y, which has nothing to do with X."
+
+The issue is almost always polluted provenance — somewhere along the line a memory got attributed as a source for a section where it doesn't belong. Here's the investigation flow:
+
+**1. Figure out which memory is causing it.** Run the same query against Hindsight directly and note the top hit's memory id.
+
+**2. Check which sections cite that memory:**
+
+```sql
+SELECT p.slug, p.type, wps.section_slug
+FROM wiki_section_sources wss
+INNER JOIN wiki_page_sections wps ON wps.id = wss.section_id
+INNER JOIN wiki_pages p ON p.id = wps.page_id
+WHERE wss.source_kind = 'memory_unit'
+  AND wss.source_ref = '<memory-uuid>'
+  AND p.owner_id = '<agent-uuid>'
+ORDER BY p.slug;
+```
+
+**3. Do the citations make sense?** If the memory is about "Austin weather" and it's cited as a source for "Aldape Auto Center," that's polluted provenance. Rebuild the agent's wiki from scratch (the nuclear way above) — current compiler rules prevent re-introducing the pollution.
+
+If citations look clean and the result is still wrong, the bug isn't in the wiki layer — check that Hindsight itself is returning the right memories for the query.
+
+## Exporting the vault
+
+Every night, a Lambda exports each agent's wiki as a zip to S3:
+
+```
+s3://thinkwork-${stage}-wiki-exports/<tenant-slug>/<agent-slug>/<yyyy-mm-dd>/vault.zip
+```
+
+Inside, one markdown file per page, organized by type. Each page has frontmatter with the tenant, owner, type, slug, title, last-compiled timestamp, source references, and aliases.
+
+Retention is 30 days (S3 lifecycle policy). To export right now instead of waiting for the nightly run:
+
+```bash
+aws lambda invoke \
+  --function-name thinkwork-${STAGE}-api-wiki-export \
+  --payload '{}' \
+  --cli-binary-format raw-in-base64-out \
+  /tmp/resp.json
+```
+
+## Watching cost
+
+Every compile job records its Bedrock token usage and a rough dollar estimate. To see daily totals for a tenant:
+
+```sql
+SELECT
+  DATE_TRUNC('day', created_at) AS day,
+  COUNT(*) AS jobs,
+  SUM((metrics->>'cost_usd')::numeric) AS total_usd,
+  SUM((metrics->>'records_read')::integer) AS records,
+  SUM((metrics->>'pages_upserted')::integer) AS pages
+FROM wiki_compile_jobs
+WHERE tenant_id = '<tenant-uuid>'
+  AND status = 'succeeded'
+GROUP BY 1
+ORDER BY 1 DESC
+LIMIT 30;
+```
+
+In practice, a full compile of an agent with a few hundred memories runs $0.50 to $1.00 end-to-end. Ongoing cost per turn (one compile per 5-minute bucket) is a few cents. If you see numbers an order of magnitude higher than that, the planner prompt is probably running away — check the job metrics for a `cap_hit` flag.
+
+## Related pages
+
+- [Compounding Memory](/concepts/knowledge/compounding-memory/) — the overview
+- [Compounding Memory: Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — how compiles work
+- [Compounding Memory: Pages](/concepts/knowledge/compounding-memory-pages/) — the data model
+- [Compounding Memory (API)](/api/compounding-memory/) — GraphQL reference
+
+---
+
+## Under the hood
+
+### Enqueue path
+
+`packages/api/src/lib/wiki/enqueue.ts` checks `tenants.wiki_compile_enabled`, verifies `adapterKind === 'hindsight'`, inserts a job with dedupe key `${tenantId}:${ownerId}:${floor(epoch_s/300)}`, fires `Lambda.invoke` with `InvocationType: "Event"`.
+
+### Job ledger fields
+
+```sql
+SELECT id, status, trigger,
+  metrics->>'records_read'       AS records,
+  metrics->>'pages_upserted'     AS pages,
+  metrics->>'sections_rewritten' AS sections,
+  metrics->>'links_upserted'     AS links,
+  metrics->>'cost_usd'           AS cost,
+  metrics->>'cap_hit'            AS cap,
+  error,
+  created_at, finished_at
+FROM wiki_compile_jobs
+WHERE owner_id = '<agent-uuid>'
+ORDER BY created_at DESC;
+```
+
+`cap_hit` values: `max_new_pages`, `max_sections_rewritten`. Re-invoke to continue.
+
+### Trigger types
+
+- `memory_retain` — post-retain fire-and-forget
+- `admin` — admin mutation (`compileWikiNow`)
+- `bootstrap_import` — bulk import terminal compile
+- `lint` — nightly promotion sweep
