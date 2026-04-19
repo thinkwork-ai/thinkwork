@@ -467,22 +467,30 @@ export function validatePlannerResult(value: unknown): asserts value is PlannerR
 		}
 	}
 
-	for (const l of v.pageLinks as unknown[]) {
-		if (!l || typeof l !== "object") throw new Error("pageLinks entry not object");
+	// Filter bad pageLinks silently instead of failing the whole plan. Some
+	// models (smaller Nova / OSS variants) occasionally invent a page type
+	// like `vehicle` or a blank slug; better to drop that one link than lose
+	// every update in the batch. The compiler already tolerates missing
+	// link targets via findPageBySlug returning null.
+	v.pageLinks = (v.pageLinks as unknown[]).filter((l) => {
+		if (!l || typeof l !== "object") return false;
 		const link = l as Record<string, unknown>;
-		if (!isPageType(link.fromType)) {
-			throw new Error(`pageLinks.fromType invalid: ${link.fromType}`);
-		}
-		if (!isPageType(link.toType)) {
-			throw new Error(`pageLinks.toType invalid: ${link.toType}`);
+		if (!isPageType(link.fromType) || !isPageType(link.toType)) {
+			console.warn(
+				`[planner] dropping pageLink with invalid type fromType=${link.fromType} toType=${link.toType}`,
+			);
+			return false;
 		}
 		if (typeof link.fromSlug !== "string" || link.fromSlug.length === 0) {
-			throw new Error("pageLinks.fromSlug missing");
+			console.warn(`[planner] dropping pageLink with missing fromSlug`);
+			return false;
 		}
 		if (typeof link.toSlug !== "string" || link.toSlug.length === 0) {
-			throw new Error("pageLinks.toSlug missing");
+			console.warn(`[planner] dropping pageLink with missing toSlug`);
+			return false;
 		}
-	}
+		return true;
+	});
 
 	for (const u of v.pageUpdates as unknown[]) {
 		if (!u || typeof u !== "object") throw new Error("pageUpdates entry not object");
