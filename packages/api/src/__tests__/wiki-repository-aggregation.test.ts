@@ -12,9 +12,39 @@
 import { describe, it, expect } from "vitest";
 import {
 	emptySectionAggregation,
+	isValidUuid,
 	mergeSectionAggregation,
 	type SectionAggregation,
 } from "../lib/wiki/repository.js";
+
+describe("isValidUuid", () => {
+	it("accepts canonical RFC 4122 UUIDs", () => {
+		expect(isValidUuid("f4a3f29b-efab-487e-b53f-33381163d168")).toBe(true);
+		expect(isValidUuid("00000000-0000-0000-0000-000000000000")).toBe(true);
+	});
+
+	it("accepts mixed-case UUIDs", () => {
+		expect(isValidUuid("F4A3F29B-EFAB-487E-B53F-33381163D168")).toBe(true);
+	});
+
+	it("rejects truncated / hallucinated LLM output", () => {
+		expect(isValidUuid("814e6b70")).toBe(false);
+		expect(isValidUuid("f4a3f29b-efab-487e-b53f")).toBe(false);
+		expect(isValidUuid("not-a-uuid")).toBe(false);
+	});
+
+	it("rejects non-strings", () => {
+		expect(isValidUuid(undefined)).toBe(false);
+		expect(isValidUuid(null)).toBe(false);
+		expect(isValidUuid(123)).toBe(false);
+		expect(isValidUuid({})).toBe(false);
+	});
+
+	it("rejects UUIDs with wrapping whitespace or quotes", () => {
+		expect(isValidUuid(" f4a3f29b-efab-487e-b53f-33381163d168")).toBe(false);
+		expect(isValidUuid('"f4a3f29b-efab-487e-b53f-33381163d168"')).toBe(false);
+	});
+});
 
 describe("emptySectionAggregation", () => {
 	it("returns a fresh record with zeroed counts + empty arrays", () => {
