@@ -59,6 +59,36 @@ type WikiCompileJob {
   createdAt: AWSDateTime!
 }
 
+"""
+Agent-scoped force-graph payload: all active pages and their [[...]] links
+for one `(tenant, owner)` scope. Shaped to match the legacy `memoryGraph`
+wire contract so the admin force-graph component can swap data sources
+with minimal client changes. `type` is always `"page"` on nodes; the
+Wiki page type (`ENTITY`/`TOPIC`/`DECISION`) lives in `entityType`.
+"""
+type WikiGraphNode {
+  id: ID!
+  label: String!
+  type: String!
+  entityType: WikiPageType!
+  slug: String!
+  strategy: String
+  edgeCount: Int!
+  latestThreadId: String
+}
+
+type WikiGraphEdge {
+  source: ID!
+  target: ID!
+  label: String!
+  weight: Float!
+}
+
+type WikiGraph {
+  nodes: [WikiGraphNode!]!
+  edges: [WikiGraphEdge!]!
+}
+
 extend type Query {
   """
   Read one compiled page by slug. `ownerId` is required.
@@ -89,6 +119,13 @@ extend type Query {
     ownerId: ID
     limit: Int = 10
   ): [WikiCompileJob!]!
+
+  """
+  Agent-scoped force-graph: every active wiki page + every page-to-page
+  link whose endpoints are both active in the same `(tenant, owner)`
+  scope. Links that reference archived pages are excluded. One round-trip.
+  """
+  wikiGraph(tenantId: ID!, ownerId: ID!): WikiGraph!
 }
 
 """
