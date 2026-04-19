@@ -57,6 +57,16 @@ export interface PlannedSectionUpdate {
 	slug: string;
 	rationale: string;
 	proposed_body_md: string;
+	/**
+	 * Which memory-record IDs actually inform THIS section's update. REQUIRED
+	 * and narrowly scoped — per-section, not per-page — so the reverse lookup
+	 * from a memory back to its citing pages stays truthful. The compiler
+	 * writes one `wiki_section_sources` row per listed ref; omitting refs
+	 * produces zero provenance rows for this section (preferred over wrongly
+	 * citing every record in the batch, which produced a lot of noise
+	 * pre-fix).
+	 */
+	source_refs: string[];
 }
 
 export interface PlannedPageUpdate {
@@ -70,6 +80,8 @@ export interface PlannedNewPageSection {
 	slug: string;
 	heading: string;
 	body_md: string;
+	/** Per-section provenance — see PlannedSectionUpdate.source_refs. */
+	source_refs: string[];
 }
 
 export interface PlannedNewPage {
@@ -79,7 +91,11 @@ export interface PlannedNewPage {
 	aliases?: string[];
 	summary?: string | null;
 	sections: PlannedNewPageSection[];
-	/** Which record IDs fed this page — used for provenance. */
+	/**
+	 * Fallback provenance for sections that don't carry their own source_refs.
+	 * Prefer per-section refs — this is only used as a secondary source when
+	 * a section's `source_refs` is empty.
+	 */
 	source_refs: string[];
 }
 
@@ -156,7 +172,7 @@ Return a JSON object with these five arrays. Any can be empty. Bias toward \`unr
 
 ## Rules
 
-1. Ground every proposed body in cited records. Include a \`source_refs\` list of record IDs for new pages and promotions.
+1. Ground every proposed body in cited records. **Every section MUST include a \`source_refs\` array listing the specific record IDs that inform THAT section.** Don't put a record's id on a section whose prose doesn't draw from that record. If a section's update isn't backed by at least one record in this batch, omit the section.
 2. Never invent record IDs, page IDs, or mention IDs — only use the ones in the input.
 3. Prefer short, factual section bodies. No speculation, no generalization beyond the records.
 4. When a record clearly refers to an existing candidate page (by slug, alias, or title), update that page. Don't duplicate.
@@ -173,7 +189,8 @@ const PLANNER_OUTPUT_SCHEMA = `{
         {
           "slug": "<section slug from the page type>",
           "rationale": "<one sentence: why this section changes>",
-          "proposed_body_md": "<full markdown body for the section>"
+          "proposed_body_md": "<full markdown body for the section>",
+          "source_refs": ["<record id that inform THIS section>"]
         }
       ]
     }
@@ -185,12 +202,13 @@ const PLANNER_OUTPUT_SCHEMA = `{
       "title": "<display title>",
       "aliases": ["<optional alternate names>"],
       "summary": "<one-line page summary>",
-      "source_refs": ["<record id>"],
+      "source_refs": ["<optional page-level fallback record ids>"],
       "sections": [
         {
           "slug": "<section slug>",
           "heading": "<section heading>",
-          "body_md": "<section body markdown>"
+          "body_md": "<section body markdown>",
+          "source_refs": ["<record id that inform THIS section>"]
         }
       ]
     }
@@ -220,7 +238,7 @@ const PLANNER_OUTPUT_SCHEMA = `{
       "title": "<page title>",
       "slug": "<kebab-case slug>",
       "sections": [
-        { "slug": "<section slug>", "heading": "<heading>", "body_md": "<body>" }
+        { "slug": "<section slug>", "heading": "<heading>", "body_md": "<body>", "source_refs": ["<record id>"] }
       ]
     }
   ]
