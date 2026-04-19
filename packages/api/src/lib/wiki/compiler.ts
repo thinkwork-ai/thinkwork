@@ -17,6 +17,7 @@ import { getMemoryServices } from "../memory/index.js";
 import {
 	completeCompileJob,
 	findPageById,
+	findPageBySlug,
 	getCompileJob,
 	getCursor,
 	listOpenMentions,
@@ -25,6 +26,7 @@ import {
 	markUnresolvedPromoted,
 	setCursor,
 	upsertPage,
+	upsertPageLink,
 	upsertUnresolvedMention,
 	normalizeAlias,
 	type WikiCompileJobRow,
@@ -65,6 +67,7 @@ export interface RunJobResult {
 		sections_skipped: number;
 		unresolved_upserted: number;
 		unresolved_promoted: number;
+		links_upserted?: number;
 		planner_calls: number;
 		section_writer_calls: number;
 		input_tokens: number;
@@ -411,6 +414,34 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 		});
 		metrics.pages_upserted += 1;
 		metrics.unresolved_promoted += 1;
+	}
+
+	// 5. Page links — resolve (type, slug) pairs against the scope's active
+	// pages AFTER all upserts/promotions have landed so a link can reference
+	// any page created earlier in this same plan.
+	if (plan.pageLinks && plan.pageLinks.length > 0) {
+		for (const link of plan.pageLinks) {
+			const from = await findPageBySlug({
+				tenantId: job.tenant_id,
+				ownerId: job.owner_id,
+				type: link.fromType,
+				slug: link.fromSlug,
+			});
+			if (!from) continue; // planner referenced a slug that isn't in scope
+			const to = await findPageBySlug({
+				tenantId: job.tenant_id,
+				ownerId: job.owner_id,
+				type: link.toType,
+				slug: link.toSlug,
+			});
+			if (!to) continue;
+			await upsertPageLink({
+				fromPageId: from.id,
+				toPageId: to.id,
+				context: link.context ?? null,
+			});
+			metrics.links_upserted = (metrics.links_upserted ?? 0) + 1;
+		}
 	}
 
 	return null;
