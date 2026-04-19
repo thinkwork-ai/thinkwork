@@ -129,4 +129,78 @@ describe("deriveParentCandidates", () => {
 		]);
 		expect(out).toEqual([]);
 	});
+
+	// --- Journal-import shape (Marco's bank) ---------------------------------
+
+	it("extracts city from place_address when no explicit city key exists", () => {
+		const out = deriveParentCandidates([
+			makeRecord("r1", {
+				place_name: "Nana",
+				place_address: "785 Queen St W, Toronto, ON M6J 1G1, Canada",
+			}),
+			makeRecord("r2", {
+				place_name: "Momofuku",
+				place_address: "190 University Ave, Toronto, ON M5H 0A3, Canada",
+			}),
+		]);
+		const toronto = out.find((c) => c.reason === "city");
+		expect(toronto?.parentTitle).toBe("Toronto");
+		expect(toronto?.supportingCount).toBe(2);
+	});
+
+	it("extracts city from US-format address with state+zip", () => {
+		const out = deriveParentCandidates([
+			makeRecord("r1", {
+				place_address: "123 Main St, Austin, TX 78701, USA",
+				place_types: "restaurant, food",
+			}),
+			makeRecord("r2", {
+				place_address: "456 Elm Ave, Austin, TX 78702, USA",
+				place_types: "restaurant, food",
+			}),
+		]);
+		const austin = out.find((c) => c.reason === "city");
+		expect(austin?.parentTitle).toBe("Austin");
+		expect(austin?.suggestedSectionSlug).toBe("restaurants");
+	});
+
+	it("accepts place_types as comma-separated string", () => {
+		const out = deriveParentCandidates([
+			makeRecord("r1", {
+				place_address: "1 Coffee Ln, Portland, OR 97201, USA",
+				place_types: "cafe, food",
+			}),
+			makeRecord("r2", {
+				place_address: "2 Espresso Rd, Portland, OR 97202, USA",
+				place_types: "cafe",
+			}),
+		]);
+		expect(out.find((c) => c.reason === "city")?.suggestedSectionSlug).toBe(
+			"coffee",
+		);
+	});
+
+	it("reads idea_tags as comma-separated tags", () => {
+		const out = deriveParentCandidates([
+			makeRecord("r1", { idea_tags: "restaurant, food" }),
+			makeRecord("r2", { idea_tags: "restaurant" }),
+			makeRecord("r3", { idea_tags: "restaurant, food" }),
+		]);
+		const restaurant = out.find(
+			(c) => c.reason === "tag_cluster" && c.parentTitle === "Restaurant",
+		);
+		expect(restaurant?.supportingCount).toBe(3);
+		const food = out.find(
+			(c) => c.reason === "tag_cluster" && c.parentTitle === "Food",
+		);
+		expect(food?.supportingCount).toBe(2);
+	});
+
+	it("treats 'London, UK' as a city", () => {
+		const out = deriveParentCandidates([
+			makeRecord("r1", { place_address: "1 Oxford St, London, UK" }),
+			makeRecord("r2", { place_address: "10 Soho Sq, London, UK" }),
+		]);
+		expect(out.find((c) => c.reason === "city")?.parentTitle).toBe("London");
+	});
 });
