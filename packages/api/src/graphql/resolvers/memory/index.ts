@@ -8,6 +8,7 @@ import { captureMobileMemory } from "./captureMobileMemory.mutation.js";
 import { mobileMemoryCaptures } from "./mobileMemoryCaptures.query.js";
 import { mobileMemorySearch } from "./mobileMemorySearch.query.js";
 import { mobileWikiSearch } from "./mobileWikiSearch.query.js";
+import { recentWikiPages } from "./recentWikiPages.query.js";
 import { deleteMobileMemoryCapture } from "./deleteMobileMemoryCapture.mutation.js";
 
 export const memoryQueries = {
@@ -18,6 +19,7 @@ export const memoryQueries = {
 	mobileMemoryCaptures,
 	mobileMemorySearch,
 	mobileWikiSearch,
+	recentWikiPages,
 };
 
 export const memoryMutations = {

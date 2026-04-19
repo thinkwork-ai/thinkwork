@@ -154,14 +154,22 @@ extend type Query {
   can show "why this page matched" without a second round trip.
   """
   mobileWikiSearch(agentId: ID!, query: String!, limit: Int = 20): [MobileWikiSearchResult!]!
+
+  """
+  Newest compiled wiki pages for the given agent, ordered by
+  last_compiled_at DESC (falling back to updated_at when the page hasn't
+  been recompiled yet). Intended as the default Memories-tab feed so
+  the user sees fresh pages before they type a search query.
+  """
+  recentWikiPages(agentId: ID!, limit: Int = 50): [WikiPage!]!
 }
 
 type MobileWikiSearchResult {
   page: WikiPage!
   """
-  Aggregated score — sum of the Hindsight hit scores for all memories cited
-  by this page. Higher is better. Not a ts_rank; not comparable across
-  queries.
+  Reciprocal-rank surfacing score = 1 / (bestRank + 60), where bestRank
+  is the lowest Hindsight position of any memory citing this page.
+  Higher is better. Not comparable across queries.
   """
   score: Float!
   """

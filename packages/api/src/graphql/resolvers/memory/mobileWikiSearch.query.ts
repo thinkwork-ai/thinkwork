@@ -27,6 +27,7 @@ import type { GraphQLContext } from "../../context.js";
 import { db, agents } from "../../utils.js";
 import { getMemoryServices } from "../../../lib/memory/index.js";
 import { toGraphQLPage } from "../wiki/mappers.js";
+import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
@@ -44,17 +45,17 @@ export const mobileWikiSearch = async (
 	const { agentId, query, limit = DEFAULT_LIMIT } = args;
 	const trimmed = (query || "").trim();
 	if (!trimmed) return [];
-	if (!ctx.auth.tenantId) throw new Error("Tenant context required");
+	const tenantId = ctx.auth.tenantId ?? (await resolveCallerTenantId(ctx));
+	if (!tenantId) throw new Error("Tenant context required");
 
 	const [agent] = await db
 		.select({ id: agents.id, tenant_id: agents.tenant_id, slug: agents.slug })
 		.from(agents)
 		.where(eq(agents.id, agentId));
-	if (!agent || agent.tenant_id !== ctx.auth.tenantId) {
+	if (!agent || agent.tenant_id !== tenantId) {
 		throw new Error("Agent not found or access denied");
 	}
 
-	const tenantId = ctx.auth.tenantId;
 	const ownerId = agent.id as string;
 	const cappedLimit = Math.max(1, Math.min(limit, MAX_LIMIT));
 	const recallLimit = Math.min(cappedLimit * RECALL_OVERFETCH, RECALL_MAX);

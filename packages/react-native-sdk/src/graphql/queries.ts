@@ -218,17 +218,75 @@ export const DeleteMobileMemoryCaptureMutation = gql`
   }
 `;
 
+export const WikiPageQuery = gql`
+  query WikiPage(
+    $tenantId: ID!
+    $ownerId: ID!
+    $type: WikiPageType!
+    $slug: String!
+  ) {
+    wikiPage(tenantId: $tenantId, ownerId: $ownerId, type: $type, slug: $slug) {
+      id
+      type
+      slug
+      title
+      summary
+      bodyMd
+      status
+      lastCompiledAt
+      updatedAt
+      aliases
+      sections {
+        id
+        sectionSlug
+        heading
+        bodyMd
+        position
+        lastSourceAt
+      }
+    }
+  }
+`;
+
+export const WikiBacklinksQuery = gql`
+  query WikiBacklinks($pageId: ID!) {
+    wikiBacklinks(pageId: $pageId) {
+      id
+      type
+      slug
+      title
+      summary
+    }
+  }
+`;
+
 export const MobileMemorySearchQuery = gql`
   query MobileMemorySearch($agentId: ID!, $query: String!, $limit: Int) {
-    mobileMemorySearch(agentId: $agentId, query: $query, limit: $limit) {
+    mobileWikiSearch(agentId: $agentId, query: $query, limit: $limit) {
+      score
+      matchingMemoryIds
+      page {
+        id
+        type
+        slug
+        title
+        summary
+        lastCompiledAt
+      }
+    }
+  }
+`;
+
+export const RecentWikiPagesQuery = gql`
+  query RecentWikiPages($agentId: ID!, $limit: Int) {
+    recentWikiPages(agentId: $agentId, limit: $limit) {
       id
-      tenantId
-      agentId
-      content
-      factType
-      capturedAt
-      syncedAt
-      metadata
+      type
+      slug
+      title
+      summary
+      lastCompiledAt
+      updatedAt
     }
   }
 `;
