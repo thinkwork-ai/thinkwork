@@ -39,9 +39,10 @@ export function CapturesList({ agentId, colors, searchQuery }: CapturesListProps
 
 	const handlePress = useCallback(
 		(hit: WikiSearchHit) => {
-			router.push(`/wiki/${encodeURIComponent(hit.type)}/${encodeURIComponent(hit.slug)}`);
+			const path = `/wiki/${encodeURIComponent(hit.type)}/${encodeURIComponent(hit.slug)}`;
+			router.push(agentId ? `${path}?agentId=${encodeURIComponent(agentId)}` : path);
 		},
-		[router],
+		[router, agentId],
 	);
 
 	if (results.length === 0) {
@@ -71,7 +72,7 @@ export function CapturesList({ agentId, colors, searchQuery }: CapturesListProps
 				<WikiResultRow hit={item} colors={colors} onPress={handlePress} />
 			)}
 			ItemSeparatorComponent={() => (
-				<View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: 16 }} />
+				<View className="h-px bg-neutral-200 dark:bg-neutral-800" />
 			)}
 			refreshControl={
 				<RefreshControl
