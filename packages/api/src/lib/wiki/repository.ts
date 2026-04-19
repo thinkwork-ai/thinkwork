@@ -16,7 +16,7 @@
  * .prds/compounding-memory-v1-build-plan.md.
  */
 
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { PgTransaction } from "drizzle-orm/pg-core";
 import {
 	wikiPages,
@@ -52,6 +52,40 @@ export type WikiSectionSourceKind =
 	| "artifact"
 	| "journal_idea";
 export type WikiUnresolvedStatus = "open" | "promoted" | "ignored";
+export type WikiPageLinkKind = "reference" | "parent_of" | "child_of";
+export type SectionPromotionStatus =
+	| "none"
+	| "candidate"
+	| "promoted"
+	| "suppressed";
+
+/**
+ * Aggregation metadata carried on a section that acts as a rollup. Leaf-style
+ * sections (overview, notes, visits) leave this NULL.
+ */
+export interface SectionAggregation {
+	linked_page_ids: string[];
+	supporting_record_count: number;
+	first_source_at: string | null;
+	last_source_at: string | null;
+	observed_tags: string[];
+	promotion_status: SectionPromotionStatus;
+	promotion_score: number;
+	promoted_page_id: string | null;
+}
+
+export function emptySectionAggregation(): SectionAggregation {
+	return {
+		linked_page_ids: [],
+		supporting_record_count: 0,
+		first_source_at: null,
+		last_source_at: null,
+		observed_tags: [],
+		promotion_status: "none",
+		promotion_score: 0,
+		promoted_page_id: null,
+	};
+}
 
 export interface WikiCompileJobRow {
 	id: string;
@@ -87,6 +121,12 @@ export interface WikiPageRow {
 	summary: string | null;
 	body_md: string | null;
 	status: WikiPageStatus;
+	/** Set when this page was promoted from a section on another page. */
+	parent_page_id: string | null;
+	/** Coarse, monotonic hubness signal. Recomputed on upsert. */
+	hubness_score: number;
+	/** Soft tag hints — never a structural forcing function. */
+	tags: string[];
 	last_compiled_at: Date | null;
 	created_at: Date;
 	updated_at: Date;
@@ -517,6 +557,7 @@ export async function listPageSections(
 		body_md: string;
 		position: number;
 		last_source_at: Date | null;
+		aggregation: SectionAggregation | null;
 	}>
 > {
 	const rows = await db
@@ -527,11 +568,20 @@ export async function listPageSections(
 			body_md: wikiPageSections.body_md,
 			position: wikiPageSections.position,
 			last_source_at: wikiPageSections.last_source_at,
+			aggregation: wikiPageSections.aggregation,
 		})
 		.from(wikiPageSections)
 		.where(eq(wikiPageSections.page_id, pageId))
 		.orderBy(asc(wikiPageSections.position));
-	return rows as any;
+	return rows.map((r) => ({
+		id: r.id,
+		section_slug: r.section_slug,
+		heading: r.heading,
+		body_md: r.body_md,
+		position: r.position,
+		last_source_at: r.last_source_at,
+		aggregation: (r.aggregation as SectionAggregation | null) ?? null,
+	}));
 }
 
 /**
@@ -920,7 +970,15 @@ export async function recordSectionSources(
 // ---------------------------------------------------------------------------
 
 export async function upsertPageLink(
-	args: { fromPageId: string; toPageId: string; context?: string | null },
+	args: {
+		fromPageId: string;
+		toPageId: string;
+		context?: string | null;
+		/** Link discriminator. Defaults to 'reference' for the historical
+		 * wikilink case. 'parent_of' / 'child_of' express durable hierarchy
+		 * created by section promotion. */
+		kind?: WikiPageLinkKind;
+	},
 	db: DbClient = defaultDb,
 ): Promise<void> {
 	if (args.fromPageId === args.toPageId) return; // no self-links
@@ -929,6 +987,7 @@ export async function upsertPageLink(
 		.values({
 			from_page_id: args.fromPageId,
 			to_page_id: args.toPageId,
+			kind: args.kind ?? "reference",
 			context: args.context ?? null,
 		})
 		.onConflictDoNothing();
@@ -949,6 +1008,458 @@ export async function listBacklinks(
 		.innerJoin(wikiPages, eq(wikiPageLinks.from_page_id, wikiPages.id))
 		.where(eq(wikiPageLinks.to_page_id, pageId));
 	return rows as any;
+}
+
+// ---------------------------------------------------------------------------
+// Hierarchical aggregation — parent/child, section aggregation, hubness
+// ---------------------------------------------------------------------------
+
+/**
+ * Set a page's parent pointer and mirror it into the page-link graph as
+ * `parent_of` (parent → child) and `child_of` (child → parent). Idempotent:
+ * calling again with the same arguments is a no-op beyond the UPDATE.
+ *
+ * Pass `null` as parentPageId to detach the page from its current parent;
+ * this also removes the hierarchy link rows (but leaves `reference` links
+ * between the same pages untouched, since link uniqueness now includes kind).
+ */
+export async function setParentPage(
+	args: { pageId: string; parentPageId: string | null },
+	db: DbClient = defaultDb,
+): Promise<void> {
+	if (args.pageId === args.parentPageId) {
+		throw new Error("setParentPage: a page cannot be its own parent");
+	}
+	await db.transaction(async (tx) => {
+		const [existing] = await tx
+			.select({ parent_page_id: wikiPages.parent_page_id })
+			.from(wikiPages)
+			.where(eq(wikiPages.id, args.pageId))
+			.limit(1);
+		if (!existing) {
+			throw new Error(`setParentPage: page ${args.pageId} not found`);
+		}
+
+		const previousParent = existing.parent_page_id as string | null;
+
+		await tx
+			.update(wikiPages)
+			.set({
+				parent_page_id: args.parentPageId,
+				updated_at: sql`now()` as any,
+			})
+			.where(eq(wikiPages.id, args.pageId));
+
+		// Remove stale hierarchy links when the parent changes or is cleared.
+		if (previousParent && previousParent !== args.parentPageId) {
+			await tx
+				.delete(wikiPageLinks)
+				.where(
+					and(
+						eq(wikiPageLinks.from_page_id, previousParent),
+						eq(wikiPageLinks.to_page_id, args.pageId),
+						eq(wikiPageLinks.kind, "parent_of"),
+					),
+				);
+			await tx
+				.delete(wikiPageLinks)
+				.where(
+					and(
+						eq(wikiPageLinks.from_page_id, args.pageId),
+						eq(wikiPageLinks.to_page_id, previousParent),
+						eq(wikiPageLinks.kind, "child_of"),
+					),
+				);
+		}
+
+		if (args.parentPageId) {
+			await tx
+				.insert(wikiPageLinks)
+				.values([
+					{
+						from_page_id: args.parentPageId,
+						to_page_id: args.pageId,
+						kind: "parent_of",
+					},
+					{
+						from_page_id: args.pageId,
+						to_page_id: args.parentPageId,
+						kind: "child_of",
+					},
+				])
+				.onConflictDoNothing();
+		}
+	});
+}
+
+/** Read all direct children of a page. */
+export async function listChildPages(
+	parentPageId: string,
+	db: DbClient = defaultDb,
+): Promise<WikiPageRow[]> {
+	const rows = await db
+		.select()
+		.from(wikiPages)
+		.where(eq(wikiPages.parent_page_id, parentPageId));
+	return rows as WikiPageRow[];
+}
+
+/**
+ * Pure merge of a patch into existing section aggregation metadata. Kept
+ * separate so the pure logic is unit-testable without hitting the DB:
+ *   - scalar keys: patch wins, undefined keys keep current
+ *   - array keys (linked_page_ids, observed_tags): dedup after merge;
+ *     patch REPLACES (the planner emits the authoritative list per call)
+ *   - supporting_record_count: patch REPLACES; callers that want to
+ *     accumulate should pass `current + n`
+ */
+export function mergeSectionAggregation(
+	current: SectionAggregation | null,
+	patch: Partial<SectionAggregation>,
+): SectionAggregation {
+	const base = current ?? emptySectionAggregation();
+	return {
+		...base,
+		...patch,
+		linked_page_ids: dedupe(
+			(patch.linked_page_ids ?? base.linked_page_ids) || [],
+		),
+		observed_tags: dedupe((patch.observed_tags ?? base.observed_tags) || []),
+	};
+}
+
+/**
+ * Merge aggregation metadata into a section. Existing keys are overwritten
+ * when provided in `patch`; keys absent from `patch` are preserved. Writing
+ * NULL to the column is explicitly not supported here — callers that want
+ * to clear aggregation should set `promotion_status: "suppressed"` and let
+ * the row keep its history.
+ */
+export async function upsertSectionAggregation(
+	args: { sectionId: string; patch: Partial<SectionAggregation> },
+	db: DbClient = defaultDb,
+): Promise<SectionAggregation> {
+	return db.transaction(async (tx) => {
+		const [row] = await tx
+			.select({ aggregation: wikiPageSections.aggregation })
+			.from(wikiPageSections)
+			.where(eq(wikiPageSections.id, args.sectionId))
+			.limit(1);
+		if (!row) {
+			throw new Error(
+				`upsertSectionAggregation: section ${args.sectionId} not found`,
+			);
+		}
+		const merged = mergeSectionAggregation(
+			row.aggregation as SectionAggregation | null,
+			args.patch,
+		);
+		await tx
+			.update(wikiPageSections)
+			.set({
+				aggregation: merged as any,
+				updated_at: sql`now()` as any,
+			})
+			.where(eq(wikiPageSections.id, args.sectionId));
+		return merged;
+	});
+}
+
+/**
+ * Recompute hubness_score for a page and persist it. Formula is intentionally
+ * narrow — we only need a monotonic ordering, not a precise number:
+ *
+ *     hubness = inbound_reference_links
+ *             + 2 * promoted_child_count
+ *             + floor(avg(section.supporting_record_count) / 10)
+ *
+ * Returns the freshly-written score.
+ */
+export async function recomputeHubness(
+	pageId: string,
+	db: DbClient = defaultDb,
+): Promise<number> {
+	const [inboundRefs] = await db
+		.select({
+			count: sql<number>`count(*)::int`,
+		})
+		.from(wikiPageLinks)
+		.where(
+			and(
+				eq(wikiPageLinks.to_page_id, pageId),
+				eq(wikiPageLinks.kind, "reference"),
+			),
+		);
+
+	const [promotedChildren] = await db
+		.select({
+			count: sql<number>`count(*)::int`,
+		})
+		.from(wikiPages)
+		.where(eq(wikiPages.parent_page_id, pageId));
+
+	const [sectionAvg] = await db
+		.select({
+			avgRecords: sql<number>`coalesce(avg((aggregation->>'supporting_record_count')::int), 0)::float`,
+		})
+		.from(wikiPageSections)
+		.where(eq(wikiPageSections.page_id, pageId));
+
+	const score =
+		(inboundRefs?.count ?? 0) +
+		2 * (promotedChildren?.count ?? 0) +
+		Math.floor((sectionAvg?.avgRecords ?? 0) / 10);
+
+	await db
+		.update(wikiPages)
+		.set({ hubness_score: score, updated_at: sql`now()` as any })
+		.where(eq(wikiPages.id, pageId));
+	return score;
+}
+
+/**
+ * Pages whose sections have been touched since `sinceUpdatedAt` — the input
+ * set for the aggregation pass. Ordered by most-recently-updated first so
+ * callers can clamp to a reasonable window without missing hot pages.
+ */
+export async function listRecentlyChangedPagesForAggregation(
+	args: {
+		tenantId: string;
+		ownerId: string;
+		sinceUpdatedAt: Date | null;
+		limit?: number;
+	},
+	db: DbClient = defaultDb,
+): Promise<WikiPageRow[]> {
+	const limit = Math.max(1, Math.min(args.limit ?? 100, 500));
+	const since = args.sinceUpdatedAt ?? new Date(0);
+	const rows = await db
+		.select()
+		.from(wikiPages)
+		.where(
+			and(
+				eq(wikiPages.tenant_id, args.tenantId),
+				eq(wikiPages.owner_id, args.ownerId),
+				eq(wikiPages.status, "active"),
+				gte(wikiPages.updated_at, since),
+			),
+		)
+		.orderBy(desc(wikiPages.updated_at))
+		.limit(limit);
+	return rows as WikiPageRow[];
+}
+
+/**
+ * Summary of a (tenant, owner) scope's wiki state. Used by the wipe +
+ * rebuild tooling to report before/after counts.
+ */
+export interface WikiScopeCounts {
+	pages: number;
+	sections: number;
+	links: number;
+	aliases: number;
+	unresolved_mentions: number;
+	compile_jobs: number;
+	has_cursor: boolean;
+	/** Pages whose parent_page_id is set — emergent hierarchy count. */
+	pages_with_parent: number;
+	/** Sections whose aggregation.promotion_status is 'promoted'. */
+	sections_promoted: number;
+	/** Sections whose aggregation.promotion_status is 'candidate'. */
+	sections_promotion_candidate: number;
+}
+
+/** Count everything in the scope without reading row bodies. */
+export async function countWikiScope(
+	args: { tenantId: string; ownerId: string },
+	db: DbClient = defaultDb,
+): Promise<WikiScopeCounts> {
+	const [pages] = await db
+		.select({ n: sql<number>`count(*)::int` })
+		.from(wikiPages)
+		.where(
+			and(
+				eq(wikiPages.tenant_id, args.tenantId),
+				eq(wikiPages.owner_id, args.ownerId),
+			),
+		);
+	const [sections] = await db
+		.select({ n: sql<number>`count(*)::int` })
+		.from(wikiPageSections)
+		.innerJoin(wikiPages, eq(wikiPageSections.page_id, wikiPages.id))
+		.where(
+			and(
+				eq(wikiPages.tenant_id, args.tenantId),
+				eq(wikiPages.owner_id, args.ownerId),
+			),
+		);
+	const [links] = await db
+		.select({ n: sql<number>`count(*)::int` })
+		.from(wikiPageLinks)
+		.innerJoin(wikiPages, eq(wikiPageLinks.from_page_id, wikiPages.id))
+		.where(
+			and(
+				eq(wikiPages.tenant_id, args.tenantId),
+				eq(wikiPages.owner_id, args.ownerId),
+			),
+		);
+	const [aliases] = await db
+		.select({ n: sql<number>`count(*)::int` })
+		.from(wikiPageAliases)
+		.innerJoin(wikiPages, eq(wikiPageAliases.page_id, wikiPages.id))
+		.where(
+			and(
+				eq(wikiPages.tenant_id, args.tenantId),
+				eq(wikiPages.owner_id, args.ownerId),
+			),
+		);
+	const [mentions] = await db
+		.select({ n: sql<number>`count(*)::int` })
+		.from(wikiUnresolvedMentions)
+		.where(
+			and(
+				eq(wikiUnresolvedMentions.tenant_id, args.tenantId),
+				eq(wikiUnresolvedMentions.owner_id, args.ownerId),
+			),
+		);
+	const [jobs] = await db
+		.select({ n: sql<number>`count(*)::int` })
+		.from(wikiCompileJobs)
+		.where(
+			and(
+				eq(wikiCompileJobs.tenant_id, args.tenantId),
+				eq(wikiCompileJobs.owner_id, args.ownerId),
+			),
+		);
+	const [cursor] = await db
+		.select({ n: sql<number>`count(*)::int` })
+		.from(wikiCompileCursors)
+		.where(
+			and(
+				eq(wikiCompileCursors.tenant_id, args.tenantId),
+				eq(wikiCompileCursors.owner_id, args.ownerId),
+			),
+		);
+	const [pagesWithParent] = await db
+		.select({ n: sql<number>`count(*)::int` })
+		.from(wikiPages)
+		.where(
+			and(
+				eq(wikiPages.tenant_id, args.tenantId),
+				eq(wikiPages.owner_id, args.ownerId),
+				sql`${wikiPages.parent_page_id} is not null`,
+			),
+		);
+	const [sectionsPromoted] = await db
+		.select({ n: sql<number>`count(*)::int` })
+		.from(wikiPageSections)
+		.innerJoin(wikiPages, eq(wikiPageSections.page_id, wikiPages.id))
+		.where(
+			and(
+				eq(wikiPages.tenant_id, args.tenantId),
+				eq(wikiPages.owner_id, args.ownerId),
+				sql`${wikiPageSections.aggregation}->>'promotion_status' = 'promoted'`,
+			),
+		);
+	const [sectionsCandidate] = await db
+		.select({ n: sql<number>`count(*)::int` })
+		.from(wikiPageSections)
+		.innerJoin(wikiPages, eq(wikiPageSections.page_id, wikiPages.id))
+		.where(
+			and(
+				eq(wikiPages.tenant_id, args.tenantId),
+				eq(wikiPages.owner_id, args.ownerId),
+				sql`${wikiPageSections.aggregation}->>'promotion_status' = 'candidate'`,
+			),
+		);
+
+	return {
+		pages: pages?.n ?? 0,
+		sections: sections?.n ?? 0,
+		links: links?.n ?? 0,
+		aliases: aliases?.n ?? 0,
+		unresolved_mentions: mentions?.n ?? 0,
+		compile_jobs: jobs?.n ?? 0,
+		has_cursor: (cursor?.n ?? 0) > 0,
+		pages_with_parent: pagesWithParent?.n ?? 0,
+		sections_promoted: sectionsPromoted?.n ?? 0,
+		sections_promotion_candidate: sectionsCandidate?.n ?? 0,
+	};
+}
+
+/**
+ * Delete every compiled wiki row for a single (tenant, owner) scope.
+ *
+ * DESTRUCTIVE. Intended for the wipe-and-rebuild path: purge compiled rows
+ * so a subsequent `bootstrapJournalImport` rebuilds from canonical memory.
+ * Canonical memory (Hindsight) is NOT touched — only this compiled store.
+ *
+ * Runs inside a transaction; if any DELETE fails, nothing is committed.
+ * Cascades on `wiki_pages` handle sections / links / aliases / section-
+ * sources automatically (see FK definitions in the schema). Unresolved
+ * mentions and compile jobs/cursor are scoped directly.
+ */
+export async function wipeWikiScope(
+	args: { tenantId: string; ownerId: string },
+	db: DbClient = defaultDb,
+): Promise<{
+	before: WikiScopeCounts;
+	after: WikiScopeCounts;
+}> {
+	if (!args.tenantId || !args.ownerId) {
+		throw new Error(
+			"wipeWikiScope: tenantId and ownerId are both required — refusing to wipe unscoped",
+		);
+	}
+	const before = await countWikiScope(args, db);
+	await db.transaction(async (tx) => {
+		// Cascades delete sections / links / aliases / section_sources.
+		await tx
+			.delete(wikiPages)
+			.where(
+				and(
+					eq(wikiPages.tenant_id, args.tenantId),
+					eq(wikiPages.owner_id, args.ownerId),
+				),
+			);
+		await tx
+			.delete(wikiUnresolvedMentions)
+			.where(
+				and(
+					eq(wikiUnresolvedMentions.tenant_id, args.tenantId),
+					eq(wikiUnresolvedMentions.owner_id, args.ownerId),
+				),
+			);
+		await tx
+			.delete(wikiCompileJobs)
+			.where(
+				and(
+					eq(wikiCompileJobs.tenant_id, args.tenantId),
+					eq(wikiCompileJobs.owner_id, args.ownerId),
+				),
+			);
+		await tx
+			.delete(wikiCompileCursors)
+			.where(
+				and(
+					eq(wikiCompileCursors.tenant_id, args.tenantId),
+					eq(wikiCompileCursors.owner_id, args.ownerId),
+				),
+			);
+	});
+	const after = await countWikiScope(args, db);
+	return { before, after };
+}
+
+function dedupe<T>(items: T[]): T[] {
+	const seen = new Set<T>();
+	const out: T[] = [];
+	for (const x of items) {
+		if (seen.has(x)) continue;
+		seen.add(x);
+		out.push(x);
+	}
+	return out;
 }
 
 // ---------------------------------------------------------------------------
