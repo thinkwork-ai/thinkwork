@@ -1,9 +1,11 @@
-import React, { useEffect } from "react";
-import { FlatList, RefreshControl, View } from "react-native";
+import React, { useCallback, useEffect } from "react";
+import { RefreshControl, View } from "react-native";
+import { FlashList } from "@shopify/flash-list";
+import { useRouter } from "expo-router";
 import { Search } from "lucide-react-native";
 import { IconBrain } from "@tabler/icons-react-native";
 import { Muted } from "@/components/ui/typography";
-import { useMobileMemorySearch } from "@thinkwork/react-native-sdk";
+import { useMobileMemorySearch, type WikiSearchHit } from "@thinkwork/react-native-sdk";
 import { COLORS } from "@/lib/theme";
 import { WikiResultRow } from "./WikiResultRow";
 
@@ -11,14 +13,11 @@ interface CapturesListProps {
 	tenantId: string | null | undefined;
 	ownerId: string | null | undefined;
 	colors: (typeof COLORS)["dark"];
-	/**
-	 * Debounced search query. Empty → "search your memories" empty state.
-	 * Non-empty → wikiSearch hits scoped to (tenantId, ownerId).
-	 */
 	searchQuery?: string;
 }
 
 export function CapturesList({ tenantId, ownerId, colors, searchQuery }: CapturesListProps) {
+	const router = useRouter();
 	const trimmedQuery = (searchQuery || "").trim();
 	const isSearching = trimmedQuery.length > 0;
 
@@ -35,6 +34,13 @@ export function CapturesList({ tenantId, ownerId, colors, searchQuery }: Capture
 			error,
 		);
 	}, [error, trimmedQuery, tenantId, ownerId]);
+
+	const handlePress = useCallback(
+		(hit: WikiSearchHit) => {
+			router.push(`/wiki/${encodeURIComponent(hit.type)}/${encodeURIComponent(hit.slug)}`);
+		},
+		[router],
+	);
 
 	if (!isSearching) {
 		return (
@@ -57,10 +63,15 @@ export function CapturesList({ tenantId, ownerId, colors, searchQuery }: Capture
 	}
 
 	return (
-		<FlatList
+		<FlashList
 			data={results}
 			keyExtractor={(hit) => hit.id}
-			renderItem={({ item }) => <WikiResultRow hit={item} colors={colors} />}
+			renderItem={({ item }) => (
+				<WikiResultRow hit={item} colors={colors} onPress={handlePress} />
+			)}
+			ItemSeparatorComponent={() => (
+				<View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: 16 }} />
+			)}
 			refreshControl={
 				<RefreshControl
 					refreshing={loading}
