@@ -26,6 +26,17 @@ const REGION = process.env.AWS_REGION || "us-east-1";
 const DEFAULT_MODEL_ID =
 	process.env.BEDROCK_MODEL_ID || "openai.gpt-oss-120b-1:0";
 
+/**
+ * Known per-model hard caps for the Bedrock Converse `maxTokens` input.
+ * Callers (planner, aggregation planner) request generous caps for large
+ * JSON payloads; we clamp to the model's real limit so small-output models
+ * like Nova Micro don't reject the request outright. Missing entries mean
+ * "no cap needed" — the request goes through as-is.
+ */
+const MODEL_MAX_OUTPUT_TOKENS: Record<string, number> = {
+	"amazon.nova-micro-v1:0": 5000,
+};
+
 // Shared singleton — Lambda reuses the same client across invocations.
 let _client: BedrockRuntimeClient | null = null;
 function getClient(): BedrockRuntimeClient {
@@ -77,6 +88,12 @@ export async function invokeClaude(
 	args: InvokeClaudeArgs,
 ): Promise<InvokeClaudeResult> {
 	const modelId = args.modelId || DEFAULT_MODEL_ID;
+	const requestedMax = args.maxTokens ?? 4096;
+	const modelCap = MODEL_MAX_OUTPUT_TOKENS[modelId];
+	const maxTokens = modelCap
+		? Math.min(requestedMax, modelCap)
+		: requestedMax;
+
 	const messages: Message[] = [
 		{ role: "user", content: [{ text: args.user } as ContentBlock] },
 	];
@@ -90,7 +107,7 @@ export async function invokeClaude(
 				? [{ text: args.system } as SystemContentBlock]
 				: undefined,
 			inferenceConfig: {
-				maxTokens: args.maxTokens ?? 4096,
+				maxTokens,
 				temperature: args.temperature ?? 0,
 			},
 		}),
