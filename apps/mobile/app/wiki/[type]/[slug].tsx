@@ -1,6 +1,7 @@
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import type { Router } from "expo-router";
 import Markdown from "react-native-markdown-display";
 import { useColorScheme } from "nativewind";
 import { useAuth } from "@/lib/auth-context";
@@ -12,6 +13,63 @@ import {
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { Text, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
+
+/**
+ * Intercept markdown link taps inside a wiki body. Rollup sections are
+ * rendered as `[**Title**](/wiki/<type>/<slug>) — summary`; tapping one
+ * should route to that page inside the app, not hit the external Linking
+ * handler. Returns `false` to tell react-native-markdown-display to stop
+ * its default behaviour once we've handled the link.
+ *
+ * Links that don't match `/wiki/<type>/<slug>` (plain http links, mailto,
+ * etc.) fall through — return `true` to let the renderer open them via
+ * the OS Linking API as usual.
+ *
+ * The api writes page types in lowercase (`entity`); the mobile router
+ * expects uppercase (`ENTITY`). We normalise here so the bodies don't
+ * have to track that.
+ */
+function buildWikiLinkHandler(
+	router: Router,
+	ownerId: string | undefined,
+): (url: string) => boolean {
+	return (url: string): boolean => {
+		const path = extractWikiPath(url);
+		if (!path) return true; // not a wiki link; let Linking handle it
+		const route = `/wiki/${encodeURIComponent(path.type)}/${encodeURIComponent(path.slug)}`;
+		router.push(ownerId ? `${route}?agentId=${encodeURIComponent(ownerId)}` : route);
+		return false;
+	};
+}
+
+function extractWikiPath(
+	url: string,
+): { type: string; slug: string } | null {
+	// Accept both relative `/wiki/…` paths and absolute URLs pointing at any
+	// host. Anything not shaped like `/wiki/<type>/<slug>` falls through.
+	let pathOnly = url;
+	try {
+		// Absolute URL (has a scheme)
+		const parsed = new URL(url);
+		pathOnly = parsed.pathname;
+	} catch {
+		// Not a valid URL — treat as a path.
+	}
+	const m = pathOnly.match(/^\/wiki\/([^/]+)\/([^/?#]+)/);
+	if (!m) return null;
+	const typeRaw = decodeURIComponent(m[1] ?? "").toLowerCase();
+	const slug = decodeURIComponent(m[2] ?? "");
+	const type =
+		typeRaw === "entity"
+			? "ENTITY"
+			: typeRaw === "topic"
+				? "TOPIC"
+				: typeRaw === "decision"
+					? "DECISION"
+					: null;
+	if (!type || !slug) return null;
+	return { type, slug };
+}
 
 const TYPE_LABELS: Record<WikiPageType, string> = {
 	ENTITY: "Entity",
@@ -45,6 +103,11 @@ export default function WikiPageScreen() {
 		[colors, isDark],
 	);
 
+	const onLinkPress = useCallback(
+		(url: string) => buildWikiLinkHandler(router, ownerId)(url),
+		[router, ownerId],
+	);
+
 	const headerTitle = page?.title || (loading ? "Loading..." : "Not found");
 
 	return (
@@ -60,7 +123,7 @@ export default function WikiPageScreen() {
 					</View>
 				) : !page ? (
 					<View className="items-center justify-center py-10 px-6">
-						<Muted>This wiki page couldn't be loaded.</Muted>
+						<Muted>This memory couldn't be loaded.</Muted>
 					</View>
 				) : (
 					<View style={{ paddingHorizontal: 24, paddingTop: 16, gap: 20 }}>
@@ -110,7 +173,9 @@ export default function WikiPageScreen() {
 								>
 									{section.heading}
 								</Text>
-								<Markdown style={markdownStyles}>{section.bodyMd}</Markdown>
+								<Markdown style={markdownStyles} onLinkPress={onLinkPress}>
+									{section.bodyMd}
+								</Markdown>
 							</View>
 						))}
 
