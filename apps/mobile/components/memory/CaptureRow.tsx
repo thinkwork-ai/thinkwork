@@ -1,18 +1,15 @@
 import React from "react";
-import { Alert, ActivityIndicator, Pressable, View } from "react-native";
-import { CloudOff, AlertCircle } from "lucide-react-native";
+import { Pressable, View } from "react-native";
 import { Text, Muted } from "@/components/ui/typography";
 import { Badge } from "@/components/ui/badge";
 import { COLORS } from "@/lib/theme";
-import type { CaptureQueueStatus } from "@/lib/offline/capture-queue";
 
 export type CaptureRowItem = {
-	id: string;                 // synced Hindsight id OR clientCaptureId for local-only
-	clientCaptureId?: string;   // present when row has a local queue entry
+	id: string;
 	content: string;
 	factType: "FACT" | "PREFERENCE" | "EXPERIENCE" | "OBSERVATION";
-	capturedAt: string;         // ISO 8601
-	status: CaptureQueueStatus; // "synced" for server-only rows
+	capturedAt: string;
+	status: "synced";
 };
 
 const FACT_TYPE_LABELS: Record<CaptureRowItem["factType"], string> = {
@@ -25,35 +22,12 @@ const FACT_TYPE_LABELS: Record<CaptureRowItem["factType"], string> = {
 interface CaptureRowProps {
 	item: CaptureRowItem;
 	colors: (typeof COLORS)["dark"];
-	onRetry?: (clientCaptureId: string) => void;
-	onDelete?: (item: CaptureRowItem) => void;
 }
 
-export function CaptureRow({ item, colors, onRetry, onDelete }: CaptureRowProps) {
+export function CaptureRow({ item, colors }: CaptureRowProps) {
 	const relativeTime = formatRelative(item.capturedAt);
-
-	const handleLongPress = () => {
-		if (!onDelete) return;
-		Alert.alert(
-			"Delete this memory?",
-			item.content.length > 80 ? `${item.content.slice(0, 80)}…` : item.content,
-			[
-				{ text: "Cancel", style: "cancel" },
-				{ text: "Delete", style: "destructive", onPress: () => onDelete(item) },
-			],
-		);
-	};
-
-	const handlePress = () => {
-		if (item.status === "failed" && item.clientCaptureId && onRetry) {
-			onRetry(item.clientCaptureId);
-		}
-	};
-
 	return (
 		<Pressable
-			onPress={handlePress}
-			onLongPress={handleLongPress}
 			style={({ pressed }) => ({
 				paddingHorizontal: 16,
 				paddingVertical: 12,
@@ -78,28 +52,8 @@ export function CaptureRow({ item, colors, onRetry, onDelete }: CaptureRowProps)
 					<Muted style={{ fontSize: 12 }}>{relativeTime}</Muted>
 				</View>
 			</View>
-			<StatusIndicator status={item.status} colors={colors} />
 		</Pressable>
 	);
-}
-
-function StatusIndicator({
-	status,
-	colors,
-}: {
-	status: CaptureQueueStatus;
-	colors: (typeof COLORS)["dark"];
-}) {
-	if (status === "saving") {
-		return <ActivityIndicator size="small" color={colors.mutedForeground} />;
-	}
-	if (status === "sync_pending") {
-		return <CloudOff size={16} color={colors.mutedForeground} />;
-	}
-	if (status === "failed") {
-		return <AlertCircle size={16} color={colors.destructive} />;
-	}
-	return null;
 }
 
 function formatRelative(iso: string): string {
