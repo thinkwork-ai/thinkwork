@@ -14,8 +14,45 @@ import {
 	emptySectionAggregation,
 	isValidUuid,
 	mergeSectionAggregation,
+	stripWikilinks,
 	type SectionAggregation,
 } from "../lib/wiki/repository.js";
+
+describe("stripWikilinks", () => {
+	it("returns empty string for null/undefined", () => {
+		expect(stripWikilinks(null)).toBe("");
+		expect(stripWikilinks(undefined)).toBe("");
+		expect(stripWikilinks("")).toBe("");
+	});
+
+	it("unwraps simple [[Title]] brackets", () => {
+		expect(stripWikilinks("Visit [[Austin]] for BBQ.")).toBe(
+			"Visit Austin for BBQ.",
+		);
+	});
+
+	it("handles [[Title|Display]] piped form", () => {
+		expect(stripWikilinks("See [[Tom's Dive & Swim|the camp]] listing.")).toBe(
+			"See the camp listing.",
+		);
+	});
+
+	it("unwraps multiple brackets in one body", () => {
+		expect(
+			stripWikilinks(
+				"- [[Tom's Dive & Swim]] – 10-week camp for 4-year-olds\n- [[Goldfish Swim School]] – Jump Start Clinics",
+			),
+		).toBe(
+			"- Tom's Dive & Swim – 10-week camp for 4-year-olds\n- Goldfish Swim School – Jump Start Clinics",
+		);
+	});
+
+	it("leaves plain markdown links alone", () => {
+		expect(stripWikilinks("See [the docs](https://example.com)")).toBe(
+			"See [the docs](https://example.com)",
+		);
+	});
+});
 
 describe("isValidUuid", () => {
 	it("accepts canonical RFC 4122 UUIDs", () => {
