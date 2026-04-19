@@ -215,14 +215,26 @@ export async function runCompileJob(
 			metrics.input_tokens += plan.usage.inputTokens;
 			metrics.output_tokens += plan.usage.outputTokens;
 
-			// Pre-compute the list of titles the section writer should linkify.
-			// Includes pages that already exist in scope AND any brand-new pages
-			// this batch is about to create — so prose on page X can reference
-			// page Y even when both land in the same planner response.
-			const knownPageTitles = [
-				...candidatePages.map((p) => p.title),
-				...plan.newPages.map((p) => p.title),
+			// Pre-compute title + type + slug for every page that could be
+			// referenced in a newPage / updated section's body. Two consumers:
+			//   1. knownPageTitles — titles only, fed to the section writer.
+			//   2. knownPageRefs — full (type, slug, title) triples, used by
+			//      linkifyKnownEntities to wrap `**Title**` mentions in real
+			//      markdown links so leaf-planner topic bodies are navigable,
+			//      not dumb lists.
+			const knownPageRefs = [
+				...candidatePages.map((p) => ({
+					type: p.type,
+					slug: p.slug,
+					title: p.title,
+				})),
+				...plan.newPages.map((p) => ({
+					type: p.type,
+					slug: p.slug,
+					title: p.title,
+				})),
 			];
+			const knownPageTitles = knownPageRefs.map((r) => r.title);
 			const capHit = await applyPlan({
 				job,
 				records,
@@ -230,6 +242,7 @@ export async function runCompileJob(
 				metrics,
 				modelId: opts.modelId,
 				knownPageTitles,
+				knownPageRefs,
 			});
 
 			// Advance cursor only after a clean apply.
@@ -330,6 +343,8 @@ interface ApplyPlanArgs {
 	modelId?: string;
 	/** Titles of scope-active pages the section writer should linkify. */
 	knownPageTitles?: string[];
+	/** (type, slug, title) of every scope-active page — drives linkifyKnown. */
+	knownPageRefs?: Array<{ type: WikiPageType; slug: string; title: string }>;
 }
 
 /**
@@ -411,7 +426,10 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			sectionsToApply.push({
 				section_slug: sec.slug,
 				heading: existingSec?.heading ?? formatHeadingFromSlug(sec.slug),
-				body_md: writeRes.body_md,
+				body_md: linkifyKnownEntities(
+					writeRes.body_md,
+					args.knownPageRefs ?? [],
+				),
 				position:
 					existingSec?.position ??
 					nextFreePosition(existingSections),
@@ -467,7 +485,10 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 				return {
 					section_slug: s.slug,
 					heading: s.heading,
-					body_md: s.body_md,
+					body_md: linkifyKnownEntities(
+						s.body_md,
+						args.knownPageRefs ?? [],
+					),
 					position: i + 1,
 					sources: sectionSources.map((r) => ({
 						kind: "memory_unit" as const,
@@ -521,7 +542,10 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 				return {
 					section_slug: s.slug,
 					heading: s.heading,
-					body_md: s.body_md,
+					body_md: linkifyKnownEntities(
+						s.body_md,
+						args.knownPageRefs ?? [],
+					),
 					position: i + 1,
 					sources: sectionSources.map((r) => ({
 						kind: "memory_unit" as const,
@@ -648,10 +672,19 @@ export async function runAggregationPass(args: AggregationArgs): Promise<void> {
 	metrics.aggregation_output_tokens =
 		(metrics.aggregation_output_tokens ?? 0) + plan.usage.outputTokens;
 
-	const knownPageTitles = [
-		...candidatePages.map((p) => p.title),
-		...plan.newPages.map((p) => p.title),
+	const knownPageRefs = [
+		...candidatePages.map((p) => ({
+			type: p.type,
+			slug: p.slug,
+			title: p.title,
+		})),
+		...plan.newPages.map((p) => ({
+			type: p.type,
+			slug: p.slug,
+			title: p.title,
+		})),
 	];
+	const knownPageTitles = knownPageRefs.map((r) => r.title);
 	await applyAggregationPlan({
 		job,
 		records,
@@ -659,6 +692,7 @@ export async function runAggregationPass(args: AggregationArgs): Promise<void> {
 		metrics,
 		modelId,
 		knownPageTitles,
+		knownPageRefs,
 	});
 }
 
@@ -742,12 +776,21 @@ interface ApplyAggregationArgs {
 	metrics: RunJobResult["metrics"];
 	modelId?: string;
 	knownPageTitles?: string[];
+	knownPageRefs?: Array<{ type: WikiPageType; slug: string; title: string }>;
 }
 
 async function applyAggregationPlan(
 	args: ApplyAggregationArgs,
 ): Promise<void> {
-	const { job, records, plan, metrics, modelId, knownPageTitles } = args;
+	const {
+		job,
+		records,
+		plan,
+		metrics,
+		modelId,
+		knownPageTitles,
+		knownPageRefs,
+	} = args;
 	const recordById = new Map(records.map((r) => [r.id, r]));
 
 	// Track pages touched by this pass so we can recompute hubness at the end.
@@ -783,7 +826,10 @@ async function applyAggregationPlan(
 				return {
 					section_slug: s.slug,
 					heading: s.heading,
-					body_md: s.body_md,
+					body_md: linkifyKnownEntities(
+						s.body_md,
+						knownPageRefs ?? [],
+					),
 					position: i + 1,
 					sources: sectionSources.map((r) => ({
 						kind: "memory_unit" as const,
@@ -1018,7 +1064,10 @@ async function applyAggregationPlan(
 				return {
 					section_slug: s.slug,
 					heading: s.heading,
-					body_md: s.body_md,
+					body_md: linkifyKnownEntities(
+						s.body_md,
+						knownPageRefs ?? [],
+					),
 					position: i + 1,
 					sources: sectionSources.map((r) => ({
 						kind: "memory_unit" as const,
@@ -1046,11 +1095,12 @@ async function applyAggregationPlan(
 		const highlights = promo.topHighlights
 			.map((h) => `- ${h.replace(/^[-•\s]+/, "")}`)
 			.join("\n");
+		const promotedHref = `/wiki/${encodeURIComponent(promo.newPage.type)}/${encodeURIComponent(newSlug)}`;
 		const newParentBody =
 			[
 				promo.parentSummary.trim(),
 				highlights,
-				`See: [[${promo.newPage.title}]]`,
+				`See: [${promo.newPage.title}](${promotedHref})`,
 			]
 				.filter((x) => x && x.length > 0)
 				.join("\n\n") + "\n";
@@ -1193,6 +1243,53 @@ function renderRollupList(
 			return `- [**${c.title}**](${href})${tail}`;
 		})
 		.join("\n");
+}
+
+/**
+ * Wrap `**Title**` mentions in body markdown with real markdown links
+ * pointing at /wiki/<type>/<slug>. Turns leaf-planner-authored bulleted
+ * lists (e.g. 2026 Orders showing "- **Order vqod414y** – ...") into
+ * clickable rollups without requiring the aggregation pass to touch
+ * them.
+ *
+ * Rules:
+ * - Only rewrites `**Title**` where Title matches a known page's title
+ *   exactly. Case-sensitive; partial matches are skipped.
+ * - Longer titles are replaced before shorter ones so "Austin Nature
+ *   & Science Center" doesn't get shadowed by a bare "Austin".
+ * - Leaves existing `[**Title**](url)` patterns alone — the negative
+ *   lookbehind / lookahead ensures we don't double-wrap anything the
+ *   aggregation-pass already rendered.
+ */
+export function linkifyKnownEntities(
+	body: string | null | undefined,
+	refs: Array<{ type: WikiPageType; slug: string; title: string }>,
+): string {
+	if (!body) return "";
+	if (refs.length === 0) return body;
+	// Longest-first so nested / prefix titles don't clobber the full match.
+	const sorted = [...refs].sort((a, b) => b.title.length - a.title.length);
+	let out = body;
+	for (const ref of sorted) {
+		if (!ref.title) continue;
+		const escaped = escapeRegExp(ref.title);
+		const href = `/wiki/${encodeURIComponent(ref.type)}/${encodeURIComponent(ref.slug)}`;
+		// Match **Title** that isn't already inside a markdown link.
+		// `(?<!\[)` — not preceded by `[`
+		// `(?!\]\()` after the closing `**` — not followed by `](` (i.e.
+		// already in a markdown link). This keeps the swap idempotent
+		// when a body gets re-compiled.
+		const pattern = new RegExp(
+			`(?<!\\[)\\*\\*${escaped}\\*\\*(?!\\]\\()`,
+			"g",
+		);
+		out = out.replace(pattern, `[**${ref.title}**](${href})`);
+	}
+	return out;
+}
+
+function escapeRegExp(s: string): string {
+	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function firstSentenceOf(s: string | null): string {

@@ -17,6 +17,77 @@ import {
 	stripWikilinks,
 	type SectionAggregation,
 } from "../lib/wiki/repository.js";
+import { linkifyKnownEntities } from "../lib/wiki/compiler.js";
+
+describe("linkifyKnownEntities", () => {
+	const refs = [
+		{ type: "entity" as const, slug: "austin", title: "Austin" },
+		{
+			type: "entity" as const,
+			slug: "austin-nature-science-center",
+			title: "Austin Nature & Science Center",
+		},
+		{
+			type: "entity" as const,
+			slug: "order-vqod414y",
+			title: "Order vqod414y",
+		},
+	];
+
+	it("wraps bolded known titles in markdown links", () => {
+		const body = "- **Order vqod414y** – from FILM FLEET LLC";
+		expect(linkifyKnownEntities(body, refs)).toBe(
+			"- [**Order vqod414y**](/wiki/entity/order-vqod414y) – from FILM FLEET LLC",
+		);
+	});
+
+	it("prefers longer title matches over shorter prefixes", () => {
+		const body = "Visit **Austin Nature & Science Center** and **Austin**.";
+		const out = linkifyKnownEntities(body, refs);
+		expect(out).toContain(
+			"[**Austin Nature & Science Center**](/wiki/entity/austin-nature-science-center)",
+		);
+		expect(out).toContain("[**Austin**](/wiki/entity/austin)");
+		// The longer title should have replaced first; the embedded "Austin"
+		// inside it must NOT have been double-linked.
+		expect(out).not.toContain("[**Austin**](/wiki/entity/austin) Nature");
+	});
+
+	it("leaves untitled or unknown bold mentions alone", () => {
+		const body = "- **Unknown Thing** — not in scope";
+		expect(linkifyKnownEntities(body, refs)).toBe(body);
+	});
+
+	it("is idempotent — already-linked mentions stay linked once", () => {
+		const once = linkifyKnownEntities("**Austin**", refs);
+		const twice = linkifyKnownEntities(once, refs);
+		expect(twice).toBe(once);
+	});
+
+	it("returns empty string on null/undefined body", () => {
+		expect(linkifyKnownEntities(null, refs)).toBe("");
+		expect(linkifyKnownEntities(undefined, refs)).toBe("");
+	});
+
+	it("returns body unchanged when refs is empty", () => {
+		const body = "- **Austin** — not linked";
+		expect(linkifyKnownEntities(body, [])).toBe(body);
+	});
+
+	it("escapes regex metacharacters in titles", () => {
+		const tricky = [
+			{
+				type: "entity" as const,
+				slug: "johnson-s",
+				title: "Johnson's (Grocery)",
+			},
+		];
+		const body = "Went to **Johnson's (Grocery)** yesterday.";
+		expect(linkifyKnownEntities(body, tricky)).toBe(
+			"Went to [**Johnson's (Grocery)**](/wiki/entity/johnson-s) yesterday.",
+		);
+	});
+});
 
 describe("stripWikilinks", () => {
 	it("returns empty string for null/undefined", () => {
