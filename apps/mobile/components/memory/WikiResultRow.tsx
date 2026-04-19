@@ -1,14 +1,14 @@
 import React from "react";
 import { Pressable, View } from "react-native";
-import { ChevronRight, Building2, Lightbulb, CheckCircle2, type LucideIcon } from "lucide-react-native";
+import { ChevronRight, AtSign, Lightbulb, BookOpen, type LucideIcon } from "lucide-react-native";
 import { Text, Muted } from "@/components/ui/typography";
 import type { WikiSearchHit } from "@thinkwork/react-native-sdk";
 import type { COLORS } from "@/lib/theme";
 
 const TYPE_CONFIG: Record<WikiSearchHit["type"], { label: string; icon: LucideIcon; bg: string; fg: string }> = {
-	ENTITY:   { label: "ENTITY",   icon: Building2,    bg: "rgba(14,165,233,0.15)",  fg: "#0ea5e9" },
-	TOPIC:    { label: "TOPIC",    icon: Lightbulb,    bg: "rgba(245,158,11,0.15)",  fg: "#f59e0b" },
-	DECISION: { label: "DECISION", icon: CheckCircle2, bg: "rgba(139,92,246,0.15)",  fg: "#8b5cf6" },
+	ENTITY:   { label: "ENTITY",   icon: AtSign,   bg: "rgba(14,165,233,0.15)",  fg: "#0ea5e9" },
+	TOPIC:    { label: "TOPIC",    icon: BookOpen,  bg: "rgba(139,92,246,0.15)",  fg: "#8b5cf6" },
+	DECISION: { label: "DECISION", icon: Lightbulb, bg: "rgba(245,158,11,0.15)",  fg: "#f59e0b" },
 };
 
 function formatRelativeTime(dateStr: string | null | undefined): string {
