@@ -48,6 +48,8 @@ import {
 import { slugifyTitle, seedAliasesForTitle } from "./aliases.js";
 import {
 	deriveParentCandidates,
+	deriveParentCandidatesFromPageSummaries,
+	mergeParentCandidates,
 	type DerivedParentCandidate,
 } from "./parent-expander.js";
 import {
@@ -592,17 +594,33 @@ interface AggregationArgs {
 export async function runAggregationPass(args: AggregationArgs): Promise<void> {
 	const { job, records, metrics, modelId } = args;
 
-	const parentCandidates = deriveParentCandidates(records);
-	metrics.deterministic_parents_derived = parentCandidates.length;
-
+	// Load recent pages first — we want their summaries to feed the
+	// page-summary-based parent expander, not just the current batch's
+	// raw records. Without this, `deterministic_parents_derived` was
+	// always 0 on real agent data: cities like Toronto / Austin spread
+	// across many compile batches so no single batch ever hit
+	// `minClusterSize`, but the scope as a whole clearly clusters.
 	const recentPages = await listRecentlyChangedPagesForAggregation({
 		tenantId: job.tenant_id,
 		ownerId: job.owner_id,
-		// Use a wider window than just this job's start so we catch pages
-		// still warm from the prior compile but not yet reorganized.
 		sinceUpdatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24),
 		limit: MAX_AGGREGATION_PAGES,
 	});
+
+	const recordBasedCandidates = deriveParentCandidates(records);
+	const pageBasedCandidates = deriveParentCandidatesFromPageSummaries(
+		recentPages.map((p) => ({
+			id: p.id,
+			summary: p.summary,
+			title: p.title,
+			tags: p.tags ?? [],
+		})),
+	);
+	const parentCandidates = mergeParentCandidates(
+		recordBasedCandidates,
+		pageBasedCandidates,
+	);
+	metrics.deterministic_parents_derived = parentCandidates.length;
 
 	if (recentPages.length === 0 && parentCandidates.length === 0) {
 		return;

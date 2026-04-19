@@ -31,13 +31,13 @@ describe("scorePromotion", () => {
 		expect(r.status).toBe("promote_ready");
 	});
 
-	it("flags 'candidate' once the composite crosses 0.55", () => {
+	it("flags 'candidate' once the composite lands between the two thresholds", () => {
 		const r = scorePromotion({
-			linkedPageCount: 12,
-			supportingRecordCount: 18,
-			temporalSpreadDays: 20,
-			coherence: 0.5,
-			bodyLength: 1200,
+			linkedPageCount: 10,
+			supportingRecordCount: 12,
+			temporalSpreadDays: 18,
+			coherence: 0.3,
+			bodyLength: 900,
 		});
 		expect(r.score).toBeGreaterThanOrEqual(
 			DEFAULT_PROMOTION_THRESHOLDS.candidate,
