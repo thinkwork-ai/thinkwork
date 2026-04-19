@@ -42,6 +42,7 @@ export function useRecentWikiPages({ agentId, limit }: UseRecentWikiPagesArgs) {
     title: p.title,
     summary: p.summary,
     lastCompiledAt: p.lastCompiledAt,
+    updatedAt: p.updatedAt,
     score: 0,
     matchedAlias: null,
     matchingMemoryIds: [],
