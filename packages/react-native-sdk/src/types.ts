@@ -161,4 +161,9 @@ export interface WikiSearchHit {
   lastCompiledAt?: string | null;
   score: number;
   matchedAlias?: string | null;
+  /**
+   * Source memory unit ids whose Hindsight recall hits caused this page
+   * to rank. Present for mobileWikiSearch; empty elsewhere.
+   */
+  matchingMemoryIds?: string[];
 }

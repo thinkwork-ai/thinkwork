@@ -10,30 +10,28 @@ import { COLORS } from "@/lib/theme";
 import { WikiResultRow } from "./WikiResultRow";
 
 interface CapturesListProps {
-	tenantId: string | null | undefined;
-	ownerId: string | null | undefined;
+	agentId: string | null | undefined;
 	colors: (typeof COLORS)["dark"];
 	searchQuery?: string;
 }
 
-export function CapturesList({ tenantId, ownerId, colors, searchQuery }: CapturesListProps) {
+export function CapturesList({ agentId, colors, searchQuery }: CapturesListProps) {
 	const router = useRouter();
 	const trimmedQuery = (searchQuery || "").trim();
 	const isSearching = trimmedQuery.length > 0;
 
 	const { results, loading, error, refetch } = useMobileMemorySearch({
-		tenantId,
-		ownerId,
+		agentId,
 		query: trimmedQuery,
 	});
 
 	useEffect(() => {
 		if (!error) return;
 		console.warn(
-			`[CapturesList] wikiSearch error query=${JSON.stringify(trimmedQuery)} tenantId=${tenantId} ownerId=${ownerId} error=${error.message}`,
+			`[CapturesList] mobileWikiSearch error query=${JSON.stringify(trimmedQuery)} agentId=${agentId} error=${error.message}`,
 			error,
 		);
-	}, [error, trimmedQuery, tenantId, ownerId]);
+	}, [error, trimmedQuery, agentId]);
 
 	const handlePress = useCallback(
 		(hit: WikiSearchHit) => {
