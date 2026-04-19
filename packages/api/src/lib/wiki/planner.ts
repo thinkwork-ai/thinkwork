@@ -311,7 +311,11 @@ export async function runPlanner(
 	const resp = await invokeClaude({
 		system: PLANNER_SYSTEM,
 		user,
-		maxTokens: 8192,
+		// Planner output grows with batch complexity + link proposals + per-
+		// section source_refs. 8k was tight enough to truncate on 50-record
+		// batches with 20+ new pages; 24k gives comfortable headroom without
+		// changing models. Haiku 4.5 supports up to 32k output tokens.
+		maxTokens: 24000,
 		temperature: 0,
 		modelId: opts.modelId,
 		signal: opts.signal,
