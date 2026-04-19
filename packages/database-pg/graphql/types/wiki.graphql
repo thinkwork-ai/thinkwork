@@ -108,6 +108,14 @@ extend type Query {
   wikiBacklinks(pageId: ID!): [WikiPage!]!
 
   """
+  Pages this page links OUT to — the "Connected Pages" surface. Mirrors
+  wikiBacklinks in the opposite direction; reads wiki_page_links where
+  from_page_id = pageId. Deduplicated by target so a parent/child pair
+  with both a `reference` link and a `parent_of` link returns once.
+  """
+  wikiConnectedPages(pageId: ID!): [WikiPage!]!
+
+  """
   Admin-only: list recent compile jobs for a tenant. When `ownerId` is
   provided, restricts to that agent's jobs; when null/absent, returns
   jobs across every agent in the tenant. Ordered newest-first.
