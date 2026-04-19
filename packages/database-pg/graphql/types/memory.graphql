@@ -142,6 +142,33 @@ extend type Query {
   derived observations.
   """
   mobileMemorySearch(agentId: ID!, query: String!, limit: Int = 20): [MobileMemoryCapture!]!
+
+  """
+  Ranked wiki-page search for mobile. Runs the same Hindsight recall the
+  mobile memory search does, then reverse-joins each hit through
+  `wiki_section_sources` to the compiled pages that cite it. Pages are
+  deduplicated (one row per page) and ranked by the sum of Hindsight hit
+  scores across all of the page's matching source memories — so a page
+  cited by multiple strong hits ranks higher than one cited by a single
+  weak hit. `matchingMemoryIds` preserves input rank order so the client
+  can show "why this page matched" without a second round trip.
+  """
+  mobileWikiSearch(agentId: ID!, query: String!, limit: Int = 20): [MobileWikiSearchResult!]!
+}
+
+type MobileWikiSearchResult {
+  page: WikiPage!
+  """
+  Aggregated score — sum of the Hindsight hit scores for all memories cited
+  by this page. Higher is better. Not a ts_rank; not comparable across
+  queries.
+  """
+  score: Float!
+  """
+  Source memory unit ids whose recall hits caused this page to appear, in
+  Hindsight rank order (best-ranked first).
+  """
+  matchingMemoryIds: [ID!]!
 }
 
 extend type Mutation {

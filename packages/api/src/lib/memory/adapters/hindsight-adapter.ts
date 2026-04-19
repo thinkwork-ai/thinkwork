@@ -299,19 +299,22 @@ export class HindsightAdapter implements MemoryAdapter {
 
 		let result: any;
 		try {
+			// JS Date carries millisecond precision; Postgres timestamptz stores
+			// microseconds. Truncate the DB side to ms so cursor `>` can't spin on
+			// a sub-ms tail that JS can't represent and thus never catches up to.
 			result = await this.db.execute(sql`
 				SELECT
 					id, bank_id, text, context, fact_type,
 					event_date, occurred_start, occurred_end,
 					mentioned_at, tags, access_count, proof_count,
 					metadata, created_at, updated_at,
-					COALESCE(updated_at, created_at) AS cursor_ts
+					date_trunc('milliseconds', COALESCE(updated_at, created_at)) AS cursor_ts
 				FROM hindsight.memory_units
 				WHERE bank_id = ${bankId}
 				  AND (
-					COALESCE(updated_at, created_at) > ${sinceTs.toISOString()}::timestamptz
+					date_trunc('milliseconds', COALESCE(updated_at, created_at)) > ${sinceTs.toISOString()}::timestamptz
 					OR (
-						COALESCE(updated_at, created_at) = ${sinceTs.toISOString()}::timestamptz
+						date_trunc('milliseconds', COALESCE(updated_at, created_at)) = ${sinceTs.toISOString()}::timestamptz
 						AND id::text > ${sinceId}
 					)
 				  )
