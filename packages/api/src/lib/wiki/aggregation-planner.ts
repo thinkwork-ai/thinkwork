@@ -106,6 +106,7 @@ You MUST ground every rollup in evidence visible in the input. Common failure mo
 - **If fewer than 3 pages in the input clearly match a hub's scope, do not create or reinforce that hub this batch.** Under-rolling is safe; over-rolling pollutes the wiki.
 - **Prefer \`Derived parent candidates\` as seed hubs** — those come from deterministic metadata extraction and are already grounded. If the derived-parents list is empty, be extra conservative about inventing hubs.
 - **City / place-based hubs require matching place evidence** in each linked page's summary. When in doubt, leave the page out.
+- **Each child page appears in at most ONE section per parent page.** If you're emitting multiple \`parentSectionUpdates\` for the same \`pageId\`, partition the children across sections (e.g. "Outdoor Attractions" vs "Events") — do not list the same entity under both. Overlap produces visible duplicates in the rendered body.
 
 ## Output actions
 
