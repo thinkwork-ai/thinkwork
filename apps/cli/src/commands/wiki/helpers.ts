@@ -26,6 +26,10 @@ export interface WikiCliOptions {
 	all?: boolean;
 	model?: string;
 	json?: boolean;
+	watch?: boolean;
+	yes?: boolean;
+	limit?: string | number;
+	timeout?: string | number;
 }
 
 export interface WikiCliContext {
