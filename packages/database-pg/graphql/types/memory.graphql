@@ -154,6 +154,14 @@ extend type Query {
   can show "why this page matched" without a second round trip.
   """
   mobileWikiSearch(agentId: ID!, query: String!, limit: Int = 20): [MobileWikiSearchResult!]!
+
+  """
+  Newest compiled wiki pages for the given agent, ordered by
+  last_compiled_at DESC (falling back to updated_at when the page hasn't
+  been recompiled yet). Intended as the default Memories-tab feed so
+  the user sees fresh pages before they type a search query.
+  """
+  recentWikiPages(agentId: ID!, limit: Int = 50): [WikiPage!]!
 }
 
 type MobileWikiSearchResult {

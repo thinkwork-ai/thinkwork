@@ -5,7 +5,11 @@ import { useRouter } from "expo-router";
 import { Search } from "lucide-react-native";
 import { IconBrain } from "@tabler/icons-react-native";
 import { Muted } from "@/components/ui/typography";
-import { useMobileMemorySearch, type WikiSearchHit } from "@thinkwork/react-native-sdk";
+import {
+	useMobileMemorySearch,
+	useRecentWikiPages,
+	type WikiSearchHit,
+} from "@thinkwork/react-native-sdk";
 import { COLORS } from "@/lib/theme";
 import { WikiResultRow } from "./WikiResultRow";
 
@@ -20,18 +24,18 @@ export function CapturesList({ agentId, colors, searchQuery }: CapturesListProps
 	const trimmedQuery = (searchQuery || "").trim();
 	const isSearching = trimmedQuery.length > 0;
 
-	const { results, loading, error, refetch } = useMobileMemorySearch({
-		agentId,
-		query: trimmedQuery,
-	});
+	const search = useMobileMemorySearch({ agentId, query: trimmedQuery });
+	const recent = useRecentWikiPages({ agentId, limit: 50 });
+
+	const { results, loading, error, refetch } = isSearching ? search : recent;
 
 	useEffect(() => {
 		if (!error) return;
 		console.warn(
-			`[CapturesList] mobileWikiSearch error query=${JSON.stringify(trimmedQuery)} agentId=${agentId} error=${error.message}`,
+			`[CapturesList] ${isSearching ? "search" : "recent"} error query=${JSON.stringify(trimmedQuery)} agentId=${agentId} error=${error.message}`,
 			error,
 		);
-	}, [error, trimmedQuery, agentId]);
+	}, [error, isSearching, trimmedQuery, agentId]);
 
 	const handlePress = useCallback(
 		(hit: WikiSearchHit) => {
@@ -40,22 +44,21 @@ export function CapturesList({ agentId, colors, searchQuery }: CapturesListProps
 		[router],
 	);
 
-	if (!isSearching) {
+	if (results.length === 0) {
+		if (isSearching) {
+			return (
+				<View className="flex-1 items-center justify-center px-6 gap-2">
+					<Search size={32} color={colors.mutedForeground} />
+					<Muted>
+						{loading ? "Searching..." : `No memories matching "${trimmedQuery}"`}
+					</Muted>
+				</View>
+			);
+		}
 		return (
 			<View className="flex-1 items-center justify-center px-6 gap-2">
 				<IconBrain size={32} color={colors.mutedForeground} />
-				<Muted>Search your memories</Muted>
-			</View>
-		);
-	}
-
-	if (results.length === 0) {
-		return (
-			<View className="flex-1 items-center justify-center px-6 gap-2">
-				<Search size={32} color={colors.mutedForeground} />
-				<Muted>
-					{loading ? "Searching..." : `No memories matching "${trimmedQuery}"`}
-				</Muted>
+				<Muted>{loading ? "Loading memories..." : "No memories yet"}</Muted>
 			</View>
 		);
 	}
