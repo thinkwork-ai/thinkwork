@@ -20,6 +20,14 @@ type MemoryRecord {
   proofCount: Int
   context: String
   threadId: String
+  """
+  Compiled wiki pages (Compounding Memory) that cite this memory unit as
+  a source. Populated from wiki_section_sources.source_ref. Returns pages
+  scoped to the same agent as this memory (there is no cross-agent
+  citation in v1). Returned pages have empty `sections`/`aliases` — fetch
+  `wikiPage(tenantId, ownerId, type, slug)` for full detail.
+  """
+  wikiPages: [WikiPage!]!
 }
 
 type MemoryContent {

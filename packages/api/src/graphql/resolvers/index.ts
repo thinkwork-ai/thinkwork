@@ -72,8 +72,10 @@ export const mutationResolvers: Record<string, any> = {
 
 import { agentTypeResolvers } from "./agents/types.js";
 import { threadTypeResolvers } from "./threads/types.js";
+import { memoryRecordTypeResolvers } from "./memory/types.js";
 
 export const typeResolvers: Record<string, Record<string, any>> = {
 	Agent: agentTypeResolvers,
 	Thread: threadTypeResolvers,
+	MemoryRecord: memoryRecordTypeResolvers,
 };
