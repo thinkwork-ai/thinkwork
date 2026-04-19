@@ -18,9 +18,11 @@ import {
 } from "./gql.js";
 import {
 	classifyMutationError,
+	isTerminalCompileStatus,
 	printForbiddenHint,
 	resolveAgentScope,
 	resolveWikiContext,
+	shortJobId,
 	type WikiCliContext,
 	type WikiCliOptions,
 } from "./helpers.js";
@@ -201,7 +203,7 @@ async function watchSingleJob(
 				if (spinner) spinner.warn("job not visible yet — polling…");
 			} else {
 				if (spinner) spinner.text = `status=${job.status}  attempt=${job.attempt}`;
-				if (isTerminal(job.status)) {
+				if (isTerminalCompileStatus(job.status)) {
 					if (spinner) {
 						if (job.status === "succeeded") spinner.succeed(`succeeded`);
 						else if (job.status === "skipped") spinner.info("skipped");
@@ -230,15 +232,3 @@ async function watchSingleJob(
 	}
 }
 
-function isTerminal(status: string | null | undefined): boolean {
-	return (
-		status === "succeeded" ||
-		status === "failed" ||
-		status === "cancelled" ||
-		status === "skipped"
-	);
-}
-
-function shortJobId(id: string): string {
-	return id.slice(0, 8);
-}

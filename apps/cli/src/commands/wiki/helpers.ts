@@ -281,3 +281,21 @@ export function printForbiddenHint(tenantSlug: string): void {
 		`Admin access to tenant "${tenantSlug}" is required for wiki operations. Ask your tenant owner to promote your membership or use an admin API key.`,
 	);
 }
+
+// ─── Compile-job status helpers ──────────────────────────────────────────────
+
+/** Terminal statuses for a `WikiCompileJob`. */
+export function isTerminalCompileStatus(
+	status: string | null | undefined,
+): boolean {
+	return (
+		status === "succeeded" ||
+		status === "failed" ||
+		status === "cancelled" ||
+		status === "skipped"
+	);
+}
+
+export function shortJobId(id: string): string {
+	return id.slice(0, 8);
+}

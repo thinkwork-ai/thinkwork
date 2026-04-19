@@ -25,9 +25,11 @@ import {
 } from "./gql.js";
 import {
 	classifyMutationError,
+	isTerminalCompileStatus,
 	printForbiddenHint,
 	resolveAgentScope,
 	resolveWikiContext,
+	shortJobId,
 	type WikiCliContext,
 	type WikiCliOptions,
 } from "./helpers.js";
@@ -136,7 +138,7 @@ export async function runWikiRebuild(opts: WikiCliOptions): Promise<void> {
 		jobId = data.compileWikiNow.id;
 		if (compileSpinner)
 			compileSpinner.succeed(
-				`Compile enqueued — job=${jobId.slice(0, 8)}  status=${data.compileWikiNow.status}`,
+				`Compile enqueued — job=${shortJobId(jobId)}  status=${data.compileWikiNow.status}`,
 			);
 	} catch (err) {
 		const classified = classifyMutationError(err);
@@ -204,7 +206,7 @@ async function watchRebuildJob(
 	const spinner = isJsonMode()
 		? null
 		: ora({
-				text: `Watching rebuild job ${target.jobId.slice(0, 8)}…`,
+				text: `Watching rebuild job ${shortJobId(target.jobId)}…`,
 				prefixText: "  ",
 			}).start();
 	const intervalMs = 3000;
@@ -219,7 +221,7 @@ async function watchRebuildJob(
 			const job = data.wikiCompileJobs.find((j) => j.id === target.jobId);
 			if (job) {
 				if (spinner) spinner.text = `status=${job.status}  attempt=${job.attempt}`;
-				if (isTerminal(job.status)) {
+				if (isTerminalCompileStatus(job.status)) {
 					if (spinner) {
 						if (job.status === "succeeded") spinner.succeed("rebuild succeeded");
 						else if (job.status === "skipped") spinner.info("rebuild skipped");
@@ -238,11 +240,3 @@ async function watchRebuildJob(
 	}
 }
 
-function isTerminal(status: string | null | undefined): boolean {
-	return (
-		status === "succeeded" ||
-		status === "failed" ||
-		status === "cancelled" ||
-		status === "skipped"
-	);
-}

@@ -17,8 +17,10 @@ import { printError, printWarning } from "../../ui.js";
 import { AllTenantAgentsForWikiDoc, WikiCompileJobsDoc } from "./gql.js";
 import {
 	classifyMutationError,
+	isTerminalCompileStatus,
 	printForbiddenHint,
 	resolveWikiContext,
+	shortJobId,
 	type WikiCliContext,
 	type WikiCliOptions,
 } from "./helpers.js";
@@ -87,7 +89,7 @@ export async function runWikiStatus(opts: WikiCliOptions): Promise<void> {
 	const spinner = isJsonMode()
 		? null
 		: ora({
-				text: `Watching job ${latestId.slice(0, 8)}…`,
+				text: `Watching job ${shortJobId(latestId)}…`,
 				prefixText: "  ",
 			}).start();
 
@@ -99,7 +101,7 @@ export async function runWikiStatus(opts: WikiCliOptions): Promise<void> {
 			if (latest) {
 				if (spinner)
 					spinner.text = `status=${latest.status}  attempt=${latest.attempt}`;
-				if (isTerminal(latest.status)) {
+				if (isTerminalCompileStatus(latest.status)) {
 					if (spinner) {
 						if (latest.status === "succeeded") spinner.succeed("succeeded");
 						else if (latest.status === "skipped") spinner.info("skipped");
@@ -215,15 +217,6 @@ async function renderJobs(
 	);
 
 	printTable(rows, columns);
-}
-
-function isTerminal(status: string | null | undefined): boolean {
-	return (
-		status === "succeeded" ||
-		status === "failed" ||
-		status === "cancelled" ||
-		status === "skipped"
-	);
 }
 
 function toInt(v: string | number | undefined, fallback: number): number {
