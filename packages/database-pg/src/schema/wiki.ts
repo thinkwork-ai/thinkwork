@@ -32,6 +32,7 @@ import {
 	primaryKey,
 	uniqueIndex,
 	index,
+	type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core";
@@ -93,6 +94,19 @@ export const wikiPages = pgTable(
 			sql`to_tsvector('english'::regconfig, coalesce(title,'') || ' ' || coalesce(summary,'') || ' ' || coalesce(body_md,''))`,
 		),
 		status: text("status").notNull().default("active"), // 'active' | 'archived'
+		// Hierarchical aggregation: set when a page was promoted from a section
+		// on another page. Nullable — most pages are top-level. Self-reference;
+		// no cascade so promoted children survive parent archival.
+		parent_page_id: uuid("parent_page_id").references(
+			(): AnyPgColumn => wikiPages.id,
+		),
+		// Cached hubness signal (inbound links + promoted child count +
+		// section density). Recomputed on page upsert. Coarse monotonic ordering
+		// only — don't treat as a precise ranking number.
+		hubness_score: integer("hubness_score").notNull().default(0),
+		// Soft tag hints (processor-derived or tenant-configurable). Used for
+		// clustering/coherence signals. Never treated as ontology.
+		tags: text("tags").array().notNull().default(sql`ARRAY[]::text[]`),
 		last_compiled_at: timestamp("last_compiled_at", { withTimezone: true }),
 		created_at: timestamp("created_at", { withTimezone: true })
 			.notNull()
@@ -120,6 +134,8 @@ export const wikiPages = pgTable(
 		index("idx_wiki_pages_last_compiled").on(table.last_compiled_at),
 		// Full-text search: GIN on the generated tsvector column.
 		index("idx_wiki_pages_search_tsv").using("gin", table.search_tsv),
+		// Fast lookup of child pages for hierarchy navigation.
+		index("idx_wiki_pages_parent").on(table.parent_page_id),
 	],
 );
 
@@ -142,6 +158,19 @@ export const wikiPageSections = pgTable(
 		position: integer("position").notNull(),
 		body_embedding: vector("body_embedding", 1024), // present but NULL in v1
 		last_source_at: timestamp("last_source_at", { withTimezone: true }),
+		// Hierarchical aggregation metadata. NULL on leaf-style sections that
+		// don't act as rollups (overview, notes, etc.). Shape:
+		//   {
+		//     linked_page_ids: string[];       // child pages rolled up here
+		//     supporting_record_count: number; // distinct citing records
+		//     first_source_at: string | null;  // ISO
+		//     last_source_at: string | null;   // ISO
+		//     observed_tags: string[];
+		//     promotion_status: "none"|"candidate"|"promoted"|"suppressed";
+		//     promotion_score: number;         // 0..1
+		//     promoted_page_id: string | null;
+		//   }
+		aggregation: jsonb("aggregation"),
 		created_at: timestamp("created_at", { withTimezone: true })
 			.notNull()
 			.default(sql`now()`),
@@ -177,17 +206,25 @@ export const wikiPageLinks = pgTable(
 		to_page_id: uuid("to_page_id")
 			.references(() => wikiPages.id, { onDelete: "cascade" })
 			.notNull(),
+		// Link discriminator. 'reference' is the historical default (wikilink /
+		// [[Foo]] style). 'parent_of' / 'child_of' express durable hierarchy
+		// created by section promotion.
+		kind: text("kind").notNull().default("reference"),
 		context: text("context"),
 		created_at: timestamp("created_at", { withTimezone: true })
 			.notNull()
 			.default(sql`now()`),
 	},
 	(table) => [
-		uniqueIndex("uq_wiki_page_links_from_to").on(
+		// Uniqueness now includes kind so we can carry both a 'reference' and a
+		// 'parent_of' between the same pages when that's semantically correct.
+		uniqueIndex("uq_wiki_page_links_from_to_kind").on(
 			table.from_page_id,
 			table.to_page_id,
+			table.kind,
 		),
 		index("idx_wiki_page_links_to").on(table.to_page_id),
+		index("idx_wiki_page_links_kind").on(table.kind),
 	],
 );
 
@@ -245,6 +282,14 @@ export const wikiUnresolvedMentions = pgTable(
 			.notNull()
 			.default(sql`now()`),
 		sample_contexts: jsonb("sample_contexts").notNull().default([]), // array of { quote, source_ref, seen_at }, capped at 5
+		// Richer cluster context for aggregate-aware promotion. NULL on old /
+		// simple mentions. Shape:
+		//   {
+		//     co_mentions: string[];          // nearby alias_normalized values
+		//     candidate_parent_page_id: string | null;
+		//     observed_tags: string[];
+		//   }
+		cluster: jsonb("cluster"),
 		suggested_type: text("suggested_type"), // 'entity' | 'topic' | 'decision'
 		status: text("status").notNull().default("open"), // 'open' | 'promoted' | 'ignored'
 		promoted_page_id: uuid("promoted_page_id").references(() => wikiPages.id),
@@ -389,6 +434,12 @@ export const wikiPagesRelations = relations(wikiPages, ({ one, many }) => ({
 		fields: [wikiPages.owner_id],
 		references: [agents.id],
 	}),
+	parentPage: one(wikiPages, {
+		relationName: "parent_page",
+		fields: [wikiPages.parent_page_id],
+		references: [wikiPages.id],
+	}),
+	childPages: many(wikiPages, { relationName: "parent_page" }),
 	sections: many(wikiPageSections),
 	outgoingLinks: many(wikiPageLinks, { relationName: "from_page" }),
 	incomingLinks: many(wikiPageLinks, { relationName: "to_page" }),
