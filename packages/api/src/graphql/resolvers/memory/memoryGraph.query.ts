@@ -5,6 +5,13 @@
  * an empty graph. Hindsight's entity / cooccurrence tables live directly
  * in the shared Aurora instance so the SQL path stays inline here,
  * gated on the adapter's `inspectGraph` capability.
+ *
+ * @deprecated Use `wikiGraph` (packages/api/src/graphql/resolvers/wiki/
+ * wikiGraph.query.ts) for the admin Memories → Graph surface. This
+ * resolver is now only consumed by the legacy per-agent memory route
+ * (apps/admin/src/routes/_authed/_tenant/agents/$agentId_.memory.tsx).
+ * Delete along with the admin `MemoryGraph` component once that route
+ * is migrated. See plans/2026-04-19-003-refactor-admin-wiki-graph-plan.md.
  */
 
 import type { GraphQLContext } from "../../context.js";
