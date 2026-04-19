@@ -48,11 +48,14 @@ Compounding happens in the background. Here's the shape of it without the plumbi
 1. You have a conversation. Something memorable happens.
 2. Your agent saves a raw memory — a short text note.
 3. A compile job notices new memories exist.
-4. The compile planner reads the new memories alongside the pages you already have, and decides: update an existing page? create a new one? hold this mention until you see it a few more times?
+4. The **leaf planner** reads the new memories alongside the pages you already have, and decides: update an existing page? create a new one? hold this mention until you see it a few more times?
 5. The section writer patches the markdown.
-6. You can now read the page, search for it, or ask the agent about it.
+6. The **aggregation pass** then looks across your recently-changed pages and decides which hub topics should get rollup sections (your new Toronto restaurants joining the `Toronto` page's `Restaurants` section) and which sections have become dense enough to promote into their own page (the `Activities` section on `Austin` earning its own `Austin Activities` page).
+7. You can now read the page, search for it, or ask the agent about it.
 
-The important thing is that step 4 is deliberately conservative. Your agent won't create a page the first time it sees a new name. It holds that name as an **unresolved mention** and waits until it sees the same thing a few more times before giving it a real page. This keeps the wiki from filling up with noise.
+Step 4 is deliberately conservative. Your agent won't create a page the first time it sees a new name. It holds that name as an **unresolved mention** and waits until it sees the same thing a few more times before giving it a real page. This keeps the wiki from filling up with noise.
+
+Step 6 is what makes memory *compound* instead of just piling up. As you mention Austin restaurants over and over, the Austin page's rollup section grows. When it's dense enough, it becomes its own page — and that page can then grow its own sections which eventually promote again. Recursive, grounded, self-organizing.
 
 ## What your agent does vs. what you see
 
