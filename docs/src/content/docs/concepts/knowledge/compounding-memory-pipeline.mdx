@@ -1,0 +1,209 @@
+---
+title: 'Compounding Memory: Pipeline'
+description: End-to-end walkthrough of the compile pipeline — triggers, the cursor loop, planner contract, section writer, provenance, and failure modes.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The compile pipeline reads normalized memory records and materializes them into compiled wiki pages. One job processes one `(tenant, agent)` scope.
+
+This doc traces the full path — from the event that enqueues a job, through the cursor loop, planner, section writer, and provenance writes — and calls out the failure modes that matter in practice.
+
+## Triggers
+
+Three things enqueue a compile job:
+
+- **Post-retain**, best-effort. After a successful `retainTurn`, `maybeEnqueuePostTurnCompile` runs in `packages/api/src/lib/wiki/enqueue.ts`. It checks `tenants.wiki_compile_enabled`, confirms the adapter is Hindsight (AgentCore doesn't implement `listRecordsUpdatedSince`), then inserts a job with a 5-minute dedupe key `${tenantId}:${ownerId}:${floor(epoch_s/300)}`. On insert, it fires a `Lambda.invoke` with `InvocationType: "Event"`. If dedupe collapses the insert or the invoke fails, the row is still claimable by any later worker.
+- **Admin mutation**, synchronous. `compileWikiNow(tenantId, ownerId)` inserts a job and returns it to the caller.
+- **Nightly lint sweep**. `wiki-lint` enqueues promotion jobs for unresolved mentions that have crossed the threshold (`mention_count >= 3 AND last_seen_at within 30 days`).
+
+The Lambda handler is `packages/api/src/handlers/wiki-compile.ts`. It accepts `{ jobId }` and calls `runJobById` from `packages/api/src/lib/wiki/compiler.ts`.
+
+## The compile loop
+
+`runCompileJob` reads the cursor for the job's scope and paginates over changed records until one of the stop conditions fires.
+
+```ts
+// packages/api/src/lib/wiki/compiler.ts
+const RECORD_PAGE_SIZE = 50;
+const MAX_RECORDS_PER_JOB = 500;
+const MAX_NEW_PAGES_PER_JOB = 25;
+const MAX_SECTIONS_REWRITTEN_PER_JOB = 100;
+```
+
+Per iteration:
+
+1. **Page in records.** `adapter.listRecordsUpdatedSince({ sinceUpdatedAt, sinceRecordId, limit })` returns up to `pageSize` records plus the next cursor. Records are ordered by `(updated_at, id)` so the pagination is deterministic.
+2. **Load context.** `listPagesForScope` pulls up to 200 candidate pages (slug + title + aliases + summary) and `listOpenMentions` pulls up to 200 open unresolved mentions.
+3. **Call the planner.** The LLM receives the records, candidates, and open mentions and returns a `PlannerResult`.
+4. **Apply the plan.** `applyPlan` runs the 5 phases below, tracking metrics.
+5. **Advance the cursor.** `setCursor` only runs when the plan applied cleanly; mid-job failures re-read the same records on retry.
+6. **Stop conditions.** Hitting `MAX_RECORDS_PER_JOB`, a cap-hit inside `applyPlan` (e.g. `max_new_pages` or `max_sections_rewritten`), or a short page (`records.length < pageSize`) ends the loop.
+
+### Cursor precision
+
+JavaScript `Date` carries milliseconds; Postgres `timestamptz` carries microseconds. The adapter's `listRecordsUpdatedSince` truncates the DB side to ms so a record at `xx:yy:zz.689019` doesn't keep comparing greater than a stored cursor of `xx:yy:zz.689`:
+
+```ts
+// packages/api/src/lib/memory/adapters/hindsight-adapter.ts
+WHERE bank_id = ${bankId}
+  AND (
+    date_trunc('milliseconds', COALESCE(updated_at, created_at)) > ${sinceTs.toISOString()}::timestamptz
+    OR (
+      date_trunc('milliseconds', COALESCE(updated_at, created_at)) = ${sinceTs.toISOString()}::timestamptz
+      AND id::text > ${sinceId}
+    )
+  )
+```
+
+Without this, a single record with sub-ms microseconds sits permanently at the tail of the queue and the drain never terminates.
+
+## Planner contract
+
+The planner lives in `packages/api/src/lib/wiki/planner.ts`. It receives a batch of records plus the scope's candidate pages and open mentions, and returns a JSON object with five arrays:
+
+```jsonc
+{
+  "pageUpdates": [
+    {
+      "pageId": "<uuid>",
+      "sections": [
+        {
+          "slug": "overview",
+          "proposed_body_md": "…",
+          "source_refs": ["<memory_unit_id>", "…"]
+        }
+      ],
+      "aliases": ["alt name"]
+    }
+  ],
+  "newPages": [
+    {
+      "type": "entity | topic | decision",
+      "slug": "...",
+      "title": "...",
+      "summary": "...",
+      "aliases": ["..."],
+      "source_refs": ["<memory_unit_id>"],
+      "sections": [
+        {
+          "slug": "overview",
+          "heading": "Overview",
+          "body_md": "...",
+          "source_refs": ["<memory_unit_id>"]
+        }
+      ]
+    }
+  ],
+  "unresolvedMentions": [
+    {
+      "alias": "Chef João",
+      "suggestedType": "entity",
+      "context": "mentioned in passing when describing…",
+      "source_ref": "<memory_unit_id>"
+    }
+  ],
+  "promotions": [
+    {
+      "mentionId": "<uuid>",
+      "type": "entity",
+      "title": "…",
+      "slug": "…",
+      "sections": [/* same shape as newPages.sections */]
+    }
+  ],
+  "pageLinks": [
+    {
+      "fromType": "entity",
+      "fromSlug": "...",
+      "toType": "topic",
+      "toSlug": "...",
+      "context": "why this link exists"
+    }
+  ]
+}
+```
+
+The planner prompt biases toward `unresolvedMentions` over `newPages`: creating spurious pages is expensive; holding an alias costs nothing.
+
+Each channel resolves to one or more writes in `applyPlan`:
+
+- **`pageUpdates`** loads the page and its existing sections, skips any section where `isMeaningfulChange(existing, proposed)` is false, then calls the section writer to produce the final markdown for each changed section.
+- **`newPages`** creates a page, seeds aliases from the title, and writes each section from the planner's seed body.
+- **`unresolvedMentions`** upserts rows into `wiki_unresolved_mentions`, bumping `mention_count` and updating `sample_contexts`.
+- **`promotions`** creates a page from a previously-accumulated mention and sets the mention's `status = 'promoted'`.
+- **`pageLinks`** is applied last so a link created in the same plan can reference a `newPages` entry from the same response.
+
+## Per-section provenance
+
+The single most important correctness property of the pipeline is that **each section's provenance is only the records the planner explicitly cited for that section**. The compiler does not fall back to "every record in the batch":
+
+```ts
+// packages/api/src/lib/wiki/compiler.ts
+function resolveCitedRecords(
+  byId: Map<string, ThinkWorkMemoryRecord>,
+  ids: string[] | undefined,
+): ThinkWorkMemoryRecord[] {
+  if (!ids || ids.length === 0) return [];
+  const out: ThinkWorkMemoryRecord[] = [];
+  for (const id of ids) {
+    const r = byId.get(id);
+    if (r) out.push(r);
+  }
+  return out;
+}
+```
+
+Zero refs means zero provenance rows. That's a feature. An earlier version fell back to the whole batch when refs were missing; a single memory unit about "weather in Austin" ended up cited as a source for unrelated CRM pages that happened to be in the same batch. The `MemoryRecord.wikiPages` reverse-lookup then returned nonsense, and `mobileWikiSearch` surfaced CRM pages above "Austin, Texas" for the query `austin`. The fix was exactly this function: no cited refs, no provenance, rather than batch-wide contamination.
+
+## Section writer
+
+`packages/api/src/lib/wiki/section-writer.ts` rewrites one section at a time. It receives:
+
+- the page type and title,
+- the section's existing markdown (or null for a new page),
+- the planner's proposed markdown (treated as a rough draft),
+- the cited source records — _not_ the full batch, just the ones the planner pointed at.
+
+`isMeaningfulChange` gates the call: whitespace-only or near-duplicate proposals are skipped. This keeps section rewrites bounded and avoids burning tokens polishing prose that already says the same thing.
+
+## Unresolved mentions
+
+When the planner sees an ambiguous alias that doesn't map cleanly to an existing candidate page, it emits an `unresolvedMentions` entry rather than a new page. The compiler upserts into `wiki_unresolved_mentions`:
+
+- `mention_count` increments on every new sighting.
+- `sample_contexts` holds up to 5 recent quoted contexts (JSONB array).
+- `status` stays `open` until a future compile promotes it (via the planner's `promotions` channel) or a linter marks it `ignored`.
+
+A mention becomes a page when mentioned ≥3 times within the last 30 days. The threshold is configurable.
+
+## Cursor recovery and replay
+
+`resetWikiCursor(tenantId, ownerId, force=false)` clears the cursor row so the next compile re-reads from the beginning. With `force=true` it also archives every active page in the scope so a full rebuild produces the vault from scratch. Archiving alone does not clean provenance (archived pages retain their `wiki_section_sources` rows); use hard-delete when the goal is clean provenance.
+
+The operator recipe is in [Operating Compounding Memory](/guides/compounding-memory-operations/).
+
+## Failure modes
+
+- **Bedrock throttling.** The planner and section writer call Claude via Bedrock. `Too many requests` errors fail the job; the cursor didn't advance past the batch, so re-invoking picks up where it left off. Drain loops should sleep before retrying.
+- **JSON truncation.** If the planner output exceeds `maxTokens` (currently 24000), JSON parsing fails. `validatePlannerResult` throws; the job fails; re-invoke with the cursor held.
+- **Runaway new-page generation.** `MAX_NEW_PAGES_PER_JOB = 25` bounds any single job. Hitting this cap returns `cap_hit: 'max_new_pages'` in metrics and stops the outer loop; the cursor still advanced for the batches already applied.
+- **Scope-isolation guard.** `applyPlan` re-checks `tenant_id` and `owner_id` on every `pageUpdates` entry before writing — a planner that hallucinates a foreign page id gets ignored rather than silently corrupting another scope.
+- **Missing adapter method.** AgentCore adapters without `listRecordsUpdatedSince` fail the job immediately with a descriptive error rather than silently producing empty compiles.
+
+## Cost envelope
+
+Metrics in the `wiki_compile_jobs.metrics` JSONB record `input_tokens`, `output_tokens`, and a `cost_usd` estimate (Claude Haiku 4.5 pricing at $1/M input, $5/M output). Measured against a full recompile of Marco's scope (643 source memory units):
+
+- **~$0.50 – $1.00** total compile cost end-to-end.
+- **99 pages**, 66 page links, 548 provenance rows, 331 distinct source memories, 10 unresolved mentions.
+- Per-batch cost in the $0.04 – $0.12 range depending on planner output size.
+
+These are observational, not a contract. Watch the per-job numbers when iterating on the planner prompt.
+
+## Related pages
+
+- [Compounding Memory](/concepts/knowledge/compounding-memory/)
+- [Compounding Memory: Pages](/concepts/knowledge/compounding-memory-pages/)
+- [Operating Compounding Memory](/guides/compounding-memory-operations/)
+- [Compounding Memory (API)](/api/compounding-memory/)

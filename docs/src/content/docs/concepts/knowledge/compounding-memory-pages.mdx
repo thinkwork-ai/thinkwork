@@ -1,0 +1,229 @@
+---
+title: 'Compounding Memory: Pages'
+description: The wiki data model — pages, sections, aliases, links, unresolved mentions, provenance — and the search index on top of them.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The compiled wiki layer is eight tables under the `wiki_*` namespace, defined in `packages/database-pg/src/schema/wiki.ts`. This doc describes each table and the invariants that matter at read time.
+
+All tables are owner-scoped in v1. Every compiled object carries both `tenant_id` and `owner_id` (the agent id), both `NOT NULL`. There are no tenant-wide pages.
+
+## `wiki_pages`
+
+Compiled pages — one row per `(tenant, agent, type, slug)`.
+
+```ts
+// packages/database-pg/src/schema/wiki.ts
+{
+  id: uuid (pk),
+  tenant_id: uuid NOT NULL,
+  owner_id: uuid NOT NULL,              // every page is agent-scoped
+  type: text NOT NULL,                  // 'entity' | 'topic' | 'decision'
+  slug: text NOT NULL,
+  title: text NOT NULL,
+  summary: text,
+  body_md: text,
+  search_tsv: tsvector GENERATED ALWAYS AS (
+    to_tsvector('english',
+      coalesce(title,'')   || ' ' ||
+      coalesce(summary,'') || ' ' ||
+      coalesce(body_md,''))
+  ),
+  status: text NOT NULL DEFAULT 'active',  // 'active' | 'archived'
+  last_compiled_at: timestamptz,
+  created_at, updated_at
+}
+```
+
+**Indexes:**
+
+- `uq_wiki_pages_tenant_owner_type_slug` — one page per `(tenant, owner, type, slug)`.
+- `idx_wiki_pages_tenant_owner_type_status` — read-path lookups.
+- `idx_wiki_pages_search_tsv` — GIN index over the generated `search_tsv` column. This is the backbone of `wikiSearch`.
+
+**Invariants:**
+
+- `owner_id` is never null. There is no tenant-wide or cross-agent read path.
+- `type` describes shape, not scope. All three types are agent-scoped.
+- Archived pages retain their rows (including provenance) until hard-deleted. A recompile resurrects an archived page back to `active` when it's touched.
+
+## Page types
+
+Type describes which sections the planner and section writer produce by default. The templates live in `packages/api/src/lib/wiki/templates.ts`.
+
+- **`entity`** — `overview`, `notes`, `visits`, `related`. A thing: a person, a place, a company, a product, a project.
+- **`topic`** — `summary`, `highlights`, `related_entities`, `recent`. A collection under a theme.
+- **`decision`** — `context`, `decision`, `rationale`, `consequences`. A recorded choice.
+
+The planner can propose section slugs outside these defaults when a batch justifies it.
+
+## `wiki_page_sections`
+
+One row per section. Sections are the atomic unit of rewrite; the compiler never does a whole-page regeneration.
+
+```ts
+{
+  id: uuid (pk),
+  page_id: uuid NOT NULL REFERENCES wiki_pages(id) ON DELETE CASCADE,
+  section_slug: text NOT NULL,          // 'overview' | 'notes' | …
+  heading: text NOT NULL,
+  body_md: text NOT NULL,
+  position: integer NOT NULL,
+  body_embedding: vector(1024),         // reserved; NULL in v1
+  last_source_at: timestamptz,
+  created_at, updated_at
+}
+```
+
+**Indexes:**
+
+- `uq_wiki_page_sections_page_slug` — at most one section per `(page, slug)`.
+- `idx_wiki_page_sections_page_position` — stable ordering.
+
+`body_embedding` is a pgvector column reserved for semantic retrieval inside a page. It's nullable and unused in v1; vector embeddings are not computed yet.
+
+## `wiki_page_aliases`
+
+Alternate names that resolve to a page.
+
+```ts
+{
+  id: uuid (pk),
+  page_id: uuid NOT NULL REFERENCES wiki_pages(id) ON DELETE CASCADE,
+  alias: text NOT NULL,                 // normalized: lowercase, punctuation-stripped
+  source: text NOT NULL,                // 'compiler' | 'manual' | 'import'
+  created_at
+}
+```
+
+Aliases are normalized on insert: lowercased, punctuation stripped, whitespace collapsed. The `wikiSearch` resolver matches aliases both exact and substring (`ILIKE %needle%`).
+
+`source` traces where the alias came from:
+- `compiler` — emitted by the planner or seeded from a new page's title (`seedAliasesForTitle`).
+- `manual` — set by an operator through admin tooling.
+- `import` — applied during bulk ingest (e.g. journal import).
+
+## `wiki_page_links`
+
+Directed references between pages in the same scope.
+
+```ts
+{
+  id: uuid (pk),
+  from_page_id: uuid NOT NULL REFERENCES wiki_pages(id) ON DELETE CASCADE,
+  to_page_id:   uuid NOT NULL REFERENCES wiki_pages(id) ON DELETE CASCADE,
+  context: text,
+  created_at
+}
+```
+
+`uq_wiki_page_links_from_to` keeps at most one edge per ordered pair; `idx_wiki_page_links_to` backs `wikiBacklinks`.
+
+The planner emits links via its `pageLinks` channel whenever one page meaningfully references another. Links are directional; the planner emits both directions when both are meaningful.
+
+## `wiki_unresolved_mentions`
+
+A first-class middle state. When the planner sees an alias that doesn't clearly match an existing page and isn't strong enough to justify a new page, it emits an unresolved mention. The row accumulates evidence until a future compile promotes or ignores it.
+
+```ts
+{
+  id: uuid (pk),
+  tenant_id, owner_id: uuid NOT NULL,
+  alias: text NOT NULL,
+  alias_normalized: text NOT NULL,
+  mention_count: integer NOT NULL DEFAULT 1,
+  first_seen_at, last_seen_at: timestamptz NOT NULL,
+  sample_contexts: jsonb NOT NULL DEFAULT [],  // up to 5 { quote, source_ref, seen_at }
+  suggested_type: text,                         // 'entity' | 'topic' | 'decision'
+  status: text NOT NULL DEFAULT 'open',         // 'open' | 'promoted' | 'ignored'
+  promoted_page_id: uuid REFERENCES wiki_pages(id),
+  updated_at
+}
+```
+
+**Promotion threshold** (configurable): `mention_count >= 3 AND last_seen_at within 30 days`. The nightly lint sweep scans for candidates and enqueues promotion jobs. The compiler's planner can also promote a mention mid-batch through the `promotions` channel.
+
+`uq_wiki_unresolved_mentions_scope_alias_status` allows the same alias to exist in `open`, `promoted`, and `ignored` states without collision.
+
+## `wiki_section_sources`
+
+Provenance. Each row says "this memory record was a source for this section."
+
+```ts
+{
+  id: uuid (pk),
+  section_id: uuid NOT NULL REFERENCES wiki_page_sections(id) ON DELETE CASCADE,
+  source_kind: text NOT NULL,     // 'memory_unit' | 'artifact' | 'journal_idea'
+  source_ref: text NOT NULL,      // normalized memory record id / external ref
+  first_seen_at: timestamptz NOT NULL
+}
+```
+
+**Indexes:**
+
+- `uq_wiki_section_sources_section_kind_ref` — idempotent inserts.
+- `idx_wiki_section_sources_kind_ref` — the reverse-lookup index: "which sections cite this memory unit?" backs `MemoryRecord.wikiPages` and the memory → pages join in `mobileWikiSearch`.
+
+<Aside type="tip">
+Provenance is the single most important correctness property of the compiled wiki. Never write a `wiki_section_sources` row for a memory the planner didn't explicitly cite for that section. See the pipeline doc's "Per-section provenance" section for the full story.
+</Aside>
+
+## `wiki_compile_jobs`
+
+The job ledger. Every compile — post-retain, admin, bulk-import, lint-promotion — becomes a row.
+
+```ts
+{
+  id: uuid (pk),
+  tenant_id, owner_id: uuid NOT NULL,
+  dedupe_key: text NOT NULL UNIQUE,
+  status: text NOT NULL DEFAULT 'pending',      // 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped'
+  trigger: text NOT NULL,                        // 'memory_retain' | 'bootstrap_import' | 'admin' | 'lint'
+  attempt: integer NOT NULL DEFAULT 0,
+  claimed_at, started_at, finished_at: timestamptz,
+  error: text,
+  metrics: jsonb,
+  created_at
+}
+```
+
+The dedupe key is `${tenantId}:${ownerId}:${floor(epoch_s/300)}` for post-retain jobs — within a 5-minute bucket per scope, extra inserts collapse via `ON CONFLICT (dedupe_key) DO NOTHING`. Admin and bulk-import triggers use their own dedupe pattern and don't collapse.
+
+`metrics` holds `records_read`, `pages_upserted`, `sections_rewritten`, `sections_skipped`, `unresolved_upserted`, `unresolved_promoted`, `links_upserted`, `planner_calls`, `section_writer_calls`, `input_tokens`, `output_tokens`, `cost_usd`, `latency_ms`, and optionally `cap_hit`.
+
+## `wiki_compile_cursors`
+
+Per-scope pagination state.
+
+```ts
+{
+  tenant_id: uuid NOT NULL,
+  owner_id: uuid NOT NULL,
+  last_record_updated_at: timestamptz,
+  last_record_id: text,         // tiebreaker for same-timestamp records
+  updated_at,
+  PRIMARY KEY (tenant_id, owner_id)
+}
+```
+
+The cursor is advanced after every successful `applyPlan` step. Mid-job failures leave it where it was, so retrying the job re-reads the same records safely.
+
+## Search
+
+`wikiSearch(tenantId, ownerId, query, limit)` runs three signals in one SQL statement (resolver at `packages/api/src/graphql/resolvers/wiki/wikiSearch.query.ts`):
+
+- **Postgres FTS** over `search_tsv` using `plainto_tsquery('english', query)`. Ranked by `ts_rank`.
+- **Alias exact and substring match** (`alias = needle OR alias ILIKE '%needle%'`). Alias hits get a +1.0 boost.
+- **Status filter** — `wiki_pages.status = 'active'` only.
+
+Results are ordered by `score DESC`, then `last_compiled_at DESC`.
+
+`mobileWikiSearch` uses a different ranking — reciprocal rank over Hindsight's semantic recall order. See [the API doc](/api/compounding-memory/#mobilewikisearch) for the full scoring.
+
+## Related pages
+
+- [Compounding Memory](/concepts/knowledge/compounding-memory/)
+- [Compounding Memory: Pipeline](/concepts/knowledge/compounding-memory-pipeline/)
+- [Operating Compounding Memory](/guides/compounding-memory-operations/)
+- [Compounding Memory (API)](/api/compounding-memory/)

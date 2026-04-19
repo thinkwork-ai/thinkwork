@@ -1,0 +1,99 @@
+---
+title: Compounding Memory
+description: A compiled layer on top of normalized memory that surfaces durable entities, topics, and decisions with provenance back to the raw memory units.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Compounding Memory is a compiled layer on top of long-term memory. It reads new and changed memory records, and materializes them into a per-agent wiki of **pages** — durable entities, topics, and decisions — each with sections, aliases, links, and provenance back to the raw memory units.
+
+The raw memory (Hindsight or AgentCore) stays the canonical record. The wiki is a derived view, rebuildable from canonical memory at any time.
+
+## Why it exists
+
+Raw memory recall answers "which memory units look relevant to this query?" That's semantic retrieval over untouched records.
+
+The wiki layer answers a different question: "what does this agent actually know about X?"
+
+Three things become possible once memories compile into pages:
+
+- **Durable subjects.** Every time a conversation mentions the same place or decision, the agent writes into the same page instead of producing disconnected summaries.
+- **Readable outputs.** A compiled page is markdown, with sections. It can be exported, inspected, or diffed.
+- **Cheap re-grounding.** An agent looking up "Austin, TX" pulls one compiled page instead of re-summarizing dozens of memory units every turn.
+
+<Aside type="tip">
+Raw long-term memory is still the primary recall path. The wiki is a compounding sidecar — high-value for durable subjects, unnecessary for ephemeral ones.
+</Aside>
+
+## The page mental model
+
+Every compiled object is a **page**. A page has one of three types:
+
+- **`entity`** — a specific thing (a person, a place, a company, a product, a project).
+- **`topic`** — a collection of related items under a theme (e.g. "Austin kids activities, April 2026").
+- **`decision`** — a choice that was made, with context and rationale.
+
+Type describes **shape** (which sections the page has, what kind of prose the section writer produces), not sharing.
+
+Every page belongs to exactly one `(tenant, agent)` scope. There are no tenant-wide pages, no cross-agent merges, and no `owner_id IS NULL` escape hatch. Team and company scopes are explicitly deferred.
+
+Inside a page:
+
+- **Sections** — markdown blocks keyed by slug (`overview`, `notes`, `visits`, `related`…). Each section is patched independently; a rewrite only touches sections whose content materially changes.
+- **Aliases** — normalized alternate names ("austin texas", "austin tx"). Aliases resolve a mention to a page.
+- **Links** — directed references to other pages in the same scope. Populated by the planner whenever one page meaningfully references another.
+- **Provenance** — every section tracks the specific memory records the compiler cited when it wrote that section.
+
+See [Compounding Memory: Pages](/concepts/knowledge/compounding-memory-pages/) for the full data model.
+
+## How a memory becomes a page
+
+The compile pipeline is owned by a job worker that runs per `(tenant, agent)` scope:
+
+1. **Claim a job.** Jobs get enqueued post-retain (fire-and-forget), by admin mutation, or by the nightly lint sweep.
+2. **Read the cursor.** A cursor stores the last processed `(updated_at, record_id)` so compiles are incremental and replayable.
+3. **Pull new records.** The memory adapter exposes `listRecordsUpdatedSince` so the compiler can paginate over just what changed.
+4. **Planner pass.** An LLM receives the records plus the scope's candidate pages and open unresolved mentions, and returns a plan: which pages to update, which to create, which aliases to hold as unresolved, which to promote, and which links to add.
+5. **Section writer pass.** For each section the plan wants to change, an LLM patches only that section's markdown — not the whole page.
+6. **Write provenance.** Each section records the specific memory records the planner cited for it. Pollution (a memory cited as a source for unrelated sections) is explicitly avoided.
+7. **Advance the cursor.** Only after a successful apply, so mid-job failures replay safely.
+
+The full walk-through is in [Compounding Memory: Pipeline](/concepts/knowledge/compounding-memory-pipeline/).
+
+## v1 scope guarantees
+
+- **Agent-scoped, everywhere.** Pages, sections, aliases, mentions, jobs, cursors — all rows carry `owner_id NOT NULL`. No cross-agent lookup within a tenant.
+- **One adapter in v1.** `listRecordsUpdatedSince` is implemented for Hindsight only. AgentCore returns `NotImplemented`.
+- **Flag-gated.** Compiles only run for tenants with `wiki_compile_enabled = true`. Other tenants are untouched.
+- **Flattened provenance.** Each `wiki_section_sources` row points at one memory unit; no nested metadata structures.
+
+## Reading the compiled wiki
+
+Four surfaces read from the wiki:
+
+- **GraphQL `wikiPage` / `wikiSearch` / `wikiBacklinks`** — admin and internal clients. Owner-scoped; `ownerId` is required on every read.
+- **GraphQL `mobileWikiSearch`** — mobile clients. Takes a free-text query, runs Hindsight recall, and returns compiled pages ranked by Hindsight's own rank order (reciprocal rank over the hit position of any citing memory).
+- **GraphQL `MemoryRecord.wikiPages`** — field resolver. For any memory surfaced by `memorySearch` or `memoryRecords`, the client can ask for the pages that cite it.
+- **Nightly export Lambda** — renders the vault as a zip at `s3://thinkwork-${stage}-wiki-exports/<tenant>/<agent>/<date>/vault.zip`.
+
+Agent tools for `search_wiki` / `read_wiki_page` are deferred; agents currently read the wiki via GraphQL, not as a direct tool.
+
+See [Compounding Memory (API)](/api/compounding-memory/) for the full GraphQL surface.
+
+## Design intent references
+
+The product and architecture decisions behind this system live in the following PRDs. They are read-only design intent; code and these docs are the source of truth for behavior.
+
+- `.prds/compounding-memory-scoping.md` — v1 agent-scope rule authority.
+- `.prds/compounding-memory-implementation-plan.md` — phased delivery plan.
+- `.prds/thinkwork-memory-compounding-pipeline-deep-dive.md` — pipeline philosophy.
+- `.prds/compiled-memory-layer-engineering-prd.md` — engineering architecture.
+- `.prds/compounding-memory-company-second-brain-prd.md` — product framing.
+
+## Related pages
+
+- [Compounding Memory: Pipeline](/concepts/knowledge/compounding-memory-pipeline/)
+- [Compounding Memory: Pages](/concepts/knowledge/compounding-memory-pages/)
+- [Operating Compounding Memory](/guides/compounding-memory-operations/)
+- [Compounding Memory (API)](/api/compounding-memory/)
+- [Long-term Memory](/concepts/knowledge/memory/)

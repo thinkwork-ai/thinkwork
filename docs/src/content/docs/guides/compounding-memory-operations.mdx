@@ -1,0 +1,238 @@
+---
+title: Operating Compounding Memory
+description: Recipes for enabling the wiki on a tenant, triggering compiles, bulk-importing, replaying, debugging ranking, and monitoring cost.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Recipes for running the Compounding Memory pipeline in a live environment. Each section is task-oriented; pick the one that matches what you need to do.
+
+Before following these, make sure you understand the pipeline shape in [Compounding Memory: Pipeline](/concepts/knowledge/compounding-memory-pipeline/).
+
+## Enable the pipeline on a tenant
+
+Compiles are gated by the `tenants.wiki_compile_enabled` flag. By default it's `false` for every tenant. Turn it on:
+
+```sql
+UPDATE tenants
+SET wiki_compile_enabled = true
+WHERE id = '<tenant-uuid>';
+```
+
+Two other conditions must also be true for the enqueue path to fire on retain:
+
+- The active memory adapter is `hindsight`. AgentCore does not implement `listRecordsUpdatedSince` in v1; the enqueue function in `packages/api/src/lib/wiki/enqueue.ts` returns `skipped_adapter` when the adapter kind is anything else.
+- The retain call can identify an `ownerId` (the agent the turn belongs to). If the retain context can't resolve an owner, the enqueue returns `skipped_missing_inputs` and moves on without failing the retain.
+
+No redeploy needed after flipping the flag. The next `retainTurn` in that tenant will enqueue a compile job.
+
+## Trigger an ad-hoc compile
+
+**GraphQL (admin-only):**
+
+```graphql
+mutation CompileNow($tenantId: ID!, $ownerId: ID!) {
+  compileWikiNow(tenantId: $tenantId, ownerId: $ownerId) {
+    id
+    status
+    trigger
+    createdAt
+  }
+}
+```
+
+This inserts a row in `wiki_compile_jobs` and fires a `Lambda.invoke` at the `wiki-compile` handler. The returned row may be either a freshly-inserted job or an existing in-flight job hit by the 5-minute dedupe bucket — check `status` and `trigger` to distinguish.
+
+**Direct Lambda invoke** (when you're driving a drain loop and want full synchronous control):
+
+```bash
+aws lambda invoke \
+  --function-name thinkwork-${STAGE}-api-wiki-compile \
+  --payload "{\"jobId\":\"<job-uuid>\"}" \
+  --cli-binary-format raw-in-base64-out \
+  /tmp/resp.json
+```
+
+Use sync invokes (the default) to see per-job errors surface directly in the response rather than only in CloudWatch.
+
+## Bulk-ingest journal data
+
+`bootstrapJournalImport` pulls every idea for a given account out of the `journal.*` schema, denormalizes it with its linked place + journal, writes each row into memory via `adapter.retain`, and enqueues a single terminal compile job at the end.
+
+```graphql
+mutation BulkImport(
+  $accountId: ID!
+  $tenantId: ID!
+  $agentId: ID!
+  $limit: Int
+) {
+  bootstrapJournalImport(
+    accountId: $accountId
+    tenantId: $tenantId
+    agentId: $agentId
+    limit: $limit
+  ) {
+    dispatched
+    dispatchedAt
+    error
+  }
+}
+```
+
+The mutation is **fire-and-forget**: it returns an acknowledgement immediately and hands the actual ingest to the dedicated `wiki-bootstrap-import` Lambda (900-second timeout, 1 GB memory). Watch progress in two places:
+
+- **CloudWatch Logs** — log group `/aws/lambda/thinkwork-${STAGE}-api-wiki-bootstrap-import`. Per-row progress, errors, and the terminal compile enqueue.
+- **`wiki_compile_jobs` ledger** — a single row with `trigger = 'bootstrap_import'` gets written at the end.
+
+Per-record retain uses `sourceType = "journal_idea"`, `kind = "event"`, and carries metadata like `idea`, `place`, `journal`, and the origin `account_id`. During import the post-retain enqueue is suppressed so only the final terminal compile runs.
+
+## Replay / rebuild from scratch
+
+`resetWikiCursor` gives you a clean starting point for a recompile.
+
+```graphql
+mutation Reset($tenantId: ID!, $ownerId: ID!, $force: Boolean) {
+  resetWikiCursor(tenantId: $tenantId, ownerId: $ownerId, force: $force) {
+    cursorCleared
+    pagesArchived
+  }
+}
+```
+
+- `force: false` (default) — clears the cursor. Next compile re-reads every memory unit from the beginning. Existing pages stay in place; the planner will mostly hit `isMeaningfulChange == false` and skip, so this is a no-op unless the memory store changed.
+- `force: true` — also archives every active page in the scope (`status = 'archived'`). The next compile resurrects them back to `active` as it touches them.
+
+**Caveat:** archiving does not delete `wiki_section_sources` rows. Archived pages retain their provenance. If your goal is to rebuild provenance cleanly (e.g. after a polluted batch compile), hard-delete instead:
+
+```sql
+-- One transaction. unresolved_mentions references pages.id via
+-- promoted_page_id, so delete those first.
+BEGIN;
+DELETE FROM wiki_unresolved_mentions WHERE owner_id = '<agent-uuid>';
+DELETE FROM wiki_pages              WHERE owner_id = '<agent-uuid>';
+DELETE FROM wiki_compile_cursors    WHERE owner_id = '<agent-uuid>';
+UPDATE wiki_compile_jobs
+  SET status = 'skipped',
+      finished_at = now(),
+      error = 'reset by operator before recompile'
+  WHERE owner_id = '<agent-uuid>'
+    AND status IN ('pending','running');
+COMMIT;
+```
+
+`ON DELETE CASCADE` on `wiki_page_sections`, `wiki_page_aliases`, `wiki_page_links`, and `wiki_section_sources` handles the rest. Then enqueue a fresh job and drain.
+
+## Inspect a compile job
+
+```sql
+SELECT
+  id, status, trigger,
+  metrics->>'records_read'         AS records,
+  metrics->>'pages_upserted'       AS pages,
+  metrics->>'sections_rewritten'   AS sections,
+  metrics->>'links_upserted'       AS links,
+  metrics->>'cost_usd'             AS cost,
+  metrics->>'cap_hit'              AS cap,
+  error,
+  created_at, finished_at
+FROM wiki_compile_jobs
+WHERE owner_id = '<agent-uuid>'
+ORDER BY created_at DESC
+LIMIT 20;
+```
+
+Fields to look for:
+
+- **`cap_hit`** — a guardrail stopped the job short. Values: `max_new_pages` (planner wanted more than 25 new pages), `max_sections_rewritten` (over 100 section rewrites in one job). Re-invoke to continue; the cursor will have advanced past already-applied batches.
+- **`trigger`** — `memory_retain`, `bootstrap_import`, `admin`, `lint`. Useful when triaging whether a job came from a real event or an operator action.
+- **`cost_usd`** — the Haiku cost estimate. Trending high? See "Cost monitoring" below.
+- **`error`** — common values: Bedrock throttle (`Too many requests…`), JSON parse failures, adapter errors.
+
+## Drain a full recompile
+
+After a hard-delete or a cursor reset, a single compile job processes at most 500 records (per `MAX_RECORDS_PER_JOB`). For a large scope you'll need to drive multiple jobs back-to-back.
+
+The pattern the maintainers use:
+
+```bash
+# Pseudocode — loop until records_read = 0 two iterations in a row.
+while true; do
+  JOB=$(psql ... "INSERT INTO wiki_compile_jobs (...) RETURNING id")
+  aws lambda invoke --function-name thinkwork-${STAGE}-api-wiki-compile \
+    --payload "{\"jobId\":\"$JOB\"}" \
+    --cli-binary-format raw-in-base64-out /tmp/resp
+  # Inspect metrics, check status, sleep if throttled.
+done
+```
+
+Expect Bedrock throttling on dense scopes. Sleep 15–30 seconds between sync invokes and back off to 30 seconds on `Too many requests` errors. The cursor only advances on successful batches, so throttled iterations don't lose data.
+
+## Debug a "weird ranking" report
+
+If mobile search returns a wiki page that shouldn't match the query, the issue is almost always polluted provenance — the planner wrote a memory unit as a source for an unrelated section, and that memory is what Hindsight returned for the query.
+
+1. **Find the Hindsight hit at fault.** Run the query against Hindsight and note the top hit's memory unit id.
+2. **Check which sections cite it.**
+   ```sql
+   SELECT p.slug, p.type, wps.section_slug
+   FROM wiki_section_sources wss
+   INNER JOIN wiki_page_sections wps ON wps.id = wss.section_id
+   INNER JOIN wiki_pages p ON p.id = wps.page_id
+   WHERE wss.source_kind = 'memory_unit'
+     AND wss.source_ref = '<memory-uuid>'
+     AND p.owner_id = '<agent-uuid>'
+   ORDER BY p.slug;
+   ```
+3. **If unrelated pages show up, the provenance is polluted.** Recompile cleanly per the replay recipe above — the current compiler's per-section provenance rule prevents re-introducing the pollution.
+
+If provenance is clean and the result still looks wrong, the next thing to suspect is the Hindsight recall itself. `mobileWikiSearch` uses Hindsight's rank order directly (best-rank reciprocal rank). Verify Hindsight is returning the right memories; if it is, the wiki layer is doing its job.
+
+## Export the vault
+
+The `wiki-export` Lambda runs nightly and writes a zip per `(tenant, agent)` to:
+
+```
+s3://thinkwork-${stage}-wiki-exports/<tenant-slug>/<agent-slug>/<yyyy-mm-dd>/vault.zip
+```
+
+Each zip contains one markdown file per page (`<type>/<slug>.md`), with frontmatter for tenant, owner, type, slug, title, `last_compiled_at`, provenance refs, and aliases. Retention is 30 days via the S3 bucket's lifecycle policy.
+
+To export on demand, invoke the Lambda directly:
+
+```bash
+aws lambda invoke \
+  --function-name thinkwork-${STAGE}-api-wiki-export \
+  --payload '{}' \
+  --cli-binary-format raw-in-base64-out \
+  /tmp/resp.json
+```
+
+The Lambda iterates over every `(tenant, agent)` with `wiki_compile_enabled = true` and at least one compiled page.
+
+## Cost monitoring
+
+Each job records `input_tokens`, `output_tokens`, and a `cost_usd` estimate using Claude Haiku 4.5 pricing. For tenant-wide monitoring:
+
+```sql
+SELECT
+  DATE_TRUNC('day', created_at) AS day,
+  count(*) AS jobs,
+  SUM((metrics->>'cost_usd')::numeric) AS total_cost_usd,
+  SUM((metrics->>'records_read')::integer) AS total_records,
+  SUM((metrics->>'pages_upserted')::integer) AS total_pages
+FROM wiki_compile_jobs
+WHERE tenant_id = '<tenant-uuid>'
+  AND status = 'succeeded'
+GROUP BY 1
+ORDER BY 1 DESC
+LIMIT 30;
+```
+
+CloudWatch metric filter on the `wiki-compile` log group catches failures; alarm on `Bedrock` throttle messages if drains are hitting them persistently.
+
+## Related pages
+
+- [Compounding Memory](/concepts/knowledge/compounding-memory/)
+- [Compounding Memory: Pipeline](/concepts/knowledge/compounding-memory-pipeline/)
+- [Compounding Memory: Pages](/concepts/knowledge/compounding-memory-pages/)
+- [Compounding Memory (API)](/api/compounding-memory/)
