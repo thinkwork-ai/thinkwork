@@ -24,7 +24,9 @@ import {
 	findPageById,
 	findPageBySlug,
 	bumpSectionLastSeen,
+	DEDUPE_BUCKET_SECONDS,
 	enqueueCompileJob,
+	parseCompileDedupeBucket,
 	findPagesByExactTitle,
 	findPagesByFuzzyTitle,
 	getCompileJob,
@@ -86,10 +88,6 @@ const MAX_RECORDS_PER_JOB = 500;
  * that feeds the whole agent history through the planner. Paired with
  * continuation chaining so a 5,000-record bootstrap still self-completes. */
 const MAX_RECORDS_PER_BOOTSTRAP_JOB = 1000;
-/** Seconds past "now" we schedule a continuation to run at. Matches the
- * compile dedupe-bucket length so the chained job lands in the next
- * bucket and can't collide with the parent. */
-const CONTINUATION_BUCKET_OFFSET_SECONDS = 300;
 const MAX_NEW_PAGES_PER_JOB = 25;
 const MAX_SECTIONS_REWRITTEN_PER_JOB = 100;
 
@@ -412,21 +410,26 @@ export async function runCompileJob(
 		// chains forward.
 		if (!cursorDrained) {
 			try {
-				// Anchor on this job's `created_at`, not wall-clock `now()`.
-				// Using wall-clock meant a long-running chained job could
-				// compute a continuation bucket identical to its parent's
-				// continuation bucket (the bucket the job itself lives in) —
-				// ON CONFLICT DO NOTHING then swallowed the insert and the
-				// chain silently stopped after step 2. Anchoring on
-				// `created_at` gives each step in a chain a strictly
-				// monotonic bucket: parent in bucket N ⇒ child enqueued for
-				// bucket N+1, child in bucket N+1 ⇒ grandchild for bucket
-				// N+2, regardless of how long any step took.
-				const jobCreatedEpoch = Math.floor(
-					job.created_at.valueOf() / 1000,
-				);
+				// Anchor on the parent's *dedupe bucket*, not its
+				// `created_at`. Earlier attempts (#296) used created_at,
+				// but a chained job is INSERTed when its parent finishes —
+				// so its `created_at` lands in the bucket BEFORE the one
+				// its dedupe key encodes (dedupe = created_at + 300s).
+				// Computing `created_at + 300` then collides with the
+				// job's own dedupe bucket and ON CONFLICT DO NOTHING
+				// drops the insert. Parsing the dedupe key gives us the
+				// parent's actual bucket so `parentBucket + 1` is always
+				// strictly ahead. Fall back to created_at for manually-
+				// seeded keys that don't match the compiler format.
+				const parentBucket =
+					parseCompileDedupeBucket(job.dedupe_key) ??
+					Math.floor(
+						job.created_at.valueOf() /
+							1000 /
+							DEDUPE_BUCKET_SECONDS,
+					);
 				const nextBucketSeconds =
-					jobCreatedEpoch + CONTINUATION_BUCKET_OFFSET_SECONDS;
+					(parentBucket + 1) * DEDUPE_BUCKET_SECONDS;
 				const { inserted, job: chained } = await enqueueCompileJob({
 					tenantId: job.tenant_id,
 					ownerId: job.owner_id,

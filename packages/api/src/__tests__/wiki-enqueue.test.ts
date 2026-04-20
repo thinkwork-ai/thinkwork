@@ -70,6 +70,7 @@ vi.mock("@aws-sdk/client-lambda", () => ({
 import { maybeEnqueuePostTurnCompile } from "../lib/wiki/enqueue.js";
 import {
 	buildCompileDedupeKey,
+	parseCompileDedupeBucket,
 	normalizeAlias,
 	renderBodyMarkdown,
 } from "../lib/wiki/repository.js";
@@ -134,6 +135,46 @@ describe("buildCompileDedupeKey", () => {
 			nowEpochSeconds: 300,
 		});
 		expect(a).not.toBe(b);
+	});
+});
+
+describe("parseCompileDedupeBucket", () => {
+	it("extracts the bucket number from a compiler-built key", () => {
+		const key = buildCompileDedupeKey({
+			tenantId: "t1",
+			ownerId: "a1",
+			nowEpochSeconds: 600,
+		});
+		expect(parseCompileDedupeBucket(key)).toBe(2);
+	});
+
+	it("returns null for manually-seeded keys that don't match", () => {
+		expect(
+			parseCompileDedupeBucket("marco-rebuild-1776700207"),
+		).toBeNull();
+	});
+
+	it("returns null when the last segment isn't a whole number", () => {
+		expect(parseCompileDedupeBucket("t:a:abc")).toBeNull();
+		expect(parseCompileDedupeBucket("t:a:3.5")).toBeNull();
+	});
+
+	it("returns null when the key has the wrong arity", () => {
+		expect(parseCompileDedupeBucket("t:a")).toBeNull();
+		expect(parseCompileDedupeBucket("t:a:b:c")).toBeNull();
+	});
+
+	it("round-trips with buildCompileDedupeKey — continuation invariant", () => {
+		// This is the guarantee the continuation path depends on: a job
+		// enqueued at `nowEpochSeconds = N * 300` must produce a key whose
+		// parsed bucket is `N`, so `parentBucket + 1` gives the
+		// next-strictly-later bucket.
+		const key = buildCompileDedupeKey({
+			tenantId: "t",
+			ownerId: "o",
+			nowEpochSeconds: 5922342 * 300,
+		});
+		expect(parseCompileDedupeBucket(key)).toBe(5922342);
 	});
 });
 

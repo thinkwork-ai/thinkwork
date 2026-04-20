@@ -226,7 +226,7 @@ export function normalizeAlias(raw: string): string {
 // Dedupe key — 5-minute wall-clock bucket per (tenant, owner)
 // ---------------------------------------------------------------------------
 
-const DEDUPE_BUCKET_SECONDS = 300;
+export const DEDUPE_BUCKET_SECONDS = 300;
 
 export function buildCompileDedupeKey(args: {
 	tenantId: string;
@@ -237,6 +237,24 @@ export function buildCompileDedupeKey(args: {
 	const bucket = Math.floor(now / DEDUPE_BUCKET_SECONDS);
 	return `${args.tenantId}:${args.ownerId}:${bucket}`;
 }
+
+/**
+ * Extract the bucket number from a compiler-built dedupe key
+ * (`{tenant}:{owner}:{bucket}`). Returns `null` when the key doesn't
+ * match — e.g., manually-seeded keys like
+ * `"marco-rebuild-1776700207"`. Continuation chaining uses this so a
+ * chained job knows its *actual* dedupe bucket, not the bucket of its
+ * `created_at` (which can trail the dedupe bucket by up to one full
+ * `DEDUPE_BUCKET_SECONDS` when the enqueue was scheduled for a future
+ * slot and the row was INSERTed earlier).
+ */
+export function parseCompileDedupeBucket(dedupeKey: string): number | null {
+	const parts = dedupeKey.split(":");
+	if (parts.length !== 3) return null;
+	const n = Number(parts[2]);
+	return Number.isFinite(n) && Number.isInteger(n) ? n : null;
+}
+
 
 // ---------------------------------------------------------------------------
 // Compile jobs
