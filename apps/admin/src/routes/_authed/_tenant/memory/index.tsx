@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useClient } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Loader2, Trash2, Brain, Search, X, ArrowLeft } from "lucide-react";
@@ -47,8 +47,20 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+type MemoryView = "memories" | "graph";
+
+function isMemoryView(v: unknown): v is MemoryView {
+  return v === "memories" || v === "graph";
+}
+
 export const Route = createFileRoute("/_authed/_tenant/memory/")({
   component: MemoryPage,
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { agent?: string; view?: MemoryView } => ({
+    ...(typeof search.agent === "string" && search.agent ? { agent: search.agent } : {}),
+    ...(isMemoryView(search.view) ? { view: search.view } : {}),
+  }),
 });
 
 /** Parse <topic name="...">content</topic> tags into structured sections.
@@ -136,11 +148,35 @@ function StrategyBadge({ strategy }: { strategy: string | null }) {
 
 function MemoryPage() {
   const { tenantId } = useTenant();
-  const [selectedAgentId, setSelectedAgentId] = useState<string>("all");
+  const { agent, view: viewParam } = Route.useSearch();
+  const navigate = useNavigate();
+  const selectedAgentId = agent ?? "all";
+  const view: MemoryView = viewParam ?? "memories";
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
-  const [view, setView] = useState<"memories" | "graph">("memories");
   const graphRef = useRef<MemoryGraphHandle>(null);
+
+  const updateFilters = useCallback(
+    (next: { agent?: string; view?: MemoryView }) => {
+      navigate({
+        to: "/memory",
+        search: {
+          ...(next.agent && next.agent !== "all" ? { agent: next.agent } : {}),
+          ...(next.view && next.view !== "memories" ? { view: next.view } : {}),
+        },
+        replace: true,
+      });
+    },
+    [navigate],
+  );
+  const setSelectedAgentId = useCallback(
+    (nextAgent: string) => updateFilters({ agent: nextAgent, view }),
+    [updateFilters, view],
+  );
+  const setView = useCallback(
+    (nextView: MemoryView) => updateFilters({ agent: selectedAgentId, view: nextView }),
+    [updateFilters, selectedAgentId],
+  );
 
   // Graph node detail sheet
   const [graphNode, setGraphNode] = useState<MemoryGraphNode | null>(null);
