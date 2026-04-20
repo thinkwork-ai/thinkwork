@@ -1604,6 +1604,184 @@ export async function listChildPages(
 	return rows as WikiPageRow[];
 }
 
+// ---------------------------------------------------------------------------
+// Read surfaces — powered by the `WikiPage` GraphQL field resolvers (Unit 8)
+// ---------------------------------------------------------------------------
+
+/** Server-side hard cap for `sourceMemoryIds(limit)` — protects the
+ * sections-sources join from accidental unbounded scans on heavy pages. */
+export const SOURCE_MEMORY_IDS_MAX_LIMIT = 50;
+
+/**
+ * Count distinct `memory_unit` source_refs across every section on `pageId`.
+ * Drives the "Based on N memories" badge in the mobile page detail screen.
+ * Returns 0 for pages with no section-sources rows (the compile pipeline
+ * hasn't cited them yet, or they're pure-aggregation sections).
+ */
+export async function countSourceMemoriesForPage(
+	pageId: string,
+	db: DbClient = defaultDb,
+): Promise<number> {
+	if (!isValidUuid(pageId)) return 0;
+	const result = await db.execute(sql`
+		SELECT COUNT(DISTINCT ${wikiSectionSources.source_ref})::int AS n
+		FROM ${wikiSectionSources}
+		INNER JOIN ${wikiPageSections}
+			ON ${wikiPageSections.id} = ${wikiSectionSources.section_id}
+		WHERE ${wikiPageSections.page_id} = ${pageId}
+			AND ${wikiSectionSources.source_kind} = 'memory_unit'
+	`);
+	const rows = (result as unknown as { rows?: Array<{ n: number }> }).rows ?? [];
+	return rows[0]?.n ?? 0;
+}
+
+/**
+ * Up to `limit` distinct `memory_unit` ids sourcing sections on `pageId`,
+ * ordered by `created_at` DESC (most recently cited first). Caller's `limit`
+ * is clamped to `[1, SOURCE_MEMORY_IDS_MAX_LIMIT]` — protects the API from
+ * unbounded scans when a mobile client accidentally asks for 100k.
+ */
+export async function listSourceMemoryIdsForPage(
+	pageId: string,
+	limit: number,
+	db: DbClient = defaultDb,
+): Promise<string[]> {
+	if (!isValidUuid(pageId)) return [];
+	const bounded = Math.max(1, Math.min(limit, SOURCE_MEMORY_IDS_MAX_LIMIT));
+	const result = await db.execute(sql`
+		SELECT DISTINCT ON (${wikiSectionSources.source_ref})
+			${wikiSectionSources.source_ref} AS "sourceRef",
+			${wikiSectionSources.first_seen_at} AS "firstSeenAt"
+		FROM ${wikiSectionSources}
+		INNER JOIN ${wikiPageSections}
+			ON ${wikiPageSections.id} = ${wikiSectionSources.section_id}
+		WHERE ${wikiPageSections.page_id} = ${pageId}
+			AND ${wikiSectionSources.source_kind} = 'memory_unit'
+		ORDER BY ${wikiSectionSources.source_ref}, ${wikiSectionSources.first_seen_at} DESC
+		LIMIT ${bounded}
+	`);
+	const rows =
+		(result as unknown as {
+			rows?: Array<{ sourceRef: string; firstSeenAt: string | Date }>;
+		}).rows ?? [];
+	return rows.map((r) => r.sourceRef);
+}
+
+/**
+ * Active child pages of `parentPageId`. Shape matches `WikiPageRow` so the
+ * GraphQL mapper can accept them with no conversion step. Ordered by
+ * `(type, slug)` — same deterministic ordering the compile pipeline uses
+ * for list surfaces.
+ */
+export async function listActiveChildPages(
+	parentPageId: string,
+	db: DbClient = defaultDb,
+): Promise<WikiPageRow[]> {
+	if (!isValidUuid(parentPageId)) return [];
+	const rows = await db
+		.select()
+		.from(wikiPages)
+		.where(
+			and(
+				eq(wikiPages.parent_page_id, parentPageId),
+				eq(wikiPages.status, "active"),
+			),
+		)
+		.orderBy(asc(wikiPages.type), asc(wikiPages.slug));
+	return rows as WikiPageRow[];
+}
+
+/**
+ * Reverse-lookup of a promotion: given a promoted page's id, find the
+ * section on its parent page whose aggregation metadata claims it. Returns
+ * null when the page is top-level OR the parent-section row has since been
+ * archived. The compile applier writes both halves (parent_page_id on the
+ * child, promoted_page_id into the parent-section's jsonb) so the mapping
+ * is intentionally directional — we scan for the section on the parent.
+ */
+export async function findPromotedFromSection(
+	pageId: string,
+	db: DbClient = defaultDb,
+): Promise<{
+	parentPageId: string;
+	sectionId: string;
+	sectionSlug: string;
+	sectionHeading: string;
+} | null> {
+	if (!isValidUuid(pageId)) return null;
+	const [page] = await db
+		.select({
+			id: wikiPages.id,
+			parent_page_id: wikiPages.parent_page_id,
+		})
+		.from(wikiPages)
+		.where(eq(wikiPages.id, pageId))
+		.limit(1);
+	if (!page?.parent_page_id) return null;
+
+	// pg_jsonb `@>` containment — matches the section whose aggregation
+	// jsonb has `promoted_page_id = <pageId>`. Cheaper than `->>` scans
+	// because jsonb_path_ops supports containment via GIN when present.
+	const needle = JSON.stringify({ promoted_page_id: pageId });
+	const result = await db.execute(sql`
+		SELECT id, section_slug AS "sectionSlug", heading
+		FROM ${wikiPageSections}
+		WHERE page_id = ${page.parent_page_id}
+			AND aggregation @> ${needle}::jsonb
+		LIMIT 1
+	`);
+	const rows =
+		(result as unknown as {
+			rows?: Array<{ id: string; sectionSlug: string; heading: string }>;
+		}).rows ?? [];
+	const row = rows[0];
+	if (!row) return null;
+	return {
+		parentPageId: page.parent_page_id,
+		sectionId: row.id,
+		sectionSlug: row.sectionSlug,
+		sectionHeading: row.heading,
+	};
+}
+
+/**
+ * Active pages denormalized into the named section's `aggregation
+ * .linked_page_ids` array. Runs two indexed lookups — one to resolve the
+ * section by (pageId, sectionSlug), one to fetch the child pages by id
+ * list. Returns [] when the section doesn't exist, has no aggregation
+ * metadata, or every linked page has been archived.
+ */
+export async function listSectionChildPages(
+	args: { pageId: string; sectionSlug: string },
+	db: DbClient = defaultDb,
+): Promise<WikiPageRow[]> {
+	if (!isValidUuid(args.pageId)) return [];
+	const [section] = await db
+		.select({ aggregation: wikiPageSections.aggregation })
+		.from(wikiPageSections)
+		.where(
+			and(
+				eq(wikiPageSections.page_id, args.pageId),
+				eq(wikiPageSections.section_slug, args.sectionSlug),
+			),
+		)
+		.limit(1);
+	const agg = section?.aggregation as SectionAggregation | null | undefined;
+	const linkedIds = Array.isArray(agg?.linked_page_ids)
+		? agg!.linked_page_ids.filter(isValidUuid)
+		: [];
+	if (linkedIds.length === 0) return [];
+
+	const rows = await db
+		.select()
+		.from(wikiPages)
+		.where(
+			and(inArray(wikiPages.id, linkedIds), eq(wikiPages.status, "active")),
+		)
+		.orderBy(asc(wikiPages.type), asc(wikiPages.slug));
+	return rows as WikiPageRow[];
+}
+
 /**
  * Pure merge of a patch into existing section aggregation metadata. Kept
  * separate so the pure logic is unit-testable without hitting the DB:

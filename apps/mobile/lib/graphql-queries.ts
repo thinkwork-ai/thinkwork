@@ -1138,6 +1138,15 @@ export const MemoryRecordsQuery = graphql(`
       expiresAt
       namespace
       strategyId
+      # "Contributes to:" chips — Unit 8 / handoff #3. One nested resolver
+      # call per record, capped at typical list size ≤50. DataLoader is a
+      # future optimization if large result sets become the norm.
+      wikiPages {
+        id
+        type
+        slug
+        title
+      }
     }
   }
 `);

@@ -35,6 +35,53 @@ type WikiPage {
   updatedAt: AWSDateTime!
   sections: [WikiPageSection!]!
   aliases: [String!]!
+
+  """
+  Distinct memory_units (Hindsight records) that source at least one section
+  on this page. Counts through `wiki_section_sources`. Hit on detail screens
+  only — list screens must NOT request this (N+1 risk).
+  """
+  sourceMemoryCount: Int!
+  """
+  Up to `limit` memory_unit ids that source sections on this page, ordered
+  by most recently-cited. Server-side capped at 50. Pairs with
+  `MemoryRecord` drill-in so a page's "Based on N memories" badge can
+  resolve to the actual records.
+  """
+  sourceMemoryIds(limit: Int = 10): [ID!]!
+  """
+  Parent hub when this page was promoted from a section on another page.
+  Null for top-level pages. Reads `wiki_pages.parent_page_id`.
+  """
+  parent: WikiPage
+  """
+  Pages that were promoted out of this page's sections — the reverse of
+  `parent`. Empty for pages that have never had a child promoted.
+  """
+  children: [WikiPage!]!
+  """
+  If this page was promoted out of a section on a parent page, the section
+  it came from. Null when this page is top-level or the parent section has
+  since been archived.
+  """
+  promotedFromSection: WikiPromotedFromSection
+  """
+  Active pages rolled up into this page's named section — the denormalized
+  aggregation view (`aggregation.linked_page_ids` on the section jsonb).
+  Empty when the section doesn't exist or carries no aggregation metadata.
+  """
+  sectionChildren(sectionSlug: String!): [WikiPage!]!
+}
+
+"""
+Provenance linkage between a promoted page and the section it was derived
+from. Populated only for pages whose `parent_page_id` is set AND whose
+parent has a section in which `aggregation.promoted_page_id` points back.
+"""
+type WikiPromotedFromSection {
+  parentPage: WikiPage!
+  sectionSlug: String!
+  sectionHeading: String!
 }
 
 type WikiSearchResult {

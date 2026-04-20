@@ -244,6 +244,69 @@ export const WikiPageQuery = gql`
         position
         lastSourceAt
       }
+      # Detail-screen-only read surfaces (Unit 8). Each field fires its own
+      # repository query — do NOT request these on list screens (search,
+      # recentWikiPages) or you'll N+1 the server.
+      sourceMemoryCount
+      parent {
+        id
+        type
+        slug
+        title
+      }
+      promotedFromSection {
+        parentPage {
+          id
+          type
+          slug
+          title
+        }
+        sectionSlug
+        sectionHeading
+      }
+      children {
+        id
+        type
+        slug
+        title
+        summary
+      }
+    }
+  }
+`;
+
+export const WikiPageSourceMemoryIdsQuery = gql`
+  query WikiPageSourceMemoryIds(
+    $tenantId: ID!
+    $ownerId: ID!
+    $type: WikiPageType!
+    $slug: String!
+    $limit: Int
+  ) {
+    wikiPage(tenantId: $tenantId, ownerId: $ownerId, type: $type, slug: $slug) {
+      id
+      sourceMemoryIds(limit: $limit)
+    }
+  }
+`;
+
+export const WikiPageSectionChildrenQuery = gql`
+  query WikiPageSectionChildren(
+    $tenantId: ID!
+    $ownerId: ID!
+    $type: WikiPageType!
+    $slug: String!
+    $sectionSlug: String!
+  ) {
+    wikiPage(tenantId: $tenantId, ownerId: $ownerId, type: $type, slug: $slug) {
+      id
+      sectionChildren(sectionSlug: $sectionSlug) {
+        id
+        type
+        slug
+        title
+        summary
+      }
     }
   }
 `;

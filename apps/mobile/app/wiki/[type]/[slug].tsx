@@ -198,6 +198,64 @@ export default function WikiPageScreen() {
 					</View>
 				) : (
 					<View style={{ paddingHorizontal: 24, paddingTop: 16, gap: 20 }}>
+						{page.promotedFromSection ? (
+							<Pressable
+								onPress={() => {
+									const parent = page.promotedFromSection!.parentPage;
+									const path = `/wiki/${encodeURIComponent(parent.type)}/${encodeURIComponent(parent.slug)}`;
+									router.push(
+										ownerId
+											? `${path}?agentId=${encodeURIComponent(ownerId)}`
+											: path,
+									);
+								}}
+								style={({ pressed }) => ({
+									paddingHorizontal: 12,
+									paddingVertical: 8,
+									borderRadius: 10,
+									backgroundColor: pressed ? colors.secondary : "transparent",
+									borderWidth: 1,
+									borderColor: colors.border,
+									alignSelf: "flex-start",
+								})}
+							>
+								<Muted style={{ fontSize: 11, fontWeight: "600", letterSpacing: 0.4 }}>
+									PROMOTED FROM
+								</Muted>
+								<Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "500" }}>
+									{page.promotedFromSection.parentPage.title} → {page.promotedFromSection.sectionHeading}
+								</Text>
+							</Pressable>
+						) : page.parent ? (
+							<Pressable
+								onPress={() => {
+									const parent = page.parent!;
+									const path = `/wiki/${encodeURIComponent(parent.type)}/${encodeURIComponent(parent.slug)}`;
+									router.push(
+										ownerId
+											? `${path}?agentId=${encodeURIComponent(ownerId)}`
+											: path,
+									);
+								}}
+								style={({ pressed }) => ({
+									paddingHorizontal: 12,
+									paddingVertical: 8,
+									borderRadius: 10,
+									backgroundColor: pressed ? colors.secondary : "transparent",
+									borderWidth: 1,
+									borderColor: colors.border,
+									alignSelf: "flex-start",
+								})}
+							>
+								<Muted style={{ fontSize: 11, fontWeight: "600", letterSpacing: 0.4 }}>
+									PARENT
+								</Muted>
+								<Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "500" }}>
+									{page.parent.title}
+								</Text>
+							</Pressable>
+						) : null}
+
 						<View style={{ gap: 6 }}>
 							{type ? (
 								<Muted
@@ -213,6 +271,22 @@ export default function WikiPageScreen() {
 							) : null}
 							{page.summary ? (
 								<Muted style={{ fontSize: 15, lineHeight: 22 }}>{page.summary}</Muted>
+							) : null}
+							{typeof page.sourceMemoryCount === "number" && page.sourceMemoryCount > 0 ? (
+								<View
+									style={{
+										paddingHorizontal: 8,
+										paddingVertical: 3,
+										borderRadius: 999,
+										backgroundColor: colors.secondary,
+										alignSelf: "flex-start",
+										marginTop: 4,
+									}}
+								>
+									<Text style={{ color: colors.mutedForeground, fontSize: 11 }}>
+										Based on {page.sourceMemoryCount} {page.sourceMemoryCount === 1 ? "memory" : "memories"}
+									</Text>
+								</View>
 							) : null}
 							{page.aliases.length > 0 ? (
 								<View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
@@ -249,6 +323,61 @@ export default function WikiPageScreen() {
 								</Markdown>
 							</View>
 						))}
+
+						{page.children && page.children.length > 0 ? (
+							<View style={{ gap: 8, marginTop: 12 }}>
+								<Text
+									style={{
+										color: colors.mutedForeground,
+										fontSize: 12,
+										fontWeight: "600",
+										letterSpacing: 0.5,
+										textTransform: "uppercase",
+									}}
+								>
+									Promoted children
+								</Text>
+								{page.children.map((child) => (
+									<Pressable
+										key={child.id}
+										onPress={() => {
+											const bp = `/wiki/${encodeURIComponent(child.type)}/${encodeURIComponent(child.slug)}`;
+											router.push(
+												ownerId ? `${bp}?agentId=${encodeURIComponent(ownerId)}` : bp,
+											);
+										}}
+										style={({ pressed }) => ({
+											paddingHorizontal: 12,
+											paddingVertical: 10,
+											borderRadius: 12,
+											borderWidth: 1,
+											borderColor: colors.border,
+											backgroundColor: pressed ? colors.secondary : "transparent",
+											gap: 4,
+										})}
+									>
+										<Muted
+											style={{
+												fontSize: 10,
+												fontWeight: "600",
+												textTransform: "uppercase",
+												letterSpacing: 0.5,
+											}}
+										>
+											{TYPE_LABELS[child.type]}
+										</Muted>
+										<Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 15, fontWeight: "500" }}>
+											{child.title}
+										</Text>
+										{child.summary ? (
+											<Muted numberOfLines={1} style={{ fontSize: 13 }}>
+												{child.summary}
+											</Muted>
+										) : null}
+									</Pressable>
+								))}
+							</View>
+						) : null}
 
 						{connectedPages.length > 0 ? (
 							<View style={{ gap: 8, marginTop: 12 }}>

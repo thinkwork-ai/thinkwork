@@ -1,12 +1,19 @@
 import { useState, useCallback } from "react";
 import { View, ScrollView, Pressable, ActivityIndicator, TextInput, Alert, Platform } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { Trash2, Check, X, RefreshCw } from "lucide-react-native";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { Text, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
 import { useMemoryRecords, useDeleteMemoryRecord, useUpdateMemoryRecord } from "@/lib/hooks/use-memory";
+
+type WikiPageChip = {
+  id: string;
+  type: "ENTITY" | "TOPIC" | "DECISION";
+  slug: string;
+  title: string;
+};
 
 type MemoryRecord = {
   memoryRecordId: string;
@@ -16,6 +23,7 @@ type MemoryRecord = {
   expiresAt?: string | null;
   namespace?: string | null;
   strategyId?: string | null;
+  wikiPages?: WikiPageChip[] | null;
 };
 
 function formatDate(iso?: string | null): string {
@@ -58,17 +66,20 @@ const STRATEGY_META: Record<string, { title: string; emptyMessage: string }> = {
 
 function MemoryCard({
   record,
+  assistantId,
   onDelete,
   onUpdate,
   colors,
 }: {
   record: MemoryRecord;
+  assistantId: string | undefined;
   onDelete: () => void;
   onUpdate: (content: string) => void;
   colors: typeof COLORS.light;
 }) {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(record.content?.text ?? "");
+  const router = useRouter();
 
   const text = record.content?.text ?? "";
 
@@ -123,6 +134,39 @@ function MemoryCard({
             {text}
           </Text>
         )}
+
+        {/* "Contributes to:" chips — Unit 8 read surface. Tap navigates to
+            the wiki page. Only rendered when not editing so the chips don't
+            fight for vertical space with the edit controls. */}
+        {!editing && record.wikiPages && record.wikiPages.length > 0 ? (
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+            <Muted style={{ fontSize: 11, marginRight: 2 }}>Contributes to:</Muted>
+            {record.wikiPages.map((page) => (
+              <Pressable
+                key={page.id}
+                onPress={(event) => {
+                  event.stopPropagation?.();
+                  const path = `/wiki/${encodeURIComponent(page.type)}/${encodeURIComponent(page.slug)}`;
+                  router.push(
+                    assistantId
+                      ? `${path}?agentId=${encodeURIComponent(assistantId)}`
+                      : path,
+                  );
+                }}
+                style={({ pressed }) => ({
+                  paddingHorizontal: 8,
+                  paddingVertical: 3,
+                  borderRadius: 999,
+                  backgroundColor: pressed ? colors.primary : colors.secondary,
+                })}
+              >
+                <Text style={{ fontSize: 11, color: colors.foreground }}>
+                  {page.title}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
 
         {/* Metadata row */}
         <View className="flex-row items-center justify-between mt-2.5 pt-2 border-t border-neutral-100 dark:border-neutral-800">
@@ -254,6 +298,7 @@ export default function MemoryListScreen() {
             <MemoryCard
               key={record.memoryRecordId}
               record={record}
+              assistantId={assistantId}
               onDelete={() => handleDelete(record.memoryRecordId)}
               onUpdate={(content) => handleUpdate(record.memoryRecordId, content)}
               colors={colors}

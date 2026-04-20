@@ -23,4 +23,5 @@ export const wikiMutations = {
 	resetWikiCursor,
 };
 
+export { wikiPageTypeResolvers } from "./fieldResolvers.js";
 export { WikiAuthError } from "./auth.js";
