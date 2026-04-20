@@ -45,6 +45,12 @@ export {
   type WikiSubgraphLink,
   type WikiSubgraphHasMoreEntry,
 } from "./hooks/use-wiki-subgraph";
+export {
+  useWikiGraph,
+  type WikiGraphPayload,
+  type WikiGraphNodeFromServer,
+  type WikiGraphEdgeFromServer,
+} from "./hooks/use-wiki-graph";
 
 export type {
   ThinkworkConfig,

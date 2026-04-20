@@ -272,6 +272,26 @@ export const WikiConnectedPagesQuery = gql`
   }
 `;
 
+export const WikiGraphQuery = gql`
+  query WikiGraph($tenantId: ID!, $ownerId: ID!) {
+    wikiGraph(tenantId: $tenantId, ownerId: $ownerId) {
+      nodes {
+        id
+        label
+        entityType
+        slug
+        edgeCount
+      }
+      edges {
+        source
+        target
+        label
+        weight
+      }
+    }
+  }
+`;
+
 export const WikiSubgraphQuery = gql`
   query WikiSubgraph(
     $tenantId: ID!

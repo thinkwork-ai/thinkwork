@@ -5,6 +5,8 @@ import {
   forceLink,
   forceManyBody,
   forceSimulation,
+  forceX,
+  forceY,
 } from "d3-force";
 import { useEffect, useRef, useState } from "react";
 import type { WikiGraphEdge, WikiGraphNode } from "../types";
@@ -35,16 +37,23 @@ export function useForceSimulation(
   const lastRenderRef = useRef(0);
 
   useEffect(() => {
+    // Tuned for dense agent graphs (~50–150 pages). Goals:
+    //   - shorter links + softer charge → connected neighborhoods stay tight
+    //   - forceX/forceY pull stragglers toward center so disconnected
+    //     components don't drift far off-canvas
+    //   - tighter collide so nodes pack densely without overlapping
     const sim = forceSimulation<WikiGraphNode, WikiGraphEdge>(nodes)
       .force(
         "link",
         forceLink<WikiGraphNode, WikiGraphEdge>(edges)
           .id((d) => d.id)
-          .distance(80),
+          .distance(40),
       )
-      .force("charge", forceManyBody().strength(-220))
+      .force("charge", forceManyBody().strength(-80))
       .force("center", forceCenter(0, 0))
-      .force("collide", forceCollide(24));
+      .force("x", forceX(0).strength(0.08))
+      .force("y", forceY(0).strength(0.08))
+      .force("collide", forceCollide(18));
 
     simRef.current = sim;
 
