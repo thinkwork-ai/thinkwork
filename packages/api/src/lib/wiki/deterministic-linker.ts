@@ -54,6 +54,22 @@ export interface ParentPageLookupArgs {
 	title: string;
 }
 
+/** Same shape as `ParentPageLookup` but with a similarity score attached.
+ * Powers the trigram fallback when exact-title lookup returns empty — the
+ * higher-recall path for cases like candidate `"Portland"` resolving to
+ * existing page `"Portland, Oregon"`. */
+export interface ParentPageFuzzyResult {
+	id: string;
+	type: WikiPageType;
+	slug: string;
+	title: string;
+	similarity: number;
+}
+
+export type ParentPageFuzzyLookup = (
+	args: ParentPageLookupArgs,
+) => Promise<ParentPageFuzzyResult[]>;
+
 export type ParentPageLookup = (
 	args: ParentPageLookupArgs,
 ) => Promise<
@@ -71,6 +87,12 @@ export interface EmitDeterministicParentLinksArgs {
 	candidates: DerivedParentCandidate[];
 	affectedPages: AffectedPage[];
 	lookupParentPages: ParentPageLookup;
+	/** Optional trigram-fallback lookup. Only invoked when
+	 * `lookupParentPages` returned no hits for a candidate. Callers that
+	 * want exact-only behavior (tests, isolated backfill runs) can omit
+	 * this. Recall gains come from titles like `"Portland"` resolving to
+	 * existing page `"Portland, Oregon"` at similarity ≥ 0.85. */
+	lookupParentPagesFuzzy?: ParentPageFuzzyLookup;
 	writeLink: (args: WriteLinkArgs) => Promise<void>;
 }
 
@@ -231,6 +253,8 @@ export async function emitDeterministicParentLinks(
 		}
 	}
 
+	const { lookupParentPagesFuzzy } = args;
+
 	for (const candidate of candidates) {
 		if (!TRUSTED_REASONS.has(candidate.reason)) continue;
 
@@ -239,16 +263,44 @@ export async function emitDeterministicParentLinks(
 			ownerId: scope.ownerId,
 			title: candidate.parentTitle,
 		});
-		if (matches.length === 0) continue;
-		if (matches.length > 1) {
-			console.warn(
-				`[deterministic-linker] title collision for "${candidate.parentTitle}"`
-					+ ` in (tenant=${scope.tenantId}, owner=${scope.ownerId}): ${matches
-						.map((m) => m.id)
-						.join(", ")} — picking first`,
-			);
+		let parent:
+			| { id: string; type: WikiPageType; slug: string; title: string }
+			| undefined;
+		if (matches.length > 0) {
+			if (matches.length > 1) {
+				console.warn(
+					`[deterministic-linker] title collision for "${candidate.parentTitle}"`
+						+ ` in (tenant=${scope.tenantId}, owner=${scope.ownerId}): ${matches
+							.map((m) => m.id)
+							.join(", ")} — picking first`,
+				);
+			}
+			parent = matches[0];
+		} else if (lookupParentPagesFuzzy) {
+			// Trigram fallback — closes the "Portland" candidate vs
+			// existing "Portland, Oregon" page gap surfaced on Marco
+			// recompile. Same-type gate below still applies.
+			const fuzzy = await lookupParentPagesFuzzy({
+				tenantId: scope.tenantId,
+				ownerId: scope.ownerId,
+				title: candidate.parentTitle,
+			});
+			if (fuzzy.length > 0) {
+				const best = fuzzy[0]!;
+				console.log(
+					`[deterministic-linker] fuzzy parent match: "${candidate.parentTitle}" ` +
+						`≈ "${best.title}" (sim=${best.similarity.toFixed(3)}) → ` +
+						`page ${best.id}`,
+				);
+				parent = {
+					id: best.id,
+					type: best.type,
+					slug: best.slug,
+					title: best.title,
+				};
+			}
 		}
-		const parent = matches[0]!;
+		if (!parent) continue;
 		if (!ALLOWED_PARENT_TYPES.has(parent.type)) continue;
 
 		const seenLeafIds = new Set<string>();

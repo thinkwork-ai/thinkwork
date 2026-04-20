@@ -313,7 +313,18 @@ const { mockAdapter, mockRepo, mockPlanner, mockWriter, mockGetServices } =
 			upsertUnresolvedMention: vi.fn(),
 			markUnresolvedPromoted: vi.fn(),
 			findPagesByExactTitle: vi.fn().mockResolvedValue([]),
+			findPagesByFuzzyTitle: vi.fn().mockResolvedValue([]),
 			findMemoryUnitPageSources: vi.fn().mockResolvedValue([]),
+			bumpSectionLastSeen: vi.fn().mockResolvedValue(0),
+			enqueueCompileJob: vi.fn().mockResolvedValue({
+				inserted: false,
+				job: {
+					id: "chained-job",
+					tenant_id: "t1",
+					owner_id: "a1",
+					trigger: "bootstrap_import",
+				},
+			}),
 			countDuplicateTitleCandidates: vi.fn().mockResolvedValue(0),
 			normalizeAlias: (s: string) => s.toLowerCase().trim(),
 		};
@@ -357,6 +368,12 @@ vi.mock("../lib/wiki/repository.js", async (importOriginal) => {
 			mockRepo.markUnresolvedPromoted(...args),
 		findPagesByExactTitle: (...args: unknown[]) =>
 			mockRepo.findPagesByExactTitle(...args),
+		findPagesByFuzzyTitle: (...args: unknown[]) =>
+			mockRepo.findPagesByFuzzyTitle(...args),
+		bumpSectionLastSeen: (...args: unknown[]) =>
+			mockRepo.bumpSectionLastSeen(...args),
+		enqueueCompileJob: (...args: unknown[]) =>
+			mockRepo.enqueueCompileJob(...args),
 		findMemoryUnitPageSources: (...args: unknown[]) =>
 			mockRepo.findMemoryUnitPageSources(...args),
 		countDuplicateTitleCandidates: (...args: unknown[]) =>
@@ -460,6 +477,8 @@ describe("runCompileJob", () => {
 		});
 		mockRepo.upsertPageLink.mockResolvedValue(undefined);
 		mockRepo.findPagesByExactTitle.mockResolvedValue([]);
+		mockRepo.findPagesByFuzzyTitle.mockResolvedValue([]);
+		mockRepo.bumpSectionLastSeen.mockResolvedValue(0);
 		mockRepo.findMemoryUnitPageSources.mockResolvedValue([]);
 		mockRepo.countDuplicateTitleCandidates.mockResolvedValue(0);
 		// No alias collisions by default; individual tests override when

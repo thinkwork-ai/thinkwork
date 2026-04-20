@@ -297,4 +297,100 @@ describe("emitDeterministicParentLinks", () => {
 		});
 		expect(result.linksWritten).toBe(3);
 	});
+
+	// ─── Trigram fallback (Unit 10 / 2026-04-20) ──────────────────────
+	//
+	// When exact-title lookup misses, the emitter falls through to a fuzzy
+	// trigram lookup — so a candidate titled "Portland" still finds an
+	// active page titled "Portland, Oregon" at similarity ≥ 0.85. The
+	// fuzzy path is opt-in via the `lookupParentPagesFuzzy` callback;
+	// callers that don't wire it get exact-only behavior.
+	describe("trigram fallback", () => {
+		it("resolves a candidate via fuzzy when exact returns empty", async () => {
+			const writeLink = makeWriteLink();
+			const fuzzy = vi.fn(async () => [
+				{
+					id: "page-portland",
+					type: "topic" as const,
+					slug: "portland-oregon",
+					title: "Portland, Oregon",
+					similarity: 0.89,
+				},
+			]);
+			const result = await emitDeterministicParentLinks({
+				scope: SCOPE,
+				candidates: [
+					candidate({ parentTitle: "Portland", parentSlug: "portland" }),
+				],
+				affectedPages: [leafPage()],
+				lookupParentPages: lookupThatReturns([]), // no exact hit
+				lookupParentPagesFuzzy: fuzzy,
+				writeLink,
+			});
+			expect(result.linksWritten).toBe(1);
+			expect(writeLink).toHaveBeenCalledWith(
+				expect.objectContaining({
+					toPageId: "page-portland",
+					context: "deterministic:city:portland",
+				}),
+			);
+		});
+
+		it("never queries fuzzy when exact already resolved the candidate", async () => {
+			const writeLink = makeWriteLink();
+			const fuzzy = vi.fn();
+			await emitDeterministicParentLinks({
+				scope: SCOPE,
+				candidates: [candidate()],
+				affectedPages: [leafPage()],
+				lookupParentPages: lookupThatReturns([
+					{ title: "Paris", match: PARIS_TOPIC },
+				]),
+				lookupParentPagesFuzzy: fuzzy as any,
+				writeLink,
+			});
+			expect(fuzzy).not.toHaveBeenCalled();
+		});
+
+		it("honors the type gate on fuzzy hits — decision parent still skipped", async () => {
+			const writeLink = makeWriteLink();
+			const fuzzy = vi.fn(async () => [
+				{
+					id: "page-portland-decision",
+					type: "decision" as const,
+					slug: "portland",
+					title: "Portland, Oregon",
+					similarity: 0.91,
+				},
+			]);
+			const result = await emitDeterministicParentLinks({
+				scope: SCOPE,
+				candidates: [
+					candidate({ parentTitle: "Portland", parentSlug: "portland" }),
+				],
+				affectedPages: [leafPage()],
+				lookupParentPages: lookupThatReturns([]),
+				lookupParentPagesFuzzy: fuzzy,
+				writeLink,
+			});
+			expect(result.linksWritten).toBe(0);
+			expect(writeLink).not.toHaveBeenCalled();
+		});
+
+		it("degrades silently when fuzzy callback is omitted (exact-only)", async () => {
+			const writeLink = makeWriteLink();
+			const result = await emitDeterministicParentLinks({
+				scope: SCOPE,
+				candidates: [
+					candidate({ parentTitle: "Portland", parentSlug: "portland" }),
+				],
+				affectedPages: [leafPage()],
+				lookupParentPages: lookupThatReturns([]),
+				// lookupParentPagesFuzzy: undefined  ← test wants exact-only
+				writeLink,
+			});
+			expect(result.linksWritten).toBe(0);
+			expect(writeLink).not.toHaveBeenCalled();
+		});
+	});
 });
