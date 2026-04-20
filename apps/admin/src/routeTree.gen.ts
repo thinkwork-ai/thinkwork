@@ -32,7 +32,6 @@ import { Route as AuthedTenantKnowledgeBasesIndexRouteImport } from './routes/_a
 import { Route as AuthedTenantInboxIndexRouteImport } from './routes/_authed/_tenant/inbox/index'
 import { Route as AuthedTenantHumansIndexRouteImport } from './routes/_authed/_tenant/humans/index'
 import { Route as AuthedTenantEvaluationsIndexRouteImport } from './routes/_authed/_tenant/evaluations/index'
-import { Route as AuthedTenantConnectorsIndexRouteImport } from './routes/_authed/_tenant/connectors/index'
 import { Route as AuthedTenantCapabilitiesIndexRouteImport } from './routes/_authed/_tenant/capabilities/index'
 import { Route as AuthedTenantArtifactsIndexRouteImport } from './routes/_authed/_tenant/artifacts/index'
 import { Route as AuthedTenantAgentsIndexRouteImport } from './routes/_authed/_tenant/agents/index'
@@ -44,7 +43,6 @@ import { Route as AuthedTenantRoutinesRoutineIdRouteImport } from './routes/_aut
 import { Route as AuthedTenantKnowledgeBasesKbIdRouteImport } from './routes/_authed/_tenant/knowledge-bases/$kbId'
 import { Route as AuthedTenantInboxInboxItemIdRouteImport } from './routes/_authed/_tenant/inbox/$inboxItemId'
 import { Route as AuthedTenantEvaluationsRunIdRouteImport } from './routes/_authed/_tenant/evaluations/$runId'
-import { Route as AuthedTenantConnectorsSlugRouteImport } from './routes/_authed/_tenant/connectors/$slug'
 import { Route as AuthedTenantCapabilitiesMcpServersRouteImport } from './routes/_authed/_tenant/capabilities/mcp-servers'
 import { Route as AuthedTenantCapabilitiesBuiltinToolsRouteImport } from './routes/_authed/_tenant/capabilities/builtin-tools'
 import { Route as AuthedTenantAgentsNewRouteImport } from './routes/_authed/_tenant/agents/new'
@@ -190,12 +188,6 @@ const AuthedTenantEvaluationsIndexRoute =
     path: '/evaluations/',
     getParentRoute: () => AuthedTenantRoute,
   } as any)
-const AuthedTenantConnectorsIndexRoute =
-  AuthedTenantConnectorsIndexRouteImport.update({
-    id: '/connectors/',
-    path: '/connectors/',
-    getParentRoute: () => AuthedTenantRoute,
-  } as any)
 const AuthedTenantCapabilitiesIndexRoute =
   AuthedTenantCapabilitiesIndexRouteImport.update({
     id: '/',
@@ -259,12 +251,6 @@ const AuthedTenantEvaluationsRunIdRoute =
   AuthedTenantEvaluationsRunIdRouteImport.update({
     id: '/evaluations/$runId',
     path: '/evaluations/$runId',
-    getParentRoute: () => AuthedTenantRoute,
-  } as any)
-const AuthedTenantConnectorsSlugRoute =
-  AuthedTenantConnectorsSlugRouteImport.update({
-    id: '/connectors/$slug',
-    path: '/connectors/$slug',
     getParentRoute: () => AuthedTenantRoute,
   } as any)
 const AuthedTenantCapabilitiesMcpServersRoute =
@@ -423,7 +409,6 @@ export interface FileRoutesByFullPath {
   '/agents/new': typeof AuthedTenantAgentsNewRoute
   '/capabilities/builtin-tools': typeof AuthedTenantCapabilitiesBuiltinToolsRoute
   '/capabilities/mcp-servers': typeof AuthedTenantCapabilitiesMcpServersRoute
-  '/connectors/$slug': typeof AuthedTenantConnectorsSlugRoute
   '/evaluations/$runId': typeof AuthedTenantEvaluationsRunIdRoute
   '/inbox/$inboxItemId': typeof AuthedTenantInboxInboxItemIdRoute
   '/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeBasesKbIdRoute
@@ -435,7 +420,6 @@ export interface FileRoutesByFullPath {
   '/agents/': typeof AuthedTenantAgentsIndexRoute
   '/artifacts/': typeof AuthedTenantArtifactsIndexRoute
   '/capabilities/': typeof AuthedTenantCapabilitiesIndexRoute
-  '/connectors/': typeof AuthedTenantConnectorsIndexRoute
   '/evaluations/': typeof AuthedTenantEvaluationsIndexRoute
   '/humans/': typeof AuthedTenantHumansIndexRoute
   '/inbox/': typeof AuthedTenantInboxIndexRoute
@@ -481,7 +465,6 @@ export interface FileRoutesByTo {
   '/agents/new': typeof AuthedTenantAgentsNewRoute
   '/capabilities/builtin-tools': typeof AuthedTenantCapabilitiesBuiltinToolsRoute
   '/capabilities/mcp-servers': typeof AuthedTenantCapabilitiesMcpServersRoute
-  '/connectors/$slug': typeof AuthedTenantConnectorsSlugRoute
   '/evaluations/$runId': typeof AuthedTenantEvaluationsRunIdRoute
   '/inbox/$inboxItemId': typeof AuthedTenantInboxInboxItemIdRoute
   '/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeBasesKbIdRoute
@@ -493,7 +476,6 @@ export interface FileRoutesByTo {
   '/agents': typeof AuthedTenantAgentsIndexRoute
   '/artifacts': typeof AuthedTenantArtifactsIndexRoute
   '/capabilities': typeof AuthedTenantCapabilitiesIndexRoute
-  '/connectors': typeof AuthedTenantConnectorsIndexRoute
   '/evaluations': typeof AuthedTenantEvaluationsIndexRoute
   '/humans': typeof AuthedTenantHumansIndexRoute
   '/inbox': typeof AuthedTenantInboxIndexRoute
@@ -543,7 +525,6 @@ export interface FileRoutesById {
   '/_authed/_tenant/agents/new': typeof AuthedTenantAgentsNewRoute
   '/_authed/_tenant/capabilities/builtin-tools': typeof AuthedTenantCapabilitiesBuiltinToolsRoute
   '/_authed/_tenant/capabilities/mcp-servers': typeof AuthedTenantCapabilitiesMcpServersRoute
-  '/_authed/_tenant/connectors/$slug': typeof AuthedTenantConnectorsSlugRoute
   '/_authed/_tenant/evaluations/$runId': typeof AuthedTenantEvaluationsRunIdRoute
   '/_authed/_tenant/inbox/$inboxItemId': typeof AuthedTenantInboxInboxItemIdRoute
   '/_authed/_tenant/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeBasesKbIdRoute
@@ -555,7 +536,6 @@ export interface FileRoutesById {
   '/_authed/_tenant/agents/': typeof AuthedTenantAgentsIndexRoute
   '/_authed/_tenant/artifacts/': typeof AuthedTenantArtifactsIndexRoute
   '/_authed/_tenant/capabilities/': typeof AuthedTenantCapabilitiesIndexRoute
-  '/_authed/_tenant/connectors/': typeof AuthedTenantConnectorsIndexRoute
   '/_authed/_tenant/evaluations/': typeof AuthedTenantEvaluationsIndexRoute
   '/_authed/_tenant/humans/': typeof AuthedTenantHumansIndexRoute
   '/_authed/_tenant/inbox/': typeof AuthedTenantInboxIndexRoute
@@ -604,7 +584,6 @@ export interface FileRouteTypes {
     | '/agents/new'
     | '/capabilities/builtin-tools'
     | '/capabilities/mcp-servers'
-    | '/connectors/$slug'
     | '/evaluations/$runId'
     | '/inbox/$inboxItemId'
     | '/knowledge-bases/$kbId'
@@ -616,7 +595,6 @@ export interface FileRouteTypes {
     | '/agents/'
     | '/artifacts/'
     | '/capabilities/'
-    | '/connectors/'
     | '/evaluations/'
     | '/humans/'
     | '/inbox/'
@@ -662,7 +640,6 @@ export interface FileRouteTypes {
     | '/agents/new'
     | '/capabilities/builtin-tools'
     | '/capabilities/mcp-servers'
-    | '/connectors/$slug'
     | '/evaluations/$runId'
     | '/inbox/$inboxItemId'
     | '/knowledge-bases/$kbId'
@@ -674,7 +651,6 @@ export interface FileRouteTypes {
     | '/agents'
     | '/artifacts'
     | '/capabilities'
-    | '/connectors'
     | '/evaluations'
     | '/humans'
     | '/inbox'
@@ -723,7 +699,6 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/agents/new'
     | '/_authed/_tenant/capabilities/builtin-tools'
     | '/_authed/_tenant/capabilities/mcp-servers'
-    | '/_authed/_tenant/connectors/$slug'
     | '/_authed/_tenant/evaluations/$runId'
     | '/_authed/_tenant/inbox/$inboxItemId'
     | '/_authed/_tenant/knowledge-bases/$kbId'
@@ -735,7 +710,6 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/agents/'
     | '/_authed/_tenant/artifacts/'
     | '/_authed/_tenant/capabilities/'
-    | '/_authed/_tenant/connectors/'
     | '/_authed/_tenant/evaluations/'
     | '/_authed/_tenant/humans/'
     | '/_authed/_tenant/inbox/'
@@ -937,13 +911,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedTenantEvaluationsIndexRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
-    '/_authed/_tenant/connectors/': {
-      id: '/_authed/_tenant/connectors/'
-      path: '/connectors'
-      fullPath: '/connectors/'
-      preLoaderRoute: typeof AuthedTenantConnectorsIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
     '/_authed/_tenant/capabilities/': {
       id: '/_authed/_tenant/capabilities/'
       path: '/'
@@ -1019,13 +986,6 @@ declare module '@tanstack/react-router' {
       path: '/evaluations/$runId'
       fullPath: '/evaluations/$runId'
       preLoaderRoute: typeof AuthedTenantEvaluationsRunIdRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/connectors/$slug': {
-      id: '/_authed/_tenant/connectors/$slug'
-      path: '/connectors/$slug'
-      fullPath: '/connectors/$slug'
-      preLoaderRoute: typeof AuthedTenantConnectorsSlugRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
     '/_authed/_tenant/capabilities/mcp-servers': {
@@ -1232,7 +1192,6 @@ interface AuthedTenantRouteChildren {
   AuthedTenantAgentsAgentIdRoute: typeof AuthedTenantAgentsAgentIdRoute
   AuthedTenantAgentsInvitesRoute: typeof AuthedTenantAgentsInvitesRoute
   AuthedTenantAgentsNewRoute: typeof AuthedTenantAgentsNewRoute
-  AuthedTenantConnectorsSlugRoute: typeof AuthedTenantConnectorsSlugRoute
   AuthedTenantEvaluationsRunIdRoute: typeof AuthedTenantEvaluationsRunIdRoute
   AuthedTenantInboxInboxItemIdRoute: typeof AuthedTenantInboxInboxItemIdRoute
   AuthedTenantKnowledgeBasesKbIdRoute: typeof AuthedTenantKnowledgeBasesKbIdRoute
@@ -1243,7 +1202,6 @@ interface AuthedTenantRouteChildren {
   AuthedTenantAgentTemplatesIndexRoute: typeof AuthedTenantAgentTemplatesIndexRoute
   AuthedTenantAgentsIndexRoute: typeof AuthedTenantAgentsIndexRoute
   AuthedTenantArtifactsIndexRoute: typeof AuthedTenantArtifactsIndexRoute
-  AuthedTenantConnectorsIndexRoute: typeof AuthedTenantConnectorsIndexRoute
   AuthedTenantEvaluationsIndexRoute: typeof AuthedTenantEvaluationsIndexRoute
   AuthedTenantHumansIndexRoute: typeof AuthedTenantHumansIndexRoute
   AuthedTenantInboxIndexRoute: typeof AuthedTenantInboxIndexRoute
@@ -1283,7 +1241,6 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantAgentsAgentIdRoute: AuthedTenantAgentsAgentIdRoute,
   AuthedTenantAgentsInvitesRoute: AuthedTenantAgentsInvitesRoute,
   AuthedTenantAgentsNewRoute: AuthedTenantAgentsNewRoute,
-  AuthedTenantConnectorsSlugRoute: AuthedTenantConnectorsSlugRoute,
   AuthedTenantEvaluationsRunIdRoute: AuthedTenantEvaluationsRunIdRoute,
   AuthedTenantInboxInboxItemIdRoute: AuthedTenantInboxInboxItemIdRoute,
   AuthedTenantKnowledgeBasesKbIdRoute: AuthedTenantKnowledgeBasesKbIdRoute,
@@ -1295,7 +1252,6 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantAgentTemplatesIndexRoute: AuthedTenantAgentTemplatesIndexRoute,
   AuthedTenantAgentsIndexRoute: AuthedTenantAgentsIndexRoute,
   AuthedTenantArtifactsIndexRoute: AuthedTenantArtifactsIndexRoute,
-  AuthedTenantConnectorsIndexRoute: AuthedTenantConnectorsIndexRoute,
   AuthedTenantEvaluationsIndexRoute: AuthedTenantEvaluationsIndexRoute,
   AuthedTenantHumansIndexRoute: AuthedTenantHumansIndexRoute,
   AuthedTenantInboxIndexRoute: AuthedTenantInboxIndexRoute,
