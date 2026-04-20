@@ -86,6 +86,14 @@ export interface EmitDeterministicParentLinksArgs {
 	scope: { tenantId: string; ownerId: string };
 	candidates: DerivedParentCandidate[];
 	affectedPages: AffectedPage[];
+	/** Scope-wide leaf pool for summary-kind candidates. Unlike
+	 * `affectedPages` (which is batch-scoped), `scopePages` holds every
+	 * scope page whose summary the page-summary expander scanned — these
+	 * pages may not have been touched in this batch. Required for
+	 * summary-kind candidates to resolve leaves; ignored for record-kind
+	 * ones. Omit when no summary-kind candidates are in the list (tests,
+	 * backfill-without-summaries paths). */
+	scopePages?: AffectedPage[];
 	lookupParentPages: ParentPageLookup;
 	/** Optional trigram-fallback lookup. Only invoked when
 	 * `lookupParentPages` returned no hits for a candidate. Callers that
@@ -265,8 +273,8 @@ export async function emitDeterministicParentLinks(
 	};
 
 	// Precompute leaf pages eligible for linking (entity type) keyed by
-	// source record id → pages, so a candidate can cheaply find the leaves
-	// whose records motivated it.
+	// source record id → pages, so a record-kind candidate can cheaply find
+	// the leaves whose records motivated it.
 	const leavesByRecord = new Map<string, AffectedPage[]>();
 	for (const page of affectedPages) {
 		if (!LINKABLE_LEAF_TYPES.has(page.type)) continue;
@@ -275,6 +283,21 @@ export async function emitDeterministicParentLinks(
 			bucket.push(page);
 			leavesByRecord.set(recordId, bucket);
 		}
+	}
+
+	// Summary-kind leaf index: keyed by page id. Consults both
+	// affectedPages (batch-touched) and scopePages (scope-wide pool) so
+	// summary-kind candidates can resolve leaves that weren't touched this
+	// batch. Deduplicated on page id — affectedPages wins on collision
+	// since its sourceRecordIds field is populated.
+	const leavesById = new Map<string, AffectedPage>();
+	for (const page of args.scopePages ?? []) {
+		if (!LINKABLE_LEAF_TYPES.has(page.type)) continue;
+		leavesById.set(page.id, page);
+	}
+	for (const page of affectedPages) {
+		if (!LINKABLE_LEAF_TYPES.has(page.type)) continue;
+		leavesById.set(page.id, page);
 	}
 
 	const { lookupParentPagesFuzzy } = args;
@@ -343,36 +366,54 @@ export async function emitDeterministicParentLinks(
 		if (!parent) continue;
 		if (!ALLOWED_PARENT_TYPES.has(parent.type)) continue;
 
-		const seenLeafIds = new Set<string>();
-		for (const recordId of candidate.sourceRecordIds) {
-			const leaves = leavesByRecord.get(recordId);
-			if (!leaves) continue;
-			for (const leaf of leaves) {
-				if (seenLeafIds.has(leaf.id)) continue;
-				seenLeafIds.add(leaf.id);
-				if (leaf.id === parent.id) continue; // no self-links
-
-				const context = `deterministic:${candidate.reason}:${candidate.parentSlug}`;
-				try {
-					await writeLink({
-						fromPageId: leaf.id,
-						toPageId: parent.id,
-						context,
-					});
-					result.linksWritten += 1;
-					result.emissions.push({
-						fromPageId: leaf.id,
-						toPageId: parent.id,
-						reason: candidate.reason,
-						parentSlug: candidate.parentSlug,
-					});
-				} catch (err) {
-					const msg = (err as Error)?.message || String(err);
-					console.warn(
-						`[deterministic-linker] writeLink failed leaf=${leaf.id} `
-							+ `parent=${parent.id}: ${msg}`,
-					);
+		// Resolve leaf pages based on candidate kind. Record-kind candidates
+		// carry memory-record ids, summary-kind candidates carry page ids
+		// directly — see `ParentCandidateSourceKind`.
+		const candidateLeaves: AffectedPage[] = [];
+		const seenCandidateLeafIds = new Set<string>();
+		const kind = candidate.sourceKind ?? "record";
+		if (kind === "summary") {
+			for (const pageId of candidate.sourceRecordIds) {
+				if (seenCandidateLeafIds.has(pageId)) continue;
+				seenCandidateLeafIds.add(pageId);
+				const leaf = leavesById.get(pageId);
+				if (leaf) candidateLeaves.push(leaf);
+			}
+		} else {
+			for (const recordId of candidate.sourceRecordIds) {
+				const leaves = leavesByRecord.get(recordId);
+				if (!leaves) continue;
+				for (const leaf of leaves) {
+					if (seenCandidateLeafIds.has(leaf.id)) continue;
+					seenCandidateLeafIds.add(leaf.id);
+					candidateLeaves.push(leaf);
 				}
+			}
+		}
+
+		for (const leaf of candidateLeaves) {
+			if (leaf.id === parent.id) continue; // no self-links
+
+			const context = `deterministic:${candidate.reason}:${candidate.parentSlug}`;
+			try {
+				await writeLink({
+					fromPageId: leaf.id,
+					toPageId: parent.id,
+					context,
+				});
+				result.linksWritten += 1;
+				result.emissions.push({
+					fromPageId: leaf.id,
+					toPageId: parent.id,
+					reason: candidate.reason,
+					parentSlug: candidate.parentSlug,
+				});
+			} catch (err) {
+				const msg = (err as Error)?.message || String(err);
+				console.warn(
+					`[deterministic-linker] writeLink failed leaf=${leaf.id} `
+						+ `parent=${parent.id}: ${msg}`,
+				);
 			}
 		}
 	}

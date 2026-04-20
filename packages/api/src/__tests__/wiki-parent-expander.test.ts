@@ -254,6 +254,43 @@ describe("deriveParentCandidates", () => {
 		]);
 		expect(out.find((c) => c.reason === "city")?.parentTitle).toBe("Austin");
 	});
+
+	// Regression tests for 2026-04-20 audit follow-up #4.1 — Mexican
+	// addresses like "..., San Miguel de Allende, Gto., Mexico" used to
+	// produce "Gto." as the city because the region-code walk didn't
+	// recognize dotted abbreviations.
+	it("resolves Mexican addresses with dotted region abbreviation 'Gto.'", () => {
+		const out = deriveParentCandidates([
+			makeRecord("r1", {
+				place_address:
+					"Pila Seca 1, Centro, Zona Centro, 37700 San Miguel de Allende, Gto., Mexico",
+			}),
+			makeRecord("r2", {
+				place_address:
+					"Calle del Dr Ignacio Hernandez 83, 37700 San Miguel de Allende, Gto., Mexico",
+			}),
+		]);
+		expect(out.find((c) => c.reason === "city")?.parentTitle).toBe(
+			"San Miguel De Allende",
+		);
+	});
+
+	it("resolves Mexican addresses with 'Q.R.' (Quintana Roo)", () => {
+		const out = deriveParentCandidates([
+			makeRecord("r1", { place_address: "Av. Coba 5, Cancún, Q.R., Mexico" }),
+			makeRecord("r2", { place_address: "Av. Coba 7, Cancún, Q.R., Mexico" }),
+		]);
+		expect(out.find((c) => c.reason === "city")?.parentTitle).toBe("Cancún");
+	});
+
+	it("resolves Canadian 'B.C.' addresses", () => {
+		const out = deriveParentCandidates([
+			makeRecord("r1", { place_address: "100 Main St, Vancouver, B.C., Canada" }),
+			makeRecord("r2", { place_address: "200 Main St, Vancouver, B.C., Canada" }),
+		]);
+		expect(out.find((c) => c.reason === "city")?.parentTitle).toBe("Vancouver");
+	});
+
 });
 
 describe("deriveParentCandidatesFromPageSummaries", () => {
@@ -350,6 +387,76 @@ describe("deriveParentCandidatesFromPageSummaries", () => {
 		]);
 		const austin = out.find((c) => c.parentTitle === "Austin");
 		expect(austin?.supportingCount).toBe(2);
+	});
+
+	// Precision filter tests for the 2026-04-20 summary-expander tightening.
+	// Without these filters the linker would emit candidates like
+	// "Prospect Interested In The Full PVL Product Line" and "Congress Ave".
+	it("drops long-fragment candidates from comma-separated summaries", () => {
+		// Real Marco data had summaries like
+		// "Sales opportunity, Prospect Interested In The Full PVL Product Line, active."
+		// which the address-fallback extractor would split and return the
+		// middle 9-word fragment. The word-count filter (>4 words) drops it.
+		const out = deriveParentCandidatesFromPageSummaries(
+			[
+				{
+					id: "p1",
+					title: "X",
+					summary:
+						"Sales opportunity, Prospect Interested In The Full PVL Product Line, active.",
+				},
+				{
+					id: "p2",
+					title: "Y",
+					summary:
+						"Account note, Prospect Interested In The Full PVL Product Line, ongoing.",
+				},
+			],
+			{ minClusterSize: 1 },
+		);
+		expect(
+			out.find((c) => c.parentTitle?.startsWith("Prospect Interested")),
+		).toBeUndefined();
+	});
+
+	it("drops short candidates (< 3 chars)", () => {
+		const out = deriveParentCandidatesFromPageSummaries(
+			[
+				{ id: "p1", title: "X", summary: "Cafe in St with great coffee." },
+				{ id: "p2", title: "Y", summary: "Bistro in St by the water." },
+			],
+			{ minClusterSize: 1 },
+		);
+		expect(out.find((c) => c.parentTitle === "St")).toBeUndefined();
+	});
+
+	it("drops street-suffix candidates ('Congress Ave', 'Queen St')", () => {
+		const out = deriveParentCandidatesFromPageSummaries(
+			[
+				{ id: "p1", title: "X", summary: "Bar on Congress Ave for drinks." },
+				{ id: "p2", title: "Y", summary: "Cafe on Congress Ave nearby." },
+			],
+			{ minClusterSize: 1 },
+		);
+		expect(out.find((c) => c.parentTitle === "Congress Ave")).toBeUndefined();
+	});
+
+	it("tags summary-expander candidates with sourceKind='summary'", () => {
+		const out = deriveParentCandidatesFromPageSummaries(
+			[{ id: "p1", title: "X", summary: "Bistro in Paris." }],
+			{ minClusterSize: 1 },
+		);
+		expect(out.find((c) => c.parentTitle === "Paris")?.sourceKind).toBe(
+			"summary",
+		);
+	});
+
+	it("tags record-expander candidates with sourceKind='record'", () => {
+		const out = deriveParentCandidates([
+			makeRecord("r1", { place_address: "1 A, Toronto, ON M6J 1G1, Canada" }),
+			makeRecord("r2", { place_address: "2 B, Toronto, ON M6J 1G2, Canada" }),
+		]);
+		expect(out.find((c) => c.reason === "city")?.sourceKind).toBe("record");
 	});
 });
 
