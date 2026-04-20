@@ -127,7 +127,7 @@ Scoping invariant preserved in WHERE clause: `(tenant_id, owner_id)` derived fro
 
 ## Implementation Units
 
-- [x] **Unit 1: Rewrite `mobileWikiSearch` resolver to use Postgres FTS**
+- [ ] **Unit 1: Rewrite `mobileWikiSearch` resolver to use Postgres FTS**
 
 **Goal:** Replace the Hindsight-recall body of the resolver with a direct FTS query against `wiki_pages.search_tsv`, preserving the GraphQL response shape.
 
@@ -169,7 +169,7 @@ Scoping invariant preserved in WHERE clause: `(tenant_id, owner_id)` derived fro
 - p95 latency on a fixture with 100 pages and a single-word query is under ~100ms in a local test loop (sanity check; production target is <200ms p95 end-to-end including network).
 - Running the resolver against the local stack returns results for "Austin" in under one second wall-clock.
 
-- [x] **Unit 2: Confirm mobile loading UX is correct post-fix (no code change unless verified bug)**
+- [ ] **Unit 2: Confirm mobile loading UX is correct post-fix (no code change unless verified bug)**
 
 **Goal:** Empirically verify the two UX concerns from the user report are resolved once the backend is fast. Only edit `WikiList.tsx` if verification surfaces an actual flicker or misbehavior.
 
