@@ -84,7 +84,12 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     { tenantId, agentId, agentIds, onNodeClick, onTypesLoaded, typeFilter, searchQuery },
     ref,
   ) {
-    const containerRef = useRef<HTMLDivElement>(null);
+    // Callback ref: re-measures whenever the mounted DOM element changes.
+    // A plain useRef + empty-deps effect misses the case where the
+    // "Loading graph..." branch mounts first (no ref attached), then swaps
+    // to the main branch once the query resolves — dims would stay null
+    // forever and strand the component on the "!dims" blank branch.
+    const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null);
     const fgRef = useRef<any>(null);
     const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
 
@@ -152,18 +157,17 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     }));
 
     useEffect(() => {
-      const el = containerRef.current;
-      if (!el) return;
+      if (!containerEl) return;
       const measure = () => {
-        const w = el.offsetWidth;
-        const h = el.offsetHeight;
+        const w = containerEl.offsetWidth;
+        const h = containerEl.offsetHeight;
         if (w > 0 && h > 0) setDims({ w, h });
       };
       measure();
       const ro = new ResizeObserver(() => measure());
-      ro.observe(el);
+      ro.observe(containerEl);
       return () => ro.disconnect();
-    }, []);
+    }, [containerEl]);
 
     const allNodes = useMemo(() => {
       const nodes: WikiGraphNode[] = [];
@@ -426,7 +430,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     }
 
     if (!dims) {
-      return <div ref={containerRef} className="absolute inset-0" />;
+      return <div ref={setContainerEl} className="absolute inset-0" />;
     }
 
     if (graphData.nodes.length === 0) {
@@ -449,7 +453,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     }));
 
     return (
-      <div ref={containerRef} className="absolute inset-0 overflow-hidden">
+      <div ref={setContainerEl} className="absolute inset-0 overflow-hidden">
         <ForceGraph3D
           ref={fgRef}
           graphData={graphData}
