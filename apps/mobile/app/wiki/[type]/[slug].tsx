@@ -1,9 +1,10 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { Router } from "expo-router";
 import Markdown from "react-native-markdown-display";
 import { useColorScheme } from "nativewind";
+import { IconTopologyStar3 } from "@tabler/icons-react-native";
 import { useAuth } from "@/lib/auth-context";
 import {
 	useWikiBacklinks,
@@ -14,6 +15,7 @@ import {
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { Text, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
+import { WikiDetailSubgraph } from "@/components/wiki/graph";
 
 /**
  * Intercept markdown link taps inside a wiki body. Rollup sections are
@@ -99,6 +101,7 @@ export default function WikiPageScreen() {
 	const { page, loading } = useWikiPage({ tenantId, ownerId, type, slug });
 	const { backlinks } = useWikiBacklinks(page?.id);
 	const { connectedPages } = useWikiConnectedPages(page?.id);
+	const [showGraph, setShowGraph] = useState(false);
 
 	const markdownStyles = useMemo(
 		() => buildMarkdownStyles(colors, isDark),
@@ -112,8 +115,41 @@ export default function WikiPageScreen() {
 
 	const headerTitle = page?.title || (loading ? "Loading..." : "Not found");
 
+	const canToggleGraph = !!page && !!tenantId && !!ownerId;
+	const headerRight = canToggleGraph ? (
+		<Pressable
+			onPress={() => setShowGraph((v) => !v)}
+			className="p-2"
+			accessibilityRole="button"
+			accessibilityLabel={showGraph ? "Hide subgraph" : "Show subgraph"}
+		>
+			<IconTopologyStar3
+				size={22}
+				color={showGraph ? colors.primary : colors.foreground}
+				strokeWidth={2}
+			/>
+		</Pressable>
+	) : undefined;
+
+	const showSplit = showGraph && page && tenantId && ownerId;
+
 	return (
-		<DetailLayout title={headerTitle}>
+		<DetailLayout title={headerTitle} headerRight={headerRight}>
+			{showSplit ? (
+				<View
+					style={{
+						height: "40%",
+						borderBottomWidth: 1,
+						borderBottomColor: colors.border,
+					}}
+				>
+					<WikiDetailSubgraph
+						tenantId={tenantId as string}
+						ownerId={ownerId as string}
+						pageId={page.id}
+					/>
+				</View>
+			) : null}
 			<ScrollView
 				style={{ flex: 1 }}
 				contentContainerStyle={{ paddingBottom: 48 }}

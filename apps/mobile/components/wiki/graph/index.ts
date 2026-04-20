@@ -1,7 +1,8 @@
 export { KnowledgeGraph } from "./KnowledgeGraph";
 export { GraphCanvas } from "./GraphCanvas";
-export { NodeDetailSheet } from "./NodeDetailSheet";
 export { WikiGraphView } from "./WikiGraphView";
+export { WikiDetailSubgraph } from "./WikiDetailSubgraph";
+export { NodeDetailModal } from "./NodeDetailModal";
 export { useGraphCamera } from "./hooks/useGraphCamera";
 export { useForceSimulation } from "./hooks/useForceSimulation";
 export { nearestNode, screenToWorld, worldToScreen } from "./layout/hitTest";

@@ -14,6 +14,8 @@ origin: plans/compounding-memory-mobile-memories-force-graph.md
 
 **v1 shipped on TestFlight branch.** The plan body below captures the design we set out to build; what actually shipped diverges in important ways. This section is the authoritative "what's true now" summary. Read this first; the body is preserved for historical context.
 
+> **v2 refinements shipped same day** as `plans/2026-04-20-003-feat-mobile-graph-refinements-plan.md`: fit-to-view camera, centered-modal preview on tap (replacing the bottom sheet), 40/60 split embedded subgraph on the detail screen, icon unification with Tabler `IconTopologyStar3`, state persistence across navigation, and long-press-back → dismiss-all. Read that plan's Post-Implementation block alongside this one for the current state of the graph surface.
+
 ### What shipped
 - **Pages-tab integration with toggle.** Graph view lives inside the Pages segment of the home tab (`apps/mobile/app/(tabs)/index.tsx`), not as a standalone route. Toggle button (Network / List icon) sits left of the filter funnel. Only visible when Pages tab is active.
 - **All-pages default view.** Graph shows *every* active page in the active agent's scope via `wikiGraph` resolver (the same one admin's `/wiki` route uses). Wired through new `useWikiGraph` SDK hook.
