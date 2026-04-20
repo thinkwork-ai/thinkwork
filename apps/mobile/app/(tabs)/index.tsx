@@ -29,13 +29,15 @@ import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { COLORS } from "@/lib/theme";
-import { ListTodo, Bot, Settings, LogOut, RefreshCw, Filter, ChevronDown, ChevronRight, X, Zap, Check, CheckSquare, ListChecks, Circle, AlertCircle, Clock, Cable, Plug } from "lucide-react-native";
+import { ListTodo, Bot, Settings, LogOut, RefreshCw, Filter, ChevronDown, ChevronRight, X, Zap, Check, CheckSquare, ListChecks, Circle, AlertCircle, Clock, Cable, Plug, List as ListIcon, Network } from "lucide-react-native";
 import { ThreadChannel } from "@/lib/gql/graphql";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { useThreadReadState } from "@/lib/hooks/use-thread-read-state";
 import { MessageInputFooter, type MessageInputFooterRef, type SelectedWorkspace } from "@/components/input/MessageInputFooter";
 import { CaptureFooter } from "@/components/wiki/CaptureFooter";
 import { WikiList } from "@/components/wiki/WikiList";
+import { WikiGraphView } from "@/components/wiki/graph";
+import { Inter_500Medium, useFonts } from "@expo-google-fonts/inter";
 import { ToastHost } from "@/components/ui/toast";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { QuickActionsSheet, type QuickActionsSheetRef } from "@/components/chat/QuickActionsSheet";
@@ -252,6 +254,10 @@ export default function ThreadsScreen() {
   // Wiki-tab search: the footer only emits on explicit submit
   // (Enter or send tap), so no debounce layer is needed here.
   const [wikiQuery, setWikiQuery] = useState("");
+  // Pages tab: list (table rows) ↔ graph (force-directed view)
+  const [wikiViewMode, setWikiViewMode] = useState<"list" | "graph">("list");
+  // Skia text rendering needs an Inter SkFont — load once for the lifetime of the tab.
+  const [wikiFontsLoaded] = useFonts({ Inter: Inter_500Medium });
 
   // ── Quick Actions (per-user, per-scope, from DB) ──────────────────────
   const [{ data: qaThreadData }, reexecuteQAThread] = useQuickActions(tenantId, "thread");
@@ -392,8 +398,26 @@ export default function ThreadsScreen() {
               </View>
             </AgentPicker>
 
-            {/* Right: Filter + Menu */}
+            {/* Right: Pages-tab view toggle + Filter + Menu */}
             <View className="flex-row items-center gap-3">
+            {activeTab === "wiki" ? (
+              <Pressable
+                onPress={() => setWikiViewMode((m) => (m === "list" ? "graph" : "list"))}
+                className="p-2"
+                accessibilityRole="button"
+                accessibilityLabel={
+                  wikiViewMode === "list"
+                    ? "Switch to graph view"
+                    : "Switch to list view"
+                }
+              >
+                {wikiViewMode === "list" ? (
+                  <Network size={22} color={colors.foreground} />
+                ) : (
+                  <ListIcon size={22} color={colors.foreground} />
+                )}
+              </Pressable>
+            ) : null}
             <Pressable
               onPress={() => setFiltersOpen((o) => !o)}
               className="p-2 relative"
@@ -438,7 +462,7 @@ export default function ThreadsScreen() {
         </View>
       )}
 
-      {/* Threads / Wiki segmented control */}
+      {/* Threads / Pages segmented control (state value stays "wiki" — Pages is the user-facing label for the compiled-wiki tab) */}
       <View
         className="border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 items-center justify-center"
         style={{ height: 52, paddingBottom: 8 }}
@@ -474,7 +498,7 @@ export default function ThreadsScreen() {
               backgroundColor: activeTab === "wiki" ? (isDark ? "#525252" : "#ffffff") : "transparent",
             }}
           >
-            <Text className="text-sm font-semibold" style={{ color: activeTab === "wiki" ? colors.foreground : colors.mutedForeground }}>Wiki</Text>
+            <Text className="text-sm font-semibold" style={{ color: activeTab === "wiki" ? colors.foreground : colors.mutedForeground }}>Pages</Text>
           </Pressable>
         </View>
       </View>
@@ -513,6 +537,12 @@ export default function ThreadsScreen() {
               </View>
             }
             contentContainerStyle={filteredThreads.length === 0 ? { flexGrow: 1, justifyContent: "center" } : { paddingTop: 8 }}
+          />
+        ) : wikiViewMode === "graph" && tenantId && activeAgent?.id && wikiFontsLoaded ? (
+          <WikiGraphView
+            tenantId={tenantId}
+            agentId={activeAgent.id}
+            searchQuery={wikiQuery}
           />
         ) : (
           <WikiList
