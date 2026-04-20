@@ -171,7 +171,7 @@ export interface Cursor {
 	recordId: string | null;
 }
 
-type DbClient = typeof defaultDb | PgTransaction<any, any, any>;
+export type DbClient = typeof defaultDb | PgTransaction<any, any, any>;
 
 // ---------------------------------------------------------------------------
 // Alias normalization — shared canonical form for lookup & dedupe
@@ -480,6 +480,129 @@ export async function findPageBySlug(
 		)
 		.limit(1);
 	return (rows[0] as WikiPageRow | undefined) ?? null;
+}
+
+/**
+ * Exact-title lookup within a (tenant, owner) scope. Returns every active
+ * page whose title matches the input exactly — case- and whitespace-
+ * sensitive. The deterministic linker uses this to resolve parent-expander
+ * candidates into concrete page ids without guessing at a type (the parent
+ * could be either `topic` or `entity`, so the caller filters on type after).
+ * Returns all hits so callers can log title collisions rather than silently
+ * picking one.
+ */
+/**
+ * R5 canary for the link-densification plan — count of (owner_id, title)
+ * pairs with more than one active page. Rising means densification may be
+ * creating duplicate hubs. Called once per compile job so the time series
+ * shows up in CloudWatch next to `links_written_*`.
+ */
+export async function countDuplicateTitleCandidates(
+	args: { tenantId: string; ownerId: string },
+	db: DbClient = defaultDb,
+): Promise<number> {
+	const result = await db.execute(sql`
+		SELECT COUNT(*)::int AS n
+		FROM (
+			SELECT ${wikiPages.owner_id}, ${wikiPages.title}
+			FROM ${wikiPages}
+			WHERE ${wikiPages.tenant_id} = ${args.tenantId}
+				AND ${wikiPages.owner_id} = ${args.ownerId}
+				AND ${wikiPages.status} = 'active'
+			GROUP BY ${wikiPages.owner_id}, ${wikiPages.title}
+			HAVING COUNT(*) > 1
+		) dup
+	`);
+	const rows = (result as unknown as { rows?: Array<{ n: number }> }).rows ?? [];
+	return rows[0]?.n ?? 0;
+}
+
+export async function findPagesByExactTitle(
+	args: { tenantId: string; ownerId: string; title: string },
+	db: DbClient = defaultDb,
+): Promise<
+	Array<{ id: string; type: WikiPageType; slug: string; title: string }>
+> {
+	const rows = await db
+		.select({
+			id: wikiPages.id,
+			type: wikiPages.type,
+			slug: wikiPages.slug,
+			title: wikiPages.title,
+		})
+		.from(wikiPages)
+		.where(
+			and(
+				eq(wikiPages.tenant_id, args.tenantId),
+				eq(wikiPages.owner_id, args.ownerId),
+				eq(wikiPages.title, args.title),
+				eq(wikiPages.status, "active"),
+			),
+		);
+	return rows as Array<{
+		id: string;
+		type: WikiPageType;
+		slug: string;
+		title: string;
+	}>;
+}
+
+/**
+ * For each (memory_unit, page) pair in scope, return the page's type + slug
+ * so the co-mention linker can filter to entity↔entity pairs and order
+ * deterministically. Joins `wiki_section_sources → wiki_page_sections →
+ * wiki_pages`, filtered to active pages in the requested (tenant, owner)
+ * scope. The same query is used by the live compile and the Unit 4
+ * backfill — that shared surface is the whole reason co-mention emission
+ * reads this table rather than the planner's pageLinks wire.
+ */
+export async function findMemoryUnitPageSources(
+	args: {
+		tenantId: string;
+		ownerId: string;
+		memoryUnitIds: string[];
+	},
+	db: DbClient = defaultDb,
+): Promise<
+	Array<{
+		memory_unit_id: string;
+		page_id: string;
+		page_type: WikiPageType;
+		slug: string;
+		title: string;
+	}>
+> {
+	if (args.memoryUnitIds.length === 0) return [];
+	const rows = await db
+		.selectDistinct({
+			memory_unit_id: wikiSectionSources.source_ref,
+			page_id: wikiPages.id,
+			page_type: wikiPages.type,
+			slug: wikiPages.slug,
+			title: wikiPages.title,
+		})
+		.from(wikiSectionSources)
+		.innerJoin(
+			wikiPageSections,
+			eq(wikiSectionSources.section_id, wikiPageSections.id),
+		)
+		.innerJoin(wikiPages, eq(wikiPageSections.page_id, wikiPages.id))
+		.where(
+			and(
+				eq(wikiSectionSources.source_kind, "memory_unit"),
+				inArray(wikiSectionSources.source_ref, args.memoryUnitIds),
+				eq(wikiPages.tenant_id, args.tenantId),
+				eq(wikiPages.owner_id, args.ownerId),
+				eq(wikiPages.status, "active"),
+			),
+		);
+	return rows as Array<{
+		memory_unit_id: string;
+		page_id: string;
+		page_type: WikiPageType;
+		slug: string;
+		title: string;
+	}>;
 }
 
 export async function findPageById(

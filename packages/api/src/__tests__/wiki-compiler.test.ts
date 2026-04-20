@@ -302,9 +302,18 @@ const { mockAdapter, mockRepo, mockPlanner, mockWriter, mockGetServices } =
 			listPagesForScope: vi.fn().mockResolvedValue([]),
 			listOpenMentions: vi.fn().mockResolvedValue([]),
 			listPageSections: vi.fn().mockResolvedValue([]),
-			upsertPage: vi.fn().mockResolvedValue({ id: "page-new" }),
+			upsertPage: vi.fn().mockResolvedValue({
+				id: "page-new",
+				type: "entity",
+				slug: "page-new",
+				title: "page-new",
+			}),
+			upsertPageLink: vi.fn().mockResolvedValue(undefined),
 			upsertUnresolvedMention: vi.fn(),
 			markUnresolvedPromoted: vi.fn(),
+			findPagesByExactTitle: vi.fn().mockResolvedValue([]),
+			findMemoryUnitPageSources: vi.fn().mockResolvedValue([]),
+			countDuplicateTitleCandidates: vi.fn().mockResolvedValue(0),
 			normalizeAlias: (s: string) => s.toLowerCase().trim(),
 		};
 		const mockPlanner = { runPlanner: vi.fn() };
@@ -337,10 +346,18 @@ vi.mock("../lib/wiki/repository.js", async (importOriginal) => {
 		listPageSections: (...args: unknown[]) =>
 			mockRepo.listPageSections(...args),
 		upsertPage: (...args: unknown[]) => mockRepo.upsertPage(...args),
+		upsertPageLink: (...args: unknown[]) =>
+			mockRepo.upsertPageLink(...args),
 		upsertUnresolvedMention: (...args: unknown[]) =>
 			mockRepo.upsertUnresolvedMention(...args),
 		markUnresolvedPromoted: (...args: unknown[]) =>
 			mockRepo.markUnresolvedPromoted(...args),
+		findPagesByExactTitle: (...args: unknown[]) =>
+			mockRepo.findPagesByExactTitle(...args),
+		findMemoryUnitPageSources: (...args: unknown[]) =>
+			mockRepo.findMemoryUnitPageSources(...args),
+		countDuplicateTitleCandidates: (...args: unknown[]) =>
+			mockRepo.countDuplicateTitleCandidates(...args),
 	};
 });
 
@@ -432,7 +449,16 @@ describe("runCompileJob", () => {
 		mockRepo.listPagesForScope.mockResolvedValue([]);
 		mockRepo.listOpenMentions.mockResolvedValue([]);
 		mockRepo.listPageSections.mockResolvedValue([]);
-		mockRepo.upsertPage.mockResolvedValue({ id: "page-new" });
+		mockRepo.upsertPage.mockResolvedValue({
+			id: "page-new",
+			type: "entity",
+			slug: "page-new",
+			title: "page-new",
+		});
+		mockRepo.upsertPageLink.mockResolvedValue(undefined);
+		mockRepo.findPagesByExactTitle.mockResolvedValue([]);
+		mockRepo.findMemoryUnitPageSources.mockResolvedValue([]);
+		mockRepo.countDuplicateTitleCandidates.mockResolvedValue(0);
 		// No alias collisions by default; individual tests override when
 		// exercising the dedup path.
 		mockRepo.findAliasMatches.mockResolvedValue([]);
@@ -641,5 +667,91 @@ describe("runCompileJob", () => {
 		const result = await runCompileJob(sampleJob, { adapter: brokenAdapter });
 		expect(result.status).toBe("failed");
 		expect(result.error).toMatch(/listRecordsUpdatedSince/);
+	});
+
+	it("emits link-densification metric keys at zero when no candidates match", async () => {
+		scriptAdapter([
+			{ records: [makeRecord("r1")], nextCursor: null },
+			{ records: [], nextCursor: null },
+		]);
+		mockPlanner.runPlanner.mockResolvedValueOnce({
+			pageUpdates: [],
+			newPages: [
+				{
+					type: "entity",
+					slug: "just-a-page",
+					title: "Just a Page",
+					sections: [
+						{
+							slug: "overview",
+							heading: "Overview",
+							body_md: "Plain.",
+						},
+					],
+					source_refs: ["r1"],
+				},
+			],
+			unresolvedMentions: [],
+			promotions: [],
+			usage: { inputTokens: 10, outputTokens: 5 },
+		});
+		mockRepo.countDuplicateTitleCandidates.mockResolvedValue(3);
+
+		const result = await runCompileJob(sampleJob);
+
+		expect(result.status).toBe("succeeded");
+		// Clean-path metrics — no city/journal candidates surfaced, so both
+		// emitters wrote nothing.
+		expect(result.metrics.links_written_deterministic).toBe(0);
+		expect(result.metrics.links_written_co_mention).toBe(0);
+		expect(result.metrics.duplicate_candidates_count).toBe(3);
+		expect(result.metrics.deterministic_linking_flag_suppressed).toBeUndefined();
+	});
+
+	it("records deterministic_linking_flag_suppressed when the flag is off", async () => {
+		const restore = process.env.WIKI_DETERMINISTIC_LINKING_ENABLED;
+		process.env.WIKI_DETERMINISTIC_LINKING_ENABLED = "false";
+		try {
+			scriptAdapter([
+				{ records: [makeRecord("r1")], nextCursor: null },
+				{ records: [], nextCursor: null },
+			]);
+			mockPlanner.runPlanner.mockResolvedValueOnce({
+				pageUpdates: [],
+				newPages: [
+					{
+						type: "entity",
+						slug: "slug-x",
+						title: "Title X",
+						sections: [
+							{
+								slug: "overview",
+								heading: "Overview",
+								body_md: "Plain.",
+							},
+						],
+						source_refs: ["r1"],
+					},
+				],
+				unresolvedMentions: [],
+				promotions: [],
+				usage: { inputTokens: 10, outputTokens: 5 },
+			});
+
+			const result = await runCompileJob(sampleJob);
+			expect(result.status).toBe("succeeded");
+			expect(result.metrics.deterministic_linking_flag_suppressed).toBe(true);
+			expect(result.metrics.links_written_deterministic).toBe(0);
+			expect(result.metrics.links_written_co_mention).toBe(0);
+			// Repo helpers under the flag gate must never be touched.
+			expect(mockRepo.findPagesByExactTitle).not.toHaveBeenCalled();
+			expect(mockRepo.findMemoryUnitPageSources).not.toHaveBeenCalled();
+		} finally {
+			if (restore === undefined) {
+				delete process.env.WIKI_DETERMINISTIC_LINKING_ENABLED;
+			} else {
+				process.env.WIKI_DETERMINISTIC_LINKING_ENABLED = restore;
+			}
+		}
 	});
 });

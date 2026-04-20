@@ -16,10 +16,13 @@ import type { ThinkWorkMemoryRecord } from "../memory/types.js";
 import { getMemoryServices } from "../memory/index.js";
 import {
 	completeCompileJob,
+	countDuplicateTitleCandidates,
 	emptySectionAggregation,
 	findAliasMatches,
+	findMemoryUnitPageSources,
 	findPageById,
 	findPageBySlug,
+	findPagesByExactTitle,
 	getCompileJob,
 	getCursor,
 	listOpenMentions,
@@ -41,6 +44,11 @@ import {
 	type WikiPageRow,
 	type WikiPageType,
 } from "./repository.js";
+import {
+	emitCoMentionLinks,
+	emitDeterministicParentLinks,
+	type AffectedPage,
+} from "./deterministic-linker.js";
 import { runPlanner, type PlannerResult } from "./planner.js";
 import {
 	isMeaningfulChange,
@@ -111,6 +119,23 @@ export interface RunJobResult {
 		/** newPages that got folded into an existing page via alias match,
 		 * preventing duplicate entities like "Nana" + "Nana Restaurant". */
 		alias_dedup_merged?: number;
+		// --- Link densification metrics (2026-04-20) --------------------
+		/** Reference links emitted by `emitDeterministicParentLinks` — a
+		 * parent-expander candidate matched an existing active page in scope
+		 * and passed the type-mismatch gate. */
+		links_written_deterministic?: number;
+		/** Reference links emitted by `emitCoMentionLinks` — reciprocal edges
+		 * between entity pages sourced by the same memory_unit (entity↔entity
+		 * only, capped at 10 per memory). */
+		links_written_co_mention?: number;
+		/** (title, owner_id) groups in `wiki_pages` with >1 active row — the
+		 * R5 precision canary. Rising means densification may be creating
+		 * duplicate hubs. */
+		duplicate_candidates_count?: number;
+		/** True when `WIKI_DETERMINISTIC_LINKING_ENABLED` is false, so
+		 * operators can distinguish "flag off" from "no candidates" at a
+		 * glance. */
+		deterministic_linking_flag_suppressed?: boolean;
 	};
 	error?: string;
 }
@@ -121,6 +146,18 @@ export interface RunJobResult {
  */
 export function isAggregationPassEnabled(): boolean {
 	const raw = (process.env.WIKI_AGGREGATION_PASS_ENABLED ?? "").toLowerCase();
+	return raw === "true" || raw === "1" || raw === "yes";
+}
+
+/**
+ * Feature flag for deterministic link emission (Unit 2 + Unit 3 of the
+ * link-densification plan). Defaults to `true` so dev gets the denser graph
+ * without an extra toggle; flip to `false` via terraform to kill-switch.
+ */
+export function isDeterministicLinkingEnabled(): boolean {
+	const raw = (
+		process.env.WIKI_DETERMINISTIC_LINKING_ENABLED ?? "true"
+	).toLowerCase();
 	return raw === "true" || raw === "1" || raw === "yes";
 }
 
@@ -298,6 +335,22 @@ export async function runCompileJob(
 			metrics.input_tokens,
 			metrics.output_tokens,
 		);
+		// R5 canary — (owner, title) duplicate-page count. Tracked per-job
+		// so any rise tied to the deterministic-linking flag is trivially
+		// diffable from the CloudWatch time series. Errors here don't fail
+		// the job; canary absence is safer than losing the compile.
+		try {
+			metrics.duplicate_candidates_count =
+				await countDuplicateTitleCandidates({
+					tenantId: job.tenant_id,
+					ownerId: job.owner_id,
+				});
+		} catch (canaryErr) {
+			console.warn(
+				`[wiki-compiler] duplicate-candidates canary failed for job=${job.id}:`,
+				(canaryErr as Error)?.message ?? canaryErr,
+			);
+		}
 		await completeCompileJob({
 			jobId: job.id,
 			status: "succeeded",
@@ -359,6 +412,23 @@ interface ApplyPlanArgs {
 async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 	const { job, records, plan, metrics } = args;
 	const recordById = new Map(records.map((r) => [r.id, r]));
+	// Pages this call to applyPlan touched — fed into the deterministic
+	// linker so we don't emit links for scope-level pages that weren't
+	// actually part of this batch's work.
+	const affectedPages: AffectedPage[] = [];
+	const rememberAffected = (
+		page: { id: string; type: WikiPageType; slug: string; title: string },
+		sourceRecordIds: Iterable<string>,
+	): void => {
+		const recordIds = Array.from(new Set(sourceRecordIds));
+		affectedPages.push({
+			id: page.id,
+			type: page.type,
+			slug: page.slug,
+			title: page.title,
+			sourceRecordIds: recordIds,
+		});
+	};
 
 	// 1. Updates to existing pages
 	for (const upd of plan.pageUpdates) {
@@ -460,6 +530,10 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 				})),
 			});
 			metrics.pages_upserted += 1;
+			rememberAffected(
+				existing,
+				sectionsToApply.flatMap((s) => s.sources?.map((r) => r.ref) ?? []),
+			);
 		}
 	}
 
@@ -498,7 +572,26 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			continue;
 		}
 
-		await upsertPage({
+		const newPageSections = np.sections.map((s, i) => {
+			const sectionSources =
+				s.source_refs && s.source_refs.length > 0
+					? resolveCitedRecords(recordById, s.source_refs)
+					: pageFallbackSources;
+			return {
+				section_slug: s.slug,
+				heading: s.heading,
+				body_md: linkifyKnownEntities(
+					s.body_md,
+					args.knownPageRefs ?? [],
+				),
+				position: i + 1,
+				sources: sectionSources.map((r) => ({
+					kind: "memory_unit" as const,
+					ref: r.id,
+				})),
+			};
+		});
+		const createdPage = await upsertPage({
 			tenant_id: job.tenant_id,
 			owner_id: job.owner_id,
 			type: np.type,
@@ -506,25 +599,7 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			title: np.title,
 			summary: np.summary ?? null,
 			markCompiled: true,
-			sections: np.sections.map((s, i) => {
-				const sectionSources =
-					s.source_refs && s.source_refs.length > 0
-						? resolveCitedRecords(recordById, s.source_refs)
-						: pageFallbackSources;
-				return {
-					section_slug: s.slug,
-					heading: s.heading,
-					body_md: linkifyKnownEntities(
-						s.body_md,
-						args.knownPageRefs ?? [],
-					),
-					position: i + 1,
-					sources: sectionSources.map((r) => ({
-						kind: "memory_unit" as const,
-						ref: r.id,
-					})),
-				};
-			}),
+			sections: newPageSections,
 			aliases: [
 				...seedAliasesForTitle(np.title),
 				...((np.aliases ?? []).map(normalizeAlias)),
@@ -533,6 +608,10 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 				.map((alias) => ({ alias, source: "compiler" })),
 		});
 		metrics.pages_upserted += 1;
+		rememberAffected(
+			createdPage,
+			newPageSections.flatMap((s) => s.sources.map((r) => r.ref)),
+		);
 	}
 
 	// 3. Unresolved mentions (cheap — accumulate only)
@@ -556,6 +635,25 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			return "max_new_pages";
 		}
 		const slug = slugifyTitle(pr.title) || pr.slug;
+		const promotionSections = pr.sections.map((s, i) => {
+			const sectionSources = resolveCitedRecords(
+				recordById,
+				s.source_refs,
+			);
+			return {
+				section_slug: s.slug,
+				heading: s.heading,
+				body_md: linkifyKnownEntities(
+					s.body_md,
+					args.knownPageRefs ?? [],
+				),
+				position: i + 1,
+				sources: sectionSources.map((r) => ({
+					kind: "memory_unit" as const,
+					ref: r.id,
+				})),
+			};
+		});
 		const page = await upsertPage({
 			tenant_id: job.tenant_id,
 			owner_id: job.owner_id,
@@ -563,25 +661,7 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			slug,
 			title: pr.title,
 			markCompiled: true,
-			sections: pr.sections.map((s, i) => {
-				const sectionSources = resolveCitedRecords(
-					recordById,
-					s.source_refs,
-				);
-				return {
-					section_slug: s.slug,
-					heading: s.heading,
-					body_md: linkifyKnownEntities(
-						s.body_md,
-						args.knownPageRefs ?? [],
-					),
-					position: i + 1,
-					sources: sectionSources.map((r) => ({
-						kind: "memory_unit" as const,
-						ref: r.id,
-					})),
-				};
-			}),
+			sections: promotionSections,
 			aliases: seedAliasesForTitle(pr.title).map((alias) => ({
 				alias,
 				source: "compiler",
@@ -593,6 +673,10 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 		});
 		metrics.pages_upserted += 1;
 		metrics.unresolved_promoted += 1;
+		rememberAffected(
+			page,
+			promotionSections.flatMap((s) => s.sources.map((r) => r.ref)),
+		);
 	}
 
 	// 5. Page links — resolve (type, slug) pairs against the scope's active
@@ -620,6 +704,66 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 				context: link.context ?? null,
 			});
 			metrics.links_upserted = (metrics.links_upserted ?? 0) + 1;
+		}
+	}
+
+	// 6. Deterministic link emission — flag-gated. Two emitters:
+	//    a) Parent links: `city` / `journal` candidates → exact-title parent.
+	//    b) Co-mention links: reciprocal entity↔entity edges when the same
+	//       memory_unit sourced ≥2 entity pages in this batch.
+	// Both only look at pages this call touched; neither re-examines the
+	// whole scope, so routine scope-wide compiles don't churn unrelated
+	// links. Errors inside either emitter are swallowed per-candidate, so
+	// the compile never fails on link-writing alone.
+	if (!isDeterministicLinkingEnabled()) {
+		metrics.deterministic_linking_flag_suppressed = true;
+	} else if (affectedPages.length > 0 && records.length > 0) {
+		const scope = { tenantId: job.tenant_id, ownerId: job.owner_id };
+		const writeLink = (linkArgs: {
+			fromPageId: string;
+			toPageId: string;
+			context: string;
+		}): Promise<void> =>
+			upsertPageLink({
+				fromPageId: linkArgs.fromPageId,
+				toPageId: linkArgs.toPageId,
+				context: linkArgs.context,
+			});
+
+		const candidates = deriveParentCandidates(records);
+		if (candidates.length > 0) {
+			const parentEmission = await emitDeterministicParentLinks({
+				scope,
+				candidates,
+				affectedPages,
+				lookupParentPages: (lookupArgs) =>
+					findPagesByExactTitle(lookupArgs),
+				writeLink,
+			});
+			metrics.links_written_deterministic =
+				(metrics.links_written_deterministic ?? 0) +
+				parentEmission.linksWritten;
+		}
+
+		// Co-mention emission runs on this batch's memory_unit ids — read
+		// back via `wiki_section_sources` so we catch links through sections
+		// this applyPlan just wrote.
+		const batchMemoryIds = Array.from(
+			new Set(
+				affectedPages.flatMap((p) => p.sourceRecordIds),
+			),
+		);
+		if (batchMemoryIds.length > 0) {
+			const coMentionEmission = await emitCoMentionLinks({
+				scope,
+				memoryUnitIds: batchMemoryIds,
+				lookupMemorySources: (lookupArgs) =>
+					findMemoryUnitPageSources(lookupArgs),
+				writeLink,
+			});
+			metrics.links_written_co_mention =
+				(metrics.links_written_co_mention ?? 0) +
+				coMentionEmission.linksWritten;
 		}
 	}
 
@@ -1222,6 +1366,9 @@ function emptyMetrics(): RunJobResult["metrics"] {
 		output_tokens: 0,
 		cost_usd: 0,
 		latency_ms: 0,
+		links_written_deterministic: 0,
+		links_written_co_mention: 0,
+		duplicate_candidates_count: 0,
 	};
 }
 
