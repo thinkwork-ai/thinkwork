@@ -3,20 +3,23 @@ import SectionShell from "./SectionShell.astro";
 import SectionHeader from "./SectionHeader.astro";
 import ScreenshotFrame from "./ScreenshotFrame.astro";
 
+interface Feature {
+  title: string;
+  desc: string;
+}
+
 interface Props {
   id: string;
   tone?: "default" | "raised";
   eyebrow: string;
   headline: string;
   lede: string;
-  step?: string;
-  bullets: string[];
+  features: Feature[];
   imagePath: string;
   imageAlt: string;
   caption: string;
   chromeLabel?: string;
   accent?: boolean;
-  figureFirst?: boolean;
 }
 
 const {
@@ -25,40 +28,46 @@ const {
   eyebrow,
   headline,
   lede,
-  step,
-  bullets,
+  features,
   imagePath,
   imageAlt,
   caption,
   chromeLabel,
   accent = false,
-  figureFirst = false,
 } = Astro.props;
 ---
 
 <SectionShell id={id} tone={tone} glow="top">
-  <SectionHeader eyebrow={eyebrow} headline={headline} lede={lede} step={step} />
+  <SectionHeader
+    eyebrow={eyebrow}
+    headline={headline}
+    lede={lede}
+    align="center"
+    width="wide"
+  />
 
-  <div class="mt-14 grid gap-12 lg:grid-cols-12 lg:items-center lg:gap-14">
-    <div class:list={["lg:col-span-5", figureFirst ? "lg:order-2" : "lg:order-1"]}>
-      <ul class="space-y-4">
-        {bullets.map((b) => (
-          <li class="flex gap-3.5 text-[15px] leading-6 text-slate-300">
-            <span class="mt-[10px] h-1 w-1 flex-none rounded-full bg-brand"></span>
-            <span>{b}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
+  <div class="mt-14">
+    <ScreenshotFrame
+      src={imagePath}
+      alt={imageAlt}
+      caption={caption}
+      chromeLabel={chromeLabel}
+      accent={accent}
+    />
+  </div>
 
-    <div class:list={["lg:col-span-7", figureFirst ? "lg:order-1" : "lg:order-2"]}>
-      <ScreenshotFrame
-        src={imagePath}
-        alt={imageAlt}
-        caption={caption}
-        chromeLabel={chromeLabel}
-        accent={accent}
-      />
-    </div>
+  <div class="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    {features.map((f, i) => (
+      <div class="group relative flex flex-col gap-3 rounded-2xl border border-white/5 bg-white/[0.025] p-6 transition hover:border-brand/25 hover:bg-white/[0.04]">
+        <div class="flex items-center justify-between">
+          <span class="inline-flex h-6 items-center rounded-full border border-brand/25 bg-brand/[0.08] px-2 font-mono text-[10px] font-semibold tracking-[0.2em] text-brand/90">
+            0{i + 1}
+          </span>
+          <span class="h-px flex-1 ml-3 bg-white/5 group-hover:bg-brand/20 transition"></span>
+        </div>
+        <h3 class="mt-1 text-[15px] font-semibold text-slate-100">{f.title}</h3>
+        <p class="text-sm leading-6 text-slate-400">{f.desc}</p>
+      </div>
+    ))}
   </div>
 </SectionShell>

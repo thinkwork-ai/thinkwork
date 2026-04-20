@@ -114,11 +114,23 @@ export const agentTemplates = {
   eyebrow: "Templates",
   headline: "You decide what each agent is allowed to do.",
   lede: "Agent templates are the contract between a policy decision and the agents that enforce it. Define a template once and every agent created from it inherits the boundary.",
-  bullets: [
-    "Allow-list the tools and MCP servers each template can call.",
-    "Pin the model. Override only when explicitly permitted.",
-    "Attach guardrails by reference so policy changes propagate.",
-    "Scope knowledge bases to the templates that should see them.",
+  features: [
+    {
+      title: "Tool allow-lists",
+      desc: "Scope which built-in tools and MCP servers each template may call. Anything unlisted is simply unreachable.",
+    },
+    {
+      title: "Model pinning",
+      desc: "Lock the model per template. Overrides require an explicit policy flag, not a quiet flag change.",
+    },
+    {
+      title: "Guardrails by reference",
+      desc: "Attach a guardrail once; every agent created from the template inherits future edits automatically.",
+    },
+    {
+      title: "Scoped knowledge",
+      desc: "Bind knowledge bases to specific templates so sensitive corpora stay out of reach for general agents.",
+    },
   ],
   caption: "Admin web · agent-templates editor",
   imagePath: "/images/admin/agent-templates.png",
@@ -128,11 +140,23 @@ export const costControl = {
   eyebrow: "Cost",
   headline: "No surprise invoices from a runaway agent.",
   lede: "Every model call emits a cost event tagged by tenant, agent, and model. Attribution is real-time. Budgets are enforced before the loop runs away.",
-  bullets: [
-    "Per-agent, per-model, and per-tenant cost attribution — no after-the-fact guessing.",
-    "30-day rolling spend charts for every agent.",
-    "Hard budgets that pause an agent before a loop becomes an invoice.",
-    "Raw cost events exportable to your own FinOps system.",
+  features: [
+    {
+      title: "Real-time attribution",
+      desc: "Every invocation emits a cost event tagged by tenant, agent, and model — no end-of-month reconciliation.",
+    },
+    {
+      title: "30-day trendlines",
+      desc: "Rolling spend charts for every agent and every model, ready to drill into on demand.",
+    },
+    {
+      title: "Enforced budgets",
+      desc: "Per-agent hard caps pause execution before a runaway loop turns into a receivable.",
+    },
+    {
+      title: "Exportable events",
+      desc: "Pipe the raw cost event stream into your own FinOps system — you own the ledger, not a vendor.",
+    },
   ],
   caption: "Admin web · analytics · cost view",
   imagePath: "/images/admin/cost-analytics.png",
