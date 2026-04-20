@@ -342,6 +342,7 @@ export async function runCompileJob(
 				modelId: opts.modelId,
 				knownPageTitles,
 				knownPageRefs,
+				candidatePages,
 			});
 
 			// Advance cursor only after a clean apply.
@@ -526,6 +527,20 @@ interface ApplyPlanArgs {
 	knownPageTitles?: string[];
 	/** (type, slug, title) of every scope-active page — drives linkifyKnown. */
 	knownPageRefs?: Array<{ type: WikiPageType; slug: string; title: string }>;
+	/** Scope-wide pages with summaries, feeding the summary-based parent
+	 * expander in the deterministic linker. Same data runCompileJob
+	 * already fetched via `listPagesForScope` for the planner call; piping
+	 * it through avoids a second DB hit. Optional — tests / backfill may
+	 * omit it, in which case the summary expander runs on an empty list
+	 * and only the record-based expander contributes candidates. */
+	candidatePages?: Array<{
+		id: string;
+		type: WikiPageType;
+		slug: string;
+		title: string;
+		summary: string | null;
+		aliases: string[];
+	}>;
 }
 
 /**
@@ -535,6 +550,7 @@ interface ApplyPlanArgs {
  */
 async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 	const { job, records, plan, metrics } = args;
+	const candidatePages = args.candidatePages ?? [];
 	const recordById = new Map(records.map((r) => [r.id, r]));
 	// Pages this call to applyPlan touched — fed into the deterministic
 	// linker so we don't emit links for scope-level pages that weren't
@@ -862,12 +878,44 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 				context: linkArgs.context,
 			});
 
-		const candidates = deriveParentCandidates(records);
-		if (candidates.length > 0) {
+		// Two expanders feed the linker:
+		//   - record-based: per-batch memory records with city/journal
+		//     metadata → leaves via leavesByRecord (affectedPages)
+		//   - summary-based: scope pages whose summaries mention a city →
+		//     leaves by page id (candidatePages, scope-wide)
+		// The summary expander was added 2026-04-20 after the parent-link
+		// audit showed the record-based path alone only recovered 14 links
+		// on Marco; summaries add another ~30-60 (Toronto / Seattle /
+		// Honolulu hubs that exist as entities but whose records don't
+		// carry `metadata.place.city`).
+		const recordCandidates = deriveParentCandidates(records);
+		const summaryCandidates = deriveParentCandidatesFromPageSummaries(
+			candidatePages.map((p) => ({
+				id: p.id,
+				summary: p.summary,
+				title: p.title,
+				tags: p.aliases,
+			})),
+		);
+		const allCandidates = [...recordCandidates, ...summaryCandidates];
+		if (allCandidates.length > 0) {
 			const parentEmission = await emitDeterministicParentLinks({
 				scope,
-				candidates,
+				candidates: allCandidates,
 				affectedPages,
+				// Scope-wide leaf pool for summary-kind candidates. Feeds the
+				// emitter's `leavesById` index so it can resolve leaves
+				// that weren't touched in THIS batch — a summary-kind
+				// candidate for "Toronto" should still link pages whose
+				// summaries mention Toronto even if those pages aren't
+				// being rewritten this compile.
+				scopePages: candidatePages.map((p) => ({
+					id: p.id,
+					type: p.type,
+					slug: p.slug,
+					title: p.title,
+					sourceRecordIds: [],
+				})),
 				lookupParentPages: (lookupArgs) =>
 					findPagesByExactTitle(lookupArgs),
 				// Trigram fallback closes the "Austin" / "Austin, Texas"

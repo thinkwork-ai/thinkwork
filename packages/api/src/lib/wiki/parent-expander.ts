@@ -19,6 +19,14 @@ import { slugifyTitle } from "./aliases.js";
 
 export type ParentCandidateReason = "city" | "journal" | "tag_cluster";
 
+/** Whether the candidate came from scanning batch memory records vs
+ * scope-wide page summaries. Matters to the deterministic linker because
+ * the leaf-resolution differs: record-kind leaves are pages touched in
+ * THIS batch whose records source the candidate (keyed on record id);
+ * summary-kind leaves are scope pages whose summaries produced the
+ * candidate token (keyed on page id, bypassing the batch-touched gate). */
+export type ParentCandidateSourceKind = "record" | "summary";
+
 export interface DerivedParentCandidate {
 	/** Why we proposed this candidate — used by the aggregation prompt. */
 	reason: ParentCandidateReason;
@@ -30,7 +38,9 @@ export interface DerivedParentCandidate {
 	/** Section on the parent that should accumulate this cluster. */
 	suggestedSectionSlug: string;
 	suggestedSectionHeading: string;
-	/** Record ids that back the candidacy. Provenance for the aggregation pass. */
+	/** Ids that back the candidacy. The id type depends on `sourceKind`:
+	 *  - record: memory-record ids (provenance + record-based leaf lookup)
+	 *  - summary: page ids (the pages whose summaries produced this token) */
 	sourceRecordIds: string[];
 	/** Observed tags across the supporting records (dedup'd). */
 	observedTags: string[];
@@ -39,6 +49,11 @@ export interface DerivedParentCandidate {
 	 * compiler can adapt thresholds in replay/testing without changing code.
 	 */
 	supportingCount: number;
+	/** Source of the candidate — determines leaf-resolution semantics in
+	 * the deterministic linker. See `ParentCandidateSourceKind`. Optional
+	 * for back-compat with older test fixtures; the emitter treats `undefined`
+	 * as `"record"` (the sole pre-existing path). */
+	sourceKind?: ParentCandidateSourceKind;
 }
 
 export interface ParentExpanderOptions {
@@ -165,6 +180,7 @@ export function deriveParentCandidates(
 			sourceRecordIds: Array.from(entry.recordIds),
 			observedTags: Array.from(entry.tags),
 			supportingCount: entry.recordIds.size,
+			sourceKind: "record",
 		});
 	}
 
@@ -224,6 +240,12 @@ export function deriveParentCandidatesFromPageSummaries(
 			extractCityFromSummary(p.summary) ??
 			extractCityFromAddress(p.summary);
 		if (!city) continue;
+		// Precision filter for the summary-expander feed into the deterministic
+		// linker (2026-04-20). The 04-20 audit surfaced noise titles like
+		// "Prospect Interested In The Full PVL Product Line" and street-name
+		// false positives like "Congress Ave" — safe to drop before they
+		// become link candidates.
+		if (!isLikelyCityToken(city)) continue;
 		const title = titleCase(city);
 		const key = title.toLowerCase();
 		let entry = byCity.get(key);
@@ -245,11 +267,13 @@ export function deriveParentCandidatesFromPageSummaries(
 			parentType: "topic",
 			suggestedSectionSlug: "overview",
 			suggestedSectionHeading: "Overview",
-			// These are page ids, not memory-record ids — same semantic role
-			// as "source of this candidacy" so we reuse the field.
+			// These are page ids, not memory-record ids — sourceKind: "summary"
+			// tells the deterministic linker to resolve leaves by page id
+			// against the scope-pages index instead of the batch-records index.
 			sourceRecordIds: Array.from(entry.pageIds),
 			observedTags: Array.from(entry.tags),
 			supportingCount: entry.pageIds.size,
+			sourceKind: "summary",
 		});
 	}
 	out.sort((a, b) => b.supportingCount - a.supportingCount);
@@ -434,10 +458,26 @@ function extractCityFromAddress(address: string | null): string | null {
 		if (/^[A-Z]{2,4}(\s|$)/.test(parts[i]!)) {
 			return stripLeadingPostcode(parts[i - 1] ?? "") || null;
 		}
+		// Dotted region abbreviations — Spanish-language addresses like
+		// "..., 37700 San Miguel de Allende, Gto., Mexico" (Guanajuato) and
+		// "..., Cancún, Q.R., Mexico" (Quintana Roo), plus Canadian "B.C."
+		// and Australian "N.S.W." usage. The 04-20 Marco audit surfaced 54
+		// records producing "Gto." / "Q.R." candidates because the walk fell
+		// through to the fallback.
+		if (isDottedRegionAbbr(parts[i]!)) {
+			return stripLeadingPostcode(parts[i - 1] ?? "") || null;
+		}
 	}
 	// Fallback: "..., City, Country" shape (e.g. "Avignon, France" or
 	// "26110 Vinsobres, France" where the region code walk found nothing).
 	return stripLeadingPostcode(parts[parts.length - 2] ?? "") || null;
+}
+
+/** True for short dotted region abbreviations: "Gto.", "Q.R.", "B.C.",
+ * "N.S.W.". Accepts 1-4 capitalized groups of 1-3 letters each, separated
+ * and trailed by dots; capped at 10 chars so "Mr. Jones" etc. never match. */
+function isDottedRegionAbbr(s: string): boolean {
+	return s.length <= 10 && /^([A-Z][a-z]{0,2}\.){1,4}$/.test(s);
 }
 
 /** Drop a leading numeric/alphanumeric postcode from a city part.
@@ -445,6 +485,47 @@ function extractCityFromAddress(address: string | null): string | null {
  * `"Ciudad de México"`, `"Austin"` → `"Austin"` (no change). */
 function stripLeadingPostcode(s: string): string {
 	return s.replace(/^[0-9][0-9A-Za-z-]*\s+/, "").trim();
+}
+
+/** Common English street-suffix tokens. Cities never end in these; pages
+ * that do are street names or building addresses the summary-extractor
+ * shouldn't promote into geographic candidates. Case-insensitive match on
+ * the final whitespace-separated token. */
+const STREET_SUFFIXES = new Set([
+	"ave",
+	"avenue",
+	"blvd",
+	"boulevard",
+	"st",
+	"street",
+	"rd",
+	"road",
+	"ln",
+	"lane",
+	"dr",
+	"drive",
+	"way",
+	"place",
+	"ct",
+	"court",
+	"pkwy",
+	"parkway",
+]);
+
+/** Coarse "is this a plausible city name?" filter for the summary-expander
+ * feed into the deterministic linker. Drops obvious noise:
+ * - ≥ 5 words (sentence fragments like "Prospect Interested In The Full PVL Product Line")
+ * - < 3 chars (abbreviations like "St")
+ * - Street-suffix endings ("Congress Ave", "Queen St")
+ * Intentionally liberal otherwise — real cities are varied. */
+function isLikelyCityToken(raw: string): boolean {
+	const s = raw.trim();
+	if (s.length < 3) return false;
+	const tokens = s.split(/\s+/).filter((t) => t.length > 0);
+	if (tokens.length === 0 || tokens.length > 4) return false;
+	const last = tokens[tokens.length - 1]!.toLowerCase().replace(/\.$/, "");
+	if (STREET_SUFFIXES.has(last)) return false;
+	return true;
 }
 
 /**
