@@ -15,6 +15,7 @@ import {
 } from "./NodeDetailModal";
 import { loadGraphState } from "./graphStateCache";
 import type {
+  GraphFilter,
   WikiGraphEdge,
   WikiGraphNode,
   WikiPageType,
@@ -30,9 +31,13 @@ interface WikiGraphViewProps {
    */
   initialFocalPageId?: string | null;
   /**
-   * When non-empty, dims nodes whose label/summary doesn't match (case-
-   * insensitive substring) to 15% opacity. Lets the shared "Search wiki…"
-   * footer filter the graph in place.
+   * When non-empty, 3-state rendering: matched nodes full color, 1-hop
+   * neighbors of a match render muted with a colored outline ring in
+   * their type color, and everything else renders just muted. Edges
+   * stay visible — full opacity when at least one endpoint is
+   * matched, muted when both are unmatched. Lets the shared "Search
+   * wiki…" footer filter the graph in place without restarting the
+   * force sim or camera.
    */
   searchQuery?: string;
 }
@@ -124,14 +129,27 @@ export function WikiGraphView({
     };
   }, [internalSubgraph, selectedNodeId]);
 
-  const dimmedNodeIds = useMemo(() => {
+  // 3-state filter: matched (full color), 1-hop neighbors of a match
+  // (muted + colored outline ring), other (muted only). Edges stay
+  // visible; full opacity when touching a match, muted otherwise.
+  // `null` means no filter active — everything renders full color.
+  const filter = useMemo<GraphFilter | null>(() => {
     const q = (searchQuery ?? "").trim().toLowerCase();
-    if (!q || !internalSubgraph) return new Set<string>();
-    const dimmed = new Set<string>();
+    if (!q || !internalSubgraph) return null;
+    const matchedIds = new Set<string>();
     for (const n of internalSubgraph.nodes) {
-      if (!(n.label ?? "").toLowerCase().includes(q)) dimmed.add(n.id);
+      if ((n.label ?? "").toLowerCase().includes(q)) matchedIds.add(n.id);
     }
-    return dimmed;
+    const neighborIds = new Set<string>();
+    for (const e of internalSubgraph.edges) {
+      const sId = typeof e.source === "string" ? e.source : e.source.id;
+      const tId = typeof e.target === "string" ? e.target : e.target.id;
+      const sMatched = matchedIds.has(sId);
+      const tMatched = matchedIds.has(tId);
+      if (sMatched && !tMatched) neighborIds.add(tId);
+      else if (tMatched && !sMatched) neighborIds.add(sId);
+    }
+    return { matchedIds, neighborIds };
   }, [searchQuery, internalSubgraph]);
 
   const handleOpenFullPage = useCallback(
@@ -173,7 +191,7 @@ export function WikiGraphView({
           subgraph={internalSubgraph}
           selectedNodeId={selectedNodeId}
           onSelectNode={setSelectedNodeId}
-          dimmedNodeIds={dimmedNodeIds}
+          filter={filter}
           cacheKey={cacheKey}
         />
       )}

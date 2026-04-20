@@ -65,3 +65,18 @@ export interface CameraState {
   ty: number;
   scale: number;
 }
+
+/**
+ * Filter state for the wiki graph. `null` → no filter active, render
+ * everything full color. Non-null → 3-state rendering:
+ *   • `matchedIds`      — matched nodes, full color.
+ *   • `neighborIds`     — 1-hop neighbors of a match, muted fill + a
+ *                          colored outline ring in the node's type color.
+ *   • everything else   — muted fill only, no outline ring.
+ * Edges stay visible: full opacity when at least one endpoint is
+ * matched, muted when both are unmatched. Nothing is ever hidden.
+ */
+export interface GraphFilter {
+  matchedIds: Set<string>;
+  neighborIds: Set<string>;
+}
