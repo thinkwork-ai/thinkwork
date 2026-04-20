@@ -24,6 +24,7 @@ import {
 	emitDeterministicParentLinks,
 	type AffectedPage,
 	type LookupMemorySources,
+	type ParentPageFuzzyLookup,
 	type ParentPageLookup,
 	type WriteLinkArgs,
 } from "./deterministic-linker.js";
@@ -43,6 +44,9 @@ export interface RunLinkBackfillArgs {
 	listAllActivePages: () => Promise<BackfillPage[]>;
 	listMemoryUnitIds: () => Promise<string[]>;
 	lookupParentPages: ParentPageLookup;
+	/** Optional trigram fallback for the parent lookup. Callers running the
+	 * live compile wire this to `findPagesByFuzzyTitle`; tests can omit. */
+	lookupParentPagesFuzzy?: ParentPageFuzzyLookup;
 	lookupMemorySources: LookupMemorySources;
 	upsertPageLink: (args: WriteLinkArgs) => Promise<void>;
 	log?: (line: string) => void;
@@ -99,6 +103,7 @@ export async function runLinkBackfill(
 		candidates,
 		affectedPages,
 		lookupParentPages: args.lookupParentPages,
+		lookupParentPagesFuzzy: args.lookupParentPagesFuzzy,
 		writeLink,
 	});
 	log(

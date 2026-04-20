@@ -23,7 +23,10 @@ import {
 	findMemoryUnitPageSources,
 	findPageById,
 	findPageBySlug,
+	bumpSectionLastSeen,
+	enqueueCompileJob,
 	findPagesByExactTitle,
+	findPagesByFuzzyTitle,
 	getCompileJob,
 	getCursor,
 	listOpenMentions,
@@ -50,6 +53,7 @@ import {
 	emitDeterministicParentLinks,
 	type AffectedPage,
 } from "./deterministic-linker.js";
+import { invokeWikiCompile } from "./enqueue.js";
 import { runPlanner, type PlannerResult } from "./planner.js";
 import {
 	isMeaningfulChange,
@@ -78,6 +82,14 @@ import { and, eq, sql } from "drizzle-orm";
 
 const RECORD_PAGE_SIZE = 50;
 const MAX_RECORDS_PER_JOB = 500;
+/** Higher cap for `trigger='bootstrap_import'` jobs — the one-shot import
+ * that feeds the whole agent history through the planner. Paired with
+ * continuation chaining so a 5,000-record bootstrap still self-completes. */
+const MAX_RECORDS_PER_BOOTSTRAP_JOB = 1000;
+/** Seconds past "now" we schedule a continuation to run at. Matches the
+ * compile dedupe-bucket length so the chained job lands in the next
+ * bucket and can't collide with the parent. */
+const CONTINUATION_BUCKET_OFFSET_SECONDS = 300;
 const MAX_NEW_PAGES_PER_JOB = 25;
 const MAX_SECTIONS_REWRITTEN_PER_JOB = 100;
 
@@ -138,6 +150,21 @@ export interface RunJobResult {
 		 * R5 precision canary. Rising means densification may be creating
 		 * duplicate hubs. */
 		duplicate_candidates_count?: number;
+		/** newPages the aggregation planner wanted to create but that would
+		 * collide by title with an existing active page of a different type
+		 * (e.g. entity `Portland, Oregon` + proposed topic `Portland, Oregon`).
+		 * The applier skips these; the metric tells operators how often the
+		 * planner is mid-air-collision-prone. */
+		duplicate_candidates_cross_type?: number;
+		/** Parent sections whose `aggregation.last_source_at` was refreshed
+		 * because a child leaf was touched this batch. Lets the aggregation
+		 * pass see freshly-touched parents even when the batch only updated
+		 * leaves (no newPages, no promotions). */
+		parent_sections_bumped?: number;
+		/** Bootstrap-scale continuation jobs successfully enqueued at the end
+		 * of this job (0 or 1 in v1). When >0, the chained job is running
+		 * in the next dedupe bucket against the same (tenant, owner) scope. */
+		continuation_enqueued?: number;
 		/** True when `WIKI_DETERMINISTIC_LINKING_ENABLED` is false, so
 		 * operators can distinguish "flag off" from "no candidates" at a
 		 * glance. */
@@ -206,16 +233,25 @@ export async function runCompileJob(
 	const allRecordsThisJob: ThinkWorkMemoryRecord[] = [];
 	const jobStartedAt = new Date();
 
+	const isBootstrap = job.trigger === "bootstrap_import";
+	const maxRecordsThisJob = isBootstrap
+		? MAX_RECORDS_PER_BOOTSTRAP_JOB
+		: MAX_RECORDS_PER_JOB;
+	// Set when the adapter returned fewer records than requested — signals
+	// we've caught up to the scope's latest memory and no continuation is
+	// needed. Stays false when the loop exits via `records_read >= cap`.
+	let cursorDrained = false;
+
 	try {
 		let cursor = await getCursor({
 			tenantId: job.tenant_id,
 			ownerId: job.owner_id,
 		});
 
-		while (metrics.records_read < MAX_RECORDS_PER_JOB) {
+		while (metrics.records_read < maxRecordsThisJob) {
 			const pageSize = Math.min(
 				RECORD_PAGE_SIZE,
-				MAX_RECORDS_PER_JOB - metrics.records_read,
+				maxRecordsThisJob - metrics.records_read,
 			);
 			const { records, nextCursor } = await adapter.listRecordsUpdatedSince({
 				tenantId: job.tenant_id,
@@ -225,7 +261,10 @@ export async function runCompileJob(
 				limit: pageSize,
 			});
 
-			if (records.length === 0) break;
+			if (records.length === 0) {
+				cursorDrained = true;
+				break;
+			}
 			metrics.records_read += records.length;
 			allRecordsThisJob.push(...records);
 
@@ -309,7 +348,10 @@ export async function runCompileJob(
 			}
 
 			// If we got fewer records than asked for, we've drained the cursor.
-			if (records.length < pageSize) break;
+			if (records.length < pageSize) {
+				cursorDrained = true;
+				break;
+			}
 		}
 
 		// ---------------------------------------------------------------
@@ -356,6 +398,37 @@ export async function runCompileJob(
 				`[wiki-compiler] duplicate-candidates canary failed for job=${job.id}:`,
 				(canaryErr as Error)?.message ?? canaryErr,
 			);
+		}
+		// Continuation chaining — when we drained the cap but not the
+		// cursor, enqueue a follow-up job into the next dedupe bucket so
+		// bootstrap-scale imports self-complete. Preserves the parent's
+		// trigger so the chained job also uses the higher bootstrap cap.
+		if (!cursorDrained && metrics.records_read >= maxRecordsThisJob) {
+			try {
+				const nextBucketSeconds =
+					Math.floor(Date.now() / 1000) + CONTINUATION_BUCKET_OFFSET_SECONDS;
+				const { inserted, job: chained } = await enqueueCompileJob({
+					tenantId: job.tenant_id,
+					ownerId: job.owner_id,
+					trigger: job.trigger,
+					nowEpochSeconds: nextBucketSeconds,
+				});
+				if (inserted) {
+					await invokeWikiCompile(chained.id).catch((err) => {
+						console.warn(
+							`[wiki-compiler] continuation invoke failed for parent=${job.id} chained=${chained.id}:`,
+							(err as Error)?.message ?? err,
+						);
+					});
+					metrics.continuation_enqueued =
+						(metrics.continuation_enqueued ?? 0) + 1;
+				}
+			} catch (chainErr) {
+				console.warn(
+					`[wiki-compiler] continuation enqueue failed for job=${job.id}:`,
+					(chainErr as Error)?.message ?? chainErr,
+				);
+			}
 		}
 		await completeCompileJob({
 			jobId: job.id,
@@ -750,6 +823,10 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 				affectedPages,
 				lookupParentPages: (lookupArgs) =>
 					findPagesByExactTitle(lookupArgs),
+				// Trigram fallback closes the Portland / "Portland, Oregon"
+				// recall gap observed on 2026-04-20 Marco recompile.
+				lookupParentPagesFuzzy: (lookupArgs) =>
+					findPagesByFuzzyTitle(lookupArgs),
 				writeLink,
 			});
 			metrics.links_written_deterministic =
@@ -777,6 +854,26 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 				(metrics.links_written_co_mention ?? 0) +
 				coMentionEmission.linksWritten;
 		}
+	}
+
+	// 7. Section activity — advance `aggregation.last_source_at` on any
+	// parent section that already claims a leaf we just touched. Errors
+	// here are benign (parent section may have drifted); log + continue so
+	// the bump loop can't fail the compile.
+	let parentSectionsBumped = 0;
+	for (const page of affectedPages) {
+		try {
+			parentSectionsBumped += await bumpSectionLastSeen({ pageId: page.id });
+		} catch (bumpErr) {
+			console.warn(
+				`[wiki-compiler] bumpSectionLastSeen failed for page=${page.id}:`,
+				(bumpErr as Error)?.message ?? bumpErr,
+			);
+		}
+	}
+	if (parentSectionsBumped > 0) {
+		metrics.parent_sections_bumped =
+			(metrics.parent_sections_bumped ?? 0) + parentSectionsBumped;
 	}
 
 	return null;
@@ -992,6 +1089,35 @@ async function applyAggregationPlan(
 		if (existing) {
 			touchedPageIds.add(existing.id);
 			continue; // never resurrect a hub the leaf planner already built
+		}
+		// Cross-type duplicate guard: even if the slug doesn't collide, an
+		// active page of a *different* type may already claim this exact
+		// title. The aggregation planner surfaced this bug on 2026-04-20
+		// Marco recompile — `Portland, Oregon` entity existed and agg
+		// planner emitted a new `topic` page with the same title,
+		// splintering the graph. Surface the collision, skip creation, and
+		// leave it to a future refinement (Unit 5 promotion path / manual
+		// review) to reconcile.
+		const titleCollisions = await findPagesByExactTitle({
+			tenantId: job.tenant_id,
+			ownerId: job.owner_id,
+			title: np.title,
+		});
+		if (titleCollisions.length > 0) {
+			metrics.duplicate_candidates_cross_type =
+				(metrics.duplicate_candidates_cross_type ?? 0) + 1;
+			console.warn(
+				`[wiki-compiler] cross-type duplicate guard: agg planner proposed ` +
+					`{type=${np.type}, title="${np.title}"} but ` +
+					titleCollisions
+						.map((p) => `${p.type}/${p.slug}=${p.id}`)
+						.join(", ") +
+					` already exists — skipping creation`,
+			);
+			// Track the existing pages so aggregation still links to them
+			// when subsequent steps resolve by title.
+			for (const c of titleCollisions) touchedPageIds.add(c.id);
+			continue;
 		}
 		const slug = slugifyTitle(np.title) || np.slug;
 		const sources = resolveCitedRecords(recordById, np.source_refs);

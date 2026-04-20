@@ -33,6 +33,7 @@ import {
 import {
 	findMemoryUnitPageSources,
 	findPagesByExactTitle,
+	findPagesByFuzzyTitle,
 	upsertPageLink,
 } from "../src/lib/wiki/repository.js";
 import { runLinkBackfill } from "../src/lib/wiki/link-backfill.js";
@@ -176,6 +177,7 @@ async function main(): Promise<void> {
 		listAllActivePages: () => listAllActivePages(scope),
 		listMemoryUnitIds: () => listMemoryUnitIdsInScope(scope),
 		lookupParentPages: (lookupArgs) => findPagesByExactTitle(lookupArgs),
+		lookupParentPagesFuzzy: (lookupArgs) => findPagesByFuzzyTitle(lookupArgs),
 		lookupMemorySources: (lookupArgs) => findMemoryUnitPageSources(lookupArgs),
 		upsertPageLink: (linkArgs) =>
 			upsertPageLink({

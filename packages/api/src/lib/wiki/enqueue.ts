@@ -95,7 +95,7 @@ export async function maybeEnqueuePostTurnCompile(
 // (useful for tests and when the caller already knows the ARN).
 // ---------------------------------------------------------------------------
 
-async function invokeWikiCompile(jobId: string): Promise<void> {
+export async function invokeWikiCompile(jobId: string): Promise<void> {
 	const fnName = resolveWikiCompileFunctionName();
 	if (!fnName) {
 		console.warn(
