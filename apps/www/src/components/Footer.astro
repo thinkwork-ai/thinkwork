@@ -1,8 +1,6 @@
 ---
 import BrainMark from "./BrainMark.astro";
-
-const docsUrl = "https://docs.thinkwork.ai";
-const githubUrl = "https://github.com/thinkwork-ai/thinkwork";
+import { external } from "../lib/copy";
 ---
 
 <footer class="border-t border-white/5 bg-[#05080c]">
@@ -12,8 +10,8 @@ const githubUrl = "https://github.com/thinkwork-ai/thinkwork";
       <span class="text-sm font-semibold tracking-tight text-slate-300">ThinkWork</span>
     </div>
     <div class="flex items-center gap-6 text-sm text-slate-500">
-      <a href={docsUrl} class="transition hover:text-slate-200">Docs</a>
-      <a href={githubUrl} class="transition hover:text-slate-200">GitHub</a>
+      <a href={external.docs} class="transition hover:text-slate-200">Docs</a>
+      <a href={external.github} class="transition hover:text-slate-200">GitHub</a>
       <span>© {new Date().getFullYear()} ThinkWork</span>
     </div>
   </div>
