@@ -1,16 +1,14 @@
 import { useMemo, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import {
-  type WikiSubgraphLink,
-  type WikiSubgraphPage,
-  type WikiSubgraphPayload,
-  useWikiSubgraph,
+  type WikiGraphEdgeFromServer,
+  type WikiGraphNodeFromServer,
+  type WikiGraphPayload,
+  useWikiGraph,
 } from "@thinkwork/react-native-sdk";
 import { COLORS } from "@/lib/theme";
-import { GraphHeader } from "./GraphHeader";
 import { KnowledgeGraph } from "./KnowledgeGraph";
 import { NodeDetailSheet } from "./NodeDetailSheet";
-import { useFocusMode } from "./hooks/useFocusMode";
 import type {
   WikiGraphEdge,
   WikiGraphNode,
@@ -21,92 +19,63 @@ import type {
 interface WikiGraphViewProps {
   tenantId: string;
   agentId: string;
+  /**
+   * Optional: route param kept for backwards compat with existing callers,
+   * but the default view is "show all pages for this agent" — focal-mode
+   * is intentionally not the default after Unit 3 validation showed
+   * single-node lonely focals were the common case for real data.
+   */
   initialFocalPageId?: string | null;
   /**
-   * When non-empty, dims nodes whose label doesn't match (case-insensitive
-   * substring) to 15% opacity. Edges between two non-matching endpoints
-   * dim too. Lets the shared "Search wiki…" footer filter the graph.
+   * When non-empty, dims nodes whose label/summary doesn't match (case-
+   * insensitive substring) to 15% opacity. Lets the shared "Search wiki…"
+   * footer filter the graph in place.
    */
   searchQuery?: string;
 }
 
 /**
- * Top-level wiring for the graph viewer. Owns:
- *   - focal page resolution (route → AsyncStorage → recent Entity)
- *   - subgraph fetch via `useWikiSubgraph`
- *   - selection state + detail-sheet presentation
- *
- * Adapts the SDK's `WikiSubgraphPayload` shape into the internal
- * `WikiSubgraph` shape that `KnowledgeGraph` expects (the internal
- * shape carries Unit 5+ aspirational fields like temporal flags;
- * the SDK shape only ships what the resolver returns today).
+ * Top-level wiring for the graph viewer. Now defaults to "show every
+ * active page in the agent's scope" via `useWikiGraph` (same resolver
+ * the admin `/wiki` route uses). The depth-bounded focal+expand model
+ * from Unit 3's first iteration is parked for a future follow-up — the
+ * default view should match user expectations from the admin surface.
  */
 export function WikiGraphView({
   tenantId,
   agentId,
-  initialFocalPageId,
   searchQuery,
 }: WikiGraphViewProps) {
-  const focus = useFocusMode({
-    tenantId,
-    agentId,
-    routeFocalPageId: initialFocalPageId ?? null,
-  });
-
-  const { subgraph, loading, error } = useWikiSubgraph({
+  const { graph, loading, error } = useWikiGraph({
     tenantId,
     ownerId: agentId,
-    focalPageId: focus.focalPageId,
-    depth: focus.depth,
   });
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const internalSubgraph = useMemo(
-    () => (subgraph ? toInternalSubgraph(subgraph) : null),
-    [subgraph],
+    () => (graph ? toInternalSubgraph(graph) : null),
+    [graph],
   );
 
-  const focalNode = useMemo(() => {
-    if (!subgraph) return null;
-    return subgraph.nodes.find((n) => n.id === subgraph.focalPageId) ?? null;
-  }, [subgraph]);
-
   const selectedNode = useMemo(() => {
-    if (!subgraph || !selectedNodeId) return null;
-    return subgraph.nodes.find((n) => n.id === selectedNodeId) ?? null;
-  }, [subgraph, selectedNodeId]);
+    if (!internalSubgraph || !selectedNodeId) return null;
+    return internalSubgraph.nodes.find((n) => n.id === selectedNodeId) ?? null;
+  }, [internalSubgraph, selectedNodeId]);
 
-  const truncated =
-    !!subgraph &&
-    subgraph.hasMore.some(
-      (e) => e.pageId === subgraph.focalPageId && e.hasMore,
-    );
-
-  // Search filter: client-side dim of nodes whose label doesn't match.
-  // Empty query → no dimming (everything visible).
+  // Search filter: client-side dim of nodes whose label/summary doesn't match.
   const dimmedNodeIds = useMemo(() => {
     const q = (searchQuery ?? "").trim().toLowerCase();
-    if (!q || !subgraph) return new Set<string>();
+    if (!q || !internalSubgraph) return new Set<string>();
     const dimmed = new Set<string>();
-    for (const n of subgraph.nodes) {
-      const label = (n.title ?? "").toLowerCase();
-      const summary = (n.summary ?? "").toLowerCase();
-      if (!label.includes(q) && !summary.includes(q)) dimmed.add(n.id);
+    for (const n of internalSubgraph.nodes) {
+      if (!(n.label ?? "").toLowerCase().includes(q)) dimmed.add(n.id);
     }
     return dimmed;
-  }, [searchQuery, subgraph]);
+  }, [searchQuery, internalSubgraph]);
 
   return (
     <View style={styles.root}>
-      <GraphHeader
-        focalTitle={focalNode?.title ?? null}
-        depth={focus.depth}
-        onIncreaseDepth={() => focus.setDepth(focus.depth + 1)}
-        onDecreaseDepth={() => focus.setDepth(focus.depth - 1)}
-        truncated={truncated}
-      />
-
       {error ? (
         <View style={styles.fallback}>
           <Text style={styles.fallbackText}>{error.message}</Text>
@@ -122,6 +91,12 @@ export function WikiGraphView({
             </Text>
           )}
         </View>
+      ) : internalSubgraph.nodes.length === 0 ? (
+        <View style={styles.fallback}>
+          <Text style={styles.fallbackText}>
+            No pages compiled yet for this agent.
+          </Text>
+        </View>
       ) : (
         <KnowledgeGraph
           subgraph={internalSubgraph}
@@ -134,69 +109,69 @@ export function WikiGraphView({
       <NodeDetailSheet
         tenantId={tenantId}
         ownerId={agentId}
-        node={selectedNode}
+        node={
+          selectedNode
+            ? {
+                id: selectedNode.id,
+                type: selectedNode.pageType,
+                slug: selectedNode.slug,
+                title: selectedNode.label,
+                summary: selectedNode.summaryPreview ?? null,
+                status: selectedNode.status,
+                lastCompiledAt: selectedNode.lastCompiledAt,
+                updatedAt: selectedNode.lastCompiledAt,
+              }
+            : null
+        }
         onClose={() => setSelectedNodeId(null)}
-        onFocusHere={(pageId) => {
-          focus.setFocus(pageId);
-          setSelectedNodeId(null);
-        }}
+        onFocusHere={() => setSelectedNodeId(null)}
       />
     </View>
   );
 }
 
-function toInternalSubgraph(payload: WikiSubgraphPayload): WikiSubgraph {
-  const lookup = new Map<string, WikiGraphNode>();
-  const nodes: WikiGraphNode[] = payload.nodes.map((n) => {
-    const internal = nodeFromPayload(n);
-    lookup.set(n.id, internal);
-    return internal;
-  });
-  const edges: WikiGraphEdge[] = payload.edges.map((e) => edgeFromPayload(e));
-  const hasMore: Record<string, boolean> = {};
-  for (const entry of payload.hasMore) hasMore[entry.pageId] = entry.hasMore;
+function toInternalSubgraph(payload: WikiGraphPayload): WikiSubgraph {
+  const NOW = new Date().toISOString();
+  const nodes: WikiGraphNode[] = payload.nodes.map((n) => nodeFromPayload(n, NOW));
+  const edges: WikiGraphEdge[] = payload.edges.map((e, idx) =>
+    edgeFromPayload(e, idx, NOW),
+  );
   return {
-    focalPageId: payload.focalPageId,
-    depth: payload.depth,
-    atTime: payload.atTime,
+    focalPageId: nodes[0]?.id ?? "",
+    depth: 0,
+    atTime: NOW,
     nodes,
     edges,
-    hasMore,
+    hasMore: {},
   };
 }
 
-function nodeFromPayload(p: WikiSubgraphPage): WikiGraphNode {
+function nodeFromPayload(p: WikiGraphNodeFromServer, now: string): WikiGraphNode {
   return {
     id: p.id,
     slug: p.slug,
-    label: p.title,
-    pageType: p.type as WikiPageType,
-    summaryPreview: p.summary ?? undefined,
-    lastCompiledAt: p.lastCompiledAt ?? p.updatedAt,
-    status: normalizeStatus(p.status),
+    label: p.label,
+    pageType: p.entityType as WikiPageType,
+    lastCompiledAt: now,
+    status: "ACTIVE",
     primaryAgentIds: [],
   };
 }
 
-function edgeFromPayload(e: WikiSubgraphLink): WikiGraphEdge {
+function edgeFromPayload(
+  e: WikiGraphEdgeFromServer,
+  idx: number,
+  now: string,
+): WikiGraphEdge {
   return {
-    id: e.id,
-    source: e.fromPageId,
-    target: e.toPageId,
-    sectionSlug: undefined,
-    contextExcerpt: e.context ?? undefined,
-    firstSeenAt: e.firstSeenAt ?? new Date(0).toISOString(),
-    lastSeenAt: e.lastSeenAt ?? new Date().toISOString(),
-    isCurrent: e.isCurrent ?? true,
-    weight: e.weight ?? undefined,
+    id: `${e.source}-${e.target}-${idx}`,
+    source: e.source,
+    target: e.target,
+    firstSeenAt: now,
+    lastSeenAt: now,
+    isCurrent: true,
+    weight: e.weight,
   };
-}
-
-function normalizeStatus(s: string): "ACTIVE" | "STALE" | "ARCHIVED" {
-  const upper = s.toUpperCase();
-  if (upper === "ARCHIVED") return "ARCHIVED";
-  if (upper === "STALE") return "STALE";
-  return "ACTIVE";
 }
 
 const styles = StyleSheet.create({
