@@ -3,7 +3,7 @@ name: github-issues
 description: >
   Search, create, and manage GitHub issues.
   Use when the user wants to view, create, or look up issues in a GitHub repository.
-license: MIT
+license: Apache-2.0
 metadata:
   author: thinkwork
   version: "1.0.0"

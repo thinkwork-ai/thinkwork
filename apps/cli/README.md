@@ -281,4 +281,4 @@ Thinkwork provisions a complete AI agent stack (~250 AWS resources):
 
 ## License
 
-MIT
+Apache 2.0 — see [LICENSE](../../LICENSE).
