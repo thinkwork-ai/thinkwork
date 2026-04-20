@@ -3,7 +3,7 @@ name: calculator
 description: >
   Perform arithmetic calculations.
   Use when the user asks to do math, convert units, or evaluate expressions.
-license: MIT
+license: Apache-2.0
 metadata:
   author: thinkwork
   version: "1.0.0"

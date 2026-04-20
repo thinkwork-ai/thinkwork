@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/thinkwork-cli"><img src="https://img.shields.io/npm/v/thinkwork-cli.svg?color=0ea5e9&label=thinkwork-cli" alt="npm version" /></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="license" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license" /></a>
   <a href="https://docs.thinkwork.ai"><img src="https://img.shields.io/badge/docs-thinkwork.ai-0ea5e9" alt="docs" /></a>
 </p>
 
@@ -107,4 +107,4 @@ See [SECURITY.md](./SECURITY.md) for vulnerability disclosure.
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+Apache 2.0 — see [LICENSE](./LICENSE) and [NOTICE](./NOTICE).

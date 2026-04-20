@@ -4,7 +4,7 @@ version = "0.0.0"
 description = "Production-grade agent platform for teams that already live on AWS"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
 authors = [{ name = "thinkwork-ai" }]
 
 [tool.uv]

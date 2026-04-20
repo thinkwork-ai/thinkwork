@@ -2,7 +2,7 @@
   "name": "thinkwork-cli",
   "version": "0.9.0",
   "description": "Thinkwork CLI — deploy, manage, and interact with your Thinkwork stack",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "bin": {
     "thinkwork": "dist/cli.js"
