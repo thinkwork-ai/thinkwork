@@ -207,6 +207,53 @@ describe("deriveParentCandidates", () => {
 		]);
 		expect(out.find((c) => c.reason === "city")?.parentTitle).toBe("London");
 	});
+
+	// Regression tests for the 2026-04-20 Marco audit — European addresses
+	// (no US-style "ST 12345" region code) previously produced broken
+	// "ZIPCODE City" candidates that never matched existing wiki pages.
+	it("strips French leading postcode from ZIPCODE-city fallback", () => {
+		const out = deriveParentCandidates([
+			makeRecord("r1", {
+				place_address: "11 Rue Bernard Palissy, 75006 Paris, France",
+			}),
+			makeRecord("r2", {
+				place_address: "27 Rue Augereau, 75007 Paris, France",
+			}),
+		]);
+		expect(out.find((c) => c.reason === "city")?.parentTitle).toBe("Paris");
+	});
+
+	it("strips leading postcode for a two-part European address", () => {
+		const out = deriveParentCandidates([
+			makeRecord("r1", { place_address: "26110 Vinsobres, France" }),
+			makeRecord("r2", { place_address: "26110 Vinsobres, France" }),
+		]);
+		expect(out.find((c) => c.reason === "city")?.parentTitle).toBe("Vinsobres");
+	});
+
+	it("resolves Mexican addresses with CDMX four-letter region code", () => {
+		const out = deriveParentCandidates([
+			makeRecord("r1", {
+				place_address: "José María Izazaga 8, Centro, 06000 Ciudad de México, CDMX, Mexico",
+			}),
+			makeRecord("r2", {
+				place_address: "Av. Insurgentes 100, 06000 Ciudad de México, CDMX, Mexico",
+			}),
+		]);
+		expect(out.find((c) => c.reason === "city")?.parentTitle).toBe(
+			"Ciudad De México",
+		);
+	});
+
+	it("does not mistake the trailing country token for a region code", () => {
+		// Before the "skip last part" fix, widening the region-code regex
+		// to `{2,4}` made "USA" swallow the match and return "TX 78701".
+		const out = deriveParentCandidates([
+			makeRecord("r1", { place_address: "1 Elm St, Austin, TX 78701, USA" }),
+			makeRecord("r2", { place_address: "2 Oak Ave, Austin, TX 78702, USA" }),
+		]);
+		expect(out.find((c) => c.reason === "city")?.parentTitle).toBe("Austin");
+	});
 });
 
 describe("deriveParentCandidatesFromPageSummaries", () => {
@@ -221,6 +268,19 @@ describe("deriveParentCandidatesFromPageSummaries", () => {
 		expect(toronto?.sourceRecordIds.sort()).toEqual(["p1", "p2"]);
 		// Austin only has 1 page — below default minClusterSize, so no hub.
 		expect(out.find((c) => c.parentTitle === "Austin")).toBeUndefined();
+	});
+
+	it("preserves accented city names in preposition matches", () => {
+		// Regression for the 2026-04-20 audit — the earlier `[A-Za-z]+`
+		// class truncated "Bogotá" to "Bogot", creating nonsense candidates.
+		const out = deriveParentCandidatesFromPageSummaries([
+			{ id: "p1", title: "Andrés", summary: "Cafe in Bogotá." },
+			{ id: "p2", title: "Leo", summary: "Restaurant in Bogotá." },
+			{ id: "p3", title: "Joe's", summary: "Cafe in Montréal." },
+			{ id: "p4", title: "Ma Poule", summary: "Bistro in Montréal." },
+		]);
+		expect(out.find((c) => c.parentTitle === "Bogotá")?.supportingCount).toBe(2);
+		expect(out.find((c) => c.parentTitle === "Montréal")?.supportingCount).toBe(2);
 	});
 
 	it("respects minClusterSize=1 for single-page hubs", () => {

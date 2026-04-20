@@ -392,5 +392,177 @@ describe("emitDeterministicParentLinks", () => {
 			expect(result.linksWritten).toBe(0);
 			expect(writeLink).not.toHaveBeenCalled();
 		});
+
+		// ─── Geo-suffix precision gate (2026-04-20 Marco audit) ─────────
+		//
+		// Lowering the fuzzy threshold to recover "Austin"→"Austin, Texas"
+		// would also match things like "Austin Reggae Fest" or
+		// "Toronto Life" — both start with the candidate token but aren't
+		// geographic hubs. The gate requires the target title to carry a
+		// "X, Region" suffix before the fuzzy hit counts.
+		describe("geo-suffix precision gate", () => {
+			it("accepts 'Austin' → 'Austin, Texas'", async () => {
+				const writeLink = makeWriteLink();
+				const fuzzy = vi.fn(async () => [
+					{
+						id: "page-austin-tx",
+						type: "entity" as const,
+						slug: "austin-texas",
+						title: "Austin, Texas",
+						similarity: 0.54,
+					},
+				]);
+				const result = await emitDeterministicParentLinks({
+					scope: SCOPE,
+					candidates: [
+						candidate({ parentTitle: "Austin", parentSlug: "austin" }),
+					],
+					affectedPages: [leafPage()],
+					lookupParentPages: lookupThatReturns([]),
+					lookupParentPagesFuzzy: fuzzy,
+					writeLink,
+				});
+				expect(result.linksWritten).toBe(1);
+			});
+
+			it("rejects 'Austin' → 'Austin Reggae Fest' (prefix match but no geo suffix)", async () => {
+				const writeLink = makeWriteLink();
+				const fuzzy = vi.fn(async () => [
+					{
+						id: "page-reggae-fest",
+						type: "entity" as const,
+						slug: "austin-reggae-fest",
+						title: "Austin Reggae Fest",
+						similarity: 0.62,
+					},
+				]);
+				const result = await emitDeterministicParentLinks({
+					scope: SCOPE,
+					candidates: [
+						candidate({ parentTitle: "Austin", parentSlug: "austin" }),
+					],
+					affectedPages: [leafPage()],
+					lookupParentPages: lookupThatReturns([]),
+					lookupParentPagesFuzzy: fuzzy,
+					writeLink,
+				});
+				expect(result.linksWritten).toBe(0);
+				expect(writeLink).not.toHaveBeenCalled();
+			});
+
+			it("rejects 'Toronto' → 'Toronto Life' (magazine, not geography)", async () => {
+				const writeLink = makeWriteLink();
+				const fuzzy = vi.fn(async () => [
+					{
+						id: "page-toronto-life",
+						type: "entity" as const,
+						slug: "toronto-life",
+						title: "Toronto Life",
+						similarity: 0.62,
+					},
+				]);
+				const result = await emitDeterministicParentLinks({
+					scope: SCOPE,
+					candidates: [
+						candidate({ parentTitle: "Toronto", parentSlug: "toronto" }),
+					],
+					affectedPages: [leafPage()],
+					lookupParentPages: lookupThatReturns([]),
+					lookupParentPagesFuzzy: fuzzy,
+					writeLink,
+				});
+				expect(result.linksWritten).toBe(0);
+			});
+
+			it("rejects 'Honolulu' → 'Merriman's Honolulu' (candidate not prefix)", async () => {
+				const writeLink = makeWriteLink();
+				const fuzzy = vi.fn(async () => [
+					{
+						id: "page-merrimans",
+						type: "entity" as const,
+						slug: "merrimans-honolulu",
+						title: "Merriman's Honolulu",
+						similarity: 0.45,
+					},
+				]);
+				const result = await emitDeterministicParentLinks({
+					scope: SCOPE,
+					candidates: [
+						candidate({ parentTitle: "Honolulu", parentSlug: "honolulu" }),
+					],
+					affectedPages: [leafPage()],
+					lookupParentPages: lookupThatReturns([]),
+					lookupParentPagesFuzzy: fuzzy,
+					writeLink,
+				});
+				expect(result.linksWritten).toBe(0);
+			});
+
+			it("scans past a rejected first hit for a later geo-qualified one", async () => {
+				// Ordering of fuzzy results is sim-desc, so the precision
+				// gate must keep looking past a high-sim non-geo hit. This
+				// models the real "Austin Reggae Fest (0.62) > Austin,
+				// Texas (0.54)" order observed in the Marco audit.
+				const writeLink = makeWriteLink();
+				const fuzzy = vi.fn(async () => [
+					{
+						id: "page-reggae-fest",
+						type: "entity" as const,
+						slug: "austin-reggae-fest",
+						title: "Austin Reggae Fest",
+						similarity: 0.62,
+					},
+					{
+						id: "page-austin-tx",
+						type: "entity" as const,
+						slug: "austin-texas",
+						title: "Austin, Texas",
+						similarity: 0.54,
+					},
+				]);
+				const result = await emitDeterministicParentLinks({
+					scope: SCOPE,
+					candidates: [
+						candidate({ parentTitle: "Austin", parentSlug: "austin" }),
+					],
+					affectedPages: [leafPage()],
+					lookupParentPages: lookupThatReturns([]),
+					lookupParentPagesFuzzy: fuzzy,
+					writeLink,
+				});
+				expect(result.linksWritten).toBe(1);
+				expect(writeLink).toHaveBeenCalledWith(
+					expect.objectContaining({ toPageId: "page-austin-tx" }),
+				);
+			});
+		});
 	});
+});
+
+// ─── isGeoQualifiedExtension unit matrix ─────────────────────────────────
+//
+// The gate is exported so we can hammer the matrix directly without
+// staging fuzzy result rows. Lives outside the emitter describe block
+// since it's a pure helper, not an emitter behavior.
+import { isGeoQualifiedExtension } from "../lib/wiki/deterministic-linker.js";
+
+describe("isGeoQualifiedExtension", () => {
+	const cases: Array<[string, string, boolean, string]> = [
+		["Austin", "Austin, Texas", true, "canonical city + state"],
+		["Paris", "Paris, France", true, "canonical city + country"],
+		["Portland", "Portland, Oregon", true, "the original Unit 10 case"],
+		["Austin", "Austin Reggae Fest", false, "prefix match, no comma"],
+		["Toronto", "Toronto Life", false, "prefix match, no geo suffix"],
+		["Honolulu", "Merriman's Honolulu", false, "candidate not a prefix"],
+		["", "Austin, Texas", false, "empty candidate"],
+		["Austin", "", false, "empty target"],
+		["Austin", "Austin", false, "identical (no suffix at all)"],
+		["AUSTIN", "Austin, Texas", true, "case-insensitive prefix"],
+		["São Paulo", "São Paulo, Brazil", true, "accented candidate"],
+	];
+	for (const [candidate, target, expected, label] of cases) {
+		it(`${expected ? "accepts" : "rejects"} "${candidate}" → "${target}" (${label})`, () => {
+			expect(isGeoQualifiedExtension(candidate, target)).toBe(expected);
+		});
+	}
 });

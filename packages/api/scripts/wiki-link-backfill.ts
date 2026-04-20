@@ -34,6 +34,7 @@ import {
 	findMemoryUnitPageSources,
 	findPagesByExactTitle,
 	findPagesByFuzzyTitle,
+	PARENT_TITLE_FUZZY_THRESHOLD,
 	upsertPageLink,
 } from "../src/lib/wiki/repository.js";
 import { runLinkBackfill } from "../src/lib/wiki/link-backfill.js";
@@ -177,7 +178,12 @@ async function main(): Promise<void> {
 		listAllActivePages: () => listAllActivePages(scope),
 		listMemoryUnitIds: () => listMemoryUnitIdsInScope(scope),
 		lookupParentPages: (lookupArgs) => findPagesByExactTitle(lookupArgs),
-		lookupParentPagesFuzzy: (lookupArgs) => findPagesByFuzzyTitle(lookupArgs),
+		lookupParentPagesFuzzy: (lookupArgs) =>
+			findPagesByFuzzyTitle({
+				...lookupArgs,
+				threshold: PARENT_TITLE_FUZZY_THRESHOLD,
+				limit: 5,
+			}),
 		lookupMemorySources: (lookupArgs) => findMemoryUnitPageSources(lookupArgs),
 		upsertPageLink: (linkArgs) =>
 			upsertPageLink({

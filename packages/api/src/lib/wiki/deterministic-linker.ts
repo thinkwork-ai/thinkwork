@@ -229,6 +229,30 @@ export async function emitCoMentionLinks(
 	return result;
 }
 
+/**
+ * Precision gate for fuzzy parent matches. Accepts a fuzzy hit only when
+ * the target page title starts with the candidate title as a whole word
+ * AND carries a `", Region"` suffix — the Google-Places "City, ST" shape.
+ * This filters out same-starting-token false positives (e.g. candidate
+ * `"Austin"` vs entity `"Austin Reggae Fest"` both score ~0.5) while
+ * keeping the cases the lower fuzzy threshold was designed to catch
+ * (`"Austin"` → `"Austin, Texas"`, `"Paris"` → `"Paris, France"`).
+ *
+ * Exported so `wiki-deterministic-linker.test.ts` can exercise the gate
+ * matrix directly — less brittle than faking similarity rows.
+ */
+export function isGeoQualifiedExtension(
+	candidate: string,
+	target: string,
+): boolean {
+	if (!candidate || !target) return false;
+	const escaped = candidate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const prefixRe = new RegExp(`^${escaped}\\b`, "iu");
+	if (!prefixRe.test(target)) return false;
+	// Require a comma-delimited region suffix ("City, ST", "City, Country").
+	return /,\s+\S/.test(target);
+}
+
 export async function emitDeterministicParentLinks(
 	args: EmitDeterministicParentLinksArgs,
 ): Promise<EmitDeterministicParentLinksResult> {
@@ -277,16 +301,23 @@ export async function emitDeterministicParentLinks(
 			}
 			parent = matches[0];
 		} else if (lookupParentPagesFuzzy) {
-			// Trigram fallback — closes the "Portland" candidate vs
-			// existing "Portland, Oregon" page gap surfaced on Marco
-			// recompile. Same-type gate below still applies.
+			// Trigram fallback — closes the "Austin" candidate vs existing
+			// "Austin, Texas" page gap surfaced on Marco recompile. A
+			// geo-suffix gate (`isGeoQualifiedExtension`) filters out
+			// similarly-scoring non-geographic hits like "Austin Reggae Fest"
+			// or "Toronto Life" — without it, the lower threshold (0.50 vs
+			// alias-dedupe 0.85) would emit false positives on entity pages
+			// that happen to start with a city token. Same-type gate below
+			// still applies.
 			const fuzzy = await lookupParentPagesFuzzy({
 				tenantId: scope.tenantId,
 				ownerId: scope.ownerId,
 				title: candidate.parentTitle,
 			});
-			if (fuzzy.length > 0) {
-				const best = fuzzy[0]!;
+			const best = fuzzy.find((row) =>
+				isGeoQualifiedExtension(candidate.parentTitle, row.title),
+			);
+			if (best) {
 				console.log(
 					`[deterministic-linker] fuzzy parent match: "${candidate.parentTitle}" ` +
 						`≈ "${best.title}" (sim=${best.similarity.toFixed(3)}) → ` +
@@ -298,6 +329,15 @@ export async function emitDeterministicParentLinks(
 					slug: best.slug,
 					title: best.title,
 				};
+			} else if (fuzzy.length > 0) {
+				// Useful when tuning: the lookup returned hits but none had a
+				// "City, Region" shape — surfaces the precision gate filtering.
+				const top = fuzzy[0]!;
+				console.log(
+					`[deterministic-linker] fuzzy parent rejected (no geo suffix): ` +
+						`"${candidate.parentTitle}" ≈ "${top.title}" ` +
+						`(sim=${top.similarity.toFixed(3)})`,
+				);
 			}
 		}
 		if (!parent) continue;

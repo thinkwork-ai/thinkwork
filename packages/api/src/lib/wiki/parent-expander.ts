@@ -296,11 +296,19 @@ export function mergeParentCandidates(
  * followed by a capitalized word or pair ("Austin", "Mexico City",
  * "New York"). Optional trailing ", ST" is stripped. Returns null when
  * nothing plausibly looks like a place.
+ *
+ * Uses `\p{L}` (any Unicode letter) and `\p{Lu}` (uppercase letter) so
+ * accented city names like "Bogotá" and "Montréal" survive — the earlier
+ * `[A-Za-z]+` character class truncated them at the first accented char.
  */
 function extractCityFromSummary(summary: string): string | null {
 	// "… in Toronto", "located in Austin, TX", "on the outskirts of Napa"
+	// `\p{Lu}\p{L}+` catches capitalized Unicode letter runs. The trailing
+	// lookahead is deliberately `(?=[^\p{L}]|$)` — a bare `\b` anchors on
+	// ASCII word-chars even under `/u`, which truncated "Bogotá" to
+	// "Bogot" before this fix.
 	const re =
-		/\b(?:in|at|on|near|from|of)\s+([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?)(?:,\s*[A-Z]{2})?\b/;
+		/\b(?:in|at|on|near|from|of)\s+(\p{Lu}\p{L}+(?:\s+\p{Lu}\p{L}+)?)(?:,\s*[A-Z]{2,4})?(?=[^\p{L}]|$)/u;
 	const match = summary.match(re);
 	if (!match) return null;
 	const token = match[1]!.trim();
@@ -395,9 +403,18 @@ function splitCsv(raw: string): string[] {
  * Extract a city from a postal-style address. The usual shape from Google
  * Places is "<street>, <city>, <state/region zip>, <country>" — we walk the
  * comma-separated parts from the end and pick the token directly before a
- * state+zip pattern (two capital letters, optionally followed by a postal
- * code). Falls back to the second-to-last part for non-US formats, and
- * returns null if we can't isolate a plausible city.
+ * state/region code. Falls back to the second-to-last part for non-US
+ * formats (e.g. "Avignon, France"), and returns null if we can't isolate a
+ * plausible city.
+ *
+ * Post-processes the chosen part with `stripLeadingPostcode` so European
+ * "ZIPCODE City" tokens (`"75006 Paris"`, `"26110 Vinsobres"`,
+ * `"06000 Ciudad de México"`) collapse to the bare city — the Marco
+ * 2026-04-20 recompile exposed ~880 addresses in this shape that were
+ * producing unusable candidate titles.
+ *
+ * Accepts 2- to 4-letter region codes so "CDMX" (Mexico), "NSW" (Australia),
+ * "BC" / "ON" (Canada), and "TX" / "CA" (US) all terminate the walk.
  */
 function extractCityFromAddress(address: string | null): string | null {
 	if (!address) return null;
@@ -407,14 +424,27 @@ function extractCityFromAddress(address: string | null): string | null {
 		.filter((p) => p.length > 0);
 	if (parts.length < 2) return null;
 
-	for (let i = parts.length - 1; i > 0; i--) {
-		// Matches "TX 78701", "ON M6J 1G1", and bare two-letter codes like "UK".
-		if (/^[A-Z]{2}(\s|$)/.test(parts[i]!)) {
-			return parts[i - 1] ?? null;
+	// Walk starts at `parts.length - 2` — never at the last part. The last
+	// slot is conventionally the country (`"USA"`, `"Mexico"`, `"Canada"`,
+	// `"France"`) and expanding the char class to `{2,4}` made bare country
+	// tokens accidentally match when scanned. Skipping the country preserves
+	// the "state/region code is the slot before the country" invariant.
+	for (let i = parts.length - 2; i > 0; i--) {
+		// Matches "TX 78701", "ON M6J 1G1", bare "CDMX", bare "UK", etc.
+		if (/^[A-Z]{2,4}(\s|$)/.test(parts[i]!)) {
+			return stripLeadingPostcode(parts[i - 1] ?? "") || null;
 		}
 	}
-	// Fallback: "..., City, Country" shape.
-	return parts[parts.length - 2] ?? null;
+	// Fallback: "..., City, Country" shape (e.g. "Avignon, France" or
+	// "26110 Vinsobres, France" where the region code walk found nothing).
+	return stripLeadingPostcode(parts[parts.length - 2] ?? "") || null;
+}
+
+/** Drop a leading numeric/alphanumeric postcode from a city part.
+ * Examples: `"75006 Paris"` → `"Paris"`, `"06000 Ciudad de México"` →
+ * `"Ciudad de México"`, `"Austin"` → `"Austin"` (no change). */
+function stripLeadingPostcode(s: string): string {
+	return s.replace(/^[0-9][0-9A-Za-z-]*\s+/, "").trim();
 }
 
 /**
