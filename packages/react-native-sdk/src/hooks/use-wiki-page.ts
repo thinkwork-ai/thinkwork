@@ -15,6 +15,20 @@ export interface WikiPageSection {
   lastSourceAt: string | null;
 }
 
+export interface WikiPageRef {
+  id: string;
+  type: WikiPageType;
+  slug: string;
+  title: string;
+  summary?: string | null;
+}
+
+export interface WikiPromotedFromSection {
+  parentPage: WikiPageRef;
+  sectionSlug: string;
+  sectionHeading: string;
+}
+
 export interface WikiPageDetail {
   id: string;
   type: WikiPageType;
@@ -27,6 +41,11 @@ export interface WikiPageDetail {
   updatedAt: string;
   aliases: string[];
   sections: WikiPageSection[];
+  // Unit 8 read surfaces — populated on the detail query only.
+  sourceMemoryCount?: number;
+  parent?: WikiPageRef | null;
+  promotedFromSection?: WikiPromotedFromSection | null;
+  children?: WikiPageRef[];
 }
 
 export interface WikiBacklink {

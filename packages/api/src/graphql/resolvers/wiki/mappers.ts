@@ -31,6 +31,10 @@ export interface GraphQLWikiPage {
 	sections: GraphQLWikiSection[];
 	aliases: string[];
 	// Backlinks are resolved lazily by the `WikiPage.backlinks` field resolver.
+	// Internal-only: surfaced so Unit 8's `parent` / `promotedFromSection`
+	// field resolvers don't have to re-query the page row. Not exposed on
+	// the GraphQL schema.
+	_parentPageId?: string | null;
 }
 
 // Timestamps may arrive as `Date` (drizzle's typed `select`) or as ISO
@@ -56,6 +60,7 @@ export function toGraphQLPage(
 		last_compiled_at: Date | string | null;
 		created_at: Date | string;
 		updated_at: Date | string;
+		parent_page_id?: string | null;
 	},
 	extras: { sections: GraphQLWikiSection[]; aliases: string[] },
 ): GraphQLWikiPage {
@@ -74,5 +79,6 @@ export function toGraphQLPage(
 		updatedAt: toIsoString(row.updated_at) as string,
 		sections: extras.sections,
 		aliases: extras.aliases,
+		_parentPageId: row.parent_page_id ?? null,
 	};
 }
