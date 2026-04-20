@@ -1,13 +1,69 @@
 ---
 title: "feat: Mobile Wiki force-graph viewer (Skia + d3-force + temporal scrub)"
 type: feat
-status: active
+status: shipped-with-divergence
 date: 2026-04-19
 deepened: 2026-04-19
+shipped: 2026-04-20
 origin: plans/compounding-memory-mobile-memories-force-graph.md
 ---
 
 # feat: Mobile Wiki force-graph viewer (Skia + d3-force + temporal scrub)
+
+## Post-Implementation Status (2026-04-20)
+
+**v1 shipped on TestFlight branch.** The plan body below captures the design we set out to build; what actually shipped diverges in important ways. This section is the authoritative "what's true now" summary. Read this first; the body is preserved for historical context.
+
+### What shipped
+- **Pages-tab integration with toggle.** Graph view lives inside the Pages segment of the home tab (`apps/mobile/app/(tabs)/index.tsx`), not as a standalone route. Toggle button (Network / List icon) sits left of the filter funnel. Only visible when Pages tab is active.
+- **All-pages default view.** Graph shows *every* active page in the active agent's scope via `wikiGraph` resolver (the same one admin's `/wiki` route uses). Wired through new `useWikiGraph` SDK hook.
+- **Tap → bottom-sheet detail.** `NodeDetailSheet` opens with summary + sections from `useWikiPage`. Actions: "View full page" navigates to `/wiki/[type]/[slug]`; "Focus here" is a no-op for now (kept for future drill-down).
+- **Search filter.** The shared "Search wiki…" composer dims non-matching nodes to 15% opacity in graph mode.
+- **Skia 2.2.12 + d3-force 3.0 + Reanimated 4.1.1 camera** sustaining UI 60fps + JS 60fps on iPhone 17 Pro sim. New-arch worklets validated via Unit 0 spike.
+- **`@expo-google-fonts/inter`** for canvas labels (Inter not previously bundled — corrected the PRD's wrong assumption). Labels later removed entirely; package retained for future LOD.
+- **Three-shade type tokens** added to `apps/mobile/lib/theme.ts`: `wikiEntity` (sky), `wikiTopic` (amber), `wikiDecision` (violet) for both light + dark.
+- **Force-layout tuning** for dense agent graphs: link distance 40, charge -80, collide 18, plus `forceX/Y(0).strength(0.08)` to keep stragglers near center (was a real issue — disconnected components drifted off-canvas).
+
+### What diverged from the plan
+- **Focal+depth model dropped.** The plan's headline interaction was focus on a page → expand k hops. Validation showed most focals were single-node lonely views. Swapped to all-pages default. `useFocusMode`, `GraphHeader`, `app/wiki/graph.tsx`, `app/wiki/[type]/[slug]/graph.tsx` all deleted in #281.
+- **`wikiSubgraph` resolver + `useWikiSubgraph` hook deleted.** Built in PR #278 with the array-binding fix in #279, then made obsolete by the swap. Removed in #281. Git history retains for future drill-down work.
+- **No `primary_agent_ids` migration.** The schema's `owner_id NOT NULL` invariant means every page is single-agent; `primary_agent_ids` would have been redundant. Resolver filters with `WHERE owner_id = $agentId` directly. (Saved a migration the plan called for.)
+- **No Skia config plugin in `app.json`.** Skia v2 autolinks; the PRD's plugin requirement is outdated.
+- **Inter font path:** used `@expo-google-fonts/inter` instead of manually bundling `Inter-Regular.ttf`. Same outcome, more idiomatic Expo.
+- **Plan's "Units 1+2 can land in parallel" was wrong.** Unit 2 modifies files Unit 1 creates; they had to stack. PR #276 (the original Unit 3) was orphaned because of stacked-PR mechanics — re-opened as #278 against main.
+- **Labels removed entirely** (after user feedback). PRD §F7 LOD logic never landed; page title shows in detail sheet on tap.
+
+### Parked indefinitely (not done, may never be)
+- **Unit 4: Label LOD + edge tap.** Edge detail sheet not built; labels off entirely. Revisit if user feedback says edges need first-class interaction.
+- **Unit 5: Temporal scrub + schema migration.** `first_seen_at` / `last_seen_at` / `is_current` columns not added. The headline differentiator from the original PRD did not ship.
+- **Unit 6: Layout stability + k-hop expansion.** Moot under the all-pages model — there's nothing to expand into.
+- **Unit 7: `wiki_pinned_positions` + node drag.** Not built. Layout regenerates on every reload.
+- **Unit 8: Hide branches, "Show all," accessibility pass, perf-budget verification.** Search-as-dim is the only "view organization" feature shipped. Accessibility labels exist on the toggle button but no comprehensive VoiceOver pass was done.
+
+### Compile-side observation (load-bearing for any future graph work)
+The graph viewer is bound by what `wiki_page_links` contains. As of 2026-04-20:
+
+| Agent | Pages | With ≥1 link | % linked | Avg degree |
+|---|---|---|---|---|
+| Marco | 261 | 183 | **70%** | 2.97 |
+| GiGi  | 849 | 392 | **46%** | 1.49 |
+| Cruz  | 10  | 9   | 90%      | 3.40 |
+
+**30–54% of pages are floating islands.** Sample of GiGi's unlinked entities: "Harmon Guest House," "Piazza Marina," "Bruges Beer Experience" — all leaf entities (restaurants, hotels). Compile is creating the entity page but not writing any `wiki_page_links` row connecting it to anything else. This is a **compile-pipeline ticket**, not a graph viewer one. Without denser linking, the visual story stays sparse no matter how the viewer is tuned.
+
+### Shipped PRs
+- #273 — Unit 1 scaffold + camera + theme + Skia + Inter
+- #274 — Unit 2 d3-force sim + node tap + selection
+- #278 — Unit 3 (re-do of orphaned #276): wikiSubgraph resolver + SDK hook + focal/detail
+- #279 — fix: wikiSubgraph edges UUID array binding
+- #280 — all-pages swap + label removal + force tuning
+- #281 — chore: drop unused wikiSubgraph hook + resolver + GraphQL types
+
+### Things to investigate before doing more graph work
+1. Compile pipeline: why aren't entity-to-entity (or entity-to-User) links being written for leaf-entity restaurants, hotels, etc.? Possibly the planner's link-emission heuristics under-cover entities only mentioned in a single source.
+2. TestFlight feedback before iterating further — real-device touch precision and pinch feel may surface things the simulator hides.
+
+---
 
 ## Overview
 
