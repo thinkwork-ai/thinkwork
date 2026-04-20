@@ -1,0 +1,42 @@
+---
+// Unified eyebrow + headline + lede lockup. Used by every section that has a heading.
+// Eyebrow carries a leading brand dot and an optional step marker so numbered
+// sections all look the same.
+
+interface Props {
+  eyebrow: string;
+  headline: string;
+  lede?: string;
+  step?: string;
+  align?: "left" | "center";
+  width?: "narrow" | "wide";
+}
+
+const {
+  eyebrow,
+  headline,
+  lede,
+  step,
+  align = "left",
+  width = "narrow",
+} = Astro.props;
+
+const alignClass = align === "center" ? "mx-auto text-center" : "";
+const widthClass = width === "wide" ? "max-w-4xl" : "max-w-3xl";
+---
+
+<div class:list={[alignClass, widthClass]}>
+  <p class="inline-flex items-center gap-2.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-brand/90">
+    <span class="h-1 w-1 rounded-full bg-brand"></span>
+    {step && <span class="font-mono text-[10px] text-brand/60">{step}</span>}
+    <span>{eyebrow}</span>
+  </p>
+  <h2 class="mt-5 text-3xl font-bold leading-[1.1] tracking-tight md:text-5xl">
+    {headline}
+  </h2>
+  {lede && (
+    <p class="mt-5 text-lg leading-relaxed text-slate-400 md:text-xl">
+      {lede}
+    </p>
+  )}
+</div>

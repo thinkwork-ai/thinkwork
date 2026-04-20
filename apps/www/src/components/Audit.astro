@@ -1,0 +1,17 @@
+---
+import CapabilityShowcase from "./CapabilityShowcase.astro";
+import { audit } from "../lib/copy";
+---
+
+<CapabilityShowcase
+  id="audit"
+  eyebrow={audit.eyebrow}
+  headline={audit.headline}
+  lede={audit.lede}
+  features={audit.features}
+  imagePath={audit.imagePath}
+  imageAlt="ThinkWork admin thread detail showing the chat prompt, eight execution steps, token count, duration, cost, and agent attribution"
+  caption={audit.caption}
+  chromeLabel="admin · thread detail"
+  accent
+/>

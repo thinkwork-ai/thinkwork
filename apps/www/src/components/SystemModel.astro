@@ -1,73 +1,48 @@
 ---
-const nodes = [
-  {
-    title: "Threads",
-    desc: "The system of record for AI work. Every request, action, and outcome lives here.",
-  },
-  {
-    title: "Memory",
-    desc: "A portable, harness-owned context layer that carries work forward between threads and agents.",
-  },
-  {
-    title: "Agents",
-    desc: "Managed or self-hosted. They operate inside the same thread and control model.",
-  },
-  {
-    title: "Connectors",
-    desc: "Approved system access — without the connector becoming the product contract.",
-  },
-];
+import SectionShell from "./SectionShell.astro";
+import SectionHeader from "./SectionHeader.astro";
+import ScreenshotFrame from "./ScreenshotFrame.astro";
+import { systemModel } from "../lib/copy";
 ---
 
-<section id="system" class="border-t border-white/5 bg-white/[0.015]">
-  <div class="mx-auto max-w-6xl px-6 py-24 md:py-32">
-    <div class="max-w-3xl">
-      <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand/90">System model</p>
-      <h2 class="mt-3 text-3xl font-bold tracking-tight md:text-5xl">
-        Threads run the work. Memory carries it forward.
-      </h2>
-      <p class="mt-5 text-lg text-slate-400 md:text-xl">
-        Four primitives, one control surface wrapping them. Simple enough to hold in your head, strict enough to ship against.
-      </p>
+<SectionShell id="system" tone="raised" glow="top">
+  <SectionHeader
+    eyebrow={systemModel.eyebrow}
+    headline={systemModel.headline}
+    lede={systemModel.lede}
+  />
+
+  <div class="relative mt-14 rounded-3xl border border-brand/15 bg-brand/[0.025] p-5 md:p-7">
+    <div class="mb-5 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.2em]">
+      <span class="flex items-center gap-2 text-brand/85">
+        <span class="h-1 w-1 rounded-full bg-brand"></span>
+        {systemModel.controlLabel}
+      </span>
+      <span class="font-mono text-[10px] normal-case tracking-[0.18em] text-slate-500">
+        {systemModel.controlDetail}
+      </span>
     </div>
 
-    <div class="relative mt-14">
-      <div class="pointer-events-none absolute inset-0 rounded-3xl border border-brand/20 bg-brand/[0.03]"></div>
-      <div class="relative p-6 md:p-8">
-        <div class="mb-6 flex items-center justify-between">
-          <span class="text-xs font-semibold uppercase tracking-[0.2em] text-brand/90">Control</span>
-          <span class="text-xs text-slate-500">Budgets · Approvals · Guardrails · Audit</span>
+    <div class="grid gap-3 md:grid-cols-4">
+      {systemModel.nodes.map((n, i) => (
+        <div class="relative rounded-2xl border border-white/10 bg-[#0a0f16] p-6 transition hover:border-brand/25">
+          <div class="flex items-center gap-2 text-[11px] font-mono tracking-[0.18em] text-brand/60">
+            <span>0{i + 1}</span>
+            <span class="h-px flex-1 bg-white/10"></span>
+          </div>
+          <h3 class="mt-3 text-[17px] font-semibold text-slate-100">{n.title}</h3>
+          <p class="mt-2 text-sm leading-6 text-slate-400">{n.desc}</p>
         </div>
-        <div class="grid gap-4 md:grid-cols-4">
-          {nodes.map((n, i) => (
-            <div class="relative rounded-2xl border border-white/10 bg-[#0a0f16] p-6">
-              <div class="flex items-center gap-2 text-xs font-mono text-brand/70">
-                <span>0{i + 1}</span>
-                <span class="h-px flex-1 bg-white/10"></span>
-              </div>
-              <h3 class="mt-3 text-xl font-semibold">{n.title}</h3>
-              <p class="mt-2 text-sm leading-6 text-slate-400">{n.desc}</p>
-            </div>
-          ))}
-        </div>
-        <p class="mt-6 text-center text-xs uppercase tracking-[0.2em] text-slate-600">
-          Control wraps the whole system
-        </p>
-      </div>
+      ))}
     </div>
-
-    <figure class="mt-12">
-      <div class="overflow-hidden rounded-2xl border border-white/10 bg-[#05080d] shadow-[0_24px_60px_rgba(0,0,0,0.45)]">
-        <img
-          src="/images/admin/dashboard.png"
-          alt="ThinkWork admin dashboard showing agents online, open threads, recent activity, and recent threads for a tenant"
-          loading="eager"
-          class="block h-auto w-full"
-        />
-      </div>
-      <figcaption class="mt-3 text-center text-xs uppercase tracking-[0.2em] text-slate-600">
-        Admin web · the system running
-      </figcaption>
-    </figure>
   </div>
-</section>
+
+  <div class="mt-16">
+    <ScreenshotFrame
+      src="/images/admin/dashboard.png"
+      alt="ThinkWork admin dashboard showing agents online, open threads, recent activity, and recent threads for a tenant"
+      caption={systemModel.dashboardCaption}
+      chromeLabel="admin · overview"
+    />
+  </div>
+</SectionShell>
