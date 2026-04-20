@@ -191,13 +191,19 @@ function MemoryPage() {
   const [memorySystemConfigResult] = useQuery({
     query: MemorySystemConfigQuery,
   });
+  // Don't coalesce until the query resolves — otherwise on refresh with
+  // ?view=graph the effect below sees `false` during load and strips the
+  // param from the URL before the real value arrives.
+  const hindsightConfigLoaded = memorySystemConfigResult.data !== undefined;
   const hindsightEnabled = memorySystemConfigResult.data?.memorySystemConfig?.hindsightEnabled ?? false;
 
   // If Hindsight is disabled mid-session (e.g. after a deploy), force the
   // view back to memories so we never render an empty graph.
   useEffect(() => {
-    if (!hindsightEnabled && view === "graph") setView("memories");
-  }, [hindsightEnabled, view]);
+    if (hindsightConfigLoaded && !hindsightEnabled && view === "graph") {
+      setView("memories");
+    }
+  }, [hindsightConfigLoaded, hindsightEnabled, view, setView]);
 
   const [agentsResult] = useQuery({
     query: AgentsListQuery,
