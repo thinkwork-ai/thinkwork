@@ -14,17 +14,20 @@ import { type SimConfig, useForceSimulation } from "./hooks/useForceSimulation";
 import { useGraphCamera } from "./hooks/useGraphCamera";
 import { computeFit } from "./layout/fitBounds";
 import { nearestNode } from "./layout/hitTest";
-import type { WikiSubgraph } from "./types";
+import type { GraphFilter, WikiSubgraph } from "./types";
 
 interface KnowledgeGraphProps {
   subgraph: WikiSubgraph;
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string | null) => void;
   /**
-   * Node ids to render at reduced opacity (e.g. when filtered out by the
-   * shared search query). Tap-hit testing still considers them.
+   * Search filter state. `null` → no filter, everything renders full
+   * color. Non-null → matched nodes full color; 1-hop neighbors muted
+   * with a colored outline ring; everything else muted only. Edges
+   * render at full opacity when at least one endpoint is matched,
+   * muted when both are unmatched.
    */
-  dimmedNodeIds?: Set<string>;
+  filter?: GraphFilter | null;
   /**
    * Show an activity indicator during the pre-reveal delay. Default true.
    * The detail-screen embed opts out because the 1-hop graph is small
@@ -70,7 +73,7 @@ export function KnowledgeGraph({
   subgraph,
   selectedNodeId,
   onSelectNode,
-  dimmedNodeIds,
+  filter,
   showRevealLoader = true,
   showLabels = false,
   simConfig,
@@ -239,7 +242,7 @@ export function KnowledgeGraph({
               subgraph={subgraph}
               selectedNodeId={selectedNodeId}
               transform={camera.transform}
-              dimmedNodeIds={dimmedNodeIds}
+              filter={filter}
               showLabels={showLabels}
             />
           ) : null}

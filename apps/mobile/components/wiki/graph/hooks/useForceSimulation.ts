@@ -46,9 +46,9 @@ export function useForceSimulation(
   config: SimConfig = {},
 ): UseForceSimulationResult {
   const {
-    linkDistance = 40,
-    chargeStrength = -80,
-    collideRadius = 18,
+    linkDistance = 60,
+    chargeStrength = -130,
+    collideRadius = 22,
     xyStrength = 0.08,
   } = config;
   const [tick, setTick] = useState(0);
