@@ -1,18 +1,13 @@
 ---
-const points = [
-  { label: "Five-command deploy", detail: "From clone to a live harness in your account." },
-  { label: "Runs in your AWS", detail: "No SaaS control plane. Your AWS account, your data." },
-  { label: "Open source core", detail: "Inspect it, fork it, ship it." },
-  { label: "Threads · Memory · Control", detail: "Built in, not bolted on." },
-];
+import { proofStrip } from "../lib/copy";
 ---
 
 <section class="border-y border-white/5 bg-white/[0.02]">
-  <div class="mx-auto grid max-w-6xl grid-cols-2 divide-x divide-white/5 overflow-hidden md:grid-cols-4">
-    {points.map((p) => (
-      <div class="flex flex-col gap-2 px-6 py-8 md:px-8 md:py-10">
-        <p class="text-base font-semibold text-white md:text-lg">{p.label}</p>
-        <p class="text-sm leading-6 text-slate-400 md:text-base">{p.detail}</p>
+  <div class="mx-auto grid max-w-6xl grid-cols-2 divide-x divide-white/5 overflow-hidden md:grid-cols-5">
+    {proofStrip.map((p) => (
+      <div class="flex flex-col gap-2 px-5 py-7 md:px-6 md:py-9">
+        <p class="text-sm font-semibold text-white md:text-base">{p.label}</p>
+        <p class="text-xs leading-5 text-slate-400 md:text-sm md:leading-6">{p.detail}</p>
       </div>
     ))}
   </div>

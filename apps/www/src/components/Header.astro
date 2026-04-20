@@ -1,9 +1,6 @@
 ---
 import BrainMark from "./BrainMark.astro";
-
-const docsUrl = "https://docs.thinkwork.ai";
-const githubUrl = "https://github.com/thinkwork-ai/thinkwork";
-const adminUrl = "https://admin.thinkwork.ai";
+import { external, nav } from "../lib/copy";
 ---
 
 <header class="fixed top-0 left-0 right-0 z-50 border-b border-white/5 bg-[#070a0f]/80 backdrop-blur-xl">
@@ -14,13 +11,12 @@ const adminUrl = "https://admin.thinkwork.ai";
     </a>
 
     <div class="hidden items-center gap-7 md:flex">
-      <a href="#system" class="text-sm text-slate-400 transition hover:text-white">System</a>
-      <a href="#memory" class="text-sm text-slate-400 transition hover:text-white">Memory</a>
-      <a href="#mobile" class="text-sm text-slate-400 transition hover:text-white">Mobile</a>
-      <a href="#quick-start" class="text-sm text-slate-400 transition hover:text-white">Quick start</a>
-      <a href={docsUrl} class="text-sm text-slate-400 transition hover:text-white">Docs</a>
+      {nav.map((item) => (
+        <a href={item.href} class="text-sm text-slate-400 transition hover:text-white">{item.label}</a>
+      ))}
+      <a href={external.docs} class="text-sm text-slate-400 transition hover:text-white">Docs</a>
       <a
-        href={githubUrl}
+        href={external.github}
         aria-label="GitHub"
         class="flex items-center justify-center text-slate-400 transition hover:text-white"
       >
@@ -29,7 +25,7 @@ const adminUrl = "https://admin.thinkwork.ai";
         </svg>
       </a>
       <a
-        href={adminUrl}
+        href={external.admin}
         class="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-slate-950 shadow shadow-brand/20 transition hover:scale-[1.02] hover:bg-brand-300"
       >
         Login
@@ -45,18 +41,17 @@ const adminUrl = "https://admin.thinkwork.ai";
 
   <div id="mobile-menu" class="hidden border-t border-white/5 bg-[#070a0f] px-6 pb-6 md:hidden">
     <div class="flex flex-col gap-4 pt-4">
-      <a href="#system" class="text-sm text-slate-400 hover:text-white">System</a>
-      <a href="#memory" class="text-sm text-slate-400 hover:text-white">Memory</a>
-      <a href="#mobile" class="text-sm text-slate-400 hover:text-white">Mobile</a>
-      <a href="#quick-start" class="text-sm text-slate-400 hover:text-white">Quick start</a>
-      <a href={docsUrl} class="text-sm text-slate-400 hover:text-white">Docs</a>
-      <a href={githubUrl} class="flex items-center gap-2 text-sm text-slate-400 hover:text-white">
+      {nav.map((item) => (
+        <a href={item.href} class="text-sm text-slate-400 hover:text-white">{item.label}</a>
+      ))}
+      <a href={external.docs} class="text-sm text-slate-400 hover:text-white">Docs</a>
+      <a href={external.github} class="flex items-center gap-2 text-sm text-slate-400 hover:text-white">
         <svg viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4" aria-hidden="true">
           <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
         </svg>
         GitHub
       </a>
-      <a href={adminUrl} class="rounded-lg bg-brand px-4 py-2 text-center text-sm font-semibold text-slate-950">
+      <a href={external.admin} class="rounded-lg bg-brand px-4 py-2 text-center text-sm font-semibold text-slate-950">
         Login
       </a>
     </div>

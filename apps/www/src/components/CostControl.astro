@@ -1,0 +1,38 @@
+---
+import ScreenshotFrame from "./ScreenshotFrame.astro";
+import { costControl } from "../lib/copy";
+---
+
+<section id="cost" class="border-t border-white/5 bg-white/[0.015]">
+  <div class="mx-auto max-w-6xl px-6 py-24 md:py-32">
+    <div class="grid gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
+      <div class="lg:order-2">
+        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand/90">{costControl.eyebrow}</p>
+        <h2 class="mt-3 text-3xl font-bold tracking-tight md:text-5xl">
+          {costControl.headline}
+        </h2>
+        <p class="mt-5 text-lg text-slate-400 md:text-xl">
+          {costControl.lede}
+        </p>
+        <ul class="mt-8 space-y-3">
+          {costControl.bullets.map((b) => (
+            <li class="flex gap-3 text-sm leading-6 text-slate-300">
+              <span class="mt-2 h-1 w-1 flex-none rounded-full bg-brand"></span>
+              <span>{b}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div class="lg:order-1">
+        <ScreenshotFrame
+          src={costControl.imagePath}
+          alt="ThinkWork admin analytics cost view showing per-agent spend time series and budget status"
+          caption={costControl.caption}
+          variant="cost"
+          pending
+        />
+      </div>
+    </div>
+  </div>
+</section>

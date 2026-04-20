@@ -1,33 +1,16 @@
 ---
-const nodes = [
-  {
-    title: "Threads",
-    desc: "The system of record for AI work. Every request, action, and outcome lives here.",
-  },
-  {
-    title: "Memory",
-    desc: "A portable, harness-owned context layer that carries work forward between threads and agents.",
-  },
-  {
-    title: "Agents",
-    desc: "Managed or self-hosted. They operate inside the same thread and control model.",
-  },
-  {
-    title: "Connectors",
-    desc: "Approved system access — without the connector becoming the product contract.",
-  },
-];
+import { systemModel } from "../lib/copy";
 ---
 
 <section id="system" class="border-t border-white/5 bg-white/[0.015]">
   <div class="mx-auto max-w-6xl px-6 py-24 md:py-32">
     <div class="max-w-3xl">
-      <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand/90">System model</p>
+      <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand/90">{systemModel.eyebrow}</p>
       <h2 class="mt-3 text-3xl font-bold tracking-tight md:text-5xl">
-        Threads run the work. Memory carries it forward.
+        {systemModel.headline}
       </h2>
       <p class="mt-5 text-lg text-slate-400 md:text-xl">
-        Four primitives, one control surface wrapping them. Simple enough to hold in your head, strict enough to ship against.
+        {systemModel.lede}
       </p>
     </div>
 
@@ -35,11 +18,11 @@ const nodes = [
       <div class="pointer-events-none absolute inset-0 rounded-3xl border border-brand/20 bg-brand/[0.03]"></div>
       <div class="relative p-6 md:p-8">
         <div class="mb-6 flex items-center justify-between">
-          <span class="text-xs font-semibold uppercase tracking-[0.2em] text-brand/90">Control</span>
-          <span class="text-xs text-slate-500">Budgets · Approvals · Guardrails · Audit</span>
+          <span class="text-xs font-semibold uppercase tracking-[0.2em] text-brand/90">{systemModel.controlLabel}</span>
+          <span class="text-xs text-slate-500">{systemModel.controlDetail}</span>
         </div>
         <div class="grid gap-4 md:grid-cols-4">
-          {nodes.map((n, i) => (
+          {systemModel.nodes.map((n, i) => (
             <div class="relative rounded-2xl border border-white/10 bg-[#0a0f16] p-6">
               <div class="flex items-center gap-2 text-xs font-mono text-brand/70">
                 <span>0{i + 1}</span>
@@ -61,12 +44,12 @@ const nodes = [
         <img
           src="/images/admin/dashboard.png"
           alt="ThinkWork admin dashboard showing agents online, open threads, recent activity, and recent threads for a tenant"
-          loading="eager"
+          loading="lazy"
           class="block h-auto w-full"
         />
       </div>
       <figcaption class="mt-3 text-center text-xs uppercase tracking-[0.2em] text-slate-600">
-        Admin web · the system running
+        {systemModel.dashboardCaption}
       </figcaption>
     </figure>
   </div>

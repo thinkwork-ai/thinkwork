@@ -1,8 +1,6 @@
 ---
 import BrainMark from "./BrainMark.astro";
-
-const docsUrl = "https://docs.thinkwork.ai";
-const githubUrl = "https://github.com/thinkwork-ai/thinkwork";
+import { hero } from "../lib/copy";
 ---
 
 <section class="relative overflow-visible pt-24 pb-24 md:pt-32 md:pb-32">
@@ -18,28 +16,27 @@ const githubUrl = "https://github.com/thinkwork-ai/thinkwork";
       </div>
       <p class="animate-fade-in-up inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-slate-300">
         <span class="h-1.5 w-1.5 rounded-full bg-brand"></span>
-        Open infrastructure for AI work
+        {hero.eyebrow}
       </p>
       <h1 class="animate-fade-in-up delay-100 mt-6 text-4xl font-extrabold leading-[1.05] tracking-tight md:text-6xl lg:text-7xl">
-        AI infrastructure in your AWS.<br class="hidden md:inline" />
-        Without the <span class="text-brand">black box.</span>
+        {hero.headlinePart1}<br class="hidden md:inline" />
+        <span class="text-brand"> {hero.headlineAccent}</span>
       </h1>
-      <p class="animate-fade-in-up delay-200 mx-auto mt-7 max-w-3xl text-xl font-medium leading-relaxed text-slate-200 md:text-2xl">
-        A production-grade harness for AI work, inside your own AWS account.
-        <span class="text-slate-400">Portable memory. Durable threads. Control that stays under your control.</span>
+      <p class="animate-fade-in-up delay-200 mx-auto mt-7 max-w-3xl text-lg leading-relaxed text-slate-300 md:text-xl">
+        {hero.lede}
       </p>
       <div class="animate-fade-in-up delay-300 mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
         <a
-          href={docsUrl}
+          href={hero.primaryCta.href}
           class="rounded-xl bg-brand px-8 py-3.5 text-base font-semibold text-slate-950 shadow-lg shadow-brand/20 transition hover:scale-[1.02] hover:bg-brand-300"
         >
-          Read the docs
+          {hero.primaryCta.label}
         </a>
         <a
-          href={githubUrl}
+          href={hero.secondaryCta.href}
           class="rounded-xl border border-white/10 bg-white/5 px-8 py-3.5 text-base font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10"
         >
-          View on GitHub
+          {hero.secondaryCta.label}
         </a>
       </div>
     </div>

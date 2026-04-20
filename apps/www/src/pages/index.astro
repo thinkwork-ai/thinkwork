@@ -3,21 +3,30 @@ import Base from "../layouts/Base.astro";
 import Header from "../components/Header.astro";
 import Hero from "../components/Hero.astro";
 import ProofStrip from "../components/ProofStrip.astro";
-import WhyThinkWork from "../components/WhyThinkWork.astro";
-import MemoryWedge from "../components/MemoryWedge.astro";
+import AdoptionProblem from "../components/AdoptionProblem.astro";
+import FiveControls from "../components/FiveControls.astro";
+import AgentTemplates from "../components/AgentTemplates.astro";
+import CostControl from "../components/CostControl.astro";
+import Evals from "../components/Evals.astro";
 import SystemModel from "../components/SystemModel.astro";
+import MemoryWedge from "../components/MemoryWedge.astro";
 import MobileApp from "../components/MobileApp.astro";
 import QuickStart from "../components/QuickStart.astro";
 import FinalCTA from "../components/FinalCTA.astro";
 import Footer from "../components/Footer.astro";
+import { meta } from "../lib/copy";
 ---
 
-<Base title="ThinkWork — Open agent infrastructure, minus the headache">
+<Base title={meta.title} description={meta.description}>
   <Header />
   <main class="overflow-x-clip">
     <Hero />
     <ProofStrip />
-    <WhyThinkWork />
+    <AdoptionProblem />
+    <FiveControls />
+    <AgentTemplates />
+    <CostControl />
+    <Evals />
     <SystemModel />
     <MemoryWedge />
     <MobileApp />

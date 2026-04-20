@@ -1,0 +1,154 @@
+---
+// Wraps a product screenshot (or illustrative placeholder) in a consistent bezel + caption.
+// When `pending` is true, renders a styled SVG mock matching the variant so the site
+// ships polished even before the final PNG capture. Swap to real PNG by setting
+// `pending={false}` once the file exists at `src`.
+
+interface Props {
+  src: string;
+  alt: string;
+  caption: string;
+  variant?: "templates" | "cost" | "evals";
+  pending?: boolean;
+  accent?: boolean;
+}
+
+const {
+  src,
+  alt,
+  caption,
+  variant = "templates",
+  pending = true,
+  accent = false,
+} = Astro.props;
+
+const frameClass = accent
+  ? "overflow-hidden rounded-2xl border border-brand/20 bg-[#05080d] shadow-[0_24px_60px_rgba(56,189,248,0.16)]"
+  : "overflow-hidden rounded-2xl border border-white/10 bg-[#05080d] shadow-[0_24px_60px_rgba(0,0,0,0.45)]";
+---
+
+<figure>
+  <div class={frameClass}>
+    {pending ? (
+      <div class="aspect-[16/10] w-full">
+        {variant === "templates" && (
+          <svg viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg" class="h-full w-full">
+            <rect width="800" height="500" fill="#05080d" />
+            <rect x="0" y="0" width="800" height="56" fill="#0a0f16" />
+            <circle cx="24" cy="28" r="5" fill="#ef4444" opacity="0.5" />
+            <circle cx="44" cy="28" r="5" fill="#eab308" opacity="0.5" />
+            <circle cx="64" cy="28" r="5" fill="#22c55e" opacity="0.5" />
+            <rect x="100" y="20" width="240" height="16" rx="4" fill="#1f2937" />
+            <rect x="32" y="88" width="180" height="22" rx="4" fill="#7dd3fc" opacity="0.85" />
+            <rect x="32" y="124" width="280" height="14" rx="3" fill="#64748b" opacity="0.6" />
+            <rect x="32" y="168" width="360" height="14" rx="3" fill="#334155" />
+            <rect x="400" y="168" width="80" height="14" rx="3" fill="#38bdf8" opacity="0.5" />
+            <rect x="500" y="168" width="60" height="14" rx="3" fill="#22c55e" opacity="0.5" />
+            <rect x="32" y="196" width="360" height="14" rx="3" fill="#334155" />
+            <rect x="400" y="196" width="80" height="14" rx="3" fill="#38bdf8" opacity="0.5" />
+            <rect x="500" y="196" width="60" height="14" rx="3" fill="#22c55e" opacity="0.5" />
+            <rect x="32" y="224" width="360" height="14" rx="3" fill="#334155" />
+            <rect x="400" y="224" width="80" height="14" rx="3" fill="#38bdf8" opacity="0.5" />
+            <rect x="500" y="224" width="60" height="14" rx="3" fill="#f59e0b" opacity="0.5" />
+            <rect x="32" y="272" width="120" height="14" rx="3" fill="#38bdf8" opacity="0.7" />
+            <rect x="32" y="304" width="736" height="1" fill="#1f2937" />
+            <rect x="32" y="328" width="150" height="28" rx="6" fill="#1e293b" stroke="#38bdf8" stroke-width="1" opacity="0.6" />
+            <rect x="196" y="328" width="150" height="28" rx="6" fill="#1e293b" stroke="#38bdf8" stroke-width="1" opacity="0.6" />
+            <rect x="360" y="328" width="150" height="28" rx="6" fill="#1e293b" stroke="#38bdf8" stroke-width="1" opacity="0.6" />
+            <rect x="32" y="384" width="360" height="10" rx="3" fill="#334155" />
+            <rect x="32" y="408" width="260" height="10" rx="3" fill="#334155" />
+            <rect x="32" y="432" width="320" height="10" rx="3" fill="#334155" />
+          </svg>
+        )}
+        {variant === "cost" && (
+          <svg viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg" class="h-full w-full">
+            <rect width="800" height="500" fill="#05080d" />
+            <rect x="0" y="0" width="800" height="56" fill="#0a0f16" />
+            <circle cx="24" cy="28" r="5" fill="#ef4444" opacity="0.5" />
+            <circle cx="44" cy="28" r="5" fill="#eab308" opacity="0.5" />
+            <circle cx="64" cy="28" r="5" fill="#22c55e" opacity="0.5" />
+            <rect x="100" y="20" width="200" height="16" rx="4" fill="#1f2937" />
+            <rect x="32" y="88" width="140" height="18" rx="4" fill="#7dd3fc" opacity="0.85" />
+            <rect x="32" y="116" width="80" height="38" rx="4" fill="#1e293b" />
+            <rect x="40" y="124" width="40" height="10" rx="2" fill="#64748b" />
+            <rect x="40" y="140" width="60" height="10" rx="2" fill="#e2e8f0" />
+            <rect x="132" y="116" width="80" height="38" rx="4" fill="#1e293b" />
+            <rect x="140" y="124" width="40" height="10" rx="2" fill="#64748b" />
+            <rect x="140" y="140" width="52" height="10" rx="2" fill="#e2e8f0" />
+            <rect x="232" y="116" width="80" height="38" rx="4" fill="#1e293b" />
+            <rect x="240" y="124" width="50" height="10" rx="2" fill="#64748b" />
+            <rect x="240" y="140" width="55" height="10" rx="2" fill="#e2e8f0" />
+            <path d="M 32 360 L 80 340 L 130 330 L 180 310 L 230 300 L 280 280 L 330 270 L 380 245 L 430 230 L 480 215 L 530 200 L 580 185 L 630 175 L 680 160 L 730 150 L 768 140"
+                  stroke="#38bdf8" stroke-width="2.5" fill="none" />
+            <path d="M 32 360 L 80 340 L 130 330 L 180 310 L 230 300 L 280 280 L 330 270 L 380 245 L 430 230 L 480 215 L 530 200 L 580 185 L 630 175 L 680 160 L 730 150 L 768 140 L 768 440 L 32 440 Z"
+                  fill="url(#costGrad)" opacity="0.3" />
+            <defs>
+              <linearGradient id="costGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.6" />
+                <stop offset="100%" stop-color="#38bdf8" stop-opacity="0" />
+              </linearGradient>
+            </defs>
+            <rect x="32" y="440" width="736" height="1" fill="#1f2937" />
+            <circle cx="430" cy="230" r="4" fill="#38bdf8" />
+            <circle cx="480" cy="215" r="4" fill="#38bdf8" />
+            <circle cx="580" cy="185" r="4" fill="#38bdf8" />
+            <rect x="32" y="460" width="60" height="10" rx="3" fill="#334155" />
+            <rect x="120" y="460" width="60" height="10" rx="3" fill="#334155" />
+            <rect x="208" y="460" width="60" height="10" rx="3" fill="#334155" />
+          </svg>
+        )}
+        {variant === "evals" && (
+          <svg viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg" class="h-full w-full">
+            <rect width="800" height="500" fill="#05080d" />
+            <rect x="0" y="0" width="800" height="56" fill="#0a0f16" />
+            <circle cx="24" cy="28" r="5" fill="#ef4444" opacity="0.5" />
+            <circle cx="44" cy="28" r="5" fill="#eab308" opacity="0.5" />
+            <circle cx="64" cy="28" r="5" fill="#22c55e" opacity="0.5" />
+            <rect x="100" y="20" width="220" height="16" rx="4" fill="#1f2937" />
+            <rect x="32" y="88" width="180" height="18" rx="4" fill="#7dd3fc" opacity="0.85" />
+            <rect x="32" y="124" width="736" height="40" rx="8" fill="#0f1823" />
+            <rect x="48" y="138" width="80" height="12" rx="3" fill="#64748b" />
+            <rect x="160" y="138" width="100" height="12" rx="3" fill="#e2e8f0" />
+            <rect x="600" y="134" width="160" height="20" rx="10" fill="#0a1f14" />
+            <circle cx="616" cy="144" r="4" fill="#22c55e" />
+            <rect x="628" y="138" width="60" height="12" rx="3" fill="#22c55e" opacity="0.9" />
+            <rect x="32" y="188" width="355" height="120" rx="10" fill="#0f1823" />
+            <rect x="48" y="204" width="140" height="12" rx="3" fill="#7dd3fc" />
+            <rect x="48" y="228" width="220" height="10" rx="3" fill="#64748b" />
+            <circle cx="330" cy="248" r="30" fill="none" stroke="#1e293b" stroke-width="6" />
+            <circle cx="330" cy="248" r="30" fill="none" stroke="#22c55e" stroke-width="6"
+                    stroke-dasharray="170 200" transform="rotate(-90 330 248)" />
+            <rect x="413" y="188" width="355" height="120" rx="10" fill="#0f1823" />
+            <rect x="429" y="204" width="140" height="12" rx="3" fill="#7dd3fc" />
+            <rect x="429" y="228" width="220" height="10" rx="3" fill="#64748b" />
+            <rect x="429" y="256" width="30" height="40" fill="#38bdf8" opacity="0.7" />
+            <rect x="469" y="246" width="30" height="50" fill="#38bdf8" opacity="0.7" />
+            <rect x="509" y="236" width="30" height="60" fill="#38bdf8" opacity="0.7" />
+            <rect x="549" y="226" width="30" height="70" fill="#22c55e" opacity="0.7" />
+            <rect x="589" y="240" width="30" height="56" fill="#38bdf8" opacity="0.7" />
+            <rect x="629" y="220" width="30" height="76" fill="#22c55e" opacity="0.7" />
+            <rect x="669" y="250" width="30" height="46" fill="#38bdf8" opacity="0.7" />
+            <rect x="709" y="218" width="30" height="78" fill="#22c55e" opacity="0.7" />
+            <rect x="32" y="332" width="736" height="40" rx="8" fill="#0f1823" />
+            <rect x="48" y="346" width="100" height="12" rx="3" fill="#64748b" />
+            <rect x="180" y="346" width="150" height="12" rx="3" fill="#e2e8f0" />
+            <rect x="600" y="342" width="160" height="20" rx="10" fill="#0a1f14" />
+            <circle cx="616" cy="352" r="4" fill="#22c55e" />
+            <rect x="628" y="346" width="70" height="12" rx="3" fill="#22c55e" opacity="0.9" />
+            <rect x="32" y="388" width="736" height="40" rx="8" fill="#0f1823" />
+            <rect x="48" y="402" width="110" height="12" rx="3" fill="#64748b" />
+            <rect x="180" y="402" width="130" height="12" rx="3" fill="#e2e8f0" />
+            <rect x="600" y="398" width="160" height="20" rx="10" fill="#1f0b0e" />
+            <circle cx="616" cy="408" r="4" fill="#f59e0b" />
+            <rect x="628" y="402" width="70" height="12" rx="3" fill="#f59e0b" opacity="0.9" />
+          </svg>
+        )}
+      </div>
+    ) : (
+      <img src={src} alt={alt} loading="lazy" class="block h-auto w-full" />
+    )}
+  </div>
+  <figcaption class="mt-3 text-center text-xs uppercase tracking-[0.2em] text-slate-600">
+    {caption}
+  </figcaption>
+</figure>
