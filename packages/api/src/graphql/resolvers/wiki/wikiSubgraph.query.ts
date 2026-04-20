@@ -181,12 +181,19 @@ export const wikiSubgraph = async (
 	const truncatedNodeCount = Math.max(0, totalCount - pageRows.length);
 	const includedIds = pageRows.map((r) => r.id);
 
-	// Edges entirely within the included set.
+	// Edges entirely within the included set. Bind each ID explicitly via
+	// sql.join — drizzle's `${jsArray}` template doesn't reliably serialize
+	// to a Postgres array literal across pg drivers (we hit "malformed array
+	// literal" with `ANY(${arr}::uuid[])` on dev).
+	const idList = sql.join(
+		includedIds.map((id) => sql`${id}::uuid`),
+		sql`, `,
+	);
 	const edgesResult = await db.execute(sql`
 		SELECT l.id, l.from_page_id, l.to_page_id, l.kind, l.context
 		FROM wiki_page_links l
-		WHERE l.from_page_id = ANY(${includedIds}::uuid[])
-		  AND l.to_page_id = ANY(${includedIds}::uuid[])
+		WHERE l.from_page_id IN (${idList})
+		  AND l.to_page_id IN (${idList})
 	`);
 
 	const edgeRows = (edgesResult as unknown as { rows?: EdgeRow[] }).rows ?? [];
