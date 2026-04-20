@@ -412,8 +412,21 @@ export async function runCompileJob(
 		// chains forward.
 		if (!cursorDrained) {
 			try {
+				// Anchor on this job's `created_at`, not wall-clock `now()`.
+				// Using wall-clock meant a long-running chained job could
+				// compute a continuation bucket identical to its parent's
+				// continuation bucket (the bucket the job itself lives in) —
+				// ON CONFLICT DO NOTHING then swallowed the insert and the
+				// chain silently stopped after step 2. Anchoring on
+				// `created_at` gives each step in a chain a strictly
+				// monotonic bucket: parent in bucket N ⇒ child enqueued for
+				// bucket N+1, child in bucket N+1 ⇒ grandchild for bucket
+				// N+2, regardless of how long any step took.
+				const jobCreatedEpoch = Math.floor(
+					job.created_at.valueOf() / 1000,
+				);
 				const nextBucketSeconds =
-					Math.floor(Date.now() / 1000) + CONTINUATION_BUCKET_OFFSET_SECONDS;
+					jobCreatedEpoch + CONTINUATION_BUCKET_OFFSET_SECONDS;
 				const { inserted, job: chained } = await enqueueCompileJob({
 					tenantId: job.tenant_id,
 					ownerId: job.owner_id,
