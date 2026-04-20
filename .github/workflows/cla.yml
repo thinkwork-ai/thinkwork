@@ -1,0 +1,56 @@
+# CLA Assistant gate.
+#
+# Runs the canonical CLA Assistant action on every pull request and posts a
+# bot comment that gates merging on contributor signature. Signatures are
+# stored as JSON in the `cla-signatures` branch of this repo.
+#
+# ----------------------------------------------------------------------------
+# Why pinned by SHA, not tag
+# ----------------------------------------------------------------------------
+# `contributor-assistant/github-action` was archived March 2026. The last
+# release was v2.6.1 (Sept 2024). The action is functionally complete and
+# v2.6.1 is the de-facto stable version. Pinning by SHA gives cryptographic
+# stability against the archived upstream — tag pins on archived repos can
+# technically be force-moved by the owner; SHA pins cannot.
+#
+# Contingency: if v2.6.1 ever breaks against a future GitHub API change,
+# fork to `thinkwork-ai/action-cla-assistant`, replicate the SHA pin from
+# the fork's release, and update the `uses:` line below. Do not pre-fork —
+# YAGNI until breakage is observed.
+#
+# ----------------------------------------------------------------------------
+# CLA-version migration path
+# ----------------------------------------------------------------------------
+# If the CLA text in /CLA.md ever changes substantively (not whitespace or
+# typo fixes), bump `path-to-signatures` to `signatures/version2/cla.json`.
+# This forces every prior contributor to re-sign against the new text.
+# Versioning is semantic, not chronological — bump only on substantive change.
+# ----------------------------------------------------------------------------
+
+name: CLA Assistant
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_target:
+    types: [opened, synchronize]
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  cla:
+    runs-on: ubuntu-latest
+    steps:
+      - name: CLA Assistant
+        uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08 # v2.6.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          path-to-signatures: 'signatures/version1/cla.json'
+          path-to-document: 'https://github.com/thinkwork-ai/thinkwork/blob/main/CLA.md'
+          branch: 'cla-signatures'
+          allowlist: dependabot[bot],renovate[bot]

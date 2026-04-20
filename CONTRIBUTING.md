@@ -68,9 +68,15 @@ This project follows the [Contributor Covenant](./CODE_OF_CONDUCT.md). Be kind.
 
 Thinkwork requires all contributors to sign a Contributor License Agreement before their pull request can be merged. The CLA lets the project use, relicense, and sublicense your contribution — which is what keeps the project's licensing posture coherent as it grows.
 
-Signing is handled by an automated bot (CLA Assistant) that comments on your pull request with a one-click signing link the first time you contribute. Once signed, it remembers you for future PRs.
+The CLA text lives at [CLA.md](./CLA.md). Read it before signing.
 
-The CLA automation is being set up. Until it is live, external PRs will be held rather than merged. If you have a contribution ready in the meantime, open it anyway — we'll get back to you as soon as the bot is wired up.
+Signing is handled by an automated bot (CLA Assistant). The first time you open a pull request, the bot comments with a link to the CLA and the exact phrase to sign with. Reply on the PR thread with:
+
+```
+I have read the CLA Document and I hereby sign the CLA
+```
+
+The bot records your signature against your GitHub account and updates the PR check to green. Subsequent PRs from the same account pass automatically — you only sign once.
 
 ## License
 
