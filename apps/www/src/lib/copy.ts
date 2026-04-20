@@ -31,7 +31,7 @@ export const hero = {
   eyebrow: "Governed AI adoption",
   headlinePart1: "The control plane for",
   headlineAccent: "governed AI adoption.",
-  lede: "Capability-granted agent templates, per-agent spend budgets, security and accuracy evals, and one admin surface for all of it — running inside the AWS account your team already operates.",
+  lede: "Capability-granted templates, per-agent spend budgets, and an evaluation harness — under one admin surface. The runtime deploys inside the AWS account your team already operates.",
   primaryCta: { label: "Read the docs", href: external.docs },
   secondaryCta: { label: "View on GitHub", href: external.github },
   headlineCandidates: [
@@ -61,7 +61,7 @@ export const proofStrip = [
   },
   {
     label: "Security + accuracy evals",
-    detail: "Automated gates on every template change, powered by AWS Bedrock AgentCore.",
+    detail: "Evaluation harness for every template, powered by AWS Bedrock AgentCore.",
   },
 ];
 
@@ -73,14 +73,14 @@ export const adoption = {
   bullets: [
     "Not a SaaS control plane you have to trust. Your runtime, your network, your data.",
     "Not a policy document. Controls are enforced in code, on every run.",
-    "Not a pilot that can't scale. The same harness a developer spins up in five commands is what an enterprise runs in production.",
+    "One system at every scale. The runtime a developer spins up in five commands is the runtime production runs on.",
   ],
 };
 
 export const controls = {
   eyebrow: "Five controls",
-  headline: "The guardrails your adoption review already requires.",
-  lede: "Every control a skeptical CTO expects to see before approving a rollout — shipped as first-class primitives, not add-ons.",
+  headline: "Governance primitives, not bolted-on guardrails.",
+  lede: "Five first-class controls a governed rollout actually requires — built into the runtime, not add-ons layered on later.",
   items: [
     {
       title: "Runs in your AWS",
@@ -104,7 +104,7 @@ export const controls = {
     },
     {
       title: "Security + accuracy evals",
-      desc: "Automated gates on every template change — AWS Bedrock AgentCore evaluators plus custom assertions.",
+      desc: "Evaluation harness for every template — AWS Bedrock AgentCore evaluators plus custom assertions.",
       icon: "evals",
     },
   ],
@@ -116,8 +116,8 @@ export const agentTemplates = {
   lede: "Agent templates are the contract between a policy decision and the agents that enforce it. Define a template once and every agent created from it inherits the boundary.",
   features: [
     {
-      title: "Tool allow-lists",
-      desc: "Scope which built-in tools and MCP servers each template may call. Anything unlisted is simply unreachable.",
+      title: "Tool block-lists",
+      desc: "Block any built-in tool or MCP server a template shouldn't reach. Agents created from the template inherit the block.",
     },
     {
       title: "Model pinning",
@@ -139,7 +139,7 @@ export const agentTemplates = {
 export const audit = {
   eyebrow: "Audit",
   headline: "Every turn leaves a trace.",
-  lede: "Every tool call, every token, every cost event is captured inside the thread that produced it. The record is durable, tenant-scoped, and ready for a compliance review without additional instrumentation.",
+  lede: "Every tool call, every token, every cost event is captured inside the thread that produced it. The record is durable, tenant-scoped, and inspectable per thread, per agent, per tenant.",
   features: [
     {
       title: "Step-by-step execution",
@@ -154,8 +154,8 @@ export const audit = {
       desc: "Thread status, priority, and the agent that ran each step travel with the record — nothing is anonymous.",
     },
     {
-      title: "Ready for evals",
-      desc: "The same traces feed directly into the AgentCore evaluator pipeline — one record, inspected two ways.",
+      title: "Evals run on the same trace",
+      desc: "AWS Bedrock AgentCore evaluators score tool safety, helpfulness, accuracy, and hallucination on the recorded turns — alongside your own regex, equals, contains, and JSON-path assertions.",
     },
   ],
   caption: "Admin web · thread detail and execution trace",
@@ -164,8 +164,8 @@ export const audit = {
 
 export const costControl = {
   eyebrow: "Cost",
-  headline: "No surprise invoices from a runaway agent.",
-  lede: "Every model call emits a cost event tagged by tenant, agent, and model. Attribution is real-time. Budgets are enforced before the loop runs away.",
+  headline: "Cost attributed where it happens.",
+  lede: "Every model call emits a cost event tagged by tenant, agent, and model. Attribution is real-time. Per-agent budgets pause execution before overruns compound.",
   features: [
     {
       title: "Real-time attribution",
@@ -177,25 +177,29 @@ export const costControl = {
     },
     {
       title: "Enforced budgets",
-      desc: "Per-agent hard caps pause execution before a runaway loop turns into a receivable.",
+      desc: "Per-agent hard caps pause execution before a runaway loop compounds into a bill.",
     },
     {
-      title: "Exportable events",
-      desc: "Pipe the raw cost event stream into your own FinOps system — you own the ledger, not a vendor.",
+      title: "Events in your database",
+      desc: "Cost events live in the Postgres you deployed. Query them directly from your AWS account — you own the ledger.",
     },
   ],
   caption: "Admin web · analytics · cost view",
   imagePath: "/images/admin/cost-analytics.png",
 };
 
+// Evals intentionally lives as a sub-feature inside Audit (see `audit.features`)
+// and as a pillar in `controls.items` / `proofStrip` until a real
+// /evaluations/$runId screenshot is captured. When it ships, these
+// bullets can seed a dedicated Evals showcase.
 export const evals = {
   eyebrow: "Evals",
-  headline: "Security and accuracy, gated automatically.",
-  lede: "Evaluations run on every template change. AWS Bedrock AgentCore ships sixteen built-in evaluators — tool safety, helpfulness, accuracy, hallucination, and more — and ThinkWork runs them alongside your custom assertions in one pass.",
+  headline: "Security and accuracy, verified against the trace.",
+  lede: "Re-run evals against any template version. AgentCore evaluators and your own deterministic assertions run against the same traces the admin already captures.",
   bullets: [
-    "AWS Bedrock AgentCore built-in evaluators for safety and accuracy.",
+    "AWS Bedrock AgentCore built-in evaluators for tool safety, helpfulness, accuracy, and hallucination.",
     "Custom deterministic assertions — regex, equals, contains, JSON path.",
-    "Red-team, tool-safety, and knowledge-base eval packs out of the box.",
+    "Red-team, tool-safety, and knowledge-base seed packs to build on.",
     "Per-template pass rates and per-test evaluator scores, archived per run.",
   ],
   caption: "Admin web · evaluations · run detail",
@@ -205,7 +209,7 @@ export const evals = {
 export const systemModel = {
   eyebrow: "One admin surface",
   headline: "Agents, templates, cost, evals, memory — one control plane.",
-  lede: "Four primitives, one surface wrapping them. Simple enough to explain to a board, strict enough to ship against.",
+  lede: "Four primitives, one surface wrapping them. Simple enough to hold in your head, strict enough to ship against.",
   nodes: [
     {
       title: "Threads",
@@ -261,7 +265,7 @@ export const mobile = {
     },
     {
       title: "Realtime by default",
-      desc: "Webhook events, agent turns, and status changes land on-device within seconds over AppSync. No pull-to-refresh dance.",
+      desc: "Webhook events, agent turns, and status changes land on-device within seconds over AppSync.",
     },
     {
       title: "On TestFlight today",
@@ -286,7 +290,7 @@ export const quickStart = {
 };
 
 export const finalCta = {
-  headlinePart1: "The harness stays",
+  headlinePart1: "The runtime stays",
   headlineAccent: "yours.",
   lede: "Deploy a governed, production-grade agent system inside the AWS account your team already runs. Keep the runtime. Keep the memory. Keep the work record.",
   primaryCta: { label: "Read the docs", href: external.docs },
