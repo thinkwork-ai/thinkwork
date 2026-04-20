@@ -290,9 +290,10 @@ export const quickStart = {
 };
 
 export const finalCta = {
-  headlinePart1: "The runtime stays",
-  headlineAccent: "yours.",
-  lede: "Deploy a governed, production-grade agent system inside the AWS account your team already runs. Keep the runtime. Keep the memory. Keep the work record.",
+  eyebrow: "Your AWS · Your rules",
+  headlinePart1: "Adopt AI.",
+  headlineAccent: "Keep control.",
+  lede: "Deploy into the AWS account your team already operates. Every agent, thread, cost event, and memory stays inside your boundary — under the IAM and governance your ops team already enforces.",
   primaryCta: { label: "Read the docs", href: external.docs },
   secondaryCta: { label: "View on GitHub", href: external.github },
 };
