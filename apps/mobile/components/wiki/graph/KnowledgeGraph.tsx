@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { StyleSheet, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS } from "react-native-reanimated";
@@ -11,12 +11,22 @@ import type { WikiSubgraph } from "./types";
 
 interface KnowledgeGraphProps {
   subgraph: WikiSubgraph;
+  selectedNodeId: string | null;
+  onSelectNode: (nodeId: string | null) => void;
 }
 
-export function KnowledgeGraph({ subgraph }: KnowledgeGraphProps) {
+/**
+ * Pure renderer of a wiki subgraph. Owns the sim + camera + composed
+ * gesture; selection state is lifted to the parent so the detail sheet
+ * can react to it.
+ */
+export function KnowledgeGraph({
+  subgraph,
+  selectedNodeId,
+  onSelectNode,
+}: KnowledgeGraphProps) {
   const { width, height } = useWindowDimensions();
   const camera = useGraphCamera(width / 2, height / 2);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   // Sim mutates node.x/y in place; tick increments trigger re-render.
   useForceSimulation(subgraph.nodes, subgraph.edges);
@@ -33,9 +43,9 @@ export function KnowledgeGraph({ subgraph }: KnowledgeGraphProps) {
         { x: screenX, y: screenY },
         subgraph.nodes,
       );
-      setSelectedNodeId(hit ? hit.node.id : null);
+      onSelectNode(hit ? hit.node.id : null);
     },
-    [camera.tx, camera.ty, camera.scale, subgraph.nodes],
+    [camera.tx, camera.ty, camera.scale, subgraph.nodes, onSelectNode],
   );
 
   const tapGesture = Gesture.Tap()
