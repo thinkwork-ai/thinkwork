@@ -2,28 +2,33 @@
 import { finalCta } from "../lib/copy";
 ---
 
-<section class="relative overflow-visible border-t border-white/5 py-24 md:py-32">
-  <div class="pointer-events-none absolute inset-x-0 -top-32 -bottom-24">
+<section class="relative overflow-visible border-t border-white/5 py-28 md:py-36">
+  <div class="pointer-events-none absolute inset-x-0 -top-32 -bottom-24 overflow-hidden">
     <div class="absolute left-1/2 top-[12%] h-[340px] w-[760px] -translate-x-1/2 rounded-full bg-brand/8 blur-[150px]"></div>
     <div class="absolute left-1/2 bottom-[-10%] h-[320px] w-[900px] -translate-x-1/2 rounded-full bg-brand/6 blur-[160px]"></div>
+    <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand/25 to-transparent"></div>
   </div>
   <div class="relative mx-auto max-w-3xl px-6 text-center">
-    <h2 class="text-3xl font-bold tracking-tight md:text-6xl">
+    <p class="inline-flex items-center gap-2.5 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-300 backdrop-blur">
+      <span class="h-1 w-1 rounded-full bg-brand"></span>
+      Deploy on your terms
+    </p>
+    <h2 class="mt-6 text-balance text-3xl font-bold tracking-tight md:text-6xl">
       {finalCta.headlinePart1} <span class="text-brand">{finalCta.headlineAccent}</span>
     </h2>
-    <p class="mx-auto mt-6 max-w-2xl text-lg text-slate-300 md:text-xl">
+    <p class="mx-auto mt-6 max-w-2xl text-pretty text-lg leading-relaxed text-slate-400 md:text-xl">
       {finalCta.lede}
     </p>
-    <div class="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+    <div class="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
       <a
         href={finalCta.primaryCta.href}
-        class="rounded-xl bg-brand px-8 py-3.5 text-base font-semibold text-slate-950 shadow-lg shadow-brand/20 transition hover:scale-[1.02] hover:bg-brand-300"
+        class="rounded-xl bg-brand px-7 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-brand/20 transition hover:scale-[1.02] hover:bg-brand-300"
       >
         {finalCta.primaryCta.label}
       </a>
       <a
         href={finalCta.secondaryCta.href}
-        class="rounded-xl border border-white/10 bg-white/5 px-8 py-3.5 text-base font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/10"
+        class="rounded-xl border border-white/10 bg-white/[0.03] px-7 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/20 hover:bg-white/[0.06]"
       >
         {finalCta.secondaryCta.label}
       </a>

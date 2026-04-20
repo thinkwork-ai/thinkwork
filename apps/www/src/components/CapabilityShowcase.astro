@@ -1,0 +1,70 @@
+---
+import SectionShell from "./SectionShell.astro";
+import SectionHeader from "./SectionHeader.astro";
+import ScreenshotFrame from "./ScreenshotFrame.astro";
+
+interface Props {
+  id: string;
+  tone?: "default" | "raised";
+  eyebrow: string;
+  headline: string;
+  lede: string;
+  step?: string;
+  bullets: string[];
+  imagePath: string;
+  imageAlt: string;
+  caption: string;
+  chromeLabel?: string;
+  variant: "templates" | "cost" | "evals";
+  accent?: boolean;
+  figureFirst?: boolean;
+  pending?: boolean;
+}
+
+const {
+  id,
+  tone = "default",
+  eyebrow,
+  headline,
+  lede,
+  step,
+  bullets,
+  imagePath,
+  imageAlt,
+  caption,
+  chromeLabel,
+  variant,
+  accent = false,
+  figureFirst = false,
+  pending = false,
+} = Astro.props;
+---
+
+<SectionShell id={id} tone={tone} glow="top">
+  <SectionHeader eyebrow={eyebrow} headline={headline} lede={lede} step={step} />
+
+  <div class="mt-14 grid gap-12 lg:grid-cols-12 lg:items-center lg:gap-14">
+    <div class:list={["lg:col-span-5", figureFirst ? "lg:order-2" : "lg:order-1"]}>
+      <ul class="space-y-4">
+        {bullets.map((b) => (
+          <li class="flex gap-3.5 text-[15px] leading-6 text-slate-300">
+            <span class="mt-[10px] h-1 w-1 flex-none rounded-full bg-brand"></span>
+            <span>{b}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+
+    <div class:list={["lg:col-span-7", figureFirst ? "lg:order-1" : "lg:order-2"]}>
+      <ScreenshotFrame
+        src={imagePath}
+        alt={imageAlt}
+        caption={caption}
+        chromeLabel={chromeLabel}
+        variant={variant}
+        pending={pending}
+        accent={accent}
+      />
+    </div>
+  </div>
+</SectionShell>

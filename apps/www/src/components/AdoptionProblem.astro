@@ -1,25 +1,23 @@
 ---
+import SectionShell from "./SectionShell.astro";
+import SectionHeader from "./SectionHeader.astro";
 import { adoption } from "../lib/copy";
 ---
 
-<section id="adoption" class="border-t border-white/5">
-  <div class="mx-auto max-w-6xl px-6 py-24 md:py-32">
-    <div class="mx-auto max-w-4xl">
-      <p class="text-xs font-semibold uppercase tracking-[0.24em] text-brand/90">{adoption.eyebrow}</p>
-      <h2 class="mt-3 text-3xl font-bold tracking-tight md:text-5xl">
-        {adoption.headline}
-      </h2>
-      <p class="mt-6 text-lg leading-relaxed text-slate-400 md:text-xl">
-        {adoption.lede}
-      </p>
+<SectionShell id="adoption" glow="top">
+  <SectionHeader
+    eyebrow={adoption.eyebrow}
+    headline={adoption.headline}
+    lede={adoption.lede}
+    width="wide"
+  />
 
-      <ul class="mt-10 grid gap-4 md:grid-cols-3">
-        {adoption.bullets.map((b) => (
-          <li class="rounded-2xl border border-white/5 bg-white/[0.02] p-6">
-            <span class="text-sm leading-6 text-slate-300">{b}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  </div>
-</section>
+  <ul class="mt-14 grid gap-4 md:grid-cols-3">
+    {adoption.bullets.map((b, i) => (
+      <li class="group relative rounded-2xl border border-white/5 bg-white/[0.02] p-6 transition hover:border-white/10 hover:bg-white/[0.035]">
+        <p class="font-mono text-[11px] tracking-[0.18em] text-brand/60">0{i + 1}</p>
+        <p class="mt-4 text-sm leading-6 text-slate-300">{b}</p>
+      </li>
+    ))}
+  </ul>
+</SectionShell>

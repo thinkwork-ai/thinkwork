@@ -1,0 +1,42 @@
+---
+// One section wrapper to rule them all. Every marketing section uses this.
+// Variants control the background tone and atmospheric glow without fragmenting.
+
+interface Props {
+  id?: string;
+  tone?: "default" | "raised" | "sunken";
+  glow?: "none" | "top" | "center" | "cascade";
+}
+
+const { id, tone = "default", glow = "none" } = Astro.props;
+
+const toneClass =
+  tone === "raised"
+    ? "bg-white/[0.018]"
+    : tone === "sunken"
+    ? "bg-[#060a10]"
+    : "";
+---
+
+<section id={id} class:list={["relative border-t border-white/5 py-24 md:py-32", toneClass]}>
+  {glow === "top" && (
+    <div class="pointer-events-none absolute inset-x-0 top-0 h-[360px] overflow-hidden">
+      <div class="absolute left-1/2 top-[-30%] h-[360px] w-[900px] -translate-x-1/2 rounded-full bg-brand/5 blur-[150px]"></div>
+    </div>
+  )}
+  {glow === "center" && (
+    <div class="pointer-events-none absolute inset-x-0 top-0 h-[640px] overflow-hidden">
+      <div class="absolute left-1/2 top-[-20%] h-[600px] w-[1100px] -translate-x-1/2 rounded-full bg-brand/6 blur-[160px]"></div>
+    </div>
+  )}
+  {glow === "cascade" && (
+    <div class="pointer-events-none absolute inset-x-0 -top-32 -bottom-24 overflow-hidden">
+      <div class="absolute left-1/2 top-[12%] h-[340px] w-[760px] -translate-x-1/2 rounded-full bg-brand/8 blur-[150px]"></div>
+      <div class="absolute left-1/2 bottom-[-10%] h-[320px] w-[900px] -translate-x-1/2 rounded-full bg-brand/6 blur-[160px]"></div>
+    </div>
+  )}
+
+  <div class="relative mx-auto max-w-6xl px-6">
+    <slot />
+  </div>
+</section>

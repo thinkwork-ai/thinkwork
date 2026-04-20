@@ -1,32 +1,35 @@
-# Admin screenshot capture checklist
+# Homepage screenshot inventory
 
-Three marketing screenshots back the governance narrative on the homepage. Until the real PNGs land here, each showcase component renders a stylized SVG mockup (set `pending={true}` on `<ScreenshotFrame>`). To promote a real capture:
+The homepage pulls product shots from this folder (`apps/www/public/images/admin/`) and `apps/www/public/images/mobile/`. Each image is used via `ScreenshotFrame.astro`; set `pending={true}` to fall back to a styled SVG mock if the PNG isn't ready.
 
-1. Drop the PNG at the path below.
-2. Open the component and flip `pending` to `false` (or remove the attr).
+## Admin captures
 
-Aspect target: roughly 16:10. Keep each file under ~400 KB. Strip any real tenant names or PII before committing.
+| File | Used by | Status |
+|------|---------|--------|
+| `dashboard.png` | `SystemModel.astro` | shipped |
+| `agent-templates.png` (capabilities list) | `AgentTemplates.astro` | shipped |
+| `cost-analytics.png` | `CostControl.astro` | shipped |
+| `memories-graph.png` (all-agents graph) | `MemoryWedge.astro` | shipped |
+| `memories-graph-filtered.png` | — | reserve asset (single-agent graph view) |
+| `thread-detail.png` | — | reserve asset (thread execution trace, useful for a future "Audit trail" section) |
+| `evals-run.png` | `Evals.astro` | **pending** — currently falls back to styled SVG mock. Drop a real capture at `/evaluations/$runId` into this path, then set `pending={false}` in `Evals.astro`. |
 
-## Required captures
+## Mobile captures
 
-### `agent-templates.png`
-- Route: `/agent-templates/$templateId` in the admin app
-- Show: the capability editor — tool allow-list, model pin, guardrail picker, skill assignments
-- Component: `src/components/AgentTemplates.astro`
+| File | Used by | Status |
+|------|---------|--------|
+| `threads-list.png` | `MobileApp.astro` (left phone) | shipped |
+| `wiki-graph.png` | `MobileApp.astro` (right phone) | shipped |
+| `wiki-list.png` | — | reserve asset |
+| `tasks-list.png` | — | legacy (pre-wiki-first narrative); can be deleted when you're sure nothing else references it |
 
-### `cost-analytics.png`
-- Route: `/analytics` → Cost tab
-- Show: per-agent spend time series with at least a week of data, plus the totals cards
-- Component: `src/components/CostControl.astro`
+## How to swap in a new capture
 
-### `evals-run.png`
-- Route: `/evaluations/$runId`
-- Show: pass-rate chart plus a visible per-test breakdown with a mix of pass and warn/fail states
-- Component: `src/components/Evals.astro`
+1. Save the PNG to the path above, overwriting the existing file. Aspect targets: roughly 16:10 for admin, vertical phone frame for mobile.
+2. Strip any real tenant names or PII before committing.
+3. Keep each file under ~600 KB.
+4. If you're replacing an image that was marked pending, set `pending={false}` (or remove the attribute) on the component that uses it.
 
-## Pre-commit pass
+## Where to find these images for decks, pitches, or other projects
 
-- No customer or teammate names visible
-- No dev-mode banners, error toasts, or debug rails
-- URL bar hidden (screenshot just the app pane, not the whole browser window)
-- 2x DPI capture where possible for crispness at desktop widths
+This folder IS the canonical asset store — anything here ships with the www site and is durably versioned. For reuse outside the www build, copy from this directory.
