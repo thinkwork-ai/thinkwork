@@ -60,60 +60,6 @@ type WikiCompileJob {
 }
 
 """
-Page-to-page link returned by the `wikiSubgraph` resolver. Mirrors a row
-in `wiki_page_links`. Temporal fields (`firstSeenAt`/`lastSeenAt`/
-`isCurrent`) are nullable in v1 and land for real in Unit 5 of the mobile
-force-graph plan; today the resolver always returns `null` for them.
-`weight` is also reserved (occurrence count, drives stroke width).
-"""
-type WikiPageLink {
-  id: ID!
-  fromPageId: ID!
-  toPageId: ID!
-  kind: String!
-  context: String
-  firstSeenAt: AWSDateTime
-  lastSeenAt: AWSDateTime
-  isCurrent: Boolean
-  weight: Float
-}
-
-"""
-Per-page hint that the focal page (or a neighbor) has additional links
-not included in the current depth window or beyond the 500-node cap.
-The mobile graph viewer renders a "+" badge for nodes flagged here.
-v1 only sets `hasMore[focalPageId] = true` when the cap truncated; per-
-node hasMore is a Unit 6 concern (k-hop expansion).
-"""
-type WikiHasMoreEntry {
-  pageId: ID!
-  hasMore: Boolean!
-}
-
-"""
-Agent-scoped subgraph reachable from a focal page within `depth` hops.
-Powers the mobile force-graph viewer's focal+expand interaction.
-
-Caps at 500 nodes; when truncated, returns top-500 by
-`(degree DESC, last_compiled_at DESC NULLS LAST)` with the focal page
-always included, sets `hasMore[focalPageId] = true`, and surfaces the
-delta in `truncatedNodeCount`.
-
-`atTime` is accepted but ignored in v1 — the temporal scrub semantics
-land with Unit 5's schema migration. The field is echoed in the response
-for forward compatibility.
-"""
-type WikiSubgraph {
-  focalPageId: ID!
-  depth: Int!
-  atTime: AWSDateTime!
-  nodes: [WikiPage!]!
-  edges: [WikiPageLink!]!
-  hasMore: [WikiHasMoreEntry!]!
-  truncatedNodeCount: Int!
-}
-
-"""
 Agent-scoped force-graph payload: all active pages and their [[...]] links
 for one `(tenant, owner)` scope. Shaped to match the legacy `memoryGraph`
 wire contract so the admin force-graph component can swap data sources
@@ -188,21 +134,6 @@ extend type Query {
   scope. Links that reference archived pages are excluded. One round-trip.
   """
   wikiGraph(tenantId: ID!, ownerId: ID!): WikiGraph!
-
-  """
-  Agent-scoped subgraph reachable within `depth` hops from a focal page.
-  Powers the mobile force-graph viewer. Caps at 500 nodes; depth clamps
-  to [0, 2]. `atTime` is accepted but currently ignored (Unit 5 wires the
-  temporal scrub).
-  """
-  wikiSubgraph(
-    tenantId: ID!
-    ownerId: ID!
-    focalPageId: ID!
-    depth: Int = 1
-    atTime: AWSDateTime
-    pageType: WikiPageType
-  ): WikiSubgraph!
 }
 
 """

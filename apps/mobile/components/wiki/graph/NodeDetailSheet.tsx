@@ -10,12 +10,24 @@ import Markdown from "react-native-markdown-display";
 import { useRouter } from "expo-router";
 import { useWikiPage, type WikiPageType } from "@thinkwork/react-native-sdk";
 import { COLORS } from "@/lib/theme";
-import type { WikiSubgraphPage } from "@thinkwork/react-native-sdk";
+
+/**
+ * Minimal node descriptor the detail sheet needs. The richer page body
+ * (sections, summary) comes from `useWikiPage` once a node is selected;
+ * this prop only carries what's needed to fire that fetch + render the
+ * header label/badge.
+ */
+export interface NodeDetailSheetTarget {
+  id: string;
+  type: WikiPageType;
+  slug: string;
+  title: string;
+}
 
 interface NodeDetailSheetProps {
   tenantId: string | null;
   ownerId: string | null;
-  node: WikiSubgraphPage | null;
+  node: NodeDetailSheetTarget | null;
   onClose: () => void;
   onFocusHere: (pageId: string) => void;
 }
