@@ -45,6 +45,7 @@ import {
 	upsertSectionAggregation,
 	upsertUnresolvedMention,
 	normalizeAlias,
+	PARENT_TITLE_FUZZY_THRESHOLD,
 	type SectionAggregation,
 	type WikiCompileJobRow,
 	type WikiPageRow,
@@ -869,10 +870,18 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 				affectedPages,
 				lookupParentPages: (lookupArgs) =>
 					findPagesByExactTitle(lookupArgs),
-				// Trigram fallback closes the Portland / "Portland, Oregon"
-				// recall gap observed on 2026-04-20 Marco recompile.
+				// Trigram fallback closes the "Austin" / "Austin, Texas"
+				// recall gap surfaced by wiki-parent-link-audit.ts on the
+				// 2026-04-20 Marco recompile. Passes a lower threshold
+				// (PARENT_TITLE_FUZZY_THRESHOLD ≈ 0.5) than alias dedupe
+				// uses — the geo-suffix gate inside the linker keeps
+				// precision high at that bar.
 				lookupParentPagesFuzzy: (lookupArgs) =>
-					findPagesByFuzzyTitle(lookupArgs),
+					findPagesByFuzzyTitle({
+						...lookupArgs,
+						threshold: PARENT_TITLE_FUZZY_THRESHOLD,
+						limit: 5,
+					}),
 				writeLink,
 			});
 			metrics.links_written_deterministic =

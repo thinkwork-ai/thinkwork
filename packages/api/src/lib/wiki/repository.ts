@@ -1133,6 +1133,16 @@ export async function findAliasMatches(
  * behavior stays consistent across the repo. */
 export const FUZZY_ALIAS_THRESHOLD = 0.85;
 
+/** Trigram threshold for parent-title fuzzy lookup in the deterministic
+ * linker. Lower than `FUZZY_ALIAS_THRESHOLD` because city candidates like
+ * "Austin" vs existing page "Austin, Texas" score around 0.54 — below 0.85
+ * but precision-acceptable once the geo-suffix gate in
+ * `deterministic-linker.ts` filters out non-geographic hits like
+ * "Austin Reggae Fest". Empirically tuned via
+ * `packages/api/scripts/wiki-parent-link-audit.ts` against Marco's
+ * 2026-04-20 corpus. Alias dedupe retains 0.85 — different precision bar. */
+export const PARENT_TITLE_FUZZY_THRESHOLD = 0.5;
+
 /**
  * Trigram-fallback variant of `findAliasMatches`. Returns every alias in
  * scope whose Postgres `similarity()` against `aliasNormalized` is
