@@ -302,9 +302,17 @@ const { mockAdapter, mockRepo, mockPlanner, mockWriter, mockGetServices } =
 			listPagesForScope: vi.fn().mockResolvedValue([]),
 			listOpenMentions: vi.fn().mockResolvedValue([]),
 			listPageSections: vi.fn().mockResolvedValue([]),
-			upsertPage: vi.fn().mockResolvedValue({ id: "page-new" }),
+			upsertPage: vi.fn().mockResolvedValue({
+				id: "page-new",
+				type: "entity",
+				slug: "page-new",
+				title: "page-new",
+			}),
+			upsertPageLink: vi.fn().mockResolvedValue(undefined),
 			upsertUnresolvedMention: vi.fn(),
 			markUnresolvedPromoted: vi.fn(),
+			findPagesByExactTitle: vi.fn().mockResolvedValue([]),
+			findMemoryUnitPageSources: vi.fn().mockResolvedValue([]),
 			normalizeAlias: (s: string) => s.toLowerCase().trim(),
 		};
 		const mockPlanner = { runPlanner: vi.fn() };
@@ -337,10 +345,16 @@ vi.mock("../lib/wiki/repository.js", async (importOriginal) => {
 		listPageSections: (...args: unknown[]) =>
 			mockRepo.listPageSections(...args),
 		upsertPage: (...args: unknown[]) => mockRepo.upsertPage(...args),
+		upsertPageLink: (...args: unknown[]) =>
+			mockRepo.upsertPageLink(...args),
 		upsertUnresolvedMention: (...args: unknown[]) =>
 			mockRepo.upsertUnresolvedMention(...args),
 		markUnresolvedPromoted: (...args: unknown[]) =>
 			mockRepo.markUnresolvedPromoted(...args),
+		findPagesByExactTitle: (...args: unknown[]) =>
+			mockRepo.findPagesByExactTitle(...args),
+		findMemoryUnitPageSources: (...args: unknown[]) =>
+			mockRepo.findMemoryUnitPageSources(...args),
 	};
 });
 
@@ -432,7 +446,15 @@ describe("runCompileJob", () => {
 		mockRepo.listPagesForScope.mockResolvedValue([]);
 		mockRepo.listOpenMentions.mockResolvedValue([]);
 		mockRepo.listPageSections.mockResolvedValue([]);
-		mockRepo.upsertPage.mockResolvedValue({ id: "page-new" });
+		mockRepo.upsertPage.mockResolvedValue({
+			id: "page-new",
+			type: "entity",
+			slug: "page-new",
+			title: "page-new",
+		});
+		mockRepo.upsertPageLink.mockResolvedValue(undefined);
+		mockRepo.findPagesByExactTitle.mockResolvedValue([]);
+		mockRepo.findMemoryUnitPageSources.mockResolvedValue([]);
 		// No alias collisions by default; individual tests override when
 		// exercising the dedup path.
 		mockRepo.findAliasMatches.mockResolvedValue([]);

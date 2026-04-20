@@ -84,6 +84,129 @@ export interface EmitDeterministicParentLinksResult {
 	}>;
 }
 
+/** Per-memory directed-edge cap (plan Unit 3). A 4-page co-mention already
+ * produces 12 directed edges — beyond this threshold we truncate rather
+ * than writing a combinatorial fan-out for a single memory. Pages are
+ * sorted slug-asc before truncation so the live compile and the backfill
+ * converge on the same edge set. */
+export const CO_MENTION_DIRECTED_EDGE_CAP = 10;
+
+export interface CoMentionSource {
+	memory_unit_id: string;
+	page_id: string;
+	page_type: WikiPageType;
+	slug: string;
+	title: string;
+}
+
+export interface LookupMemorySourcesArgs {
+	tenantId: string;
+	ownerId: string;
+	memoryUnitIds: string[];
+}
+
+export type LookupMemorySources = (
+	args: LookupMemorySourcesArgs,
+) => Promise<CoMentionSource[]>;
+
+export interface EmitCoMentionLinksArgs {
+	scope: { tenantId: string; ownerId: string };
+	memoryUnitIds: string[];
+	lookupMemorySources: LookupMemorySources;
+	writeLink: (args: WriteLinkArgs) => Promise<void>;
+}
+
+export interface EmitCoMentionLinksResult {
+	linksWritten: number;
+	emissions: Array<{
+		fromPageId: string;
+		toPageId: string;
+		memoryUnitId: string;
+	}>;
+}
+
+/**
+ * Emit reciprocal `reference` links between entity pages sourced by the
+ * same `memory_unit`. Reads `wiki_section_sources` via the injected
+ * `lookupMemorySources` callback so the live compile and the Unit 4
+ * backfill share one code path. Topic and decision endpoints are
+ * filtered out — their relationships are the LLM aggregation planner's
+ * call, not co-mention evidence.
+ */
+export async function emitCoMentionLinks(
+	args: EmitCoMentionLinksArgs,
+): Promise<EmitCoMentionLinksResult> {
+	const { scope, memoryUnitIds, lookupMemorySources, writeLink } = args;
+	const result: EmitCoMentionLinksResult = {
+		linksWritten: 0,
+		emissions: [],
+	};
+	if (memoryUnitIds.length === 0) return result;
+
+	const rows = await lookupMemorySources({
+		tenantId: scope.tenantId,
+		ownerId: scope.ownerId,
+		memoryUnitIds,
+	});
+
+	// Group entity-type sources by memory_unit, dedup'd by page_id.
+	const byMemory = new Map<string, Map<string, CoMentionSource>>();
+	for (const row of rows) {
+		if (!LINKABLE_LEAF_TYPES.has(row.page_type)) continue;
+		let pages = byMemory.get(row.memory_unit_id);
+		if (!pages) {
+			pages = new Map();
+			byMemory.set(row.memory_unit_id, pages);
+		}
+		if (!pages.has(row.page_id)) pages.set(row.page_id, row);
+	}
+
+	for (const [memoryUnitId, pageMap] of byMemory) {
+		if (pageMap.size < 2) continue;
+
+		// Deterministic slug-asc ordering — so truncation to
+		// CO_MENTION_DIRECTED_EDGE_CAP picks the same edges whether we're
+		// running live or backfilling.
+		const pages = Array.from(pageMap.values()).sort((a, b) =>
+			a.slug.localeCompare(b.slug),
+		);
+
+		const pairs: Array<[CoMentionSource, CoMentionSource]> = [];
+		outer: for (let i = 0; i < pages.length; i++) {
+			for (let j = 0; j < pages.length; j++) {
+				if (i === j) continue;
+				pairs.push([pages[i]!, pages[j]!]);
+				if (pairs.length >= CO_MENTION_DIRECTED_EDGE_CAP) break outer;
+			}
+		}
+
+		const context = `co_mention:${memoryUnitId}`;
+		for (const [from, to] of pairs) {
+			try {
+				await writeLink({
+					fromPageId: from.page_id,
+					toPageId: to.page_id,
+					context,
+				});
+				result.linksWritten += 1;
+				result.emissions.push({
+					fromPageId: from.page_id,
+					toPageId: to.page_id,
+					memoryUnitId,
+				});
+			} catch (err) {
+				const msg = (err as Error)?.message || String(err);
+				console.warn(
+					`[co-mention-linker] writeLink failed from=${from.page_id} `
+						+ `to=${to.page_id} mem=${memoryUnitId}: ${msg}`,
+				);
+			}
+		}
+	}
+
+	return result;
+}
+
 export async function emitDeterministicParentLinks(
 	args: EmitDeterministicParentLinksArgs,
 ): Promise<EmitDeterministicParentLinksResult> {

@@ -18,6 +18,7 @@ import {
 	completeCompileJob,
 	emptySectionAggregation,
 	findAliasMatches,
+	findMemoryUnitPageSources,
 	findPageById,
 	findPageBySlug,
 	findPagesByExactTitle,
@@ -43,6 +44,7 @@ import {
 	type WikiPageType,
 } from "./repository.js";
 import {
+	emitCoMentionLinks,
 	emitDeterministicParentLinks,
 	type AffectedPage,
 } from "./deterministic-linker.js";
@@ -688,30 +690,63 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 		}
 	}
 
-	// 6. Deterministic parent linking — emit `reference` edges from leaf
-	// entity pages to their city/journal topic parent when an exact-title
-	// match exists in scope. Only fires for pages touched by this call,
-	// so routine scope-wide compiles don't churn unrelated links.
+	// 6. Deterministic link emission — flag-gated. Two emitters:
+	//    a) Parent links: `city` / `journal` candidates → exact-title parent.
+	//    b) Co-mention links: reciprocal entity↔entity edges when the same
+	//       memory_unit sourced ≥2 entity pages in this batch.
+	// Both only look at pages this call touched; neither re-examines the
+	// whole scope, so routine scope-wide compiles don't churn unrelated
+	// links. Errors inside either emitter are swallowed per-candidate, so
+	// the compile never fails on link-writing alone.
 	if (!isDeterministicLinkingEnabled()) {
 		metrics.deterministic_linking_flag_suppressed = true;
 	} else if (affectedPages.length > 0 && records.length > 0) {
+		const scope = { tenantId: job.tenant_id, ownerId: job.owner_id };
+		const writeLink = (linkArgs: {
+			fromPageId: string;
+			toPageId: string;
+			context: string;
+		}): Promise<void> =>
+			upsertPageLink({
+				fromPageId: linkArgs.fromPageId,
+				toPageId: linkArgs.toPageId,
+				context: linkArgs.context,
+			});
+
 		const candidates = deriveParentCandidates(records);
 		if (candidates.length > 0) {
-			const emission = await emitDeterministicParentLinks({
-				scope: { tenantId: job.tenant_id, ownerId: job.owner_id },
+			const parentEmission = await emitDeterministicParentLinks({
+				scope,
 				candidates,
 				affectedPages,
 				lookupParentPages: (lookupArgs) =>
 					findPagesByExactTitle(lookupArgs),
-				writeLink: (linkArgs) =>
-					upsertPageLink({
-						fromPageId: linkArgs.fromPageId,
-						toPageId: linkArgs.toPageId,
-						context: linkArgs.context,
-					}),
+				writeLink,
 			});
 			metrics.links_written_deterministic =
-				(metrics.links_written_deterministic ?? 0) + emission.linksWritten;
+				(metrics.links_written_deterministic ?? 0) +
+				parentEmission.linksWritten;
+		}
+
+		// Co-mention emission runs on this batch's memory_unit ids — read
+		// back via `wiki_section_sources` so we catch links through sections
+		// this applyPlan just wrote.
+		const batchMemoryIds = Array.from(
+			new Set(
+				affectedPages.flatMap((p) => p.sourceRecordIds),
+			),
+		);
+		if (batchMemoryIds.length > 0) {
+			const coMentionEmission = await emitCoMentionLinks({
+				scope,
+				memoryUnitIds: batchMemoryIds,
+				lookupMemorySources: (lookupArgs) =>
+					findMemoryUnitPageSources(lookupArgs),
+				writeLink,
+			});
+			metrics.links_written_co_mention =
+				(metrics.links_written_co_mention ?? 0) +
+				coMentionEmission.linksWritten;
 		}
 	}
 

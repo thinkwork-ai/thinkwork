@@ -521,6 +521,64 @@ export async function findPagesByExactTitle(
 	}>;
 }
 
+/**
+ * For each (memory_unit, page) pair in scope, return the page's type + slug
+ * so the co-mention linker can filter to entity↔entity pairs and order
+ * deterministically. Joins `wiki_section_sources → wiki_page_sections →
+ * wiki_pages`, filtered to active pages in the requested (tenant, owner)
+ * scope. The same query is used by the live compile and the Unit 4
+ * backfill — that shared surface is the whole reason co-mention emission
+ * reads this table rather than the planner's pageLinks wire.
+ */
+export async function findMemoryUnitPageSources(
+	args: {
+		tenantId: string;
+		ownerId: string;
+		memoryUnitIds: string[];
+	},
+	db: DbClient = defaultDb,
+): Promise<
+	Array<{
+		memory_unit_id: string;
+		page_id: string;
+		page_type: WikiPageType;
+		slug: string;
+		title: string;
+	}>
+> {
+	if (args.memoryUnitIds.length === 0) return [];
+	const rows = await db
+		.selectDistinct({
+			memory_unit_id: wikiSectionSources.source_ref,
+			page_id: wikiPages.id,
+			page_type: wikiPages.type,
+			slug: wikiPages.slug,
+			title: wikiPages.title,
+		})
+		.from(wikiSectionSources)
+		.innerJoin(
+			wikiPageSections,
+			eq(wikiSectionSources.section_id, wikiPageSections.id),
+		)
+		.innerJoin(wikiPages, eq(wikiPageSections.page_id, wikiPages.id))
+		.where(
+			and(
+				eq(wikiSectionSources.source_kind, "memory_unit"),
+				inArray(wikiSectionSources.source_ref, args.memoryUnitIds),
+				eq(wikiPages.tenant_id, args.tenantId),
+				eq(wikiPages.owner_id, args.ownerId),
+				eq(wikiPages.status, "active"),
+			),
+		);
+	return rows as Array<{
+		memory_unit_id: string;
+		page_id: string;
+		page_type: WikiPageType;
+		slug: string;
+		title: string;
+	}>;
+}
+
 export async function findPageById(
 	pageId: string,
 	db: DbClient = defaultDb,
