@@ -221,3 +221,9 @@ variable "wiki_aggregation_pass_enabled" {
   type        = string
   default     = "true"
 }
+
+variable "wiki_deterministic_linking_enabled" {
+  description = "Feature flag for deterministic compile-time link emission (parent-expander-driven city/journal references + entity↔entity co-mention edges). When off, the compile pipeline never calls the deterministic linkers and `links_written_deterministic` / `links_written_co_mention` stay at 0 in metrics. Stored as a string because the Lambda reads it verbatim from env; must be 'true' / '1' / 'yes' to enable."
+  type        = string
+  default     = "true"
+}

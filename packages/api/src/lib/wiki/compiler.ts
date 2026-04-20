@@ -16,6 +16,7 @@ import type { ThinkWorkMemoryRecord } from "../memory/types.js";
 import { getMemoryServices } from "../memory/index.js";
 import {
 	completeCompileJob,
+	countDuplicateTitleCandidates,
 	emptySectionAggregation,
 	findAliasMatches,
 	findMemoryUnitPageSources,
@@ -334,6 +335,22 @@ export async function runCompileJob(
 			metrics.input_tokens,
 			metrics.output_tokens,
 		);
+		// R5 canary — (owner, title) duplicate-page count. Tracked per-job
+		// so any rise tied to the deterministic-linking flag is trivially
+		// diffable from the CloudWatch time series. Errors here don't fail
+		// the job; canary absence is safer than losing the compile.
+		try {
+			metrics.duplicate_candidates_count =
+				await countDuplicateTitleCandidates({
+					tenantId: job.tenant_id,
+					ownerId: job.owner_id,
+				});
+		} catch (canaryErr) {
+			console.warn(
+				`[wiki-compiler] duplicate-candidates canary failed for job=${job.id}:`,
+				(canaryErr as Error)?.message ?? canaryErr,
+			);
+		}
 		await completeCompileJob({
 			jobId: job.id,
 			status: "succeeded",

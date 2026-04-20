@@ -491,6 +491,31 @@ export async function findPageBySlug(
  * Returns all hits so callers can log title collisions rather than silently
  * picking one.
  */
+/**
+ * R5 canary for the link-densification plan — count of (owner_id, title)
+ * pairs with more than one active page. Rising means densification may be
+ * creating duplicate hubs. Called once per compile job so the time series
+ * shows up in CloudWatch next to `links_written_*`.
+ */
+export async function countDuplicateTitleCandidates(
+	args: { tenantId: string; ownerId: string },
+	db: DbClient = defaultDb,
+): Promise<number> {
+	const rows = (await db.execute(sql`
+		SELECT COUNT(*)::int AS n
+		FROM (
+			SELECT ${wikiPages.owner_id}, ${wikiPages.title}
+			FROM ${wikiPages}
+			WHERE ${wikiPages.tenant_id} = ${args.tenantId}
+				AND ${wikiPages.owner_id} = ${args.ownerId}
+				AND ${wikiPages.status} = 'active'
+			GROUP BY ${wikiPages.owner_id}, ${wikiPages.title}
+			HAVING COUNT(*) > 1
+		) dup
+	`)) as unknown as Array<{ n: number }>;
+	return rows[0]?.n ?? 0;
+}
+
 export async function findPagesByExactTitle(
 	args: { tenantId: string; ownerId: string; title: string },
 	db: DbClient = defaultDb,
