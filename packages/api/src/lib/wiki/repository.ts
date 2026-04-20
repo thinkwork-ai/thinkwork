@@ -982,6 +982,97 @@ export async function findAliasMatches(
 	}));
 }
 
+/** Trigram similarity threshold for fuzzy alias / title matching. Matches
+ * the `hindsight_recall_filter.py` bar — keep aligned so duplicate-detection
+ * behavior stays consistent across the repo. */
+export const FUZZY_ALIAS_THRESHOLD = 0.85;
+
+/**
+ * Trigram-fallback variant of `findAliasMatches`. Returns every alias in
+ * scope whose Postgres `similarity()` against `aliasNormalized` is
+ * ≥ `FUZZY_ALIAS_THRESHOLD` (0.85). Filters to active pages only so
+ * archived doppelgangers don't silently resurrect. Returns rows with the
+ * matched page's `type` + `status` so callers can apply the type-mismatch
+ * gate without a second lookup.
+ *
+ * Relies on the `idx_wiki_page_aliases_alias_trgm` GIN index from migration
+ * 0015 for query performance; the function itself falls back to sequential
+ * scan + returns empty if `pg_trgm` isn't installed (see Unit 3 fallback).
+ */
+export async function findAliasMatchesFuzzy(
+	args: {
+		tenantId: string;
+		ownerId: string;
+		aliasNormalized: string;
+		threshold?: number;
+	},
+	db: DbClient = defaultDb,
+): Promise<
+	Array<{
+		pageId: string;
+		aliasId: string;
+		aliasText: string;
+		similarity: number;
+		pageType: WikiPageType;
+		pageStatus: string;
+	}>
+> {
+	const threshold = args.threshold ?? FUZZY_ALIAS_THRESHOLD;
+	try {
+		const result = await db.execute(sql`
+			SELECT
+				${wikiPageAliases.page_id}    AS "pageId",
+				${wikiPageAliases.id}         AS "aliasId",
+				${wikiPageAliases.alias}      AS "aliasText",
+				similarity(${wikiPageAliases.alias}, ${args.aliasNormalized}) AS "similarity",
+				${wikiPages.type}             AS "pageType",
+				${wikiPages.status}           AS "pageStatus"
+			FROM ${wikiPageAliases}
+			INNER JOIN ${wikiPages}
+				ON ${wikiPageAliases.page_id} = ${wikiPages.id}
+			WHERE ${wikiPages.tenant_id} = ${args.tenantId}
+				AND ${wikiPages.owner_id} = ${args.ownerId}
+				AND ${wikiPages.status} = 'active'
+				AND similarity(${wikiPageAliases.alias}, ${args.aliasNormalized}) >= ${threshold}
+			ORDER BY similarity(${wikiPageAliases.alias}, ${args.aliasNormalized}) DESC
+			LIMIT 20
+		`);
+		const rows =
+			(
+				result as unknown as {
+					rows?: Array<{
+						pageId: string;
+						aliasId: string;
+						aliasText: string;
+						similarity: number | string;
+						pageType: WikiPageType;
+						pageStatus: string;
+					}>;
+				}
+			).rows ?? [];
+		return rows.map((r) => ({
+			pageId: r.pageId,
+			aliasId: r.aliasId,
+			aliasText: r.aliasText,
+			similarity:
+				typeof r.similarity === "string"
+					? Number(r.similarity)
+					: r.similarity,
+			pageType: r.pageType,
+			pageStatus: r.pageStatus,
+		}));
+	} catch (err) {
+		// pg_trgm extension missing / permission issue / syntax reject. Caller
+		// treats this as "no fuzzy matches" so the exact-match code path can
+		// carry on unchanged.
+		console.warn(
+			`[findAliasMatchesFuzzy] similarity query failed, falling back to exact-only:`,
+			(err as Error)?.message ?? err,
+		);
+		return [];
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Unresolved mentions
 // ---------------------------------------------------------------------------
