@@ -22,14 +22,21 @@ interface GraphCanvasProps {
   subgraph: WikiSubgraph;
   selectedNodeId: string | null;
   transform: ReturnType<typeof useGraphCamera>["transform"];
+  /**
+   * Node ids to render dimmed (15% opacity for the node, no label).
+   * Edges are dimmed when both endpoints are dimmed.
+   */
+  dimmedNodeIds?: Set<string>;
 }
 
 const SELECTION_RING_OFFSET = 4;
+const DIM_OPACITY = 0.15;
 
 export function GraphCanvas({
   subgraph,
   selectedNodeId,
   transform,
+  dimmedNodeIds,
 }: GraphCanvasProps) {
   const systemScheme = useColorScheme();
   const scheme: ColorScheme = systemScheme === "light" ? "light" : "dark";
@@ -68,6 +75,8 @@ export function GraphCanvas({
           ) {
             return null;
           }
+          const edgeDimmed =
+            !!dimmedNodeIds && dimmedNodeIds.has(a.id) && dimmedNodeIds.has(b.id);
           return (
             <Line
               key={e.id}
@@ -75,11 +84,13 @@ export function GraphCanvas({
               p2={vec(b.x, b.y)}
               color={edgeColor}
               strokeWidth={1}
+              opacity={edgeDimmed ? DIM_OPACITY : 1}
             />
           );
         })}
         {subgraph.nodes.map((n) => {
           if (n.x == null || n.y == null) return null;
+          const isDimmed = !!dimmedNodeIds && dimmedNodeIds.has(n.id);
           return (
             <Circle
               key={n.id}
@@ -87,6 +98,7 @@ export function GraphCanvas({
               cy={n.y}
               r={nodeRadius}
               color={getNodeColor(n.pageType, scheme)}
+              opacity={isDimmed ? DIM_OPACITY : 1}
             />
           );
         })}
@@ -103,6 +115,7 @@ export function GraphCanvas({
         {labelFont
           ? subgraph.nodes.map((n) => {
               if (n.x == null || n.y == null) return null;
+              if (dimmedNodeIds?.has(n.id)) return null;
               return (
                 <SkiaText
                   key={`label-${n.id}`}
