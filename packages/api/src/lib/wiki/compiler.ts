@@ -111,6 +111,23 @@ export interface RunJobResult {
 		/** newPages that got folded into an existing page via alias match,
 		 * preventing duplicate entities like "Nana" + "Nana Restaurant". */
 		alias_dedup_merged?: number;
+		// --- Link densification metrics (2026-04-20) --------------------
+		/** Reference links emitted by `emitDeterministicParentLinks` — a
+		 * parent-expander candidate matched an existing active page in scope
+		 * and passed the type-mismatch gate. */
+		links_written_deterministic?: number;
+		/** Reference links emitted by `emitCoMentionLinks` — reciprocal edges
+		 * between entity pages sourced by the same memory_unit (entity↔entity
+		 * only, capped at 10 per memory). */
+		links_written_co_mention?: number;
+		/** (title, owner_id) groups in `wiki_pages` with >1 active row — the
+		 * R5 precision canary. Rising means densification may be creating
+		 * duplicate hubs. */
+		duplicate_candidates_count?: number;
+		/** True when `WIKI_DETERMINISTIC_LINKING_ENABLED` is false, so
+		 * operators can distinguish "flag off" from "no candidates" at a
+		 * glance. */
+		deterministic_linking_flag_suppressed?: boolean;
 	};
 	error?: string;
 }
@@ -1222,6 +1239,9 @@ function emptyMetrics(): RunJobResult["metrics"] {
 		output_tokens: 0,
 		cost_usd: 0,
 		latency_ms: 0,
+		links_written_deterministic: 0,
+		links_written_co_mention: 0,
+		duplicate_candidates_count: 0,
 	};
 }
 

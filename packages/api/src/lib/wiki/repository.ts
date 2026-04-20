@@ -171,7 +171,7 @@ export interface Cursor {
 	recordId: string | null;
 }
 
-type DbClient = typeof defaultDb | PgTransaction<any, any, any>;
+export type DbClient = typeof defaultDb | PgTransaction<any, any, any>;
 
 // ---------------------------------------------------------------------------
 // Alias normalization — shared canonical form for lookup & dedupe
