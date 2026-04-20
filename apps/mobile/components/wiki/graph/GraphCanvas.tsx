@@ -3,12 +3,10 @@ import {
   Circle,
   Group,
   Line,
-  Text as SkiaText,
-  matchFont,
   vec,
 } from "@shopify/react-native-skia";
 import { useMemo } from "react";
-import { Platform, StyleSheet, useColorScheme } from "react-native";
+import { StyleSheet, useColorScheme } from "react-native";
 import type { useGraphCamera } from "./hooks/useGraphCamera";
 import {
   type ColorScheme,
@@ -47,14 +45,8 @@ export function GraphCanvas({
     return m;
   }, [subgraph.nodes]);
 
-  const labelFont = useMemo(() => {
-    const family = Platform.select({ ios: "Inter", default: "Inter" });
-    return matchFont({ fontFamily: family, fontSize: 11, fontWeight: "500" });
-  }, []);
-
   const nodeRadius = getNodeRadius();
   const edgeColor = getEdgeColor(scheme);
-  const labelColor = scheme === "dark" ? "#fafafa" : "#171717";
   const selectedNode = selectedNodeId ? nodesById.get(selectedNodeId) : null;
 
   return (
@@ -112,22 +104,10 @@ export function GraphCanvas({
             strokeWidth={2}
           />
         ) : null}
-        {labelFont
-          ? subgraph.nodes.map((n) => {
-              if (n.x == null || n.y == null) return null;
-              if (dimmedNodeIds?.has(n.id)) return null;
-              return (
-                <SkiaText
-                  key={`label-${n.id}`}
-                  x={n.x + nodeRadius + 4}
-                  y={n.y + 4}
-                  text={n.label}
-                  font={labelFont}
-                  color={labelColor}
-                />
-              );
-            })
-          : null}
+        {/* Labels intentionally omitted — they overlap heavily at default
+            zoom on dense graphs. Page title is shown in the detail sheet
+            when a node is tapped. Re-introduce with zoom-based LOD per
+            PRD §F7 if labels become essential. */}
       </Group>
     </Canvas>
   );
