@@ -136,6 +136,32 @@ export const agentTemplates = {
   imagePath: "/images/admin/agent-templates.png",
 };
 
+export const audit = {
+  eyebrow: "Audit",
+  headline: "Every turn leaves a trace.",
+  lede: "Every tool call, every token, every cost event is captured inside the thread that produced it. The record is durable, tenant-scoped, and ready for a compliance review without additional instrumentation.",
+  features: [
+    {
+      title: "Step-by-step execution",
+      desc: "Every tool call — with its arguments, result, and duration — is captured inline with the turn that fired it.",
+    },
+    {
+      title: "Token + cost per turn",
+      desc: "Every turn records its token use and model spend, so cost lives next to the decision that drove it.",
+    },
+    {
+      title: "Status + attribution",
+      desc: "Thread status, priority, and the agent that ran each step travel with the record — nothing is anonymous.",
+    },
+    {
+      title: "Ready for evals",
+      desc: "The same traces feed directly into the AgentCore evaluator pipeline — one record, inspected two ways.",
+    },
+  ],
+  caption: "Admin web · thread detail and execution trace",
+  imagePath: "/images/admin/thread-detail.png",
+};
+
 export const costControl = {
   eyebrow: "Cost",
   headline: "No surprise invoices from a runaway agent.",
