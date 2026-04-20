@@ -3,7 +3,7 @@ name: my-connector
 description: >
   Send replies back to the external service connected via this connector.
   Use when responding to messages received through the custom connector.
-license: MIT
+license: Apache-2.0
 metadata:
   author: thinkwork
   version: "1.0.0"

@@ -18,9 +18,8 @@ If you want a generic self-hosted agent framework, there are several great proje
 ## Before opening a PR
 
 1. **Open an issue first** for anything non-trivial. We'd rather discuss approach before you write code.
-2. **Sign your commits** (`git commit -s`) — we use the [Developer Certificate of Origin](https://developercertificate.org/).
-3. **Write tests.** New features need tests. Bug fixes need a test that fails on `main` and passes with the fix.
-4. **Run the checks locally** before pushing:
+2. **Write tests.** New features need tests. Bug fixes need a test that fails on `main` and passes with the fix.
+3. **Run the checks locally** before pushing:
    ```bash
    pnpm install
    pnpm lint
@@ -28,8 +27,8 @@ If you want a generic self-hosted agent framework, there are several great proje
    pnpm test
    pnpm format:check
    ```
-5. **Keep PRs focused.** One topic per PR. Refactors and feature changes go in separate PRs.
-6. **Update docs** for any user-visible change. Docs live in `docs/`.
+4. **Keep PRs focused.** One topic per PR. Refactors and feature changes go in separate PRs.
+5. **Update docs** for any user-visible change. Docs live in `docs/`.
 
 ## Repo layout
 
@@ -65,6 +64,14 @@ scripts/     # build, release, migration scripts
 
 This project follows the [Contributor Covenant](./CODE_OF_CONDUCT.md). Be kind.
 
+## Contributor License Agreement (CLA)
+
+Thinkwork requires all contributors to sign a Contributor License Agreement before their pull request can be merged. The CLA lets the project use, relicense, and sublicense your contribution — which is what keeps the project's licensing posture coherent as it grows.
+
+Signing is handled by an automated bot (CLA Assistant) that comments on your pull request with a one-click signing link the first time you contribute. Once signed, it remembers you for future PRs.
+
+The CLA automation is being set up. Until it is live, external PRs will be held rather than merged. If you have a contribution ready in the meantime, open it anyway — we'll get back to you as soon as the bot is wired up.
+
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT license that covers the project.
+By contributing, you agree that your contributions will be licensed under the Apache License 2.0 that covers the project, subject to the terms of the CLA.
