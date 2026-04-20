@@ -99,7 +99,7 @@ TypeScript (apps, packages, CLI, docs) + Python (Strands agent runtime) + Terraf
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md). Issues and discussions are open. Note the AWS-native scope — feature requests that assume a non-AWS substrate will be politely declined.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) and the [CLA](./CLA.md). Issues and discussions are open. Note the AWS-native scope — feature requests that assume a non-AWS substrate will be politely declined.
 
 ## Security
 
