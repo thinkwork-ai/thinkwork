@@ -292,56 +292,6 @@ export const WikiGraphQuery = gql`
   }
 `;
 
-export const WikiSubgraphQuery = gql`
-  query WikiSubgraph(
-    $tenantId: ID!
-    $ownerId: ID!
-    $focalPageId: ID!
-    $depth: Int
-    $atTime: AWSDateTime
-    $pageType: WikiPageType
-  ) {
-    wikiSubgraph(
-      tenantId: $tenantId
-      ownerId: $ownerId
-      focalPageId: $focalPageId
-      depth: $depth
-      atTime: $atTime
-      pageType: $pageType
-    ) {
-      focalPageId
-      depth
-      atTime
-      truncatedNodeCount
-      nodes {
-        id
-        type
-        slug
-        title
-        summary
-        status
-        lastCompiledAt
-        updatedAt
-      }
-      edges {
-        id
-        fromPageId
-        toPageId
-        kind
-        context
-        firstSeenAt
-        lastSeenAt
-        isCurrent
-        weight
-      }
-      hasMore {
-        pageId
-        hasMore
-      }
-    }
-  }
-`;
-
 export const MobileMemorySearchQuery = gql`
   query MobileMemorySearch($agentId: ID!, $query: String!, $limit: Int) {
     mobileWikiSearch(agentId: $agentId, query: $query, limit: $limit) {
