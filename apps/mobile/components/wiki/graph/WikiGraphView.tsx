@@ -116,10 +116,6 @@ export function WikiGraphView({
                 type: selectedNode.pageType,
                 slug: selectedNode.slug,
                 title: selectedNode.label,
-                summary: selectedNode.summaryPreview ?? null,
-                status: selectedNode.status,
-                lastCompiledAt: selectedNode.lastCompiledAt,
-                updatedAt: selectedNode.lastCompiledAt,
               }
             : null
         }

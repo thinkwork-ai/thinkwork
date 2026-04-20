@@ -39,13 +39,6 @@ export {
   type WikiBacklink,
 } from "./hooks/use-wiki-page";
 export {
-  useWikiSubgraph,
-  type WikiSubgraphPayload,
-  type WikiSubgraphPage,
-  type WikiSubgraphLink,
-  type WikiSubgraphHasMoreEntry,
-} from "./hooks/use-wiki-subgraph";
-export {
   useWikiGraph,
   type WikiGraphPayload,
   type WikiGraphNodeFromServer,
