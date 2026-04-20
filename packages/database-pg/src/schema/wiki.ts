@@ -136,6 +136,12 @@ export const wikiPages = pgTable(
 		index("idx_wiki_pages_search_tsv").using("gin", table.search_tsv),
 		// Fast lookup of child pages for hierarchy navigation.
 		index("idx_wiki_pages_parent").on(table.parent_page_id),
+		// Trigram GIN index on title — powers fuzzy page lookup in the
+		// compiler's newPage dedupe path. Requires `pg_trgm` extension.
+		index("idx_wiki_pages_title_trgm").using(
+			"gin",
+			sql`${table.title} gin_trgm_ops`,
+		),
 	],
 );
 
@@ -253,6 +259,13 @@ export const wikiPageAliases = pgTable(
 			table.alias,
 		),
 		index("idx_wiki_page_aliases_alias").on(table.alias),
+		// Trigram GIN on alias — powers fuzzy alias matching
+		// (`findAliasMatchesFuzzy`) so variants like "Paris, France" collapse
+		// onto existing "Paris" pages instead of splintering the wiki.
+		index("idx_wiki_page_aliases_alias_trgm").using(
+			"gin",
+			sql`${table.alias} gin_trgm_ops`,
+		),
 	],
 );
 

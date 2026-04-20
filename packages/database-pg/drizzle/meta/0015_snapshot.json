@@ -1,6 +1,6 @@
 {
-  "id": "35ef8887-e5f1-42ea-a933-0d9f97986cba",
-  "prevId": "8e065d6d-ea59-4602-935d-958465bf29d2",
+  "id": "d8cb375e-1dce-49e9-a79d-fba20c8d19ee",
+  "prevId": "35ef8887-e5f1-42ea-a933-0d9f97986cba",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -11515,6 +11515,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "idx_wiki_page_aliases_alias_trgm": {
+          "name": "idx_wiki_page_aliases_alias_trgm",
+          "columns": [
+            {
+              "expression": "\"alias\" gin_trgm_ops",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -12050,6 +12065,21 @@
           "isUnique": false,
           "concurrently": false,
           "method": "btree",
+          "with": {}
+        },
+        "idx_wiki_pages_title_trgm": {
+          "name": "idx_wiki_pages_title_trgm",
+          "columns": [
+            {
+              "expression": "\"title\" gin_trgm_ops",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
           "with": {}
         }
       },

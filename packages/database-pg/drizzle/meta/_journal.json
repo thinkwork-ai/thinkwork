@@ -99,6 +99,13 @@
       "when": 1776604237639,
       "tag": "0014_wiki_aggregation",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1776694413971,
+      "tag": "0015_pg_trgm_alias_title_indexes",
+      "breakpoints": true
     }
   ]
 }

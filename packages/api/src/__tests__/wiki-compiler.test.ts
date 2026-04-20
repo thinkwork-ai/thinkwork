@@ -299,6 +299,7 @@ const { mockAdapter, mockRepo, mockPlanner, mockWriter, mockGetServices } =
 			completeCompileJob: vi.fn(),
 			findPageById: vi.fn(),
 			findAliasMatches: vi.fn().mockResolvedValue([]),
+			findAliasMatchesFuzzy: vi.fn().mockResolvedValue([]),
 			listPagesForScope: vi.fn().mockResolvedValue([]),
 			listOpenMentions: vi.fn().mockResolvedValue([]),
 			listPageSections: vi.fn().mockResolvedValue([]),
@@ -339,6 +340,8 @@ vi.mock("../lib/wiki/repository.js", async (importOriginal) => {
 		findPageById: (...args: unknown[]) => mockRepo.findPageById(...args),
 		findAliasMatches: (...args: unknown[]) =>
 			mockRepo.findAliasMatches(...args),
+		findAliasMatchesFuzzy: (...args: unknown[]) =>
+			mockRepo.findAliasMatchesFuzzy(...args),
 		listPagesForScope: (...args: unknown[]) =>
 			mockRepo.listPagesForScope(...args),
 		listOpenMentions: (...args: unknown[]) =>
@@ -462,6 +465,7 @@ describe("runCompileJob", () => {
 		// No alias collisions by default; individual tests override when
 		// exercising the dedup path.
 		mockRepo.findAliasMatches.mockResolvedValue([]);
+		mockRepo.findAliasMatchesFuzzy.mockResolvedValue([]);
 	});
 
 	it("creates a new page from the planner's newPages output", async () => {
@@ -753,5 +757,189 @@ describe("runCompileJob", () => {
 				process.env.WIKI_DETERMINISTIC_LINKING_ENABLED = restore;
 			}
 		}
+	});
+
+	// ─── Fuzzy alias dedupe (pg_trgm fallback) ──────────────────────────
+	//
+	// maybeMergeIntoExistingPage runs exact alias match first and falls
+	// through to trigram similarity only when exact misses. These tests
+	// pin the gates: type mismatch never merges, archived pages don't
+	// resurrect, pg_trgm-unavailable is a graceful fall-back to create-
+	// new-page (via the helper's internal try/catch).
+	describe("runCompileJob → fuzzy alias dedupe", () => {
+		function plannerWithNewPage(title: string, slug: string): void {
+			mockPlanner.runPlanner.mockResolvedValueOnce({
+				pageUpdates: [],
+				newPages: [
+					{
+						type: "entity",
+						slug,
+						title,
+						sections: [
+							{
+								slug: "overview",
+								heading: "Overview",
+								body_md: "body",
+							},
+						],
+						source_refs: ["r1"],
+					},
+				],
+				unresolvedMentions: [],
+				promotions: [],
+				usage: { inputTokens: 1, outputTokens: 1 },
+			});
+		}
+
+		it("folds a newPage into an existing entity when a 0.90+ trigram alias match exists (same type)", async () => {
+			scriptAdapter([
+				{ records: [makeRecord("r1")], nextCursor: null },
+				{ records: [], nextCursor: null },
+			]);
+			plannerWithNewPage("Austin, TX", "austin-tx");
+			mockRepo.findAliasMatchesFuzzy.mockResolvedValue([
+				{
+					pageId: "existing-austin",
+					aliasId: "alias-1",
+					aliasText: "austin",
+					similarity: 0.91,
+					pageType: "entity",
+					pageStatus: "active",
+				},
+			]);
+			mockRepo.findPageById.mockResolvedValue({
+				id: "existing-austin",
+				tenant_id: "t1",
+				owner_id: "a1",
+				type: "entity",
+				slug: "austin",
+				title: "Austin",
+				status: "active",
+			});
+
+			const result = await runCompileJob(sampleJob);
+
+			expect(result.status).toBe("succeeded");
+			expect(result.metrics.fuzzy_dedupe_merges).toBe(1);
+			expect(result.metrics.alias_dedup_merged).toBeFalsy();
+			// Merged via the existing page's slug, not the planner's proposed one.
+			expect(mockRepo.upsertPage).toHaveBeenCalledWith(
+				expect.objectContaining({ slug: "austin" }),
+			);
+		});
+
+		it("does NOT merge when the trigram match is on a page of a different type (type-mismatch gate)", async () => {
+			scriptAdapter([
+				{ records: [makeRecord("r1")], nextCursor: null },
+				{ records: [], nextCursor: null },
+			]);
+			plannerWithNewPage("Austin", "austin");
+			// Fuzzy match exists but on a `topic` page — proposal is `entity`.
+			mockRepo.findAliasMatchesFuzzy.mockResolvedValue([
+				{
+					pageId: "topic-austin",
+					aliasId: "alias-1",
+					aliasText: "austin",
+					similarity: 0.95,
+					pageType: "topic",
+					pageStatus: "active",
+				},
+			]);
+
+			const result = await runCompileJob(sampleJob);
+
+			expect(result.status).toBe("succeeded");
+			expect(result.metrics.fuzzy_dedupe_merges ?? 0).toBe(0);
+			expect(result.metrics.alias_dedup_merged ?? 0).toBe(0);
+			// A new entity page was created (didn't merge into the topic).
+			expect(mockRepo.findPageById).not.toHaveBeenCalledWith("topic-austin");
+		});
+
+		it("skips fuzzy hits on archived pages (no silent resurrect)", async () => {
+			scriptAdapter([
+				{ records: [makeRecord("r1")], nextCursor: null },
+				{ records: [], nextCursor: null },
+			]);
+			plannerWithNewPage("Austin", "austin-new");
+			// Repo helper already filters `status=active`, but we double-gate
+			// at the merge function too. Simulate a rogue archived row slipping
+			// past the query.
+			mockRepo.findAliasMatchesFuzzy.mockResolvedValue([
+				{
+					pageId: "archived-austin",
+					aliasId: "alias-1",
+					aliasText: "austin",
+					similarity: 0.97,
+					pageType: "entity",
+					pageStatus: "archived",
+				},
+			]);
+			mockRepo.findPageById.mockResolvedValue({
+				id: "archived-austin",
+				tenant_id: "t1",
+				owner_id: "a1",
+				type: "entity",
+				slug: "austin",
+				title: "Austin",
+				status: "archived",
+			});
+
+			const result = await runCompileJob(sampleJob);
+
+			expect(result.status).toBe("succeeded");
+			expect(result.metrics.fuzzy_dedupe_merges ?? 0).toBe(0);
+		});
+
+		it("prefers exact-match hits when both exact and fuzzy would match (metric lands under alias_dedup_merged, not fuzzy)", async () => {
+			scriptAdapter([
+				{ records: [makeRecord("r1")], nextCursor: null },
+				{ records: [], nextCursor: null },
+			]);
+			// Title slugs differently from the existing page's slug so the
+			// merge path actually fires (short-circuit skips when slugs match).
+			plannerWithNewPage("Austin Texas", "austin-texas-unused");
+			mockRepo.findAliasMatches.mockResolvedValue([
+				{
+					pageId: "existing-austin",
+					aliasId: "alias-1",
+					aliasText: "austin",
+				},
+			]);
+			mockRepo.findPageById.mockResolvedValue({
+				id: "existing-austin",
+				tenant_id: "t1",
+				owner_id: "a1",
+				type: "entity",
+				slug: "austin",
+				title: "Austin",
+				status: "active",
+			});
+
+			const result = await runCompileJob(sampleJob);
+
+			expect(result.status).toBe("succeeded");
+			expect(result.metrics.alias_dedup_merged).toBe(1);
+			expect(result.metrics.fuzzy_dedupe_merges ?? 0).toBe(0);
+			// Fuzzy helper is never even consulted when exact resolved.
+			expect(mockRepo.findAliasMatchesFuzzy).not.toHaveBeenCalled();
+		});
+
+		it("falls through cleanly when both exact and fuzzy return empty (creates the newPage)", async () => {
+			scriptAdapter([
+				{ records: [makeRecord("r1")], nextCursor: null },
+				{ records: [], nextCursor: null },
+			]);
+			plannerWithNewPage("Paris", "paris");
+			// Default mocks: both findAliasMatches & findAliasMatchesFuzzy
+			// return []. The fuzzy helper internally swallows pg_trgm errors so
+			// a missing extension looks identical to this case.
+
+			const result = await runCompileJob(sampleJob);
+
+			expect(result.status).toBe("succeeded");
+			expect(result.metrics.pages_upserted).toBe(1);
+			expect(result.metrics.fuzzy_dedupe_merges ?? 0).toBe(0);
+			expect(result.metrics.alias_dedup_merged ?? 0).toBe(0);
+		});
 	});
 });
