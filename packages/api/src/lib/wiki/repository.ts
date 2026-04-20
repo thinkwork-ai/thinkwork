@@ -1134,7 +1134,16 @@ export async function upsertUnresolvedMention(
 		};
 	}
 
-	const [inserted] = await db
+	// Race-tolerant insert: the SELECT-then-INSERT window above is not
+	// atomic. On a cursor-reset recompile (or any flow that re-emits the
+	// same alias quickly), a sibling process can land the open row between
+	// our SELECT and our INSERT, yielding a unique-index violation on
+	// `(tenant_id, owner_id, alias_normalized, status)`. Switching to
+	// ON CONFLICT DO NOTHING lets the caller progress; when the conflict
+	// fires, we re-read the winning row and drive the same update path the
+	// happy case would — so mention_count and sample_contexts still
+	// accumulate (just one generation behind in the race case).
+	const insertedRows = await db
 		.insert(wikiUnresolvedMentions)
 		.values({
 			tenant_id: input.tenant_id,
@@ -1144,14 +1153,68 @@ export async function upsertUnresolvedMention(
 			suggested_type: input.suggested_type ?? null,
 			sample_contexts: contextEntry ? [contextEntry] : [],
 		})
+		.onConflictDoNothing()
 		.returning({
 			id: wikiUnresolvedMentions.id,
 			mention_count: wikiUnresolvedMentions.mention_count,
 		});
+
+	if (insertedRows.length > 0) {
+		return {
+			id: insertedRows[0]!.id,
+			mention_count: insertedRows[0]!.mention_count,
+			inserted: true,
+		};
+	}
+
+	// Conflict path: someone else inserted the open row. Re-read it and
+	// apply the same update the first branch would have applied if the
+	// SELECT had found it.
+	const winnerRows = await db
+		.select()
+		.from(wikiUnresolvedMentions)
+		.where(
+			and(
+				eq(wikiUnresolvedMentions.tenant_id, input.tenant_id),
+				eq(wikiUnresolvedMentions.owner_id, input.owner_id),
+				eq(wikiUnresolvedMentions.alias_normalized, input.alias_normalized),
+				eq(wikiUnresolvedMentions.status, "open"),
+			),
+		)
+		.limit(1);
+	if (!winnerRows[0]) {
+		// Conflict reported but re-read returned nothing — possible only if
+		// the winning row was promoted/archived in the micro-gap between our
+		// INSERT and our follow-up SELECT. Treat as a no-op; the next
+		// planner invocation will re-attempt cleanly.
+		console.warn(
+			`[upsertUnresolvedMention] conflict without winner for ` +
+				`(tenant=${input.tenant_id}, owner=${input.owner_id}, ` +
+				`alias=${input.alias_normalized})`,
+		);
+		return { id: "", mention_count: 0, inserted: false };
+	}
+	const winner = winnerRows[0] as any;
+	const winnerSamples = contextEntry
+		? [contextEntry, ...((winner.sample_contexts ?? []) as any[])].slice(
+				0,
+				MAX_SAMPLE_CONTEXTS,
+			)
+		: winner.sample_contexts;
+	await db
+		.update(wikiUnresolvedMentions)
+		.set({
+			mention_count: sql`${wikiUnresolvedMentions.mention_count} + 1`,
+			last_seen_at: sql`now()` as any,
+			sample_contexts: winnerSamples,
+			suggested_type: input.suggested_type ?? winner.suggested_type,
+			updated_at: sql`now()` as any,
+		})
+		.where(eq(wikiUnresolvedMentions.id, winner.id));
 	return {
-		id: inserted!.id,
-		mention_count: inserted!.mention_count,
-		inserted: true,
+		id: winner.id,
+		mention_count: (winner.mention_count as number) + 1,
+		inserted: false,
 	};
 }
 
