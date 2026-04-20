@@ -120,6 +120,7 @@ export function KnowledgeGraph({
     camera.tx.value = cached.tx;
     camera.ty.value = cached.ty;
     camera.scale.value = cached.scale;
+    lastFittedSizeRef.current = { width: size.width, height: size.height };
     setRevealed(true);
   }, [cacheKey, size, subgraph, camera]);
 
@@ -135,6 +136,27 @@ export function KnowledgeGraph({
     return () => clearTimeout(t);
   }, []);
 
+  // Re-fit whenever the canvas size changes after the initial reveal —
+  // e.g. the user toggles split/full-graph on the detail screen. The
+  // initial reveal handles first size; this handles subsequent ones.
+  const lastFittedSizeRef = useRef<{ width: number; height: number } | null>(
+    null,
+  );
+  useEffect(() => {
+    if (!size) return;
+    if (!hasRevealedRef.current && !restoredRef.current) return;
+    const prev = lastFittedSizeRef.current;
+    if (prev && prev.width === size.width && prev.height === size.height) {
+      return;
+    }
+    lastFittedSizeRef.current = { width: size.width, height: size.height };
+    if (!prev) return; // first known size was handled by reveal/restore
+    const target = computeFit(subgraph.nodes, size.width, size.height, {
+      maxScale: 1,
+    });
+    camera.animateTo(target, FIT_ANIM_MS);
+  }, [size, subgraph, camera]);
+
   const hasRevealedRef = useRef(false);
   useEffect(() => {
     if (!preRevealComplete || !size) return;
@@ -142,6 +164,7 @@ export function KnowledgeGraph({
     if (hasRevealedRef.current) return;
     if (userInteractedRef.current) return;
     hasRevealedRef.current = true;
+    lastFittedSizeRef.current = { width: size.width, height: size.height };
     const target = computeFit(subgraph.nodes, size.width, size.height, {
       maxScale: 1,
     });

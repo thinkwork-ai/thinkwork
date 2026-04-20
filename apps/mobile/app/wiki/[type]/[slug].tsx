@@ -4,7 +4,11 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import type { Router } from "expo-router";
 import Markdown from "react-native-markdown-display";
 import { useColorScheme } from "nativewind";
-import { IconTopologyStar3 } from "@tabler/icons-react-native";
+import {
+	IconAlignLeft,
+	IconLayoutRows,
+	IconTopologyStar3,
+} from "@tabler/icons-react-native";
 import { useAuth } from "@/lib/auth-context";
 import {
 	useWikiBacklinks,
@@ -101,7 +105,9 @@ export default function WikiPageScreen() {
 	const { page, loading } = useWikiPage({ tenantId, ownerId, type, slug });
 	const { backlinks } = useWikiBacklinks(page?.id);
 	const { connectedPages } = useWikiConnectedPages(page?.id);
-	const [showGraph, setShowGraph] = useState(false);
+	const [viewMode, setViewMode] = useState<"wiki" | "split" | "graph">(
+		"wiki",
+	);
 
 	const markdownStyles = useMemo(
 		() => buildMarkdownStyles(colors, isDark),
@@ -116,30 +122,54 @@ export default function WikiPageScreen() {
 	const headerTitle = page?.title || (loading ? "Loading..." : "Not found");
 
 	const canToggleGraph = !!page && !!tenantId && !!ownerId;
+	const cycleView = () =>
+		setViewMode((m) =>
+			m === "wiki" ? "split" : m === "split" ? "graph" : "wiki",
+		);
+	const viewIcon =
+		viewMode === "wiki"
+			? IconAlignLeft
+			: viewMode === "split"
+				? IconLayoutRows
+				: IconTopologyStar3;
+	const ViewIcon = viewIcon;
 	const headerRight = canToggleGraph ? (
 		<Pressable
-			onPress={() => setShowGraph((v) => !v)}
+			onPress={cycleView}
 			className="p-2"
 			accessibilityRole="button"
-			accessibilityLabel={showGraph ? "Hide subgraph" : "Show subgraph"}
+			accessibilityLabel={
+				viewMode === "wiki"
+					? "Switch to split view"
+					: viewMode === "split"
+						? "Switch to graph view"
+						: "Switch to wiki view"
+			}
 		>
-			<IconTopologyStar3
+			<ViewIcon
 				size={22}
-				color={showGraph ? colors.primary : colors.foreground}
+				color={viewMode === "wiki" ? colors.foreground : colors.primary}
 				strokeWidth={2}
 			/>
 		</Pressable>
 	) : undefined;
 
-	const showSplit = showGraph && page && tenantId && ownerId;
+	const showAnyGraph =
+		(viewMode === "split" || viewMode === "graph") &&
+		page &&
+		tenantId &&
+		ownerId;
+	const graphFullscreen = viewMode === "graph";
 
 	return (
 		<DetailLayout title={headerTitle} headerRight={headerRight}>
-			{showSplit ? (
+			{showAnyGraph ? (
 				<View
 					style={{
-						height: "40%",
-						borderBottomWidth: 1,
+						// 50/50 split in split mode; full flex in graph mode.
+						height: graphFullscreen ? undefined : "50%",
+						flex: graphFullscreen ? 1 : undefined,
+						borderBottomWidth: graphFullscreen ? 0 : 1,
 						borderBottomColor: colors.border,
 					}}
 				>
@@ -151,7 +181,10 @@ export default function WikiPageScreen() {
 				</View>
 			) : null}
 			<ScrollView
-				style={{ flex: 1 }}
+				style={{
+					flex: 1,
+					display: graphFullscreen ? "none" : undefined,
+				}}
 				contentContainerStyle={{ paddingBottom: 48 }}
 				showsVerticalScrollIndicator={false}
 			>
