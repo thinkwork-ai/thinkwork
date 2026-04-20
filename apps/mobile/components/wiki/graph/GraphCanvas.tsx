@@ -121,11 +121,17 @@ export function GraphCanvas({
           }
           const edgeDimmed =
             !!filter && !filter.matchedIds.has(a.id) && !filter.matchedIds.has(b.id);
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist <= nodeRadius * 2) return null;
+          const ux = dx / dist;
+          const uy = dy / dist;
           return (
             <Line
               key={e.id}
-              p1={vec(a.x, a.y)}
-              p2={vec(b.x, b.y)}
+              p1={vec(a.x + ux * nodeRadius, a.y + uy * nodeRadius)}
+              p2={vec(b.x - ux * nodeRadius, b.y - uy * nodeRadius)}
               color={edgeColor}
               strokeWidth={1}
               opacity={edgeDimmed ? DIM_OPACITY : 1}
