@@ -208,9 +208,6 @@ build_handler "webhooks-admin" \
 build_handler "webhook-deliveries-cleanup" \
   "$REPO_ROOT/packages/api/src/handlers/webhook-deliveries-cleanup.ts"
 
-build_handler "task-connectors" \
-  "$REPO_ROOT/packages/api/src/handlers/task-connectors.ts"
-
 build_handler "github-app" \
   "$REPO_ROOT/packages/api/src/handlers/github-app.ts"
 
