@@ -566,3 +566,194 @@ describe("isGeoQualifiedExtension", () => {
 		});
 	}
 });
+
+// ─── sourceKind branch — 2026-04-20 summary-expander wiring ──────────────
+//
+// The emitter routes candidates based on `sourceKind`:
+//   - "record" (default): sourceRecordIds are memory-record ids; leaves
+//     come from affectedPages via leavesByRecord (batch-scoped).
+//   - "summary": sourceRecordIds are page ids; leaves come from
+//     scopePages + affectedPages via leavesById (scope-wide).
+//
+// These tests exercise the summary-kind path and confirm the record-kind
+// path still works when sourceKind is omitted (back-compat).
+
+describe("sourceKind='summary' candidate leaf resolution", () => {
+	it("resolves leaves by page id from scopePages", async () => {
+		const writeLink = makeWriteLink();
+		const scopePage: AffectedPage = {
+			id: "page-nana",
+			type: "entity",
+			slug: "nana",
+			title: "Nana",
+			sourceRecordIds: [], // unused for summary-kind
+		};
+		const result = await emitDeterministicParentLinks({
+			scope: SCOPE,
+			candidates: [
+				candidate({
+					sourceKind: "summary",
+					sourceRecordIds: ["page-nana"],
+					parentTitle: "Toronto",
+					parentSlug: "toronto",
+				}),
+			],
+			affectedPages: [], // summary-kind should not need affectedPages
+			scopePages: [scopePage],
+			lookupParentPages: lookupThatReturns([
+				{
+					title: "Toronto",
+					match: {
+						id: "page-toronto",
+						type: "topic",
+						slug: "toronto",
+						title: "Toronto",
+					},
+				},
+			]),
+			writeLink,
+		});
+		expect(result.linksWritten).toBe(1);
+		expect(writeLink).toHaveBeenCalledWith(
+			expect.objectContaining({
+				fromPageId: "page-nana",
+				toPageId: "page-toronto",
+				context: "deterministic:city:toronto",
+			}),
+		);
+	});
+
+	it("skips summary-kind candidates whose page ids aren't in any pool", async () => {
+		const writeLink = makeWriteLink();
+		const result = await emitDeterministicParentLinks({
+			scope: SCOPE,
+			candidates: [
+				candidate({
+					sourceKind: "summary",
+					sourceRecordIds: ["page-not-in-scope"],
+					parentTitle: "Toronto",
+					parentSlug: "toronto",
+				}),
+			],
+			affectedPages: [],
+			scopePages: [], // empty pool → no leaf resolution possible
+			lookupParentPages: lookupThatReturns([
+				{
+					title: "Toronto",
+					match: {
+						id: "page-toronto",
+						type: "topic",
+						slug: "toronto",
+						title: "Toronto",
+					},
+				},
+			]),
+			writeLink,
+		});
+		expect(result.linksWritten).toBe(0);
+		expect(writeLink).not.toHaveBeenCalled();
+	});
+
+	it("filters non-entity scopePages from leaf resolution", async () => {
+		// Only entities are linkable leaves; topic/decision scopePages get
+		// dropped from leavesById before candidate matching.
+		const writeLink = makeWriteLink();
+		const result = await emitDeterministicParentLinks({
+			scope: SCOPE,
+			candidates: [
+				candidate({
+					sourceKind: "summary",
+					sourceRecordIds: ["page-topic"],
+					parentTitle: "Paris",
+					parentSlug: "paris",
+				}),
+			],
+			affectedPages: [],
+			scopePages: [
+				{
+					id: "page-topic",
+					type: "topic",
+					slug: "paris-food",
+					title: "Paris Food",
+					sourceRecordIds: [],
+				},
+			],
+			lookupParentPages: lookupThatReturns([
+				{ title: "Paris", match: { id: "page-paris", type: "entity", slug: "paris", title: "Paris" } },
+			]),
+			writeLink,
+		});
+		expect(result.linksWritten).toBe(0);
+	});
+
+	it("record-kind candidates still work when sourceKind is omitted (back-compat)", async () => {
+		// Existing test fixtures don't set sourceKind — the emitter must
+		// default to "record" and use leavesByRecord / affectedPages.
+		const writeLink = makeWriteLink();
+		const result = await emitDeterministicParentLinks({
+			scope: SCOPE,
+			candidates: [candidate({ /* no sourceKind */ })],
+			affectedPages: [leafPage()],
+			lookupParentPages: lookupThatReturns([
+				{ title: "Paris", match: { id: "page-paris", type: "entity", slug: "paris", title: "Paris" } },
+			]),
+			writeLink,
+		});
+		expect(result.linksWritten).toBe(1);
+	});
+
+	it("writes both record and summary emissions when both kinds target the same parent", async () => {
+		// Real-world: Toronto is a city with BOTH record-based candidates
+		// (memory_units with place_address) AND summary-based candidates
+		// (pages whose summaries mention Toronto). Both lists should fire.
+		const writeLink = makeWriteLink();
+		const recordLeaf: AffectedPage = {
+			id: "page-record-leaf",
+			type: "entity",
+			slug: "cafe-batch",
+			title: "Cafe Batch",
+			sourceRecordIds: ["r1"],
+		};
+		const scopeLeaf: AffectedPage = {
+			id: "page-scope-leaf",
+			type: "entity",
+			slug: "cafe-scope",
+			title: "Cafe Scope",
+			sourceRecordIds: [],
+		};
+		const result = await emitDeterministicParentLinks({
+			scope: SCOPE,
+			candidates: [
+				candidate({
+					sourceKind: "record",
+					sourceRecordIds: ["r1"],
+					parentTitle: "Toronto",
+					parentSlug: "toronto",
+				}),
+				candidate({
+					sourceKind: "summary",
+					sourceRecordIds: ["page-scope-leaf"],
+					parentTitle: "Toronto",
+					parentSlug: "toronto",
+				}),
+			],
+			affectedPages: [recordLeaf],
+			scopePages: [scopeLeaf],
+			lookupParentPages: lookupThatReturns([
+				{
+					title: "Toronto",
+					match: {
+						id: "page-toronto",
+						type: "topic",
+						slug: "toronto",
+						title: "Toronto",
+					},
+				},
+			]),
+			writeLink,
+		});
+		expect(result.linksWritten).toBe(2);
+		const toIds = writeLink.mock.calls.map((c) => c[0].fromPageId).sort();
+		expect(toIds).toEqual(["page-record-leaf", "page-scope-leaf"]);
+	});
+});
