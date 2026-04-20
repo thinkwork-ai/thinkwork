@@ -20,7 +20,7 @@
  */
 
 import type { ThinkWorkMemoryRecord } from "../memory/types.js";
-import { invokeClaude, parseJsonResponse } from "./bedrock.js";
+import { invokeClaudeJson } from "./bedrock.js";
 import { describeAllPageTypes } from "./templates.js";
 import type { WikiPageType } from "./repository.js";
 
@@ -183,7 +183,14 @@ export interface PlannerResult {
 	 * before deciding which sections to promote.
 	 */
 	sectionPromotions: PlannedSectionPromotion[];
-	usage: { inputTokens: number; outputTokens: number };
+	usage: {
+		inputTokens: number;
+		outputTokens: number;
+		/** Retry attempts inside `invokeClaudeJson` before the call succeeded.
+		 * Optional so older tests that stub `runPlanner` directly stay green —
+		 * production code always populates this. */
+		bedrockRetries?: number;
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -356,7 +363,7 @@ export async function runPlanner(
 	opts: { signal?: AbortSignal; modelId?: string } = {},
 ): Promise<PlannerResult> {
 	const user = buildPlannerUserPrompt(batch);
-	const resp = await invokeClaude({
+	const resp = await invokeClaudeJson<PlannerResult>({
 		system: PLANNER_SYSTEM,
 		user,
 		// Planner output grows with batch complexity + link proposals + per-
@@ -369,13 +376,14 @@ export async function runPlanner(
 		signal: opts.signal,
 	});
 
-	const parsed = parseJsonResponse<PlannerResult>(resp.text);
+	const parsed = resp.parsed;
 	validatePlannerResult(parsed);
 	return {
 		...parsed,
 		usage: {
 			inputTokens: resp.inputTokens,
 			outputTokens: resp.outputTokens,
+			bedrockRetries: resp.retries,
 		},
 	};
 }

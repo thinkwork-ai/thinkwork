@@ -11,7 +11,7 @@
  *     repository, mocked Bedrock planner + section-writer
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ─── Bedrock + parseJsonResponse ─────────────────────────────────────────────
 
@@ -42,6 +42,189 @@ describe("parseJsonResponse", () => {
 
 	it("throws when no JSON block is present", () => {
 		expect(() => parseJsonResponse("no json here at all")).toThrow(/no JSON/);
+	});
+});
+
+// ─── bedrock retry wrapper ───────────────────────────────────────────────────
+//
+// Covers the 2026-04-20 Bedrock-retry shim added after Marco's bootstrap chain
+// broke twice on empty/truncated JSON responses (15% of calls). Tests mock the
+// underlying Bedrock SDK via a shared `sendMock` so `invokeClaude` itself
+// stays real — the retry loop is exercised end-to-end.
+
+const sendMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@aws-sdk/client-bedrock-runtime", async () => {
+	const actual = await vi.importActual<
+		typeof import("@aws-sdk/client-bedrock-runtime")
+	>("@aws-sdk/client-bedrock-runtime");
+	return {
+		...actual,
+		BedrockRuntimeClient: vi.fn().mockImplementation(() => ({
+			send: sendMock,
+		})),
+	};
+});
+
+import {
+	invokeClaudeJson,
+	invokeClaudeWithRetry,
+	BedrockRetryExhaustedError,
+	isRetryableBedrockError,
+} from "../lib/wiki/bedrock.js";
+
+function fakeResponse(text: string) {
+	return {
+		output: { message: { content: [{ text }] } },
+		usage: { inputTokens: 10, outputTokens: 5 },
+		stopReason: "end_turn",
+	};
+}
+
+describe("invokeClaudeJson retry behavior", () => {
+	beforeEach(() => {
+		sendMock.mockReset();
+		// Bypass real backoff delays without fake-timer ceremony.
+		vi.stubGlobal("setTimeout", ((cb: () => void) => {
+			cb();
+			return 0;
+		}) as unknown as typeof setTimeout);
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it("retries empty responses and returns parsed result with retry count", async () => {
+		sendMock
+			.mockResolvedValueOnce(fakeResponse(""))
+			.mockResolvedValueOnce(fakeResponse(""))
+			.mockResolvedValueOnce(fakeResponse('{"ok":true}'));
+
+		const res = await invokeClaudeJson<{ ok: boolean }>({
+			system: "s",
+			user: "u",
+		});
+
+		expect(res.parsed).toEqual({ ok: true });
+		expect(res.retries).toBe(2);
+		expect(sendMock).toHaveBeenCalledTimes(3);
+	});
+
+	it("retries truncated JSON SyntaxErrors", async () => {
+		// Fenced block with a truncated JSON body — parseJsonResponse hits the
+		// fence extractor and JSON.parse throws SyntaxError.
+		sendMock
+			.mockResolvedValueOnce(
+				fakeResponse('```json\n{"a":1,"b":\n```'),
+			)
+			.mockResolvedValueOnce(fakeResponse('{"a":1,"b":2}'));
+
+		const res = await invokeClaudeJson<{ a: number; b: number }>({
+			system: "s",
+			user: "u",
+		});
+
+		expect(res.parsed).toEqual({ a: 1, b: 2 });
+		expect(res.retries).toBe(1);
+	});
+
+	it("throws BedrockRetryExhaustedError after 3 failed attempts", async () => {
+		sendMock.mockResolvedValue(fakeResponse(""));
+
+		let caught: unknown;
+		try {
+			await invokeClaudeJson<unknown>({ system: "s", user: "u" });
+		} catch (err) {
+			caught = err;
+		}
+
+		expect(caught).toBeInstanceOf(BedrockRetryExhaustedError);
+		expect((caught as BedrockRetryExhaustedError).name).toBe(
+			"BedrockRetryExhaustedError",
+		);
+		expect((caught as BedrockRetryExhaustedError).attempts).toBe(3);
+		expect(sendMock).toHaveBeenCalledTimes(3);
+	});
+
+	it("does not retry non-retryable SDK errors", async () => {
+		const err = Object.assign(new Error("denied"), {
+			name: "AccessDeniedException",
+		});
+		sendMock.mockRejectedValue(err);
+
+		await expect(
+			invokeClaudeJson<unknown>({ system: "s", user: "u" }),
+		).rejects.toMatchObject({ name: "AccessDeniedException" });
+		expect(sendMock).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe("invokeClaudeWithRetry retry behavior", () => {
+	beforeEach(() => {
+		sendMock.mockReset();
+		vi.stubGlobal("setTimeout", ((cb: () => void) => {
+			cb();
+			return 0;
+		}) as unknown as typeof setTimeout);
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it("retries ThrottlingException and returns retry count", async () => {
+		const throttle = Object.assign(new Error("slow down"), {
+			name: "ThrottlingException",
+		});
+		sendMock
+			.mockRejectedValueOnce(throttle)
+			.mockResolvedValueOnce(fakeResponse("hello"));
+
+		const res = await invokeClaudeWithRetry({ system: "s", user: "u" });
+		expect(res.text).toBe("hello");
+		expect(res.retries).toBe(1);
+		expect(sendMock).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe("isRetryableBedrockError", () => {
+	it("flags transient SDK exceptions", () => {
+		expect(
+			isRetryableBedrockError(
+				Object.assign(new Error("x"), { name: "ThrottlingException" }),
+			),
+		).toBe(true);
+		expect(
+			isRetryableBedrockError(
+				Object.assign(new Error("x"), {
+					name: "ServiceUnavailableException",
+				}),
+			),
+		).toBe(true);
+	});
+
+	it("flags parseJsonResponse failures", () => {
+		expect(
+			isRetryableBedrockError(new Error("parseJsonResponse: empty response")),
+		).toBe(true);
+		expect(
+			isRetryableBedrockError(new SyntaxError("Unexpected end of JSON input")),
+		).toBe(true);
+	});
+
+	it("refuses AbortError and unknown fatal errors", () => {
+		const abortErr = Object.assign(new Error("aborted"), {
+			name: "AbortError",
+		});
+		expect(isRetryableBedrockError(abortErr)).toBe(false);
+		expect(
+			isRetryableBedrockError(
+				Object.assign(new Error("bad"), { name: "ValidationException" }),
+			),
+		).toBe(false);
+		expect(isRetryableBedrockError(new Error("random"))).toBe(false);
+		expect(isRetryableBedrockError("string error")).toBe(false);
 	});
 });
 

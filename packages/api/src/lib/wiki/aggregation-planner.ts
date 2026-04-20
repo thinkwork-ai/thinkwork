@@ -20,7 +20,7 @@
  * application steps for the aggregation-specific fields.
  */
 
-import { invokeClaude, parseJsonResponse } from "./bedrock.js";
+import { invokeClaudeJson } from "./bedrock.js";
 import { describeAllPageTypes } from "./templates.js";
 import {
 	validatePlannerResult,
@@ -261,7 +261,7 @@ export async function runAggregationPlanner(
 	opts: { signal?: AbortSignal; modelId?: string } = {},
 ): Promise<PlannerResult> {
 	const user = buildAggregationUserPrompt(batch);
-	const resp = await invokeClaude({
+	const resp = await invokeClaudeJson<Record<string, unknown>>({
 		system: AGGREGATION_SYSTEM,
 		user,
 		// Aggregation output tends to be smaller than the leaf planner's, but
@@ -273,7 +273,7 @@ export async function runAggregationPlanner(
 		signal: opts.signal,
 	});
 
-	const parsed = parseJsonResponse<Record<string, unknown>>(resp.text);
+	const parsed = resp.parsed;
 	// Force leaf-only fields to [] before validation — the aggregation planner
 	// is banned from emitting them.
 	parsed.pageUpdates = [];
@@ -287,6 +287,7 @@ export async function runAggregationPlanner(
 		usage: {
 			inputTokens: resp.inputTokens,
 			outputTokens: resp.outputTokens,
+			bedrockRetries: resp.retries,
 		},
 	};
 }
