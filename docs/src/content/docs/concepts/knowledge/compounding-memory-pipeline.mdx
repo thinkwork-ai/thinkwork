@@ -258,6 +258,7 @@ Link-densification + alias-dedupe counters (added by the deterministic-linking a
 ### Triggers
 
 - **Post-retain** — `maybeEnqueuePostTurnCompile` in `packages/api/src/lib/wiki/enqueue.ts`. Checks `tenants.wiki_compile_enabled`, confirms adapter is Hindsight, inserts a job row with dedupe key `${tenantId}:${ownerId}:${floor(epoch_s/300)}`, fires `Lambda.invoke` with `InvocationType: "Event"` and `{jobId}` payload.
+- **Continuation (cap hit)** — when a job exits on any `cap_hit` without draining its cursor, `runCompileJob` enqueues a follow-up into the **next** dedupe bucket via `(parseCompileDedupeBucket(parent.dedupe_key) + 1) * DEDUPE_BUCKET_SECONDS`. The chained job inherits the parent's `trigger`, so `bootstrap_import` continuations keep the higher `MAX_RECORDS_PER_BOOTSTRAP_JOB = 1000` cap and self-complete without manual re-kick. Parsing the parent's dedupe bucket (not `Date.now()` or `created_at`) is what keeps the chain monotonic — see [`docs/solutions/logic-errors/compile-continuation-dedupe-bucket-2026-04-20.md`](/../../solutions/logic-errors/compile-continuation-dedupe-bucket-2026-04-20/).
 - **Admin mutation** — `compileWikiNow(tenantId, ownerId, modelId?)` resolver.
 - **Nightly lint** — `packages/api/src/handlers/wiki-lint.ts`.
 - **CLI** — `thinkwork wiki compile --tenant … --owner …`.
@@ -268,6 +269,7 @@ Link-densification + alias-dedupe counters (added by the deterministic-linking a
 // packages/api/src/lib/wiki/compiler.ts
 const RECORD_PAGE_SIZE = 50;
 const MAX_RECORDS_PER_JOB = 500;
+const MAX_RECORDS_PER_BOOTSTRAP_JOB = 1000; // applied only when trigger='bootstrap_import'
 const MAX_NEW_PAGES_PER_JOB = 25;
 const MAX_SECTIONS_REWRITTEN_PER_JOB = 100;
 ```
