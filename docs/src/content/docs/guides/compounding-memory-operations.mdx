@@ -198,6 +198,50 @@ aws lambda invoke \
   /tmp/resp.json
 ```
 
+## Monitoring link density
+
+Deterministic link emission and alias dedupe are on by default (`WIKI_DETERMINISTIC_LINKING_ENABLED=true`, pinned in terraform). Operators have two first-line tools.
+
+**Per-agent snapshot script.** Prints a per-agent density table and appends a timestamped markdown file to `docs/metrics/` so before/after flag flips can be diffed:
+
+```bash
+DATABASE_URL=... pnpm --filter @thinkwork/api \
+  exec tsx scripts/wiki-link-density-baseline.ts --tenant <uuid> [--owner <uuid>]
+```
+
+**Copy-pasteable SQL.** `docs/metrics/wiki-link-density.md` in the repo carries per-agent density, per-compile rollup, provenance audit, flag verification, and targeted rollback SQL.
+
+Metric keys worth watching on `wiki_compile_jobs.metrics`:
+
+- `links_written_deterministic` — edges from `emitDeterministicParentLinks` (city/journal → parent topic).
+- `links_written_co_mention` — edges from `emitCoMentionLinks` (entity ↔ entity via shared `memory_unit`).
+- `duplicate_candidates_count` — **R5 precision canary**. Count of active `(owner, title)` groups with more than one row. Rising = dedupe losing ground.
+- `alias_dedup_merged` — `newPages[]` entries collapsed into existing page by exact alias match.
+- `fuzzy_dedupe_merges` — same, via `pg_trgm` similarity ≥ 0.85. Tracked separately because fuzzy is the over-collapse risk.
+- `deterministic_linking_flag_suppressed` — `true` when flag was off.
+
+**Targeted rollback.** Every deterministic row carries `context LIKE 'deterministic:%'` or `context LIKE 'co_mention:%'`. If precision tanks, drop them without disturbing LLM-emitted references:
+
+```sql
+DELETE FROM wiki_page_links
+WHERE (context LIKE 'deterministic:%' OR context LIKE 'co_mention:%')
+  AND from_page_id IN (
+    SELECT id FROM wiki_pages
+    WHERE tenant_id = '<tenant-uuid>' AND owner_id = '<agent-uuid>'
+  );
+```
+
+**Backfilling the existing corpus.** If you turned deterministic linking on after pages already existed, the one-off backfill applies both emitters without re-running the LLM compile:
+
+```bash
+DATABASE_URL=... pnpm --filter @thinkwork/api \
+  exec tsx scripts/wiki-link-backfill.ts --tenant <uuid> --owner <uuid> [--dry-run]
+```
+
+Idempotent via `onConflictDoNothing` on `(from_page_id, to_page_id, kind)`. Safe to re-run.
+
+**Disabling deterministic linking for a Lambda.** `WIKI_DETERMINISTIC_LINKING_ENABLED=false` on the compile Lambda skips both emitters and records `deterministic_linking_flag_suppressed: true` on subsequent jobs. Flip via terraform so the next deploy doesn't reset it.
+
 ## Watching cost
 
 Every compile job records its Bedrock token usage and a rough dollar estimate. To see daily totals for a tenant:
@@ -238,12 +282,17 @@ In practice, a full compile of an agent with a few hundred memories runs $0.50 t
 
 ```sql
 SELECT id, status, trigger,
-  metrics->>'records_read'       AS records,
-  metrics->>'pages_upserted'     AS pages,
-  metrics->>'sections_rewritten' AS sections,
-  metrics->>'links_upserted'     AS links,
-  metrics->>'cost_usd'           AS cost,
-  metrics->>'cap_hit'            AS cap,
+  metrics->>'records_read'                 AS records,
+  metrics->>'pages_upserted'               AS pages,
+  metrics->>'sections_rewritten'           AS sections,
+  metrics->>'links_upserted'               AS links,
+  metrics->>'links_written_deterministic'  AS det_links,
+  metrics->>'links_written_co_mention'     AS co_links,
+  metrics->>'duplicate_candidates_count'   AS dup_candidates,
+  metrics->>'alias_dedup_merged'           AS exact_merges,
+  metrics->>'fuzzy_dedupe_merges'          AS fuzzy_merges,
+  metrics->>'cost_usd'                     AS cost,
+  metrics->>'cap_hit'                      AS cap,
   error,
   created_at, finished_at
 FROM wiki_compile_jobs
