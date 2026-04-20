@@ -17,17 +17,32 @@ import {
   getNodeColor,
   getNodeRadius,
 } from "./layout/typeStyle";
-import type { WikiSubgraph } from "./types";
+import type { GraphFilter, WikiSubgraph } from "./types";
+
+type NodeVisualState = "matched" | "neighbor" | "other";
+
+function classifyNode(
+  id: string,
+  filter: GraphFilter | null | undefined,
+): NodeVisualState {
+  if (!filter) return "matched";
+  if (filter.matchedIds.has(id)) return "matched";
+  if (filter.neighborIds.has(id)) return "neighbor";
+  return "other";
+}
 
 interface GraphCanvasProps {
   subgraph: WikiSubgraph;
   selectedNodeId: string | null;
   transform: ReturnType<typeof useGraphCamera>["transform"];
   /**
-   * Node ids to render dimmed (15% opacity for the node, no label).
-   * Edges are dimmed when both endpoints are dimmed.
+   * Search filter. `null`/`undefined` → every node + edge renders
+   * full color. Non-null → matched full color; 1-hop neighbors at 15%
+   * fill + a stroked outline ring in their type color; everything
+   * else at 15% fill, no ring. Edges render at full opacity when at
+   * least one endpoint is matched, muted otherwise.
    */
-  dimmedNodeIds?: Set<string>;
+  filter?: GraphFilter | null;
   /**
    * When true, render each node's label inside the transformed group so
    * it tracks the camera natively. Intended for small graphs where
@@ -37,6 +52,12 @@ interface GraphCanvasProps {
 }
 
 const SELECTION_RING_OFFSET = 4;
+const NEIGHBOR_RING_STROKE = 1.5;
+// Ring sits inside the sphere (centered on a slightly smaller radius)
+// so the node's overall footprint doesn't grow when it becomes a
+// neighbor. Inset by half the stroke width keeps the stroke's outer
+// edge flush with the filled circle's outer edge.
+const NEIGHBOR_RING_INSET = NEIGHBOR_RING_STROKE / 2;
 const DIM_OPACITY = 0.15;
 const LABEL_FONT_SIZE = 11;
 const LABEL_GAP = 6;
@@ -52,7 +73,7 @@ export function GraphCanvas({
   subgraph,
   selectedNodeId,
   transform,
-  dimmedNodeIds,
+  filter,
   showLabels = false,
 }: GraphCanvasProps) {
   const systemScheme = useColorScheme();
@@ -99,7 +120,7 @@ export function GraphCanvas({
             return null;
           }
           const edgeDimmed =
-            !!dimmedNodeIds && dimmedNodeIds.has(a.id) && dimmedNodeIds.has(b.id);
+            !!filter && !filter.matchedIds.has(a.id) && !filter.matchedIds.has(b.id);
           return (
             <Line
               key={e.id}
@@ -113,15 +134,49 @@ export function GraphCanvas({
         })}
         {subgraph.nodes.map((n) => {
           if (n.x == null || n.y == null) return null;
-          const isDimmed = !!dimmedNodeIds && dimmedNodeIds.has(n.id);
+          const state = classifyNode(n.id, filter);
+          const nodeColor = getNodeColor(n.pageType, scheme);
+          if (state === "matched") {
+            return (
+              <Circle
+                key={n.id}
+                cx={n.x}
+                cy={n.y}
+                r={nodeRadius}
+                color={nodeColor}
+                opacity={1}
+              />
+            );
+          }
+          if (state === "neighbor") {
+            return (
+              <Group key={n.id}>
+                <Circle
+                  cx={n.x}
+                  cy={n.y}
+                  r={nodeRadius}
+                  color={nodeColor}
+                  opacity={DIM_OPACITY}
+                />
+                <Circle
+                  cx={n.x}
+                  cy={n.y}
+                  r={nodeRadius - NEIGHBOR_RING_INSET}
+                  color={nodeColor}
+                  style="stroke"
+                  strokeWidth={NEIGHBOR_RING_STROKE}
+                />
+              </Group>
+            );
+          }
           return (
             <Circle
               key={n.id}
               cx={n.x}
               cy={n.y}
               r={nodeRadius}
-              color={getNodeColor(n.pageType, scheme)}
-              opacity={isDimmed ? DIM_OPACITY : 1}
+              color={nodeColor}
+              opacity={DIM_OPACITY}
             />
           );
         })}
@@ -138,7 +193,7 @@ export function GraphCanvas({
         {showLabels && labelFont
           ? subgraph.nodes.map((n) => {
               if (n.x == null || n.y == null) return null;
-              if (dimmedNodeIds && dimmedNodeIds.has(n.id)) return null;
+              if (classifyNode(n.id, filter) !== "matched") return null;
               const text = truncate(n.label, LABEL_MAX_CHARS);
               const w = labelFont.measureText(text).width;
               return (
