@@ -1,9 +1,35 @@
 import { useMemo } from "react";
 import { Gesture } from "react-native-gesture-handler";
-import { useDerivedValue, useSharedValue } from "react-native-reanimated";
+import {
+  Easing,
+  cancelAnimation,
+  runOnJS,
+  useDerivedValue,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { SCALE_MAX, SCALE_MIN } from "../layout/typeStyle";
 
-export function useGraphCamera(initialTx = 0, initialTy = 0) {
+const FIT_DURATION_MS = 600;
+const FIT_EASING = Easing.out(Easing.cubic);
+
+export interface CameraTarget {
+  tx: number;
+  ty: number;
+  scale: number;
+}
+
+interface UseGraphCameraOptions {
+  /** Fired on the JS thread the first time the user pans or pinches. */
+  onUserGesture?: () => void;
+}
+
+export function useGraphCamera(
+  initialTx = 0,
+  initialTy = 0,
+  options: UseGraphCameraOptions = {},
+) {
+  const { onUserGesture } = options;
   const tx = useSharedValue(initialTx);
   const ty = useSharedValue(initialTy);
   const scale = useSharedValue(1);
@@ -23,6 +49,10 @@ export function useGraphCamera(initialTx = 0, initialTy = 0) {
   const gesture = useMemo(() => {
     const pan = Gesture.Pan()
       .onStart(() => {
+        cancelAnimation(tx);
+        cancelAnimation(ty);
+        cancelAnimation(scale);
+        if (onUserGesture) runOnJS(onUserGesture)();
         startTx.value = tx.value;
         startTy.value = ty.value;
       })
@@ -33,6 +63,10 @@ export function useGraphCamera(initialTx = 0, initialTy = 0) {
 
     const pinch = Gesture.Pinch()
       .onStart((e) => {
+        cancelAnimation(tx);
+        cancelAnimation(ty);
+        cancelAnimation(scale);
+        if (onUserGesture) runOnJS(onUserGesture)();
         startScale.value = scale.value;
         startTx.value = tx.value;
         startTy.value = ty.value;
@@ -51,7 +85,29 @@ export function useGraphCamera(initialTx = 0, initialTy = 0) {
       });
 
     return Gesture.Simultaneous(pan, pinch);
-  }, [tx, ty, scale, startTx, startTy, startScale, focalX, focalY]);
+  }, [tx, ty, scale, startTx, startTy, startScale, focalX, focalY, onUserGesture]);
 
-  return { tx, ty, scale, transform, gesture };
+  // Stable identity so effects can depend on `camera` without retriggering
+  // every render (sim ticks at 30Hz; the parent re-renders that often).
+  return useMemo(
+    () => ({
+      tx,
+      ty,
+      scale,
+      transform,
+      gesture,
+      animateTo: (target: CameraTarget, duration = FIT_DURATION_MS) => {
+        const cfg = { duration, easing: FIT_EASING };
+        tx.value = withTiming(target.tx, cfg);
+        ty.value = withTiming(target.ty, cfg);
+        scale.value = withTiming(target.scale, cfg);
+      },
+      stepToward: (target: CameraTarget, alpha = 0.15) => {
+        tx.value = tx.value + (target.tx - tx.value) * alpha;
+        ty.value = ty.value + (target.ty - ty.value) * alpha;
+        scale.value = scale.value + (target.scale - scale.value) * alpha;
+      },
+    }),
+    [tx, ty, scale, transform, gesture],
+  );
 }

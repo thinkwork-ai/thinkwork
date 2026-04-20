@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import {
   type WikiGraphEdgeFromServer,
   type WikiGraphNodeFromServer,
@@ -8,7 +9,11 @@ import {
 } from "@thinkwork/react-native-sdk";
 import { COLORS } from "@/lib/theme";
 import { KnowledgeGraph } from "./KnowledgeGraph";
-import { NodeDetailSheet } from "./NodeDetailSheet";
+import {
+  NodeDetailModal,
+  type NodeDetailModalTarget,
+} from "./NodeDetailModal";
+import { loadGraphState } from "./graphStateCache";
 import type {
   WikiGraphEdge,
   WikiGraphNode,
@@ -21,9 +26,7 @@ interface WikiGraphViewProps {
   agentId: string;
   /**
    * Optional: route param kept for backwards compat with existing callers,
-   * but the default view is "show all pages for this agent" — focal-mode
-   * is intentionally not the default after Unit 3 validation showed
-   * single-node lonely focals were the common case for real data.
+   * but the default view is "show all pages for this agent".
    */
   initialFocalPageId?: string | null;
   /**
@@ -35,17 +38,18 @@ interface WikiGraphViewProps {
 }
 
 /**
- * Top-level wiring for the graph viewer. Now defaults to "show every
- * active page in the agent's scope" via `useWikiGraph` (same resolver
- * the admin `/wiki` route uses). The depth-bounded focal+expand model
- * from Unit 3's first iteration is parked for a future follow-up — the
- * default view should match user expectations from the admin surface.
+ * Top-level wiring for the graph viewer. Nodes have no labels, so a tap
+ * opens a centered `NodeDetailModal` showing the page's wiki body. From
+ * there, the user can open the full detail screen via the external-link
+ * icon. This keeps the common case (preview → dismiss) cheap without
+ * forcing a full navigation round-trip.
  */
 export function WikiGraphView({
   tenantId,
   agentId,
   searchQuery,
 }: WikiGraphViewProps) {
+  const router = useRouter();
   const { graph, loading, error } = useWikiGraph({
     tenantId,
     ownerId: agentId,
@@ -53,17 +57,62 @@ export function WikiGraphView({
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
-  const internalSubgraph = useMemo(
-    () => (graph ? toInternalSubgraph(graph) : null),
-    [graph],
-  );
+  const cacheKey = `${tenantId}:${agentId}`;
 
-  const selectedNode = useMemo(() => {
+  // When urql re-emits the query (even with identical content) we get a
+  // new `graph` ref and `toInternalSubgraph` produces brand-new node
+  // objects. Carry positions forward by id so the layout doesn't snap
+  // back to d3's random sunflower on re-emit. Also seed from the module
+  // cache on the very first build so cross-mount restores work.
+  const prevInternalRef = useRef<WikiSubgraph | null>(null);
+
+  const internalSubgraph = useMemo(() => {
+    if (!graph) return null;
+    const sub = toInternalSubgraph(graph);
+    const prev = prevInternalRef.current;
+    if (prev) {
+      const byId = new Map<string, WikiGraphNode>(
+        prev.nodes.map((n) => [n.id, n]),
+      );
+      for (const n of sub.nodes) {
+        const p = byId.get(n.id);
+        if (p && typeof p.x === "number" && typeof p.y === "number") {
+          n.x = p.x;
+          n.y = p.y;
+          n.vx = 0;
+          n.vy = 0;
+        }
+      }
+    } else {
+      const cached = loadGraphState(cacheKey);
+      if (cached) {
+        for (const n of sub.nodes) {
+          const p = cached.positions.get(n.id);
+          if (p) {
+            n.x = p.x;
+            n.y = p.y;
+            n.vx = 0;
+            n.vy = 0;
+          }
+        }
+      }
+    }
+    prevInternalRef.current = sub;
+    return sub;
+  }, [graph, cacheKey]);
+
+  const selectedTarget: NodeDetailModalTarget | null = useMemo(() => {
     if (!internalSubgraph || !selectedNodeId) return null;
-    return internalSubgraph.nodes.find((n) => n.id === selectedNodeId) ?? null;
+    const node = internalSubgraph.nodes.find((n) => n.id === selectedNodeId);
+    if (!node) return null;
+    return {
+      id: node.id,
+      type: node.pageType,
+      slug: node.slug,
+      title: node.label,
+    };
   }, [internalSubgraph, selectedNodeId]);
 
-  // Search filter: client-side dim of nodes whose label/summary doesn't match.
   const dimmedNodeIds = useMemo(() => {
     const q = (searchQuery ?? "").trim().toLowerCase();
     if (!q || !internalSubgraph) return new Set<string>();
@@ -73,6 +122,17 @@ export function WikiGraphView({
     }
     return dimmed;
   }, [searchQuery, internalSubgraph]);
+
+  const handleOpenFullPage = useCallback(
+    (node: NodeDetailModalTarget) => {
+      setSelectedNodeId(null);
+      // Route's `isWikiPageType` check is case-sensitive (ENTITY/TOPIC/
+      // DECISION). Lowercasing yields "Not found"; keep uppercase.
+      const base = `/wiki/${encodeURIComponent(node.type)}/${encodeURIComponent(node.slug)}`;
+      router.push(`${base}?agentId=${encodeURIComponent(agentId)}`);
+    },
+    [router, agentId],
+  );
 
   return (
     <View style={styles.root}>
@@ -103,24 +163,16 @@ export function WikiGraphView({
           selectedNodeId={selectedNodeId}
           onSelectNode={setSelectedNodeId}
           dimmedNodeIds={dimmedNodeIds}
+          cacheKey={cacheKey}
         />
       )}
 
-      <NodeDetailSheet
+      <NodeDetailModal
         tenantId={tenantId}
         ownerId={agentId}
-        node={
-          selectedNode
-            ? {
-                id: selectedNode.id,
-                type: selectedNode.pageType,
-                slug: selectedNode.slug,
-                title: selectedNode.label,
-              }
-            : null
-        }
+        node={selectedTarget}
         onClose={() => setSelectedNodeId(null)}
-        onFocusHere={() => setSelectedNodeId(null)}
+        onOpenFullPage={handleOpenFullPage}
       />
     </View>
   );
