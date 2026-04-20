@@ -482,6 +482,45 @@ export async function findPageBySlug(
 	return (rows[0] as WikiPageRow | undefined) ?? null;
 }
 
+/**
+ * Exact-title lookup within a (tenant, owner) scope. Returns every active
+ * page whose title matches the input exactly — case- and whitespace-
+ * sensitive. The deterministic linker uses this to resolve parent-expander
+ * candidates into concrete page ids without guessing at a type (the parent
+ * could be either `topic` or `entity`, so the caller filters on type after).
+ * Returns all hits so callers can log title collisions rather than silently
+ * picking one.
+ */
+export async function findPagesByExactTitle(
+	args: { tenantId: string; ownerId: string; title: string },
+	db: DbClient = defaultDb,
+): Promise<
+	Array<{ id: string; type: WikiPageType; slug: string; title: string }>
+> {
+	const rows = await db
+		.select({
+			id: wikiPages.id,
+			type: wikiPages.type,
+			slug: wikiPages.slug,
+			title: wikiPages.title,
+		})
+		.from(wikiPages)
+		.where(
+			and(
+				eq(wikiPages.tenant_id, args.tenantId),
+				eq(wikiPages.owner_id, args.ownerId),
+				eq(wikiPages.title, args.title),
+				eq(wikiPages.status, "active"),
+			),
+		);
+	return rows as Array<{
+		id: string;
+		type: WikiPageType;
+		slug: string;
+		title: string;
+	}>;
+}
+
 export async function findPageById(
 	pageId: string,
 	db: DbClient = defaultDb,

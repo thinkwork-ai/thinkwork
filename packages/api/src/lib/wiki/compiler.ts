@@ -20,6 +20,7 @@ import {
 	findAliasMatches,
 	findPageById,
 	findPageBySlug,
+	findPagesByExactTitle,
 	getCompileJob,
 	getCursor,
 	listOpenMentions,
@@ -41,6 +42,10 @@ import {
 	type WikiPageRow,
 	type WikiPageType,
 } from "./repository.js";
+import {
+	emitDeterministicParentLinks,
+	type AffectedPage,
+} from "./deterministic-linker.js";
 import { runPlanner, type PlannerResult } from "./planner.js";
 import {
 	isMeaningfulChange,
@@ -138,6 +143,18 @@ export interface RunJobResult {
  */
 export function isAggregationPassEnabled(): boolean {
 	const raw = (process.env.WIKI_AGGREGATION_PASS_ENABLED ?? "").toLowerCase();
+	return raw === "true" || raw === "1" || raw === "yes";
+}
+
+/**
+ * Feature flag for deterministic link emission (Unit 2 + Unit 3 of the
+ * link-densification plan). Defaults to `true` so dev gets the denser graph
+ * without an extra toggle; flip to `false` via terraform to kill-switch.
+ */
+export function isDeterministicLinkingEnabled(): boolean {
+	const raw = (
+		process.env.WIKI_DETERMINISTIC_LINKING_ENABLED ?? "true"
+	).toLowerCase();
 	return raw === "true" || raw === "1" || raw === "yes";
 }
 
@@ -376,6 +393,23 @@ interface ApplyPlanArgs {
 async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 	const { job, records, plan, metrics } = args;
 	const recordById = new Map(records.map((r) => [r.id, r]));
+	// Pages this call to applyPlan touched — fed into the deterministic
+	// linker so we don't emit links for scope-level pages that weren't
+	// actually part of this batch's work.
+	const affectedPages: AffectedPage[] = [];
+	const rememberAffected = (
+		page: { id: string; type: WikiPageType; slug: string; title: string },
+		sourceRecordIds: Iterable<string>,
+	): void => {
+		const recordIds = Array.from(new Set(sourceRecordIds));
+		affectedPages.push({
+			id: page.id,
+			type: page.type,
+			slug: page.slug,
+			title: page.title,
+			sourceRecordIds: recordIds,
+		});
+	};
 
 	// 1. Updates to existing pages
 	for (const upd of plan.pageUpdates) {
@@ -477,6 +511,10 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 				})),
 			});
 			metrics.pages_upserted += 1;
+			rememberAffected(
+				existing,
+				sectionsToApply.flatMap((s) => s.sources?.map((r) => r.ref) ?? []),
+			);
 		}
 	}
 
@@ -515,7 +553,26 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			continue;
 		}
 
-		await upsertPage({
+		const newPageSections = np.sections.map((s, i) => {
+			const sectionSources =
+				s.source_refs && s.source_refs.length > 0
+					? resolveCitedRecords(recordById, s.source_refs)
+					: pageFallbackSources;
+			return {
+				section_slug: s.slug,
+				heading: s.heading,
+				body_md: linkifyKnownEntities(
+					s.body_md,
+					args.knownPageRefs ?? [],
+				),
+				position: i + 1,
+				sources: sectionSources.map((r) => ({
+					kind: "memory_unit" as const,
+					ref: r.id,
+				})),
+			};
+		});
+		const createdPage = await upsertPage({
 			tenant_id: job.tenant_id,
 			owner_id: job.owner_id,
 			type: np.type,
@@ -523,25 +580,7 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			title: np.title,
 			summary: np.summary ?? null,
 			markCompiled: true,
-			sections: np.sections.map((s, i) => {
-				const sectionSources =
-					s.source_refs && s.source_refs.length > 0
-						? resolveCitedRecords(recordById, s.source_refs)
-						: pageFallbackSources;
-				return {
-					section_slug: s.slug,
-					heading: s.heading,
-					body_md: linkifyKnownEntities(
-						s.body_md,
-						args.knownPageRefs ?? [],
-					),
-					position: i + 1,
-					sources: sectionSources.map((r) => ({
-						kind: "memory_unit" as const,
-						ref: r.id,
-					})),
-				};
-			}),
+			sections: newPageSections,
 			aliases: [
 				...seedAliasesForTitle(np.title),
 				...((np.aliases ?? []).map(normalizeAlias)),
@@ -550,6 +589,10 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 				.map((alias) => ({ alias, source: "compiler" })),
 		});
 		metrics.pages_upserted += 1;
+		rememberAffected(
+			createdPage,
+			newPageSections.flatMap((s) => s.sources.map((r) => r.ref)),
+		);
 	}
 
 	// 3. Unresolved mentions (cheap — accumulate only)
@@ -573,6 +616,25 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			return "max_new_pages";
 		}
 		const slug = slugifyTitle(pr.title) || pr.slug;
+		const promotionSections = pr.sections.map((s, i) => {
+			const sectionSources = resolveCitedRecords(
+				recordById,
+				s.source_refs,
+			);
+			return {
+				section_slug: s.slug,
+				heading: s.heading,
+				body_md: linkifyKnownEntities(
+					s.body_md,
+					args.knownPageRefs ?? [],
+				),
+				position: i + 1,
+				sources: sectionSources.map((r) => ({
+					kind: "memory_unit" as const,
+					ref: r.id,
+				})),
+			};
+		});
 		const page = await upsertPage({
 			tenant_id: job.tenant_id,
 			owner_id: job.owner_id,
@@ -580,25 +642,7 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			slug,
 			title: pr.title,
 			markCompiled: true,
-			sections: pr.sections.map((s, i) => {
-				const sectionSources = resolveCitedRecords(
-					recordById,
-					s.source_refs,
-				);
-				return {
-					section_slug: s.slug,
-					heading: s.heading,
-					body_md: linkifyKnownEntities(
-						s.body_md,
-						args.knownPageRefs ?? [],
-					),
-					position: i + 1,
-					sources: sectionSources.map((r) => ({
-						kind: "memory_unit" as const,
-						ref: r.id,
-					})),
-				};
-			}),
+			sections: promotionSections,
 			aliases: seedAliasesForTitle(pr.title).map((alias) => ({
 				alias,
 				source: "compiler",
@@ -610,6 +654,10 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 		});
 		metrics.pages_upserted += 1;
 		metrics.unresolved_promoted += 1;
+		rememberAffected(
+			page,
+			promotionSections.flatMap((s) => s.sources.map((r) => r.ref)),
+		);
 	}
 
 	// 5. Page links — resolve (type, slug) pairs against the scope's active
@@ -637,6 +685,33 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 				context: link.context ?? null,
 			});
 			metrics.links_upserted = (metrics.links_upserted ?? 0) + 1;
+		}
+	}
+
+	// 6. Deterministic parent linking — emit `reference` edges from leaf
+	// entity pages to their city/journal topic parent when an exact-title
+	// match exists in scope. Only fires for pages touched by this call,
+	// so routine scope-wide compiles don't churn unrelated links.
+	if (!isDeterministicLinkingEnabled()) {
+		metrics.deterministic_linking_flag_suppressed = true;
+	} else if (affectedPages.length > 0 && records.length > 0) {
+		const candidates = deriveParentCandidates(records);
+		if (candidates.length > 0) {
+			const emission = await emitDeterministicParentLinks({
+				scope: { tenantId: job.tenant_id, ownerId: job.owner_id },
+				candidates,
+				affectedPages,
+				lookupParentPages: (lookupArgs) =>
+					findPagesByExactTitle(lookupArgs),
+				writeLink: (linkArgs) =>
+					upsertPageLink({
+						fromPageId: linkArgs.fromPageId,
+						toPageId: linkArgs.toPageId,
+						context: linkArgs.context,
+					}),
+			});
+			metrics.links_written_deterministic =
+				(metrics.links_written_deterministic ?? 0) + emission.linksWritten;
 		}
 	}
 
