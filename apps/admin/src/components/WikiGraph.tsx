@@ -7,6 +7,14 @@
  * init, stable nodeThreeObject) carry over intact — each one exists to
  * avoid a camera reset or simulation restart on filter-keystrokes. Do
  * not "clean up" those without measuring.
+ *
+ * When a filter is active, nodes partition into matched (full color),
+ * 1-hop neighbors of a match (muted 0.15 fill + colored outline ring
+ * in the node's type color), and other (muted 0.15 fill only). Edges
+ * stay visible — full opacity when at least one endpoint is matched,
+ * muted when both are unmatched. The whole graph remains visible;
+ * nothing is hidden. Opacities are applied in-place via stashed
+ * material refs so a filter change doesn't restart the force sim.
  */
 import {
   useCallback,
@@ -32,6 +40,23 @@ import {
 } from "@/lib/wiki-palette";
 
 export type { WikiPageType };
+
+type NodeVisualState = "matched" | "neighbor" | "other";
+
+type GraphClassification = {
+  matchedIds: Set<string>;
+  neighborIds: Set<string>;
+};
+
+function classifyNode(
+  id: string,
+  c: GraphClassification | null,
+): NodeVisualState {
+  if (!c) return "matched";
+  if (c.matchedIds.has(id)) return "matched";
+  if (c.neighborIds.has(id)) return "neighbor";
+  return "other";
+}
 
 export interface WikiGraphNode {
   id: string;
@@ -291,6 +316,34 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     const matchedIdsRef = useRef<Set<string> | null>(null);
     matchedIdsRef.current = matchedIds;
 
+    // 3-state: matched (full color), 1-hop neighbor of a match (muted
+    // fill + colored outline ring), other (muted fill only). Edges stay
+    // visible: full opacity when at least one endpoint is matched,
+    // muted when both are unmatched. Nothing is hidden — the whole
+    // graph remains visible so users keep spatial context.
+    const classification = useMemo<GraphClassification | null>(() => {
+      if (!matchedIds) return null;
+      const neighborIds = new Set<string>();
+      for (const l of graphData.links) {
+        const sId =
+          typeof (l as any).source === "object"
+            ? ((l as any).source as any).id
+            : (l as any).source;
+        const tId =
+          typeof (l as any).target === "object"
+            ? ((l as any).target as any).id
+            : (l as any).target;
+        const sMatched = matchedIds.has(sId);
+        const tMatched = matchedIds.has(tId);
+        if (sMatched && !tMatched) neighborIds.add(tId);
+        else if (tMatched && !sMatched) neighborIds.add(sId);
+      }
+      return { matchedIds, neighborIds };
+    }, [matchedIds, graphData]);
+
+    const classificationRef = useRef<GraphClassification | null>(null);
+    classificationRef.current = classification;
+
     getNodeWithEdgesRef.current = (nodeId: string) => {
       const node = graphData.nodes.find((n: any) => n.id === nodeId);
       if (!node) return null;
@@ -316,8 +369,8 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     };
 
     const nodeThreeObject = useCallback((node: any) => {
-      const matched = matchedIdsRef.current;
-      const muted = matched ? !matched.has(node.id) : false;
+      const state = classifyNode(node.id, classificationRef.current);
+
       const entityType = node.entityType as WikiPageType;
       const color = PAGE_TYPE_FORCE_COLORS[entityType] ?? PAGE_TYPE_DEFAULT_FORCE_COLOR;
       // Clip the label to keep the canvas readable without losing the full
@@ -329,7 +382,10 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       // Size by degree. Pages with more links render bigger.
       const degree = node.edgeCount || 1;
       const r = Math.max(5, Math.min(18, 5 + Math.sqrt(degree) * 1.5));
-      const opacity = muted ? 0.15 : 1;
+
+      const sphereOp = state === "matched" ? 1 : 0.15;
+      const labelOp = sphereOp;
+      const ringOp = state === "neighbor" ? 1 : 0;
 
       const group = new THREE.Group();
 
@@ -337,7 +393,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       const material = new THREE.MeshLambertMaterial({
         color,
         transparent: true,
-        opacity,
+        opacity: sphereOp,
       });
       const sphere = new THREE.Mesh(geometry, material);
       group.add(sphere);
@@ -357,40 +413,70 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       const spriteMaterial = new THREE.SpriteMaterial({
         map: texture,
         transparent: true,
-        opacity,
+        opacity: labelOp,
       });
       const sprite = new THREE.Sprite(spriteMaterial);
       sprite.scale.set(r * 3, r * 3, 1);
       sprite.position.set(0, 0, 0);
       group.add(sprite);
 
+      // Colored outline ring — visible only on 1-hop neighbors of a
+      // matched node. Canvas sprite so it always faces the camera.
+      // Scale = sphere diameter (r * 2) so the stroke sits inside the
+      // sphere's footprint and the node doesn't visually grow when it
+      // becomes a neighbor.
+      const ringCanvas = document.createElement("canvas");
+      const rSize = 128;
+      ringCanvas.width = rSize;
+      ringCanvas.height = rSize;
+      const rCtx = ringCanvas.getContext("2d")!;
+      rCtx.clearRect(0, 0, rSize, rSize);
+      rCtx.strokeStyle = color;
+      rCtx.lineWidth = 10;
+      rCtx.beginPath();
+      rCtx.arc(rSize / 2, rSize / 2, rSize / 2 - 10, 0, Math.PI * 2);
+      rCtx.stroke();
+      const ringTexture = new THREE.CanvasTexture(ringCanvas);
+      const ringMaterial = new THREE.SpriteMaterial({
+        map: ringTexture,
+        transparent: true,
+        opacity: ringOp,
+      });
+      const ringSprite = new THREE.Sprite(ringMaterial);
+      ringSprite.scale.set(r * 2, r * 2, 1);
+      ringSprite.position.set(0, 0, 0);
+      group.add(ringSprite);
+
       // Stash materials so filter-mute can adjust opacity without rebuilding
       // the graphData (which would restart the simulation).
       node.__sphereMat = material;
       node.__spriteMat = spriteMaterial;
+      node.__ringMat = ringMaterial;
 
       return group;
     }, []);
 
     useEffect(() => {
       for (const n of graphData.nodes as any[]) {
-        const muted = matchedIds ? !matchedIds.has(n.id) : false;
-        const op = muted ? 0.15 : 1;
-        if (n.__sphereMat) n.__sphereMat.opacity = op;
-        if (n.__spriteMat) n.__spriteMat.opacity = op;
+        const state = classifyNode(n.id, classification);
+        const sphereOp = state === "matched" ? 1 : 0.15;
+        const ringOp = state === "neighbor" ? 1 : 0;
+        if (n.__sphereMat) n.__sphereMat.opacity = sphereOp;
+        if (n.__spriteMat) n.__spriteMat.opacity = sphereOp;
+        if (n.__ringMat) n.__ringMat.opacity = ringOp;
       }
       fgRef.current?.refresh?.();
-    }, [matchedIds, graphData]);
+    }, [classification, graphData]);
 
     useEffect(() => {
       const fg = fgRef.current;
       if (!fg) return;
       const nodeCount = graphData.nodes.length;
-      const chargeStrength = nodeCount > 50 ? -120 : -80;
+      const chargeStrength = nodeCount > 50 ? -200 : -130;
       fg.d3Force("charge")?.strength(chargeStrength).distanceMax(200);
-      fg.d3Force("link")?.distance(nodeCount > 50 ? 70 : 55);
+      fg.d3Force("link")?.distance(nodeCount > 50 ? 100 : 75);
       fg.d3Force("center")?.strength(1);
-      fg.d3Force("collide", d3.forceCollide().radius(20).strength(0.8));
+      fg.d3Force("collide", d3.forceCollide().radius(28).strength(0.8));
     }, [graphData]);
 
     // One-shot camera setup. After this the user owns zoom/pan.
@@ -464,11 +550,27 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
           nodeThreeObject={nodeThreeObject}
           nodeRelSize={6}
           showNavInfo={false}
-          linkColor={() => "rgba(255,255,255,0.7)"}
+          linkColor={(link: any) => {
+            const m = matchedIdsRef.current;
+            if (!m) return "rgba(255,255,255,0.7)";
+            const sId = typeof link.source === "object" ? link.source.id : link.source;
+            const tId = typeof link.target === "object" ? link.target.id : link.target;
+            return m.has(sId) || m.has(tId)
+              ? "rgba(255,255,255,0.7)"
+              : "rgba(255,255,255,0.1)";
+          }}
           linkWidth={() => 2}
           linkDirectionalArrowLength={() => 4}
           linkDirectionalArrowRelPos={1}
-          linkDirectionalArrowColor={() => "rgba(255,255,255,0.7)"}
+          linkDirectionalArrowColor={(link: any) => {
+            const m = matchedIdsRef.current;
+            if (!m) return "rgba(255,255,255,0.7)";
+            const sId = typeof link.source === "object" ? link.source.id : link.source;
+            const tId = typeof link.target === "object" ? link.target.id : link.target;
+            return m.has(sId) || m.has(tId)
+              ? "rgba(255,255,255,0.7)"
+              : "rgba(255,255,255,0.1)";
+          }}
           linkLabel={(link: any) => link.label || "references"}
           nodeLabel={(node: any) =>
             `${node.label}${
