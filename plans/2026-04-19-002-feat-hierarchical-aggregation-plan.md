@@ -3,11 +3,43 @@ title: "feat: Hierarchical aggregation for Compounding Memory"
 type: feat
 status: active
 date: 2026-04-19
+last_refresh: 2026-04-20
 origin: docs/brainstorms/2026-04-19-compounding-memory-hierarchical-aggregation-requirements.md
 supersedes: plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md
 ---
 
 # feat: Hierarchical aggregation for Compounding Memory
+
+## Implementation Status (2026-04-20 refresh)
+
+This plan was drafted 2026-04-19 when only PR 1–5 of `.prds/compounding-memory-v1-build-plan.md` had landed. A day later, a mix of direct-execution PRs + collateral fixes shipped substantial portions of the aggregation engine — often in a slightly different shape than the plan proposed. This section captures what actually exists on `main` so the remaining units below can be scoped against reality, not against the original theory.
+
+| Unit | Original plan status | Actual state on `main` | Shipping refs |
+|---|---|---|---|
+| Unit 1 — Schema / migration | ❌ not started | ✅ Shipped, denormalized. `parent_page_id`, `hubness_score`, `aggregation` jsonb on sections (carrying `promotion_status`, `promotion_score`, `promoted_page_id`, `linked_page_ids`, etc.), `cluster` jsonb on `wiki_unresolved_mentions`, trigram indexes on aliases + titles. No separate `wiki_section_children` table — children denormalized into `aggregation.linked_page_ids`. | PRs #279-283, #285, #288 |
+| Unit 2 — Parent expansion | ❌ not started | ✅ Shipped. `packages/api/src/lib/wiki/parent-expander.ts` exports `deriveParentCandidates()` + `deriveParentCandidatesFromPageSummaries()`. Pure module — no DB lookup. Exact-title page resolution happens in `deterministic-linker.ts` (`emitDeterministicParentLinks`). | PR #285 |
+| Unit 3a — Fuzzy alias dedupe | ❌ not started | ✅ Shipped. `findAliasMatchesFuzzy()` in repository.ts, pg_trgm ≥ 0.85, same-type gate in `maybeMergeIntoExistingPage`, `fuzzy_dedupe_merges` metric. Migration `0015_pg_trgm_alias_title_indexes.sql`. | PR #288 |
+| Unit 3b — Section activity bump | ❌ not started | ❌ **Still missing.** No `bumpSectionLastSeen()` helper; parent `last_source_at` advances only inside the aggregation pass, not on leaf updates. | — |
+| Unit 3c — Continuation chaining | ❌ not started | ❌ **Still missing.** No `MAX_RECORDS_PER_BOOTSTRAP_JOB`, no next-bucket enqueue helper, no `continuation_enqueued` metric. R8 blocked until this lands. | — |
+| Unit 4 — Aggregation planner + applier | ❌ not started | ✅ Shipped, inline applier. `aggregation-planner.ts` emits `parentSectionUpdates` + `sectionPromotions` + `newPages` + `pageLinks`. Applier inlined in `compiler.ts:applyAggregationPlan()`. No separate `aggregation-applier.ts` module. Children registered via `aggregation.linked_page_ids`, not a join table. | PR B-series (prior), #285 |
+| Unit 5 — Promotion scoring + applier | ❌ not started | ✅ Shipped, inline applier. Pure `promotion-scorer.ts` with 5-signal Jaccard coherence; applier inlined in `compiler.ts`. Hysteresis via `aggregation.promotion_status='promoted'`. Extract-and-summarize writes a summary + top-highlights + link on the parent section. Thresholds lowered from plan's 5.0 composite to `candidate=0.4 / promoteReady=0.55` after real-data tuning. | PR B-series, #285 |
+| Unit 6 — Mention cluster enrichment + cluster promotion | ❌ not started | ❌ **Still missing.** `cluster` jsonb slot exists (`co_mentions`, `candidate_parent_page_id`, `observed_tags`) but aggregation planner does not enrich it with `cluster_summary` / `candidate_canonical_titles`, and no promotion path consumes it. Mention-seeded topic creation is not live. | — |
+| Unit 7 — Continuation + health metrics + admin query | ❌ not started | 🟡 **Partially shipped.** Most metrics exist in `wiki_compile_jobs.metrics` (`links_written_*`, `fuzzy_dedupe_merges`, `alias_dedup_merged`, `duplicate_candidates_count`, `deterministic_linking_flag_suppressed`). Missing: `continuation_enqueued`, cluster-related metrics, and the `wikiCompoundingHealth` admin GraphQL query. | PR #285 (metrics) |
+| Unit 8 — Mobile + GraphQL read surfaces | ❌ not started | ❌ **Mostly missing.** `MemoryRecord.wikiPages` declared but not verified end-to-end. `WikiPage.sourceMemoryCount` / `parent` / `children` / `promotedFromSection` / `sectionChildren` field resolvers do not exist. No "Contributes to:" / "Based on N memories" UI on mobile. The mobile graph viewer (#280, #283) is the one surface that shipped. | PRs #280, #283 |
+
+**New finding from Marco recompile validation on 2026-04-20 (not in original plan):** The aggregation applier creates hub `newPage`s without cross-type dedupe. On Marco, recompile produced 3 new `topic` pages — `Portland, Oregon`, `Tokyo`, `LastMile Data Catalog MCP` — whose titles already belonged to active `entity` pages. The R5 canary (`duplicate_candidates_count`) caught this (went from 1 → 4), but the applier itself should have detected the collision and either reused the existing entity or disambiguated the topic title. See Unit 9 below.
+
+**Recompile validation numbers (Marco, 284 active pages):**
+
+| Metric | Before recompile | After recompile |
+|---|---|---|
+| Pages linked | 74.7% | 77.5% |
+| Reference edges | 382 | 568 |
+| `fuzzy_dedupe_merges` | — | 0 (no planner-emitted duplicates to catch in this batch) |
+| `links_written_co_mention` | — | 156 |
+| `links_written_deterministic` | — | 0 (6 candidates derived, 0 exact-title matches — addresses trigram-fallback gap, see Unit 10) |
+| `parent_of` / `child_of` pair count | 3 / 3 | 4 / 4 |
+| `duplicate_candidates_count` (R5) | 1 | 4 (the cross-type bug) |
 
 ## Overview
 
@@ -201,28 +233,52 @@ stateDiagram-v2
 
 ## Phased Delivery
 
-v1 hierarchical aggregation is stacked PRs on top of the existing v1 build plan (PRs 1–5 in `.prds/compounding-memory-v1-build-plan.md`). Each PR leaves main green with aggregation-specific behavior gated behind the same `tenants.wiki_compile_enabled` flag used today.
+The original plan specified three phases. After the 2026-04-20 refresh, Phases 1 and 2 are functionally landed (see status table); the remaining work reorganizes around what the Marco recompile validation revealed. Each PR leaves `main` green and ships behind the existing `tenants.wiki_compile_enabled` + `WIKI_DETERMINISTIC_LINKING_ENABLED` flags.
 
-### Phase 1 — Foundation (lands first; enabled pieces are inert without Phase 2)
+### ✅ Phase 1 — Foundation (shipped)
 
-- Unit 1: Schema + migration for section kinds, parent-child, section-children join, mention cluster fields, `parent_page_id`, `hub_score`, `promotion_status`, trigram extension + indexes.
-- Unit 2: Deterministic parent expansion module + leaf planner prompt hook (candidates passed; planner instructed to favor parent reinforcement where appropriate).
-- Unit 3: Leaf compiler adjustments: fuzzy alias resolution (supersedes exact-only match) + section activity bump when a leaf page is updated under a known parent context + continuation chaining skeleton (Phase 1 ships the logic; Phase 3 wires metrics).
+- Unit 1: Schema / migration — shipped in denormalized form via PR 1 + PRs #285, #288. Aggregation state lives in `wiki_page_sections.aggregation jsonb` rather than discrete columns.
+- Unit 2: Deterministic parent expansion — shipped via PR #285 (pure module + exact-title page lookup in `deterministic-linker.ts`).
+- Unit 3a: Fuzzy alias dedupe — shipped via PR #288 (pg_trgm ≥ 0.85, same-type gate, `fuzzy_dedupe_merges` metric).
 
-### Phase 2 — Aggregation engine (the core mechanism)
+### ✅ Phase 2 — Aggregation engine (shipped)
 
-- Unit 4: Aggregation planner module, prompt, validator, applier for parent-section updates and section-child registrations.
-- Unit 5: Promotion scoring + promotion applier, hysteresis, extract-and-summarize, parent pointer sections.
+- Unit 4: Aggregation planner + applier — shipped. Applier is inlined in `compiler.ts`; children live in the section's aggregation jsonb rather than a join table.
+- Unit 5: Promotion scoring + applier — shipped. Thresholds retuned to `candidate=0.4 / promoteReady=0.55` after real-data calibration.
 
-### Phase 3 — Evidence, ops, surfaces
+### 🟡 Phase 3 — Operational readiness + correctness (2 PRs)
 
-- Unit 6: Mention cluster enrichment (supporting records, co-mentions, candidate parents/titles, summary, ambiguity) + cluster-aware promotion path.
-- Unit 7: Continuation chaining activation + compounding-health metrics + admin `wikiCompoundingHealth` query.
-- Unit 8: Mobile + GraphQL read surfaces: `MemoryRecord.wikiPages` end-to-end, `WikiPage.sourceMemoryCount`, parent/child breadcrumbs, `promotedFrom` linkage on child pages, "Contributes to:" on memory detail, "Based on N memories" on page detail.
+PR scope reflects real file surfaces after the refresh rather than the original plan's shape.
+
+- **PR A — "compile ops readiness"** (one merge, small surface):
+  - Unit 3b — section activity bump on leaf updates.
+  - Unit 3c — continuation chaining for bootstrap-scale imports (unlocks R8).
+  - Unit 9 — aggregation-applier cross-type duplicate guard (fixes the R5 canary trip surfaced on 2026-04-20 Marco recompile).
+  - Unit 10 — trigram-fallback page lookup for the deterministic parent linker (closes the 0-deterministic-links gap observed on Marco).
+- **PR B — "admin compounding-health query"**:
+  - Residual of Unit 7 — `wikiCompoundingHealth(tenantId, ownerId)` admin GraphQL query + whatever cluster metrics we want from Unit 6 if it ships first.
+
+### 🟢 Phase 4 — Evidence + read surfaces (2 PRs, lower urgency)
+
+- **PR C — Unit 6**: Evidence-backed mention clusters + cluster-aware promotion. Independent of Phase 3; high value but no operator can't-compile-without-this blocker. Safe to defer after Marco validates Phases 1-3 on a real bootstrap.
+- **PR D — Unit 8**: Mobile backlink UI + `WikiPage.parent`/`children`/`sourceMemoryCount`/`promotedFromSection` resolvers + `MemoryRecord.wikiPages` end-to-end. Pure UI + GraphQL layer; no compile-pipeline risk.
+
+### Completion gates
+
+The original nine acceptance criteria still apply. Gate them against the phase they finish in:
+
+- R1 (no surface-form fragmentation): needs Phase 3 PR A (Unit 10 in particular).
+- R2 (hub section with ≥ 5 backlinks): achievable today on bootstrap-scale data once Phase 3 PR A lands the trigram fallback.
+- R3/R4 (promotion + extract-and-summarize): ✅ already observable.
+- R5 (mobile backlink UI): Phase 4 PR D.
+- R6 (duplicate candidates → 0 on replay): needs Unit 9 (Phase 3 PR A).
+- R7 (scope isolation): ✅ holds.
+- R8 (bootstrap chains): needs Unit 3c (Phase 3 PR A).
+- R9 (metrics observable): Phase 3 PR B (health query).
 
 ## Implementation Units
 
-- [ ] **Unit 1: Schema + migration for hierarchical aggregation**
+- [x] **Unit 1: Schema + migration for hierarchical aggregation** — shipped in denormalized form (see status table above). No separate `wiki_section_children` table; children live in `aggregation.linked_page_ids`. `section_kind` / `last_scored_at` / `tag_histogram` columns not added — state lives in the `aggregation` jsonb. Acceptable for v1; revisit if children queries become a bottleneck.
 
 **Goal:** Land the entire data model for section kinds, parent-child relationships, section-to-child join, mention clusters, hub score, promotion status, and trigram indexes in one migration so downstream units can assume the model exists.
 
@@ -263,7 +319,7 @@ v1 hierarchical aggregation is stacked PRs on top of the existing v1 build plan 
 - Schema snapshot exported; `pnpm tsx -e "import * as s from '@thinkwork/database-pg/schema'; console.log(Object.keys(s).sort())"` lists the new symbols.
 - All existing api tests still pass (baseline preserved).
 
-- [ ] **Unit 2: Deterministic parent expansion module + leaf planner prompt integration**
+- [x] **Unit 2: Deterministic parent expansion module + leaf planner prompt integration** — shipped. Module is pure (no DB lookup); exact-title page resolution lives in `deterministic-linker.ts` (PR #285). See Unit 10 for the trigram-fallback gap that limits recall on titles like "Portland, Oregon" vs existing "Portland".
 
 **Goal:** Give the leaf planner a pre-computed list of candidate parent pages derived from each record's metadata so the model no longer has to rediscover containment every batch.
 
@@ -304,7 +360,7 @@ v1 hierarchical aggregation is stacked PRs on top of the existing v1 build plan 
 - Planner regression fixture still parses cleanly with the expanded prompt.
 - Metric `parent_expansions` appears on job metrics.
 
-- [ ] **Unit 3: Leaf compiler: fuzzy alias resolution + section activity tracking + continuation chaining skeleton**
+- [ ] **Unit 3: Leaf compiler: fuzzy alias resolution + section activity tracking + continuation chaining skeleton** — **partially shipped.** Fuzzy alias dedupe landed via PR #288 (Unit 3a). Section activity bump on leaf updates (Unit 3b) and continuation chaining skeleton (Unit 3c) remain — see the unwrapped sub-units at the bottom of this list.
 
 **Goal:** Harden the leaf compiler so surface-form variance collapses to one page (no duplicate Austin/ATX pages), so parent-section activity is recorded on every leaf update, and so the compile job's outer loop is shaped to chain continuations once metrics land in Unit 7.
 
@@ -350,7 +406,7 @@ v1 hierarchical aggregation is stacked PRs on top of the existing v1 build plan 
 - Job metrics carry `fuzzy_dedupe_merges`, `alias_prematch_hits`, `continuation_enqueued`.
 - Scope-isolation test (cross-agent fuzzy match is impossible) re-passes.
 
-- [ ] **Unit 4: Aggregation planner module + applier**
+- [x] **Unit 4: Aggregation planner module + applier** — shipped. Applier is inlined in `compiler.ts:applyAggregationPlan()` rather than a separate module; output schema carries `parentSectionUpdates + sectionPromotions + newPages + pageLinks` (no `sectionChildRegistrations` or `mentionClusterEnrichments` — those collapse into the aggregation jsonb and into Unit 6 respectively). The cross-type duplicate bug discovered during Marco validation lives in this applier; addressed in Unit 9.
 
 **Goal:** Run a second, narrowly-scoped planner after the leaf compile loop drains. Its job is to update parent-page sections, register section children, propose cluster enrichments, and emit promotion candidates.
 
@@ -416,7 +472,7 @@ v1 hierarchical aggregation is stacked PRs on top of the existing v1 build plan 
 - New metrics populate: `aggregation_targets`, `parent_sections_updated`, `section_children_registered`, `promotion_candidates_proposed`, `aggregation_failed`, `aggregation_partial_failure`.
 - Scope-isolation test re-passes; aggregation writes never cross `(tenant, owner)`.
 
-- [ ] **Unit 5: Promotion scoring + promotion applier (extract-and-summarize)**
+- [x] **Unit 5: Promotion scoring + promotion applier (extract-and-summarize)** — shipped. Pure scorer in `promotion-scorer.ts`; applier inlined in `compiler.ts`. Thresholds were tuned down to `candidate=0.4 / promoteReady=0.55` after real-data evaluation showed the plan's composite=5.0 bar was unreachable on agent-scale density. Hysteresis via `aggregation.promotion_status='promoted'` on the parent section. Extract-and-summarize rewrite shipped as documented.
 
 **Goal:** Turn promotion candidates into actual child pages. Multi-signal score, deterministic threshold, extract-and-summarize behavior on the parent (not hollowing-out), hysteresis so promoted sections never flap.
 
@@ -469,7 +525,7 @@ v1 hierarchical aggregation is stacked PRs on top of the existing v1 build plan 
 - Acceptance: R3 and R4 observable in the Austin fixture.
 - Health query reflects one `promoted` section and one promoted child page.
 
-- [ ] **Unit 6: Evidence-backed mention clusters + cluster-aware promotion**
+- [ ] **Unit 6: Evidence-backed mention clusters + cluster-aware promotion** — unchanged from the original plan. The `cluster` jsonb slot exists on `wiki_unresolved_mentions` but the planner enrichment + promotion path do not. Treat the schema-extension bullet points in the original spec as optional — the existing `cluster jsonb` shape (`{ co_mentions, candidate_parent_page_id, observed_tags }`) can absorb `supporting_record_ids`, `cluster_summary`, `ambiguity_notes` as additional keys without a migration.
 
 **Goal:** Turn unresolved mentions into cluster candidates that carry enough evidence to promote directly into aggregate pages, not bare leaves.
 
@@ -507,7 +563,7 @@ v1 hierarchical aggregation is stacked PRs on top of the existing v1 build plan 
 - Health query shows cluster counts and `cluster_promotion_deferred` reasons.
 - Metric: `cluster_promotions_executed`.
 
-- [ ] **Unit 7: Continuation chaining activation + compounding-health metrics + admin query**
+- [ ] **Unit 7: Continuation chaining activation + compounding-health metrics + admin query** — **partially shipped.** Most compile-side metrics landed via PR #285 (`links_written_*`, `fuzzy_dedupe_merges`, `duplicate_candidates_count`, `deterministic_linking_flag_suppressed`). Still missing: continuation-chaining activation (needs Unit 3c first) + the `wikiCompoundingHealth` admin GraphQL query. Tighten the scope of this unit to "admin query + continuation wiring once 3c lands"; most of the metric scaffolding is done.
 
 **Goal:** Make the bootstrap-scale compile self-complete, and expose whether compounding is actually working.
 
@@ -551,7 +607,7 @@ v1 hierarchical aggregation is stacked PRs on top of the existing v1 build plan 
 - Query runs cleanly against dev DB.
 - CloudWatch shows metrics JSON in compile-job logs.
 
-- [ ] **Unit 8: Mobile backlink UI + parent/child navigation + GraphQL read surfaces**
+- [ ] **Unit 8: Mobile backlink UI + parent/child navigation + GraphQL read surfaces** — unchanged. Mobile graph viewer (#280, #283) ships a different surface (force-directed graph over `wikiSubgraph`), not the per-page backlink UI this unit describes. Still a full gap.
 
 **Goal:** Make compounding visible. From any memory record the user can see which compiled pages cite it; from any compiled page the user sees cited memory count + drill-in list + parent breadcrumb + promoted-from linkage + child pages list.
 
@@ -600,6 +656,123 @@ v1 hierarchical aggregation is stacked PRs on top of the existing v1 build plan 
 **Verification:**
 - Manual mobile check with a seeded fixture.
 - Resolver tests green.
+
+### Sub-units added in the 2026-04-20 refresh
+
+These split out the "still pending" pieces of the original Unit 3 and capture the two new gaps Marco recompile validation surfaced.
+
+- [ ] **Unit 3b: Section activity bump on leaf updates**
+
+**Goal:** When a leaf page update lands under a parent (via `parent_page_id`), bump the parent section's `aggregation.last_source_at` so the next aggregation pass can treat it as a freshly-touched candidate. Today the bump only happens inside `applyAggregationPlan`, which means a batch that touched leaves but didn't trigger the aggregation planner leaves parents looking stale.
+
+**Requirements:** R2, R9.
+
+**Dependencies:** Unit 1 (schema — already shipped).
+
+**Files:**
+- Modify: `packages/api/src/lib/wiki/repository.ts` (add `bumpSectionLastSeen({ pageId, sectionSlug })` helper)
+- Modify: `packages/api/src/lib/wiki/compiler.ts` (call inside the leaf-update path in `applyPlan`)
+- Test: extend `packages/api/src/__tests__/wiki-compiler.test.ts`
+
+**Approach:**
+- Helper reads the target page's `parent_page_id`; if non-null, looks up the matching `collection`-style section on the parent (via heuristics on `aggregation.linked_page_ids`), and updates `aggregation->'last_source_at'` to `now()` via `jsonb_set` if newer. Idempotent.
+- Called once per leaf update at the end of `applyPlan`'s updates + newPages branches.
+- Metric: `parent_sections_bumped`.
+
+**Test scenarios:**
+- Happy path: leaf with `parent_page_id` set → parent section's `last_source_at` advances.
+- Edge case: leaf has no parent → no-op.
+- Edge case: parent section's `aggregation` is null → no-op, log.
+
+**Verification:**
+- Aggregation pass on a batch that only touched leaves (no newPages, no promotions) still sees those parents as candidates.
+
+- [ ] **Unit 3c: Continuation chaining**
+
+**Goal:** Bootstrap-scale imports (>= 500 records) must self-complete via next-bucket dedupe re-enqueue rather than requiring manual re-trigger. R8 acceptance blocked on this.
+
+**Requirements:** R8.
+
+**Dependencies:** Unit 1 shipped; `enqueue.ts` exists.
+
+**Files:**
+- Modify: `packages/api/src/lib/wiki/compiler.ts` (detect cap hit at job end, call enqueue helper)
+- Modify: `packages/api/src/lib/wiki/enqueue.ts` (next-bucket helper that floors `now + 300s` and constructs a dedupe key that can't collide with the current bucket)
+- Test: `packages/api/src/__tests__/wiki-continuation-chaining.test.ts`
+
+**Approach:**
+- New constant `MAX_RECORDS_PER_BOOTSTRAP_JOB = 1000` gated on `job.trigger === 'bootstrap_import'`; keep `MAX_RECORDS_PER_JOB = 500` for other triggers.
+- At job end: if `metrics.records_read >= cap` AND `cursor_not_drained`, compute next-bucket dedupe key and call `enqueueCompileJob` + async `invokeWikiCompile` (fire-and-forget per the existing Lambda invoke pattern).
+- Metric: `continuation_enqueued` (incremented only when the chain actually landed an inserted row).
+
+**Test scenarios:**
+- 1,500-record fixture with `trigger='bootstrap_import'` → job 1 reads 1,000, enqueues continuation; job 2 reads 500 and drains cursor.
+- Cap hit exactly with cursor drained → no continuation.
+- Enqueue fails (conflict/Lambda down) → metric stays 0, parent job still `succeeded`.
+
+**Verification:**
+- `metrics.continuation_enqueued >= 1` on the 1,500-record fixture.
+- Retries in `job_log` don't runaway (dedupe key changes per 5-minute bucket).
+
+- [ ] **Unit 9: Aggregation-applier cross-type duplicate guard**
+
+**Goal:** Stop the aggregation applier from creating a new `topic` (or any type) page when an active page of ANY type already exists with the same title in scope. Surfaced on 2026-04-20 Marco recompile — `Portland, Oregon`, `Tokyo`, and `LastMile Data Catalog MCP` got fresh `topic` rows despite active `entity` pages at those titles, tripping the R5 canary (`duplicate_candidates_count` 1 → 4).
+
+**Requirements:** R1, R6 — scope isolation plus "no surface-form fragmentation".
+
+**Dependencies:** Unit 1 shipped.
+
+**Files:**
+- Modify: `packages/api/src/lib/wiki/compiler.ts` — `applyAggregationPlan()` newPages loop (currently uses `findPageBySlug(..., type: np.type)` only; add a cross-type check via `findPagesByExactTitle`)
+- Modify: `packages/api/src/lib/wiki/repository.ts` — `findPagesByExactTitle` already exists (from PR #285). Reuse it.
+- Test: extend `packages/api/src/__tests__/wiki-compiler.test.ts`
+
+**Approach:**
+- Before the aggregation applier creates a hub newPage, call `findPagesByExactTitle({ tenantId, ownerId, title: np.title })`. If ANY hit exists (regardless of type), skip the newPage creation, log a structured warning, and increment a new metric `duplicate_candidates_cross_type`.
+- When the colliding page is of `type='entity'` and the proposal is `type='topic'`, treat the entity as a candidate for future promotion (Unit 5 already handles that path) — don't silently overwrite.
+- Do NOT attempt to auto-merge cross-type; the original shape (entity surviving, topic deferred) is the safer default. Operator-facing alerts via the health query (Unit 7) flag these cases.
+
+**Execution note:** Test-first. Seed a fixture where an entity `"Portland, Oregon"` pre-exists and the aggregation planner emits a `topic` newPage with the same title; assert the topic is NOT created and `duplicate_candidates_cross_type` increments.
+
+**Test scenarios:**
+- Happy path: planner emits `topic` newPage with title matching active `entity` → skip, metric increments, entity unchanged.
+- Happy path: planner emits `topic` newPage with title matching active `topic` (self-type collision) → existing behavior (findPageBySlug catches it).
+- Edge case: matching page is archived → proceed with new creation (archived doesn't shadow).
+- Edge case: no matching page → proceed with creation as today.
+- Error path: `findPagesByExactTitle` throws → log + proceed (don't block the applier on a read failure).
+
+**Verification:**
+- Re-run the Marco recompile validation. `duplicate_candidates_count` should not rise (stays at 1 — the pre-existing `Austin, Texas` pair — until manually addressed).
+
+- [ ] **Unit 10: Trigram-fallback page lookup for the deterministic parent linker**
+
+**Goal:** Close the exact-title recall gap in `deterministic-linker.ts:emitDeterministicParentLinks`. On Marco recompile, the parent-expander derived 6 city/journal candidates but zero produced links because `findPagesByExactTitle` missed parents whose titles differ from the candidate by a common suffix pattern (e.g., candidate `"Portland"` from place.city metadata vs active page titled `"Portland, Oregon"`).
+
+**Requirements:** R1 (+denser graph for sparse agents).
+
+**Dependencies:** PR #285 shipped; PR #288 shipped `pg_trgm` indexes.
+
+**Files:**
+- Modify: `packages/api/src/lib/wiki/repository.ts` — add `findPagesByFuzzyTitle({ tenantId, ownerId, title, threshold })` using the trigram GIN index. Mirrors `findAliasMatchesFuzzy` shape.
+- Modify: `packages/api/src/lib/wiki/deterministic-linker.ts` — `emitDeterministicParentLinks` tries exact first, falls through to fuzzy at 0.85 when exact returns empty. Same type gate as fuzzy alias dedupe.
+- Test: extend `packages/api/src/__tests__/wiki-deterministic-linker.test.ts`
+
+**Approach:**
+- Fuzzy path is additive — exact-title remains the primary resolver. Only fires when `findPagesByExactTitle` returned 0 hits.
+- Cap at 1 fuzzy hit per candidate (`LIMIT 1` on the trigram query, ordered by similarity DESC).
+- Keep the `context` tag format — both exact + fuzzy rows tag as `deterministic:<reason>:<parent_slug>`. No new rollback surface.
+
+**Execution note:** Start with a failing test that seeds a candidate `{reason: "city", parentTitle: "Portland"}` + an active `"Portland, Oregon"` topic page, asserts one `reference` link to the topic.
+
+**Test scenarios:**
+- Happy path: candidate `"Portland"` + page `"Portland, Oregon"` (topic, same scope, active) → one link.
+- Edge case: exact-title match exists → fuzzy never queried (performance invariant).
+- Edge case: fuzzy match is type `decision` → skipped by type gate.
+- Edge case: multiple fuzzy matches → pick highest similarity (single row).
+- Edge case: `pg_trgm` missing → helper returns empty, behaviour falls back to exact-only (mirrors `findAliasMatchesFuzzy`).
+
+**Verification:**
+- Marco recompile produces `links_written_deterministic > 0` (expect the 6 derived candidates to start landing links).
 
 ## System-Wide Impact
 
