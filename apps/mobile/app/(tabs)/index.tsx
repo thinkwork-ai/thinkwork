@@ -254,7 +254,7 @@ export default function ThreadsScreen() {
   // Wiki-tab search: the footer only emits on explicit submit
   // (Enter or send tap), so no debounce layer is needed here.
   const [wikiQuery, setWikiQuery] = useState("");
-  // Pages tab: list (table rows) ↔ graph (force-directed view)
+  // Wiki tab: list (table rows) ↔ graph (force-directed view)
   const [wikiViewMode, setWikiViewMode] = useState<"list" | "graph">("list");
   // Skia text rendering needs an Inter SkFont — load once for the lifetime of the tab.
   const [wikiFontsLoaded] = useFonts({ Inter: Inter_500Medium });
@@ -398,7 +398,7 @@ export default function ThreadsScreen() {
               </View>
             </AgentPicker>
 
-            {/* Right: Pages-tab view toggle + Filter + Menu */}
+            {/* Right: Wiki-tab view toggle + Filter + Menu */}
             <View className="flex-row items-center gap-3">
             {activeTab === "wiki" ? (
               <Pressable
@@ -462,7 +462,7 @@ export default function ThreadsScreen() {
         </View>
       )}
 
-      {/* Threads / Pages segmented control (state value stays "wiki" — Pages is the user-facing label for the compiled-wiki tab) */}
+      {/* Threads / Wiki segmented control */}
       <View
         className="border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 items-center justify-center"
         style={{ height: 52, paddingBottom: 8 }}
@@ -498,7 +498,7 @@ export default function ThreadsScreen() {
               backgroundColor: activeTab === "wiki" ? (isDark ? "#525252" : "#ffffff") : "transparent",
             }}
           >
-            <Text className="text-sm font-semibold" style={{ color: activeTab === "wiki" ? colors.foreground : colors.mutedForeground }}>Pages</Text>
+            <Text className="text-sm font-semibold" style={{ color: activeTab === "wiki" ? colors.foreground : colors.mutedForeground }}>Wiki</Text>
           </Pressable>
         </View>
       </View>
