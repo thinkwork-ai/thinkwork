@@ -112,7 +112,7 @@ export const controls = {
 
 export const agentTemplates = {
   eyebrow: "Templates",
-  headline: "You decide what each agent is allowed to do.",
+  headline: "You decide what each agent can do.",
   lede: "Agent templates are the contract between a policy decision and the agents that enforce it. Define a template once and every agent created from it inherits the boundary.",
   features: [
     {
