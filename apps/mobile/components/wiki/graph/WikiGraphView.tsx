@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import {
@@ -50,10 +50,21 @@ export function WikiGraphView({
   searchQuery,
 }: WikiGraphViewProps) {
   const router = useRouter();
-  const { graph, loading, error } = useWikiGraph({
+  const { graph, loading, error, refetch } = useWikiGraph({
     tenantId,
     ownerId: agentId,
   });
+
+  // Background refresh every time the graph view mounts (i.e. toggled
+  // back from list view). There's no pull-to-refresh in graph mode, so
+  // this is the user's only guarantee of fresh data. Positions + camera
+  // survive via the prevInternalRef + graphStateCache layers, so the
+  // refresh doesn't disturb the visible state.
+  const refetchRef = useRef(refetch);
+  refetchRef.current = refetch;
+  useEffect(() => {
+    refetchRef.current();
+  }, []);
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
