@@ -16,6 +16,9 @@ export const COLORS = {
     destructive: "#ef4444",
     border: "#e5e5e5",
     input: "#e5e5e5",
+    wikiEntity: "#0284c7",
+    wikiTopic: "#d97706",
+    wikiDecision: "#7c3aed",
   },
   dark: {
     background: "#000000",
@@ -31,6 +34,9 @@ export const COLORS = {
     destructive: "#ef4444",
     border: "rgba(255, 255, 255, 0.1)",
     input: "rgba(255, 255, 255, 0.15)",
+    wikiEntity: "#38bdf8",
+    wikiTopic: "#fbbf24",
+    wikiDecision: "#a78bfa",
   },
 };
 
