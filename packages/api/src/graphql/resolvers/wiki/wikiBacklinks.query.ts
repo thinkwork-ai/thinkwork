@@ -7,7 +7,7 @@
  * their target.
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
 	wikiPages,
 	wikiPageLinks,
@@ -38,18 +38,26 @@ export const wikiBacklinks = async (
 		ownerId: target.owner_id,
 	});
 
+	// Two-step dedup: first pull the set of distinct source page ids
+	// pointing at the target (so a parent/child pair with both a
+	// `reference` and a `parent_of` row collapses to one id), then fetch
+	// the active page rows by id. Sibling resolver `wikiConnectedPages`
+	// already uses this shape; `wikiBacklinks` was doing a raw join that
+	// surfaced duplicate REFERENCED BY entries + a React key-collision
+	// warning on the mobile wiki detail screen.
+	const sourceRows = await db
+		.selectDistinct({ id: wikiPageLinks.from_page_id })
+		.from(wikiPageLinks)
+		.where(eq(wikiPageLinks.to_page_id, args.pageId));
+	const sourceIds = sourceRows.map((r) => r.id);
+	if (sourceIds.length === 0) return [];
+
 	const rows = await db
 		.select()
-		.from(wikiPageLinks)
-		.innerJoin(wikiPages, eq(wikiPageLinks.from_page_id, wikiPages.id))
-		.where(
-			and(
-				eq(wikiPageLinks.to_page_id, args.pageId),
-				eq(wikiPages.status, "active"),
-			),
-		);
+		.from(wikiPages)
+		.where(and(inArray(wikiPages.id, sourceIds), eq(wikiPages.status, "active")));
 
 	return rows.map((r) =>
-		toGraphQLPage(r.wiki_pages, { sections: [], aliases: [] }),
+		toGraphQLPage(r, { sections: [], aliases: [] }),
 	);
 };
