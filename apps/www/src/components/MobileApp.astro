@@ -13,11 +13,11 @@ import { mobile } from "../lib/copy";
 
   <div class="mt-14 grid gap-10 lg:grid-cols-12 lg:items-center lg:gap-14">
     <div class="lg:col-span-6">
-      <div class="relative rounded-3xl border border-white/5 bg-white/[0.02] p-6 md:p-10">
+      <div class="relative rounded-3xl border border-white/5 bg-white/[0.02] p-5 md:p-8">
         <div class="pointer-events-none absolute inset-x-10 top-8 bottom-10 rounded-[2rem] bg-gradient-to-b from-brand/[0.08] to-transparent blur-2xl"></div>
-        <div class="relative flex items-end justify-center gap-4 sm:gap-5">
-          <div class="relative w-full max-w-[230px] translate-y-2">
-            <div class="overflow-hidden rounded-[2rem] border border-white/10 bg-[#05080d] shadow-[0_24px_60px_rgba(0,0,0,0.55)]">
+        <div class="relative grid grid-cols-2 items-start gap-4 sm:gap-5">
+          <div class="flex flex-col items-center">
+            <div class="w-full overflow-hidden rounded-[2rem] border border-white/10 bg-[#05080d] shadow-[0_24px_60px_rgba(0,0,0,0.55)]">
               <img
                 src="/images/mobile/threads-list.png"
                 alt="The Threads tab in the ThinkWork mobile app showing a unified inbox of chat threads, automations, and email threads"
@@ -27,10 +27,10 @@ import { mobile } from "../lib/copy";
                 class="block h-auto w-full"
               />
             </div>
-            <p class="mt-3 text-center font-mono text-[11px] uppercase tracking-[0.2em] text-slate-500">Threads</p>
+            <p class="mt-4 text-center font-mono text-[11px] uppercase tracking-[0.2em] text-slate-500">Threads</p>
           </div>
-          <div class="relative w-full max-w-[230px] -translate-y-2">
-            <div class="overflow-hidden rounded-[2rem] border border-brand/20 bg-[#05080d] shadow-[0_24px_60px_rgba(56,189,248,0.18)]">
+          <div class="flex flex-col items-center">
+            <div class="w-full overflow-hidden rounded-[2rem] border border-brand/20 bg-[#05080d] shadow-[0_24px_60px_rgba(56,189,248,0.18)]">
               <img
                 src="/images/mobile/wiki-graph.png"
                 alt="The Wiki tab in the ThinkWork mobile app showing the memory knowledge graph"
@@ -40,7 +40,7 @@ import { mobile } from "../lib/copy";
                 class="block h-auto w-full"
               />
             </div>
-            <p class="mt-3 text-center font-mono text-[11px] uppercase tracking-[0.2em] text-brand/70">Wiki</p>
+            <p class="mt-4 text-center font-mono text-[11px] uppercase tracking-[0.2em] text-brand/70">Wiki</p>
           </div>
         </div>
       </div>

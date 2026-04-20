@@ -12,7 +12,7 @@ The homepage pulls product shots from this folder (`apps/www/public/images/admin
 | `memories-graph.png` (all-agents graph) | `MemoryWedge.astro` | shipped |
 | `memories-graph-filtered.png` | — | reserve asset (single-agent graph view) |
 | `thread-detail.png` | — | reserve asset (thread execution trace, useful for a future "Audit trail" section) |
-| `evals-run.png` | `Evals.astro` | **pending** — currently falls back to styled SVG mock. Drop a real capture at `/evaluations/$runId` into this path, then set `pending={false}` in `Evals.astro`. |
+| `evals-run.png` | — | **not yet captured**. The dedicated Evals showcase section is currently removed to avoid a placeholder. Evals still appears as pillar #5 in `FiveControls.astro` and as a proof point in `ProofStrip.astro`. When a real `/evaluations/$runId` capture lands, re-add an `Evals.astro` component (see `git log` — it was deleted in the `feat(www): unify design system` follow-up; a prior version using `CapabilityShowcase` is recoverable from the history) and compose it in `src/pages/index.astro` between `CostControl` and `SystemModel`. |
 
 ## Mobile captures
 

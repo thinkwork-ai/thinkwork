@@ -15,10 +15,8 @@ interface Props {
   imageAlt: string;
   caption: string;
   chromeLabel?: string;
-  variant: "templates" | "cost" | "evals";
   accent?: boolean;
   figureFirst?: boolean;
-  pending?: boolean;
 }
 
 const {
@@ -33,10 +31,8 @@ const {
   imageAlt,
   caption,
   chromeLabel,
-  variant,
   accent = false,
   figureFirst = false,
-  pending = false,
 } = Astro.props;
 ---
 
@@ -61,8 +57,6 @@ const {
         alt={imageAlt}
         caption={caption}
         chromeLabel={chromeLabel}
-        variant={variant}
-        pending={pending}
         accent={accent}
       />
     </div>
