@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useClient } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Loader2, Search, X, Sparkles } from "lucide-react";
@@ -31,8 +31,20 @@ import {
 } from "@/components/ui/select";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 
+type WikiView = "pages" | "graph";
+
+function isWikiView(v: unknown): v is WikiView {
+  return v === "pages" || v === "graph";
+}
+
 export const Route = createFileRoute("/_authed/_tenant/wiki/")({
   component: WikiPage,
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { agent?: string; view?: WikiView } => ({
+    ...(typeof search.agent === "string" && search.agent ? { agent: search.agent } : {}),
+    ...(isWikiView(search.view) ? { view: search.view } : {}),
+  }),
 });
 
 type WikiRow = {
@@ -61,11 +73,35 @@ function PageTypeBadge({ type }: { type: WikiPageType }) {
 
 function WikiPage() {
   const { tenantId } = useTenant();
-  const [selectedAgentId, setSelectedAgentId] = useState<string>("all");
+  const { agent, view: viewParam } = Route.useSearch();
+  const navigate = useNavigate();
+  const selectedAgentId = agent ?? "all";
+  const view: WikiView = viewParam ?? "pages";
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
-  const [view, setView] = useState<"pages" | "graph">("pages");
   const graphRef = useRef<WikiGraphHandle>(null);
+
+  const updateFilters = useCallback(
+    (next: { agent?: string; view?: WikiView }) => {
+      navigate({
+        to: "/wiki",
+        search: {
+          ...(next.agent && next.agent !== "all" ? { agent: next.agent } : {}),
+          ...(next.view && next.view !== "pages" ? { view: next.view } : {}),
+        },
+        replace: true,
+      });
+    },
+    [navigate],
+  );
+  const setSelectedAgentId = useCallback(
+    (nextAgent: string) => updateFilters({ agent: nextAgent, view }),
+    [updateFilters, view],
+  );
+  const setView = useCallback(
+    (nextView: WikiView) => updateFilters({ agent: selectedAgentId, view: nextView }),
+    [updateFilters, selectedAgentId],
+  );
 
   // List-row detail sheet
   const [sheetOpen, setSheetOpen] = useState(false);
