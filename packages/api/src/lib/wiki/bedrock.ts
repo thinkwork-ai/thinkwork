@@ -181,3 +181,153 @@ export function parseJsonResponse<T>(text: string): T {
 function truncate(s: string, n: number): string {
 	return s.length <= n ? s : `${s.slice(0, n)}…`;
 }
+
+// ---------------------------------------------------------------------------
+// Retry wrapper — handles transient Bedrock + JSON-parse failures
+// ---------------------------------------------------------------------------
+
+/**
+ * Thrown when all retry attempts fail. The compile-job outer catch checks for
+ * this name and increments `bedrock_retry_exhausted` on the job metrics.
+ */
+export class BedrockRetryExhaustedError extends Error {
+	override readonly name = "BedrockRetryExhaustedError";
+	readonly attempts: number;
+	override readonly cause: Error;
+	constructor(attempts: number, cause: Error) {
+		super(
+			`bedrock retry exhausted after ${attempts} attempts: ${cause.message}`,
+		);
+		this.attempts = attempts;
+		this.cause = cause;
+	}
+}
+
+const DEFAULT_MAX_ATTEMPTS = 3;
+const BASE_BACKOFF_MS = 1000;
+
+// SDK exception names that indicate a transient condition worth retrying.
+// Anything outside this set (auth, validation, not-found, aborted) is fatal.
+const RETRYABLE_SDK_ERROR_NAMES = new Set([
+	"ThrottlingException",
+	"ServiceUnavailableException",
+	"InternalServerException",
+	"ModelStreamErrorException",
+	"ModelErrorException",
+	"TimeoutError",
+]);
+
+/**
+ * Classify an error as worth retrying. Covers:
+ * - Transient SDK exceptions (throttling, 5xx, transient timeouts)
+ * - `parseJsonResponse: empty response` and `no JSON found…` — empty or
+ *   prose-only Bedrock outputs that cleared the SDK call but failed to parse
+ * - `SyntaxError` from `JSON.parse` — the "Expected ',' or '}' after property
+ *   value" / unterminated-string shapes that come from a truncated response
+ *
+ * User-initiated cancellation (`AbortError`) is never retried.
+ */
+export function isRetryableBedrockError(err: unknown): boolean {
+	if (!(err instanceof Error)) return false;
+	if (err.name === "AbortError") return false;
+	if (RETRYABLE_SDK_ERROR_NAMES.has(err.name)) return true;
+	const code = (err as NodeJS.ErrnoException).code;
+	if (code === "ETIMEDOUT" || code === "ECONNRESET") return true;
+	if (err instanceof SyntaxError) return true;
+	if (err.message.startsWith("parseJsonResponse:")) return true;
+	return false;
+}
+
+function backoffDelayMs(attempt: number): number {
+	// attempt is 1-indexed; first retry waits ~1s, then ~2s, then ~4s
+	const base = BASE_BACKOFF_MS * 2 ** (attempt - 1);
+	// ±25% jitter: multiply by a factor in [0.75, 1.25]
+	const jitter = 0.75 + Math.random() * 0.5;
+	return Math.round(base * jitter);
+}
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export interface InvokeClaudeWithRetryResult extends InvokeClaudeResult {
+	/** Number of retry attempts that happened before the call succeeded. */
+	retries: number;
+}
+
+/**
+ * Invoke Claude with retry on transient SDK failures. Used by section-writer,
+ * which accepts raw markdown and has no JSON-parse step to retry on.
+ */
+export async function invokeClaudeWithRetry(
+	args: InvokeClaudeArgs,
+): Promise<InvokeClaudeWithRetryResult> {
+	return withBedrockRetry(
+		async () => invokeClaude(args),
+		{ signal: args.signal },
+	);
+}
+
+export interface InvokeClaudeJsonResult<T> extends InvokeClaudeWithRetryResult {
+	parsed: T;
+}
+
+/**
+ * Invoke Claude expecting a JSON response, retrying on transient SDK failures
+ * AND on JSON-parse failures (empty response, truncated response, no JSON
+ * found). Planner + aggregation-planner both route through this — a compile
+ * job now rides through the ~15% Bedrock flakes that used to kill the chain.
+ *
+ * Optional `parse` hook lets callers substitute their own extractor. Defaults
+ * to `parseJsonResponse`.
+ */
+export async function invokeClaudeJson<T>(
+	args: InvokeClaudeArgs & { parse?: (text: string) => T },
+): Promise<InvokeClaudeJsonResult<T>> {
+	const parse = args.parse ?? ((text: string) => parseJsonResponse<T>(text));
+	return withBedrockRetry(
+		async () => {
+			const res = await invokeClaude(args);
+			const parsed = parse(res.text);
+			return { ...res, parsed };
+		},
+		{ signal: args.signal },
+	);
+}
+
+async function withBedrockRetry<R>(
+	fn: () => Promise<R>,
+	opts: { signal?: AbortSignal; maxAttempts?: number } = {},
+): Promise<R & { retries: number }> {
+	const maxAttempts = opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
+	let lastErr: Error | undefined;
+	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+		if (opts.signal?.aborted) {
+			const abortErr = new Error("aborted");
+			abortErr.name = "AbortError";
+			throw abortErr;
+		}
+		try {
+			const res = await fn();
+			return { ...res, retries: attempt - 1 };
+		} catch (err) {
+			lastErr = err instanceof Error ? err : new Error(String(err));
+			if (!isRetryableBedrockError(lastErr)) {
+				throw lastErr;
+			}
+			if (attempt >= maxAttempts) {
+				throw new BedrockRetryExhaustedError(attempt, lastErr);
+			}
+			const delay = backoffDelayMs(attempt);
+			console.warn(
+				`[bedrock] retry ${attempt}/${maxAttempts - 1} after ${delay}ms: ${truncate(lastErr.message, 200)}`,
+			);
+			await sleep(delay);
+		}
+	}
+	// Unreachable — loop always returns or throws.
+	throw new BedrockRetryExhaustedError(
+		maxAttempts,
+		lastErr ?? new Error("unknown bedrock failure"),
+	);
+}

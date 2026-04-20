@@ -55,6 +55,7 @@ import {
 	emitDeterministicParentLinks,
 	type AffectedPage,
 } from "./deterministic-linker.js";
+import { BedrockRetryExhaustedError } from "./bedrock.js";
 import { invokeWikiCompile } from "./enqueue.js";
 import { runPlanner, type PlannerResult } from "./planner.js";
 import {
@@ -167,6 +168,17 @@ export interface RunJobResult {
 		 * operators can distinguish "flag off" from "no candidates" at a
 		 * glance. */
 		deterministic_linking_flag_suppressed?: boolean;
+		/** Total retry attempts across every Bedrock call this job — planner,
+		 * aggregation planner, and section writer all feed into this counter.
+		 * Successful calls with 0 retries contribute nothing. Rising values
+		 * mean the model / quota is flaking; a Bedrock outage shows up here
+		 * before it shows up as outright failures. */
+		bedrock_retries?: number;
+		/** Count of Bedrock calls that exhausted all 3 retry attempts and
+		 * forced this job to fail. Effectively 0 or 1 — once the outer catch
+		 * fires, the job is dead — but treated as a counter so it aggregates
+		 * cleanly across jobs in downstream dashboards. */
+		bedrock_retry_exhausted?: number;
 	};
 	error?: string;
 }
@@ -298,6 +310,8 @@ export async function runCompileJob(
 			metrics.planner_calls += 1;
 			metrics.input_tokens += plan.usage.inputTokens;
 			metrics.output_tokens += plan.usage.outputTokens;
+			metrics.bedrock_retries =
+				(metrics.bedrock_retries ?? 0) + (plan.usage.bedrockRetries ?? 0);
 
 			// Pre-compute title + type + slug for every page that could be
 			// referenced in a newPage / updated section's body. Two consumers:
@@ -461,6 +475,13 @@ export async function runCompileJob(
 		return makeResult(job.id, "succeeded", started, metrics);
 	} catch (err) {
 		const msg = (err as Error)?.message || String(err);
+		if (
+			err instanceof BedrockRetryExhaustedError ||
+			(err as Error | undefined)?.name === "BedrockRetryExhaustedError"
+		) {
+			metrics.bedrock_retry_exhausted =
+				(metrics.bedrock_retry_exhausted ?? 0) + 1;
+		}
 		metrics.cost_usd = estimateCostUsd(
 			metrics.input_tokens,
 			metrics.output_tokens,
@@ -598,6 +619,8 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			metrics.sections_rewritten += 1;
 			metrics.input_tokens += writeRes.inputTokens;
 			metrics.output_tokens += writeRes.outputTokens;
+			metrics.bedrock_retries =
+				(metrics.bedrock_retries ?? 0) + (writeRes.bedrockRetries ?? 0);
 
 			sectionsToApply.push({
 				section_slug: sec.slug,
@@ -976,6 +999,8 @@ export async function runAggregationPass(args: AggregationArgs): Promise<void> {
 		(metrics.aggregation_input_tokens ?? 0) + plan.usage.inputTokens;
 	metrics.aggregation_output_tokens =
 		(metrics.aggregation_output_tokens ?? 0) + plan.usage.outputTokens;
+	metrics.bedrock_retries =
+		(metrics.bedrock_retries ?? 0) + (plan.usage.bedrockRetries ?? 0);
 
 	const knownPageRefs = [
 		...candidatePages.map((p) => ({
@@ -1275,6 +1300,8 @@ async function applyAggregationPlan(
 			metrics.section_writer_calls += 1;
 			metrics.input_tokens += writeRes.inputTokens;
 			metrics.output_tokens += writeRes.outputTokens;
+			metrics.bedrock_retries =
+				(metrics.bedrock_retries ?? 0) + (writeRes.bedrockRetries ?? 0);
 			bodyForUpsert = writeRes.body_md;
 		}
 		metrics.sections_rewritten += 1;
@@ -1531,6 +1558,8 @@ function emptyMetrics(): RunJobResult["metrics"] {
 		links_written_co_mention: 0,
 		duplicate_candidates_count: 0,
 		fuzzy_dedupe_merges: 0,
+		bedrock_retries: 0,
+		bedrock_retry_exhausted: 0,
 	};
 }
 

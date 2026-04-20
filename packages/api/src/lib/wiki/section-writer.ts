@@ -13,7 +13,7 @@
  */
 
 import type { ThinkWorkMemoryRecord } from "../memory/types.js";
-import { invokeClaude } from "./bedrock.js";
+import { invokeClaudeWithRetry } from "./bedrock.js";
 import { getTemplate } from "./templates.js";
 import type { WikiPageType } from "./repository.js";
 
@@ -46,6 +46,10 @@ export interface SectionWriteResult {
 	inputTokens: number;
 	outputTokens: number;
 	modelId: string;
+	/** Retry attempts before the underlying Bedrock call succeeded. Optional so
+	 * older tests that stub `writeSection` directly stay green — production
+	 * code always populates this. */
+	bedrockRetries?: number;
 }
 
 const SECTION_WRITER_SYSTEM = `You are rewriting a single section of a compounding-memory wiki page.
@@ -120,7 +124,7 @@ export async function writeSection(
 		"Return only the final markdown body for this one section. Do not include the heading line. Use plain prose — no [[wikilink]] brackets.",
 	].join("\n");
 
-	const resp = await invokeClaude({
+	const resp = await invokeClaudeWithRetry({
 		system: SECTION_WRITER_SYSTEM,
 		user,
 		maxTokens: 2048,
@@ -133,6 +137,7 @@ export async function writeSection(
 		inputTokens: resp.inputTokens,
 		outputTokens: resp.outputTokens,
 		modelId: resp.modelId,
+		bedrockRetries: resp.retries,
 	};
 }
 
