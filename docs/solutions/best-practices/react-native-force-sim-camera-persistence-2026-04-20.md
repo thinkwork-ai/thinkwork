@@ -1,6 +1,7 @@
 ---
 title: Persisting d3-force + Reanimated camera state across React Native navigation
 date: 2026-04-20
+last_updated: 2026-04-20
 category: best-practices
 module: apps/mobile/components/wiki/graph
 problem_type: best_practice
@@ -30,7 +31,7 @@ A wiki graph screen renders nodes/edges with `@shopify/react-native-skia` under 
 Three forces fight that expectation and each one produces a different user-visible regression:
 
 1. **Expo Router unmounts the graph screen** when the user navigates away (tab unmount-on-blur or stack push that displaces the origin screen).
-2. **urql emits a new payload object for the same query** — either on focus/refetch or when a sibling component creates an identical subscription. The adapter's `useMemo` rebuilds, producing fresh node objects with no `x`/`y`.
+2. **urql emits a new payload object for the same query** — either on focus/refetch or when a sibling component creates an identical subscription. This is also an intentional case: setting `requestPolicy: "cache-and-network"` and firing `refetch()` on mount to give a Skia-canvas surface a "pull-to-refresh"-equivalent will re-emit on every mount by design. Without Layer 2 below, every intended refresh stomps the user's camera + layout. The adapter's `useMemo` rebuilds, producing fresh node objects with no `x`/`y`.
 3. **d3-force starts at `alpha = 1`** on every (re-)init. Even with seeded positions, it immediately applies fresh velocities on the first tick and flings nodes away from the restored layout.
 
 No single persistence layer defeats all three. You need three independent layers working together.
@@ -56,6 +57,19 @@ The three layers are orthogonal. Omitting any one produces a different regressio
 ## When to Apply
 
 - Any Skia / Reanimated canvas whose layout is computed by an iterative simulation (d3-force, matter-js, custom springs) **and** whose host screen can unmount.
+- **Adding a background data-refresh affordance** to the same surface (no pull-to-refresh on a Skia canvas, so remount-on-toggle is the only natural trigger). Once Layers 1–3 are in place this is a one-line change: fire `refetch()` in a mount-only effect, via a stable ref so the effect stays at empty deps.
+
+  ```tsx
+  const { graph, refetch } = useWikiGraph({ tenantId, ownerId });
+  const refetchRef = useRef(refetch);
+  refetchRef.current = refetch;
+  useEffect(() => {
+    refetchRef.current();
+  }, []);
+  ```
+
+  The ref is load-bearing. Putting `refetch` itself in the dep array refires on every urql identity change — a refetch storm. Calling it inline in render fires ~30× per second during active simulation. The stable-ref idiom keeps the effect one-shot per mount while still calling whatever `refetch` closure urql currently exposes. Cached data renders instantly on mount, fresh data slides in silently via Layer 2 — the user never sees a loading state on the graph itself.
+
 - Also watch for two sibling gotchas from the same surface area:
   - **Timed reveal / intro animations** whose `useEffect` depends on data that can re-emit. If a `setTimeout` sits inside a `useEffect` whose deps change at a higher frequency than the timer fires, the cleanup will repeatedly clear the timer — you're stuck with `revealed: false` forever. Fix: split into two effects — (a) a mount-only `useEffect(() => { const t = setTimeout(...); return () => clearTimeout(t); }, [])` that flips a `preRevealComplete` state, and (b) a second effect gated on `preRevealComplete + hasRevealedRef.current` that runs the reveal logic exactly once per component instance.
   - **Labels that must follow the camera**: render as Skia `<Text>` inside the transformed `<Group>`, not as RN `<Text>` overlays positioned by reading `camera.tx.value` on the JS thread. Shared-value writes happen UI-thread without triggering a JS re-render, so overlay math stays stale during pan/pinch.
@@ -158,3 +172,4 @@ if (preseeded) {
 - Code: `apps/mobile/components/wiki/graph/graphStateCache.ts` · `WikiGraphView.tsx` · `hooks/useForceSimulation.ts` · `KnowledgeGraph.tsx`
 - Sibling gotcha: the same session surfaced the two-effect reveal pattern and Skia-text-inside-Group for auto-following labels; both are documented in the v2 plan's "Things worth knowing before touching the graph again" section.
 - PR #292 — the landed implementation of all three layers.
+- PR #301 — turned on mount-triggered `refetch()` on `WikiGraphView` to give the graph surface a refresh affordance. Layer 2's `prevInternalRef` is what makes the intentional re-emit safe; validates the "urql re-emits mid-session" branch of the Context section.
