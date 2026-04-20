@@ -18,7 +18,7 @@ related:
 This plan adds two **deterministic, LLM-free** link-emission paths to the compile pipeline plus a one-time backfill:
 
 1. **Metadata-driven parent links.** When `parent-expander` derives a high-confidence parent candidate (exact city match, exact journal match, exact tag-cluster match) and a wiki page already exists for that parent title, emit a `reference` link from the leaf to the parent, without waiting for a section promotion.
-2. **Co-mention reference links.** When the leaf planner processes a batch containing a memory_unit that references ≥2 existing entity pages by slug, emit reciprocal `reference` links between those pages with `context = memory_unit.id` for provenance.
+2. **Co-mention reference links.** After `applyPlan()` writes sections, read `wiki_section_sources` for this batch's memory_units — whenever a single memory_unit sourced ≥2 distinct active entity pages, emit reciprocal `reference` links between those pages with `context = "co_mention:<memory_unit_id>"` for provenance.
 3. **Backfill.** One-off script that walks existing pages + memory_units and produces the same link set retroactively, idempotent via the existing `(from_page_id, to_page_id, kind)` unique index.
 
 Scope is deliberately a **pre-hierarchical quick win**. The broader hierarchical aggregation plan (`plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md`, 0/8 done) is the canonical long-term answer — section promotion scoring, `parent_page_id` column, pg_trgm fuzzy dedupe, duplicate-candidate metric. This plan is a strict subset that ships densification now without pre-empting any of that work.
@@ -134,11 +134,12 @@ The [compound-engineering-plugin](https://github.com/EveryInc/compound-engineeri
   2. An **exact-title** active wiki page exists for `parentTitle` in the same `(tenant_id, owner_id)` scope.
   3. **Type-mismatch gate**: leaf is `entity`, parent is `topic` or `entity` (hub-like). No entity→decision, no leaf→leaf of differing specificity.
   4. The leaf page was created or updated in this compile batch (avoids emitting links for unrelated pages every pass).
+- **Co-mention source = `wiki_section_sources`, not planner output.** The leaf planner's `pageLinks` shape carries no per-link `memory_unit_id`, and the section-sources join already gives us `(memory_unit_id → page_id)` after `applyPlan()` writes sections. Reusing it keeps live-compile and backfill on one code path with zero LLM-contract changes. Decided during `/ce:work` execution on 2026-04-20.
 - **Co-mention gate = ALL must hold:**
-  1. The same memory_unit has ≥2 resolved `pageLinks` (via existing planner output + resolver).
-  2. Resolved pages are distinct (`from ≠ to`) and both `active`.
-  3. **Per-memory cap: 10 reciprocal edges max** (fully connected clique of 5 pages, 10 directed edges). Prevents combinatorial explosion on dense batches.
-  4. **Minimum co-mention frequency: the pair must co-appear in ≥2 distinct memory_units before the edge is written.** Borrowed from co-occurrence network literature — single-occurrence pairs have well-documented high false-positive rate. Implemented by staging candidate edges in a per-compile accumulator and only flushing pairs that clear the threshold; a small backlog of "pending" pairs persists via `wiki_unresolved_mentions` (or an equivalent scratch table, decided at implementation time) so the threshold works across compile boundaries during bootstrap.
+  1. A single memory_unit sourced ≥2 distinct active pages in this batch (from `wiki_section_sources`).
+  2. Both endpoints are `entity` type. Topic↔entity and decision↔entity remain LLM/aggregation-planner territory.
+  3. **Per-memory cap: 10 reciprocal edges max** (fully connected clique of 5 pages, 10 directed edges). Prevents combinatorial explosion on dense batches. When >5 pages are co-sourced, pages are sorted by slug asc before truncation so backfill and live compile produce identical edges.
+- **No ≥2-memory frequency gate in v1.** The co-occurrence literature recommends one to suppress false positives, but the stated problem here is under-linking (48% floating dots), not over-linking. Precision is bounded by the entity↔entity gate, the 10-edge cap, `context="co_mention:<memory_unit_id>"` provenance for surgical rollback (`DELETE … WHERE context LIKE 'co_mention:%'`), and the `duplicate_candidates_count` R5 canary. If dev observation shows precision tanking, v1.1 adds the gate with a dedicated `wiki_comention_pending` table (clean schema rather than overloading `wiki_unresolved_mentions`). Decided during `/ce:work` execution on 2026-04-20.
 - **Context field is load-bearing provenance.** All deterministic rows get `context = "deterministic:city:<parent_slug>"` or `"co_mention:<memory_unit.id>"`. This lets future work audit, roll back, or upgrade specific rows without touching LLM-emitted ones.
 - **Backfill is pure-read on source data.** The script reuses the same emit functions the live path uses — one code path, two call sites.
 - **No schema migrations.** Every new behavior fits into the existing `wiki_page_links` table. Metrics ride inside `wiki_compile_jobs.metrics` jsonb.
@@ -150,13 +151,14 @@ The [compound-engineering-plugin](https://github.com/EveryInc/compound-engineeri
 
 - **Is the aggregation pass running?** Yes. Every recent compile shows `agg_calls=1`. The gap is `sections_promoted`, not pass execution.
 - **Is `parent-expander` emitting candidates?** Yes, 3-8 per compile. They're ignored by the aggregation planner under current thresholds.
-- **Where to hook co-mention emission?** `applyPlan()` after `planner.pageLinks` resolution but before `upsertPageLink()` writes — the (type, slug) → page_id map is already built there.
+- **Where to hook co-mention emission?** `applyPlan()` after section writes (so `wiki_section_sources` rows exist) and after `planner.pageLinks` resolution. The emitter reads section-sources directly rather than grouping planner output, since plan.pageLinks carries no `memory_unit_id` on the current wire.
 - **Which candidate reasons to trust deterministically?** `city` and `journal` — both are exact-match on rich metadata. `tag_cluster` is heuristic and unsafe without coherence scoring; defer.
 
 ### Deferred to Implementation
 
 - **Exact fuzzy-match policy for parent titles.** v1 uses exact match + slug equality. Trigram match lives with `plans/2026-04-19-002`.
 - **Co-mention cap tuning.** 10 is a starting point; Unit 5 metrics will inform adjustment.
+- **Precision monitoring.** If `duplicate_candidates_count` rises >10% post-rollout (R5) or dev smoke shows obviously-wrong edges, add a `wiki_comention_pending` table in v1.1 to implement the ≥2-memory frequency gate with proper schema. Rollback path is the `context LIKE 'co_mention:%'` DELETE.
 - **Backfill chunking strategy.** Aurora query planner details (ordering, LIMIT, cursor vs offset) decided at implementation time.
 - **Kill-switch audit trail.** Whether to log every flag-off suppression or only the count. Implementation choice.
 
@@ -185,10 +187,11 @@ compile (per memory batch)
 │   │   │                 context:"deterministic:{reason}:{parentSlug}")
 │   │   └─ increment metrics.links_written_deterministic
 │   │
-│   └─ NEW: emitCoMentionLinks(plan.pageLinks, memory_units)
-│       ├─ group resolved pageLinks by source memory_unit_id
-│       ├─ for each group with ≥2 distinct pages:
-│       │   ├─ cap to 10 reciprocal edges (pair-wise, ordered)
+│   └─ NEW: emitCoMentionLinks(memoryUnitIds, scope)
+│       ├─ read wiki_section_sources joined to wiki_pages for memoryUnitIds
+│       ├─ group by memory_unit_id → distinct entity-type page_ids
+│       ├─ for each group with ≥2 entity pages:
+│       │   ├─ sort by slug asc, cap to 10 reciprocal edges
 │       │   └─ upsertPageLink(a ↔ b, kind:"reference",
 │       │                     context:"co_mention:{memory_unit_id}")
 │       └─ increment metrics.links_written_co_mention
@@ -292,28 +295,28 @@ compile (per memory batch)
 - Test: `packages/api/src/__tests__/wiki-co-mention-linker.test.ts`
 
 **Approach:**
-- Input: the already-resolved `(from_page_id, to_page_id)` pairs from `plan.pageLinks`, each tagged by `memory_unit_id`.
-- Group by `memory_unit_id`. For groups with ≥2 distinct resolved pages, build pair-wise reciprocal edges (directed; A→B and B→A as separate rows).
-- **Per-memory cap**: 10 directed edges (so max clique is 5 pages per memory_unit before truncation). Order deterministically (by slug asc) before truncating so backfill is repeatable.
-- **≥2-memory frequency gate**: before emitting, check a scratch table of pending-pair observations scoped to `(tenant_id, owner_id)`. A pair is emitted only once its observation count reaches 2. On first observation, record-and-hold; on second, emit + clear the pending row. Borrowed from co-occurrence network false-positive mitigation (see Prior Art).
-- Type gate: both endpoints must be `entity` (not topic↔entity — topic relationships remain LLM territory; co-mention is entity↔entity evidence).
-- Emit `context = "co_mention:{first_memory_id}+{second_memory_id}"` so provenance shows both supporting memories.
+- Input: `wiki_section_sources` rows for the `memory_unit_ids` processed in this batch. Query joins `wiki_section_sources → wiki_page_sections → wiki_pages` so we get `(memory_unit_id, page_id, page_type)` tuples without touching the planner output. Same query powers the Unit 4 backfill.
+- Group by `memory_unit_id`. For groups with ≥2 distinct `entity`-type pages, build pair-wise reciprocal edges (directed; A→B and B→A as separate rows).
+- **Per-memory cap**: 10 directed edges (so max clique is 5 pages per memory_unit before truncation). Order by slug asc before truncating so backfill and live compile produce identical edges.
+- **Type gate**: both endpoints must be `entity`. Topic↔entity and decision↔entity remain LLM / aggregation-planner territory; co-mention is entity↔entity evidence only.
+- **No ≥2-memory frequency gate in v1** (see Key Technical Decisions). Precision is bounded by the type gate, the 10-edge cap, and `context`-based rollback.
+- Emit `context = "co_mention:{memory_unit_id}"` so every row is traceable to its source memory.
 - Behind the same `WIKI_DETERMINISTIC_LINKING_ENABLED` flag.
 
 **Patterns to follow:** Mirror Unit 2's function shape.
 
 **Test scenarios:**
-- Happy path: two memory_units each mention (A, B) → on second memory, 2 reciprocal rows emitted with `context="co_mention:m1+m2"`.
-- Happy path: memory_unit with 3 resolved entity pages + prior observation of all three pairs → 6 directed reference rows (3×2) emitted in this compile.
-- Edge case: memory_unit with 6 entities, all pairs seen twice → 30 pairs truncated to 10 edges (5-page clique). Assert exact selection (slug asc).
-- Edge case: single-memory co-mention (pair only seen once) → 0 rows written; pending-pair scratch row created.
-- Edge case: single-memory with 1 entity → 0 rows, 0 pending.
-- Edge case: memory_unit with duplicates (same page mentioned twice) → dedup to one, 0 rows if only one distinct page.
-- Edge case: one endpoint is a `topic` → skipped (not even staged as pending).
-- Edge case: same pair already present via planner output or deterministic path → `onConflictDoNothing()` preserves original row; pending scratch for the pair cleared.
-- Edge case: pending scratch row for a pair persists across compile boundaries (bootstrap replay) — subsequent batch finishes the threshold.
-- Error path: resolver returns `null` for one slug → skip that endpoint silently, emit/stage for the rest.
-- Integration: full compile on a batch where 2 memories each mention (Harmon Guest House, Sonoma) → 2 reference rows (one reciprocal pair) after second memory, `context` includes both memory ids.
+- Happy path: one memory_unit sourced 2 entity pages (A, B) → 2 reciprocal rows (A→B, B→A) with `context="co_mention:<memory_unit_id>"`.
+- Happy path: one memory_unit sourced 3 entity pages → 6 directed reference rows (3×2 pairs).
+- Edge case: one memory_unit sourced 6 entities → 30 pairs truncated to 10 edges (5-page clique). Assert exact selection (slug asc).
+- Edge case: memory_unit sourced only 1 entity → 0 rows.
+- Edge case: memory_unit sourced 0 entity pages (all topic/decision) → 0 rows.
+- Edge case: memory_unit sourced 1 entity + 1 topic → 0 rows (topic endpoint filtered out, leaving <2 entities).
+- Edge case: memory_unit sourced same page via multiple sections → dedup by `page_id` before pair building.
+- Edge case: same pair already present via planner output or deterministic path → `onConflictDoNothing()` preserves original row.
+- Edge case: flag `WIKI_DETERMINISTIC_LINKING_ENABLED=false` → no rows written regardless of input.
+- Integration: full compile on a batch where one memory is sourced on both "Harmon Guest House" (entity) and "Sonoma" (topic) pages → 0 co-mention rows (type gate filters the topic, leaving <2 entities).
+- Integration: full compile on a batch where one memory is sourced on two entity pages → 2 reference rows after the compile.
 
 **Verification:**
 - Unit tests pass.
@@ -336,7 +339,7 @@ compile (per memory batch)
 **Approach:**
 - Accept `--tenant`, `--owner`, `--dry-run` flags (mandatory scope, matches `wiki-wipe-and-rebuild.ts`).
 - Phase A (deterministic parents): walk `wiki_pages` in the scope, join to `wiki_section_sources → hindsight.memory_units` to rebuild the metadata, feed into `deriveParentCandidates()`, pass the result to `emitDeterministicParentLinks()` with a simulated `affectedPagesById` covering all pages.
-- Phase B (co-mention): group `wiki_section_sources` rows by `memory_unit_id`, join to `wiki_pages` to resolve page ids, call `emitCoMentionLinks()` directly with synthetic `plan.pageLinks` shape.
+- Phase B (co-mention): call `emitCoMentionLinks()` with the full list of `memory_unit_id`s in scope. Same function the live path uses — since it already reads `wiki_section_sources`, no synthetic plan shape is needed.
 - Log per-agent: candidates examined, edges written, edges skipped by gate. Dry-run only prints the plan.
 - Idempotent via `onConflictDoNothing()`. Safe to re-run.
 
