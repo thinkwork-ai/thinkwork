@@ -29,7 +29,8 @@ import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { COLORS } from "@/lib/theme";
-import { ListTodo, Bot, Settings, LogOut, RefreshCw, Filter, ChevronDown, ChevronRight, X, Zap, Check, CheckSquare, ListChecks, Circle, AlertCircle, Clock, Cable, Plug, List as ListIcon, Network } from "lucide-react-native";
+import { ListTodo, Bot, Settings, LogOut, RefreshCw, Filter, ChevronDown, ChevronRight, X, Zap, Check, CheckSquare, ListChecks, Circle, AlertCircle, Clock, Cable, Plug } from "lucide-react-native";
+import { IconTopologyStar3, IconList } from "@tabler/icons-react-native";
 import { ThreadChannel } from "@/lib/gql/graphql";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { useThreadReadState } from "@/lib/hooks/use-thread-read-state";
@@ -411,10 +412,14 @@ export default function ThreadsScreen() {
                     : "Switch to list view"
                 }
               >
-                {wikiViewMode === "list" ? (
-                  <Network size={22} color={colors.foreground} />
+                {wikiViewMode === "graph" ? (
+                  <IconList size={22} color={colors.foreground} strokeWidth={2} />
                 ) : (
-                  <ListIcon size={22} color={colors.foreground} />
+                  <IconTopologyStar3
+                    size={22}
+                    color={colors.foreground}
+                    strokeWidth={2}
+                  />
                 )}
               </Pressable>
             ) : null}

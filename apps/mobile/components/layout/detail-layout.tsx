@@ -34,7 +34,23 @@ export function DetailLayout({ title, children, headerRight, showSidebar = true,
       className="h-14 flex-row items-center px-4 border-b border-neutral-200 dark:border-neutral-800"
       style={{ backgroundColor: colors.background }}
     >
-      <Pressable onPress={() => router.back()} className="py-2 -ml-2 pr-2" hitSlop={8}>
+      <Pressable
+        onPress={() => router.back()}
+        onLongPress={() => {
+          // Pop all detail screens in one gesture. Useful when drilling
+          // many hops deep through the wiki graph and the user wants to
+          // bail back to the tab root.
+          if (typeof (router as { dismissAll?: () => void }).dismissAll === "function") {
+            (router as { dismissAll: () => void }).dismissAll();
+          } else {
+            router.replace("/(tabs)");
+          }
+        }}
+        className="py-2 -ml-2 pr-2"
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="Back (long-press to return to start)"
+      >
         <ChevronLeft size={24} color={colors.foreground} />
       </Pressable>
 

@@ -35,3 +35,21 @@ This will build and submit to TestFlight automatically.
 pnpm install
 pnpm start
 ```
+
+## Wiki graph architecture
+
+The Wiki tab's force-directed graph viewer lives under `components/wiki/graph/`.
+
+Top-level composition:
+- `WikiGraphView` — fetches via `useWikiGraph`, adapts to internal types, carries node positions across urql re-emits via `prevInternalRef`, and mounts `KnowledgeGraph` + `NodeDetailModal`. Used by the home-tab Wiki view.
+- `WikiDetailSubgraph` — filters the same `wikiGraph` payload to a 1-hop neighborhood (`layout/neighborhood.ts`) and mounts `KnowledgeGraph` + `NodeDetailModal` scoped to a single page. Rendered inside `app/wiki/[type]/[slug].tsx` when the topology-star toggle is on (40% split above the scrolling wiki content).
+- `KnowledgeGraph` — owns the camera (`useGraphCamera`), sim (`useForceSimulation`), composed gesture, reveal animation, and position/camera persistence. Props steer variants: `cacheKey` (persist state across unmounts), `showLabels`, `showRevealLoader`, `simConfig`.
+- `GraphCanvas` — pure Skia renderer. Edges + circles + optional Skia `<Text>` labels inside a transformed `<Group>`.
+- `NodeDetailModal` — centered modal preview on node tap. Scrollable body with summary + sections from `useWikiPage`. External-link icon opens the full `/wiki/[type]/[slug]` detail screen.
+
+Persistence layers (all three required for "drill in → come back → exact same state"):
+1. `graphStateCache.ts` — module-level `Map` keyed on `${tenantId}:${agentId}`; written on `KnowledgeGraph` unmount, read on mount.
+2. `prevInternalRef` in `WikiGraphView` — carries `n.x/n.y` forward when urql re-emits the same query with a new object ref.
+3. `useForceSimulation` detects "all nodes have positions" on init and starts the sim with `alpha(0).stop()` so d3 doesn't agitate a restored layout.
+
+See `plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md` (v1) and `plans/2026-04-20-003-feat-mobile-graph-refinements-plan.md` (v2) for design intent, what shipped vs. what diverged, and the list of gotchas to watch out for before changing graph code.
