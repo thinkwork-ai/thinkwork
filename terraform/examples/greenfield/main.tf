@@ -181,6 +181,21 @@ variable "wiki_aggregation_pass_enabled" {
   default     = "true"
 }
 
+variable "wiki_deterministic_linking_enabled" {
+  description = <<-EOT
+    Feature flag for deterministic compile-time link emission:
+      - city/journal parent references from parent-expander candidates
+      - entity↔entity co-mention edges via wiki_section_sources
+
+    Accepts a string so the Lambda reads the env var verbatim; must be
+    "true" / "1" / "yes" to enable. Rollback is a targeted DELETE:
+    `DELETE FROM wiki_page_links WHERE context LIKE 'deterministic:%' OR
+    context LIKE 'co_mention:%'` — provenance is preserved on every row.
+  EOT
+  type        = string
+  default     = "true"
+}
+
 locals {
   www_dns_enabled = var.www_domain != "" && var.cloudflare_zone_id != ""
   docs_domain     = var.www_domain != "" ? "docs.${var.www_domain}" : ""
@@ -227,8 +242,9 @@ module "thinkwork" {
   # Wiki compile Lambda config. Pinned so unrelated terraform applies
   # don't wipe the Bedrock model or the aggregation flag back to
   # whatever the Lambda env defaults to.
-  wiki_compile_model_id         = var.wiki_compile_model_id
-  wiki_aggregation_pass_enabled = var.wiki_aggregation_pass_enabled
+  wiki_compile_model_id              = var.wiki_compile_model_id
+  wiki_aggregation_pass_enabled      = var.wiki_aggregation_pass_enabled
+  wiki_deterministic_linking_enabled = var.wiki_deterministic_linking_enabled
 
   # Greenfield: create everything (all defaults are true)
 }

@@ -69,8 +69,9 @@ locals {
     # unrelated deploys don't wipe them back to defaults (the aggregation
     # flag got reset on every terraform apply before this was pinned).
     "wiki-compile" = {
-      BEDROCK_MODEL_ID              = var.wiki_compile_model_id
-      WIKI_AGGREGATION_PASS_ENABLED = var.wiki_aggregation_pass_enabled
+      BEDROCK_MODEL_ID                   = var.wiki_compile_model_id
+      WIKI_AGGREGATION_PASS_ENABLED      = var.wiki_aggregation_pass_enabled
+      WIKI_DETERMINISTIC_LINKING_ENABLED = var.wiki_deterministic_linking_enabled
     }
     "wiki-export" = {
       WIKI_EXPORT_BUCKET = aws_s3_bucket.wiki_exports.bucket

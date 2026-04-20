@@ -195,8 +195,9 @@ module "api" {
   ecr_repository_url            = module.agentcore.ecr_repository_url
   job_scheduler_role_arn        = module.job_triggers.job_scheduler_role_arn
   lastmile_tasks_api_url        = var.lastmile_tasks_api_url
-  wiki_compile_model_id         = var.wiki_compile_model_id
-  wiki_aggregation_pass_enabled = var.wiki_aggregation_pass_enabled
+  wiki_compile_model_id               = var.wiki_compile_model_id
+  wiki_aggregation_pass_enabled       = var.wiki_aggregation_pass_enabled
+  wiki_deterministic_linking_enabled  = var.wiki_deterministic_linking_enabled
 }
 
 ################################################################################

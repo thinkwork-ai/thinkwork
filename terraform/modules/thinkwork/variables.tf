@@ -335,3 +335,9 @@ variable "wiki_aggregation_pass_enabled" {
   type        = string
   default     = "true"
 }
+
+variable "wiki_deterministic_linking_enabled" {
+  description = "Feature flag for deterministic compile-time link emission — parent-expander-derived city/journal links plus entity↔entity co-mention links. 'true' to enable, anything else disables. Precision-bounded: rollback is `DELETE FROM wiki_page_links WHERE context LIKE 'deterministic:%' OR context LIKE 'co_mention:%'`."
+  type        = string
+  default     = "true"
+}
