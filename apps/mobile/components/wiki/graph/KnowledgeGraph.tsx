@@ -1,6 +1,12 @@
+import { useCallback, useState } from "react";
 import { StyleSheet, View, useWindowDimensions } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, { runOnJS } from "react-native-reanimated";
 import { COLORS } from "@/lib/theme";
 import { GraphCanvas } from "./GraphCanvas";
+import { useForceSimulation } from "./hooks/useForceSimulation";
+import { useGraphCamera } from "./hooks/useGraphCamera";
+import { nearestNode } from "./layout/hitTest";
 import type { WikiSubgraph } from "./types";
 
 interface KnowledgeGraphProps {
@@ -9,14 +15,53 @@ interface KnowledgeGraphProps {
 
 export function KnowledgeGraph({ subgraph }: KnowledgeGraphProps) {
   const { width, height } = useWindowDimensions();
+  const camera = useGraphCamera(width / 2, height / 2);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  // Sim mutates node.x/y in place; tick increments trigger re-render.
+  useForceSimulation(subgraph.nodes, subgraph.edges);
+
+  const handleTap = useCallback(
+    (screenX: number, screenY: number) => {
+      const cameraState = {
+        tx: camera.tx.value,
+        ty: camera.ty.value,
+        scale: camera.scale.value,
+      };
+      const hit = nearestNode(
+        cameraState,
+        { x: screenX, y: screenY },
+        subgraph.nodes,
+      );
+      setSelectedNodeId(hit ? hit.node.id : null);
+    },
+    [camera.tx, camera.ty, camera.scale, subgraph.nodes],
+  );
+
+  const tapGesture = Gesture.Tap()
+    .maxDuration(250)
+    .onEnd((e) => {
+      runOnJS(handleTap)(e.x, e.y);
+    });
+
+  const composedGesture = Gesture.Simultaneous(camera.gesture, tapGesture);
 
   return (
     <View style={styles.root}>
-      <GraphCanvas subgraph={subgraph} width={width} height={height} />
+      <GestureDetector gesture={composedGesture}>
+        <Animated.View style={[styles.canvasWrap, { width, height }]}>
+          <GraphCanvas
+            subgraph={subgraph}
+            selectedNodeId={selectedNodeId}
+            transform={camera.transform}
+          />
+        </Animated.View>
+      </GestureDetector>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.dark.background },
+  canvasWrap: { backgroundColor: "transparent" },
 });
