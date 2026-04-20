@@ -252,12 +252,18 @@ export async function enqueueCompileJob(
 		tenantId: string;
 		ownerId: string;
 		trigger: WikiCompileTrigger;
+		/** Override the epoch-seconds used to derive the dedupe bucket. Used
+		 * by continuation chaining to enqueue a job against the *next*
+		 * bucket so the chain doesn't self-dedupe. Leave unset for the
+		 * normal post-turn path. */
+		nowEpochSeconds?: number;
 	},
 	db: DbClient = defaultDb,
 ): Promise<{ inserted: boolean; job: WikiCompileJobRow }> {
 	const dedupeKey = buildCompileDedupeKey({
 		tenantId: args.tenantId,
 		ownerId: args.ownerId,
+		nowEpochSeconds: args.nowEpochSeconds,
 	});
 
 	const [inserted] = await db
@@ -492,6 +498,49 @@ export async function findPageBySlug(
  * picking one.
  */
 /**
+ * Bump `aggregation->last_source_at` on any section of the given leaf's
+ * parent page whose `linked_page_ids` contains this leaf. Called after a
+ * leaf page is upserted so the next aggregation pass sees its parent
+ * sections as freshly touched — without this, a batch that updated only
+ * leaves (no newPages, no promotions) leaves parent sections looking
+ * stale and they can fall off the aggregation-target shortlist.
+ *
+ * Returns the number of section rows bumped. Zero is the common case for
+ * brand-new leaves that no parent section claims yet — the aggregation
+ * pass will register them on its own tick.
+ */
+export async function bumpSectionLastSeen(
+	args: { pageId: string },
+	db: DbClient = defaultDb,
+): Promise<number> {
+	const leafRows = await db
+		.select({ parent_page_id: wikiPages.parent_page_id })
+		.from(wikiPages)
+		.where(eq(wikiPages.id, args.pageId))
+		.limit(1);
+	const parentId = leafRows[0]?.parent_page_id as string | null | undefined;
+	if (!parentId) return 0;
+
+	const nowIso = new Date().toISOString();
+	const result = await db.execute(sql`
+		UPDATE ${wikiPageSections}
+		SET aggregation = jsonb_set(
+			aggregation::jsonb,
+			'{last_source_at}',
+			to_jsonb(${nowIso}::text)::jsonb
+		)
+		WHERE ${wikiPageSections.page_id} = ${parentId}
+			AND aggregation IS NOT NULL
+			AND aggregation ? 'linked_page_ids'
+			AND (aggregation -> 'linked_page_ids') @> to_jsonb(ARRAY[${args.pageId}]::text[])
+		RETURNING ${wikiPageSections.id}
+	`);
+	const rows =
+		(result as unknown as { rows?: Array<{ id: string }> }).rows ?? [];
+	return rows.length;
+}
+
+/**
  * R5 canary for the link-densification plan — count of (owner_id, title)
  * pairs with more than one active page. Rising means densification may be
  * creating duplicate hubs. Called once per compile job so the time series
@@ -515,6 +564,85 @@ export async function countDuplicateTitleCandidates(
 	`);
 	const rows = (result as unknown as { rows?: Array<{ n: number }> }).rows ?? [];
 	return rows[0]?.n ?? 0;
+}
+
+/**
+ * Trigram-fallback title lookup. Returns active pages whose title's
+ * `similarity()` against the input is ≥ threshold (default 0.85 — same
+ * as the alias bar in `findAliasMatchesFuzzy`). Results are ordered by
+ * similarity desc, capped by `limit` (default 1). Powers the
+ * deterministic parent linker's recall-extension path: candidate
+ * `"Portland"` resolves to active page `"Portland, Oregon"`.
+ *
+ * Uses the `idx_wiki_pages_title_trgm` GIN index (migration 0015).
+ * Internal try/catch returns empty on `pg_trgm` errors so callers
+ * degrade gracefully if the extension is missing.
+ */
+export async function findPagesByFuzzyTitle(
+	args: {
+		tenantId: string;
+		ownerId: string;
+		title: string;
+		threshold?: number;
+		limit?: number;
+	},
+	db: DbClient = defaultDb,
+): Promise<
+	Array<{
+		id: string;
+		type: WikiPageType;
+		slug: string;
+		title: string;
+		similarity: number;
+	}>
+> {
+	const threshold = args.threshold ?? FUZZY_ALIAS_THRESHOLD;
+	const limit = Math.max(1, Math.min(args.limit ?? 1, 20));
+	try {
+		const result = await db.execute(sql`
+			SELECT
+				${wikiPages.id}     AS "id",
+				${wikiPages.type}   AS "type",
+				${wikiPages.slug}   AS "slug",
+				${wikiPages.title}  AS "title",
+				similarity(${wikiPages.title}, ${args.title}) AS "similarity"
+			FROM ${wikiPages}
+			WHERE ${wikiPages.tenant_id} = ${args.tenantId}
+				AND ${wikiPages.owner_id} = ${args.ownerId}
+				AND ${wikiPages.status} = 'active'
+				AND similarity(${wikiPages.title}, ${args.title}) >= ${threshold}
+			ORDER BY similarity(${wikiPages.title}, ${args.title}) DESC
+			LIMIT ${limit}
+		`);
+		const rows =
+			(
+				result as unknown as {
+					rows?: Array<{
+						id: string;
+						type: WikiPageType;
+						slug: string;
+						title: string;
+						similarity: number | string;
+					}>;
+				}
+			).rows ?? [];
+		return rows.map((r) => ({
+			id: r.id,
+			type: r.type,
+			slug: r.slug,
+			title: r.title,
+			similarity:
+				typeof r.similarity === "string"
+					? Number(r.similarity)
+					: r.similarity,
+		}));
+	} catch (err) {
+		console.warn(
+			`[findPagesByFuzzyTitle] similarity query failed, returning empty:`,
+			(err as Error)?.message ?? err,
+		);
+		return [];
+	}
 }
 
 export async function findPagesByExactTitle(
