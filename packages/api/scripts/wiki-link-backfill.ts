@@ -121,7 +121,7 @@ async function listMemoryUnitIdsInScope(args: {
 	tenantId: string;
 	ownerId: string;
 }): Promise<string[]> {
-	const rows = (await db.execute(sql`
+	const result = await db.execute(sql`
 		SELECT DISTINCT ${wikiSectionSources.source_ref}::text AS memory_unit_id
 		FROM ${wikiSectionSources}
 		JOIN ${wikiPageSections}
@@ -131,7 +131,10 @@ async function listMemoryUnitIdsInScope(args: {
 			AND ${wikiPages.tenant_id} = ${args.tenantId}
 			AND ${wikiPages.owner_id} = ${args.ownerId}
 			AND ${wikiPages.status} = 'active'
-	`)) as unknown as Array<{ memory_unit_id: string }>;
+	`);
+	const rows =
+		(result as unknown as { rows?: Array<{ memory_unit_id: string }> })
+			.rows ?? [];
 	return rows.map((r) => r.memory_unit_id);
 }
 
@@ -139,14 +142,16 @@ async function countReferenceLinks(scope: {
 	tenantId: string;
 	ownerId: string;
 }): Promise<number> {
-	const rows = (await db.execute(sql`
+	const result = await db.execute(sql`
 		SELECT COUNT(*)::int AS n
 		FROM ${wikiPageLinks} wpl
 		JOIN ${wikiPages} wp ON wp.id = wpl.from_page_id
 		WHERE wpl.kind = 'reference'
 			AND wp.tenant_id = ${scope.tenantId}
 			AND wp.owner_id = ${scope.ownerId}
-	`)) as unknown as Array<{ n: number }>;
+	`);
+	const rows =
+		(result as unknown as { rows?: Array<{ n: number }> }).rows ?? [];
 	return rows[0]?.n ?? 0;
 }
 

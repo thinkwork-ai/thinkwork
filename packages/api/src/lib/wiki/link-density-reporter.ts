@@ -75,7 +75,7 @@ export async function queryLinkDensity(
 		.groupBy(wikiPages.owner_id)) as Array<{ owner_id: string; n: number }>;
 
 	// Pages with ≥1 outgoing or incoming `reference` link.
-	const linkedPagesPerOwner = (await db.execute(sql`
+	const linkedPagesRaw = await db.execute(sql`
 			SELECT
 				wp.owner_id AS owner_id,
 				COUNT(DISTINCT wp.id)::int AS n
@@ -86,11 +86,14 @@ export async function queryLinkDensity(
 			WHERE wp.tenant_id = ${args.tenantId}
 				${args.ownerId ? sql`AND wp.owner_id = ${args.ownerId}` : sql``}
 			GROUP BY wp.owner_id
-		`)) as unknown as Array<{ owner_id: string; n: number }>;
+		`);
+	const linkedPagesPerOwner = rowsOf<{ owner_id: string; n: number }>(
+		linkedPagesRaw,
+	);
 
 	// Link counts per kind per owner — scope join via wp alias so we stay
 	// inside (tenant, owner).
-	const linksPerOwnerByKind = (await db.execute(sql`
+	const linksByKindRaw = await db.execute(sql`
 			SELECT
 				wp.owner_id AS owner_id,
 				wpl.kind    AS kind,
@@ -100,11 +103,16 @@ export async function queryLinkDensity(
 			WHERE wp.tenant_id = ${args.tenantId}
 				${args.ownerId ? sql`AND wp.owner_id = ${args.ownerId}` : sql``}
 			GROUP BY wp.owner_id, wpl.kind
-		`)) as unknown as Array<{ owner_id: string; kind: string; n: number }>;
+		`);
+	const linksPerOwnerByKind = rowsOf<{
+		owner_id: string;
+		kind: string;
+		n: number;
+	}>(linksByKindRaw);
 
 	// Duplicate title candidates: (title, owner_id) groups with >1 active row.
 	// Tracks R5 precision canary from the plan.
-	const duplicatesPerOwner = (await db.execute(sql`
+	const dupRaw = await db.execute(sql`
 			SELECT owner_id, COUNT(*)::int AS n
 			FROM (
 				SELECT owner_id, title
@@ -116,7 +124,8 @@ export async function queryLinkDensity(
 				HAVING COUNT(*) > 1
 			) dup
 			GROUP BY owner_id
-		`)) as unknown as Array<{ owner_id: string; n: number }>;
+		`);
+	const duplicatesPerOwner = rowsOf<{ owner_id: string; n: number }>(dupRaw);
 
 	const pagesBy = indexBy(pagesPerOwner, (r) => r.owner_id);
 	const linkedBy = indexBy(linkedPagesPerOwner, (r) => r.owner_id);
@@ -209,4 +218,12 @@ function indexBy<T, K>(rows: T[], keyFn: (r: T) => K): Map<K, T> {
 function truncate(s: string, n: number): string {
 	if (s.length <= n) return s;
 	return `${s.slice(0, n - 1)}…`;
+}
+
+/** node-postgres wraps result sets as `{ rows: T[], rowCount, ... }`. This
+ * helper unwraps that shape with a defensive fallback, matching the
+ * pattern already used in `journal-import.ts`. */
+function rowsOf<T>(result: unknown): T[] {
+	const wrapped = result as { rows?: T[] } | undefined;
+	return wrapped?.rows ?? [];
 }

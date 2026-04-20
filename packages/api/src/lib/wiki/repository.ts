@@ -501,7 +501,7 @@ export async function countDuplicateTitleCandidates(
 	args: { tenantId: string; ownerId: string },
 	db: DbClient = defaultDb,
 ): Promise<number> {
-	const rows = (await db.execute(sql`
+	const result = await db.execute(sql`
 		SELECT COUNT(*)::int AS n
 		FROM (
 			SELECT ${wikiPages.owner_id}, ${wikiPages.title}
@@ -512,7 +512,8 @@ export async function countDuplicateTitleCandidates(
 			GROUP BY ${wikiPages.owner_id}, ${wikiPages.title}
 			HAVING COUNT(*) > 1
 		) dup
-	`)) as unknown as Array<{ n: number }>;
+	`);
+	const rows = (result as unknown as { rows?: Array<{ n: number }> }).rows ?? [];
 	return rows[0]?.n ?? 0;
 }
 
