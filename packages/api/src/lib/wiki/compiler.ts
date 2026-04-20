@@ -402,8 +402,15 @@ export async function runCompileJob(
 		// Continuation chaining — when we drained the cap but not the
 		// cursor, enqueue a follow-up job into the next dedupe bucket so
 		// bootstrap-scale imports self-complete. Preserves the parent's
-		// trigger so the chained job also uses the higher bootstrap cap.
-		if (!cursorDrained && metrics.records_read >= maxRecordsThisJob) {
+		// trigger so the chained job inherits the higher bootstrap cap.
+		//
+		// Original Unit 3c trigger was
+		// `records_read >= maxRecordsThisJob` — but `applyPlan` can also
+		// early-return on `max_new_pages` / `max_sections_rewritten` with
+		// `records_read` well below the records cap, and the cursor still
+		// has work. Anchor on `!cursorDrained` so ANY early loop exit
+		// chains forward.
+		if (!cursorDrained) {
 			try {
 				const nextBucketSeconds =
 					Math.floor(Date.now() / 1000) + CONTINUATION_BUCKET_OFFSET_SECONDS;
