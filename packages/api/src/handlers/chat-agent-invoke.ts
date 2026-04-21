@@ -470,6 +470,12 @@ export async function handler(event: InvokeEvent): Promise<void> {
       agent_name: agent.name,
       human_name: humanName || undefined,
       workspace_bucket: WORKSPACE_BUCKET || undefined,
+      // Unit 7: container calls /api/workspaces/files at bootstrap via
+      // x-api-key auth. Plumb the API URL + service secret so the
+      // container can set them on os.environ and use them for the
+      // composer fetch.
+      thinkwork_api_url: THINKWORK_API_URL || undefined,
+      thinkwork_api_secret: THINKWORK_API_SECRET || undefined,
       hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
       runtime_type: runtimeType,
       model: agentModel,
