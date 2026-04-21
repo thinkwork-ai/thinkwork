@@ -2,10 +2,11 @@ import type { GraphQLContext } from "../../context.js";
 import {
 	db, eq,
 	agents, agentTemplates, agentSkills, agentKnowledgeBases,
-	agentCapabilities,
+	agentCapabilities, tenants,
 	agentToCamel, generateSlug,
 } from "../../utils.js";
 import { agentMcpServers, agentTemplateMcpServers } from "@thinkwork/database-pg/schema";
+import { initializePinnedVersions } from "../../../lib/pinned-versions.js";
 
 export async function createAgentFromTemplate(_parent: any, args: any, _ctx: GraphQLContext) {
 	const i = args.input;
@@ -21,6 +22,32 @@ export async function createAgentFromTemplate(_parent: any, args: any, _ctx: Gra
 	const templateSkills = (agentTemplate.skills as any[]) || [];
 	const templateKbIds = (agentTemplate.knowledge_base_ids as string[]) || [];
 
+	// 1b. Initialize pinned versions BEFORE the agent row exists so the row
+	// captures the pin map on insert. Looking up tenant slug requires an
+	// extra query but it's a one-off at agent-creation time. Guardrail-
+	// class files (GUARDRAILS / PLATFORM / CAPABILITIES) get their bytes
+	// hashed and stored in the content-addressable version store so the
+	// composer can serve that exact content forever, even after template
+	// edits (Unit 4's pinned-resolution path reads from there).
+	//
+	// A failure here must not silently drop the pins — if the version store
+	// can't be written, the agent would be created without pins and Unit 9's
+	// "template update available" detection would never fire. We let the
+	// error surface and the mutation fails.
+	let pinnedVersions: Record<string, string> = {};
+	{
+		const [tenant] = await db
+			.select({ slug: tenants.slug })
+			.from(tenants)
+			.where(eq(tenants.id, agentTemplate.tenant_id!));
+		if (tenant?.slug && agentTemplate.slug) {
+			pinnedVersions = await initializePinnedVersions({
+				tenantSlug: tenant.slug,
+				templateSlug: agentTemplate.slug,
+			});
+		}
+	}
+
 	// 2. Create agent record (model, guardrail, tools come from template)
 	const [agent] = await db
 		.insert(agents)
@@ -31,6 +58,8 @@ export async function createAgentFromTemplate(_parent: any, args: any, _ctx: Gra
 			role: config.role,
 			adapter_type: "strands",
 			template_id: agentTemplate.id,
+			agent_pinned_versions:
+				Object.keys(pinnedVersions).length > 0 ? pinnedVersions : null,
 		})
 		.returning();
 
@@ -98,13 +127,11 @@ export async function createAgentFromTemplate(_parent: any, args: any, _ctx: Gra
 		console.warn(`[createAgentFromTemplate] Failed to provision email capability:`, err);
 	}
 
-	// 6. Copy workspace files from template S3 prefix to agent S3 prefix
-	try {
-		const { copyTemplateWorkspace } = await import("../../../lib/workspace-copy.js");
-		await copyTemplateWorkspace(agentTemplate.tenant_id!, agentTemplate.slug, agent.slug!);
-	} catch (err) {
-		console.warn(`[createAgentFromTemplate] Failed to copy workspace files:`, err);
-	}
+	// 6. (Unit 8) No copy-on-create. The new agent starts with an empty S3
+	// prefix and reads the composed view through the overlay composer
+	// (Unit 4) — template / defaults bytes flow through at read time.
+	// Pinned-class files (GUARDRAILS / PLATFORM / CAPABILITIES) are
+	// resolved via the sha256 recorded in agent_pinned_versions above.
 
 	// 7. Regenerate workspace map
 	try {
