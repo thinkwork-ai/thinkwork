@@ -5,7 +5,7 @@ status: active
 date: 2026-04-19
 last_refresh: 2026-04-20
 origin: docs/brainstorms/2026-04-19-compounding-memory-hierarchical-aggregation-requirements.md
-supersedes: plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md
+supersedes: docs/plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md
 ---
 
 # feat: Hierarchical aggregation for Compounding Memory
@@ -54,8 +54,8 @@ Canonical acceptance test is the Austin restaurants walkthrough in the origin do
 See origin: `docs/brainstorms/2026-04-19-compounding-memory-hierarchical-aggregation-requirements.md`. In short:
 
 - The current per-batch, record-first compiler is well-shaped for safe leaf creation but has no mechanism to aggregate related memories into parent-page sections, cluster mentions, canonicalize near-duplicates, or promote dense sections into their own pages.
-- The hierarchical aggregation plan (`plans/compounding-memory-hierarchical-aggregation-plan.md`) and research memo (`.prds/compounding-memory-aggregation-research-memo.md`) specify the direction. This plan is the implementation design against the existing v1 code shape.
-- The earlier refinement plan (`plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md`, now superseded) addressed fuzzy aliases, evidence recompile, backlink UI, and metrics. Those sub-elements are folded into this plan under the aggregation pass.
+- The hierarchical aggregation plan (`docs/plans/archived/compounding-memory-hierarchical-aggregation-plan.md`) and research memo (`.prds/compounding-memory-aggregation-research-memo.md`) specify the direction. This plan is the implementation design against the existing v1 code shape.
+- The earlier refinement plan (`docs/plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md`, now superseded) addressed fuzzy aliases, evidence recompile, backlink UI, and metrics. Those sub-elements are folded into this plan under the aggregation pass.
 
 ## Requirements Trace
 
@@ -833,7 +833,7 @@ Observable on the Amy → GiGi smoke run (100–200 records):
 ## Sources & References
 
 - **Origin document:** [docs/brainstorms/2026-04-19-compounding-memory-hierarchical-aggregation-requirements.md](../docs/brainstorms/2026-04-19-compounding-memory-hierarchical-aggregation-requirements.md)
-- **Canonical architectural spec:** [plans/compounding-memory-hierarchical-aggregation-plan.md](./compounding-memory-hierarchical-aggregation-plan.md)
+- **Canonical architectural spec:** [docs/plans/archived/compounding-memory-hierarchical-aggregation-plan.md](archived/compounding-memory-hierarchical-aggregation-plan.md)
 - **Diagnosis / research memo:** [.prds/compounding-memory-aggregation-research-memo.md](../.prds/compounding-memory-aggregation-research-memo.md)
 - **v1 build plan (PR sequence):** [.prds/compounding-memory-v1-build-plan.md](../.prds/compounding-memory-v1-build-plan.md)
 - **Scope rule (non-negotiable):** [.prds/compounding-memory-scoping.md](../.prds/compounding-memory-scoping.md)
@@ -842,4 +842,4 @@ Observable on the Amy → GiGi smoke run (100–200 records):
 - **Agent brief:** [.prds/compounding-memory-agent-brief.md](../.prds/compounding-memory-agent-brief.md)
 - **Trigram threshold precedent:** `packages/agentcore-strands/agent-container/hindsight_recall_filter.py:46`
 - **Reverse-join precedent:** `packages/api/src/graphql/resolvers/memory/mobileWikiSearch.query.ts`
-- **Superseded prior direction:** [plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md](./2026-04-19-001-feat-compounding-memory-refinement-plan.md)
+- **Superseded prior direction:** [docs/plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md](./2026-04-19-001-feat-compounding-memory-refinement-plan.md)

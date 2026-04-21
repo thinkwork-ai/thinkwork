@@ -119,7 +119,7 @@ The Templates section headline on thinkwork.ai (`apps/www`) wraps with `do.` str
 
 **Test scenarios:**
 - Happy path: The Templates headline renders as "You decide what each agent can do." at all viewports; no orphaned `do.`.
-- Integration: grep the repo for the old string to confirm no other file referenced it. The only expected hit is `plans/archived/*` if any, which does not affect runtime.
+- Integration: grep the repo for the old string to confirm no other file referenced it. The only expected hit is `docs/plans/archived/*` if any, which does not affect runtime.
 
 **Verification:**
 - Reload the running dev server after edit; confirm the new headline renders and wraps on one or two balanced lines across viewports.

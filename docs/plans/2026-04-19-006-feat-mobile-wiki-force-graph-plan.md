@@ -5,7 +5,7 @@ status: shipped-with-divergence
 date: 2026-04-19
 deepened: 2026-04-19
 shipped: 2026-04-20
-origin: plans/compounding-memory-mobile-memories-force-graph.md
+origin: docs/plans/archived/compounding-memory-mobile-memories-force-graph.md
 ---
 
 # feat: Mobile Wiki force-graph viewer (Skia + d3-force + temporal scrub)
@@ -14,7 +14,7 @@ origin: plans/compounding-memory-mobile-memories-force-graph.md
 
 **v1 shipped on TestFlight branch.** The plan body below captures the design we set out to build; what actually shipped diverges in important ways. This section is the authoritative "what's true now" summary. Read this first; the body is preserved for historical context.
 
-> **v2 refinements shipped same day** as `plans/2026-04-20-003-feat-mobile-graph-refinements-plan.md`: fit-to-view camera, centered-modal preview on tap (replacing the bottom sheet), 40/60 split embedded subgraph on the detail screen, icon unification with Tabler `IconTopologyStar3`, state persistence across navigation, and long-press-back → dismiss-all. Read that plan's Post-Implementation block alongside this one for the current state of the graph surface.
+> **v2 refinements shipped same day** as `docs/plans/2026-04-20-015-feat-mobile-graph-refinements-plan.md`: fit-to-view camera, centered-modal preview on tap (replacing the bottom sheet), 40/60 split embedded subgraph on the detail screen, icon unification with Tabler `IconTopologyStar3`, state persistence across navigation, and long-press-back → dismiss-all. Read that plan's Post-Implementation block alongside this one for the current state of the graph surface.
 
 ### What shipped
 - **Pages-tab integration with toggle.** Graph view lives inside the Pages segment of the home tab (`apps/mobile/app/(tabs)/index.tsx`), not as a standalone route. Toggle button (Network / List icon) sits left of the filter funnel. Only visible when Pages tab is active.
@@ -115,7 +115,7 @@ The PRD is detailed and largely correct, but several assumptions need reconcilin
 
 ### Deferred to Separate Tasks
 
-- **Sibling Memories UI PRD as a plan**: the list / detail / capture / `RelationshipChips` / `RelationshipGraph` surfaces in `plans/archived/compounding-memory-mobile-memories-ui-prd.md` are a prerequisite for the "Graph view" header entry point. Until that plan lands, the graph is reachable from a temporary placeholder route (see Unit 3). The sibling plan also adds `primary_agent_ids` on `wiki_pages`; this plan tolerates its absence (see Unit 3 approach).
+- **Sibling Memories UI PRD as a plan**: the list / detail / capture / `RelationshipChips` / `RelationshipGraph` surfaces in `docs/plans/archived/compounding-memory-mobile-memories-ui-prd.md` are a prerequisite for the "Graph view" header entry point. Until that plan lands, the graph is reachable from a temporary placeholder route (see Unit 3). The sibling plan also adds `primary_agent_ids` on `wiki_pages`; this plan tolerates its absence (see Unit 3 approach).
 - **Android polish + perf tuning**: this plan targets iPhone 13 first per PRD §7.1. Android validation is a follow-up.
 - **Removing the legacy `wikiGraph` resolver**: plan 003 already ships `wikiGraph` and is the active admin surface; not deprecated by this plan.
 - **Subtype glyphs (person / building / folder / repo) for Entity nodes**: depends on the compile Lambda tagging `EntityProfileFragment` subtype on the warehouse record (PRD §10 question 6). Render no glyph until that lands.
@@ -141,8 +141,8 @@ The PRD is detailed and largely correct, but several assumptions need reconcilin
 - `packages/api/src/lib/wiki/compiler.ts` + `packages/api/src/handlers/wiki-compile.ts` — compile Lambda entry point and orchestration. The temporal write-seam (`upsertPageLink` and friends) lives under `packages/api/src/lib/wiki/` repository functions; Unit 5 modifies these.
 - `packages/react-native-sdk/src/hooks/use-wiki-page.ts` — canonical hook shape: `useQuery` from `urql`, `pause: !arg`, `requestPolicy: "cache-and-network"`, returns `{ page, loading, error, refetch }` (note the SDK-level rename of `fetching` → `loading` — PRD §4.3 specifies `fetching` but actual hooks expose `loading`; new hooks must follow the existing convention, not the PRD draft).
 - `packages/react-native-sdk/src/index.ts` — manual barrel re-exports per hook; new hooks must be added explicitly. Current SDK version is `0.2.0-beta.2`; this plan publishes `0.4.0-beta.0` per the PRD's `sdk-v*` convention (jumping over `0.3.0-beta.0` which the sibling Memories UI PRD claims).
-- `plans/2026-04-19-003-refactor-admin-wiki-graph-plan.md` — companion admin work; pattern source for `(tenant, owner)` scoping and `kind`-deduped link counting.
-- `plans/2026-04-19-005-refactor-mobile-memories-to-wiki-plan.md` — in-flight mobile rename. This plan inherits its `apps/mobile/components/wiki/` directory.
+- `docs/plans/2026-04-19-003-refactor-admin-wiki-graph-plan.md` — companion admin work; pattern source for `(tenant, owner)` scoping and `kind`-deduped link counting.
+- `docs/plans/2026-04-19-005-refactor-mobile-memories-to-wiki-plan.md` — in-flight mobile rename. This plan inherits its `apps/mobile/components/wiki/` directory.
 
 ### Institutional Learnings
 
@@ -156,8 +156,8 @@ The PRD is detailed and largely correct, but several assumptions need reconcilin
 
 ### External References
 
-- PRD origin: `plans/compounding-memory-mobile-memories-force-graph.md` — primary source of truth for feature acceptance criteria; section references `(see origin: plans/compounding-memory-mobile-memories-force-graph.md §F1)` are used throughout this plan.
-- Sibling PRD (not yet a plan): `plans/archived/compounding-memory-mobile-memories-ui-prd.md` — defines `primary_agent_ids` migration and `TypeBadge` tokens.
+- PRD origin: `docs/plans/archived/compounding-memory-mobile-memories-force-graph.md` — primary source of truth for feature acceptance criteria; section references `(see origin: docs/plans/archived/compounding-memory-mobile-memories-force-graph.md §F1)` are used throughout this plan.
+- Sibling PRD (not yet a plan): `docs/plans/archived/compounding-memory-mobile-memories-ui-prd.md` — defines `primary_agent_ids` migration and `TypeBadge` tokens.
 
 ## Key Technical Decisions
 
@@ -929,10 +929,10 @@ Unit 0 must complete green before any of Unit 1–8 opens a PR. Units 1 and 2 ca
 
 ## Sources & References
 
-- **Origin PRD:** `plans/compounding-memory-mobile-memories-force-graph.md` — primary source of truth for feature acceptance criteria.
-- **Sibling PRD (deferred to its own plan):** `plans/archived/compounding-memory-mobile-memories-ui-prd.md` — defines `primary_agent_ids` migration and `TypeBadge` tokens.
-- **Companion plan:** `plans/2026-04-19-003-refactor-admin-wiki-graph-plan.md` — admin-side `wikiGraph` resolver pattern source.
-- **In-flight rename:** `plans/2026-04-19-005-refactor-mobile-memories-to-wiki-plan.md` — owns the `apps/mobile/components/memory/ → components/wiki/` move that this plan inherits.
+- **Origin PRD:** `docs/plans/archived/compounding-memory-mobile-memories-force-graph.md` — primary source of truth for feature acceptance criteria.
+- **Sibling PRD (deferred to its own plan):** `docs/plans/archived/compounding-memory-mobile-memories-ui-prd.md` — defines `primary_agent_ids` migration and `TypeBadge` tokens.
+- **Companion plan:** `docs/plans/2026-04-19-003-refactor-admin-wiki-graph-plan.md` — admin-side `wikiGraph` resolver pattern source.
+- **In-flight rename:** `docs/plans/2026-04-19-005-refactor-mobile-memories-to-wiki-plan.md` — owns the `apps/mobile/components/memory/ → components/wiki/` move that this plan inherits.
 - **Code touchpoints:**
   - `apps/mobile/app/_layout.tsx`, `apps/mobile/app.json`, `apps/mobile/lib/theme.ts`, `apps/mobile/babel.config.js`, `apps/mobile/package.json`
   - `apps/mobile/components/PromptTemplateSheet.tsx`, `apps/mobile/components/threads/ThreadRow.tsx`

@@ -26,7 +26,7 @@ What is missing for the admin graph view: a single resolver that returns all act
 
 ## Scope Boundaries
 
-- Admin app only. Mobile already has its own planned force graph surface (`plans/archived/compounding-memory-mobile-memories-force-graph.md`); this plan does not touch it.
+- Admin app only. Mobile already has its own planned force graph surface (`docs/plans/archived/compounding-memory-mobile-memories-force-graph.md`); this plan does not touch it.
 - v1 is a static "all active pages + links in scope" render. No time scrubbing, no focal-expand mode, no pinned-position persistence.
 - v1 keeps the existing `memoryGraph` resolver + `MemoryGraphQuery` on the server untouched so nothing else in the system breaks. The admin stops calling them; follow-up PR removes them after a short soak.
 - No wiki authoring surface (no create/edit/delete pages or links). Compile is the only author, same rule as mobile.
@@ -39,7 +39,7 @@ What is missing for the admin graph view: a single resolver that returns all act
 - **Delete `memoryGraph` resolver, schema, and client code**: separate follow-up PR after the new graph has been verified on dev for at least one day. Keeps this PR's blast radius tight.
 - **Wiki-link navigation inside rendered markdown body** (click `[[Mom's Cardiologist]]` → navigate to that page in the sheet): follow-up once the minimum graph + detail sheet ships.
 - **Type subtype coloring** (Entity → Person / Company / …): wiki pages carry only `entity | topic | decision`. Subtype coloring needs classifier work upstream; out of scope here.
-- **Mobile force graph**: already owned by `plans/archived/compounding-memory-mobile-memories-force-graph.md`.
+- **Mobile force graph**: already owned by `docs/plans/archived/compounding-memory-mobile-memories-force-graph.md`.
 
 ## Context & Research
 
@@ -63,8 +63,8 @@ What is missing for the admin graph view: a single resolver that returns all act
 
 ### External References
 
-- `plans/archived/wiki-compiler-memory-layer.md` — architectural anchor for the compiled memory layer. Confirms compiled pages are a strictly downstream, rebuildable projection; treating them as the primary visualization is aligned with the architecture (there is no danger of the admin UI accidentally making wiki state canonical).
-- `plans/archived/compounding-memory-mobile-memories-force-graph.md` — mobile force-graph PRD. Useful shape reference for node/edge types; v1 admin intentionally does not inherit the temporal-scrub or Skia pieces.
+- `docs/plans/archived/wiki-compiler-memory-layer.md` — architectural anchor for the compiled memory layer. Confirms compiled pages are a strictly downstream, rebuildable projection; treating them as the primary visualization is aligned with the architecture (there is no danger of the admin UI accidentally making wiki state canonical).
+- `docs/plans/archived/compounding-memory-mobile-memories-force-graph.md` — mobile force-graph PRD. Useful shape reference for node/edge types; v1 admin intentionally does not inherit the temporal-scrub or Skia pieces.
 
 ## Key Technical Decisions
 
@@ -84,7 +84,7 @@ What is missing for the admin graph view: a single resolver that returns all act
 
 - *Which GraphQL file does the new `WikiGraph` type live in?* → `packages/database-pg/graphql/types/wiki.graphql`, extending the existing wiki type surface. Avoids spreading wiki schema across files.
 - *Do we need a `wikiGraphMulti(tenantId, ownerIds)` server endpoint to optimize "All Agents"?* → No, client fan-out is fine for v1. The existing `MemoryGraph` ships the same pattern and admin tenants have ≤10 agents today.
-- *How do we surface "this page cites which memories"?* → Not in v1. The plan intentionally leaves provenance drill-down to the separate compounding-memory refinement plan (`plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md`, now superseded by the hierarchical aggregation plan). The admin graph shows structural links between pages only.
+- *How do we surface "this page cites which memories"?* → Not in v1. The plan intentionally leaves provenance drill-down to the separate compounding-memory refinement plan (`docs/plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md`, now superseded by the hierarchical aggregation plan). The admin graph shows structural links between pages only.
 - *Should the current list view's search bar also search wiki pages?* → Out of scope. The search input continues to search memory records in list mode; the graph pane already runs its own client-side node-label filter on `searchQuery`, which is reused.
 
 ### Deferred to Implementation
@@ -309,6 +309,6 @@ What is missing for the admin graph view: a single resolver that returns all act
   - `packages/database-pg/src/schema/wiki.ts` (tables)
   - `packages/database-pg/graphql/types/wiki.graphql` (schema home)
 - Related PRs/plans:
-  - `plans/archived/wiki-compiler-memory-layer.md` — architectural anchor
-  - `plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md` — superseded; aggregation plan covers provenance surfaces
-  - `plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md` — sibling work on compounding loop; this plan's graph tab will visibly benefit once hierarchical aggregation lands
+  - `docs/plans/archived/wiki-compiler-memory-layer.md` — architectural anchor
+  - `docs/plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md` — superseded; aggregation plan covers provenance surfaces
+  - `docs/plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md` — sibling work on compounding loop; this plan's graph tab will visibly benefit once hierarchical aggregation lands
