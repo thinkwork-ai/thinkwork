@@ -12,7 +12,7 @@ import type {
 	APIGatewayProxyEventV2,
 	APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { schema } from "@thinkwork/database-pg";
 import { db } from "../lib/db.js";
@@ -124,16 +124,35 @@ export async function handler(
 		}
 	}
 
-	// Resolve Thinkwork user ID — the UI passes the Cognito sub, but
-	// connections.user_id FK references the users table. Look up by tenant.
+	// Resolve Thinkwork user ID. The mobile/admin UI passes `meUser.id`
+	// (which is already users.id from the `me` GraphQL resolver), so the
+	// direct match is the common case. We fall back to a tenant-only lookup
+	// only for legacy callers that still pass a raw Cognito sub and can't
+	// find a matching users row (rare, kept for compatibility).
 	let resolvedUserId = userId;
 	try {
 		const [dbUser] = await db
 			.select({ id: users.id })
 			.from(users)
-			.where(eq(users.tenant_id, tenantId))
+			.where(and(eq(users.tenant_id, tenantId), eq(users.id, userId)))
 			.limit(1);
-		if (dbUser) resolvedUserId = dbUser.id;
+		if (dbUser) {
+			resolvedUserId = dbUser.id;
+		} else {
+			// Legacy fallback — userId didn't match a users.id in this tenant.
+			// Pick the tenant's first user deterministically so we don't bind
+			// the connection to an arbitrary row each invocation.
+			const [fallbackUser] = await db
+				.select({ id: users.id })
+				.from(users)
+				.where(eq(users.tenant_id, tenantId))
+				.orderBy(users.created_at)
+				.limit(1);
+			if (fallbackUser) {
+				console.warn(`[oauth-authorize] userId=${userId.slice(0,8)} not a users.id in tenant; falling back to first user ${fallbackUser.id.slice(0,8)}`);
+				resolvedUserId = fallbackUser.id;
+			}
+		}
 	} catch (err) {
 		console.warn(`[oauth-authorize] Failed to resolve user, using provided userId:`, err);
 	}
