@@ -4,6 +4,7 @@ import type {
 } from "aws-lambda";
 import { eq, and } from "drizzle-orm";
 import { schema } from "@thinkwork/database-pg";
+import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
 import { db } from "../lib/db.js";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
 import { handleCors, json, error, notFound, unauthorized } from "../lib/response.js";
@@ -127,6 +128,7 @@ async function createAgent(
 		.values({
 			tenant_id: tenantId,
 			name: body.name as string,
+			slug: generateSlug(),
 			template_id: body.template_id as string,
 			role: body.role as string | undefined,
 			type: (body.type as string) ?? "agent",

@@ -25,6 +25,7 @@ import {
 	agentApiKeys,
 	activityLog,
 } from "@thinkwork/database-pg/schema";
+import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
 import { db } from "../lib/db.js";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
 import { handleCors, json, error, notFound, unauthorized, forbidden } from "../lib/response.js";
@@ -453,6 +454,7 @@ async function approveJoinRequest(
 		.values({
 			tenant_id: tenantId,
 			name: jr.agent_name,
+			slug: generateSlug(),
 			template_id: (jr as any).template_id || ceoAgent?.template_id,
 			type: "agent",
 			status: "idle",
