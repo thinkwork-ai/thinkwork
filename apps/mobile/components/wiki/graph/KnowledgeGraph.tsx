@@ -108,11 +108,16 @@ export function KnowledgeGraph({
   // collide values would never actually push nodes apart and the toggle
   // would only turn text on. Skip the very first render so we don't
   // stomp the reveal-fit animation.
+  //
+  // `alpha(0.3)` is enough heat to re-balance seeded positions under
+  // new forces without cold-spreading — combined with the label mode's
+  // raised `alphaDecay` / `velocityDecay`, the toggle settles in well
+  // under a second on a ~150-node graph.
   const prevShowLabelsRef = useRef(showLabels);
   useEffect(() => {
     if (prevShowLabelsRef.current === showLabels) return;
     prevShowLabelsRef.current = showLabels;
-    sim.restart(0.5);
+    sim.restart(0.3);
   }, [showLabels, sim]);
 
   const [revealed, setRevealed] = useState(false);

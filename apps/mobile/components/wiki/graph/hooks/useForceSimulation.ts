@@ -24,6 +24,20 @@ export interface SimConfig {
   collideRadius?: number;
   /** forceX/forceY strength pulling stragglers to origin. Default 0.08. */
   xyStrength?: number;
+  /**
+   * d3-force alpha decay per tick. Omit to use d3's default (~0.0228,
+   * which takes ~170 ticks from alpha=0.5 down to the hook's 0.01
+   * quiesce gate). Raise (e.g. 0.06) to cool the sim faster when the
+   * layout only needs to re-balance from seeded positions rather than
+   * cold-spread from a random seed.
+   */
+  alphaDecay?: number;
+  /**
+   * d3-force velocity decay (damping). Omit to use d3's default (0.4).
+   * Raise (e.g. 0.55) to damp per-tick motion more aggressively so
+   * nodes settle visually before alpha even reaches the quiesce gate.
+   */
+  velocityDecay?: number;
 }
 
 export interface UseForceSimulationResult {
@@ -50,6 +64,8 @@ export function useForceSimulation(
     chargeStrength = -130,
     collideRadius = 22,
     xyStrength = 0.08,
+    alphaDecay,
+    velocityDecay,
   } = config;
   const [tick, setTick] = useState(0);
   const [settled, setSettled] = useState(false);
@@ -85,6 +101,12 @@ export function useForceSimulation(
       .force("y", forceY(0).strength(xyStrength))
       .force("collide", forceCollide(collideRadius));
 
+    // Apply cooling knobs only when the caller opts in. Omitting them
+    // leaves d3's defaults (alphaDecay ≈ 0.0228, velocityDecay = 0.4),
+    // so existing callers keep the exact same feel.
+    if (typeof alphaDecay === "number") sim.alphaDecay(alphaDecay);
+    if (typeof velocityDecay === "number") sim.velocityDecay(velocityDecay);
+
     if (preseeded) {
       // Freeze at the restored layout. `alpha(0)` + `stop()` means no
       // ticks will fire; nodes remain at their seeded positions.
@@ -109,7 +131,16 @@ export function useForceSimulation(
       sim.stop();
       simRef.current = null;
     };
-  }, [nodes, edges, linkDistance, chargeStrength, collideRadius, xyStrength]);
+  }, [
+    nodes,
+    edges,
+    linkDistance,
+    chargeStrength,
+    collideRadius,
+    xyStrength,
+    alphaDecay,
+    velocityDecay,
+  ]);
 
   return {
     tick,

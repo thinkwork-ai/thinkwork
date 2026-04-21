@@ -26,12 +26,18 @@ import type {
 // Tuned for browsable label mode on the main agent graph (~100-200 nodes).
 // Loosened from `WikiDetailSubgraph` (which targets ~10-30 nodes): more
 // link distance + collide so ~18-char titles don't crash into adjacent
-// nodes at default zoom.
+// nodes at default zoom. `alphaDecay`/`velocityDecay` are raised well
+// above d3's defaults (~0.0228 / 0.4) because this sim always starts
+// from seeded positions — nodes only need to re-balance under the new
+// forces, not cold-spread — so aggressive cooling ends the toggle
+// animation in well under a second on a ~150-node graph.
 const LABEL_MODE_SIM_CONFIG: SimConfig = {
   linkDistance: 110,
   chargeStrength: -340,
   collideRadius: 52,
   xyStrength: 0.04,
+  alphaDecay: 0.06,
+  velocityDecay: 0.55,
 };
 
 interface WikiGraphViewProps {
