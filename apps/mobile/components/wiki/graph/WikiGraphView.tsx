@@ -38,9 +38,9 @@ import type {
 // either degrade clustering (velocityDecay too high) or produce an
 // abrupt stop (quiesceAlpha too high).
 const LABEL_MODE_SIM_CONFIG: SimConfig = {
-  linkDistance: 110,
-  chargeStrength: -340,
-  collideRadius: 52,
+  linkDistance: 85,
+  chargeStrength: -850,
+  collideRadius: 48,
   xyStrength: 0.04,
   alphaDecay: 0.05,
 };
