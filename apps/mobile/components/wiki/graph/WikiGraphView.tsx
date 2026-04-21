@@ -26,18 +26,25 @@ import type {
 // Tuned for browsable label mode on the main agent graph (~100-200 nodes).
 // Loosened from `WikiDetailSubgraph` (which targets ~10-30 nodes): more
 // link distance + collide so ~18-char titles don't crash into adjacent
-// nodes at default zoom. `alphaDecay`/`velocityDecay` are raised well
-// above d3's defaults (~0.0228 / 0.4) because this sim always starts
-// from seeded positions — nodes only need to re-balance under the new
-// forces, not cold-spread — so aggressive cooling ends the toggle
-// animation in well under a second on a ~150-node graph.
+// nodes at default zoom.
+//
+// Animation length is controlled by `alphaDecay` (aggressive cooling)
+// and `quiesceAlpha` (stop rendering when motion is already tiny) —
+// NOT by `velocityDecay`. Damping per-tick velocity would shorten the
+// animation but also prevent popular hubs from pulling tight clusters,
+// which is the single most important visual signal in label mode.
+//
+// The pairing matters: `quiesceAlpha` must be *low enough* that the
+// tick where we stop has only tiny per-tick motion, otherwise the
+// animation appears to cut off mid-drift rather than trail to rest.
+// `alphaDecay` carries the time savings instead.
 const LABEL_MODE_SIM_CONFIG: SimConfig = {
   linkDistance: 110,
   chargeStrength: -340,
   collideRadius: 52,
   xyStrength: 0.04,
-  alphaDecay: 0.06,
-  velocityDecay: 0.55,
+  alphaDecay: 0.1,
+  quiesceAlpha: 0.02,
 };
 
 interface WikiGraphViewProps {

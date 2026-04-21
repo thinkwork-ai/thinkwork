@@ -36,8 +36,20 @@ export interface SimConfig {
    * d3-force velocity decay (damping). Omit to use d3's default (0.4).
    * Raise (e.g. 0.55) to damp per-tick motion more aggressively so
    * nodes settle visually before alpha even reaches the quiesce gate.
+   * NOTE: raising this too far (>0.5) degrades clustering because
+   * nodes get damped before they can pack into their force equilibrium.
    */
   velocityDecay?: number;
+  /**
+   * Alpha threshold at which this hook stops the sim + flags `settled`.
+   * Omit to use the hook's default (0.01, d3-ish "fully converged").
+   * Raise (e.g. 0.05) to end the animation once visible motion is
+   * already tiny — the tail from alpha≈0.05 down to 0.01 is mostly
+   * CPU work the user can't see, and cutting it off is the cheapest
+   * way to shorten a re-layout animation without changing the
+   * steady-state layout.
+   */
+  quiesceAlpha?: number;
 }
 
 export interface UseForceSimulationResult {
@@ -66,6 +78,7 @@ export function useForceSimulation(
     xyStrength = 0.08,
     alphaDecay,
     velocityDecay,
+    quiesceAlpha = QUIESCE_ALPHA,
   } = config;
   const [tick, setTick] = useState(0);
   const [settled, setSettled] = useState(false);
@@ -121,7 +134,7 @@ export function useForceSimulation(
       if (now - lastRenderRef.current < FRAME_BUDGET_MS) return;
       lastRenderRef.current = now;
       setTick((t) => t + 1);
-      if (sim.alpha() < QUIESCE_ALPHA) {
+      if (sim.alpha() < quiesceAlpha) {
         sim.stop();
         setSettled(true);
       }
@@ -140,6 +153,7 @@ export function useForceSimulation(
     xyStrength,
     alphaDecay,
     velocityDecay,
+    quiesceAlpha,
   ]);
 
   return {
