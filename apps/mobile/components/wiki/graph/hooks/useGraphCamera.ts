@@ -37,8 +37,11 @@ export function useGraphCamera(
   const startTx = useSharedValue(0);
   const startTy = useSharedValue(0);
   const startScale = useSharedValue(1);
-  const focalX = useSharedValue(0);
-  const focalY = useSharedValue(0);
+  // Centroid at pinch start — anchors the world-point the user grabbed.
+  // The *current* centroid is read from `e.focalX/Y` every `onUpdate` so the
+  // zoom tracks finger drift instead of staying pinned to the initial touch.
+  const startFocalX = useSharedValue(0);
+  const startFocalY = useSharedValue(0);
 
   const transform = useDerivedValue(() => [
     { translateX: tx.value },
@@ -70,8 +73,8 @@ export function useGraphCamera(
         startScale.value = scale.value;
         startTx.value = tx.value;
         startTy.value = ty.value;
-        focalX.value = e.focalX;
-        focalY.value = e.focalY;
+        startFocalX.value = e.focalX;
+        startFocalY.value = e.focalY;
       })
       .onUpdate((e) => {
         const next = Math.min(
@@ -79,13 +82,28 @@ export function useGraphCamera(
           Math.max(SCALE_MIN, startScale.value * e.scale),
         );
         const ratio = next / startScale.value;
-        tx.value = focalX.value - (focalX.value - startTx.value) * ratio;
-        ty.value = focalY.value - (focalY.value - startTy.value) * ratio;
+        // Anchor the world-point that was under `startFocal` at onStart to
+        // the *current* centroid (`e.focalX/Y`). Reading the live centroid
+        // each frame makes zoom track finger drift — without this, a pinch
+        // whose centroid wanders (common near the graph edges where grip is
+        // awkward) "jumps" as the anchor and the user's fingers diverge.
+        tx.value = e.focalX - (startFocalX.value - startTx.value) * ratio;
+        ty.value = e.focalY - (startFocalY.value - startTy.value) * ratio;
         scale.value = next;
       });
 
     return Gesture.Simultaneous(pan, pinch);
-  }, [tx, ty, scale, startTx, startTy, startScale, focalX, focalY, onUserGesture]);
+  }, [
+    tx,
+    ty,
+    scale,
+    startTx,
+    startTy,
+    startScale,
+    startFocalX,
+    startFocalY,
+    onUserGesture,
+  ]);
 
   // Stable identity so effects can depend on `camera` without retriggering
   // every render (sim ticks at 30Hz; the parent re-renders that often).
