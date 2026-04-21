@@ -6,16 +6,23 @@
  * wiki corpus for a single (tenant, owner) scope without re-running the
  * LLM compile. Phase A emits deterministic `reference` links derived
  * from page summaries; Phase B emits reciprocal entity↔entity
- * co-mention links via `wiki_section_sources`.
+ * co-mention links via `wiki_section_sources`. Phase C (wiki-places-v2
+ * Unit 8, opt-out) walks every active page, resolves a POI via the
+ * places-service, sets `wiki_pages.place_id`, and emits one hierarchy
+ * edge per page.
  *
  * Usage:
  *   DATABASE_URL=... tsx packages/api/scripts/wiki-link-backfill.ts \
- *     --tenant <uuid> --owner <uuid> [--dry-run]
+ *     --tenant <uuid> --owner <uuid> [--dry-run] [--no-phase-c]
  *
  * Flags:
- *   --tenant   (required) tenant_id — scope safety rail.
- *   --owner    (required) owner/agent_id — scope safety rail.
- *   --dry-run  Skip writes; log the plan (candidates and edge counts).
+ *   --tenant     (required) tenant_id — scope safety rail.
+ *   --owner      (required) owner/agent_id — scope safety rail.
+ *   --dry-run    Skip writes; log the plan (candidates and edge counts).
+ *                Phase C dry-run short-circuits the places-service — no
+ *                Google API calls, no DB writes, only a projected
+ *                enrichment count.
+ *   --no-phase-c Skip the wiki-places-v2 Phase C pass; run only Phases A + B.
  *
  * Idempotency: `upsertPageLink` uses `onConflictDoNothing` on the
  * `(from_page_id, to_page_id, kind)` unique index, so re-running the
@@ -32,21 +39,43 @@ import {
 } from "@thinkwork/database-pg/schema";
 import {
 	findMemoryUnitPageSources,
+	findPageByPlaceId,
 	findPagesByExactTitle,
 	findPagesByFuzzyTitle,
+	findPlaceById,
 	PARENT_TITLE_FUZZY_THRESHOLD,
 	upsertPageLink,
+	type WikiPageRow,
+	type WikiPageType,
+	type WikiPlaceRow,
 } from "../src/lib/wiki/repository.js";
-import { runLinkBackfill } from "../src/lib/wiki/link-backfill.js";
+import {
+	runLinkBackfill,
+	runPhaseCPlaceBackfill,
+	type PhaseCPage,
+	type PhaseCSourceRecord,
+	type RunPhaseCPlaceBackfillResult,
+} from "../src/lib/wiki/link-backfill.js";
+import { loadGooglePlacesClientFromSsm } from "../src/lib/wiki/google-places-client.js";
+import {
+	resolvePlaceForRecord,
+	type PlacesServiceContext,
+} from "../src/lib/wiki/places-service.js";
 
 interface CliArgs {
 	tenantId: string | null;
 	ownerId: string | null;
 	dryRun: boolean;
+	phaseC: boolean;
 }
 
 function parseArgs(argv: string[]): CliArgs {
-	const out: CliArgs = { tenantId: null, ownerId: null, dryRun: false };
+	const out: CliArgs = {
+		tenantId: null,
+		ownerId: null,
+		dryRun: false,
+		phaseC: true,
+	};
 	for (let i = 0; i < argv.length; i++) {
 		const a = argv[i];
 		switch (a) {
@@ -58,6 +87,12 @@ function parseArgs(argv: string[]): CliArgs {
 				break;
 			case "--dry-run":
 				out.dryRun = true;
+				break;
+			case "--phase-c":
+				out.phaseC = true;
+				break;
+			case "--no-phase-c":
+				out.phaseC = false;
 				break;
 			case "--help":
 			case "-h":
@@ -73,12 +108,15 @@ function printHelp(): void {
 
 Usage:
   tsx packages/api/scripts/wiki-link-backfill.ts \\
-    --tenant <uuid> --owner <uuid> [--dry-run]
+    --tenant <uuid> --owner <uuid> [--dry-run] [--no-phase-c]
 
 Flags:
-  --tenant   (required) tenant_id scope.
-  --owner    (required) owner/agent_id scope.
-  --dry-run  Log candidates + counts without writing links.
+  --tenant      (required) tenant_id scope.
+  --owner       (required) owner/agent_id scope.
+  --dry-run     Log candidates + counts without writing links.
+                Phase C dry-run short-circuits the places-service
+                (no Google API calls, no DB writes).
+  --no-phase-c  Skip the wiki-places-v2 Phase C pass (default is on).
 `);
 }
 
@@ -157,6 +195,121 @@ async function countReferenceLinks(scope: {
 	return rows[0]?.n ?? 0;
 }
 
+async function listActivePagesForPhaseC(scope: {
+	tenantId: string;
+	ownerId: string;
+}): Promise<PhaseCPage[]> {
+	const rows = await db
+		.select({
+			id: wikiPages.id,
+			type: wikiPages.type,
+			slug: wikiPages.slug,
+			title: wikiPages.title,
+			place_id: wikiPages.place_id,
+		})
+		.from(wikiPages)
+		.where(
+			and(
+				eq(wikiPages.tenant_id, scope.tenantId),
+				eq(wikiPages.owner_id, scope.ownerId),
+				eq(wikiPages.status, "active"),
+			),
+		);
+	return rows.map((r) => ({
+		id: r.id,
+		type: r.type as WikiPageType,
+		slug: r.slug,
+		title: r.title,
+		place_id: r.place_id ?? null,
+	}));
+}
+
+/**
+ * Fetch source memory_unit records for a given page_id, joining through
+ * `wiki_section_sources → wiki_page_sections` and reading each unit's
+ * raw `metadata` JSONB directly off `hindsight.memory_units`.
+ *
+ * Returns records in the `{ id, metadata: { raw: <...> } }` shape that
+ * `readPlaceMetadata` expects — mirrors the HindsightAdapter's `mapUnit`
+ * nesting so the places-service doesn't have to care whether it's being
+ * called from the compile pipeline or the backfill script.
+ */
+async function fetchPageSourceRecords(
+	pageId: string,
+): Promise<PhaseCSourceRecord[]> {
+	const result = await db.execute(sql`
+		SELECT DISTINCT m.id::text AS id, m.metadata
+		FROM hindsight.memory_units m
+		JOIN wiki_section_sources ss ON ss.source_ref = m.id::text
+		JOIN wiki_page_sections ps ON ps.id = ss.section_id
+		WHERE ps.page_id = ${pageId}::uuid
+			AND ss.source_kind = 'memory_unit'
+	`);
+	const rows =
+		(result as unknown as {
+			rows?: Array<{ id: string; metadata: unknown }>;
+		}).rows ?? [];
+	return rows.map((r) => ({
+		id: r.id,
+		metadata: { raw: r.metadata ?? null },
+	}));
+}
+
+async function setPagePlaceIdInDb(args: {
+	pageId: string;
+	placeId: string;
+}): Promise<string> {
+	const result = await db.execute(sql`
+		UPDATE ${wikiPages}
+		SET place_id = COALESCE(place_id, ${args.placeId}::uuid),
+			updated_at = now()
+		WHERE id = ${args.pageId}::uuid
+		RETURNING place_id
+	`);
+	const rows =
+		(result as unknown as { rows?: Array<{ place_id: string }> }).rows ?? [];
+	return rows[0]?.place_id ?? args.placeId;
+}
+
+async function runPhaseCAgainstDb(
+	scope: { tenantId: string; ownerId: string },
+	dryRun: boolean,
+): Promise<RunPhaseCPlaceBackfillResult> {
+	const googleClient = dryRun ? null : await loadGooglePlacesClientFromSsm();
+	const placesCtx: PlacesServiceContext = {
+		tenantId: scope.tenantId,
+		ownerId: scope.ownerId,
+		googlePlacesClient: googleClient,
+		logger: console,
+	};
+
+	return runPhaseCPlaceBackfill({
+		scope,
+		dryRun,
+		listActivePages: () => listActivePagesForPhaseC(scope),
+		fetchRecordsForPage: (pageId) => fetchPageSourceRecords(pageId),
+		resolvePlaceForRecord: async (record) => {
+			// places-service resolver wants a full ThinkWorkMemoryRecord; it
+			// only reads `metadata`, so the minimal shape is safe.
+			const resolved = await resolvePlaceForRecord(record as any, placesCtx);
+			if (!resolved) return null;
+			return { poi: { id: resolved.poi.id } };
+		},
+		setPagePlaceId: (a) => setPagePlaceIdInDb(a),
+		findPlaceById: (a): Promise<WikiPlaceRow | null> => findPlaceById(a),
+		findPageByPlaceId: (a): Promise<WikiPageRow | null> => findPageByPlaceId(a),
+		writeLink: (link) =>
+			upsertPageLink({
+				fromPageId: link.fromPageId,
+				toPageId: link.toPageId,
+				context: link.context,
+				kind: link.kind,
+			}),
+		breakerState: googleClient ? () => googleClient.breakerState() : undefined,
+		log: (msg) => console.log(msg),
+	});
+}
+
 async function main(): Promise<void> {
 	const args = parseArgs(process.argv.slice(2));
 	if (!args.tenantId || !args.ownerId) {
@@ -194,6 +347,16 @@ async function main(): Promise<void> {
 		},
 		log: (msg) => console.log(msg),
 	});
+
+	if (args.phaseC) {
+		console.log(
+			`[wiki-link-backfill] Phase C start${args.dryRun ? " (DRY RUN)" : ""}`,
+		);
+		const phaseCResult = await runPhaseCAgainstDb(scope, args.dryRun);
+		console.log(`[summary] phase-c ${JSON.stringify(phaseCResult)}`);
+	} else {
+		console.log(`[wiki-link-backfill] Phase C skipped (--no-phase-c)`);
+	}
 
 	if (!args.dryRun && baseline !== null) {
 		const after = await countReferenceLinks(scope);
