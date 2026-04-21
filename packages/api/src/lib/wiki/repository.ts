@@ -1551,9 +1551,9 @@ export async function upsertPageLink(
 		kind?: WikiPageLinkKind;
 	},
 	db: DbClient = defaultDb,
-): Promise<void> {
-	if (args.fromPageId === args.toPageId) return; // no self-links
-	await db
+): Promise<boolean> {
+	if (args.fromPageId === args.toPageId) return false; // no self-links
+	const returned = await db
 		.insert(wikiPageLinks)
 		.values({
 			from_page_id: args.fromPageId,
@@ -1561,7 +1561,12 @@ export async function upsertPageLink(
 			kind: args.kind ?? "reference",
 			context: args.context ?? null,
 		})
-		.onConflictDoNothing();
+		.onConflictDoNothing()
+		.returning({ id: wikiPageLinks.id });
+	// Empty array = the ON CONFLICT DO NOTHING path fired (edge already
+	// existed). Callers that track metrics should NOT double-count on
+	// re-runs.
+	return returned.length > 0;
 }
 
 export async function listBacklinks(

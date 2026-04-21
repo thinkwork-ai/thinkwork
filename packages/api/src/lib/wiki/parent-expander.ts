@@ -17,7 +17,14 @@
 import type { ThinkWorkMemoryRecord } from "../memory/types.js";
 import { slugifyTitle } from "./aliases.js";
 
-export type ParentCandidateReason = "city" | "journal";
+export type ParentCandidateReason = "city" | "journal" | "place";
+// Note: "place" is reserved for edge-context strings written by
+// `emitPlaceHierarchyLinks` (deterministic-linker.ts) — the union is
+// extended here so the switch-on-reason code paths downstream stay
+// exhaustive. `deriveParentCandidates` and
+// `deriveParentCandidatesFromPageSummaries` never produce "place"
+// candidates; the hierarchy emitter bypasses this module entirely and
+// walks `wiki_places.parent_place_id` directly.
 
 /** Whether the candidate came from scanning batch memory records vs
  * scope-wide page summaries. Matters to the deterministic linker because

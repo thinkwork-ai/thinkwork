@@ -52,8 +52,10 @@ import {
 import {
 	emitCoMentionLinks,
 	emitDeterministicParentLinks,
+	emitPlaceHierarchyLinks,
 	type AffectedPage,
 } from "./deterministic-linker.js";
+import { findPageByPlaceId, findPlaceById } from "./repository.js";
 import { findExistingPageByTitleOrAlias } from "./page-lookup.js";
 import {
 	resolveBatchPlace,
@@ -150,6 +152,12 @@ export interface RunJobResult {
 		 * between entity pages sourced by the same memory_unit (entity↔entity
 		 * only, capped at 10 per memory). */
 		links_written_co_mention?: number;
+		/** Reference links emitted by `emitPlaceHierarchyLinks` — one per
+		 * page to the backing page of its immediate parent in the
+		 * wiki_places hierarchy (POI → city, city → state, state →
+		 * country). Only counts brand-new inserts; re-runs that hit the
+		 * unique (from,to,kind) constraint don't double-count. */
+		links_written_place?: number;
 		/** (title, owner_id) groups in `wiki_pages` with >1 active row — the
 		 * R5 precision canary. Rising means densification may be creating
 		 * duplicate hubs. */
@@ -584,7 +592,13 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 	// actually part of this batch's work.
 	const affectedPages: AffectedPage[] = [];
 	const rememberAffected = (
-		page: { id: string; type: WikiPageType; slug: string; title: string },
+		page: {
+			id: string;
+			type: WikiPageType;
+			slug: string;
+			title: string;
+			place_id?: string | null;
+		},
 		sourceRecordIds: Iterable<string>,
 	): void => {
 		const recordIds = Array.from(new Set(sourceRecordIds));
@@ -594,6 +608,7 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			slug: page.slug,
 			title: page.title,
 			sourceRecordIds: recordIds,
+			placeId: page.place_id ?? null,
 		});
 	};
 
@@ -903,16 +918,17 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 		metrics.deterministic_linking_flag_suppressed = true;
 	} else if (affectedPages.length > 0 && records.length > 0) {
 		const scope = { tenantId: job.tenant_id, ownerId: job.owner_id };
-		const writeLink = (linkArgs: {
+		const writeLink = async (linkArgs: {
 			fromPageId: string;
 			toPageId: string;
 			context: string;
-		}): Promise<void> =>
-			upsertPageLink({
+		}): Promise<void> => {
+			await upsertPageLink({
 				fromPageId: linkArgs.fromPageId,
 				toPageId: linkArgs.toPageId,
 				context: linkArgs.context,
 			});
+		};
 
 		// Two expanders feed the linker:
 		//   - record-based: per-batch memory records with city/journal
@@ -992,6 +1008,38 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			metrics.links_written_co_mention =
 				(metrics.links_written_co_mention ?? 0) +
 				coMentionEmission.linksWritten;
+		}
+
+		// c) Place-hierarchy emission: for every affected page that carries
+		//    a place_id, walk wiki_places.parent_place_id and emit one
+		//    reference edge to the backing page of its immediate parent.
+		//    Bypasses the candidate pipeline — hierarchy edges are
+		//    structural, not precision-tuned. Metric counts only NEW
+		//    inserts so re-runs don't double-count.
+		const pagesWithPlaceId = affectedPages
+			.filter((p) => p.placeId)
+			.map((p) => ({
+				id: p.id,
+				tenant_id: job.tenant_id,
+				owner_id: job.owner_id,
+				place_id: p.placeId ?? null,
+			}));
+		if (pagesWithPlaceId.length > 0) {
+			const placeEmission = await emitPlaceHierarchyLinks({
+				scope,
+				affectedPages: pagesWithPlaceId,
+				findPlaceById,
+				findPageByPlaceId,
+				writeLink: (linkArgs) =>
+					upsertPageLink({
+						fromPageId: linkArgs.fromPageId,
+						toPageId: linkArgs.toPageId,
+						context: linkArgs.context,
+						kind: linkArgs.kind,
+					}),
+			});
+			metrics.links_written_place =
+				(metrics.links_written_place ?? 0) + placeEmission.linksWritten;
 		}
 	}
 
@@ -1635,6 +1683,7 @@ function emptyMetrics(): RunJobResult["metrics"] {
 		latency_ms: 0,
 		links_written_deterministic: 0,
 		links_written_co_mention: 0,
+		links_written_place: 0,
 		duplicate_candidates_count: 0,
 		fuzzy_dedupe_merges: 0,
 		bedrock_retries: 0,
