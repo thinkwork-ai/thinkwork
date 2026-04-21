@@ -1,0 +1,79 @@
+# Skill Runs — audit + invocation surface for composition-mode skills.
+#
+# See docs/plans/2026-04-21-003-feat-composable-skills-with-learnings-plan.md
+# (Unit 4). startSkillRun is the single entry point every invocation path
+# funnels through (chat intent, scheduled, admin catalog, webhook).
+
+type SkillRun {
+  id: ID!
+  tenantId: ID!
+  agentId: ID
+  invokerUserId: ID!
+  skillId: String!
+  skillVersion: Int!
+  invocationSource: String!
+  inputs: AWSJSON
+  resolvedInputs: AWSJSON
+  resolvedInputsHash: String!
+  status: String!
+  deliveryChannels: AWSJSON
+  startedAt: AWSDateTime!
+  finishedAt: AWSDateTime
+  deliveredArtifactRef: AWSJSON
+  deleteAt: AWSDateTime!
+  feedbackSignal: String
+  feedbackNote: String
+  failureReason: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input StartSkillRunInput {
+  # Server-derived when absent; overridable only when the caller is a
+  # tenant admin impersonating via the admin catalog path.
+  tenantId: ID
+  agentId: ID
+  skillId: String!
+  skillVersion: Int
+  invocationSource: String!
+  inputs: AWSJSON
+  deliveryChannels: AWSJSON
+}
+
+input SubmitRunFeedbackInput {
+  runId: ID!
+  # 'positive' | 'negative'
+  signal: String!
+  note: String
+}
+
+type CompositionFeedbackSummary {
+  skillId: String!
+  positive: Int!
+  negative: Int!
+  total: Int!
+}
+
+extend type Query {
+  skillRun(id: ID!): SkillRun
+  skillRuns(
+    tenantId: ID
+    agentId: ID
+    invokerUserId: ID
+    skillId: String
+    status: String
+    invocationSource: String
+    limit: Int
+  ): [SkillRun!]!
+  compositionFeedbackSummary(
+    tenantId: ID
+    skillId: String
+  ): [CompositionFeedbackSummary!]!
+}
+
+extend type Mutation {
+  startSkillRun(input: StartSkillRunInput!): SkillRun!
+  cancelSkillRun(runId: ID!): SkillRun!
+  deleteRun(runId: ID!): Boolean!
+  submitRunFeedback(input: SubmitRunFeedbackInput!): SkillRun!
+}
