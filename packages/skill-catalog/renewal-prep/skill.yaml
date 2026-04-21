@@ -1,0 +1,110 @@
+id: renewal-prep
+version: 1
+execution: composition
+mode: tool
+name: "Renewal Prep"
+description: >
+  Prep a customer renewal conversation. Pulls contract terms, recent
+  usage, support posture, renewal history, and win/loss signals, then
+  renders a renewal_risk brief ordered by deal-impact likelihood.
+
+inputs:
+  customer:
+    type: string
+    required: true
+    resolver: resolve_customer
+    on_missing_input: ask
+  renewal_date:
+    type: date
+    required: true
+    on_missing_input: ask
+  contract_value:
+    type: string
+    required: false
+
+tenant_overridable:
+  - triggers.schedule.expression
+
+triggers:
+  chat_intent:
+    examples:
+      - "prep for {customer} renewal"
+      - "renewal brief for {customer}"
+      - "{customer} renewal risk"
+    disambiguation: ask
+  schedule:
+    # Daily 07:00 scan — fires for any account with a renewal in the next
+    # 60 days, per the scheduled-jobs row's from_tenant_config bindings.
+    type: cron
+    expression: "0 7 * * ? *"
+    bindings:
+      customer:
+        from_tenant_config: upcoming_renewal_customer
+      renewal_date:
+        from_tenant_config: upcoming_renewal_date
+
+delivery:
+  - chat
+  - email
+
+budget_cap:
+  tokens: 150000
+
+steps:
+  - id: frame
+    mode: sequential
+    skill: frame
+    inputs:
+      problem: "Renewal prep for {customer}. Renewal on {renewal_date}. Contract value: {contract_value}."
+    output: framed
+
+  - id: gather
+    mode: parallel
+    on_branch_failure: continue_with_footer
+    branches:
+      - id: contract
+        skill: contract_summary
+        inputs:
+          customer: "{customer}"
+        critical: true
+      - id: usage_trend
+        skill: product_usage_summary
+        inputs:
+          customer: "{customer}"
+          period: last_quarter
+      - id: renewal_history
+        skill: renewal_history_summary
+        inputs:
+          customer: "{customer}"
+      - id: ar
+        skill: ar_summary
+        inputs:
+          customer: "{customer}"
+      - id: nps
+        skill: nps_summary
+        inputs:
+          customer: "{customer}"
+          period: last_year
+      - id: tickets
+        skill: support_incidents_summary
+        inputs:
+          customer: "{customer}"
+          period: last_quarter
+    output: gathered
+
+  - id: synthesize
+    mode: sequential
+    skill: synthesize
+    inputs:
+      framed: "{framed}"
+      gathered: "{gathered}"
+      focus: risks
+    output: synthesis
+
+  - id: package
+    mode: sequential
+    skill: package
+    inputs:
+      synthesis: "{synthesis}"
+      format: renewal_risk
+    output: deliverable

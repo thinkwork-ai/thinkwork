@@ -1,0 +1,114 @@
+id: sales-prep
+version: 1
+execution: composition
+mode: tool
+name: "Prep for Meeting"
+description: >
+  Gather account context, financials, activity, and external signals for a
+  sales meeting. Produces a packaged brief the rep can read in 60 seconds.
+
+# Typed inputs — the dispatcher / scheduled job / admin catalog resolves
+# values into these shapes before calling startSkillRun.
+inputs:
+  customer:
+    type: string
+    required: true
+    resolver: resolve_customer
+    on_missing_input: ask
+  meeting_date:
+    type: date
+    required: true
+    on_missing_input: ask
+  focus:
+    type: enum
+    values: [financial, expansion, risks, general]
+    default: general
+
+# Tenants can override these paths via agent_skills.config without touching
+# the canonical YAML. Everything else stays as authored.
+tenant_overridable:
+  - inputs.focus.default
+  - triggers.schedule.expression
+
+triggers:
+  chat_intent:
+    examples:
+      - "prep me for {customer}"
+      - "brief me on {customer}"
+      - "sales prep for {customer}"
+      - "get me ready for the {customer} meeting"
+    disambiguation: ask
+  schedule:
+    type: cron
+    # Weekday afternoons — the default is a sensible baseline; tenants override.
+    expression: "0 14 ? * MON-FRI *"
+    bindings:
+      customer:
+        from_tenant_config: default_customer
+      meeting_date:
+        today_plus_N: 1
+
+# Two destinations in v1. Agent_owner is a Unit 8 reconciler path.
+delivery:
+  - chat
+  - email
+
+# Per-run ceiling so a badly-configured branch can't drain the tenant budget.
+budget_cap:
+  tokens: 120000
+
+# The composition body. Ordering matters: frame before gather so the focus
+# hint reaches the parallel branches' prompts; synthesize reads both; package
+# renders the final artifact deterministically.
+steps:
+  - id: frame
+    mode: sequential
+    skill: frame
+    inputs:
+      problem: "Prep for meeting with {customer} on {meeting_date}. Focus: {focus}."
+    output: framed
+
+  - id: gather
+    mode: parallel
+    on_branch_failure: continue_with_footer
+    branches:
+      - id: crm
+        skill: crm_account_summary
+        inputs:
+          customer: "{customer}"
+        critical: true
+      - id: ar
+        skill: ar_summary
+        inputs:
+          customer: "{customer}"
+      - id: tickets
+        skill: support_incidents_summary
+        inputs:
+          customer: "{customer}"
+      - id: web
+        skill: web_research
+        inputs:
+          customer: "{customer}"
+          date: "{meeting_date}"
+      - id: wiki
+        skill: wiki_search
+        inputs:
+          customer: "{customer}"
+    output: gathered
+
+  - id: synthesize
+    mode: sequential
+    skill: synthesize
+    inputs:
+      framed: "{framed}"
+      gathered: "{gathered}"
+      focus: "{focus}"
+    output: synthesis
+
+  - id: package
+    mode: sequential
+    skill: package
+    inputs:
+      synthesis: "{synthesis}"
+      format: sales_brief
+    output: deliverable
