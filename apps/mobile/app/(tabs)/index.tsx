@@ -30,7 +30,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { COLORS } from "@/lib/theme";
 import { ListTodo, Bot, Settings, LogOut, RefreshCw, Filter, ChevronDown, ChevronRight, X, Zap, Check, CheckSquare, ListChecks, Circle, AlertCircle, Clock, Cable, Plug } from "lucide-react-native";
-import { IconTopologyStar3, IconList } from "@tabler/icons-react-native";
+import { IconTopologyStar3, IconList, IconLetterCase } from "@tabler/icons-react-native";
 import { ThreadChannel } from "@/lib/gql/graphql";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { useThreadReadState } from "@/lib/hooks/use-thread-read-state";
@@ -257,6 +257,10 @@ export default function ThreadsScreen() {
   const [wikiQuery, setWikiQuery] = useState("");
   // Wiki tab: list (table rows) ↔ graph (force-directed view)
   const [wikiViewMode, setWikiViewMode] = useState<"list" | "graph">("list");
+  // Wiki graph view: when on, render node titles + use a label-friendly
+  // force layout (longer links, more repulsion) so titles don't overlap.
+  // In-session only; cold app launches start with labels off.
+  const [wikiShowLabels, setWikiShowLabels] = useState(false);
   // Skia text rendering needs an Inter SkFont — load once for the lifetime of the tab.
   const [wikiFontsLoaded] = useFonts({ Inter: Inter_500Medium });
 
@@ -401,6 +405,20 @@ export default function ThreadsScreen() {
 
             {/* Right: Wiki-tab view toggle + Filter + Menu */}
             <View className="flex-row items-center gap-3">
+            {activeTab === "wiki" && wikiViewMode === "graph" ? (
+              <Pressable
+                onPress={() => setWikiShowLabels((s) => !s)}
+                className="p-2"
+                accessibilityRole="button"
+                accessibilityLabel={wikiShowLabels ? "Hide labels" : "Show labels"}
+              >
+                <IconLetterCase
+                  size={22}
+                  color={wikiShowLabels ? colors.primary : colors.foreground}
+                  strokeWidth={2}
+                />
+              </Pressable>
+            ) : null}
             {activeTab === "wiki" ? (
               <Pressable
                 onPress={() => setWikiViewMode((m) => (m === "list" ? "graph" : "list"))}
@@ -548,6 +566,7 @@ export default function ThreadsScreen() {
             tenantId={tenantId}
             agentId={activeAgent.id}
             searchQuery={wikiQuery}
+            showLabels={wikiShowLabels}
           />
         ) : (
           <WikiList
