@@ -55,7 +55,17 @@ export interface SimConfig {
 export interface UseForceSimulationResult {
   tick: number;
   settled: boolean;
-  restart: (alpha?: number) => void;
+  /**
+   * Re-heats the sim to the given alpha and starts the scheduler. When
+   * `preTick > 0`, runs that many iterations synchronously *before* the
+   * scheduler starts — d3's `simulation.tick(N)` advances the sim without
+   * emitting tick events, so positions converge offscreen and the user
+   * only sees the trailing low-amplitude settle. Essential when a re-
+   * layout has to transition between dramatically different force
+   * equilibriums (e.g. a label-mode toggle) that would otherwise not
+   * converge within the visible tick budget.
+   */
+  restart: (alpha?: number, preTick?: number) => void;
   stop: () => void;
 }
 
@@ -159,9 +169,18 @@ export function useForceSimulation(
   return {
     tick,
     settled,
-    restart: (alpha = 0.3) => {
+    restart: (alpha = 0.3, preTick = 0) => {
       setSettled(false);
-      simRef.current?.alpha(alpha).restart();
+      const sim = simRef.current;
+      if (!sim) return;
+      sim.alpha(alpha);
+      // Fast-forward convergence offscreen. `sim.tick(N)` advances the
+      // forces without firing tick events, so no re-renders happen
+      // during the pre-tick. The JS thread blocks briefly (~2-4ms/tick
+      // on ~150 nodes) but the user never sees it — they just see the
+      // final low-amplitude tail once `restart()` starts the scheduler.
+      if (preTick > 0) sim.tick(preTick);
+      sim.restart();
     },
     stop: () => {
       simRef.current?.stop();

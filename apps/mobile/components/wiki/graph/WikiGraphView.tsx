@@ -28,23 +28,21 @@ import type {
 // link distance + collide so ~18-char titles don't crash into adjacent
 // nodes at default zoom.
 //
-// Animation length is controlled by `alphaDecay` (aggressive cooling)
-// and `quiesceAlpha` (stop rendering when motion is already tiny) —
-// NOT by `velocityDecay`. Damping per-tick velocity would shorten the
-// animation but also prevent popular hubs from pulling tight clusters,
-// which is the single most important visual signal in label mode.
-//
-// The pairing matters: `quiesceAlpha` must be *low enough* that the
-// tick where we stop has only tiny per-tick motion, otherwise the
-// animation appears to cut off mid-drift rather than trail to rest.
-// `alphaDecay` carries the time savings instead.
+// Animation length is driven primarily by the `preTick` call inside
+// `KnowledgeGraph`'s label-toggle effect (see `sim.restart(0.3, 40)`).
+// Pre-ticking advances convergence offscreen, so the scheduler phase
+// here just plays a short low-amplitude settle. `alphaDecay` is a
+// modest bump above d3's default (~0.0228) to keep the tail short
+// without forcing premature quiesce; `velocityDecay` and
+// `quiesceAlpha` stay at their defaults because aggressive values
+// either degrade clustering (velocityDecay too high) or produce an
+// abrupt stop (quiesceAlpha too high).
 const LABEL_MODE_SIM_CONFIG: SimConfig = {
   linkDistance: 110,
   chargeStrength: -340,
   collideRadius: 52,
   xyStrength: 0.04,
-  alphaDecay: 0.1,
-  quiesceAlpha: 0.02,
+  alphaDecay: 0.05,
 };
 
 interface WikiGraphViewProps {
