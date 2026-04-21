@@ -29,7 +29,7 @@ If you're not on AWS, this isn't the right tool for you — and that's the point
 
 - **Six product modules:** Agents, Threads, Connectors, Automations, Control, Memory
 - **Two clients:** an admin/operator web app (`apps/admin`) and a mobile client (`apps/mobile`, Expo)
-- **A real CLI** (`thinkwork-cli`) with two surfaces: **deploy-side** (`login`, `init`, `plan`, `deploy`, `bootstrap`, `destroy`, `doctor`, `status`, `outputs`, `config`, `update`) and **API-side** (`login --stage`, `logout`, `me`, `user`, `mcp`, `tools`, plus a scaffolded roadmap of `thread`, `agent`, `template`, `tenant`, `member`, `team`, `kb`, `routine`, `scheduled-job`, `turn`, `wakeup`, `webhook`, `connector`, `skill`, `memory`, `recipe`, `artifact`, `cost`, `budget`, `performance`, `trace`, `inbox`, `dashboard` — see [apps/cli/README.md#roadmap](./apps/cli/README.md#roadmap))
+- **A real CLI** (`thinkwork-cli`) with two surfaces: **deploy-side** (`login`, `init`, `plan`, `deploy`, `bootstrap`, `destroy`, `doctor`, `status`, `outputs`, `config`, `update`) and **API-side** (`login --stage`, `logout`, `me`, `user`, `mcp`, `tools`, `eval`, `wiki`, plus a scaffolded roadmap of `thread`, `agent`, `template`, `tenant`, `member`, `team`, `kb`, `routine`, `scheduled-job`, `turn`, `wakeup`, `webhook`, `connector`, `skill`, `memory`, `recipe`, `artifact`, `cost`, `budget`, `performance`, `trace`, `inbox`, `dashboard` — see [apps/cli/README.md#roadmap](./apps/cli/README.md#roadmap))
 - **Three connectors at launch:** Slack, GitHub, Google Workspace
 - **Threads with structured channels** (CHAT, AUTO, EMAIL, SLACK, GITHUB) for task intake and execution
 - **Memory** as the umbrella layer for document knowledge, long-term memory, retrieval context, and portable memory contracts — including a **memory graph view** for inspecting relationships across stored memories
@@ -54,7 +54,7 @@ The operator surface. A React SPA at `apps/admin`, authenticated through Cognito
   <img src="./apps/www/public/images/mobile/wiki-graph.png" alt="Wiki tab — Compounding Memory pages rendered as a knowledge graph in the ThinkWork mobile app" width="280" />
 </p>
 
-The end-user surface. An Expo + React Native client at `apps/mobile`, currently shipping on iOS via TestFlight. Users get a unified inbox across chat threads, scheduled automations, and emails — with narrow-policy push notifications and realtime activity on every turn. The companion **Wiki** tab surfaces Compounding Memory pages (Entity, Topic, Decision) that the agent builds as it learns — browseable on device, linked to each other, and scoped per user. The mobile app owns per-user OAuth and MCP tokens; tenant configuration stays on the admin side. See the [mobile docs](https://docs.thinkwork.ai/applications/mobile/) for the full surface.
+The end-user surface. An Expo + React Native client at `apps/mobile`, currently shipping on iOS via TestFlight. Users get a unified inbox across chat threads, scheduled automations, and emails — with narrow-policy push notifications and realtime activity on every turn. The companion **Wiki** tab surfaces Compounding Memory pages (Entity, Topic, Decision) that the agent builds as it learns — browseable on device, linked to each other, and scoped per agent. The mobile app owns per-user OAuth and MCP tokens; tenant configuration stays on the admin side. See the [mobile docs](https://docs.thinkwork.ai/applications/mobile/) for the full surface.
 
 ## Roadmap
 
@@ -75,7 +75,7 @@ thinkwork login                    # 1. Pick an AWS profile
 thinkwork doctor -s dev            # 2. Check prerequisites (AWS, Terraform, Bedrock)
 thinkwork init -s dev              # 3. Scaffold terraform.tfvars + modules
 thinkwork plan -s dev              # 4. Review the Terraform plan
-thinkwork deploy -s dev            # 5. Provision the stack (~5 min)
+thinkwork deploy -s dev            # 5. Provision the stack
 thinkwork bootstrap -s dev         # 6. Seed workspace files + skill catalog
 thinkwork login --stage dev        # 7. Sign in to the Cognito pool (OAuth)
 thinkwork me                       # 8. Confirm identity + tenant
