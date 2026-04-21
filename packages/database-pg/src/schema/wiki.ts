@@ -39,28 +39,12 @@ import { tenants } from "./core";
 import { agents } from "./agents";
 
 // ---------------------------------------------------------------------------
-// Custom pgvector + tsvector column helpers
+// Custom tsvector column helper
 //
-// Drizzle has no native `vector`/`tsvector` column types; these helpers emit
-// the right SQL during migration generation. The tsvector column is wired up
-// as a generated column via `.generatedAlwaysAs()` below.
+// Drizzle has no native `tsvector` column type; this helper emits the right
+// SQL during migration generation. The tsvector column is wired up as a
+// generated column via `.generatedAlwaysAs()` below.
 // ---------------------------------------------------------------------------
-
-const vector = (name: string, dimensions: number) =>
-	customType<{ data: number[]; driverData: string }>({
-		dataType() {
-			return `vector(${dimensions})`;
-		},
-		toDriver(value: number[]): string {
-			return `[${value.join(",")}]`;
-		},
-		fromDriver(value: string): number[] {
-			return value
-				.slice(1, -1)
-				.split(",")
-				.map((n) => Number(n));
-		},
-	})(name);
 
 const tsvector = (name: string) =>
 	customType<{ data: string; driverData: string }>({
@@ -162,7 +146,6 @@ export const wikiPageSections = pgTable(
 		heading: text("heading").notNull(),
 		body_md: text("body_md").notNull(),
 		position: integer("position").notNull(),
-		body_embedding: vector("body_embedding", 1024), // present but NULL in v1
 		last_source_at: timestamp("last_source_at", { withTimezone: true }),
 		// Hierarchical aggregation metadata. NULL on leaf-style sections that
 		// don't act as rollups (overview, notes, etc.). Shape:
@@ -295,14 +278,6 @@ export const wikiUnresolvedMentions = pgTable(
 			.notNull()
 			.default(sql`now()`),
 		sample_contexts: jsonb("sample_contexts").notNull().default([]), // array of { quote, source_ref, seen_at }, capped at 5
-		// Richer cluster context for aggregate-aware promotion. NULL on old /
-		// simple mentions. Shape:
-		//   {
-		//     co_mentions: string[];          // nearby alias_normalized values
-		//     candidate_parent_page_id: string | null;
-		//     observed_tags: string[];
-		//   }
-		cluster: jsonb("cluster"),
 		suggested_type: text("suggested_type"), // 'entity' | 'topic' | 'decision'
 		status: text("status").notNull().default("open"), // 'open' | 'promoted' | 'ignored'
 		promoted_page_id: uuid("promoted_page_id").references(() => wikiPages.id),
