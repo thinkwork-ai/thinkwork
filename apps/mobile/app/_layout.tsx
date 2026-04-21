@@ -273,7 +273,6 @@ function RootLayoutNav() {
         <Stack.Screen name="settings/account" />
         <Stack.Screen name="settings/team" />
         <Stack.Screen name="settings/profile" />
-        <Stack.Screen name="settings/connectors" />
         <Stack.Screen name="settings/integrations" />
         <Stack.Screen name="settings/integration-detail" />
         <Stack.Screen name="settings/usage" />

@@ -41,7 +41,7 @@ export const webhooks = pgTable(
 		name: text("name").notNull(),
 		description: text("description"),
 		token: text("token").notNull(),
-		target_type: text("target_type").notNull(), // agent | routine | task
+		target_type: text("target_type").notNull(), // agent | routine
 		agent_id: uuid("agent_id").references(() => agents.id),
 		routine_id: uuid("routine_id").references(() => routines.id),
 		connect_provider_id: uuid("connect_provider_id").references(() => connectProviders.id),

@@ -45,7 +45,7 @@ export const webhookDeliveries = pgTable(
 			onDelete: "set null",
 		}),
 		tenant_id: uuid("tenant_id").references(() => tenants.id),
-		target_type: text("target_type"), // agent | routine | task | null
+		target_type: text("target_type"), // agent | routine | null
 
 		// For task-type webhooks, captured from the adapter's normalizeEvent.
 		provider_id: uuid("provider_id").references(() => connectProviders.id),

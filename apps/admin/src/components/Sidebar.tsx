@@ -18,7 +18,6 @@ import {
   CalendarClock,
   BookOpen,
   LayoutTemplate,
-  Plug,
   ShieldCheck,
 } from "lucide-react";
 import { useQuery } from "urql";
@@ -176,7 +175,6 @@ export function AppSidebar() {
     { to: "/analytics", icon: BarChart3, label: "Analytics" },
     { to: "/scheduled-jobs", icon: CalendarClock, label: "Automations" },
     { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
-    { to: "/connectors", icon: Plug, label: "Connectors" },
     { to: "/webhooks", icon: Webhook, label: "Webhooks" },
     { to: "/knowledge-bases", icon: BookOpen, label: "Knowledge Bases" },
     { to: "/humans", icon: Users, label: "Humans" },

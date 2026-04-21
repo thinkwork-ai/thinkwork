@@ -94,7 +94,7 @@ Both tables are REST-driven, not GraphQL.
 
 1. Find the agent in the [Agents](/applications/admin/agents/) list
 2. Pause or delete it
-3. Also revoke the API key through the credential vault (see [Connectors](/applications/admin/connectors/) for credential rotation)
+3. Also revoke the API key so the paused runtime can't authenticate
 4. The runtime will receive 401s on its next call and stop
 
 <Aside type="caution">
@@ -118,5 +118,4 @@ Revoking a BYOB agent does not automatically revoke its API key — those are se
 ## Related pages
 
 - [Agents](/applications/admin/agents/) — where approved BYOB agents appear
-- [Connectors](/applications/admin/connectors/) — credential vault and API key management
 - [Authentication & Tenancy](/applications/admin/authentication-and-tenancy/) — how the tenant context is resolved after a BYOB agent authenticates
