@@ -1,0 +1,42 @@
+slug: compound
+display_name: Compound Learnings
+description: >
+  Learnings loop for compositions. `compound_recall` retrieves prior
+  observations scoped to (tenant, user, skill, optional subject) at run
+  start; `compound_reflect` extracts up to 3 new observations from the
+  completed run and stores them under the same scope. Paired — edit
+  docstrings together.
+category: composable-primitive
+version: "0.1.0"
+author: thinkwork
+icon: repeat
+tags: [composition, primitive, learnings, memory, recall, reflect]
+execution: script
+mode: tool
+invocable_from: composition
+is_default: false
+
+scripts:
+  - name: compound_recall
+    path: scripts/recall.py
+    description: "Retrieve top-K prior learnings for this composition run (user-scoped before tenant-scoped)."
+  - name: compound_reflect
+    path: scripts/reflect.py
+    description: "Extract up to 3 non-obvious observations from the completed run and store them under the composition's scope."
+
+inputs:
+  tenant_id:
+    type: string
+    required: true
+  skill_id:
+    type: string
+    required: true
+  user_id:
+    type: string
+    required: false
+  subject_entity_id:
+    type: string
+    required: false
+
+requires_env:
+  - AGENTCORE_MEMORY_ID
