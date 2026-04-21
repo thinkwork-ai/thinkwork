@@ -23,6 +23,7 @@ independently.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -37,6 +38,12 @@ from skill_inputs import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Skill ids the auto-compound injection looks for. Accept both the Python
+# function name (compound_recall) and the dotted shorthand (compound.recall)
+# so a composition author can write either and the runner won't double-wrap.
+_COMPOUND_RECALL_IDS = frozenset({"compound_recall", "compound.recall"})
+_COMPOUND_REFLECT_IDS = frozenset({"compound_reflect", "compound.reflect"})
 
 
 # --- Dispatch contract -------------------------------------------------------
@@ -88,6 +95,7 @@ async def run_composition(
     composition: CompositionSkill,
     resolved_inputs: dict[str, Any],
     dispatch: SkillDispatch,
+    context: dict[str, Any] | None = None,
 ) -> CompositionResult:
     """Execute a composition start-to-finish and return a structured result.
 
@@ -95,12 +103,40 @@ async def run_composition(
     runner does not re-validate input types. Callers validate at the mutation
     boundary (startSkillRun) before invoking.
 
+    `context` is optional run-scoped state that callers can use to opt into
+    cross-cutting behaviors without changing the composition YAML. Recognized
+    keys:
+      * `scope` — a `{tenant_id, user_id?, skill_id, subject_entity_id?}`
+        dict. When present, the runner auto-invokes `compound_recall` before
+        the first declared step and `compound_reflect` after the last (Unit 3).
+        If the composition already declares either step explicitly, that side
+        of the wrap is skipped so authors who want custom recall/reflect
+        semantics retain full control.
+      * `recall_query` — override the string the auto-recall queries with.
+        Defaults to the composition's description. Ignored when scope is absent.
+
     The runner is pure in the sense that it calls `dispatch` for any side
     effect — it doesn't touch the DB, doesn't post chat messages, doesn't
     write artifacts. Those belong to the caller (a later unit wires them in).
     """
+    context = context or {}
+    scope = context.get("scope")
+
+    has_explicit_recall = _declares_skill(composition, _COMPOUND_RECALL_IDS)
+    has_explicit_reflect = _declares_skill(composition, _COMPOUND_REFLECT_IDS)
+    auto_recall = bool(scope) and not has_explicit_recall
+    auto_reflect = bool(scope) and not has_explicit_reflect
+
     result = CompositionResult(composition_id=composition.id, status="complete")
     named_outputs: dict[str, Any] = {}
+
+    if auto_recall:
+        prior = await _auto_compound_recall(
+            scope=scope,
+            query=context.get("recall_query") or composition.description,
+            dispatch=dispatch,
+        )
+        named_outputs["prior_learnings"] = prior
 
     for step in composition.steps:
         if isinstance(step, SequentialStep):
@@ -124,8 +160,99 @@ async def run_composition(
             output_key = getattr(step, "output", None) or step.id
             named_outputs[output_key] = step_result.output
 
+    # Reflect only when the run actually finished. Reflecting on a failed
+    # run would poison the learnings pool with bad examples.
+    if auto_reflect and result.status == "complete":
+        await _auto_compound_reflect(
+            scope=scope,
+            resolved_inputs=resolved_inputs,
+            named_outputs=named_outputs,
+            step_results=result.step_results,
+            dispatch=dispatch,
+        )
+
     result.named_outputs = named_outputs
     return result
+
+
+# --- Auto-compound helpers ---------------------------------------------------
+
+
+def _declares_skill(composition: CompositionSkill, skill_ids: frozenset[str]) -> bool:
+    """Does this composition's step list contain a step whose skill matches?"""
+    for step in composition.steps:
+        if isinstance(step, SequentialStep):
+            if (step.skill or step.id) in skill_ids:
+                return True
+        elif isinstance(step, ParallelStep):
+            for branch in step.branches:
+                if branch.skill in skill_ids:
+                    return True
+    return False
+
+
+def _scope_to_inputs(scope: dict[str, Any]) -> dict[str, str]:
+    """Flatten a scope dict to the string-keyed args compound_* tools expect."""
+    return {
+        "tenant_id": str(scope.get("tenant_id") or ""),
+        "user_id": str(scope.get("user_id") or ""),
+        "skill_id": str(scope.get("skill_id") or ""),
+        "subject_entity_id": str(scope.get("subject_entity_id") or ""),
+    }
+
+
+async def _auto_compound_recall(
+    scope: dict[str, Any],
+    query: str,
+    dispatch: SkillDispatch,
+) -> str:
+    """Invoke compound_recall with scope inputs. Swallow any failure so the
+    composition continues with an empty prior_learnings context."""
+    inputs = {**_scope_to_inputs(scope), "query": query or ""}
+    try:
+        result = await dispatch("compound_recall", inputs)
+    except Exception as exc:
+        logger.warning("auto compound_recall failed: %s", exc)
+        return ""
+    if result is None:
+        return ""
+    return result if isinstance(result, str) else str(result)
+
+
+async def _auto_compound_reflect(
+    scope: dict[str, Any],
+    resolved_inputs: dict[str, Any],
+    named_outputs: dict[str, Any],
+    step_results: list[StepResult],
+    dispatch: SkillDispatch,
+) -> None:
+    """Invoke compound_reflect after the run. Best-effort — a write failure
+    must not change the composition's status."""
+    deliverable = _pick_deliverable(named_outputs, step_results)
+    inputs = {
+        **_scope_to_inputs(scope),
+        "run_inputs": json.dumps(resolved_inputs, default=str),
+        "deliverable": deliverable,
+        "prior_learnings": str(named_outputs.get("prior_learnings") or ""),
+    }
+    try:
+        await dispatch("compound_reflect", inputs)
+    except Exception as exc:
+        logger.warning("auto compound_reflect failed: %s", exc)
+
+
+def _pick_deliverable(
+    named_outputs: dict[str, Any], step_results: list[StepResult]
+) -> str:
+    """Heuristic: the deliverable is the named output called `deliverable`
+    if one exists, otherwise the last step's output."""
+    if "deliverable" in named_outputs:
+        return str(named_outputs["deliverable"])
+    if step_results:
+        last = step_results[-1]
+        if last.output is not None:
+            return str(last.output)
+    return ""
 
 
 # --- Sequential -------------------------------------------------------------
