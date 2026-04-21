@@ -120,6 +120,13 @@
       "when": 1776790755231,
       "tag": "0017_wiki_places",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1776799778139,
+      "tag": "0018_agent_workspace_overlay",
+      "breakpoints": true
     }
   ]
 }

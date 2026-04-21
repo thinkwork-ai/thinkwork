@@ -93,6 +93,21 @@ export const userProfiles = pgTable("user_profiles", {
 	display_name: text("display_name"),
 	theme: text("theme").default("system"),
 	notification_preferences: jsonb("notification_preferences"),
+	/**
+	 * Profession / role label (e.g., "Founder", "VP Engineering"). Rendered into
+	 * agent USER.md as {{HUMAN_TITLE}} at assignment time. Null → renders as "—".
+	 */
+	title: text("title"),
+	/**
+	 * IANA timezone identifier (e.g., "America/Chicago"). Rendered into agent
+	 * USER.md as {{HUMAN_TIMEZONE}} at assignment time. Null → renders as "—".
+	 */
+	timezone: text("timezone"),
+	/**
+	 * Preferred pronouns (free text, e.g., "he/him", "they/them"). Rendered into
+	 * agent USER.md as {{HUMAN_PRONOUNS}} at assignment time. Null → renders as "—".
+	 */
+	pronouns: text("pronouns"),
 	created_at: timestamp("created_at", { withTimezone: true })
 		.notNull()
 		.default(sql`now()`),
