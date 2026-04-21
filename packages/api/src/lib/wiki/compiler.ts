@@ -18,8 +18,6 @@ import {
 	completeCompileJob,
 	countDuplicateTitleCandidates,
 	emptySectionAggregation,
-	findAliasMatches,
-	findAliasMatchesFuzzy,
 	findMemoryUnitPageSources,
 	findPageById,
 	findPageBySlug,
@@ -56,6 +54,7 @@ import {
 	emitDeterministicParentLinks,
 	type AffectedPage,
 } from "./deterministic-linker.js";
+import { findExistingPageByTitleOrAlias } from "./page-lookup.js";
 import { BedrockRetryExhaustedError } from "./bedrock.js";
 import { invokeWikiCompile } from "./enqueue.js";
 import { runPlanner, type PlannerResult } from "./planner.js";
@@ -1745,74 +1744,29 @@ async function maybeMergeIntoExistingPage(args: {
 	knownPageRefs: Array<{ type: WikiPageType; slug: string; title: string }>;
 	pageFallbackSources: ThinkWorkMemoryRecord[];
 }): Promise<AliasMergeKind | null> {
-	const aliasNormalized = normalizeAlias(args.proposed.title);
-	if (!aliasNormalized) return null;
-
-	// Pass 1: exact alias match (existing behavior). Prefer same-type hits.
-	const exactMatches = await findAliasMatches({
+	const hit = await findExistingPageByTitleOrAlias({
 		tenantId: args.job.tenant_id,
 		ownerId: args.job.owner_id,
-		aliasNormalized,
+		type: args.proposed.type,
+		title: args.proposed.title,
 	});
-	let existing: WikiPageRow | null = null;
-	let kind: AliasMergeKind = "exact";
-	for (const m of exactMatches) {
-		const candidate = await findPageById(m.pageId);
-		if (!candidate) continue;
-		if (
-			candidate.tenant_id !== args.job.tenant_id ||
-			candidate.owner_id !== args.job.owner_id
-		) {
-			continue;
-		}
-		if (candidate.status !== "active") continue;
-		if (candidate.type === args.proposed.type) {
-			existing = candidate;
-			break;
-		}
-		if (!existing) existing = candidate;
-	}
+	if (!hit) return null;
+	const existing = hit.page;
+	const kind: AliasMergeKind = hit.kind;
 
-	// Pass 2: trigram-fuzzy fallback when exact didn't resolve a candidate.
-	// Fuzzy is strict-same-type (the type-mismatch gate) because it's the
-	// over-collapse risk — "Austin" the entity vs "Austin" the topic must
-	// stay separate even if the aliases trigram-match. Archived pages are
-	// filtered by the repo helper.
-	if (!existing) {
-		const fuzzyMatches = await findAliasMatchesFuzzy({
-			tenantId: args.job.tenant_id,
-			ownerId: args.job.owner_id,
-			aliasNormalized,
-		});
-		for (const m of fuzzyMatches) {
-			if (m.pageType !== args.proposed.type) continue;
-			const candidate = await findPageById(m.pageId);
-			if (!candidate) continue;
-			if (
-				candidate.tenant_id !== args.job.tenant_id ||
-				candidate.owner_id !== args.job.owner_id
-			) {
-				continue;
-			}
-			if (candidate.status !== "active") continue;
-			existing = candidate;
-			kind = "fuzzy";
-			console.log(
-				`[wiki-compiler] fuzzy_dedupe_merged: "${args.proposed.title}" ` +
-					`≈ "${m.aliasText}" (sim=${m.similarity.toFixed(3)}) → ` +
-					`page ${candidate.id}`,
-			);
-			break;
-		}
-	}
-
-	if (!existing) return null;
 	// Don't merge when the existing page already has the exact slug
 	// the proposal would generate — upsertPage's slug-based upsert
 	// will handle that natively.
 	if (existing.slug === args.proposedSlug) return null;
 
-	if (kind === "exact") {
+	if (kind === "fuzzy" && hit.matchedAlias) {
+		console.log(
+			`[wiki-compiler] fuzzy_dedupe_merged: "${args.proposed.title}" ` +
+				`≈ "${hit.matchedAlias.text}" ` +
+				`(sim=${hit.matchedAlias.similarity.toFixed(3)}) → ` +
+				`page ${existing.id}`,
+		);
+	} else {
 		console.log(
 			`[wiki-compiler] alias_dedup_merged: proposed newPage "${args.proposed.title}" → existing page ${existing.id} (${existing.type}/${existing.slug})`,
 		);

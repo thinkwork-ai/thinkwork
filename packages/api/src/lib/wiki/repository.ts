@@ -23,6 +23,7 @@ import {
 	wikiPageSections,
 	wikiPageLinks,
 	wikiPageAliases,
+	wikiPlaces,
 	wikiUnresolvedMentions,
 	wikiSectionSources,
 	wikiCompileJobs,
@@ -123,11 +124,45 @@ export interface WikiPageRow {
 	status: WikiPageStatus;
 	/** Set when this page was promoted from a section on another page. */
 	parent_page_id: string | null;
+	/** Optional pointer into wiki_places. See wiki-places-v2 plan. */
+	place_id: string | null;
 	/** Coarse, monotonic hubness signal. Recomputed on upsert. */
 	hubness_score: number;
 	/** Soft tag hints — never a structural forcing function. */
 	tags: string[];
 	last_compiled_at: Date | null;
+	created_at: Date;
+	updated_at: Date;
+}
+
+export type WikiPlaceKind =
+	| "country"
+	| "region"
+	| "state"
+	| "city"
+	| "neighborhood"
+	| "poi"
+	| "custom";
+
+export type WikiPlaceSource =
+	| "google_api"
+	| "journal_metadata"
+	| "manual"
+	| "derived_hierarchy";
+
+export interface WikiPlaceRow {
+	id: string;
+	tenant_id: string;
+	owner_id: string;
+	name: string;
+	google_place_id: string | null;
+	geo_lat: string | null; // numeric returned as text by pg driver
+	geo_lon: string | null;
+	address: string | null;
+	parent_place_id: string | null;
+	place_kind: WikiPlaceKind | null;
+	source: WikiPlaceSource;
+	source_payload: unknown | null;
 	created_at: Date;
 	updated_at: Date;
 }
@@ -155,6 +190,10 @@ export interface UpsertPageInput {
 	sections?: WikiSectionInput[];
 	/** Aliases to upsert alongside the page. `source` defaults to 'compiler'. */
 	aliases?: Array<{ alias: string; source?: string }>;
+	/** Optional pointer into wiki_places. First-seen-wins: on UPDATE the
+	 * existing page's place_id is preserved via COALESCE; the new value only
+	 * takes hold when the page had NULL before. See wiki-places-v2 plan. */
+	place_id?: string | null;
 }
 
 export interface UpsertUnresolvedInput {
@@ -962,6 +1001,15 @@ export async function upsertPage(
 					...(input.markCompiled
 						? { last_compiled_at: sql`now()` as any }
 						: {}),
+					// First-seen-wins: existing wins when non-null, otherwise the
+					// incoming place_id takes hold. A supplied-null `place_id`
+					// (vs undefined) never clears an existing value — callers
+					// that genuinely want to unset must do it explicitly.
+					...(input.place_id !== undefined
+						? {
+								place_id: sql`COALESCE(${wikiPages.place_id}, ${input.place_id})` as any,
+							}
+						: {}),
 					updated_at: sql`now()` as any,
 				})
 				.where(eq(wikiPages.id, existing.id))
@@ -982,6 +1030,7 @@ export async function upsertPage(
 					last_compiled_at: input.markCompiled
 						? (sql`now()` as any)
 						: null,
+					place_id: input.place_id ?? null,
 				})
 				.returning();
 			page = inserted as WikiPageRow;
@@ -1228,6 +1277,28 @@ export async function findAliasMatchesFuzzy(
 		return [];
 	}
 }
+
+/**
+ * Look up an existing active page that this proposed page would collide with,
+ * using the same two-pass alias machinery as the compiler's merge step
+ * (`maybeMergeIntoExistingPage`): exact alias match first, then trigram-fuzzy
+ * at {@link FUZZY_ALIAS_THRESHOLD}.
+ *
+ * Exact hits prefer same-type candidates (so a "Paris" topic page doesn't get
+ * collapsed into an unrelated "Paris" entity). Fuzzy is strict same-type
+ * because the over-collapse risk there is significant.
+ *
+ * Returns the matching page row, or null if nothing qualifies. Pure
+ * lookup — no upsert side effects, unlike the compiler's merge helper
+ * which re-seeds sections on hit.
+ *
+ * Extracted for reuse by the places-service auto-backing-page creator
+ * (see packages/api/src/lib/wiki/places-service.ts).
+ */
+// `findExistingPageByTitleOrAlias` lives in ./page-lookup.ts — it imports
+// the alias helpers above via `./repository.js` so vi.mock interception works
+// for callers. Keeping it here would trap the internal calls in the same
+// module scope and break test mocks.
 
 // ---------------------------------------------------------------------------
 // Unresolved mentions
@@ -2144,6 +2215,181 @@ function dedupe<T>(items: T[]): T[] {
 		out.push(x);
 	}
 	return out;
+}
+
+// ---------------------------------------------------------------------------
+// wiki_places — canonical location records
+//
+// Scoped per (tenant, owner) like every other wiki table. The partial unique
+// index on (tenant_id, owner_id, google_place_id) WHERE google_place_id IS
+// NOT NULL enforces first-seen-wins; callers must handle the resulting
+// unique-violation by reading the existing row.
+// ---------------------------------------------------------------------------
+
+export interface UpsertWikiPlaceInput {
+	tenant_id: string;
+	owner_id: string;
+	name: string;
+	google_place_id?: string | null;
+	geo_lat?: number | string | null;
+	geo_lon?: number | string | null;
+	address?: string | null;
+	parent_place_id?: string | null;
+	place_kind?: WikiPlaceKind | null;
+	source: WikiPlaceSource;
+	source_payload?: unknown | null;
+}
+
+/**
+ * Look up a wiki_places row by its (tenant, owner, google_place_id). Returns
+ * null when no row exists. Used by the places-service to short-circuit
+ * Google API calls when a record's POI id has already been materialized.
+ */
+export async function findPlaceByGooglePlaceId(
+	args: {
+		tenantId: string;
+		ownerId: string;
+		googlePlaceId: string;
+	},
+	db: DbClient = defaultDb,
+): Promise<WikiPlaceRow | null> {
+	if (!args.googlePlaceId) return null;
+	const rows = await db
+		.select()
+		.from(wikiPlaces)
+		.where(
+			and(
+				eq(wikiPlaces.tenant_id, args.tenantId),
+				eq(wikiPlaces.owner_id, args.ownerId),
+				eq(wikiPlaces.google_place_id, args.googlePlaceId),
+			),
+		)
+		.limit(1);
+	return (rows[0] as WikiPlaceRow) ?? null;
+}
+
+/**
+ * Look up a wiki_places row by id, scope-checked. Returns null on mismatch.
+ */
+export async function findPlaceById(
+	args: { tenantId: string; ownerId: string; id: string },
+	db: DbClient = defaultDb,
+): Promise<WikiPlaceRow | null> {
+	const rows = await db
+		.select()
+		.from(wikiPlaces)
+		.where(
+			and(
+				eq(wikiPlaces.id, args.id),
+				eq(wikiPlaces.tenant_id, args.tenantId),
+				eq(wikiPlaces.owner_id, args.ownerId),
+			),
+		)
+		.limit(1);
+	return (rows[0] as WikiPlaceRow) ?? null;
+}
+
+/**
+ * Find a wiki_page whose `place_id` matches. Used by the hierarchy linker
+ * (Unit 7) to look up the parent page from the parent place. Returns null
+ * when no backing page exists — that's a signal worth logging (the auto-
+ * create-backing-page step in places-service should have ensured one).
+ */
+export async function findPageByPlaceId(
+	args: { tenantId: string; ownerId: string; placeId: string },
+	db: DbClient = defaultDb,
+): Promise<WikiPageRow | null> {
+	const rows = await db
+		.select()
+		.from(wikiPages)
+		.where(
+			and(
+				eq(wikiPages.tenant_id, args.tenantId),
+				eq(wikiPages.owner_id, args.ownerId),
+				eq(wikiPages.place_id, args.placeId),
+				eq(wikiPages.status, "active"),
+			),
+		)
+		.limit(1);
+	return (rows[0] as WikiPageRow) ?? null;
+}
+
+/**
+ * Insert a wiki_places row, or return the existing row if the partial
+ * unique index fires. On conflict the row is re-read from the
+ * `(tenant_id, owner_id, google_place_id)` partial unique so callers get
+ * the canonical id to link against.
+ *
+ * ON CONFLICT DO NOTHING is used instead of DO UPDATE because first-
+ * seen-wins is the product decision — re-running compile should never
+ * overwrite the original row's payload or coordinates. Rows without
+ * `google_place_id` are always inserted (the partial unique doesn't cover
+ * them).
+ *
+ * Returns `{ row, inserted }` so callers can distinguish "new row written"
+ * from "existing row returned" — useful for metrics and logs.
+ */
+export async function upsertPlace(
+	input: UpsertWikiPlaceInput,
+	db: DbClient = defaultDb,
+): Promise<{ row: WikiPlaceRow; inserted: boolean }> {
+	const values = {
+		tenant_id: input.tenant_id,
+		owner_id: input.owner_id,
+		name: input.name,
+		google_place_id: input.google_place_id ?? null,
+		// numeric columns accept string; stringify numbers to preserve precision.
+		geo_lat:
+			input.geo_lat === null || input.geo_lat === undefined
+				? null
+				: String(input.geo_lat),
+		geo_lon:
+			input.geo_lon === null || input.geo_lon === undefined
+				? null
+				: String(input.geo_lon),
+		address: input.address ?? null,
+		parent_place_id: input.parent_place_id ?? null,
+		place_kind: input.place_kind ?? null,
+		source: input.source,
+		source_payload: (input.source_payload ?? null) as any,
+	};
+
+	const inserted = await db
+		.insert(wikiPlaces)
+		.values(values as any)
+		.onConflictDoNothing()
+		.returning();
+
+	if (inserted[0]) {
+		return { row: inserted[0] as WikiPlaceRow, inserted: true };
+	}
+
+	// Conflict — read the existing row via google_place_id (the partial
+	// unique key). If google_place_id is null, the conflict can't have
+	// fired on the partial unique and we should never land here; log and
+	// bail gracefully.
+	if (!input.google_place_id) {
+		throw new Error(
+			`upsertPlace: INSERT returned no row with null google_place_id — scope (${input.tenant_id}, ${input.owner_id}) name=${input.name}`,
+		);
+	}
+	const existing = await findPlaceByGooglePlaceId(
+		{
+			tenantId: input.tenant_id,
+			ownerId: input.owner_id,
+			googlePlaceId: input.google_place_id,
+		},
+		db,
+	);
+	if (!existing) {
+		throw new Error(
+			`upsertPlace: conflict on google_place_id=${input.google_place_id} but no existing row in scope (${input.tenant_id}, ${input.owner_id})`,
+		);
+	}
+	console.warn(
+		`[wiki-places] upsert_conflict_reused: google_place_id=${input.google_place_id} scope=(${input.tenant_id.slice(0, 8)},${input.owner_id.slice(0, 8)})`,
+	);
+	return { row: existing, inserted: false };
 }
 
 // ---------------------------------------------------------------------------
