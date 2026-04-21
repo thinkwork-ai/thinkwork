@@ -42,7 +42,10 @@ DEFAULT_MODEL = "us.anthropic.claude-sonnet-4-6"
 
 _workspace_loaded_key = None
 
-PERSONALITY_TEMPLATE_FILES = ["SOUL.md", "IDENTITY.md", "USER.md"]
+# The personality-template constant used to drive _fetch_memory_templates
+# / _bootstrap_personality_files. Those functions are gone (Unit 7) —
+# everything flows through the composer now. The list lives in
+# @thinkwork/workspace-defaults' CANONICAL_FILE_NAMES on the server side.
 
 # ── Nova Act browser tool ────────────────────────────────────────────────────
 # Loads API key from SSM at startup. The @tool decorated function is passed
