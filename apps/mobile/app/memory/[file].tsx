@@ -5,14 +5,12 @@ import { useColorScheme } from "nativewind";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { Text, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
-import { workspaceApi } from "@/lib/workspace-api";
+import { getWorkspaceFile } from "@/lib/workspace-api";
 
 export default function WorkspaceFileView() {
-  const { file, assistantId, tenantSlug, instanceId } = useLocalSearchParams<{
+  const { file, assistantId } = useLocalSearchParams<{
     file: string;
     assistantId: string;
-    tenantSlug: string;
-    instanceId: string;
   }>();
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
@@ -24,13 +22,13 @@ export default function WorkspaceFileView() {
   const fileName = decodeURIComponent(file ?? "");
 
   useEffect(() => {
-    if (!tenantSlug || !instanceId || !fileName) {
+    if (!assistantId || !fileName) {
       setLoading(false);
       return;
     }
     let cancelled = false;
     setLoading(true);
-    workspaceApi({ action: "get", tenantSlug, instanceId, path: fileName })
+    getWorkspaceFile({ agentId: assistantId }, fileName)
       .then((data) => {
         if (!cancelled) setContent(data.content ?? "");
       })
@@ -42,13 +40,13 @@ export default function WorkspaceFileView() {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [tenantSlug, instanceId, fileName]);
+  }, [assistantId, fileName]);
 
   const editButton = (
     <Pressable
       onPress={() =>
         router.push(
-          `/memory/edit-file?file=${encodeURIComponent(fileName)}&assistantId=${assistantId}&tenantSlug=${tenantSlug}&instanceId=${instanceId}`,
+          `/memory/edit-file?file=${encodeURIComponent(fileName)}&assistantId=${assistantId}`,
         )
       }
       className="active:opacity-70"

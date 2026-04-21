@@ -16,16 +16,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const API_URL = import.meta.env.VITE_API_URL || "";
-const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
+import { listWorkspaceFiles } from "@/lib/workspace-files-api";
 
 // System defaults (always loaded, shown as reference)
 const SYSTEM_FILES = ["SOUL.md", "IDENTITY.md", "USER.md"];
 
 interface AgentContextDialogProps {
   agentId: string;
-  tenantSlug: string;
-  instanceId: string;
   contextFiles: string[] | null;
   contextSkills: string[] | null;
   contextKnowledgeBases: string[] | null;
@@ -40,8 +37,6 @@ interface AgentContextDialogProps {
 
 export function AgentContextDialog({
   agentId,
-  tenantSlug,
-  instanceId,
   contextFiles,
   contextSkills,
   contextKnowledgeBases,
@@ -61,20 +56,12 @@ export function AgentContextDialog({
   const [workspaceFiles, setWorkspaceFiles] = useState<string[]>([]);
 
   const fetchWorkspaceFiles = useCallback(async () => {
-    if (!tenantSlug || !instanceId || !open) return;
+    if (!open) return;
     try {
-      const res = await fetch(`${API_URL}/internal/workspace-files`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-        },
-        body: JSON.stringify({ action: "list", tenantSlug, instanceId }),
-      });
-      const data = await res.json();
-      setWorkspaceFiles((data.files ?? []).filter((f: string) => f !== "manifest.json"));
+      const data = await listWorkspaceFiles({ agentId });
+      setWorkspaceFiles(data.files.map((f) => f.path).filter((p) => p !== "manifest.json"));
     } catch {}
-  }, [tenantSlug, instanceId, open]);
+  }, [agentId, open]);
 
   useEffect(() => {
     fetchWorkspaceFiles();

@@ -20,8 +20,13 @@ import {
   FilePlus,
 } from "lucide-react";
 import { AgentDetailQuery } from "@/lib/graphql-queries";
+import {
+  deleteWorkspaceFile,
+  getWorkspaceFile,
+  listWorkspaceFiles,
+  putWorkspaceFile,
+} from "@/lib/workspace-files-api";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
-import { useTenant } from "@/context/TenantContext";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { PageLayout } from "@/components/PageLayout";
 import { Button } from "@/components/ui/button";
@@ -51,11 +56,8 @@ export const Route = createFileRoute("/_authed/_tenant/agents/$agentId_/workspac
 });
 
 // ---------------------------------------------------------------------------
-// API helpers
+// File descriptions (unchanged)
 // ---------------------------------------------------------------------------
-
-const API_URL = import.meta.env.VITE_API_URL || "";
-const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
 
 const FILE_DESCRIPTIONS: Record<string, string> = {
   "SOUL.md": "Core personality, values, and behavioral guidelines",
@@ -66,19 +68,6 @@ const FILE_DESCRIPTIONS: Record<string, string> = {
   "TOOLS.md": "Tool usage preferences and instructions",
   "ROUTER.md": "Legacy context routing — which files load for each channel/task",
 };
-
-async function workspaceApi(body: Record<string, unknown>) {
-  const res = await fetch(`${API_URL}/internal/workspace-files`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`Workspace API: ${res.status}`);
-  return res.json();
-}
 
 // ---------------------------------------------------------------------------
 // Tree data structure
@@ -293,8 +282,6 @@ const FOLDER_TEMPLATES: Record<string, { files: Record<string, string> }> = {
 function AgentWorkspacePage() {
   const { agentId } = Route.useParams();
   const { folder: initialFolder } = Route.useSearch();
-  const { tenant } = useTenant();
-  const tenantSlug = tenant?.slug ?? "";
 
   const [result] = useQuery({
     query: AgentDetailQuery,
@@ -302,7 +289,9 @@ function AgentWorkspacePage() {
   });
 
   const agent = result.data?.agent;
-  const instanceId = agent?.slug ?? agentId;
+  // The new /api/workspaces/files handler derives tenant from the caller's
+  // Cognito JWT; the client sends only the agent id.
+  const target = useMemo(() => ({ agentId }), [agentId]);
 
   useBreadcrumbs([
     { label: "Agents", href: "/agents" },
@@ -319,17 +308,16 @@ function AgentWorkspacePage() {
   const [generating, setGenerating] = useState(false);
 
   const fetchFiles = useCallback(async () => {
-    if (!tenantSlug || !instanceId) return;
     setLoadingFiles(true);
     try {
-      const data = await workspaceApi({ action: "list", tenantSlug, instanceId });
-      setFiles(data.files ?? []);
+      const data = await listWorkspaceFiles(target);
+      setFiles(data.files.map((f) => f.path));
     } catch (err) {
       console.error("Failed to list workspace files:", err);
     } finally {
       setLoadingFiles(false);
     }
-  }, [tenantSlug, instanceId]);
+  }, [target]);
 
   useEffect(() => {
     fetchFiles();
@@ -387,7 +375,6 @@ function AgentWorkspacePage() {
   // ---------------------------------------------------------------------------
 
   const handleGenerate = async () => {
-    if (!tenantSlug) return;
     setGenerating(true);
     try {
       const defaults: Record<string, string> = {
@@ -400,7 +387,7 @@ function AgentWorkspacePage() {
         "memory/contacts.md": "# Contacts\n\nKey people and their roles.\n",
       };
       for (const [path, content] of Object.entries(defaults)) {
-        await workspaceApi({ action: "put", tenantSlug, instanceId, path, content });
+        await putWorkspaceFile(target, path, content);
       }
       await fetchFiles();
     } catch (err) {
@@ -419,14 +406,14 @@ function AgentWorkspacePage() {
   const [creatingFile, setCreatingFile] = useState(false);
 
   const handleCreateFile = async () => {
-    if (!newFilePath.trim() || !tenantSlug) return;
+    if (!newFilePath.trim()) return;
     setCreatingFile(true);
     try {
       const path = newFilePath.trim();
       const content = path.endsWith(".md")
         ? `# ${path.split("/").pop()?.replace(".md", "")}\n\n`
         : "";
-      await workspaceApi({ action: "put", tenantSlug, instanceId, path, content });
+      await putWorkspaceFile(target, path, content);
       await fetchFiles();
       setShowNewFileDialog(false);
       setNewFilePath("");
@@ -438,11 +425,10 @@ function AgentWorkspacePage() {
   };
 
   const handleAddFolder = async (folderKey: string) => {
-    if (!tenantSlug) return;
     const template = FOLDER_TEMPLATES[folderKey];
     if (!template) return;
     for (const [path, content] of Object.entries(template.files)) {
-      await workspaceApi({ action: "put", tenantSlug, instanceId, path, content });
+      await putWorkspaceFile(target, path, content);
     }
     await fetchFiles();
   };
@@ -460,10 +446,9 @@ function AgentWorkspacePage() {
 
   const handleOpen = async (filePath: string) => {
     setOpenFile(filePath);
-    if (!tenantSlug) return;
     setLoadingContent(true);
     try {
-      const data = await workspaceApi({ action: "get", tenantSlug, instanceId, path: filePath });
+      const data = await getWorkspaceFile(target, filePath);
       const fileContent = data.content ?? "";
       setContent(fileContent);
       setEditValue(fileContent);
@@ -478,10 +463,10 @@ function AgentWorkspacePage() {
 
 
   const handleSave = async () => {
-    if (!openFile || !tenantSlug) return;
+    if (!openFile) return;
     setSaving(true);
     try {
-      await workspaceApi({ action: "put", tenantSlug, instanceId, path: openFile, content: editValue });
+      await putWorkspaceFile(target, openFile, editValue);
       setContent(editValue);
     } catch (err) {
       console.error("Failed to save workspace file:", err);
@@ -491,10 +476,10 @@ function AgentWorkspacePage() {
   };
 
   const handleDelete = async () => {
-    if (!openFile || !tenantSlug) return;
+    if (!openFile) return;
     if (!confirm(`Delete ${openFile}?`)) return;
     try {
-      await workspaceApi({ action: "delete", tenantSlug, instanceId, path: openFile });
+      await deleteWorkspaceFile(target, openFile);
       setOpenFile(null);
       await fetchFiles();
     } catch (err) {

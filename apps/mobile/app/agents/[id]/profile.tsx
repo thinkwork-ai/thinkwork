@@ -7,8 +7,7 @@ import { DetailLayout } from "@/components/layout/detail-layout";
 import { Text, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
 import { useAgent } from "@/lib/hooks/use-agents";
-import { useTenant } from "@/lib/hooks/use-tenants";
-import { workspaceApi } from "@/lib/workspace-api";
+import { listWorkspaceFiles } from "@/lib/workspace-api";
 
 const WORKSPACE_FILE_DESCRIPTIONS: Record<string, string> = {
   "SOUL.md": "Core personality, values, and behavioral guidelines",
@@ -26,26 +25,22 @@ export default function AgentProfileScreen() {
 
   const [{ data: agentData }] = useAgent(id);
   const agent = agentData?.agent;
-  const instanceId = agent?.slug ?? id;
-
-  const [{ data: tenantData }] = useTenant(agent?.tenantId);
-  const tenantSlug = tenantData?.tenant?.slug ?? "";
 
   const [files, setFiles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchFiles = useCallback(async () => {
-    if (!tenantSlug || !instanceId) return;
+    if (!id) return;
     setLoading(true);
     try {
-      const data = await workspaceApi({ action: "list", tenantSlug, instanceId });
-      setFiles(data.files ?? []);
+      const data = await listWorkspaceFiles({ agentId: id });
+      setFiles(data.files.map((f) => f.path));
     } catch (err) {
       console.error("Failed to list workspace files:", err);
     } finally {
       setLoading(false);
     }
-  }, [tenantSlug, instanceId]);
+  }, [id]);
 
   useEffect(() => {
     fetchFiles();
@@ -71,7 +66,7 @@ export default function AgentProfileScreen() {
                 key={fileName}
                 onPress={() =>
                   router.push(
-                    `/memory/${encodeURIComponent(fileName)}?assistantId=${id}&tenantSlug=${tenantSlug}&instanceId=${instanceId}`,
+                    `/memory/${encodeURIComponent(fileName)}?assistantId=${id}`,
                   )
                 }
                 className={`flex-row items-center justify-between py-3 active:opacity-70 ${
