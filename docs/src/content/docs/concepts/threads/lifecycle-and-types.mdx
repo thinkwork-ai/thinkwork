@@ -1,51 +1,93 @@
 ---
 title: Lifecycle and Types
-description: Thread statuses, channels, prefixes, and how ThinkWork models different kinds of work in the same thread system.
+description: How a thread moves through its lifecycle, what the channel prefixes mean, and where priority fits in — the full state model of a thread in ThinkWork.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-ThinkWork uses one thread model for many kinds of work. The differences show up in status, channel, and metadata, not in separate storage systems.
+A thread is never just "a row in a table." It's a row plus a lifecycle, plus a channel that classifies how the work arrived, plus a priority that's independent of status. This page walks all three.
 
-## Thread lifecycle
+## The status lifecycle
 
-```
-open → waiting → open → ... → closed
-                             ↘ failed
-```
+Every thread sits in one of seven statuses. The state machine is small and deliberate:
 
-- **open** means the thread is active and can receive more work
-- **waiting** means the thread is paused for a human reply or external event
-- **closed** means the work is complete
-- **failed** means the run hit an unrecoverable error
+| Status | Meaning | Typical trigger |
+|---|---|---|
+| `BACKLOG` | Captured, but not scheduled for work yet | New thread from a connector, or a user drafting without sending |
+| `TODO` | Ready to be picked up | An assignee has the thread in their queue, or an agent is about to run |
+| `IN_PROGRESS` | Currently being worked on | An agent turn is running, or a human is actively typing |
+| `IN_REVIEW` | Waiting on human review | Agent requested approval (see [Admin: Inbox](/applications/admin/inbox/)); or an operator needs to confirm |
+| `BLOCKED` | Stuck on a dependency or error | Tool call failed with a non-retryable error, or waiting on external input |
+| `DONE` | Completed | Work is finished and no more turns are expected |
+| `CANCELLED` | Abandoned | Operator cancelled before completion |
 
-Threads can be reopened later without losing history.
+Status is set by the agent, by the operator, or by the system — not by the user directly. A user sending a new message into a `DONE` thread implicitly moves it back to `IN_PROGRESS`.
 
-## Channel model
+A thread can move freely between statuses other than `DONE` and `CANCELLED`; the terminal statuses are still reopenable if needed, but the default UI treats them as closed.
 
-Every thread has a channel that explains how it entered the system.
+### Priority is separate
 
-| Channel | Prefix | Origination |
-|---------|--------|-------------|
-| `CHAT` | `CHAT-` | Direct message in the admin or end-user app |
-| `AUTO` | `AUTO-` | Automation or scheduled job |
-| `EMAIL` | `EMAIL-` | Inbound email via SES |
-| `SLACK` | `SLACK-` | Message from Slack connector |
-| `GITHUB` | `GH-` | GitHub event or comment |
-| `TASK` | `TASK-` | Manually created task thread |
-| `EVAL` | `EVAL-` | Eval pack run |
+Status answers "where is this in the workflow?" Priority answers "how important is it?" They're orthogonal:
 
-The prefix is human-readable by design, which makes logs, screenshots, and support conversations easier to follow.
+| Priority | Use |
+|---|---|
+| `CRITICAL` | Page-me-now work — outages, security incidents |
+| `URGENT` | Same-day, pre-empts other work |
+| `HIGH` | Next up in the queue |
+| `MEDIUM` | Default |
+| `LOW` | Eventually |
 
-## Why types matter
+The admin app lets operators sort, filter, and group by either axis. The Kanban board groups by status; the grouped-table view most often groups by priority or assignee.
 
-ThinkWork does not treat these as separate conversation systems. They all land in the same thread model, which means you get the same:
+### Inbox status (computed)
 
-- history and replayability
-- status transitions
-- audit trail
-- agent assignment model
+On top of the explicit `status` column, the admin app computes a per-row inbox status that isn't stored:
 
-<Aside type="tip">
-When you are reasoning about work in ThinkWork, start with the thread. Channel and status explain the rest.
-</Aside>
+- `running` — a turn is actively executing right now (drives the subtle shimmer in the thread row)
+- `unread` — the thread has new turns since the operator last read it (drives the unread indicator)
+- `read` — otherwise
+
+That indicator is what makes the thread list feel alive without an operator having to babysit it.
+
+## The channel model
+
+Every thread has a `channel` column set at creation time. Channel determines the prefix, the inbound mapping logic, and the outbound behavior when an agent replies.
+
+| Channel | Prefix | How work arrives | How agents reply |
+|---|---|---|---|
+| `CHAT` | `CHAT-` | User sends message in admin or mobile app | AppSync subscription streams response back to the app |
+| `AUTO` | `AUTO-` | EventBridge / AWS Scheduler fires a scheduled job or event trigger | Response recorded on the thread; optional side-effects via tool calls |
+| `SLACK` | `SLACK-` | Slack Events API webhook to the Slack connector Lambda | Slack connector posts the response back to the originating channel/thread |
+| `GITHUB` | `GITHUB-` | GitHub webhook (issue, PR, comment) | GitHub connector posts a comment via the GitHub API |
+| `EMAIL` | `EMAIL-` | SES inbound email rule to the email connector | SES sending domain sends a reply; `inReplyTo` and `References` headers are preserved |
+| `TASK` | `TASK-` | External task system webhook (e.g. LastMile task assignment) | Task connector normalizes state changes back to the external system |
+
+The prefix is part of the thread id — a thread id is `<CHANNEL>-<ULID>`, e.g. `SLACK-01H8QKPZ4X8M4NXDRM9N8KBJ9P`. The prefix isn't a display-only formatter; it's on the row, indexed, and used to pick the outbound response handler.
+
+## Reopen, not recreate
+
+When a user sends a new message into a `DONE` or `CANCELLED` thread — say, someone replies to a Slack thread ThinkWork had archived — the system reopens the existing thread rather than starting a new one. The key for that reopen is the channel-specific metadata (Slack's `messageTs`, GitHub's `issueNumber`, Email's `messageId` + `inReplyTo`), not the thread id directly, because the external system doesn't know our ids.
+
+That reopen guarantees conversation continuity: an agent that answered a Slack question in March can see its own earlier answer when someone follows up in April.
+
+## Known limits
+
+- **Channel set is closed.** Adding a new channel requires code changes in the API schema, the connector Lambda, and the outbound reply handler. The channel column is a Postgres enum, not an open string.
+- **No cross-channel merging.** A GitHub issue and an Email thread about the same subject stay as two threads. The agent can reference both, but the data model does not link them.
+- **Inbox status is not persisted.** A server restart loses unread tracking for already-open clients until they reload.
+
+## Related pages
+
+- [Threads (overview)](/concepts/threads/) — why ThinkWork picks one universal container
+- [Routing and Metadata](/concepts/threads/routing-and-metadata/) — how inbound events map into the thread model
+- [Admin: Threads](/applications/admin/threads/) — the operator view of this lifecycle
+- [Connectors](/concepts/connectors/) — how each inbound channel is implemented
+
+## Under the hood
+
+- **Status column.** Postgres enum `thread_status` with values `BACKLOG | TODO | IN_PROGRESS | IN_REVIEW | BLOCKED | DONE | CANCELLED`. Migration lives in `packages/database-pg/drizzle/`.
+- **Channel column.** Postgres enum `thread_channel` with values `CHAT | AUTO | SLACK | GITHUB | EMAIL | TASK`.
+- **Priority column.** Postgres enum `thread_priority`.
+- **Id format.** `${channel_prefix}-${ULID}`. Implemented in `packages/api/src/lib/threads/ids.ts`.
+- **Reopen lookup.** Each connector Lambda queries `threads` with a channel-scoped metadata filter before deciding whether to `createThread` or `updateThread`. See `apps/connectors/slack/src/handlers/events.ts` for the canonical shape.
+- **Inbox status.** Computed in the admin app's `ThreadsList` component from the `threadTurns` aggregate and the last-read timestamp stored per operator.

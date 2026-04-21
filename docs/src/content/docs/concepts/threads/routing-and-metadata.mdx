@@ -1,50 +1,125 @@
 ---
 title: Routing and Metadata
-description: How thread metadata, channel context, and routing signals help agents respond appropriately.
+description: How inbound connector events become threads — the normalization path, the channel-specific metadata, and how agents see source context when they reply.
 ---
 
-Thread routing in ThinkWork is driven by the thread record plus its channel-specific metadata.
+import { Aside } from '@astrojs/starlight/components';
 
-## Metadata as routing context
+When a Slack message, a GitHub issue comment, or an inbound email arrives, ThinkWork has to do two things: figure out which thread it belongs to (new? existing? reopen a closed one?), and preserve enough context that an agent can reply back through the same channel it came from. This page is how that works.
 
-Threads carry a `metadata` JSON field for source-specific details.
+## The routing question
 
-Examples include:
+Every inbound connector event answers the same three routing questions before it becomes a thread turn:
 
-- **EMAIL**: `fromAddress`, `toAddress`, `subject`, `messageId`, `inReplyTo`
-- **SLACK**: `channelId`, `messageTs`, `teamId`, `userId`
-- **GITHUB**: `repoFullName`, `issueNumber`, `eventType`
+1. **Does a thread already exist for this external conversation?** A Slack threaded reply should land in the same ThinkWork thread as the original message, not a new one.
+2. **If yes, is that thread still open?** A reply to a `DONE` thread should reopen it, not silently drop.
+3. **If no thread exists, which agent should own the new one?** The inbound event may name a target (an @-mention, an assignment), or the tenant may have a default routing rule.
 
-That metadata is available in the thread record and can be included in agent context.
+Each connector Lambda runs through those questions before calling `createThread` or `updateThread`. The answers live in channel-specific metadata.
 
-## Why metadata matters
+## What metadata carries
 
-Metadata lets ThinkWork keep one thread model while still preserving where the work came from.
+Every thread has a `metadata` JSON column. Channel determines what that column holds.
 
-It supports patterns like:
+### `SLACK`
 
-- replying back to the correct Slack thread
-- linking an answer to the right GitHub issue
-- distinguishing inbound email from an internal automation run
-- tailoring behavior based on source channel
-
-## Routing model
-
-At a high level, routing follows this shape:
-
-```
-Inbound message or event
-  → thread created or updated
-  → channel + metadata captured
-  → agent selected
-  → context assembled
-  → response written back to the thread
+```json
+{
+  "teamId": "T0123ABCD",
+  "channelId": "C0456EFGH",
+  "threadTs": "1708123456.001100",
+  "userId": "U0789IJKL",
+  "messageTs": "1708123456.001100"
+}
 ```
 
-Connector-originated work uses the same thread path as direct user work. That keeps auditability and downstream automation behavior consistent.
+`threadTs` is the Slack-native thread identifier — the first message's timestamp. Every subsequent message in that Slack thread carries the same `threadTs`, which is how the connector finds the existing ThinkWork thread on reply. If `threadTs` is absent (the user sent a top-level message, not a threaded reply), the connector either matches to a same-`channelId` open thread or creates a new one.
+
+### `GITHUB`
+
+```json
+{
+  "repoFullName": "acme/widgets",
+  "issueNumber": 42,
+  "eventType": "issue_comment",
+  "author": "octocat"
+}
+```
+
+`(repoFullName, issueNumber)` is the identity key. A comment on issue #42 maps to the ThinkWork thread keyed on that pair.
+
+### `EMAIL`
+
+```json
+{
+  "fromAddress": "customer@example.com",
+  "toAddress": "support@tenant.thinkwork.ai",
+  "subject": "Re: Deploy failing",
+  "messageId": "<abc@example.com>",
+  "inReplyTo": "<xyz@example.com>",
+  "references": ["<xyz@example.com>", "<parent@example.com>"]
+}
+```
+
+SES inbound lookup uses `inReplyTo` and `references` to stitch replies into existing threads via standard email threading rules. A reply to a closed thread reopens it.
+
+### `TASK`
+
+```json
+{
+  "provider": "lastmile",
+  "externalTaskId": "task_abc123",
+  "latestEnvelope": { /* provider-normalized task state */ }
+}
+```
+
+Task connectors update the thread's metadata on every external state change so the mobile task card always reflects current task state without needing a round-trip to the external system at render time.
+
+### `AUTO` and `CHAT`
+
+Internal channels have simpler metadata:
+
+- `AUTO` carries the `scheduleId` or `triggerId` that fired, plus the Step Functions execution ARN for the run.
+- `CHAT` carries `createdByUserId` and, for threads started from the mobile app, any workspace id.
+
+## A worked example: Slack → thread
+
+Here's the full path of an inbound Slack message becoming a thread turn.
+
+1. **Slack fires a webhook.** Slack POSTs an `event_callback` to `/connectors/slack/webhook` on API Gateway.
+2. **Webhook signature verified.** The Slack connector Lambda validates the `X-Slack-Signature` header against the signing secret in SSM.
+3. **Event normalized.** The raw Slack event (nested, full of implementation detail) is mapped to a `NormalizedEvent` — the connector-agnostic shape the thread path consumes.
+4. **Routing check.** The Lambda queries `threads` for an open thread with `channel = 'SLACK'` and `metadata->>'threadTs' = $1`. If present and status is not `DONE/CANCELLED`, reuse. If present and closed, reopen. If absent, mint a new thread.
+5. **Agent resolution.** For a new thread, the Lambda picks an agent: the target of an @-mention, a channel-default binding, or the tenant default. For an existing thread, the assigned agent already owns it.
+6. **Message persisted.** A new `thread_message` row lands with role=`user`, the Slack user's name, and the full Slack event stored in `metadata` for audit.
+7. **Agent invoked.** AgentCore Lambda is fired asynchronously via SQS. It sees the thread, the new message, and the channel-specific metadata.
+8. **Agent replies.** The agent produces a response message. The outbound Slack handler reads `threadTs` from thread metadata and posts the reply in the same Slack thread.
+
+Every step is observable in the admin thread detail view — the inbound Slack event is visible in turn metadata, the agent invocation shows tool calls and memory reads, and the outbound Slack response is logged with its Slack message id.
+
+## Why agents see metadata
+
+When AgentCore assembles context for a turn, it includes the thread's metadata as-is in the agent's working context (not verbatim in the prompt, but exposed via structured fields the agent's skill packs can read). That's how an agent's `reply_via_slack` tool knows to post into `threadTs = "1708..."` without the agent itself having to parse or pass it around.
+
+This is the system boundary made useful: the agent is channel-agnostic in its logic, but channel-aware in its tools.
+
+## Known limits
+
+- **No cross-channel routing rules.** A rule like "route any GitHub issue mentioning `@on-call` to the ops agent *and* the PagerDuty integration" requires two separate routing setups today.
+- **Thread merging is manual.** If a customer emails and then follows up on Slack, the two threads stay separate. An operator can mark one as a duplicate, but the system doesn't auto-merge.
+- **Webhook replay isn't idempotent at the event level.** A connector Lambda deduping on provider-specific event ids is the right fix; today it happens inconsistently across providers.
 
 ## Related pages
 
-- [Threads Overview](/concepts/threads/)
-- [Lifecycle and Types](/concepts/threads/lifecycle-and-types/)
-- [Connectors](/concepts/connectors/)
+- [Threads (overview)](/concepts/threads/) — the universal container
+- [Lifecycle and Types](/concepts/threads/lifecycle-and-types/) — status, channel, priority
+- [Connectors](/concepts/connectors/) — the integrations that produce these events
+- [Admin: Threads](/applications/admin/threads/) — where metadata is visible in the UI
+
+## Under the hood
+
+- **Normalized event shape.** `packages/api/src/lib/connectors/normalized-event.ts` — shared across all connector Lambdas.
+- **Thread resolution.** `packages/api/src/lib/threads/resolve.ts` — the `resolveExistingThread(channel, metadata)` helper every connector calls before deciding create-vs-update.
+- **Slack connector.** `apps/connectors/slack/src/handlers/events.ts` — the canonical example; other connectors follow the same pattern with provider-specific signature verification and event mapping.
+- **Metadata schema.** No Postgres schema enforcement on `metadata` — it's a JSONB column. Shape is enforced by the TypeScript types in `packages/api/src/schema/threads/types.ts` and consumed by both inbound connectors and outbound reply handlers.
+- **Outbound handlers.** `packages/api/src/lib/agents/reply/` — one handler per channel, each reads `thread.metadata` to decide where the reply goes.
