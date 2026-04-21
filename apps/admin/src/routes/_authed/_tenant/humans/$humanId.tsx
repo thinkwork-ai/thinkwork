@@ -80,7 +80,7 @@ function HumanDetailPage() {
         />
       }
     >
-      <div className="space-y-6">
+      <div className="space-y-6 max-w-[750px]">
         <HumanProfileSection
           userId={member.user.id}
           email={member.user.email}
