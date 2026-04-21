@@ -1102,15 +1102,16 @@ export type MobileMemoryCapture = {
 export type MobileWikiSearchResult = {
   __typename?: 'MobileWikiSearchResult';
   /**
-   * Source memory unit ids whose recall hits caused this page to appear, in
-   * Hindsight rank order (best-ranked first).
+   * Retained for wire-format compatibility with older mobile clients.
+   * Always [] on the FTS path; pages match their own compiled text, not
+   * source memory units.
    */
   matchingMemoryIds: Array<Scalars['ID']['output']>;
   page: WikiPage;
   /**
-   * Reciprocal-rank surfacing score = 1 / (bestRank + 60), where bestRank
-   * is the lowest Hindsight position of any memory citing this page.
-   * Higher is better. Not comparable across queries.
+   * Postgres `ts_rank(search_tsv, plainto_tsquery('english', query))` on
+   * the page's compiled text. Higher is better. Not comparable across
+   * queries.
    */
   score: Scalars['Float']['output'];
 };
@@ -2116,14 +2117,17 @@ export type Query = {
    */
   mobileMemorySearch: Array<MobileMemoryCapture>;
   /**
-   * Ranked wiki-page search for mobile. Runs the same Hindsight recall the
-   * mobile memory search does, then reverse-joins each hit through
-   * `wiki_section_sources` to the compiled pages that cite it. Pages are
-   * deduplicated (one row per page) and ranked by the sum of Hindsight hit
-   * scores across all of the page's matching source memories — so a page
-   * cited by multiple strong hits ranks higher than one cited by a single
-   * weak hit. `matchingMemoryIds` preserves input rank order so the client
-   * can show "why this page matched" without a second round trip.
+   * Ranked wiki-page search for mobile. Runs a Postgres full-text query
+   * (`plainto_tsquery('english', …)` + `ts_rank`) against the GIN-indexed
+   * `search_tsv` generated column on `wiki_pages` (title || summary ||
+   * body_md), scoped to one (tenant, agent) pair. Returns results in
+   * `ts_rank` DESC order, tie-broken by `last_compiled_at` DESC.
+   *
+   * Previously routed through Hindsight semantic recall; on the compiled
+   * wiki corpus FTS is near-instant and matches the query shape mobile
+   * users actually type (page titles, keywords). `matchingMemoryIds` is
+   * retained for wire-format compatibility and is always [] on this path —
+   * pages match their own compiled text, not source memory units.
    */
   mobileWikiSearch: Array<MobileWikiSearchResult>;
   modelCatalog: Array<ModelCatalogEntry>;
@@ -2179,6 +2183,13 @@ export type Query = {
    * Powers the `thinkwork wiki status` CLI command.
    */
   wikiCompileJobs: Array<WikiCompileJob>;
+  /**
+   * Pages this page links OUT to — the "Connected Pages" surface. Mirrors
+   * wikiBacklinks in the opposite direction; reads wiki_page_links where
+   * from_page_id = pageId. Deduplicated by target so a parent/child pair
+   * with both a `reference` link and a `parent_of` link returns once.
+   */
+  wikiConnectedPages: Array<WikiPage>;
   /**
    * Agent-scoped force-graph: every active wiki page + every page-to-page
    * link whose endpoints are both active in the same `(tenant, owner)`
@@ -2686,6 +2697,11 @@ export type QueryWikiCompileJobsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   ownerId?: InputMaybe<Scalars['ID']['input']>;
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryWikiConnectedPagesArgs = {
+  pageId: Scalars['ID']['input'];
 };
 
 
@@ -3614,18 +3630,63 @@ export type WikiPage = {
   __typename?: 'WikiPage';
   aliases: Array<Scalars['String']['output']>;
   bodyMd?: Maybe<Scalars['String']['output']>;
+  /**
+   * Pages that were promoted out of this page's sections — the reverse of
+   * `parent`. Empty for pages that have never had a child promoted.
+   */
+  children: Array<WikiPage>;
   createdAt: Scalars['AWSDateTime']['output'];
   id: Scalars['ID']['output'];
   lastCompiledAt?: Maybe<Scalars['AWSDateTime']['output']>;
   ownerId: Scalars['ID']['output'];
+  /**
+   * Parent hub when this page was promoted from a section on another page.
+   * Null for top-level pages. Reads `wiki_pages.parent_page_id`.
+   */
+  parent?: Maybe<WikiPage>;
+  /**
+   * If this page was promoted out of a section on a parent page, the section
+   * it came from. Null when this page is top-level or the parent section has
+   * since been archived.
+   */
+  promotedFromSection?: Maybe<WikiPromotedFromSection>;
+  /**
+   * Active pages rolled up into this page's named section — the denormalized
+   * aggregation view (`aggregation.linked_page_ids` on the section jsonb).
+   * Empty when the section doesn't exist or carries no aggregation metadata.
+   */
+  sectionChildren: Array<WikiPage>;
   sections: Array<WikiPageSection>;
   slug: Scalars['String']['output'];
+  /**
+   * Distinct memory_units (Hindsight records) that source at least one section
+   * on this page. Counts through `wiki_section_sources`. Hit on detail screens
+   * only — list screens must NOT request this (N+1 risk).
+   */
+  sourceMemoryCount: Scalars['Int']['output'];
+  /**
+   * Up to `limit` memory_unit ids that source sections on this page, ordered
+   * by most recently-cited. Server-side capped at 50. Pairs with
+   * `MemoryRecord` drill-in so a page's "Based on N memories" badge can
+   * resolve to the actual records.
+   */
+  sourceMemoryIds: Array<Scalars['ID']['output']>;
   status: Scalars['String']['output'];
   summary?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
   title: Scalars['String']['output'];
   type: WikiPageType;
   updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+
+export type WikiPageSectionChildrenArgs = {
+  sectionSlug: Scalars['String']['input'];
+};
+
+
+export type WikiPageSourceMemoryIdsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 export type WikiPageSection = {
@@ -3649,6 +3710,18 @@ export enum WikiPageType {
   Entity = 'ENTITY',
   Topic = 'TOPIC'
 }
+
+/**
+ * Provenance linkage between a promoted page and the section it was derived
+ * from. Populated only for pages whose `parent_page_id` is set AND whose
+ * parent has a section in which `aggregation.promoted_page_id` points back.
+ */
+export type WikiPromotedFromSection = {
+  __typename?: 'WikiPromotedFromSection';
+  parentPage: WikiPage;
+  sectionHeading: Scalars['String']['output'];
+  sectionSlug: Scalars['String']['output'];
+};
 
 export type WikiResetCursorResult = {
   __typename?: 'WikiResetCursorResult';
@@ -4148,6 +4221,29 @@ export type InviteMemberMutationVariables = Exact<{
 
 
 export type InviteMemberMutation = { __typename?: 'Mutation', inviteMember: { __typename?: 'TenantMember', id: string, tenantId: string, principalType: string, principalId: string, role: string, status: string, createdAt: any, user?: { __typename?: 'User', id: string, name?: string | null, email: string } | null } };
+
+export type UpdateUserMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+  input: UpdateUserInput;
+}>;
+
+
+export type UpdateUserMutation = { __typename?: 'Mutation', updateUser: { __typename?: 'User', id: string, tenantId: string, email: string, name?: string | null, image?: string | null, phone?: string | null, updatedAt: any } };
+
+export type UpdateTenantMemberMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+  input: UpdateTenantMemberInput;
+}>;
+
+
+export type UpdateTenantMemberMutation = { __typename?: 'Mutation', updateTenantMember: { __typename?: 'TenantMember', id: string, tenantId: string, principalType: string, principalId: string, role: string, status: string, updatedAt: any } };
+
+export type RemoveTenantMemberMutationVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type RemoveTenantMemberMutation = { __typename?: 'Mutation', removeTenantMember: boolean };
 
 export type AgentApiKeysQueryVariables = Exact<{
   agentId: Scalars['ID']['input'];
@@ -4711,6 +4807,9 @@ export const TenantDetailDocument = {"kind":"Document","definitions":[{"kind":"O
 export const DeploymentStatusDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"DeploymentStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deploymentStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"stage"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"region"}},{"kind":"Field","name":{"kind":"Name","value":"accountId"}},{"kind":"Field","name":{"kind":"Name","value":"bucketName"}},{"kind":"Field","name":{"kind":"Name","value":"databaseEndpoint"}},{"kind":"Field","name":{"kind":"Name","value":"ecrUrl"}},{"kind":"Field","name":{"kind":"Name","value":"adminUrl"}},{"kind":"Field","name":{"kind":"Name","value":"docsUrl"}},{"kind":"Field","name":{"kind":"Name","value":"apiEndpoint"}},{"kind":"Field","name":{"kind":"Name","value":"appsyncUrl"}},{"kind":"Field","name":{"kind":"Name","value":"appsyncRealtimeUrl"}},{"kind":"Field","name":{"kind":"Name","value":"hindsightEndpoint"}},{"kind":"Field","name":{"kind":"Name","value":"agentcoreStatus"}},{"kind":"Field","name":{"kind":"Name","value":"hindsightEnabled"}},{"kind":"Field","name":{"kind":"Name","value":"managedMemoryEnabled"}}]}}]}}]} as unknown as DocumentNode<DeploymentStatusQuery, DeploymentStatusQueryVariables>;
 export const TenantMembersListDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"TenantMembersList"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantMembers"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"principalType"}},{"kind":"Field","name":{"kind":"Name","value":"principalId"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"user"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"image"}}]}},{"kind":"Field","name":{"kind":"Name","value":"agent"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<TenantMembersListQuery, TenantMembersListQueryVariables>;
 export const InviteMemberDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"InviteMember"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"InviteMemberInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"inviteMember"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"principalType"}},{"kind":"Field","name":{"kind":"Name","value":"principalId"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"user"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"email"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<InviteMemberMutation, InviteMemberMutationVariables>;
+export const UpdateUserDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateUser"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateUserInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateUser"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"image"}},{"kind":"Field","name":{"kind":"Name","value":"phone"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateUserMutation, UpdateUserMutationVariables>;
+export const UpdateTenantMemberDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateTenantMember"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateTenantMemberInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateTenantMember"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"principalType"}},{"kind":"Field","name":{"kind":"Name","value":"principalId"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<UpdateTenantMemberMutation, UpdateTenantMemberMutationVariables>;
+export const RemoveTenantMemberDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RemoveTenantMember"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"removeTenantMember"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<RemoveTenantMemberMutation, RemoveTenantMemberMutationVariables>;
 export const AgentApiKeysDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AgentApiKeys"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agentApiKeys"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"keyPrefix"}},{"kind":"Field","name":{"kind":"Name","value":"lastUsedAt"}},{"kind":"Field","name":{"kind":"Name","value":"revokedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<AgentApiKeysQuery, AgentApiKeysQueryVariables>;
 export const CreateAgentApiKeyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateAgentApiKey"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateAgentApiKeyInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createAgentApiKey"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"apiKey"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"keyPrefix"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"plainTextKey"}}]}}]}}]} as unknown as DocumentNode<CreateAgentApiKeyMutation, CreateAgentApiKeyMutationVariables>;
 export const RevokeAgentApiKeyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RevokeAgentApiKey"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"revokeAgentApiKey"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"revokedAt"}}]}}]}}]} as unknown as DocumentNode<RevokeAgentApiKeyMutation, RevokeAgentApiKeyMutationVariables>;
