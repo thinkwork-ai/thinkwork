@@ -21,7 +21,8 @@ import {
 } from "@aws-sdk/client-secrets-manager";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
-import { agentSkills, skillCatalog, tenantSkills, tenantMcpServers, agentMcpServers, agentTemplateMcpServers, tenantBuiltinTools, connections, connectProviders } from "@thinkwork/database-pg/schema";
+import { agentSkills, skillCatalog, skillRuns, tenantSkills, tenantMcpServers, agentMcpServers, agentTemplateMcpServers, tenantBuiltinTools, connections, connectProviders, users } from "@thinkwork/database-pg/schema";
+import { createHash } from "node:crypto";
 import { parse as parseYaml } from "yaml";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
 import { handleCors, json, error, notFound, unauthorized } from "../lib/response.js";
@@ -308,6 +309,13 @@ export async function handler(
 			const tenantId = event.headers["x-tenant-id"];
 			if (!userId || !tenantId) return error("x-principal-id and x-tenant-id headers required", 400);
 			return mcpClearUserToken(userId, tenantId, mcpServerId);
+		}
+
+		// POST /api/skills/start — service-to-service wrapper around startSkillRun.
+		// The AgentCore-container's dispatcher skill calls this with API_AUTH_SECRET
+		// to kick off a composition on behalf of the chat invoker. See Unit 5.
+		if (path === "/api/skills/start" && method === "POST") {
+			return startSkillRunService(event);
 		}
 
 		return notFound("Route not found");
@@ -2392,4 +2400,228 @@ async function listS3Keys(prefix: string): Promise<string[]> {
 	} while (continuationToken);
 
 	return keys;
+}
+
+// ---------------------------------------------------------------------------
+// Composition start (Unit 5) — service-to-service wrapper around startSkillRun.
+//
+// The AgentCore-container dispatcher skill calls this with API_AUTH_SECRET
+// to start a composition on behalf of the chat invoker. We trust the caller
+// (container runs inside our infra + has the secret) to assert the invoker's
+// identity. Cognito-JWT-driven callers should use the GraphQL mutation
+// instead — this endpoint is explicitly for service identities that have
+// already resolved the user.
+// ---------------------------------------------------------------------------
+
+const VALID_INVOCATION_SOURCES = new Set(["chat", "scheduled", "catalog", "webhook"]);
+
+interface StartSkillRunServiceBody {
+	tenantId: string;
+	invokerUserId: string;
+	agentId?: string;
+	skillId: string;
+	skillVersion?: number;
+	invocationSource: string;
+	inputs?: Record<string, unknown>;
+	deliveryChannels?: unknown[];
+}
+
+async function startSkillRunService(
+	event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	let body: StartSkillRunServiceBody;
+	try {
+		body = JSON.parse(event.body || "{}");
+	} catch {
+		return error("Invalid JSON body", 400);
+	}
+
+	const {
+		tenantId,
+		invokerUserId,
+		agentId,
+		skillId,
+		skillVersion = 1,
+		invocationSource,
+		inputs = {},
+		deliveryChannels = [],
+	} = body;
+
+	if (!tenantId || !invokerUserId || !skillId || !invocationSource) {
+		return error(
+			"Missing required fields: tenantId, invokerUserId, skillId, invocationSource",
+			400,
+		);
+	}
+	if (!VALID_INVOCATION_SOURCES.has(invocationSource)) {
+		return error(
+			`invocationSource must be one of chat|scheduled|catalog|webhook (got ${invocationSource})`,
+			400,
+		);
+	}
+
+	// Sanity check: the claimed invoker belongs to the claimed tenant.
+	// Prevents a compromised container (or a bad call) from pinning one
+	// tenant's user to another tenant's run.
+	const [invoker] = await db
+		.select({ id: users.id, tenant_id: users.tenant_id })
+		.from(users)
+		.where(eq(users.id, invokerUserId));
+	if (!invoker) return error("invokerUserId not found", 404);
+	if (invoker.tenant_id !== tenantId) {
+		return error("invokerUserId tenant mismatch", 403);
+	}
+
+	const resolvedInputs = inputs;
+	const resolvedInputsHash = hashResolvedInputs(resolvedInputs);
+
+	const inserted = await db
+		.insert(skillRuns)
+		.values({
+			tenant_id: tenantId,
+			agent_id: agentId ?? null,
+			invoker_user_id: invokerUserId,
+			skill_id: skillId,
+			skill_version: skillVersion,
+			invocation_source: invocationSource,
+			inputs: resolvedInputs,
+			resolved_inputs: resolvedInputs,
+			resolved_inputs_hash: resolvedInputsHash,
+			delivery_channels: deliveryChannels,
+			status: "running",
+		})
+		.onConflictDoNothing({
+			target: [
+				skillRuns.tenant_id,
+				skillRuns.invoker_user_id,
+				skillRuns.skill_id,
+				skillRuns.resolved_inputs_hash,
+			],
+		})
+		.returning();
+
+	if (inserted.length === 0) {
+		// Dedup hit — surface the active run so the dispatcher can tell
+		// the user "already running, view progress" without starting a
+		// duplicate composition.
+		const [existing] = await db
+			.select()
+			.from(skillRuns)
+			.where(
+				and(
+					eq(skillRuns.tenant_id, tenantId),
+					eq(skillRuns.invoker_user_id, invokerUserId),
+					eq(skillRuns.skill_id, skillId),
+					eq(skillRuns.resolved_inputs_hash, resolvedInputsHash),
+					eq(skillRuns.status, "running"),
+				),
+			);
+		if (!existing) {
+			return error("concurrent start race: no row inserted, no active match", 500);
+		}
+		return json({ runId: existing.id, status: existing.status, deduped: true });
+	}
+
+	const runRow = inserted[0];
+	const invokeResult = await invokeAgentcoreRunSkill({
+		runId: runRow.id,
+		tenantId,
+		invokerUserId,
+		skillId,
+		skillVersion: runRow.skill_version,
+		resolvedInputs,
+		invocationSource,
+	});
+
+	if (!invokeResult.ok) {
+		await db
+			.update(skillRuns)
+			.set({
+				status: "failed",
+				failure_reason: invokeResult.error.slice(0, 500),
+				finished_at: new Date(),
+				updated_at: new Date(),
+			})
+			.where(eq(skillRuns.id, runRow.id));
+		return error(`composition invoke failed: ${invokeResult.error}`, 502);
+	}
+
+	return json({ runId: runRow.id, status: "running", deduped: false });
+}
+
+// Shared helpers — mirror the canonicalization/invoke shape used by the
+// GraphQL startSkillRun resolver (packages/api/src/graphql/utils.ts) and by
+// job-trigger's inline skill_run branch. Drift would collapse the
+// skill_runs dedup partial unique index.
+
+function canonicalizeForHash(value: unknown): string {
+	if (value === null || typeof value !== "object") return JSON.stringify(value);
+	if (Array.isArray(value)) {
+		return `[${value.map((v) => canonicalizeForHash(v)).join(",")}]`;
+	}
+	const obj = value as Record<string, unknown>;
+	const keys = Object.keys(obj).sort();
+	const entries = keys.map(
+		(k) => `${JSON.stringify(k)}:${canonicalizeForHash(obj[k])}`,
+	);
+	return `{${entries.join(",")}}`;
+}
+
+function hashResolvedInputs(resolvedInputs: Record<string, unknown>): string {
+	return createHash("sha256")
+		.update(canonicalizeForHash(resolvedInputs))
+		.digest("hex");
+}
+
+async function invokeAgentcoreRunSkill(payload: {
+	runId: string;
+	tenantId: string;
+	invokerUserId: string;
+	skillId: string;
+	skillVersion: number;
+	resolvedInputs: Record<string, unknown>;
+	invocationSource: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+	const fnName = process.env.AGENTCORE_FUNCTION_NAME;
+	if (!fnName) return { ok: false, error: "AGENTCORE_FUNCTION_NAME env var not set" };
+	try {
+		const { LambdaClient, InvokeCommand } = await import("@aws-sdk/client-lambda");
+		const lambda = new LambdaClient({});
+		const envelope = {
+			kind: "run_skill" as const,
+			runId: payload.runId,
+			tenantId: payload.tenantId,
+			invokerUserId: payload.invokerUserId,
+			skillId: payload.skillId,
+			skillVersion: payload.skillVersion,
+			invocationSource: payload.invocationSource,
+			resolvedInputs: payload.resolvedInputs,
+			scope: {
+				tenantId: payload.tenantId,
+				userId: payload.invokerUserId,
+				skillId: payload.skillId,
+			},
+		};
+		const res = await lambda.send(new InvokeCommand({
+			FunctionName: fnName,
+			InvocationType: "RequestResponse",
+			Payload: new TextEncoder().encode(JSON.stringify({
+				requestContext: { http: { method: "POST", path: "/invocations" } },
+				rawPath: "/invocations",
+				headers: {
+					"content-type": "application/json",
+					authorization: `Bearer ${process.env.THINKWORK_API_SECRET || process.env.API_AUTH_SECRET || ""}`,
+				},
+				body: JSON.stringify(envelope),
+				isBase64Encoded: false,
+			})),
+		}));
+		if (res.FunctionError) {
+			const raw = res.Payload ? new TextDecoder().decode(res.Payload) : "";
+			return { ok: false, error: `agentcore-invoke threw: ${raw || res.FunctionError}` };
+		}
+		return { ok: true };
+	} catch (err) {
+		return { ok: false, error: err instanceof Error ? err.message : String(err) };
+	}
 }
