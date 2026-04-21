@@ -32,6 +32,8 @@ COPY packages/agentcore-strands/agent-container/eval_span_attrs.py .
 COPY packages/agentcore-strands/agent-container/external_task_context.py .
 COPY packages/agentcore-strands/agent-container/workflow_skill_context.py .
 COPY packages/agentcore-strands/agent-container/memory_tools.py .
+COPY packages/agentcore-strands/agent-container/write_memory_tool.py .
+COPY packages/agentcore-strands/agent-container/workspace_composer_client.py .
 COPY packages/agentcore-strands/agent-container/hindsight_usage_capture.py .
 COPY packages/agentcore-strands/agent-container/hindsight_recall_filter.py .
 COPY packages/agentcore-strands/agent-container/api_memory_client.py .

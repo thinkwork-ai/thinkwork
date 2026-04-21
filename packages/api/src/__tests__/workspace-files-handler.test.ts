@@ -259,6 +259,73 @@ describe("legacy body shape", () => {
 	});
 });
 
+// ─── 2b. Service-to-service (apikey) auth ────────────────────────────────────
+
+describe("apikey auth (Strands container path, Unit 7)", () => {
+	it("accepts apikey auth with an x-tenant-id header and composes the agent", async () => {
+		// apikey callers skip the DB users lookup entirely — resolveCallerFromAuth
+		// trusts the x-tenant-id header since the shared service secret is the
+		// trust boundary.
+		authMockImpl.mockResolvedValue({
+			principalId: null,
+			tenantId: TENANT_A,
+			email: null,
+			authType: "apikey",
+		});
+		// resolveAgentTarget
+		pushDbRows([agentRow()]);
+		pushDbRows([tenantRow()]);
+		// composer.loadAgentContext
+		pushDbRows([agentRow()]);
+		pushDbRows([tenantRow()]);
+		pushDbRows([templateRowTenantA()]);
+
+		s3Mock.on(GetObjectCommand, { Key: "tenants/acme/agents/marco/workspace/SOUL.md" }).rejects(noSuchKey());
+		s3Mock.on(GetObjectCommand, { Key: "tenants/acme/agents/_catalog/exec-assistant/workspace/SOUL.md" }).rejects(noSuchKey());
+		s3Mock.on(GetObjectCommand, { Key: "tenants/acme/agents/_catalog/defaults/workspace/SOUL.md" })
+			.resolves({ Body: { transformToString: async () => "Hi {{AGENT_NAME}}" } as unknown as never });
+
+		const res = await parse(
+			await handler(event({ action: "get", agentId: AGENT_ID, path: "SOUL.md" })),
+		);
+		expect(res.statusCode).toBe(200);
+		expect(res.body.content).toBe("Hi Marco");
+	});
+
+	it("returns 404 when apikey caller's x-tenant-id does not match the agent's tenant", async () => {
+		// Strands container running in tenant B accidentally passes an agentId
+		// belonging to tenant A. The composer's DB lookup binds both and
+		// returns nothing.
+		authMockImpl.mockResolvedValue({
+			principalId: null,
+			tenantId: TENANT_B,
+			email: null,
+			authType: "apikey",
+		});
+		// resolveAgentTarget: agent belongs to A, mismatches caller's B → null
+		pushDbRows([agentRow({ tenant_id: TENANT_A })]);
+
+		const res = await parse(
+			await handler(event({ action: "get", agentId: AGENT_ID, path: "SOUL.md" })),
+		);
+		expect(res.statusCode).toBe(404);
+		expect(s3Mock.calls().length).toBe(0);
+	});
+
+	it("rejects apikey without any x-tenant-id header (caller tenant unresolvable)", async () => {
+		authMockImpl.mockResolvedValue({
+			principalId: null,
+			tenantId: null,
+			email: null,
+			authType: "apikey",
+		});
+		const res = await parse(
+			await handler(event({ action: "list", agentId: AGENT_ID })),
+		);
+		expect(res.statusCode).toBe(401);
+	});
+});
+
 // ─── 3. Target selection ─────────────────────────────────────────────────────
 
 describe("target selection", () => {
