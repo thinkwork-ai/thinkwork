@@ -435,7 +435,7 @@ function MemoryPage() {
           <div className="flex items-center gap-2 shrink-0">
             {hindsightEnabled && (
               <ToggleGroup type="single" value={view} onValueChange={(v) => v && setView(v as "memories" | "graph")} variant="outline">
-                <ToggleGroupItem value="memories" className="px-3 text-xs">Memories</ToggleGroupItem>
+                <ToggleGroupItem value="memories" className="px-3 text-xs">Table</ToggleGroupItem>
                 <ToggleGroupItem value="graph" className="px-3 text-xs">Graph</ToggleGroupItem>
               </ToggleGroup>
             )}

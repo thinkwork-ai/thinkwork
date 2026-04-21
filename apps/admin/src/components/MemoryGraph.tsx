@@ -358,7 +358,10 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       if (!fg || !dims || cameraInitRef.current) return;
       const camera = fg.camera();
       const controls = fg.controls();
-      camera.position.set(0, 0, 500);
+      // Scale starting distance with node count so large graphs start framed.
+      const nodeCount = graphData.nodes.length;
+      const initialZ = Math.max(800, Math.min(6000, 100 * Math.sqrt(nodeCount)));
+      camera.position.set(0, 0, initialZ);
       camera.up.set(0, 1, 0);
       camera.lookAt(0, 0, 0);
       controls.enableRotate = false;
@@ -414,12 +417,28 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
           nodeThreeObject={nodeThreeObject}
           nodeRelSize={6}
           showNavInfo={false}
-          linkColor={(link: any) => link.label ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.25)"}
-          linkWidth={(link: any) => link.label ? 2.5 : 1.5}
-          linkDirectionalArrowLength={(link: any) => link.label ? 4 : 0}
+          linkColor={(link: any) => {
+            const m = matchedIdsRef.current;
+            if (!m) return "rgba(255,255,255,0.7)";
+            const sId = typeof link.source === "object" ? link.source.id : link.source;
+            const tId = typeof link.target === "object" ? link.target.id : link.target;
+            return m.has(sId) || m.has(tId)
+              ? "rgba(255,255,255,0.7)"
+              : "rgba(255,255,255,0.1)";
+          }}
+          linkWidth={() => 2}
+          linkDirectionalArrowLength={() => 4}
           linkDirectionalArrowRelPos={1}
-          linkDirectionalArrowColor={(link: any) => link.label ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.25)"}
-          linkLabel={(link: any) => link.label || ""}
+          linkDirectionalArrowColor={(link: any) => {
+            const m = matchedIdsRef.current;
+            if (!m) return "rgba(255,255,255,0.7)";
+            const sId = typeof link.source === "object" ? link.source.id : link.source;
+            const tId = typeof link.target === "object" ? link.target.id : link.target;
+            return m.has(sId) || m.has(tId)
+              ? "rgba(255,255,255,0.7)"
+              : "rgba(255,255,255,0.1)";
+          }}
+          linkLabel={(link: any) => link.label || "mentions"}
           nodeLabel={(node: any) => `${node.label}${node.entityType ? ` (${node.entityType})` : ""}${node.edgeCount ? ` — ${node.edgeCount} mentions` : ""}`}
           cooldownTicks={100}
           d3AlphaDecay={0.02}

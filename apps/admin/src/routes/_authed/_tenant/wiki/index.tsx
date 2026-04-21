@@ -202,7 +202,7 @@ function WikiPage() {
     pause: !activeSearch || !tenantId || !searchAgentId,
   });
 
-  useBreadcrumbs([{ label: "Wiki" }]);
+  useBreadcrumbs([{ label: "Wiki Pages" }]);
 
   const toRow = (p: any, agentId: string, agentName: string): WikiRow => ({
     id: p.id,
@@ -311,7 +311,7 @@ function WikiPage() {
       <div className="shrink-0 px-4 pt-3 pb-3 relative z-10">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="text-lg font-semibold">Wiki</h1>
+            <h1 className="text-lg font-semibold">Wiki Pages</h1>
             <p className="text-xs text-muted-foreground">{headerCount}</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -321,7 +321,7 @@ function WikiPage() {
               onValueChange={(v) => v && setView(v as "pages" | "graph")}
               variant="outline"
             >
-              <ToggleGroupItem value="pages" className="px-3 text-xs">Pages</ToggleGroupItem>
+              <ToggleGroupItem value="pages" className="px-3 text-xs">Table</ToggleGroupItem>
               <ToggleGroupItem value="graph" className="px-3 text-xs">Graph</ToggleGroupItem>
             </ToggleGroup>
             <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
