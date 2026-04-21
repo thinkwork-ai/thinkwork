@@ -3,9 +3,9 @@ title: "Compounding Memory — Hierarchical Aggregation (v1 refinement)"
 date: 2026-04-19
 status: ready-for-planning
 related-plans:
-  - plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md  # superseded by this direction
+  - docs/plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md  # superseded by this direction
 canonical-sources:
-  - plans/compounding-memory-hierarchical-aggregation-plan.md
+  - docs/plans/archived/compounding-memory-hierarchical-aggregation-plan.md
   - .prds/compounding-memory-aggregation-research-memo.md
   - .prds/compounding-memory-agent-brief.md
   - .prds/compounding-memory-scoping.md
@@ -16,7 +16,7 @@ canonical-sources:
 
 ## Problem
 
-The compile pipeline ships end-to-end but does not *compound*. On partial real data the observed failures are fragmentation (same concept as multiple pages), thin pages (2-3 memories cited instead of 30), and invisible compounding (memory ↔ page backlinks exist in SQL but not in UI). A first pass refinement ([plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md](../../plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md)) focused on the leaf compiler — alias fuzzy match, evidence recompile, backlink UI, metrics. Pressure-testing surfaced that those improvements are secondary: the primary missing mechanism is **hierarchical aggregation with section-to-page promotion**, already specified in [plans/compounding-memory-hierarchical-aggregation-plan.md](../../plans/compounding-memory-hierarchical-aggregation-plan.md) and diagnosed in [.prds/compounding-memory-aggregation-research-memo.md](../../.prds/compounding-memory-aggregation-research-memo.md).
+The compile pipeline ships end-to-end but does not *compound*. On partial real data the observed failures are fragmentation (same concept as multiple pages), thin pages (2-3 memories cited instead of 30), and invisible compounding (memory ↔ page backlinks exist in SQL but not in UI). A first pass refinement ([docs/plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md](../plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md)) focused on the leaf compiler — alias fuzzy match, evidence recompile, backlink UI, metrics. Pressure-testing surfaced that those improvements are secondary: the primary missing mechanism is **hierarchical aggregation with section-to-page promotion**, already specified in [docs/plans/archived/compounding-memory-hierarchical-aggregation-plan.md](../plans/archived/compounding-memory-hierarchical-aggregation-plan.md) and diagnosed in [.prds/compounding-memory-aggregation-research-memo.md](../../.prds/compounding-memory-aggregation-research-memo.md).
 
 This document captures the product-level decisions needed before a revised implementation plan lands.
 
@@ -97,7 +97,7 @@ The refined pipeline is working when all of the following are true on the Amy �
 - **Parent keeps a summary on promotion.** "Extract + summarize" behavior is the mandatory shape.
 - **Tags are soft hints only.** Tenant-definable, optional, never load-bearing on correctness.
 - **Deterministic rollups run before the LLM.** The model sees candidate parents in its context, rather than rediscovering them.
-- **Earlier refinement plan is superseded.** [plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md](../../plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md) is archived as a direction note; its useful sub-elements (alias fuzzy matching, continuation chaining, backlink UI, health metrics) are folded into the replacement plan rather than dropped.
+- **Earlier refinement plan is superseded.** [docs/plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md](../plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md) is archived as a direction note; its useful sub-elements (alias fuzzy matching, continuation chaining, backlink UI, health metrics) are folded into the replacement plan rather than dropped.
 
 ## Open questions for planning
 
@@ -116,11 +116,11 @@ These are the technical and sequencing decisions that belong in `/ce:plan`, not 
 
 ## References
 
-- **Primary architectural source:** [plans/compounding-memory-hierarchical-aggregation-plan.md](../../plans/compounding-memory-hierarchical-aggregation-plan.md) — canonical specification for the aggregation model, promotion signals, and recommended compiler behavior changes.
+- **Primary architectural source:** [docs/plans/archived/compounding-memory-hierarchical-aggregation-plan.md](../plans/archived/compounding-memory-hierarchical-aggregation-plan.md) — canonical specification for the aggregation model, promotion signals, and recommended compiler behavior changes.
 - **Diagnosis and root causes:** [.prds/compounding-memory-aggregation-research-memo.md](../../.prds/compounding-memory-aggregation-research-memo.md) — why the current pipeline under-aggregates and what muscles are missing.
 - **Product framing:** [.prds/compounding-memory-agent-brief.md](../../.prds/compounding-memory-agent-brief.md) — what Compounding Memory is and what it should produce.
 - **Scope rule (non-negotiable):** [.prds/compounding-memory-scoping.md](../../.prds/compounding-memory-scoping.md) — strict agent-scoping for every compiled object in v1.
 - **Existing build plan to extend:** [.prds/compounding-memory-v1-build-plan.md](../../.prds/compounding-memory-v1-build-plan.md) — the phased PR sequence this work sits alongside.
 - **Pipeline logic source of truth:** [.prds/thinkwork-memory-compounding-pipeline-deep-dive.md](../../.prds/thinkwork-memory-compounding-pipeline-deep-dive.md) — planner contract, section-patch strategy, unresolved-mention lifecycle.
 - **Engineering architecture:** [.prds/compiled-memory-layer-engineering-prd.md](../../.prds/compiled-memory-layer-engineering-prd.md) — compiled layer schema intent and provenance model.
-- **Superseded prior direction:** [plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md](../../plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md) — first-pass leaf-compiler refinement. Useful sub-elements (alias fuzzy matching, backlink UI, continuation chaining, health metrics) are absorbed into the replacement plan, not discarded.
+- **Superseded prior direction:** [docs/plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md](../plans/2026-04-19-001-feat-compounding-memory-refinement-plan.md) — first-pass leaf-compiler refinement. Useful sub-elements (alias fuzzy matching, backlink UI, continuation chaining, health metrics) are absorbed into the replacement plan, not discarded.

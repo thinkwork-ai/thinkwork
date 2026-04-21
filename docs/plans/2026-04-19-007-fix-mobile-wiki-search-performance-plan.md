@@ -265,5 +265,5 @@ Scoping invariant preserved in WHERE clause: `(tenant_id, owner_id)` derived fro
 - Schema + indexes: `packages/database-pg/src/schema/wiki.ts` (lines 76–140)
 - Mobile UI: `apps/mobile/components/wiki/WikiList.tsx`, `apps/mobile/app/(tabs)/index.tsx`
 - Mobile SDK: `packages/react-native-sdk/src/hooks/use-mobile-memory-search.ts`, `packages/react-native-sdk/src/hooks/use-recent-wiki-pages.ts`, `packages/react-native-sdk/src/graphql/queries.ts`
-- Related in-flight plans: `plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md` (graph view — independent), `docs/plans/2026-04-19-005-refactor-mobile-memories-to-wiki-plan.md` (completed — establishes Wiki tab structure)
+- Related in-flight plans: `docs/plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md` (graph view — independent), `docs/plans/2026-04-19-005-refactor-mobile-memories-to-wiki-plan.md` (completed — establishes Wiki tab structure)
 - Memories referenced: GraphQL Lambda deploys via PR; Verify wire format empirically; Read diagnostic logs literally

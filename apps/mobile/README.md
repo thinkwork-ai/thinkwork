@@ -52,4 +52,4 @@ Persistence layers (all three required for "drill in → come back → exact sam
 2. `prevInternalRef` in `WikiGraphView` — carries `n.x/n.y` forward when urql re-emits the same query with a new object ref.
 3. `useForceSimulation` detects "all nodes have positions" on init and starts the sim with `alpha(0).stop()` so d3 doesn't agitate a restored layout.
 
-See `plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md` (v1) and `plans/2026-04-20-003-feat-mobile-graph-refinements-plan.md` (v2) for design intent, what shipped vs. what diverged, and the list of gotchas to watch out for before changing graph code.
+See `docs/plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md` (v1) and `docs/plans/2026-04-20-015-feat-mobile-graph-refinements-plan.md` (v2) for design intent, what shipped vs. what diverged, and the list of gotchas to watch out for before changing graph code.

@@ -167,8 +167,8 @@ if (preseeded) {
 
 ## Related
 
-- Plan: [`plans/2026-04-20-003-feat-mobile-graph-refinements-plan.md`](../../../plans/2026-04-20-003-feat-mobile-graph-refinements-plan.md) — Post-Implementation Status block with the session-level narrative and divergences.
-- Plan: [`plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md`](../../../plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md) — the v1 graph ship this pattern was added on top of.
+- Plan: [`docs/plans/2026-04-20-015-feat-mobile-graph-refinements-plan.md`](../../plans/2026-04-20-015-feat-mobile-graph-refinements-plan.md) — Post-Implementation Status block with the session-level narrative and divergences.
+- Plan: [`docs/plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md`](../../plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md) — the v1 graph ship this pattern was added on top of.
 - Code: `apps/mobile/components/wiki/graph/graphStateCache.ts` · `WikiGraphView.tsx` · `hooks/useForceSimulation.ts` · `KnowledgeGraph.tsx`
 - Sibling gotcha: the same session surfaced the two-effect reveal pattern and Skia-text-inside-Group for auto-following labels; both are documented in the v2 plan's "Things worth knowing before touching the graph again" section.
 - PR #292 — the landed implementation of all three layers.
