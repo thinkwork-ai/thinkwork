@@ -155,7 +155,7 @@ export const audit = {
     },
     {
       title: "Evaluations run on the same trace",
-      desc: "AWS Bedrock AgentCore evaluators score tool safety, helpfulness, accuracy, and hallucination on the recorded turns — alongside your own regex, equals, contains, and JSON-path assertions.",
+      desc: "AWS Bedrock AgentCore evaluators score tool safety, helpfulness, accuracy, and hallucination on the recorded turns.",
     },
   ],
   caption: "Admin web · thread detail and execution trace",
