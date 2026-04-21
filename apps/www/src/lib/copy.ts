@@ -22,21 +22,21 @@ export const nav = [
 ];
 
 export const meta = {
-  title: "ThinkWork — The control plane for governed AI adoption",
+  title: "ThinkWork — The admin console for governed AI adoption",
   description:
-    "Enterprise-grade agent infrastructure with template-level capability grants, per-agent spend budgets, and security and accuracy evals — running inside the AWS account your team already operates.",
+    "Enterprise-grade agent infrastructure with template-level capability grants, per-agent spend budgets, and security and accuracy evaluations — running inside the AWS account your team already operates.",
 };
 
 export const hero = {
   eyebrow: "Governed AI adoption",
-  headlinePart1: "The control plane for",
+  headlinePart1: "The admin console for",
   headlineAccent: "governed AI adoption.",
-  lede: "Capability-granted templates, per-agent spend budgets, and an evaluation harness — under one admin surface. The runtime deploys inside the AWS account your team already operates.",
+  lede: "Capability-granted templates, per-agent budgets, and security and accuracy evaluations — in one admin console. The runtime deploys into the AWS account your team already operates.",
   primaryCta: { label: "Read the docs", href: external.docs },
   secondaryCta: { label: "View on GitHub", href: external.github },
   headlineCandidates: [
     // Locked: first entry is the winner; runner-ups kept for future copy iteration.
-    "The control plane for governed AI adoption.",
+    "The admin console for governed AI adoption.",
     "AI adoption, governed from day one.",
     "Agents your security team can sign off on.",
   ],
@@ -53,15 +53,15 @@ export const proofStrip = [
   },
   {
     label: "Centralized admin",
-    detail: "One surface for agents, templates, budgets, evals, memory, and audit.",
+    detail: "One console for agents, templates, budgets, evaluations, memory, and audit.",
   },
   {
     label: "Spend budgets",
     detail: "Real-time cost attribution per agent and model, with hard caps.",
   },
   {
-    label: "Security + accuracy evals",
-    detail: "Evaluation harness for every template, powered by AWS Bedrock AgentCore.",
+    label: "Security + accuracy evaluations",
+    detail: "Evaluation suite for every template, powered by AWS Bedrock AgentCore.",
   },
 ];
 
@@ -94,7 +94,7 @@ export const controls = {
     },
     {
       title: "Centralized management",
-      desc: "One admin surface for agents, templates, budgets, evals, memory, and audit — no fragmented toolchain.",
+      desc: "One admin console for agents, templates, budgets, evaluations, memory, and audit — no fragmented toolchain.",
       icon: "admin",
     },
     {
@@ -103,8 +103,8 @@ export const controls = {
       icon: "cost",
     },
     {
-      title: "Security + accuracy evals",
-      desc: "Evaluation harness for every template — AWS Bedrock AgentCore evaluators plus custom assertions.",
+      title: "Security + accuracy evaluations",
+      desc: "Evaluation suite for every template — AWS Bedrock AgentCore evaluators plus custom assertions.",
       icon: "evals",
     },
   ],
@@ -154,7 +154,7 @@ export const audit = {
       desc: "Thread status, priority, and the agent that ran each step travel with the record — nothing is anonymous.",
     },
     {
-      title: "Evals run on the same trace",
+      title: "Evaluations run on the same trace",
       desc: "AWS Bedrock AgentCore evaluators score tool safety, helpfulness, accuracy, and hallucination on the recorded turns — alongside your own regex, equals, contains, and JSON-path assertions.",
     },
   ],
@@ -195,7 +195,7 @@ export const costControl = {
 export const evals = {
   eyebrow: "Evals",
   headline: "Security and accuracy, verified against the trace.",
-  lede: "Re-run evals against any template version. AgentCore evaluators and your own deterministic assertions run against the same traces the admin already captures.",
+  lede: "Re-run evaluations against any template version. AgentCore evaluators and your own deterministic assertions run against the same traces the admin already captures.",
   bullets: [
     "AWS Bedrock AgentCore built-in evaluators for tool safety, helpfulness, accuracy, and hallucination.",
     "Custom deterministic assertions — regex, equals, contains, JSON path.",
@@ -207,8 +207,8 @@ export const evals = {
 };
 
 export const systemModel = {
-  eyebrow: "One admin surface",
-  headline: "Agents, templates, cost, evals, memory — one control plane.",
+  eyebrow: "One admin console",
+  headline: "Agents, templates, cost, evaluations, memory — one admin console.",
   lede: "Four primitives, one surface wrapping them. Simple enough to hold in your head, strict enough to ship against.",
   nodes: [
     {
