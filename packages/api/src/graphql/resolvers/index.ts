@@ -27,6 +27,7 @@ import { orchestrationMutations } from "./orchestration/index.js";
 import { webhookMutations } from "./webhooks/index.js";
 import { evaluationsQueries, evaluationsMutations } from "./evaluations/index.js";
 import { wikiQueries, wikiMutations } from "./wiki/index.js";
+import { skillRunsQueries, skillRunsMutations } from "./skill-runs/index.js";
 
 export const queryResolvers: Record<string, any> = {
 	_empty: () => null,
@@ -47,6 +48,7 @@ export const queryResolvers: Record<string, any> = {
 	...templateQueries,
 	...evaluationsQueries,
 	...wikiQueries,
+	...skillRunsQueries,
 };
 
 export const mutationResolvers: Record<string, any> = {
@@ -68,6 +70,7 @@ export const mutationResolvers: Record<string, any> = {
 	...templateMutations,
 	...evaluationsMutations,
 	...wikiMutations,
+	...skillRunsMutations,
 };
 
 import { agentTypeResolvers } from "./agents/types.js";
