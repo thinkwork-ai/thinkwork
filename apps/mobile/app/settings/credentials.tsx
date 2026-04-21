@@ -31,7 +31,7 @@ export default function CredentialsScreen() {
   };
 
   return (
-    <DetailLayout title="Credentials Locker">
+    <DetailLayout title="Credential Locker">
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 24 }}

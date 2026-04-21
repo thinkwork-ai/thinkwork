@@ -102,9 +102,9 @@ export function McpServersSection({ refreshSignal }: Props) {
     );
   }
 
-  const oauthServers = (servers || []).filter((s) => s.authType === "oauth");
-  const readyServers = (servers || []).filter((s) => s.authType !== "oauth" || s.authStatus === "active");
-  const needsAction = oauthServers.filter((s) => s.authStatus !== "active");
+  // Flat list: show every server once with a status badge telling the story.
+  // Drops the earlier "Needs Connection" / "Active" sub-groupings per UX feedback.
+  const allServers = servers || [];
 
   return (
     <View style={{ gap: 16 }}>
@@ -112,81 +112,57 @@ export function McpServersSection({ refreshSignal }: Props) {
         MCP Servers
       </Text>
 
-      {(!servers || servers.length === 0) && (
+      {allServers.length === 0 ? (
         <View className="items-center py-8 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
           <Cable size={32} color={colors.mutedForeground} />
           <Muted className="mt-3 text-center px-6">
             No MCP servers assigned to your agents yet. Ask your admin to set up MCP tool connectors.
           </Muted>
         </View>
-      )}
-
-      {needsAction.length > 0 && (
-        <View>
-          <Text className="text-xs font-medium text-yellow-500 mb-2 px-1">Needs Connection</Text>
-          <View className="overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
-            {needsAction.map((server, idx) => (
+      ) : (
+        <View className="overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
+          {allServers.map((server, idx) => {
+            const isActive = server.authType !== "oauth" || server.authStatus === "active";
+            const isExpired = server.authStatus === "expired";
+            const badgeLabel = isActive
+              ? "Active"
+              : isExpired
+                ? "Reconnect"
+                : "Connect";
+            const subtitle = isActive
+              ? server.tools?.length
+                ? `${server.tools.length} tools available`
+                : server.authType === "none"
+                  ? "No auth required"
+                  : "Connected"
+              : isExpired
+                ? "Connection expired."
+                : "Not connected.";
+            return (
               <Pressable
                 key={server.id}
                 onPress={() => router.push({ pathname: "/settings/mcp-server-detail", params: { id: server.id } })}
-                className={`flex-row items-center px-4 py-3 active:bg-neutral-50 dark:active:bg-neutral-800 ${idx < needsAction.length - 1 ? "border-b border-neutral-100 dark:border-neutral-800" : ""}`}
+                className={`flex-row items-start px-4 py-3 active:bg-neutral-50 dark:active:bg-neutral-800 ${idx < allServers.length - 1 ? "border-b border-neutral-100 dark:border-neutral-800" : ""}`}
               >
                 <View className="flex-1">
                   <Text className="font-medium text-neutral-900 dark:text-neutral-100">
                     {server.name}
                   </Text>
-                  <Muted className="text-xs">
-                    {server.authStatus === "expired"
-                      ? "Connection expired. Tap to reconnect."
-                      : "Tap to connect your account"}
-                  </Muted>
+                  <Muted className="text-xs">{subtitle}</Muted>
                 </View>
-                <Badge
-                  variant="outline"
-                  className={`px-2 py-0.5 ${server.authStatus === "expired" ? "border-yellow-500/30" : ""}`}
-                  textClassName={`text-xs ${server.authStatus === "expired" ? "text-yellow-400" : ""}`}
-                >
-                  {server.authStatus === "expired" ? "Reconnect" : "Connect"}
-                </Badge>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      )}
-
-      {readyServers.length > 0 && (
-        <View>
-          <Text className="text-xs font-medium text-green-500 mb-2 px-1">Active</Text>
-          <View className="overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
-            {readyServers.map((server, idx) => (
-              <Pressable
-                key={server.id}
-                onPress={() => router.push({ pathname: "/settings/mcp-server-detail", params: { id: server.id } })}
-                className={`flex-row items-center px-4 py-3 active:bg-neutral-50 dark:active:bg-neutral-800 ${idx < readyServers.length - 1 ? "border-b border-neutral-100 dark:border-neutral-800" : ""}`}
-              >
-                <View className="flex-1">
-                  <Text className="font-medium text-neutral-900 dark:text-neutral-100">
-                    {server.name}
-                  </Text>
-                  <Muted className="text-xs">
-                    {server.tools?.length
-                      ? `${server.tools.length} tools available`
-                      : server.authType === "none"
-                        ? "No auth required"
-                        : "Connected"}
-                  </Muted>
+                <View className="flex-row items-center mt-1">
+                  <Badge
+                    variant="outline"
+                    className={`px-2 py-0.5 mr-2 ${isActive ? "border-green-500/30" : isExpired ? "border-yellow-500/30" : ""}`}
+                    textClassName={`text-xs ${isActive ? "text-green-400" : isExpired ? "text-yellow-400" : ""}`}
+                  >
+                    {badgeLabel}
+                  </Badge>
+                  <ChevronRight size={16} color={colors.mutedForeground} />
                 </View>
-                <Badge
-                  variant="outline"
-                  className="px-2 py-0.5 border-green-500/30 mr-2"
-                  textClassName="text-xs text-green-400"
-                >
-                  Active
-                </Badge>
-                <ChevronRight size={16} color={colors.mutedForeground} />
               </Pressable>
-            ))}
-          </View>
+            );
+          })}
         </View>
       )}
     </View>
