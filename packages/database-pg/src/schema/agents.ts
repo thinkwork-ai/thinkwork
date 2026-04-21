@@ -64,6 +64,16 @@ export const agents = pgTable(
 			.references(() => agentTemplates.id)
 			.notNull(),
 		version: integer("version").notNull().default(1),
+		/**
+		 * Per-file content-hash pins for guardrail-class workspace files (GUARDRAILS.md,
+		 * PLATFORM.md, CAPABILITIES.md). Shape: { "GUARDRAILS.md": "sha256:<hex>", ... }.
+		 * Keys are the canonical file basenames; values are `sha256:<64-hex>` strings.
+		 * Null until the agent goes through createAgentFromTemplate (Unit 8) or the
+		 * one-shot migration (Unit 10). Template edits to pinned files surface as
+		 * "Template update available" in the admin UI; operators accept updates via
+		 * acceptTemplateUpdate / acceptTemplateUpdateBulk which advance the recorded hash.
+		 */
+		agent_pinned_versions: jsonb("agent_pinned_versions"),
 		created_at: timestamp("created_at", { withTimezone: true })
 			.notNull()
 			.default(sql`now()`),
