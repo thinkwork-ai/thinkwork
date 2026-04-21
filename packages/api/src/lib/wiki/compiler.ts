@@ -18,8 +18,6 @@ import {
 	completeCompileJob,
 	countDuplicateTitleCandidates,
 	emptySectionAggregation,
-	findAliasMatches,
-	findAliasMatchesFuzzy,
 	findMemoryUnitPageSources,
 	findPageById,
 	findPageBySlug,
@@ -54,8 +52,16 @@ import {
 import {
 	emitCoMentionLinks,
 	emitDeterministicParentLinks,
+	emitPlaceHierarchyLinks,
 	type AffectedPage,
 } from "./deterministic-linker.js";
+import { findPageByPlaceId, findPlaceById } from "./repository.js";
+import { findExistingPageByTitleOrAlias } from "./page-lookup.js";
+import {
+	resolveBatchPlace,
+	type PlacesServiceContext,
+} from "./places-service.js";
+import type { GooglePlacesClient } from "./google-places-client.js";
 import { BedrockRetryExhaustedError } from "./bedrock.js";
 import { invokeWikiCompile } from "./enqueue.js";
 import { runPlanner, type PlannerResult } from "./planner.js";
@@ -146,6 +152,12 @@ export interface RunJobResult {
 		 * between entity pages sourced by the same memory_unit (entity↔entity
 		 * only, capped at 10 per memory). */
 		links_written_co_mention?: number;
+		/** Reference links emitted by `emitPlaceHierarchyLinks` — one per
+		 * page to the backing page of its immediate parent in the
+		 * wiki_places hierarchy (POI → city, city → state, state →
+		 * country). Only counts brand-new inserts; re-runs that hit the
+		 * unique (from,to,kind) constraint don't double-count. */
+		links_written_place?: number;
 		/** (title, owner_id) groups in `wiki_pages` with >1 active row — the
 		 * R5 precision canary. Rising means densification may be creating
 		 * duplicate hubs. */
@@ -214,6 +226,18 @@ export interface RunCompileJobOpts {
 	 * `BEDROCK_MODEL_ID` (or the code default) applies.
 	 */
 	modelId?: string;
+	/**
+	 * Optional Google Places client. When present, new-page writes call
+	 * `resolveBatchPlace` to materialize wiki_places rows + hierarchy and
+	 * link the page via `place_id`. Null disables the places-service entirely
+	 * for this job — records are persisted to wiki_pages without place_id.
+	 *
+	 * Handler path: `wiki-compile.ts` awaits `loadGooglePlacesClientFromSsm()`
+	 * at cold start and passes the resolved client (or null when SSM has no
+	 * key) here. Tests can inject a mock client or leave it undefined to
+	 * exercise the no-enrichment path.
+	 */
+	googlePlacesClient?: GooglePlacesClient | null;
 }
 
 /**
@@ -243,6 +267,15 @@ export async function runCompileJob(
 	// input slice (not just the last batch) when it derives parent candidates.
 	const allRecordsThisJob: ThinkWorkMemoryRecord[] = [];
 	const jobStartedAt = new Date();
+
+	// Places-service context: one per job. The client reference is captured
+	// at job start; if the breaker trips mid-job the compiler sees it on the
+	// next resolveBatchPlace call and falls back cleanly.
+	const placesCtx: PlacesServiceContext = {
+		tenantId: job.tenant_id,
+		ownerId: job.owner_id,
+		googlePlacesClient: opts.googlePlacesClient ?? null,
+	};
 
 	const isBootstrap = job.trigger === "bootstrap_import";
 	const maxRecordsThisJob = isBootstrap
@@ -343,6 +376,7 @@ export async function runCompileJob(
 				knownPageTitles,
 				knownPageRefs,
 				candidatePages,
+				placesCtx,
 			});
 
 			// Advance cursor only after a clean apply.
@@ -523,6 +557,7 @@ interface ApplyPlanArgs {
 	plan: PlannerResult;
 	metrics: RunJobResult["metrics"];
 	modelId?: string;
+	placesCtx?: PlacesServiceContext;
 	/** Titles of scope-active pages the section writer should linkify. */
 	knownPageTitles?: string[];
 	/** (type, slug, title) of every scope-active page — drives linkifyKnown. */
@@ -557,7 +592,13 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 	// actually part of this batch's work.
 	const affectedPages: AffectedPage[] = [];
 	const rememberAffected = (
-		page: { id: string; type: WikiPageType; slug: string; title: string },
+		page: {
+			id: string;
+			type: WikiPageType;
+			slug: string;
+			title: string;
+			place_id?: string | null;
+		},
 		sourceRecordIds: Iterable<string>,
 	): void => {
 		const recordIds = Array.from(new Set(sourceRecordIds));
@@ -567,6 +608,7 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			slug: page.slug,
 			title: page.title,
 			sourceRecordIds: recordIds,
+			placeId: page.place_id ?? null,
 		});
 	};
 
@@ -739,6 +781,14 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 				})),
 			};
 		});
+		// Resolve a place_id for this page from its backing records before
+		// the upsert. Returns null when no record carries place metadata or
+		// when Google enrichment is disabled — in those cases the page ships
+		// without a place_id.
+		const placeIdForPage = args.placesCtx
+			? (await resolveBatchPlace(pageFallbackSources, args.placesCtx))
+					?.placeId ?? null
+			: null;
 		const createdPage = await upsertPage({
 			tenant_id: job.tenant_id,
 			owner_id: job.owner_id,
@@ -748,6 +798,7 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			summary: np.summary ?? null,
 			markCompiled: true,
 			sections: newPageSections,
+			place_id: placeIdForPage,
 			aliases: [
 				...seedAliasesForTitle(np.title),
 				...((np.aliases ?? []).map(normalizeAlias)),
@@ -867,16 +918,17 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 		metrics.deterministic_linking_flag_suppressed = true;
 	} else if (affectedPages.length > 0 && records.length > 0) {
 		const scope = { tenantId: job.tenant_id, ownerId: job.owner_id };
-		const writeLink = (linkArgs: {
+		const writeLink = async (linkArgs: {
 			fromPageId: string;
 			toPageId: string;
 			context: string;
-		}): Promise<void> =>
-			upsertPageLink({
+		}): Promise<void> => {
+			await upsertPageLink({
 				fromPageId: linkArgs.fromPageId,
 				toPageId: linkArgs.toPageId,
 				context: linkArgs.context,
 			});
+		};
 
 		// Two expanders feed the linker:
 		//   - record-based: per-batch memory records with city/journal
@@ -956,6 +1008,38 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			metrics.links_written_co_mention =
 				(metrics.links_written_co_mention ?? 0) +
 				coMentionEmission.linksWritten;
+		}
+
+		// c) Place-hierarchy emission: for every affected page that carries
+		//    a place_id, walk wiki_places.parent_place_id and emit one
+		//    reference edge to the backing page of its immediate parent.
+		//    Bypasses the candidate pipeline — hierarchy edges are
+		//    structural, not precision-tuned. Metric counts only NEW
+		//    inserts so re-runs don't double-count.
+		const pagesWithPlaceId = affectedPages
+			.filter((p) => p.placeId)
+			.map((p) => ({
+				id: p.id,
+				tenant_id: job.tenant_id,
+				owner_id: job.owner_id,
+				place_id: p.placeId ?? null,
+			}));
+		if (pagesWithPlaceId.length > 0) {
+			const placeEmission = await emitPlaceHierarchyLinks({
+				scope,
+				affectedPages: pagesWithPlaceId,
+				findPlaceById,
+				findPageByPlaceId,
+				writeLink: (linkArgs) =>
+					upsertPageLink({
+						fromPageId: linkArgs.fromPageId,
+						toPageId: linkArgs.toPageId,
+						context: linkArgs.context,
+						kind: linkArgs.kind,
+					}),
+			});
+			metrics.links_written_place =
+				(metrics.links_written_place ?? 0) + placeEmission.linksWritten;
 		}
 	}
 
@@ -1599,6 +1683,7 @@ function emptyMetrics(): RunJobResult["metrics"] {
 		latency_ms: 0,
 		links_written_deterministic: 0,
 		links_written_co_mention: 0,
+		links_written_place: 0,
 		duplicate_candidates_count: 0,
 		fuzzy_dedupe_merges: 0,
 		bedrock_retries: 0,
@@ -1745,74 +1830,29 @@ async function maybeMergeIntoExistingPage(args: {
 	knownPageRefs: Array<{ type: WikiPageType; slug: string; title: string }>;
 	pageFallbackSources: ThinkWorkMemoryRecord[];
 }): Promise<AliasMergeKind | null> {
-	const aliasNormalized = normalizeAlias(args.proposed.title);
-	if (!aliasNormalized) return null;
-
-	// Pass 1: exact alias match (existing behavior). Prefer same-type hits.
-	const exactMatches = await findAliasMatches({
+	const hit = await findExistingPageByTitleOrAlias({
 		tenantId: args.job.tenant_id,
 		ownerId: args.job.owner_id,
-		aliasNormalized,
+		type: args.proposed.type,
+		title: args.proposed.title,
 	});
-	let existing: WikiPageRow | null = null;
-	let kind: AliasMergeKind = "exact";
-	for (const m of exactMatches) {
-		const candidate = await findPageById(m.pageId);
-		if (!candidate) continue;
-		if (
-			candidate.tenant_id !== args.job.tenant_id ||
-			candidate.owner_id !== args.job.owner_id
-		) {
-			continue;
-		}
-		if (candidate.status !== "active") continue;
-		if (candidate.type === args.proposed.type) {
-			existing = candidate;
-			break;
-		}
-		if (!existing) existing = candidate;
-	}
+	if (!hit) return null;
+	const existing = hit.page;
+	const kind: AliasMergeKind = hit.kind;
 
-	// Pass 2: trigram-fuzzy fallback when exact didn't resolve a candidate.
-	// Fuzzy is strict-same-type (the type-mismatch gate) because it's the
-	// over-collapse risk — "Austin" the entity vs "Austin" the topic must
-	// stay separate even if the aliases trigram-match. Archived pages are
-	// filtered by the repo helper.
-	if (!existing) {
-		const fuzzyMatches = await findAliasMatchesFuzzy({
-			tenantId: args.job.tenant_id,
-			ownerId: args.job.owner_id,
-			aliasNormalized,
-		});
-		for (const m of fuzzyMatches) {
-			if (m.pageType !== args.proposed.type) continue;
-			const candidate = await findPageById(m.pageId);
-			if (!candidate) continue;
-			if (
-				candidate.tenant_id !== args.job.tenant_id ||
-				candidate.owner_id !== args.job.owner_id
-			) {
-				continue;
-			}
-			if (candidate.status !== "active") continue;
-			existing = candidate;
-			kind = "fuzzy";
-			console.log(
-				`[wiki-compiler] fuzzy_dedupe_merged: "${args.proposed.title}" ` +
-					`≈ "${m.aliasText}" (sim=${m.similarity.toFixed(3)}) → ` +
-					`page ${candidate.id}`,
-			);
-			break;
-		}
-	}
-
-	if (!existing) return null;
 	// Don't merge when the existing page already has the exact slug
 	// the proposal would generate — upsertPage's slug-based upsert
 	// will handle that natively.
 	if (existing.slug === args.proposedSlug) return null;
 
-	if (kind === "exact") {
+	if (kind === "fuzzy" && hit.matchedAlias) {
+		console.log(
+			`[wiki-compiler] fuzzy_dedupe_merged: "${args.proposed.title}" ` +
+				`≈ "${hit.matchedAlias.text}" ` +
+				`(sim=${hit.matchedAlias.similarity.toFixed(3)}) → ` +
+				`page ${existing.id}`,
+		);
+	} else {
 		console.log(
 			`[wiki-compiler] alias_dedup_merged: proposed newPage "${args.proposed.title}" → existing page ${existing.id} (${existing.type}/${existing.slug})`,
 		);

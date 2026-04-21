@@ -26,6 +26,7 @@ import {
 	uuid,
 	text,
 	integer,
+	numeric,
 	timestamp,
 	jsonb,
 	customType,
@@ -84,6 +85,15 @@ export const wikiPages = pgTable(
 		parent_page_id: uuid("parent_page_id").references(
 			(): AnyPgColumn => wikiPages.id,
 		),
+		// Optional pointer into wiki_places. Zero or one place per page. Set by
+		// the compile pipeline when a source record carries
+		// place_google_place_id, and by the Phase C backfill for pre-existing
+		// pages. Forward-declared here; wiki_places is defined below and the FK
+		// is expressed via the `.references()` callback to break the circular
+		// declaration order.
+		place_id: uuid("place_id").references((): AnyPgColumn => wikiPlaces.id, {
+			onDelete: "set null",
+		}),
 		// Cached hubness signal (inbound links + promoted child count +
 		// section density). Recomputed on page upsert. Coarse monotonic ordering
 		// only — don't treat as a precise ranking number.
@@ -120,6 +130,11 @@ export const wikiPages = pgTable(
 		index("idx_wiki_pages_search_tsv").using("gin", table.search_tsv),
 		// Fast lookup of child pages for hierarchy navigation.
 		index("idx_wiki_pages_parent").on(table.parent_page_id),
+		// Reverse lookup "page for a place". Partial — most pages don't carry
+		// place_id, so the non-null partial keeps the index tight.
+		index("idx_wiki_pages_place_id")
+			.on(table.place_id)
+			.where(sql`${table.place_id} IS NOT NULL`),
 		// Trigram GIN index on title — powers fuzzy page lookup in the
 		// compiler's newPage dedupe path. Requires `pg_trgm` extension.
 		index("idx_wiki_pages_title_trgm").using(
@@ -410,6 +425,89 @@ export const wikiCompileCursors = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// wiki_places — canonical location identity (POI, city, state, country)
+//
+// First-class place records. Scoped per (tenant, owner) like every other
+// wiki table. Pages reference places via the nullable
+// `wiki_pages.place_id` FK declared above. Hierarchy is expressed by the
+// `parent_place_id` self-FK (POI → city → state → country, with state only
+// populated for US/CA).
+//
+// See docs/brainstorms/2026-04-21-wiki-place-capability-requirements.md and
+// docs/plans/2026-04-21-005-feat-wiki-place-capability-v2-plan.md for the
+// architectural rationale.
+// ---------------------------------------------------------------------------
+
+export const wikiPlaces = pgTable(
+	"wiki_places",
+	{
+		id: uuid("id")
+			.primaryKey()
+			.default(sql`gen_random_uuid()`),
+		tenant_id: uuid("tenant_id")
+			.references(() => tenants.id)
+			.notNull(),
+		owner_id: uuid("owner_id")
+			.references(() => agents.id)
+			.notNull(),
+		name: text("name").notNull(),
+		// Google's identifier, when known. Non-null rows in a (tenant, owner)
+		// scope are uniqueness-constrained via a partial unique index below —
+		// first-seen-wins for Google-sourced places.
+		google_place_id: text("google_place_id"),
+		// Canonical coordinates. numeric(9,6) = ~11cm precision at the equator
+		// and matches what Google Places returns. Drizzle returns numeric as
+		// strings to preserve precision — callers coerce with Number() when
+		// they need to operate on them.
+		geo_lat: numeric("geo_lat", { precision: 9, scale: 6 }),
+		geo_lon: numeric("geo_lon", { precision: 9, scale: 6 }),
+		address: text("address"),
+		// Self-reference: expresses hierarchy (POI → city → state → country).
+		// ON DELETE SET NULL so losing a parent doesn't cascade-nuke
+		// descendants; we'd rather have orphaned rows to audit than silent
+		// data loss.
+		parent_place_id: uuid("parent_place_id").references(
+			(): AnyPgColumn => wikiPlaces.id,
+			{ onDelete: "set null" },
+		),
+		// 'country' | 'region' | 'state' | 'city' | 'neighborhood' | 'poi' |
+		// 'custom'. Sentinel text (not an enum) to match the rest of the wiki
+		// schema's convention for small, additive value sets.
+		place_kind: text("place_kind"),
+		// Provenance of the row. Drives compile-time and refresh-time behavior
+		// (e.g., 'manual' rows are never overwritten by Google refresh).
+		// 'google_api' | 'journal_metadata' | 'manual' | 'derived_hierarchy'.
+		source: text("source").notNull(),
+		// Verbatim cache of the Google Places response for 'google_api' rows,
+		// or free-form creator-provided data for 'manual' rows. Frozen after
+		// first write per plan D7; manual refresh only via
+		// packages/api/scripts/wiki-places-refresh.ts.
+		source_payload: jsonb("source_payload"),
+		created_at: timestamp("created_at", { withTimezone: true })
+			.notNull()
+			.default(sql`now()`),
+		updated_at: timestamp("updated_at", { withTimezone: true })
+			.notNull()
+			.default(sql`now()`),
+	},
+	(table) => [
+		// Read-path access is always (tenant, owner) first.
+		index("idx_wiki_places_tenant_owner").on(
+			table.tenant_id,
+			table.owner_id,
+		),
+		// Hierarchy walk from parent → children.
+		index("idx_wiki_places_parent").on(table.parent_place_id),
+		// Partial unique: enforces first-seen-wins for Google-sourced places
+		// within a (tenant, owner) scope, while allowing many metadata-only
+		// rows (source='journal_metadata', google_place_id IS NULL).
+		uniqueIndex("uq_wiki_places_scope_google_place_id")
+			.on(table.tenant_id, table.owner_id, table.google_place_id)
+			.where(sql`${table.google_place_id} IS NOT NULL`),
+	],
+);
+
+// ---------------------------------------------------------------------------
 // Relations
 // ---------------------------------------------------------------------------
 
@@ -428,6 +526,10 @@ export const wikiPagesRelations = relations(wikiPages, ({ one, many }) => ({
 		references: [wikiPages.id],
 	}),
 	childPages: many(wikiPages, { relationName: "parent_page" }),
+	place: one(wikiPlaces, {
+		fields: [wikiPages.place_id],
+		references: [wikiPlaces.id],
+	}),
 	sections: many(wikiPageSections),
 	outgoingLinks: many(wikiPageLinks, { relationName: "from_page" }),
 	incomingLinks: many(wikiPageLinks, { relationName: "to_page" }),
@@ -523,3 +625,21 @@ export const wikiCompileCursorsRelations = relations(
 		}),
 	}),
 );
+
+export const wikiPlacesRelations = relations(wikiPlaces, ({ one, many }) => ({
+	tenant: one(tenants, {
+		fields: [wikiPlaces.tenant_id],
+		references: [tenants.id],
+	}),
+	owner: one(agents, {
+		fields: [wikiPlaces.owner_id],
+		references: [agents.id],
+	}),
+	parentPlace: one(wikiPlaces, {
+		relationName: "parent_place",
+		fields: [wikiPlaces.parent_place_id],
+		references: [wikiPlaces.id],
+	}),
+	childPlaces: many(wikiPlaces, { relationName: "parent_place" }),
+	pages: many(wikiPages),
+}));

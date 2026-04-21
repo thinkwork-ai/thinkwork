@@ -11,7 +11,7 @@
  * callbacks are injected by the compiler / backfill caller.
  */
 
-import type { WikiPageType } from "./repository.js";
+import type { WikiPageRow, WikiPageType, WikiPlaceRow } from "./repository.js";
 import type {
 	DerivedParentCandidate,
 	ParentCandidateReason,
@@ -38,6 +38,11 @@ export interface AffectedPage {
 	 * match against `candidate.sourceRecordIds` so we don't link pages that
 	 * happened to be touched for an unrelated reason. */
 	sourceRecordIds: string[];
+	/** Optional pointer into wiki_places. When set, the place-hierarchy
+	 * emitter walks parent_place_id to emit one reference edge per page to
+	 * its immediate parent's backing page. Null / undefined pages are
+	 * skipped by that emitter. */
+	placeId?: string | null;
 }
 
 export interface ParentPageLookupArgs {
@@ -405,6 +410,160 @@ export async function emitDeterministicParentLinks(
 						+ `parent=${parent.id}: ${msg}`,
 				);
 			}
+		}
+	}
+
+	return result;
+}
+
+// ---------------------------------------------------------------------------
+// Place-hierarchy emitter — dedicated path for wiki_places parent edges
+//
+// Walks `wiki_places.parent_place_id` chain for every affected page that
+// carries a `place_id` and emits one reference edge per page to the
+// backing page of its immediate parent place. Bypasses the candidate
+// pipeline (deriveParentCandidates → emitDeterministicParentLinks) by
+// design — hierarchy edges are structural, deterministic, and don't
+// need the leaf-type / precision gates that guard the regex/fuzzy path.
+//
+// See docs/plans/2026-04-21-005-feat-wiki-place-capability-v2-plan.md §R6
+// and §Unit 7.
+// ---------------------------------------------------------------------------
+
+export interface PageWithPlace {
+	id: string;
+	tenant_id: string;
+	owner_id: string;
+	place_id: string | null;
+}
+
+export interface FindPlaceById {
+	(args: {
+		tenantId: string;
+		ownerId: string;
+		id: string;
+	}): Promise<WikiPlaceRow | null>;
+}
+
+export interface FindPageByPlaceId {
+	(args: {
+		tenantId: string;
+		ownerId: string;
+		placeId: string;
+	}): Promise<WikiPageRow | null>;
+}
+
+export interface EmitPlaceHierarchyLinksArgs {
+	scope: { tenantId: string; ownerId: string };
+	affectedPages: PageWithPlace[];
+	findPlaceById: FindPlaceById;
+	findPageByPlaceId: FindPageByPlaceId;
+	/** Returns `true` when a new row was inserted, `false` when the
+	 * ON CONFLICT DO NOTHING path fired (re-run of an already-emitted
+	 * edge). The metric only counts new inserts; otherwise re-runs would
+	 * double-count. */
+	writeLink: (
+		args: WriteLinkArgs & { kind: "reference" },
+	) => Promise<boolean>;
+}
+
+export interface EmitPlaceHierarchyLinksResult {
+	linksWritten: number;
+	emissions: Array<{
+		fromPageId: string;
+		toPageId: string;
+		parentPlaceId: string;
+	}>;
+	skipped: Array<{
+		pageId: string;
+		reason: "no_place_id" | "top_of_hierarchy" | "parent_page_missing";
+	}>;
+}
+
+export async function emitPlaceHierarchyLinks(
+	args: EmitPlaceHierarchyLinksArgs,
+): Promise<EmitPlaceHierarchyLinksResult> {
+	const result: EmitPlaceHierarchyLinksResult = {
+		linksWritten: 0,
+		emissions: [],
+		skipped: [],
+	};
+
+	for (const page of args.affectedPages) {
+		if (!page.place_id) {
+			result.skipped.push({ pageId: page.id, reason: "no_place_id" });
+			continue;
+		}
+
+		let place: WikiPlaceRow | null;
+		try {
+			place = await args.findPlaceById({
+				tenantId: args.scope.tenantId,
+				ownerId: args.scope.ownerId,
+				id: page.place_id,
+			});
+		} catch (err) {
+			console.warn(
+				`[place-hierarchy-linker] findPlaceById failed page=${page.id}: ${(err as Error)?.message ?? err}`,
+			);
+			continue;
+		}
+
+		if (!place?.parent_place_id) {
+			result.skipped.push({ pageId: page.id, reason: "top_of_hierarchy" });
+			continue;
+		}
+
+		let parentPage: WikiPageRow | null;
+		try {
+			parentPage = await args.findPageByPlaceId({
+				tenantId: args.scope.tenantId,
+				ownerId: args.scope.ownerId,
+				placeId: place.parent_place_id,
+			});
+		} catch (err) {
+			console.warn(
+				`[place-hierarchy-linker] findPageByPlaceId failed page=${page.id} parent_place=${place.parent_place_id}: ${(err as Error)?.message ?? err}`,
+			);
+			continue;
+		}
+
+		if (!parentPage) {
+			// The place has a parent_place_id but no page in scope backs
+			// that parent. Shouldn't happen post-Unit-5 (places-service
+			// auto-creates backing pages) — log so the gap is visible.
+			console.warn(
+				`[place-hierarchy-linker] parent_page_missing page=${page.id} parent_place=${place.parent_place_id}`,
+			);
+			result.skipped.push({
+				pageId: page.id,
+				reason: "parent_page_missing",
+			});
+			continue;
+		}
+
+		if (parentPage.id === page.id) continue; // degenerate; shouldn't happen
+
+		const context = `deterministic:place:${place.parent_place_id}`;
+		try {
+			const inserted = await args.writeLink({
+				fromPageId: page.id,
+				toPageId: parentPage.id,
+				context,
+				kind: "reference",
+			});
+			if (inserted) {
+				result.linksWritten += 1;
+				result.emissions.push({
+					fromPageId: page.id,
+					toPageId: parentPage.id,
+					parentPlaceId: place.parent_place_id,
+				});
+			}
+		} catch (err) {
+			console.warn(
+				`[place-hierarchy-linker] writeLink failed page=${page.id} parent=${parentPage.id}: ${(err as Error)?.message ?? err}`,
+			);
 		}
 	}
 

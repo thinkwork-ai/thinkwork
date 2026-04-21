@@ -356,14 +356,33 @@ resource "aws_iam_role_policy" "lambda_ssm_read" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "ssm:GetParameter",
-        "ssm:GetParameters",
-      ]
-      Resource = "arn:aws:ssm:${var.region}:${var.account_id}:parameter/thinkwork/${var.stage}/*"
-    }]
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters",
+        ]
+        Resource = "arn:aws:ssm:${var.region}:${var.account_id}:parameter/thinkwork/${var.stage}/*"
+      },
+      # SecureString parameters (e.g. /thinkwork/<stage>/google-places/api-key)
+      # are encrypted with the default AWS-managed SSM key. The default key's
+      # resource policy auto-grants Decrypt to any IAM principal with
+      # ssm:GetParameter on the parameter via `kms:ViaService = ssm.*`, so
+      # this explicit grant is a belt-and-suspenders clarification. If we
+      # later move to a customer-managed KMS key, this is the scope that
+      # needs updating.
+      {
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "ssm.${var.region}.amazonaws.com"
+          }
+        }
+      },
+    ]
   })
 }
 

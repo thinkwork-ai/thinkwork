@@ -30,6 +30,20 @@ db_password = "CHANGE_ME_strong_password_here"
 # Pre-signup Lambda (optional — leave empty if not using custom pre-signup logic)
 # pre_signup_lambda_zip = "./lambdas/pre-signup.zip"
 
+# Google Places API key (optional — leave empty to run compile pipeline
+# without live place-hierarchy enrichment; records fall back to
+# metadata-only rows and no country/city backing pages are auto-created).
+#
+# When set, terraform creates a SSM SecureString parameter at
+# /thinkwork/<stage>/google-places/api-key and the wiki-compile Lambda
+# reads it on cold start. Alternative: leave blank here and set the key
+# manually after apply via:
+#   aws ssm put-parameter --type SecureString --overwrite \
+#     --name /thinkwork/<stage>/google-places/api-key --value <KEY>
+# (terraform's lifecycle.ignore_changes on the value keeps your manual
+# value from being overwritten on future applies.)
+# google_places_api_key = ""
+
 # Public website (apps/www) custom domain.
 # Leave www_domain empty to skip the custom domain and serve on the raw
 # CloudFront URL. When set, you must also provide cloudflare_zone_id below —

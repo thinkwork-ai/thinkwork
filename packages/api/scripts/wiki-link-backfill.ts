@@ -185,12 +185,13 @@ async function main(): Promise<void> {
 				limit: 5,
 			}),
 		lookupMemorySources: (lookupArgs) => findMemoryUnitPageSources(lookupArgs),
-		upsertPageLink: (linkArgs) =>
-			upsertPageLink({
+		upsertPageLink: async (linkArgs) => {
+			await upsertPageLink({
 				fromPageId: linkArgs.fromPageId,
 				toPageId: linkArgs.toPageId,
 				context: linkArgs.context,
-			}),
+			});
+		},
 		log: (msg) => console.log(msg),
 	});
 
