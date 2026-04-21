@@ -3,9 +3,9 @@ title: "feat: Compile-pipeline link densification (pre-hierarchical)"
 type: feat
 status: active
 date: 2026-04-20
-origin: plans/2026-04-20-001-handoff-mobile-graph-densification-and-dogfood.md
+origin: docs/plans/2026-04-20-013-handoff-mobile-graph-densification-and-dogfood.md
 related:
-  - plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md  # the broader effort this plan unblocks / coordinates with
+  - docs/plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md  # the broader effort this plan unblocks / coordinates with
   - docs/brainstorms/2026-04-19-compounding-memory-hierarchical-aggregation-requirements.md
 ---
 
@@ -21,11 +21,11 @@ This plan adds two **deterministic, LLM-free** link-emission paths to the compil
 2. **Co-mention reference links.** After `applyPlan()` writes sections, read `wiki_section_sources` for this batch's memory_units — whenever a single memory_unit sourced ≥2 distinct active entity pages, emit reciprocal `reference` links between those pages with `context = "co_mention:<memory_unit_id>"` for provenance.
 3. **Backfill.** One-off script that walks existing pages + memory_units and produces the same link set retroactively, idempotent via the existing `(from_page_id, to_page_id, kind)` unique index.
 
-Scope is deliberately a **pre-hierarchical quick win**. The broader hierarchical aggregation plan (`plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md`, 0/8 done) is the canonical long-term answer — section promotion scoring, `parent_page_id` column, pg_trgm fuzzy dedupe, duplicate-candidate metric. This plan is a strict subset that ships densification now without pre-empting any of that work.
+Scope is deliberately a **pre-hierarchical quick win**. The broader hierarchical aggregation plan (`docs/plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md`, 0/8 done) is the canonical long-term answer — section promotion scoring, `parent_page_id` column, pg_trgm fuzzy dedupe, duplicate-candidate metric. This plan is a strict subset that ships densification now without pre-empting any of that work.
 
 ## Problem Frame
 
-See origin: [`plans/2026-04-20-001-handoff-mobile-graph-densification-and-dogfood.md`](2026-04-20-001-handoff-mobile-graph-densification-and-dogfood.md) (PR #284 — queued).
+See origin: [`docs/plans/2026-04-20-013-handoff-mobile-graph-densification-and-dogfood.md`](2026-04-20-013-handoff-mobile-graph-densification-and-dogfood.md) (PR #284 — queued).
 
 The mobile graph viewer shipped 2026-04-19 and renders what's in `wiki_page_links`. On dev the link density per agent is:
 
@@ -67,10 +67,10 @@ Investigation run on 2026-04-20 refines the origin's four hypotheses:
 
 ### Out of scope — actively deferred
 
-- **Section promotion scoring** — owned by `plans/2026-04-19-002` Unit 4.
-- **`parent_page_id` structural column on `wiki_pages`** — owned by `plans/2026-04-19-002` Decision 2.
-- **Fuzzy alias dedupe (pg_trgm 0.85)** — owned by `plans/2026-04-19-002` Unit 2. This plan only uses exact-title match.
-- **Emitting `parent_of`/`child_of` deterministically** — this plan emits only `reference` kind. Structural parent/child remains the aggregation planner's call. (Opens a deferred upgrade path: when `plans/2026-04-19-002` lands, the same deterministic candidates can upgrade to `child_of` under its composite score gate.)
+- **Section promotion scoring** — owned by `docs/plans/2026-04-19-002` Unit 4.
+- **`parent_page_id` structural column on `wiki_pages`** — owned by `docs/plans/2026-04-19-002` Decision 2.
+- **Fuzzy alias dedupe (pg_trgm 0.85)** — owned by `docs/plans/2026-04-19-002` Unit 2. This plan only uses exact-title match.
+- **Emitting `parent_of`/`child_of` deterministically** — this plan emits only `reference` kind. Structural parent/child remains the aggregation planner's call. (Opens a deferred upgrade path: when `docs/plans/2026-04-19-002` lands, the same deterministic candidates can upgrade to `child_of` under its composite score gate.)
 - **Cross-agent / cross-tenant linking** — scope stays `(tenant_id, owner_id)` per scoping PRD.
 - **Graph viewer or mobile UI changes.** The viewer is correct given denser data.
 - **User-node linking** (H3) — revisit after dogfood.
@@ -78,7 +78,7 @@ Investigation run on 2026-04-20 refines the origin's four hypotheses:
 
 ### Deferred to Separate Tasks
 
-- **Hierarchical aggregation** (`plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md`) — active, 0/8 units. This densification plan is a precursor that does not block or replace it.
+- **Hierarchical aggregation** (`docs/plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md`) — active, 0/8 units. This densification plan is a precursor that does not block or replace it.
 - **Gap-sweep of 4 GiGi ideas lost to retain timeouts during bootstrap** — trivial, separate follow-up.
 
 ## Context & Research
@@ -93,10 +93,10 @@ Investigation run on 2026-04-20 refines the origin's four hypotheses:
 
 ### Institutional Learnings
 
-- [`plans/compounding-memory-hierarchical-aggregation-plan.md`](compounding-memory-hierarchical-aggregation-plan.md) — rejects "section-to-page promotion on link count alone"; links without the composite 5-signal score are not compounding. This plan honors that by **only emitting `reference` kind**, leaving structural `parent_of` to the composite-scored aggregation pass.
-- [`plans/archived/wiki-compiler-memory-layer.md`](archived/wiki-compiler-memory-layer.md) — no-stub-page regression test: cannot create placeholder pages to hang links on. This plan writes links only when both endpoints are existing active pages.
-- [`plans/archived/compounding-memory-aggregation-research-memo.md`](archived/compounding-memory-aggregation-research-memo.md) — Rec 4/5: metadata-driven candidates are the right lane, but links alone aren't compounding. Mitigation: ship the `duplicate_candidates` metric in the same PR so false positives are observable.
-- [`plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md`](2026-04-19-002-feat-hierarchical-aggregation-plan.md) Decision 7 — v1 coherence signal is Jaccard tag overlap + shared-metadata majority share + pg_trgm 0.85 + type-mismatch gate. This plan borrows the **type-mismatch gate** verbatim; it does NOT adopt Jaccard/composite scoring (that stays with the broader plan).
+- [`docs/plans/archived/compounding-memory-hierarchical-aggregation-plan.md`](archived/compounding-memory-hierarchical-aggregation-plan.md) — rejects "section-to-page promotion on link count alone"; links without the composite 5-signal score are not compounding. This plan honors that by **only emitting `reference` kind**, leaving structural `parent_of` to the composite-scored aggregation pass.
+- [`docs/plans/archived/wiki-compiler-memory-layer.md`](archived/wiki-compiler-memory-layer.md) — no-stub-page regression test: cannot create placeholder pages to hang links on. This plan writes links only when both endpoints are existing active pages.
+- [`docs/plans/archived/compounding-memory-aggregation-research-memo.md`](archived/compounding-memory-aggregation-research-memo.md) — Rec 4/5: metadata-driven candidates are the right lane, but links alone aren't compounding. Mitigation: ship the `duplicate_candidates` metric in the same PR so false positives are observable.
+- [`docs/plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md`](2026-04-19-002-feat-hierarchical-aggregation-plan.md) Decision 7 — v1 coherence signal is Jaccard tag overlap + shared-metadata majority share + pg_trgm 0.85 + type-mismatch gate. This plan borrows the **type-mismatch gate** verbatim; it does NOT adopt Jaccard/composite scoring (that stays with the broader plan).
 
 ### Prior Art and Borrowed Patterns
 
@@ -128,7 +128,7 @@ The [compound-engineering-plugin](https://github.com/EveryInc/compound-engineeri
 
 ## Key Technical Decisions
 
-- **Deterministic parent links emit only `reference` kind in v1.** Upgrading to `child_of` requires the composite coherence score owned by the hierarchical aggregation plan. This keeps the precision bar high and leaves room for `plans/2026-04-19-002` to upgrade existing rows later.
+- **Deterministic parent links emit only `reference` kind in v1.** Upgrading to `child_of` requires the composite coherence score owned by the hierarchical aggregation plan. This keeps the precision bar high and leaves room for `docs/plans/2026-04-19-002` to upgrade existing rows later.
 - **Emission gate = ALL must hold:**
   1. `parent-expander` returned the candidate with `reason ∈ {"city","journal"}` (strongest signals) — `tag_cluster` deferred to v2.
   2. An **exact-title** active wiki page exists for `parentTitle` in the same `(tenant_id, owner_id)` scope.
@@ -156,7 +156,7 @@ The [compound-engineering-plugin](https://github.com/EveryInc/compound-engineeri
 
 ### Deferred to Implementation
 
-- **Exact fuzzy-match policy for parent titles.** v1 uses exact match + slug equality. Trigram match lives with `plans/2026-04-19-002`.
+- **Exact fuzzy-match policy for parent titles.** v1 uses exact match + slug equality. Trigram match lives with `docs/plans/2026-04-19-002`.
 - **Co-mention cap tuning.** 10 is a starting point; Unit 5 metrics will inform adjustment.
 - **Precision monitoring.** If `duplicate_candidates_count` rises >10% post-rollout (R5) or dev smoke shows obviously-wrong edges, add a `wiki_comention_pending` table in v1.1 to implement the ≥2-memory frequency gate with proper schema. Rollback path is the `context LIKE 'co_mention:%'` DELETE.
 - **Backfill chunking strategy.** Aurora query planner details (ordering, LIMIT, cursor vs offset) decided at implementation time.
@@ -410,7 +410,7 @@ compile (per memory batch)
 |------|------------|
 | Deterministic emission creates wrong `reference` links when two agents independently have a "Paris" topic (doesn't happen today — scope isolation) | Each lookup is scoped by `(tenant_id, owner_id)`; unit test asserts cross-scope leakage is impossible. |
 | Co-mention explosion when planner emits 20 pageLinks for a single memory_unit | Per-memory cap of 10 directed edges, deterministic ordering for truncation repeatability. |
-| Title case mismatch (`Paris` vs `paris, france`) causes low recall | Accepted for v1 — fuzzy match is `plans/2026-04-19-002` scope. Measurable via baseline reporter: if R1 not met on exact-match alone, escalate to that plan rather than adding fuzzy here. |
+| Title case mismatch (`Paris` vs `paris, france`) causes low recall | Accepted for v1 — fuzzy match is `docs/plans/2026-04-19-002` scope. Measurable via baseline reporter: if R1 not met on exact-match alone, escalate to that plan rather than adding fuzzy here. |
 | Backfill writes the same rows live compile would write, duplicate work | No — unique index makes the intersection a no-op. |
 | `duplicate_candidates_count` rises (false-positive hubs) | R5 gate in the acceptance check. If exceeded, flip the flag off, revert via SQL `DELETE … WHERE context LIKE 'deterministic:%'` — clean rollback because `context` tags provenance. |
 | Compile latency regression | Per-memory-unit overhead is O(candidates × log(pages)) for exact lookup; empirically <5ms extra per memory on dev. R7 gate enforced by Unit 5 metrics. |
@@ -419,17 +419,17 @@ compile (per memory batch)
 ## Documentation / Operational Notes
 
 - Add one entry to `docs/solutions/` capturing the diagnostic — "aggregation pass runs but section_promoted stays null, so structural links rely on `setParentPage()` which never fires." Keeps the learning discoverable.
-- Update `plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md` with a one-line cross-reference noting this plan's deterministic linker as the upgrade target when Unit 4 of that plan lands.
+- Update `docs/plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md` with a one-line cross-reference noting this plan's deterministic linker as the upgrade target when Unit 4 of that plan lands.
 - Rollout: ship Units 1-3 together (no behavior change until flag on), flip the flag on dev, run Unit 4 backfill once, observe R1/R2/R3/R5 for 24h, then flip the flag on staging/prod.
 - Kill-switch: `WIKI_DETERMINISTIC_LINKING_ENABLED=false` via terraform (not `aws lambda update-function-configuration` per feedback memory `graphql_deploy_via_pr`).
 
 ## Sources & References
 
-- **Origin document:** [`plans/2026-04-20-001-handoff-mobile-graph-densification-and-dogfood.md`](2026-04-20-001-handoff-mobile-graph-densification-and-dogfood.md) (PR #284 — queued)
-- **Canonical long-term plan:** [`plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md`](2026-04-19-002-feat-hierarchical-aggregation-plan.md)
+- **Origin document:** [`docs/plans/2026-04-20-013-handoff-mobile-graph-densification-and-dogfood.md`](2026-04-20-013-handoff-mobile-graph-densification-and-dogfood.md) (PR #284 — queued)
+- **Canonical long-term plan:** [`docs/plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md`](2026-04-19-002-feat-hierarchical-aggregation-plan.md)
 - **Requirements origin:** [`docs/brainstorms/2026-04-19-compounding-memory-hierarchical-aggregation-requirements.md`](../docs/brainstorms/2026-04-19-compounding-memory-hierarchical-aggregation-requirements.md)
-- **Research memo (archived):** [`plans/archived/compounding-memory-aggregation-research-memo.md`](archived/compounding-memory-aggregation-research-memo.md)
-- **No-stub-page regression precedent:** [`plans/archived/wiki-compiler-memory-layer.md`](archived/wiki-compiler-memory-layer.md)
+- **Research memo (archived):** [`docs/plans/archived/compounding-memory-aggregation-research-memo.md`](archived/compounding-memory-aggregation-research-memo.md)
+- **No-stub-page regression precedent:** [`docs/plans/archived/wiki-compiler-memory-layer.md`](archived/wiki-compiler-memory-layer.md)
 - **Code surfaces:** `packages/api/src/lib/wiki/{compiler,repository,parent-expander,aliases}.ts`, `packages/database-pg/src/schema/wiki.ts`
 - **Related PRs:** #264 (linkify body), #272 (env-var terraform pinning), #275 (journal-import-resume script)
 - **Diagnostic queries + pre-change measurements:** inline in Problem Frame above, investigation run 2026-04-20

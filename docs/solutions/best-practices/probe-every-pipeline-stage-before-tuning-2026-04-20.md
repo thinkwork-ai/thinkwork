@@ -28,7 +28,7 @@ related_components:
 
 ## Context
 
-The 2026-04-20 handoff plan (`plans/2026-04-20-005-handoff-compile-reliability-and-read-surfaces.md`, item #2) flagged `links_written_deterministic = 0` on Marco's 221-page wiki corpus. The plan's hypothesis was crisp and plausible: the pg_trgm fuzzy-title similarity gate (`FUZZY_ALIAS_THRESHOLD = 0.85`) was too strict because `similarity("Paris", "Paris, France") ≈ 0.45`. Recommended fix: lower `PARENT_TITLE_FUZZY_THRESHOLD` to ~0.55 and ship.
+The 2026-04-20 handoff plan (`docs/plans/2026-04-20-017-handoff-compile-reliability-and-read-surfaces.md`, item #2) flagged `links_written_deterministic = 0` on Marco's 221-page wiki corpus. The plan's hypothesis was crisp and plausible: the pg_trgm fuzzy-title similarity gate (`FUZZY_ALIAS_THRESHOLD = 0.85`) was too strict because `similarity("Paris", "Paris, France") ≈ 0.45`. Recommended fix: lower `PARENT_TITLE_FUZZY_THRESHOLD` to ~0.55 and ship.
 
 The trap: this is a four-stage pipeline (candidate derivation → exact lookup → fuzzy lookup → precision gate), and a zero at the end can come from ANY stage. Tuning the last knob first would have "fixed" the symptom with a false fix — recovering ~1 link instead of the 14 actually available, while silently admitting false positives like `"Toronto" → "Toronto Life"` (a magazine).
 
@@ -106,6 +106,6 @@ The table tells you which stage is empty before you touch any knob.
 ## Related
 
 - `docs/solutions/logic-errors/compile-continuation-dedupe-bucket-2026-04-20.md` — sibling wiki-compile pipeline learning (continuation bucket math + `ON CONFLICT DO NOTHING` swallowing failures). Complementary: same module, different stage, same "surface metric hid an upstream failure" shape.
-- `plans/2026-04-20-005-handoff-compile-reliability-and-read-surfaces.md` — the handoff plan whose item-#2 hypothesis this audit invalidated.
+- `docs/plans/2026-04-20-017-handoff-compile-reliability-and-read-surfaces.md` — the handoff plan whose item-#2 hypothesis this audit invalidated.
 - PR [#311](https://github.com/thinkwork-ai/thinkwork/pull/311) — the fix that landed after the audit ran.
 - Auto-memory: `feedback_verify_wire_format_empirically.md`, `feedback_read_diagnostic_logs_literally.md` — sibling methodology heuristics.

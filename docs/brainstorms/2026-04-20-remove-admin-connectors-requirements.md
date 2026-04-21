@@ -54,7 +54,7 @@ Continuing to ship the page is strictly negative: tenants see a broken admin sur
 - **Out of scope: any new replacement UI.** The current external-task ingress surface is being retired — see Key Decisions for the framing.
 - **Out of scope: generic webhook admin** (`webhooks-admin.ts` and the `/webhooks` admin route) — that surface is unrelated and stays.
 - **Out of scope:** `seeds/eval-test-cases/*.json` references to "connectors" — scenario fixtures, not runtime.
-- **Out of scope:** archived plans under `plans/archived/` — historical, stay as-is.
+- **Out of scope:** archived plans under `docs/plans/archived/` — historical, stay as-is.
 
 ## Key Decisions
 

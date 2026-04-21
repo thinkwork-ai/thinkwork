@@ -3,9 +3,9 @@ title: "Handoff: compile reliability + read surfaces (post-Marco-rebuild)"
 type: handoff
 status: open
 date: 2026-04-20
-parent_plan: plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md
+parent_plan: docs/plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md
 related:
-  - plans/2026-04-20-002-feat-compile-link-densification-plan.md
+  - docs/plans/2026-04-20-014-feat-compile-link-densification-plan.md
   - docs/solutions/logic-errors/compile-continuation-dedupe-bucket-2026-04-20.md
 ---
 
@@ -13,7 +13,7 @@ related:
 
 ## Read this first
 
-The 2026-04-20 session shipped **10 PRs** to land Phase 1 + Phase 2 + Phase 3 PR A of `plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md` (the hierarchical-aggregation plan). Refreshed plan status — what's still open vs what shipped — lives at the top of that file in its "Implementation Status (2026-04-20 refresh)" section. **Read that section before doing anything else.**
+The 2026-04-20 session shipped **10 PRs** to land Phase 1 + Phase 2 + Phase 3 PR A of `docs/plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md` (the hierarchical-aggregation plan). Refreshed plan status — what's still open vs what shipped — lives at the top of that file in its "Implementation Status (2026-04-20 refresh)" section. **Read that section before doing anything else.**
 
 Outcome: Marco's wiki was wiped and rebuilt from scratch via bootstrap_import continuation chain. Final dev state — **221 active pages, 336 reference links, 72.9% linked, 0 cross-type duplicate titles, 8 continuation hops executed cleanly before the chain tripped on unrelated Bedrock flakes**.
 
@@ -151,7 +151,7 @@ If (2), either the expander needs additional metadata fields or the records them
 
 Compounding Memory is now observably real in the database — 221 Marco pages, 336 reference links, parent/child hierarchy — but the mobile app only surfaces a flat page list and a force-graph. Users can't see the compounding relationships. This is the highest user-visible payoff remaining in the hierarchical-aggregation plan.
 
-### Scope (per Unit 8 of `plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md`)
+### Scope (per Unit 8 of `docs/plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md`)
 
 **GraphQL layer** — add field resolvers in `packages/api/src/graphql/resolvers/wiki/`:
 
@@ -199,7 +199,7 @@ Lower urgency than #1–#3 because:
 - Mention-backed hub creation is a *nice-to-have* for compounding; the compile pipeline works without it today.
 - Pattern-wise, once Unit 8 surfaces mention counts in the mobile UI, a user can eyeball whether clusters are worth promoting manually via the admin `compileWikiNow`.
 
-### Scope (per Unit 6 of `plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md`)
+### Scope (per Unit 6 of `docs/plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md`)
 
 - Extend the `cluster` jsonb to carry `supporting_record_ids`, `candidate_canonical_titles`, `cluster_summary`, `ambiguity_notes`. No migration needed — it's already a jsonb column.
 - Aggregation planner emits `mentionClusterEnrichments[]` when a cluster has ≥ 3 entries and `last_seen_at` is within 30 days.
@@ -242,7 +242,7 @@ From prior sessions, treat as load-bearing for this work:
 ## Starting command
 
 ```text
-/ce:work plans/2026-04-20-005-handoff-compile-reliability-and-read-surfaces.md
+/ce:work docs/plans/2026-04-20-017-handoff-compile-reliability-and-read-surfaces.md
 ```
 
-Pick the next subsection based on scope + appetite. All four items are independent — can ship in any order. If context is tight, `/ce:work` with a specific pointer like `plans/2026-04-20-005-handoff…#1-bedrock-retry-wrapper` still reads the section cleanly.
+Pick the next subsection based on scope + appetite. All four items are independent — can ship in any order. If context is tight, `/ce:work` with a specific pointer like `docs/plans/2026-04-20-005-handoff…#1-bedrock-retry-wrapper` still reads the section cleanly.

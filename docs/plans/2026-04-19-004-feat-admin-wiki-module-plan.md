@@ -9,7 +9,7 @@ date: 2026-04-19
 
 ## Overview
 
-Reverse the key product decision from `plans/2026-04-19-003-refactor-admin-wiki-graph-plan.md`: the compiled-wiki graph should live in its own top-level module, not replace the Hindsight-backed Memories graph. Memories returns to exactly what it is today (entity+cooccurrence graph over Hindsight). A new Wiki module ships next to it in the sidebar, reusing the already-built `WikiGraph` component and introducing a wiki-page list view that mirrors the Memories list.
+Reverse the key product decision from `docs/plans/2026-04-19-003-refactor-admin-wiki-graph-plan.md`: the compiled-wiki graph should live in its own top-level module, not replace the Hindsight-backed Memories graph. Memories returns to exactly what it is today (entity+cooccurrence graph over Hindsight). A new Wiki module ships next to it in the sidebar, reusing the already-built `WikiGraph` component and introducing a wiki-page list view that mirrors the Memories list.
 
 Three-page-type semantics become visible in the UI:
 - **Entity** → blue
@@ -329,7 +329,7 @@ The wiki backend is already built and visible in the admin via plan 003: resolve
 
 ## Sources & References
 
-- Immediate predecessor plan: [plans/2026-04-19-003-refactor-admin-wiki-graph-plan.md](./2026-04-19-003-refactor-admin-wiki-graph-plan.md) — whose Unit 4 wiring this plan partially reverts.
-- Architectural anchor: [plans/archived/wiki-compiler-memory-layer.md](archived/wiki-compiler-memory-layer.md).
-- Related in-flight work (untouched): [plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md](./2026-04-19-002-feat-hierarchical-aggregation-plan.md).
+- Immediate predecessor plan: [docs/plans/2026-04-19-003-refactor-admin-wiki-graph-plan.md](./2026-04-19-003-refactor-admin-wiki-graph-plan.md) — whose Unit 4 wiring this plan partially reverts.
+- Architectural anchor: [docs/plans/archived/wiki-compiler-memory-layer.md](archived/wiki-compiler-memory-layer.md).
+- Related in-flight work (untouched): [docs/plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md](./2026-04-19-002-feat-hierarchical-aggregation-plan.md).
 - Pattern references: `apps/admin/src/routes/_authed/_tenant/memory/index.tsx`, `apps/admin/src/components/WikiGraph.tsx`, `apps/admin/src/components/Sidebar.tsx`, `packages/api/src/graphql/resolvers/memory/recentWikiPages.query.ts`, `packages/api/src/graphql/resolvers/wiki/wikiSearch.query.ts`.

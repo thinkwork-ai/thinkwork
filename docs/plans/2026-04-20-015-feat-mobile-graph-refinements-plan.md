@@ -4,7 +4,7 @@ type: feat
 status: shipped-with-divergence
 date: 2026-04-20
 shipped: 2026-04-20
-origin: plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md
+origin: docs/plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md
 ---
 
 # feat: Mobile graph refinements (fit-to-view + detail-screen tap + subgraph-in-detail + icon swap)
@@ -57,7 +57,7 @@ All four planned units shipped on a single branch (`feat/mobile-graph-fit-to-vie
 
 ## Overview
 
-Four bounded refinements to the v1 Wiki force-graph viewer (shipped 2026-04-20 per `plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md`). Mobile-only. No new backend. Two visual polish units, one new surface on the detail screen, one icon swap.
+Four bounded refinements to the v1 Wiki force-graph viewer (shipped 2026-04-20 per `docs/plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md`). Mobile-only. No new backend. Two visual polish units, one new surface on the detail screen, one icon swap.
 
 ## Problem Frame
 
@@ -77,7 +77,7 @@ Real-device feedback on the shipped graph surfaced four UX gaps:
 - Swap both toggle icons (home tab + detail screen) to `IconTopologyStar3`.
 
 **Out of scope.**
-- Compile-side link densification (owned by `plans/2026-04-20-002-feat-compile-link-densification-plan.md`).
+- Compile-side link densification (owned by `docs/plans/2026-04-20-014-feat-compile-link-densification-plan.md`).
 - Node pinning, temporal scrub, LOD labels, edge tap — still parked per the parent plan.
 - Any backend / schema change. 1-hop neighborhood is derived client-side from the existing `wikiGraph` payload.
 - Web target: all four units are `apps/mobile` only.
@@ -259,7 +259,7 @@ Straightforward polish work. No test-first requirement — unit-level tests for 
 
 ## Patterns and References
 
-- Existing force-graph architecture: `plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md` §"What shipped".
+- Existing force-graph architecture: `docs/plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md` §"What shipped".
 - `DetailLayout.headerRight` usage: any `apps/mobile/app/settings/**` screen that passes a header-right button.
 - Reanimated `withTiming` + `cancelAnimation` — standard patterns; see `react-native-reanimated` v4 docs.
 - Tabler icon usage: `apps/mobile/components/wiki/WikiList.tsx` (`IconBrain`), `apps/mobile/components/chat/ChatScreen.tsx` (`IconHistory`).

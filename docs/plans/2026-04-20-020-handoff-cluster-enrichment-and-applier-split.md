@@ -3,9 +3,9 @@ title: "Handoff: Unit 6 mention cluster enrichment + applier split (fresh sessio
 type: handoff
 status: open
 date: 2026-04-20
-parent_plan: plans/2026-04-20-007-handoff-cluster-enrichment-and-validation.md
+parent_plan: docs/plans/2026-04-20-019-handoff-cluster-enrichment-and-validation.md
 related:
-  - plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md
+  - docs/plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md
   - docs/solutions/best-practices/probe-every-pipeline-stage-before-tuning-2026-04-20.md
 ---
 
@@ -13,7 +13,7 @@ related:
 
 ## Read this first
 
-The 2026-04-20 fourth session closed out handoff items **#1** (validated #318 live-compile wiring on Marco) and **#3** (`wikiBacklinks` dedup). Supersedes `plans/2026-04-20-007-handoff-cluster-enrichment-and-validation.md`. Starting a **fresh session** for Unit 6 is recommended — it's the biggest remaining plan item and benefits from a cold context + a 15-min `/ce:brainstorm` before writing code.
+The 2026-04-20 fourth session closed out handoff items **#1** (validated #318 live-compile wiring on Marco) and **#3** (`wikiBacklinks` dedup). Supersedes `docs/plans/2026-04-20-019-handoff-cluster-enrichment-and-validation.md`. Starting a **fresh session** for Unit 6 is recommended — it's the biggest remaining plan item and benefits from a cold context + a 15-min `/ce:brainstorm` before writing code.
 
 ### What shipped across the 2026-04-20 sessions (8 PRs total)
 
@@ -62,7 +62,7 @@ Mention clusters are where **"I've mentioned 'Taberna do Pescador' 4 times acros
 
 After today's work (read surfaces in #312, summary-expander wiring in #318, backlinks dedup in #320), mobile users can now see the compounding graph. Cluster-backed topic promotion would unlock a new class of hub creation that today requires operator-driven `compileWikiNow` + LLM-planner prompting.
 
-### Scope (per Unit 6 of `plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md`)
+### Scope (per Unit 6 of `docs/plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md`)
 
 - Extend the `cluster` jsonb to carry:
   - `supporting_record_ids: string[]`
@@ -147,7 +147,7 @@ Suggested approach: seed 3–4 fake `wiki_unresolved_mentions` rows on Cruz with
 
 ### Execution note
 
-`applyAggregationPlan` is **1300+ lines** in `compiler.ts`. Original aggregation plan (`plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md` Unit 4) called for a separate `aggregation-applier.ts` module. **Strong candidate to split as PART OF this PR** since cluster-promotion logic would add another 100–200 lines to the already-oversized function. See #2 below.
+`applyAggregationPlan` is **1300+ lines** in `compiler.ts`. Original aggregation plan (`docs/plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md` Unit 4) called for a separate `aggregation-applier.ts` module. **Strong candidate to split as PART OF this PR** since cluster-promotion logic would add another 100–200 lines to the already-oversized function. See #2 below.
 
 ---
 
@@ -197,7 +197,7 @@ Still open. `wiki_unresolved_mentions.promoted_page_id_wiki_pages_id_fk` blocks 
 ## Starting command
 
 ```text
-/ce:work plans/2026-04-20-008-handoff-cluster-enrichment-and-applier-split.md
+/ce:work docs/plans/2026-04-20-020-handoff-cluster-enrichment-and-applier-split.md
 ```
 
 ### Recommended approach

@@ -61,7 +61,7 @@ The display components in `apps/mobile/components/memory/` (`CapturesList`, `Wik
 
 ### Institutional Learnings
 
-- `plans/2026-04-19-003-refactor-admin-wiki-graph-plan.md` (active) mirrors the same "memory label is stale, swap to wiki" framing on the admin side. Same terminology split (raw = memory, compiled = wiki) should be respected here.
+- `docs/plans/2026-04-19-003-refactor-admin-wiki-graph-plan.md` (active) mirrors the same "memory label is stale, swap to wiki" framing on the admin side. Same terminology split (raw = memory, compiled = wiki) should be respected here.
 
 ### External References
 
@@ -244,5 +244,5 @@ The display components in `apps/mobile/components/memory/` (`CapturesList`, `Wik
 ## Sources & References
 
 - Related code: `apps/mobile/app/(tabs)/index.tsx`, `apps/mobile/components/memory/*`, `apps/mobile/app/memory/*`, `apps/mobile/app/wiki/[type]/[slug].tsx`, `packages/react-native-sdk/src/hooks/use-mobile-memory-search.ts`, `packages/react-native-sdk/src/hooks/use-capture-mobile-memory.ts`.
-- Related plans: `plans/2026-04-19-003-refactor-admin-wiki-graph-plan.md` (same wiki-vs-memory disambiguation on admin).
+- Related plans: `docs/plans/2026-04-19-003-refactor-admin-wiki-graph-plan.md` (same wiki-vs-memory disambiguation on admin).
 - Mobile test harness: local iOS simulator build + existing EAS TestFlight pipeline.

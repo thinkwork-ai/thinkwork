@@ -3,14 +3,14 @@ title: "Handoff: mobile wiki graph — dogfood + compile-pipeline densification"
 type: handoff
 status: open
 date: 2026-04-20
-parent_plan: plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md
+parent_plan: docs/plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md
 ---
 
 # Handoff: mobile wiki graph — dogfood + compile-pipeline densification
 
 ## Read this first
 
-The mobile wiki force-graph viewer **shipped** to TestFlight on 2026-04-19 (UTC 2026-04-20). All 8 PRs in the original effort are in main. Authoritative summary of what shipped + what diverged from the plan is at the top of [`plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md`](2026-04-19-006-feat-mobile-wiki-force-graph-plan.md) under **"Post-Implementation Status (2026-04-20)"** — read that section before doing anything else.
+The mobile wiki force-graph viewer **shipped** to TestFlight on 2026-04-19 (UTC 2026-04-20). All 8 PRs in the original effort are in main. Authoritative summary of what shipped + what diverged from the plan is at the top of [`docs/plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md`](2026-04-19-006-feat-mobile-wiki-force-graph-plan.md) under **"Post-Implementation Status (2026-04-20)"** — read that section before doing anything else.
 
 This handoff covers two follow-ups that **were not built** during the initial effort:
 
@@ -193,10 +193,10 @@ Then open the plan doc, get review, **then** ship.
 ## References
 
 **Plans / docs**
-- Parent plan (post-impl status): [`plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md`](2026-04-19-006-feat-mobile-wiki-force-graph-plan.md)
-- Original PRD: [`plans/compounding-memory-mobile-memories-force-graph.md`](compounding-memory-mobile-memories-force-graph.md)
-- Sibling: [`plans/2026-04-19-003-refactor-admin-wiki-graph-plan.md`](2026-04-19-003-refactor-admin-wiki-graph-plan.md)
-- Hierarchical aggregation (related compile work): [`plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md`](2026-04-19-002-feat-hierarchical-aggregation-plan.md)
+- Parent plan (post-impl status): [`docs/plans/2026-04-19-006-feat-mobile-wiki-force-graph-plan.md`](2026-04-19-006-feat-mobile-wiki-force-graph-plan.md)
+- Original PRD: [`docs/plans/archived/compounding-memory-mobile-memories-force-graph.md`](archived/compounding-memory-mobile-memories-force-graph.md)
+- Sibling: [`docs/plans/2026-04-19-003-refactor-admin-wiki-graph-plan.md`](2026-04-19-003-refactor-admin-wiki-graph-plan.md)
+- Hierarchical aggregation (related compile work): [`docs/plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md`](2026-04-19-002-feat-hierarchical-aggregation-plan.md)
 
 **Shipped PRs (mobile graph effort)**
 - #273 Unit 1 — scaffold + camera + theme + Skia + Inter

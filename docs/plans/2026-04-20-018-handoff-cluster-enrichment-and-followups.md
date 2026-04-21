@@ -3,16 +3,16 @@ title: "Handoff: mention cluster enrichment + Marco follow-ups"
 type: handoff
 status: open
 date: 2026-04-20
-parent_plan: plans/2026-04-20-005-handoff-compile-reliability-and-read-surfaces.md
+parent_plan: docs/plans/2026-04-20-017-handoff-compile-reliability-and-read-surfaces.md
 related:
-  - plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md
+  - docs/plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md
 ---
 
 # Handoff: mention cluster enrichment + Marco follow-ups
 
 ## Read this first
 
-The 2026-04-20 second session closed out items #1, #2, and #3 from the prior handoff (`plans/2026-04-20-005-handoff-compile-reliability-and-read-surfaces.md`). Three PRs merged in sequence:
+The 2026-04-20 second session closed out items #1, #2, and #3 from the prior handoff (`docs/plans/2026-04-20-017-handoff-compile-reliability-and-read-surfaces.md`). Three PRs merged in sequence:
 
 | PR | What |
 |---|---|
@@ -51,7 +51,7 @@ Mention clusters are where "I've mentioned 'Taberna do Pescador' 4 times across 
 
 After #312, mobile surfaces show "Contributes to:" chips for memories and children/parent hierarchy for pages — but cluster-backed topic pages would unlock a new hub-creation flow that today requires operator-driven `compileWikiNow` + LLM-planner prompting.
 
-### Scope (per Unit 6 of `plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md`)
+### Scope (per Unit 6 of `docs/plans/2026-04-19-002-feat-hierarchical-aggregation-plan.md`)
 
 - Extend the `cluster` jsonb to carry:
   - `supporting_record_ids: string[]`
@@ -198,7 +198,7 @@ Same load-bearing feedback memos as the prior handoff:
 ## Starting command
 
 ```text
-/ce:work plans/2026-04-20-006-handoff-cluster-enrichment-and-followups.md
+/ce:work docs/plans/2026-04-20-018-handoff-cluster-enrichment-and-followups.md
 ```
 
 Pick the next subsection based on appetite. All four items are independent:
