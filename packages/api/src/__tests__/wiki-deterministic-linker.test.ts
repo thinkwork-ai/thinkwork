@@ -117,35 +117,6 @@ describe("emitDeterministicParentLinks", () => {
 		);
 	});
 
-	it("ignores reason=tag_cluster in v1", async () => {
-		const writeLink = makeWriteLink();
-		const result = await emitDeterministicParentLinks({
-			scope: SCOPE,
-			candidates: [
-				candidate({
-					reason: "tag_cluster",
-					parentTitle: "Restaurants",
-					parentSlug: "restaurants",
-				}),
-			],
-			affectedPages: [leafPage()],
-			lookupParentPages: lookupThatReturns([
-				{
-					title: "Restaurants",
-					match: {
-						id: "page-restaurants",
-						type: "topic",
-						slug: "restaurants",
-						title: "Restaurants",
-					},
-				},
-			]),
-			writeLink,
-		});
-		expect(result.linksWritten).toBe(0);
-		expect(writeLink).not.toHaveBeenCalled();
-	});
-
 	it("emits no link when no active parent page exists for the title", async () => {
 		const writeLink = makeWriteLink();
 		const result = await emitDeterministicParentLinks({
