@@ -35,8 +35,11 @@ import {
 // Workspace Files Card
 // ---------------------------------------------------------------------------
 
-const API_URL = import.meta.env.VITE_API_URL || "";
-const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
+import {
+  getWorkspaceFile,
+  listWorkspaceFiles,
+  putWorkspaceFile,
+} from "@/lib/workspace-files-api";
 
 const WORKSPACE_FILE_DESCRIPTIONS: Record<string, string> = {
   "SOUL.md": "Core personality, values, and behavioral guidelines",
@@ -46,20 +49,8 @@ const WORKSPACE_FILE_DESCRIPTIONS: Record<string, string> = {
   "TOOLS.md": "Tool usage preferences and instructions",
 };
 
-async function workspaceApi(body: Record<string, unknown>) {
-  const res = await fetch(`${API_URL}/internal/workspace-files`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`Workspace API: ${res.status}`);
-  return res.json();
-}
-
-export function WorkspaceFilesCard({ tenantSlug, instanceId }: { tenantSlug: string; instanceId: string }) {
+export function WorkspaceFilesCard({ agentId }: { agentId: string }) {
+  const target = { agentId };
   const [files, setFiles] = useState<string[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [openFile, setOpenFile] = useState<string | null>(null);
@@ -70,23 +61,21 @@ export function WorkspaceFilesCard({ tenantSlug, instanceId }: { tenantSlug: str
   const [editValue, setEditValue] = useState("");
   const [generating, setGenerating] = useState(false);
 
-  // List workspace files from S3
+  // List workspace files (composed view).
   useEffect(() => {
-    if (!tenantSlug || !instanceId) return;
     setLoadingFiles(true);
-    workspaceApi({ action: "list", tenantSlug, instanceId })
-      .then((data) => setFiles(data.files ?? []))
+    listWorkspaceFiles(target)
+      .then((data) => setFiles(data.files.map((f) => f.path)))
       .catch(console.error)
       .finally(() => setLoadingFiles(false));
-  }, [tenantSlug, instanceId]);
+  }, [agentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleOpen = async (fileName: string) => {
     setOpenFile(fileName);
     setEditing(false);
-    if (!tenantSlug) return;
     setLoading(true);
     try {
-      const data = await workspaceApi({ action: "get", tenantSlug, instanceId, path: fileName });
+      const data = await getWorkspaceFile(target, fileName);
       setContent(data.content ?? "");
     } catch (err) {
       console.error("Failed to load workspace file:", err);
@@ -99,10 +88,10 @@ export function WorkspaceFilesCard({ tenantSlug, instanceId }: { tenantSlug: str
   const handleEdit = () => { setEditValue(content); setEditing(true); };
 
   const handleSave = async () => {
-    if (!openFile || !tenantSlug) return;
+    if (!openFile) return;
     setSaving(true);
     try {
-      await workspaceApi({ action: "put", tenantSlug, instanceId, path: openFile, content: editValue });
+      await putWorkspaceFile(target, openFile, editValue);
       setContent(editValue);
       setEditing(false);
     } catch (err) {
@@ -113,15 +102,18 @@ export function WorkspaceFilesCard({ tenantSlug, instanceId }: { tenantSlug: str
   };
 
   const handleGenerate = async () => {
-    if (!tenantSlug) return;
     setGenerating(true);
     try {
       const defaults = ["SOUL.md", "IDENTITY.md", "USER.md", "TOOLS.md"];
       for (const name of defaults) {
-        await workspaceApi({ action: "put", tenantSlug, instanceId, path: name, content: `# ${name.replace(".md", "")}\n\nEdit this file to configure your agent.\n` });
+        await putWorkspaceFile(
+          target,
+          name,
+          `# ${name.replace(".md", "")}\n\nEdit this file to configure your agent.\n`,
+        );
       }
-      const data = await workspaceApi({ action: "list", tenantSlug, instanceId });
-      setFiles(data.files ?? []);
+      const data = await listWorkspaceFiles(target);
+      setFiles(data.files.map((f) => f.path));
     } catch (err) {
       console.error("Failed to generate workspace files:", err);
     } finally {

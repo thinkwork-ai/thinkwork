@@ -7,8 +7,7 @@ import { DetailLayout } from "@/components/layout/detail-layout";
 import { Text, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
 import { useAgent } from "@/lib/hooks/use-agents";
-import { useTenant } from "@/lib/hooks/use-tenants";
-import { workspaceApi } from "@/lib/workspace-api";
+import { getWorkspaceFile, putWorkspaceFile } from "@/lib/workspace-api";
 
 // ---------------------------------------------------------------------------
 // Form fields → workspace file mapping
@@ -132,11 +131,7 @@ export default function PersonalizeAgentScreen() {
 
   const [{ data: agentData }] = useAgent(id);
   const agent = agentData?.agent;
-  const instanceId = agent?.slug ?? id;
   const isPersonalAgent = !!agent?.humanPairId;
-
-  const [{ data: tenantData }] = useTenant(agent?.tenantId);
-  const tenantSlug = tenantData?.tenant?.slug ?? "";
 
   const [form, setForm] = useState<PersonalizationForm>(DEFAULT_FORM);
   const [loading, setLoading] = useState(true);
@@ -149,13 +144,14 @@ export default function PersonalizeAgentScreen() {
   const [rawUser, setRawUser] = useState("");
 
   const loadFiles = useCallback(async () => {
-    if (!tenantSlug || !instanceId) return;
+    if (!id) return;
     setLoading(true);
     try {
+      const target = { agentId: id };
       const [soulRes, identityRes, userRes] = await Promise.all([
-        workspaceApi({ action: "get", tenantSlug, instanceId, path: "SOUL.md" }),
-        workspaceApi({ action: "get", tenantSlug, instanceId, path: "IDENTITY.md" }),
-        workspaceApi({ action: "get", tenantSlug, instanceId, path: "USER.md" }),
+        getWorkspaceFile(target, "SOUL.md"),
+        getWorkspaceFile(target, "IDENTITY.md"),
+        getWorkspaceFile(target, "USER.md"),
       ]);
       const soul = soulRes.content ?? "";
       const identity = identityRes.content ?? "";
@@ -169,27 +165,28 @@ export default function PersonalizeAgentScreen() {
     } finally {
       setLoading(false);
     }
-  }, [tenantSlug, instanceId]);
+  }, [id]);
 
   useEffect(() => {
     loadFiles();
   }, [loadFiles]);
 
   const handleSave = async () => {
-    if (!tenantSlug || !instanceId) return;
+    if (!id) return;
     setSaving(true);
     try {
+      const target = { agentId: id };
       if (advancedMode) {
         await Promise.all([
-          workspaceApi({ action: "put", tenantSlug, instanceId, path: "SOUL.md", content: rawSoul }),
-          workspaceApi({ action: "put", tenantSlug, instanceId, path: "IDENTITY.md", content: rawIdentity }),
-          workspaceApi({ action: "put", tenantSlug, instanceId, path: "USER.md", content: rawUser }),
+          putWorkspaceFile(target, "SOUL.md", rawSoul),
+          putWorkspaceFile(target, "IDENTITY.md", rawIdentity),
+          putWorkspaceFile(target, "USER.md", rawUser),
         ]);
       } else {
         await Promise.all([
-          workspaceApi({ action: "put", tenantSlug, instanceId, path: "SOUL.md", content: renderSoulMd(form) }),
-          workspaceApi({ action: "put", tenantSlug, instanceId, path: "IDENTITY.md", content: renderIdentityMd(form) }),
-          workspaceApi({ action: "put", tenantSlug, instanceId, path: "USER.md", content: renderUserMd(form) }),
+          putWorkspaceFile(target, "SOUL.md", renderSoulMd(form)),
+          putWorkspaceFile(target, "IDENTITY.md", renderIdentityMd(form)),
+          putWorkspaceFile(target, "USER.md", renderUserMd(form)),
         ]);
         // Update raw values for advanced mode consistency
         setRawSoul(renderSoulMd(form));
