@@ -108,11 +108,21 @@ export function KnowledgeGraph({
   // collide values would never actually push nodes apart and the toggle
   // would only turn text on. Skip the very first render so we don't
   // stomp the reveal-fit animation.
+  //
+  // `alpha(0.3)` gives the sim enough heat to re-balance seeded
+  // positions into the new-force equilibrium — importantly, enough
+  // heat for popular hubs to pull their neighbors into tight
+  // clusters. Combined with the label mode's `alphaDecay` (0.1) and
+  // `quiesceAlpha` (0.02), the toggle settles in ~26 visible ticks
+  // (~0.4s) and trails naturally to rest (per-tick motion at the
+  // quiesce point is ~7% of peak, so the stop is imperceptible)
+  // without damping per-tick motion, so hub clustering surfaces
+  // properly.
   const prevShowLabelsRef = useRef(showLabels);
   useEffect(() => {
     if (prevShowLabelsRef.current === showLabels) return;
     prevShowLabelsRef.current = showLabels;
-    sim.restart(0.5);
+    sim.restart(0.3);
   }, [showLabels, sim]);
 
   const [revealed, setRevealed] = useState(false);
