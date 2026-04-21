@@ -1,24 +1,21 @@
-import { useCallback, useMemo, useState } from "react";
+import { useState } from "react";
 import { View, ScrollView, Pressable, RefreshControl, Alert } from "react-native";
 import { useColorScheme } from "nativewind";
 import * as WebBrowser from "expo-web-browser";
-import { useQuery } from "urql";
-import { Mail, Calendar, Link2, Link2Off, AlertTriangle, RefreshCw, ListChecks, Bot, Check, ChevronDown, ChevronUp } from "lucide-react-native";
+import { Mail, Calendar, Link2, Link2Off, AlertTriangle, RefreshCw } from "lucide-react-native";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { Text, Muted } from "@/components/ui/typography";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { COLORS } from "@/lib/theme";
 import { useMe } from "@/lib/hooks/use-users";
-import { useConnections, type ConnectionRow } from "@/lib/hooks/use-connections";
-import { AgentsQuery } from "@/lib/graphql-queries";
+import { useConnections } from "@/lib/hooks/use-connections";
 const API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(/\/graphql$/, "");
 const GRAPHQL_API_KEY = process.env.EXPO_PUBLIC_GRAPHQL_API_KEY || "";
 
 const PROVIDER_ICONS: Record<string, typeof Mail> = {
   google_productivity: Mail,
   microsoft_365: Calendar,
-  lastmile: ListChecks,
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -41,28 +38,6 @@ export default function IntegrationsScreen() {
 
   const { connections, loading, refetch: refetchConnections } = useConnections();
   const [refreshing, setRefreshing] = useState(false);
-  const [expandedAgentPicker, setExpandedAgentPicker] = useState<string | null>(null);
-  const [savingAgentFor, setSavingAgentFor] = useState<string | null>(null);
-
-  // Agents the current user is paired with — used to populate the LastMile
-  // "Default task agent" picker. Query is paused until tenant is known.
-  const [agentsResult] = useQuery({
-    query: AgentsQuery,
-    variables: { tenantId: tenantId || "" },
-    pause: !tenantId,
-  });
-  const myAgents = useMemo(() => {
-    const all = (agentsResult.data?.agents ?? []) as Array<{
-      id: string;
-      name: string;
-      humanPairId?: string | null;
-      status?: string | null;
-    }>;
-    if (!user?.id) return [];
-    return all.filter(
-      (a) => a.humanPairId === user.id && (a.status ?? "active") !== "archived",
-    );
-  }, [agentsResult.data?.agents, user?.id]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -84,62 +59,6 @@ export default function IntegrationsScreen() {
     await WebBrowser.openBrowserAsync(url);
     await refetchConnections();
   };
-
-  // LastMile connects via MCP Servers → LastMile Tasks → OAuth. The
-  // post-OAuth hook in skills.ts calls user_whoami on the MCP server and
-  // writes the connections row automatically. Point users there.
-  const handleConnectLastmile = async () => {
-    Alert.alert(
-      "Connect via MCP Servers",
-      "LastMile Tasks uses OAuth through the MCP Servers screen. Open the header menu → MCP Servers → LastMile Tasks → Connect. Your LastMile user id is picked up automatically.",
-    );
-  };
-
-  // Persist the user's per-provider default agent pick onto the connection
-  // metadata. Reads current provider sub-object first so existing fields
-  // (userId, name, etc. populated by the OAuth callback) survive the merge.
-  const handleSelectDefaultAgent = useCallback(
-    async (
-      connection: ConnectionRow,
-      providerName: string,
-      agentId: string | null,
-    ) => {
-      if (!tenantId) return;
-      const currentMeta =
-        (connection.metadata as Record<string, unknown> | null) ?? {};
-      const currentProviderMeta =
-        (currentMeta[providerName] as Record<string, unknown> | undefined) ?? {};
-      const nextProviderMeta = {
-        ...currentProviderMeta,
-        default_agent_id: agentId ?? null,
-      };
-      setSavingAgentFor(connection.id);
-      try {
-        const res = await fetch(`${API_BASE}/api/connections/${connection.id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": GRAPHQL_API_KEY,
-            "x-tenant-id": tenantId,
-          },
-          body: JSON.stringify({
-            metadata: { [providerName]: nextProviderMeta },
-          }),
-        });
-        if (!res.ok) {
-          throw new Error(`PUT /api/connections failed: ${res.status}`);
-        }
-        await refetchConnections();
-        setExpandedAgentPicker(null);
-      } catch (err) {
-        console.error("[integrations] Failed to set default agent:", err);
-        Alert.alert("Couldn't save", "Default agent couldn't be saved. Try again.");
-      } finally {
-        setSavingAgentFor(null);
-      }
-    },
-    [tenantId, refetchConnections],
-  );
 
   const handleDisconnect = async (connectionId: string, providerName: string) => {
     Alert.alert(
@@ -174,8 +93,6 @@ export default function IntegrationsScreen() {
       await handleConnectGoogle();
     } else if (providerName === "microsoft_365") {
       await handleConnectMicrosoft();
-    } else if (providerName === "lastmile") {
-      await handleConnectLastmile();
     }
   };
 
@@ -189,7 +106,7 @@ export default function IntegrationsScreen() {
 
   if (loading) {
     return (
-      <DetailLayout title="Connectors">
+      <DetailLayout title="Integrations">
         <View className="flex-1 p-4" style={{ maxWidth: 600 }}>
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-20 w-full rounded-xl mb-3" />
@@ -200,7 +117,7 @@ export default function IntegrationsScreen() {
   }
 
   return (
-    <DetailLayout title="Connectors">
+    <DetailLayout title="Integrations">
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 24 }}
@@ -280,79 +197,6 @@ export default function IntegrationsScreen() {
                           <Muted className="text-xs">Disconnect</Muted>
                         </Pressable>
                       </View>
-
-                      {/* LastMile-only: per-user default agent picker.
-                          Wires into connections.metadata.lastmile.default_agent_id,
-                          which the webhook ingest reads to attach an agent to
-                          new external-task threads. */}
-                      {conn.provider_name === "lastmile" && !isExpired && (() => {
-                        const lastmileMeta = (conn.metadata?.lastmile as Record<string, unknown> | undefined) ?? {};
-                        const currentAgentId = (lastmileMeta.default_agent_id as string | undefined) ?? null;
-                        const currentAgent = currentAgentId
-                          ? myAgents.find((a) => a.id === currentAgentId)
-                          : null;
-                        const isExpanded = expandedAgentPicker === conn.id;
-                        const isSaving = savingAgentFor === conn.id;
-                        return (
-                          <View className="mt-3 pt-3 border-t border-neutral-100 dark:border-neutral-800">
-                            <Pressable
-                              onPress={() => setExpandedAgentPicker(isExpanded ? null : conn.id)}
-                              className="flex-row items-center justify-between"
-                            >
-                              <View className="flex-row items-center gap-2 flex-1">
-                                <Bot size={14} color={colors.mutedForeground} />
-                                <Text className="text-xs text-neutral-500 dark:text-neutral-400">
-                                  Default task agent
-                                </Text>
-                                <Text className="text-xs font-medium text-neutral-900 dark:text-neutral-100">
-                                  {currentAgent?.name ?? (currentAgentId ? "(unknown)" : "None")}
-                                </Text>
-                              </View>
-                              {isExpanded ? (
-                                <ChevronUp size={14} color={colors.mutedForeground} />
-                              ) : (
-                                <ChevronDown size={14} color={colors.mutedForeground} />
-                              )}
-                            </Pressable>
-                            {isExpanded && (
-                              <View className="mt-2 rounded-lg border border-neutral-100 dark:border-neutral-800 overflow-hidden">
-                                <Pressable
-                                  onPress={() => handleSelectDefaultAgent(conn, "lastmile", null)}
-                                  disabled={isSaving}
-                                  className="flex-row items-center justify-between px-3 py-2 active:bg-neutral-50 dark:active:bg-neutral-800"
-                                >
-                                  <Text className="text-sm text-neutral-700 dark:text-neutral-300">None</Text>
-                                  {currentAgentId === null && <Check size={14} color={colors.primary} />}
-                                </Pressable>
-                                {myAgents.length === 0 ? (
-                                  <View className="px-3 py-2 border-t border-neutral-100 dark:border-neutral-800">
-                                    <Muted className="text-xs">
-                                      No agents paired to you yet. Create one in Agents and link it.
-                                    </Muted>
-                                  </View>
-                                ) : (
-                                  myAgents.map((agent) => (
-                                    <Pressable
-                                      key={agent.id}
-                                      onPress={() => handleSelectDefaultAgent(conn, "lastmile", agent.id)}
-                                      disabled={isSaving}
-                                      className="flex-row items-center justify-between px-3 py-2 border-t border-neutral-100 dark:border-neutral-800 active:bg-neutral-50 dark:active:bg-neutral-800"
-                                    >
-                                      <Text className="text-sm text-neutral-700 dark:text-neutral-300">
-                                        {agent.name}
-                                      </Text>
-                                      {currentAgentId === agent.id && <Check size={14} color={colors.primary} />}
-                                    </Pressable>
-                                  ))
-                                )}
-                              </View>
-                            )}
-                            <Muted className="text-xs mt-1.5">
-                              Attached automatically to new LastMile task threads so you can chat about them.
-                            </Muted>
-                          </View>
-                        );
-                      })()}
                     </View>
                   );
                 })}
@@ -408,31 +252,9 @@ export default function IntegrationsScreen() {
                 </Pressable>
               )}
 
-              {/* LastMile Tasks */}
-              {!connectedProviders.has("lastmile") && (
-                <Pressable
-                  onPress={handleConnectLastmile}
-                  className="flex-row items-center px-4 py-3 border-t border-neutral-100 dark:border-neutral-800 active:bg-neutral-50 dark:active:bg-neutral-800"
-                >
-                  <View className="w-9 h-9 rounded-lg bg-neutral-100 dark:bg-neutral-800 items-center justify-center">
-                    <ListChecks size={18} color={colors.primary} />
-                  </View>
-                  <View className="flex-1 ml-3">
-                    <Text className="font-medium text-neutral-900 dark:text-neutral-100">
-                      LastMile Tasks
-                    </Text>
-                    <Muted className="text-xs">Work tasks assigned to you in LastMile</Muted>
-                  </View>
-                  <Badge variant="outline" className="px-2 py-0.5" textClassName="text-xs">
-                    Connect
-                  </Badge>
-                </Pressable>
-              )}
-
               {/* All connected */}
               {connectedProviders.has("google_productivity") &&
-                connectedProviders.has("microsoft_365") &&
-                connectedProviders.has("lastmile") && (
+                connectedProviders.has("microsoft_365") && (
                 <View className="px-4 py-3">
                   <Muted className="text-sm">All available integrations connected.</Muted>
                 </View>

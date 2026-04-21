@@ -5,7 +5,7 @@ description: Custom HTTP webhooks that fire an agent or a routine when an extern
 
 import { Aside } from '@astrojs/starlight/components';
 
-Webhooks are custom HTTP endpoints that external systems can POST to in order to trigger an agent turn or a routine. They are distinct from [Connectors](/applications/admin/connectors/) in that they don't wrap a specific provider — they're blank slates. Any system that can make an authenticated HTTP POST can become a ThinkWork trigger through a webhook.
+Webhooks are custom HTTP endpoints that external systems can POST to in order to trigger an agent turn or a routine. They're blank slates — any system that can make an authenticated HTTP POST can become a ThinkWork trigger through a webhook.
 
 ## The list
 
@@ -159,7 +159,6 @@ The webhook id changes, so the URL also changes. Plan for that in the external s
 
 ## Related pages
 
-- [Connectors](/applications/admin/connectors/) — provider-specific inbound integrations (Slack, GitHub, Google) — a different thing from custom webhooks
 - [Scheduled Jobs](/applications/admin/scheduled-jobs/) — the time-based counterpart to webhook-driven triggers
 - [Routines](/applications/admin/routines/) — multi-step workflows that webhooks can trigger
 - [Agents](/applications/admin/agents/) — the other target type for webhook invocations

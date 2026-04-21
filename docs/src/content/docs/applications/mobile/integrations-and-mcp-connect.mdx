@@ -1,11 +1,11 @@
 ---
 title: Mobile — Integrations & MCP Connect
-description: Self-serve per-user OAuth for connectors and MCP servers in the ThinkWork mobile app — Google Productivity, Microsoft 365, LastMile, and any MCP server registered at the tenant level.
+description: Self-serve per-user OAuth for connectors and MCP servers in the ThinkWork mobile app — Google Productivity, Microsoft 365, and any MCP server registered at the tenant level.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-The mobile app owns the **user side** of connector and MCP configuration: self-serve OAuth flows, per-user token storage, and the "Needs Connection" prompts that surface when something needs to be granted. Tenant-level registration of MCP servers and connector credentials lives in the [Admin Web App](/applications/admin/connectors/).
+The mobile app owns the **user side** of connector and MCP configuration: self-serve OAuth flows, per-user token storage, and the "Needs Connection" prompts that surface when something needs to be granted. Tenant-level registration of MCP servers lives in the [Admin Web App](/applications/admin/mcp-servers/).
 
 <Aside type="note">
 Why the split? Admin registers infrastructure (the MCP server's URL, transport, and authentication type; the tenant's OAuth client ID for Google). The mobile app handles user-owned credentials (each user's personal OAuth refresh token, each user's per-MCP-server access token). This keeps operator concerns and user concerns cleanly separated.
@@ -95,11 +95,9 @@ A few things to check when a connection isn't behaving:
 - **Connect button loops back to the same screen** — the WebBrowser session may have been closed before the redirect. Try again. If it persists, the tenant's OAuth redirect URI is probably misconfigured on the provider side.
 - **"Needs Connection" sticks after a successful consent** — the app polls the connection status after a redirect; if the poll is missed, pull to refresh the screen.
 - **Tools list is empty** — the admin app's "Test Connection" for this MCP server may have failed, so the tool list was never cached. Ask the operator to retest from the admin side.
-- **Push notifications not arriving after a task-integration connect** — see [Push Notifications](/applications/mobile/push-notifications/).
 
 ## Related pages
 
 - [MCP Tool Connectors](/concepts/mcp-servers/) — the concept page with the full MCP model and token lifecycle
-- [External Task Connectors](/concepts/connectors/external-tasks/) — the specific connector class that drives the Tasks tab
-- [Admin — Connectors](/applications/admin/connectors/) and [Admin — Tenant MCP Servers](/applications/admin/mcp-servers/) — the tenant-level registration side
+- [Admin — Tenant MCP Servers](/applications/admin/mcp-servers/) — the tenant-level registration side
 - [Mobile — Authentication](/applications/mobile/authentication/) — the sign-in flow that precedes any of this
