@@ -2,12 +2,13 @@ slug: agent-email-send
 display_name: Agent Email Send
 description: Send emails from your agent email address with reply tracking. Use when the agent needs to send an email, reply, or follow up.
 category: communication
-version: "1.0.0"
+version: "1.1.0"
 author: thinkwork
 icon: send
 tags: [email, send, outbound, communication]
 execution: script
 is_default: true
+mode: reply  # default — back-compat; reply mode keeps the existing contract
 scripts:
   - name: send_email
     path: scripts/send.py
@@ -26,3 +27,29 @@ requires_env:
   - INBOUND_SUBJECT
   - INBOUND_FROM
   - INBOUND_BODY
+
+# Unit 2 addition: outbound variant for scheduled / webhook / composition
+# invocations that have no inbound reply context. Back-compat: the default
+# mode above (`reply`) is unchanged — existing callers get the same
+# contract they had before. New callers opt in with mode=outbound and get
+# a relaxed requires_env (drops the INBOUND_* reply-token requirements).
+# The script body (scripts/send.py) already treats every INBOUND_* var as
+# optional, so this is a skill-metadata change only.
+mode_variants:
+  outbound:
+    description: >
+      Send an email without an inbound reply context. Used by scheduled jobs,
+      webhook-triggered compositions, and composition steps that produce a
+      deliverable (e.g., sales-prep) — anywhere there's no inbound message to
+      thread against.
+    requires_env:
+      - THINKWORK_API_URL
+      - THINKWORK_API_SECRET
+      - AGENT_ID
+      - AGENT_EMAIL_ADDRESS
+    triggers: []
+    # When invoked in outbound mode, these fields of send_email must not be set:
+    forbidden_fields:
+      - in_reply_to
+      - quoted_from
+      - quoted_body

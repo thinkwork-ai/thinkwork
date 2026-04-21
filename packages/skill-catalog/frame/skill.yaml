@@ -1,0 +1,26 @@
+slug: frame
+display_name: Frame
+description: Restate a problem in a structured way before gathering data. Returns goal, constraints, known unknowns, and decision criteria so downstream steps have a clean target. Composition-only primitive — not intended for direct chat use.
+category: composable-primitive
+version: "0.1.0"
+author: thinkwork
+icon: target
+tags: [composition, primitive, framing]
+execution: context
+mode: tool
+
+# Composition-only: this skill is designed to be invoked by a composition step,
+# not picked up ad hoc from chat. Admins should not enable `frame` as a direct
+# agent tool; the composition_runner calls it with resolved inputs.
+invocable_from: composition
+
+inputs:
+  problem:
+    type: string
+    required: true
+  context:
+    type: string
+    required: false
+
+# Named string the composition runner stores as a step output.
+output: framed

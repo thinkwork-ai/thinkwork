@@ -1,0 +1,36 @@
+slug: package
+display_name: Package
+description: Render a synthesis into a final deliverable using a named template. Deterministic — template substitution only, no LLM call at this step. Supported formats in v1 are sales_brief, health_report, and renewal_risk.
+category: composable-primitive
+version: "0.1.0"
+author: thinkwork
+icon: file-text
+tags: [composition, primitive, rendering, deliverable]
+execution: script
+mode: tool
+invocable_from: composition
+is_default: false
+
+scripts:
+  - name: render_package
+    path: scripts/render.py
+    description: "Render a synthesis dict into a Markdown deliverable using a named template."
+
+inputs:
+  synthesis:
+    type: string
+    required: true
+  format:
+    type: enum
+    required: true
+    values: [sales_brief, health_report, renewal_risk]
+  metadata:
+    type: string
+    required: false
+
+output: deliverable
+
+templates:
+  sales_brief: templates/sales_brief.md.tmpl
+  health_report: templates/health_report.md.tmpl
+  renewal_risk: templates/renewal_risk.md.tmpl

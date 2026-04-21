@@ -6,7 +6,7 @@ description: >
 license: Proprietary
 metadata:
   author: thinkwork
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Agent Email Send Skill
@@ -72,12 +72,34 @@ Reply tokens expire after 7 days and allow up to 3 replies per token.
 
 The server automatically formats the quoted thread — your `body` should only contain your reply. Do not manually quote the original message.
 
+## Modes
+
+`send_email` accepts a `mode` argument that controls which inbound-context
+guarantees apply.
+
+### `reply` (default, back-compat)
+
+For replying to an inbound email. Requires the `INBOUND_*` env vars and the
+threading fields (`inReplyTo`, `quotedFrom`, `quotedBody`). This is the
+behavior every existing caller already gets — passing `mode` is optional.
+
+### `outbound`
+
+For scheduled jobs, webhook-triggered compositions, and composition steps
+that produce a deliverable. There is no inbound message to reply to, so
+the `INBOUND_*` env vars are not required. Pass `mode="outbound"` and leave
+`inReplyTo`, `quotedFrom`, and `quotedBody` unset — the tool rejects the
+call if any threading field is populated, preventing accidental replies to
+a stale inbound token. Use this mode whenever the composition runner, a
+cron trigger, or a webhook handler drives the invocation.
+
 ## When to Use This Skill
 
-- Responding to inbound emails you received
-- Proactively reaching out to contacts when instructed
-- Sending status updates, reports, or summaries via email
+- Responding to inbound emails you received (use `mode="reply"`, the default)
+- Proactively reaching out to contacts when instructed (use `mode="outbound"`)
+- Sending status updates, reports, or summaries via email (use `mode="outbound"`)
 - Following up on tasks or requests
+- Delivering a composition's packaged output via email (use `mode="outbound"`)
 
 ## When NOT to Use This Skill
 
