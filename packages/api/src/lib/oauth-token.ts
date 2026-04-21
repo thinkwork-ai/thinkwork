@@ -24,6 +24,10 @@ import {
 	// CreateSecretCommand - not needed for refresh, only for initial token storage
 	ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
+import {
+	getOAuthClientCredentials,
+	isSecretsManagerProvider,
+} from "./oauth-client-credentials.js";
 
 const STAGE = process.env.STAGE || process.env.APP_STAGE || "dev";
 const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
@@ -228,15 +232,19 @@ export async function resolveOAuthToken(
 
 	const config = provider.config as ProviderConfig;
 
-	// Determine client credentials from env
+	// Determine client credentials — Google/Microsoft from Secrets Manager (cached per-cold-start).
 	let clientId = "";
 	let clientSecret = "";
-	if (provider.name === "google_productivity") {
-		clientId = process.env.GOOGLE_PRODUCTIVITY_CLIENT_ID || "";
-		clientSecret = process.env.GOOGLE_PRODUCTIVITY_CLIENT_SECRET || "";
-	} else if (provider.name === "microsoft_365") {
-		clientId = process.env.MICROSOFT_CLIENT_ID || "";
-		clientSecret = process.env.MICROSOFT_CLIENT_SECRET || "";
+	if (isSecretsManagerProvider(provider.name)) {
+		try {
+			const creds = await getOAuthClientCredentials(provider.name);
+			clientId = creds.clientId;
+			clientSecret = creds.clientSecret;
+		} catch (credErr) {
+			console.error(`[oauth-token] Client credentials fetch failed for ${provider.name}:`, credErr);
+			await markConnectionExpired(connectionId, tenantId, "client_creds_missing");
+			return null;
+		}
 	}
 
 	// 4. Refresh the token
