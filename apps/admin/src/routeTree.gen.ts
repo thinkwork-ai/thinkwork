@@ -24,6 +24,7 @@ import { Route as AuthedTenantAnalyticsRouteImport } from './routes/_authed/_ten
 import { Route as AuthedTenantWikiIndexRouteImport } from './routes/_authed/_tenant/wiki/index'
 import { Route as AuthedTenantWebhooksIndexRouteImport } from './routes/_authed/_tenant/webhooks/index'
 import { Route as AuthedTenantThreadsIndexRouteImport } from './routes/_authed/_tenant/threads/index'
+import { Route as AuthedTenantSkillRunsIndexRouteImport } from './routes/_authed/_tenant/skill-runs/index'
 import { Route as AuthedTenantSecurityIndexRouteImport } from './routes/_authed/_tenant/security/index'
 import { Route as AuthedTenantScheduledJobsIndexRouteImport } from './routes/_authed/_tenant/scheduled-jobs/index'
 import { Route as AuthedTenantRoutinesIndexRouteImport } from './routes/_authed/_tenant/routines/index'
@@ -38,6 +39,7 @@ import { Route as AuthedTenantAgentsIndexRouteImport } from './routes/_authed/_t
 import { Route as AuthedTenantAgentTemplatesIndexRouteImport } from './routes/_authed/_tenant/agent-templates/index'
 import { Route as AuthedTenantWebhooksWebhookIdRouteImport } from './routes/_authed/_tenant/webhooks/$webhookId'
 import { Route as AuthedTenantThreadsThreadIdRouteImport } from './routes/_authed/_tenant/threads/$threadId'
+import { Route as AuthedTenantSkillRunsRunIdRouteImport } from './routes/_authed/_tenant/skill-runs/$runId'
 import { Route as AuthedTenantScheduledJobsScheduledJobIdRouteImport } from './routes/_authed/_tenant/scheduled-jobs/$scheduledJobId'
 import { Route as AuthedTenantRoutinesRoutineIdRouteImport } from './routes/_authed/_tenant/routines/$routineId'
 import { Route as AuthedTenantKnowledgeBasesKbIdRouteImport } from './routes/_authed/_tenant/knowledge-bases/$kbId'
@@ -144,6 +146,12 @@ const AuthedTenantThreadsIndexRoute =
     path: '/threads/',
     getParentRoute: () => AuthedTenantRoute,
   } as any)
+const AuthedTenantSkillRunsIndexRoute =
+  AuthedTenantSkillRunsIndexRouteImport.update({
+    id: '/skill-runs/',
+    path: '/skill-runs/',
+    getParentRoute: () => AuthedTenantRoute,
+  } as any)
 const AuthedTenantSecurityIndexRoute =
   AuthedTenantSecurityIndexRouteImport.update({
     id: '/security/',
@@ -222,6 +230,12 @@ const AuthedTenantThreadsThreadIdRoute =
   AuthedTenantThreadsThreadIdRouteImport.update({
     id: '/threads/$threadId',
     path: '/threads/$threadId',
+    getParentRoute: () => AuthedTenantRoute,
+  } as any)
+const AuthedTenantSkillRunsRunIdRoute =
+  AuthedTenantSkillRunsRunIdRouteImport.update({
+    id: '/skill-runs/$runId',
+    path: '/skill-runs/$runId',
     getParentRoute: () => AuthedTenantRoute,
   } as any)
 const AuthedTenantScheduledJobsScheduledJobIdRoute =
@@ -422,6 +436,7 @@ export interface FileRoutesByFullPath {
   '/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeBasesKbIdRoute
   '/routines/$routineId': typeof AuthedTenantRoutinesRoutineIdRoute
   '/scheduled-jobs/$scheduledJobId': typeof AuthedTenantScheduledJobsScheduledJobIdRoute
+  '/skill-runs/$runId': typeof AuthedTenantSkillRunsRunIdRoute
   '/threads/$threadId': typeof AuthedTenantThreadsThreadIdRoute
   '/webhooks/$webhookId': typeof AuthedTenantWebhooksWebhookIdRoute
   '/agent-templates/': typeof AuthedTenantAgentTemplatesIndexRoute
@@ -436,6 +451,7 @@ export interface FileRoutesByFullPath {
   '/routines/': typeof AuthedTenantRoutinesIndexRoute
   '/scheduled-jobs/': typeof AuthedTenantScheduledJobsIndexRoute
   '/security/': typeof AuthedTenantSecurityIndexRoute
+  '/skill-runs/': typeof AuthedTenantSkillRunsIndexRoute
   '/threads/': typeof AuthedTenantThreadsIndexRoute
   '/webhooks/': typeof AuthedTenantWebhooksIndexRoute
   '/wiki/': typeof AuthedTenantWikiIndexRoute
@@ -479,6 +495,7 @@ export interface FileRoutesByTo {
   '/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeBasesKbIdRoute
   '/routines/$routineId': typeof AuthedTenantRoutinesRoutineIdRoute
   '/scheduled-jobs/$scheduledJobId': typeof AuthedTenantScheduledJobsScheduledJobIdRoute
+  '/skill-runs/$runId': typeof AuthedTenantSkillRunsRunIdRoute
   '/threads/$threadId': typeof AuthedTenantThreadsThreadIdRoute
   '/webhooks/$webhookId': typeof AuthedTenantWebhooksWebhookIdRoute
   '/agent-templates': typeof AuthedTenantAgentTemplatesIndexRoute
@@ -493,6 +510,7 @@ export interface FileRoutesByTo {
   '/routines': typeof AuthedTenantRoutinesIndexRoute
   '/scheduled-jobs': typeof AuthedTenantScheduledJobsIndexRoute
   '/security': typeof AuthedTenantSecurityIndexRoute
+  '/skill-runs': typeof AuthedTenantSkillRunsIndexRoute
   '/threads': typeof AuthedTenantThreadsIndexRoute
   '/webhooks': typeof AuthedTenantWebhooksIndexRoute
   '/wiki': typeof AuthedTenantWikiIndexRoute
@@ -540,6 +558,7 @@ export interface FileRoutesById {
   '/_authed/_tenant/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeBasesKbIdRoute
   '/_authed/_tenant/routines/$routineId': typeof AuthedTenantRoutinesRoutineIdRoute
   '/_authed/_tenant/scheduled-jobs/$scheduledJobId': typeof AuthedTenantScheduledJobsScheduledJobIdRoute
+  '/_authed/_tenant/skill-runs/$runId': typeof AuthedTenantSkillRunsRunIdRoute
   '/_authed/_tenant/threads/$threadId': typeof AuthedTenantThreadsThreadIdRoute
   '/_authed/_tenant/webhooks/$webhookId': typeof AuthedTenantWebhooksWebhookIdRoute
   '/_authed/_tenant/agent-templates/': typeof AuthedTenantAgentTemplatesIndexRoute
@@ -554,6 +573,7 @@ export interface FileRoutesById {
   '/_authed/_tenant/routines/': typeof AuthedTenantRoutinesIndexRoute
   '/_authed/_tenant/scheduled-jobs/': typeof AuthedTenantScheduledJobsIndexRoute
   '/_authed/_tenant/security/': typeof AuthedTenantSecurityIndexRoute
+  '/_authed/_tenant/skill-runs/': typeof AuthedTenantSkillRunsIndexRoute
   '/_authed/_tenant/threads/': typeof AuthedTenantThreadsIndexRoute
   '/_authed/_tenant/webhooks/': typeof AuthedTenantWebhooksIndexRoute
   '/_authed/_tenant/wiki/': typeof AuthedTenantWikiIndexRoute
@@ -600,6 +620,7 @@ export interface FileRouteTypes {
     | '/knowledge-bases/$kbId'
     | '/routines/$routineId'
     | '/scheduled-jobs/$scheduledJobId'
+    | '/skill-runs/$runId'
     | '/threads/$threadId'
     | '/webhooks/$webhookId'
     | '/agent-templates/'
@@ -614,6 +635,7 @@ export interface FileRouteTypes {
     | '/routines/'
     | '/scheduled-jobs/'
     | '/security/'
+    | '/skill-runs/'
     | '/threads/'
     | '/webhooks/'
     | '/wiki/'
@@ -657,6 +679,7 @@ export interface FileRouteTypes {
     | '/knowledge-bases/$kbId'
     | '/routines/$routineId'
     | '/scheduled-jobs/$scheduledJobId'
+    | '/skill-runs/$runId'
     | '/threads/$threadId'
     | '/webhooks/$webhookId'
     | '/agent-templates'
@@ -671,6 +694,7 @@ export interface FileRouteTypes {
     | '/routines'
     | '/scheduled-jobs'
     | '/security'
+    | '/skill-runs'
     | '/threads'
     | '/webhooks'
     | '/wiki'
@@ -717,6 +741,7 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/knowledge-bases/$kbId'
     | '/_authed/_tenant/routines/$routineId'
     | '/_authed/_tenant/scheduled-jobs/$scheduledJobId'
+    | '/_authed/_tenant/skill-runs/$runId'
     | '/_authed/_tenant/threads/$threadId'
     | '/_authed/_tenant/webhooks/$webhookId'
     | '/_authed/_tenant/agent-templates/'
@@ -731,6 +756,7 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/routines/'
     | '/_authed/_tenant/scheduled-jobs/'
     | '/_authed/_tenant/security/'
+    | '/_authed/_tenant/skill-runs/'
     | '/_authed/_tenant/threads/'
     | '/_authed/_tenant/webhooks/'
     | '/_authed/_tenant/wiki/'
@@ -868,6 +894,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedTenantThreadsIndexRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
+    '/_authed/_tenant/skill-runs/': {
+      id: '/_authed/_tenant/skill-runs/'
+      path: '/skill-runs'
+      fullPath: '/skill-runs/'
+      preLoaderRoute: typeof AuthedTenantSkillRunsIndexRouteImport
+      parentRoute: typeof AuthedTenantRoute
+    }
     '/_authed/_tenant/security/': {
       id: '/_authed/_tenant/security/'
       path: '/security'
@@ -964,6 +997,13 @@ declare module '@tanstack/react-router' {
       path: '/threads/$threadId'
       fullPath: '/threads/$threadId'
       preLoaderRoute: typeof AuthedTenantThreadsThreadIdRouteImport
+      parentRoute: typeof AuthedTenantRoute
+    }
+    '/_authed/_tenant/skill-runs/$runId': {
+      id: '/_authed/_tenant/skill-runs/$runId'
+      path: '/skill-runs/$runId'
+      fullPath: '/skill-runs/$runId'
+      preLoaderRoute: typeof AuthedTenantSkillRunsRunIdRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
     '/_authed/_tenant/scheduled-jobs/$scheduledJobId': {
@@ -1218,6 +1258,7 @@ interface AuthedTenantRouteChildren {
   AuthedTenantKnowledgeBasesKbIdRoute: typeof AuthedTenantKnowledgeBasesKbIdRoute
   AuthedTenantRoutinesRoutineIdRoute: typeof AuthedTenantRoutinesRoutineIdRoute
   AuthedTenantScheduledJobsScheduledJobIdRoute: typeof AuthedTenantScheduledJobsScheduledJobIdRoute
+  AuthedTenantSkillRunsRunIdRoute: typeof AuthedTenantSkillRunsRunIdRoute
   AuthedTenantThreadsThreadIdRoute: typeof AuthedTenantThreadsThreadIdRoute
   AuthedTenantWebhooksWebhookIdRoute: typeof AuthedTenantWebhooksWebhookIdRoute
   AuthedTenantAgentTemplatesIndexRoute: typeof AuthedTenantAgentTemplatesIndexRoute
@@ -1231,6 +1272,7 @@ interface AuthedTenantRouteChildren {
   AuthedTenantRoutinesIndexRoute: typeof AuthedTenantRoutinesIndexRoute
   AuthedTenantScheduledJobsIndexRoute: typeof AuthedTenantScheduledJobsIndexRoute
   AuthedTenantSecurityIndexRoute: typeof AuthedTenantSecurityIndexRoute
+  AuthedTenantSkillRunsIndexRoute: typeof AuthedTenantSkillRunsIndexRoute
   AuthedTenantThreadsIndexRoute: typeof AuthedTenantThreadsIndexRoute
   AuthedTenantWebhooksIndexRoute: typeof AuthedTenantWebhooksIndexRoute
   AuthedTenantWikiIndexRoute: typeof AuthedTenantWikiIndexRoute
@@ -1269,6 +1311,7 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantRoutinesRoutineIdRoute: AuthedTenantRoutinesRoutineIdRoute,
   AuthedTenantScheduledJobsScheduledJobIdRoute:
     AuthedTenantScheduledJobsScheduledJobIdRoute,
+  AuthedTenantSkillRunsRunIdRoute: AuthedTenantSkillRunsRunIdRoute,
   AuthedTenantThreadsThreadIdRoute: AuthedTenantThreadsThreadIdRoute,
   AuthedTenantWebhooksWebhookIdRoute: AuthedTenantWebhooksWebhookIdRoute,
   AuthedTenantAgentTemplatesIndexRoute: AuthedTenantAgentTemplatesIndexRoute,
@@ -1282,6 +1325,7 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantRoutinesIndexRoute: AuthedTenantRoutinesIndexRoute,
   AuthedTenantScheduledJobsIndexRoute: AuthedTenantScheduledJobsIndexRoute,
   AuthedTenantSecurityIndexRoute: AuthedTenantSecurityIndexRoute,
+  AuthedTenantSkillRunsIndexRoute: AuthedTenantSkillRunsIndexRoute,
   AuthedTenantThreadsIndexRoute: AuthedTenantThreadsIndexRoute,
   AuthedTenantWebhooksIndexRoute: AuthedTenantWebhooksIndexRoute,
   AuthedTenantWikiIndexRoute: AuthedTenantWikiIndexRoute,

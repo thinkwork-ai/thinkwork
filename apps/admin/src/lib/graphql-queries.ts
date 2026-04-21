@@ -1989,3 +1989,109 @@ export const OnEvalRunUpdatedSubscription = gql`
     }
   }
 `;
+
+// ---------------------------------------------------------------------------
+// Skill Runs — observability + control surface for composition invocations
+// (composable-skills plan Unit 4 resolvers; Unit 7 admin UI).
+// ---------------------------------------------------------------------------
+
+export const SkillRunsQuery = gql`
+  query SkillRuns(
+    $tenantId: ID
+    $agentId: ID
+    $invokerUserId: ID
+    $skillId: String
+    $status: String
+    $invocationSource: String
+    $limit: Int
+  ) {
+    skillRuns(
+      tenantId: $tenantId
+      agentId: $agentId
+      invokerUserId: $invokerUserId
+      skillId: $skillId
+      status: $status
+      invocationSource: $invocationSource
+      limit: $limit
+    ) {
+      id
+      tenantId
+      agentId
+      invokerUserId
+      skillId
+      skillVersion
+      invocationSource
+      status
+      startedAt
+      finishedAt
+      deleteAt
+      feedbackSignal
+      failureReason
+      createdAt
+    }
+  }
+`;
+
+export const SkillRunQuery = gql`
+  query SkillRun($id: ID!) {
+    skillRun(id: $id) {
+      id
+      tenantId
+      agentId
+      invokerUserId
+      skillId
+      skillVersion
+      invocationSource
+      inputs
+      resolvedInputs
+      status
+      deliveryChannels
+      startedAt
+      finishedAt
+      deliveredArtifactRef
+      deleteAt
+      feedbackSignal
+      feedbackNote
+      failureReason
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+export const CompositionFeedbackSummaryQuery = gql`
+  query CompositionFeedbackSummary($tenantId: ID, $skillId: String) {
+    compositionFeedbackSummary(tenantId: $tenantId, skillId: $skillId) {
+      skillId
+      positive
+      negative
+      total
+    }
+  }
+`;
+
+export const CancelSkillRunMutation = gql`
+  mutation CancelSkillRun($runId: ID!) {
+    cancelSkillRun(runId: $runId) {
+      id
+      status
+      finishedAt
+    }
+  }
+`;
+
+export const SubmitRunFeedbackMutation = gql`
+  mutation SubmitRunFeedback($input: SubmitRunFeedbackInput!) {
+    submitRunFeedback(input: $input) {
+      id
+      feedbackSignal
+      feedbackNote
+    }
+  }
+`;
+
+export const DeleteRunMutation = gql`
+  mutation DeleteRun($runId: ID!) {
+    deleteRun(runId: $runId)
+  }
+`;
