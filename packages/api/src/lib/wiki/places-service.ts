@@ -121,6 +121,31 @@ export async function resolvePlaceForRecord(
 	return await createMetadataOnlyPoi(meta, ctx);
 }
 
+/**
+ * Batch-level convenience: given the records backing a single page, find
+ * the first one that resolves to a POI and return its place_id. Subsequent
+ * records in the batch are intentionally skipped — a page has at most one
+ * `place_id`, and first-seen-wins is the policy (see plan D6).
+ *
+ * Returns null when no record in the batch carries place metadata OR when
+ * every record returns null (e.g., all metadata-only with no
+ * `place_google_place_id` and no enrichment path). Callers should treat
+ * null as "leave this page's place_id unchanged".
+ *
+ * This helper is the seam the compile pipeline uses; the places-service
+ * handles each call's retries, cache hits, and breaker-trip fallbacks.
+ */
+export async function resolveBatchPlace(
+	records: ThinkWorkMemoryRecord[],
+	ctx: PlacesServiceContext,
+): Promise<{ placeId: string } | null> {
+	for (const record of records) {
+		const resolved = await resolvePlaceForRecord(record, ctx);
+		if (resolved) return { placeId: resolved.poi.id };
+	}
+	return null;
+}
+
 // ---------------------------------------------------------------------------
 // Internals
 // ---------------------------------------------------------------------------

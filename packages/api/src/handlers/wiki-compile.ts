@@ -12,15 +12,18 @@
 
 import { runCompileJob, runJobById } from "../lib/wiki/compiler.js";
 import { claimNextCompileJob } from "../lib/wiki/repository.js";
-import { loadGooglePlacesClientFromSsm } from "../lib/wiki/google-places-client.js";
+import {
+	loadGooglePlacesClientFromSsm,
+	type GooglePlacesClient,
+} from "../lib/wiki/google-places-client.js";
 
 // Pre-warm the Google Places client on cold start so the "initialized" vs
 // "key missing" log line lands immediately instead of at first compile.
 // The call is idempotent and caches at module scope — warm invocations
 // hit the cache without SSM or KMS traffic. A null return is fine: the
 // compile pipeline degrades gracefully to metadata-only place rows.
-let googlePlacesClientReady: Promise<unknown> | null = null;
-function primeGooglePlacesClient(): Promise<unknown> {
+let googlePlacesClientReady: Promise<GooglePlacesClient | null> | null = null;
+function primeGooglePlacesClient(): Promise<GooglePlacesClient | null> {
 	if (!googlePlacesClientReady) {
 		googlePlacesClientReady = loadGooglePlacesClientFromSsm().catch((err) => {
 			console.warn(
@@ -55,8 +58,11 @@ export async function handler(
 	event: WikiCompileEvent = {},
 ): Promise<WikiCompileResult> {
 	try {
-		await primeGooglePlacesClient();
-		const opts = event.modelId ? { modelId: event.modelId } : {};
+		const googlePlacesClient = await primeGooglePlacesClient();
+		const opts = {
+			...(event.modelId ? { modelId: event.modelId } : {}),
+			googlePlacesClient,
+		};
 		if (event?.jobId) {
 			const result = await runJobById(event.jobId, opts);
 			if (!result) {

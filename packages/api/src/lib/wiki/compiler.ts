@@ -55,6 +55,11 @@ import {
 	type AffectedPage,
 } from "./deterministic-linker.js";
 import { findExistingPageByTitleOrAlias } from "./page-lookup.js";
+import {
+	resolveBatchPlace,
+	type PlacesServiceContext,
+} from "./places-service.js";
+import type { GooglePlacesClient } from "./google-places-client.js";
 import { BedrockRetryExhaustedError } from "./bedrock.js";
 import { invokeWikiCompile } from "./enqueue.js";
 import { runPlanner, type PlannerResult } from "./planner.js";
@@ -213,6 +218,18 @@ export interface RunCompileJobOpts {
 	 * `BEDROCK_MODEL_ID` (or the code default) applies.
 	 */
 	modelId?: string;
+	/**
+	 * Optional Google Places client. When present, new-page writes call
+	 * `resolveBatchPlace` to materialize wiki_places rows + hierarchy and
+	 * link the page via `place_id`. Null disables the places-service entirely
+	 * for this job — records are persisted to wiki_pages without place_id.
+	 *
+	 * Handler path: `wiki-compile.ts` awaits `loadGooglePlacesClientFromSsm()`
+	 * at cold start and passes the resolved client (or null when SSM has no
+	 * key) here. Tests can inject a mock client or leave it undefined to
+	 * exercise the no-enrichment path.
+	 */
+	googlePlacesClient?: GooglePlacesClient | null;
 }
 
 /**
@@ -242,6 +259,15 @@ export async function runCompileJob(
 	// input slice (not just the last batch) when it derives parent candidates.
 	const allRecordsThisJob: ThinkWorkMemoryRecord[] = [];
 	const jobStartedAt = new Date();
+
+	// Places-service context: one per job. The client reference is captured
+	// at job start; if the breaker trips mid-job the compiler sees it on the
+	// next resolveBatchPlace call and falls back cleanly.
+	const placesCtx: PlacesServiceContext = {
+		tenantId: job.tenant_id,
+		ownerId: job.owner_id,
+		googlePlacesClient: opts.googlePlacesClient ?? null,
+	};
 
 	const isBootstrap = job.trigger === "bootstrap_import";
 	const maxRecordsThisJob = isBootstrap
@@ -342,6 +368,7 @@ export async function runCompileJob(
 				knownPageTitles,
 				knownPageRefs,
 				candidatePages,
+				placesCtx,
 			});
 
 			// Advance cursor only after a clean apply.
@@ -522,6 +549,7 @@ interface ApplyPlanArgs {
 	plan: PlannerResult;
 	metrics: RunJobResult["metrics"];
 	modelId?: string;
+	placesCtx?: PlacesServiceContext;
 	/** Titles of scope-active pages the section writer should linkify. */
 	knownPageTitles?: string[];
 	/** (type, slug, title) of every scope-active page — drives linkifyKnown. */
@@ -738,6 +766,14 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 				})),
 			};
 		});
+		// Resolve a place_id for this page from its backing records before
+		// the upsert. Returns null when no record carries place metadata or
+		// when Google enrichment is disabled — in those cases the page ships
+		// without a place_id.
+		const placeIdForPage = args.placesCtx
+			? (await resolveBatchPlace(pageFallbackSources, args.placesCtx))
+					?.placeId ?? null
+			: null;
 		const createdPage = await upsertPage({
 			tenant_id: job.tenant_id,
 			owner_id: job.owner_id,
@@ -747,6 +783,7 @@ async function applyPlan(args: ApplyPlanArgs): Promise<string | null> {
 			summary: np.summary ?? null,
 			markCompiled: true,
 			sections: newPageSections,
+			place_id: placeIdForPage,
 			aliases: [
 				...seedAliasesForTitle(np.title),
 				...((np.aliases ?? []).map(normalizeAlias)),

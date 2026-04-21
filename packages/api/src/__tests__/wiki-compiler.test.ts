@@ -466,6 +466,21 @@ describe("isMeaningfulChange", () => {
 // ─── compiler end-to-end with mocks ──────────────────────────────────────────
 
 // Hoisted mock handles so vi.mock factories can reach them.
+const { mockPlacesService } = vi.hoisted(() => ({
+	mockPlacesService: {
+		resolveBatchPlace: vi.fn().mockResolvedValue(null),
+	},
+}));
+vi.mock("../lib/wiki/places-service.js", async (importOriginal) => {
+	const actual =
+		(await importOriginal()) as typeof import("../lib/wiki/places-service.js");
+	return {
+		...actual,
+		resolveBatchPlace: (...args: unknown[]) =>
+			mockPlacesService.resolveBatchPlace(...args),
+	};
+});
+
 const { mockAdapter, mockRepo, mockPlanner, mockWriter, mockGetServices } =
 	vi.hoisted(() => {
 		const mockAdapter = {
@@ -668,6 +683,9 @@ describe("runCompileJob", () => {
 		// exercising the dedup path.
 		mockRepo.findAliasMatches.mockResolvedValue([]);
 		mockRepo.findAliasMatchesFuzzy.mockResolvedValue([]);
+		// Default: no places resolved. Tests that exercise the place_id wire
+		// override per-scenario.
+		mockPlacesService.resolveBatchPlace.mockResolvedValue(null);
 	});
 
 	it("creates a new page from the planner's newPages output", async () => {
@@ -1142,6 +1160,68 @@ describe("runCompileJob", () => {
 			expect(result.metrics.pages_upserted).toBe(1);
 			expect(result.metrics.fuzzy_dedupe_merges ?? 0).toBe(0);
 			expect(result.metrics.alias_dedup_merged ?? 0).toBe(0);
+		});
+	});
+
+	describe("runCompileJob → places integration", () => {
+		function plannerWithNewPage(title: string, slug: string) {
+			mockPlanner.runPlanner.mockResolvedValueOnce({
+				pageUpdates: [],
+				newPages: [
+					{
+						type: "entity",
+						slug,
+						title,
+						sections: [
+							{ slug: "overview", heading: "Overview", body_md: "body" },
+						],
+						source_refs: ["r1"],
+					},
+				],
+				unresolvedMentions: [],
+				promotions: [],
+				usage: { inputTokens: 10, outputTokens: 5 },
+			});
+		}
+
+		it("passes resolved place_id to upsertPage when places-service returns one", async () => {
+			scriptAdapter([
+				{ records: [makeRecord("r1")], nextCursor: null },
+				{ records: [], nextCursor: null },
+			]);
+			plannerWithNewPage("Café", "cafe");
+			mockPlacesService.resolveBatchPlace.mockResolvedValueOnce({
+				placeId: "place-42",
+			});
+
+			const result = await runCompileJob(sampleJob);
+
+			expect(result.status).toBe("succeeded");
+			expect(mockPlacesService.resolveBatchPlace).toHaveBeenCalled();
+			const upsertCall = mockRepo.upsertPage.mock.calls.find(
+				(c: unknown[]) => (c[0] as { slug?: string }).slug === "cafe",
+			);
+			expect(upsertCall).toBeDefined();
+			expect((upsertCall![0] as { place_id?: string }).place_id).toBe(
+				"place-42",
+			);
+		});
+
+		it("passes place_id=null when places-service returns null (default path)", async () => {
+			scriptAdapter([
+				{ records: [makeRecord("r1")], nextCursor: null },
+				{ records: [], nextCursor: null },
+			]);
+			plannerWithNewPage("Acme", "acme");
+
+			const result = await runCompileJob(sampleJob);
+
+			expect(result.status).toBe("succeeded");
+			const upsertCall = mockRepo.upsertPage.mock.calls.find(
+				(c: unknown[]) => (c[0] as { slug?: string }).slug === "acme",
+			);
+			expect(upsertCall).toBeDefined();
+			expect((upsertCall![0] as { place_id?: unknown }).place_id).toBeNull();
 		});
 	});
 });
