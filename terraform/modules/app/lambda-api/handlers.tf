@@ -72,6 +72,11 @@ locals {
       BEDROCK_MODEL_ID                   = var.wiki_compile_model_id
       WIKI_AGGREGATION_PASS_ENABLED      = var.wiki_aggregation_pass_enabled
       WIKI_DETERMINISTIC_LINKING_ENABLED = var.wiki_deterministic_linking_enabled
+      # Name (not value) of the SecureString SSM parameter that holds the
+      # Google Places API key. wiki-compile fetches + caches on cold start.
+      # The parameter may contain a placeholder value at apply time — the
+      # Lambda logs and degrades gracefully if decryption returns empty.
+      GOOGLE_PLACES_SSM_PARAM_NAME = "/thinkwork/${var.stage}/google-places/api-key"
     }
     "wiki-export" = {
       WIKI_EXPORT_BUCKET = aws_s3_bucket.wiki_exports.bucket
@@ -459,6 +464,34 @@ resource "aws_iam_role_policy" "scheduler_invoke" {
 # ---------------------------------------------------------------------------
 # SSM Parameters — Lambda ARNs for cross-function invocation
 # ---------------------------------------------------------------------------
+
+########################################################################
+# SecureString parameter for the Google Places API key. wiki-compile reads
+# this on cold start via loadGooglePlacesClientFromSsm() and caches the
+# client at module scope. When google_places_api_key is empty (the
+# default), we seed the parameter with a placeholder so the Lambda init
+# path can distinguish "unconfigured" (skip Google entirely, degrade
+# gracefully) from "configured but wrong" (log + skip). lifecycle.ignore_
+# changes on `value` lets ops rotate via
+#   aws ssm put-parameter --overwrite \
+#     --name /thinkwork/<stage>/google-places/api-key \
+#     --type SecureString --value <KEY>
+# without terraform fighting it on the next apply.
+########################################################################
+
+resource "aws_ssm_parameter" "google_places_api_key" {
+  name        = "/thinkwork/${var.stage}/google-places/api-key"
+  type        = "SecureString"
+  value       = var.google_places_api_key != "" ? var.google_places_api_key : "PLACEHOLDER_SET_VIA_CLI"
+  description = "Google Places API (New) key consumed by wiki-compile. See docs/plans/2026-04-21-005-feat-wiki-place-capability-v2-plan.md Unit 4."
+
+  lifecycle {
+    # Allow `aws ssm put-parameter --overwrite` to stick across applies.
+    # New-key rotation or initial population by ops should happen via CLI,
+    # not via terraform var.
+    ignore_changes = [value]
+  }
+}
 
 resource "aws_ssm_parameter" "lambda_arns" {
   for_each = local.use_local_zips ? {

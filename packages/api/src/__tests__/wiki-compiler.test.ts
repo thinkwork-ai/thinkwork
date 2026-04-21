@@ -466,6 +466,21 @@ describe("isMeaningfulChange", () => {
 // ─── compiler end-to-end with mocks ──────────────────────────────────────────
 
 // Hoisted mock handles so vi.mock factories can reach them.
+const { mockPlacesService } = vi.hoisted(() => ({
+	mockPlacesService: {
+		resolveBatchPlace: vi.fn().mockResolvedValue(null),
+	},
+}));
+vi.mock("../lib/wiki/places-service.js", async (importOriginal) => {
+	const actual =
+		(await importOriginal()) as typeof import("../lib/wiki/places-service.js");
+	return {
+		...actual,
+		resolveBatchPlace: (...args: unknown[]) =>
+			mockPlacesService.resolveBatchPlace(...args),
+	};
+});
+
 const { mockAdapter, mockRepo, mockPlanner, mockWriter, mockGetServices } =
 	vi.hoisted(() => {
 		const mockAdapter = {
@@ -492,7 +507,7 @@ const { mockAdapter, mockRepo, mockPlanner, mockWriter, mockGetServices } =
 				slug: "page-new",
 				title: "page-new",
 			}),
-			upsertPageLink: vi.fn().mockResolvedValue(undefined),
+			upsertPageLink: vi.fn().mockResolvedValue(true),
 			upsertUnresolvedMention: vi.fn(),
 			markUnresolvedPromoted: vi.fn(),
 			findPagesByExactTitle: vi.fn().mockResolvedValue([]),
@@ -509,6 +524,8 @@ const { mockAdapter, mockRepo, mockPlanner, mockWriter, mockGetServices } =
 				},
 			}),
 			countDuplicateTitleCandidates: vi.fn().mockResolvedValue(0),
+			findPlaceById: vi.fn().mockResolvedValue(null),
+			findPageByPlaceId: vi.fn().mockResolvedValue(null),
 			normalizeAlias: (s: string) => s.toLowerCase().trim(),
 		};
 		const mockPlanner = { runPlanner: vi.fn() };
@@ -561,6 +578,9 @@ vi.mock("../lib/wiki/repository.js", async (importOriginal) => {
 			mockRepo.findMemoryUnitPageSources(...args),
 		countDuplicateTitleCandidates: (...args: unknown[]) =>
 			mockRepo.countDuplicateTitleCandidates(...args),
+		findPlaceById: (...args: unknown[]) => mockRepo.findPlaceById(...args),
+		findPageByPlaceId: (...args: unknown[]) =>
+			mockRepo.findPageByPlaceId(...args),
 	};
 });
 
@@ -658,7 +678,9 @@ describe("runCompileJob", () => {
 			slug: "page-new",
 			title: "page-new",
 		});
-		mockRepo.upsertPageLink.mockResolvedValue(undefined);
+		mockRepo.upsertPageLink.mockResolvedValue(true);
+		mockRepo.findPlaceById.mockResolvedValue(null);
+		mockRepo.findPageByPlaceId.mockResolvedValue(null);
 		mockRepo.findPagesByExactTitle.mockResolvedValue([]);
 		mockRepo.findPagesByFuzzyTitle.mockResolvedValue([]);
 		mockRepo.bumpSectionLastSeen.mockResolvedValue(0);
@@ -668,6 +690,9 @@ describe("runCompileJob", () => {
 		// exercising the dedup path.
 		mockRepo.findAliasMatches.mockResolvedValue([]);
 		mockRepo.findAliasMatchesFuzzy.mockResolvedValue([]);
+		// Default: no places resolved. Tests that exercise the place_id wire
+		// override per-scenario.
+		mockPlacesService.resolveBatchPlace.mockResolvedValue(null);
 	});
 
 	it("creates a new page from the planner's newPages output", async () => {
@@ -1142,6 +1167,175 @@ describe("runCompileJob", () => {
 			expect(result.metrics.pages_upserted).toBe(1);
 			expect(result.metrics.fuzzy_dedupe_merges ?? 0).toBe(0);
 			expect(result.metrics.alias_dedup_merged ?? 0).toBe(0);
+		});
+	});
+
+	describe("runCompileJob → places integration", () => {
+		function plannerWithNewPage(title: string, slug: string) {
+			mockPlanner.runPlanner.mockResolvedValueOnce({
+				pageUpdates: [],
+				newPages: [
+					{
+						type: "entity",
+						slug,
+						title,
+						sections: [
+							{ slug: "overview", heading: "Overview", body_md: "body" },
+						],
+						source_refs: ["r1"],
+					},
+				],
+				unresolvedMentions: [],
+				promotions: [],
+				usage: { inputTokens: 10, outputTokens: 5 },
+			});
+		}
+
+		it("passes resolved place_id to upsertPage when places-service returns one", async () => {
+			scriptAdapter([
+				{ records: [makeRecord("r1")], nextCursor: null },
+				{ records: [], nextCursor: null },
+			]);
+			plannerWithNewPage("Café", "cafe");
+			mockPlacesService.resolveBatchPlace.mockResolvedValueOnce({
+				placeId: "place-42",
+			});
+
+			const result = await runCompileJob(sampleJob);
+
+			expect(result.status).toBe("succeeded");
+			expect(mockPlacesService.resolveBatchPlace).toHaveBeenCalled();
+			const upsertCall = mockRepo.upsertPage.mock.calls.find(
+				(c: unknown[]) => (c[0] as { slug?: string }).slug === "cafe",
+			);
+			expect(upsertCall).toBeDefined();
+			expect((upsertCall![0] as { place_id?: string }).place_id).toBe(
+				"place-42",
+			);
+		});
+
+		it("passes place_id=null when places-service returns null (default path)", async () => {
+			scriptAdapter([
+				{ records: [makeRecord("r1")], nextCursor: null },
+				{ records: [], nextCursor: null },
+			]);
+			plannerWithNewPage("Acme", "acme");
+
+			const result = await runCompileJob(sampleJob);
+
+			expect(result.status).toBe("succeeded");
+			const upsertCall = mockRepo.upsertPage.mock.calls.find(
+				(c: unknown[]) => (c[0] as { slug?: string }).slug === "acme",
+			);
+			expect(upsertCall).toBeDefined();
+			expect((upsertCall![0] as { place_id?: unknown }).place_id).toBeNull();
+		});
+
+		it("emits a hierarchy reference edge and increments links_written_place", async () => {
+			scriptAdapter([
+				{ records: [makeRecord("r1")], nextCursor: null },
+				{ records: [], nextCursor: null },
+			]);
+			plannerWithNewPage("Louvre", "louvre");
+			mockPlacesService.resolveBatchPlace.mockResolvedValueOnce({
+				placeId: "poi-paris",
+			});
+			// upsertPage returns a page row that carries the place_id so the
+			// hierarchy emitter has something to walk from.
+			mockRepo.upsertPage.mockImplementation(async (input: any) => ({
+				id: `page-${input.slug}`,
+				type: input.type,
+				slug: input.slug,
+				title: input.title,
+				place_id: input.place_id ?? null,
+			}));
+			mockRepo.findPlaceById.mockResolvedValue({
+				id: "poi-paris",
+				parent_place_id: "place-city-paris",
+			});
+			mockRepo.findPageByPlaceId.mockResolvedValue({
+				id: "page-city-paris",
+			});
+			mockRepo.upsertPageLink.mockResolvedValue(true);
+
+			const result = await runCompileJob(sampleJob);
+
+			expect(result.status).toBe("succeeded");
+			expect(result.metrics.links_written_place).toBe(1);
+			const linkCall = mockRepo.upsertPageLink.mock.calls.find(
+				(c: unknown[]) =>
+					(c[0] as { context?: string }).context?.startsWith(
+						"deterministic:place:",
+					),
+			);
+			expect(linkCall).toBeDefined();
+			expect((linkCall![0] as { fromPageId?: string }).fromPageId).toBe(
+				"page-louvre",
+			);
+			expect((linkCall![0] as { toPageId?: string }).toPageId).toBe(
+				"page-city-paris",
+			);
+		});
+
+		it("skips hierarchy emission when the place is top-of-hierarchy", async () => {
+			scriptAdapter([
+				{ records: [makeRecord("r1")], nextCursor: null },
+				{ records: [], nextCursor: null },
+			]);
+			plannerWithNewPage("France", "france");
+			mockPlacesService.resolveBatchPlace.mockResolvedValueOnce({
+				placeId: "country-fr",
+			});
+			mockRepo.upsertPage.mockImplementation(async (input: any) => ({
+				id: `page-${input.slug}`,
+				type: input.type,
+				slug: input.slug,
+				title: input.title,
+				place_id: input.place_id ?? null,
+			}));
+			mockRepo.findPlaceById.mockResolvedValue({
+				id: "country-fr",
+				parent_place_id: null, // top of hierarchy
+			});
+			mockRepo.upsertPageLink.mockResolvedValue(true);
+
+			const result = await runCompileJob(sampleJob);
+
+			expect(result.status).toBe("succeeded");
+			expect(result.metrics.links_written_place).toBe(0);
+			expect(mockRepo.findPageByPlaceId).not.toHaveBeenCalled();
+		});
+
+		it("does not double-count when upsertPageLink hits ON CONFLICT DO NOTHING", async () => {
+			scriptAdapter([
+				{ records: [makeRecord("r1")], nextCursor: null },
+				{ records: [], nextCursor: null },
+			]);
+			plannerWithNewPage("Louvre", "louvre");
+			mockPlacesService.resolveBatchPlace.mockResolvedValueOnce({
+				placeId: "poi-paris",
+			});
+			mockRepo.upsertPage.mockImplementation(async (input: any) => ({
+				id: `page-${input.slug}`,
+				type: input.type,
+				slug: input.slug,
+				title: input.title,
+				place_id: input.place_id ?? null,
+			}));
+			mockRepo.findPlaceById.mockResolvedValue({
+				id: "poi-paris",
+				parent_place_id: "place-city-paris",
+			});
+			mockRepo.findPageByPlaceId.mockResolvedValue({
+				id: "page-city-paris",
+			});
+			// Re-run hits the existing edge — upsertPageLink returns false.
+			mockRepo.upsertPageLink.mockResolvedValue(false);
+
+			const result = await runCompileJob(sampleJob);
+
+			expect(result.status).toBe("succeeded");
+			expect(result.metrics.links_written_place).toBe(0);
 		});
 	});
 });
