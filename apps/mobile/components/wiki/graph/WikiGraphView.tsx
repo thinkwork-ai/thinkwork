@@ -27,11 +27,24 @@ import type {
 // Loosened from `WikiDetailSubgraph` (which targets ~10-30 nodes): more
 // link distance + collide so ~18-char titles don't crash into adjacent
 // nodes at default zoom.
+//
+// Animation length is controlled by `alphaDecay` (aggressive cooling)
+// and `quiesceAlpha` (stop rendering when motion is already tiny) —
+// NOT by `velocityDecay`. Damping per-tick velocity would shorten the
+// animation but also prevent popular hubs from pulling tight clusters,
+// which is the single most important visual signal in label mode.
+//
+// The pairing matters: `quiesceAlpha` must be *low enough* that the
+// tick where we stop has only tiny per-tick motion, otherwise the
+// animation appears to cut off mid-drift rather than trail to rest.
+// `alphaDecay` carries the time savings instead.
 const LABEL_MODE_SIM_CONFIG: SimConfig = {
   linkDistance: 110,
   chargeStrength: -340,
   collideRadius: 52,
   xyStrength: 0.04,
+  alphaDecay: 0.1,
+  quiesceAlpha: 0.02,
 };
 
 interface WikiGraphViewProps {
