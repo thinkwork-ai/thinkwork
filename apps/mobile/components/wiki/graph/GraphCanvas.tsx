@@ -59,6 +59,11 @@ const NEIGHBOR_RING_STROKE = 1.5;
 // edge flush with the filled circle's outer edge.
 const NEIGHBOR_RING_INSET = NEIGHBOR_RING_STROKE / 2;
 const DIM_OPACITY = 0.15;
+// Default edge opacity. Kept well below 1 so connector lines support the
+// nodes rather than overpower them — against the black canvas, `mutedForeground`
+// at full opacity reads as near-white and crowds out labels at high edge
+// density. 0.4 keeps edges clearly visible without competing for attention.
+const EDGE_OPACITY = 0.4;
 const LABEL_FONT_SIZE = 11;
 const LABEL_GAP = 6;
 const LABEL_MAX_CHARS = 18;
@@ -134,7 +139,7 @@ export function GraphCanvas({
               p2={vec(b.x - ux * nodeRadius, b.y - uy * nodeRadius)}
               color={edgeColor}
               strokeWidth={1}
-              opacity={edgeDimmed ? DIM_OPACITY : 1}
+              opacity={edgeDimmed ? DIM_OPACITY : EDGE_OPACITY}
             />
           );
         })}
