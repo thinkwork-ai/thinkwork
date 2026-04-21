@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Users, Search, Plus } from "lucide-react";
@@ -99,6 +99,7 @@ const columns: ColumnDef<HumanRow>[] = [
 
 function HumansPage() {
   const { tenantId } = useTenant();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
   useBreadcrumbs([{ label: "Humans" }]);
@@ -169,7 +170,14 @@ function HumansPage() {
           action={{ label: "Invite Member", onClick: () => setInviteOpen(true) }}
         />
       ) : (
-        <DataTable columns={columns} data={rows} filterValue={search} />
+        <DataTable
+          columns={columns}
+          data={rows}
+          filterValue={search}
+          onRowClick={(row) =>
+            navigate({ to: "/humans/$humanId", params: { humanId: row.id } })
+          }
+        />
       )}
 
       <InviteMemberDialog
