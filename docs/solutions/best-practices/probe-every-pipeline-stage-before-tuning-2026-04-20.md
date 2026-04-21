@@ -1,6 +1,7 @@
 ---
 title: Probe every pipeline stage before tuning the last knob
 date: 2026-04-20
+last_updated: 2026-04-21
 category: best-practices
 module: wiki-parent-linking
 problem_type: best_practice
@@ -105,6 +106,7 @@ The table tells you which stage is empty before you touch any knob.
 
 ## Related
 
+- [Backfill audits must account for corpus growth when materializing structural pages](./backfill-audits-account-for-corpus-growth-2026-04-21.md) — denominator-drift corollary. The audit script from this learning existed and was correct, but its `projected_linked_pct` ratio assumed a static corpus. When the wiki-places-v2 wet-run materialized 279 new backing pages, the projection undershot by 50%. Parent methodology = audit first; corollary = watch the audit's own denominator assumptions.
 - `docs/solutions/logic-errors/compile-continuation-dedupe-bucket-2026-04-20.md` — sibling wiki-compile pipeline learning (continuation bucket math + `ON CONFLICT DO NOTHING` swallowing failures). Complementary: same module, different stage, same "surface metric hid an upstream failure" shape.
 - `docs/plans/2026-04-20-017-handoff-compile-reliability-and-read-surfaces.md` — the handoff plan whose item-#2 hypothesis this audit invalidated.
 - PR [#311](https://github.com/thinkwork-ai/thinkwork/pull/311) — the fix that landed after the audit ran.
