@@ -572,3 +572,184 @@ def clear_thread_memory(ticket_id: str) -> bool:
     return True
 
 
+# ---------------------------------------------------------------------------
+# Scoped learning store + recall (compound primitive — Unit 3)
+# ---------------------------------------------------------------------------
+#
+# Scope tuple: (tenant_id, user_id?, skill_id, subject_entity_id?)
+#
+# Writes land at ONE namespace — the most specific one the scope describes.
+# Reads walk the scope's namespace *priority chain* (most → least specific)
+# so user-scoped learnings surface before tenant-wide ones, and per-subject
+# learnings surface before per-user general ones. Results are deduped by
+# text and capped at top_k.
+#
+# Before the per-user memory scope refactor lands (auto-memory
+# project_memory_scope_refactor), we store scope inline on the namespace.
+# After the refactor, this helper keeps the same public signature and
+# just swaps its underlying namespace scheme — compositions don't change.
+
+
+def _learning_namespace(scope: dict) -> str:
+    """Encode a scope dict into the single namespace a learning writes to.
+
+    The most-specific namespace the scope describes:
+      tenant + skill                                                   (tenant-wide)
+      tenant + skill + subject                                         (webhook / no-user)
+      tenant + user + skill                                            (user-scoped)
+      tenant + user + skill + subject                                  (user + subject)
+
+    Raises ValueError for scopes missing tenant_id or skill_id.
+    """
+    tenant = scope.get("tenant_id")
+    skill = scope.get("skill_id")
+    if not tenant or not skill:
+        raise ValueError("scope must include tenant_id and skill_id")
+    user = scope.get("user_id")
+    subject = scope.get("subject_entity_id")
+
+    parts = ["learnings", f"tenant_{tenant}"]
+    if user:
+        parts.append(f"user_{user}")
+    parts.append(f"skill_{skill}")
+    if subject:
+        parts.append(f"subject_{subject}")
+    return "/".join(parts)
+
+
+def _learning_recall_namespaces(scope: dict) -> list[str]:
+    """Return the namespace priority chain for a recall scope.
+
+    Ordered most → least specific so callers can tag results with priority
+    index 0 (best) through N-1.
+    """
+    tenant = scope.get("tenant_id")
+    skill = scope.get("skill_id")
+    if not tenant or not skill:
+        return []
+    user = scope.get("user_id")
+    subject = scope.get("subject_entity_id")
+
+    chain: list[str] = []
+    if user and subject:
+        chain.append(f"learnings/tenant_{tenant}/user_{user}/skill_{skill}/subject_{subject}")
+        chain.append(f"learnings/tenant_{tenant}/user_{user}/skill_{skill}")
+    elif user:
+        chain.append(f"learnings/tenant_{tenant}/user_{user}/skill_{skill}")
+    elif subject:
+        # Webhook / no-user path — still bias toward subject-specific learnings
+        # before pulling in the broader tenant corpus.
+        chain.append(f"learnings/tenant_{tenant}/skill_{skill}/subject_{subject}")
+    chain.append(f"learnings/tenant_{tenant}/skill_{skill}")
+    return chain
+
+
+def store_learning(scope: dict, content: str) -> bool:
+    """Persist a single learning under the scoped namespace. Best-effort.
+
+    Compositions should not fail because a learning couldn't be stored,
+    so this function returns False (and logs) on any error rather than
+    raising.
+    """
+    if not AGENTCORE_MEMORY_ID:
+        logger.debug("store_learning skipped: AGENTCORE_MEMORY_ID unset")
+        return False
+    if not content or not content.strip():
+        return False
+    try:
+        namespace = _learning_namespace(scope)
+    except ValueError as exc:
+        logger.warning("store_learning invalid scope: %s", exc)
+        return False
+
+    try:
+        client = _get_agentcore_client()
+        request_id = uuid.uuid4().hex[:16]
+        now = datetime.now(timezone.utc)
+        response = client.batch_create_memory_records(
+            memoryId=AGENTCORE_MEMORY_ID,
+            records=[{
+                "requestIdentifier": request_id,
+                "content": {"text": content},
+                "namespaces": [namespace],
+                "timestamp": now,
+            }],
+        )
+        failed = response.get("failedRecords", [])
+        if failed:
+            logger.warning("store_learning failed_records namespace=%s: %s",
+                           namespace, failed)
+            return False
+        logger.info("store_learning namespace=%s len=%d", namespace, len(content))
+        return True
+    except Exception as e:
+        logger.warning("store_learning boto error namespace=%s: %s", namespace, e)
+        return False
+
+
+def recall_learnings(scope: dict, query: str, top_k: int = 5) -> list[dict]:
+    """Recall prior learnings in priority order (user → tenant).
+
+    Walks the scope's namespace chain, prefers higher-priority tiers when
+    the same text appears at multiple levels, caps the final result at
+    top_k. Returns a list of dicts: `{text, score, priority, namespace}`.
+
+    Best-effort: on any boto error, returns []. A composition that recalls
+    nothing runs with an empty prior_learnings context — not a failure.
+    """
+    if not AGENTCORE_MEMORY_ID:
+        return []
+    namespaces = _learning_recall_namespaces(scope)
+    if not namespaces:
+        return []
+
+    try:
+        client = _get_agentcore_client()
+    except Exception as e:  # pragma: no cover — boto3 client init rarely raises
+        logger.warning("recall_learnings client init failed: %s", e)
+        return []
+
+    has_retrieve = hasattr(client, "retrieve_memories")
+
+    seen_text: dict[str, dict] = {}
+    for priority, namespace in enumerate(namespaces):
+        try:
+            if has_retrieve:
+                response = client.retrieve_memories(
+                    memoryId=AGENTCORE_MEMORY_ID,
+                    namespace=namespace,
+                    searchCriteria={
+                        "searchQuery": query,
+                        "topK": top_k,
+                    },
+                )
+            else:
+                # Older boto3 / regions without semantic search — fall back
+                # to raw listing. Results aren't scored by similarity, but
+                # namespace priority still ranks them usefully.
+                response = client.list_memory_records(
+                    memoryId=AGENTCORE_MEMORY_ID,
+                    namespace=namespace,
+                )
+        except Exception as e:
+            logger.warning("recall_learnings namespace=%s failed: %s", namespace, e)
+            continue
+
+        records = response.get("memoryRecordSummaries", [])
+        for record in records:
+            text = record.get("content", {}).get("text", "")
+            if not text or text in seen_text:
+                continue
+            seen_text[text] = {
+                "text": text,
+                "score": record.get("score", 0.5),
+                "priority": priority,
+                "namespace": namespace,
+                "memoryRecordId": record.get("memoryRecordId", ""),
+            }
+
+    # Preserve priority order (insertion order of seen_text is priority-ordered
+    # because we iterated namespaces in priority order), then cap at top_k.
+    result = list(seen_text.values())[:top_k]
+    logger.info("recall_learnings scope=%s results=%d", namespaces[0], len(result))
+    return result
