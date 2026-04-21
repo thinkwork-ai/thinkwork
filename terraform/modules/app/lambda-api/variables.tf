@@ -227,3 +227,10 @@ variable "wiki_deterministic_linking_enabled" {
   type        = string
   default     = "true"
 }
+
+variable "google_places_api_key" {
+  description = "Google Places API (New) key used by wiki-compile for POI → city/state/country hierarchy enrichment. Stored as a SecureString SSM parameter at /thinkwork/<stage>/google-places/api-key. Empty default creates the parameter with a placeholder value; operator populates via `aws ssm put-parameter --overwrite`. The parameter's value has lifecycle.ignore_changes set so CLI rotation sticks across terraform applies. Compile gracefully degrades when the key is absent (metadata-only place rows) — never fails compile."
+  type        = string
+  default     = ""
+  sensitive   = true
+}

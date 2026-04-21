@@ -181,6 +181,24 @@ variable "wiki_aggregation_pass_enabled" {
   default     = "true"
 }
 
+variable "google_places_api_key" {
+  description = <<-EOT
+    Google Places API (New) key used by wiki-compile to enrich POI records
+    with city/state/country hierarchy during compile. When empty, compile
+    gracefully degrades to metadata-only place rows (no hierarchy, no
+    backing pages), so this is opt-in. Stored as a SecureString at
+    /thinkwork/<stage>/google-places/api-key — see
+    terraform/modules/app/lambda-api/handlers.tf for the SSM resource.
+
+    The parameter's value has lifecycle.ignore_changes set, so you can
+    rotate via `aws ssm put-parameter --overwrite` without terraform
+    fighting you on the next apply.
+  EOT
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "wiki_deterministic_linking_enabled" {
   description = <<-EOT
     Feature flag for deterministic compile-time link emission:
@@ -245,6 +263,7 @@ module "thinkwork" {
   wiki_compile_model_id              = var.wiki_compile_model_id
   wiki_aggregation_pass_enabled      = var.wiki_aggregation_pass_enabled
   wiki_deterministic_linking_enabled = var.wiki_deterministic_linking_enabled
+  google_places_api_key              = var.google_places_api_key
 
   # Greenfield: create everything (all defaults are true)
 }
