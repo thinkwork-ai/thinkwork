@@ -1,0 +1,26 @@
+slug: gather
+display_name: Gather
+description: >
+  Parallel fan-out primitive. Not a runnable skill on its own — compositions
+  declare a parallel step and the composition runner executes the branches
+  concurrently. This entry exists so admins can see gather in the catalog
+  alongside the other composition primitives.
+category: composable-primitive
+version: "0.1.0"
+author: thinkwork
+icon: layers
+tags: [composition, primitive, parallel, fan-out]
+
+# `declarative` signals: do not load this as an agent tool. The composition
+# runner special-cases `mode: parallel` steps and runs their branches via
+# asyncio.gather; there is no script, prompt, or MCP to invoke here.
+execution: declarative
+invocable_from: composition
+
+# Admin discoverability only. If an admin tries to enable gather as a
+# direct agent tool, the skill registry should refuse with the message
+# below.
+standalone_invocation_error: >
+  The `gather` primitive is executed by the composition runner. It is not
+  a runnable skill on its own. Use it inside a composition step with
+  `mode: parallel` and declare the branches you want to fan out.

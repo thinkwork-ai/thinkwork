@@ -1,0 +1,27 @@
+slug: synthesize
+display_name: Synthesize
+description: Read a frame + gathered data (and optionally prior learnings) and produce a structured analysis — risks, opportunities, open questions, and talking points — that the package step will render into a deliverable. Composition-only primitive.
+category: composable-primitive
+version: "0.1.0"
+author: thinkwork
+icon: git-merge
+tags: [composition, primitive, analysis]
+execution: context
+mode: tool
+invocable_from: composition
+
+inputs:
+  framed:
+    type: string
+    required: true
+  gathered:
+    type: string
+    required: true
+  focus:
+    type: string
+    required: false
+  prior_learnings:
+    type: string
+    required: false
+
+output: synthesis
