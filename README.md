@@ -34,7 +34,7 @@ If you're not on AWS, this isn't the right tool for you — and that's the point
 - **Threads with structured channels** (CHAT, AUTO, EMAIL, SLACK, GITHUB) for task intake and execution
 - **Memory** as the umbrella layer for document knowledge, long-term memory, retrieval context, and portable memory contracts — including a **memory graph view** for inspecting relationships across stored memories
 - **Compounding Memory (Wiki)** — scattered memories distill into durable, browseable pages (Entity, Topic, Decision) on both the admin and mobile surfaces
-- **Evaluations** — in-app test-case authoring, eval runs, and per-agent scoring on top of AWS Bedrock AgentCore Evaluations
+- **Evaluations** — in-app test-case authoring, evaluation runs, and per-agent scoring on top of AWS Bedrock AgentCore Evaluations
 - **Cost & budget analytics** — per-agent / per-model spend, time-series charts, and budget policies that auto-pause agents
 - **Agent Templates** for fleet-wide configuration
 - **Terraform Registry modules** at `thinkwork-ai/thinkwork/aws` — drops into your existing AWS Landing Zone with BYO-everywhere support
