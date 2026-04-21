@@ -36,23 +36,6 @@ Tapping a push opens the app. What happens next depends on the tap context:
 
 All three paths land in the same thread-detail screen, so the user always ends up looking at the thing the push was about.
 
-## Narrow push policy for external tasks
-
-Not every event that affects a user fires a push. For external task events, the policy is deliberately narrow (see [External Task Connectors — Push notification policy](/concepts/connectors/external-tasks/#push-notification-policy)):
-
-| Event | Push? |
-|---|---|
-| Task assigned or reassigned to the user | Yes |
-| Task status changed | Yes |
-| Task updated with `status`, `status_id`, `due_at`, or `due_date` in the changed fields | Yes |
-| Task updated with only description, title, or priority changes | No |
-| Task commented | No |
-| Task created | No |
-
-The reasoning: push notifications should only fire on things that change the user's plan. A description edit shouldn't buzz a user's pocket; an assignment or due-date change should.
-
-The same activity still lands on the task card's **Activity** section (via AppSync subscriptions, see [Mobile — Threads & Chat](/applications/mobile/threads-and-chat/#real-time-not-polling)) — only the push is filtered. The user can always see the full audit trail by opening the thread.
-
 ## Payload shape
 
 External-task pushes carry a small, predictable payload:
@@ -89,11 +72,10 @@ For payload routing specifically, the simulator path is enough: the mobile app d
 ## Known limits
 
 - **Android not yet shipped.** Push notifications are iOS-only in v1. The Expo push wrapper would work on Android out of the box, but no production Android build is published.
-- **No per-integration mute.** Users can't silence LastMile pushes while keeping Microsoft 365 pushes, for example. This is an in-app preferences page on the roadmap.
+- **No per-integration mute.** Users can't silence one integration's pushes while keeping another's. This is an in-app preferences page on the roadmap.
 - **Cold-launch deep link does not restore scroll state.** Tapping a push while the app is closed opens the target thread at its default scroll position, not wherever the user had previously scrolled.
 
 ## Related pages
 
-- [External Task Connectors — Push notification policy](/concepts/connectors/external-tasks/#push-notification-policy) — the server-side policy that decides when to fire
 - [Mobile — Threads & Chat](/applications/mobile/threads-and-chat/) — where the tap handler lands
 - [Mobile — Authentication](/applications/mobile/authentication/) — why push registration waits for sign-in

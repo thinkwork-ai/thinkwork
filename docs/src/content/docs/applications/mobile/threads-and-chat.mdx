@@ -22,23 +22,14 @@ The Threads tab supports:
 
 Rows are rendered by two components: `ThreadRow` for chat threads and `TaskRow` for external-task threads. The user doesn't have to care about the difference; the list is unified.
 
-### When does the Tasks tab appear?
-
-**Tab:** `(tabs)/tasks`
-
-The Tasks tab is conditional. It only appears if the user has at least one connected task integration (currently LastMile; future: Linear and others). If no task connector is active, the tab is hidden from the tab bar and the user sees a two-tab layout (Threads + Settings). As soon as they connect a task integration from **Settings → Integrations**, the Tasks tab appears.
-
-The Tasks tab itself is a filtered view of the same threads list — it shows only threads where `channel = TASK` and the user is the assigned owner, filtered by active / done / all. See [External Task Connectors](/concepts/connectors/external-tasks/) for the full task-card model.
-
 ## Thread detail
 
 **Route:** `/thread/[threadId]`
 
 Tapping a thread opens the chat view. The layout top-to-bottom:
 
-1. **Optional pinned task header.** For external-task threads, a pinned header renders the `ExternalTaskCard` with header, field list, activity, and action buttons. Covered in [External Task Connectors](/concepts/connectors/external-tasks/#what-the-user-sees).
-2. **Message timeline.** User and agent messages scroll in reverse-chronological order with user messages right-aligned and agent messages left-aligned.
-3. **Message input footer.** A multi-line input with supporting controls.
+1. **Message timeline.** User and agent messages scroll in reverse-chronological order with user messages right-aligned and agent messages left-aligned.
+2. **Message input footer.** A multi-line input with supporting controls.
 
 The timeline renders markdown via a custom `MarkdownMessage` component that handles code blocks, inline code, tables, and streaming text. In-flight agent messages render character-by-character as tokens stream from the model, so the user sees the response form in real time.
 
@@ -94,5 +85,4 @@ This is an intentional scope decision for v1. Offline compose adds complexity (l
 
 - [Threads (concept)](/concepts/threads/) — the thread model at the product level
 - [Agents (concept)](/concepts/agents/) — how agents produce the messages the timeline renders
-- [External Task Connectors](/concepts/connectors/external-tasks/) — the pinned task header and activity section
-- [Mobile — Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/) — how the Tasks tab gets unlocked
+- [Mobile — Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/) — per-user integration and MCP server setup

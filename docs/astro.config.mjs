@@ -67,7 +67,6 @@ export default defineConfig({
                 { label: "Overview", slug: "concepts/connectors" },
                 { label: "Integrations", slug: "concepts/connectors/integrations" },
                 { label: "MCP Tools", slug: "concepts/connectors/mcp-tools" },
-                { label: "External Tasks", slug: "concepts/connectors/external-tasks" },
               ],
             },
             {
@@ -132,7 +131,6 @@ export default defineConfig({
                     { label: "Scheduled Jobs", slug: "applications/admin/scheduled-jobs" },
                     { label: "Evaluations", slug: "applications/admin/evaluations" },
                     { label: "Routines", slug: "applications/admin/routines" },
-                    { label: "Connectors", slug: "applications/admin/connectors" },
                     { label: "Webhooks", slug: "applications/admin/webhooks" },
                     { label: "Artifacts", slug: "applications/admin/artifacts" },
                     { label: "Humans", slug: "applications/admin/humans" },
@@ -149,7 +147,6 @@ export default defineConfig({
                 { label: "Authentication", slug: "applications/mobile/authentication" },
                 { label: "Threads & Chat", slug: "applications/mobile/threads-and-chat" },
                 { label: "Integrations & MCP Connect", slug: "applications/mobile/integrations-and-mcp-connect" },
-                { label: "External Tasks", slug: "applications/mobile/external-tasks" },
                 { label: "Push Notifications", slug: "applications/mobile/push-notifications" },
                 { label: "Distribution", slug: "applications/mobile/distribution" },
               ],
@@ -205,7 +202,6 @@ export default defineConfig({
           items: [
             { label: "Skill Packs", slug: "guides/skill-packs" },
             { label: "Connectors", slug: "guides/connectors" },
-            { label: "External Tasks", slug: "guides/external-tasks" },
             { label: "Evaluations", slug: "guides/evaluations" },
             { label: "Operating Compounding Memory", slug: "guides/compounding-memory-operations" },
           ],
