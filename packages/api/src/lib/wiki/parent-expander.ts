@@ -17,7 +17,7 @@
 import type { ThinkWorkMemoryRecord } from "../memory/types.js";
 import { slugifyTitle } from "./aliases.js";
 
-export type ParentCandidateReason = "city" | "journal" | "tag_cluster";
+export type ParentCandidateReason = "city" | "journal";
 
 /** Whether the candidate came from scanning batch memory records vs
  * scope-wide page summaries. Matters to the deterministic linker because
@@ -150,21 +150,6 @@ export function deriveParentCandidates(
 			for (const t of readTags(meta)) entry.tags.add(t);
 		}
 
-		// --- Tag cluster -----------------------------------------------------
-		// Any tag repeated across records is a weak signal; downstream filtering
-		// on supportingCount >= min keeps ephemeral one-offs out.
-		for (const tag of readTags(meta)) {
-			const title = titleCase(tag);
-			const key = `tag:${title.toLowerCase()}`;
-			const entry = ensure(key, {
-				reason: "tag_cluster",
-				title,
-				sectionSlug: slugifyTitle(title) || "overview",
-				sectionHeading: title,
-			});
-			entry.recordIds.add(r.id);
-			entry.tags.add(tag);
-		}
 	}
 
 	const out: DerivedParentCandidate[] = [];

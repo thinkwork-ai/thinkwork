@@ -25,7 +25,6 @@ import { describeAllPageTypes } from "./templates.js";
 import {
 	validatePlannerResult,
 	type PlannerResult,
-	type PlannedPageLink,
 } from "./planner.js";
 import type {
 	WikiPageType,
@@ -61,7 +60,6 @@ export interface AggregationCandidatePage {
 export interface AggregationLinkNeighborhood {
 	pageId: string;
 	inboundCount: number;
-	outboundSlugs: Array<{ type: WikiPageType; slug: string }>;
 }
 
 export interface AggregationBatch {
@@ -230,7 +228,7 @@ export function buildAggregationUserPrompt(batch: AggregationBatch): string {
 	} else {
 		for (const n of batch.linkNeighborhoods.slice(0, 30)) {
 			lines.push(
-				`- pageId=${n.pageId} inbound=${n.inboundCount} outbound=${JSON.stringify(n.outboundSlugs.slice(0, 8))}`,
+				`- pageId=${n.pageId} inbound=${n.inboundCount}`,
 			);
 		}
 	}
@@ -289,20 +287,6 @@ export async function runAggregationPlanner(
 			outputTokens: resp.outputTokens,
 			bedrockRetries: resp.retries,
 		},
-	};
-}
-
-// Convenience: useful as a default empty result for the feature-flag-off path.
-export function emptyAggregationResult(): PlannerResult {
-	return {
-		pageUpdates: [],
-		newPages: [],
-		unresolvedMentions: [],
-		promotions: [],
-		pageLinks: [] as PlannedPageLink[],
-		parentSectionUpdates: [],
-		sectionPromotions: [],
-		usage: { inputTokens: 0, outputTokens: 0 },
 	};
 }
 

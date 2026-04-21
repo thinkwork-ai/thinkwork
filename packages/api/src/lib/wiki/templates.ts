@@ -18,8 +18,6 @@ export interface SectionTemplate {
 	heading: string;
 	/** One-line description for the planner prompt — what belongs here. */
 	prompt: string;
-	/** Initial body for a brand-new page when the planner hasn't written it yet. */
-	placeholder: string;
 }
 
 export interface PageTemplate {
@@ -40,28 +38,24 @@ export const PAGE_TEMPLATES: Record<WikiPageType, PageTemplate> = {
 				heading: "Overview",
 				prompt:
 					"Two–four sentence summary of what this entity is, grounded in the cited records. Avoid speculation.",
-				placeholder: "_No overview yet._",
 			},
 			{
 				slug: "notes",
 				heading: "Notes",
 				prompt:
 					"Notable impressions, opinions, or qualitative observations about this entity, drawn directly from record quotes.",
-				placeholder: "_No notes yet._",
 			},
 			{
 				slug: "visits",
 				heading: "Visits & Interactions",
 				prompt:
 					"A chronological-ish list (newest first) of meaningful interactions or visits. Keep entries short; cite dates when available.",
-				placeholder: "_No visits recorded yet._",
 			},
 			{
 				slug: "related",
 				heading: "Related",
 				prompt:
 					"Other pages in this wiki that this entity is meaningfully linked to. Rendered automatically from wiki_page_links; only add prose here when relationships need explanation.",
-				placeholder: "_No linked pages yet._",
 			},
 		],
 	},
@@ -74,27 +68,23 @@ export const PAGE_TEMPLATES: Record<WikiPageType, PageTemplate> = {
 				slug: "summary",
 				heading: "Summary",
 				prompt: "Two–four sentence description of what this topic covers.",
-				placeholder: "_No summary yet._",
 			},
 			{
 				slug: "highlights",
 				heading: "Highlights",
 				prompt:
 					"Short bulleted highlights — standout moments, patterns, or takeaways.",
-				placeholder: "_No highlights yet._",
 			},
 			{
 				slug: "related_entities",
 				heading: "Related Entities",
 				prompt:
 					"Named entities (places, people, etc.) that show up repeatedly in this topic. Use wiki-page links when the entity already exists.",
-				placeholder: "_No related entities yet._",
 			},
 			{
 				slug: "recent",
 				heading: "Recent",
 				prompt: "A few of the newest records contributing to this topic.",
-				placeholder: "_No recent activity._",
 			},
 		],
 	},
@@ -108,26 +98,22 @@ export const PAGE_TEMPLATES: Record<WikiPageType, PageTemplate> = {
 				heading: "Context",
 				prompt:
 					"What was going on that prompted this decision. Keep to what the records show.",
-				placeholder: "_No context yet._",
 			},
 			{
 				slug: "decision",
 				heading: "Decision",
 				prompt: "The decision itself in one or two plain-language sentences.",
-				placeholder: "_No decision text yet._",
 			},
 			{
 				slug: "rationale",
 				heading: "Rationale",
 				prompt: "The reasons given or evident in the source records.",
-				placeholder: "_No rationale yet._",
 			},
 			{
 				slug: "consequences",
 				heading: "Consequences",
 				prompt:
 					"Observed follow-on effects: what changed, what got revisited, what to revisit next.",
-				placeholder: "_No consequences recorded._",
 			},
 		],
 	},

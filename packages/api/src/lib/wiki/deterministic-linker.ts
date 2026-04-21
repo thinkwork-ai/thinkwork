@@ -17,14 +17,6 @@ import type {
 	ParentCandidateReason,
 } from "./parent-expander.js";
 
-/** Reasons we emit deterministic links for in v1. `tag_cluster` is too
- * heuristic to trust without the coherence scoring owned by the broader
- * hierarchical-aggregation plan. */
-const TRUSTED_REASONS: ReadonlySet<ParentCandidateReason> = new Set([
-	"city",
-	"journal",
-]);
-
 /** Leaf types we link from. Only entity pages get auto-parented; topic /
  * decision pages are the aggregation planner's call. */
 const LINKABLE_LEAF_TYPES: ReadonlySet<WikiPageType> = new Set(["entity"]);
@@ -303,8 +295,6 @@ export async function emitDeterministicParentLinks(
 	const { lookupParentPagesFuzzy } = args;
 
 	for (const candidate of candidates) {
-		if (!TRUSTED_REASONS.has(candidate.reason)) continue;
-
 		const matches = await lookupParentPages({
 			tenantId: scope.tenantId,
 			ownerId: scope.ownerId,
