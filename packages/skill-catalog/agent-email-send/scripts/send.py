@@ -21,6 +21,7 @@ def send_email(
     in_reply_to: str = "",
     quoted_from: str = "",
     quoted_body: str = "",
+    mode: str = "reply",
 ) -> str:
     """Send an email from the agent's email address with threading support.
 
@@ -32,10 +33,21 @@ def send_email(
         in_reply_to: Message-ID of email being replied to.
         quoted_from: Display name or email of original sender.
         quoted_body: Body of original email to include as quoted text.
+        mode: "reply" (default) threads against an inbound message; "outbound"
+            is for scheduled / webhook / composition invocations that have no
+            inbound context. Outbound rejects threading fields so callers
+            can't accidentally reply to a stale inbound token.
 
     Returns:
         JSON with messageId and status.
     """
+    if mode not in ("reply", "outbound"):
+        return json.dumps({"error": f"Unknown mode {mode!r}. Use 'reply' or 'outbound'."})
+    if mode == "outbound" and (in_reply_to or quoted_from or quoted_body):
+        return json.dumps({
+            "error": "mode='outbound' forbids in_reply_to, quoted_from, and quoted_body"
+        })
+
     if not to:
         return json.dumps({"error": "At least one recipient is required"})
     if len(to) > 5:
