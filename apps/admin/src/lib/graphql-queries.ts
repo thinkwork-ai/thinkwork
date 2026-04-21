@@ -978,6 +978,40 @@ export const InviteMemberMutation = graphql(`
   }
 `);
 
+export const UpdateUserMutation = graphql(`
+  mutation UpdateUser($id: ID!, $input: UpdateUserInput!) {
+    updateUser(id: $id, input: $input) {
+      id
+      tenantId
+      email
+      name
+      image
+      phone
+      updatedAt
+    }
+  }
+`);
+
+export const UpdateTenantMemberMutation = graphql(`
+  mutation UpdateTenantMember($id: ID!, $input: UpdateTenantMemberInput!) {
+    updateTenantMember(id: $id, input: $input) {
+      id
+      tenantId
+      principalType
+      principalId
+      role
+      status
+      updatedAt
+    }
+  }
+`);
+
+export const RemoveTenantMemberMutation = graphql(`
+  mutation RemoveTenantMember($id: ID!) {
+    removeTenantMember(id: $id)
+  }
+`);
+
 // ---------------------------------------------------------------------------
 // Subscriptions
 // ---------------------------------------------------------------------------
