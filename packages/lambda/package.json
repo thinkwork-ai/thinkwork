@@ -8,7 +8,8 @@
   },
   "scripts": {
     "build": "tsc --build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@thinkwork/database-pg": "workspace:*",
@@ -24,6 +25,7 @@
     "@aws-sdk/client-scheduler": "^3.917.0",
     "@aws-sdk/client-ssm": "^3.917.0",
     "@types/node": "^25.3.3",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.4"
   }
 }
