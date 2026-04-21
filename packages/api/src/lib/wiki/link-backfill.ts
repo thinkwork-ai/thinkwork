@@ -224,6 +224,12 @@ export interface RunPhaseCPlaceBackfillArgs {
 export interface RunPhaseCPlaceBackfillResult {
 	pages_processed: number;
 	pages_enriched: number;
+	/** Subset of `pages_enriched` where at least one source record carries
+	 * `place_google_place_id`. Matches `wiki-places-audit.ts`'s
+	 * `unlinked_with_place_data` count within ±5% — pages without
+	 * `google_place_id` still get a `place_id` but produce a metadata-only
+	 * POI (`source='journal_metadata'`) with no hierarchy parents. */
+	pages_with_google_place_id: number;
 	hierarchy_edges_written: number;
 	collisions: number;
 	breaker_tripped: boolean;
@@ -236,6 +242,7 @@ export async function runPhaseCPlaceBackfill(
 	const result: RunPhaseCPlaceBackfillResult = {
 		pages_processed: 0,
 		pages_enriched: 0,
+		pages_with_google_place_id: 0,
 		hierarchy_edges_written: 0,
 		collisions: 0,
 		breaker_tripped: false,
@@ -274,18 +281,29 @@ export async function runPhaseCPlaceBackfill(
 		if (records.length === 0) continue;
 
 		if (args.dryRun) {
-			// Projection — count pages that *would* enrich via
-			// `readPlaceMetadata`. Matches the wiki-places-audit script's
-			// "addressable" count (modulo cache hits, which still count as
-			// enrichment for page linking purposes).
-			if (records.some((r) => readPlaceMetadata(r) !== null)) {
-				result.pages_enriched += 1;
+			// Projection — inspect source records for place metadata and
+			// count two bands: any metadata (broad; pages that will gain a
+			// place_id) and `place_google_place_id`-bearing (strict; the
+			// subset that will enrich via Google + produce hierarchy edges,
+			// matching the wiki-places-audit addressable ceiling).
+			let hasAnyMeta = false;
+			let hasGoogleId = false;
+			for (const record of records) {
+				const meta = readPlaceMetadata(record);
+				if (meta) hasAnyMeta = true;
+				if (meta?.googlePlaceId) hasGoogleId = true;
+				if (hasGoogleId) break; // strict subset is sufficient to break
 			}
+			if (hasAnyMeta) result.pages_enriched += 1;
+			if (hasGoogleId) result.pages_with_google_place_id += 1;
 			continue;
 		}
 
 		// Wet-run: first record with a resolvable place wins. Subsequent
 		// records are intentionally skipped (plan D6).
+		if (records.some((r) => readPlaceMetadata(r)?.googlePlaceId)) {
+			result.pages_with_google_place_id += 1;
+		}
 		let enriched = false;
 		for (const record of records) {
 			let resolved: PhaseCResolvedPlace | null;
