@@ -15,6 +15,14 @@ import { resolveCallerUserId } from "./resolve-auth-user.js";
 
 export type TenantAdminRole = "owner" | "admin";
 
+/**
+ * Minimal duck-type that covers both the module-level `db` and a Drizzle
+ * transaction handle (`tx`). Drizzle's `db` and `PgTransaction<...>` have
+ * subtly different full types (e.g. only `db` has `$client`), but both
+ * expose the `select` API we use for the role lookup.
+ */
+type DbOrTx = { select: typeof defaultDb.select };
+
 function forbidden(message: string): GraphQLError {
 	return new GraphQLError(message, {
 		extensions: { code: "FORBIDDEN" },
@@ -34,7 +42,7 @@ function forbidden(message: string): GraphQLError {
 export async function requireTenantAdmin(
 	ctx: GraphQLContext,
 	tenantId: string,
-	dbOrTx: typeof defaultDb = defaultDb,
+	dbOrTx: DbOrTx = defaultDb,
 ): Promise<TenantAdminRole> {
 	if (ctx.auth.authType !== "cognito") {
 		throw forbidden("Tenant admin role required");
