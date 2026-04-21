@@ -1,7 +1,7 @@
 ---
 title: "feat: Composable skills + compound learnings — structured business workflows as skill-framework evolution"
 type: feat
-status: active
+status: complete
 date: 2026-04-21
 origin: docs/brainstorms/2026-04-21-structured-playbooks-for-business-problem-solving-requirements.md
 supersedes: docs/plans/2026-04-21-002-feat-playbooks-primitive-v1-plan.md
@@ -860,7 +860,7 @@ Nine units; still substantially smaller than the superseded plan. Units 1–7 sh
 
 ---
 
-- [ ] **Unit 8: Webhook ingress pattern + tenant system-user actor**
+- [x] **Unit 8: Webhook ingress pattern + tenant system-user actor** (shipped 2026-04-21 — included the previously-deferred reconciler composition + 8 integration tests from Unit 9)
 
 **Goal:** Ship the shared webhook-handler pattern (D7b) that lets external integrations trigger composition runs. Two concrete handlers land in v1: CRM opportunity events and task-completion events. The pattern itself (`_shared.ts` helper + conventions + README) is the real deliverable — new integrations beyond v1 add a small Lambda with almost no new code.
 
@@ -904,7 +904,7 @@ Nine units; still substantially smaller than the superseded plan. Units 1–7 sh
 
 ---
 
-- [ ] **Unit 9: Seed compositions + end-to-end integration suite**
+- [x] **Unit 9: Seed compositions + end-to-end integration suite** (deliverable seeds + authoring guide shipped in PR #354; reconciler composition + 8 integration tests shipped with Unit 8)
 
 **Goal:** Author four seed compositions with real YAML, prompts, and package templates (three deliverable-shaped + one reconciler-shaped). Ship integration tests covering the four invocation paths, critical-branch failure, cancellation, HITL reconciler loop, and a learnings round-trip.
 
@@ -1001,6 +1001,54 @@ Nine units; still substantially smaller than the superseded plan. Units 1–7 sh
 - `packages/api/src/handlers/webhooks/README.md` — how to add a new webhook integration in <100 lines. Part of Unit 8.
 - Operator runbook for CI + catalog validation — part of Unit 1.
 - Post-GA `docs/solutions/` entries: composition runner patterns, learnings scope semantics, skill-allowlist enforcement, reconciler-pattern pitfalls (HITL loops, output idempotency) — planned via `ce:compound-refresh` after first 3 months of production.
+
+## Retrospective — 2026-04-21
+
+**All nine units shipped.** The plan ran slightly out of order: Unit 9 (seed
+content + integration tests) shipped partially in PR #354 alongside the
+deliverable-shaped seeds and authoring guide, deferring the reconciler
+composition and all 8 integration tests to Unit 8 once the webhook ingress
+pattern existed to house them. Unit 8 closed out that deferral.
+
+### What shipped in Unit 8
+
+- `packages/api/src/handlers/webhooks/{_shared.ts,crm-opportunity.ts,task-event.ts,README.md}` — shared webhook ingress helper + two concrete integrations + authoring guide (<100 lines to add a new integration).
+- `tenant_system_users` table + schema + migration 0019 — stable per-tenant actor uuid for webhook-triggered runs, compiled-in invoke-only scope.
+- `skill_runs.triggered_by_run_id` column + index — links reconciler ticks back to the run that spawned the completed task.
+- `packages/skill-catalog/customer-onboarding-reconciler/` — the reconciler-shape anchor (skill.yaml, SKILL.md, README, agent-mode `act` sub-skill), landing at a new canonical slug per the migration-path decision below.
+- 11 Python shape tests (`test_reconciler_composition.py`) pinning the reconciler-shape invariants — no `frame`/`package`, `gather.on_branch_failure: fail`, `existing_tasks` is critical, `delivery: [agent_owner]` only.
+- Integration test harness under `packages/api/test/integration/skill-runs/_harness/` + all 8 deferred integration tests (chat-intent, scheduled, catalog, webhook, critical-failure, cancel, learnings-roundtrip, reconciler-hitl-loop).
+- Terraform wiring: two new Lambdas + specific API Gateway routes `POST /webhooks/{crm-opportunity,task-event}/{tenantId}` (more specific than the legacy `{proxy+}` catch-all).
+
+### Migration-path decision for the slug collision
+
+The pre-flight SQL query from `docs/solutions/workflow-issues/skill-catalog-slug-collision-execution-mode-transitions-2026-04-21.md` couldn't be run against production DB from the dev environment; Unit 8 took the doc's recommended default (path 2 — different canonical slug for the new composition). The reconciler lives at `customer-onboarding-reconciler/`; the legacy `execution: context` `customer-onboarding` skill is untouched. Trade-off: plan references to "customer-onboarding as the reconciler anchor" now need a mental rename to "customer-onboarding-reconciler." Cheaper than coordinating a data migration mid-feature; consistent with the broader pattern of explicit slug transitions (see `project_thinkwork_supersedes_maniflow`).
+
+### What R13 looks like (reconciler-shape adoption criterion)
+
+The `reconciler-hitl-loop.test.ts` integration test is the in-repo falsification of R13: it runs a 4-tick sequence (tick 1 creates 3 tasks; ticks 2, 3, 4 fire as owners complete each task) and asserts `tasks.createCalls` stays at 3 across all four ticks. Zero duplicate creates. If that test ever starts failing, either the `existing_tasks` contract has drifted in `gather`, or the `act` sub-skill's decision protocol has drifted. Both are catch-it-at-PR-time failures — the whole reason the test lives in the harness is that the runtime failure it guards against is impossible to diagnose from a production skill_runs log.
+
+Production validation of R13 (≥1 real CRM opportunity-won → full loop → no duplicates) is still gated on the CRM connector shipping. When that lands, the criterion can be checked end-to-end against a live webhook. Until then, the in-repo proxy is our proof that the reconciler contract shape holds.
+
+### What the pressure test revealed
+
+Writing the reconciler-shape composition + integration test surfaced two things the plan hadn't fully pinned:
+
+1. **Reconciler gather is not the deliverable gather.** The deliverable shape's `on_branch_failure: continue_with_footer` invites per-branch graceful degradation — that's great when a missing AR connector means "skip the finance section." For a reconciler, the same flag is dangerous: a missing `existing_tasks` read + `continue_with_footer` would silently degrade to "create every gap every tick," which is the exact failure mode R13 pins against. The reconciler YAML ships with `on_branch_failure: fail` and both `customer` + `existing_tasks` branches are `critical: true`. The Python shape test pins this explicitly so a future author can't accidentally relax it.
+
+2. **The `_shared.ts` helper is the 4th instance of a canonical shape** — but only if you count the inlined helper trio. We avoided the 4th inline by importing `canonicalizeForHash` / `hashResolvedInputs` / `invokeComposition` from `packages/api/src/graphql/utils.ts` instead, keeping inline copies at 3 exactly as `inline-helpers-vs-shared-package-for-cross-surface-code-2026-04-21.md` suggested. One data point for the doc's premise that "three is fine, four is the extraction signal" — we had to choose and picked "same-package import" over "extraction to a new workspace package." If webhook integrations proliferate and start re-inlining, re-evaluate.
+
+### What deferred (explicitly, not silently)
+
+- **Real CRM / task-system connectors.** The CRM handler accepts a vendor-neutral envelope; the act sub-skill's `lastmile_tasks_*` tools are stubs in the harness. Real connectors are per-tenant adapter work gated on the first design-partner ask.
+- **Tenant admin-fallback notification routing** when `agent_owner` is null. The plan's mitigation path (emit `notification_pending` metric + fall back to tenant-admin channel if configured) is documented but not implemented — no surface consumes the metric yet, and the integration-test harness covers the happy-path agent_owner case.
+- **Signing-secret rotation UI.** v1 is operator-managed via Secrets Manager directly; the webhook README documents the operator procedure. A self-serve rotation flow is Phase 2.
+- **Reconciler cron fallback.** v1 is event-driven only. If production shows long quiet periods where tasks stall, add a scheduled tick as a safety net — trivial in the existing DSL.
+
+### Known follow-ups that were not in scope for this plan
+
+- Unit 8 touched `skill_runs` schema (added `triggered_by_run_id`) but didn't change the schema-level relations graph. A future PR should add the self-referential FK + relation for query-builder ergonomics when the admin UI starts rendering reconciler tick chains.
+- The `delete_at` retention ceiling (180 days) applies to all rows including webhook-triggered ones. No change needed, but worth re-evaluating if a reconciler loop legitimately spans >180 days of HITL waiting (unlikely at v1 scale, but plausible for enterprise onboarding).
 
 ## Sources & References
 

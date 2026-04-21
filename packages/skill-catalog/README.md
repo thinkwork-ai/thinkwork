@@ -185,22 +185,142 @@ results much more precise.
 
 ---
 
-## Reconciler example
+## Annotated reconciler example — `customer-onboarding-reconciler/skill.yaml`
 
 The reconciler shape — webhook trigger → gather → synthesize → act
-(agent-mode sub-skill) → compound — ships with **Unit 8** of the
-composable-skills plan (webhook ingress pattern + tenant system-user
-actor). The anchor composition is `customer-onboarding`; its
-`sub-skills/act/` is an `execution: composition, mode: agent` sub-skill
-that decides what to mutate in the downstream task system this tick.
+(agent-mode sub-skill) → compound — is the anchor for Unit 8 of the
+composable-skills plan (webhook ingress + tenant system-user actor).
+The anchor composition is **`customer-onboarding-reconciler/`**; see
+`SKILL.md` there for the runbook and the "why this is a reconciler,
+not a workflow" rationale.
 
-When Unit 8 lands, this README gets a companion reconciler walkthrough.
-The key architectural difference from the deliverable shape:
-reconcilers are **stateless across invocations** (their output
-idempotency lives in the downstream task system via `gather` querying
-"what already exists?"), and they **never block waiting for a human**
-— they end the tick after creating tasks / asking questions and re-run
-when the downstream event fires.
+```yaml
+# Reconcilers are event-driven, so the `mode: tool` + `execution:
+# composition` combo stays — same DSL, different shape. The slug
+# deliberately does NOT reuse `customer-onboarding` because an
+# execution: context legacy of that slug is still referenced by
+# production agent_skills rows (see the slug-collision solution doc
+# for the three migration paths — Unit 8 picked the "different slug"
+# option).
+id: customer-onboarding-reconciler
+version: 1
+execution: composition
+mode: tool
+
+# Reconcilers don't need `on_missing_input: ask` — they're webhook-
+# triggered, not chat-triggered. If a required input is missing, the
+# resolver in `_shared.ts` rejects the webhook with 400.
+inputs:
+  customerId:
+    type: string
+    required: true
+  opportunityId:
+    type: string
+    required: true
+
+# Empty in v1 — the reconciler body is not tenant-tunable yet.
+tenant_overridable: []
+
+# The webhook trigger shape is advisory documentation; actual routing
+# lives in `packages/api/src/handlers/webhooks/crm-opportunity.ts`
+# and `task-event.ts`.
+triggers:
+  webhook:
+    examples:
+      - source: crm
+        event: opportunity.won
+      - source: task-system
+        event: task.completed
+
+# agent_owner (not chat / email) — webhook-triggered runs have no
+# chat thread. Delivery lands at the owning agent's configured
+# channel; see `packages/api/src/handlers/webhooks/README.md` for
+# how the tenant-admin fallback works when agent_owner is null.
+delivery:
+  - agent_owner
+
+# Tight budget cap — a reconciler tick is short by design; a drift
+# means the act sub-skill is looping.
+budget_cap:
+  tokens: 60000
+
+# Reconciler body. No `frame` and no `package` — the composition
+# produces state changes, not a document. The `gather` step's
+# `on_branch_failure: fail` differs from the deliverable shape's
+# `continue_with_footer`: a reconciler that can't read existing_tasks
+# risks creating duplicates on the next tick, which is worse than a
+# failed run.
+steps:
+  - id: gather
+    mode: parallel
+    on_branch_failure: fail
+    branches:
+      - id: customer             # Context anchor.
+        skill: crm_account_summary
+        inputs: { customer: "{customerId}" }
+        critical: true
+      - id: existing_tasks       # Prevents duplicate creates. CRITICAL.
+        skill: lastmile_tasks_list
+        inputs:
+          subject_kind: customer
+          subject_id: "{customerId}"
+          trigger: "customer-onboarding-reconciler"
+        critical: true
+      - id: contract
+        skill: crm_opportunity_summary
+        inputs: { opportunity: "{opportunityId}" }
+    output: gathered
+
+  - id: synthesize               # focus=gap_analysis steers the primitive
+    mode: sequential             # toward what's-missing reasoning instead
+    skill: synthesize            # of risks/opportunities reasoning.
+    inputs:
+      framed: "Onboarding reconciliation for customer {customerId}."
+      gathered: "{gathered}"
+      focus: gap_analysis
+    output: gap_analysis
+
+  - id: act                      # Agent-mode sub-skill. Reads gap + tasks,
+    mode: sequential             # creates ONLY missing tasks via the
+    skill: customer-onboarding-reconciler/act
+    inputs:                      # lastmile_tasks_create tool. MUST NOT
+      customerId: "{customerId}" # `asyncio.sleep` — CI lint enforces.
+      opportunityId: "{opportunityId}"
+      gap_analysis: "{gap_analysis}"
+      existing_tasks: "{gathered.existing_tasks}"
+    output: action_summary
+```
+
+### Why reconcilers never block
+
+Real onboarding waits on humans: clarification answers, contract
+signatures, payment setup, team assignments. The tempting
+implementation is an inline `await_task_completion(...)` — which the
+plan's D7a decision explicitly rejected. Waiting inside one
+invocation holds an AgentCore session open indefinitely, breaks the
+dedup-on-running index semantics, and forces a new execution
+substrate.
+
+Reconcilers invert this: each tick is short. Reading state → creating
+missing tasks → exit. When a human completes a task, the task-system
+webhook fires, the composition re-invokes with the same inputs, reads
+state again (now including the completed task), and decides what's
+still missing.
+
+### Output idempotency
+
+The invariant the reconciler depends on is: **gather always reads
+before act writes, and act only writes tasks that don't already
+exist.** The composition's `gather` step MUST include a branch that
+lists existing tasks for the subject entity. The `act` sub-skill MUST
+diff against that list before creating anything. Two ticks running
+back-to-back with the same inputs must produce at most one task per
+gap — not two.
+
+The `reconciler-hitl-loop.test.ts` integration test (Unit 8) asserts
+this by running a full tick → task-complete → re-tick sequence and
+verifying the `lastmile_tasks_create` call count matches exactly the
+number of gaps identified on the first tick.
 
 ---
 

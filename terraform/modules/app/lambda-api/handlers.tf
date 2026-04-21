@@ -126,6 +126,8 @@ resource "aws_lambda_function" "handler" {
     "webhooks",
     "webhooks-admin",
     "webhook-deliveries-cleanup",
+    "webhook-crm-opportunity",
+    "webhook-task-event",
     "workspace-files",
     "knowledge-base-manager",
     "knowledge-base-files",
@@ -255,7 +257,15 @@ locals {
     "ANY /api/job-schedules/{proxy+}" = "job-schedule-manager"
     "ANY /api/job-schedules"          = "job-schedule-manager"
 
-    # Webhooks (public trigger)
+    # Integration webhooks (Unit 8 — composable-skills). Each integration
+    # has its own Lambda + a specific route under /webhooks/{integration}/
+    # {tenantId}. Specific routes take precedence over the {proxy+}
+    # catch-all below, which still owns the legacy PRD-19 webhook-token
+    # surface.
+    "POST /webhooks/crm-opportunity/{tenantId}" = "webhook-crm-opportunity"
+    "POST /webhooks/task-event/{tenantId}"      = "webhook-task-event"
+
+    # Webhooks (public trigger) — legacy PRD-19 tokenized webhooks.
     "POST /webhooks/{proxy+}" = "webhooks"
 
     # Webhooks admin
