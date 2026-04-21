@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "@/lib/auth-context";
 import { useMe } from "@/lib/hooks/use-users";
@@ -7,12 +7,9 @@ import { useMe } from "@/lib/hooks/use-users";
  * Shared hook for the tenant's connection rows, served by the REST
  * `/api/connections` endpoint.
  *
- * There are two callers today — the inbox screen (gates the Threads/Tasks
- * tab bar on `hasTaskConnector`) and the Connectors settings screen (does
- * full CRUD). Both want the same server state, so we keep a single
- * module-level cache and fan out updates to every mounted hook instance via
- * a small listener set. Refetching in one screen is immediately visible in
- * the other.
+ * A module-level cache fans out updates to every mounted hook instance via
+ * a small listener set, so refetching in one screen is immediately visible
+ * in any other screen reading the same data.
  */
 
 const API_BASE = (process.env.EXPO_PUBLIC_GRAPHQL_URL ?? "").replace(/\/graphql$/, "");
@@ -31,10 +28,8 @@ export type ConnectionRow = {
   provider_display_name: string;
   /**
    * The provider catalog's `provider_type` — the "kind" of provider, e.g.
-   * `"task"` for LastMile Tasks, `"email"` for Gmail, etc. Surfaced by the
-   * server join in `/api/connections`. This is the source of truth for
-   * deciding whether the inbox should show the Tasks tab — never hard-code
-   * a provider name.
+   * `"email"` for Gmail, `"calendar"` for Google Calendar, etc. Surfaced
+   * by the server join in `/api/connections`.
    */
   provider_type: string;
 };
@@ -168,12 +163,12 @@ export function useConnections() {
   }, [tenantId, userId]);
 
   // Refetch every time a screen using this hook gains focus. This is the
-  // escape hatch for OAuth round-trips: the user kicks off LastMile auth
-  // from MCP Servers, comes back to Connectors or the inbox, and we
-  // revalidate against the server instead of showing the pre-OAuth cache.
-  // We intentionally do *not* clear the cache — the stale view stays
-  // visible for the couple of hundred ms the GET takes, then gets
-  // replaced, avoiding a loading flash on every tab switch.
+  // escape hatch for OAuth round-trips: the user kicks off provider auth,
+  // comes back to Integrations, and we revalidate against the server
+  // instead of showing the pre-OAuth cache. We intentionally do *not*
+  // clear the cache — the stale view stays visible for the couple of
+  // hundred ms the GET takes, then gets replaced, avoiding a loading
+  // flash on every tab switch.
   useFocusEffect(
     useCallback(() => {
       if (!tenantId || !userId) return;
@@ -185,26 +180,10 @@ export function useConnections() {
   const loading = cache.loading || (connections === null && !!tenantId && !!userId);
   const error = cache.error;
 
-  // Only "active" rows count as configured. "expired" means credentials
-  // lapsed — the user sees a reconnect banner in Connectors and the row
-  // should not be treated as a usable task connector.
-  const activeTaskConnectors = useMemo(() => {
-    return (connections ?? []).filter(
-      (c) => c.status === "active" && c.provider_type === "task",
-    );
-  }, [connections]);
-
-  const hasTaskConnector = activeTaskConnectors.length > 0;
-
   return {
     connections,
     loading,
     error,
     refetch,
-    /** Any active connection whose provider catalog `provider_type === 'task'`. */
-    hasTaskConnector,
-    /** Raw list of active task-kind connections — callers that need to read
-     *  metadata (e.g., default_agent_id) off the row. */
-    activeTaskConnectors,
   };
 }

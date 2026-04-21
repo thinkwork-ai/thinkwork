@@ -436,7 +436,7 @@ export default function ThreadsScreen() {
               items={[
                 { label: "Agent Config", icon: Bot, onPress: () => router.push("/settings/agent-config") },
                 { label: "Automations", icon: Zap, onPress: () => router.push("/settings/automations") },
-                { label: "Connectors", icon: Plug, onPress: () => router.push("/settings/connectors") },
+                { label: "Integrations", icon: Plug, onPress: () => router.push("/settings/integrations") },
                 { label: "MCP Servers", icon: Cable, onPress: () => router.push("/settings/mcp-servers") },
                 { label: "User Settings", icon: Settings, onPress: () => router.push("/settings/user-settings") },
                 ...(Platform.OS !== "web" ? [{

@@ -76,7 +76,7 @@ export default function CredentialDetailScreen() {
         if (router.canGoBack()) {
           router.back();
         } else {
-          router.replace("/settings/connectors");
+          router.replace("/settings/integrations");
         }
       } catch (e) {
         console.error("Revoke failed:", e);
