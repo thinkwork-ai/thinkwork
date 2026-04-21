@@ -5,14 +5,12 @@ import { useColorScheme } from "nativewind";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { Text, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
-import { workspaceApi } from "@/lib/workspace-api";
+import { getWorkspaceFile, putWorkspaceFile } from "@/lib/workspace-api";
 
 export default function WorkspaceFileEditor() {
-  const { file, assistantId, tenantSlug, instanceId } = useLocalSearchParams<{
+  const { file, assistantId } = useLocalSearchParams<{
     file: string;
     assistantId: string;
-    tenantSlug: string;
-    instanceId: string;
   }>();
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
@@ -28,13 +26,13 @@ export default function WorkspaceFileEditor() {
   const hasChanges = content !== original;
 
   useEffect(() => {
-    if (!tenantSlug || !instanceId || !fileName) {
+    if (!assistantId || !fileName) {
       setLoading(false);
       return;
     }
     let cancelled = false;
     setLoading(true);
-    workspaceApi({ action: "get", tenantSlug, instanceId, path: fileName })
+    getWorkspaceFile({ agentId: assistantId }, fileName)
       .then((data) => {
         if (!cancelled) {
           const text = data.content ?? "";
@@ -53,13 +51,13 @@ export default function WorkspaceFileEditor() {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [tenantSlug, instanceId, fileName]);
+  }, [assistantId, fileName]);
 
   const handleSave = async () => {
-    if (!tenantSlug || !instanceId || !fileName || saving) return;
+    if (!assistantId || !fileName || saving) return;
     setSaving(true);
     try {
-      await workspaceApi({ action: "put", tenantSlug, instanceId, path: fileName, content });
+      await putWorkspaceFile({ agentId: assistantId }, fileName, content);
       setOriginal(content);
       router.back();
     } catch (e) {

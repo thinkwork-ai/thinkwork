@@ -17,8 +17,13 @@ import {
   ChevronDown,
   Wand2,
 } from "lucide-react";
-import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
+import {
+  deleteWorkspaceFile,
+  getWorkspaceFile,
+  listWorkspaceFiles,
+  putWorkspaceFile,
+} from "@/lib/workspace-files-api";
 import { PageLayout } from "@/components/PageLayout";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Button } from "@/components/ui/button";
@@ -36,26 +41,6 @@ import {
 export const Route = createFileRoute("/_authed/_tenant/agent-templates/defaults")({
   component: DefaultWorkspacePage,
 });
-
-// ---------------------------------------------------------------------------
-// Workspace API
-// ---------------------------------------------------------------------------
-
-const API_URL = import.meta.env.VITE_API_URL || "";
-const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
-
-async function workspaceApi(body: Record<string, unknown>) {
-  const res = await fetch(`${API_URL}/internal/workspace-files`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`Workspace API: ${res.status}`);
-  return res.json();
-}
 
 // ---------------------------------------------------------------------------
 // Default file content
@@ -187,9 +172,6 @@ function TreeItem({
 // ---------------------------------------------------------------------------
 
 function DefaultWorkspacePage() {
-  const { tenant } = useTenant();
-  const tenantSlug = tenant?.slug;
-
   useBreadcrumbs([
     { label: "Agent Templates", href: "/agent-templates" },
     { label: "Default Workspace" },
@@ -205,14 +187,15 @@ function DefaultWorkspacePage() {
   const [newFileDialogOpen, setNewFileDialogOpen] = useState(false);
   const [bootstrapping, setBootstrapping] = useState(false);
 
-  const instanceId = "_catalog/defaults";
+  // The handler's `defaults: true` target resolves to the caller's tenant
+  // server-side — no tenant slug round-trip.
+  const target = { defaults: true as const };
 
   const fetchFiles = useCallback(async () => {
-    if (!tenantSlug) return;
     setLoading(true);
     try {
-      const res = await workspaceApi({ action: "list", tenantSlug, instanceId });
-      const fileList: string[] = res.files || [];
+      const res = await listWorkspaceFiles(target);
+      const fileList = res.files.map((f) => f.path);
       setFiles(fileList);
       return fileList;
     } catch (err) {
@@ -222,18 +205,17 @@ function DefaultWorkspacePage() {
     } finally {
       setLoading(false);
     }
-  }, [tenantSlug]);
+  }, []);
 
   // Auto-bootstrap on first visit
   useEffect(() => {
-    if (!tenantSlug) return;
     (async () => {
       const fileList = await fetchFiles();
       if (fileList && fileList.length === 0) {
         setBootstrapping(true);
         try {
           for (const [path, fileContent] of Object.entries(DEFAULT_FILES)) {
-            await workspaceApi({ action: "put", tenantSlug, instanceId, path, content: fileContent });
+            await putWorkspaceFile(target, path, fileContent);
           }
           await fetchFiles();
         } catch (err) {
@@ -243,13 +225,12 @@ function DefaultWorkspacePage() {
         }
       }
     })();
-  }, [tenantSlug]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadFile = async (path: string) => {
-    if (!tenantSlug) return;
     setSelectedFile(path);
     try {
-      const res = await workspaceApi({ action: "get", tenantSlug, instanceId, path });
+      const res = await getWorkspaceFile(target, path);
       const c = res.content || "";
       setContent(c);
       setOriginalContent(c);
@@ -261,10 +242,10 @@ function DefaultWorkspacePage() {
   };
 
   const saveFile = async () => {
-    if (!tenantSlug || !selectedFile) return;
+    if (!selectedFile) return;
     setSaving(true);
     try {
-      await workspaceApi({ action: "put", tenantSlug, instanceId, path: selectedFile, content });
+      await putWorkspaceFile(target, selectedFile, content);
       setOriginalContent(content);
     } catch (err) {
       console.error("Failed to save file:", err);
@@ -274,9 +255,9 @@ function DefaultWorkspacePage() {
   };
 
   const createFile = async () => {
-    if (!tenantSlug || !newFileName) return;
+    if (!newFileName) return;
     try {
-      await workspaceApi({ action: "put", tenantSlug, instanceId, path: newFileName, content: "" });
+      await putWorkspaceFile(target, newFileName, "");
       setNewFileDialogOpen(false);
       setNewFileName("");
       await fetchFiles();
@@ -287,9 +268,8 @@ function DefaultWorkspacePage() {
   };
 
   const deleteFile = async (path: string) => {
-    if (!tenantSlug) return;
     try {
-      await workspaceApi({ action: "delete", tenantSlug, instanceId, path });
+      await deleteWorkspaceFile(target, path);
       if (selectedFile === path) {
         setSelectedFile(null);
         setContent("");
@@ -302,11 +282,10 @@ function DefaultWorkspacePage() {
   };
 
   const handleRebootstrap = async () => {
-    if (!tenantSlug) return;
     setBootstrapping(true);
     try {
       for (const [path, fileContent] of Object.entries(DEFAULT_FILES)) {
-        await workspaceApi({ action: "put", tenantSlug, instanceId, path, content: fileContent });
+        await putWorkspaceFile(target, path, fileContent);
       }
       await fetchFiles();
       setSelectedFile(null);

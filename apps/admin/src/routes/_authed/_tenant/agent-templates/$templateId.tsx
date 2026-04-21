@@ -99,24 +99,15 @@ const AVAILABLE_TOOLS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Workspace API (same as agent workspace editor)
+// Workspace API (shared client — see apps/admin/src/lib/workspace-files-api.ts)
 // ---------------------------------------------------------------------------
 
-const API_URL = import.meta.env.VITE_API_URL || "";
-const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
-
-async function workspaceApi(body: Record<string, unknown>) {
-  const res = await fetch(`${API_URL}/internal/workspace-files`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`Workspace API: ${res.status}`);
-  return res.json();
-}
+import {
+  deleteWorkspaceFile,
+  getWorkspaceFile,
+  listWorkspaceFiles,
+  putWorkspaceFile,
+} from "@/lib/workspace-files-api";
 
 // ---------------------------------------------------------------------------
 // Tree
@@ -350,22 +341,18 @@ function TemplateEditorPage() {
 
   // Load workspace files when switching to workspace tab
   const loadWorkspaceFiles = useCallback(async () => {
-    if (!tenantSlug || !slug || isNew) return;
+    if (isNew || !templateId) return;
     setWsLoadingFiles(true);
     try {
-      const res = await workspaceApi({
-        action: "list",
-        tenantSlug,
-        instanceId: `_catalog/${slug}`,
-      });
-      setWsFiles(res.files || []);
+      const res = await listWorkspaceFiles({ templateId });
+      setWsFiles(res.files.map((f) => f.path));
     } catch (err) {
       console.error("Failed to load workspace files:", err);
       setWsFiles([]);
     } finally {
       setWsLoadingFiles(false);
     }
-  }, [tenantSlug, slug, isNew]);
+  }, [templateId, isNew]);
 
   useEffect(() => {
     if (activeTab === "workspace" && !isNew) {
@@ -374,15 +361,10 @@ function TemplateEditorPage() {
   }, [activeTab, loadWorkspaceFiles, isNew]);
 
   const loadFileContent = async (path: string) => {
-    if (!tenantSlug || !slug) return;
+    if (!templateId) return;
     setWsSelectedFile(path);
     try {
-      const res = await workspaceApi({
-        action: "get",
-        tenantSlug,
-        instanceId: `_catalog/${slug}`,
-        path,
-      });
+      const res = await getWorkspaceFile({ templateId }, path);
       const c = res.content || "";
       setWsContent(c);
       setWsOriginalContent(c);
@@ -394,16 +376,10 @@ function TemplateEditorPage() {
   };
 
   const saveFileContent = async () => {
-    if (!tenantSlug || !slug || !wsSelectedFile) return;
+    if (!templateId || !wsSelectedFile) return;
     setWsSavingFile(true);
     try {
-      await workspaceApi({
-        action: "put",
-        tenantSlug,
-        instanceId: `_catalog/${slug}`,
-        path: wsSelectedFile,
-        content: wsContent,
-      });
+      await putWorkspaceFile({ templateId }, wsSelectedFile, wsContent);
       setWsOriginalContent(wsContent);
     } catch (err) {
       console.error("Failed to save file:", err);
@@ -413,15 +389,9 @@ function TemplateEditorPage() {
   };
 
   const createNewFile = async () => {
-    if (!tenantSlug || !slug || !wsNewFileName) return;
+    if (!templateId || !wsNewFileName) return;
     try {
-      await workspaceApi({
-        action: "put",
-        tenantSlug,
-        instanceId: `_catalog/${slug}`,
-        path: wsNewFileName,
-        content: "",
-      });
+      await putWorkspaceFile({ templateId }, wsNewFileName, "");
       setWsNewFileDialogOpen(false);
       setWsNewFileName("");
       await loadWorkspaceFiles();
@@ -432,14 +402,9 @@ function TemplateEditorPage() {
   };
 
   const deleteFile = async (path: string) => {
-    if (!tenantSlug || !slug) return;
+    if (!templateId) return;
     try {
-      await workspaceApi({
-        action: "delete",
-        tenantSlug,
-        instanceId: `_catalog/${slug}`,
-        path,
-      });
+      await deleteWorkspaceFile({ templateId }, path);
       if (wsSelectedFile === path) {
         setWsSelectedFile(null);
         setWsContent("");

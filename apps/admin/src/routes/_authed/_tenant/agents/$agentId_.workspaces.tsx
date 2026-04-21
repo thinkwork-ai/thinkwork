@@ -5,8 +5,14 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { FolderOpen, Plus, Trash2, Loader2, Wrench, Pencil } from "lucide-react";
 
 import { AgentDetailQuery } from "@/lib/graphql-queries";
+import {
+  deleteWorkspaceFile,
+  getWorkspaceFile,
+  listWorkspaceFiles,
+  putWorkspaceFile,
+  regenerateWorkspaceMap,
+} from "@/lib/workspace-files-api";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
-import { useTenant } from "@/context/TenantContext";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { PageLayout } from "@/components/PageLayout";
 import { DataTable } from "@/components/ui/data-table";
@@ -34,22 +40,6 @@ import {
 export const Route = createFileRoute("/_authed/_tenant/agents/$agentId_/workspaces")({
   component: WorkspacesPage,
 });
-
-const API_URL = import.meta.env.VITE_API_URL || "";
-const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
-
-async function workspaceApi(body: Record<string, unknown>) {
-  const res = await fetch(`${API_URL}/internal/workspace-files`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`API Error: ${res.status}`);
-  return res.json();
-}
 
 const MODEL_OPTIONS = [
   { value: "us.anthropic.claude-haiku-4-5-20251001-v1:0", label: "Claude Haiku 4.5" },
@@ -130,8 +120,6 @@ const columns: ColumnDef<WorkspaceRow>[] = [
 
 function WorkspacesPage() {
   const { agentId } = Route.useParams();
-  const { tenant } = useTenant();
-  const tenantSlug = tenant?.slug || "";
   const navigate = useNavigate();
 
   const [result] = useQuery({
@@ -140,8 +128,8 @@ function WorkspacesPage() {
   });
 
   const agent = result.data?.agent as Record<string, any> | undefined;
-  const agentSlug = agent?.slug || "";
   const agentSkills: AgentSkill[] = (agent?.skills ?? []) as AgentSkill[];
+  const target = { agentId };
 
   useBreadcrumbs([
     { label: "Agents", href: "/agents" },
@@ -154,22 +142,19 @@ function WorkspacesPage() {
   const [loading, setLoading] = useState(true);
 
   const loadWorkspaces = useCallback(async () => {
-    if (!tenantSlug || !agentSlug) return;
     setLoading(true);
     try {
-      const data = await workspaceApi({ action: "list", tenantSlug, instanceId: agentSlug });
-      const files: string[] = (data.files || []).map((f: any) => f.path || f);
+      const data = await listWorkspaceFiles(target);
+      const files: string[] = data.files.map((f) => f.path);
 
       // Find workspace folders: {slug}/CONTEXT.md
-      const contextFiles = files.filter((f: string) => f.match(/^[^/]+\/CONTEXT\.md$/));
+      const contextFiles = files.filter((f) => f.match(/^[^/]+\/CONTEXT\.md$/));
       const rows: WorkspaceRow[] = [];
 
       for (const cf of contextFiles) {
         const slug = cf.split("/")[0];
         try {
-          const content = await workspaceApi({
-            action: "get", tenantSlug, instanceId: agentSlug, path: cf,
-          });
+          const content = await getWorkspaceFile(target, cf);
           const text = content.content || "";
           const nameMatch = text.match(/^#\s+(.+)$/m);
           const purposeMatch = text.match(/^##\s+What This Workspace Is\s*\n([\s\S]*?)(?=\n##|\n---|$)/m);
@@ -202,11 +187,11 @@ function WorkspacesPage() {
     } finally {
       setLoading(false);
     }
-  }, [tenantSlug, agentSlug]);
+  }, [target]);
 
   useEffect(() => {
-    if (tenantSlug && agentSlug) loadWorkspaces();
-  }, [tenantSlug, agentSlug, loadWorkspaces]);
+    loadWorkspaces();
+  }, [loadWorkspaces]);
 
   // Create dialog state
   const [createOpen, setCreateOpen] = useState(false);
@@ -232,7 +217,7 @@ function WorkspacesPage() {
   };
 
   const handleCreate = async () => {
-    if (!newName.trim() || !tenantSlug || !agentSlug) return;
+    if (!newName.trim()) return;
     setCreating(true);
 
     const slug = newName.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
@@ -278,32 +263,15 @@ function WorkspacesPage() {
     const contextContent = lines.join("\n");
 
     try {
-      // Write CONTEXT.md to workspace folder
-      await workspaceApi({
-        action: "put",
-        tenantSlug,
-        instanceId: agentSlug,
-        path: `${slug}/CONTEXT.md`,
-        content: contextContent,
-      });
+      // Write CONTEXT.md to workspace folder.
+      await putWorkspaceFile(target, `${slug}/CONTEXT.md`, contextContent);
 
-      // Trigger workspace map regeneration via a special API call
+      // Trigger workspace map regeneration — non-critical, fine to fail
+      // silently (map regenerates on next skill change too).
       try {
-        await fetch(`${API_URL}/internal/workspace-files`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-          },
-          body: JSON.stringify({
-            action: "regenerate-map",
-            tenantSlug,
-            instanceId: agentSlug,
-            agentId,
-          }),
-        });
+        await regenerateWorkspaceMap(agentId);
       } catch {
-        // Non-critical — map will be regenerated on next skill change
+        // Non-critical — map will be regenerated on next skill change.
       }
 
       setCreateOpen(false);
@@ -319,13 +287,8 @@ function WorkspacesPage() {
   const handleDelete = async (ws: WorkspaceRow) => {
     if (!confirm(`Delete workspace "${ws.name}"? This removes the folder and all its files.`)) return;
     try {
-      // Delete CONTEXT.md (and ideally all files in the folder)
-      await workspaceApi({
-        action: "delete",
-        tenantSlug,
-        instanceId: agentSlug,
-        path: `${ws.slug}/CONTEXT.md`,
-      });
+      // Delete CONTEXT.md (and ideally all files in the folder).
+      await deleteWorkspaceFile(target, `${ws.slug}/CONTEXT.md`);
       loadWorkspaces();
     } catch (err) {
       console.error("Failed to delete workspace:", err);

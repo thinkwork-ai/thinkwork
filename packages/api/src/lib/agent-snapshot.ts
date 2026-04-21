@@ -17,13 +17,13 @@
 
 import {
 	ListObjectsV2Command,
-	GetObjectCommand,
 	PutObjectCommand,
 	DeleteObjectsCommand,
 	S3Client,
 } from "@aws-sdk/client-s3";
 import { db, eq, sql, agents, agentSkills, agentKnowledgeBases, agentVersions, tenants } from "../graphql/utils.js";
 import { regenerateManifest } from "./workspace-manifest.js";
+import { composeList, type ComposeResult } from "./workspace-overlay.js";
 
 const s3 = new S3Client({
 	region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1",
@@ -40,45 +40,39 @@ async function resolveTenantSlug(tenantId: string): Promise<string> {
 	return tenant.slug;
 }
 
-async function streamToString(stream: any): Promise<string> {
-	const chunks: Buffer[] = [];
-	for await (const chunk of stream) {
-		chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-	}
-	return Buffer.concat(chunks).toString("utf-8");
-}
-
 /**
- * Read every file under a workspace prefix into a { path: content } map.
- * Excludes manifest.json (regenerated on restore).
+ * Read every composed workspace file into a { path: content } map.
+ *
+ * Under the overlay model (PRD workspace-overlay, Unit 5), the snapshot
+ * captures the *composed* view — agent overrides + template base +
+ * defaults — so `restoreAgentFromSnapshot` restores the full state the
+ * operator saw, not just the sparse set of agent-scoped overrides. This is
+ * what lets a rollback actually work: a fresh-off-template agent has no
+ * files in `{agent}/workspace/` at all, but its snapshot still needs to
+ * preserve the 11 canonical files so a later template edit doesn't
+ * silently leak into a "restored" agent.
+ *
+ * Placeholder values are server-computed from current DB state by the
+ * composer; a snapshot taken while human A is paired and restored after
+ * reassignment to human B will bake human A's values. That matches
+ * expected rollback semantics — the version *is* the point-in-time state.
  */
 export async function readWorkspaceFiles(
-	tenantSlug: string,
-	agentSlug: string,
+	tenantId: string,
+	agentId: string,
 ): Promise<Record<string, string>> {
-	if (!BUCKET) return {};
-	const prefix = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/`;
+	// Read lazily — at cold start the env is present, but tests inject it
+	// after module load.
+	if (!process.env.WORKSPACE_BUCKET) return {};
+	const files = (await composeList(
+		{ tenantId },
+		agentId,
+		{ includeContent: true },
+	)) as ComposeResult[];
 	const out: Record<string, string> = {};
-	let continuationToken: string | undefined;
-
-	do {
-		const list = await s3.send(
-			new ListObjectsV2Command({
-				Bucket: BUCKET,
-				Prefix: prefix,
-				ContinuationToken: continuationToken,
-			}),
-		);
-		for (const obj of list.Contents || []) {
-			if (!obj.Key) continue;
-			const relPath = obj.Key.slice(prefix.length);
-			if (!relPath || relPath === "manifest.json") continue;
-			const res = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: obj.Key }));
-			out[relPath] = await streamToString(res.Body as any);
-		}
-		continuationToken = list.IsTruncated ? list.NextContinuationToken : undefined;
-	} while (continuationToken);
-
+	for (const f of files) {
+		out[f.path] = f.content;
+	}
 	return out;
 }
 
@@ -156,12 +150,11 @@ export async function snapshotAgent(
 	const skills = await db.select().from(agentSkills).where(eq(agentSkills.agent_id, agentId));
 	const kbs = await db.select().from(agentKnowledgeBases).where(eq(agentKnowledgeBases.agent_id, agentId));
 
-	// 3. Read workspace files
+	// 3. Read workspace files — composed view, not just agent overrides.
 	let workspaceFiles: Record<string, string> = {};
 	if (agent.slug && agent.tenant_id) {
 		try {
-			const tenantSlug = await resolveTenantSlug(agent.tenant_id);
-			workspaceFiles = await readWorkspaceFiles(tenantSlug, agent.slug);
+			workspaceFiles = await readWorkspaceFiles(agent.tenant_id, agent.id);
 		} catch (err) {
 			console.warn(`[snapshotAgent] Failed to read workspace for ${agentId}:`, err);
 		}
