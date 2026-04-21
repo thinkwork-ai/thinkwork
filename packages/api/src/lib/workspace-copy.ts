@@ -11,9 +11,10 @@ import {
 	S3Client,
 	ListObjectsV2Command,
 	CopyObjectCommand,
+	GetObjectCommand,
 	PutObjectCommand,
 } from "@aws-sdk/client-s3";
-import { loadDefaults } from "@thinkwork/workspace-defaults";
+import { DEFAULTS_VERSION, loadDefaults } from "@thinkwork/workspace-defaults";
 
 const s3 = new S3Client({
 	region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1",
@@ -83,14 +84,52 @@ async function copyS3Prefix(srcPrefix: string, dstPrefix: string): Promise<numbe
 	return copied;
 }
 
-async function ensureDefaultsExist(tenantSlug: string): Promise<void> {
-	const prefix = `tenants/${tenantSlug}/agents/_catalog/defaults/workspace/`;
-	const list = await s3.send(
-		new ListObjectsV2Command({ Bucket: BUCKET, Prefix: prefix, MaxKeys: 1 }),
-	);
-	if ((list.Contents?.length ?? 0) > 0) return; // already seeded
+const VERSION_KEY_SUFFIX = "_defaults_version";
 
-	// Seed default files
+/**
+ * Read the stored `_defaults_version` for a tenant's defaults prefix.
+ * Returns `0` if the key is missing, corrupt, or the prefix is empty —
+ * signaling "needs seeding". Never throws on missing key.
+ */
+async function readStoredDefaultsVersion(tenantSlug: string): Promise<number> {
+	const key = `tenants/${tenantSlug}/agents/_catalog/defaults/workspace/${VERSION_KEY_SUFFIX}`;
+	try {
+		const resp = await s3.send(
+			new GetObjectCommand({ Bucket: BUCKET, Key: key }),
+		);
+		const body = await resp.Body?.transformToString();
+		if (!body) return 0;
+		const parsed = Number.parseInt(body.trim(), 10);
+		return Number.isFinite(parsed) ? parsed : 0;
+	} catch {
+		// NoSuchKey or any read error → treat as unseeded.
+		return 0;
+	}
+}
+
+/**
+ * Ensure `_catalog/defaults/workspace/` for this tenant is seeded with the
+ * current canonical content. Idempotent: callers may invoke on every
+ * createAgentTemplate without worry.
+ *
+ * Semantics:
+ *   • Stored version === DEFAULTS_VERSION → no-op (common case).
+ *   • Stored version < DEFAULTS_VERSION (or missing) → rewrite ALL 11 files
+ *     and bump the stored version. Existing objects are overwritten.
+ *   • Never deletes extra files the prefix may hold (e.g., a legacy TOOLS.md)
+ *     — that cleanup is left to explicit migration (Unit 10).
+ */
+export async function ensureDefaultsExist(tenantSlug: string): Promise<{
+	seeded: boolean;
+	previousVersion: number;
+	currentVersion: number;
+}> {
+	const prefix = `tenants/${tenantSlug}/agents/_catalog/defaults/workspace/`;
+	const previousVersion = await readStoredDefaultsVersion(tenantSlug);
+	if (previousVersion === DEFAULTS_VERSION) {
+		return { seeded: false, previousVersion, currentVersion: DEFAULTS_VERSION };
+	}
+
 	for (const [path, content] of Object.entries(DEFAULT_FILES)) {
 		await s3.send(
 			new PutObjectCommand({
@@ -101,6 +140,15 @@ async function ensureDefaultsExist(tenantSlug: string): Promise<void> {
 			}),
 		);
 	}
+	await s3.send(
+		new PutObjectCommand({
+			Bucket: BUCKET,
+			Key: `${prefix}${VERSION_KEY_SUFFIX}`,
+			Body: String(DEFAULTS_VERSION),
+			ContentType: "text/plain",
+		}),
+	);
+	return { seeded: true, previousVersion, currentVersion: DEFAULTS_VERSION };
 }
 
 // ---------------------------------------------------------------------------

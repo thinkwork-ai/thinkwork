@@ -348,6 +348,25 @@ _(empty — add entries as you encounter them)_
 `;
 
 // ---------------------------------------------------------------------------
+// Version
+// ---------------------------------------------------------------------------
+
+/**
+ * Monotonically-increasing version of the canonical default content.
+ *
+ * The seed handler (Unit 3) writes this number to a `_defaults_version` S3
+ * object in each tenant's `_catalog/defaults/workspace/` prefix. On each
+ * invocation it reads the stored version and, if different from `DEFAULTS_VERSION`,
+ * rewrites all 11 files and bumps the stored version. Matching version → no-op.
+ *
+ * **Bump this whenever any of the 11 canonical files changes.**
+ * The parity test catches drift between the inline TS and the .md authoring
+ * sources, but the version bump is what drives actual S3 updates across
+ * existing tenants — forgetting it means existing tenants keep the old content.
+ */
+export const DEFAULTS_VERSION = 1;
+
+// ---------------------------------------------------------------------------
 // Aggregator
 // ---------------------------------------------------------------------------
 
