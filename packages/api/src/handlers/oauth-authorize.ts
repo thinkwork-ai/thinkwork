@@ -17,11 +17,15 @@ import { randomBytes } from "crypto";
 import { schema } from "@thinkwork/database-pg";
 import { db } from "../lib/db.js";
 import { error } from "../lib/response.js";
+import {
+	getOAuthClientCredentials,
+	isSecretsManagerProvider,
+} from "../lib/oauth-client-credentials.js";
 
 const { connectProviders, connections, users } = schema;
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_PRODUCTIVITY_CLIENT_ID || "";
-const MICROSOFT_CLIENT_ID = process.env.MICROSOFT_CLIENT_ID || "";
+// LastMile is still env-var based (legacy surface; migrate opportunistically).
+// Google + Microsoft come from Secrets Manager via getOAuthClientCredentials().
 const LASTMILE_CLIENT_ID = process.env.LASTMILE_CLIENT_ID || "";
 
 // Callback URL — in production this is api.thinkwork.ai, in dev it's the raw API Gateway URL
@@ -57,7 +61,10 @@ export async function handler(
 		.where(eq(connectProviders.name, providerName));
 
 	if (!provider) {
-		return error(`Unknown provider: ${providerName}`, 404);
+		return error(
+			`Unknown provider: ${providerName} (check connect_providers table; run scripts/seed-dev.sql if missing)`,
+			404,
+		);
 	}
 
 	const config = provider.config as ProviderConfig;
@@ -65,17 +72,24 @@ export async function handler(
 		return error("Provider not configured for OAuth");
 	}
 
-	// Determine client ID
+	// Determine client ID — Google/Microsoft come from Secrets Manager,
+	// LastMile still reads from env (legacy).
 	let clientId = "";
-	if (providerName === "google_productivity") {
-		clientId = GOOGLE_CLIENT_ID;
-	} else if (providerName === "microsoft_365") {
-		clientId = MICROSOFT_CLIENT_ID;
+	if (isSecretsManagerProvider(providerName)) {
+		try {
+			clientId = (await getOAuthClientCredentials(providerName)).clientId;
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			return error(`OAuth client not configured for ${providerName}: ${msg}`, 500);
+		}
 	} else if (providerName === "lastmile") {
 		clientId = LASTMILE_CLIENT_ID;
 	}
 	if (!clientId) {
-		return error("OAuth client not configured for this provider", 500);
+		const envHint = isSecretsManagerProvider(providerName)
+			? `check the Secrets Manager secret referenced by ${providerName === "google_productivity" ? "GOOGLE_PRODUCTIVITY_OAUTH_SECRET_ARN" : "MICROSOFT_OAUTH_SECRET_ARN"}`
+			: "check LASTMILE_CLIENT_ID env var";
+		return error(`OAuth client not configured for ${providerName} (${envHint})`, 500);
 	}
 	if (!OAUTH_CALLBACK_URL) {
 		return error("OAUTH_CALLBACK_URL is not configured", 500);

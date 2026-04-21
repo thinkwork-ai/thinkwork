@@ -199,6 +199,13 @@ module "api" {
   wiki_aggregation_pass_enabled      = var.wiki_aggregation_pass_enabled
   wiki_deterministic_linking_enabled = var.wiki_deterministic_linking_enabled
   google_places_api_key              = var.google_places_api_key
+
+  # Per-user OAuth client credentials — fed to Secrets Manager in
+  # app/lambda-api/oauth-secrets.tf. Reuses the same google_oauth_client_*
+  # tfvars that already flow to the Cognito federated-signin module.
+  google_oauth_client_id     = var.google_oauth_client_id
+  google_oauth_client_secret = var.google_oauth_client_secret
+  redirect_success_url       = var.redirect_success_url
 }
 
 ################################################################################

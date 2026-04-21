@@ -50,6 +50,12 @@ variable "google_oauth_client_secret" {
   default     = ""
 }
 
+variable "redirect_success_url" {
+  description = "Default OAuth-callback redirect target when no per-request returnUrl is supplied. Mobile callers pass thinkwork:// custom scheme; web falls through to this."
+  type        = string
+  default     = "https://app.thinkwork.ai/settings/credentials"
+}
+
 # ---------------------------------------------------------------------------
 # BYO Foundation (all optional — defaults to creating everything)
 # ---------------------------------------------------------------------------

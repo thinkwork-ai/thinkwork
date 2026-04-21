@@ -25,17 +25,19 @@ import {
 	ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
 
+import {
+	getOAuthClientCredentials,
+	isSecretsManagerProvider,
+} from "../lib/oauth-client-credentials.js";
+
 const { connections, connectProviders, credentials, agentSkills } = schema;
 
 const STAGE = process.env.STAGE || "dev";
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_PRODUCTIVITY_CLIENT_ID || "";
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_PRODUCTIVITY_CLIENT_SECRET || "";
-const MICROSOFT_CLIENT_ID = process.env.MICROSOFT_CLIENT_ID || "";
-const MICROSOFT_CLIENT_SECRET = process.env.MICROSOFT_CLIENT_SECRET || "";
+// LastMile still uses env vars (legacy). Google + Microsoft come from Secrets Manager.
 const LASTMILE_CLIENT_ID = process.env.LASTMILE_CLIENT_ID || "";
 const LASTMILE_CLIENT_SECRET = process.env.LASTMILE_CLIENT_SECRET || "";
 const OAUTH_CALLBACK_URL = process.env.OAUTH_CALLBACK_URL || "";
-const REDIRECT_SUCCESS_URL = process.env.REDIRECT_SUCCESS_URL || "https://app.thinkwork.ai/settings/integrations";
+const REDIRECT_SUCCESS_URL = process.env.REDIRECT_SUCCESS_URL || "https://app.thinkwork.ai/settings/credentials";
 
 const sm = new SecretsManagerClient({
 	region: process.env.AWS_REGION || "us-east-1",
@@ -103,20 +105,23 @@ export async function handler(
 			.where(eq(connectProviders.id, conn.provider_id));
 
 		if (!provider) {
-			return redirect(`${REDIRECT_SUCCESS_URL}?status=error&reason=provider_not_found`);
+			return redirectForConn(conn, "error", "reason=provider_not_found");
 		}
 
 		const config = provider.config as ProviderConfig;
 
-		// Determine client credentials
+		// Determine client credentials — Google/Microsoft via Secrets Manager, LastMile via env (legacy).
 		let clientId = "";
 		let clientSecret = "";
-		if (provider.name === "google_productivity") {
-			clientId = GOOGLE_CLIENT_ID;
-			clientSecret = GOOGLE_CLIENT_SECRET;
-		} else if (provider.name === "microsoft_365") {
-			clientId = MICROSOFT_CLIENT_ID;
-			clientSecret = MICROSOFT_CLIENT_SECRET;
+		if (isSecretsManagerProvider(provider.name)) {
+			try {
+				const creds = await getOAuthClientCredentials(provider.name);
+				clientId = creds.clientId;
+				clientSecret = creds.clientSecret;
+			} catch (credErr) {
+				console.error(`[oauth-callback] Secret fetch failed for ${provider.name}:`, credErr);
+				return redirectForConn(conn, "error", "reason=client_creds_missing");
+			}
 		} else if (provider.name === "lastmile") {
 			clientId = LASTMILE_CLIENT_ID;
 			clientSecret = LASTMILE_CLIENT_SECRET;
@@ -140,7 +145,7 @@ export async function handler(
 		if (!tokenRes.ok) {
 			const errText = await tokenRes.text();
 			console.error(`[oauth-callback] Token exchange failed: ${tokenRes.status} ${errText}`);
-			return redirect(`${REDIRECT_SUCCESS_URL}?status=error&reason=token_exchange_failed`);
+			return redirectForConn(conn, "error", "reason=token_exchange_failed");
 		}
 
 		const tokens = await tokenRes.json() as TokenResponse;
@@ -363,7 +368,7 @@ export async function handler(
 			};
 		}
 
-		return redirect(`${REDIRECT_SUCCESS_URL}?status=connected&provider=${provider.name}`);
+		return redirectForConn(conn, "connected", `provider=${encodeURIComponent(provider.name)}`);
 	} catch (err) {
 		console.error(`[oauth-callback] Unexpected error:`, err);
 		return redirect(`${REDIRECT_SUCCESS_URL}?status=error&reason=internal_error`);
@@ -376,4 +381,25 @@ function redirect(url: string): APIGatewayProxyStructuredResultV2 {
 		headers: { Location: url },
 		body: "",
 	};
+}
+
+/**
+ * Redirect to the per-request `return_url` captured in the pending-connection
+ * metadata (set by oauth-authorize.ts:140 from the mobile/admin caller),
+ * falling back to `REDIRECT_SUCCESS_URL` for web callers that didn't supply one.
+ *
+ * Mobile passes a custom scheme (e.g. `thinkwork://settings/integrations`) so
+ * `openAuthSessionAsync` can close the in-app browser and hand control back.
+ */
+function redirectForConn(
+	conn: { metadata?: unknown } | null | undefined,
+	status: "connected" | "error",
+	queryTail: string,
+): APIGatewayProxyStructuredResultV2 {
+	const meta = (conn?.metadata as Record<string, unknown> | undefined) || {};
+	const returnUrl = typeof meta.return_url === "string" && meta.return_url
+		? meta.return_url
+		: REDIRECT_SUCCESS_URL;
+	const separator = returnUrl.includes("?") ? "&" : "?";
+	return redirect(`${returnUrl}${separator}status=${status}&${queryTail}`);
 }
