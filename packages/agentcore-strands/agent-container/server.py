@@ -142,76 +142,33 @@ except ImportError as e:
     _browse_website = None
 
 
-def _fetch_memory_templates() -> dict[str, str]:
-    """Download memory templates from S3 memory/ prefix."""
-    bucket = os.environ.get("AGENTCORE_FILES_BUCKET", "")
-    if not bucket:
-        logger.warning("AGENTCORE_FILES_BUCKET not set, skipping template fetch")
-        return {}
-    templates = {}
-    try:
-        s3 = boto3.client("s3", region_name=AWS_REGION)
-        for filename in PERSONALITY_TEMPLATE_FILES:
-            try:
-                resp = s3.get_object(Bucket=bucket, Key=f"memory/{filename}")
-                templates[filename] = resp["Body"].read().decode("utf-8")
-                logger.info("Fetched template memory/%s (%d bytes)", filename, len(templates[filename]))
-            except Exception as e:
-                logger.warning("Failed to fetch template memory/%s: %s", filename, e)
-    except Exception as e:
-        logger.warning("Failed to create S3 client for templates: %s", e)
-    return templates
+# ─── Composer-backed workspace fetch (Unit 7) ────────────────────────────────
+#
+# The container used to (a) download files directly from S3 and (b) bootstrap
+# missing personality files by fetching templates, substituting
+# {{AGENT_NAME}} / {{HUMAN_NAME}} locally, and writing the substituted content
+# BACK to S3. That third step forked every agent's S3 state on first boot and
+# defeated the overlay composer's first-hit-wins rule.
+#
+# Now the container asks the composer (Unit 4) for the fully composed
+# workspace in one HTTP call — tenant is validated server-side, placeholder
+# substitution happens server-side, and nothing is written back to S3.
+#
+# The HTTP client lives in workspace_composer_client.py so it can be
+# unit-tested without importing the full Strands runtime.
+
+from workspace_composer_client import (
+    compute_fingerprint,
+    fetch_composed_workspace,
+    write_composed_to_dir,
+)
 
 
-def _bootstrap_personality_files(ws_tenant: str = "", ws_instance: str = "",
-                                  agent_name: str = "", human_name: str = ""):
-    """Fetch templates from S3, substitute placeholders, write locally + persist."""
-    os.makedirs(WORKSPACE_DIR, exist_ok=True)
-
-    # Check if any personality files are missing
-    missing = [f for f in PERSONALITY_TEMPLATE_FILES
-               if not os.path.exists(os.path.join(WORKSPACE_DIR, f))]
-    if not missing:
-        return
-
-    # Fetch templates from S3 memory/ prefix
-    templates = _fetch_memory_templates()
-    if not templates:
-        logger.warning("No personality templates available from S3, skipping bootstrap")
-        return
-
-    substitutions = {
-        "{{AGENT_NAME}}": agent_name or "Assistant",
-        "{{HUMAN_NAME}}": human_name or "the user",
-    }
-
-    bucket = os.environ.get("AGENTCORE_FILES_BUCKET", "")
-    s3 = boto3.client("s3", region_name=AWS_REGION) if bucket else None
-
-    for filename in missing:
-        template = templates.get(filename)
-        if not template:
-            continue
-
-        # Apply substitutions
-        content = template
-        for placeholder, value in substitutions.items():
-            content = content.replace(placeholder, value)
-
-        # Write locally
-        filepath = os.path.join(WORKSPACE_DIR, filename)
-        with open(filepath, "w") as f:
-            f.write(content)
-        logger.info("Bootstrapped %s (agent_name=%s, human_name=%s)", filename, agent_name, human_name)
-
-        # Persist to S3 workspace so it survives container restarts
-        if s3 and ws_tenant and ws_instance:
-            try:
-                s3_key = f"tenants/{ws_tenant}/agents/{ws_instance}/workspace/{filename}"
-                s3.put_object(Bucket=bucket, Key=s3_key, Body=content, ContentType="text/markdown")
-                logger.info("Uploaded %s to s3://%s/%s", filename, bucket, s3_key)
-            except Exception as e:
-                logger.warning("Failed to upload %s to S3: %s", filename, e)
+# Cache the hash of the last composed-list result so we skip rewriting
+# /tmp/workspace on warm reuse when nothing changed. Composer caching +
+# this client-side short-circuit keep mass-wakeup bootstrap cost bounded
+# (see plan's project_enterprise_onboarding_scale memory).
+_composed_fingerprint: str | None = None
 
 
 def _retrieve_kb_context(kb_config: list, query: str, max_results: int = 5) -> str:
@@ -396,58 +353,78 @@ def _ensure_workspace_ready(workspace_tenant_id: str, assistant_id: str,
                             skills_config: list | None = None,
                             tenant_slug: str = "", instance_id: str = "",
                             agent_name: str = "", human_name: str = ""):
-    """Sync workspace from S3. Re-syncs if workspace files have changed (manifest ETag)."""
-    global _workspace_loaded_key
+    """Fetch the composed workspace from /api/workspaces/files and write it
+    to /tmp/workspace. No S3 reads, no S3 writes, no local substitution.
 
-    ws_tenant = tenant_slug or workspace_tenant_id
-    ws_instance = instance_id or assistant_id
-    if not ws_tenant or not ws_instance:
+    Falls back to the legacy direct-S3 sync only when THINKWORK_API_URL /
+    API_AUTH_SECRET aren't set (early boot or misconfigured deploy). Under
+    normal operation every file comes from the composer — that's what
+    closes the "first boot forks every agent's S3 state" regression.
+    """
+    global _workspace_loaded_key, _composed_fingerprint
+
+    # tenant_slug / instance_id are the legacy fallback fields; the composer
+    # itself only needs tenant UUID + agent UUID.
+    if not workspace_tenant_id or not assistant_id:
         os.makedirs(WORKSPACE_DIR, exist_ok=True)
         return
 
-    # Include manifest ETag in the cache key so workspace changes trigger re-sync.
-    # A lightweight S3 HEAD on manifest.json (~5ms) avoids full re-syncs when nothing changed.
-    manifest_version = ""
-    bucket = os.environ.get("AGENTCORE_FILES_BUCKET", "")
-    head_ms = 0
-    if bucket:
+    api_url = os.environ.get("THINKWORK_API_URL") or ""
+    api_secret = (
+        os.environ.get("API_AUTH_SECRET")
+        or os.environ.get("THINKWORK_API_SECRET")
+        or ""
+    )
+
+    os.makedirs(WORKSPACE_DIR, exist_ok=True)
+
+    if not api_url or not api_secret:
+        # No composer URL / secret → legacy direct-S3 sync. This path stays
+        # until every deploy env has THINKWORK_API_URL + API_AUTH_SECRET
+        # plumbed through (safety net for transitional deploys).
+        ws_tenant = tenant_slug or workspace_tenant_id
+        ws_instance = instance_id or assistant_id
+        if not ws_tenant or not ws_instance:
+            return
         try:
-            import boto3
-            s3 = boto3.client("s3", region_name=AWS_REGION)
-            manifest_key = f"tenants/{ws_tenant}/agents/{ws_instance}/workspace/manifest.json"
-            t0 = time.time()
-            head = s3.head_object(Bucket=bucket, Key=manifest_key)
-            head_ms = round((time.time() - t0) * 1000)
-            manifest_version = head.get("ETag", "") or head.get("LastModified", "")
-            if hasattr(manifest_version, "isoformat"):
-                manifest_version = manifest_version.isoformat()
-        except Exception:
-            head_ms = round((time.time() - t0) * 1000) if "t0" in dir() else 0
-
-    current_key = f"{ws_tenant}:{ws_instance}:{manifest_version}"
-
-    # Never cache when manifest_version is empty — always re-sync so we pick up
-    # a newly-created manifest.json instead of permanently caching the empty key.
-    if current_key and manifest_version and _workspace_loaded_key == current_key:
-        logger.info("workspace_sync action=skip head_ms=%d etag=%s",
-                     head_ms, manifest_version[:16] if manifest_version else "(none)")
+            from install_skills import install_workspace
+            install_workspace(ws_tenant, ws_instance)
+            logger.warning(
+                "workspace_sync action=legacy_s3 (no composer URL/secret)"
+            )
+        except Exception as e:
+            logger.warning("workspace_sync legacy S3 failed: %s", e)
         return
 
-    sync_action = "full_sync" if not manifest_version else "update"
     t_sync = time.time()
+    try:
+        files = fetch_composed_workspace(
+            tenant_id=workspace_tenant_id,
+            agent_id=assistant_id,
+            api_url=api_url,
+            api_secret=api_secret,
+        )
+    except Exception as e:
+        logger.warning("workspace_sync composer fetch failed: %s", e)
+        return
 
-    from install_skills import install_workspace
-    install_workspace(ws_tenant, ws_instance)
-    files_synced = len(os.listdir(WORKSPACE_DIR)) if os.path.isdir(WORKSPACE_DIR) else 0
+    # Client-side fingerprint skip: if composer returns the same set of
+    # {path, sha256} as last time, don't rewrite /tmp/workspace.
+    fingerprint = compute_fingerprint(files)
+    if fingerprint == _composed_fingerprint and _workspace_loaded_key:
+        logger.info("workspace_sync action=skip reason=fingerprint_match files=%d",
+                     len(files))
+        return
 
-    # Bootstrap personality files from S3 templates if missing after sync
-    _bootstrap_personality_files(ws_tenant, ws_instance, agent_name, human_name)
+    files_written = write_composed_to_dir(files, WORKSPACE_DIR)
 
     sync_ms = round((time.time() - t_sync) * 1000)
-    _workspace_loaded_key = current_key
-    logger.info("workspace_sync action=%s head_ms=%d sync_ms=%d files=%d etag=%s",
-                sync_action, head_ms, sync_ms, files_synced,
-                manifest_version[:16] if manifest_version else "(none)")
+    _workspace_loaded_key = f"{workspace_tenant_id}:{assistant_id}:{fingerprint}"
+    _composed_fingerprint = fingerprint
+    logger.info(
+        "workspace_sync action=composer_fetch sync_ms=%d files=%d fingerprint=%s",
+        sync_ms, files_written, fingerprint[:12],
+    )
 
 
 def _call_strands_agent(system_prompt: str, messages: list,
@@ -523,6 +500,16 @@ def _call_strands_agent(system_prompt: str, messages: list,
         logger.info("Managed memory tools registered: remember, recall, forget")
     except Exception as e:
         logger.warning("Managed memory tools registration failed: %s", e)
+
+    # Unit 7: write_memory — agent appends to its own memory/*.md working
+    # notes via the composer. Basename enum (lessons.md | preferences.md |
+    # contacts.md) so there's no path string to escape.
+    try:
+        from write_memory_tool import write_memory
+        tools.append(write_memory)
+        logger.info("workspace tool registered: write_memory")
+    except Exception as e:
+        logger.warning("write_memory registration failed: %s", e)
 
     _hindsight_enabled = bool(os.environ.get("HINDSIGHT_ENDPOINT"))
     if _hindsight_enabled:
@@ -1517,6 +1504,18 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
         if workspace_bucket:
             os.environ["AGENTCORE_FILES_BUCKET"] = workspace_bucket
             logger.info("AGENTCORE_FILES_BUCKET set from payload: %s", workspace_bucket)
+
+        # Unit 7: composer endpoint URL + service secret for workspace fetch
+        # + write_memory tool. chat-agent-invoke.ts plumbs these through.
+        thinkwork_api_url = payload.get("thinkwork_api_url") or ""
+        if thinkwork_api_url:
+            os.environ["THINKWORK_API_URL"] = thinkwork_api_url
+        thinkwork_api_secret = payload.get("thinkwork_api_secret") or ""
+        if thinkwork_api_secret:
+            os.environ["THINKWORK_API_SECRET"] = thinkwork_api_secret
+            # API_AUTH_SECRET is the canonical name on the backend; match it
+            # here so both names resolve.
+            os.environ["API_AUTH_SECRET"] = thinkwork_api_secret
 
         hindsight_endpoint = payload.get("hindsight_endpoint") or ""
         if hindsight_endpoint:

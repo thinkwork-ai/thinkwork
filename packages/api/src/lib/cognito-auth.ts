@@ -9,7 +9,30 @@ import { CognitoJwtVerifier } from "aws-jwt-verify";
 
 const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || "";
 const CLIENT_IDS = (process.env.COGNITO_APP_CLIENT_IDS || "").split(",").filter(Boolean);
-const API_KEY = process.env.GRAPHQL_API_KEY || "";
+
+/**
+ * Accepted service-to-service secrets for `x-api-key` auth.
+ *
+ * `API_AUTH_SECRET` / `THINKWORK_API_SECRET` are the canonical service
+ * secret (Secrets Manager; injected into every backend Lambda + the
+ * agentcore-runtime container's invoke payload). `GRAPHQL_API_KEY` is the
+ * AppSync API key — historically the only value accepted here, kept for
+ * backward compatibility.
+ *
+ * Read lazily so tests can override process.env after module load.
+ */
+function acceptedApiKeys(): string[] {
+	const out: string[] = [];
+	for (const name of [
+		"API_AUTH_SECRET",
+		"THINKWORK_API_SECRET",
+		"GRAPHQL_API_KEY",
+	]) {
+		const v = process.env[name];
+		if (v) out.push(v);
+	}
+	return out;
+}
 
 export interface AuthResult {
 	principalId: string | null;
@@ -57,13 +80,16 @@ export async function authenticate(headers: Record<string, string | undefined>):
 	}
 
 	// Try API key
-	if (apiKey && apiKey === API_KEY) {
-		return {
-			principalId: headers["x-principal-id"] || null,
-			tenantId: headers["x-tenant-id"] || null,
-			email: null,
-			authType: "apikey",
-		};
+	if (apiKey) {
+		const accepted = acceptedApiKeys();
+		if (accepted.some((k) => k === apiKey)) {
+			return {
+				principalId: headers["x-principal-id"] || null,
+				tenantId: headers["x-tenant-id"] || null,
+				email: null,
+				authType: "apikey",
+			};
+		}
 	}
 
 	return null;
