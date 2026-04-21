@@ -165,6 +165,7 @@ export function AppSidebar() {
   const agentsItems: NavItem[] = [
     { to: "/agents", icon: Bot, label: "Agents", badge: agentCount },
     { to: "/agent-templates", icon: LayoutTemplate, label: "Agent Templates" },
+    { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
     { to: "/capabilities", icon: Puzzle, label: "Capabilities" },
     { to: "/memory", icon: Brain, label: "Memories" },
     { to: "/wiki", icon: Network, label: "Wiki Pages" },
@@ -176,7 +177,6 @@ export function AppSidebar() {
     { to: "/analytics", icon: BarChart3, label: "Analytics" },
     { to: "/scheduled-jobs", icon: CalendarClock, label: "Automations" },
     { to: "/webhooks", icon: Webhook, label: "Webhooks" },
-    { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
     { to: "/humans", icon: Users, label: "Humans" },
     { to: "/settings", icon: Settings, label: "Settings" },
   ];
