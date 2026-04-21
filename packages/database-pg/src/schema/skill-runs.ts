@@ -86,6 +86,11 @@ export const skillRuns = pgTable(
 		// SHA256 of canonicalized resolved_inputs — backs the dedup partial
 		// unique index so identical concurrent invocations converge.
 		resolved_inputs_hash: text("resolved_inputs_hash").notNull(),
+		// Set when this run was triggered by a task-completion webhook as the
+		// next tick of a reconciler loop (D7a / Unit 8). Points back to the
+		// earlier run whose composition spawned the completed task. Null for
+		// the first tick of a loop and for all non-reconciler invocations.
+		triggered_by_run_id: uuid("triggered_by_run_id"),
 		status: text("status").notNull().default("running"),
 		delivery_channels: jsonb("delivery_channels")
 			.notNull()
@@ -121,6 +126,8 @@ export const skillRuns = pgTable(
 		index("idx_skill_runs_invoker").on(table.invoker_user_id),
 		// Per-skill analytics (powers compositionFeedbackSummary query).
 		index("idx_skill_runs_tenant_skill").on(table.tenant_id, table.skill_id),
+		// Reconciler-loop lookup: find the full tick chain for a given run.
+		index("idx_skill_runs_triggered_by").on(table.triggered_by_run_id),
 		// Retention sweeper.
 		index("idx_skill_runs_delete_at").on(table.delete_at),
 		// Dedup partial unique — only active runs collide. Once status flips
