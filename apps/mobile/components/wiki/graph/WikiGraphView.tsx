@@ -8,6 +8,7 @@ import {
   useWikiGraph,
 } from "@thinkwork/react-native-sdk";
 import { COLORS } from "@/lib/theme";
+import type { SimConfig } from "./hooks/useForceSimulation";
 import { KnowledgeGraph } from "./KnowledgeGraph";
 import {
   NodeDetailModal,
@@ -21,6 +22,17 @@ import type {
   WikiPageType,
   WikiSubgraph,
 } from "./types";
+
+// Tuned for browsable label mode on the main agent graph (~100-200 nodes).
+// Loosened from `WikiDetailSubgraph` (which targets ~10-30 nodes): more
+// link distance + collide so ~18-char titles don't crash into adjacent
+// nodes at default zoom.
+const LABEL_MODE_SIM_CONFIG: SimConfig = {
+  linkDistance: 110,
+  chargeStrength: -340,
+  collideRadius: 52,
+  xyStrength: 0.04,
+};
 
 interface WikiGraphViewProps {
   tenantId: string;
@@ -40,6 +52,12 @@ interface WikiGraphViewProps {
    * force sim or camera.
    */
   searchQuery?: string;
+  /**
+   * When true, render node titles beneath each node and use a label-
+   * friendly force config so titles don't overlap. Default false (the
+   * original dense, label-free constellation).
+   */
+  showLabels?: boolean;
 }
 
 /**
@@ -53,6 +71,7 @@ export function WikiGraphView({
   tenantId,
   agentId,
   searchQuery,
+  showLabels = false,
 }: WikiGraphViewProps) {
   const router = useRouter();
   const { graph, loading, error, refetch } = useWikiGraph({
@@ -193,6 +212,8 @@ export function WikiGraphView({
           onSelectNode={setSelectedNodeId}
           filter={filter}
           cacheKey={cacheKey}
+          showLabels={showLabels}
+          simConfig={showLabels ? LABEL_MODE_SIM_CONFIG : undefined}
         />
       )}
 
