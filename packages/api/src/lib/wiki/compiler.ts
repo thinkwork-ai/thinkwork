@@ -1127,21 +1127,8 @@ async function hydrateAggregationCandidates(
 
 async function computeLinkNeighborhoods(
 	pages: WikiPageRow[],
-): Promise<
-	Array<{
-		pageId: string;
-		inboundCount: number;
-		outboundSlugs: Array<{ type: "entity" | "topic" | "decision"; slug: string }>;
-	}>
-> {
-	const out: Array<{
-		pageId: string;
-		inboundCount: number;
-		outboundSlugs: Array<{
-			type: "entity" | "topic" | "decision";
-			slug: string;
-		}>;
-	}> = [];
+): Promise<Array<{ pageId: string; inboundCount: number }>> {
+	const out: Array<{ pageId: string; inboundCount: number }> = [];
 	for (const p of pages) {
 		const [inbound] = await defaultDb
 			.select({ count: sql<number>`count(*)::int` })
@@ -1150,7 +1137,6 @@ async function computeLinkNeighborhoods(
 		out.push({
 			pageId: p.id,
 			inboundCount: inbound?.count ?? 0,
-			outboundSlugs: [],
 		});
 	}
 	return out;
