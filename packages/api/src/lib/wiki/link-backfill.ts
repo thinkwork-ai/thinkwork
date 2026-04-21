@@ -357,6 +357,32 @@ export async function runPhaseCPlaceBackfill(
 		result.breaker_tripped = true;
 	}
 
+	// Final sweep: `ensureBackingPage` (invoked by places-service while the
+	// main loop is running) creates new backing entity pages for POIs and
+	// hierarchy tiers mid-run. Those newly-created pages have `place_id`
+	// set but were never in the initial snapshot, so their hierarchy edge
+	// was never emitted. Re-list now and emit over everything — idempotent
+	// via ON CONFLICT DO NOTHING on already-written edges, so this doesn't
+	// double-count. Skipped in dry-run (no pages were created).
+	if (!args.dryRun) {
+		const initialIds = new Set(pages.map((p) => p.id));
+		const pagesNow = await args.listActivePages();
+		const newlyCreated = pagesNow.filter(
+			(p) => p.place_id && !initialIds.has(p.id),
+		);
+		log(
+			`[phase-c] final sweep — ${newlyCreated.length} pages created mid-run need hierarchy emission`,
+		);
+		for (const page of newlyCreated) {
+			if (!page.place_id) continue;
+			result.hierarchy_edges_written += await emitHierarchyForSinglePage(
+				args,
+				page.id,
+				page.place_id,
+			);
+		}
+	}
+
 	log(
 		`[phase-c] summary ${JSON.stringify(result)}`,
 	);

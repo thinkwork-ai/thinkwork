@@ -511,6 +511,88 @@ describe("runPhaseCPlaceBackfill — dry-run", () => {
 	});
 });
 
+describe("runPhaseCPlaceBackfill — final sweep for mid-run backing pages", () => {
+	it("emits hierarchy edges for backing pages that get created mid-run (places-service ensureBackingPage side effect)", async () => {
+		// Simulate the real-world scenario: the places-service creates a new
+		// backing POI entity page during the main loop. That new page gets a
+		// place_id but isn't in the initial listActivePages() snapshot, so
+		// without a final sweep its hierarchy edge never lands.
+		const initialPages: PhaseCPage[] = [
+			phaseCPage({ id: "p-original", place_id: null }),
+		];
+		// Stateful list — grows when the places-service "creates" a backing
+		// page mid-run.
+		const mutablePages: PhaseCPage[] = [...initialPages];
+		const deps = buildPhaseCDeps(mutablePages, {
+			"p-original": [phaseCSource("m1", "gpid-cafe")],
+		});
+
+		// Re-wire listActivePages to always return the current mutablePages
+		// (the helper's closure captured the initial array, which works
+		// because array identity is preserved; but we re-wire for clarity).
+		deps.args.listActivePages = async () => mutablePages;
+
+		// Simulate `ensureBackingPage` by appending a new backing entity page
+		// with its place_id pre-set whenever the places-service resolves a
+		// place for the first time.
+		const realResolve = deps.args.resolvePlaceForRecord;
+		deps.args.resolvePlaceForRecord = async (record) => {
+			const resolved = await realResolve(record);
+			if (resolved) {
+				// The POI's own backing page didn't exist before — simulate
+				// the auto-created entity page.
+				const backingId = `page-for-${resolved.poi.id}`;
+				if (!mutablePages.some((p) => p.id === backingId)) {
+					mutablePages.push({
+						id: backingId,
+						slug: backingId,
+						title: "Mid-run backing page",
+						type: "entity",
+						place_id: resolved.poi.id,
+					});
+				}
+			}
+			return resolved;
+		};
+
+		// Place chain: POI with a city parent; parent page exists in the map.
+		deps.placesRowsById.set(
+			"poi-gpid-cafe",
+			placeRow({ id: "poi-gpid-cafe", parent_place_id: "city-paris" }),
+		);
+		deps.backingPagesByPlaceId.set(
+			"city-paris",
+			pageRow({ id: "paris", type: "topic", title: "Paris" }),
+		);
+
+		const result = await runPhaseCPlaceBackfill(deps.args);
+
+		// Main loop emits one edge (the original page → Paris).
+		// Final sweep catches the backing page → also emits its edge.
+		expect(result.hierarchy_edges_written).toBe(2);
+		expect(deps.writeLinkCalls.length).toBe(2);
+		expect(deps.writeLinkCalls.map((l) => l.fromPageId).sort()).toEqual(
+			["p-original", "page-for-poi-gpid-cafe"].sort(),
+		);
+	});
+
+	it("skips the final sweep in dry-run mode (no pages were created)", async () => {
+		const pages: PhaseCPage[] = [phaseCPage({ id: "p-cafe" })];
+		const deps = buildPhaseCDeps(pages, {
+			"p-cafe": [phaseCSource("m1", "gpid-cafe")],
+		});
+		deps.args.dryRun = true;
+		const listSpy = vi.fn(async () => pages);
+		deps.args.listActivePages = listSpy;
+
+		await runPhaseCPlaceBackfill(deps.args);
+
+		// listActivePages should have been called exactly once (main loop),
+		// not twice — dry-run never triggers the sweep.
+		expect(listSpy).toHaveBeenCalledTimes(1);
+	});
+});
+
 describe("runPhaseCPlaceBackfill — idempotency", () => {
 	it("emits zero new hierarchy edges on the second pass when writeLink dedupes on the unique index", async () => {
 		const pages: PhaseCPage[] = [
