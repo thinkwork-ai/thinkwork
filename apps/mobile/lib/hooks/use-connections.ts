@@ -78,7 +78,6 @@ async function fetchNow(tenantId: string, userId: string): Promise<void> {
         throw new Error(`GET /api/connections failed: ${res.status}`);
       }
       const data = (await res.json()) as ConnectionRow[];
-      console.log(`[useConnections] fetched ${data.length} rows for user=${userId.slice(0,8)} tenant=${tenantId.slice(0,8)}; statuses=${data.map(d=>d.status).join(",")}`);
       cache.connections = data;
       cache.scopeKey = scopeKey;
       cache.error = null;

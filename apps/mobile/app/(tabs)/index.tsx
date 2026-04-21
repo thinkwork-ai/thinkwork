@@ -29,7 +29,7 @@ import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { COLORS } from "@/lib/theme";
-import { ListTodo, Bot, Settings, LogOut, RefreshCw, Filter, ChevronDown, ChevronRight, X, Zap, Check, CheckSquare, ListChecks, Circle, AlertCircle, Clock, Cable, Plug } from "lucide-react-native";
+import { ListTodo, Bot, Settings, LogOut, RefreshCw, Filter, ChevronDown, ChevronRight, X, Zap, Check, CheckSquare, ListChecks, Circle, AlertCircle, Clock, Plug } from "lucide-react-native";
 import { IconTopologyStar3, IconList, IconLetterCase } from "@tabler/icons-react-native";
 import { ThreadChannel } from "@/lib/gql/graphql";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
@@ -454,8 +454,7 @@ export default function ThreadsScreen() {
               items={[
                 { label: "Agent Config", icon: Bot, onPress: () => router.push("/settings/agent-config") },
                 { label: "Automations", icon: Zap, onPress: () => router.push("/settings/automations") },
-                { label: "Integrations", icon: Plug, onPress: () => router.push("/settings/integrations") },
-                { label: "MCP Servers", icon: Cable, onPress: () => router.push("/settings/mcp-servers") },
+                { label: "Credentials Locker", icon: Plug, onPress: () => router.push("/settings/credentials") },
                 { label: "User Settings", icon: Settings, onPress: () => router.push("/settings/user-settings") },
                 ...(Platform.OS !== "web" ? [{
                   label: "Update App",
