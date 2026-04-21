@@ -1,0 +1,101 @@
+id: customer-onboarding-reconciler
+version: 1
+execution: composition
+mode: tool
+name: "Customer Onboarding (Reconciler)"
+description: >
+  Drive a new customer from deal-close to onboarded by continuously
+  reconciling desired state against actual state. Invoked via webhook on
+  opportunity-won and re-invoked on task completions. Never blocks waiting
+  for human input — each tick reads current state, creates the tasks that
+  are still missing, and exits. HITL happens between ticks, not inside a
+  single invocation.
+
+# Typed inputs — the resolver converts slugs to ids; the reconciler only
+# needs the stable customer / opportunity identifiers.
+inputs:
+  customerId:
+    type: string
+    required: true
+  opportunityId:
+    type: string
+    required: true
+
+# v1 tenants cannot override the reconciler body without touching the
+# canonical YAML. Future units may open up the checklist sub-skill.
+tenant_overridable: []
+
+# The reconciler shape's triggers are primarily webhook-driven. chat_intent
+# is present so an admin can force a tick from the catalog UI, but scheduled
+# invocation is not in v1 — reconciliation is event-driven on task close.
+triggers:
+  chat_intent:
+    examples:
+      - "reconcile onboarding for {customer}"
+      - "kick onboarding for {customer}"
+    disambiguation: ask
+  webhook:
+    examples:
+      - source: crm
+        event: opportunity.won
+        when: "Opportunity stage transitions to Closed Won"
+      - source: task-system
+        event: task.completed
+        when: "A task spawned by a prior tick gets marked done"
+
+# Reconciler-shape compositions deliver to the agent's owner rather than a
+# chat thread. Run-detail UI still shows up under the owning agent.
+delivery:
+  - agent_owner
+
+budget_cap:
+  tokens: 60000
+
+# Reconciler body: gather current state → synthesize the gap → act by
+# creating only the missing tasks. The runner's implicit compound.reflect
+# captures per-run learnings (e.g. "ABC Fuels onboarding runs always need
+# a bespoke PO setup step").
+#
+# No `frame` / `package` steps — there is no one-shot deliverable. The
+# composition's value is the *difference* between ticks, not a document.
+steps:
+  - id: gather
+    mode: parallel
+    on_branch_failure: fail
+    branches:
+      - id: customer
+        skill: crm_account_summary
+        inputs:
+          customer: "{customerId}"
+        critical: true
+      - id: existing_tasks
+        skill: lastmile_tasks_list
+        inputs:
+          subject_kind: customer
+          subject_id: "{customerId}"
+          trigger: "customer-onboarding-reconciler"
+        critical: true
+      - id: contract
+        skill: crm_opportunity_summary
+        inputs:
+          opportunity: "{opportunityId}"
+    output: gathered
+
+  - id: synthesize
+    mode: sequential
+    skill: synthesize
+    inputs:
+      framed: "Onboarding reconciliation for customer {customerId}."
+      gathered: "{gathered}"
+      focus: gap_analysis
+    output: gap_analysis
+
+  - id: act
+    mode: sequential
+    skill: customer-onboarding-reconciler/act
+    inputs:
+      customerId: "{customerId}"
+      opportunityId: "{opportunityId}"
+      gap_analysis: "{gap_analysis}"
+      existing_tasks: "{gathered.existing_tasks}"
+    output: action_summary
