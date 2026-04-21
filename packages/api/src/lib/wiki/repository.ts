@@ -2091,6 +2091,20 @@ export async function wipeWikiScope(
 	}
 	const before = await countWikiScope(args, db);
 	await db.transaction(async (tx) => {
+		// Delete unresolved mentions FIRST so the page delete that follows isn't
+		// blocked by the FK from wiki_unresolved_mentions.promoted_page_id →
+		// wiki_pages.id. The FK is not set to cascade (nulling promoted_page_id
+		// would preserve mention history, but the wipe explicitly discards the
+		// whole scope's mention set anyway, so just delete the mentions up
+		// front).
+		await tx
+			.delete(wikiUnresolvedMentions)
+			.where(
+				and(
+					eq(wikiUnresolvedMentions.tenant_id, args.tenantId),
+					eq(wikiUnresolvedMentions.owner_id, args.ownerId),
+				),
+			);
 		// Cascades delete sections / links / aliases / section_sources.
 		await tx
 			.delete(wikiPages)
@@ -2098,14 +2112,6 @@ export async function wipeWikiScope(
 				and(
 					eq(wikiPages.tenant_id, args.tenantId),
 					eq(wikiPages.owner_id, args.ownerId),
-				),
-			);
-		await tx
-			.delete(wikiUnresolvedMentions)
-			.where(
-				and(
-					eq(wikiUnresolvedMentions.tenant_id, args.tenantId),
-					eq(wikiUnresolvedMentions.owner_id, args.ownerId),
 				),
 			);
 		await tx

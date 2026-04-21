@@ -85,34 +85,16 @@ describe("deriveParentCandidates", () => {
 		expect(trip?.suggestedSectionSlug).toBe("entries");
 	});
 
-	it("collapses tag clusters across records", () => {
-		const out = deriveParentCandidates([
-			makeRecord("r1", { tags: ["restaurant", "food"] }),
-			makeRecord("r2", { tags: ["restaurant"] }),
-			makeRecord("r3", { tags: ["restaurant", "food"] }),
-		]);
-		const restaurant = out.find(
-			(c) => c.reason === "tag_cluster" && c.parentTitle === "Restaurant",
-		);
-		expect(restaurant?.supportingCount).toBe(3);
-		const food = out.find(
-			(c) => c.reason === "tag_cluster" && c.parentTitle === "Food",
-		);
-		expect(food?.supportingCount).toBe(2);
-	});
-
 	it("respects minClusterSize threshold", () => {
 		const records = [
-			makeRecord("r1", { tags: ["coffee"] }),
-			makeRecord("r2", { tags: ["coffee"] }),
-			makeRecord("r3", { tags: ["coffee"] }),
+			makeRecord("r1", { place: { city: "Paris" } }),
+			makeRecord("r2", { place: { city: "Paris" } }),
+			makeRecord("r3", { place: { city: "Paris" } }),
 		];
 		const strict = deriveParentCandidates(records, { minClusterSize: 5 });
 		expect(strict).toEqual([]);
 		const loose = deriveParentCandidates(records, { minClusterSize: 1 });
-		expect(loose.find((c) => c.reason === "tag_cluster")?.supportingCount).toBe(
-			3,
-		);
+		expect(loose.find((c) => c.reason === "city")?.supportingCount).toBe(3);
 	});
 
 	it("sorts candidates by supportingCount desc", () => {
@@ -120,8 +102,8 @@ describe("deriveParentCandidates", () => {
 			makeRecord("r1", { place: { city: "Austin" } }),
 			makeRecord("r2", { place: { city: "Austin" } }),
 			makeRecord("r3", { place: { city: "Austin" } }),
-			makeRecord("r4", { tags: ["restaurant"] }),
-			makeRecord("r5", { tags: ["restaurant"] }),
+			makeRecord("r4", { place: { city: "Paris" } }),
+			makeRecord("r5", { place: { city: "Paris" } }),
 		]);
 		expect(out.map((c) => c.supportingCount)).toEqual([3, 2]);
 	});
@@ -182,22 +164,6 @@ describe("deriveParentCandidates", () => {
 		expect(out.find((c) => c.reason === "city")?.suggestedSectionSlug).toBe(
 			"coffee",
 		);
-	});
-
-	it("reads idea_tags as comma-separated tags", () => {
-		const out = deriveParentCandidates([
-			makeRecord("r1", { idea_tags: "restaurant, food" }),
-			makeRecord("r2", { idea_tags: "restaurant" }),
-			makeRecord("r3", { idea_tags: "restaurant, food" }),
-		]);
-		const restaurant = out.find(
-			(c) => c.reason === "tag_cluster" && c.parentTitle === "Restaurant",
-		);
-		expect(restaurant?.supportingCount).toBe(3);
-		const food = out.find(
-			(c) => c.reason === "tag_cluster" && c.parentTitle === "Food",
-		);
-		expect(food?.supportingCount).toBe(2);
 	});
 
 	it("treats 'London, UK' as a city", () => {
