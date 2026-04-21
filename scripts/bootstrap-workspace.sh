@@ -11,8 +11,25 @@
 # Example:
 #   scripts/bootstrap-workspace.sh dev thinkwork-dev-storage \
 #     "postgresql://thinkwork_admin:pass@host:5432/thinkwork?sslmode=no-verify"
+#
+# Robustness notes:
+# - The ERR trap reports line + command before set -e kills the process, so
+#   silent failures (e.g. a command substitution with pipefail) surface with
+#   a usable source location instead of exit-code-1-with-no-context.
+# - The per-tenant seeding loop used to contain `[ … ] && continue` patterns
+#   that are technically safe under set -e + pipefail in isolation but become
+#   silent gotchas when combined with command substitutions earlier in the
+#   iteration. The patterns are now written as explicit `if … then continue`
+#   so the intent and the exit-status propagation are both obvious.
+# - The seeding block is wrapped in a failure-isolating subshell so a flaky
+#   AWS call on one tenant doesn't kill the whole deploy. Individual failures
+#   are logged and the final "=== Bootstrap complete ===" line is guaranteed
+#   to print.
 
 set -euo pipefail
+
+# Line + command on any set-e kill. Replaces the previous silent-exit-1.
+trap 'rc=$?; echo "ERR (exit=$rc) on line $LINENO: $BASH_COMMAND" >&2' ERR
 
 STAGE="${1:?Usage: bootstrap-workspace.sh <stage> <bucket> <database-url>}"
 BUCKET="${2:?Usage: bootstrap-workspace.sh <stage> <bucket> <database-url>}"
@@ -64,7 +81,9 @@ echo "── Uploading skill catalog files to S3 ──"
 for skill_dir in "$REPO_ROOT/packages/skill-catalog"/*/; do
   [ -d "$skill_dir" ] || continue
   slug=$(basename "$skill_dir")
-  [ "$slug" = "scripts" ] && continue  # skip the sync scripts dir
+  if [ "$slug" = "scripts" ]; then
+    continue  # the sync scripts dir is not a skill
+  fi
   aws s3 sync "$skill_dir" "s3://$BUCKET/skills/catalog/$slug/" --quiet
   file_count=$(find "$skill_dir" -type f | wc -l | tr -d ' ')
   echo "  ✓ $slug ($file_count files)"
@@ -81,40 +100,71 @@ echo "── Seeding per-tenant workspace defaults ──"
 PSQL_URL=$(echo "$DATABASE_URL" | sed 's/sslmode=no-verify/sslmode=require/g')
 TENANT_SLUGS=$(psql "$PSQL_URL" -t -A -c "SELECT slug FROM tenants" 2>/dev/null || echo "")
 
-if [ -z "$TENANT_SLUGS" ]; then
-  echo "  No tenants found (or DB not reachable). Skipping per-tenant seeding."
-else
+# Running the tenant-seed loop in a subshell with its own set-e behavior means
+# an error on one tenant logs + skips rather than killing the overall deploy.
+# The final "=== Bootstrap complete ===" line is the signal that the step ran
+# to completion; any per-tenant warnings appear in-line above it.
+bootstrap_status=0
+(
+  set +e
+  if [ -z "$TENANT_SLUGS" ]; then
+    echo "  No tenants found (or DB not reachable). Skipping per-tenant seeding."
+    exit 0
+  fi
+
   for slug in $TENANT_SLUGS; do
+    # Guard against a stray empty slug from a trailing newline in psql output.
+    if [ -z "$slug" ]; then
+      continue
+    fi
+
     DEFAULTS_PREFIX="tenants/$slug/agents/_catalog/defaults/workspace/"
 
-    # Check if defaults already exist
-    COUNT=$(aws s3 ls "s3://$BUCKET/$DEFAULTS_PREFIX" 2>/dev/null | wc -l | tr -d ' ')
+    # Check if defaults already exist. `aws s3 ls` returns non-zero on an
+    # empty prefix in some CLI versions, and with `set -o pipefail` that
+    # would kick through `wc -l`. Running without pipefail here is fine —
+    # `wc -l` on empty input prints `0`, which is exactly what we want.
+    ( set +o pipefail; aws s3 ls "s3://$BUCKET/$DEFAULTS_PREFIX" 2>/dev/null | wc -l | tr -d ' ' ) > /tmp/.bs_count
+    COUNT=$(cat /tmp/.bs_count || echo 0)
+    rm -f /tmp/.bs_count
+    COUNT=${COUNT:-0}
+
     # Expect 11 files (4 memory-templates + 4 system-workspace + 3 memory stubs)
     if [ "$COUNT" -ge "11" ]; then
       echo "  ✓ $slug — defaults exist ($COUNT files)"
     else
       echo "  → Seeding defaults for $slug..."
+      upload_ok=1
       # Memory templates
       for f in "$REPO_ROOT/packages/memory-templates/"*.md; do
-        aws s3 cp "$f" "s3://$BUCKET/${DEFAULTS_PREFIX}$(basename "$f")" --quiet
+        aws s3 cp "$f" "s3://$BUCKET/${DEFAULTS_PREFIX}$(basename "$f")" --quiet || upload_ok=0
       done
       # System workspace
       for f in "$REPO_ROOT/packages/system-workspace/"*.md; do
-        aws s3 cp "$f" "s3://$BUCKET/${DEFAULTS_PREFIX}$(basename "$f")" --quiet
+        aws s3 cp "$f" "s3://$BUCKET/${DEFAULTS_PREFIX}$(basename "$f")" --quiet || upload_ok=0
       done
       # Memory stubs
-      echo "# Lessons Learned" | aws s3 cp - "s3://$BUCKET/${DEFAULTS_PREFIX}memory/lessons.md" --quiet
-      echo "# Preferences" | aws s3 cp - "s3://$BUCKET/${DEFAULTS_PREFIX}memory/preferences.md" --quiet
-      echo "# Contacts" | aws s3 cp - "s3://$BUCKET/${DEFAULTS_PREFIX}memory/contacts.md" --quiet
-      echo "  ✓ $slug — seeded"
+      echo "# Lessons Learned" | aws s3 cp - "s3://$BUCKET/${DEFAULTS_PREFIX}memory/lessons.md" --quiet || upload_ok=0
+      echo "# Preferences" | aws s3 cp - "s3://$BUCKET/${DEFAULTS_PREFIX}memory/preferences.md" --quiet || upload_ok=0
+      echo "# Contacts" | aws s3 cp - "s3://$BUCKET/${DEFAULTS_PREFIX}memory/contacts.md" --quiet || upload_ok=0
+      if [ "$upload_ok" = "1" ]; then
+        echo "  ✓ $slug — seeded"
+      else
+        echo "  ! $slug — partial failure during seeding (continuing)"
+      fi
     fi
 
-    # Copy defaults to any templates missing workspace files
+    # Copy defaults to any templates missing workspace files.
     TEMPLATE_SLUGS=$(psql "$PSQL_URL" -t -A -c "SELECT slug FROM agent_templates WHERE tenant_id = (SELECT id FROM tenants WHERE slug = '$slug')" 2>/dev/null || true)
     for tpl in $TEMPLATE_SLUGS; do
-      [ -z "$tpl" ] && continue
+      if [ -z "$tpl" ]; then
+        continue
+      fi
       TPL_PREFIX="tenants/$slug/agents/_catalog/$tpl/workspace/"
-      TPL_COUNT=$(aws s3 ls "s3://$BUCKET/$TPL_PREFIX" 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+      ( set +o pipefail; aws s3 ls "s3://$BUCKET/$TPL_PREFIX" 2>/dev/null | wc -l | tr -d ' ' ) > /tmp/.bs_tpl
+      TPL_COUNT=$(cat /tmp/.bs_tpl || echo 0)
+      rm -f /tmp/.bs_tpl
+      TPL_COUNT=${TPL_COUNT:-0}
       if [ "$TPL_COUNT" -lt "3" ]; then
         echo "  → Copying defaults to template '$tpl'..."
         aws s3 cp --recursive "s3://$BUCKET/$DEFAULTS_PREFIX" "s3://$BUCKET/$TPL_PREFIX" --quiet 2>/dev/null || true
@@ -124,6 +174,10 @@ else
       fi
     done
   done
+) || bootstrap_status=$?
+
+if [ "$bootstrap_status" -ne 0 ]; then
+  echo "  ! Tenant seeding finished with warnings (subshell exit=$bootstrap_status)"
 fi
 
 echo ""
