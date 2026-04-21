@@ -52,6 +52,17 @@ locals {
     # and the workflow picker proxy returns 503. Set to the LMI develop /
     # staging / prod base URL per stage to enable real cross-system sync.
     LASTMILE_TASKS_API_URL = var.lastmile_tasks_api_url
+
+    # Per-user OAuth wiring (Google Workspace today; Microsoft 365 follow-up).
+    # Secret ARNs are the indirection; the actual client_id/client_secret
+    # values live in Secrets Manager and are fetched by
+    # packages/api/src/lib/oauth-client-credentials.ts at cold-start.
+    # OAUTH_CALLBACK_URL is the URL registered with Google/Azure OAuth apps.
+    # REDIRECT_SUCCESS_URL is the fallback post-OAuth redirect when the
+    # caller doesn't pass a per-request returnUrl (mobile passes thinkwork://).
+    GOOGLE_PRODUCTIVITY_OAUTH_SECRET_ARN = aws_secretsmanager_secret.oauth_google_productivity.arn
+    OAUTH_CALLBACK_URL                   = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com/api/oauth/callback"
+    REDIRECT_SUCCESS_URL                 = var.redirect_success_url
   }
 
   # Per-handler env-var overrides. ARNs are constructed from the naming

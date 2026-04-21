@@ -234,3 +234,26 @@ variable "google_places_api_key" {
   default     = ""
   sensitive   = true
 }
+
+# ---------------------------------------------------------------------------
+# Per-user OAuth client credentials
+# ---------------------------------------------------------------------------
+
+variable "google_oauth_client_id" {
+  description = "Google Workspace OAuth 2.0 client ID (for per-user Gmail/Calendar integration). Stored in Secrets Manager via aws_secretsmanager_secret_version; fetched by Lambdas at cold-start via oauth-client-credentials.ts."
+  type        = string
+  default     = ""
+}
+
+variable "google_oauth_client_secret" {
+  description = "Google Workspace OAuth 2.0 client secret (for per-user Gmail/Calendar integration). Stored in Secrets Manager alongside the client_id; Lambdas fetch both values at cold-start."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "redirect_success_url" {
+  description = "Default OAuth-callback redirect target used when the caller doesn't supply a returnUrl. Mobile callers pass a thinkwork:// custom scheme; web (admin) falls through to this default."
+  type        = string
+  default     = "https://app.thinkwork.ai/settings/credentials"
+}

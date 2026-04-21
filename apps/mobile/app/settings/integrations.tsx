@@ -45,18 +45,26 @@ export default function IntegrationsScreen() {
     setRefreshing(false);
   };
 
+  // Custom scheme we pass as `returnUrl` so oauth-callback redirects back to
+  // the app at the end of consent. Matches the pattern used by MCP OAuth
+  // (apps/mobile/app/settings/mcp-server-detail.tsx). NEVER pass
+  // preferEphemeralSession: true — per feedback_mobile_oauth_ephemeral_session
+  // that kills iOS credential prefills and forces a full reauth every time.
+  const RETURN_SCHEME = "thinkwork://settings/integrations";
+
   const handleConnectGoogle = async () => {
     if (!tenantId || !user?.id) return;
-    const url = `${API_BASE}/api/oauth/authorize?provider=google_productivity&userId=${user.id}&tenantId=${tenantId}`;
-    await WebBrowser.openBrowserAsync(url);
-    // Refresh connections after OAuth flow completes
+    const url = `${API_BASE}/api/oauth/authorize?provider=google_productivity&userId=${user.id}&tenantId=${tenantId}&returnUrl=${encodeURIComponent(RETURN_SCHEME)}`;
+    await WebBrowser.openAuthSessionAsync(url, RETURN_SCHEME);
+    // Refresh connections after OAuth flow completes (browser auto-closes on
+    // the deep-link return; this runs whether the user completed or cancelled)
     await refetchConnections();
   };
 
   const handleConnectMicrosoft = async () => {
     if (!tenantId || !user?.id) return;
-    const url = `${API_BASE}/api/oauth/authorize?provider=microsoft_365&userId=${user.id}&tenantId=${tenantId}`;
-    await WebBrowser.openBrowserAsync(url);
+    const url = `${API_BASE}/api/oauth/authorize?provider=microsoft_365&userId=${user.id}&tenantId=${tenantId}&returnUrl=${encodeURIComponent(RETURN_SCHEME)}`;
+    await WebBrowser.openAuthSessionAsync(url, RETURN_SCHEME);
     await refetchConnections();
   };
 
