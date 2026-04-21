@@ -99,7 +99,21 @@ export function KnowledgeGraph({
 
   // Sim runs from mount regardless of reveal — the 1s buffer lets node
   // positions stabilize enough for a sensible fit target.
-  useForceSimulation(subgraph.nodes, subgraph.edges, simConfig);
+  const sim = useForceSimulation(subgraph.nodes, subgraph.edges, simConfig);
+
+  // When `showLabels` flips, `useForceSimulation`'s effect tears down +
+  // rebuilds the sim with the new `simConfig`, but its preseeded branch
+  // immediately quiesces it (alpha=0) because every node still has x/y
+  // from the prior layout. Without this restart the new link/charge/
+  // collide values would never actually push nodes apart and the toggle
+  // would only turn text on. Skip the very first render so we don't
+  // stomp the reveal-fit animation.
+  const prevShowLabelsRef = useRef(showLabels);
+  useEffect(() => {
+    if (prevShowLabelsRef.current === showLabels) return;
+    prevShowLabelsRef.current = showLabels;
+    sim.restart(0.5);
+  }, [showLabels, sim]);
 
   const [revealed, setRevealed] = useState(false);
 
