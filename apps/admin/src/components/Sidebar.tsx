@@ -167,16 +167,16 @@ export function AppSidebar() {
     { to: "/agent-templates", icon: LayoutTemplate, label: "Agent Templates" },
     { to: "/capabilities", icon: Puzzle, label: "Capabilities" },
     { to: "/memory", icon: Brain, label: "Memories" },
-    { to: "/wiki", icon: Network, label: "Wiki" },
+    { to: "/wiki", icon: Network, label: "Wiki Pages" },
+    { to: "/knowledge-bases", icon: BookOpen, label: "Knowledge Bases" },
     { to: "/security", icon: Shield, label: "Security Center" },
   ];
 
   const manageItems: NavItem[] = [
     { to: "/analytics", icon: BarChart3, label: "Analytics" },
     { to: "/scheduled-jobs", icon: CalendarClock, label: "Automations" },
-    { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
     { to: "/webhooks", icon: Webhook, label: "Webhooks" },
-    { to: "/knowledge-bases", icon: BookOpen, label: "Knowledge Bases" },
+    { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
     { to: "/humans", icon: Users, label: "Humans" },
     { to: "/settings", icon: Settings, label: "Settings" },
   ];

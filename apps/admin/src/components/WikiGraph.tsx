@@ -486,7 +486,12 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       if (!fg || !dims || cameraInitRef.current) return;
       const camera = fg.camera();
       const controls = fg.controls();
-      camera.position.set(0, 0, 500);
+      // Scale starting distance with node count so large graphs start
+      // framed. No post-settle zoom — zoomToFit over-corrects and shoves
+      // the whole layout into a tiny center blob.
+      const nodeCount = graphData.nodes.length;
+      const initialZ = Math.max(800, Math.min(6000, 100 * Math.sqrt(nodeCount)));
+      camera.position.set(0, 0, initialZ);
       camera.up.set(0, 1, 0);
       camera.lookAt(0, 0, 0);
       controls.enableRotate = false;
