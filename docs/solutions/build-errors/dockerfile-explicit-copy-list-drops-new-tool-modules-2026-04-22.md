@@ -26,6 +26,7 @@ tags:
   - ci-gap
   - workspace-tools
   - recurring-class
+last_updated: 2026-04-22
 ---
 
 # Dockerfile explicit-COPY list silently drops new agent-container modules
@@ -34,15 +35,20 @@ tags:
 
 `packages/agentcore-strands/agent-container/Dockerfile` uses an explicit per-file `COPY` list (not a wildcard) for its Python sources. When a PR adds a new `.py` file to that directory and imports it from `server.py`, skipping the Dockerfile update produces a container image that's missing the file. The `ModuleNotFoundError` surfaces at runtime — either as a hard container crash (pre-2026-04-22) or, now that tool registration is wrapped in `try/except`, as a silent WARNING log while the feature ships non-functional.
 
-**This is the third observed occurrence of the same class of bug in the last seven days** (session history):
+**This is the fourth observed occurrence of the same class of bug in the last seven days** (session history):
 
 | Date | Module missed | Fix PR | Surfaced as |
 |------|---------------|--------|-------------|
 | 2026-04-15 | `external_task_context.py` | #100 | Hard container crash (Runtime.ExitError) |
 | 2026-04-17 | `workflow_skill_context.py` | #140 | Hard container crash |
-| 2026-04-22 | 3 × `update_*_tool.py` | #394 | Silent WARNING — feature shipped non-functional |
+| 2026-04-22 (AM) | 3 × `update_*_tool.py` | #394 | Silent WARNING — feature shipped non-functional |
+| 2026-04-22 (PM) | `invocation_env.py` (+ `wiki_tools.py` dormant) | #417 | Hard container crash — every chat turn returned "I'm sorry, I encountered an error processing your request" |
 
-Each previous occurrence was fixed by adding the specific file to the COPY list. No structural fix landed, so the class keeps recurring.
+Each previous occurrence was fixed by adding the specific file to the COPY list. No structural fix has landed, so the class keeps recurring.
+
+**Occurrence #4 is empirical evidence that documentation-only prevention is insufficient.** This doc shipped at ~15:52 UTC via PR #397. PR #401 merged at ~16:20 UTC adding `invocation_env.py` — the author had no mechanical reason to touch the Dockerfile, the COPY list didn't update, and the container crashed for every user 90 minutes after the compound doc went live. The doc is discoverable (`CLAUDE.md` points at `docs/solutions/`) but discoverability only helps someone who thinks to check — and nobody thinks to grep a learnings directory while adding a one-line refactor.
+
+This doc's Prevention section (below) lists three structural fixes. Pick one and ship it. The two-hour gap between "doc exists" and "doc bypassed" is as clean a null result as documentation-as-prevention will ever produce.
 
 ## Symptoms
 
@@ -121,7 +127,7 @@ The `try/except` wrapper around each registration was added in PR #391 to allow 
 
 ### Immediate (structural, not just discipline)
 
-Three occurrences in seven days make this a recurring class, not a one-off. The discipline-level fix ("remember to update the Dockerfile") has failed three times. Ship one of these:
+Four occurrences in seven days make this a recurring class, not a one-off. The discipline-level fix ("remember to update the Dockerfile") has failed four times — including once **within two hours of this doc shipping**. Ship one of these:
 
 1. **Refactor the Dockerfile to use a subdirectory + wildcard.** Move Strands-container Python files into `packages/agentcore-strands/agent-container/container-sources/` and use:
     ```dockerfile
@@ -144,7 +150,7 @@ Three occurrences in seven days make this a recurring class, not a one-off. The 
 
 4. **Post-deploy smoke test that asserts expected tool registration.** After any deploy that rebuilt the agentcore image, run a script that invokes the Lambda once and greps the CloudWatch log for every `workspace tool registered: <name>` line the codebase declares. Missing INFO → fail the deploy. This catches the Dockerfile gap even if (1) and (2) aren't adopted.
 
-5. **Dockerfile COPY audit on every new `.py` file.** When adding any Python file under `packages/agentcore-strands/agent-container/` or `packages/agentcore/agent-container/` that a container entry point imports, grep the Dockerfile for the filename. If absent, add a `COPY` line in the same PR. (This is the current discipline; it has failed three times and should not be relied on alone.)
+5. **Dockerfile COPY audit on every new `.py` file.** When adding any Python file under `packages/agentcore-strands/agent-container/` or `packages/agentcore/agent-container/` that a container entry point imports, grep the Dockerfile for the filename. If absent, add a `COPY` line in the same PR. (This is the current discipline; it has failed four times and should not be relied on alone.)
 
 6. **E2E tool-invocation check for any new `@tool` PR.** A post-deploy smoke that POSTs a trigger prompt to the Lambda and asserts the tool name appears in `tools_called` of the response. Would have caught PR #391 before a human ever typed "rename yourself to Zig".
 
@@ -161,7 +167,9 @@ Three occurrences in seven days make this a recurring class, not a one-off. The 
 - **PR #388** — `feat(workspace): SOUL.md — "Never fabricate capability"` — introduced the guardrail that surfaced the honest refusal on rename. Without this PR, the agent would have fabricated success and the bug would have gone undetected longer.
 - **PR #100** — `fix(agentcore): bundle external_task_context.py` — first recurrence of this class (2026-04-15).
 - **PR #140** — `fix(agentcore): bundle workflow_skill_context.py into container` — second recurrence (2026-04-17).
-- **Follow-up**: promote registration-failure log level + add startup assertion (PR #391 review items REL-005 and KP-006).
+- **PR #401** — `feat(agentcore): plumb CURRENT_USER_ID through every agent invocation path` — introduced `invocation_env.py` without updating the Dockerfile; caused the 4th occurrence two hours after this doc was written.
+- **PR #417** — `fix(agentcore): add invocation_env + wiki_tools to Dockerfile COPY list` — resolution for the 4th occurrence. Also caught `wiki_tools.py` (imported lazily from #199, dormant but missing) while the hood was up.
+- **Follow-up**: promote registration-failure log level + add startup assertion (PR #391 review items REL-005 and KP-006). These do not replace the structural fix above; they reduce damage when the structural fix is skipped.
 
 ## Sibling silent-failure learnings
 
