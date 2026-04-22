@@ -18,6 +18,16 @@ type AgentTemplate {
   skills: AWSJSON
   knowledgeBaseIds: AWSJSON
 
+  """
+  Sandbox opt-in metadata for the AgentCore Code Interpreter sandbox
+  (plan Unit 3). Shape validated at create/update time by
+  packages/api/src/lib/templates/sandbox-config.ts:
+    { environment: "default-public" | "internal-only",
+      required_connections: ["google" | "github" | "slack", ...] }
+  Null means the template does not use the sandbox.
+  """
+  sandbox: AWSJSON
+
   isPublished: Boolean!
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
@@ -79,6 +89,12 @@ input CreateAgentTemplateInput {
   config: AWSJSON
   skills: AWSJSON
   knowledgeBaseIds: AWSJSON
+  """
+  Sandbox opt-in metadata; see AgentTemplate.sandbox. Validated at
+  resolver boundary. Omit (or pass null) for templates that do not
+  opt into the sandbox.
+  """
+  sandbox: AWSJSON
 
   isPublished: Boolean
   """
@@ -100,6 +116,11 @@ input UpdateAgentTemplateInput {
   config: AWSJSON
   skills: AWSJSON
   knowledgeBaseIds: AWSJSON
+  """
+  Sandbox opt-in metadata; see AgentTemplate.sandbox. Pass null to
+  clear; omit to leave unchanged.
+  """
+  sandbox: AWSJSON
 
   isPublished: Boolean
 }
@@ -153,13 +174,21 @@ extend type Mutation {
   deleteAgentTemplate(id: ID!): Boolean!
   createAgentFromTemplate(input: CreateAgentFromTemplateInput!): Agent!
   "Sync template config + workspace files to a linked agent. idempotencyKey optional."
-  syncTemplateToAgent(templateId: ID!, agentId: ID!, idempotencyKey: String): Agent!
+  syncTemplateToAgent(
+    templateId: ID!
+    agentId: ID!
+    idempotencyKey: String
+  ): Agent!
   "Sync template to every linked agent in a tenant. idempotencyKey optional."
   syncTemplateToAllAgents(templateId: ID!, idempotencyKey: String): SyncSummary!
   rollbackAgentVersion(agentId: ID!, versionId: ID!): Agent!
 
   "Advance an agent's pinned hash for a guardrail-class file. idempotencyKey optional."
-  acceptTemplateUpdate(agentId: ID!, filename: String!, idempotencyKey: String): Agent!
+  acceptTemplateUpdate(
+    agentId: ID!
+    filename: String!
+    idempotencyKey: String
+  ): Agent!
   acceptTemplateUpdateBulk(
     templateId: ID!
     filename: String!
