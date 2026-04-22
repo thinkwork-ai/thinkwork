@@ -18,9 +18,11 @@ RUN pip install --no-cache-dir -r requirements.txt && \
     playwright install chromium --with-deps 2>/dev/null || true && \
     find /usr/local/lib/python3.12 -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
-# Copy runtime server + skill runner
+# Copy runtime server + skill runner + composition pipeline
 COPY packages/agentcore-strands/agent-container/server.py .
 COPY packages/agentcore-strands/agent-container/skill_runner.py .
+COPY packages/agentcore-strands/agent-container/skill_inputs.py .
+COPY packages/agentcore-strands/agent-container/composition_runner.py .
 COPY packages/agentcore-strands/agent-container/eval_span_attrs.py .
 
 # Memory engine: managed (AgentCore) or hindsight (external service)
@@ -37,6 +39,7 @@ COPY packages/agentcore-strands/agent-container/workspace_composer_client.py .
 COPY packages/agentcore-strands/agent-container/hindsight_usage_capture.py .
 COPY packages/agentcore-strands/agent-container/hindsight_recall_filter.py .
 COPY packages/agentcore-strands/agent-container/api_memory_client.py .
+COPY packages/agentcore-strands/agent-container/run_skill_dispatch.py .
 
 # Copy shared Agent Container modules
 COPY packages/agentcore/agent-container/permissions.py .
