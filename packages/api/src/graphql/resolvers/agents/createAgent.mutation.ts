@@ -10,6 +10,8 @@ import {
   invokeJobScheduleManager,
 } from "../../utils.js";
 import { requireTenantAdmin } from "../core/authz.js";
+import { resolveCallerUserId } from "../core/resolve-auth-user.js";
+import { runWithIdempotency } from "../../../lib/idempotency.js";
 
 export async function createAgent(
   _parent: any,
@@ -19,6 +21,29 @@ export async function createAgent(
   const i = args.input;
   await requireTenantAdmin(ctx, i.tenantId);
 
+  // Resolve the invoker. Apikey callers (thinkwork-admin skill) set
+  // principalId directly on ctx.auth; cognito callers go through the
+  // users-lookup path. Null userId → runWithIdempotency short-circuits
+  // to a plain fn() call, preserving pre-Unit-4 admin SPA behavior.
+  const invokerUserId =
+    ctx.auth.authType === "apikey"
+      ? ctx.auth.principalId
+      : await resolveCallerUserId(ctx);
+
+  return runWithIdempotency({
+    tenantId: i.tenantId,
+    invokerUserId,
+    mutationName: "createAgent",
+    inputs: i,
+    clientKey: i.idempotencyKey ?? null,
+    resultCoerce: (raw) => raw as ReturnType<typeof agentToCamel>,
+    fn: () => createAgentCore(i),
+  });
+}
+
+async function createAgentCore(
+  i: any,
+): Promise<ReturnType<typeof agentToCamel>> {
   // Auto-register heartbeat config for serverless agents
   let runtimeConfig = i.runtimeConfig ? JSON.parse(i.runtimeConfig) : undefined;
   const adapterType = i.adapterType || "strands";
