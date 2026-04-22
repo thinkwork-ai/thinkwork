@@ -25,8 +25,10 @@ import json
 import logging
 import os
 import random
+import re
 import socket
 import time
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +38,19 @@ logger = logging.getLogger(__name__)
 # seconds and include ±0.5s jitter to avoid thundering-herd on cold starts.
 _COMPLETE_RETRY_DELAYS = (1.0, 3.0, 9.0)
 _COMPLETE_RETRY_JITTER = 0.5
+
+# context-mode sub-skill defaults. Model matches DEFAULT_MODEL in server.py —
+# context-mode prompts are short, deterministic-enough Sonnet workloads.
+_DEFAULT_CONTEXT_MODEL = "us.anthropic.claude-sonnet-4-6"
+
+# Single-brace template-token regex, matching the format used by the
+# composition-invoked context skills' prompt files (packages/skill-catalog/
+# frame/prompts/frame.md, synthesize/prompts/synthesize.md). The plan's
+# handoff doc suggested lifting the package skill's double-brace {{ var }}
+# regex, but the real prompt files use {var} — using Mustache here would
+# leave every placeholder unresolved in the rendered prompt. Missing keys
+# render as empty string to mirror render.py's _lookup behavior.
+_CONTEXT_TEMPLATE_TOKEN = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 
 class SkillNotRegisteredError(RuntimeError):
@@ -54,12 +69,13 @@ def _invoke_sub_skill(sub_skill_id: str, sub_inputs: dict):
     the sub-skill's skill.yaml, and dispatch on `execution`:
 
       * `script` — import the declared script file and call its entry
-        function with `sub_inputs` kwargs. Deterministic; this is the
-        only execution mode wired today. Compositions that only reference
-        script sub-skills can reach `status='complete'`.
+        function with `sub_inputs` kwargs. Deterministic.
+      * `context` — render the skill's prompt template against
+        `sub_inputs` and invoke Bedrock Converse. Returns the model's
+        response text as the sub-skill's output. Composition steps that
+        need LLM reasoning (frame / synthesize) take this path.
       * anything else — raise SkillNotRegisteredError so the composition
         runner surfaces a clean per-step failure with a named reason.
-        Context-mode (LLM-prompt) + agent-mode dispatch land in a follow-up.
     """
     import importlib.util
     import os
@@ -91,10 +107,13 @@ def _invoke_sub_skill(sub_skill_id: str, sub_inputs: dict):
         meta = yaml.safe_load(f) or {}
 
     execution = meta.get("execution") or ""
+    if execution == "context":
+        return _invoke_context_skill(sub_skill_id, sub_inputs, meta)
     if execution != "script":
         raise SkillNotRegisteredError(
             f"skill {sub_skill_id!r} execution={execution!r} is not wired "
-            f"in the run_skill dispatch path yet (only 'script' is supported)"
+            f"in the run_skill dispatch path yet "
+            f"(only 'script' and 'context' are supported)"
         )
 
     scripts = meta.get("scripts") or []
@@ -143,6 +162,99 @@ def _invoke_sub_skill(sub_skill_id: str, sub_inputs: dict):
         raise SkillNotRegisteredError(
             f"skill {sub_skill_id!r} refused inputs: {exc}"
         ) from exc
+
+
+def _render_context_template(template: str, sub_inputs: dict[str, Any]) -> str:
+    """Substitute {key} tokens in a prompt template against sub_inputs.
+
+    Missing keys render as empty string (mirrors
+    packages/skill-catalog/package/scripts/render.py's _lookup). Non-string
+    values are JSON-encoded so dicts / lists passed between composition
+    steps arrive as readable text instead of Python repr.
+    """
+    def replace(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key not in sub_inputs:
+            return ""
+        value = sub_inputs[key]
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value
+        if isinstance(value, (int, float, bool)):
+            return str(value)
+        return json.dumps(value)
+
+    return _CONTEXT_TEMPLATE_TOKEN.sub(replace, template)
+
+
+def _invoke_context_skill(sub_skill_id: str, sub_inputs: dict, meta: dict):
+    """Execute an execution=context sub-skill via Bedrock Converse.
+
+    Prompt file location is `<SKILLS_DIR>/<sub_skill_id>/prompts/<slug>.md`
+    where slug = meta.get('slug') or sub_skill_id. That matches the
+    on-disk layout of the composition-invoked context skills (frame,
+    synthesize). The skill.yaml may declare `model:` to override the
+    default sonnet-4-6 selection.
+
+    No system prompt beyond the rendered template — context skills self-
+    describe their role in the template's opening lines ("You are the
+    `frame` step of a composition…"). One user-message converse call;
+    return the concatenated text blocks from the assistant response.
+    """
+    from install_skills import SKILLS_DIR  # local import — already loaded by caller
+
+    slug = meta.get("slug") or sub_skill_id
+    prompt_path = os.path.join(SKILLS_DIR, sub_skill_id, "prompts", f"{slug}.md")
+    if not os.path.isfile(prompt_path):
+        raise SkillNotRegisteredError(
+            f"skill {sub_skill_id!r} (execution=context) has no prompt at "
+            f"{prompt_path}"
+        )
+
+    with open(prompt_path, encoding="utf-8") as f:
+        template = f.read()
+
+    try:
+        rendered = _render_context_template(template, sub_inputs or {})
+    except Exception as exc:
+        raise SkillNotRegisteredError(
+            f"skill {sub_skill_id!r} prompt render failed: {exc}"
+        ) from exc
+
+    model_id = meta.get("model") or _DEFAULT_CONTEXT_MODEL
+
+    try:
+        import boto3  # type: ignore[import-untyped]
+    except ImportError as exc:
+        raise SkillNotRegisteredError(
+            f"skill {sub_skill_id!r} (execution=context): boto3 unavailable: {exc}"
+        ) from exc
+
+    client = boto3.client("bedrock-runtime")
+    try:
+        response = client.converse(
+            modelId=model_id,
+            messages=[{"role": "user", "content": [{"text": rendered}]}],
+        )
+    except Exception as exc:
+        raise SkillNotRegisteredError(
+            f"skill {sub_skill_id!r} (execution=context) Bedrock converse "
+            f"failed: {exc}"
+        ) from exc
+
+    # Converse response shape: output.message.content is a list of blocks;
+    # text-only context skills emit one or more {"text": "..."} entries.
+    try:
+        blocks = response["output"]["message"]["content"]
+    except (KeyError, TypeError) as exc:
+        raise SkillNotRegisteredError(
+            f"skill {sub_skill_id!r} (execution=context) Bedrock response "
+            f"missing output.message.content: {exc}"
+        ) from exc
+
+    text_parts = [b.get("text", "") for b in blocks if isinstance(b, dict) and "text" in b]
+    return "".join(text_parts)
 
 
 def _urlopen_with_retry(req, timeout: int, run_id: str):
