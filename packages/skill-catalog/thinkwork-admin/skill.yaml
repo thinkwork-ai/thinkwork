@@ -12,6 +12,12 @@ tags: [admin, platform, onboarding]
 execution: script
 mode: tool
 is_default: false
+# Opt-in flag: this skill uses operation-level permissions. Admin SPA
+# surfaces a per-skill Permissions sub-panel on the template + agent
+# Skills tabs that writes agent_skills.permissions.operations (and the
+# template's skills[i].permissions.operations). Skills without this
+# flag keep their existing free-form permissions jsonb and UI.
+permissions_model: operations
 
 requires_env:
   - THINKWORK_API_URL
