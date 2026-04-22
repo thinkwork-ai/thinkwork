@@ -18,7 +18,6 @@ export const nav = [
   { label: "Journey", href: "#journey" },
   { label: "How it works", href: "#how-it-works" },
   { label: "Governance", href: "#controls" },
-  { label: "Ownership", href: "#ownership" },
   { label: "Quick start", href: "#quick-start" },
 ];
 
@@ -68,9 +67,8 @@ export const proofStrip = [
       "Approved capabilities per agent, budgets that cap spend, and evaluations that scale with usage.",
   },
   {
-    label: "Your AWS account",
-    detail:
-      "Runtime, data, audit trail, and memory stay inside your AWS account.",
+    label: "Your boundary",
+    detail: "Runtime, data, audit trail, and memory stay inside your boundary.",
   },
   {
     label: "One system at every scale",
@@ -127,17 +125,17 @@ export const howItWorks = {
       href: "#memory",
     },
     {
-      title: "Templates",
-      oneLiner: "Templates enforce limits.",
+      title: "Sandbox",
+      oneLiner: "Sandbox runs code at reasoning time.",
       detail:
-        "You decide what each agent is allowed to do — which tools, models, and knowledge it can use. Agents inherit those limits.",
-      href: "#templates",
+        "A per-turn execution surface on AWS Bedrock AgentCore for ad-hoc transforms, API stitching, and one-off CLI calls — isolated, tenant-scoped, and audited alongside every other turn in the thread.",
+      href: "",
     },
     {
       title: "Controls",
       oneLiner: "Controls make adoption governable.",
       detail:
-        "Budgets, guardrails, evaluations, and audit trails keep AI accountable as usage grows.",
+        "Templates contract each agent to an approved set of tools, models, and knowledge. Budgets, guardrails, evaluations, and audit trails keep AI accountable as usage grows.",
       href: "#controls",
     },
   ],
@@ -340,19 +338,6 @@ export const mobile = {
   ],
 };
 
-export const ownership = {
-  eyebrow: "Ownership",
-  headline: "Keep the harness yours.",
-  lede: "ThinkWork deploys into the AWS account your team already runs. As AI becomes part of operations, your runtime, data, audit trail, and memory stay inside the boundary your ops team already enforces.",
-  points: [
-    { title: "Runtime", desc: "Stays in your AWS account." },
-    { title: "Data", desc: "Stays in your account." },
-    { title: "Audit trail", desc: "Stays inspectable." },
-    { title: "Memory", desc: "Stays portable." },
-    { title: "Harness", desc: "Stays yours." },
-  ],
-};
-
 export const quickStart = {
   eyebrow: "Quick start",
   headline: "Five commands. One AWS account.",
@@ -372,7 +357,14 @@ export const finalCta = {
   eyebrow: "Your AWS · Your rules",
   headlinePart1: "Adopt AI.",
   headlineAccent: "Keep control.",
-  lede: "Deploy into the account your ops team already runs. Every agent, thread, cost event, and memory stays in your AWS — under the IAM and governance your ops team already enforces.",
+  lede: "Deploy into the account your ops team already runs. Every agent, thread, cost event, and memory stays inside the IAM and governance your ops team already enforces.",
+  points: [
+    { title: "Runtime", desc: "Stays in your AWS." },
+    { title: "Data", desc: "Stays in your account." },
+    { title: "Audit trail", desc: "Stays inspectable." },
+    { title: "Memory", desc: "Stays portable." },
+    { title: "Harness", desc: "Stays yours." },
+  ],
   primaryCta: { label: "Read the docs", href: external.docs },
   secondaryCta: { label: "View on GitHub", href: external.github },
 };
