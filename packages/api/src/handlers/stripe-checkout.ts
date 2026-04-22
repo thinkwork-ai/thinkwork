@@ -104,7 +104,11 @@ export async function handler(
 		const session = await stripe.checkout.sessions.create({
 			mode: "subscription",
 			line_items: [{ price: priceId, quantity: 1 }],
-			customer_creation: "always",
+			// Subscription mode auto-creates customers. `customer_creation`
+			// is payment-mode-only per the Stripe API — passing it here
+			// makes Stripe reject the request with:
+			//   "customer_creation can only be used in payment mode."
+			// Caught during local dogfooding before the Lambda deployed.
 			customer_email: email,
 			allow_promotion_codes: true,
 			client_reference_id: randomUUID(),
