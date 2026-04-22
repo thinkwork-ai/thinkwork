@@ -43,6 +43,12 @@ import {
 } from "../lib/oauth-token.js";
 import { buildMcpConfigs } from "../lib/mcp-configs.js";
 import { loadTenantBuiltinTools } from "./skills.js";
+import {
+  applySandboxPayloadFields,
+  checkSandboxPreflight,
+  type SandboxPreflightResult,
+  type TemplateSandboxConfig,
+} from "../lib/sandbox-preflight.js";
 import { ensureThreadForWork } from "../lib/thread-helpers.js";
 import {
   isThreadBlocked,
@@ -67,6 +73,8 @@ const WORKSPACE_BUCKET = process.env.WORKSPACE_BUCKET || "";
 const THINKWORK_API_URL =
   process.env.THINKWORK_API_URL || process.env.MCP_BASE_URL || "";
 const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
+// Stage namespace for the sandbox Secrets Manager paths.
+const STAGE = process.env.STAGE || process.env.STACK_NAME || "dev";
 const BATCH_SIZE = 10;
 
 /**
@@ -232,7 +240,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     return;
   }
 
-  // 3. Look up agent + its template (model, guardrail, blocked tools all live on agent_templates)
+  // 3. Look up agent + its template (model, guardrail, blocked tools, sandbox
+  // all live on agent_templates)
   const [agent] = await db
     .select({
       adapter_type: agents.adapter_type,
@@ -244,6 +253,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       budget_paused: agents.budget_paused,
       guardrail_id: agentTemplates.guardrail_id,
       blocked_tools: agentTemplates.blocked_tools,
+      sandbox: agentTemplates.sandbox,
     })
     .from(agents)
     .leftJoin(agentTemplates, eq(agents.template_id, agentTemplates.id))
@@ -1087,7 +1097,35 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       `[wakeup-processor] Invoking AgentCore for agent=${wakeup.agent_id} runtime=${runtimeType} mcp=${mcpServers.join(",")} source=${wakeup.source} traceId=${traceId}`,
     );
 
-    const invokeResponse = await invokeAgentCore({
+    // Sandbox pre-flight (plan Unit 9). Wakeup-side resolution differs from
+    // chat: R15 keeps CURRENT_USER_ID undefined for system/agent triggers to
+    // block admin-skill spoofing, but the sandbox still needs *some* user's
+    // OAuth tokens when the template declared required_connections. Fall back
+    // to agents.human_pair_id — the owning user — when the wakeup is
+    // system-originated. The two env vars (CURRENT_USER_ID vs
+    // SANDBOX_USER_ID) answer different questions: 'who is invoking admin
+    // operations' vs 'whose OAuth tokens is this agent borrowing'.
+    const sandboxUserId = invokerUserId ?? agent.human_pair_id ?? undefined;
+    let sandboxPreflight: SandboxPreflightResult | null = null;
+    if (sandboxUserId && agent.sandbox) {
+      try {
+        sandboxPreflight = await checkSandboxPreflight({
+          stage: STAGE,
+          tenantId: wakeup.tenant_id,
+          agentId: wakeup.agent_id,
+          userId: sandboxUserId,
+          templateSandbox: agent.sandbox as TemplateSandboxConfig | null,
+        });
+        console.log(
+          `[wakeup-processor] sandbox pre-flight: ${sandboxPreflight.status}`,
+        );
+      } catch (err) {
+        console.error(`[wakeup-processor] sandbox pre-flight failed:`, err);
+        sandboxPreflight = null;
+      }
+    }
+
+    const agentCorePayload: Record<string, unknown> = {
       tenant_id: wakeup.tenant_id,
       // Unit 7 made workspace_tenant_id a hard gate in
       // _ensure_workspace_ready; missing it means the container
@@ -1122,7 +1160,27 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       mcp_configs: mcpConfigs.length > 0 ? mcpConfigs : undefined,
       session_key: triggerId || `wakeup-${wakeup.source}`,
       trigger_channel: triggerChannel || undefined,
-    });
+    };
+
+    if (sandboxPreflight && sandboxUserId) {
+      applySandboxPayloadFields(agentCorePayload, sandboxPreflight, {
+        tenantId: wakeup.tenant_id,
+        userId: sandboxUserId,
+        stage: STAGE,
+      });
+      if (sandboxPreflight.status !== "ready") {
+        console.log(
+          `[wakeup-processor] sandbox not registered for this wakeup: ${sandboxPreflight.status}`,
+          sandboxPreflight.status === "missing-connection"
+            ? { missing: sandboxPreflight.missingConnections }
+            : sandboxPreflight.status === "provisioning"
+              ? { environment: sandboxPreflight.environment }
+              : {},
+        );
+      }
+    }
+
+    const invokeResponse = await invokeAgentCore(agentCorePayload as any);
 
     const durationMs = Date.now() - startMs;
 

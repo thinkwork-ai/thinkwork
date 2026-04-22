@@ -42,6 +42,12 @@ import {
 } from "../lib/oauth-token.js";
 import { buildMcpConfigs } from "../lib/mcp-configs.js";
 import { loadTenantBuiltinTools } from "./skills.js";
+import {
+  applySandboxPayloadFields,
+  checkSandboxPreflight,
+  type SandboxPreflightResult,
+  type TemplateSandboxConfig,
+} from "../lib/sandbox-preflight.js";
 // PRD-22: Signal protocol removed — agents use tools for thread state transitions
 
 /**
@@ -70,6 +76,9 @@ const WORKSPACE_BUCKET = process.env.WORKSPACE_BUCKET || "";
 const THINKWORK_API_URL =
   process.env.THINKWORK_API_URL || process.env.MCP_BASE_URL || "";
 const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
+// Used by sandbox-preflight to namespace Secrets Manager paths per stage.
+// STACK_NAME is the legacy env var every other handler reads; mirror that.
+const STAGE = process.env.STAGE || process.env.STACK_NAME || "dev";
 
 const db = getDb();
 const lambdaClient = new LambdaClient({});
@@ -134,12 +143,13 @@ export async function handler(event: InvokeEvent): Promise<void> {
       return;
     }
 
-    // Look up the agent's template (model, guardrail, blocked tools)
+    // Look up the agent's template (model, guardrail, blocked tools, sandbox)
     const [agentTemplate] = await db
       .select({
         model: agentTemplates.model,
         guardrail_id: agentTemplates.guardrail_id,
         blocked_tools: agentTemplates.blocked_tools,
+        sandbox: agentTemplates.sandbox,
       })
       .from(agentTemplates)
       .where(eq(agentTemplates.id, agent.template_id));
@@ -584,6 +594,31 @@ export async function handler(event: InvokeEvent): Promise<void> {
 
     let workflowSkill: unknown = undefined;
 
+    // Sandbox pre-flight (plan Unit 9). Decides whether to register the
+    // execute_code tool for this turn. R15-consistent: we use the actual
+    // invoker (currentUserId), not agent.human_pair_id — a wakeup-style
+    // fallback would hand every webhook-triggered run the agent owner's
+    // sandbox tokens.
+    let sandboxPreflight: SandboxPreflightResult | null = null;
+    if (currentUserId && agentTemplate.sandbox) {
+      try {
+        sandboxPreflight = await checkSandboxPreflight({
+          stage: STAGE,
+          tenantId,
+          agentId,
+          userId: currentUserId,
+          templateSandbox:
+            agentTemplate.sandbox as TemplateSandboxConfig | null,
+        });
+        console.log(
+          `[chat-agent-invoke] sandbox pre-flight: ${sandboxPreflight.status}`,
+        );
+      } catch (err) {
+        console.error(`[chat-agent-invoke] sandbox pre-flight failed:`, err);
+        sandboxPreflight = null;
+      }
+    }
+
     const invokeStart = Date.now();
     const invokePayload = {
       tenant_id: tenantId,
@@ -624,7 +659,25 @@ export async function handler(event: InvokeEvent): Promise<void> {
       guardrail_config: guardrailPayload || undefined,
       mcp_configs: mcpConfigs.length > 0 ? mcpConfigs : undefined,
       workflow_skill: workflowSkill,
-    };
+    } as Record<string, unknown>;
+
+    if (sandboxPreflight && currentUserId) {
+      applySandboxPayloadFields(invokePayload, sandboxPreflight, {
+        tenantId,
+        userId: currentUserId,
+        stage: STAGE,
+      });
+      if (sandboxPreflight.status !== "ready") {
+        console.log(
+          `[chat-agent-invoke] sandbox not registered for this turn: ${sandboxPreflight.status}`,
+          sandboxPreflight.status === "missing-connection"
+            ? { missing: sandboxPreflight.missingConnections }
+            : sandboxPreflight.status === "provisioning"
+              ? { environment: sandboxPreflight.environment }
+              : {},
+        );
+      }
+    }
 
     // The agentcore container runs an HTTP server behind Lambda Web Adapter;
     // POSTs must be wrapped in an API Gateway v2-style event targeting /invocations.

@@ -552,6 +552,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
         try:
             from strands import tool as _sb_tool_decorator
             from sandbox_tool import build_execute_code_tool, new_session_state
+            from sandbox_preamble import PreambleInputs, build_preamble
             # bedrock-agentcore runtime client wrappers. Lazy-imported so
             # the container boots cleanly on stages without the SDK.
             from bedrock_agentcore.tools.code_interpreter_client import (
@@ -561,6 +562,30 @@ def _call_strands_agent(system_prompt: str, messages: list,
             # surface. Session id + lifecycle stay in our session_state
             # dict (call-frame-local to _call_strands_agent).
             _sb_state = new_session_state()
+
+            # Resolve the preamble source once, from the fields the
+            # dispatcher wrote onto the invocation env (plan Unit 9).
+            # SANDBOX_SECRET_PATHS is a JSON string of connection_type
+            # → Secrets Manager ARN path; build_preamble turns it into
+            # the Python source for executeCode call #1.
+            import json as _sb_json
+            try:
+                _sb_secret_paths = _sb_json.loads(
+                    os.environ.get("SANDBOX_SECRET_PATHS", "{}"),
+                )
+            except Exception as _sb_err:
+                logger.warning(
+                    "SANDBOX_SECRET_PATHS parse failed: %s", _sb_err,
+                )
+                _sb_secret_paths = {}
+            _sb_preamble_source = build_preamble(
+                PreambleInputs(
+                    tenant_id=os.environ.get("SANDBOX_TENANT_ID", ""),
+                    user_id=os.environ.get("SANDBOX_USER_ID", ""),
+                    stage=os.environ.get("SANDBOX_STAGE", ""),
+                    secret_paths=_sb_secret_paths,
+                ),
+            )
 
             async def _start_session(ipi: str, timeout: int) -> str:
                 # code_session is a context manager on the sync client;
@@ -575,7 +600,31 @@ def _call_strands_agent(system_prompt: str, messages: list,
                     ctx = _code_session(ipi)
                     sess = ctx.__enter__()
                     _sb_state["_code_session_ctx"] = ctx
-                    return getattr(sess, "session_id", getattr(sess, "id", ""))
+                    session_id = getattr(
+                        sess, "session_id", getattr(sess, "id", ""),
+                    )
+                    # Plan Unit 8: preamble runs as executeCode call #1
+                    # BEFORE any user code, so triple-quote tricks can't
+                    # escape a boundary that doesn't exist in one source.
+                    # If the preamble fails, session-start fails — the
+                    # tool factory's error mapping surfaces SandboxError
+                    # to the agent.
+                    inner = (
+                        ctx.__enter__.__self__
+                        if hasattr(ctx, "__enter__")
+                        else None
+                    )
+                    target = inner or ctx
+                    for name in ("invoke", "execute", "run"):
+                        if hasattr(target, name):
+                            getattr(target, name)(_sb_preamble_source)
+                            break
+                    else:
+                        raise RuntimeError(
+                            "bedrock_agentcore code_session has no "
+                            "invoke/execute/run — cannot run preamble",
+                        )
+                    return session_id
 
                 return await loop.run_in_executor(None, _start)
 
