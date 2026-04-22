@@ -19,7 +19,6 @@ import {
   BookOpen,
   LayoutTemplate,
   ShieldCheck,
-  PlayCircle,
 } from "lucide-react";
 import { useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
@@ -167,7 +166,6 @@ export function AppSidebar() {
     { to: "/agents", icon: Bot, label: "Agents", badge: agentCount },
     { to: "/agent-templates", icon: LayoutTemplate, label: "Agent Templates" },
     { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
-    { to: "/skill-runs", icon: PlayCircle, label: "Skill Runs" },
     { to: "/capabilities", icon: Puzzle, label: "Capabilities" },
     { to: "/memory", icon: Brain, label: "Memories" },
     { to: "/wiki", icon: Network, label: "Wiki Pages" },
