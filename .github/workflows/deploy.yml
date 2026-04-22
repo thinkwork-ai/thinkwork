@@ -186,7 +186,8 @@ jobs:
             -var "pre_signup_lambda_zip=$PRE_SIGNUP_ZIP" \
             -var "www_domain=${{ vars.WWW_DOMAIN }}" \
             -var "cloudflare_zone_id=${{ vars.CLOUDFLARE_ZONE_ID }}" \
-            -var "ses_inbound_domain=agents.thinkwork.ai"
+            -var "ses_inbound_domain=agents.thinkwork.ai" \
+            -var "stripe_price_ids_json=${{ vars.STRIPE_PRICE_IDS_JSON || '{\"starter\":\"price_1TP9s3Gs3wYVawVNsIhCDxen\",\"team\":\"price_1TP9s3Gs3wYVawVNVczTjhEH\",\"enterprise\":\"price_1TP9s3Gs3wYVawVND3jweCOb\"}' }}"
 
   # ── Database migration drift check ──────────────────────────────
   # Runs `scripts/db-migrate-manual.sh` against the dev DB after
