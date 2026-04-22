@@ -23,8 +23,11 @@ schedules requests across processes or warm starts.
 from __future__ import annotations
 
 import asyncio
+import datetime
+import hashlib
 import logging
 import os
+import time
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -70,6 +73,7 @@ def build_execute_code_tool(
     stop_session: Callable[[str, str], Awaitable[None]],
     run_code: Callable[[str, str, str], Awaitable[dict]],
     check_quota: Callable[[], Awaitable[dict]] | None = None,
+    log_invocation: Callable[[dict], Awaitable[None]] | None = None,
 ) -> Any:
     """Return the `execute_code` Strands tool closure.
 
@@ -96,6 +100,11 @@ def build_execute_code_tool(
             the tool surfaces SandboxCapExceeded without touching the
             interpreter. When ``check_quota`` is None (older tests / a
             stage without Unit 10 wired) the tool behaves as before.
+        log_invocation: optional ``async (row: dict) -> None`` invoked
+            after each executeCode finishes with the sandbox_invocations
+            row shape. Failures are logged and swallowed per plan Unit
+            11 — an audit write failure must not unwind the agent turn.
+            When None, the tool behaves as before Unit 11.
     """
 
     interpreter_id = os.environ.get("SANDBOX_INTERPRETER_ID", "")
@@ -142,16 +151,47 @@ def build_execute_code_tool(
         # doesn't trip the stub path.
         start = asyncio.get_event_loop().time()
 
+        started_at_wall = time.time()
+        code_hash = hashlib.sha256(code.encode("utf-8")).hexdigest()
+
+        async def _return_with_audit(result: SandboxResult) -> dict:
+            """Emit the sandbox_invocations audit row, then return result.
+
+            Plan Unit 11: audit is best-effort — a logging failure must
+            not unwind the agent turn. log_invocation=None → no-op.
+            """
+            duration_ms = int((asyncio.get_event_loop().time() - start) * 1000)
+            if result.duration_ms is None:
+                result.duration_ms = duration_ms
+            if log_invocation is not None:
+                try:
+                    await log_invocation(
+                        _audit_row(
+                            result=result,
+                            started_at_wall=started_at_wall,
+                            duration_ms=duration_ms,
+                            code_hash=code_hash,
+                            session_id=session_state.get("session_id"),
+                        ),
+                    )
+                except Exception as err:  # noqa: BLE001
+                    logger.warning(
+                        "sandbox audit write failed (non-blocking): %s", err,
+                    )
+            return result.__dict__
+
         if not interpreter_id:
-            return SandboxResult(
-                ok=False,
-                error="SandboxProvisioning",
-                error_message=(
-                    "The tenant sandbox is not ready yet. The interpreter is "
-                    "still being provisioned — retry this action shortly."
+            return await _return_with_audit(
+                SandboxResult(
+                    ok=False,
+                    error="SandboxProvisioning",
+                    error_message=(
+                        "The tenant sandbox is not ready yet. The interpreter is "
+                        "still being provisioned — retry this action shortly."
+                    ),
+                    exit_status="provisioning",
                 ),
-                exit_status="provisioning",
-            ).__dict__
+            )
 
         # Quota circuit breaker (plan Unit 10). Runs BEFORE we touch the
         # interpreter — a breach must not cost a StartSession round trip
@@ -165,59 +205,67 @@ def build_execute_code_tool(
                 logger.warning(
                     "sandbox quota check transport failure: %s", err,
                 )
-                return SandboxResult(
-                    ok=False,
-                    error="SandboxCapExceeded",
-                    error_message=(
-                        "The sandbox quota service is unreachable; failing "
-                        "closed. Retry in 60 seconds."
+                return await _return_with_audit(
+                    SandboxResult(
+                        ok=False,
+                        error="SandboxCapExceeded",
+                        error_message=(
+                            "The sandbox quota service is unreachable; failing "
+                            "closed. Retry in 60 seconds."
+                        ),
+                        exit_status="cap_exceeded",
                     ),
-                    exit_status="cap_exceeded",
-                ).__dict__
+                )
             if not quota.get("ok", False):
                 dimension = quota.get("dimension", "unknown")
                 resets_at = quota.get("resets_at", "")
-                return SandboxResult(
-                    ok=False,
-                    error="SandboxCapExceeded",
-                    error_message=(
-                        f"Sandbox cap reached ({dimension}); resets at "
-                        f"{resets_at}. Reduce work or wait for the window."
+                return await _return_with_audit(
+                    SandboxResult(
+                        ok=False,
+                        error="SandboxCapExceeded",
+                        error_message=(
+                            f"Sandbox cap reached ({dimension}); resets at "
+                            f"{resets_at}. Reduce work or wait for the window."
+                        ),
+                        exit_status="cap_exceeded",
                     ),
-                    exit_status="cap_exceeded",
-                ).__dict__
+                )
 
         try:
             session_id = await _ensure_session()
             assert session_id is not None
             payload = await run_code(interpreter_id, session_id, code)
         except TimeoutError:
-            return SandboxResult(
-                ok=False,
-                error="SandboxTimeout",
-                error_message="Execution exceeded the 5-minute session ceiling.",
-                exit_status="timeout",
-            ).__dict__
+            return await _return_with_audit(
+                SandboxResult(
+                    ok=False,
+                    error="SandboxTimeout",
+                    error_message="Execution exceeded the 5-minute session ceiling.",
+                    exit_status="timeout",
+                ),
+            )
         except MemoryError:
-            return SandboxResult(
-                ok=False,
-                error="SandboxOOM",
-                error_message="The sandbox ran out of memory. Reduce the data size and retry.",
-                exit_status="oom",
-            ).__dict__
+            return await _return_with_audit(
+                SandboxResult(
+                    ok=False,
+                    error="SandboxOOM",
+                    error_message="The sandbox ran out of memory. Reduce the data size and retry.",
+                    exit_status="oom",
+                ),
+            )
         except Exception as err:
             logger.exception("sandbox execute_code failed")
-            return SandboxResult(
-                ok=False,
-                error="SandboxError",
-                error_message=f"Sandbox execution failed: {err}",
-                exit_status="error",
-            ).__dict__
+            return await _return_with_audit(
+                SandboxResult(
+                    ok=False,
+                    error="SandboxError",
+                    error_message=f"Sandbox execution failed: {err}",
+                    exit_status="error",
+                ),
+            )
 
         result = _shape_payload(payload)
-        duration_ms = int((asyncio.get_event_loop().time() - start) * 1000)
-        result.duration_ms = duration_ms
-        return result.__dict__
+        return await _return_with_audit(result)
 
     async def _cleanup_session() -> None:
         """Stop the per-turn session, log-and-continue on failure."""
@@ -323,3 +371,53 @@ def _truncate(text: str, cap_bytes: int) -> str:
 def new_session_state() -> dict:
     """Build a per-turn session_state dict. Call once per agent turn."""
     return {"turn_id": str(uuid.uuid4())}
+
+
+# ---------------------------------------------------------------------------
+# Audit row shape (plan Unit 11) — exported for unit tests.
+# ---------------------------------------------------------------------------
+
+
+def _audit_row(
+    *,
+    result: SandboxResult,
+    started_at_wall: float,
+    duration_ms: int,
+    code_hash: str,
+    session_id: str | None,
+) -> dict:
+    """Build the sandbox_invocations row body for the narrow audit POST.
+
+    Fields are the envelope /api/sandbox/invocations accepts; the
+    handler validates + coerces. The tenant/agent/user identifiers come
+    from os.environ (set by invocation_env.apply_invocation_env in
+    server.py), and duration/bytes/peak-memory come from the result
+    SandboxResult.
+    """
+    started_iso = datetime.datetime.fromtimestamp(
+        started_at_wall, tz=datetime.UTC,
+    ).isoformat()
+    finished_iso = datetime.datetime.fromtimestamp(
+        started_at_wall + (duration_ms / 1000.0), tz=datetime.UTC,
+    ).isoformat()
+    return {
+        "tenant_id": os.environ.get("SANDBOX_TENANT_ID", "")
+        or os.environ.get("TENANT_ID", ""),
+        "agent_id": os.environ.get("AGENT_ID", "") or None,
+        "user_id": os.environ.get("SANDBOX_USER_ID", "")
+        or os.environ.get("USER_ID", ""),
+        "template_id": os.environ.get("TEMPLATE_ID", "") or None,
+        "session_id": session_id,
+        "environment_id": os.environ.get("SANDBOX_ENVIRONMENT", ""),
+        "started_at": started_iso,
+        "finished_at": finished_iso,
+        "duration_ms": duration_ms,
+        "exit_status": result.exit_status,
+        "stdout_bytes": result.stdout_bytes,
+        "stderr_bytes": result.stderr_bytes,
+        "stdout_truncated": result.stdout_truncated,
+        "stderr_truncated": result.stderr_truncated,
+        "peak_memory_mb": result.peak_memory_mb,
+        "executed_code_hash": code_hash,
+        "failure_reason": result.error_message if not result.ok else None,
+    }

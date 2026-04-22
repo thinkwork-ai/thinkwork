@@ -722,6 +722,38 @@ def _call_strands_agent(system_prompt: str, messages: list,
 
                 return await loop.run_in_executor(None, _post)
 
+            # Audit writer (plan Unit 11). Posts to the narrow
+            # /api/sandbox/invocations endpoint after every executeCode
+            # call. Non-blocking for the agent turn — the sandbox_tool
+            # swallows any exception this raises. When the endpoint
+            # isn't wired (no URL/secret), skip silently so dev stages
+            # without it don't dead-letter.
+            async def _log_invocation(row: dict) -> None:
+                if not _sb_api_url or not _sb_api_secret:
+                    return
+                import asyncio as _a
+                import json as _j
+                from urllib.request import Request, urlopen
+                loop = _a.get_event_loop()
+
+                def _post() -> None:
+                    body = _j.dumps(row).encode("utf-8")
+                    req = Request(
+                        f"{_sb_api_url.rstrip('/')}/api/sandbox/invocations",
+                        data=body,
+                        headers={
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {_sb_api_secret}",
+                        },
+                        method="POST",
+                    )
+                    # Short timeout — an audit row write shouldn't
+                    # block the agent response more than a beat.
+                    with urlopen(req, timeout=3) as resp:
+                        resp.read()
+
+                await loop.run_in_executor(None, _post)
+
             execute_code = build_execute_code_tool(
                 strands_tool_decorator=_sb_tool_decorator,
                 session_state=_sb_state,
@@ -729,6 +761,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
                 stop_session=_stop_session,
                 run_code=_run_code,
                 check_quota=_check_quota,
+                log_invocation=_log_invocation,
             )
             tools.append(execute_code)
             _sandbox_cleanup_fn = getattr(execute_code, "_sandbox_cleanup", None)
