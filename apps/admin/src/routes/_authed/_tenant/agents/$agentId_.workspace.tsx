@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "urql";
+import { gql, useQuery } from "urql";
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
@@ -25,14 +25,39 @@ import {
   getWorkspaceFile,
   listWorkspaceFiles,
   putWorkspaceFile,
+  type ComposeSource,
 } from "@/lib/workspace-files-api";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { PageLayout } from "@/components/PageLayout";
 import { Button } from "@/components/ui/button";
+import { WorkspaceFileBadge } from "@/components/WorkspaceFileBadge";
+import { AcceptTemplateUpdateDialog } from "@/components/AcceptTemplateUpdateDialog";
 
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+
+const AgentPinStatusQuery = gql`
+  query AgentPinStatus($agentId: ID!) {
+    agentPinStatus(agentId: $agentId) {
+      filename
+      pinnedSha
+      latestSha
+      updateAvailable
+      pinnedContent
+      latestContent
+    }
+  }
+`;
+
+type PinStatusEntry = {
+  filename: string;
+  pinnedSha: string | null;
+  latestSha: string | null;
+  updateAvailable: boolean;
+  pinnedContent: string | null;
+  latestContent: string | null;
+};
 import {
   Dialog,
   DialogContent,
@@ -134,16 +159,22 @@ function TreeItem({
   selectedPath,
   expandedFolders,
   profileFiles,
+  sourceFor,
+  updateAvailableFor,
   onSelect,
   onToggle,
+  onAcceptUpdate,
 }: {
   node: TreeNode;
   depth: number;
   selectedPath: string | null;
   expandedFolders: Set<string>;
   profileFiles: Set<string> | null;
+  sourceFor: (path: string) => ComposeSource | undefined;
+  updateAvailableFor: (path: string) => boolean;
   onSelect: (path: string) => void;
   onToggle: (path: string) => void;
+  onAcceptUpdate: (filename: string) => void;
 }) {
   const isExpanded = expandedFolders.has(node.path);
   const isSelected = selectedPath === node.path;
@@ -187,7 +218,31 @@ function TreeItem({
           </>
         )}
         <span className="truncate">{node.name}</span>
-        {isProfileFile && (
+        {!node.isFolder && sourceFor(node.path) && (
+          <span
+            className="ml-auto flex items-center gap-1"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <WorkspaceFileBadge
+              source={sourceFor(node.path) as ComposeSource}
+              updateAvailable={updateAvailableFor(node.path)}
+            />
+            {updateAvailableFor(node.path) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5 text-[10px] px-1.5 text-amber-500"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAcceptUpdate(node.path);
+                }}
+              >
+                Review
+              </Button>
+            )}
+          </span>
+        )}
+        {isProfileFile && !sourceFor(node.path) && (
           <Badge variant="secondary" className="ml-auto text-[10px] px-1 py-0">
             active
           </Badge>
@@ -203,8 +258,11 @@ function TreeItem({
               selectedPath={selectedPath}
               expandedFolders={expandedFolders}
               profileFiles={profileFiles}
+              sourceFor={sourceFor}
+              updateAvailableFor={updateAvailableFor}
               onSelect={onSelect}
               onToggle={onToggle}
+              onAcceptUpdate={onAcceptUpdate}
             />
           ))}
           {node.children.length === 0 && (
@@ -304,6 +362,7 @@ function AgentWorkspacePage() {
   // ---------------------------------------------------------------------------
 
   const [files, setFiles] = useState<string[]>([]);
+  const [fileSources, setFileSources] = useState<Record<string, ComposeSource>>({});
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [generating, setGenerating] = useState(false);
 
@@ -312,6 +371,9 @@ function AgentWorkspacePage() {
     try {
       const data = await listWorkspaceFiles(target);
       setFiles(data.files.map((f) => f.path));
+      const sources: Record<string, ComposeSource> = {};
+      for (const f of data.files) sources[f.path] = f.source;
+      setFileSources(sources);
     } catch (err) {
       console.error("Failed to list workspace files:", err);
     } finally {
@@ -324,6 +386,46 @@ function AgentWorkspacePage() {
   }, [fetchFiles]);
 
   const tree = useMemo(() => buildTree(files), [files]);
+
+  // ---------------------------------------------------------------------------
+  // Pin status — drives the "Update available" badge on guardrail-class files
+  // ---------------------------------------------------------------------------
+
+  const [pinStatusResult, refetchPinStatus] = useQuery({
+    query: AgentPinStatusQuery,
+    variables: { agentId },
+  });
+
+  const pinStatus: Record<string, PinStatusEntry> = useMemo(() => {
+    const out: Record<string, PinStatusEntry> = {};
+    const list = (pinStatusResult.data as { agentPinStatus?: PinStatusEntry[] } | undefined)
+      ?.agentPinStatus;
+    if (list) for (const p of list) out[p.filename] = p;
+    return out;
+  }, [pinStatusResult.data]);
+
+  const sourceFor = useCallback(
+    (path: string) => fileSources[path],
+    [fileSources],
+  );
+  const updateAvailableFor = useCallback(
+    (path: string) => Boolean(pinStatus[path]?.updateAvailable),
+    [pinStatus],
+  );
+
+  // Accept-update dialog
+  const [acceptDialogFilename, setAcceptDialogFilename] = useState<string | null>(null);
+  const handleAcceptUpdate = useCallback((filename: string) => {
+    setAcceptDialogFilename(filename);
+  }, []);
+  const handleAcceptClose = useCallback((open: boolean) => {
+    if (!open) setAcceptDialogFilename(null);
+  }, []);
+  const handleAccepted = useCallback(() => {
+    setAcceptDialogFilename(null);
+    refetchPinStatus({ requestPolicy: "network-only" });
+    fetchFiles();
+  }, [refetchPinStatus, fetchFiles]);
 
   // ---------------------------------------------------------------------------
   // Folder toggle state
@@ -574,8 +676,11 @@ function AgentWorkspacePage() {
                   selectedPath={openFile}
                   expandedFolders={expandedFolders}
                   profileFiles={profileFiles}
+                  sourceFor={sourceFor}
+                  updateAvailableFor={updateAvailableFor}
                   onSelect={handleOpen}
                   onToggle={toggleFolder}
+                  onAcceptUpdate={handleAcceptUpdate}
                 />
               ))}
             </div>
@@ -686,6 +791,19 @@ function AgentWorkspacePage() {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Accept-update dialog — opens when operator clicks Review on a
+          pinned file with updateAvailable. */}
+      {acceptDialogFilename && (
+        <AcceptTemplateUpdateDialog
+          open={Boolean(acceptDialogFilename)}
+          onOpenChange={handleAcceptClose}
+          agentId={agentId}
+          filename={acceptDialogFilename}
+          pinnedContent={pinStatus[acceptDialogFilename]?.pinnedContent ?? null}
+          latestContent={pinStatus[acceptDialogFilename]?.latestContent ?? null}
+          onAccepted={handleAccepted}
+        />
+      )}
     </PageLayout>
   );
 }

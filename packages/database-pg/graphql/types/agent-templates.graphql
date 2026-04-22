@@ -106,6 +106,29 @@ input CreateAgentFromTemplateInput {
   teamId: ID
 }
 
+# --- Pin status + accept-update (overlay Unit 9) ---
+
+type PinStatusFile {
+  filename: String!
+  pinnedSha: String
+  latestSha: String
+  updateAvailable: Boolean!
+  pinnedContent: String
+  latestContent: String
+}
+
+type AcceptTemplateUpdateBulkResultEntry {
+  agentId: ID!
+  success: Boolean!
+  error: String
+}
+
+type AcceptTemplateUpdateBulkResult {
+  accepted: Int!
+  failed: Int!
+  results: [AcceptTemplateUpdateBulkResultEntry!]!
+}
+
 # --- Query / Mutation extensions ---
 
 extend type Query {
@@ -114,6 +137,7 @@ extend type Query {
   agentVersions(agentId: ID!, limit: Int): [AgentVersion!]!
   linkedAgentsForTemplate(templateId: ID!): [Agent!]!
   templateSyncDiff(templateId: ID!, agentId: ID!): TemplateSyncDiff!
+  agentPinStatus(agentId: ID!): [PinStatusFile!]!
 }
 
 extend type Mutation {
@@ -124,4 +148,11 @@ extend type Mutation {
   syncTemplateToAgent(templateId: ID!, agentId: ID!): Agent!
   syncTemplateToAllAgents(templateId: ID!): SyncSummary!
   rollbackAgentVersion(agentId: ID!, versionId: ID!): Agent!
+
+  acceptTemplateUpdate(agentId: ID!, filename: String!): Agent!
+  acceptTemplateUpdateBulk(
+    templateId: ID!
+    filename: String!
+    tenantId: ID!
+  ): AcceptTemplateUpdateBulkResult!
 }
