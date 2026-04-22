@@ -8,8 +8,14 @@
 -- Apply manually (no CI migration runner):
 --   psql "$DATABASE_URL" -f packages/database-pg/drizzle/0018_skill_runs.sql
 --
+-- Drift detection:
+--   bash scripts/db-migrate-manual.sh
+--
 -- Pre-migration invariant: no existing table named skill_runs.
 --   SELECT to_regclass('public.skill_runs'); must return NULL.
+--
+-- creates: public.skill_runs
+-- creates: public.uq_skill_runs_dedup_active
 
 CREATE TABLE "skill_runs" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
