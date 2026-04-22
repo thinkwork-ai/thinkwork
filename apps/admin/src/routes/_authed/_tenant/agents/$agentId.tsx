@@ -283,7 +283,11 @@ function AgentDetailPage() {
               onSaveBudget={handleSaveBudget}
               onDeleteBudget={handleDeleteBudget}
             >
-              <Link to="/agents/$agentId/workspace" params={{ agentId }}>
+              <Link
+                to="/agents/$agentId/workspace"
+                params={{ agentId }}
+                search={{ folder: undefined }}
+              >
                 <Badge variant="outline" className="gap-1 cursor-pointer hover:bg-accent">
                   <FolderOpen className="h-3 w-3" />
                   Workspace
