@@ -225,11 +225,103 @@ class PostCompletionTests(unittest.TestCase):
                 url="https://example.test/api/skills/complete",
                 code=500, msg="boom", hdrs=None, fp=None,
             )
-        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
-            # Does not raise
+        # time.sleep is patched so the 3 backoff waits don't drag tests.
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen), \
+             patch("run_skill_dispatch.time.sleep"):
+            # Does not raise — _urlopen_with_retry raises after exhausting
+            # attempts, post_skill_run_complete catches + logs.
             run_skill_dispatch.post_skill_run_complete(
                 "run-x", "tenant-x", "failed", failure_reason="x",
             )
+
+
+class UrlopenWithRetryTests(unittest.TestCase):
+    """Inner retry helper — exercised directly so we can count attempts."""
+
+    def setUp(self):
+        # Suppress real backoff for fast tests.
+        self._sleep_patch = patch("run_skill_dispatch.time.sleep")
+        self._sleep_patch.start()
+
+    def tearDown(self):
+        self._sleep_patch.stop()
+
+    def test_200_one_call_only(self):
+        class FakeResp:
+            status = 200
+        with patch("urllib.request.urlopen", return_value=FakeResp()) as mock_open:
+            resp = run_skill_dispatch._urlopen_with_retry(
+                MagicMock(), timeout=15, run_id="r1",
+            )
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(mock_open.call_count, 1)
+
+    def test_5xx_retries_three_times_then_raises(self):
+        import urllib.error
+        def fake_urlopen(req, timeout=None):
+            raise urllib.error.HTTPError(
+                url="https://example.test/api/skills/complete",
+                code=503, msg="unavail", hdrs=None, fp=None,
+            )
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen) as mock_open:
+            with self.assertRaises(urllib.error.HTTPError):
+                run_skill_dispatch._urlopen_with_retry(
+                    MagicMock(), timeout=15, run_id="r2",
+                )
+        # 1 initial + 3 retries = 4 attempts total (matches
+        # _COMPLETE_RETRY_DELAYS = (1, 3, 9) per the plan spec).
+        self.assertEqual(mock_open.call_count, 4)
+
+    def test_400_invalid_transition_treated_as_success_not_retried(self):
+        import io
+        import urllib.error
+
+        def fake_urlopen(req, timeout=None):
+            err = urllib.error.HTTPError(
+                url="https://example.test/api/skills/complete",
+                code=400, msg="bad",
+                hdrs=None,
+                fp=io.BytesIO(b'{"error":"invalid transition: complete -> failed"}'),
+            )
+            raise err
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen) as mock_open:
+            resp = run_skill_dispatch._urlopen_with_retry(
+                MagicMock(), timeout=15, run_id="r3",
+            )
+        # Sentinel: invalid-transition returns None (treat as idempotency-ok).
+        self.assertIsNone(resp)
+        self.assertEqual(mock_open.call_count, 1)
+
+    def test_other_400_is_terminal_not_retried_and_raised(self):
+        import io
+        import urllib.error
+
+        def fake_urlopen(req, timeout=None):
+            raise urllib.error.HTTPError(
+                url="https://example.test/api/skills/complete",
+                code=400, msg="bad",
+                hdrs=None,
+                fp=io.BytesIO(b'{"error":"Missing required fields"}'),
+            )
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen) as mock_open:
+            with self.assertRaises(urllib.error.HTTPError):
+                run_skill_dispatch._urlopen_with_retry(
+                    MagicMock(), timeout=15, run_id="r4",
+                )
+        self.assertEqual(mock_open.call_count, 1)
+
+    def test_socket_timeout_retried_then_raised(self):
+        import socket
+        def boom(req, timeout=None):
+            raise socket.timeout("slow downstream")
+        with patch("urllib.request.urlopen", side_effect=boom) as mock_open:
+            with self.assertRaises(socket.timeout):
+                run_skill_dispatch._urlopen_with_retry(
+                    MagicMock(), timeout=15, run_id="r5",
+                )
+        self.assertEqual(mock_open.call_count, 4)
 
 
 if __name__ == "__main__":
