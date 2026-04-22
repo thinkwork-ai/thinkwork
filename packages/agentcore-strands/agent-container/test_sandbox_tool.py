@@ -317,3 +317,122 @@ def test_new_session_state_returns_independent_dicts():
     assert a["turn_id"] != b["turn_id"]
     a["session_id"] = "x"
     assert "session_id" not in b
+
+
+# ---------------------------------------------------------------------------
+# Quota circuit breaker (plan Unit 10)
+# ---------------------------------------------------------------------------
+
+
+def test_quota_ok_runs_the_tool_normally(interpreter_env):
+    quota_calls = {"n": 0}
+
+    async def quota():
+        quota_calls["n"] += 1
+        return {"ok": True, "tenant_daily_count": 1, "agent_hourly_count": 1}
+
+    async def start(ipi, timeout):
+        return "sess-1"
+
+    async def run(ipi, sess, code):
+        return {"stdout": "hello", "stderr": "", "exit_code": 0}
+
+    async def stop(ipi, sess):
+        pass
+
+    tool = st.build_execute_code_tool(
+        strands_tool_decorator=_passthrough_tool_decorator,
+        session_state={},
+        start_session=start,
+        stop_session=stop,
+        run_code=run,
+        check_quota=quota,
+    )
+    result = _run(tool("print('hi')"))
+    assert result["ok"] is True
+    assert quota_calls["n"] == 1
+
+
+def test_quota_denial_returns_cap_exceeded_without_starting_session(
+    interpreter_env,
+):
+    async def quota():
+        return {
+            "ok": False,
+            "dimension": "tenant_daily",
+            "resets_at": "2026-04-23T00:00:00Z",
+        }
+
+    async def start(ipi, timeout):
+        raise AssertionError("start_session must not run after quota denial")
+
+    async def run(ipi, sess, code):
+        raise AssertionError("run_code must not run after quota denial")
+
+    async def stop(ipi, sess):
+        pass
+
+    tool = st.build_execute_code_tool(
+        strands_tool_decorator=_passthrough_tool_decorator,
+        session_state={},
+        start_session=start,
+        stop_session=stop,
+        run_code=run,
+        check_quota=quota,
+    )
+    result = _run(tool("print('hi')"))
+    assert result["ok"] is False
+    assert result["error"] == "SandboxCapExceeded"
+    assert result["exit_status"] == "cap_exceeded"
+    assert "tenant_daily" in result["error_message"]
+    assert "2026-04-23" in result["error_message"]
+
+
+def test_quota_transport_failure_fails_closed(interpreter_env):
+    async def quota():
+        raise RuntimeError("network down")
+
+    async def start(ipi, timeout):
+        raise AssertionError("start_session must not run after quota failure")
+
+    async def run(ipi, sess, code):
+        raise AssertionError("run_code must not run after quota failure")
+
+    async def stop(ipi, sess):
+        pass
+
+    tool = st.build_execute_code_tool(
+        strands_tool_decorator=_passthrough_tool_decorator,
+        session_state={},
+        start_session=start,
+        stop_session=stop,
+        run_code=run,
+        check_quota=quota,
+    )
+    result = _run(tool("print('hi')"))
+    # Fails closed — a transport failure must not let calls through.
+    assert result["ok"] is False
+    assert result["error"] == "SandboxCapExceeded"
+
+
+def test_quota_none_behaves_like_pre_unit_10(interpreter_env):
+    """Back-compat: tests that predate Unit 10 pass check_quota=None."""
+
+    async def start(ipi, timeout):
+        return "sess-1"
+
+    async def run(ipi, sess, code):
+        return {"stdout": "ok", "stderr": "", "exit_code": 0}
+
+    async def stop(ipi, sess):
+        pass
+
+    tool = st.build_execute_code_tool(
+        strands_tool_decorator=_passthrough_tool_decorator,
+        session_state={},
+        start_session=start,
+        stop_session=stop,
+        run_code=run,
+    )
+    result = _run(tool("print('hi')"))
+    assert result["ok"] is True
