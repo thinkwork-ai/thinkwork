@@ -5,204 +5,127 @@ description: The universal work container in ThinkWork. Every conversation, auto
 
 import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
 
-A thread is the fundamental unit of work in ThinkWork. A chat message from a user, a Slack event from a connector, a scheduled automation turn, an inbound email — every one of them lands in a thread. Same schema, same lifecycle, same audit trail, same API.
+A thread is the fundamental unit of work in ThinkWork. A chat message from a user, a Slack event from a connector, a scheduled automation turn, an inbound email — every one of them lands in a thread. Same shape, same lifecycle, same audit trail.
 
 That choice is load-bearing. Most agent systems split "chat" from "workflows" from "integrations" into three code paths, three sets of UI affordances, and three state machines. ThinkWork deliberately doesn't. There is one container, and it carries enough metadata — channel, prefix, routing context — to specialize behavior per source without splitting the container itself.
 
-This page is the deep dive: why threads exist in this shape, how a real inbound event becomes a thread turn, what the lifecycle actually looks like, where the data lives, and what can go wrong. If you only read one Concepts page, read this one first — most of the rest of the system is easier to understand once threads click.
+This page is the conceptual deep dive: why threads exist in this shape, what a thread actually holds, how the lifecycle works, and the invariants you can rely on. For the admin UI around threads, see [Admin: Threads](/applications/admin/threads/). For the mobile chat surface, see [Mobile: Threads & Chat](/applications/mobile/threads-and-chat/). For the GraphQL schema, see the [API reference](/api/graphql/).
 
 ## Why threads exist
 
 The alternative — bespoke records for chat sessions, automation runs, and inbound webhooks — turns every cross-cutting concern into a special case. Audit logic has three implementations. Budget enforcement has three implementations. Handoff from an agent to a human has three implementations. Each one drifts independently, and each drift shows up as a product bug.
 
-ThinkWork picks the other tradeoff: every piece of work is a thread, and every code path in the system treats threads as the canonical state. That pays off when:
+ThinkWork picks the other tradeoff: every piece of work is a thread, and every code path treats threads as the canonical state. That pays off when:
 
 - **Handoff.** A Slack-originated thread escalates to a human. The admin app already has a thread detail view; the inbox already has an approval surface. No new surface to build because everything is already a thread.
 - **Audit.** A compliance question lands for an agent turn that happened three months ago. The thread still has the full record — messages, tool calls, memory reads, guardrail activations, cost — regardless of whether it started from chat, cron, or webhook.
-- **Composition.** Automations can spawn child threads. Connectors can reply into existing threads. Agents can pin context from a previous thread into a new one. All uniformly, because it's all the same schema.
-- **Tenancy.** Tenant isolation is enforced once, at the `threads` table's row-level security policy. Every downstream surface that joins against `threads` inherits the isolation for free.
-- **Replay.** The NDJSON audit log is partitioned by thread id. Reconstructing a turn from three months ago — or replaying a bad automation run against a fixed agent prompt — is a single S3 select, not a cross-system archaeology.
+- **Composition.** Automations can spawn child threads. Connectors can reply into existing threads. Agents can pin context from a previous thread into a new one. All uniformly, because it's all the same shape.
+- **Tenancy.** Tenant isolation is enforced once, in the thread store. Every downstream surface that reads threads inherits the isolation for free.
+- **Replay.** The audit log is partitioned by thread id. Reconstructing a turn from three months ago — or replaying a bad automation run against a fixed agent prompt — is one scan, not a cross-system archaeology.
 
 <Aside type="tip">
-  If you're coming from a system that separates conversations from workflows, expect a small rewiring. Once you see the admin app's thread list filter an automation run and a user chat the same way, the shape clicks.
+  If you're coming from a system that separates conversations from workflows, expect a small rewiring. Once you see a chat thread and an automation run render through the same admin surface with the same filters, the shape clicks.
 </Aside>
 
 ## Anatomy of a thread
 
-A thread is not just a row — it's a row plus an ordered set of messages, plus an ordered set of turns, plus channel-specific metadata. The distinction matters because different surfaces render different parts:
+A thread is not a single record — it's a thread row plus an ordered set of messages, plus an ordered set of turns, plus channel-specific metadata. Different surfaces render different parts:
 
 ```
-Thread (threads table)
- ├── Messages (thread_messages)    ← what gets rendered as chat bubbles
+Thread
+ ├── Messages              ← what gets rendered as chat bubbles
  │    ├── message 1 (role=user, body="book me a flight to Austin")
  │    ├── message 2 (role=assistant, body="found 3 options...")
  │    └── ...
- ├── Turns (thread_turns)          ← execution wrappers around agent invocations
+ ├── Turns                 ← execution wrappers around agent invocations
  │    ├── turn 1 (model call + 3 tool calls + memory recall)
  │    ├── turn 2 (model call + guardrail hit + no tool calls)
  │    └── ...
- └── Metadata (JSONB)              ← channel-specific context
-      └── { "channelId": "C08...", "threadTs": "1708..." }  (if SLACK)
+ └── Metadata              ← channel-specific context (Slack channel id, GitHub issue number, etc.)
 ```
 
-**Messages are conversational.** They're what the user and the agent say to each other, in natural language. The mobile app's chat view renders messages. The admin thread timeline renders messages interleaved with execution events.
+**Messages are conversational.** They're what the user and the agent say to each other, in natural language. Chat views render messages. The admin thread timeline renders messages interleaved with execution events.
 
-**Turns are execution containers.** One user message typically triggers one turn. That turn wraps the model invocation plus every tool call, memory read, guardrail decision, and cost emission that happened during the invocation. Turns are what the audit trail and cost accounting read. If a user's message triggered three tool calls before the agent produced its response, those all live inside one turn.
+**Turns are execution containers.** One user message typically triggers one turn. That turn wraps the model invocation plus every tool call, memory read, guardrail decision, and cost emission that happened during it. Turns are what the audit trail and cost accounting read. If a user's message triggered three tool calls before the agent produced its response, those all live inside one turn.
 
-**The metadata JSONB column** holds channel-specific routing and replay context — the Slack `threadTs` that lets outbound replies land in the right Slack thread, the GitHub `issueNumber` + `repoFullName` that identifies an issue, the email `messageId` + `inReplyTo` that implements email threading standards.
+**Metadata** holds channel-specific routing and replay context — the Slack thread id that lets outbound replies land in the right conversation, the GitHub issue number that identifies an issue, the email `Message-Id` that implements email threading standards.
 
 ### Messages vs. turns — why both exist
 
-This distinction trips people up on first read, so it's worth making explicit. Consider a single user message: *"what's my calendar look like next Tuesday?"*
+This distinction trips people up on first read. Consider a single user message: *"what's my calendar look like next Tuesday?"*
 
-- Exactly **one** message row is written for the user's input.
-- Exactly **one** turn row is written for the agent's invocation.
-- That turn internally records: the model call (tokens in/out, latency), a `calendar.listEvents` tool call (input + output), a memory recall (the user's preference for concise summaries), a guardrail pass, and the final cost.
-- Exactly **one** message row is written for the agent's response.
+- Exactly **one** message is written for the user's input.
+- Exactly **one** turn is written for the agent's invocation.
+- That turn internally records: the model call (tokens in/out, latency), a calendar-lookup tool call (input + output), a memory recall (the user's preference for concise summaries), a guardrail pass, and the final cost.
+- Exactly **one** message is written for the agent's response.
 
-So: 2 message rows, 1 turn row. The turn is the execution record; the messages are the conversation.
+So: 2 messages, 1 turn. The turn is the execution record; the messages are the conversation.
 
-If the user asks a follow-up (*"move the 3pm to next Wednesday"*), that's another message + another turn, same thread.
-
-## A walking tour: inbound Slack → thread → agent reply
-
-Concrete example, end to end. A customer in Slack mentions the tenant's support bot.
-
-### 1. Slack fires a webhook
-
-Slack POSTs an `event_callback` to `/connectors/slack/webhook` on API Gateway. The POST body carries the full event: team id, channel id, user id, message text, thread timestamp (if this is a threaded reply), and a signature header for verification.
-
-### 2. The Slack connector Lambda runs
-
-The Lambda at `apps/connectors/slack/` does three things in sequence:
-
-**Signature verification.** The `X-Slack-Signature` header is HMAC'd against the tenant's Slack signing secret (stored in SSM Parameter Store, pulled into Lambda env). A failed verification drops the event with a `401` — this is the defense against replay attacks.
-
-**Event normalization.** Slack's raw event format is converted to the internal `NormalizedEvent` shape — `packages/api/src/lib/connectors/normalized-event.ts`. Every connector (Slack, GitHub, Email, Task, etc.) produces this same shape so downstream code doesn't branch on provider.
-
-**Thread resolution.** The Lambda asks: *does a thread already exist for this external conversation?* It queries `threads WHERE channel = 'SLACK' AND metadata->>'threadTs' = $1`. Three outcomes:
-
-| Outcome | Action |
-|---|---|
-| Matching open thread | Append to it |
-| Matching closed/cancelled thread | Reopen (`status = IN_PROGRESS`) and append |
-| No match | Create a new thread, mint a new id (`SLACK-01H...`) |
-
-### 3. Agent resolution
-
-For a new thread, the Lambda picks which agent owns it:
-
-1. **Explicit mention.** If the Slack message mentions `@agent-name`, that agent is picked.
-2. **Channel default.** The tenant can configure per-channel default agents in the admin Connectors surface.
-3. **Tenant default.** Fallback to the tenant's default Slack agent.
-
-For an existing thread, the `assigned_agent_id` column already answers this question — no re-routing on reply.
-
-### 4. Message persisted
-
-A `thread_messages` row is written with:
-
-```
-role: 'user'
-body: "<Slack message text>"
-author_name: "<Slack display name>"
-metadata: { slackUserId, teamId, ... }  // copy of the originating Slack fields
-created_at: now()
-```
-
-The message write is the transaction boundary — everything downstream happens asynchronously.
-
-### 5. AgentCore invoked (async)
-
-The resolver enqueues an SQS message; the AgentCore Lambda picks it up.
-
-AgentCore reads the thread's assigned agent, loads the agent's template (model, guardrail, tool config, memory behavior), assembles context (recent thread turns + document retrieval + long-term memory recall + wiki pages), and invokes Bedrock Converse with the assembled input and the template's guardrail.
-
-This step is covered in depth in [Managed Agents](/concepts/agents/managed-agents/) — the key point for the threads model is that AgentCore writes back into this same thread; it doesn't spawn a new one.
-
-### 6. Tool calls and response
-
-Strands orchestrates any tool calls the model requests. Each tool call is recorded inside the turn row — `thread_turn_tool_calls` sub-records with input, output, latency, and error state.
-
-When the model produces its final response, a new `thread_messages` row is written with `role = 'assistant'`.
-
-### 7. Outbound reply
-
-The agent's response is posted back to Slack via the Slack outbound handler. That handler reads `thread.metadata` to find the Slack `threadTs` and `channelId`, then calls Slack's `chat.postMessage` API with the reply nested in the same Slack thread.
-
-The outbound Slack message id gets written into the thread's turn record so the audit log can link the agent's response back to the specific Slack message.
-
-### 8. Subscriptions fire
-
-AppSync subscriptions (`onThreadUpdated`, `onThreadTurnUpdated`) publish. Every admin tab and mobile session subscribed with a tenant filter re-executes its relevant queries — the admin thread list re-sorts with the now-updated thread at the top; the detail view (if it's open) renders the new message.
-
-### 9. Post-turn side effects
-
-Before the Lambda exits:
-
-- **Memory retention.** If AgentCore Memory is the adapter, a retention event fires so background strategies extract what's worth remembering. If Hindsight is the adapter, the retain path writes directly.
-- **Wiki compile enqueue.** If the agent has compounding memory enabled, a compile job gets queued (5-minute dedupe bucket; see [Compounding Memory: Pipeline](/concepts/knowledge/compounding-memory-pipeline/)).
-- **Audit record.** A full NDJSON record of the invocation lands in the audit S3 bucket under `tenant_id/YYYY-MM-DD/<thread_id>/<turn_id>.ndjson`.
-- **Cost reducer.** OTel spans emit; the cost reducer picks them up and writes a `thread_turn_costs` row with the breakdown (input tokens, output tokens, tool cost, total cost).
-
-Total wall time from Slack webhook to agent response in Slack: typically 3–10 seconds, dominated by Bedrock model latency.
+If the user asks a follow-up, that's another message plus another turn, same thread.
 
 ## The channel model
 
-Every thread has a `channel` column set at creation time. Channel determines the prefix, the inbound connector Lambda, and the outbound reply handler.
+Every thread has a channel set at creation time. Channel determines the prefix and which system produced the work:
 
 | Channel | Prefix | How work arrives | How agents reply |
 |---|---|---|---|
-| `CHAT` | `CHAT-` | User sends message in admin or mobile app | AppSync subscription streams response back to the app |
-| `AUTO` | `AUTO-` | AWS Scheduler / EventBridge fires a scheduled job or event trigger | Response recorded on the thread; optional side-effects via tool calls |
-| `SLACK` | `SLACK-` | Slack Events API webhook to the Slack connector Lambda | Slack connector posts the response back to the originating channel/thread |
-| `GITHUB` | `GITHUB-` | GitHub webhook (issue, PR, comment) | GitHub connector posts a comment via the GitHub API |
-| `EMAIL` | `EMAIL-` | SES inbound email rule to the email connector | SES sending domain sends a reply; `inReplyTo` and `References` headers are preserved |
-| `TASK` | `TASK-` | External task system webhook (e.g. LastMile task assignment) | Task connector normalizes state changes back to the external system |
+| `CHAT` | `CHAT-` | User sends message in admin or mobile app | Streamed back to the app over a real-time subscription |
+| `AUTO` | `AUTO-` | Scheduler or event trigger fires | Response recorded on the thread; optional tool-call side-effects |
+| `SLACK` | `SLACK-` | Inbound Slack event to the Slack connector | Reply posted back to the originating Slack channel/thread |
+| `GITHUB` | `GITHUB-` | GitHub webhook (issue, PR, comment) | Comment posted via the GitHub API |
+| `EMAIL` | `EMAIL-` | Inbound email | Reply sent; `In-Reply-To` / `References` preserved |
+| `TASK` | `TASK-` | External task system webhook | Task state normalized back to the external system |
 
-The prefix is part of the thread id, not a separate column — a thread id is `<CHANNEL>-<ULID>`, e.g. `SLACK-01H8QKPZ4X8M4NXDRM9N8KBJ9P`. The prefix isn't a display formatter; it's indexed on the row and used to pick the outbound response handler at reply time.
+The prefix is part of the thread id. A thread id is `<CHANNEL>-<ULID>`. That isn't just cosmetic — it's the first thing humans and tools read when orienting to a thread:
 
-### Why prefixes, not just a channel column?
-
-You could imagine storing the channel in its own column and generating opaque ids. Prefixes in the id are a deliberate choice for three reasons:
-
-1. **Readability.** An operator skimming CloudWatch logs immediately knows a `SLACK-01H...` id is a Slack thread without having to JOIN.
-2. **Stable sort.** ULIDs are time-ordered. A thread list sorted by id is also sorted by creation time, grouped by channel.
-3. **External linking.** URLs, admin surfaces, and audit queries carry the channel context implicitly — `/threads/SLACK-01H...` is self-describing.
+1. **Readability.** An operator skimming logs immediately knows a `SLACK-01H…` id is a Slack thread.
+2. **Stable sort.** ULIDs are time-ordered, so a list sorted by id groups by channel and sorts by creation time at once.
+3. **Self-describing URLs.** `/threads/SLACK-01H…` tells you the shape of the rendering without a lookup.
 
 ### Adding a new channel
 
-New channel support is three changes:
+Channel support has three seams: a new channel value in the thread model, an inbound handler that maps provider events into the thread model, and an outbound handler that knows how to reply via the provider's API. The shape is the same for every channel; each connector fills it in.
 
-1. **Schema.** Add the value to the `thread_channel` Postgres enum (a migration).
-2. **Inbound connector.** A Lambda under `apps/connectors/<channel>/` that verifies signatures, normalizes events into `NormalizedEvent`, and calls the internal thread resolver.
-3. **Outbound handler.** A handler under `packages/api/src/lib/agents/reply/` that knows how to reply via the provider's API, reading whatever's needed from `thread.metadata`.
+## Reopen, don't recreate
 
-No other surface needs to change — the admin app, mobile app, agent runtime, and audit layer all consume threads generically.
+This is the single most important invariant in the thread model.
+
+When a user follows up on a conversation ThinkWork had archived — say, someone replies to a Slack thread that was closed last week — the system **reopens the existing thread** rather than starting a new one.
+
+The reopen key is the channel-specific metadata, not the ThinkWork thread id directly:
+
+| Channel | Reopen key |
+|---|---|
+| Slack | The Slack thread timestamp (`thread_ts`) |
+| GitHub | The `(repo, issue_number)` pair |
+| Email | The email `Message-Id` chain (`In-Reply-To` + `References`) |
+| Task | The `(provider, external_task_id)` pair |
+
+That guarantees conversation continuity. An agent that answered a Slack question in March sees its own earlier answer when someone follows up in April. Without this, every follow-up would be a fresh thread with no memory of the conversation that preceded it.
+
+The reopen happens at the connector boundary — whenever an inbound event arrives, the connector looks for an existing open thread matching the external-system keys before deciding to create a new one. A thread in `DONE` status implicitly returns to `IN_PROGRESS` on reopen.
 
 ## The status lifecycle
 
-Status is the first-class answer to "where is this thread in its workflow right now?" Seven values, with deliberate semantics:
+Status answers *"where is this thread in its workflow right now?"* Seven values with deliberate semantics:
 
-| Status | Meaning | Typical trigger |
-|---|---|---|
-| `BACKLOG` | Captured, but not scheduled for work yet | New thread from a connector, or a user drafting without sending |
-| `TODO` | Ready to be picked up | Assignee has the thread in queue, or agent is about to run |
-| `IN_PROGRESS` | Currently being worked on | An agent turn is running, or a human is actively typing |
-| `IN_REVIEW` | Waiting on human review | Agent requested approval (see [Admin: Inbox](/applications/admin/inbox/)); operator needs to confirm |
-| `BLOCKED` | Stuck on a dependency or error | Tool call failed with a non-retryable error, or waiting on external input |
-| `DONE` | Completed | Work is finished and no more turns are expected |
-| `CANCELLED` | Abandoned | Operator cancelled before completion |
-
-### Transition rules
+| Status | Meaning |
+|---|---|
+| `BACKLOG` | Captured, but not scheduled for work yet |
+| `TODO` | Ready to be picked up |
+| `IN_PROGRESS` | Currently being worked on |
+| `IN_REVIEW` | Waiting on human review or approval |
+| `BLOCKED` | Stuck on a dependency or error |
+| `DONE` | Completed |
+| `CANCELLED` | Abandoned |
 
 The state machine is deliberately loose — any-to-any transitions are allowed — because real work doesn't flow cleanly. A thread can go `IN_PROGRESS → BLOCKED → IN_PROGRESS` multiple times in a day. `DONE` is terminal by convention but not by enforcement; a new message into a `DONE` thread reopens it (implicit `DONE → IN_PROGRESS`).
 
-The one hard rule: **no transitions are triggered by reads.** An operator looking at a thread doesn't change its status. Status is written only by explicit mutations (agent activity, operator action, connector event).
+The one hard rule: **no transitions are triggered by reads.** Opening a thread in the UI doesn't change its status. Status is written only by explicit mutations — agent activity, operator action, or connector event.
 
 ### Priority is a separate axis
 
-Status answers *"what workflow phase?"* Priority answers *"how urgent?"*:
+Status answers "what workflow phase?" Priority answers "how urgent?" They're orthogonal:
 
 | Priority | Use |
 |---|---|
@@ -212,289 +135,61 @@ Status answers *"what workflow phase?"* Priority answers *"how urgent?"*:
 | `MEDIUM` | Default |
 | `LOW` | Eventually |
 
-Status and priority together let the admin app group threads usefully — `IN_PROGRESS + CRITICAL` is a meaningfully different bucket than `IN_PROGRESS + LOW`.
-
-### Computed inbox status
-
-A third axis, not stored but computed per-row for each operator: `running | unread | read`. This drives the shimmer on actively-running threads and the unread indicator for new turns since the operator last opened the thread. See [Admin: Threads](/applications/admin/threads/) for how the computation happens.
-
-## Reopen, don't recreate
-
-When a user follows up on a conversation ThinkWork had archived — say, someone replies to a Slack thread that was marked `DONE` last week — the system reopens the existing thread rather than starting a new one. This is a product correctness invariant, not a nice-to-have.
-
-The reopen key is the channel-specific metadata, not the ThinkWork thread id directly:
-
-| Channel | Reopen key |
-|---|---|
-| `SLACK` | `metadata->>'threadTs'` (Slack's own thread identifier) |
-| `GITHUB` | `(metadata->>'repoFullName', metadata->>'issueNumber')` |
-| `EMAIL` | `metadata->>'messageId'` via the `inReplyTo` / `References` email headers |
-| `TASK` | `(metadata->>'provider', metadata->>'externalTaskId')` |
-
-That decision guarantees conversation continuity. An agent that answered a Slack question in March sees its own earlier answer when someone follows up in April. Without this, each follow-up would be a fresh thread with no memory of the conversation that preceded it.
+The two together let operators group threads usefully — `IN_PROGRESS + CRITICAL` is a meaningfully different bucket than `IN_PROGRESS + LOW`. See [Admin: Threads](/applications/admin/threads/) for how the grouping surfaces in the operator UI.
 
 ## Concurrency and ordering
 
-Real systems race. Two inbound events for the same external conversation can arrive within milliseconds of each other — a user hits send twice, an automation fires during a human reply, a webhook retries before the original was processed. Thread handling has to be correct under that.
+Real systems race. Two inbound events for the same external conversation can arrive within milliseconds of each other — a user hits send twice, an automation fires during a human reply, a webhook retries before the original was processed. The thread model has rules for this.
 
-### Message ordering
+### One running turn per thread
 
-Messages are ordered by `created_at` with nanosecond precision, plus a monotonic sequence number per thread as a tiebreaker. Two messages inserted at literally the same microsecond get distinct sequence numbers so the render order is stable.
+A thread can only have **one running turn at a time**. This is the central concurrency invariant. If a new user message arrives while a turn is already in-flight, the new message is persisted immediately (so the user sees their message) but the agent invocation is deferred — queued behind the running turn.
 
-### Turn concurrency
+This prevents two agents from racing on the same thread and corrupting its state.
 
-A thread can only have one *running* turn at a time. If a new user message arrives while a turn is already in-flight, the new message is persisted immediately (so the user sees their message) but the agent invocation is deferred — queued behind the running turn. AgentCore checks `thread.status = 'IN_PROGRESS'` with a lock before starting a new turn; if it finds one already running, it backs off and lets the SQS redelivery handle the retry.
+### Messages preserve order
 
-### Idempotent connector delivery
+Messages are ordered by creation time with a monotonic sequence number per thread as a tiebreaker. Two messages written at literally the same moment get distinct sequence numbers so the render order is stable.
 
-Webhooks retry. The internal connector Lambdas dedupe on provider-specific event ids (`event_id` for Slack, `delivery_id` for GitHub) before creating a message — a replayed webhook becomes a no-op rather than a duplicate message.
+### Idempotent inbound delivery
 
-### The "both win" case
+Webhooks retry. Connector handlers are expected to dedupe on provider-specific event ids before creating a message, so a replayed webhook becomes a no-op rather than a duplicate.
 
-Two operators in the admin app editing thread metadata at the same moment: last write wins on the overlapping fields. The thread detail view re-executes on the subscription, so whoever's edit lands second sees the new state immediately. There's no CRDT model here — high-concurrency metadata editing isn't a real ThinkWork use case.
+### Metadata editing
 
-## Retention, archival, and deletion
+Two operators editing thread metadata simultaneously: last write wins on the overlapping fields. There's no CRDT model — high-concurrency metadata editing isn't a real ThinkWork use case.
 
-Threads are durable by default. Three surfaces care about lifetime:
+## Retention and archival
 
-### In-app retention
+Threads are durable by default. Three layers have opinions about lifetime:
 
-The admin thread list has no retention cutoff — `DONE` threads from two years ago are still queryable. The operator UX defaults to filtering them out (only non-terminal statuses are shown unless you explicitly opt in), but the data is there.
+- **The thread store itself.** No retention cutoff. `DONE` threads from two years ago are still queryable. Operator UIs default to filtering them out of the default view, but the data is there.
+- **The audit log.** Every turn's full execution record is written to an append-only log. Retention is configured per deployment — the default is "keep indefinitely"; compliance-heavy tenants often configure 7-year retention with cold-storage transitions.
+- **Deletion.** True deletion of a thread is rare and operator-only. Even after a thread is deleted, its audit records persist — the audit log is the compliance source of truth; the thread row is an indexing layer on top. Most "deletion" in practice is archival, not row deletion.
 
-### Audit log retention
-
-The NDJSON audit records for each turn follow the S3 lifecycle policy:
-
-- **0–90 days**: S3 Standard (hot reads).
-- **90+ days**: S3 Glacier (compliance-accessible, minutes to restore).
-- **Purge**: configurable per-tenant; default is "never" for compliance workloads, commonly set to 7 years.
-
-The bucket has `s3:DeleteObject` denied on the Lambda role that writes — records are cryptographically immutable at the IAM level. Deletion requires an operator with the dedicated audit-admin role.
-
-### Thread deletion
-
-True deletion of a thread is deliberately rare and operator-only. The `deleteThread` mutation cascades to messages and turns, but does **not** delete the audit records — those stay under their S3 prefix keyed on the thread id, even after the thread row is gone. The design reason: the audit log is the compliance source of truth; the thread row is just the indexing layer.
-
-Most "deletion" in practice is archival — moving the thread out of default UI filters — not row deletion. The mobile app has no delete surface at all.
-
-## Where threads show up in the product
-
-Every ThinkWork surface that shows work shows it as a thread. The surfaces vary — an operator wants the Kanban, an end user wants the chat view — but the thread itself is the same record underneath each one.
-
-| Surface | View | What it reads |
-|---|---|---|
-| Admin web app | `/threads` — Kanban + grouped table | `ThreadsPagedQuery` + two subscriptions |
-| Admin web app | `/threads/:id` — detail with timeline + audit | `ThreadDetailQuery` + `ArtifactsListQuery` |
-| Mobile app | Threads tab — list | `MobileThreadsListQuery` |
-| Mobile app | Thread detail — chat view | `ThreadDetailQuery` (same as admin) + streaming subscription |
-| CLI | `thinkwork threads list/get` | Same GraphQL surface |
-| GraphQL API | `threads`, `thread`, `createThread`, `sendMessage` | Direct resolver access |
-
-The same thread can be open in three surfaces simultaneously and stay consistent via AppSync subscriptions — no polling, no refresh-to-see-updates.
+The mobile app has no delete surface at all. End-users archive, operators can delete, but audit always survives.
 
 ## Known limits
 
-- **Bulk actions.** The admin thread list does not support multi-select for bulk archive, bulk assign, or bulk status change. Operators change threads one at a time. Tracked as a planned follow-up.
-- **Thread merging.** Two threads can't currently be merged into one. A customer who emails and then follows up on Slack stays as two threads. An operator can mark one as a duplicate, but the system does not auto-merge.
+- **Bulk actions.** Multi-select for bulk archive, bulk assign, or bulk status change isn't part of the thread model today. Operators change threads one at a time.
+- **Thread merging.** Two threads can't currently be merged into one. A customer who emails and then follows up on Slack stays as two threads.
 - **Cross-channel routing rules.** A rule like "route any GitHub issue mentioning @on-call to the ops agent *and* fire PagerDuty" requires two separate routing configs today.
-- **Attachment upload.** The admin app exposes an attachment upload surface on thread detail, but the handler is stubbed — the UI renders, the mutation is not wired.
-- **Activity feed stitching.** `ExecutionTrace` merges messages and comments client-side; there's no dedicated cross-system activity feed query. Adding one is on the roadmap.
-- **No partial-thread export.** Exporting a single thread's full record (messages + turns + audit) has no dedicated mutation — operators can assemble it from the pieces, but there's no "download this thread" button.
+- **Attachment upload.** The admin surfaces an attachment upload affordance on thread detail, but the handler is stubbed — the UI renders, the mutation is not wired end-to-end.
+- **No partial-thread export.** Exporting a single thread's full record (messages + turns + audit) has no dedicated export path — operators assemble it from the pieces.
 - **Concurrent-turn queueing is FIFO, not priority-aware.** If a `CRITICAL` thread has three queued turns behind an in-flight turn, they execute in arrival order, not priority order.
-
-## What can go wrong
-
-**Duplicate messages from webhook retries.** If a connector Lambda's dedupe logic has a bug or a gap (say, a new provider's event_id wasn't carried through `NormalizedEvent`), retries produce duplicates. Mitigation: every connector Lambda is expected to dedupe on the provider's own event id before the internal `createMessage` call.
-
-**Orphan threads from pre-signup failures.** If the Cognito pre-signup Lambda fails to resolve a tenant for a federated user, the sign-in completes but subsequent thread creation fails with a `null tenant_id`. Mitigation: the tenant resolver fallback (`resolveCallerTenantId`) catches this case for Google-federated users until the Cognito pre-token trigger lands.
-
-**Thread-turn status drift.** If AgentCore crashes mid-turn, the thread is left in `IN_PROGRESS` with no running invocation. A reaper job runs every 5 minutes to reset `IN_PROGRESS` threads with no active Lambda invocation back to `TODO` or `BLOCKED`, depending on the last turn's state.
-
-**Missing subscriptions.** AppSync subscriptions can drop silently on mobile when the app is backgrounded. The mobile client re-issues subscriptions on every resume-to-foreground, so an operator occasionally seeing stale data for 200ms before an auto-refresh is expected, not a bug.
-
-**Metadata schema drift.** The `metadata` JSONB column is enforced only by TypeScript types, not by Postgres schema. A connector Lambda shipping a new field that an outbound handler reads before the handler's been deployed will produce a correct-but-empty read. Deploy the outbound handler first for any metadata addition.
 
 ## Related pages
 
-- [Lifecycle and Types](/concepts/threads/lifecycle-and-types/) — status, channel, priority, and the full channel model at leaf-level depth
-- [Routing and Metadata](/concepts/threads/routing-and-metadata/) — how inbound connector events map into the thread model, with a real Slack → thread walkthrough
-- [Concepts: Managed Agents](/concepts/agents/managed-agents/) — what happens on the agent side of step 5 in the walking tour
-- [Concepts: Connectors](/concepts/connectors/) — the integrations that produce inbound events
+- [Lifecycle and Types](/concepts/threads/lifecycle-and-types/) — the channel model in more depth
+- [Routing and Metadata](/concepts/threads/routing-and-metadata/) — how inbound events map into the thread model
 - [Admin: Threads](/applications/admin/threads/) — the operator view: Kanban, table, filters, detail, audit
 - [Mobile: Threads & Chat](/applications/mobile/threads-and-chat/) — the end-user view
-- [Concepts: Control](/concepts/control/) — the audit + cost + guardrail layer that wraps every turn
-- [Architecture](/architecture/) — where threads sit in the three-tier deployment
+- [Concepts: Managed Agents](/concepts/agents/managed-agents/) — what runs inside a turn
+- [Concepts: Connectors](/concepts/connectors/) — how inbound events become threads
+- [API Reference: GraphQL](/api/graphql/) — the thread queries, mutations, and subscriptions
 
 ## Under the hood
 
-Everything below is code-path detail for someone actually modifying or debugging the thread subsystem. Skip it if you're just trying to use the product.
+Threads live as rows in the operational database with tenant-scoped row-level security. Messages and turns are child tables, each with their own indexes for the common access patterns (list-by-thread, list-by-tenant-sorted-by-updated). The thread id is a prefixed ULID and is the primary key in the thread table and a foreign key everywhere else. AppSync subscriptions broadcast thread and turn updates to subscribed clients.
 
-### Schema
-
-Three core tables in Aurora Postgres. Every one carries `tenant_id` with an RLS policy enforcing isolation.
-
-```sql
--- threads
-CREATE TABLE threads (
-  id                 text PRIMARY KEY,                -- prefixed ULID, e.g. 'CHAT-01H...'
-  tenant_id          uuid NOT NULL,
-  channel            thread_channel NOT NULL,         -- enum
-  status             thread_status NOT NULL DEFAULT 'BACKLOG',
-  priority           thread_priority NOT NULL DEFAULT 'MEDIUM',
-  title              text,
-  description        text,
-  assigned_agent_id  uuid REFERENCES agents(id),
-  parent_thread_id   text REFERENCES threads(id),     -- for routine child threads
-  metadata           jsonb NOT NULL DEFAULT '{}',
-  created_at         timestamptz NOT NULL DEFAULT now(),
-  updated_at         timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_threads_tenant_updated ON threads (tenant_id, updated_at DESC);
-CREATE INDEX idx_threads_tenant_status  ON threads (tenant_id, status);
-CREATE INDEX idx_threads_tenant_channel ON threads (tenant_id, channel);
-CREATE INDEX idx_threads_metadata_gin   ON threads USING gin (metadata);  -- for metadata->>'threadTs' lookups
-```
-
-```sql
--- thread_messages — one row per user/assistant/system/tool message
-CREATE TABLE thread_messages (
-  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  thread_id   text NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
-  tenant_id   uuid NOT NULL,
-  role        message_role NOT NULL,  -- user | assistant | system | tool
-  body        text NOT NULL,
-  author_name text,
-  metadata    jsonb NOT NULL DEFAULT '{}',
-  sequence    bigserial NOT NULL,     -- monotonic per thread, tiebreaker for ordering
-  created_at  timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_messages_thread_created ON thread_messages (thread_id, created_at, sequence);
-```
-
-```sql
--- thread_turns — one row per agent invocation
-CREATE TABLE thread_turns (
-  id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  thread_id          text NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
-  tenant_id          uuid NOT NULL,
-  agent_id           uuid NOT NULL,
-  triggering_message_id uuid REFERENCES thread_messages(id),
-  response_message_id   uuid REFERENCES thread_messages(id),
-  status             turn_status NOT NULL,  -- queued | running | succeeded | failed
-  model_id           text,
-  started_at         timestamptz NOT NULL DEFAULT now(),
-  completed_at       timestamptz,
-  error              jsonb,
-  metadata           jsonb NOT NULL DEFAULT '{}'  -- tool calls, memory reads, guardrail hits
-);
-```
-
-### Row-level security
-
-Every query under `threads`, `thread_messages`, `thread_turns` is filtered by an RLS policy that reads the current tenant from a session GUC set by the API Gateway resolver:
-
-```sql
-ALTER TABLE threads ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY tenant_isolation ON threads
-  USING (tenant_id = current_setting('app.current_tenant_id')::uuid);
-```
-
-Even with an application bug, a query cannot return another tenant's threads. Same policy shape on the message and turn tables.
-
-### Resolvers
-
-```
-packages/api/src/schema/threads/
-├── queries.ts        — thread, threadsPaged, threadsByAgent
-├── mutations.ts      — createThread, updateThread, sendMessage, deleteThread
-├── subscriptions.ts  — onThreadUpdated, onThreadTurnUpdated
-├── types.ts          — GraphQL type definitions
-└── resolve.ts        — createOrUpdateThread (the shared inbound path)
-```
-
-Every mutation sets `updated_at = now()` on the thread row so the subscription fires. The subscription filter is `tenant_id + optional threadId` — a client subscribing to one thread's detail gets only its events.
-
-### Subscription wire format
-
-AppSync publishes mutations over WebSocket using its custom protocol. Simplified:
-
-```
-Client → WS connect (JWT in connection_init payload)
-       → { type: "start", payload: { query: "subscription OnThreadUpdated($tenantId: ID!) {...}" } }
-
-Server → { type: "data", payload: { data: { onThreadUpdated: { id, status, updatedAt } } } }
-```
-
-The admin app's urql `subscriptionExchange` wraps this and re-executes the paging query on each delivery with `network-only` policy.
-
-### Inbound resolver (`resolveExistingThread`)
-
-The function connector Lambdas call to decide create-vs-update:
-
-```ts
-// packages/api/src/lib/threads/resolve.ts
-export async function resolveExistingThread(
-  db: Database,
-  args: { tenantId: string; channel: ThreadChannel; metadata: Record<string, unknown> },
-): Promise<Thread | null>
-```
-
-Channel-specific lookup paths:
-
-- `SLACK`: `WHERE channel = 'SLACK' AND metadata->>'threadTs' = $1 AND status != 'CANCELLED'`
-- `GITHUB`: `WHERE channel = 'GITHUB' AND metadata->>'repoFullName' = $1 AND metadata->>'issueNumber' = $2`
-- `EMAIL`: iterates the `References` chain looking for any matching `messageId`
-- `TASK`: `WHERE channel = 'TASK' AND metadata->>'provider' = $1 AND metadata->>'externalTaskId' = $2`
-
-### Caps and limits
-
-- **Message body.** 1 MB max per message (enforced at the mutation layer).
-- **Thread title.** 256 chars.
-- **Metadata size.** 64 KB per thread (JSONB, enforced by a Postgres CHECK).
-- **Messages per thread.** No hard cap, but pagination kicks in at 100/page in the admin and mobile detail views.
-- **Concurrent running turns per thread.** 1. Queued turns wait.
-
-### Performance characteristics
-
-- **Thread list query.** The index on `(tenant_id, updated_at DESC)` makes paging through a 500k-thread tenant a non-issue — `LIMIT 50 OFFSET N` is a range scan.
-- **Thread detail query.** Fetches the thread + its messages + its turns in a single round-trip via a JOIN'd query. 99th percentile under 100ms even on hot threads with 1,000+ messages.
-- **Metadata lookups.** The GIN index on `metadata` makes `metadata->>'threadTs' = $1` fast enough for connector hot paths (under 10ms).
-- **Subscription fan-out.** AppSync handles this — one publish fans to all subscribed clients with matching filters without the resolver touching it.
-
-### Audit log format
-
-Every turn emits an NDJSON record to S3 at:
-
-```
-s3://thinkwork-<stage>-audit/<tenant_id>/<YYYY-MM-DD>/<thread_id>/<turn_id>.ndjson
-```
-
-The record shape (one JSON object per line, human-readable):
-
-```json
-{"kind": "turn.started", "turn_id": "...", "thread_id": "...", "agent_id": "...", "ts": "..."}
-{"kind": "context.assembled", "message_count": 12, "knowledge_chunks": 3, "memory_recalls": 5, "wiki_pages": 2}
-{"kind": "model.invoked", "model_id": "...", "input_tokens": 2841, "system_prompt_tokens": 842}
-{"kind": "tool.called", "tool": "calendar.listEvents", "input": {...}, "output": {...}, "latency_ms": 340}
-{"kind": "guardrail.evaluated", "action": "PASSED", "details": {...}}
-{"kind": "model.completed", "output_tokens": 412}
-{"kind": "turn.completed", "cost_usd": 0.0231, "duration_ms": 2810}
-```
-
-A full thread's audit is `S3 select` on one prefix. A tenant-wide month is one prefix query.
-
-### Metrics
-
-Every turn emits CloudWatch metrics under the `ThinkWork/Threads` namespace:
-
-- `TurnsStarted` / `TurnsCompleted` / `TurnsFailed` — counters per tenant + agent.
-- `TurnDurationMs` — p50/p95/p99 latency per model.
-- `ContextAssemblyMs` — time spent in the retrieval-and-context step before Bedrock.
-- `BedrockInvocationMs` — time in the model call itself.
-- `ToolCallCount` — distribution of tools-called-per-turn.
-- `QueuedTurnsPerThread` — distribution of queue depth.
-
-Dashboards per tenant live under `terraform/modules/monitoring/dashboards/`.
+For the admin app's use of these surfaces (query names, subscription wiring, live-update behavior), see [Admin: Threads](/applications/admin/threads/) and [Admin: Authentication & Tenancy](/applications/admin/authentication-and-tenancy/). For the GraphQL schema, see the [API reference](/api/graphql/).

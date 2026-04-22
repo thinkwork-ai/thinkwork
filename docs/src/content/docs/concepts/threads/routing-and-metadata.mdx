@@ -92,7 +92,7 @@ Here's the full path of an inbound Slack message becoming a thread turn.
 4. **Routing check.** The Lambda queries `threads` for an open thread with `channel = 'SLACK'` and `metadata->>'threadTs' = $1`. If present and status is not `DONE/CANCELLED`, reuse. If present and closed, reopen. If absent, mint a new thread.
 5. **Agent resolution.** For a new thread, the Lambda picks an agent: the target of an @-mention, a channel-default binding, or the tenant default. For an existing thread, the assigned agent already owns it.
 6. **Message persisted.** A new `thread_message` row lands with role=`user`, the Slack user's name, and the full Slack event stored in `metadata` for audit.
-7. **Agent invoked.** AgentCore Lambda is fired asynchronously via SQS. It sees the thread, the new message, and the channel-specific metadata.
+7. **Agent invoked.** The AgentCore runtime is fired asynchronously. It sees the thread, the new message, and the channel-specific metadata.
 8. **Agent replies.** The agent produces a response message. The outbound Slack handler reads `threadTs` from thread metadata and posts the reply in the same Slack thread.
 
 Every step is observable in the admin thread detail view — the inbound Slack event is visible in turn metadata, the agent invocation shows tool calls and memory reads, and the outbound Slack response is logged with its Slack message id.
@@ -118,8 +118,6 @@ This is the system boundary made useful: the agent is channel-agnostic in its lo
 
 ## Under the hood
 
-- **Normalized event shape.** `packages/api/src/lib/connectors/normalized-event.ts` — shared across all connector Lambdas.
-- **Thread resolution.** `packages/api/src/lib/threads/resolve.ts` — the `resolveExistingThread(channel, metadata)` helper every connector calls before deciding create-vs-update.
-- **Slack connector.** `apps/connectors/slack/src/handlers/events.ts` — the canonical example; other connectors follow the same pattern with provider-specific signature verification and event mapping.
-- **Metadata schema.** No Postgres schema enforcement on `metadata` — it's a JSONB column. Shape is enforced by the TypeScript types in `packages/api/src/schema/threads/types.ts` and consumed by both inbound connectors and outbound reply handlers.
-- **Outbound handlers.** `packages/api/src/lib/agents/reply/` — one handler per channel, each reads `thread.metadata` to decide where the reply goes.
+Inbound connector handlers live in `packages/api/src/handlers/` (one per provider — e.g., `github-app.ts`, `email-inbound.ts`). Each verifies the provider's signature, normalizes the event into a shared shape, and calls the same internal thread-resolution path before appending or creating.
+
+The `metadata` column is JSONB — no Postgres-level schema — with shape enforced at the application layer by the TypeScript types the connectors and outbound reply handlers share. Outbound handlers read from the same `metadata` to decide where to post a reply.

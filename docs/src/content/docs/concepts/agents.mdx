@@ -50,7 +50,7 @@ See [Templates](/concepts/agents/templates/) for the live-configuration layer an
 When a message arrives in a thread assigned to a managed agent:
 
 ```
-Thread message → API Gateway → AgentCore Lambda
+Thread message → API Gateway → AgentCore runtime
                                         │
                                         ▼
                               Load agent + template
@@ -115,51 +115,12 @@ Agents don't own threads, memory, or connectors — they *use* them. Every conce
 
 ## Under the hood
 
-### Creating a managed agent
-
-The admin app is the main way to create agents. For scripting or SDKs, the GraphQL mutation:
-
-```graphql
-mutation CreateAgent {
-  createAgent(input: {
-    name: "Support Bot"
-    description: "Handles tier-1 customer support questions"
-    systemPrompt: "You are a helpful support agent for Acme Corp. Be concise and accurate."
-    templateId: "tpl-claude-sonnet"
-    skillPackIds: ["sp-jira", "sp-confluence"]
-    knowledgeBaseIds: ["kb-support-docs"]
-  }) {
-    id
-    name
-    status
-  }
-}
-```
-
 ### Model selection
 
-Managed agents use Amazon Bedrock for inference. Any model available in your region through Bedrock can be referenced, but you must [request model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html) in the AWS console first for each model.
-
-Model id is set at the template level, not per-agent. That's how a fleet-wide rotation is one update.
+Managed agents use Amazon Bedrock for inference. Any model available in your region through Bedrock can be referenced, but you must [request model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html) in the AWS console first for each model. Model id is set at the template level, not per-agent — that's how a fleet-wide rotation is one update.
 
 ### Connected-agent webhook contract
 
-Connected agents register a webhook URL. ThinkWork POSTs a payload shaped like:
+Connected agents register a webhook URL. ThinkWork POSTs a payload with the thread id, canonical message history, optional retrieved memory, and channel-specific metadata. The connected runtime is expected to respond with a message in the same shape.
 
-```json
-{
-  "threadId": "CHAT-01H...",
-  "messages": [ /* canonical message history */ ],
-  "memory": { /* optional retrieved context */ },
-  "metadata": { /* channel-specific fields */ }
-}
-```
-
-The connected runtime is expected to respond with a message in the same shape. The exact contract and auth model are covered in the [Admin: Agent Invites](/applications/admin/agent-invites/) page, which also documents how to issue an invite token that authorizes a BYOB runtime.
-
-### Agent storage
-
-- **Table.** `agents` in Aurora Postgres. Foreign-keys to `agent_templates`, `tenants`.
-- **Status column.** Postgres enum. Budget-driven pauses are reversible; archival is sticky.
-- **System prompt.** Stored on the agent row. Agent-specific system prompt is appended after the template's base instructions at invocation time.
-- **Real-time updates.** `OnAgentStatusChangedSubscription` — any status transition fires to subscribed clients so the admin agent list stays live.
+The exact contract and auth model are covered in [Admin: Agent Invites](/applications/admin/agent-invites/), which also documents how to issue an invite token that authorizes a BYOB runtime. For the GraphQL shape of the agent object itself, see the [API reference](/api/graphql/).

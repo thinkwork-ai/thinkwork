@@ -100,9 +100,9 @@ Worth being honest about:
 
 ## Under the hood
 
-- **Cost capture.** `apps/agent-core/src/otel.py` instruments every turn; the CloudWatch log group emits spans to a cost reducer Lambda in `packages/api/src/lib/billing/cost-reducer.ts`.
-- **Cost storage.** `thread_turn_costs` table in Aurora — one row per turn, foreign-keyed to `thread_turns`. Index on `(tenant_id, created_at)` for the common month-to-date query.
-- **Budget reconciler.** `packages/api/src/handlers/budget-reconciler.ts`. EventBridge rule `budget-reconciler-15min`, runs every 15 minutes per stage.
-- **Pause mechanism.** Reconciler issues `updateAgent` mutation with `status = 'PAUSED'`; admin app and mobile surfaces reflect this immediately via `OnAgentStatusChangedSubscription`.
-- **Audit bucket.** `s3://thinkwork-<stage>-audit/` with `s3:DeleteObject` denied on the Lambda role in IAM. Lifecycle policy is configured in Terraform per deployment.
-- **NDJSON record format.** `packages/api/src/lib/audit/record.ts` defines the schema; `thinkwork audit replay` in the CLI reads the bucket and re-plays records into a local SQLite DB for analysis.
+- **Cost capture.** The AgentCore runtime (in `packages/agentcore/agent-container/`) instruments every turn with OpenTelemetry spans. A downstream reducer turns those spans into per-turn cost rows in the operational database.
+- **Budget enforcement.** The budget handler in `packages/api/src/handlers/budgets.ts` runs on a schedule, computes month-to-date spend against template caps, and pauses agents that are over cap.
+- **Pause mechanism.** Pause is a simple status transition on the agent row; admin and mobile surfaces react to the change via real-time subscriptions.
+- **Audit storage.** NDJSON records land in an append-only S3 bucket provisioned by the ThinkWork Terraform module, with IAM denying deletes on the writer role. Lifecycle + retention is configurable per deployment.
+
+For the admin operator views of analytics and budgets, see [Admin: Analytics](/applications/admin/analytics/) and [Admin: Security Center](/applications/admin/security-center/).

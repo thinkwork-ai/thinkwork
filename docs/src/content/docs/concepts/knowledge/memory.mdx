@@ -122,5 +122,5 @@ Worth repeating: short-term context comes from thread history. Long-term memory 
 - **Hindsight adapter.** `packages/api/src/lib/memory/adapters/hindsight-adapter.ts` — HTTP client against the ECS service.
 - **AgentCore Memory adapter.** `packages/api/src/lib/memory/adapters/agentcore-adapter.ts` — Bedrock AgentCore Memory SDK wrappers.
 - **Adapter selection.** `packages/api/src/lib/memory/index.ts` — picks the adapter based on deployment config (`enable_hindsight` flag + tenant `memory_adapter` column).
-- **Retention event.** `apps/agent-core/src/post_turn.py` — emits the event to whichever adapter is active after every turn.
+- **Retention event.** Emitted from the AgentCore runtime (`packages/agentcore/agent-container/`) after every turn to whichever adapter is active.
 - **Tenant column.** `tenants.memory_adapter` — set by the admin app; default matches the deployment's `enable_hindsight` flag.

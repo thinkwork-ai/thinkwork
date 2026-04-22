@@ -116,9 +116,8 @@ For debugging one bad run, the thread + execution views are enough. For tracking
 
 ## Under the hood
 
-- **State machines.** Provisioned by `terraform/modules/automations/` — one module per routine shape, or per-tenant custom instances.
-- **ASL storage.** Routines authored in the admin app store their ASL JSON in `routines` Aurora table; a publisher Lambda diffs the stored ASL against the Step Functions state machine and updates on change.
-- **Integration layer.** `packages/api/src/lib/routines/` — helpers for composing agent-invocation states, Inbox wait states, and connector-tool states.
-- **Task token persistence.** Inbox items for human-in-the-loop waits store the Step Functions task token; resolving the inbox item issues `SendTaskSuccess` or `SendTaskFailure` to resume the execution.
-- **Thread integration.** Each agent-invocation state passes the routine's thread id through its input, so every turn lands on the same thread.
-- **Child thread pattern.** High-fan-out routines use `thread.parentThreadId` to link per-item child threads to the parent routine run.
+Routines are backed by AWS Step Functions state machines provisioned through the ThinkWork Terraform module. Routine definitions (the state-machine ASL) are stored in the operational database; a publisher reconciles stored ASL with the deployed state machine when routines are edited.
+
+Human-in-the-loop waits use Step Functions task tokens, persisted on the Inbox item. Resolving the inbox item releases the token and resumes the execution.
+
+For the operator view of routines, see [Admin: Routines](/applications/admin/routines/). For the inbox surface that handles human-in-the-loop approvals, see [Admin: Inbox](/applications/admin/inbox/).

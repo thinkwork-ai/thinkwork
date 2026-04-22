@@ -85,9 +85,6 @@ That reopen guarantees conversation continuity: an agent that answered a Slack q
 
 ## Under the hood
 
-- **Status column.** Postgres enum `thread_status` with values `BACKLOG | TODO | IN_PROGRESS | IN_REVIEW | BLOCKED | DONE | CANCELLED`. Migration lives in `packages/database-pg/drizzle/`.
-- **Channel column.** Postgres enum `thread_channel` with values `CHAT | AUTO | SLACK | GITHUB | EMAIL | TASK`.
-- **Priority column.** Postgres enum `thread_priority`.
-- **Id format.** `${channel_prefix}-${ULID}`. Implemented in `packages/api/src/lib/threads/ids.ts`.
-- **Reopen lookup.** Each connector Lambda queries `threads` with a channel-scoped metadata filter before deciding whether to `createThread` or `updateThread`. See `apps/connectors/slack/src/handlers/events.ts` for the canonical shape.
-- **Inbox status.** Computed in the admin app's `ThreadsList` component from the `threadTurns` aggregate and the last-read timestamp stored per operator.
+Status, channel, and priority are Postgres enums on the `threads` table (migrations live in `packages/database-pg/drizzle/`). The thread id format — `<CHANNEL>-<ULID>` — is generated when the row is created.
+
+Inbound connector handlers (in `packages/api/src/handlers/`) look up existing threads by channel-scoped metadata before deciding to create a new thread vs. append to an existing one. For the operator view of lifecycle in the admin UI, see [Admin: Threads](/applications/admin/threads/).

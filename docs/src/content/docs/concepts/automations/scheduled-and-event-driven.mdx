@@ -110,9 +110,6 @@ For event-driven automations:
 
 ## Under the hood
 
-- **Aurora tables.** `scheduled_jobs`, `event_triggers`, `job_runs`.
-- **Provisioning Lambda.** `packages/api/src/handlers/job-schedule-manager.ts` — called on every `scheduled_jobs` insert/update/delete to reconcile with AWS Scheduler.
-- **Trigger Lambda.** `packages/api/src/handlers/job-trigger.ts` — fired by both AWS Scheduler (scheduled path) and EventBridge rules (event-driven path); normalizes both to the same Step Functions input.
-- **State machine.** `terraform/modules/automations/step-function-automation.tf` — defines the states, retries, dead-letter handling.
-- **AWS Scheduler target.** Every schedule targets the `job-trigger` Lambda directly (not the state machine), because the Lambda normalizes input and resolves the current `scheduled_jobs` row at fire time. This decouples the fire-time payload from Scheduler's snapshot.
-- **EventBridge custom bus.** `thinkwork-<stage>-events`. Rule patterns live in `terraform/modules/automations/triggers.tf`.
+Schedules and triggers are first-class rows in the operational database, reconciled into AWS Scheduler and EventBridge by the scheduled-jobs handler in `packages/api/src/handlers/scheduled-jobs.ts`. When a schedule fires, AWS Scheduler invokes the trigger target; the trigger resolves the current schedule row at fire time and kicks off the Step Functions state machine.
+
+State machines, rule patterns, and the EventBridge custom bus are provisioned by the ThinkWork Terraform module. For the operator view of schedules, see [Admin: Scheduled Jobs](/applications/admin/scheduled-jobs/).

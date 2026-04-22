@@ -20,7 +20,7 @@ Not every source feeds every turn. A focused chatbot may use only thread history
 
 ## The assembly step
 
-Context assembly happens inside the AgentCore Lambda before any Bedrock call. The shape:
+Context assembly happens inside the AgentCore runtime before any Bedrock call. The shape:
 
 ```
 User message arrives in thread
@@ -101,7 +101,6 @@ Long-term memory should never masquerade as the thread record. If an operator as
 
 ## Under the hood
 
-- **Assembly code.** `apps/agent-core/src/context.py` — orchestrates the four parallel queries, applies the budget, returns the structured context object.
-- **Token counting.** `apps/agent-core/src/tokens.py` — model-specific tokenizer approximations; per-model count tables.
-- **Budget config.** `agent_templates.memory_config` and `agent_templates.tool_config` JSON columns. Admin UI exposes the common knobs (topK, recall count, max thread history turns).
-- **Instrumentation.** Each source's query emits an OTel span recording latency, result count, and token contribution. Spans land in turn traces in the admin detail view.
+Context assembly happens inside the AgentCore runtime (`packages/agentcore/agent-container/`) before any Bedrock call. The four sources are queried in parallel, token-counted, and merged into the final input. Budget knobs (retrieval `top_k`, memory recall count, max thread-history window) live on the agent template and can be tuned without a redeploy.
+
+Each source emits OpenTelemetry spans recording latency, result count, and token contribution — surfaced in the turn trace view. See [Admin: Threads](/applications/admin/threads/) for the turn-trace operator view.
