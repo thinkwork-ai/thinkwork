@@ -5,6 +5,7 @@ import {
 	agentToCamel,
 	invokeJobScheduleManager,
 } from "../../utils.js";
+import { writeUserMdForAssignment } from "../../../lib/user-md-writer.js";
 
 export async function updateAgent(_parent: any, args: any, ctx: GraphQLContext) {
 	const i = args.input;
@@ -23,11 +24,67 @@ export async function updateAgent(_parent: any, args: any, ctx: GraphQLContext) 
 	if (i.humanPairId !== undefined) updates.human_pair_id = i.humanPairId;
 	if (i.parentAgentId !== undefined) updates.parent_agent_id = i.parentAgentId;
 
-	const [row] = await db
-		.update(agents)
-		.set(updates)
-		.where(eq(agents.id, args.id))
-		.returning();
+	const humanPairIdChanging = i.humanPairId !== undefined;
+
+	// Unit 6: when humanPairId is set / changed / cleared, rewrite USER.md
+	// in the same transaction as the DB update so the S3 side-effect is
+	// atomic with the row change. An S3 failure rolls the update back and
+	// human_pair_id stays at its prior value — we never leave DB pointing
+	// at human B while USER.md still renders human A.
+	//
+	// Other update paths (runtime_config scheduled-job sync, etc.) stay
+	// out of the transaction — their side effects are recoverable via
+	// retry and shouldn't block a routine rename from committing.
+	let row: typeof agents.$inferSelect | null = null;
+	if (humanPairIdChanging) {
+		row = await db.transaction(async (tx) => {
+			const [pre] = await tx
+				.select({ human_pair_id: agents.human_pair_id })
+				.from(agents)
+				.where(eq(agents.id, args.id));
+			if (!pre) throw new Error("Agent not found");
+			const oldPairId = pre.human_pair_id ?? null;
+			const newPairId = (i.humanPairId as string | null) ?? null;
+
+			const [updated] = await tx
+				.update(agents)
+				.set(updates)
+				.where(eq(agents.id, args.id))
+				.returning();
+			if (!updated) throw new Error("Agent not found");
+
+			// Only rewrite USER.md when the pair actually changed. Stable
+			// no-op reassignments (setting the same id) shouldn't burn an
+			// S3 PUT or invalidate cache.
+			if (oldPairId !== newPairId) {
+				try {
+					await writeUserMdForAssignment(tx, args.id, newPairId);
+					console.log(
+						`[updateAgent] user_md_write agentId=${args.id} success=true`,
+					);
+				} catch (err) {
+					const errorCategory =
+						(err as { code?: string } | null)?.code ||
+						(err as { name?: string } | null)?.name ||
+						"unknown";
+					console.warn(
+						`[updateAgent] user_md_write agentId=${args.id} success=false errorCategory=${errorCategory}`,
+					);
+					throw err; // roll back the transaction
+				}
+			}
+
+			return updated;
+		});
+	} else {
+		const [updated] = await db
+			.update(agents)
+			.set(updates)
+			.where(eq(agents.id, args.id))
+			.returning();
+		if (!updated) throw new Error("Agent not found");
+		row = updated;
+	}
 	if (!row) throw new Error("Agent not found");
 
 	// Sync scheduled job if runtime_config changed
