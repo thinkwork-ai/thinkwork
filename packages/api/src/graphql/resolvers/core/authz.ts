@@ -191,3 +191,27 @@ export async function requireAdminOrApiKeyCaller(
   }
   throw unauthenticated("Unsupported authentication type");
 }
+
+/**
+ * Guard for the never-exposed tier — catastrophic mutations that no
+ * service-auth caller (including the thinkwork-admin skill) may reach.
+ * Cognito callers pass through unchanged; every other authType
+ * refuses. Allow-list Cognito-only is stronger than an `x-skill-id`
+ * deny-list: no service principal — regardless of which skill holds
+ * the shared secret — can trigger a catastrophic op.
+ *
+ * Usage: call at the top of any resolver that implements a
+ * never-exposed op (deleteTenant, transferTenantOwnership,
+ * billing / spend mutations, bulk purges). None of those resolvers
+ * exist today; the thinkwork-admin plan (Unit 11) ships this helper
+ * as a primitive ready for when they land. The thinkwork-admin
+ * manifest also enforces a name-exclusion invariant — see
+ * `packages/skill-catalog/thinkwork-admin/skill.yaml` lint test.
+ */
+export function requireNotFromAdminSkill(ctx: GraphQLContext): void {
+  if (ctx.auth.authType !== "cognito") {
+    throw forbidden(
+      "Catastrophic operations are restricted to Cognito-authenticated callers",
+    );
+  }
+}
