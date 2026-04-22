@@ -1,77 +1,149 @@
 ---
 title: Managed Agents
-description: How ThinkWork runs managed agents inside your AWS account, what gets configured per agent, and why managed does not mean vendor-hosted.
+description: A walking tour of what happens when a managed agent runs — cold start, context assembly, Bedrock invocation, tool execution, and streaming back — plus why managed does not mean vendor-hosted.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Managed agents are the default ThinkWork runtime. ThinkWork runs the agent loop for you inside your AWS account, so you get a consistent execution model, thread integration, streaming, and auditability without building your own orchestration layer.
+Managed agents are the default ThinkWork runtime. ThinkWork runs the agent loop for you inside your AWS account on **AgentCore**, a Python Lambda container built on the [Strands](https://strandsagents.com) framework. You get a consistent execution model, thread integration, streaming, and auditability without having to build any of that yourself.
 
-The important distinction is that **managed does not mean vendor-hosted**. ThinkWork makes agent infrastructure easy, but the harness, state, controls, and data still live inside your deployment boundary.
+The important distinction is that **managed does not mean vendor-hosted**. ThinkWork makes running an agent easy, but the Lambda container is in your account, the thread state is in your Aurora cluster, the model invocation goes to your Bedrock endpoint, and the audit log lives in your S3 bucket. Nothing phones home; nothing depends on a ThinkWork SaaS control plane.
 
-## Runtime model
+## A walking tour of one invocation
 
-Managed agents run on **AgentCore**, a Python Lambda container built on the [Strands](https://strandsagents.com) framework.
+From "user sends a message" to "agent response streams back," end to end.
 
-```
-Thread message → API Gateway → AgentCore Lambda → Strands agent loop
-                                                 ↓
-                                         Bedrock (Claude)
-                                                 ↓
-                 Tools, knowledge retrieval, memory recall, connector access
-                                                 ↓
-                               AppSync subscription → client
-```
+### 1 — The trigger
 
-Strands handles the inner agent loop, including tool calls and streaming. ThinkWork supplies the surrounding system: thread state, memory behavior, templates, controls, connectors, and deployment inside your AWS account.
+A new message lands in a thread assigned to a managed agent. How it got there doesn't matter — could be a chat from the mobile app, an inbound Slack event mapped by the Slack connector, or an automation's scheduled run. The message row is written to Aurora; an AppSync mutation fires; a message also lands on an SQS queue that the AgentCore Lambda consumes.
 
-## Why this model matters
+### 2 — Lambda invocation
 
-ThinkWork is not a black-box hosted agent API.
+The AgentCore Lambda receives the SQS event. If this is the first invocation in a while, the container cold starts — 3–5 seconds including pulling the image from ECR, initializing the Strands runtime, and opening the Aurora connection pool. Warm invocations start in under 100ms.
 
-It is an open harness for AI work that happens to be easy to deploy and operate.
+The container is 512MB compressed, preloaded with:
 
-That means you do not have to choose between:
-- easy infrastructure
-- owned infrastructure
-- portable architecture
-- inspectable control surfaces
+- Python 3.12
+- Strands agent framework
+- Boto3 (Bedrock, S3, SSM, Secrets Manager clients)
+- httpx (for skill HTTP tools and MCP)
+- psycopg3 (Aurora connection)
+- The ThinkWork runtime library — tool registration, memory read/write, context assembly, OTel instrumentation
 
-ThinkWork is designed to give you all four.
+Lambda memory is 3GB by default (configurable), which maps to roughly 2 vCPUs.
 
-For teams already on AWS, that is the point: you get production-grade managed agents without handing your runtime, thread record, or memory layer to a third-party control plane.
+### 3 — Agent and template resolution
 
-## What a managed agent includes
+AgentCore reads the thread's assigned agent id. From the agent row it reads the template id, system prompt, assigned skill packs, and assigned knowledge bases. From the template row it reads the model id, guardrail id, inference params, and tool config.
+
+Agent state is resolved *every invocation*. That matters: if an operator updated the template's `modelId` five seconds ago, this invocation already sees the new model. There is no cache that could serve stale config.
+
+### 4 — Context assembly
+
+Before calling the model, AgentCore assembles the context. Four sources feed in:
+
+- **Thread history.** The most recent turns from the thread, windowed to fit alongside everything else.
+- **Document retrieval.** If the agent has knowledge bases attached, each gets queried for the top-K most-similar chunks given the user's message. Results are merged.
+- **Long-term memory recall.** If the agent has long-term memory configured, the memory adapter is queried for relevant prior facts — this is Hindsight or AgentCore Memory, depending on the deployment.
+- **Compounding-memory wiki.** If the agent has a wiki, the recall tool surfaces relevant pages. Often this is faster and more precise than raw memory search because the pages are pre-organized.
+
+All four pieces get stitched into the structured input that goes to Bedrock's `converse` API. The system prompt comes from the template base + the agent-specific prompt; the user message is the latest message in the thread; the retrieved content is added as tool context or `<knowledge>` blocks.
+
+### 5 — Bedrock invocation
+
+AgentCore calls `bedrock-runtime.converse` with the assembled context, the configured model id, and — critically — the configured `guardrailIdentifier`. The guardrail evaluator runs *inside* the Bedrock call, not as a wrapper around it. That's what makes the boundary non-bypassable.
+
+The model returns either a direct response or a tool-use request.
+
+### 6 — The Strands loop
+
+If the model requested a tool, Strands orchestrates the handshake:
+
+1. Strands looks up the requested tool in its registry (built-in + skill-pack-provided + MCP-connected).
+2. The tool is invoked — could be a local Python function, an HTTP call to an external API, or an MCP call to a remote server.
+3. The tool's output is added to the conversation and sent back to the model.
+4. The model may request more tools, or produce a final response.
+
+OpenTelemetry spans wrap every tool invocation and every model call, capturing input tokens, output tokens, and latency. Those spans become the raw material for per-turn cost capture downstream.
+
+### 7 — Response and streaming
+
+When the model produces its final response, AgentCore:
+
+1. Writes a new `thread_message` row with role=`assistant`.
+2. Writes a `thread_turn` row with the aggregated turn data (tool calls, memory reads, cost, duration).
+3. Publishes an AppSync mutation so subscribed clients see the new message live.
+4. If streaming is enabled, chunk-by-chunk updates stream via AppSync throughout step 6; the final message is just the completion marker.
+
+### 8 — Post-turn side effects
+
+A few things happen after the turn completes but before the Lambda returns:
+
+- **Memory retention.** If AgentCore Memory is the adapter, a retention event fires so background strategies (summaries, preferences, semantic facts) can extract what's worth remembering.
+- **Wiki compile enqueue.** If the agent has compounding memory enabled, a compile job gets queued on a 5-minute dedupe bucket (see [Compounding Memory: Pipeline](/concepts/knowledge/compounding-memory-pipeline/)).
+- **Audit record.** An NDJSON record of the full invocation lands in the audit S3 bucket.
+- **Cost reducer.** The OTel spans emit; the cost reducer picks them up off the CloudWatch stream and writes a `thread_turn_costs` row.
+
+Then the Lambda returns. Total wall time for a warm invocation with a typical context: 2–10 seconds depending on model + tool calls.
+
+## Why this shape matters
+
+A few things about this model that aren't obvious until you've operated it for a while:
+
+- **Agent state resolution every turn.** No stale config. No deploy needed to rotate a model.
+- **Tool config lives in the template.** A skill pack upload doesn't change what an agent can do; the template's `toolConfig` governs that. This matters for security — an attacker who somehow uploads a malicious skill pack still needs the template's tool flag to be on.
+- **Every turn is observable twice.** From the thread side (narrative timeline) and from the execution side (OTel spans + audit record). Debugging is pleasant because the data is there.
+- **Cold starts are visible.** A 3–5s cold start on the first turn after a quiet period is normal and expected. Set user expectations accordingly.
+
+## What a managed agent includes (reference)
 
 Every managed agent has:
 
-- A model chosen through its agent template
-- A system prompt stored on the agent record
-- Optional skill packs
-- Optional document knowledge access
-- Optional memory behavior
-- Control settings such as guardrails, rate limits, and budgets
+- A **model** chosen through its template.
+- A **system prompt** stored on the agent record.
+- Optional **skill packs** — the agent's capabilities.
+- Optional **knowledge bases** — what it retrieves from.
+- Optional **long-term memory** — the adapter behavior is configured on the template.
+- Optional **compounding-memory wiki** — derived context on top of long-term memory.
+- **Control settings** inherited from the template — guardrails, rate limits, budgets.
 
 <Aside type="note">
-Memory is the umbrella context layer in ThinkWork. Document knowledge and long-term memory are different inputs into that layer, and both feed the same agent turn in different ways.
+  Memory is the umbrella context layer in ThinkWork. Document knowledge, long-term memory, and compounding-memory pages are different inputs into that layer — all three can feed the same turn, and the harness handles assembly without the agent's author wiring it up.
 </Aside>
-
-## Typical setup flow
-
-1. Create an agent template with model and control defaults
-2. Create an agent and assign the template
-3. Attach skill packs if the agent needs custom tools or instructions
-4. Attach document knowledge sources if the agent should retrieve from documents
-5. Choose the memory mode that matches the use case
 
 ## When to use managed agents
 
 Managed agents are the best fit when you want:
 
-- Bedrock-native deployment in your own AWS account
-- A standard runtime across many agents
-- Tight integration with threads, memory, automations, and controls
-- Simple operations for internal tools and production workflows
-- Easy setup without giving up ownership of the harness
+- Bedrock-native deployment in your own AWS account.
+- A standard runtime across many agents.
+- Tight integration with threads, memory, automations, and controls.
+- Simple operations for internal tools and production workflows.
+- The operational benefits — guardrail integration, per-turn cost, fleet rotation, audit — that the managed path bakes in.
 
-Use [connected agents](/concepts/agents/) when you already have an external runtime that you want ThinkWork to orchestrate around rather than replace.
+Use [connected agents](/concepts/agents/) instead when you already have an external runtime you want ThinkWork to orchestrate around rather than replace.
+
+## Known limits
+
+- **Lambda max execution time is 15 minutes.** A single turn can't run longer than that. For longer work, use a routine with multiple steps.
+- **Max container image size is 10GB.** Not a practical limit for typical skill packs, but very large reference corpora shouldn't ride in the image.
+- **Cold starts add 3–5s to the first turn.** For latency-sensitive internal tools, keep Lambda warmed or route through a provisioned-concurrency configuration.
+- **No per-invocation model override.** The template's model id is authoritative; per-turn model switching would require a different template assignment.
+
+## Related pages
+
+- [Agents (overview)](/concepts/agents/) — managed vs. connected
+- [Templates and Skills](/concepts/agents/templates-and-skills/) — the reuse model
+- [Memory](/concepts/knowledge/) — the context layer managed agents read
+- [Control](/concepts/control/) — how guardrails, budgets, and audit wrap the managed path
+- [Architecture](/architecture/) — where AgentCore fits in the deployment
+
+## Under the hood
+
+- **Container source.** `apps/agent-core/` — the Python code for the AgentCore Lambda.
+- **Image build.** Published to ECR at `thinkwork-<stage>-agent-core:<version>`.
+- **Lambda config.** `terraform/modules/thinkwork/agent-core.tf` — 3GB memory, 15-minute timeout, provisioned concurrency optional.
+- **Strands integration.** `apps/agent-core/src/strands/` — the Strands agent loop wrapper; registers ThinkWork tools (memory, knowledge, connector, MCP) plus skill-pack tools into the Strands tool registry.
+- **Bedrock client.** `apps/agent-core/src/bedrock.py` — wraps `converse` with retries, guardrail injection, and OTel instrumentation.
+- **Context assembly.** `apps/agent-core/src/context.py` — reads thread history, queries knowledge bases, calls memory recall, pulls wiki pages; returns the structured context object.
+- **Post-turn side effects.** `apps/agent-core/src/post_turn.py` — runs memory retention, wiki enqueue, audit write, and cost emit.
