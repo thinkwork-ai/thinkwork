@@ -1,3 +1,4 @@
+import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import {
   db,
@@ -15,6 +16,25 @@ export async function setAgentSkills(
   args: any,
   ctx: GraphQLContext,
 ) {
+  // R16: an agent holding thinkwork-admin with `set_agent_skills` in its
+  // own allowlist must not be able to rewrite its own permissions.operations
+  // jsonb. This closes the self-bootstrapping privilege-escalation loop
+  // (apikey caller = agent.id; the agent grants itself every op). Check
+  // fires BEFORE requireTenantAdmin so it's order-independent of future
+  // changes to the admin gate. Cross-agent provisioning stays allowed —
+  // reconcilers and onboarding automations legitimately set sibling-agent
+  // skills.
+  if (
+    ctx.auth.authType === "apikey" &&
+    ctx.auth.agentId &&
+    ctx.auth.agentId === args.agentId
+  ) {
+    throw new GraphQLError(
+      "An agent cannot modify its own skill permissions",
+      { extensions: { code: "FORBIDDEN" } },
+    );
+  }
+
   // Resolve the target agent's tenant so the role gate runs against the
   // authoritative tenantId, not a caller-supplied one. An unauthorized
   // empty-skills call is still refused — the P0 defense here is that a
