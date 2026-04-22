@@ -29,6 +29,7 @@ import type Stripe from "stripe";
 import { getStripeClient } from "../lib/stripe-client.js";
 import { getStripeCredentials } from "../lib/stripe-credentials.js";
 import { provisionTenantFromStripeSession } from "../lib/stripe-provision-tenant.js";
+import { sendStripeWelcomeEmail } from "../lib/stripe-welcome-email.js";
 import { db } from "../lib/db.js";
 import { schema } from "@thinkwork/database-pg";
 
@@ -165,6 +166,20 @@ export async function handler(
 				console.log(
 					`[stripe-webhook] Provisioned tenant ${result.tenantId} plan=${result.plan} from session ${session.id}`,
 				);
+
+				// Fire the welcome email. Non-fatal on SES failure — the tenant
+				// row already carries pending_owner_email, so the webhook ack's
+				// 200 either way (Stripe won't retry, and the operator has a
+				// manual-recovery path via the logs).
+				const adminUrl = process.env.ADMIN_URL || "https://admin.thinkwork.ai";
+				await sendStripeWelcomeEmail({
+					email: result.email,
+					plan: result.plan,
+					tenantId: result.tenantId,
+					sessionId: session.id,
+					adminUrl,
+				});
+
 				return json({ received: true, tenantId: result.tenantId });
 			}
 			default:

@@ -82,6 +82,10 @@ locals {
     STRIPE_CHECKOUT_SUCCESS_URL   = "${var.admin_url}/onboarding/welcome?session_id={CHECKOUT_SESSION_ID}"
     STRIPE_CHECKOUT_CANCEL_URL    = "${var.www_url}/pricing"
     WWW_URL                       = var.www_url
+    # Override the welcome email's From: address. Defaults to
+    # hello@agents.thinkwork.ai (the already-verified SES inbound domain);
+    # set to hello@thinkwork.ai once the bare-apex identity is verified in SES.
+    STRIPE_WELCOME_FROM_EMAIL = var.stripe_welcome_from_email
   }
 
   # Per-handler env-var overrides. ARNs are constructed from the naming
