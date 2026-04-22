@@ -541,6 +541,94 @@ def _call_strands_agent(system_prompt: str, messages: list,
     except Exception as e:
         logger.warning("update_user_profile registration failed: %s", e)
 
+    # AgentCore Code Sandbox execute_code tool (plan Unit 7).
+    # Registered only when the dispatcher has populated SANDBOX_INTERPRETER_ID
+    # on the invocation env — the pre-flight helper (plan Unit 9) decides
+    # whether to set it based on the template's sandbox opt-in + tenant
+    # policy + interpreter-ready state. Held outside tool_cleanups so the
+    # per-turn session can be torn down in the finally block below.
+    _sandbox_cleanup_fn = None
+    if os.environ.get("SANDBOX_INTERPRETER_ID"):
+        try:
+            from strands import tool as _sb_tool_decorator
+            from sandbox_tool import build_execute_code_tool, new_session_state
+            # bedrock-agentcore runtime client wrappers. Lazy-imported so
+            # the container boots cleanly on stages without the SDK.
+            from bedrock_agentcore.tools.code_interpreter_client import (
+                code_session as _code_session,
+            )
+            # Inject thin callables over the bedrock-agentcore control
+            # surface. Session id + lifecycle stay in our session_state
+            # dict (call-frame-local to _call_strands_agent).
+            _sb_state = new_session_state()
+
+            async def _start_session(ipi: str, timeout: int) -> str:
+                # code_session is a context manager on the sync client;
+                # wrap it in a threadpool so the async caller sees an
+                # awaitable interface without blocking the loop.
+                # NOTE: kept as an async wrapper so the full path can swap
+                # for a native async client without changing callers.
+                import asyncio as _a
+                loop = _a.get_event_loop()
+
+                def _start():
+                    ctx = _code_session(ipi)
+                    sess = ctx.__enter__()
+                    _sb_state["_code_session_ctx"] = ctx
+                    return getattr(sess, "session_id", getattr(sess, "id", ""))
+
+                return await loop.run_in_executor(None, _start)
+
+            async def _stop_session(ipi: str, sess: str) -> None:
+                import asyncio as _a
+                loop = _a.get_event_loop()
+                ctx = _sb_state.pop("_code_session_ctx", None)
+                if ctx is None:
+                    return
+                def _stop():
+                    ctx.__exit__(None, None, None)
+                await loop.run_in_executor(None, _stop)
+
+            async def _run_code(ipi: str, sess: str, code: str) -> dict:
+                import asyncio as _a
+                loop = _a.get_event_loop()
+                ctx = _sb_state.get("_code_session_ctx")
+                if ctx is None:
+                    raise RuntimeError("sandbox session not started")
+                def _run():
+                    # code_session yields an object with an invoke() / execute()
+                    # method depending on SDK version; we probe both.
+                    inner = ctx.__enter__.__self__ if hasattr(ctx, "__enter__") else None
+                    target = inner or ctx
+                    for name in ("invoke", "execute", "run"):
+                        if hasattr(target, name):
+                            return getattr(target, name)(code)
+                    raise RuntimeError(
+                        "bedrock_agentcore code_session has no invoke/execute/run",
+                    )
+                return await loop.run_in_executor(None, _run)
+
+            execute_code = build_execute_code_tool(
+                strands_tool_decorator=_sb_tool_decorator,
+                session_state=_sb_state,
+                start_session=_start_session,
+                stop_session=_stop_session,
+                run_code=_run_code,
+            )
+            tools.append(execute_code)
+            _sandbox_cleanup_fn = getattr(execute_code, "_sandbox_cleanup", None)
+            logger.info(
+                "sandbox tool registered: execute_code (interpreter=%s env=%s)",
+                os.environ.get("SANDBOX_INTERPRETER_ID"),
+                os.environ.get("SANDBOX_ENVIRONMENT"),
+            )
+        except Exception as e:
+            # Dispatcher thinks the sandbox should be live, but the runtime
+            # can't wire it up. Fail loud — the startup assertion below
+            # converts this into a turn-level error.
+            logger.error("sandbox tool registration failed: %s", e)
+            raise
+
     _hindsight_enabled = bool(os.environ.get("HINDSIGHT_ENDPOINT"))
     if _hindsight_enabled:
         # Hindsight memory: retain/recall/reflect tools backed by the
@@ -1213,6 +1301,16 @@ def _call_strands_agent(system_prompt: str, messages: list,
                 logger.warning("MCP client cleanup error: %s", _mcp_err)
         if mcp_clients:
             logger.info("MCP clients cleaned up: %d", len(mcp_clients))
+        # Sandbox execute_code session teardown (plan Unit 7 R-Q6).
+        # Log-and-continue on failure — AgentCore's 5-min session timeout
+        # is the backstop. Session id lives on _sb_state inside the tool
+        # closure (call-frame-local), which goes out of scope here.
+        if _sandbox_cleanup_fn is not None:
+            try:
+                import asyncio as _a
+                _a.get_event_loop().run_until_complete(_sandbox_cleanup_fn())
+            except Exception as _sb_err:
+                logger.warning("sandbox cleanup failed: %s", _sb_err)
     bedrock_request_ids = get_captured_request_ids()
 
     # 5. Extract response and usage
