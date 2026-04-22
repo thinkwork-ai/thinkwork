@@ -188,6 +188,65 @@ jobs:
             -var "cloudflare_zone_id=${{ vars.CLOUDFLARE_ZONE_ID }}" \
             -var "ses_inbound_domain=agents.thinkwork.ai"
 
+  # ── Database migration drift check ──────────────────────────────
+  # Runs `scripts/db-migrate-manual.sh` against the dev DB after
+  # terraform-apply has ensured the cluster exists. Fails the deploy if
+  # any hand-rolled .sql file in packages/database-pg/drizzle/ (i.e.
+  # one not registered in meta/_journal.json) declares objects missing
+  # from the DB, forcing an operator to apply them via
+  # `psql "$DATABASE_URL" -f <file>` before redeploying.
+  #
+  # Why this exists: three drift incidents in five days (Apr 17 mig
+  # 0008; Apr 18 mig 0012 collision; Apr 21 migs 0018+0019) all had
+  # the same root cause — hand-rolled migrations are outside
+  # drizzle-kit's journal and have no automated drift detection. This
+  # gate turns drift into a deploy-time error instead of a runtime
+  # surprise. Captures the deferred fix named in session 3fdbdb0c
+  # (Apr 17) that stayed open across two incidents.
+  #
+  # Scope: manual-track only (drizzle/*.sql not in meta/_journal.json).
+  # Journal-track drift detection is a separate follow-up. If
+  # migration-drift-check surfaces false positives or blocks
+  # legitimate deploys, an operator can re-run the workflow after
+  # applying the missing migrations via `psql`.
+  migration-drift-check:
+    name: Migration Drift Check
+    needs: [terraform-apply]
+    if: always() && needs.terraform-apply.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Get DB endpoint + secret
+        id: outputs
+        working-directory: terraform/examples/greenfield
+        run: |
+          terraform init
+          terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
+          echo "db_endpoint=$(terraform output -raw db_cluster_endpoint)" >> "$GITHUB_OUTPUT"
+          echo "db_secret_arn=$(terraform output -raw db_secret_arn)" >> "$GITHUB_OUTPUT"
+
+      - name: Install psql
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Run drift check
+        run: |
+          DB_PASS=$(aws secretsmanager get-secret-value \
+            --secret-id "${{ steps.outputs.outputs.db_secret_arn }}" \
+            --query SecretString --output text | jq -r .password)
+          export DATABASE_URL="postgresql://thinkwork_admin:${DB_PASS}@${{ steps.outputs.outputs.db_endpoint }}:5432/thinkwork?sslmode=no-verify"
+          bash scripts/db-migrate-manual.sh
+
   # ── Build & deploy admin app ─────────────────────────────────────
   build-admin:
     name: Build & Deploy Admin
@@ -296,11 +355,18 @@ jobs:
         run: bash scripts/build-www.sh ${{ env.STAGE }}
 
   # ── Bootstrap workspace + skills ─────────────────────────────────
+  # Depends on migration-drift-check so skill-catalog seeding never runs
+  # against an unmigrated schema — if a hand-rolled migration is
+  # outstanding, bootstrap's downstream DB writes would see pre-migration
+  # table shapes and silently misbehave.
   bootstrap:
     name: Bootstrap
-    needs: [detect-changes, terraform-apply]
+    needs: [detect-changes, terraform-apply, migration-drift-check]
     if: >-
-      always() && needs.terraform-apply.result == 'success' && (
+      always()
+      && needs.terraform-apply.result == 'success'
+      && needs.migration-drift-check.result == 'success'
+      && (
         needs.detect-changes.outputs.skills == 'true' ||
         github.event_name == 'workflow_dispatch'
       )
@@ -344,7 +410,7 @@ jobs:
   # ── Deploy summary ──────────────────────────────────────────────
   summary:
     name: Deploy Summary
-    needs: [terraform-apply, build-admin, build-docs, build-www, bootstrap]
+    needs: [terraform-apply, migration-drift-check, build-admin, build-docs, build-www, bootstrap]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:
@@ -387,9 +453,10 @@ jobs:
           echo "║ Hindsight:  $(terraform output -raw hindsight_enabled 2>/dev/null || echo 'N/A')"
           echo "║"
           echo "║ Job Results:"
-          echo "║   Terraform Apply: ${{ needs.terraform-apply.result }}"
-          echo "║   Build Admin:     ${{ needs.build-admin.result }}"
-          echo "║   Build Docs:      ${{ needs.build-docs.result }}"
-          echo "║   Build Www:       ${{ needs.build-www.result }}"
-          echo "║   Bootstrap:       ${{ needs.bootstrap.result }}"
+          echo "║   Terraform Apply:        ${{ needs.terraform-apply.result }}"
+          echo "║   Migration Drift Check:  ${{ needs.migration-drift-check.result }}"
+          echo "║   Build Admin:            ${{ needs.build-admin.result }}"
+          echo "║   Build Docs:             ${{ needs.build-docs.result }}"
+          echo "║   Build Www:              ${{ needs.build-www.result }}"
+          echo "║   Bootstrap:              ${{ needs.bootstrap.result }}"
           echo "╚══════════════════════════════════════════════════════════════╝"
