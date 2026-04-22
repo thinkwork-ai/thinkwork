@@ -1,6 +1,8 @@
 import type { GraphQLContext } from "../../context.js";
 import { db, agentTemplates, snakeToCamel } from "../../utils.js";
 import { requireTenantAdmin } from "../core/authz.js";
+import { resolveCallerUserId } from "../core/resolve-auth-user.js";
+import { runWithIdempotency } from "../../../lib/idempotency.js";
 
 export async function createAgentTemplate(
   _parent: any,
@@ -10,6 +12,22 @@ export async function createAgentTemplate(
   const i = args.input;
   await requireTenantAdmin(ctx, i.tenantId);
 
+  const invokerUserId =
+    ctx.auth.authType === "apikey"
+      ? ctx.auth.principalId
+      : await resolveCallerUserId(ctx);
+
+  return runWithIdempotency({
+    tenantId: i.tenantId,
+    invokerUserId,
+    mutationName: "createAgentTemplate",
+    inputs: i,
+    clientKey: i.idempotencyKey ?? null,
+    fn: () => createAgentTemplateCore(i),
+  });
+}
+
+async function createAgentTemplateCore(i: any) {
   const config = i.config
     ? typeof i.config === "string"
       ? JSON.parse(i.config)
