@@ -28,13 +28,13 @@ function CapabilitiesLayout() {
           <div className="flex justify-center">
             <Tabs value={currentTab}>
               <TabsList>
-                <TabsTrigger value="skills" asChild>
+                <TabsTrigger value="skills" asChild className="px-2">
                   <Link to="/capabilities/skills">Skills</Link>
                 </TabsTrigger>
-                <TabsTrigger value="builtin-tools" asChild>
+                <TabsTrigger value="builtin-tools" asChild className="px-2">
                   <Link to="/capabilities/builtin-tools">Built-in Tools</Link>
                 </TabsTrigger>
-                <TabsTrigger value="mcp-servers" asChild>
+                <TabsTrigger value="mcp-servers" asChild className="px-2">
                   <Link to="/capabilities/mcp-servers">MCP Servers</Link>
                 </TabsTrigger>
               </TabsList>
