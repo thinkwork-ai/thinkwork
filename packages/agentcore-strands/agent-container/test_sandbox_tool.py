@@ -436,3 +436,167 @@ def test_quota_none_behaves_like_pre_unit_10(interpreter_env):
     )
     result = _run(tool("print('hi')"))
     assert result["ok"] is True
+
+
+# ---------------------------------------------------------------------------
+# Audit writer (plan Unit 11)
+# ---------------------------------------------------------------------------
+
+
+def test_audit_emits_row_on_successful_call(interpreter_env, monkeypatch):
+    """Happy path — audit row carries tenant/user/env, hash, duration."""
+    monkeypatch.setenv("SANDBOX_TENANT_ID", "11111111-2222-3333-4444-555555555555")
+    monkeypatch.setenv("SANDBOX_USER_ID", "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+    monkeypatch.setenv("AGENT_ID", "ffffffff-1111-2222-3333-444444444444")
+
+    logged: list[dict] = []
+
+    async def audit(row):
+        logged.append(row)
+
+    async def start(ipi, timeout):
+        return "sess-42"
+
+    async def run(ipi, sess, code):
+        return {"stdout": "hi", "stderr": "", "exit_code": 0}
+
+    async def stop(ipi, sess):
+        pass
+
+    tool = st.build_execute_code_tool(
+        strands_tool_decorator=_passthrough_tool_decorator,
+        session_state={},
+        start_session=start,
+        stop_session=stop,
+        run_code=run,
+        log_invocation=audit,
+    )
+    result = _run(tool("print('hi')"))
+    assert result["ok"] is True
+    assert len(logged) == 1
+    row = logged[0]
+    assert row["tenant_id"] == "11111111-2222-3333-4444-555555555555"
+    assert row["user_id"] == "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    assert row["agent_id"] == "ffffffff-1111-2222-3333-444444444444"
+    assert row["environment_id"] == "default-public"
+    assert row["exit_status"] == "ok"
+    assert row["session_id"] == "sess-42"
+    assert isinstance(row["executed_code_hash"], str)
+    assert len(row["executed_code_hash"]) == 64
+    assert row["duration_ms"] is not None
+
+
+def test_audit_fires_on_provisioning_path(monkeypatch):
+    """Audit still runs when SANDBOX_INTERPRETER_ID is unset."""
+    monkeypatch.delenv("SANDBOX_INTERPRETER_ID", raising=False)
+
+    logged: list[dict] = []
+
+    async def audit(row):
+        logged.append(row)
+
+    async def never(*args, **kwargs):
+        raise AssertionError("should not be called")
+
+    tool = st.build_execute_code_tool(
+        strands_tool_decorator=_passthrough_tool_decorator,
+        session_state={},
+        start_session=never,
+        stop_session=never,
+        run_code=never,
+        log_invocation=audit,
+    )
+    _run(tool("print('hi')"))
+    assert len(logged) == 1
+    assert logged[0]["exit_status"] == "provisioning"
+
+
+def test_audit_fires_on_cap_exceeded(interpreter_env):
+    """Audit runs even when the quota check rejects."""
+    logged: list[dict] = []
+
+    async def audit(row):
+        logged.append(row)
+
+    async def quota():
+        return {
+            "ok": False,
+            "dimension": "tenant_daily",
+            "resets_at": "2026-04-23T00:00:00Z",
+        }
+
+    async def never(*args, **kwargs):
+        raise AssertionError("should not be called")
+
+    tool = st.build_execute_code_tool(
+        strands_tool_decorator=_passthrough_tool_decorator,
+        session_state={},
+        start_session=never,
+        stop_session=never,
+        run_code=never,
+        check_quota=quota,
+        log_invocation=audit,
+    )
+    _run(tool("print('hi')"))
+    assert len(logged) == 1
+    assert logged[0]["exit_status"] == "cap_exceeded"
+
+
+def test_audit_write_failure_is_swallowed(interpreter_env):
+    """An audit write failure must not unwind the agent turn."""
+
+    async def audit(row):
+        raise RuntimeError("audit endpoint 500")
+
+    async def start(ipi, timeout):
+        return "sess-1"
+
+    async def run(ipi, sess, code):
+        return {"stdout": "ok", "stderr": "", "exit_code": 0}
+
+    async def stop(ipi, sess):
+        pass
+
+    tool = st.build_execute_code_tool(
+        strands_tool_decorator=_passthrough_tool_decorator,
+        session_state={},
+        start_session=start,
+        stop_session=stop,
+        run_code=run,
+        log_invocation=audit,
+    )
+    # Must not raise despite the audit writer throwing.
+    result = _run(tool("print('hi')"))
+    assert result["ok"] is True
+
+
+def test_audit_code_hash_is_content_addressable(interpreter_env):
+    """Same code → same hash. Different code → different hash."""
+
+    logged: list[dict] = []
+
+    async def audit(row):
+        logged.append(row)
+
+    async def start(ipi, timeout):
+        return "sess"
+
+    async def run(ipi, sess, code):
+        return {"stdout": "", "stderr": "", "exit_code": 0}
+
+    async def stop(ipi, sess):
+        pass
+
+    tool = st.build_execute_code_tool(
+        strands_tool_decorator=_passthrough_tool_decorator,
+        session_state={},
+        start_session=start,
+        stop_session=stop,
+        run_code=run,
+        log_invocation=audit,
+    )
+    _run(tool("print(1)"))
+    _run(tool("print(1)"))
+    _run(tool("print(2)"))
+    assert logged[0]["executed_code_hash"] == logged[1]["executed_code_hash"]
+    assert logged[1]["executed_code_hash"] != logged[2]["executed_code_hash"]

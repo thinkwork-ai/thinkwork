@@ -187,6 +187,9 @@ build_handler "budgets" \
 build_handler "sandbox-quota-check" \
   "$REPO_ROOT/packages/api/src/handlers/sandbox-quota-check.ts"
 
+build_handler "sandbox-invocation-log" \
+  "$REPO_ROOT/packages/api/src/handlers/sandbox-invocation-log.ts"
+
 build_handler "guardrails" \
   "$REPO_ROOT/packages/api/src/handlers/guardrails-handler.ts"
 
