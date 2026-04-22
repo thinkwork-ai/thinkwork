@@ -107,6 +107,13 @@ input UpdateTenantInput {
   name: String
   plan: String
   issuePrefix: String
+  """
+  Optional client-supplied idempotency key. When provided, a retry with
+  the same key returns the prior call's result without re-executing.
+  Null/absent = server derives a key from canonicalized inputs.
+  See packages/api/src/lib/idempotency.ts.
+  """
+  idempotencyKey: String
 }
 
 input UpdateTenantSettingsInput {
@@ -121,11 +128,15 @@ input AddTenantMemberInput {
   principalType: String!
   principalId: ID!
   role: String
+  "Optional idempotency key. See UpdateTenantInput.idempotencyKey."
+  idempotencyKey: String
 }
 
 input UpdateTenantMemberInput {
   role: String
   status: String
+  "Optional idempotency key. See UpdateTenantInput.idempotencyKey."
+  idempotencyKey: String
 }
 
 input UpdateUserInput {
@@ -184,6 +195,8 @@ input InviteMemberInput {
   email: String!
   name: String
   role: String
+  "Optional idempotency key. See UpdateTenantInput.idempotencyKey."
+  idempotencyKey: String
 }
 
 type BootstrapResult {
@@ -202,7 +215,8 @@ extend type Mutation {
   ): TenantSettings!
   addTenantMember(tenantId: ID!, input: AddTenantMemberInput!): TenantMember!
   updateTenantMember(id: ID!, input: UpdateTenantMemberInput!): TenantMember!
-  removeTenantMember(id: ID!): Boolean!
+  "Remove a tenant member. idempotencyKey optional — see UpdateTenantInput.idempotencyKey."
+  removeTenantMember(id: ID!, idempotencyKey: String): Boolean!
   inviteMember(tenantId: ID!, input: InviteMemberInput!): TenantMember!
   updateUser(id: ID!, input: UpdateUserInput!): User!
   updateUserProfile(userId: ID!, input: UpdateUserProfileInput!): UserProfile!

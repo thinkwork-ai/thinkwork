@@ -47,6 +47,11 @@ input CreateTeamInput {
   type: String
   budgetMonthlyCents: Int
   metadata: AWSJSON
+  """
+  Optional client-supplied idempotency key. See
+  CreateAgentInput.idempotencyKey / packages/api/src/lib/idempotency.ts.
+  """
+  idempotencyKey: String
 }
 
 input UpdateTeamInput {
@@ -61,11 +66,15 @@ input UpdateTeamInput {
 input AddTeamAgentInput {
   agentId: ID!
   role: String
+  "Optional idempotency key. See CreateTeamInput.idempotencyKey."
+  idempotencyKey: String
 }
 
 input AddTeamUserInput {
   userId: ID!
   role: String
+  "Optional idempotency key. See CreateTeamInput.idempotencyKey."
+  idempotencyKey: String
 }
 
 # --- Query / Mutation extensions ---

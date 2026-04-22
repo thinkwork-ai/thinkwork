@@ -130,6 +130,13 @@ input CreateAgentInput {
   adapterConfig: AWSJSON
   runtimeConfig: AWSJSON
   avatarUrl: String
+  """
+  Optional client-supplied idempotency key. When provided, a retry with
+  the same key returns the prior call's result without re-executing.
+  Null/absent = server derives a key from canonicalized inputs.
+  See packages/api/src/lib/idempotency.ts.
+  """
+  idempotencyKey: String
 }
 
 input UpdateAgentInput {
@@ -212,8 +219,10 @@ extend type Mutation {
   deleteAgent(id: ID!): Boolean!
   updateAgentStatus(id: ID!, status: AgentStatus!): Agent!
 
-  setAgentCapabilities(agentId: ID!, capabilities: [AgentCapabilityInput!]!): [AgentCapability!]!
-  setAgentSkills(agentId: ID!, skills: [AgentSkillInput!]!): [AgentSkill!]!
+  "Replace an agent's capabilities. idempotencyKey optional — see CreateAgentInput.idempotencyKey."
+  setAgentCapabilities(agentId: ID!, capabilities: [AgentCapabilityInput!]!, idempotencyKey: String): [AgentCapability!]!
+  "Replace an agent's skills. idempotencyKey optional — see CreateAgentInput.idempotencyKey."
+  setAgentSkills(agentId: ID!, skills: [AgentSkillInput!]!, idempotencyKey: String): [AgentSkill!]!
   setAgentBudgetPolicy(agentId: ID!, input: AgentBudgetPolicyInput!): AgentBudgetPolicy!
   deleteAgentBudgetPolicy(agentId: ID!): Boolean!
 
