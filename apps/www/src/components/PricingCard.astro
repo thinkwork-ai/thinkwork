@@ -1,0 +1,83 @@
+---
+interface Props {
+  id: string;
+  name: string;
+  tagline: string;
+  summary: string;
+  features: string[];
+  cta: string;
+  highlighted?: boolean;
+}
+
+const {
+  id,
+  name,
+  tagline,
+  summary,
+  features,
+  cta,
+  highlighted = false,
+} = Astro.props;
+---
+
+<article
+  data-plan-id={id}
+  class:list={[
+    "relative flex h-full flex-col rounded-3xl border p-8 backdrop-blur-xl transition",
+    highlighted
+      ? "border-brand/40 bg-gradient-to-b from-brand/10 to-white/[0.04] shadow-[0_0_80px_-20px] shadow-brand/30"
+      : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]",
+  ]}
+>
+  {highlighted && (
+    <span class="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full border border-brand/40 bg-brand/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-brand">
+      Recommended
+    </span>
+  )}
+
+  <header class="mb-6">
+    <h3 class="text-2xl font-semibold tracking-tight text-slate-50">{name}</h3>
+    <p class:list={[
+      "mt-1 text-sm font-semibold uppercase tracking-[0.15em]",
+      highlighted ? "text-brand" : "text-slate-400",
+    ]}>
+      {tagline}
+    </p>
+    <p class="mt-3 text-sm leading-relaxed text-slate-400">{summary}</p>
+  </header>
+
+  <ul class="mb-8 flex-1 space-y-3">
+    {features.map((feat) => (
+      <li class="flex gap-3 text-sm text-slate-300">
+        <svg
+          class="mt-0.5 h-4 w-4 flex-none text-brand"
+          viewBox="0 0 16 16"
+          aria-hidden="true"
+        >
+          <path
+            fill="currentColor"
+            d="M6.5 11.793 3.354 8.646a.5.5 0 0 1 .708-.708L6.5 10.379l5.44-5.44a.5.5 0 1 1 .708.708l-5.793 5.792a.5.5 0 0 1-.707 0z"
+          />
+        </svg>
+        <span>{feat}</span>
+      </li>
+    ))}
+  </ul>
+
+  <button
+    type="button"
+    data-plan-cta={id}
+    class:list={[
+      "w-full rounded-xl px-6 py-3 text-sm font-semibold transition",
+      highlighted
+        ? "bg-brand text-slate-950 shadow-lg shadow-brand/20 hover:scale-[1.02] hover:bg-brand-300"
+        : "border border-white/15 bg-white/[0.04] text-slate-100 hover:border-white/30 hover:bg-white/[0.08]",
+    ]}
+  >
+    {cta}
+  </button>
+  <p
+    data-plan-error={id}
+    class="mt-3 hidden text-center text-xs text-red-300"
+  ></p>
+</article>

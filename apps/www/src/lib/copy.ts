@@ -18,6 +18,7 @@ export const nav = [
   { label: "Journey", href: "#journey" },
   { label: "How it works", href: "#how-it-works" },
   { label: "Governance", href: "#controls" },
+  { label: "Pricing", href: "/pricing" },
   { label: "Quick start", href: "#quick-start" },
 ];
 
@@ -367,4 +368,74 @@ export const finalCta = {
   ],
   primaryCta: { label: "Read the docs", href: external.docs },
   secondaryCta: { label: "View on GitHub", href: external.github },
+};
+
+export const pricing = {
+  meta: {
+    title: "ThinkWork pricing — Agent infrastructure in your AWS.",
+    description:
+      "Plans for teams adopting AI work inside their own AWS boundary — visible workflows, governed expansion, durable memory, and evaluations that scale with usage.",
+  },
+  eyebrow: "Pricing",
+  headline: "Infrastructure you own.",
+  headlineAccent: "Plans that scale with usage.",
+  lede:
+    "Every plan ships the same AWS-native runtime. Deployment boundary stays inside the account your team already operates. Pick a plan by the shape of your operation — not by the capabilities you're allowed to use.",
+  plans: [
+    {
+      id: "starter",
+      name: "Starter",
+      tagline: "One team. Bounded pilot.",
+      summary:
+        "For a single ops team standing up a controlled pilot inside their AWS account.",
+      features: [
+        "One tenant",
+        "Up to 10 agents, 5 templates",
+        "Visible threads + durable memory",
+        "Evaluations + budgets",
+        "Community support",
+      ],
+      cta: "Start pilot",
+      highlighted: false,
+    },
+    {
+      id: "team",
+      name: "Team",
+      tagline: "Cross-team expansion.",
+      summary:
+        "For organizations moving from one pilot to several owned-workflows under shared governance.",
+      features: [
+        "Up to 5 tenants",
+        "Up to 100 agents, 20 templates",
+        "All Starter capabilities",
+        "Template-level capability grants",
+        "Priority email support",
+      ],
+      cta: "Choose Team",
+      highlighted: true,
+    },
+    {
+      id: "enterprise",
+      name: "Enterprise",
+      tagline: "Fleet-scale agent operations.",
+      summary:
+        "For enterprises running many teams across one AWS deployment boundary.",
+      features: [
+        "Unlimited tenants",
+        "400+ agents, 5+ templates per tenant",
+        "All Team capabilities",
+        "Enterprise SSO + audit exports",
+        "Named support + SLA",
+      ],
+      cta: "Talk to us",
+      highlighted: false,
+    },
+  ],
+  smallPrint: [
+    "Every plan deploys into your AWS account; we never operate shared infrastructure.",
+    "Charged in USD, billed monthly. Annual contracts available on Enterprise.",
+    "Prices exclude AWS usage (Bedrock, Aurora, CloudFront) and Stripe processing fees.",
+  ],
+  finePrint:
+    "Final pricing confirmed during checkout. Contact us for procurement, security review, or annual billing.",
 };

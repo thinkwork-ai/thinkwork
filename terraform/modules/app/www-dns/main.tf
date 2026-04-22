@@ -33,23 +33,26 @@ locals {
   www     = "www.${var.domain}"
   docs    = "docs.${var.domain}"
   admin   = "admin.${var.domain}"
+  api     = "api.${var.domain}"
   name_id = replace(var.domain, ".", "-")
 
-  # ACM SANs: always include www, conditionally include docs and admin.
-  # Gated on plain bool vars (not on CloudFront outputs) to keep the
-  # dependency graph acyclic — distributions depend on the cert, so
-  # the cert mustn't depend on distribution outputs.
+  # ACM SANs: always include www, conditionally include docs, admin, api.
+  # Gated on plain bool vars (not on CloudFront/API Gateway outputs) to keep
+  # the dependency graph acyclic — distributions / custom domain names
+  # depend on the cert, so the cert mustn't depend on those outputs.
   cert_sans = concat(
     [local.www],
     var.include_docs ? [local.docs] : [],
     var.include_admin ? [local.admin] : [],
+    var.include_api ? [local.api] : [],
   )
 
-  # CNAME records can only be created when we have the distribution
-  # domain to point at. Those inputs come after the cert is done, so
-  # they don't participate in the cert's dependency graph.
+  # CNAME records can only be created when we have the target domain to
+  # point at. Those inputs come after the cert is done, so they don't
+  # participate in the cert's dependency graph.
   create_docs_record  = var.include_docs && var.docs_cloudfront_domain_name != ""
   create_admin_record = var.include_admin && var.admin_cloudfront_domain_name != ""
+  create_api_record   = var.include_api && var.api_gateway_id != ""
 }
 
 ################################################################################
@@ -242,4 +245,53 @@ resource "cloudflare_record" "admin" {
   ttl     = 300
   proxied = false
   comment = "thinkwork-${var.stage} admin → CloudFront"
+}
+
+################################################################################
+# api.<domain> → HTTP API Gateway (optional)
+#
+# API Gateway v2 HTTP APIs support regional custom domains. The cert lives in
+# the same region as the API (us-east-1 here) and the domain name maps the
+# target stage under the root base path ("") so routes defined on the API
+# (/api/stripe/webhook, /graphql, etc.) are reachable at the vanity domain.
+#
+# Cloudflare must stay DNS-only (proxied=false). API Gateway presents the
+# ACM cert directly; a proxied CNAME would mess with the TLS handshake.
+################################################################################
+
+resource "aws_apigatewayv2_domain_name" "api" {
+  count = var.include_api ? 1 : 0
+
+  domain_name = local.api
+
+  domain_name_configuration {
+    certificate_arn = aws_acm_certificate_validation.www.certificate_arn
+    endpoint_type   = "REGIONAL"
+    security_policy = "TLS_1_2"
+  }
+
+  tags = {
+    Name  = "thinkwork-${var.stage}-api-custom-domain"
+    Stage = var.stage
+  }
+}
+
+resource "aws_apigatewayv2_api_mapping" "api" {
+  count = local.create_api_record ? 1 : 0
+
+  api_id      = var.api_gateway_id
+  domain_name = aws_apigatewayv2_domain_name.api[0].id
+  stage       = var.api_gateway_stage_name
+}
+
+resource "cloudflare_record" "api" {
+  count = local.create_api_record ? 1 : 0
+
+  zone_id = var.cloudflare_zone_id
+  name    = local.api
+  content = aws_apigatewayv2_domain_name.api[0].domain_name_configuration[0].target_domain_name
+  type    = "CNAME"
+  ttl     = 300
+  proxied = false
+  comment = "thinkwork-${var.stage} api → API Gateway v2 regional domain"
 }
