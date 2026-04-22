@@ -13,12 +13,14 @@ export default defineConfig({
 		],
 		// Sandbox E2E tests hit live infra (deployed stage). They are
 		// opted into via `pnpm sandbox:e2e` (separate config below).
-		// Keeping them out of the default run means `pnpm test` stays
-		// hermetic. See packages/api/test/integration/sandbox/README.md.
+		// The `.e2e.test.ts` extension marks live-infra tests; other
+		// `.test.ts` files inside test/integration/sandbox/ (pure
+		// logic) still run under the default config. See
+		// packages/api/test/integration/sandbox/README.md.
 		exclude: [
 			"**/node_modules/**",
 			"**/dist/**",
-			"test/integration/sandbox/**",
+			"test/integration/sandbox/**/*.e2e.test.ts",
 		],
 	},
 });
