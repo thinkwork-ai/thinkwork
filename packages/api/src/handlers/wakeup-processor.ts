@@ -890,6 +890,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
 		const invokeResponse = await invokeAgentCore({
 			tenant_id: wakeup.tenant_id,
+			// Unit 7 made workspace_tenant_id a hard gate in
+			// _ensure_workspace_ready; missing it means the container
+			// skips workspace sync and /tmp/workspace stays empty.
+			workspace_tenant_id: wakeup.tenant_id,
 			assistant_id: wakeup.agent_id,
 			thread_id: resolvedThreadId,
 			user_id: agent.human_pair_id || undefined,
@@ -1220,6 +1224,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
 				const loopResponse = await invokeAgentCore({
 					tenant_id: wakeup.tenant_id,
+					workspace_tenant_id: wakeup.tenant_id,
 					assistant_id: wakeup.agent_id,
 					thread_id: resolvedThreadId,
 					user_id: agent.human_pair_id || undefined,
