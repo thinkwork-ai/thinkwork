@@ -99,22 +99,35 @@ Sub-agents are child agents that this agent can delegate to at runtime. The tab 
 
 The "Create Sub-agent" dialog captures a name, slug, role, and model selection. Model options are hardcoded as a curated list (Haiku, Sonnet, Nova variants). The slug auto-fills from the name as the user types. Submission fires `CreateSubAgentMutation` and, on delete, `DeleteSubAgentMutation`.
 
-### Workspaces
+### Workspace
 
-**Routes:** `/agents/:agentId/workspaces` and `/agents/:agentId/workspace`  
-**Files:** `agents/$agentId_.workspaces.tsx` and `agents/$agentId_/workspace.tsx`
+**Route:** `/agents/:agentId/workspace`  
+**File:** `agents/$agentId_.workspace.tsx`
 
-Workspaces are agent-scoped folders of configuration and context files — SOUL.md, USER.md, IDENTITY.md, and similar. The tab is a file browser + editor:
+The Workspace tab is an agent's composed file view — `SOUL.md`, `IDENTITY.md`, `USER.md`, `GUARDRAILS.md`, `memory/*.md`, and any agent-scoped customizations. The file list is the **composed view** from the [workspace overlay](/concepts/agents/workspace-overlay/): every file the agent would read at invocation time, drawn from the agent layer, the template layer, or tenant defaults.
 
-- **Left sidebar** — a collapsible folder/file tree
-- **Right pane** — a CodeMirror markdown editor (with vscodeDark theme) and a header banner describing what the file is for (pulled from a static `FILE_DESCRIPTIONS` map that maps SOUL.md → "Core personality", etc.)
-- **Toolbar** — create folder, create file, breadcrumb trail
+**Layout:**
+- **Left sidebar** — collapsible folder/file tree. Files that inherit cleanly from the template or tenant defaults show no icon — that's the common case. Non-default state gets a right-justified indicator:
+  - Filled purple dot — agent-scoped override
+  - Amber alert — pinned guardrail file has a template update available
+- **Right pane** — CodeMirror markdown editor (vscodeDark). Header banner describes what the file is for (pulled from a static `FILE_DESCRIPTIONS` map — `SOUL.md` → "Core personality", etc.).
+- **Toolbar** — add file, add folder (with templates like `docs/`, `memory/`), Bootstrap (populate defaults for a fresh agent).
 
-File operations go through a custom REST endpoint at `POST /internal/workspace-files` that reads, writes, lists, and creates files under the agent's workspace prefix. Auto-save on blur or explicit save button.
+**Tasks on this tab:**
 
-<Aside type="note">
-Both `$agentId_.workspaces.tsx` and `$agentId_/workspace.tsx` exist in the route tree. They render essentially the same UI — the second form appears to be a legacy or alternative route and may be consolidated in a future cleanup.
-</Aside>
+- **Override an inherited file** — click any file showing the blue or muted icon, edit, save. The icon flips to the filled purple dot and the composer now serves the agent-scoped bytes instead of the template.
+- **Revert an override** — open the overridden file, click the trash icon. The agent-scoped object is deleted; the file re-inherits from template or defaults.
+- **Accept a pinned template update** — when `GUARDRAILS.md` / `PLATFORM.md` / `CAPABILITIES.md` shows the amber alert, click **Review**. A side-by-side dialog shows the current pinned content vs. the latest template bytes. Confirm to advance the pin and delete any local override.
+- **Create an ad-hoc file** — use **Add** to create files under arbitrary paths (e.g. `docs/procedures/onboarding.md`). These are agent-only; no template equivalent exists, so they always show the purple dot.
+
+File operations go through `POST /api/workspaces/files`, which fronts the [composer](/concepts/agents/workspace-overlay/#implementation). Pinned-file writes without the accept flag return 403 — the Review button is the canonical path.
+
+### Workspaces (sub-agents)
+
+**Route:** `/agents/:agentId/workspaces`  
+**File:** `agents/$agentId_.workspaces.tsx`
+
+A separate feature from the Workspace tab above. "Workspaces" (plural) lists **sub-agent** workspaces that the parent agent can delegate to — each is a specialized focus area with its own `{workspace-slug}/CONTEXT.md`, skill set, and model. Not related to the overlay; see [Sub-agents](#sub-agents) above for the underlying model.
 
 ### Scheduled Jobs
 
@@ -167,7 +180,7 @@ Type is a separate axis: `WORKSPACE_AGENT` (scoped to a workspace under a parent
 ## Known limits
 
 - **Agent creation redirects** — the `/agents/new` route is a stub; the dialog is the real entry point.
-- **Two workspace routes** — `$agentId_.workspaces.tsx` and `$agentId_/workspace.tsx` both exist; treat them as equivalent.
+- **`/workspace` and `/workspaces` are different features** — singular is the overlay file tree, plural is the sub-agent delegation surface. Linked from different places in the UI.
 - **Memory edits depend on backend** — AgentCore records are read-only; Hindsight records are editable.
 - **Activity feed is client-filtered** — the agent detail page filters the tenant-wide queries rather than issuing agent-scoped ones, which is fine for small tenants but can be slow at scale.
 
@@ -178,4 +191,5 @@ Type is a separate axis: `WORKSPACE_AGENT` (scoped to a workspace under a parent
 - [Skills Catalog](/applications/admin/skills-catalog/) — where the skills installed here come from
 - [Tenant MCP Servers](/applications/admin/mcp-servers/) — MCP tool assignment source
 - [Memory](/applications/admin/memory/) — tenant-wide memory view
+- [Workspace Overlay (concept)](/concepts/agents/workspace-overlay/) — inheritance, pinning, accept-update flow
 - [Agents (concept)](/concepts/agents/) — the underlying agent model

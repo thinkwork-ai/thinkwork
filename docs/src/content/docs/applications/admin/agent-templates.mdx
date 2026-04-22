@@ -5,7 +5,12 @@ description: Reusable agent configuration bundles — skills, knowledge, MCP ser
 
 import { Aside } from '@astrojs/starlight/components';
 
-Agent templates are reusable configuration bundles that multiple agents can share. A template defines the model, default skill assignments, default knowledge bases, MCP server assignments, guardrail attachments, system prompt, and budget caps. When an agent is created from a template, it inherits all of that. When the template changes, operators **sync** the change out to the linked agents — explicitly, not automatically.
+Agent templates are reusable configuration bundles that multiple agents can share. A template defines the model, default skill assignments, default knowledge bases, MCP server assignments, guardrail attachments, system prompt, budget caps, and a workspace file set.
+
+Templates propagate to linked agents via two distinct mechanisms depending on what changed:
+
+- **Configuration fields** (skills, KBs, MCP servers, guardrails, model, system prompt, budget) — propagated via the explicit **Sync** flow described later on this page. Operators review per-agent diffs and confirm.
+- **Workspace files** (`SOUL.md`, `IDENTITY.md`, `USER.md`, `GUARDRAILS.md`, etc.) — propagated via the [workspace overlay](/concepts/agents/workspace-overlay/). Live-class files update on next invocation with no sync step; guardrail-class files require a per-agent **Accept update** review; `USER.md` is rewritten server-side on human reassignment.
 
 This is how fleet-wide configuration gets managed in ThinkWork without having to touch every agent individually.
 
@@ -52,6 +57,28 @@ A full CodeMirror editor in markdown mode, vscodeDark theme. The system prompt i
 ### Linked agents section
 
 Below the main form, the template detail page lists every agent currently linked to this template. For each linked agent, the row shows its name, status, and (after a sync is triggered) its sync status.
+
+## The Workspace tab
+
+The template detail page has a **Workspace** tab alongside **Configuration**, **Skills**, and **MCP Servers**. This is where the template's inheritance base for workspace files lives — `SOUL.md`, `IDENTITY.md`, `GUARDRAILS.md`, and so on.
+
+Edits to this tab propagate to linked agents through the [workspace overlay](/concepts/agents/workspace-overlay/) at read time, not through the Sync flow. Specifically:
+
+- **Live files** (`SOUL.md`, `IDENTITY.md`, `ROUTER.md`, `memory/*.md`, etc.) — edits are visible to every linked agent on the **next invocation**. No per-agent sync, no explicit propagation step. If an agent overrode the file, its override still wins; otherwise it picks up the template's new bytes.
+- **Pinned files** (`GUARDRAILS.md`, `PLATFORM.md`, `CAPABILITIES.md`) — edits do **not** flow automatically. Every linked agent surfaces a **Template update available** badge on that file. Operators review and accept per-agent (or bulk per-template) from the agent's Workspace tab. This is the safety lane for anything that could meaningfully change agent behavior.
+- **Managed files** (`USER.md`) — the template's `USER.md` carries `{{HUMAN_*}}` placeholders. Agents get a rendered copy written to their own prefix when their human pair is assigned or reassigned. Editing the template's `USER.md` only affects agents that are subsequently reassigned or newly created — existing agents already carry the rendered bytes.
+
+**Tasks on this tab:**
+
+- **Edit a template file** — click the file in the tree, edit, save. Live files take effect on next agent invocation.
+- **Add a new file** — use the **+** button in the sidebar. New files automatically flow to linked agents (unless they're ad-hoc names outside the overlay's canonical set, in which case they still inherit normally).
+- **Delete a template-level override** — remove a file here and linked agents will fall through to the tenant defaults layer for that file.
+
+For the tenant-wide defaults that every template inherits from, see `/agent-templates/defaults` (the **Default Workspace** page).
+
+<Aside type="note">
+The template's Workspace tab does **not** show a per-file source badge, because by definition every file listed here is at the template layer. The operator-facing distinction matters on the _agent's_ Workspace tab, where the same file could come from the agent override, the template, or the defaults.
+</Aside>
 
 ## The sync flow
 
