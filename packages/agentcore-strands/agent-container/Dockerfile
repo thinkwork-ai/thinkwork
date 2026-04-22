@@ -48,6 +48,17 @@ COPY packages/agentcore-strands/agent-container/hindsight_usage_capture.py .
 COPY packages/agentcore-strands/agent-container/hindsight_recall_filter.py .
 COPY packages/agentcore-strands/agent-container/api_memory_client.py .
 COPY packages/agentcore-strands/agent-container/run_skill_dispatch.py .
+# Top-of-module import in server.py (landed via #401). Missing this line
+# crashed the container on startup with ModuleNotFoundError — every chat
+# turn failed until the COPY list caught up. 4th occurrence of this class
+# of bug, see docs/solutions/build-errors/dockerfile-explicit-copy-list-
+# drops-new-tool-modules-2026-04-22.md.
+COPY packages/agentcore-strands/agent-container/invocation_env.py .
+# Lazy-imported by server.py inside the wiki-tools registration path
+# (landed in #199). Not the trigger for the active outage but fails at
+# runtime the first time the wiki tool is invoked — same class, zero cost
+# to fix while we're here.
+COPY packages/agentcore-strands/agent-container/wiki_tools.py .
 
 # Copy shared Agent Container modules
 COPY packages/agentcore/agent-container/permissions.py .
