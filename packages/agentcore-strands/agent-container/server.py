@@ -657,12 +657,78 @@ def _call_strands_agent(system_prompt: str, messages: list,
                     )
                 return await loop.run_in_executor(None, _run)
 
+            # Quota circuit breaker (plan Unit 10). Posts to the narrow
+            # /api/sandbox/quota/check-and-increment endpoint with
+            # Bearer API_AUTH_SECRET before every tool call. On denial
+            # or transport failure, the tool surfaces SandboxCapExceeded
+            # without touching the interpreter — fail-closed discipline
+            # per plan R-Q8.
+            _sb_api_url = (
+                os.environ.get("THINKWORK_API_URL")
+                or os.environ.get("MCP_BASE_URL")
+                or ""
+            )
+            _sb_api_secret = (
+                os.environ.get("API_AUTH_SECRET")
+                or os.environ.get("THINKWORK_API_SECRET")
+                or ""
+            )
+            _sb_tenant = (
+                os.environ.get("SANDBOX_TENANT_ID", "")
+                or os.environ.get("TENANT_ID", "")
+            )
+            _sb_agent = os.environ.get("AGENT_ID", "")
+
+            async def _check_quota() -> dict:
+                # Stage without the endpoint wired → bypass. Fail-closed
+                # only applies when the endpoint is configured; a dev
+                # stage without it shouldn't dead-letter every call.
+                if not _sb_api_url or not _sb_api_secret:
+                    return {"ok": True}
+                import asyncio as _a
+                import json as _j
+                from urllib.request import Request, urlopen
+                loop = _a.get_event_loop()
+
+                def _post() -> dict:
+                    body = _j.dumps({
+                        "tenant_id": _sb_tenant,
+                        "agent_id": _sb_agent,
+                    }).encode("utf-8")
+                    req = Request(
+                        f"{_sb_api_url.rstrip('/')}/api/sandbox/quota/check-and-increment",
+                        data=body,
+                        headers={
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {_sb_api_secret}",
+                        },
+                        method="POST",
+                    )
+                    try:
+                        with urlopen(req, timeout=5) as resp:
+                            return _j.loads(resp.read().decode("utf-8"))
+                    except Exception as _err:  # noqa: BLE001
+                        # HTTPError carries .read() — 429 denials land here
+                        # because urlopen treats them as HTTP errors.
+                        payload_text = getattr(_err, "read", lambda: b"")()
+                        try:
+                            parsed = _j.loads(payload_text.decode("utf-8"))
+                            if isinstance(parsed, dict):
+                                parsed.setdefault("ok", False)
+                                return parsed
+                        except Exception:
+                            pass
+                        raise
+
+                return await loop.run_in_executor(None, _post)
+
             execute_code = build_execute_code_tool(
                 strands_tool_decorator=_sb_tool_decorator,
                 session_state=_sb_state,
                 start_session=_start_session,
                 stop_session=_stop_session,
                 run_code=_run_code,
+                check_quota=_check_quota,
             )
             tools.append(execute_code)
             _sandbox_cleanup_fn = getattr(execute_code, "_sandbox_cleanup", None)
