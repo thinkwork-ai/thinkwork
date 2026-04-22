@@ -66,12 +66,17 @@ COPY packages/agentcore-strands/agent-container/wiki_tools.py .
 # as the other entries in this block — see
 # docs/solutions/build-errors/dockerfile-explicit-copy-list-drops-new-tool-modules-2026-04-22.md.
 COPY packages/agentcore-strands/agent-container/sandbox_tool.py .
+# AgentCore Code Sandbox preamble builder (plan Unit 8). Same
+# lazy-import class of bug as sandbox_tool — explicit COPY + build-time
+# import assertion.
+COPY packages/agentcore-strands/agent-container/sandbox_preamble.py .
 
-# Build-time assertion: fail the image build loud if sandbox_tool.py is
-# missing or can't import cleanly. Without this, a regression on the
-# COPY line above only surfaces on the first sandbox-enabled turn in
-# production — hours after deploy.
+# Build-time assertion: fail the image build loud if either sandbox
+# module is missing or can't import cleanly. Without these, a regression
+# on the COPY lines above only surfaces on the first sandbox-enabled
+# turn in production — hours after deploy.
 RUN python -c "import sandbox_tool; assert hasattr(sandbox_tool, 'build_execute_code_tool'), 'sandbox_tool missing factory'; print('sandbox_tool: OK')"
+RUN python -c "import sandbox_preamble; assert hasattr(sandbox_preamble, 'build_preamble'), 'sandbox_preamble missing build_preamble'; print('sandbox_preamble: OK')"
 
 # Copy shared Agent Container modules
 COPY packages/agentcore/agent-container/permissions.py .
