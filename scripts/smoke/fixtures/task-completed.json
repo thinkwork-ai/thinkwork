@@ -1,0 +1,8 @@
+{
+  "event": "task.completed",
+  "taskId": "smoke-task-0001",
+  "metadata": {
+    "triggeredByRunId": "REPLACE_WITH_ACTUAL_SKILL_RUN_UUID",
+    "skillIdHint": "customer-onboarding-reconciler"
+  }
+}
