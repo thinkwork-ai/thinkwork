@@ -62,6 +62,7 @@ export const AgentDetailQuery = gql`
         model
         guardrailId
         blockedTools
+        skills
       }
       systemPrompt
       avatarUrl
@@ -86,6 +87,7 @@ export const AgentDetailQuery = gql`
         skillId
         enabled
         config
+        permissions
       }
       budgetPolicy {
         id
@@ -188,6 +190,7 @@ export const SetAgentSkillsMutation = graphql(`
       skillId
       enabled
       config
+      permissions
     }
   }
 `);
