@@ -1,0 +1,61 @@
+# Sandbox base image for the AgentCore Code Interpreter.
+#
+# Builds a Python 3.12 container with a small, pinned set of libraries
+# template authors can rely on without paying the first-turn `pip install`
+# tax. Installs sitecustomize.py so the stdout/stderr token redactor is
+# active before any user code or framework traceback runs on cold start.
+#
+# Image tagging is CI-driven (see scripts/build_and_push_sandbox_base.sh).
+# Tags are immutable; a bump ships as a reviewable PR.
+#
+# Build context is the repository root so the COPY line can reach the
+# Python source under packages/agentcore-strands/agent-container-sandbox/.
+#
+#   docker build -f terraform/modules/app/agentcore-code-interpreter/Dockerfile.sandbox-base .
+
+FROM python:3.12-slim AS base
+
+# ---------------------------------------------------------------------------
+# System packages — minimal. The sandbox runs agent code, not a full distro.
+# ---------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---------------------------------------------------------------------------
+# Blessed Python libraries — pinned to explicit versions per plan R14/R24.
+# Bumps happen in reviewable PRs. Runtime `pip install` is still allowed
+# (per R15; T2 residual is named), but these baseline packages install once
+# at image bake and don't pay the per-turn cost.
+# ---------------------------------------------------------------------------
+RUN pip install --no-cache-dir \
+        pandas==2.2.3 \
+        numpy==2.1.3 \
+        requests==2.32.3 \
+        boto3==1.38.0 \
+        httpx==0.28.1 \
+        pyyaml==6.0.2 \
+        openpyxl==3.1.5 \
+        python-dateutil==2.9.0.post0
+
+# ---------------------------------------------------------------------------
+# sitecustomize.py — the R13 stdout/stderr token redactor. Python
+# auto-imports any module named "sitecustomize" on interpreter startup, so
+# placing it in site-packages makes the redactor load before any user code
+# (and before the framework traceback on cold start). See the module
+# docstring for the honestly-scoped invariant and named residual gaps.
+# ---------------------------------------------------------------------------
+COPY packages/agentcore-strands/agent-container-sandbox/sitecustomize.py \
+     /usr/local/lib/python3.12/site-packages/sitecustomize.py
+
+# ---------------------------------------------------------------------------
+# Startup assertion — fail loudly if the module isn't wired up or
+# THINKWORK_SANDBOX_SCRUBBER=off slips through to prod. Runs in the same
+# image smoke-test CI job that pushes the tag.
+# ---------------------------------------------------------------------------
+RUN python -c "import sitecustomize; assert sitecustomize.installed(), 'sitecustomize did not install its stdio wrapper on import'; print('sitecustomize: OK')"
+
+# AgentCore Code Interpreter supplies its own entrypoint; we provide the
+# libraries + scrubber only. No CMD/ENTRYPOINT override.
