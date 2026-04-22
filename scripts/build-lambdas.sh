@@ -157,6 +157,12 @@ build_handler "oauth-authorize" \
 build_handler "oauth-callback" \
   "$REPO_ROOT/packages/api/src/handlers/oauth-callback.ts"
 
+build_handler "stripe-checkout" \
+  "$REPO_ROOT/packages/api/src/handlers/stripe-checkout.ts"
+
+build_handler "stripe-webhook" \
+  "$REPO_ROOT/packages/api/src/handlers/stripe-webhook.ts"
+
 build_handler "teams" \
   "$REPO_ROOT/packages/api/src/handlers/teams.ts"
 

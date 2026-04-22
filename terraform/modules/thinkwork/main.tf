@@ -189,8 +189,10 @@ module "api" {
   hindsight_endpoint                 = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
   agentcore_memory_id                = module.agentcore_memory.memory_id
   memory_engine                      = local.resolved_memory_engine
-  admin_url                          = "https://${module.admin_site.distribution_domain}"
+  admin_url                          = var.admin_domain != "" ? "https://${var.admin_domain}" : "https://${module.admin_site.distribution_domain}"
   docs_url                           = "https://${module.docs_site.distribution_domain}"
+  www_url                            = var.www_domain != "" ? "https://${var.www_domain}" : "https://${module.www_site.distribution_domain}"
+  stripe_price_ids_json              = var.stripe_price_ids_json
   appsync_realtime_url               = module.appsync.graphql_realtime_url
   ecr_repository_url                 = module.agentcore.ecr_repository_url
   job_scheduler_role_arn             = module.job_triggers.job_scheduler_role_arn

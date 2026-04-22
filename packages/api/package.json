@@ -28,7 +28,8 @@
     "@thinkwork/workspace-defaults": "workspace:*",
     "drizzle-orm": "^0.39.0",
     "expo-server-sdk": "^6.1.0",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "stripe": "^17.5.0"
   },
   "devDependencies": {
     "@aws-sdk/client-bedrock-agent": "^3.1024.0",
