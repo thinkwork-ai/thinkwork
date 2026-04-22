@@ -269,3 +269,9 @@ variable "redirect_success_url" {
   type        = string
   default     = "https://app.thinkwork.ai/settings/credentials"
 }
+
+variable "platform_operator_emails" {
+  description = "Comma-separated allowlist of emails permitted to invoke operator-gated GraphQL mutations (updateTenantPolicy, sandbox fixture setup, etc.). Compared against ctx.auth.email — pulled from the Cognito JWT for user callers and from the x-principal-email header for service-auth callers. Empty ⇒ the gate rejects every call."
+  type        = string
+  default     = ""
+}

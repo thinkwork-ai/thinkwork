@@ -271,11 +271,21 @@ async function runGql<T>(
   env: HarnessEnv,
   body: { query: string; variables?: Record<string, unknown> },
 ): Promise<T> {
+  // Service-auth against the deployed graphql-http Lambda uses
+  // `x-api-key` (not `Authorization: Bearer`). The Bearer slot is
+  // reserved for Cognito JWTs. See packages/api/src/lib/cognito-auth.ts.
+  //
+  // `x-principal-email` is how the harness tells operator-gated
+  // resolvers who the caller is — the apikey path has no JWT to pull
+  // an email from, so it reads this header instead. The value must
+  // appear in the Lambda's THINKWORK_PLATFORM_OPERATOR_EMAILS list for
+  // updateTenantPolicy etc. to allow the call.
   const resp = await fetch(`${env.thinkworkApiUrl.replace(/\/$/, "")}/graphql`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${env.apiAuthSecret}`,
+      "x-api-key": env.apiAuthSecret,
+      "x-principal-email": env.operatorEmail,
     },
     body: JSON.stringify(body),
   });
