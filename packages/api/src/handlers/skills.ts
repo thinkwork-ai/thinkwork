@@ -318,6 +318,14 @@ export async function handler(
 			return startSkillRunService(event);
 		}
 
+		// POST /api/skills/complete — service-to-service terminal-state writeback.
+		// The agentcore container calls this from its kind="run_skill" branch
+		// after run_composition() returns, so skill_runs.status transitions out
+		// of `running`. Mirrors the auth + body-shape convention of /start.
+		if (path === "/api/skills/complete" && method === "POST") {
+			return completeSkillRunService(event);
+		}
+
 		return notFound("Route not found");
 	} catch (err) {
 		console.error("Skills handler error:", err);
@@ -2552,6 +2560,106 @@ async function startSkillRunService(
 	}
 
 	return json({ runId: runRow.id, status: "running", deduped: false });
+}
+
+// ---------------------------------------------------------------------------
+// Composition complete — terminal-state writeback from the agentcore container.
+//
+// After run_composition() returns, the container POSTs the terminal state
+// here so skill_runs.status transitions out of `running`. Service-auth only
+// (Bearer API_AUTH_SECRET); tenant-integrity-checked against the row by id.
+// ---------------------------------------------------------------------------
+
+// Transitions permitted from `running`. The skill_runs CHECK constraint
+// permits these terminal statuses. `invoker_deprovisioned` + `skipped_disabled`
+// are owned by job-trigger, not this endpoint — a container-completion can't
+// produce those signals.
+const SKILL_RUN_TERMINAL_FROM_RUNNING = new Set([
+	"complete",
+	"failed",
+	"cancelled",
+	"cost_bounded_error",
+]);
+
+interface CompleteSkillRunBody {
+	runId: string;
+	tenantId: string;
+	status: string;
+	failureReason?: string | null;
+	deliveredArtifactRef?: unknown;
+}
+
+async function completeSkillRunService(
+	event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	let body: CompleteSkillRunBody;
+	try {
+		body = JSON.parse(event.body || "{}");
+	} catch {
+		return error("Invalid JSON body", 400);
+	}
+
+	const { runId, tenantId, status, failureReason, deliveredArtifactRef } = body;
+
+	if (!runId || !tenantId || !status) {
+		return error("Missing required fields: runId, tenantId, status", 400);
+	}
+	if (!SKILL_RUN_TERMINAL_FROM_RUNNING.has(status)) {
+		return error(
+			`status must be one of ${Array.from(SKILL_RUN_TERMINAL_FROM_RUNNING).join("|")} (got ${status})`,
+			400,
+		);
+	}
+	if (status !== "complete" && !failureReason) {
+		return error("failureReason is required when status is not 'complete'", 400);
+	}
+
+	const [row] = await db
+		.select({
+			id: skillRuns.id,
+			tenant_id: skillRuns.tenant_id,
+			status: skillRuns.status,
+		})
+		.from(skillRuns)
+		.where(eq(skillRuns.id, runId));
+	if (!row) return error("runId not found", 404);
+	if (row.tenant_id !== tenantId) {
+		return error("tenantId does not match skill_run", 403);
+	}
+	// Only `running` rows are eligible for this writeback. Terminal-to-terminal
+	// transitions (e.g. failed → cancelled) aren't something run_composition
+	// should be producing — reject so we don't silently overwrite prior state.
+	if (row.status !== "running") {
+		return error(`invalid transition: ${row.status} → ${status}`, 400);
+	}
+
+	const updates: Record<string, unknown> = {
+		status,
+		finished_at: new Date(),
+		updated_at: new Date(),
+	};
+	if (failureReason != null) {
+		updates.failure_reason = String(failureReason).slice(0, 500);
+	}
+	if (deliveredArtifactRef !== undefined && deliveredArtifactRef !== null) {
+		updates.delivered_artifact_ref = deliveredArtifactRef;
+	}
+
+	const [updated] = await db
+		.update(skillRuns)
+		.set(updates)
+		.where(eq(skillRuns.id, runId))
+		.returning({
+			id: skillRuns.id,
+			status: skillRuns.status,
+			finished_at: skillRuns.finished_at,
+		});
+
+	return json({
+		runId: updated.id,
+		status: updated.status,
+		finishedAt: updated.finished_at,
+	});
 }
 
 // Shared helpers — mirror the canonicalization/invoke shape used by the

@@ -8,6 +8,7 @@ Pure Python — no Node.js dependency.
 
 Build revision: 2026-04-13 — include PR #24 (hindsight async tools).
 """
+import asyncio
 import json
 import logging
 import os
@@ -1475,6 +1476,23 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
             return
 
         logger.info("Raw payload keys: %s", list(payload.keys()))
+
+        # kind="run_skill" envelope — composition dispatch path. The TS
+        # /api/skills/start handler fires this shape via agentcore-invoke
+        # when a caller (chat dispatcher, admin catalog, scheduled job,
+        # webhook) wants to run a composition. Handled synchronously within
+        # this invocation; terminal state is POSTed back to /api/skills/
+        # complete before we respond to the caller.
+        if payload.get("kind") == "run_skill":
+            from run_skill_dispatch import dispatch_run_skill
+            try:
+                result = asyncio.run(dispatch_run_skill(payload))
+                self._respond(200, result)
+            except Exception as e:
+                logger.exception("run_skill: dispatch crashed")
+                self._respond(500, {"error": f"run_skill dispatch crashed: {e}"})
+            return
+
         tenant_id = payload.get("sessionId") or payload.get("tenant_id") or "unknown"
         ticket_id = payload.get("thread_id") or payload.get("ticket_id") or ""
         assistant_id = payload.get("assistant_id") or ""

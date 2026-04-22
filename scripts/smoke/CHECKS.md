@@ -6,28 +6,32 @@ script exits `0` on PASS, `1` on FAIL, and prints exactly one
 
 ## What "passing" means today
 
-**Today's expected state:** chat, catalog, and scheduled smokes all
-return `FAIL:timeout_still_running`. That is **not** a defect in these
-scripts — it's a correctly-reported runtime gap. The deployed
-agentcore container (`packages/agentcore-strands/agent-container/
-server.py`) doesn't yet branch on `kind="run_skill"` envelopes, so
-rows inserted by the dispatch layer never transition out of `running`.
-Wiring `run_skill` dispatch into the container is a separate
-follow-up; once it lands, these scripts should PASS (probably with
-`status=failed, reason=<missing connector>` — that failure IS a pass,
-per the composable-skills plan, since no real connectors are wired
-either).
+Each smoke PASSes when `skill_runs.status` transitions out of
+`running` within the timeout — whether to `complete` (composition
+finished, artifact delivered) or to `failed` with a `failure_reason`
+that names a specific missing skill (e.g. `step 'frame' failed: frame
+error: SkillNotRegisteredError`). Both outcomes prove the full
+dispatch → runtime → DB loop works end-to-end.
 
-**What this PR's smokes DO prove right now:**
+On today's dev stack, no connector/script skills are registered in
+the run_skill dispatch closure, so every composition fails at its
+first step with a clean, named error. That's the designed PASS
+condition until real connector adapters land.
 
-- Schema + migrations are applied correctly on the target stage
-  (pre-flight `to_regclass` probe).
-- `POST /api/skills/start` accepts the service envelope and inserts a
-  `skill_runs` row — the fix for the `ON CONFLICT … WHERE
-  status='running'` partial-index bug lands with this kit.
+**What the smokes prove end-to-end:**
+
+- Schema + migrations applied correctly (pre-flight `to_regclass` probe).
+- `POST /api/skills/start` accepts the service envelope, inserts a
+  `skill_runs` row, and invokes the agentcore Lambda.
+- The agentcore container branches on `kind="run_skill"`, loads the
+  composition YAML from S3, runs `composition_runner.run_composition`
+  with a dispatch closure, and POSTs terminal state back to
+  `/api/skills/complete`.
+- `/api/skills/complete` (service-auth) validates the transition and
+  updates `skill_runs.status` + `failure_reason` + `finished_at`.
 - `job-trigger` Lambda reads a `scheduled_jobs` row, resolves input
-  bindings, and inserts a `skill_runs` row with
-  `invocation_source='scheduled'`.
+  bindings, inserts a `skill_runs` row with `invocation_source=
+  'scheduled'`, and the composition runs through the same path.
 - All three paths deduplicate correctly via the partial unique index.
 
 A script FAILs when:
@@ -35,11 +39,10 @@ A script FAILs when:
 - `skill_runs` or related tables are missing on the target stage
   (`FAIL:schema_missing`).
 - The dispatch endpoint returns non-200 (`FAIL:dispatch_http_<code>`)
-  or the lambda invoke fails (`FAIL:lambda_invoke_rc_<code>`).
+  or the Lambda invoke fails (`FAIL:lambda_invoke_rc_<code>`).
 - The inserted `skill_runs` row is still `status='running'` after the
-  timeout — today this is the expected state (see above); after
-  `run_skill` dispatch lands in the container this becomes a genuine
-  failure signal (`FAIL:timeout_still_running …`).
+  timeout — the composition runner hung, crashed, or the completion
+  callback never arrived (`FAIL:timeout_still_running …`).
 - The scheduled path couldn't insert the fixture `scheduled_jobs` row
   or the job-trigger Lambda didn't produce a matching `skill_runs`
   row within 10s (`FAIL:insert_scheduled_job` / `FAIL:no_skill_run_row`).
@@ -125,10 +128,14 @@ webhook-smoke happy-path call.
 
 ## Known gaps
 
-- **`run_skill` dispatch in the agentcore container** (blocker). The
-  deployed `server.py` doesn't branch on `kind="run_skill"` envelopes
-  today, so rows stay `status=running`. Tracked as a follow-up —
-  once it lands, all three strict smokes should PASS.
+- **No real connector script skills are registered** — the run_skill
+  dispatch closure in
+  `packages/agentcore-strands/agent-container/run_skill_dispatch.py`
+  raises `SkillNotRegisteredError` for every sub-skill call, which
+  produces a clean PASS-as-failed today. The R13 adoption criterion
+  from the composable-skills v1 plan covers wiring real CRM / AR /
+  support / web / wiki connector adapters; once any of those land,
+  individual compositions could PASS with `status=complete` instead.
 - The catalog path uses the **service endpoint** `/api/skills/start`,
   not the admin GraphQL `startSkillRun` mutation — the mutation
   requires a Cognito JWT we don't have programmatic access to. The
