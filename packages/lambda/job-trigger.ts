@@ -153,7 +153,13 @@ async function invokeAgentcoreRunSkill(payload: {
   try {
     const { LambdaClient, InvokeCommand } =
       await import("@aws-sdk/client-lambda");
-    const lambda = new LambdaClient({});
+    const { NodeHttpHandler } = await import("@smithy/node-http-handler");
+    // 28s socketTimeout leaves 2s headroom before the 30s Lambda
+    // ceiling; a slow agentcore otherwise blocks the caller past its
+    // timeout with no way to return a structured error.
+    const lambda = new LambdaClient({
+      requestHandler: new NodeHttpHandler({ socketTimeout: 28_000 }),
+    });
     const envelope = {
       kind: "run_skill" as const,
       runId: payload.runId,

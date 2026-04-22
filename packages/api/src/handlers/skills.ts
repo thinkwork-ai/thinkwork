@@ -2763,7 +2763,14 @@ async function invokeAgentcoreRunSkill(payload: {
 	if (!fnName) return { ok: false, error: "AGENTCORE_FUNCTION_NAME env var not set" };
 	try {
 		const { LambdaClient, InvokeCommand } = await import("@aws-sdk/client-lambda");
-		const lambda = new LambdaClient({});
+		const { NodeHttpHandler } = await import("@smithy/node-http-handler");
+		// 28s socketTimeout leaves 2s headroom before this Lambda's 30s
+		// ceiling (and API Gateway's 29s cap). Without it a slow agentcore
+		// can block past those limits and we lose the chance to return a
+		// structured 502 to the caller.
+		const lambda = new LambdaClient({
+			requestHandler: new NodeHttpHandler({ socketTimeout: 28_000 }),
+		});
 		const envelope = {
 			kind: "run_skill" as const,
 			runId: payload.runId,

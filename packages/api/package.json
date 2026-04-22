@@ -21,6 +21,7 @@
     "@aws-sdk/client-sns": "^3.917.0",
     "@aws-sdk/client-ssm": "^3.917.0",
     "@graphql-yoga/plugin-disable-introspection": "^2.22.0",
+    "@smithy/node-http-handler": "^4.5.2",
     "@thinkwork/database-pg": "workspace:*",
     "@thinkwork/lambda": "workspace:*",
     "@thinkwork/workspace-defaults": "workspace:*",

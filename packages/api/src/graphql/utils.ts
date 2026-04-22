@@ -481,7 +481,15 @@ export async function invokeComposition(
     }
     const { LambdaClient, InvokeCommand } =
       await import("@aws-sdk/client-lambda");
-    const lambda = new LambdaClient({});
+    const { NodeHttpHandler } = await import("@smithy/node-http-handler");
+    // 28s socketTimeout leaves 2s headroom before the graphql-http
+    // Lambda's 30s ceiling (and API Gateway's 29s cap). Without it a
+    // slow agentcore can block past those limits and we lose the chance
+    // to transition skill_runs out of `running` before the client
+    // times out.
+    const lambda = new LambdaClient({
+      requestHandler: new NodeHttpHandler({ socketTimeout: 28_000 }),
+    });
     const body = JSON.stringify(payload);
     const lambdaPayload = JSON.stringify({
       requestContext: { http: { method: "POST", path: "/invocations" } },
