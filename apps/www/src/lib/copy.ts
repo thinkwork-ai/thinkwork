@@ -25,14 +25,14 @@ export const nav = [
 export const meta = {
   title: "ThinkWork — Start small. Build trust. Scale AI safely.",
   description:
-    "A controlled path from AI experiments to trusted AI work. Visible threads, durable memory, capability-granted templates, and a deployment boundary you own.",
+    "The path from AI experiments to trusted AI work. Visible work, governed expansion, and an AWS deployment boundary you own.",
 };
 
 export const hero = {
   eyebrow: "The AI adoption journey",
   headlinePart1: "Start small. Build trust.",
   headlineAccent: "Scale AI safely.",
-  lede: "ThinkWork is the path from AI experiments to trusted AI work — visible threads, durable memory, capability-granted templates, and a deployment boundary that stays inside the AWS account your team already operates.",
+  lede: "The path from AI experiments to trusted AI work — visible work, governed expansion, and an AWS deployment boundary you own.",
   primaryCta: { label: "Read the docs", href: external.docs },
   secondaryCta: { label: "View on GitHub", href: external.github },
   headlineCandidates: [
@@ -42,20 +42,30 @@ export const hero = {
     "A controlled path to real AI work.",
     "Adopt AI. Keep control.",
   ],
+  ledeCandidates: [
+    // Locked: first entry is the winner; runner-ups kept for future copy iteration.
+    "The path from AI experiments to trusted AI work — visible work, governed expansion, and an AWS deployment boundary you own.",
+    "ThinkWork helps organizations move from AI experiments to trusted AI work through visible workflows, governed expansion, and an AWS deployment boundary they own.",
+    "ThinkWork helps organizations adopt AI through small wins, visible work, governed expansion, and a deployment boundary they own.",
+    "ThinkWork is the path from AI experiments to trusted AI work — visible threads, durable memory, capability-granted templates, and a deployment boundary that stays inside the AWS account your team already operates.",
+  ],
 };
 
 export const proofStrip = [
   {
     label: "Start small",
-    detail: "One assistant, one workflow, one team. Pilot without a platform bet.",
+    detail:
+      "One assistant, one workflow, one team. Pilot without a platform bet.",
   },
   {
     label: "Visible work",
-    detail: "Every request, action, and outcome lives inside a durable, inspectable thread.",
+    detail:
+      "Every request, action, and outcome lives inside a durable, inspectable thread.",
   },
   {
     label: "Governed expansion",
-    detail: "Template capability grants, per-agent budgets, and evaluations that scale with usage.",
+    detail:
+      "Approved capabilities per agent, budgets that cap spend, and evaluations that scale with usage.",
   },
   {
     label: "Your AWS account",
@@ -63,7 +73,8 @@ export const proofStrip = [
   },
   {
     label: "One system at every scale",
-    detail: "The runtime a developer spins up in five commands is the runtime production runs on.",
+    detail:
+      "The runtime a developer spins up in five commands is the runtime production runs on.",
   },
 ];
 
@@ -115,25 +126,29 @@ export const howItWorks = {
     {
       title: "Threads",
       oneLiner: "Threads keep work visible.",
-      detail: "Every request, action, and outcome lives in one system of record — durable, attributed, and inspectable per thread, per agent, per tenant.",
+      detail:
+        "Every request, action, and outcome lives in one system of record — durable, attributed, and inspectable per thread, per agent, per tenant.",
       href: "#audit",
     },
     {
       title: "Memory",
       oneLiner: "Memory carries context forward.",
-      detail: "Agents do not start from zero every time. Useful context, decisions, and knowledge stay available across threads, across teams, across time.",
+      detail:
+        "Agents do not start from zero every time. Useful context, decisions, and knowledge stay available across threads, across teams, across time.",
       href: "#memory",
     },
     {
       title: "Templates",
       oneLiner: "Templates enforce boundaries.",
-      detail: "You decide which tools, models, and knowledge each agent can use. Agents inherit the boundary — policy becomes code, not paperwork.",
+      detail:
+        "You decide what each agent is allowed to do — which tools, models, and knowledge it can use. Agents inherit that boundary.",
       href: "#templates",
     },
     {
       title: "Controls",
       oneLiner: "Controls make adoption governable.",
-      detail: "Budgets, guardrails, evaluations, and audit trails keep AI accountable as usage grows.",
+      detail:
+        "Budgets, guardrails, evaluations, and audit trails keep AI accountable as usage grows.",
       href: "#controls",
     },
   ],
@@ -150,8 +165,8 @@ export const controls = {
       icon: "aws",
     },
     {
-      title: "Capability-granted templates",
-      desc: "Templates pin the model, allow-list tools, attach guardrails, and gate knowledge access. Agents inherit the boundary.",
+      title: "Approved agent capabilities",
+      desc: "Each agent inherits an approved set of tools, models, and knowledge from its template — policy becomes code, not paperwork.",
       icon: "templates",
     },
     {
@@ -227,23 +242,19 @@ export const audit = {
 export const costControl = {
   eyebrow: "Cost",
   headline: "Cost attributed where it happens.",
-  lede: "Every model call emits a cost event tagged by tenant, agent, and model. Attribution is real-time. Per-agent budgets pause execution before overruns compound.",
+  lede: "Every model call emits a cost event tagged by tenant, agent, and model. Per-agent budgets pause execution before overruns compound.",
   features: [
     {
-      title: "Real-time attribution",
-      desc: "Every invocation emits a cost event tagged by tenant, agent, and model — no end-of-month reconciliation.",
-    },
-    {
-      title: "30-day trendlines",
-      desc: "Rolling spend charts for every agent and every model, ready to drill into on demand.",
+      title: "Owned cost ledger",
+      desc: "Every invocation emits a cost event tagged by tenant, agent, and model, written to the Postgres you deployed.",
     },
     {
       title: "Enforced budgets",
       desc: "Per-agent hard caps pause execution before a runaway loop compounds into a bill.",
     },
     {
-      title: "Events in your database",
-      desc: "Cost events live in the Postgres you deployed. Query them directly from your AWS account — you own the ledger.",
+      title: "Evaluated in context",
+      desc: "Cost shows up next to the turn that produced it, so spend and quality travel together.",
     },
   ],
   caption: "Admin web · analytics · cost view",
@@ -270,8 +281,8 @@ export const evals = {
 
 export const systemModel = {
   eyebrow: "One admin console",
-  headline: "Agents, templates, cost, evaluations, and memory in one admin console.",
-  lede: "Four primitives, one surface wrapping them. Simple enough to hold in your head, strict enough to ship against.",
+  headline: "One surface where the primitives connect.",
+  lede: "Threads, memory, agents, and connectors meet in one admin surface. Governance, audit, and spend travel with them — no fragmented toolchain, no per-tool control plane.",
   nodes: [
     {
       title: "Threads",
@@ -313,9 +324,9 @@ export const memory = {
 };
 
 export const mobile = {
-  eyebrow: "End-user app",
-  headline: "Your users get a real mobile app.",
-  lede: "The operator story lives in the admin web. The user story lives in a native-feeling iOS app built on the same threads, agents, and connectors the rest of the system uses.",
+  eyebrow: "End-user surface",
+  headline: "End users get a real work surface too.",
+  lede: "Governed AI is not just an admin surface. The operator story lives in the admin web; the user story is a native iOS app on the same threads, agents, and connectors — live on TestFlight today.",
   highlights: [
     {
       title: "Assigned work, one place",
@@ -330,8 +341,8 @@ export const mobile = {
       desc: "Webhook events, agent turns, and status changes land on-device within seconds over AppSync.",
     },
     {
-      title: "On TestFlight today",
-      desc: "iOS first, live for early users. The Expo codebase is cross-platform; Android ships when the iOS shape is stable.",
+      title: "Memory, browseable",
+      desc: "The Wiki tab surfaces the same entities, pages, and knowledge graph the admin shows — so end users can see what the org has learned.",
     },
   ],
 };
