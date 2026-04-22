@@ -189,10 +189,80 @@ def _check_admin_role() -> None:
         )
 
 
+def _begin_mutation(operation_name: str) -> dict[str, object]:
+    """Pre-mutation pipeline shared by every wrapper in operations/*.py.
+
+    Runs in this order:
+      1. `_env()` — refuse on R15 no-invoker / env-misconfigured.
+      2. `_check_admin_role()` — wrapper-side role gate (early-fail UX).
+      3. `turn_cap.check_and_increment()` — per-turn mutation cap (Unit 9).
+
+    Returns a context dict carrying the resolved env + the start time,
+    consumed by `_end_mutation()` to emit the audit log (Unit 12).
+
+    Raises `AdminSkillRefusal` on any gate failure — @_safe turns that
+    into a structured refused shape for the caller. The counter is
+    incremented BEFORE the GraphQL call, so if the server refuses the
+    mutation the turn still counts (otherwise an agent could burn its
+    budget on refused calls and never trip the cap).
+    """
+    import time as _time
+
+    import turn_cap as _turn_cap
+
+    env = _env()
+    _check_admin_role()
+    turn_count = _turn_cap.check_and_increment()
+    return {
+        "env": env,
+        "operation_name": operation_name,
+        "turn_count": turn_count,
+        "started_at_ms": int(_time.time() * 1000),
+    }
+
+
+def _end_mutation(
+    ctx: dict[str, object],
+    *,
+    status: str,
+    arguments: object,
+    refusal_reason: str | None = None,
+) -> None:
+    """Post-mutation pipeline — emit one structured audit line.
+
+    Never raises. Called on both success and refusal paths. Redaction
+    lives in `audit.emit` (Unit 12) so secrets never reach stdout.
+    """
+    import time as _time
+
+    import audit as _audit
+
+    env = ctx["env"]
+    try:
+        _audit.emit(
+            invoker_user_id=env["current_user_id"],  # type: ignore[index]
+            invoker_role="admin",
+            agent_id=env["agent_id"],  # type: ignore[index]
+            agent_tenant_id=env["tenant_id"],  # type: ignore[index]
+            operation_name=ctx["operation_name"],  # type: ignore[arg-type]
+            arguments=arguments,
+            status=status,
+            refusal_reason=refusal_reason,
+            latency_ms=int(_time.time() * 1000) - int(ctx["started_at_ms"]),  # type: ignore[arg-type]
+            turn_count=ctx["turn_count"] if isinstance(ctx.get("turn_count"), int) else None,  # type: ignore[arg-type]
+        )
+    except Exception:
+        # Audit emission must never block the caller. Failures swallow;
+        # the underlying stdout write is synchronous and won't retry.
+        pass
+
+
 __all__ = [
     "AdminSkillRefusal",
     "_env",
     "_graphql",
     "_safe",
     "_check_admin_role",
+    "_begin_mutation",
+    "_end_mutation",
 ]
