@@ -1,0 +1,210 @@
+---
+title: "Composable Skills: Primitives"
+description: The reusable sub-skills most compositions chain together — frame, gather, synthesize, package — plus how to add a new primitive to the catalog. Primitives are the difference between "writing a new composition takes 30 lines of YAML" and "writing a new composition takes 300 lines of Python."
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A composition is only as cheap to author as its primitive library. `sales-prep`, `renewal-prep`, `account-health-review`, and `customer-onboarding-reconciler` all chain the same four primitives with different inputs and a few different branches inside `gather`. That's the leverage — the first composition justifies building the primitives; the next N compositions are nearly free.
+
+This page is the catalog: what each primitive does, its contract, when to reach for it, and what to do if the one you need doesn't exist yet.
+
+## The four core primitives
+
+The primitives fall into two rough tiers: **structural** (frame, synthesize, package) and **data-gathering** (gather). Structural primitives transform text; data-gathering primitives pull from external systems. Most compositions touch both.
+
+### frame — structured problem restatement
+
+**Id:** `frame`
+**Execution:** `context` (LLM-prompt skill)
+**Inputs:** `problem: string`, `context: string?`
+**Output:** `framed` — a structured text block with four headings: `## Goal`, `## Constraints`, `## Known unknowns`, `## Decision criteria`.
+
+`frame` converts a free-form problem statement into an explicit restatement the rest of the composition can work against. Most compositions start here because later steps (`gather`, `synthesize`) need a clear target, and letting each step infer the target separately produces drift.
+
+```yaml
+- id: frame
+  mode: sequential
+  skill: frame
+  inputs:
+    problem: "Prep for meeting with {customer} on {meeting_date}. Focus: {focus}."
+  output: framed
+```
+
+**When to use it:** any composition whose first human-readable input is a user's free-form request or a templated string assembled from composition inputs.
+**When not to use it:** compositions that run on purely structured input (e.g. a CRM event payload where the shape is already fixed) — skip straight to `gather`.
+
+### gather — parallel fan-out to data sources
+
+**Id:** `gather`
+**Execution:** composition primitive invoked via `mode: parallel` branches
+**Inputs:** inherited per branch
+**Output:** dict keyed by branch id (`{gathered.crm}`, `{gathered.ar}`, …)
+
+`gather` isn't a single skill — it's a pattern. A parallel step with multiple branches, each branch invoking a data-source skill concurrently. The branches are *the* domain-specific skills: `crm_account_summary`, `ar_summary`, `support_incidents_summary`, `web_research`, `wiki_search`, `usage_metrics_summary`, etc.
+
+```yaml
+- id: gather
+  mode: parallel
+  on_branch_failure: continue_with_footer
+  branches:
+    - id: crm
+      skill: crm_account_summary
+      inputs: { customer: "{customer}" }
+      critical: true
+    - id: tickets
+      skill: support_incidents_summary
+      inputs: { customer: "{customer}" }
+    - id: web
+      skill: web_research
+      inputs: { customer: "{customer}", date: "{meeting_date}" }
+```
+
+**The critical flag is the key design choice.** A `critical: true` branch failing fails the whole step. A non-critical branch failing gets noted as a footer on the aggregated output ("⚠️ ar_summary unavailable — AR data not included in synthesis"). The downstream `synthesize` step sees both the successful branches and the footer notes, and weights its synthesis accordingly.
+
+**When to use it:** whenever you need to pull from 2+ independent data sources and the composition's value is the synthesis across them.
+**When not to use it:** if you only need one source, a sequential step calling the source skill directly is clearer than a parallel-of-one.
+
+<Aside type="tip">
+  Mark at most one branch `critical: true`. Marking multiple critical branches turns the step into an AND gate where any single failure blocks the whole composition. The pattern is "one source is load-bearing; the rest are nice-to-have."
+</Aside>
+
+### synthesize — structured cross-source synthesis
+
+**Id:** `synthesize`
+**Execution:** `context` (LLM-prompt skill)
+**Inputs:** `framed: string`, `gathered: string | dict`, `focus: string?`
+**Output:** `synthesis` — structured text with four headings: `## Risks`, `## Opportunities`, `## Open questions`, `## Talking points`.
+
+`synthesize` reads the framing + the gathered data and produces a structured cross-source summary. It's where the composition's intelligence lives — the LLM reasons over what's in `gathered`, weighs against the `framed` goal, and produces a decision-ready artifact.
+
+```yaml
+- id: synthesize
+  mode: sequential
+  skill: synthesize
+  inputs:
+    framed: "{framed}"
+    gathered: "{gathered}"
+    focus: "{focus}"
+  output: synthesis
+```
+
+The four-heading output is deliberate — it's a stable shape downstream skills (`package`, delivery formatters) can parse.
+
+**When to use it:** whenever `gather` pulled multi-source data and a human-readable decision artifact is the end goal.
+**When not to use it:** if the composition's output is a structured API payload (e.g. creating a record in another system), not a human-readable narrative. Use a custom script skill instead.
+
+### package — deterministic template rendering
+
+**Id:** `package`
+**Execution:** `script` (deterministic Python function — no LLM)
+**Inputs:** `synthesis: string`, `format: enum[sales_brief, health_report, renewal_risk]`, `metadata: dict?`
+**Output:** `deliverable` — rendered markdown.
+
+`package` takes a synthesis and renders it into a named template. The `package` skill in the catalog ships three templates: `sales_brief`, `health_report`, `renewal_risk`. Adding a template is adding a file to `packages/skill-catalog/package/templates/`.
+
+```yaml
+- id: package
+  mode: sequential
+  skill: package
+  inputs:
+    synthesis: "{synthesis}"
+    format: sales_brief
+  output: deliverable
+```
+
+Because `package` is a script skill (no LLM), it's deterministic — the same synthesis + format produces byte-identical output. That's what makes it a useful probe for the full dispatch → runtime → DB loop; see `scripts/smoke/complete-smoke.sh`.
+
+**When to use it:** whenever the composition's final step is "format this into a known deliverable shape."
+**When not to use it:** if the output format itself needs LLM reasoning (e.g. adapting to the user's preferred style), use a context-mode skill instead.
+
+## The dispatcher/router primitives
+
+Not all primitives are data-gathering or formatting. Two structural primitives serve the dispatch layer:
+
+### skill-dispatcher — chat intent routing
+
+The chat agent's skill-dispatcher primitive listens for messages, matches user intent against every composition's `triggers.chat_intent.examples`, and invokes the best match via `/api/skills/start`. You don't reference `skill-dispatcher` from a composition — it *invokes* compositions. Covered in depth under [Managed Agents](/concepts/agents/managed-agents/).
+
+### compound_recall / compound_reflect — automatic memory hooks
+
+Every composition automatically attempts a `compound_recall` step before the first declared step and a `compound_reflect` step after the last (when `context.scope` is present). Recall pulls prior learnings; reflect writes new ones. These run *implicitly* — you don't declare them in your steps. If a tenant hasn't enabled the compounding-memory path, the implicit steps fail silently and the composition proceeds with the declared steps.
+
+See [Compounding Memory](/concepts/knowledge/compounding-memory/) for the full picture.
+
+## Adding a new primitive
+
+A new primitive earns its keep when you've drafted at least two compositions that would reference it. Before that, it's speculative; after that, the extraction is mechanical.
+
+### Decide the execution mode
+
+| Need | Choose | Rationale |
+|------|--------|-----------|
+| Deterministic transform (template, format, math) | `execution: script` | No LLM cost, perfectly reproducible, CI-testable |
+| LLM reasoning over structured input | `execution: context` | Prompt template + model call, produced by the agentcore container |
+| A whole multi-step workflow | `execution: composition` | Nest a composition inside another composition — rare but supported |
+
+Script is cheapest and most reliable. Prefer it when the transform can be expressed deterministically.
+
+### Write the skill
+
+Every primitive is a standard skill — not composition-specific. Put it in `packages/skill-catalog/<slug>/` with:
+
+```
+packages/skill-catalog/<slug>/
+├── skill.yaml            # id, execution, inputs, outputs, scripts/prompts pointers
+├── SKILL.md              # the contract; what it does, inputs/outputs, examples
+├── README.md             # optional; authoring notes
+├── scripts/              # for execution: script
+│   └── <entry>.py
+├── prompts/              # for execution: context
+│   └── <slug>.md
+└── tests/                # optional but strongly recommended for script skills
+```
+
+For script skills, the `scripts[0]` entry in `skill.yaml` names the entry function; the dispatch closure imports the file and calls that function with inputs as kwargs.
+
+### Invocable from composition only
+
+Most primitives should *not* be installed as direct agent tools — the runtime treats them as internal-only. Mark them explicitly in `SKILL.md`:
+
+```markdown
+## When this is invoked
+
+Only by a composition step. Direct chat invocation is not supported.
+```
+
+This keeps the admin-surface catalog clean and avoids confusing end-users with primitives that only make sense as part of a composition.
+
+### Upload + dispatch-test
+
+1. Sync to S3: `aws s3 sync packages/skill-catalog/<slug>/ s3://<bucket>/skills/catalog/<slug>/`.
+2. Write a one-step composition referencing the new primitive.
+3. Fire `/api/skills/start` with the composition's id and check `skill_runs.status`.
+4. Iterate on the primitive's contract until the composition reaches `status=complete`.
+
+Once validated, reference the primitive from the real compositions it was built for.
+
+## Existing primitives at a glance
+
+| Primitive | Execution | Purpose |
+|-----------|-----------|---------|
+| `frame` | context | Structured problem restatement |
+| `synthesize` | context | Multi-source cross-synthesis |
+| `package` | script | Deterministic template rendering |
+| `compound_recall` | implicit | Pull prior learnings (auto-invoked) |
+| `compound_reflect` | implicit | Write new learnings (auto-invoked) |
+| `crm_account_summary` | *(pending connector)* | CRM account data fetch |
+| `ar_summary` | *(pending connector)* | AR data fetch |
+| `support_incidents_summary` | *(pending connector)* | Support-system data fetch |
+| `web_research` | *(pending connector)* | External web context |
+| `wiki_search` | context | Internal wiki retrieval |
+
+The `(pending connector)` primitives have their skill.yaml defined but no registered script or context implementation yet — they raise `SkillNotRegisteredError` when dispatched, which is a clean named failure per the composable-skills plan. Real connector adapters are tracked as a follow-up.
+
+## Related pages
+
+- [Overview](/concepts/agents/composable-skills/) — the conceptual framing and stack diagram
+- [Authoring](/concepts/agents/composable-skills/authoring/) — walk through a composition YAML field-by-field
+- [Skills](/concepts/agents/skills/) — the single-skill layer, of which every primitive is an instance
+- [Managed Agents](/concepts/agents/managed-agents/) — the runtime that dispatches primitives

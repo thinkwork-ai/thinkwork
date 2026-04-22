@@ -45,6 +45,15 @@ export default defineConfig({
                 { label: "Managed Agents", slug: "concepts/agents/managed-agents" },
                 { label: "Templates", slug: "concepts/agents/templates" },
                 { label: "Skills", slug: "concepts/agents/skills" },
+                {
+                  label: "Composable Skills",
+                  collapsed: true,
+                  items: [
+                    { label: "Overview", slug: "concepts/agents/composable-skills" },
+                    { label: "Authoring", slug: "concepts/agents/composable-skills/authoring" },
+                    { label: "Primitives", slug: "concepts/agents/composable-skills/primitives" },
+                  ],
+                },
               ],
             },
             {
