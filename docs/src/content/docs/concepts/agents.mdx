@@ -1,42 +1,122 @@
 ---
 title: Agents
-description: Managed agents powered by AgentCore and Bedrock, connected agents that bring their own runtime, plus templates and skill packs for reuse.
+description: Managed agents run by ThinkWork inside your AWS account, connected agents that bring their own runtime, and the model for how both plug into threads, memory, and connectors.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-An agent in ThinkWork is a named entity that receives messages in a thread and produces responses. Agents come in two flavors: **managed** (ThinkWork runs the runtime inside your AWS account) and **connected** (you bring your own runtime).
+An agent in ThinkWork is a named entity that receives messages in a thread and produces responses. Agents are the decision-making layer: they read assembled context, decide what to do, call tools, and write back into the thread.
 
-## The role of agents in the system
+ThinkWork supports two kinds of agents — **managed** and **connected** — and the difference is about *where the inference runtime lives*, not about what capabilities the agent has.
 
-Agents are the decision-making layer of ThinkWork. They sit on top of threads, use memory and document knowledge for context, and call tools through skill packs or connectors.
+## Managed vs. connected
 
-If you're new to the model, a good reading order is:
+**Managed agents** are the default. ThinkWork runs them on **AgentCore**, a Python Lambda container built on the [Strands](https://strandsagents.com) framework, inside *your* AWS account. You get a consistent execution model, thread integration, streaming, auditability, and cost tracking without building your own orchestration.
 
-1. [Threads](/concepts/threads/)
-2. [Agents](/concepts/agents/)
-3. [Memory](/concepts/knowledge/)
-4. [Connectors](/concepts/connectors/)
+The important distinction: managed does not mean vendor-hosted. ThinkWork makes running an agent easy; the harness, state, memory, guardrails, audit, and data still live inside your deployment boundary. Your tenants' data never leaves your AWS account.
 
-## Managed agents
+**Connected agents** let you plug an existing runtime — your own Python service, a LangChain or LlamaIndex app, a custom container, a third-party hosted agent — into the ThinkWork thread and control plane. ThinkWork still handles auth, thread persistence, real-time updates, and the admin UI. You provide the inference logic.
 
-Managed agents are the default ThinkWork runtime. ThinkWork runs them on AgentCore in your AWS account and wires them into the rest of the platform.
+A connected agent registers a webhook. When a message arrives in a thread assigned to it, ThinkWork POSTs the thread context to your endpoint; your runtime produces a response in the standard message format and posts it back.
 
-That means ThinkWork gives you managed execution without forcing you into a vendor-hosted control plane.
+<Aside type="note">
+  Connected agents are the right choice when you already have agent infrastructure and want ThinkWork's thread system, connectors, memory, and admin surfaces *on top of* it without migrating your runtime. They're the wrong choice when you want the managed benefits (guardrail integration, per-turn cost capture, fleet-wide template rotation) — those only apply to the managed path.
+</Aside>
 
-Every managed agent has:
+Both kinds of agents show up identically in the admin app, the mobile app, the thread list, and the audit log. An operator sees "Agent X replied in thread Y" the same way regardless of where the inference ran.
 
-- A **model** selected through an agent template
-- A **system prompt** stored on the agent record
-- Optional **skill packs**
-- Optional **document knowledge access**
-- Optional **memory behavior**
+## What a managed agent has
 
-Read [Managed Agents](/concepts/agents/managed-agents/) for the runtime model and [Templates and Skills](/concepts/agents/templates-and-skills/) for the reuse model.
+Every managed agent is a record that references:
+
+- A **template** (see below) — model, guardrail, inference parameters, memory behavior.
+- A **system prompt** — the agent-specific instructions, stored on the agent record.
+- Optional **skill packs** — bundled capabilities the agent can call.
+- Optional **knowledge bases** — documents the agent retrieves from at turn time.
+- Optional **connectors + MCP servers** — external tool surfaces the agent is allowed to use.
+
+The agent itself is thin. Most of what determines how it behaves lives on the **template** it references.
+
+## Templates: where the real configuration lives
+
+Templates are the reuse layer for agent configuration. Rather than setting model, guardrails, budgets, and tool config per agent — and watching them drift over time — you set them once on a template and assign agents to it.
+
+When you update the template, every agent on it picks up the change on the next invocation. That's how ThinkWork handles fleet-wide model rotations, guardrail policy tightening, or budget cap changes: one write, many agents.
+
+See [Templates and Skills](/concepts/agents/templates-and-skills/) for the full reuse model.
+
+## How a turn runs (managed path)
+
+When a message arrives in a thread assigned to a managed agent:
+
+```
+Thread message → API Gateway → AgentCore Lambda
+                                        │
+                                        ▼
+                              Load agent + template
+                                        │
+                                        ▼
+                              Assemble context
+                              (history + docs + memory + wiki)
+                                        │
+                                        ▼
+                              Bedrock Converse (guardrail applied)
+                                        │
+                                        ▼
+                              Strands loop: tool calls, reasoning, response
+                                        │
+                                        ▼
+                              Write turn + messages back to thread
+                                        │
+                                        ▼
+                              AppSync subscription → client
+```
+
+Strands runs the inner agent loop — tool calling, multi-step reasoning, streaming. ThinkWork provides everything surrounding it: thread state, memory access, template-driven model config, guardrail enforcement, cost capture, connector-provided tools.
+
+See [Managed Agents](/concepts/agents/managed-agents/) for the runtime model in depth.
+
+## Agent lifecycle
+
+An agent record moves through a small state machine:
+
+```
+created → active → suspended → archived
+```
+
+- **created** — Agent exists but has never been invoked.
+- **active** — Agent is accepting messages.
+- **suspended** — Agent is paused. Usually set by the budget reconciler when a spend cap is hit, but operators can also suspend manually.
+- **archived** — Agent is retired. Read-only; visible for audit but won't receive messages.
+
+Suspended agents stop *on the next invocation boundary*. An in-flight turn when suspension happens finishes; subsequent messages get a "this agent is suspended" error until an operator resumes it.
+
+## How agents relate to the rest of the system
+
+Agents don't own threads, memory, or connectors — they *use* them. Every concept is composable:
+
+- **Threads** — agents act inside threads, not outside them. See [Threads](/concepts/threads/).
+- **Memory** — agents read document knowledge, recall long-term memories, and read their own compounding-memory wiki. They don't define what memory is. See [Memory](/concepts/knowledge/).
+- **Connectors** — MCP tool connectors expose external capabilities the agent can call during a turn. See [Connectors](/concepts/connectors/).
+- **Control** — guardrails wrap agent invocations; budgets cap their spend; audit records everything they do. See [Control](/concepts/control/).
+
+<Aside type="tip">
+  When you start with ThinkWork, read the concepts in this order: [Threads](/concepts/threads/), [Agents](/concepts/agents/), [Memory](/concepts/knowledge/), [Connectors](/concepts/connectors/). Once those four are clear, Control and Automations layer cleanly on top.
+</Aside>
+
+## Related pages
+
+- [Managed Agents](/concepts/agents/managed-agents/) — the AgentCore + Strands runtime in detail
+- [Templates and Skills](/concepts/agents/templates-and-skills/) — the reuse model for fleets
+- [Admin: Agents](/applications/admin/agents/) — the operator surface for managing agents
+- [Admin: Agent Templates](/applications/admin/agent-templates/) — templates live here
+- [Admin: Agent Invites](/applications/admin/agent-invites/) — how to connect a BYOB runtime to ThinkWork
+
+## Under the hood
 
 ### Creating a managed agent
 
-Use the admin app or the GraphQL API:
+The admin app is the main way to create agents. For scripting or SDKs, the GraphQL mutation:
 
 ```graphql
 mutation CreateAgent {
@@ -46,7 +126,7 @@ mutation CreateAgent {
     systemPrompt: "You are a helpful support agent for Acme Corp. Be concise and accurate."
     templateId: "tpl-claude-sonnet"
     skillPackIds: ["sp-jira", "sp-confluence"]
-    knowledgeBaseId: "kb-support-docs"
+    knowledgeBaseIds: ["kb-support-docs"]
   }) {
     id
     name
@@ -55,100 +135,30 @@ mutation CreateAgent {
 }
 ```
 
-## Connected agents
+### Model selection
 
-Connected agents let you plug an existing runtime, such as your own Python service, LangChain app, or custom container, into the ThinkWork thread and control plane. ThinkWork handles auth, thread persistence, real-time updates, and the admin UI while you provide the inference logic.
+Managed agents use Amazon Bedrock for inference. Any model available in your region through Bedrock can be referenced, but you must [request model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html) in the AWS console first for each model.
 
-Connected agents register a **webhook endpoint**. When a message arrives in a thread assigned to a connected agent, ThinkWork POSTs the thread context to your endpoint and expects a response in the standard message format.
+Model id is set at the template level, not per-agent. That's how a fleet-wide rotation is one update.
 
-<Aside type="note">
-Connected agents are useful when you already have agent infrastructure and want ThinkWork's thread system, connectors, and admin app on top of it without migrating your runtime.
-</Aside>
+### Connected-agent webhook contract
 
-## Agent Templates
+Connected agents register a webhook URL. ThinkWork POSTs a payload shaped like:
 
-Agent Templates define fleet-wide defaults for model selection, guardrails, and tool configuration. Rather than setting these per-agent, you set them once on a template and assign agents to that template.
-
-A template specifies:
-
-| Field | Description |
-|-------|-------------|
-| `modelId` | Bedrock model ID (e.g. `anthropic.claude-3-5-sonnet-20241022-v2:0`) |
-| `guardrailId` | Bedrock Guardrail ID to apply on every invoke |
-| `maxTokens` | Maximum output tokens per turn |
-| `temperature` | Sampling temperature (0.0–1.0) |
-| `toolConfig` | Which tool categories are enabled (SQL, S3, web, and connector-provided tools such as MCP) |
-| `memoryConfig` | Memory engine settings (retain/recall/reflect intervals) |
-
-### Example template
-
-```graphql
-mutation CreateTemplate {
-  createAgentTemplate(input: {
-    name: "Claude Sonnet — Standard"
-    modelId: "anthropic.claude-3-5-sonnet-20241022-v2:0"
-    maxTokens: 8192
-    temperature: 0.3
-    guardrailId: "gr-default-safe"
-    toolConfig: {
-      sqlEnabled: true
-      s3Enabled: true
-      mcpEnabled: false
-      webEnabled: false
-    }
-  }) {
-    id
-    name
-  }
+```json
+{
+  "threadId": "CHAT-01H...",
+  "messages": [ /* canonical message history */ ],
+  "memory": { /* optional retrieved context */ },
+  "metadata": { /* channel-specific fields */ }
 }
 ```
 
-When you update a template, every agent assigned to it picks up the change on the next invoke. This is the primary mechanism for rotating models and runtime defaults across your fleet.
+The connected runtime is expected to respond with a message in the same shape. The exact contract and auth model are covered in the [Admin: Agent Invites](/applications/admin/agent-invites/) page, which also documents how to issue an invite token that authorizes a BYOB runtime.
 
-## Skill packs
+### Agent storage
 
-Skill packs are the primary extension mechanism for managed agents. A skill pack is a `SKILL.md` file stored in your S3 skill catalog bucket. At invoke time, AgentCore downloads the skill packs assigned to the agent, parses them, and injects their capabilities into the runtime.
-
-Managed agents can also receive external tools through connectors, including MCP-based tool connectors configured at the tenant and template level. Use skill packs when you want to package logic inside ThinkWork, and use connector-managed tool systems when you want agents to call out to existing external services.
-
-See [Templates and Skills](/concepts/agents/templates-and-skills/) for the fuller operating model and [Authoring Guide: Skill Packs](/guides/skill-packs/) for the SKILL.md format.
-
-## Model selection
-
-ThinkWork uses Amazon Bedrock for managed agent inference. Any model available in your region through Bedrock can be used, but you must [request model access](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html) in the AWS console first.
-
-Recommended starting models:
-
-| Use case | Model ID |
-|----------|----------|
-| General purpose (recommended) | `anthropic.claude-3-5-sonnet-20241022-v2:0` |
-| High throughput / lower cost | `anthropic.claude-3-haiku-20240307-v1:0` |
-| Complex reasoning | `anthropic.claude-3-5-sonnet-20241022-v2:0` with extended thinking |
-| Long context | `anthropic.claude-3-5-sonnet-20241022-v2:0` (200k context) |
-
-Model IDs are usually set at the **Agent Template** level rather than per-agent.
-
-## Memory and document knowledge
-
-Agents use memory and document knowledge, but they do not own those concepts.
-
-- Use [Memory](/concepts/knowledge/) for the umbrella model
-- Use [Document Knowledge](/concepts/knowledge/document-knowledge/) for Bedrock Knowledge Bases
-- Use [Long-term Memory](/concepts/knowledge/memory/) for retained context across work
-
-Over time, ThinkWork should expose that memory through a ThinkWork-owned contract so portability is defined at the harness layer, not by raw backend endpoints.
-
-<Aside type="tip">
-Start with the default AgentCore LongTerm memory and a single focused knowledge base. Expand from there once the agent's job and retrieval needs are clear.
-</Aside>
-
-## Agent lifecycle
-
-```
-created → active → suspended → archived
-```
-
-- **created** — Agent exists but has never been invoked
-- **active** — Agent is accepting messages
-- **suspended** — Agent is paused (for example, budget limit hit)
-- **archived** — Agent is retired and read-only
+- **Table.** `agents` in Aurora Postgres. Foreign-keys to `agent_templates`, `tenants`.
+- **Status column.** Postgres enum. Budget-driven pauses are reversible; archival is sticky.
+- **System prompt.** Stored on the agent row. Agent-specific system prompt is appended after the template's base instructions at invocation time.
+- **Real-time updates.** `OnAgentStatusChangedSubscription` — any status transition fires to subscribed clients so the admin agent list stays live.

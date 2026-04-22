@@ -17,6 +17,14 @@ hero:
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
+## What ThinkWork is
+
+ThinkWork is an open agent harness you deploy into your own AWS account. Not a hosted service with a control plane you don't own, not a SaaS product with your data in somebody else's multi-tenant database — a Terraform module that stands up the whole system inside your VPC, keyed to your Cognito, running on your Bedrock endpoint, with your agent state in your Aurora cluster.
+
+The harness is what's opinionated; the infrastructure is yours. That means you get a production-grade system — threads, memory, agents, connectors, automations, controls — wired together correctly, with AgentCore as the managed runtime. And you keep every byte of data, every audit log, and every IAM boundary in your own account. If ThinkWork the company disappears tomorrow, your deployment keeps working.
+
+This is designed for teams who've already picked AWS, who want more than a demo, and who aren't willing to trade control for convenience. If that's you, the next 15 minutes (see [Getting Started](/getting-started/)) goes from zero to a running agent invocation.
+
 ## Six core concepts, one deploy
 
 <CardGrid>
