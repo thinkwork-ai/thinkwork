@@ -34,6 +34,28 @@ class SkillYamlCoercionTests(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    def test_permissions_model_top_level_key_roundtrips(self):
+        """Unit 3 adds `permissions_model: operations` to thinkwork-admin's
+        manifest. The parser must tolerate it as a plain top-level string
+        key so sync-catalog-db (which stores the full parsed YAML in
+        tier1_metadata) surfaces it unchanged to downstream consumers."""
+        parsed = self._parse(
+            textwrap.dedent(
+                """
+                slug: thinkwork-admin
+                permissions_model: operations
+                scripts:
+                  - name: create_agent
+                    path: scripts/operations/agents.py
+                    default_enabled: true
+                """
+            ).lstrip()
+        )
+        self.assertEqual(parsed.get("permissions_model"), "operations")
+        # Adjacent scripts list still parses correctly — the new top-level
+        # key must not disturb the parser's list handling.
+        self.assertEqual(parsed["scripts"][0]["default_enabled"], True)
+
     def test_default_enabled_true_is_python_true_in_list_item(self):
         parsed = self._parse(
             textwrap.dedent(
