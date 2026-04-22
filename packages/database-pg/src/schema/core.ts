@@ -66,6 +66,13 @@ export const tenants = pgTable(
     // gates on ID-present independently of sandbox_enabled (plan R-Q10).
     sandbox_interpreter_public_id: text("sandbox_interpreter_public_id"),
     sandbox_interpreter_internal_id: text("sandbox_interpreter_internal_id"),
+    // Set by the stripe-webhook Lambda when a checkout.session.completed event
+    // pre-provisions a paid tenant. bootstrapUser later matches this column
+    // to a Google-signed-in user's email and claims the tenant (attaches the
+    // user as owner, clears this column). NULL for tenants created by
+    // bootstrapUser directly (free signups) or once a paid tenant is claimed.
+    // Partial unique index enforced via drizzle/0022_stripe_billing_indexes.sql.
+    pending_owner_email: text("pending_owner_email"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
