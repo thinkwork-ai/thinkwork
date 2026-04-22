@@ -618,6 +618,43 @@ describe("list action includeContent (Strands container cold-start)", () => {
 	});
 });
 
+// ─── 8c. CORS preflight + headers on every response ─────────────────────────
+
+describe("CORS", () => {
+	it("short-circuits OPTIONS preflight with 204 + CORS headers before auth", async () => {
+		// No auth mock set up — if the handler hit authenticate() it would
+		// return 401 and this test would fail.
+		authMockImpl.mockResolvedValue(null);
+		const preflight = await handler({
+			headers: {
+				origin: "http://localhost:5175",
+				"access-control-request-method": "POST",
+				"access-control-request-headers": "authorization, content-type",
+			},
+			requestContext: { http: { method: "OPTIONS" } },
+			body: null,
+		});
+		expect(preflight.statusCode).toBe(204);
+		expect(preflight.headers?.["Access-Control-Allow-Origin"]).toBe("*");
+		expect(preflight.headers?.["Access-Control-Allow-Methods"]).toMatch(/POST/);
+		expect(preflight.headers?.["Access-Control-Allow-Headers"]).toMatch(
+			/authorization/i,
+		);
+	});
+
+	it("emits Access-Control-Allow-Origin on normal POST responses too", async () => {
+		authMockImpl.mockResolvedValue(null);
+		const res = await handler({
+			headers: {},
+			body: JSON.stringify({ action: "list", agentId: AGENT_ID }),
+		});
+		// 401 (no auth) but CORS headers must still be present or the
+		// browser won't even expose the response body to the admin UI.
+		expect(res.statusCode).toBe(401);
+		expect(res.headers?.["Access-Control-Allow-Origin"]).toBe("*");
+	});
+});
+
 // ─── 9. Action validation ────────────────────────────────────────────────────
 
 describe("action validation", () => {

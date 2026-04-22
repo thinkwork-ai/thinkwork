@@ -63,6 +63,7 @@ import { agents, agentTemplates, db, eq, tenants } from "./src/graphql/utils.js"
 interface APIGatewayProxyEvent {
 	headers?: Record<string, string | undefined>;
 	body?: string | null;
+	requestContext?: { http?: { method?: string } };
 }
 
 interface APIGatewayProxyResult {
@@ -71,12 +72,30 @@ interface APIGatewayProxyResult {
 	body: string;
 }
 
+// CORS headers mirror packages/api/src/lib/response.ts so the admin SPA
+// (localhost:5175 in dev, the static-site bucket in prod) and the mobile
+// app can hit this endpoint from the browser / WebView. The API Gateway
+// has tenant-scoped cors_configuration too, but HTTP API proxy
+// integrations forward OPTIONS to the Lambda — so we must respond 2xx
+// ourselves or the browser preflight fails.
+const CORS_HEADERS = {
+	"Access-Control-Allow-Origin": "*",
+	"Access-Control-Allow-Methods": "POST, OPTIONS",
+	"Access-Control-Allow-Headers":
+		"Content-Type, Authorization, x-api-key, x-tenant-id, x-principal-id",
+	"Access-Control-Max-Age": "3600",
+};
+
 function json(statusCode: number, body: unknown): APIGatewayProxyResult {
 	return {
 		statusCode,
-		headers: { "Content-Type": "application/json" },
+		headers: { "Content-Type": "application/json", ...CORS_HEADERS },
 		body: JSON.stringify(body),
 	};
+}
+
+function corsPreflight(): APIGatewayProxyResult {
+	return { statusCode: 204, headers: CORS_HEADERS, body: "" };
 }
 
 // ---------------------------------------------------------------------------
@@ -430,6 +449,14 @@ interface RequestBody {
 export async function handler(
 	event: APIGatewayProxyEvent,
 ): Promise<APIGatewayProxyResult> {
+	// Short-circuit CORS preflight BEFORE auth. The API Gateway forwards
+	// OPTIONS to the Lambda on proxy integrations, so we have to answer
+	// with a 2xx + CORS headers ourselves or browser preflight fails.
+	const method = event.requestContext?.http?.method;
+	if (method === "OPTIONS") {
+		return corsPreflight();
+	}
+
 	if (!bucket()) {
 		return json(500, { ok: false, error: "WORKSPACE_BUCKET not configured" });
 	}
