@@ -55,6 +55,14 @@ Monthly spend cap. Whether hitting the cap pauses the agent automatically. Optio
 
 Skill packs and knowledge bases that **new agents created from this template inherit**. These are seeds at creation time, not live-reference fields — see [Inheritance and overrides](#inheritance-and-overrides) below.
 
+### Workspace files
+
+Markdown files that shape the agent's runtime behavior — `SOUL.md` (personality), `IDENTITY.md` (name and role), `GUARDRAILS.md` (policy), `PLATFORM.md`, and others — live on the template. Agents read them through the [workspace overlay](/concepts/agents/workspace-overlay/), which composes at read time: agent override wins, template is the fallback, tenant defaults are the floor.
+
+Template workspace edits are **live** for most files (next invocation sees the change, no sync step) and **pinned** for the three guardrail-class files (`GUARDRAILS.md`, `PLATFORM.md`, `CAPABILITIES.md`), which require a per-agent **Accept update** review before propagating. `USER.md` is a managed special case — rewritten server-side on human reassignment using `{{HUMAN_*}}` placeholders in the template bytes.
+
+This is different from the skills / KB inheritance model: workspace files are not copied into the agent at creation time. They flow through the overlay chain on every read.
+
 ### Metadata
 
 Name, description, category tag, published flag, source (built-in vs. tenant-created vs. imported). Informational — doesn't affect runtime behavior, just helps operators organize templates.
