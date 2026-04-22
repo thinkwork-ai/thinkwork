@@ -18,6 +18,7 @@ import { mockClient } from "aws-sdk-client-mock";
 import {
 	DeleteObjectCommand,
 	GetObjectCommand,
+	HeadObjectCommand,
 	ListObjectsV2Command,
 	PutObjectCommand,
 	S3Client,
@@ -545,6 +546,75 @@ describe("template target", () => {
 		);
 		expect(res.statusCode).toBe(404);
 		expect(s3Mock.calls().length).toBe(0);
+	});
+});
+
+// ─── 8b. includeContent: the Unit 7 Strands cold-start contract ──────────────
+
+describe("list action includeContent (Strands container cold-start)", () => {
+	it("returns files[].content when includeContent=true (container bootstrap)", async () => {
+		authMockImpl.mockResolvedValue({
+			principalId: null,
+			tenantId: TENANT_A,
+			email: null,
+			authType: "apikey",
+		});
+		// resolveAgentTarget
+		pushDbRows([agentRow()]);
+		pushDbRows([tenantRow()]);
+		// composer.loadAgentContext
+		pushDbRows([agentRow()]);
+		pushDbRows([tenantRow()]);
+		pushDbRows([templateRowTenantA()]);
+
+		// composeList includeContent walks S3 for each canonical path. Stub
+		// every attempt to 404 except defaults for SOUL.md so composeList
+		// produces at least one composed entry with content.
+		s3Mock.on(ListObjectsV2Command).resolves({ Contents: [] });
+		s3Mock.on(GetObjectCommand).rejects(noSuchKey());
+		s3Mock
+			.on(GetObjectCommand, {
+				Key: "tenants/acme/agents/_catalog/defaults/workspace/SOUL.md",
+			})
+			.resolves({
+				Body: { transformToString: async () => "Hi {{AGENT_NAME}}" } as unknown as never,
+			});
+
+		const res = await parse(
+			await handler(
+				event({ action: "list", agentId: AGENT_ID, includeContent: true }),
+			),
+		);
+		expect(res.statusCode).toBe(200);
+		const soul = res.body.files.find((f: { path: string }) => f.path === "SOUL.md");
+		expect(soul).toBeDefined();
+		expect(soul.content).toBe("Hi Marco");
+	});
+
+	it("omits files[].content when includeContent is absent or false", async () => {
+		authMockImpl.mockResolvedValue({
+			principalId: null,
+			tenantId: TENANT_A,
+			email: null,
+			authType: "apikey",
+		});
+		pushDbRows([agentRow()]);
+		pushDbRows([tenantRow()]);
+		pushDbRows([agentRow()]);
+		pushDbRows([tenantRow()]);
+		pushDbRows([templateRowTenantA()]);
+
+		s3Mock.on(ListObjectsV2Command).resolves({ Contents: [] });
+		s3Mock.on(HeadObjectCommand).rejects({ name: "NotFound", $metadata: { httpStatusCode: 404 } } as never);
+
+		const res = await parse(
+			await handler(event({ action: "list", agentId: AGENT_ID })),
+		);
+		expect(res.statusCode).toBe(200);
+		expect(Array.isArray(res.body.files)).toBe(true);
+		for (const f of res.body.files) {
+			expect(f.content).toBeUndefined();
+		}
 	});
 });
 
