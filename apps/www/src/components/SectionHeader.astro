@@ -9,7 +9,7 @@ interface Props {
   lede?: string;
   step?: string;
   align?: "left" | "center";
-  width?: "narrow" | "wide" | "widest";
+  width?: "narrow" | "wide" | "widest" | "full";
 }
 
 const {
@@ -23,7 +23,13 @@ const {
 
 const alignClass = align === "center" ? "mx-auto text-center" : "";
 const widthClass =
-  width === "widest" ? "max-w-5xl" : width === "wide" ? "max-w-4xl" : "max-w-3xl";
+  width === "full"
+    ? "max-w-none"
+    : width === "widest"
+      ? "max-w-5xl"
+      : width === "wide"
+        ? "max-w-4xl"
+        : "max-w-3xl";
 ---
 
 <div class:list={[alignClass, widthClass]}>
