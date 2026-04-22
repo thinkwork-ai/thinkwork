@@ -426,18 +426,6 @@ class InvokeSubSkillTests(unittest.TestCase):
             )
         self.assertEqual(out, {"echoed": "hi"})
 
-    def test_context_skill_raises_not_registered(self):
-        import os
-        slug = "ctx-skill"
-        skill_dir = os.path.join(self._tmp, slug)
-        os.makedirs(skill_dir, exist_ok=True)
-        with open(os.path.join(skill_dir, "skill.yaml"), "w") as f:
-            f.write("id: ctx-skill\nexecution: context\n")
-        with patch.dict(sys.modules, {"install_skills": self._install_mock}):
-            with self.assertRaises(run_skill_dispatch.SkillNotRegisteredError) as cm:
-                run_skill_dispatch._invoke_sub_skill("ctx-skill", {})
-        self.assertIn("execution='context'", str(cm.exception))
-
     def test_missing_yaml_raises_not_registered(self):
         with patch.dict(sys.modules, {"install_skills": self._install_mock}):
             with self.assertRaises(run_skill_dispatch.SkillNotRegisteredError) as cm:
@@ -454,3 +442,134 @@ class InvokeSubSkillTests(unittest.TestCase):
             with self.assertRaises(run_skill_dispatch.SkillNotRegisteredError) as cm:
                 run_skill_dispatch._invoke_sub_skill("strict-skill", {"wrong": 1})
         self.assertIn("refused inputs", str(cm.exception))
+
+    # ----- execution=context dispatch --------------------------------------
+
+    def test_context_skill_missing_prompt_file_raises_clean(self):
+        """execution=context skill with no prompt file on disk → clean
+        SkillNotRegisteredError naming the missing path, not a
+        FileNotFoundError bubbling up from an open() call."""
+        import os
+        slug = "ctx-skill"
+        skill_dir = os.path.join(self._tmp, slug)
+        os.makedirs(skill_dir, exist_ok=True)
+        with open(os.path.join(skill_dir, "skill.yaml"), "w") as f:
+            f.write("slug: ctx-skill\nexecution: context\n")
+        with patch.dict(sys.modules, {"install_skills": self._install_mock}):
+            with self.assertRaises(run_skill_dispatch.SkillNotRegisteredError) as cm:
+                run_skill_dispatch._invoke_sub_skill("ctx-skill", {})
+        msg = str(cm.exception)
+        self.assertIn("execution=context", msg)
+        self.assertIn("no prompt", msg)
+
+    def test_context_skill_invokes_bedrock_and_returns_text(self):
+        """Happy path: render the prompt template, call converse once
+        with the rendered text, concatenate assistant text blocks."""
+        import os
+        slug = "ctx-skill"
+        skill_dir = os.path.join(self._tmp, slug)
+        os.makedirs(os.path.join(skill_dir, "prompts"), exist_ok=True)
+        with open(os.path.join(skill_dir, "skill.yaml"), "w") as f:
+            f.write("slug: ctx-skill\nexecution: context\n")
+        with open(os.path.join(skill_dir, "prompts", "ctx-skill.md"), "w") as f:
+            f.write("Context test.\nProblem: {problem}\nFocus: {focus}\n")
+
+        fake_converse = MagicMock(return_value={
+            "output": {"message": {"content": [
+                {"text": "## Goal\nAnswer."},
+                {"text": " More."},
+            ]}},
+        })
+        fake_boto3 = MagicMock(client=MagicMock(return_value=MagicMock(converse=fake_converse)))
+
+        with patch.dict(sys.modules, {
+            "install_skills": self._install_mock,
+            "boto3": fake_boto3,
+        }):
+            out = run_skill_dispatch._invoke_sub_skill(
+                "ctx-skill", {"problem": "X", "focus": "risks"},
+            )
+
+        self.assertEqual(out, "## Goal\nAnswer. More.")
+        fake_converse.assert_called_once()
+        kwargs = fake_converse.call_args.kwargs
+        self.assertEqual(kwargs["modelId"], "us.anthropic.claude-sonnet-4-6")
+        rendered = kwargs["messages"][0]["content"][0]["text"]
+        self.assertIn("Problem: X", rendered)
+        self.assertIn("Focus: risks", rendered)
+        self.assertNotIn("{problem}", rendered)
+
+    def test_context_skill_honors_yaml_model_override(self):
+        import os
+        slug = "ctx-skill"
+        skill_dir = os.path.join(self._tmp, slug)
+        os.makedirs(os.path.join(skill_dir, "prompts"), exist_ok=True)
+        with open(os.path.join(skill_dir, "skill.yaml"), "w") as f:
+            f.write(
+                "slug: ctx-skill\n"
+                "execution: context\n"
+                "model: us.anthropic.claude-haiku-4-5\n"
+            )
+        with open(os.path.join(skill_dir, "prompts", "ctx-skill.md"), "w") as f:
+            f.write("hello")
+
+        fake_converse = MagicMock(return_value={
+            "output": {"message": {"content": [{"text": "ok"}]}},
+        })
+        fake_boto3 = MagicMock(client=MagicMock(return_value=MagicMock(converse=fake_converse)))
+
+        with patch.dict(sys.modules, {
+            "install_skills": self._install_mock,
+            "boto3": fake_boto3,
+        }):
+            run_skill_dispatch._invoke_sub_skill("ctx-skill", {})
+
+        self.assertEqual(
+            fake_converse.call_args.kwargs["modelId"],
+            "us.anthropic.claude-haiku-4-5",
+        )
+
+
+class ContextTemplateSubstitutionTests(unittest.TestCase):
+    """Unit tests for the {var} single-brace renderer."""
+
+    def test_replaces_known_keys(self):
+        out = run_skill_dispatch._render_context_template(
+            "hello {name}, your role is {role}",
+            {"name": "Eric", "role": "admin"},
+        )
+        self.assertEqual(out, "hello Eric, your role is admin")
+
+    def test_missing_key_renders_empty(self):
+        out = run_skill_dispatch._render_context_template(
+            "before [{missing}] after", {},
+        )
+        self.assertEqual(out, "before [] after")
+
+    def test_none_value_renders_empty(self):
+        out = run_skill_dispatch._render_context_template(
+            "[{k}]", {"k": None},
+        )
+        self.assertEqual(out, "[]")
+
+    def test_non_string_value_json_encoded(self):
+        out = run_skill_dispatch._render_context_template(
+            "data={payload}", {"payload": {"a": 1, "b": [2, 3]}},
+        )
+        self.assertIn('"a": 1', out)
+        self.assertIn('"b": [2, 3]', out)
+
+    def test_numeric_and_bool_coerced_to_str(self):
+        out = run_skill_dispatch._render_context_template(
+            "n={n} flag={flag}", {"n": 42, "flag": True},
+        )
+        self.assertEqual(out, "n=42 flag=True")
+
+    def test_non_identifier_tokens_left_literal(self):
+        # {not-a-var} and {123abc} don't match the regex so they stay
+        # literal — prevents false positives on shell-style patterns or
+        # code fences inside prompt bodies.
+        out = run_skill_dispatch._render_context_template(
+            "keep {not-a-var} and {123abc}", {},
+        )
+        self.assertEqual(out, "keep {not-a-var} and {123abc}")

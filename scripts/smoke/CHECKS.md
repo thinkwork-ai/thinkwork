@@ -13,18 +13,23 @@ that names a specific missing skill (e.g. `step 'frame' failed: frame
 error: SkillNotRegisteredError`). Both outcomes prove the full
 dispatch → runtime → DB loop works end-to-end.
 
-On today's dev stack, the run_skill dispatch closure wires
-`execution: script` sub-skills (deterministic Python functions). It
-does NOT yet wire `execution: context` (LLM-prompt) or
-`execution: agent` sub-skills — those raise a named
-`SkillNotRegisteredError` and the step fails cleanly. That means:
+On today's dev stack, the run_skill dispatch closure wires both
+`execution: script` (deterministic Python functions) and
+`execution: context` (LLM-prompt via Bedrock Converse) sub-skills.
+`execution: agent` sub-skills still raise `SkillNotRegisteredError`.
+That means:
 
 - Compositions whose only step is a script skill (e.g.
-  `smoke-package-only` → `package`) run to `status='complete'` —
-  proves the full dispatch → runtime → DB loop from both ends.
-- Compositions whose first step is context or agent mode (e.g.
-  `sales-prep` → `frame`) fail cleanly at step 1. Clean named
-  failure is still a PASS per the composable-skills plan.
+  `smoke-package-only` → `package`) run to `status='complete'`.
+- Compositions that start with a context-mode sub-skill (e.g.
+  `sales-prep` → `frame` → `gather` → `synthesize` → `package`) now
+  progress past the context steps. The first failure typically comes
+  from the `gather` branch, which references one or more missing
+  script-mode connectors (e.g. `crm_account_summary not registered`)
+  — still a clean named failure, still a PASS per the composable-
+  skills plan.
+- A composition that reaches a not-yet-wired `execution: agent`
+  sub-skill fails with `execution='agent' is not wired` — clean PASS.
 
 **What the smokes prove end-to-end:**
 
@@ -136,14 +141,17 @@ webhook-smoke happy-path call.
 
 ## Known gaps
 
-- **No real connector script skills are registered** — the run_skill
-  dispatch closure in
+- **No real connector script skills are registered** — the dispatch
+  closure in
   `packages/agentcore-strands/agent-container/run_skill_dispatch.py`
-  raises `SkillNotRegisteredError` for every sub-skill call, which
-  produces a clean PASS-as-failed today. The R13 adoption criterion
-  from the composable-skills v1 plan covers wiring real CRM / AR /
-  support / web / wiki connector adapters; once any of those land,
-  individual compositions could PASS with `status=complete` instead.
+  now handles `script` and `context` sub-skills, but the `gather`
+  branches of `sales-prep` / `renewal-prep` reference CRM / AR /
+  support / web / wiki connectors that aren't loaded on dev. Those
+  compositions terminate at the first missing connector with a clean
+  `SkillNotRegisteredError`. The R13 adoption criterion from the
+  composable-skills v1 plan covers wiring the connector adapters;
+  once any of those land, individual compositions could reach
+  `status=complete` instead.
 - The catalog path uses the **service endpoint** `/api/skills/start`,
   not the admin GraphQL `startSkillRun` mutation — the mutation
   requires a Cognito JWT we don't have programmatic access to. The
