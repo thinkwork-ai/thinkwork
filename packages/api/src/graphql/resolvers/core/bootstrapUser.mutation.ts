@@ -47,7 +47,72 @@ export const bootstrapUser = async (_parent: unknown, _args: unknown, ctx: Graph
 		};
 	}
 
-	// Create tenant
+	// Paid-signup claim path: if the Stripe webhook pre-provisioned a tenant
+	// for this email, attach this user to that (already-paid) tenant instead
+	// of creating a new "free" one.
+	//
+	// Match on lowercased email — the partial unique index in
+	// drizzle/0022_stripe_billing_indexes.sql stores lower(email) so there's
+	// at most one candidate row. Returns the claimed tenant with plan set
+	// from Stripe (written by provisionTenantFromStripeSession).
+	const [pendingTenant] = await db
+		.select()
+		.from(tenants)
+		.where(eq(sql`lower(${tenants.pending_owner_email})`, email.toLowerCase()))
+		.limit(1);
+
+	if (pendingTenant) {
+		console.log(
+			`[bootstrapUser] Claiming pre-provisioned paid tenant ${pendingTenant.id} (plan=${pendingTenant.plan}) for ${email}`,
+		);
+
+		const [user] = await db
+			.insert(users)
+			.values({
+				tenant_id: pendingTenant.id,
+				email,
+				name,
+			})
+			.returning();
+
+		await db
+			.insert(tenantMembers)
+			.values({
+				tenant_id: pendingTenant.id,
+				principal_type: "user",
+				principal_id: user.id,
+				role: "owner",
+				status: "active",
+			});
+
+		const [claimedTenant] = await db
+			.update(tenants)
+			.set({ pending_owner_email: null, updated_at: sql`now()` })
+			.where(eq(tenants.id, pendingTenant.id))
+			.returning();
+
+		try {
+			const { CognitoIdentityProviderClient, AdminUpdateUserAttributesCommand } = await import("@aws-sdk/client-cognito-identity-provider");
+			const cognito = new CognitoIdentityProviderClient({});
+			await cognito.send(new AdminUpdateUserAttributesCommand({
+				UserPoolId: process.env.COGNITO_USER_POOL_ID || process.env.USER_POOL_ID,
+				Username: cognitoSub,
+				UserAttributes: [
+					{ Name: "custom:tenant_id", Value: pendingTenant.id },
+				],
+			}));
+		} catch (err) {
+			console.warn("[bootstrapUser] Failed to update Cognito tenant_id (claim path):", err);
+		}
+
+		return {
+			user,
+			tenant: claimedTenant ?? pendingTenant,
+			isNew: true,
+		};
+	}
+
+	// Default path — no pending tenant, create a fresh free-tier workspace.
 	const tenantName = `${name}'s Workspace`;
 	const tenantSlug = generateSlug();
 
