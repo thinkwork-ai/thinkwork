@@ -171,9 +171,9 @@ export async function startSkillRun(
 		invocationSource: i.invocationSource,
 		resolvedInputs,
 		scope: {
-			tenantId,
-			userId,
-			skillId: i.skillId,
+			tenant_id: tenantId,
+			user_id: userId,
+			skill_id: i.skillId,
 		},
 		completionHmacSecret,
 	});

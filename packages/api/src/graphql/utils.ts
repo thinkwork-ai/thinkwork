@@ -442,11 +442,16 @@ export type CompositionInvokePayload = {
   skillVersion: number;
   invocationSource: string;
   resolvedInputs: Record<string, unknown>;
+  // snake_case — composition_runner._scope_to_inputs (Python) reads
+  // tenant_id/user_id/skill_id/subject_entity_id. Every pre-hardening
+  // camelCase emit silently coerced to "" on the Python side; the bug
+  // hid because no context-mode sub-skill had landed yet. See change 4
+  // of docs/plans/2026-04-22-005-....
   scope?: {
-    tenantId: string;
-    userId?: string;
-    skillId: string;
-    subjectEntityId?: string;
+    tenant_id: string;
+    user_id?: string;
+    skill_id: string;
+    subject_entity_id?: string;
   };
   // Per-run HMAC secret the container uses to sign its
   // /api/skills/complete callback — see skill_runs.completion_hmac_secret.

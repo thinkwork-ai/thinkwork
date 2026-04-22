@@ -163,10 +163,12 @@ async function invokeAgentcoreRunSkill(payload: {
       skillVersion: payload.skillVersion,
       invocationSource: "scheduled" as const,
       resolvedInputs: payload.resolvedInputs,
+      // snake_case — Python's composition_runner._scope_to_inputs reads
+      // tenant_id/user_id/skill_id. See change 4 of the hardening plan.
       scope: {
-        tenantId: payload.tenantId,
-        userId: payload.invokerUserId,
-        skillId: payload.skillId,
+        tenant_id: payload.tenantId,
+        user_id: payload.invokerUserId,
+        skill_id: payload.skillId,
       },
       completionHmacSecret: payload.completionHmacSecret,
     };

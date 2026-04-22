@@ -70,6 +70,59 @@ class DispatchRunSkillTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(post_args[2], "complete")
         mock_install.assert_called_once_with("skills/catalog/my-comp", "my-comp")
 
+    async def test_scope_passes_through_snake_case_to_run_composition(self):
+        """Regression: the TS emitters must ship snake_case scope keys so
+        composition_runner._scope_to_inputs (which reads tenant_id,
+        user_id, skill_id) sees real values instead of silently coercing
+        to "". Prior to this, every auto_recall/auto_reflect inside a
+        context-mode sub-skill was looking up `user_id=""` because TS was
+        emitting camelCase.
+        """
+        mock_install = MagicMock()
+        mock_load = MagicMock(return_value={"my-comp": MagicMock()})
+
+        captured_context: dict = {}
+
+        class Result:
+            status = "complete"
+            failure_reason = None
+
+        async def fake_run_composition(comp, resolved, dispatch, context=None):
+            captured_context["context"] = context
+            return Result()
+
+        with patch.object(run_skill_dispatch, "post_skill_run_complete",
+                          side_effect=lambda *a, **kw: None), \
+             patch.dict(sys.modules, {
+                 "install_skills": MagicMock(install_skill_from_s3=mock_install),
+                 "skill_runner": MagicMock(load_composition_skills=mock_load),
+                 "composition_runner": MagicMock(run_composition=fake_run_composition),
+             }):
+            await run_skill_dispatch.dispatch_run_skill({
+                "kind": "run_skill",
+                "runId": "run-scope",
+                "tenantId": "tenant-1",
+                "invokerUserId": "user-1",
+                "skillId": "my-comp",
+                "resolvedInputs": {},
+                "scope": {
+                    "tenant_id": "tenant-1",
+                    "user_id": "user-1",
+                    "skill_id": "my-comp",
+                },
+            })
+
+        scope = captured_context["context"]["scope"]
+        self.assertEqual(scope["tenant_id"], "tenant-1")
+        self.assertEqual(scope["user_id"], "user-1")
+        self.assertEqual(scope["skill_id"], "my-comp")
+        # Guard against regression: camelCase keys must NOT be the only
+        # source of truth — if they sneak back in, _scope_to_inputs will
+        # coerce to "" and this assertion will surface the drift.
+        self.assertNotIn("tenantId", scope)
+        self.assertNotIn("userId", scope)
+        self.assertNotIn("skillId", scope)
+
     async def test_failed_composition_posts_failure_reason(self):
         mock_install = MagicMock()
         mock_load = MagicMock(return_value={"my-comp": MagicMock()})

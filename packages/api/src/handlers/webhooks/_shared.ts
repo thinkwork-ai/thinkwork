@@ -410,9 +410,9 @@ export function createWebhookHandler(
 			invocationSource: "webhook",
 			resolvedInputs,
 			scope: {
-				tenantId,
-				userId: invokerUserId,
-				skillId: dispatch.skillId,
+				tenant_id: tenantId,
+				user_id: invokerUserId,
+				skill_id: dispatch.skillId,
 			},
 			completionHmacSecret,
 		});
