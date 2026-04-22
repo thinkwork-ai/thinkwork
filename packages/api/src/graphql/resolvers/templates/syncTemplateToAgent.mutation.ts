@@ -10,114 +10,150 @@
 
 import type { GraphQLContext } from "../../context.js";
 import {
-	db,
-	eq,
-	agents,
-	agentTemplates,
-	agentSkills,
-	agentKnowledgeBases,
-	agentToCamel,
-	sql,
+  db,
+  eq,
+  agents,
+  agentTemplates,
+  agentSkills,
+  agentKnowledgeBases,
+  agentToCamel,
+  sql,
 } from "../../utils.js";
-import { agentMcpServers, agentTemplateMcpServers } from "@thinkwork/database-pg/schema";
+import {
+  agentMcpServers,
+  agentTemplateMcpServers,
+} from "@thinkwork/database-pg/schema";
 import { snapshotAgent } from "../../../lib/agent-snapshot.js";
 import { overlayTemplateWorkspace } from "../../../lib/workspace-copy.js";
+import { requireTenantAdmin } from "../core/authz.js";
 
-export async function syncTemplateToAgent(_parent: any, args: any, ctx: GraphQLContext) {
-	const { templateId, agentId } = args;
+export async function syncTemplateToAgent(
+  _parent: any,
+  args: any,
+  ctx: GraphQLContext,
+) {
+  const { templateId, agentId } = args;
 
-	// 1. Fetch template + agent, validate linkage
-	const [agentTemplate] = await db.select().from(agentTemplates).where(eq(agentTemplates.id, templateId));
-	if (!agentTemplate) throw new Error("Agent template not found");
+  // 1. Fetch template + agent, validate linkage
+  const [agentTemplate] = await db
+    .select()
+    .from(agentTemplates)
+    .where(eq(agentTemplates.id, templateId));
+  if (!agentTemplate) throw new Error("Agent template not found");
 
-	const [agent] = await db.select().from(agents).where(eq(agents.id, agentId));
-	if (!agent) throw new Error("Agent not found");
-	if (agent.template_id !== templateId) {
-		throw new Error("Agent is not linked to this template");
-	}
+  const [agent] = await db.select().from(agents).where(eq(agents.id, agentId));
+  if (!agent) throw new Error("Agent not found");
+  if (agent.template_id !== templateId) {
+    throw new Error("Agent is not linked to this template");
+  }
 
-	// 2. Snapshot current state FIRST (enables rollback)
-	await snapshotAgent(agentId, "Pre-sync from template", ctx.auth.principalId);
+  // Gate on the template's tenant — any admin of that tenant may sync
+  // any linked agent. This must run before snapshotAgent (writes) and
+  // before any delete/update on agent_skills / agent_knowledge_bases /
+  // agent_mcp_servers.
+  await requireTenantAdmin(ctx, agentTemplate.tenant_id!);
 
-	// 3. Read template config
-	const config = (agentTemplate.config as any) || {};
-	const templateSkills = (agentTemplate.skills as any[]) || [];
-	const templateKbIds = (agentTemplate.knowledge_base_ids as string[]) || [];
+  // 2. Snapshot current state FIRST (enables rollback)
+  await snapshotAgent(agentId, "Pre-sync from template", ctx.auth.principalId);
 
-	// 4. Update agent.role from template.config.role
-	await db
-		.update(agents)
-		.set({
-			role: config.role ?? agent.role,
-			updated_at: sql`now()`,
-		})
-		.where(eq(agents.id, agentId));
+  // 3. Read template config
+  const config = (agentTemplate.config as any) || {};
+  const templateSkills = (agentTemplate.skills as any[]) || [];
+  const templateKbIds = (agentTemplate.knowledge_base_ids as string[]) || [];
 
-	// 5. Replace agent_skills
-	await db.delete(agentSkills).where(eq(agentSkills.agent_id, agentId));
-	if (templateSkills.length > 0) {
-		await db.insert(agentSkills).values(
-			templateSkills.map((s: any) => ({
-				agent_id: agentId,
-				tenant_id: agent.tenant_id!,
-				skill_id: s.skill_id,
-				config: s.config,
-				permissions: s.permissions,
-				rate_limit_rpm: s.rate_limit_rpm,
-				model_override: s.model_override ?? null,
-				enabled: s.enabled ?? true,
-			})),
-		);
-	}
+  // 4. Update agent.role from template.config.role
+  await db
+    .update(agents)
+    .set({
+      role: config.role ?? agent.role,
+      updated_at: sql`now()`,
+    })
+    .where(eq(agents.id, agentId));
 
-	// 6. Replace agent_knowledge_bases
-	await db.delete(agentKnowledgeBases).where(eq(agentKnowledgeBases.agent_id, agentId));
-	if (templateKbIds.length > 0) {
-		await db.insert(agentKnowledgeBases).values(
-			templateKbIds.map((kbId: string) => ({
-				agent_id: agentId,
-				tenant_id: agent.tenant_id!,
-				knowledge_base_id: kbId,
-				enabled: true,
-			})),
-		);
-	}
+  // 5. Replace agent_skills
+  await db.delete(agentSkills).where(eq(agentSkills.agent_id, agentId));
+  if (templateSkills.length > 0) {
+    await db.insert(agentSkills).values(
+      templateSkills.map((s: any) => ({
+        agent_id: agentId,
+        tenant_id: agent.tenant_id!,
+        skill_id: s.skill_id,
+        config: s.config,
+        permissions: s.permissions,
+        rate_limit_rpm: s.rate_limit_rpm,
+        model_override: s.model_override ?? null,
+        enabled: s.enabled ?? true,
+      })),
+    );
+  }
 
-	// 6b. Replace agent_mcp_servers from agent_template_mcp_servers join table
-	const templateMcpRows = await db
-		.select({ mcp_server_id: agentTemplateMcpServers.mcp_server_id, enabled: agentTemplateMcpServers.enabled })
-		.from(agentTemplateMcpServers)
-		.where(eq(agentTemplateMcpServers.template_id, templateId));
-	await db.delete(agentMcpServers).where(eq(agentMcpServers.agent_id, agentId));
-	if (templateMcpRows.length > 0) {
-		await db.insert(agentMcpServers).values(
-			templateMcpRows.map((m) => ({
-				agent_id: agentId,
-				tenant_id: agent.tenant_id!,
-				mcp_server_id: m.mcp_server_id,
-				enabled: m.enabled ?? true,
-			})),
-		);
-	}
+  // 6. Replace agent_knowledge_bases
+  await db
+    .delete(agentKnowledgeBases)
+    .where(eq(agentKnowledgeBases.agent_id, agentId));
+  if (templateKbIds.length > 0) {
+    await db.insert(agentKnowledgeBases).values(
+      templateKbIds.map((kbId: string) => ({
+        agent_id: agentId,
+        tenant_id: agent.tenant_id!,
+        knowledge_base_id: kbId,
+        enabled: true,
+      })),
+    );
+  }
 
-	// 7. Overlay workspace files (template files overwrite matching paths; agent-only files preserved)
-	try {
-		await overlayTemplateWorkspace(agent.tenant_id!, agentTemplate.slug, agent.slug!);
-	} catch (err) {
-		console.warn(`[syncTemplateToAgent] Workspace overlay failed:`, err);
-	}
+  // 6b. Replace agent_mcp_servers from agent_template_mcp_servers join table
+  const templateMcpRows = await db
+    .select({
+      mcp_server_id: agentTemplateMcpServers.mcp_server_id,
+      enabled: agentTemplateMcpServers.enabled,
+    })
+    .from(agentTemplateMcpServers)
+    .where(eq(agentTemplateMcpServers.template_id, templateId));
+  await db.delete(agentMcpServers).where(eq(agentMcpServers.agent_id, agentId));
+  if (templateMcpRows.length > 0) {
+    await db.insert(agentMcpServers).values(
+      templateMcpRows.map((m) => ({
+        agent_id: agentId,
+        tenant_id: agent.tenant_id!,
+        mcp_server_id: m.mcp_server_id,
+        enabled: m.enabled ?? true,
+      })),
+    );
+  }
 
-	// 8. Regenerate workspace map
-	try {
-		const { regenerateWorkspaceMap } = await import("../../../lib/workspace-map-generator.js");
-		regenerateWorkspaceMap(agentId).catch((err: unknown) => {
-			console.error("[syncTemplateToAgent] regenerateWorkspaceMap failed:", err);
-		});
-	} catch (err) {
-		console.warn("[syncTemplateToAgent] workspace-map-generator not available:", err);
-	}
+  // 7. Overlay workspace files (template files overwrite matching paths; agent-only files preserved)
+  try {
+    await overlayTemplateWorkspace(
+      agent.tenant_id!,
+      agentTemplate.slug,
+      agent.slug!,
+    );
+  } catch (err) {
+    console.warn(`[syncTemplateToAgent] Workspace overlay failed:`, err);
+  }
 
-	// 9. Return updated agent
-	const [updated] = await db.select().from(agents).where(eq(agents.id, agentId));
-	return agentToCamel(updated);
+  // 8. Regenerate workspace map
+  try {
+    const { regenerateWorkspaceMap } =
+      await import("../../../lib/workspace-map-generator.js");
+    regenerateWorkspaceMap(agentId).catch((err: unknown) => {
+      console.error(
+        "[syncTemplateToAgent] regenerateWorkspaceMap failed:",
+        err,
+      );
+    });
+  } catch (err) {
+    console.warn(
+      "[syncTemplateToAgent] workspace-map-generator not available:",
+      err,
+    );
+  }
+
+  // 9. Return updated agent
+  const [updated] = await db
+    .select()
+    .from(agents)
+    .where(eq(agents.id, agentId));
+  return agentToCamel(updated);
 }
