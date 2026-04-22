@@ -121,6 +121,8 @@ resource "aws_lambda_function" "handler" {
     "connections",
     "oauth-authorize",
     "oauth-callback",
+    "stripe-checkout",
+    "stripe-webhook",
     "teams",
     "team-members",
     "tenants",
@@ -246,6 +248,12 @@ locals {
     "ANY /api/connections"          = "connections"
     "GET /api/oauth/authorize"      = "oauth-authorize"
     "GET /api/oauth/callback"       = "oauth-callback"
+
+    # Stripe billing (unauthenticated — checkout is pre-signup; webhook is
+    # server-to-server with Stripe signature verification).
+    "POST /api/stripe/checkout-session"    = "stripe-checkout"
+    "OPTIONS /api/stripe/checkout-session" = "stripe-checkout"
+    "POST /api/stripe/webhook"             = "stripe-webhook"
 
     # Routines
     "ANY /api/routines/{proxy+}" = "routines"
