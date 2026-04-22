@@ -208,6 +208,7 @@ module "api" {
   google_oauth_client_id     = var.google_oauth_client_id
   google_oauth_client_secret = var.google_oauth_client_secret
   redirect_success_url       = var.redirect_success_url
+  platform_operator_emails   = var.platform_operator_emails
 }
 
 ################################################################################
