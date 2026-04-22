@@ -218,6 +218,7 @@ locals {
   www_dns_enabled = var.www_domain != "" && var.cloudflare_zone_id != ""
   docs_domain     = var.www_domain != "" ? "docs.${var.www_domain}" : ""
   admin_domain    = var.www_domain != "" ? "admin.${var.www_domain}" : ""
+  api_domain      = var.www_domain != "" ? "api.${var.www_domain}" : ""
 }
 
 module "thinkwork" {
@@ -291,6 +292,13 @@ module "www_dns" {
   # Admin: same cycle-avoidance pattern.
   include_admin                = true
   admin_cloudfront_domain_name = module.thinkwork.admin_distribution_domain
+
+  # API custom domain (api.<apex>). Same cycle-avoidance — the ACM cert SAN
+  # list is gated on include_api (a plain bool), while api_gateway_id (which
+  # the cert doesn't depend on) is read at record-creation time.
+  include_api            = true
+  api_gateway_id         = module.thinkwork.api_id
+  api_gateway_stage_name = "$default"
 }
 
 ################################################################################
@@ -325,6 +333,11 @@ resource "cloudflare_record" "agents_ns" {
 output "api_endpoint" {
   description = "API Gateway endpoint URL"
   value       = module.thinkwork.api_endpoint
+}
+
+output "api_domain" {
+  description = "Custom domain for the HTTP API (e.g. api.thinkwork.ai). Empty string when www_domain/cloudflare_zone_id aren't configured. Read by scripts/build-www.sh to set PUBLIC_API_URL at build time."
+  value       = local.www_dns_enabled ? local.api_domain : ""
 }
 
 output "appsync_api_url" {

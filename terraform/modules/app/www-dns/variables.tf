@@ -41,3 +41,21 @@ variable "admin_cloudfront_domain_name" {
   type        = string
   default     = ""
 }
+
+variable "include_api" {
+  description = "When true, add api.<domain> to the ACM cert SANs, create an API Gateway v2 custom domain name + base-path mapping, and create a Cloudflare CNAME pointing api.<domain> at the API Gateway regional domain. The API Gateway must be in the same region as this module since regional custom domains require a cert in the same region."
+  type        = bool
+  default     = false
+}
+
+variable "api_gateway_id" {
+  description = "aws_apigatewayv2_api.id of the HTTP API to expose at api.<domain>. Required when include_api is true."
+  type        = string
+  default     = ""
+}
+
+variable "api_gateway_stage_name" {
+  description = "aws_apigatewayv2_stage.name to map under the root base path on the custom domain. Defaults to the auto-deployed `$default` stage."
+  type        = string
+  default     = "$default"
+}
