@@ -87,6 +87,9 @@ import {
   skillRuns,
   // Mutation idempotency (thinkwork-admin plan Unit 4)
   mutationIdempotency,
+  // Sandbox (AgentCore Code Sandbox plan)
+  tenantPolicyEvents,
+  sandboxInvocations,
 } from "@thinkwork/database-pg/schema";
 import { checkAndFireUnblockWakeups } from "../lib/orchestration/thread-release.js";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
@@ -151,9 +154,18 @@ export {
   agentVersions,
   skillRuns,
   mutationIdempotency,
+  tenantPolicyEvents,
+  sandboxInvocations,
   checkAndFireUnblockWakeups,
   generateSlug,
 };
+
+export {
+  COMPLIANCE_TIERS,
+  SANDBOX_ENVIRONMENTS,
+  type ComplianceTier,
+  type SandboxEnvironment,
+} from "@thinkwork/database-pg/schema";
 
 // ---------------------------------------------------------------------------
 // Database

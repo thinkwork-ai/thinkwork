@@ -5,6 +5,7 @@ import { user } from "./user.query.js";
 import { tenantMembers_ as tenantMembers } from "./tenantMembers.query.js";
 import { createTenant } from "./createTenant.mutation.js";
 import { updateTenant } from "./updateTenant.mutation.js";
+import { updateTenantPolicy } from "./updateTenantPolicy.mutation.js";
 import { updateTenantSettings } from "./updateTenantSettings.mutation.js";
 import { addTenantMember } from "./addTenantMember.mutation.js";
 import { updateTenantMember } from "./updateTenantMember.mutation.js";
@@ -31,6 +32,7 @@ export const coreMutations = {
   bootstrapUser,
   createTenant,
   updateTenant,
+  updateTenantPolicy,
   updateTenantSettings,
   addTenantMember,
   updateTenantMember,
