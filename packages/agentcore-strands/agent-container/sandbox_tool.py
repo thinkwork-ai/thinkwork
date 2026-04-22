@@ -69,6 +69,7 @@ def build_execute_code_tool(
     start_session: Callable[[str, int], Awaitable[str]],
     stop_session: Callable[[str, str], Awaitable[None]],
     run_code: Callable[[str, str, str], Awaitable[dict]],
+    check_quota: Callable[[], Awaitable[dict]] | None = None,
 ) -> Any:
     """Return the `execute_code` Strands tool closure.
 
@@ -87,6 +88,14 @@ def build_execute_code_tool(
         stop_session: ``async (interpreter_id, session_id) -> None``.
         run_code: ``async (interpreter_id, session_id, code) -> dict`` —
             returns the AgentCore response_payload structure.
+        check_quota: optional ``async () -> dict`` that atomically claims
+            quota before the session is started / user code runs.
+            Production wires this to the /api/sandbox/quota/check-and-increment
+            narrow REST endpoint (plan Unit 10). On denial, returns
+            ``{"ok": False, "dimension": "...", "resets_at": "..."}``;
+            the tool surfaces SandboxCapExceeded without touching the
+            interpreter. When ``check_quota`` is None (older tests / a
+            stage without Unit 10 wired) the tool behaves as before.
     """
 
     interpreter_id = os.environ.get("SANDBOX_INTERPRETER_ID", "")
@@ -143,6 +152,40 @@ def build_execute_code_tool(
                 ),
                 exit_status="provisioning",
             ).__dict__
+
+        # Quota circuit breaker (plan Unit 10). Runs BEFORE we touch the
+        # interpreter — a breach must not cost a StartSession round trip
+        # nor a preamble-call SM read. Fails closed: network errors
+        # calling the endpoint surface as SandboxCapExceeded with
+        # dimension='unknown', never as ok-to-proceed.
+        if check_quota is not None:
+            try:
+                quota = await check_quota()
+            except Exception as err:
+                logger.warning(
+                    "sandbox quota check transport failure: %s", err,
+                )
+                return SandboxResult(
+                    ok=False,
+                    error="SandboxCapExceeded",
+                    error_message=(
+                        "The sandbox quota service is unreachable; failing "
+                        "closed. Retry in 60 seconds."
+                    ),
+                    exit_status="cap_exceeded",
+                ).__dict__
+            if not quota.get("ok", False):
+                dimension = quota.get("dimension", "unknown")
+                resets_at = quota.get("resets_at", "")
+                return SandboxResult(
+                    ok=False,
+                    error="SandboxCapExceeded",
+                    error_message=(
+                        f"Sandbox cap reached ({dimension}); resets at "
+                        f"{resets_at}. Reduce work or wait for the window."
+                    ),
+                    exit_status="cap_exceeded",
+                ).__dict__
 
         try:
             session_id = await _ensure_session()
