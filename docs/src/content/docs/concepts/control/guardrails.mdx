@@ -84,6 +84,6 @@ ThinkWork provides a `gr-default-safe` starter guardrail in the Terraform module
 
 Guardrails are Amazon Bedrock Guardrails — a managed AWS primitive. See the [Bedrock Guardrails documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails.html) for the underlying service.
 
-Inside ThinkWork, the agent template carries the guardrail id and version, and the AgentCore runtime (in `packages/agentcore/agent-container/`) passes those into every Bedrock `converse` call. Guardrail activations are recorded on the turn and surfaced both in the admin thread timeline (see [Admin: Threads](/applications/admin/threads/)) and in the audit log.
+Inside ThinkWork, the agent template carries the guardrail id and version, and the AgentCore runtime (in `packages/agentcore-strands/agent-container/`) passes those into every Bedrock `converse` call. Guardrail activations are recorded on the turn and surfaced both in the admin thread timeline (see [Admin: Threads](/applications/admin/threads/)) and in the audit log.
 
 Starter guardrail resources are provisioned by the ThinkWork Terraform module; tenants can add their own by editing the Terraform configuration.

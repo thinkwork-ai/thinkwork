@@ -101,6 +101,6 @@ Long-term memory should never masquerade as the thread record. If an operator as
 
 ## Under the hood
 
-Context assembly happens inside the AgentCore runtime (`packages/agentcore/agent-container/`) before any Bedrock call. The four sources are queried in parallel, token-counted, and merged into the final input. Budget knobs (retrieval `top_k`, memory recall count, max thread-history window) live on the agent template and can be tuned without a redeploy.
+Context assembly happens inside the AgentCore runtime (`packages/agentcore-strands/agent-container/`) before any Bedrock call. The four sources are queried in parallel, token-counted, and merged into the final input. Budget knobs (retrieval `top_k`, memory recall count, max thread-history window) live on the agent template and can be tuned without a redeploy.
 
 Each source emits OpenTelemetry spans recording latency, result count, and token contribution — surfaced in the turn trace view. See [Admin: Threads](/applications/admin/threads/) for the turn-trace operator view.

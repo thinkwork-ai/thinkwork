@@ -141,6 +141,6 @@ Use [connected agents](/concepts/agents/) instead when you already have an exter
 
 ## Under the hood
 
-The AgentCore runtime lives in `packages/agentcore/agent-container/` — a Python container built on the Strands agent framework, deployed as a Lambda container image. It reads the agent and template records from the operational database, assembles context from the memory + knowledge layers, calls Bedrock with the template's guardrail applied, orchestrates tool use through Strands, and writes turns + messages back to the thread.
+The AgentCore runtime lives in `packages/agentcore-strands/agent-container/` — a Python container built on the Strands agent framework, deployed as a Lambda container image. It reads the agent and template records from the operational database, assembles context from the memory + knowledge layers, calls Bedrock with the template's guardrail applied, orchestrates tool use through Strands, and writes turns + messages back to the thread.
 
 For the code path, start in `packages/agentcore/` for the runtime itself and `packages/api/src/lib/memory/` for the memory adapter contract the runtime calls. Template and agent row shapes are defined in the operational database schema (`packages/database-pg/drizzle/`).

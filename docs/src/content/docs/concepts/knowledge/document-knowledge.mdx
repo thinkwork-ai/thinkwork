@@ -89,4 +89,4 @@ The agent template can specify a default KB assignment — new agents created fr
 - **Embedding model.** Configurable per KB; defaults to `amazon.titan-embed-text-v2:0` unless overridden in the KB spec.
 - **Retrieval API.** `bedrock-agent-runtime:Retrieve` called from AgentCore during context assembly; results merged into the model's system prompt via a `<knowledge>` block.
 - **Sync triggers.** Scheduled (via EventBridge) or on-demand (admin "Sync Now" button fires an ingestion job).
-- **Code path.** ThinkWork-side orchestration lives under `packages/api/src/`; the AgentCore-side retrieval integration lives in `packages/agentcore/agent-container/`.
+- **Code path.** ThinkWork-side orchestration lives under `packages/api/src/`; the AgentCore-side retrieval integration lives in `packages/agentcore-strands/agent-container/`.
