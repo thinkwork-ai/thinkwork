@@ -81,6 +81,11 @@ input CreateAgentTemplateInput {
   knowledgeBaseIds: AWSJSON
 
   isPublished: Boolean
+  """
+  Optional client-supplied idempotency key. See
+  CreateAgentInput.idempotencyKey / packages/api/src/lib/idempotency.ts.
+  """
+  idempotencyKey: String
 }
 
 input UpdateAgentTemplateInput {
@@ -104,6 +109,8 @@ input CreateAgentFromTemplateInput {
   name: String!
   slug: String!
   teamId: ID
+  "Optional idempotency key. See CreateAgentInput.idempotencyKey."
+  idempotencyKey: String
 }
 
 # --- Pin status + accept-update (overlay Unit 9) ---
@@ -145,11 +152,14 @@ extend type Mutation {
   updateAgentTemplate(id: ID!, input: UpdateAgentTemplateInput!): AgentTemplate!
   deleteAgentTemplate(id: ID!): Boolean!
   createAgentFromTemplate(input: CreateAgentFromTemplateInput!): Agent!
-  syncTemplateToAgent(templateId: ID!, agentId: ID!): Agent!
-  syncTemplateToAllAgents(templateId: ID!): SyncSummary!
+  "Sync template config + workspace files to a linked agent. idempotencyKey optional."
+  syncTemplateToAgent(templateId: ID!, agentId: ID!, idempotencyKey: String): Agent!
+  "Sync template to every linked agent in a tenant. idempotencyKey optional."
+  syncTemplateToAllAgents(templateId: ID!, idempotencyKey: String): SyncSummary!
   rollbackAgentVersion(agentId: ID!, versionId: ID!): Agent!
 
-  acceptTemplateUpdate(agentId: ID!, filename: String!): Agent!
+  "Advance an agent's pinned hash for a guardrail-class file. idempotencyKey optional."
+  acceptTemplateUpdate(agentId: ID!, filename: String!, idempotencyKey: String): Agent!
   acceptTemplateUpdateBulk(
     templateId: ID!
     filename: String!
