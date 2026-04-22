@@ -329,7 +329,7 @@ variable "api_domain" {
 # ---------------------------------------------------------------------------
 
 variable "stripe_price_ids_json" {
-  description = "JSON object mapping internal plan names to Stripe price IDs for this stage, e.g. {\"starter\":\"price_...\",\"team\":\"price_...\"}. Non-secret; per-stage. Exposed to Lambdas as STRIPE_PRICE_IDS_JSON env var. The secret_key, publishable_key, and webhook_signing_secret live in Secrets Manager at thinkwork/${stage}/stripe/api-credentials — never in tfvars."
+  description = "JSON object mapping internal plan names to Stripe price IDs for this stage, e.g. {\"starter\":\"price_...\",\"team\":\"price_...\"}. Non-secret; per-stage. Exposed to Lambdas as STRIPE_PRICE_IDS_JSON env var. The secret_key, publishable_key, and webhook_signing_secret live in Secrets Manager at thinkwork/<stage>/stripe/api-credentials — never in tfvars."
   type        = string
   default     = "{}"
 }
