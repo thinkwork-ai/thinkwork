@@ -39,7 +39,7 @@ type ScheduledJobRow = {
   trigger_type: string;
   enabled: boolean;
   schedule_type: string;
-  schedule_expression: string;
+  schedule_expression: string | null;
   timezone: string;
   agent_id: string | null;
   routine_id: string | null;
@@ -111,7 +111,8 @@ function jobTypeIcon(type: string) {
   return <Repeat className="h-3.5 w-3.5" />;
 }
 
-function formatSchedule(expr: string): string {
+function formatSchedule(expr: string | null): string {
+  if (!expr) return "—";
   if (expr.startsWith("rate(")) return expr.slice(5, -1);
   if (expr.startsWith("at(")) {
     const dt = expr.slice(3, -1);
