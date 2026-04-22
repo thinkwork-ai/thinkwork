@@ -92,6 +92,14 @@ export const skillRuns = pgTable(
 		// the first tick of a loop and for all non-reconciler invocations.
 		triggered_by_run_id: uuid("triggered_by_run_id"),
 		status: text("status").notNull().default("running"),
+		// Per-run HMAC secret for /api/skills/complete authentication.
+		// Populated on insert by startSkillRunService, sent to the agentcore
+		// container in the run_skill envelope, burned to NULL by
+		// completeSkillRunService on successful terminal transition.
+		// A null value means "no longer active" — a repeat completion attempt
+		// cannot forge a valid signature. See
+		// docs/plans/2026-04-22-005-feat-composable-skills-hardening-handoff-plan.md.
+		completion_hmac_secret: text("completion_hmac_secret"),
 		delivery_channels: jsonb("delivery_channels")
 			.notNull()
 			.default(sql`'[]'::jsonb`),

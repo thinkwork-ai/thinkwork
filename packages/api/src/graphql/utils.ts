@@ -442,12 +442,20 @@ export type CompositionInvokePayload = {
   skillVersion: number;
   invocationSource: string;
   resolvedInputs: Record<string, unknown>;
+  // snake_case — composition_runner._scope_to_inputs (Python) reads
+  // tenant_id/user_id/skill_id/subject_entity_id. Every pre-hardening
+  // camelCase emit silently coerced to "" on the Python side; the bug
+  // hid because no context-mode sub-skill had landed yet. See change 4
+  // of docs/plans/2026-04-22-005-....
   scope?: {
-    tenantId: string;
-    userId?: string;
-    skillId: string;
-    subjectEntityId?: string;
+    tenant_id: string;
+    user_id?: string;
+    skill_id: string;
+    subject_entity_id?: string;
   };
+  // Per-run HMAC secret the container uses to sign its
+  // /api/skills/complete callback — see skill_runs.completion_hmac_secret.
+  completionHmacSecret: string;
 };
 
 export type CompositionInvokeResult =
@@ -473,7 +481,15 @@ export async function invokeComposition(
     }
     const { LambdaClient, InvokeCommand } =
       await import("@aws-sdk/client-lambda");
-    const lambda = new LambdaClient({});
+    const { NodeHttpHandler } = await import("@smithy/node-http-handler");
+    // 28s socketTimeout leaves 2s headroom before the graphql-http
+    // Lambda's 30s ceiling (and API Gateway's 29s cap). Without it a
+    // slow agentcore can block past those limits and we lose the chance
+    // to transition skill_runs out of `running` before the client
+    // times out.
+    const lambda = new LambdaClient({
+      requestHandler: new NodeHttpHandler({ socketTimeout: 28_000 }),
+    });
     const body = JSON.stringify(payload);
     const lambdaPayload = JSON.stringify({
       requestContext: { http: { method: "POST", path: "/invocations" } },

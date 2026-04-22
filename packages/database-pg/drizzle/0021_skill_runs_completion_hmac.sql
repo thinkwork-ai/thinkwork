@@ -1,0 +1,33 @@
+-- skill_runs.completion_hmac_secret — per-run secret for the
+-- /api/skills/complete callback.
+--
+-- See docs/plans/2026-04-22-005-feat-composable-skills-hardening-handoff-plan.md
+-- (PR #1, change 3). startSkillRunService generates a fresh secret at insert,
+-- stores it in this column, and ships it to the agentcore container inside
+-- the run_skill envelope. post_skill_run_complete computes
+-- HMAC-SHA256(secret, runId) and sends it as X-Skill-Run-Signature:
+-- sha256=<hex>. completeSkillRunService reads the secret from the row,
+-- timing-safe-compares, and NULLs the column on successful terminal
+-- transition (single-use). Missing-or-mismatched → 401.
+--
+-- The column is nullable because:
+--   * rows inserted before this migration have no secret,
+--   * burning the secret on completion requires setting it to NULL.
+-- A NULL secret at /api/skills/complete time is treated as "already
+-- completed" — repeat completion attempts get 401, which the Python
+-- retry path already treats as terminal (not retried).
+--
+-- Apply manually (matches 0018/0019/0020 convention):
+--   psql "$DATABASE_URL" -f packages/database-pg/drizzle/0021_skill_runs_completion_hmac.sql
+--
+-- Drift detection:
+--   pnpm db:migrate-manual
+--
+-- Pre-migration invariants:
+--   - skill_runs exists (applied via 0018_skill_runs.sql).
+--   - skill_runs.completion_hmac_secret does not exist yet.
+--
+-- creates-column: public.skill_runs.completion_hmac_secret
+
+ALTER TABLE "skill_runs"
+	ADD COLUMN IF NOT EXISTS "completion_hmac_secret" text;
