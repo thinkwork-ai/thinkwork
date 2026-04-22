@@ -3,6 +3,7 @@ import { db, agentTemplates, snakeToCamel } from "../../utils.js";
 import { requireTenantAdmin } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { runWithIdempotency } from "../../../lib/idempotency.js";
+import { validateTemplateSandbox } from "../../../lib/templates/sandbox-config.js";
 
 export async function createAgentTemplate(
   _parent: any,
@@ -48,6 +49,10 @@ async function createAgentTemplateCore(i: any) {
       ? JSON.parse(i.blockedTools)
       : i.blockedTools
     : undefined;
+
+  const sandboxResult = validateTemplateSandbox(i.sandbox);
+  if (!sandboxResult.ok) throw new Error(sandboxResult.error);
+
   const [row] = await db
     .insert(agentTemplates)
     .values({
@@ -63,6 +68,7 @@ async function createAgentTemplateCore(i: any) {
       config,
       skills,
       knowledge_base_ids: knowledgeBaseIds,
+      sandbox: sandboxResult.value,
       is_published: i.isPublished ?? true,
     })
     .returning();

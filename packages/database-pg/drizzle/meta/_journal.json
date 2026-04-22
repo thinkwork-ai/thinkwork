@@ -141,6 +141,13 @@
       "when": 1776878985543,
       "tag": "0019_condemned_dragon_man",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1776881659765,
+      "tag": "0020_crazy_the_anarchist",
+      "breakpoints": true
     }
   ]
 }

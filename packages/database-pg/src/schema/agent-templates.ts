@@ -8,15 +8,15 @@
  */
 
 import {
-	pgTable,
-	uuid,
-	text,
-	integer,
-	timestamp,
-	jsonb,
-	boolean,
-	uniqueIndex,
-	index,
+  pgTable,
+  uuid,
+  text,
+  integer,
+  timestamp,
+  jsonb,
+  boolean,
+  uniqueIndex,
+  index,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { tenants, users } from "./core.js";
@@ -28,48 +28,60 @@ import { guardrails } from "./guardrails.js";
 // ---------------------------------------------------------------------------
 
 export const agentTemplates = pgTable(
-	"agent_templates",
-	{
-		id: uuid("id")
-			.primaryKey()
-			.default(sql`gen_random_uuid()`),
-		tenant_id: uuid("tenant_id").references(() => tenants.id),
-		name: text("name").notNull(),
-		slug: text("slug").notNull(),
-		description: text("description"),
-		category: text("category"),
-		icon: text("icon"),
-		/** 'system' = platform-provided, 'user' = tenant-created */
-		source: text("source").notNull().default("user"),
-		/** The Bedrock model agents in this template use */
-		model: text("model"),
-		/** Guardrail assigned to this template (null = inherit tenant default) */
-		guardrail_id: uuid("guardrail_id").references(() => guardrails.id),
-		/** Tools blocked for agents in this template: string[] */
-		blocked_tools: jsonb("blocked_tools"),
-		/** Agent config: role, other non-security settings */
-		config: jsonb("config"),
-		/** Skill assignments: [{ skill_id, config?, permissions?, enabled, model_override? }] */
-		skills: jsonb("skills"),
-		/** KB UUIDs to assign on creation */
-		knowledge_base_ids: jsonb("knowledge_base_ids"),
-		is_published: boolean("is_published").notNull().default(true),
-		created_at: timestamp("created_at", { withTimezone: true })
-			.notNull()
-			.default(sql`now()`),
-		updated_at: timestamp("updated_at", { withTimezone: true })
-			.notNull()
-			.default(sql`now()`),
-	},
-	(table) => [
-		uniqueIndex("uq_agent_templates_tenant_slug").on(
-			table.tenant_id,
-			table.slug,
-		),
-		index("idx_agent_templates_tenant").on(table.tenant_id),
-		index("idx_agent_templates_category").on(table.category),
-		index("idx_agent_templates_source").on(table.source),
-	],
+  "agent_templates",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id").references(() => tenants.id),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    description: text("description"),
+    category: text("category"),
+    icon: text("icon"),
+    /** 'system' = platform-provided, 'user' = tenant-created */
+    source: text("source").notNull().default("user"),
+    /** The Bedrock model agents in this template use */
+    model: text("model"),
+    /** Guardrail assigned to this template (null = inherit tenant default) */
+    guardrail_id: uuid("guardrail_id").references(() => guardrails.id),
+    /** Tools blocked for agents in this template: string[] */
+    blocked_tools: jsonb("blocked_tools"),
+    /** Agent config: role, other non-security settings */
+    config: jsonb("config"),
+    /** Skill assignments: [{ skill_id, config?, permissions?, enabled, model_override? }] */
+    skills: jsonb("skills"),
+    /** KB UUIDs to assign on creation */
+    knowledge_base_ids: jsonb("knowledge_base_ids"),
+    /**
+     * Sandbox opt-in metadata for the AgentCore Code Interpreter sandbox
+     * (plan Unit 3). Shape: { environment: 'default-public' | 'internal-only',
+     * required_connections: string[] } | null. Null = template does not use
+     * the sandbox; `execute_code` is not registered for its agents.
+     *
+     * Shape is validated at create/update mutation time by
+     * packages/api/src/lib/templates/sandbox-config.ts — the DB column is
+     * plain jsonb because Drizzle has no enum-inside-jsonb primitive; the
+     * validator is the gate.
+     */
+    sandbox: jsonb("sandbox"),
+    is_published: boolean("is_published").notNull().default(true),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("uq_agent_templates_tenant_slug").on(
+      table.tenant_id,
+      table.slug,
+    ),
+    index("idx_agent_templates_tenant").on(table.tenant_id),
+    index("idx_agent_templates_category").on(table.category),
+    index("idx_agent_templates_source").on(table.source),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -77,37 +89,37 @@ export const agentTemplates = pgTable(
 // ---------------------------------------------------------------------------
 
 export const agentVersions = pgTable(
-	"agent_versions",
-	{
-		id: uuid("id")
-			.primaryKey()
-			.default(sql`gen_random_uuid()`),
-		tenant_id: uuid("tenant_id")
-			.references(() => tenants.id)
-			.notNull(),
-		agent_id: uuid("agent_id")
-			.references(() => agents.id)
-			.notNull(),
-		version_number: integer("version_number").notNull(),
-		label: text("label"),
-		config_snapshot: jsonb("config_snapshot"),
-		workspace_snapshot: jsonb("workspace_snapshot"),
-		skills_snapshot: jsonb("skills_snapshot"),
-		knowledge_bases_snapshot: jsonb("knowledge_bases_snapshot"),
-		guardrail_snapshot: jsonb("guardrail_snapshot"),
-		created_by: uuid("created_by").references(() => users.id),
-		created_at: timestamp("created_at", { withTimezone: true })
-			.notNull()
-			.default(sql`now()`),
-		is_active: boolean("is_active").notNull().default(false),
-	},
-	(table) => [
-		index("idx_agent_versions_agent").on(table.agent_id),
-		uniqueIndex("uq_agent_versions_agent_version").on(
-			table.agent_id,
-			table.version_number,
-		),
-	],
+  "agent_versions",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id)
+      .notNull(),
+    agent_id: uuid("agent_id")
+      .references(() => agents.id)
+      .notNull(),
+    version_number: integer("version_number").notNull(),
+    label: text("label"),
+    config_snapshot: jsonb("config_snapshot"),
+    workspace_snapshot: jsonb("workspace_snapshot"),
+    skills_snapshot: jsonb("skills_snapshot"),
+    knowledge_bases_snapshot: jsonb("knowledge_bases_snapshot"),
+    guardrail_snapshot: jsonb("guardrail_snapshot"),
+    created_by: uuid("created_by").references(() => users.id),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    is_active: boolean("is_active").notNull().default(false),
+  },
+  (table) => [
+    index("idx_agent_versions_agent").on(table.agent_id),
+    uniqueIndex("uq_agent_versions_agent_version").on(
+      table.agent_id,
+      table.version_number,
+    ),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -115,34 +127,31 @@ export const agentVersions = pgTable(
 // ---------------------------------------------------------------------------
 
 export const agentTemplatesRelations = relations(
-	agentTemplates,
-	({ one, many }) => ({
-		tenant: one(tenants, {
-			fields: [agentTemplates.tenant_id],
-			references: [tenants.id],
-		}),
-		guardrail: one(guardrails, {
-			fields: [agentTemplates.guardrail_id],
-			references: [guardrails.id],
-		}),
-		agents: many(agents),
-	}),
+  agentTemplates,
+  ({ one, many }) => ({
+    tenant: one(tenants, {
+      fields: [agentTemplates.tenant_id],
+      references: [tenants.id],
+    }),
+    guardrail: one(guardrails, {
+      fields: [agentTemplates.guardrail_id],
+      references: [guardrails.id],
+    }),
+    agents: many(agents),
+  }),
 );
 
-export const agentVersionsRelations = relations(
-	agentVersions,
-	({ one }) => ({
-		tenant: one(tenants, {
-			fields: [agentVersions.tenant_id],
-			references: [tenants.id],
-		}),
-		agent: one(agents, {
-			fields: [agentVersions.agent_id],
-			references: [agents.id],
-		}),
-		createdBy: one(users, {
-			fields: [agentVersions.created_by],
-			references: [users.id],
-		}),
-	}),
-);
+export const agentVersionsRelations = relations(agentVersions, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [agentVersions.tenant_id],
+    references: [tenants.id],
+  }),
+  agent: one(agents, {
+    fields: [agentVersions.agent_id],
+    references: [agents.id],
+  }),
+  createdBy: one(users, {
+    fields: [agentVersions.created_by],
+    references: [users.id],
+  }),
+}));
