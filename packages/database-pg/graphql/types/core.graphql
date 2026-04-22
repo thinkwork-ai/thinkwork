@@ -160,6 +160,24 @@ extend type Query {
   user(id: ID!): User
   tenantMembers(tenantId: ID!): [TenantMember!]!
   deploymentStatus: DeploymentStatus!
+  """
+  Returns the caller's own role on the caller's own tenant.
+
+  Used by the thinkwork-admin Python skill to pre-flight the
+  server-side role gate before making a gated mutation. The query
+  takes no arguments by design — it cannot be used as an enumeration
+  oracle to probe arbitrary (userId, tenantId) pairs. The
+  authoritative role gate remains `requireAdminOrApiKeyCaller` on
+  each gated mutation.
+  """
+  adminRoleCheck: AdminRoleCheckResult!
+}
+
+type AdminRoleCheckResult {
+  """
+  One of: owner, admin, member, other.
+  """
+  role: String!
 }
 
 input InviteMemberInput {
@@ -178,7 +196,10 @@ extend type Mutation {
   bootstrapUser: BootstrapResult!
   createTenant(input: CreateTenantInput!): Tenant!
   updateTenant(id: ID!, input: UpdateTenantInput!): Tenant!
-  updateTenantSettings(tenantId: ID!, input: UpdateTenantSettingsInput!): TenantSettings!
+  updateTenantSettings(
+    tenantId: ID!
+    input: UpdateTenantSettingsInput!
+  ): TenantSettings!
   addTenantMember(tenantId: ID!, input: AddTenantMemberInput!): TenantMember!
   updateTenantMember(id: ID!, input: UpdateTenantMemberInput!): TenantMember!
   removeTenantMember(id: ID!): Boolean!
