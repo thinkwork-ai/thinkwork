@@ -176,7 +176,9 @@ const LEGACY_ANCHOR_RE = /Your name is \*\*[^*]+\*\*\./;
 function surgery(existing: string, newName: string): string | null {
 	// Defensive: strip newlines so a malicious name can't inject extra
 	// markdown lines. Collapse to spaces, trim runs.
-	const safeName = newName.replace(/[\r\n]+/g, " ").trim();
+	// Includes U+2028 / U+2029 so a name with line separators can't
+	// inject extra markdown lines past the \r\n guard.
+	const safeName = newName.replace(/[\r\n\u2028\u2029]+/g, " ").trim();
 
 	// Use function-form replacement so `$&`, `$'`, `` $` ``, `$1` in
 	// `safeName` are NOT interpreted as backreferences by String.replace.

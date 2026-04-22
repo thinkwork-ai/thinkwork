@@ -201,6 +201,11 @@ async function resolveAssignment(
 		HUMAN_TITLE: null,
 		HUMAN_TIMEZONE: null,
 		HUMAN_PRONOUNS: null,
+		HUMAN_CALL_BY: null,
+		HUMAN_PHONE: null,
+		HUMAN_NOTES: null,
+		HUMAN_FAMILY: null,
+		HUMAN_CONTEXT: null,
 	};
 
 	if (humanPairId) {
@@ -209,17 +214,25 @@ async function resolveAssignment(
 				id: users.id,
 				name: users.name,
 				email: users.email,
+				phone: users.phone,
 			})
 			.from(users)
 			.where(eq(users.id, humanPairId));
 		if (user) {
 			values.HUMAN_NAME = user.name;
 			values.HUMAN_EMAIL = user.email;
+			// HUMAN_PHONE reads from users.phone (account-level contact info)
+			// rather than user_profiles — we don't duplicate it across tables.
+			values.HUMAN_PHONE = user.phone;
 			const [profile] = await tx
 				.select({
 					title: userProfiles.title,
 					timezone: userProfiles.timezone,
 					pronouns: userProfiles.pronouns,
+					call_by: userProfiles.call_by,
+					notes: userProfiles.notes,
+					family: userProfiles.family,
+					context: userProfiles.context,
 				})
 				.from(userProfiles)
 				.where(eq(userProfiles.user_id, user.id));
@@ -227,6 +240,10 @@ async function resolveAssignment(
 				values.HUMAN_TITLE = profile.title;
 				values.HUMAN_TIMEZONE = profile.timezone;
 				values.HUMAN_PRONOUNS = profile.pronouns;
+				values.HUMAN_CALL_BY = profile.call_by;
+				values.HUMAN_NOTES = profile.notes;
+				values.HUMAN_FAMILY = profile.family;
+				values.HUMAN_CONTEXT = profile.context;
 			}
 		}
 	}

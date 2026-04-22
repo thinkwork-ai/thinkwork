@@ -19,6 +19,20 @@ export type Scalars = {
   AWSURL: { input: any; output: any; }
 };
 
+export type AcceptTemplateUpdateBulkResult = {
+  __typename?: 'AcceptTemplateUpdateBulkResult';
+  accepted: Scalars['Int']['output'];
+  failed: Scalars['Int']['output'];
+  results: Array<AcceptTemplateUpdateBulkResultEntry>;
+};
+
+export type AcceptTemplateUpdateBulkResultEntry = {
+  __typename?: 'AcceptTemplateUpdateBulkResultEntry';
+  agentId: Scalars['ID']['output'];
+  error?: Maybe<Scalars['String']['output']>;
+  success: Scalars['Boolean']['output'];
+};
+
 export type ActivityLogEntry = {
   __typename?: 'ActivityLogEntry';
   action: Scalars['String']['output'];
@@ -392,6 +406,14 @@ export type BudgetStatus = {
 
 export type CheckoutThreadInput = {
   runId: Scalars['String']['input'];
+};
+
+export type CompositionFeedbackSummary = {
+  __typename?: 'CompositionFeedbackSummary';
+  negative: Scalars['Int']['output'];
+  positive: Scalars['Int']['output'];
+  skillId: Scalars['String']['output'];
+  total: Scalars['Int']['output'];
 };
 
 export type ConcurrencySnapshot = {
@@ -1158,6 +1180,8 @@ export type ModelInvocation = {
 export type Mutation = {
   __typename?: 'Mutation';
   _empty?: Maybe<Scalars['String']['output']>;
+  acceptTemplateUpdate: Agent;
+  acceptTemplateUpdateBulk: AcceptTemplateUpdateBulkResult;
   addInboxItemComment: InboxItemComment;
   addInboxItemLink: InboxItemLink;
   addTeamAgent: TeamAgent;
@@ -1178,6 +1202,7 @@ export type Mutation = {
   bootstrapUser: BootstrapResult;
   cancelEvalRun: EvalRun;
   cancelInboxItem: InboxItem;
+  cancelSkillRun: SkillRun;
   cancelThreadTurn: ThreadTurn;
   captureMobileMemory: MobileMemoryCapture;
   checkoutThread: Thread;
@@ -1228,6 +1253,7 @@ export type Mutation = {
   deleteRecipe: Scalars['Boolean']['output'];
   deleteRoutine: Scalars['Boolean']['output'];
   deleteRoutineTrigger: Scalars['Boolean']['output'];
+  deleteRun: Scalars['Boolean']['output'];
   deleteTeam: Scalars['Boolean']['output'];
   deleteThread: Scalars['Boolean']['output'];
   deleteThreadComment: Scalars['Boolean']['output'];
@@ -1275,6 +1301,8 @@ export type Mutation = {
   setAgentSkills: Array<AgentSkill>;
   setRoutineTrigger: RoutineTrigger;
   startEvalRun: EvalRun;
+  startSkillRun: SkillRun;
+  submitRunFeedback: SkillRun;
   syncKnowledgeBase: KnowledgeBase;
   syncTemplateToAgent: Agent;
   syncTemplateToAllAgents: SyncSummary;
@@ -1304,6 +1332,19 @@ export type Mutation = {
   updateUserProfile: UserProfile;
   updateWebhook: Webhook;
   upsertBudgetPolicy: BudgetPolicy;
+};
+
+
+export type MutationAcceptTemplateUpdateArgs = {
+  agentId: Scalars['ID']['input'];
+  filename: Scalars['String']['input'];
+};
+
+
+export type MutationAcceptTemplateUpdateBulkArgs = {
+  filename: Scalars['String']['input'];
+  templateId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -1373,6 +1414,11 @@ export type MutationCancelEvalRunArgs = {
 
 export type MutationCancelInboxItemArgs = {
   id: Scalars['ID']['input'];
+};
+
+
+export type MutationCancelSkillRunArgs = {
+  runId: Scalars['ID']['input'];
 };
 
 
@@ -1584,6 +1630,11 @@ export type MutationDeleteRoutineArgs = {
 
 export type MutationDeleteRoutineTriggerArgs = {
   id: Scalars['ID']['input'];
+};
+
+
+export type MutationDeleteRunArgs = {
+  runId: Scalars['ID']['input'];
 };
 
 
@@ -1857,6 +1908,16 @@ export type MutationStartEvalRunArgs = {
 };
 
 
+export type MutationStartSkillRunArgs = {
+  input: StartSkillRunInput;
+};
+
+
+export type MutationSubmitRunFeedbackArgs = {
+  input: SubmitRunFeedbackInput;
+};
+
+
 export type MutationSyncKnowledgeBaseArgs = {
   id: Scalars['ID']['input'];
 };
@@ -2061,6 +2122,16 @@ export type PerformanceTimeSeries = {
   totalCostUsd: Scalars['Float']['output'];
 };
 
+export type PinStatusFile = {
+  __typename?: 'PinStatusFile';
+  filename: Scalars['String']['output'];
+  latestContent?: Maybe<Scalars['String']['output']>;
+  latestSha?: Maybe<Scalars['String']['output']>;
+  pinnedContent?: Maybe<Scalars['String']['output']>;
+  pinnedSha?: Maybe<Scalars['String']['output']>;
+  updateAvailable: Scalars['Boolean']['output'];
+};
+
 export type Query = {
   __typename?: 'Query';
   _empty?: Maybe<Scalars['String']['output']>;
@@ -2071,6 +2142,7 @@ export type Query = {
   agentCostBreakdown: CostSummary;
   agentEmailCapability?: Maybe<AgentEmailCapability>;
   agentPerformance: Array<AgentPerformance>;
+  agentPinStatus: Array<PinStatusFile>;
   agentTemplate?: Maybe<AgentTemplate>;
   agentTemplates: Array<AgentTemplate>;
   agentVersions: Array<AgentVersion>;
@@ -2081,6 +2153,7 @@ export type Query = {
   artifacts: Array<Artifact>;
   budgetPolicies: Array<BudgetPolicy>;
   budgetStatus: Array<BudgetStatus>;
+  compositionFeedbackSummary: Array<CompositionFeedbackSummary>;
   concurrencySnapshot: ConcurrencySnapshot;
   costByAgent: Array<AgentCostSummary>;
   costByModel: Array<ModelCostSummary>;
@@ -2149,6 +2222,8 @@ export type Query = {
   scheduledJob?: Maybe<ScheduledJob>;
   scheduledJobs: Array<ScheduledJob>;
   singleAgentPerformance?: Maybe<AgentPerformance>;
+  skillRun?: Maybe<SkillRun>;
+  skillRuns: Array<SkillRun>;
   team?: Maybe<Team>;
   teams: Array<Team>;
   templateSyncDiff: TemplateSyncDiff;
@@ -2254,6 +2329,11 @@ export type QueryAgentPerformanceArgs = {
 };
 
 
+export type QueryAgentPinStatusArgs = {
+  agentId: Scalars['ID']['input'];
+};
+
+
 export type QueryAgentTemplateArgs = {
   id: Scalars['ID']['input'];
 };
@@ -2313,6 +2393,12 @@ export type QueryBudgetPoliciesArgs = {
 
 export type QueryBudgetStatusArgs = {
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryCompositionFeedbackSummaryArgs = {
+  skillId?: InputMaybe<Scalars['String']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -2545,6 +2631,22 @@ export type QueryScheduledJobsArgs = {
 export type QuerySingleAgentPerformanceArgs = {
   agentId: Scalars['ID']['input'];
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QuerySkillRunArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QuerySkillRunsArgs = {
+  agentId?: InputMaybe<Scalars['ID']['input']>;
+  invocationSource?: InputMaybe<Scalars['String']['input']>;
+  invokerUserId?: InputMaybe<Scalars['ID']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  skillId?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -2909,6 +3011,31 @@ export type SendMessageInput = {
   toolResults?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
+export type SkillRun = {
+  __typename?: 'SkillRun';
+  agentId?: Maybe<Scalars['ID']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  deleteAt: Scalars['AWSDateTime']['output'];
+  deliveredArtifactRef?: Maybe<Scalars['AWSJSON']['output']>;
+  deliveryChannels?: Maybe<Scalars['AWSJSON']['output']>;
+  failureReason?: Maybe<Scalars['String']['output']>;
+  feedbackNote?: Maybe<Scalars['String']['output']>;
+  feedbackSignal?: Maybe<Scalars['String']['output']>;
+  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  id: Scalars['ID']['output'];
+  inputs?: Maybe<Scalars['AWSJSON']['output']>;
+  invocationSource: Scalars['String']['output'];
+  invokerUserId: Scalars['ID']['output'];
+  resolvedInputs?: Maybe<Scalars['AWSJSON']['output']>;
+  resolvedInputsHash: Scalars['String']['output'];
+  skillId: Scalars['String']['output'];
+  skillVersion: Scalars['Int']['output'];
+  startedAt: Scalars['AWSDateTime']['output'];
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
 export type StartEvalRunInput = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
   agentTemplateId?: InputMaybe<Scalars['ID']['input']>;
@@ -2917,10 +3044,26 @@ export type StartEvalRunInput = {
   testCaseIds?: InputMaybe<Array<Scalars['ID']['input']>>;
 };
 
+export type StartSkillRunInput = {
+  agentId?: InputMaybe<Scalars['ID']['input']>;
+  deliveryChannels?: InputMaybe<Scalars['AWSJSON']['input']>;
+  inputs?: InputMaybe<Scalars['AWSJSON']['input']>;
+  invocationSource: Scalars['String']['input'];
+  skillId: Scalars['String']['input'];
+  skillVersion?: InputMaybe<Scalars['Int']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
 export type StatusCount = {
   __typename?: 'StatusCount';
   count: Scalars['Int']['output'];
   status: Scalars['String']['output'];
+};
+
+export type SubmitRunFeedbackInput = {
+  note?: InputMaybe<Scalars['String']['input']>;
+  runId: Scalars['ID']['input'];
+  signal: Scalars['String']['input'];
 };
 
 export type Subscription = {
@@ -3463,9 +3606,20 @@ export type UpdateUserInput = {
 };
 
 export type UpdateUserProfileInput = {
+  /** Short/preferred name the agent should use in chat. Set via admin UI or agent self-serve tool. */
+  callBy?: InputMaybe<Scalars['String']['input']>;
+  /** Free-form markdown capturing ongoing context about the human. */
+  context?: InputMaybe<Scalars['String']['input']>;
   displayName?: InputMaybe<Scalars['String']['input']>;
+  /** Free-form markdown describing the human's family / close contacts. */
+  family?: InputMaybe<Scalars['String']['input']>;
+  /** Free-form notes about the human's preferences + communication style. */
+  notes?: InputMaybe<Scalars['String']['input']>;
   notificationPreferences?: InputMaybe<Scalars['AWSJSON']['input']>;
+  pronouns?: InputMaybe<Scalars['String']['input']>;
   theme?: InputMaybe<Scalars['String']['input']>;
+  timezone?: InputMaybe<Scalars['String']['input']>;
+  title?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpdateWebhookInput = {
@@ -3503,12 +3657,23 @@ export type User = {
 
 export type UserProfile = {
   __typename?: 'UserProfile';
+  /** Short/preferred name — what the agent should call this human in chat. */
+  callBy?: Maybe<Scalars['String']['output']>;
+  /** Free-form markdown capturing ongoing context about the human. */
+  context?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   displayName?: Maybe<Scalars['String']['output']>;
+  /** Free-form markdown describing the human's family / close contacts. */
+  family?: Maybe<Scalars['String']['output']>;
   id: Scalars['ID']['output'];
+  /** Free-form notes the agent maintains about this human's preferences + style. */
+  notes?: Maybe<Scalars['String']['output']>;
   notificationPreferences?: Maybe<Scalars['AWSJSON']['output']>;
+  pronouns?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
   theme?: Maybe<Scalars['String']['output']>;
+  timezone?: Maybe<Scalars['String']['output']>;
+  title?: Maybe<Scalars['String']['output']>;
   updatedAt: Scalars['AWSDateTime']['output'];
   userId: Scalars['ID']['output'];
 };
@@ -3737,6 +3902,14 @@ export type WikiSearchResult = {
   page: WikiPage;
   score: Scalars['Float']['output'];
 };
+
+export type AcceptTemplateUpdateMutationVariables = Exact<{
+  agentId: Scalars['ID']['input'];
+  filename: Scalars['String']['input'];
+}>;
+
+
+export type AcceptTemplateUpdateMutation = { __typename?: 'Mutation', acceptTemplateUpdate: { __typename?: 'Agent', id: string, name: string, slug?: string | null } };
 
 export type CreateSubAgentMutationVariables = Exact<{
   input: CreateAgentInput;
@@ -4742,7 +4915,64 @@ export type OnEvalRunUpdatedSubscriptionVariables = Exact<{
 
 export type OnEvalRunUpdatedSubscription = { __typename?: 'Subscription', onEvalRunUpdated?: { __typename?: 'EvalRunUpdateEvent', runId: string, tenantId: string, agentId?: string | null, status: string, totalTests?: number | null, passed?: number | null, failed?: number | null, passRate?: number | null, errorMessage?: string | null, updatedAt: any } | null };
 
+export type SkillRunsQueryVariables = Exact<{
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  agentId?: InputMaybe<Scalars['ID']['input']>;
+  invokerUserId?: InputMaybe<Scalars['ID']['input']>;
+  skillId?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  invocationSource?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
 
+
+export type SkillRunsQuery = { __typename?: 'Query', skillRuns: Array<{ __typename?: 'SkillRun', id: string, tenantId: string, agentId?: string | null, invokerUserId: string, skillId: string, skillVersion: number, invocationSource: string, status: string, startedAt: any, finishedAt?: any | null, deleteAt: any, feedbackSignal?: string | null, failureReason?: string | null, createdAt: any }> };
+
+export type SkillRunQueryVariables = Exact<{
+  id: Scalars['ID']['input'];
+}>;
+
+
+export type SkillRunQuery = { __typename?: 'Query', skillRun?: { __typename?: 'SkillRun', id: string, tenantId: string, agentId?: string | null, invokerUserId: string, skillId: string, skillVersion: number, invocationSource: string, inputs?: any | null, resolvedInputs?: any | null, status: string, deliveryChannels?: any | null, startedAt: any, finishedAt?: any | null, deliveredArtifactRef?: any | null, deleteAt: any, feedbackSignal?: string | null, feedbackNote?: string | null, failureReason?: string | null, createdAt: any, updatedAt: any } | null };
+
+export type CompositionFeedbackSummaryQueryVariables = Exact<{
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  skillId?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type CompositionFeedbackSummaryQuery = { __typename?: 'Query', compositionFeedbackSummary: Array<{ __typename?: 'CompositionFeedbackSummary', skillId: string, positive: number, negative: number, total: number }> };
+
+export type CancelSkillRunMutationVariables = Exact<{
+  runId: Scalars['ID']['input'];
+}>;
+
+
+export type CancelSkillRunMutation = { __typename?: 'Mutation', cancelSkillRun: { __typename?: 'SkillRun', id: string, status: string, finishedAt?: any | null } };
+
+export type SubmitRunFeedbackMutationVariables = Exact<{
+  input: SubmitRunFeedbackInput;
+}>;
+
+
+export type SubmitRunFeedbackMutation = { __typename?: 'Mutation', submitRunFeedback: { __typename?: 'SkillRun', id: string, feedbackSignal?: string | null, feedbackNote?: string | null } };
+
+export type DeleteRunMutationVariables = Exact<{
+  runId: Scalars['ID']['input'];
+}>;
+
+
+export type DeleteRunMutation = { __typename?: 'Mutation', deleteRun: boolean };
+
+export type AgentPinStatusQueryVariables = Exact<{
+  agentId: Scalars['ID']['input'];
+}>;
+
+
+export type AgentPinStatusQuery = { __typename?: 'Query', agentPinStatus: Array<{ __typename?: 'PinStatusFile', filename: string, pinnedSha?: string | null, latestSha?: string | null, updateAvailable: boolean, pinnedContent?: string | null, latestContent?: string | null }> };
+
+
+export const AcceptTemplateUpdateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AcceptTemplateUpdate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"filename"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"acceptTemplateUpdate"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"filename"},"value":{"kind":"Variable","name":{"kind":"Name","value":"filename"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}}]}}]}}]} as unknown as DocumentNode<AcceptTemplateUpdateMutation, AcceptTemplateUpdateMutationVariables>;
 export const CreateSubAgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateSubAgent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateAgentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createAgent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}}]}}]}}]} as unknown as DocumentNode<CreateSubAgentMutation, CreateSubAgentMutationVariables>;
 export const DeleteSubAgentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteSubAgent"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteAgent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<DeleteSubAgentMutation, DeleteSubAgentMutationVariables>;
 export const AddThreadCommentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AddThreadComment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AddThreadCommentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"addThreadComment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"authorType"}},{"kind":"Field","name":{"kind":"Name","value":"authorId"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<AddThreadCommentMutation, AddThreadCommentMutationVariables>;
@@ -4874,3 +5104,10 @@ export const DeleteEvalRunDocument = {"kind":"Document","definitions":[{"kind":"
 export const CancelEvalRunDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CancelEvalRun"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cancelEvalRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}}]}}]}}]} as unknown as DocumentNode<CancelEvalRunMutation, CancelEvalRunMutationVariables>;
 export const EvalTestCaseHistoryDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"EvalTestCaseHistory"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"testCaseId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalTestCaseHistory"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"testCaseId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"testCaseId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"testCaseName"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"score"}},{"kind":"Field","name":{"kind":"Name","value":"durationMs"}},{"kind":"Field","name":{"kind":"Name","value":"input"}},{"kind":"Field","name":{"kind":"Name","value":"expected"}},{"kind":"Field","name":{"kind":"Name","value":"actualOutput"}},{"kind":"Field","name":{"kind":"Name","value":"assertions"}},{"kind":"Field","name":{"kind":"Name","value":"evaluatorResults"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<EvalTestCaseHistoryQuery, EvalTestCaseHistoryQueryVariables>;
 export const OnEvalRunUpdatedDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"subscription","name":{"kind":"Name","value":"OnEvalRunUpdated"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"onEvalRunUpdated"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"runId"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"totalTests"}},{"kind":"Field","name":{"kind":"Name","value":"passed"}},{"kind":"Field","name":{"kind":"Name","value":"failed"}},{"kind":"Field","name":{"kind":"Name","value":"passRate"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<OnEvalRunUpdatedSubscription, OnEvalRunUpdatedSubscriptionVariables>;
+export const SkillRunsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SkillRuns"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"invokerUserId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"skillId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"invocationSource"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"skillRuns"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"invokerUserId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"invokerUserId"}}},{"kind":"Argument","name":{"kind":"Name","value":"skillId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"skillId"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}},{"kind":"Argument","name":{"kind":"Name","value":"invocationSource"},"value":{"kind":"Variable","name":{"kind":"Name","value":"invocationSource"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"invokerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"skillId"}},{"kind":"Field","name":{"kind":"Name","value":"skillVersion"}},{"kind":"Field","name":{"kind":"Name","value":"invocationSource"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"deleteAt"}},{"kind":"Field","name":{"kind":"Name","value":"feedbackSignal"}},{"kind":"Field","name":{"kind":"Name","value":"failureReason"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<SkillRunsQuery, SkillRunsQueryVariables>;
+export const SkillRunDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SkillRun"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"skillRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"invokerUserId"}},{"kind":"Field","name":{"kind":"Name","value":"skillId"}},{"kind":"Field","name":{"kind":"Name","value":"skillVersion"}},{"kind":"Field","name":{"kind":"Name","value":"invocationSource"}},{"kind":"Field","name":{"kind":"Name","value":"inputs"}},{"kind":"Field","name":{"kind":"Name","value":"resolvedInputs"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"deliveryChannels"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"deliveredArtifactRef"}},{"kind":"Field","name":{"kind":"Name","value":"deleteAt"}},{"kind":"Field","name":{"kind":"Name","value":"feedbackSignal"}},{"kind":"Field","name":{"kind":"Name","value":"feedbackNote"}},{"kind":"Field","name":{"kind":"Name","value":"failureReason"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SkillRunQuery, SkillRunQueryVariables>;
+export const CompositionFeedbackSummaryDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CompositionFeedbackSummary"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"skillId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"compositionFeedbackSummary"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"skillId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"skillId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"skillId"}},{"kind":"Field","name":{"kind":"Name","value":"positive"}},{"kind":"Field","name":{"kind":"Name","value":"negative"}},{"kind":"Field","name":{"kind":"Name","value":"total"}}]}}]}}]} as unknown as DocumentNode<CompositionFeedbackSummaryQuery, CompositionFeedbackSummaryQueryVariables>;
+export const CancelSkillRunDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CancelSkillRun"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"runId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cancelSkillRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"runId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"runId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}}]}}]}}]} as unknown as DocumentNode<CancelSkillRunMutation, CancelSkillRunMutationVariables>;
+export const SubmitRunFeedbackDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SubmitRunFeedback"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SubmitRunFeedbackInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"submitRunFeedback"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"feedbackSignal"}},{"kind":"Field","name":{"kind":"Name","value":"feedbackNote"}}]}}]}}]} as unknown as DocumentNode<SubmitRunFeedbackMutation, SubmitRunFeedbackMutationVariables>;
+export const DeleteRunDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteRun"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"runId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"runId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"runId"}}}]}]}}]} as unknown as DocumentNode<DeleteRunMutation, DeleteRunMutationVariables>;
+export const AgentPinStatusDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"AgentPinStatus"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agentPinStatus"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"filename"}},{"kind":"Field","name":{"kind":"Name","value":"pinnedSha"}},{"kind":"Field","name":{"kind":"Name","value":"latestSha"}},{"kind":"Field","name":{"kind":"Name","value":"updateAvailable"}},{"kind":"Field","name":{"kind":"Name","value":"pinnedContent"}},{"kind":"Field","name":{"kind":"Name","value":"latestContent"}}]}}]}}]} as unknown as DocumentNode<AgentPinStatusQuery, AgentPinStatusQueryVariables>;

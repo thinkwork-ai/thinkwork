@@ -14,6 +14,7 @@ import { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-node/
  * Learn more about it here: https://the-guild.dev/graphql/codegen/plugins/presets/preset-client#reducing-bundle-size
  */
 type Documents = {
+    "\n\tmutation AcceptTemplateUpdate($agentId: ID!, $filename: String!) {\n\t\tacceptTemplateUpdate(agentId: $agentId, filename: $filename) {\n\t\t\tid\n\t\t\tname\n\t\t\tslug\n\t\t}\n\t}\n": typeof types.AcceptTemplateUpdateDocument,
     "\n  mutation CreateSubAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      slug\n    }\n  }\n": typeof types.CreateSubAgentDocument,
     "\n  mutation DeleteSubAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n": typeof types.DeleteSubAgentDocument,
     "\n  mutation AddThreadComment($input: AddThreadCommentInput!) {\n    addThreadComment(input: $input) {\n      id\n      authorType\n      authorId\n      content\n      createdAt\n    }\n  }\n": typeof types.AddThreadCommentDocument,
@@ -145,8 +146,16 @@ type Documents = {
     "\n  mutation CancelEvalRun($id: ID!) {\n    cancelEvalRun(id: $id) {\n      id\n      status\n      completedAt\n    }\n  }\n": typeof types.CancelEvalRunDocument,
     "\n  query EvalTestCaseHistory($testCaseId: ID!, $limit: Int) {\n    evalTestCaseHistory(testCaseId: $testCaseId, limit: $limit) {\n      id\n      runId\n      testCaseName\n      category\n      status\n      score\n      durationMs\n      input\n      expected\n      actualOutput\n      assertions\n      evaluatorResults\n      errorMessage\n      createdAt\n    }\n  }\n": typeof types.EvalTestCaseHistoryDocument,
     "\n  subscription OnEvalRunUpdated($tenantId: ID!) {\n    onEvalRunUpdated(tenantId: $tenantId) {\n      runId\n      tenantId\n      agentId\n      status\n      totalTests\n      passed\n      failed\n      passRate\n      errorMessage\n      updatedAt\n    }\n  }\n": typeof types.OnEvalRunUpdatedDocument,
+    "\n  query SkillRuns(\n    $tenantId: ID\n    $agentId: ID\n    $invokerUserId: ID\n    $skillId: String\n    $status: String\n    $invocationSource: String\n    $limit: Int\n  ) {\n    skillRuns(\n      tenantId: $tenantId\n      agentId: $agentId\n      invokerUserId: $invokerUserId\n      skillId: $skillId\n      status: $status\n      invocationSource: $invocationSource\n      limit: $limit\n    ) {\n      id\n      tenantId\n      agentId\n      invokerUserId\n      skillId\n      skillVersion\n      invocationSource\n      status\n      startedAt\n      finishedAt\n      deleteAt\n      feedbackSignal\n      failureReason\n      createdAt\n    }\n  }\n": typeof types.SkillRunsDocument,
+    "\n  query SkillRun($id: ID!) {\n    skillRun(id: $id) {\n      id\n      tenantId\n      agentId\n      invokerUserId\n      skillId\n      skillVersion\n      invocationSource\n      inputs\n      resolvedInputs\n      status\n      deliveryChannels\n      startedAt\n      finishedAt\n      deliveredArtifactRef\n      deleteAt\n      feedbackSignal\n      feedbackNote\n      failureReason\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.SkillRunDocument,
+    "\n  query CompositionFeedbackSummary($tenantId: ID, $skillId: String) {\n    compositionFeedbackSummary(tenantId: $tenantId, skillId: $skillId) {\n      skillId\n      positive\n      negative\n      total\n    }\n  }\n": typeof types.CompositionFeedbackSummaryDocument,
+    "\n  mutation CancelSkillRun($runId: ID!) {\n    cancelSkillRun(runId: $runId) {\n      id\n      status\n      finishedAt\n    }\n  }\n": typeof types.CancelSkillRunDocument,
+    "\n  mutation SubmitRunFeedback($input: SubmitRunFeedbackInput!) {\n    submitRunFeedback(input: $input) {\n      id\n      feedbackSignal\n      feedbackNote\n    }\n  }\n": typeof types.SubmitRunFeedbackDocument,
+    "\n  mutation DeleteRun($runId: ID!) {\n    deleteRun(runId: $runId)\n  }\n": typeof types.DeleteRunDocument,
+    "\n  query AgentPinStatus($agentId: ID!) {\n    agentPinStatus(agentId: $agentId) {\n      filename\n      pinnedSha\n      latestSha\n      updateAvailable\n      pinnedContent\n      latestContent\n    }\n  }\n": typeof types.AgentPinStatusDocument,
 };
 const documents: Documents = {
+    "\n\tmutation AcceptTemplateUpdate($agentId: ID!, $filename: String!) {\n\t\tacceptTemplateUpdate(agentId: $agentId, filename: $filename) {\n\t\t\tid\n\t\t\tname\n\t\t\tslug\n\t\t}\n\t}\n": types.AcceptTemplateUpdateDocument,
     "\n  mutation CreateSubAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      slug\n    }\n  }\n": types.CreateSubAgentDocument,
     "\n  mutation DeleteSubAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n": types.DeleteSubAgentDocument,
     "\n  mutation AddThreadComment($input: AddThreadCommentInput!) {\n    addThreadComment(input: $input) {\n      id\n      authorType\n      authorId\n      content\n      createdAt\n    }\n  }\n": types.AddThreadCommentDocument,
@@ -278,6 +287,13 @@ const documents: Documents = {
     "\n  mutation CancelEvalRun($id: ID!) {\n    cancelEvalRun(id: $id) {\n      id\n      status\n      completedAt\n    }\n  }\n": types.CancelEvalRunDocument,
     "\n  query EvalTestCaseHistory($testCaseId: ID!, $limit: Int) {\n    evalTestCaseHistory(testCaseId: $testCaseId, limit: $limit) {\n      id\n      runId\n      testCaseName\n      category\n      status\n      score\n      durationMs\n      input\n      expected\n      actualOutput\n      assertions\n      evaluatorResults\n      errorMessage\n      createdAt\n    }\n  }\n": types.EvalTestCaseHistoryDocument,
     "\n  subscription OnEvalRunUpdated($tenantId: ID!) {\n    onEvalRunUpdated(tenantId: $tenantId) {\n      runId\n      tenantId\n      agentId\n      status\n      totalTests\n      passed\n      failed\n      passRate\n      errorMessage\n      updatedAt\n    }\n  }\n": types.OnEvalRunUpdatedDocument,
+    "\n  query SkillRuns(\n    $tenantId: ID\n    $agentId: ID\n    $invokerUserId: ID\n    $skillId: String\n    $status: String\n    $invocationSource: String\n    $limit: Int\n  ) {\n    skillRuns(\n      tenantId: $tenantId\n      agentId: $agentId\n      invokerUserId: $invokerUserId\n      skillId: $skillId\n      status: $status\n      invocationSource: $invocationSource\n      limit: $limit\n    ) {\n      id\n      tenantId\n      agentId\n      invokerUserId\n      skillId\n      skillVersion\n      invocationSource\n      status\n      startedAt\n      finishedAt\n      deleteAt\n      feedbackSignal\n      failureReason\n      createdAt\n    }\n  }\n": types.SkillRunsDocument,
+    "\n  query SkillRun($id: ID!) {\n    skillRun(id: $id) {\n      id\n      tenantId\n      agentId\n      invokerUserId\n      skillId\n      skillVersion\n      invocationSource\n      inputs\n      resolvedInputs\n      status\n      deliveryChannels\n      startedAt\n      finishedAt\n      deliveredArtifactRef\n      deleteAt\n      feedbackSignal\n      feedbackNote\n      failureReason\n      createdAt\n      updatedAt\n    }\n  }\n": types.SkillRunDocument,
+    "\n  query CompositionFeedbackSummary($tenantId: ID, $skillId: String) {\n    compositionFeedbackSummary(tenantId: $tenantId, skillId: $skillId) {\n      skillId\n      positive\n      negative\n      total\n    }\n  }\n": types.CompositionFeedbackSummaryDocument,
+    "\n  mutation CancelSkillRun($runId: ID!) {\n    cancelSkillRun(runId: $runId) {\n      id\n      status\n      finishedAt\n    }\n  }\n": types.CancelSkillRunDocument,
+    "\n  mutation SubmitRunFeedback($input: SubmitRunFeedbackInput!) {\n    submitRunFeedback(input: $input) {\n      id\n      feedbackSignal\n      feedbackNote\n    }\n  }\n": types.SubmitRunFeedbackDocument,
+    "\n  mutation DeleteRun($runId: ID!) {\n    deleteRun(runId: $runId)\n  }\n": types.DeleteRunDocument,
+    "\n  query AgentPinStatus($agentId: ID!) {\n    agentPinStatus(agentId: $agentId) {\n      filename\n      pinnedSha\n      latestSha\n      updateAvailable\n      pinnedContent\n      latestContent\n    }\n  }\n": types.AgentPinStatusDocument,
 };
 
 /**
@@ -294,6 +310,10 @@ const documents: Documents = {
  */
 export function graphql(source: string): unknown;
 
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n\tmutation AcceptTemplateUpdate($agentId: ID!, $filename: String!) {\n\t\tacceptTemplateUpdate(agentId: $agentId, filename: $filename) {\n\t\t\tid\n\t\t\tname\n\t\t\tslug\n\t\t}\n\t}\n"): (typeof documents)["\n\tmutation AcceptTemplateUpdate($agentId: ID!, $filename: String!) {\n\t\tacceptTemplateUpdate(agentId: $agentId, filename: $filename) {\n\t\t\tid\n\t\t\tname\n\t\t\tslug\n\t\t}\n\t}\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -818,6 +838,34 @@ export function graphql(source: "\n  query EvalTestCaseHistory($testCaseId: ID!,
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  subscription OnEvalRunUpdated($tenantId: ID!) {\n    onEvalRunUpdated(tenantId: $tenantId) {\n      runId\n      tenantId\n      agentId\n      status\n      totalTests\n      passed\n      failed\n      passRate\n      errorMessage\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  subscription OnEvalRunUpdated($tenantId: ID!) {\n    onEvalRunUpdated(tenantId: $tenantId) {\n      runId\n      tenantId\n      agentId\n      status\n      totalTests\n      passed\n      failed\n      passRate\n      errorMessage\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query SkillRuns(\n    $tenantId: ID\n    $agentId: ID\n    $invokerUserId: ID\n    $skillId: String\n    $status: String\n    $invocationSource: String\n    $limit: Int\n  ) {\n    skillRuns(\n      tenantId: $tenantId\n      agentId: $agentId\n      invokerUserId: $invokerUserId\n      skillId: $skillId\n      status: $status\n      invocationSource: $invocationSource\n      limit: $limit\n    ) {\n      id\n      tenantId\n      agentId\n      invokerUserId\n      skillId\n      skillVersion\n      invocationSource\n      status\n      startedAt\n      finishedAt\n      deleteAt\n      feedbackSignal\n      failureReason\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  query SkillRuns(\n    $tenantId: ID\n    $agentId: ID\n    $invokerUserId: ID\n    $skillId: String\n    $status: String\n    $invocationSource: String\n    $limit: Int\n  ) {\n    skillRuns(\n      tenantId: $tenantId\n      agentId: $agentId\n      invokerUserId: $invokerUserId\n      skillId: $skillId\n      status: $status\n      invocationSource: $invocationSource\n      limit: $limit\n    ) {\n      id\n      tenantId\n      agentId\n      invokerUserId\n      skillId\n      skillVersion\n      invocationSource\n      status\n      startedAt\n      finishedAt\n      deleteAt\n      feedbackSignal\n      failureReason\n      createdAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query SkillRun($id: ID!) {\n    skillRun(id: $id) {\n      id\n      tenantId\n      agentId\n      invokerUserId\n      skillId\n      skillVersion\n      invocationSource\n      inputs\n      resolvedInputs\n      status\n      deliveryChannels\n      startedAt\n      finishedAt\n      deliveredArtifactRef\n      deleteAt\n      feedbackSignal\n      feedbackNote\n      failureReason\n      createdAt\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  query SkillRun($id: ID!) {\n    skillRun(id: $id) {\n      id\n      tenantId\n      agentId\n      invokerUserId\n      skillId\n      skillVersion\n      invocationSource\n      inputs\n      resolvedInputs\n      status\n      deliveryChannels\n      startedAt\n      finishedAt\n      deliveredArtifactRef\n      deleteAt\n      feedbackSignal\n      feedbackNote\n      failureReason\n      createdAt\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CompositionFeedbackSummary($tenantId: ID, $skillId: String) {\n    compositionFeedbackSummary(tenantId: $tenantId, skillId: $skillId) {\n      skillId\n      positive\n      negative\n      total\n    }\n  }\n"): (typeof documents)["\n  query CompositionFeedbackSummary($tenantId: ID, $skillId: String) {\n    compositionFeedbackSummary(tenantId: $tenantId, skillId: $skillId) {\n      skillId\n      positive\n      negative\n      total\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CancelSkillRun($runId: ID!) {\n    cancelSkillRun(runId: $runId) {\n      id\n      status\n      finishedAt\n    }\n  }\n"): (typeof documents)["\n  mutation CancelSkillRun($runId: ID!) {\n    cancelSkillRun(runId: $runId) {\n      id\n      status\n      finishedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SubmitRunFeedback($input: SubmitRunFeedbackInput!) {\n    submitRunFeedback(input: $input) {\n      id\n      feedbackSignal\n      feedbackNote\n    }\n  }\n"): (typeof documents)["\n  mutation SubmitRunFeedback($input: SubmitRunFeedbackInput!) {\n    submitRunFeedback(input: $input) {\n      id\n      feedbackSignal\n      feedbackNote\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DeleteRun($runId: ID!) {\n    deleteRun(runId: $runId)\n  }\n"): (typeof documents)["\n  mutation DeleteRun($runId: ID!) {\n    deleteRun(runId: $runId)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AgentPinStatus($agentId: ID!) {\n    agentPinStatus(agentId: $agentId) {\n      filename\n      pinnedSha\n      latestSha\n      updateAvailable\n      pinnedContent\n      latestContent\n    }\n  }\n"): (typeof documents)["\n  query AgentPinStatus($agentId: ID!) {\n    agentPinStatus(agentId: $agentId) {\n      filename\n      pinnedSha\n      latestSha\n      updateAvailable\n      pinnedContent\n      latestContent\n    }\n  }\n"];
 
 export function graphql(source: string) {
   return (documents as any)[source] ?? {};
