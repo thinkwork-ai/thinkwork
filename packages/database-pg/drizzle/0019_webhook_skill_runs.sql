@@ -13,9 +13,17 @@
 -- Apply manually (matches 0018_skill_runs.sql convention):
 --   psql "$DATABASE_URL" -f packages/database-pg/drizzle/0019_webhook_skill_runs.sql
 --
+-- Drift detection:
+--   bash scripts/db-migrate-manual.sh
+--
 -- Pre-migration invariants:
 --   - skill_runs exists (applied via 0018_skill_runs.sql).
 --   - tenant_system_users does not exist yet.
+--
+-- creates: public.tenant_system_users
+-- creates: public.uq_tenant_system_users_tenant
+-- creates: public.idx_skill_runs_triggered_by
+-- creates-column: public.skill_runs.triggered_by_run_id
 
 -- ---------------------------------------------------------------------------
 -- 1. skill_runs.triggered_by_run_id
