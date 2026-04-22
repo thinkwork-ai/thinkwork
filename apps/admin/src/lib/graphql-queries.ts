@@ -1560,6 +1560,7 @@ export const TemplateSyncDiffQuery = graphql(`
       skillsAdded
       skillsRemoved
       skillsChanged
+      permissionsChanges { skillId added removed }
       kbsAdded
       kbsRemoved
       filesAdded
