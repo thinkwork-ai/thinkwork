@@ -62,15 +62,21 @@ export type AddInboxItemLinkInput = {
 
 export type AddTeamAgentInput = {
   agentId: Scalars['ID']['input'];
+  /** Optional idempotency key. See CreateTeamInput.idempotencyKey. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   role?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type AddTeamUserInput = {
+  /** Optional idempotency key. See CreateTeamInput.idempotencyKey. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   role?: InputMaybe<Scalars['String']['input']>;
   userId: Scalars['ID']['input'];
 };
 
 export type AddTenantMemberInput = {
+  /** Optional idempotency key. See UpdateTenantInput.idempotencyKey. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   principalId: Scalars['ID']['input'];
   principalType: Scalars['String']['input'];
   role?: InputMaybe<Scalars['String']['input']>;
@@ -483,6 +489,8 @@ export type CreateAgentApiKeyResult = {
 };
 
 export type CreateAgentFromTemplateInput = {
+  /** Optional idempotency key. See CreateAgentInput.idempotencyKey. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   name: Scalars['String']['input'];
   slug: Scalars['String']['input'];
   teamId?: InputMaybe<Scalars['ID']['input']>;
@@ -494,6 +502,13 @@ export type CreateAgentInput = {
   adapterType?: InputMaybe<Scalars['String']['input']>;
   avatarUrl?: InputMaybe<Scalars['String']['input']>;
   humanPairId?: InputMaybe<Scalars['ID']['input']>;
+  /**
+   * Optional client-supplied idempotency key. When provided, a retry with
+   * the same key returns the prior call's result without re-executing.
+   * Null/absent = server derives a key from canonicalized inputs.
+   * See packages/api/src/lib/idempotency.ts.
+   */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   name: Scalars['String']['input'];
   parentAgentId?: InputMaybe<Scalars['ID']['input']>;
   reportsTo?: InputMaybe<Scalars['ID']['input']>;
@@ -512,6 +527,11 @@ export type CreateAgentTemplateInput = {
   description?: InputMaybe<Scalars['String']['input']>;
   guardrailId?: InputMaybe<Scalars['ID']['input']>;
   icon?: InputMaybe<Scalars['String']['input']>;
+  /**
+   * Optional client-supplied idempotency key. See
+   * CreateAgentInput.idempotencyKey / packages/api/src/lib/idempotency.ts.
+   */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   isPublished?: InputMaybe<Scalars['Boolean']['input']>;
   knowledgeBaseIds?: InputMaybe<Scalars['AWSJSON']['input']>;
   model?: InputMaybe<Scalars['String']['input']>;
@@ -625,6 +645,11 @@ export type CreateScheduledJobInput = {
 export type CreateTeamInput = {
   budgetMonthlyCents?: InputMaybe<Scalars['Int']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;
+  /**
+   * Optional client-supplied idempotency key. See
+   * CreateAgentInput.idempotencyKey / packages/api/src/lib/idempotency.ts.
+   */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
   name: Scalars['String']['input'];
   tenantId: Scalars['ID']['input'];
@@ -917,6 +942,8 @@ export type InboxItemStatusEvent = {
 
 export type InviteMemberInput = {
   email: Scalars['String']['input'];
+  /** Optional idempotency key. See UpdateTenantInput.idempotencyKey. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
   role?: InputMaybe<Scalars['String']['input']>;
 };
@@ -1186,6 +1213,7 @@ export type ModelInvocation = {
 export type Mutation = {
   __typename?: 'Mutation';
   _empty?: Maybe<Scalars['String']['output']>;
+  /** Advance an agent's pinned hash for a guardrail-class file. idempotencyKey optional. */
   acceptTemplateUpdate: Agent;
   acceptTemplateUpdateBulk: AcceptTemplateUpdateBulkResult;
   addInboxItemComment: InboxItemComment;
@@ -1285,6 +1313,7 @@ export type Mutation = {
   removeInboxItemLink: Scalars['Boolean']['output'];
   removeTeamAgent: Scalars['Boolean']['output'];
   removeTeamUser: Scalars['Boolean']['output'];
+  /** Remove a tenant member. idempotencyKey optional — see UpdateTenantInput.idempotencyKey. */
   removeTenantMember: Scalars['Boolean']['output'];
   removeThreadDependency: Scalars['Boolean']['output'];
   removeThreadLabel: Scalars['Boolean']['output'];
@@ -1302,15 +1331,19 @@ export type Mutation = {
   seedEvalTestCases: Scalars['Int']['output'];
   sendMessage: Message;
   setAgentBudgetPolicy: AgentBudgetPolicy;
+  /** Replace an agent's capabilities. idempotencyKey optional — see CreateAgentInput.idempotencyKey. */
   setAgentCapabilities: Array<AgentCapability>;
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
+  /** Replace an agent's skills. idempotencyKey optional — see CreateAgentInput.idempotencyKey. */
   setAgentSkills: Array<AgentSkill>;
   setRoutineTrigger: RoutineTrigger;
   startEvalRun: EvalRun;
   startSkillRun: SkillRun;
   submitRunFeedback: SkillRun;
   syncKnowledgeBase: KnowledgeBase;
+  /** Sync template config + workspace files to a linked agent. idempotencyKey optional. */
   syncTemplateToAgent: Agent;
+  /** Sync template to every linked agent in a tenant. idempotencyKey optional. */
   syncTemplateToAllAgents: SyncSummary;
   toggleAgentEmailChannel: AgentCapability;
   triggerRoutineRun: RoutineRun;
@@ -1344,6 +1377,7 @@ export type Mutation = {
 export type MutationAcceptTemplateUpdateArgs = {
   agentId: Scalars['ID']['input'];
   filename: Scalars['String']['input'];
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -1817,6 +1851,7 @@ export type MutationRemoveTeamUserArgs = {
 
 export type MutationRemoveTenantMemberArgs = {
   id: Scalars['ID']['input'];
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -1887,6 +1922,7 @@ export type MutationSetAgentBudgetPolicyArgs = {
 export type MutationSetAgentCapabilitiesArgs = {
   agentId: Scalars['ID']['input'];
   capabilities: Array<AgentCapabilityInput>;
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -1898,6 +1934,7 @@ export type MutationSetAgentKnowledgeBasesArgs = {
 
 export type MutationSetAgentSkillsArgs = {
   agentId: Scalars['ID']['input'];
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   skills: Array<AgentSkillInput>;
 };
 
@@ -1931,11 +1968,13 @@ export type MutationSyncKnowledgeBaseArgs = {
 
 export type MutationSyncTemplateToAgentArgs = {
   agentId: Scalars['ID']['input'];
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   templateId: Scalars['ID']['input'];
 };
 
 
 export type MutationSyncTemplateToAllAgentsArgs = {
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   templateId: Scalars['ID']['input'];
 };
 
@@ -3575,12 +3614,21 @@ export type UpdateTeamInput = {
 };
 
 export type UpdateTenantInput = {
+  /**
+   * Optional client-supplied idempotency key. When provided, a retry with
+   * the same key returns the prior call's result without re-executing.
+   * Null/absent = server derives a key from canonicalized inputs.
+   * See packages/api/src/lib/idempotency.ts.
+   */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   issuePrefix?: InputMaybe<Scalars['String']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
   plan?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpdateTenantMemberInput = {
+  /** Optional idempotency key. See UpdateTenantInput.idempotencyKey. */
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   role?: InputMaybe<Scalars['String']['input']>;
   status?: InputMaybe<Scalars['String']['input']>;
 };
