@@ -24,8 +24,18 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
+import socket
+import time
 
 logger = logging.getLogger(__name__)
+
+# Bounded retry for the /api/skills/complete POST. Transient Aurora /
+# API-gateway blips shouldn't strand the row — the reconciler is a 15-min
+# backstop, not a substitute for getting the writeback through. Delays are
+# seconds and include ±0.5s jitter to avoid thundering-herd on cold starts.
+_COMPLETE_RETRY_DELAYS = (1.0, 3.0, 9.0)
+_COMPLETE_RETRY_JITTER = 0.5
 
 
 class SkillNotRegisteredError(RuntimeError):
@@ -135,16 +145,101 @@ def _invoke_sub_skill(sub_skill_id: str, sub_inputs: dict):
         ) from exc
 
 
+def _urlopen_with_retry(req, timeout: int, run_id: str):
+    """Invoke urlopen with bounded retry on transient errors.
+
+    Retries on 5xx HTTPError, URLError, and socket.timeout. Does NOT
+    retry on 4xx — those are validation or idempotency signals. Returns
+    the response on success (200); raises on terminal failure after the
+    last attempt. The caller wraps the raise in a log + return so
+    dispatch itself never throws.
+
+    A 400 with body containing "invalid transition" is treated as
+    idempotency-ok: a prior attempt already terminated the row, so the
+    retry should treat the second server-side refusal as success rather
+    than a failure. The function returns None in that case; callers
+    check for the sentinel before treating the result as a response.
+    """
+    import urllib.error
+    import urllib.request
+
+    last_exc: Exception | None = None
+    for attempt_idx, delay in enumerate((0.0, *_COMPLETE_RETRY_DELAYS), start=1):
+        if delay:
+            sleep_for = delay + random.uniform(-_COMPLETE_RETRY_JITTER, _COMPLETE_RETRY_JITTER)
+            time.sleep(max(0.0, sleep_for))
+        try:
+            resp = urllib.request.urlopen(req, timeout=timeout)
+            logger.info(
+                "run_skill: completion POST attempt=%d status=%d runId=%s",
+                attempt_idx, resp.status, run_id,
+            )
+            return resp
+        except urllib.error.HTTPError as e:
+            # 4xx: terminal. 400 "invalid transition" means a prior attempt
+            # already completed this row — treat as idempotency success.
+            if 400 <= e.code < 500:
+                try:
+                    detail = e.read().decode("utf-8", errors="replace")
+                except Exception:
+                    detail = str(e)
+                if e.code == 400 and "invalid transition" in detail.lower():
+                    logger.info(
+                        "run_skill: completion POST attempt=%d runId=%s "
+                        "status=400 invalid-transition (idempotency ok)",
+                        attempt_idx, run_id,
+                    )
+                    return None
+                logger.error(
+                    "run_skill: completion POST attempt=%d runId=%s "
+                    "status=%d terminal (no retry) detail=%s",
+                    attempt_idx, run_id, e.code, detail[:300],
+                )
+                raise
+            # 5xx: retryable.
+            logger.warning(
+                "run_skill: completion POST attempt=%d runId=%s "
+                "status=%d retryable HTTPError",
+                attempt_idx, run_id, e.code,
+            )
+            last_exc = e
+        except (urllib.error.URLError, socket.timeout) as e:
+            logger.warning(
+                "run_skill: completion POST attempt=%d runId=%s retryable transport error: %s",
+                attempt_idx, run_id, e,
+            )
+            last_exc = e
+    # Exhausted retries.
+    assert last_exc is not None  # mypy: loop guarantees an exception was seen
+    logger.error(
+        "run_skill: completion POST runId=%s exhausted %d attempts, raising",
+        run_id, len(_COMPLETE_RETRY_DELAYS) + 1,
+    )
+    raise last_exc
+
+
 def post_skill_run_complete(run_id: str, tenant_id: str, status: str,
                              failure_reason: str | None = None,
-                             delivered_artifact_ref: dict | None = None) -> None:
+                             delivered_artifact_ref: dict | None = None,
+                             completion_hmac_secret: str | None = None) -> None:
     """POST terminal state to the TS /api/skills/complete endpoint.
 
     Mirrors the urllib pattern from write_memory_tool.py. Service-auth
-    via API_AUTH_SECRET (or THINKWORK_API_SECRET alias). Failures log
-    loudly but do NOT raise — the smoke timeout is the correct backstop
-    diagnostic if the writeback drops.
+    via API_AUTH_SECRET (or THINKWORK_API_SECRET alias) AND a per-run
+    HMAC header computed from completion_hmac_secret (arrived in the
+    run_skill envelope). The HMAC gate means a leaked API_AUTH_SECRET
+    plus a guessed runId cannot forge a completion for someone else's
+    run. Uses a bounded retry (3 attempts, exponential backoff with
+    jitter) to ride through transient Aurora / API-gateway blips; the
+    15-minute skill-runs-reconciler is the backstop for anything that
+    makes it past the retries. Failures log loudly but do NOT raise out
+    of this function — a dispatch coroutine should never throw because
+    of a writeback failure.
     """
+    import hmac as _hmac
+    import hashlib as _hashlib
+    import urllib.request
+
     api_url = os.environ.get("THINKWORK_API_URL") or ""
     api_secret = (
         os.environ.get("API_AUTH_SECRET")
@@ -163,21 +258,38 @@ def post_skill_run_complete(run_id: str, tenant_id: str, status: str,
     if delivered_artifact_ref is not None:
         body_dict["deliveredArtifactRef"] = delivered_artifact_ref
 
-    import urllib.error
-    import urllib.request
-
     body = json.dumps(body_dict).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_secret}",
+    }
+    if completion_hmac_secret:
+        signature = _hmac.new(
+            completion_hmac_secret.encode("utf-8"),
+            run_id.encode("utf-8"),
+            _hashlib.sha256,
+        ).hexdigest()
+        headers["X-Skill-Run-Signature"] = f"sha256={signature}"
+    else:
+        # The envelope is supposed to carry this; if it doesn't, the server
+        # will 401 and the retry helper will surface the terminal failure.
+        logger.warning(
+            "run_skill: no completion_hmac_secret in envelope for runId=%s; "
+            "server will reject the completion POST",
+            run_id,
+        )
     req = urllib.request.Request(
         f"{api_url.rstrip('/')}/api/skills/complete",
         data=body,
         method="POST",
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_secret}",
-        },
+        headers=headers,
     )
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        resp = _urlopen_with_retry(req, timeout=15, run_id=run_id)
+        if resp is None:
+            # Idempotency-ok from a prior attempt's success.
+            return
+        with resp:
             if resp.status != 200:
                 logger.error(
                     "run_skill: completion POST returned HTTP %s for runId=%s",
@@ -188,15 +300,6 @@ def post_skill_run_complete(run_id: str, tenant_id: str, status: str,
                     "run_skill: completion POSTed — runId=%s status=%s",
                     run_id, status,
                 )
-    except urllib.error.HTTPError as e:
-        try:
-            detail = e.read().decode("utf-8", errors="replace")
-        except Exception:
-            detail = str(e)
-        logger.error(
-            "run_skill: completion POST HTTPError runId=%s status=%s detail=%s",
-            run_id, e.code, detail[:300],
-        )
     except Exception as e:
         logger.error("run_skill: completion POST failed runId=%s err=%s", run_id, e)
 
@@ -216,6 +319,7 @@ async def dispatch_run_skill(payload: dict) -> dict:
     skill_id = payload.get("skillId") or ""
     resolved_inputs = payload.get("resolvedInputs") or {}
     scope = payload.get("scope") or {}
+    completion_hmac_secret = payload.get("completionHmacSecret") or ""
 
     if not (run_id and tenant_id and skill_id):
         return {
@@ -233,7 +337,11 @@ async def dispatch_run_skill(payload: dict) -> dict:
     except Exception as e:
         reason = f"failed to sync composition skill {skill_id!r} from S3: {e}"
         logger.error("run_skill: %s", reason)
-        post_skill_run_complete(run_id, tenant_id, "failed", failure_reason=reason)
+        post_skill_run_complete(
+            run_id, tenant_id, "failed",
+            failure_reason=reason,
+            completion_hmac_secret=completion_hmac_secret,
+        )
         return {"runId": run_id, "status": "failed", "failureReason": reason}
 
     # Load the composition (pydantic-validated). load_composition_skills
@@ -247,7 +355,11 @@ async def dispatch_run_skill(payload: dict) -> dict:
             f"(YAML missing or not execution: composition)"
         )
         logger.error("run_skill: %s", reason)
-        post_skill_run_complete(run_id, tenant_id, "failed", failure_reason=reason)
+        post_skill_run_complete(
+            run_id, tenant_id, "failed",
+            failure_reason=reason,
+            completion_hmac_secret=completion_hmac_secret,
+        )
         return {"runId": run_id, "status": "failed", "failureReason": reason}
 
     # Build the SkillDispatch. For each sub-skill requested by a composition
@@ -286,7 +398,11 @@ async def dispatch_run_skill(payload: dict) -> dict:
         status = "failed"
         failure_reason = f"composition_runner raised: {e}"
 
-    post_skill_run_complete(run_id, tenant_id, status, failure_reason=failure_reason)
+    post_skill_run_complete(
+        run_id, tenant_id, status,
+        failure_reason=failure_reason,
+        completion_hmac_secret=completion_hmac_secret,
+    )
     return {
         "runId": run_id,
         "status": status,

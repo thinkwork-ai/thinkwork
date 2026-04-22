@@ -11,7 +11,7 @@
  *   { triggerId, triggerType, tenantId, agentId?, routineId?, prompt?, scheduleName?, oneTime? }
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { getDb, ensureThreadForWork } from "@thinkwork/database-pg";
 import {
   agentWakeupRequests,
@@ -144,6 +144,7 @@ async function invokeAgentcoreRunSkill(payload: {
   skillId: string;
   skillVersion: number;
   resolvedInputs: Record<string, unknown>;
+  completionHmacSecret: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const fnName = process.env.AGENTCORE_FUNCTION_NAME;
   if (!fnName) {
@@ -152,7 +153,13 @@ async function invokeAgentcoreRunSkill(payload: {
   try {
     const { LambdaClient, InvokeCommand } =
       await import("@aws-sdk/client-lambda");
-    const lambda = new LambdaClient({});
+    const { NodeHttpHandler } = await import("@smithy/node-http-handler");
+    // 28s socketTimeout leaves 2s headroom before the 30s Lambda
+    // ceiling; a slow agentcore otherwise blocks the caller past its
+    // timeout with no way to return a structured error.
+    const lambda = new LambdaClient({
+      requestHandler: new NodeHttpHandler({ socketTimeout: 28_000 }),
+    });
     const envelope = {
       kind: "run_skill" as const,
       runId: payload.runId,
@@ -162,11 +169,14 @@ async function invokeAgentcoreRunSkill(payload: {
       skillVersion: payload.skillVersion,
       invocationSource: "scheduled" as const,
       resolvedInputs: payload.resolvedInputs,
+      // snake_case — Python's composition_runner._scope_to_inputs reads
+      // tenant_id/user_id/skill_id. See change 4 of the hardening plan.
       scope: {
-        tenantId: payload.tenantId,
-        userId: payload.invokerUserId,
-        skillId: payload.skillId,
+        tenant_id: payload.tenantId,
+        user_id: payload.invokerUserId,
+        skill_id: payload.skillId,
       },
+      completionHmacSecret: payload.completionHmacSecret,
     };
     const res = await lambda.send(
       new InvokeCommand({
@@ -486,6 +496,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       // (tenant, invoker, skill, hash) WHERE status='running' makes
       // overlapping fires dedup cleanly.
       const resolvedInputsHash = hashResolvedInputs(resolvedInputs);
+      const completionHmacSecret = randomBytes(32).toString("hex");
       const inserted = await db
         .insert(skillRuns)
         .values({
@@ -500,6 +511,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
           resolved_inputs_hash: resolvedInputsHash,
           delivery_channels: (cfg.deliveryChannels as unknown[]) ?? [],
           status: "running",
+          completion_hmac_secret: completionHmacSecret,
         })
         .onConflictDoNothing({
           target: [
@@ -531,6 +543,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         skillId,
         skillVersion: runRow.skill_version,
         resolvedInputs,
+        completionHmacSecret,
       });
 
       if (!invokeResult.ok) {

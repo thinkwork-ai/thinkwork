@@ -10,9 +10,12 @@
  *   * row not found → 404
  *   * tenant mismatch → 403
  *   * invalid transition (already terminal) → 400
+ *   * HMAC: missing signature → 401; wrong signature → 401; valid → 200
+ *   * HMAC: already-terminated row (secret burned to NULL) → 401
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { createHmac } from "node:crypto";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 
 const {
@@ -61,6 +64,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
 		resolved_inputs_hash: "skill_runs.resolved_inputs_hash",
 		status: "skill_runs.status",
 		finished_at: "skill_runs.finished_at",
+		completion_hmac_secret: "skill_runs.completion_hmac_secret",
 	},
 	tenantSkills: {},
 	tenantMcpServers: {},
@@ -107,6 +111,11 @@ vi.mock("@aws-sdk/client-secrets-manager", () => ({
 
 import { handler } from "../handlers/skills.js";
 
+const HMAC_SECRET = "test-secret-abc";
+
+const sign = (runId: string, secret = HMAC_SECRET) =>
+	`sha256=${createHmac("sha256", secret).update(runId).digest("hex")}`;
+
 const BODY = (overrides: Record<string, unknown> = {}) =>
 	JSON.stringify({
 		runId: "R1",
@@ -121,7 +130,10 @@ const EVENT = (overrides: Partial<APIGatewayProxyEventV2> = {}): APIGatewayProxy
 	routeKey: "POST /api/skills/complete",
 	rawPath: "/api/skills/complete",
 	rawQueryString: "",
-	headers: { authorization: "Bearer api-secret" },
+	headers: {
+		authorization: "Bearer api-secret",
+		"x-skill-run-signature": sign("R1"),
+	},
 	requestContext: {
 		http: { method: "POST", path: "/api/skills/complete", sourceIp: "", userAgent: "" },
 	} as APIGatewayProxyEventV2["requestContext"],
@@ -139,7 +151,7 @@ beforeEach(() => {
 
 describe("POST /api/skills/complete — happy paths", () => {
 	it("updates a running row to failed with a reason", async () => {
-		mockSelect.mockReturnValueOnce([{ id: "R1", tenant_id: "T1", status: "running" }]);
+		mockSelect.mockReturnValueOnce([{ id: "R1", tenant_id: "T1", status: "running", completion_hmac_secret: HMAC_SECRET }]);
 		mockUpdateReturning.mockReturnValueOnce([
 			{ id: "R1", status: "failed", finished_at: new Date("2026-04-22T13:00:00Z") },
 		]);
@@ -153,7 +165,7 @@ describe("POST /api/skills/complete — happy paths", () => {
 	});
 
 	it("updates a running row to complete with deliveredArtifactRef", async () => {
-		mockSelect.mockReturnValueOnce([{ id: "R1", tenant_id: "T1", status: "running" }]);
+		mockSelect.mockReturnValueOnce([{ id: "R1", tenant_id: "T1", status: "running", completion_hmac_secret: HMAC_SECRET }]);
 		mockUpdateReturning.mockReturnValueOnce([
 			{ id: "R1", status: "complete", finished_at: new Date() },
 		]);
@@ -225,17 +237,98 @@ describe("POST /api/skills/complete — identity + transition checks", () => {
 	});
 
 	it("403s when tenantId does not match the row", async () => {
-		mockSelect.mockReturnValueOnce([{ id: "R1", tenant_id: "T-other", status: "running" }]);
+		mockSelect.mockReturnValueOnce([{ id: "R1", tenant_id: "T-other", status: "running", completion_hmac_secret: HMAC_SECRET }]);
 		const res = await handler(EVENT());
 		expect(res.statusCode).toBe(403);
 		expect(mockUpdate).not.toHaveBeenCalled();
 	});
 
 	it("400s when the row is already terminal", async () => {
-		mockSelect.mockReturnValueOnce([{ id: "R1", tenant_id: "T1", status: "complete" }]);
+		mockSelect.mockReturnValueOnce([{ id: "R1", tenant_id: "T1", status: "complete", completion_hmac_secret: HMAC_SECRET }]);
 		const res = await handler(EVENT());
 		expect(res.statusCode).toBe(400);
 		expect(res.body).toContain("invalid transition");
 		expect(mockUpdate).not.toHaveBeenCalled();
+	});
+});
+
+describe("POST /api/skills/complete — per-run HMAC", () => {
+	it("200s with a valid signature + burns the secret on success", async () => {
+		mockSelect.mockReturnValueOnce([
+			{ id: "R1", tenant_id: "T1", status: "running", completion_hmac_secret: HMAC_SECRET },
+		]);
+		mockUpdateReturning.mockReturnValueOnce([
+			{ id: "R1", status: "failed", finished_at: new Date() },
+		]);
+
+		const res = await handler(EVENT());
+		expect(res.statusCode).toBe(200);
+		expect(mockUpdate).toHaveBeenCalledTimes(1);
+	});
+
+	it("401s when the signature header is missing", async () => {
+		mockSelect.mockReturnValueOnce([
+			{ id: "R1", tenant_id: "T1", status: "running", completion_hmac_secret: HMAC_SECRET },
+		]);
+		const res = await handler(EVENT({ headers: { authorization: "Bearer api-secret" } }));
+		expect(res.statusCode).toBe(401);
+		expect(res.body).toContain("invalid completion signature");
+		expect(mockUpdate).not.toHaveBeenCalled();
+	});
+
+	it("401s when the signature is computed from the wrong secret", async () => {
+		mockSelect.mockReturnValueOnce([
+			{ id: "R1", tenant_id: "T1", status: "running", completion_hmac_secret: HMAC_SECRET },
+		]);
+		const res = await handler(EVENT({
+			headers: {
+				authorization: "Bearer api-secret",
+				"x-skill-run-signature": sign("R1", "attacker-secret"),
+			},
+		}));
+		expect(res.statusCode).toBe(401);
+		expect(mockUpdate).not.toHaveBeenCalled();
+	});
+
+	it("401s when the row's secret has been burned to NULL (already completed)", async () => {
+		mockSelect.mockReturnValueOnce([
+			{ id: "R1", tenant_id: "T1", status: "running", completion_hmac_secret: null },
+		]);
+		const res = await handler(EVENT());
+		expect(res.statusCode).toBe(401);
+		expect(res.body).toContain("run is no longer active");
+		expect(mockUpdate).not.toHaveBeenCalled();
+	});
+
+	it("401s when the signature is signed over a different runId", async () => {
+		mockSelect.mockReturnValueOnce([
+			{ id: "R1", tenant_id: "T1", status: "running", completion_hmac_secret: HMAC_SECRET },
+		]);
+		const res = await handler(EVENT({
+			headers: {
+				authorization: "Bearer api-secret",
+				"x-skill-run-signature": sign("R-other", HMAC_SECRET),
+			},
+		}));
+		expect(res.statusCode).toBe(401);
+		expect(mockUpdate).not.toHaveBeenCalled();
+	});
+});
+
+describe("POST /api/skills/complete — TOCTOU race", () => {
+	it("409s when the atomic CAS finds the row no longer in running state", async () => {
+		// SELECT returns `running` (so auth + invariant checks pass), but the
+		// atomic UPDATE returns zero rows — simulates a concurrent cancel
+		// flipping status='cancelled' between SELECT and UPDATE. Must NOT
+		// silently succeed or overwrite the terminal state.
+		mockSelect.mockReturnValueOnce([
+			{ id: "R1", tenant_id: "T1", status: "running", completion_hmac_secret: HMAC_SECRET },
+		]);
+		mockUpdateReturning.mockReturnValueOnce([]);
+
+		const res = await handler(EVENT());
+		expect(res.statusCode).toBe(409);
+		expect(res.body).toContain("run no longer in running state");
+		expect(mockUpdate).toHaveBeenCalledTimes(1);
 	});
 });

@@ -126,6 +126,7 @@ resource "aws_lambda_function" "handler" {
     "webhooks",
     "webhooks-admin",
     "webhook-deliveries-cleanup",
+    "skill-runs-reconciler",
     "webhook-crm-opportunity",
     "webhook-task-event",
     "workspace-files",
@@ -363,6 +364,32 @@ resource "aws_scheduler_schedule" "webhook_deliveries_cleanup" {
 
   target {
     arn      = aws_lambda_function.handler["webhook-deliveries-cleanup"].arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# ---------------------------------------------------------------------------
+# skill_runs reconciler — transitions stuck-running rows to failed every 5 min.
+# Guards against agentcore Lambda crashes / OOMs that drop the
+# /api/skills/complete writeback and leave the row at 'running' forever,
+# which in turn blocks the dedup partial unique index from letting retries
+# through.
+# ---------------------------------------------------------------------------
+
+resource "aws_scheduler_schedule" "skill_runs_reconciler" {
+  count = local.use_local_zips ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-skill-runs-reconciler"
+  group_name          = "default"
+  schedule_expression = "rate(5 minutes)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["skill-runs-reconciler"].arn
     role_arn = aws_iam_role.scheduler.arn
   }
 }
