@@ -2674,15 +2674,23 @@ async function completeSkillRunService(
 		updates.delivered_artifact_ref = deliveredArtifactRef;
 	}
 
+	// Atomic compare-and-swap on status='running'. A concurrent cancel
+	// (admin, reconciler, deprovisioner) that flips status between the
+	// SELECT above and this UPDATE would be silently clobbered without
+	// this predicate. The fast-path 400 above is a best-effort early
+	// rejection; this is the authoritative guard.
 	const [updated] = await db
 		.update(skillRuns)
 		.set(updates)
-		.where(eq(skillRuns.id, runId))
+		.where(and(eq(skillRuns.id, runId), eq(skillRuns.status, "running")))
 		.returning({
 			id: skillRuns.id,
 			status: skillRuns.status,
 			finished_at: skillRuns.finished_at,
 		});
+	if (!updated) {
+		return error("run no longer in running state", 409);
+	}
 
 	return json({
 		runId: updated.id,

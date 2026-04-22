@@ -314,3 +314,21 @@ describe("POST /api/skills/complete — per-run HMAC", () => {
 		expect(mockUpdate).not.toHaveBeenCalled();
 	});
 });
+
+describe("POST /api/skills/complete — TOCTOU race", () => {
+	it("409s when the atomic CAS finds the row no longer in running state", async () => {
+		// SELECT returns `running` (so auth + invariant checks pass), but the
+		// atomic UPDATE returns zero rows — simulates a concurrent cancel
+		// flipping status='cancelled' between SELECT and UPDATE. Must NOT
+		// silently succeed or overwrite the terminal state.
+		mockSelect.mockReturnValueOnce([
+			{ id: "R1", tenant_id: "T1", status: "running", completion_hmac_secret: HMAC_SECRET },
+		]);
+		mockUpdateReturning.mockReturnValueOnce([]);
+
+		const res = await handler(EVENT());
+		expect(res.statusCode).toBe(409);
+		expect(res.body).toContain("run no longer in running state");
+		expect(mockUpdate).toHaveBeenCalledTimes(1);
+	});
+});
