@@ -122,6 +122,17 @@ function cognitoCtx(principalId = "sub-1"): any {
   };
 }
 
+function apikeyCtx(agentId = "agent-1"): any {
+  return {
+    auth: {
+      authType: "apikey",
+      principalId: "user-1",
+      agentId,
+      tenantId: "tenant-A",
+    },
+  };
+}
+
 const FORBIDDEN = Object.assign(new Error("Tenant admin role required"), {
   extensions: { code: "FORBIDDEN" },
 });
@@ -218,6 +229,52 @@ describe("agent mutations — role gate + tenant pin", () => {
         extensions: { code: "FORBIDDEN" },
       });
       expect(deleteCallRef.value).toBe(0);
+    });
+
+    // R16: an agent holding thinkwork-admin with `set_agent_skills` in its
+    // allowlist must NOT be able to rewrite its own permissions.operations
+    // (self-bootstrapping privilege escalation). Cross-agent provisioning
+    // stays allowed — reconcilers and onboarding automations need it.
+    describe("self-target rejection (R16)", () => {
+      it("refuses apikey caller where ctx.auth.agentId === args.agentId", async () => {
+        await expect(
+          setAgentSkills(
+            null,
+            { ...skillsInput, agentId: "agent-self" },
+            apikeyCtx("agent-self"),
+          ),
+        ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
+        // Self-target check must fire BEFORE any DB work.
+        expect(mockRequireTenantAdmin).not.toHaveBeenCalled();
+        expect(deleteCallRef.value).toBe(0);
+      });
+
+      it("allows apikey caller where caller agent != target agent (cross-agent provisioning)", async () => {
+        mockAgentRows.mockReturnValue([{ tenant_id: "tenant-A" }]);
+        mockAdminAllowed();
+        mockSkillsRows.mockReturnValue([]);
+        mockSkillsUpdateRows.mockReturnValue([]);
+        await setAgentSkills(
+          null,
+          { ...skillsInput, agentId: "agent-target" },
+          apikeyCtx("agent-caller"),
+        );
+        // No self-target throw; normal flow proceeds.
+        expect(mockRequireTenantAdmin).toHaveBeenCalledWith(
+          expect.anything(),
+          "tenant-A",
+        );
+      });
+
+      it("allows cognito callers unchanged (no agentId on principal)", async () => {
+        mockAgentRows.mockReturnValue([{ tenant_id: "tenant-A" }]);
+        mockAdminAllowed();
+        mockSkillsRows.mockReturnValue([]);
+        mockSkillsUpdateRows.mockReturnValue([]);
+        await setAgentSkills(null, skillsInput, cognitoCtx());
+        // Cognito callers never hit the self-target branch.
+        expect(mockRequireTenantAdmin).toHaveBeenCalledTimes(1);
+      });
     });
   });
 

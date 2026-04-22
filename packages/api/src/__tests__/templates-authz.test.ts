@@ -19,14 +19,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const {
   mockSelectRows,
   mockInsertReturning,
+  mockUpdateReturning,
   mockRequireTenantAdmin,
+  mockRequireNotFromAdminSkill,
   insertCallRef,
   deleteCallRef,
   updateCallRef,
 } = vi.hoisted(() => ({
   mockSelectRows: vi.fn(),
   mockInsertReturning: vi.fn(),
+  mockUpdateReturning: vi.fn(),
   mockRequireTenantAdmin: vi.fn(),
+  mockRequireNotFromAdminSkill: vi.fn(),
   insertCallRef: { value: 0 },
   deleteCallRef: { value: 0 },
   updateCallRef: { value: 0 },
@@ -57,7 +61,9 @@ vi.mock("../graphql/utils.js", () => ({
       updateCallRef.value++;
       return {
         set: () => ({
-          where: () => Promise.resolve(),
+          where: () => ({
+            returning: () => Promise.resolve(mockUpdateReturning() as unknown[]),
+          }),
         }),
       };
     }),
@@ -92,6 +98,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
 
 vi.mock("../graphql/resolvers/core/authz.js", () => ({
   requireTenantAdmin: mockRequireTenantAdmin,
+  requireNotFromAdminSkill: mockRequireNotFromAdminSkill,
 }));
 
 // Unit 8c wired runWithIdempotency into createAgentTemplate. Stub the
@@ -118,6 +125,8 @@ vi.mock("../lib/workspace-map-generator.js", () => ({
 // eslint-disable-next-line import/first
 import { createAgentTemplate } from "../graphql/resolvers/templates/createAgentTemplate.mutation.js";
 // eslint-disable-next-line import/first
+import { updateAgentTemplate } from "../graphql/resolvers/templates/updateAgentTemplate.mutation.js";
+// eslint-disable-next-line import/first
 import { syncTemplateToAgent } from "../graphql/resolvers/templates/syncTemplateToAgent.mutation.js";
 // eslint-disable-next-line import/first
 import { syncTemplateToAllAgents } from "../graphql/resolvers/templates/syncTemplateToAllAgents.mutation.js";
@@ -129,6 +138,17 @@ function cognitoCtx(principalId = "sub-1"): any {
       principalId,
       tenantId: null,
       email: "caller@example.com",
+    },
+  };
+}
+
+function apikeyCtx(agentId = "agent-1"): any {
+  return {
+    auth: {
+      authType: "apikey",
+      principalId: "user-1",
+      agentId,
+      tenantId: "tenant-A",
     },
   };
 }
@@ -148,7 +168,9 @@ describe("agent-template mutations — role gate + tenant pin", () => {
   beforeEach(() => {
     mockSelectRows.mockReset();
     mockInsertReturning.mockReset();
+    mockUpdateReturning.mockReset();
     mockRequireTenantAdmin.mockReset();
+    mockRequireNotFromAdminSkill.mockReset();
     insertCallRef.value = 0;
     deleteCallRef.value = 0;
     updateCallRef.value = 0;
@@ -182,6 +204,64 @@ describe("agent-template mutations — role gate + tenant pin", () => {
         createAgentTemplate(null, { input }, cognitoCtx()),
       ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
       expect(insertCallRef.value).toBe(0);
+    });
+  });
+
+  describe("updateAgentTemplate (R15)", () => {
+    const input = { name: "Updated" };
+
+    it("calls requireTenantAdmin with the template's row-derived tenantId", async () => {
+      mockSelectRows.mockReturnValueOnce([
+        { id: "tpl-1", tenant_id: "tenant-A" },
+      ]);
+      mockUpdateReturning.mockReturnValueOnce([
+        { id: "tpl-1", tenant_id: "tenant-A", name: "Updated" },
+      ]);
+      mockAdminAllowed();
+      await updateAgentTemplate(null, { id: "tpl-1", input }, cognitoCtx());
+      expect(mockRequireTenantAdmin).toHaveBeenCalledWith(
+        expect.anything(),
+        "tenant-A",
+      );
+    });
+
+    it("refuses member-role caller before UPDATE", async () => {
+      mockSelectRows.mockReturnValueOnce([
+        { id: "tpl-1", tenant_id: "tenant-A" },
+      ]);
+      mockAdminForbidden();
+      await expect(
+        updateAgentTemplate(null, { id: "tpl-1", input }, cognitoCtx()),
+      ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
+      expect(updateCallRef.value).toBe(0);
+    });
+
+    it("refuses cross-tenant admin — derives tenantId from the target row, not the caller", async () => {
+      // Caller is admin of tenant-B (ctx.auth.tenantId omitted / null per
+      // Google-federated pattern). Target template lives in tenant-A. The
+      // row-derived pin means requireTenantAdmin is called with "tenant-A",
+      // and the test mock refuses (tenant-B != tenant-A).
+      mockSelectRows.mockReturnValueOnce([
+        { id: "tpl-1", tenant_id: "tenant-A" },
+      ]);
+      mockAdminForbidden();
+      await expect(
+        updateAgentTemplate(null, { id: "tpl-1", input }, cognitoCtx()),
+      ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
+      expect(mockRequireTenantAdmin).toHaveBeenCalledWith(
+        expect.anything(),
+        "tenant-A",
+      );
+      expect(updateCallRef.value).toBe(0);
+    });
+
+    it("throws NOT_FOUND when the template id does not exist (no auth info leaked)", async () => {
+      mockSelectRows.mockReturnValueOnce([]);
+      await expect(
+        updateAgentTemplate(null, { id: "tpl-missing", input }, cognitoCtx()),
+      ).rejects.toThrow(/not found/i);
+      expect(mockRequireTenantAdmin).not.toHaveBeenCalled();
+      expect(updateCallRef.value).toBe(0);
     });
   });
 
@@ -285,6 +365,49 @@ describe("agent-template mutations — role gate + tenant pin", () => {
       await expect(
         syncTemplateToAllAgents(null, { templateId: "tpl-1" }, cognitoCtx()),
       ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
+    });
+
+    // R17: catastrophic-tier gate blocks apikey callers even before
+    // requireTenantAdmin runs. Prevents an agent holding thinkwork-admin
+    // with `sync_template_to_all_agents` in its allowlist from fan-out
+    // propagating permissions to every agent in one shot.
+    describe("catastrophic-tier gate (R17)", () => {
+      const CATASTROPHIC_FORBIDDEN = Object.assign(
+        new Error(
+          "Catastrophic operations are restricted to Cognito-authenticated callers",
+        ),
+        { extensions: { code: "FORBIDDEN" } },
+      );
+
+      it("refuses apikey callers via requireNotFromAdminSkill", async () => {
+        mockRequireNotFromAdminSkill.mockImplementation(() => {
+          throw CATASTROPHIC_FORBIDDEN;
+        });
+        await expect(
+          syncTemplateToAllAgents(
+            null,
+            { templateId: "tpl-1" },
+            apikeyCtx("agent-1"),
+          ),
+        ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
+        // Gate fires BEFORE the template lookup / requireTenantAdmin.
+        expect(mockRequireTenantAdmin).not.toHaveBeenCalled();
+      });
+
+      it("allows cognito tenant admins — requireNotFromAdminSkill is a no-op for cognito", async () => {
+        mockRequireNotFromAdminSkill.mockImplementation(() => undefined);
+        mockSelectRows
+          .mockReturnValueOnce([{ id: "tpl-1", tenant_id: "tenant-A" }])
+          .mockReturnValueOnce([]);
+        mockAdminAllowed();
+        await syncTemplateToAllAgents(
+          null,
+          { templateId: "tpl-1" },
+          cognitoCtx(),
+        );
+        expect(mockRequireNotFromAdminSkill).toHaveBeenCalledTimes(1);
+        expect(mockRequireTenantAdmin).toHaveBeenCalledTimes(1);
+      });
     });
   });
 });
