@@ -422,9 +422,20 @@ _(empty — add entries as you encounter them)_
  * rewrites all 11 files and bumps the stored version. Matching version → no-op.
  *
  * **Bump this whenever any of the 11 canonical files changes.**
- * The parity test catches drift between the inline TS and the .md authoring
- * sources, but the version bump is what drives actual S3 updates across
- * existing tenants — forgetting it means existing tenants keep the old content.
+ *
+ * What the version bump DOES:
+ *   - Newly created tenants get the new content at `seed-workspace-defaults`
+ *     time.
+ *   - The `_catalog/defaults/workspace/` prefix in each existing tenant's
+ *     S3 bucket is refreshed next time `seed-workspace-defaults` runs.
+ *
+ * What the version bump DOES NOT do:
+ *   - Per-template S3 copies (`_catalog/<templateSlug>/workspace/`) are
+ *     independent of defaults — they need explicit refresh.
+ *   - Existing agent OVERRIDES (`tenants/<slug>/agents/<slug>/workspace/`)
+ *     are never updated by the version bump. Use
+ *     `backfill-identity-md.ts` / `backfill-user-md.ts` (or a targeted
+ *     accept-template-update flow) to refresh them.
  */
 export const DEFAULTS_VERSION = 2;
 

@@ -10,7 +10,9 @@
  *   - Matches both the new `- **Name:** <x>` bullet shape and the
  *     legacy `Your name is **<x>**.` prose shape.
  *   - Transient S3 PUT failure retries once, then bubbles.
- *   - Invalidates the composer cache on success.
+ *   - Composer cache invalidation is the CALLER's responsibility (it
+ *     fires after the DB transaction commits in `updateAgent`); the
+ *     writer itself no longer invalidates.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";

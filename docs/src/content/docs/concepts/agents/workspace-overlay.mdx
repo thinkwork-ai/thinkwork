@@ -63,6 +63,8 @@ This is the safety lane for anything that could meaningfully change agent behavi
 
 Pre-assignment, `USER.md` renders with every `{{HUMAN_*}}` placeholder as an em-dash so the admin preview shows clean copy instead of raw `{{HUMAN_NAME}}` literals.
 
+`IDENTITY.md` has a related write-at-rename behavior. When a human renames an agent via the `updateAgent` GraphQL mutation, the agent's `IDENTITY.md` override is updated server-side in the same DB transaction. Only the `- **Name:**` line is rewritten (name-line surgery); all other prose the agent has written into `IDENTITY.md` — Creature, Vibe, Emoji, Avatar, any backstory below — is preserved intact. Same transactional guarantee as `USER.md` write-at-assignment: if the S3 PUT fails, the DB update rolls back, so the agent's DB name and `IDENTITY.md` never drift. Implementation: `packages/api/src/lib/identity-md-writer.ts`.
+
 ## Editing from the admin UI
 
 ### Agent workspace tab

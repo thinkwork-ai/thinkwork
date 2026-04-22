@@ -7,11 +7,21 @@ import {
 } from "../../utils.js";
 import { writeUserMdForAssignment } from "../../../lib/user-md-writer.js";
 import { writeIdentityMdForAgent } from "../../../lib/identity-md-writer.js";
+import { invalidateComposerCache } from "../../../lib/workspace-overlay.js";
 
 export async function updateAgent(_parent: any, args: any, ctx: GraphQLContext) {
 	const i = args.input;
 	const updates: Record<string, unknown> = { updated_at: new Date() };
-	if (i.name !== undefined) updates.name = i.name;
+	if (i.name !== undefined) {
+		// Reject `null` and empty-string names loudly. Without this guard,
+		// `nameProvided` would be true while `nameActuallyChanged` (string
+		// typeof check) would be false — the DB would accept `null` but the
+		// IDENTITY.md writer would skip, silently drifting S3 from the DB.
+		if (typeof i.name !== "string" || i.name.trim() === "") {
+			throw new Error("Agent name must be a non-empty string");
+		}
+		updates.name = i.name;
+	}
 	if (i.role !== undefined) updates.role = i.role;
 	if (i.type !== undefined) updates.type = i.type.toLowerCase();
 	if (i.templateId !== undefined) updates.template_id = i.templateId;
@@ -42,12 +52,18 @@ export async function updateAgent(_parent: any, args: any, ctx: GraphQLContext) 
 	// out of the transaction — their side effects are recoverable via
 	// retry and shouldn't block a routine update from committing.
 	let row: typeof agents.$inferSelect | null = null;
+	// Cache invalidations to fire AFTER the txn commits. Firing inside the
+	// txn would clear the composer cache before the DB settles — if a later
+	// step rolls back, the composer would then read fresh S3 state that no
+	// longer matches the rolled-back DB row.
+	const cacheInvalidations: Array<{ tenantId: string; agentId: string }> = [];
 	if (humanPairIdChanging || nameProvided) {
 		row = await db.transaction(async (tx) => {
 			const [pre] = await tx
 				.select({
 					human_pair_id: agents.human_pair_id,
 					name: agents.name,
+					tenant_id: agents.tenant_id,
 				})
 				.from(agents)
 				.where(eq(agents.id, args.id));
@@ -74,6 +90,10 @@ export async function updateAgent(_parent: any, args: any, ctx: GraphQLContext) 
 					console.log(
 						`[updateAgent] user_md_write agentId=${args.id} success=true`,
 					);
+					cacheInvalidations.push({
+						tenantId: pre.tenant_id,
+						agentId: args.id,
+					});
 				} catch (err) {
 					const errorCategory =
 						(err as { code?: string } | null)?.code ||
@@ -95,6 +115,10 @@ export async function updateAgent(_parent: any, args: any, ctx: GraphQLContext) 
 					console.log(
 						`[updateAgent] identity_md_write agentId=${args.id} oldName=${oldName} newName=${i.name} success=true`,
 					);
+					cacheInvalidations.push({
+						tenantId: pre.tenant_id,
+						agentId: args.id,
+					});
 				} catch (err) {
 					const errorCategory =
 						(err as { code?: string } | null)?.code ||
@@ -109,6 +133,12 @@ export async function updateAgent(_parent: any, args: any, ctx: GraphQLContext) 
 
 			return updated;
 		});
+
+		// Txn committed successfully — now safe to invalidate the composer
+		// cache so the next read reflects the new S3 state.
+		for (const entry of cacheInvalidations) {
+			invalidateComposerCache(entry);
+		}
 	} else {
 		const [updated] = await db
 			.update(agents)

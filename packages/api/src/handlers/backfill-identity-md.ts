@@ -1,17 +1,24 @@
 /**
- * One-off backfill: rewrite IDENTITY.md + SOUL.md for every agent so
- * their override reflects the current template shape.
+ * One-off backfill: force-overwrite IDENTITY.md + SOUL.md for every agent
+ * with the current template content.
  *
- * - IDENTITY.md: calls `writeIdentityMdForAgent` per agent. Performs
- *   name-line surgery if an override exists, seeds from template if
- *   not. Idempotent — running it twice on an up-to-date agent rewrites
- *   the same bytes.
- * - SOUL.md: no placeholders, no agent state to resolve. The override
- *   is overwritten verbatim with the current template content.
+ * This is the "template migration" backfill — distinct from the name-line
+ * surgery that `writeIdentityMdForAgent` performs on agent rename. When the
+ * template SHAPE changes (as in the Zig-era personality refresh), every
+ * existing agent override needs a full rewrite to adopt the new structure;
+ * name-line surgery alone would leave the old shape in place below the
+ * Name line.
  *
- * USER.md is NOT covered here — it has its own backfill
- * (`backfill-user-md.ts`, PR #383) which resolves per-human placeholder
- * values. Run the USER.md backfill separately.
+ * What this handler does:
+ *   - IDENTITY.md: writes the current template with `{{AGENT_NAME}}`
+ *     substituted from the agent row. Agent-authored prose below the Name
+ *     line IS clobbered — that's the intent of a template migration. If
+ *     you need to preserve agent-authored personality prose, DO NOT run
+ *     this handler; use a targeted accept-template-update flow instead.
+ *   - SOUL.md: writes the current template verbatim (no placeholders).
+ *
+ * USER.md is handled by `backfill-user-md.ts` (it needs per-human
+ * placeholder resolution from the pairing).
  *
  * Run locally:
  *   npx tsx packages/api/src/handlers/backfill-identity-md.ts --dry-run \

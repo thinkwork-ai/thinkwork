@@ -39,7 +39,6 @@ import {
 	substitute,
 	type SanitizationViolation,
 } from "./placeholder-substitution.js";
-import { invalidateComposerCache } from "./workspace-overlay.js";
 
 const REGION =
 	process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
@@ -266,8 +265,11 @@ export class UserMdWriterError extends Error {
  * (`tx`) — DB reads run inside the same snapshot as the agent mutation, so
  * the caller can safely re-read fields they just wrote.
  *
- * On success, invalidates the composer cache for this agent so the next
- * composed view reflects the write.
+ * The caller is responsible for invalidating the composer cache
+ * (`invalidateComposerCache({ tenantId, agentId })`) AFTER the DB
+ * transaction commits. Invalidating inside this writer would clear the
+ * cache prematurely — a subsequent txn rollback would leave the cache
+ * miss seeing fresh S3 state that contradicts the rolled-back DB row.
  */
 export async function writeUserMdForAssignment(
 	tx: DbOrTx,
@@ -314,8 +316,8 @@ export async function writeUserMdForAssignment(
 		rendered,
 	);
 
-	invalidateComposerCache({
-		tenantId: resolved.tenantId,
-		agentId,
-	});
+	// NOTE: Composer cache invalidation is the caller's responsibility,
+	// AFTER the DB transaction commits. Invalidating here would clear the
+	// cache inside the txn — if a subsequent operation rolls back, the
+	// composer would read stale S3 state that no longer matches the DB.
 }

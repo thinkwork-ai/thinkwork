@@ -36,7 +36,6 @@ import { agents, tenants } from "@thinkwork/database-pg/schema";
 import { loadDefaults } from "@thinkwork/workspace-defaults";
 import { db as defaultDb } from "../graphql/utils.js";
 import { substitute } from "./placeholder-substitution.js";
-import { invalidateComposerCache } from "./workspace-overlay.js";
 
 const REGION =
 	process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
@@ -175,13 +174,19 @@ const NEW_ANCHOR_RE = /^- \*\*Name:\*\*.*$/m;
 const LEGACY_ANCHOR_RE = /Your name is \*\*[^*]+\*\*\./;
 
 function surgery(existing: string, newName: string): string | null {
+	// Defensive: strip newlines so a malicious name can't inject extra
+	// markdown lines. Collapse to spaces, trim runs.
+	const safeName = newName.replace(/[\r\n]+/g, " ").trim();
+
+	// Use function-form replacement so `$&`, `$'`, `` $` ``, `$1` in
+	// `safeName` are NOT interpreted as backreferences by String.replace.
 	if (NEW_ANCHOR_RE.test(existing)) {
-		return existing.replace(NEW_ANCHOR_RE, `- **Name:** ${newName}`);
+		return existing.replace(NEW_ANCHOR_RE, () => `- **Name:** ${safeName}`);
 	}
 	if (LEGACY_ANCHOR_RE.test(existing)) {
 		return existing.replace(
 			LEGACY_ANCHOR_RE,
-			`Your name is **${newName}**.`,
+			() => `Your name is **${safeName}**.`,
 		);
 	}
 	return null;
@@ -206,6 +211,12 @@ function renderTemplate(agentName: string): string {
  *   fall through to a full template rewrite.
  * - If no override exists, seed the agent prefix with the template
  *   IDENTITY.md with `{{AGENT_NAME}}` substituted.
+ *
+ * The caller is responsible for invalidating the composer cache
+ * (`invalidateComposerCache({ tenantId, agentId })`) AFTER the DB
+ * transaction commits. Invalidating inside this writer would clear the
+ * cache prematurely — a subsequent txn rollback would leave the cache
+ * miss seeing fresh S3 state that contradicts the rolled-back DB row.
  */
 export async function writeIdentityMdForAgent(
 	tx: DbOrTx,
@@ -252,8 +263,8 @@ export async function writeIdentityMdForAgent(
 		rendered,
 	);
 
-	invalidateComposerCache({
-		tenantId: resolved.tenantId,
-		agentId,
-	});
+	// NOTE: Composer cache invalidation is the caller's responsibility,
+	// AFTER the DB transaction commits. Invalidating here would clear the
+	// cache inside the txn — if a subsequent operation rolls back, the
+	// composer would read stale S3 state that no longer matches the DB.
 }
