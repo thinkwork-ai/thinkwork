@@ -43,7 +43,7 @@ Tapping an already-connected integration and choosing **Disconnect** clears the 
 
 **Route:** `/settings/mcp-servers`
 
-The MCP Servers screen is the user side of [MCP Tool Connectors](/concepts/mcp-servers/). It lists every MCP server registered at the tenant level that is assigned to any agent the user has access to, plus the user's per-server auth status.
+The MCP Servers screen is the user side of [MCP Tool Connectors](/concepts/connectors/mcp-tools/). It lists every MCP server registered at the tenant level that is assigned to any agent the user has access to, plus the user's per-server auth status.
 
 Each row shows:
 
@@ -75,7 +75,7 @@ The tools list is the canonical "what can this server actually do?" view. It's r
 
 ### Token refresh behavior
 
-Users don't normally see the token-refresh flow — it runs automatically through the [oauth-token resolver](/concepts/mcp-servers/#token-refresh) before any outbound call. The user only sees a **"Reconnect"** prompt when a refresh has definitively failed (for example, the refresh token was revoked on the provider side), at which point they need to re-grant access.
+Users don't normally see the token-refresh flow — it runs automatically through the oauth-token resolver before any outbound call. The user only sees a **"Reconnect"** prompt when a refresh has definitively failed (for example, the refresh token was revoked on the provider side), at which point they need to re-grant access.
 
 ## Why integrations and MCP are separate screens
 
@@ -98,6 +98,6 @@ A few things to check when a connection isn't behaving:
 
 ## Related pages
 
-- [MCP Tool Connectors](/concepts/mcp-servers/) — the concept page with the full MCP model and token lifecycle
+- [MCP Tool Connectors](/concepts/connectors/mcp-tools/) — the concept page with the full MCP model and token lifecycle
 - [Admin — Tenant MCP Servers](/applications/admin/mcp-servers/) — the tenant-level registration side
 - [Mobile — Authentication](/applications/mobile/authentication/) — the sign-in flow that precedes any of this

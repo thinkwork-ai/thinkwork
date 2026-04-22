@@ -5,7 +5,21 @@ description: All Terraform variables for a ThinkWork deployment. Required fields
 
 import { Aside } from '@astrojs/starlight/components';
 
-This page documents all Terraform variables for the `thinkwork-ai/thinkwork/aws` module. Variables are grouped by category.
+This page documents all Terraform variables for the `thinkwork-ai/thinkwork/aws` module. Variables are grouped by category, and every variable has a sensible default — a full dev deployment needs only four variables set (stage, region, account, DB password), and a production deployment typically adds a domain, Google OAuth credentials, and HA overrides.
+
+## How to choose values
+
+A short orientation before the tables:
+
+- **Dev stacks** favor cost and speed. Aurora Serverless v2 at the minimum capacity, single NAT gateway, no Hindsight, Claude Haiku as the default model. You can stand up and tear down these stacks in minutes.
+- **Production stacks** favor availability and safety. HA across AZs, reserved concurrency on AgentCore, domain + ACM, Google OAuth enabled, Hindsight if the tenants need structured memory. Expect the first deploy to take 15–20 minutes.
+- **Shared-infrastructure stacks** use the `create_*` boolean flags to adopt an existing VPC, database, or Cognito pool instead of creating new ones. Every `existing_*` field is required if its corresponding `create_*` is `false`. See [BYO Infrastructure](/deploy/byo/) for the full story.
+
+Defaults are chosen for dev correctness. Don't set every value explicitly — set the ones that matter for your deployment shape and let the rest fall to defaults.
+
+<Aside type="caution">
+**`terraform.tfvars` holds plaintext secrets today.** `db_password`, `google_oauth_client_secret`, and any API keys you feed in as variables land in `terraform.tfvars` in cleartext. That file should never be committed, and on production stacks should migrate to SSM Parameter Store or Secrets Manager references (via `aws_ssm_parameter` data sources) rather than literal values. This migration is a planned follow-up; until it lands, treat `terraform.tfvars` as a sensitive file — don't paste it into chat, don't commit it, and rotate any secret that may have been exposed.
+</Aside>
 
 ## Required variables
 
@@ -191,3 +205,11 @@ tags = {
   Environment = "production"
 }
 ```
+
+## Related pages
+
+- [Greenfield AWS Deploy](/deploy/greenfield/) — end-to-end walkthrough with these variables in context
+- [BYO Infrastructure](/deploy/byo/) — adopting an existing VPC, database, or Cognito pool
+- [Getting Started](/getting-started/) — the 15-minute dev deploy
+- [Architecture](/architecture/) — what each tier of resources does
+- [Concepts: Control](/concepts/control/) — the production-readiness concerns these variables touch (guardrails, budgets, audit)

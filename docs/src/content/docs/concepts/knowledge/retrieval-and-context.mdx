@@ -1,74 +1,106 @@
 ---
 title: Retrieval and Context
-description: How thread history, document retrieval, and long-term memory come together inside a ThinkWork turn.
+description: How thread history, document retrieval, long-term memory recall, and the compounding-memory wiki come together at turn time — with the token budget tradeoffs that matter when you're tuning it.
 ---
 
-A ThinkWork turn is assembled from multiple context sources, not just the latest user message.
+import { Aside } from '@astrojs/starlight/components';
 
-This page is about that assembly step.
+A ThinkWork turn is not just "user message goes to the model." Before the model sees anything, the harness assembles context from up to four sources, budgets them against the model's context window, and decides what to include vs. truncate. This page is about that assembly.
 
-## Context sources
+## The four sources
 
-Depending on configuration, a managed agent may receive:
+Any given turn can draw from:
 
-- the current thread message
-- recent thread history
-- retrieved document passages
-- recalled long-term memories
-- skill instructions and tool definitions
-- connector metadata from the source system
+- **Thread history.** The recent conversation in this thread — prior user messages, agent responses, tool calls, and their outputs. This is the short-term context.
+- **Document knowledge.** Chunks retrieved from the agent's assigned knowledge bases at the start of the turn, based on semantic similarity to the user's message.
+- **Long-term memory.** Facts and preferences recalled from the agent's memory adapter (Hindsight or AgentCore Memory). These are carry-forward learnings, not chat history.
+- **Compounding-memory wiki.** When the agent has a wiki compiled, relevant entity and topic pages surface through the wiki-recall tool — typically faster and more targeted than raw memory search.
 
-## The clean model
+Not every source feeds every turn. A focused chatbot may use only thread history + document knowledge. A long-running research agent adds memory. An agent deeply embedded in a user's workspace uses all four.
 
-ThinkWork separates these concerns on purpose:
+## The assembly step
 
-- **Threads** hold the canonical record of work
-- **Memory** provides useful retrieved context
-- **Agents** decide how to act on that context
+Context assembly happens inside the AgentCore runtime before any Bedrock call. The shape:
 
-That keeps the product model cleaner than treating every source as just another prompt blob.
-
-## Turn assembly
-
-A typical turn looks like this:
-
-```txt
-Current message
-  + recent thread history
-  + retrieved document chunks
-  + recalled long-term memories
-  + tool and policy context
-  = model input for this turn
+```
+User message arrives in thread
+        │
+        ▼
+Load agent + template (which sources are enabled?)
+        │
+        ▼
+Query the enabled sources in parallel:
+  ├─ thread.getRecentTurns(threadId, limit)
+  ├─ knowledge.retrieve(query=message, kbIds, topK)
+  ├─ memory.recall(query=message, ownerId, k)
+  └─ wiki.recall(query=message, ownerId)
+        │
+        ▼
+Budget + merge: trim each source until the combined token
+count fits the model's context window with headroom for
+the system prompt, tool definitions, and response.
+        │
+        ▼
+Assembled context → Bedrock converse call
 ```
 
-The exact mix depends on the agent template, selected memory engine, retrieval configuration, and deployment settings.
+All four queries run in parallel. Whichever is slowest sets the turn's baseline latency — usually document retrieval (Bedrock KB) or long-term memory recall. Wiki recall is fast (a single structured query against `wiki_pages` + `wiki_page_sections`).
 
-## What should stay stable
+## Token budget tradeoffs
 
-Even as backends change, these rules should stay true:
+The model's context window is a hard limit. Every token spent on retrieved context is a token unavailable for the response. The harness budgets aggressively:
 
-- thread history is the short-term and session context source
-- document retrieval is one context input, not the whole product
-- long-term memory recall comes through ThinkWork’s memory contract
-- the harness decides how context is assembled for the turn
+- **System prompt** — template base + agent-specific prompt. Typically 500–2000 tokens.
+- **Tool definitions** — registered tools from skill packs, connectors, MCP. Typically 200–1500 tokens depending on agent surface.
+- **Response headroom** — `maxTokens` from the template, reserved so the model has room to generate.
+- **Retrieved context** — what's left after the above. The four sources compete for this pool.
 
-That is the real retrieval story.
-Not a backend hostname.
-Not a specific vector store.
-Not one vendor’s memory API.
+When the retrieval layer produces more content than the budget allows, it truncates by priority:
 
-## Current implementation shape
+1. Most recent thread turns are kept in full.
+2. Top-K retrieved document chunks are kept in full until the budget runs out.
+3. Recalled memories and wiki pages get summarized (first 2–3 lines of each) before being included.
+4. Older thread history is summarized or dropped.
 
-Today, the main context inputs are:
+This priority is tunable per agent template via the `memoryConfig` and `toolConfig` fields. An agent that should lean heavily on retrieved documents sets a higher KB topK; an agent that should lean on memory sets a higher memory recall count.
 
-- thread history from the ThinkWork thread store
-- document retrieval through Bedrock Knowledge Bases when enabled
-- long-term recall through the selected memory engine adapter
+<Aside type="tip">
+  If an agent's responses feel "forgetful," check the context budget before adding more sources. The common failure mode is adding a wiki on top of a big KB on top of long memory recall — each source is good individually, but together they starve the response budget. Better to tune each down than to stuff them all.
+</Aside>
 
-ThinkWork may expand retrieval controls over time, but this is the durable mental model to build against.
+## Why this matters to keep separate
+
+It's tempting to collapse everything into one big "just feed the model context" blob. Three reasons not to:
+
+- **Separate cost accounting.** Tokens from retrieved docs vs. recalled memories vs. thread history show up separately in audit records. An operator debugging "why did this turn cost $2" can see whether the document KB was bloated or whether the thread history was too long.
+- **Separate failure modes.** If the KB sync is broken today, document retrieval fails silently — and the rest of the turn still works. A single blob would fail the whole turn.
+- **Separate tuning knobs.** You change the topK for KB retrieval without touching memory recall. Without the separation, tuning is all-or-nothing.
+
+## Short-term vs. long-term
+
+A distinction that bites people:
+
+- **Short-term context** = thread history. It's the canonical record of what happened *in this conversation*. The model reads it verbatim (within budget).
+- **Long-term memory** = facts recalled from prior work. The model reads these as selective summaries, not verbatim chat logs.
+
+Long-term memory should never masquerade as the thread record. If an operator asks "what did the agent say in thread X," the answer is in the thread's turn rows, not in the memory adapter. Memory is *derived* context; the thread is *canonical* record.
+
+## Known limits
+
+- **No runtime introspection of what was assembled.** The admin thread detail shows the final context shape for a turn (which KB returned which chunks, which memories were recalled), but modifying the assembly mid-turn isn't possible. Tune at the template level and re-run.
+- **Budgeting is heuristic.** The harness approximates token counts; the model's tokenizer is authoritative. A turn that appears to fit the budget can still truncate if the estimate is off by a few percent. Keep headroom.
+- **Wiki recall is optional per-invocation.** If the wiki compile is behind (the compile job hasn't caught up to the agent's latest memories), the wiki-recall tool returns older content. Operators can force a compile if this matters.
 
 ## Related pages
 
-- [Memory overview](/concepts/knowledge/)
-- [Document Knowledge](/concepts/knowledge/document-knowledge/)
-- [Long-term Memory](/concepts/knowledge/memory/)
+- [Memory (overview)](/concepts/knowledge/) — the umbrella
+- [Document Knowledge](/concepts/knowledge/document-knowledge/) — the retrieval source
+- [Long-term Memory](/concepts/knowledge/memory/) — the recall source
+- [Compounding Memory](/concepts/knowledge/compounding-memory/) — the wiki source
+- [Concepts: Managed Agents](/concepts/agents/managed-agents/) — where assembly sits in the invocation flow
+
+## Under the hood
+
+Context assembly happens inside the AgentCore runtime (`packages/agentcore-strands/agent-container/`) before any Bedrock call. The four sources are queried in parallel, token-counted, and merged into the final input. Budget knobs (retrieval `top_k`, memory recall count, max thread-history window) live on the agent template and can be tuned without a redeploy.
+
+Each source emits OpenTelemetry spans recording latency, result count, and token contribution — surfaced in the turn trace view. See [Admin: Threads](/applications/admin/threads/) for the turn-trace operator view.

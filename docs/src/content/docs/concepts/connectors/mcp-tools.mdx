@@ -106,7 +106,18 @@ Common MCP tool connector use cases include:
 - business-system queries
 - search or retrieval over external systems
 
+## "MCP server" is a two-surface term — be precise
+
+Internal conversations occasionally conflate two things with the same name:
+
+- **A provider's MCP server** — the remote HTTP(S) endpoint you register here. That's what this page is about.
+- **A provider's task-connector surface** (e.g. an older LastMile integration) — a different surface that routes tasks into ThinkWork threads. Not the same thing as an MCP server, even when both belong to the same provider.
+
+When someone says "LastMile MCP," they usually mean the remote MCP server we register here. The task-connector surface is documented separately under external-task integrations. Be explicit when the two come up together.
+
 ## Related pages
 
 - [Connectors Overview](/concepts/connectors/)
 - [Integrations](/concepts/connectors/integrations/)
+- [Admin: Tenant MCP Servers](/applications/admin/mcp-servers/) — the operator surface for registering and managing servers
+- [Mobile: Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/) — where per-user OAuth actually happens

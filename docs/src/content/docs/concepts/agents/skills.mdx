@@ -1,0 +1,235 @@
+---
+title: Skills
+description: A skill pack is a self-contained bundle of tools, instructions, and assets an agent can load at invocation time. ThinkWork implements the open Agent Skills spec — a SKILL.md file plus optional directories that any compliant runtime can execute.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A skill pack is the other reuse layer for agents — the one orthogonal to templates. Where a template controls *how* an agent behaves (model, guardrail, budget, memory), a skill pack controls *what an agent can do* (tools, instructions, context). Several different templates — a support agent, a research agent, a sales-ops agent — might all share the same "CRM lookup" skill pack while differing wildly in everything else.
+
+ThinkWork implements the [**Agent Skills specification**](https://agentskills.io/specification), an open standard for portable, agent-readable skill definitions. A skill you write for ThinkWork is the same skill that runs on Claude Desktop, AWS AgentCore, or any other compliant runtime. That portability is a deliberate design choice, not an implementation detail.
+
+This page is the conceptual deep dive: what a skill is, when to reach for one, the `SKILL.md` format (which is the canonical spec, not implementation), and how skills compose with agents at runtime. For the operator surface that uploads and installs skills, see [Admin: Skills Catalog](/applications/admin/skills-catalog/). For the end-to-end authoring walkthrough, see [Authoring Guide: Skill Packs](/guides/skill-packs/).
+
+## The core idea
+
+A skill pack is a directory. The only required file is `SKILL.md` — a markdown document with YAML frontmatter that declares tools, instructions, and metadata. Optional supporting directories carry executable scripts, reference docs, and static assets. The whole pack is zipped, uploaded to the tenant's skill catalog, and assigned to agents.
+
+At invocation time, the runtime downloads every skill pack the agent has assigned, parses the `SKILL.md`, registers its tools into the agent's tool surface, and prepends its instructions to the system prompt. The agent can now call the skill's tools for the rest of the turn.
+
+No redeploy. Upload a new skill pack, assign it, and it's live on the next invocation.
+
+## When to reach for a skill pack
+
+Skill packs are the right tool when:
+
+- **A cluster of related tools belongs together.** A "CRM lookup" pack that exposes `crm.getAccount`, `crm.listContacts`, `crm.createTicket` with consistent error handling. Individual agents don't each re-implement CRM access.
+- **Domain instructions should travel with tools.** "When asked about billing, always cite the source document" lives in the pack so every agent using billing tools gets the instruction automatically.
+- **A capability bundle exists independent of any one agent.** "Support tier-1 responses" as a pack — CRM tools + response-tone instructions + escalation rules — attachable to any agent.
+- **You want the same behavior across runtimes.** A skill pack is portable by the spec's design; the same `SKILL.md` runs on any compliant runtime.
+
+Skill packs are *not* the right tool when:
+
+- **You need per-user configuration.** Skill packs are per-agent, not per-user. OAuth tokens and per-user credentials live in the credential vault and the mobile connect flows, not in skill packs.
+- **You need to store secrets.** `SKILL.md` is plaintext. Don't put API keys there. Skills reference credentials by name; the runtime resolves them at invocation.
+- **You want orchestration or branching logic.** A skill pack is a capability, not a workflow. Multi-step orchestration belongs in [Routines](/concepts/automations/routines-and-execution-model/).
+
+<Aside type="tip">
+  The fastest calibration question when authoring: "does this work inside one turn?" If yes, it's a skill. If it needs multiple turns, human approvals, or scheduling, it's a routine.
+</Aside>
+
+## The `SKILL.md` format
+
+The minimum viable skill pack is a single `SKILL.md` file. Here's a small one:
+
+```markdown
+---
+name: slack-summarize
+version: 1.2.0
+description: Summarize a Slack channel or thread into bullet points.
+author: thinkwork-platform
+license: MIT
+triggers:
+  - "summarize a slack channel"
+  - "what happened in #ops"
+---
+
+# Slack Summarize
+
+You can summarize a Slack channel or thread into concise bullet points.
+
+When the user asks to summarize a Slack channel, use the `slack_fetch_messages` tool
+with appropriate time bounds (default: last 24 hours). Return a markdown-formatted
+summary of key threads and decisions.
+
+## Tools
+
+### slack_fetch_messages
+
+Fetch messages from a Slack channel.
+
+**Input:**
+- `channel_id` (string, required) — Slack channel ID
+- `since` (ISO 8601 datetime, optional) — earliest message time. Default: 24h ago.
+
+**Output:**
+- `messages` (array of objects) — each with `user`, `text`, `ts`, `thread_ts`.
+
+## Behavior
+
+- Group consecutive messages from the same user.
+- Flag any message starting with "⚠️" or "URGENT" as a highlight.
+- Keep the summary under 400 words unless the user asks for more detail.
+```
+
+That's a complete skill. Frontmatter declares identity and triggers. The markdown body provides instructions that get prepended to the agent's system prompt. Tool definitions (under `## Tools`) are parsed into structured tool registrations.
+
+### Frontmatter fields
+
+| Field | Required | Purpose |
+|---|---|---|
+| `name` | ✓ | Unique within a tenant. Kebab-case. |
+| `version` | ✓ | Semver. Used for catalog display and compatibility checks. |
+| `description` | ✓ | One-sentence summary shown in the catalog. |
+| `author` | — | Attribution; informational. |
+| `license` | — | SPDX identifier; informational. |
+| `triggers` | — | Natural-language phrases that hint when this skill is relevant. Used in catalog search, not runtime routing. |
+| `requires` | — | Other skill pack names this pack depends on. |
+| `min_agent_skills_version` | — | Spec version compatibility. Defaults to `1.0`. |
+
+### Body sections
+
+The body is parsed into named sections:
+
+- **Introductory prose** — everything before the first `## Tools` heading. Gets injected into the system prompt verbatim.
+- **`## Tools`** — tool definitions. Each `### <tool-name>` subsection defines one tool with input/output schema.
+- **`## Behavior`** — additional instructions. Also injected into the system prompt.
+- **`## Examples`** — few-shot examples. Optionally included in the system prompt, truncated by token budget.
+
+The spec is lenient about section order — the parser takes what's there and skips what isn't.
+
+## The directory structure
+
+For anything beyond the minimal one-file skill, the spec defines a richer layout:
+
+```
+my-skill/
+├── SKILL.md          ← required
+├── scripts/          ← optional: executable code the skill can invoke
+│   ├── summarize.py
+│   └── parse-slack.py
+├── references/       ← optional: additional documentation for the agent
+│   ├── tone-guidelines.md
+│   └── escalation-matrix.md
+├── assets/           ← optional: templates, data files
+│   ├── response-template.md
+│   └── company-facts.json
+└── skill.yaml        ← optional: catalog metadata (display name, icon, category)
+```
+
+- **`scripts/`** holds code a skill's tools can execute. When a tool is a script-call, the runtime invokes the script with the tool's arguments and pipes stdout back as the tool output.
+- **`references/`** holds supplementary markdown files that the agent can read at runtime via a built-in read-reference tool. Useful for long guidance that would bloat the system prompt if always included.
+- **`assets/`** holds static files — templates, fixture data, configuration. The agent reads these on demand.
+- **`skill.yaml`** is a small extension (outside the core spec) that carries catalog metadata used by the admin UI.
+
+The `SKILL.md` is the only file the spec requires — everything else is additive.
+
+## Tool definitions
+
+Tools are defined as `### <tool-name>` subsections under `## Tools`:
+
+```markdown
+### calendar_list_events
+
+Return upcoming events in the user's primary calendar.
+
+**Input:**
+- `start` (ISO 8601 date, optional) — range start. Default: today.
+- `end` (ISO 8601 date, optional) — range end. Default: 7 days from start.
+- `limit` (integer, optional) — max events. Default: 20.
+
+**Output:**
+- `events` (array of objects): `{ id, title, start, end, attendees }`
+
+**Errors:**
+- `CALENDAR_NOT_AUTHORIZED` — user hasn't connected their calendar.
+- `RATE_LIMITED` — too many requests; retry after a minute.
+```
+
+The parser extracts the tool name, description, input/output schema, and error codes. Tools can be implemented as scripts (run locally against the pack's `scripts/` directory), HTTP calls (to a URL declared in frontmatter), or MCP tool proxies. The model never sees these implementation details — it sees only the tool's name, description, and JSON-schema-equivalent input/output shape.
+
+## The invocation-time lifecycle
+
+What conceptually happens on every turn for an agent with skill packs assigned:
+
+1. The runtime reads the agent's assigned skill pack ids.
+2. It downloads each skill pack (or reads from a warm cache of a recently-loaded pack).
+3. It parses the `SKILL.md`, registers the pack's tools into the agent's runtime tool surface, and accumulates the pack's instructions.
+4. It composes the final system prompt: template base + agent-specific prompt + accumulated skill-pack instructions.
+5. The model is invoked with the assembled prompt and the expanded tool surface.
+6. The agent calls tools as needed. Tool handlers read asset/reference files on demand during execution.
+7. The turn completes. Skill packs carry no cross-turn state.
+
+Skill packs are fresh on every turn. That's what makes hot-swapping a pack safe — upload a new version, every subsequent turn picks it up. There may be a brief cache window depending on the runtime's warming behavior, but the contract is "next invocation, new pack."
+
+## Uploading and cataloging
+
+Skills are uploaded into a per-tenant catalog. Operators do this from the admin app (drag-and-drop the pack directory) or through the CLI for CI pipelines. Uploads are validated for:
+
+- **Spec compliance.** Does the `SKILL.md` parse? Do tools have well-formed schemas? Is the frontmatter complete?
+- **Security.** Are any file paths escaping the pack directory? Are any scripts trying to operate outside their sandbox?
+- **Size.** Total pack size under the catalog's per-pack limit; individual files under the per-file limit.
+- **Name collisions.** A repeated name gets treated as a new version of an existing pack, not an overwrite.
+
+Rejected uploads show specific errors without touching the catalog. See [Admin: Skills Catalog](/applications/admin/skills-catalog/) for the operator flow.
+
+## Versioning
+
+Skill versioning follows the spec: semver in the frontmatter. Uploading `sp-crm-lookup@1.3.0` over an existing `sp-crm-lookup@1.2.0` updates the catalog to point at 1.3.0, and agents currently using the pack get 1.3.0 on their next invocation.
+
+If you need to pin an agent to a specific skill version, the current pattern is to upload the version under a distinct name and assign that. Inline version pinning is on the roadmap.
+
+Rolling back is a re-upload of the previous version under a higher semver (`1.3.1` superseding a bad `1.3.0`). Every agent picks up the rollback on the next turn.
+
+## Assigning skills to agents
+
+A single agent can have any number of skill packs assigned. They combine additively — all tools from all packs are in the runtime tool surface; all instructions from all packs are in the system prompt.
+
+Three ways to assign:
+
+1. **Via template defaults.** A new agent created from a template inherits the template's default skill packs.
+2. **Via admin UI.** On the agent's detail page.
+3. **Via GraphQL API.** Update the agent's skill-pack list programmatically.
+
+See [Templates](/concepts/agents/templates/) for how default assignments propagate at agent creation time (and why they don't propagate on later template edits without an explicit sync).
+
+### Conflicts between packs
+
+If two packs define a tool with the same name, the one loaded last wins. The load order is the order of the agent's skill-pack list. Pack authors should consider namespacing (`myservice_search` rather than `search`) to avoid collisions.
+
+Instruction conflicts — pack A says "always respond in bullets," pack B says "always respond in prose" — are resolved by the model, not by the runtime. Contradictory instructions produce unpredictable behavior. Authoring discipline is to keep pack instructions scoped and non-conflicting.
+
+## Testing skills
+
+During authoring, skills can be exercised locally without uploading to the tenant's catalog. The CLI offers a local test-runner that loads the pack from a working directory, executes a prompt against the deployed Bedrock endpoint, and returns the tool calls and final response. Useful for iterating on a pack before uploading.
+
+For unit-testing specific tools, the same path can bypass the model entirely — invoke a tool with fixture input and show the output, suitable for CI.
+
+See [Authoring Guide: Skill Packs](/guides/skill-packs/) for specific command invocations.
+
+## Known limits
+
+- **No per-agent skill version pinning.** An agent always gets the latest version of each assigned pack. Pinning via distinct pack names is the current workaround.
+- **Instruction bloat.** Every assigned pack's instructions land in the system prompt. Ten packs of 500-word instructions = 5,000 extra tokens per turn. Watch the context budget.
+- **No secrets injection.** Skill packs can reference credential names, but the actual token fetch happens at runtime against the credential vault. Secrets never land in `SKILL.md`.
+- **Script execution is sandboxed.** Scripts run with restricted filesystem access (only the pack's own directory). Scripts needing network access should be rewritten as HTTP-backed tools.
+- **Cross-tenant skill sharing isn't built-in.** Exporting a pack from one tenant and importing into another works (upload the same directory), but there's no shared-across-tenants primitive.
+
+## Related pages
+
+- [Concepts: Agents](/concepts/agents/) — where agents sit relative to skills
+- [Concepts: Templates](/concepts/agents/templates/) — the other reuse layer; model/guardrail/budget
+- [Concepts: Managed Agents](/concepts/agents/managed-agents/) — the runtime that loads skills at invocation time
+- [Admin: Skills Catalog](/applications/admin/skills-catalog/) — the operator surface for browsing, installing, uploading
+- [Authoring Guide: Skill Packs](/guides/skill-packs/) — end-to-end walkthrough of writing a skill
+- [Agent Skills specification](https://agentskills.io/specification) — the open spec
