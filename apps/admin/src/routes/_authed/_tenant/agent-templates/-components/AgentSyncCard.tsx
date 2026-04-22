@@ -35,6 +35,10 @@ export function AgentSyncCard({
   const [{ fetching: applying }, applySync] = useMutation(SyncTemplateToAgentMutation);
 
   const diff = data?.templateSyncDiff;
+  const permissionsChanges = diff?.permissionsChanges ?? [];
+  const hasPermissionsChanges = permissionsChanges.some(
+    (p) => p.added.length > 0 || p.removed.length > 0,
+  );
   const hasChanges =
     !!diff &&
     (diff.roleChange != null ||
@@ -44,7 +48,8 @@ export function AgentSyncCard({
       diff.kbsAdded.length > 0 ||
       diff.kbsRemoved.length > 0 ||
       diff.filesAdded.length > 0 ||
-      diff.filesModified.length > 0);
+      diff.filesModified.length > 0 ||
+      hasPermissionsChanges);
 
   const changeCount =
     (diff?.roleChange ? 1 : 0) +
@@ -54,7 +59,11 @@ export function AgentSyncCard({
     (diff?.kbsAdded?.length ?? 0) +
     (diff?.kbsRemoved?.length ?? 0) +
     (diff?.filesAdded?.length ?? 0) +
-    (diff?.filesModified?.length ?? 0);
+    (diff?.filesModified?.length ?? 0) +
+    permissionsChanges.reduce(
+      (n, p) => n + p.added.length + p.removed.length,
+      0,
+    );
 
   const handleApply = async () => {
     const res = await applySync({ templateId, agentId });
@@ -144,6 +153,39 @@ export function AgentSyncCard({
           {diff.skillsChanged.length > 0 && (
             <DiffSection title="Skills config changed">
               {diff.skillsChanged.join(", ")}
+            </DiffSection>
+          )}
+          {hasPermissionsChanges && (
+            <DiffSection title="Permissions" tone="remove">
+              <div className="space-y-1">
+                {permissionsChanges.map((p) => {
+                  if (p.added.length === 0 && p.removed.length === 0)
+                    return null;
+                  return (
+                    <div key={p.skillId}>
+                      <span className="font-medium text-foreground">
+                        {p.skillId}
+                      </span>
+                      {p.removed.length > 0 && (
+                        <>
+                          {" — losing "}
+                          <span className="text-red-600 dark:text-red-400">
+                            {p.removed.join(", ")}
+                          </span>
+                        </>
+                      )}
+                      {p.added.length > 0 && (
+                        <>
+                          {p.removed.length > 0 ? "; gaining " : " — gaining "}
+                          <span className="text-green-600 dark:text-green-400">
+                            {p.added.join(", ")}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </DiffSection>
           )}
           {diff.kbsAdded.length > 0 && (
