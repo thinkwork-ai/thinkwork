@@ -43,6 +43,7 @@ COPY packages/agentcore-strands/agent-container/write_memory_tool.py .
 COPY packages/agentcore-strands/agent-container/update_agent_name_tool.py .
 COPY packages/agentcore-strands/agent-container/update_identity_tool.py .
 COPY packages/agentcore-strands/agent-container/update_user_profile_tool.py .
+COPY packages/agentcore-strands/agent-container/invocation_env.py .
 COPY packages/agentcore-strands/agent-container/workspace_composer_client.py .
 COPY packages/agentcore-strands/agent-container/hindsight_usage_capture.py .
 COPY packages/agentcore-strands/agent-container/hindsight_recall_filter.py .
