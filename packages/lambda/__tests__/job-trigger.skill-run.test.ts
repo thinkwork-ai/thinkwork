@@ -100,6 +100,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
 vi.mock("drizzle-orm", () => ({
 	and: (...args: unknown[]) => ({ _and: args }),
 	eq: (...args: unknown[]) => ({ _eq: args }),
+	sql: (...args: unknown[]) => ({ _sql: args }),
 }));
 
 vi.mock("@aws-sdk/client-lambda", () => ({
