@@ -1,94 +1,65 @@
-import { useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "urql";
-import { useTenant } from "@/context/TenantContext";
+import { createFileRoute, Link, Outlet, useLocation } from "@tanstack/react-router";
+import { BarChart3 } from "lucide-react";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
-import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AgentsListQuery } from "@/lib/graphql-queries";
-import { ActivityView } from "./-analytics/ActivityView";
-import { CostView } from "./-analytics/CostView";
-import { PerformanceView } from "./-analytics/PerformanceView";
-
-type AnalyticsView = "activity" | "cost" | "performance";
-
-function isAnalyticsView(v: unknown): v is AnalyticsView {
-  return v === "activity" || v === "cost" || v === "performance";
-}
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const Route = createFileRoute("/_authed/_tenant/analytics")({
-  component: AnalyticsPage,
-  validateSearch: (search: Record<string, unknown>): { view?: AnalyticsView } => ({
-    ...(isAnalyticsView(search.view) ? { view: search.view } : {}),
-  }),
+  component: AnalyticsLayout,
 });
 
-function AnalyticsPage() {
+type AnalyticsTab = "cost" | "activity" | "performance" | "skill-runs";
+
+function AnalyticsLayout() {
   useBreadcrumbs([{ label: "Analytics" }]);
-  const { tenantId } = useTenant();
-  const { view } = Route.useSearch();
-  const navigate = useNavigate();
-  const active: AnalyticsView = view ?? "cost";
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const { pathname } = useLocation();
 
-  const [agentsResult] = useQuery({
-    query: AgentsListQuery,
-    variables: { tenantId: tenantId! },
-    pause: !tenantId || active !== "performance",
-  });
-  const allAgents = (agentsResult.data as any)?.agents ?? [];
-
-  const setView = (next: AnalyticsView) => {
-    navigate({
-      to: "/analytics",
-      search: next === "cost" ? {} : { view: next },
-      replace: true,
-    });
-  };
+  const currentTab: AnalyticsTab = pathname.startsWith("/analytics/skill-runs")
+    ? "skill-runs"
+    : pathname.startsWith("/analytics/activity")
+      ? "activity"
+      : pathname.startsWith("/analytics/performance")
+        ? "performance"
+        : "cost";
 
   return (
     <PageLayout
       header={
-        <PageHeader
-          title="Analytics"
-          actions={
-            <>
-              <ToggleGroup
-                type="single"
-                value={active}
-                onValueChange={(v) => v && isAnalyticsView(v) && setView(v)}
-                variant="outline"
-              >
-                <ToggleGroupItem value="cost" className="px-3 text-xs">Cost</ToggleGroupItem>
-                <ToggleGroupItem value="activity" className="px-3 text-xs">Activity</ToggleGroupItem>
-                <ToggleGroupItem value="performance" className="px-3 text-xs">Performance</ToggleGroupItem>
-              </ToggleGroup>
-              {active === "performance" && (
-                <Select
-                  value={selectedAgentId ?? "all"}
-                  onValueChange={(v) => setSelectedAgentId(v === "all" ? null : v)}
-                >
-                  <SelectTrigger className="w-48 h-8 text-sm">
-                    <SelectValue placeholder="All agents" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All agents</SelectItem>
-                    {allAgents.map((a: { id: string; name: string }) => (
-                      <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </>
-          }
-        />
+        <div className="grid grid-cols-3 items-center">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-muted-foreground" />
+            <h1 className="text-2xl font-bold tracking-tight leading-tight text-foreground">
+              Analytics
+            </h1>
+          </div>
+          <div className="flex justify-center">
+            <Tabs value={currentTab}>
+              <TabsList>
+                <TabsTrigger value="cost" asChild className="px-2">
+                  <Link to="/analytics/cost">Cost</Link>
+                </TabsTrigger>
+                <TabsTrigger value="activity" asChild className="px-2">
+                  <Link to="/analytics/activity">Activity</Link>
+                </TabsTrigger>
+                <TabsTrigger value="performance" asChild className="px-2">
+                  <Link to="/analytics/performance">Performance</Link>
+                </TabsTrigger>
+                <TabsTrigger value="skill-runs" asChild className="px-2">
+                  <Link
+                    to="/analytics/skill-runs"
+                    search={{ skillId: undefined, status: undefined, invocationSource: undefined }}
+                  >
+                    Runs
+                  </Link>
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+          <div />
+        </div>
       }
     >
-      {active === "activity" && <ActivityView />}
-      {active === "cost" && <CostView />}
-      {active === "performance" && <PerformanceView selectedAgentId={selectedAgentId} />}
+      <Outlet />
     </PageLayout>
   );
 }
