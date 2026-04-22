@@ -13,10 +13,18 @@ that names a specific missing skill (e.g. `step 'frame' failed: frame
 error: SkillNotRegisteredError`). Both outcomes prove the full
 dispatch → runtime → DB loop works end-to-end.
 
-On today's dev stack, no connector/script skills are registered in
-the run_skill dispatch closure, so every composition fails at its
-first step with a clean, named error. That's the designed PASS
-condition until real connector adapters land.
+On today's dev stack, the run_skill dispatch closure wires
+`execution: script` sub-skills (deterministic Python functions). It
+does NOT yet wire `execution: context` (LLM-prompt) or
+`execution: agent` sub-skills — those raise a named
+`SkillNotRegisteredError` and the step fails cleanly. That means:
+
+- Compositions whose only step is a script skill (e.g.
+  `smoke-package-only` → `package`) run to `status='complete'` —
+  proves the full dispatch → runtime → DB loop from both ends.
+- Compositions whose first step is context or agent mode (e.g.
+  `sales-prep` → `frame`) fail cleanly at step 1. Clean named
+  failure is still a PASS per the composable-skills plan.
 
 **What the smokes prove end-to-end:**
 
