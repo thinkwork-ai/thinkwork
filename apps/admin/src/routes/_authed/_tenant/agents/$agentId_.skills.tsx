@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Loader2,
   ExternalLink,
+  Shield,
 } from "lucide-react";
 import { AgentDetailQuery, SetAgentSkillsMutation } from "@/lib/graphql-queries";
 import { useAuth } from "@/context/AuthContext";
@@ -19,21 +20,39 @@ import { PageLayout } from "@/components/PageLayout";
 import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
   listCatalog,
+  getCatalogSkill,
   installSkillToAgent,
   saveSkillCredentials,
   type CatalogSkill,
 } from "@/lib/skills-api";
+import {
+  PermissionsEditor,
+  resolveAgentSaveValue,
+  type SkillOperation,
+} from "@/components/skills/PermissionsEditor";
+
+type SkillManifestMeta = {
+  permissions_model?: "operations";
+  scripts?: Array<{
+    name: string;
+    path: string;
+    description?: string;
+    default_enabled?: boolean;
+  }>;
+};
 
 export const Route = createFileRoute("/_authed/_tenant/agents/$agentId_/skills")({
   component: AgentSkillsPage,
@@ -213,6 +232,59 @@ function AgentSkillsPage() {
   );
 
   // Catalog
+  // Phase 4 / Unit 9: per-skill manifest metadata for permissions UI.
+  const [manifestMetaCache, setManifestMetaCache] = useState<
+    Record<string, SkillManifestMeta>
+  >({});
+  const [permissionsDialogSlug, setPermissionsDialogSlug] = useState<
+    string | null
+  >(null);
+
+  // Template skills blob for the ceiling. AgentDetailQuery's agentTemplate
+  // now includes `skills` (per Phase 3 / Unit 7 plumbing). Parse once.
+  const templateSkills: Array<Record<string, unknown>> = (() => {
+    const raw = (agent?.agentTemplate as { skills?: unknown })?.skills;
+    if (!raw) return [];
+    try {
+      const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  })();
+
+  // Lazily fetch manifest details for any assigned skill we haven't cached.
+  useEffect(() => {
+    const missing = items
+      .map((i) => i.skillId)
+      .filter((slug) => !(slug in manifestMetaCache));
+    if (missing.length === 0) return;
+    let canceled = false;
+    Promise.all(
+      missing.map((slug) =>
+        getCatalogSkill(slug)
+          .then((p) => ({
+            slug,
+            meta: {
+              permissions_model: (p as any).permissions_model,
+              scripts: (p as any).scripts,
+            } as SkillManifestMeta,
+          }))
+          .catch(() => ({ slug, meta: {} as SkillManifestMeta })),
+      ),
+    ).then((entries) => {
+      if (canceled) return;
+      setManifestMetaCache((prev) => {
+        const next = { ...prev };
+        for (const { slug, meta } of entries) next[slug] = meta;
+        return next;
+      });
+    });
+    return () => {
+      canceled = true;
+    };
+  }, [items, manifestMetaCache]);
+
   const [catalog, setCatalog] = useState<CatalogSkill[]>([]);
   useEffect(() => {
     listCatalog().then(setCatalog).catch(console.error);
@@ -431,6 +503,50 @@ function AgentSkillsPage() {
         />
       )}
 
+      {/* Operation permissions — per Unit 9 of the permissions UI plan.
+          Shows only for assigned skills whose manifest declares
+          permissions_model: operations. Each row surfaces the effective
+          state (inheriting / explicit count) and opens the PermissionsEditor
+          dialog on edit. Ceiling is sourced from agentTemplate.skills. */}
+      <AgentPermissionsSection
+        items={items}
+        catalogMap={catalogMap}
+        manifestMetaCache={manifestMetaCache}
+        templateSkills={templateSkills}
+        onRequestEdit={(slug) => setPermissionsDialogSlug(slug)}
+      />
+      <AgentPermissionsDialog
+        slug={permissionsDialogSlug}
+        meta={permissionsDialogSlug ? manifestMetaCache[permissionsDialogSlug] : undefined}
+        ceiling={
+          permissionsDialogSlug
+            ? resolveTemplatePermissions(templateSkills, permissionsDialogSlug)
+            : null
+        }
+        initialValue={
+          permissionsDialogSlug
+            ? parseAgentPermissions(
+                items.find((i) => i.skillId === permissionsDialogSlug)?.permissions,
+              )
+            : null
+        }
+        onClose={() => setPermissionsDialogSlug(null)}
+        onSave={(next) => {
+          if (!permissionsDialogSlug) return;
+          const newItems = items.map((i) =>
+            i.skillId !== permissionsDialogSlug
+              ? i
+              : {
+                  ...i,
+                  permissions: next === null ? undefined : { operations: next },
+                },
+          );
+          setItems(newItems);
+          handleSaveSkills(newItems);
+          setPermissionsDialogSlug(null);
+        }}
+      />
+
       {/* Add Skill dialog */}
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
         <DialogContent className="max-w-md">
@@ -631,4 +747,206 @@ function AgentSkillsPage() {
       </Dialog>
     </PageLayout>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Unit 9 — Permissions section + dialog
+// ---------------------------------------------------------------------------
+
+function AgentPermissionsSection({
+  items,
+  catalogMap,
+  manifestMetaCache,
+  templateSkills,
+  onRequestEdit,
+}: {
+  items: Array<{ skillId: string; permissions?: unknown }>;
+  catalogMap: Map<string, CatalogSkill>;
+  manifestMetaCache: Record<string, SkillManifestMeta>;
+  templateSkills: Array<Record<string, unknown>>;
+  onRequestEdit: (slug: string) => void;
+}) {
+  const opsSkills = items.filter((i) => {
+    const meta = manifestMetaCache[i.skillId];
+    return meta?.permissions_model === "operations";
+  });
+  if (opsSkills.length === 0) return null;
+
+  return (
+    <Card className="mt-6">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Shield className="h-4 w-4" />
+          Operation permissions
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {opsSkills.map((i) => {
+          const meta = catalogMap.get(i.skillId);
+          const explicit = parseAgentPermissions(i.permissions);
+          const ceiling = resolveTemplatePermissions(
+            templateSkills,
+            i.skillId,
+          );
+          const isInheriting = explicit === null;
+          const effectiveCount = isInheriting
+            ? (ceiling?.length ?? 0)
+            : explicit.length;
+          return (
+            <div
+              key={i.skillId}
+              className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="font-medium">{meta?.name ?? i.skillId}</div>
+                <div className="text-xs text-muted-foreground">
+                  {effectiveCount} op{effectiveCount === 1 ? "" : "s"} enabled
+                  {isInheriting && " (inherited)"}
+                  {effectiveCount === 0 && (
+                    <span className="ml-2 text-amber-600 dark:text-amber-400">
+                      — agent cannot use this skill
+                    </span>
+                  )}
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onRequestEdit(i.skillId)}
+              >
+                <Shield className="h-3 w-3 mr-1" />
+                Edit
+              </Button>
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
+function AgentPermissionsDialog({
+  slug,
+  meta,
+  ceiling,
+  initialValue,
+  onClose,
+  onSave,
+}: {
+  slug: string | null;
+  meta?: SkillManifestMeta;
+  ceiling: string[] | null;
+  initialValue: string[] | null;
+  onClose: () => void;
+  onSave: (next: string[] | null) => void;
+}) {
+  const open = slug !== null;
+  const [workingValue, setWorkingValue] = useState<string[] | null>(
+    initialValue,
+  );
+  useEffect(() => {
+    setWorkingValue(initialValue);
+  }, [initialValue, slug]);
+
+  const scripts = meta?.scripts ?? [];
+  const ops: SkillOperation[] = scripts.map((s) => ({
+    name: s.name,
+    path: s.path,
+    description: s.description,
+    default_enabled: s.default_enabled,
+  }));
+
+  const handleSave = () => {
+    // Dirty-diff: collapse explicit-equal-to-ceiling back to null so the
+    // agent stays inheriting and picks up future template widenings.
+    const toSave = resolveAgentSaveValue({
+      loaded: initialValue,
+      current: workingValue,
+      ceiling,
+    });
+    onSave(toSave);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Agent permissions — {slug}</DialogTitle>
+          <DialogDescription>
+            Narrow which operations this agent may call. Ops outside the
+            template's ceiling are disabled. Click Reset to return the
+            agent to inheriting the template's full list.
+          </DialogDescription>
+        </DialogHeader>
+
+        {ceiling === null ? (
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
+            This skill is not authorized at the template level — contact
+            your template administrator to author permissions there first.
+          </div>
+        ) : ops.length === 0 ? (
+          <div className="text-xs text-muted-foreground py-4">
+            No operations available for this skill.
+          </div>
+        ) : (
+          <PermissionsEditor
+            mode="agent"
+            ops={ops}
+            ceiling={ceiling}
+            value={workingValue}
+            onChange={setWorkingValue}
+          />
+        )}
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={ceiling === null}>
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Read the template's permissions.operations for a given skill_id from
+ * the template's skills jsonb array. Returns null when the template has
+ * no entry OR the entry lacks explicit permissions — in either case the
+ * agent has no ceiling and cannot author an override.
+ */
+function resolveTemplatePermissions(
+  templateSkills: Array<Record<string, unknown>>,
+  skillId: string,
+): string[] | null {
+  const entry = templateSkills.find((s) => s?.skill_id === skillId);
+  if (!entry) return null;
+  const perms = entry.permissions;
+  if (!perms || typeof perms !== "object" || Array.isArray(perms)) return null;
+  const ops = (perms as Record<string, unknown>).operations;
+  if (!Array.isArray(ops)) return null;
+  return ops.filter((o): o is string => typeof o === "string");
+}
+
+/**
+ * Parse the agent's stored permissions.operations — returns `null` when
+ * the agent is inheriting (no explicit jsonb or missing `operations` key)
+ * and an explicit array otherwise.
+ */
+function parseAgentPermissions(raw: unknown): string[] | null {
+  if (raw === null || raw === undefined) return null;
+  let value = raw;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const ops = (value as Record<string, unknown>).operations;
+  if (!Array.isArray(ops)) return null;
+  return ops.filter((o): o is string => typeof o === "string");
 }

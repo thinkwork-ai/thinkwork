@@ -19,6 +19,7 @@ import {
   ChevronDown,
   Cable,
   XCircle,
+  Shield,
 } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -47,6 +48,8 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -62,8 +65,13 @@ import {
 } from "@/lib/graphql-queries";
 import {
   listCatalog,
+  getCatalogSkill,
   type CatalogSkill,
 } from "@/lib/skills-api";
+import {
+  PermissionsEditor,
+  type SkillOperation,
+} from "@/components/skills/PermissionsEditor";
 import {
   listMcpServers,
   getTemplateMcpServers,
@@ -208,6 +216,17 @@ type TemplateSkill = {
   skill_id: string;
   enabled: boolean;
   model_override?: string | null;
+  permissions?: { operations: string[] } | null;
+};
+
+type SkillManifestMeta = {
+  permissions_model?: "operations";
+  scripts?: Array<{
+    name: string;
+    path: string;
+    description?: string;
+    default_enabled?: boolean;
+  }>;
 };
 
 function TemplateEditorPage() {
@@ -239,6 +258,15 @@ function TemplateEditorPage() {
   const [templateSkills, setTemplateSkills] = useState<TemplateSkill[]>([]);
   const [catalog, setCatalog] = useState<CatalogSkill[]>([]);
   const [addSkillDialogOpen, setAddSkillDialogOpen] = useState(false);
+  // Permissions editor (Phase 4 / Unit 8). Manifest metadata is fetched
+  // lazily from getCatalogSkill and cached here so the Skills tab knows
+  // which skills surface a Permissions dialog.
+  const [manifestMetaCache, setManifestMetaCache] = useState<
+    Record<string, SkillManifestMeta>
+  >({});
+  const [permissionsDialogSlug, setPermissionsDialogSlug] = useState<
+    string | null
+  >(null);
 
   // State -- MCP servers
   const [templateMcpServers, setTemplateMcpServers] = useState<Array<{ mcp_server_id: string; enabled: boolean }>>([]);
@@ -283,6 +311,41 @@ function TemplateEditorPage() {
   }, []);
 
   const catalogMap = new Map(catalog.map((s) => [s.slug, s]));
+
+  // Lazily fetch manifest details (scripts, permissions_model) for any
+  // templateSkill whose details we don't yet have. listCatalog's payload
+  // omits scripts; getCatalogSkill returns the full parsed YAML per
+  // plan Key Technical Decisions. Only one fetch per slug per mount.
+  useEffect(() => {
+    const missing = templateSkills
+      .map((s) => s.skill_id)
+      .filter((slug) => !(slug in manifestMetaCache));
+    if (missing.length === 0) return;
+    let canceled = false;
+    Promise.all(
+      missing.map((slug) =>
+        getCatalogSkill(slug)
+          .then((payload) => ({
+            slug,
+            meta: {
+              permissions_model: (payload as any).permissions_model,
+              scripts: (payload as any).scripts,
+            } as SkillManifestMeta,
+          }))
+          .catch(() => ({ slug, meta: {} as SkillManifestMeta })),
+      ),
+    ).then((entries) => {
+      if (canceled) return;
+      setManifestMetaCache((prev) => {
+        const next = { ...prev };
+        for (const { slug, meta } of entries) next[slug] = meta;
+        return next;
+      });
+    });
+    return () => {
+      canceled = true;
+    };
+  }, [templateSkills, manifestMetaCache]);
 
   // Populate form from fetched data
   useEffect(() => {
@@ -433,13 +496,50 @@ function TemplateEditorPage() {
   );
 
   const addSkill = (skillSlug: string) => {
-    const updated = [...templateSkills, { skill_id: skillSlug, enabled: true }];
+    // If the skill's manifest declares `permissions_model: operations`,
+    // pre-seed permissions with the default_enabled ops so the agent's
+    // allowlist is usable immediately rather than R12-empty on first add.
+    // Uses the manifestMetaCache populated by the useEffect below; if the
+    // cache hasn't filled yet for this skill, permissions stays undefined
+    // (the operator can author it later via the Permissions dialog).
+    const meta = manifestMetaCache[skillSlug];
+    const defaultOps =
+      meta?.permissions_model === "operations"
+        ? (meta.scripts ?? [])
+            .filter((s) => s.default_enabled === true)
+            .map((s) => s.name)
+        : null;
+    const newEntry: TemplateSkill = {
+      skill_id: skillSlug,
+      enabled: true,
+      ...(defaultOps ? { permissions: { operations: defaultOps } } : {}),
+    };
+    const updated = [...templateSkills, newEntry];
     setTemplateSkills(updated);
     setAddSkillDialogOpen(false);
   };
 
   const removeSkill = (skillId: string) => {
     setTemplateSkills(templateSkills.filter((s) => s.skill_id !== skillId));
+  };
+
+  const updateSkillPermissions = (
+    skillId: string,
+    next: { operations: string[] } | null,
+  ) => {
+    setTemplateSkills((prev) =>
+      prev.map((s) =>
+        s.skill_id !== skillId
+          ? s
+          : next === null
+            ? (() => {
+                // Drop the permissions key entirely when the operator clears.
+                const { permissions: _p, ...rest } = s;
+                return rest as TemplateSkill;
+              })()
+            : { ...s, permissions: next },
+      ),
+    );
   };
 
   // MCP helpers
@@ -741,6 +841,35 @@ function TemplateEditorPage() {
                 ),
               },
               {
+                id: "permissions",
+                header: () => <div className="text-center">Permissions</div>,
+                size: 110,
+                cell: ({ row }: any) => {
+                  const slug = row.original.slug;
+                  const isEnabled = templateSkills.some((s) => s.skill_id === slug);
+                  const meta = manifestMetaCache[slug];
+                  const usesOps = meta?.permissions_model === "operations";
+                  if (!isEnabled || !usesOps) {
+                    return <div className="text-center text-xs text-muted-foreground">—</div>;
+                  }
+                  const assigned = templateSkills.find((s) => s.skill_id === slug);
+                  const count = assigned?.permissions?.operations?.length;
+                  return (
+                    <div className="flex justify-center">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => setPermissionsDialogSlug(slug)}
+                      >
+                        <Shield className="h-3 w-3" />
+                        {count === undefined ? "Defaults" : `${count} op${count === 1 ? "" : "s"}`}
+                      </Button>
+                    </div>
+                  );
+                },
+              },
+              {
                 id: "enabled",
                 header: () => <div className="text-right">Enabled</div>,
                 size: 80,
@@ -765,6 +894,29 @@ function TemplateEditorPage() {
             tableClassName="table-fixed"
           />
         )}
+
+        {/* Permissions editor dialog (Unit 8) — rendered outside the
+            activeTab conditional so state persists across tab switches. */}
+        <TemplatePermissionsDialog
+          slug={permissionsDialogSlug}
+          meta={
+            permissionsDialogSlug
+              ? manifestMetaCache[permissionsDialogSlug]
+              : undefined
+          }
+          assigned={
+            permissionsDialogSlug
+              ? templateSkills.find(
+                  (s) => s.skill_id === permissionsDialogSlug,
+                )
+              : undefined
+          }
+          onClose={() => setPermissionsDialogSlug(null)}
+          onChange={(next) => {
+            if (permissionsDialogSlug)
+              updateSkillPermissions(permissionsDialogSlug, next);
+          }}
+        />
 
         {/* MCP Servers Tab */}
         {activeTab === "mcp" && (
@@ -987,5 +1139,71 @@ function TemplateEditorPage() {
         </DialogContent>
       </Dialog>
     </PageLayout>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TemplatePermissionsDialog — Unit 8
+// ---------------------------------------------------------------------------
+
+function TemplatePermissionsDialog({
+  slug,
+  meta,
+  assigned,
+  onClose,
+  onChange,
+}: {
+  slug: string | null;
+  meta?: SkillManifestMeta;
+  assigned?: TemplateSkill;
+  onClose: () => void;
+  onChange: (next: { operations: string[] } | null) => void;
+}) {
+  const open = slug !== null;
+  const scripts = meta?.scripts ?? [];
+  const ops: SkillOperation[] = scripts.map((s) => ({
+    name: s.name,
+    path: s.path,
+    description: s.description,
+    default_enabled: s.default_enabled,
+  }));
+  const value = assigned?.permissions?.operations ?? null;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            Template permissions — {slug}
+          </DialogTitle>
+          <DialogDescription>
+            Authored here, these ops are the ceiling for every agent
+            instantiated from this template. Agents may narrow further
+            on the per-agent Skills tab; they cannot widen.
+          </DialogDescription>
+        </DialogHeader>
+
+        {ops.length === 0 ? (
+          <div className="text-xs text-muted-foreground py-4">
+            No operations available for this skill.
+          </div>
+        ) : (
+          <PermissionsEditor
+            mode="template"
+            ops={ops}
+            value={value}
+            onChange={(next) =>
+              onChange(next === null ? null : { operations: next })
+            }
+          />
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Done
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
