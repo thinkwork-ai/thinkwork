@@ -12,7 +12,7 @@
  *   4. defaults                → muted Layers
  */
 
-import { AlertCircle, FilePen, Layers, LayoutTemplate } from "lucide-react";
+import { AlertCircle, Circle, Layers, LayoutTemplate } from "lucide-react";
 
 export type ComposeSource =
 	| "agent-override"
@@ -45,12 +45,12 @@ export function WorkspaceFileBadge({
 		case "agent-override":
 		case "agent-override-pinned":
 			return (
-				<FilePen
-					className="h-3.5 w-3.5 shrink-0 text-purple-500"
+				<Circle
+					className="h-2 w-2 shrink-0 text-purple-500 fill-current"
 					aria-label="Overridden"
 				>
 					<title>Overridden — agent-scoped edit</title>
-				</FilePen>
+				</Circle>
 			);
 		case "template":
 		case "template-pinned":
