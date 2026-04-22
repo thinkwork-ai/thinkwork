@@ -35,6 +35,14 @@ COPY packages/agentcore-strands/agent-container/external_task_context.py .
 COPY packages/agentcore-strands/agent-container/workflow_skill_context.py .
 COPY packages/agentcore-strands/agent-container/memory_tools.py .
 COPY packages/agentcore-strands/agent-container/write_memory_tool.py .
+# Self-serve agent tools (docs/plans/2026-04-22-003-...-plan.md). Without
+# these three COPY lines the server.py registration block silently
+# falls through to warning-level logs — the tools never reach the
+# agent's toolset and the model loudly refuses the actions it's been
+# told (via MEMORY_GUIDE.md) it can take.
+COPY packages/agentcore-strands/agent-container/update_agent_name_tool.py .
+COPY packages/agentcore-strands/agent-container/update_identity_tool.py .
+COPY packages/agentcore-strands/agent-container/update_user_profile_tool.py .
 COPY packages/agentcore-strands/agent-container/workspace_composer_client.py .
 COPY packages/agentcore-strands/agent-container/hindsight_usage_capture.py .
 COPY packages/agentcore-strands/agent-container/hindsight_recall_filter.py .
