@@ -127,6 +127,13 @@
       "when": 1776799778139,
       "tag": "0018_agent_workspace_overlay",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1776865933950,
+      "tag": "0018_cool_firebird",
+      "breakpoints": true
     }
   ]
 }

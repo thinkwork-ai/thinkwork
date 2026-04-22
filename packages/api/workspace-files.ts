@@ -411,6 +411,101 @@ async function handleDelete(
 	return json(200, { ok: true });
 }
 
+// Line-surgery anchors for IDENTITY.md personality fields. Only these 4
+// lines are editable via `update-identity-field`; the Name line is
+// reserved for `update_agent_name` (which goes through the updateAgent
+// mutation + writeIdentityMdForAgent). Never exposing Name here is a
+// narrow-scope guarantee — the tool's Literal type is backed by this
+// server-side whitelist.
+const IDENTITY_FIELD_ANCHORS: Record<
+	"creature" | "vibe" | "emoji" | "avatar",
+	RegExp
+> = {
+	creature: /^- \*\*Creature:\*\*.*$/m,
+	vibe: /^- \*\*Vibe:\*\*.*$/m,
+	emoji: /^- \*\*Emoji:\*\*.*$/m,
+	avatar: /^- \*\*Avatar:\*\*.*$/m,
+};
+
+function identityFieldLabel(
+	field: keyof typeof IDENTITY_FIELD_ANCHORS,
+): string {
+	return field.charAt(0).toUpperCase() + field.slice(1);
+}
+
+async function handleUpdateIdentityField(
+	deps: HandlerDeps,
+	field: string,
+	value: string,
+): Promise<APIGatewayProxyResult> {
+	const { target, tenantId } = deps;
+	if (target.kind !== "agent") {
+		return json(400, {
+			ok: false,
+			error: "update-identity-field requires agentId",
+		});
+	}
+	if (!(field in IDENTITY_FIELD_ANCHORS)) {
+		return json(400, {
+			ok: false,
+			error: `Unknown identity field '${field}'. Allowed: creature, vibe, emoji, avatar.`,
+		});
+	}
+	if (typeof value !== "string") {
+		return json(400, { ok: false, error: "value must be a string" });
+	}
+	// Defensive sanitization — mirror writeIdentityMdForAgent's name-line
+	// treatment. Newlines collapsed to spaces so a value can't inject
+	// extra markdown bullets; the regex replacer function form prevents
+	// `$&`, `$'`, `` $` ``, `$1` from expanding as backreferences.
+	const safeValue = value.replace(/[\r\n]+/g, " ").trim();
+	const typedField = field as keyof typeof IDENTITY_FIELD_ANCHORS;
+	const anchor = IDENTITY_FIELD_ANCHORS[typedField];
+	const label = identityFieldLabel(typedField);
+
+	const identityKey = target.key("IDENTITY.md");
+	let existing: string | null = null;
+	try {
+		const resp = await s3.send(
+			new GetObjectCommand({ Bucket: bucket(), Key: identityKey }),
+		);
+		existing = (await resp.Body?.transformToString("utf-8")) ?? "";
+	} catch (err) {
+		const name = (err as { name?: string } | null)?.name;
+		const status = (err as { $metadata?: { httpStatusCode?: number } } | null)
+			?.$metadata?.httpStatusCode;
+		const isNotFound =
+			err instanceof NoSuchKey ||
+			name === "NoSuchKey" ||
+			name === "NotFound" ||
+			status === 404;
+		if (!isNotFound) throw err;
+	}
+
+	if (!existing || !anchor.test(existing)) {
+		return json(422, {
+			ok: false,
+			error: `IDENTITY.md is missing the ${label} line anchor; have your human rerun the template migration.`,
+		});
+	}
+
+	const rendered = existing.replace(
+		anchor,
+		() => `- **${label}:** ${safeValue}`,
+	);
+
+	await s3.send(
+		new PutObjectCommand({
+			Bucket: bucket(),
+			Key: identityKey,
+			Body: rendered,
+			ContentType: "text/plain; charset=utf-8",
+		}),
+	);
+	invalidateComposerCache({ tenantId, agentId: target.agentId });
+	return json(200, { ok: true });
+}
+
 async function handleRegenerateMap(deps: HandlerDeps): Promise<APIGatewayProxyResult> {
 	const { target } = deps;
 	if (target.kind !== "agent") {
@@ -441,6 +536,10 @@ interface RequestBody {
 	 * this flag is true.
 	 */
 	includeContent?: boolean;
+	/** For `update-identity-field`: creature | vibe | emoji | avatar. */
+	field?: string;
+	/** For `update-identity-field`: the new line content. */
+	value?: string;
 	// Legacy shape — rejected loudly so buggy clients surface.
 	tenantSlug?: string;
 	instanceId?: string;
@@ -547,6 +646,19 @@ export async function handler(
 			}
 			case "regenerate-map":
 				return await handleRegenerateMap(deps);
+			case "update-identity-field": {
+				if (!body.field || body.value === undefined) {
+					return json(400, {
+						ok: false,
+						error: "field and value are required for update-identity-field",
+					});
+				}
+				return await handleUpdateIdentityField(
+					deps,
+					String(body.field),
+					String(body.value),
+				);
+			}
 			default:
 				return json(400, { ok: false, error: `Unknown action: ${action}` });
 		}

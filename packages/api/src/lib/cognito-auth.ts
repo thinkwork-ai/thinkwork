@@ -39,6 +39,15 @@ export interface AuthResult {
 	tenantId: string | null;
 	email: string | null;
 	authType: "cognito" | "apikey";
+	/**
+	 * Agent id asserted by the caller for service-auth (apikey) requests
+	 * via `x-agent-id` header. Always null for cognito JWT callers.
+	 * Mutations that allow agent self-edits (e.g., `updateAgent` with
+	 * service auth, `updateUserProfile`) compare this against the target
+	 * id/pair and reject the request if they don't match — keeps the
+	 * blast radius of the shared service key narrow.
+	 */
+	agentId: string | null;
 }
 
 let verifier: ReturnType<typeof CognitoJwtVerifier.create> | null = null;
@@ -72,6 +81,7 @@ export async function authenticate(headers: Record<string, string | undefined>):
 				tenantId: (payload as any)["custom:tenant_id"] || null,
 				email: (payload as any).email || null,
 				authType: "cognito",
+				agentId: null,
 			};
 		} catch (err) {
 			console.warn("[cognito-auth] JWT verification failed:", (err as Error).message);
@@ -88,6 +98,7 @@ export async function authenticate(headers: Record<string, string | undefined>):
 				tenantId: headers["x-tenant-id"] || null,
 				email: null,
 				authType: "apikey",
+				agentId: headers["x-agent-id"] || null,
 			};
 		}
 	}
