@@ -133,7 +133,7 @@ async function createThread(
   env: ReturnType<typeof readHarnessEnv>,
   fixtures: Fixtures,
 ): Promise<string> {
-  const db = openDb(env);
+  const db = await openDb(env);
   try {
     const result = await db.execute(
       sql`INSERT INTO threads (tenant_id, agent_id, title, status, created_at, updated_at)
@@ -153,7 +153,7 @@ async function insertUserMessage(
   threadId: string,
   message: string,
 ): Promise<void> {
-  const db = openDb(env);
+  const db = await openDb(env);
   try {
     await db.execute(
       sql`INSERT INTO messages (tenant_id, thread_id, agent_id, role, content, created_at, updated_at)
@@ -169,7 +169,7 @@ async function readLatestTurn(
   threadId: string,
   since: Date,
 ): Promise<{ status: string } | null> {
-  const db = openDb(env);
+  const db = await openDb(env);
   try {
     const result = await db.execute(
       sql`SELECT status FROM thread_turns
@@ -183,15 +183,15 @@ async function readLatestTurn(
   }
 }
 
-function openDb(env: ReturnType<typeof readHarnessEnv>) {
+async function openDb(env: ReturnType<typeof readHarnessEnv>) {
   const client = new PgClient({ connectionString: env.databaseUrl });
   const db = drizzle(client, { schema: {} as any });
   (db as any)._client = client;
-  void client.connect();
+  await client.connect();
   return db;
 }
 
-async function closeDb(db: ReturnType<typeof openDb>): Promise<void> {
+async function closeDb(db: Awaited<ReturnType<typeof openDb>>): Promise<void> {
   const client = (db as any)._client as PgClient;
   try {
     await client.end();

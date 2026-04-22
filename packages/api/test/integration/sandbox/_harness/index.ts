@@ -6,11 +6,9 @@
  * catch deploy-level seam failures that unit tests can't see. See
  * `../README.md` for the required env vars, invocation commands, and
  * failure-mode triage.
- *
- * Unit 1 of the plan: scaffolding only. Exports typed stubs so
- * `sandbox-pilot.e2e.test.ts` can import against real symbols before
- * Units 2+ fill in the behavior.
  */
+
+import { randomBytes } from "node:crypto";
 
 export interface HarnessEnv {
   thinkworkApiUrl: string;
@@ -30,6 +28,7 @@ export class HarnessEnvError extends Error {
     );
     this.name = "HarnessEnvError";
     this.missing = missing;
+    Object.setPrototypeOf(this, HarnessEnvError.prototype);
   }
 }
 
@@ -73,9 +72,6 @@ function envVarName(camelKey: string): string {
  * can be cleanly swept via `--cleanup-only`.
  */
 export function newRunId(): string {
-  // crypto.randomBytes works everywhere vitest runs; no dep on node:crypto import
-  // at harness load time so HarnessEnvError can surface first if env is missing.
-  const { randomBytes } = require("node:crypto") as typeof import("node:crypto");
   return randomBytes(4).toString("hex");
 }
 
@@ -108,26 +104,3 @@ export function nameFixtures(runId: string, suffix = ""): FixtureName {
   };
 }
 
-/**
- * Placeholder Harness shape. Unit 2 expands with createSandboxFixtures
- * returning a concrete Fixtures struct + teardown.
- */
-export interface Harness {
-  env: HarnessEnv;
-  runId: string;
-  teardown(): Promise<void>;
-}
-
-/**
- * Unit 1 stub. Caller can instantiate to verify env wiring; every
- * method is a no-op until Unit 2 lands the real factory.
- */
-export function createHarnessShell(env: HarnessEnv): Harness {
-  return {
-    env,
-    runId: newRunId(),
-    async teardown() {
-      // Unit 2 fills this in.
-    },
-  };
-}

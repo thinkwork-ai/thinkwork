@@ -13,6 +13,7 @@
  * Plan: docs/plans/2026-04-22-009-test-agentcore-code-sandbox-e2e-plan.md Unit 3.
  */
 
+import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Client as PgClient } from "pg";
@@ -72,7 +73,7 @@ export async function assertSandboxInvocation(
     runId: string;
   },
 ): Promise<SandboxInvocationRow> {
-  const db = openDb(env);
+  const db = await openDb(env);
   try {
     const result = await db.execute(
       sql`SELECT * FROM sandbox_invocations
@@ -110,7 +111,7 @@ export async function readTenantDailyCounter(
   env: HarnessEnv,
   tenantId: string,
 ): Promise<{ count: number; wallClockSeconds: number } | null> {
-  const db = openDb(env);
+  const db = await openDb(env);
   try {
     const result = await db.execute(
       sql`SELECT invocations_count, wall_clock_seconds
@@ -207,7 +208,6 @@ export function findTokenMatches(
 function hashSample(value: string): string {
   // Don't log the raw token sample — hash it so the error message is
   // safe to share in a screenshot / on Slack.
-  const { createHash } = require("node:crypto") as typeof import("node:crypto");
   return createHash("sha256").update(value).digest("hex").slice(0, 12);
 }
 
@@ -239,7 +239,7 @@ export async function assertTenantIsolation(
   env: HarnessEnv,
   args: { tenantA: string; tenantB: string; since: Date; runId: string },
 ): Promise<void> {
-  const db = openDb(env);
+  const db = await openDb(env);
   try {
     for (const tenantId of [args.tenantA, args.tenantB]) {
       const result = await db.execute(
@@ -263,15 +263,15 @@ export async function assertTenantIsolation(
 // DB plumbing (same shape as fixtures.ts — kept narrow to avoid schema pkg deps)
 // ---------------------------------------------------------------------------
 
-function openDb(env: HarnessEnv) {
+async function openDb(env: HarnessEnv) {
   const client = new PgClient({ connectionString: env.databaseUrl });
   const db = drizzle(client, { schema: {} as any });
   (db as any)._client = client;
-  void client.connect();
+  await client.connect();
   return db;
 }
 
-async function closeDb(db: ReturnType<typeof openDb>): Promise<void> {
+async function closeDb(db: Awaited<ReturnType<typeof openDb>>): Promise<void> {
   const client = (db as any)._client as PgClient;
   try {
     await client.end();

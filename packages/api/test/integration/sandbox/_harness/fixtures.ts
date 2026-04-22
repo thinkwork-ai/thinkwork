@@ -240,7 +240,7 @@ export async function cleanupStaleFixtures(
   maxAgeMs: number = 24 * 60 * 60 * 1000,
 ): Promise<{ cleaned: number; skipped: number }> {
   const cutoff = new Date(Date.now() - maxAgeMs);
-  const db = openDb(env);
+  const db = await openDb(env);
   try {
     // Raw SQL because the harness doesn't have Drizzle schema imports
     // wired; a LIKE sweep over tenants.slug is the narrow shape.
@@ -354,7 +354,7 @@ async function createFixtureUser(
   tenantId: string,
   names: FixtureName,
 ): Promise<string> {
-  const db = openDb(env);
+  const db = await openDb(env);
   try {
     const email = `${names.tenantSlug}@sandbox-e2e.local`;
     const result = await db.execute(
@@ -375,7 +375,7 @@ async function seedConnections(
   userId: string,
   tokens: { github: string; slack: string },
 ): Promise<{ github: string; slack: string }> {
-  const db = openDb(opts.env);
+  const db = await openDb(opts.env);
   const sm = new SecretsManagerClient({ region: opts.env.awsRegion });
   try {
     const providerIds = await readProviderIds(db);
@@ -410,7 +410,7 @@ async function pairAgentToUser(
   agentId: string,
   userId: string,
 ): Promise<void> {
-  const db = openDb(env);
+  const db = await openDb(env);
   try {
     await db.execute(
       sql`UPDATE agents SET human_pair_id = ${userId}::uuid WHERE id = ${agentId}::uuid`,
@@ -429,7 +429,7 @@ async function setTenantCapOverride(
   // overrides may need a new table or JSON column. For v1, we
   // short-circuit by pre-seeding the counter row at count=cap, so the
   // very first invocation hits `WHERE count < cap` as false.
-  const db = openDb(env);
+  const db = await openDb(env);
   try {
     await db.execute(
       sql`INSERT INTO sandbox_tenant_daily_counters (tenant_id, utc_date, invocations_count, updated_at)
@@ -494,7 +494,7 @@ async function teardownFixtures(
 }
 
 async function deleteTenantCascade(env: HarnessEnv, tenantId: string): Promise<void> {
-  const db = openDb(env);
+  const db = await openDb(env);
   try {
     // Order matters — FK cascades handle most of it, but a few tables
     // don't cascade (agent_skills, agent_knowledge_bases, agents → template_id).
@@ -536,7 +536,7 @@ async function readTenantInterpreterIds(
   env: HarnessEnv,
   tenantId: string,
 ): Promise<{ public: string | null; internal: string | null }> {
-  const db = openDb(env);
+  const db = await openDb(env);
   try {
     const result = await db.execute(
       sql`SELECT sandbox_interpreter_public_id, sandbox_interpreter_internal_id FROM tenants WHERE id = ${tenantId}::uuid`,
@@ -558,7 +558,7 @@ async function writeTenantInterpreterIds(
   publicId: string,
   internalId: string,
 ): Promise<void> {
-  const db = openDb(env);
+  const db = await openDb(env);
   try {
     await db.execute(
       sql`UPDATE tenants
@@ -572,7 +572,7 @@ async function writeTenantInterpreterIds(
 }
 
 async function readProviderIds(
-  db: ReturnType<typeof openDb>,
+  db: Awaited<ReturnType<typeof openDb>>,
 ): Promise<{ github?: string; slack?: string }> {
   const result = await db.execute(
     sql`SELECT name, id FROM connect_providers WHERE name IN ('github', 'slack')`,
@@ -616,16 +616,15 @@ async function putSecret(
 // carry long-lived DB handles across assertions.
 // ---------------------------------------------------------------------------
 
-function openDb(env: HarnessEnv) {
+async function openDb(env: HarnessEnv) {
   const client = new PgClient({ connectionString: env.databaseUrl });
   const db = drizzle(client, { schema: {} as any });
   (db as any)._client = client;
-  // Connect lazily — pg requires an explicit connect() before queries.
-  void client.connect();
+  await client.connect();
   return db;
 }
 
-async function closeDb(db: ReturnType<typeof openDb>): Promise<void> {
+async function closeDb(db: Awaited<ReturnType<typeof openDb>>): Promise<void> {
   const client = (db as any)._client as PgClient;
   try {
     await client.end();
