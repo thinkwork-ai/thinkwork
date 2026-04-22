@@ -128,18 +128,36 @@ function AgentSkillsPage() {
     skillId: string;
     enabled: boolean;
     config?: any;
+    permissions?: any;
   }[];
 
   const refresh = useCallback(() => {
     reexecute({ requestPolicy: "network-only" });
   }, [reexecute]);
 
+  // R11 round-trip fix: thread `permissions` through every load + save
+  // touchpoint so saving an unrelated change (toggling enabled,
+  // editing config) doesn't drop the jsonb on the wire. Paired with
+  // the defensive `undefined` guard in setAgentSkills (Phase 2a) to
+  // make mobile's deferred SetAgentSkills fix safe in the meantime.
   const [items, setItems] = useState(
-    skills.map((s) => ({ skillId: s.skillId, enabled: s.enabled, config: s.config })),
+    skills.map((s) => ({
+      skillId: s.skillId,
+      enabled: s.enabled,
+      config: s.config,
+      permissions: s.permissions,
+    })),
   );
 
   useEffect(() => {
-    setItems(skills.map((s) => ({ skillId: s.skillId, enabled: s.enabled, config: s.config })));
+    setItems(
+      skills.map((s) => ({
+        skillId: s.skillId,
+        enabled: s.enabled,
+        config: s.config,
+        permissions: s.permissions,
+      })),
+    );
   }, [skills]);
 
   const normalizeForSave = (list: typeof items) =>
@@ -152,10 +170,24 @@ function AgentSkillsPage() {
           : s.config
             ? JSON.stringify(s.config)
             : undefined,
+      // AWSJSON round-trip — stringify on save, parse on load. Omit
+      // entirely when the row has no permissions so the resolver's
+      // defensive guard preserves the existing jsonb.
+      permissions:
+        s.permissions === null || s.permissions === undefined
+          ? undefined
+          : typeof s.permissions === "string"
+            ? s.permissions
+            : JSON.stringify(s.permissions),
     }));
 
   const handleSaveSkills = useCallback(
-    async (s: { skillId: string; enabled: boolean; config?: any }[]) => {
+    async (s: {
+      skillId: string;
+      enabled: boolean;
+      config?: any;
+      permissions?: any;
+    }[]) => {
       const res = await setSkillsMut({
         agentId,
         skills: s.map((sk) => ({
@@ -167,6 +199,12 @@ function AgentSkillsPage() {
               : sk.config
                 ? JSON.stringify(sk.config)
                 : undefined,
+          permissions:
+            sk.permissions === null || sk.permissions === undefined
+              ? undefined
+              : typeof sk.permissions === "string"
+                ? sk.permissions
+                : JSON.stringify(sk.permissions),
         })),
       });
       if (!res.error) refresh();
@@ -242,7 +280,12 @@ function AgentSkillsPage() {
       const initialConfig = meta_?.mcp_server
         ? JSON.stringify({ mcpServer: meta_.mcp_server, skillType: slug })
         : null;
-      const newItems = [...items, { skillId: slug, enabled: true, config: initialConfig }];
+      // Permissions intentionally omitted on add — agent starts inheriting
+      // from the template. The Phase 4 UI is where operators author an
+      // agent-level override; until then, null permissions means "use
+      // whatever the template has for this skill." Resolver's defensive
+      // guard in setAgentSkills preserves any existing jsonb on write.
+      const newItems = [...items, { skillId: slug, enabled: true, config: initialConfig, permissions: undefined }];
       setItems(newItems);
       await handleSaveSkills(normalizeForSave(newItems));
       setAddDialogOpen(false);

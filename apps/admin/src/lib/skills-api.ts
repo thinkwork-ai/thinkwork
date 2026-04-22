@@ -41,6 +41,18 @@ export type CatalogSkill = {
   mcp_tools?: string[];
   dependencies?: string[];
   triggers?: string[];
+  // Permissions UI (Unit 4 of agent-skill permissions plan). Present
+  // when the manifest declares `permissions_model: operations` AND the
+  // REST endpoint returns the full parsed YAML — specifically
+  // `getCatalogSkill(slug)`. The list endpoint `listCatalog()` omits
+  // these fields for payload size.
+  permissions_model?: "operations";
+  scripts?: Array<{
+    name: string;
+    path: string;
+    description?: string;
+    default_enabled?: boolean;
+  }>;
 };
 
 export type InstalledSkill = {
