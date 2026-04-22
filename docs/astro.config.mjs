@@ -43,7 +43,8 @@ export default defineConfig({
               items: [
                 { label: "Overview", slug: "concepts/agents" },
                 { label: "Managed Agents", slug: "concepts/agents/managed-agents" },
-                { label: "Templates and Skills", slug: "concepts/agents/templates-and-skills" },
+                { label: "Templates", slug: "concepts/agents/templates" },
+                { label: "Skills", slug: "concepts/agents/skills" },
               ],
             },
             {

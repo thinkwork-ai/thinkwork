@@ -43,7 +43,7 @@ Templates are the reuse layer for agent configuration. Rather than setting model
 
 When you update the template, every agent on it picks up the change on the next invocation. That's how ThinkWork handles fleet-wide model rotations, guardrail policy tightening, or budget cap changes: one write, many agents.
 
-See [Templates and Skills](/concepts/agents/templates-and-skills/) for the full reuse model.
+See [Templates](/concepts/agents/templates/) for the live-configuration layer and [Skills](/concepts/agents/skills/) for the reusable-capability layer.
 
 ## How a turn runs (managed path)
 
@@ -107,7 +107,8 @@ Agents don't own threads, memory, or connectors — they *use* them. Every conce
 ## Related pages
 
 - [Managed Agents](/concepts/agents/managed-agents/) — the AgentCore + Strands runtime in detail
-- [Templates and Skills](/concepts/agents/templates-and-skills/) — the reuse model for fleets
+- [Templates](/concepts/agents/templates/) — fleet-wide configuration (model, guardrail, budget, tool surface)
+- [Skills](/concepts/agents/skills/) — reusable capability packs the Agent Skills spec portably describes
 - [Admin: Agents](/applications/admin/agents/) — the operator surface for managing agents
 - [Admin: Agent Templates](/applications/admin/agent-templates/) — templates live here
 - [Admin: Agent Invites](/applications/admin/agent-invites/) — how to connect a BYOB runtime to ThinkWork

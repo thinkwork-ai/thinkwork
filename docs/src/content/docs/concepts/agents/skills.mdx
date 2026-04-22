@@ -1,0 +1,459 @@
+---
+title: Skills
+description: A skill pack is a self-contained bundle of tools, instructions, and assets an agent can load at invocation time. ThinkWork implements the open Agent Skills spec — a `SKILL.md` file plus optional directories, stored in S3, downloaded fresh on every invocation.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A skill pack is the other reuse layer for agents — the one orthogonal to templates. Where a template controls *how* an agent behaves (model, guardrail, budget, memory), a skill pack controls *what an agent can do* (tools, instructions, context). Several different templates — a support agent, a research agent, a sales-ops agent — might all share the same "CRM lookup" skill pack while differing wildly in everything else.
+
+ThinkWork implements the [**Agent Skills specification**](https://agentskills.io/specification), an open standard for portable, agent-readable skill definitions. A skill you write for ThinkWork is the same skill that runs on Claude Desktop, AWS AgentCore, or any other compliant runtime. That portability is a deliberate design choice, not an implementation detail.
+
+## The core idea
+
+A skill pack is a directory. The only required file is `SKILL.md` — a markdown document with YAML frontmatter that declares tools, instructions, and metadata. Optional supporting directories carry executable scripts, reference docs, and static assets. The whole pack is zipped, uploaded to your tenant's S3 skill catalog, and assigned to agents.
+
+At invocation time, AgentCore downloads every skill pack the agent has assigned, parses the `SKILL.md`, registers its tools into the Strands tool registry, and prepends its instructions to the agent's system prompt. The agent can now call the skill's tools for the rest of the turn.
+
+No redeploy. No cache to bust. Upload a new skill pack, assign it, and it's live on the next invocation.
+
+## When to reach for a skill pack
+
+Skill packs are the right tool when:
+
+- **A cluster of related tools belongs together.** A "CRM lookup" pack that exposes `crm.getAccount`, `crm.listContacts`, `crm.createTicket` with consistent error handling. Individual agents don't each re-implement CRM access.
+- **Domain instructions should travel with tools.** "When asked about billing, always cite the source document" lives in the pack so every agent using billing tools gets the instruction automatically.
+- **A capability bundle exists independent of any one agent.** "Support tier-1 responses" as a pack — CRM tools + response-tone instructions + escalation rules — attachable to any agent.
+- **You want the same behavior across tenants.** A skill pack is portable by the spec's design; the same `SKILL.md` runs on any compliant runtime.
+
+Skill packs are *not* the right tool when:
+
+- **You need per-user configuration.** Skill packs are per-agent, not per-user. OAuth tokens and per-user credentials live in SSM Parameter Store and mobile connect flows, not in skill packs.
+- **You need to store secrets.** `SKILL.md` is plaintext in S3. Don't put API keys there. Skills reference credentials by name; the runtime fetches them at invocation time.
+- **You want orchestration or branching logic.** A skill pack is a capability, not a workflow. Multi-step orchestration belongs in [Routines](/concepts/automations/routines-and-execution-model/).
+
+<Aside type="tip">
+  If you're authoring a skill pack, the fastest calibration question is: "does this work inside one turn?" If yes, it's a skill. If it needs multiple turns, human approvals, or scheduling, it's a routine.
+</Aside>
+
+## The `SKILL.md` format
+
+The minimum viable skill pack is a single `SKILL.md` file. Here's a small one:
+
+```markdown
+---
+name: slack-summarize
+version: 1.2.0
+description: Summarize a Slack channel or thread into bullet points.
+author: thinkwork-platform
+license: MIT
+triggers:
+  - "summarize a slack channel"
+  - "what happened in #ops"
+---
+
+# Slack Summarize
+
+You can summarize a Slack channel or thread into concise bullet points.
+
+When the user asks to summarize a Slack channel, use the `slack_fetch_messages` tool
+with appropriate time bounds (default: last 24 hours). Return a markdown-formatted
+summary of key threads and decisions.
+
+## Tools
+
+### slack_fetch_messages
+
+Fetch messages from a Slack channel.
+
+**Input:**
+- `channel_id` (string, required) — Slack channel ID
+- `since` (ISO 8601 datetime, optional) — earliest message time. Default: 24h ago.
+
+**Output:**
+- `messages` (array of objects) — each with `user`, `text`, `ts`, `thread_ts`.
+
+## Behavior
+
+- Group consecutive messages from the same user.
+- Flag any message starting with "⚠️" or "URGENT" as a highlight.
+- Keep the summary under 400 words unless the user asks for more detail.
+```
+
+That's a complete skill. Frontmatter declares identity and triggers. The markdown body provides instructions that get prepended to the agent's system prompt. Tool definitions (under `## Tools`) are parsed into structured tool registrations.
+
+### Frontmatter fields
+
+| Field | Required | Purpose |
+|---|---|---|
+| `name` | ✓ | Unique within a tenant. Kebab-case. |
+| `version` | ✓ | Semver. Used for catalog display and compatibility checks. |
+| `description` | ✓ | One-sentence summary shown in the admin catalog. |
+| `author` | — | Attribution; informational. |
+| `license` | — | Spdx identifier; informational. |
+| `triggers` | — | Natural-language phrases that hint when this skill is relevant. Used in catalog search, not in runtime routing. |
+| `requires` | — | Array of other skill pack names this pack depends on. |
+| `min_agent_skills_version` | — | Spec version compatibility. Defaults to `1.0`. |
+
+### Body sections
+
+The `SKILL.md` body is parsed into named sections:
+
+- **Introductory prose** — everything before the first `## Tools` heading. Gets injected into the agent's system prompt verbatim.
+- **`## Tools`** — tool definitions. Each `### <tool-name>` subsection defines one tool with input/output schema.
+- **`## Behavior`** — additional instructions. Also injected into the system prompt.
+- **`## Examples`** — few-shot examples. Optionally included in the system prompt, truncated by token budget.
+
+The spec is lenient about section order — the runtime parses what's there and skips what isn't.
+
+## The full directory structure
+
+For anything beyond the minimal one-file skill, the Agent Skills spec defines a richer layout:
+
+```
+my-skill/
+├── SKILL.md          ← required
+├── scripts/          ← optional: executable code the skill can invoke
+│   ├── summarize.py
+│   └── parse-slack.py
+├── references/       ← optional: additional documentation for the agent
+│   ├── tone-guidelines.md
+│   └── escalation-matrix.md
+├── assets/           ← optional: templates, data files
+│   ├── response-template.md
+│   └── company-facts.json
+└── skill.yaml        ← optional: ThinkWork catalog metadata (see below)
+```
+
+- **`scripts/`** holds code that the skill's tools can execute. When a tool is a script-call (marked `type: script` in the tool definition), the runtime invokes the script with the tool's arguments and pipes stdout back as the tool output.
+- **`references/`** holds supplementary markdown files that the agent can read at runtime via the built-in `skill_read_reference` tool. Useful for long guidance that would bloat the system prompt if always included.
+- **`assets/`** holds static files — templates, fixture data, configuration. The agent can read these via `skill_read_asset`.
+- **`skill.yaml`** is a ThinkWork-specific extension (outside the spec) that carries catalog metadata: display name, icon, category, whether the skill is catalog-featured.
+
+The `SKILL.md` is the only file the spec *requires* — everything else is additive.
+
+## Tool definitions
+
+Tools are defined as `### <tool-name>` subsections under `## Tools`:
+
+```markdown
+### calendar_list_events
+
+Return upcoming events in the user's primary calendar.
+
+**Input:**
+- `start` (ISO 8601 date, optional) — range start. Default: today.
+- `end` (ISO 8601 date, optional) — range end. Default: 7 days from start.
+- `limit` (integer, optional) — max events. Default: 20.
+
+**Output:**
+- `events` (array of objects): `{ id, title, start, end, attendees }`
+
+**Errors:**
+- `CALENDAR_NOT_AUTHORIZED` — user hasn't connected their calendar.
+- `RATE_LIMITED` — too many requests; retry after a minute.
+
+**Implementation:** script (`scripts/calendar.py`)
+```
+
+The parser extracts:
+
+- **Name** — `calendar_list_events`
+- **Description** — the first line after the heading
+- **Input schema** — parsed from the `**Input:**` list
+- **Output schema** — parsed from the `**Output:**` list
+- **Error codes** — parsed from `**Errors:**`
+- **Implementation** — either `script` (invokes a local script), `http` (HTTP call to a URL defined in frontmatter), or `mcp` (calls through an MCP server reference). Defaults vary by skill.
+
+Tools are registered in the Strands tool registry at invocation time with this shape. Strands handles the model-facing JSON Schema generation automatically.
+
+## The invocation-time lifecycle
+
+What actually happens on every turn for an agent with skill packs assigned:
+
+```
+1. AgentCore Lambda starts a turn
+         │
+         ▼
+2. Read agent → agent.skill_pack_ids = [sp-crm, sp-tone, sp-billing]
+         │
+         ▼
+3. For each skill pack id, in parallel:
+    a. S3 GET s3://thinkwork-<stage>-skill-catalog/skills/<pack-id>/SKILL.md
+    b. Parse frontmatter + body
+    c. Register tools into Strands tool registry
+    d. Accumulate instructions for the system prompt
+         │
+         ▼
+4. Compose final system prompt:
+    [template.default_system_prompt]
+    + [agent.system_prompt]
+    + [pack1 instructions] + [pack2 instructions] + ...
+         │
+         ▼
+5. Invoke Bedrock with tools + prompt
+         │
+         ▼
+6. Agent calls tools as needed; tool handlers read asset/reference files
+   from S3 on demand
+         │
+         ▼
+7. Turn completes; skill packs are discarded (no cross-turn state)
+```
+
+Skill packs carry no per-invocation state. Every turn is a fresh load. That's what makes hot-swapping a pack safe — upload a new version, every subsequent turn picks it up.
+
+### Caching
+
+The `SKILL.md` parse is cached in Lambda memory for the duration of the execution context (a warm container). Cold starts reparse; warm invocations reuse. Cache TTL is the Lambda's own lifecycle — there's no explicit expiration. Updating a skill pack is effectively eventually-consistent: the next cold start on each concurrent Lambda picks up the update, and warm Lambdas pick it up on their next cold start (usually within minutes).
+
+For urgent skill updates, the admin app offers a "Force Refresh" that sends a dummy invocation to cold-start every concurrent Lambda, guaranteeing the new pack is live within seconds.
+
+## Uploading and cataloging
+
+Skill packs are stored in an S3 bucket per tenant:
+
+```
+s3://thinkwork-<stage>-skill-catalog/
+  └── skills/
+      └── catalog/
+          ├── sp-crm-lookup/
+          │   ├── SKILL.md
+          │   ├── scripts/
+          │   ├── references/
+          │   └── skill.yaml
+          ├── sp-support-tone/
+          └── sp-billing-responses/
+```
+
+Three ways to get a skill into the catalog:
+
+1. **Upload via the admin app.** Skills Catalog surface → Upload → drag-and-drop the directory. The admin backend validates the pack (see [Validation](#validation) below) and uploads to S3.
+2. **Upload via the CLI.** `thinkwork skills upload ./my-skill/` does the same thing; useful for CI pipelines.
+3. **Install from a public catalog.** The Agent Skills spec defines a registry format; ThinkWork can fetch-and-install skills from any URL that serves the registry format. Useful for sharing skills across teams.
+
+### Validation
+
+On upload, the admin backend runs `packages/api/src/lib/skills/validator.ts`:
+
+- **Spec compliance.** Does the `SKILL.md` parse? Do tools have well-formed schemas? Is the frontmatter complete?
+- **Security.** Are any file paths escaping the pack directory (`../../etc/passwd`)? Are any scripts trying to exec outside their sandbox?
+- **Size limits.** Total pack ≤ 50 MB. Individual files ≤ 5 MB.
+- **Name collisions.** Is there already a pack with this `name`? Upload as a new version, not an overwrite.
+
+Rejected uploads show specific errors in the admin UI. The tenant's S3 bucket is never touched for a failed validation.
+
+## Versioning
+
+Skill versioning follows the Agent Skills spec: semver in the frontmatter, plus S3 versioning on the underlying bucket.
+
+Uploading `sp-crm-lookup@1.3.0` over an existing `sp-crm-lookup@1.2.0`:
+
+- The S3 bucket has versioning enabled, so the old version is still retrievable.
+- The catalog updates `sp-crm-lookup` to point at 1.3.0.
+- Agents currently using `sp-crm-lookup` get 1.3.0 on their next invocation.
+
+If you need to pin an agent to a specific skill version, the current pattern is to upload the version under a distinct name (`sp-crm-lookup-v1-2-0`) and assign that. Inline version pinning is on the roadmap.
+
+### Rollback
+
+Roll back by re-uploading the previous version:
+
+```bash
+thinkwork skills rollback sp-crm-lookup --to 1.2.0
+```
+
+The CLI fetches the old version from S3 versioning, bumps its frontmatter to a higher semver (`1.3.1` superseding the bad `1.3.0`), and re-uploads. Every agent on the next turn picks up the rollback.
+
+## Assigning skills to agents
+
+Assignment is a simple foreign-key-style relationship:
+
+```
+agents.skill_pack_ids = [uuid_a, uuid_b, uuid_c]  -- Postgres uuid[] column
+```
+
+Three ways to assign:
+
+1. **Via template defaults.** A new agent created from a template inherits the template's `default_skill_pack_ids`.
+2. **Via admin UI.** Agent detail → Skills tab → add/remove.
+3. **Via GraphQL.** `updateAgent(id, { skillPackIds: [...] })`.
+
+A single agent can have any number of skill packs. They combine additively — all tools from all packs are in the runtime registry, all instructions from all packs are in the system prompt.
+
+### Conflicts between packs
+
+If two packs define a tool with the same name, the one loaded last wins. The load order is the order of `agent.skill_pack_ids`, which the admin UI preserves. This is worth knowing for pack authors: if your pack exposes a generic tool name like `search`, assume another pack might too, and consider namespacing (`myservice_search`).
+
+Instruction conflicts — pack A says "always respond in bullets," pack B says "always respond in prose" — are resolved by the model, not the runtime. Contradictory instructions produce unpredictable behavior. Authoring discipline is to keep pack instructions scoped and non-conflicting.
+
+## Testing skills locally
+
+During authoring, skills can be exercised locally without uploading to the tenant's S3 catalog:
+
+```bash
+thinkwork skills test ./my-skill --prompt "summarize #ops from yesterday"
+```
+
+The CLI loads the pack from the local directory, spins up a local Strands runtime pointing at your deployed Bedrock endpoint, and runs the prompt through the skill. Output includes every tool call attempted, the arguments the model passed, and the final response.
+
+For unit testing specific tools:
+
+```bash
+thinkwork skills test-tool ./my-skill slack_fetch_messages \
+  --input '{"channel_id": "C123", "since": "2026-04-20T00:00:00Z"}'
+```
+
+This bypasses the model entirely and just invokes the tool with your fixture input, showing the output. Useful for CI.
+
+## Known limits
+
+- **No per-agent skill version pinning.** An agent always gets the latest version of each assigned pack. Pinning via distinct pack names is the current workaround.
+- **Instruction bloat.** Every assigned pack's instructions land in the system prompt. Ten packs of 500-word instructions = 5,000 extra tokens per turn. Watch the context budget.
+- **No secrets injection.** Skill packs can reference credential names, but the actual token fetch is runtime. Credentials live in SSM Parameter Store; the runtime resolves them at tool-call time.
+- **Script execution is sandboxed.** Scripts run in a restricted Python subprocess with no network access and a filesystem limited to the pack's own directory. Scripts needing network access should be rewritten as HTTP tools.
+- **Large references slow cold starts.** A pack with 50 MB of reference files causes a noticeable cold-start penalty even though references are fetched on-demand — the metadata scan at startup touches every file. Keep packs lean.
+- **Cross-tenant skill sharing isn't built-in.** Exporting a pack from tenant A and importing into tenant B works (upload the same directory) but there's no "shared across tenants" primitive.
+
+## Related pages
+
+- [Concepts: Agents](/concepts/agents/) — where agents sit relative to skills
+- [Concepts: Templates](/concepts/agents/templates/) — the other reuse layer; model/guardrail/budget
+- [Concepts: Managed Agents](/concepts/agents/managed-agents/) — the runtime that loads skills at invocation time
+- [Admin: Skills Catalog](/applications/admin/skills-catalog/) — the operator surface for browsing, installing, uploading
+- [Authoring Guide: Skill Packs](/guides/skill-packs/) — end-to-end walkthrough of writing a skill
+- [Agent Skills specification](https://agentskills.io/specification) — the open spec
+
+## Under the hood
+
+### Storage layout
+
+```
+s3://thinkwork-<stage>-skill-catalog/
+  └── skills/
+      └── catalog/
+          └── <pack-id>/
+              ├── SKILL.md
+              ├── skill.yaml         (ThinkWork catalog metadata)
+              ├── scripts/
+              ├── references/
+              └── assets/
+```
+
+Every pack is a flat directory under `skills/catalog/`. The pack id (a uuid) is the directory name. The original pack name lives in `SKILL.md` frontmatter.
+
+Bucket configuration:
+
+- **Versioning:** enabled. Every upload creates a new version; rollback reads an old version.
+- **Lifecycle:** non-current versions transition to S3 Glacier after 180 days.
+- **Encryption:** SSE-S3 with a tenant-scoped KMS key.
+- **IAM:** AgentCore Lambda role has `s3:GetObject` only for the tenant's own skill catalog prefix. Uploads go through the admin API, which has `s3:PutObject` via a separate role.
+
+### Catalog metadata
+
+```sql
+CREATE TABLE skill_packs (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id         uuid NOT NULL,
+  name              text NOT NULL,
+  version           text NOT NULL,
+  description       text,
+  category          text,
+  s3_prefix         text NOT NULL,        -- skills/catalog/<pack-id>/
+  s3_version_id     text,                 -- S3 version id of SKILL.md at upload time
+  tool_count        int NOT NULL DEFAULT 0,
+  tool_names        text[] NOT NULL DEFAULT '{}',
+  total_size_bytes  bigint NOT NULL DEFAULT 0,
+  uploaded_by       uuid REFERENCES users(id),
+  uploaded_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at        timestamptz NOT NULL DEFAULT now(),
+
+  UNIQUE (tenant_id, name, version)
+);
+
+CREATE INDEX idx_skill_packs_tenant ON skill_packs (tenant_id, name);
+```
+
+The DB row is a cache of `SKILL.md` metadata for fast catalog queries. The canonical source is still the S3 object; the DB row updates on upload and when the admin manually triggers a re-scan.
+
+### Invocation-time loading
+
+```python
+# apps/agent-core/src/tools/skills.py
+async def load_skills_for_turn(agent_id: str, tenant_id: str) -> list[SkillPack]:
+    agent = await db.agents.get(agent_id)
+    pack_ids = agent.skill_pack_ids
+    packs = await asyncio.gather(*[
+        load_pack(tenant_id, pack_id) for pack_id in pack_ids
+    ])
+    return packs
+
+async def load_pack(tenant_id: str, pack_id: str) -> SkillPack:
+    if (tenant_id, pack_id) in _cache:
+        return _cache[(tenant_id, pack_id)]
+
+    key = f"skills/catalog/{pack_id}/SKILL.md"
+    body = await s3.get_object(Bucket=f"thinkwork-{stage}-skill-catalog", Key=key)
+    parsed = parse_skill_md(body)
+    _cache[(tenant_id, pack_id)] = parsed
+    return parsed
+```
+
+`_cache` is module-level and survives within a warm Lambda execution context. Cold starts rebuild it.
+
+### Strands registration
+
+After loading, tools are registered with Strands:
+
+```python
+for pack in packs:
+    for tool in pack.tools:
+        strands_agent.register_tool(
+            name=tool.name,
+            description=tool.description,
+            input_schema=tool.input_schema,
+            handler=build_tool_handler(tool, pack),
+        )
+
+combined_system_prompt = (
+    template.default_system_prompt
+    + "\n\n"
+    + agent.system_prompt
+    + "\n\n"
+    + "\n\n".join(pack.instructions for pack in packs)
+)
+
+strands_agent.system_prompt = combined_system_prompt
+```
+
+The handler closure wraps the tool definition with the correct execution path — script, HTTP, or MCP — and handles error mapping.
+
+### Validation pipeline
+
+```ts
+// packages/api/src/lib/skills/validator.ts
+export function validateSkillPack(files: PackFiles): ValidationResult {
+  const skillMd = files.get('SKILL.md');
+  if (!skillMd) return fail('SKILL.md is required');
+
+  const parsed = parseSkillMd(skillMd);
+  if (!parsed.frontmatter.name) return fail('name is required in frontmatter');
+  if (!semver.valid(parsed.frontmatter.version)) return fail('version must be semver');
+
+  for (const file of files.values()) {
+    if (file.path.includes('..')) return fail(`path traversal in ${file.path}`);
+    if (file.size > 5 * 1024 * 1024) return fail(`${file.path} exceeds 5MB limit`);
+  }
+
+  const totalSize = Array.from(files.values()).reduce((s, f) => s + f.size, 0);
+  if (totalSize > 50 * 1024 * 1024) return fail('pack exceeds 50MB total size');
+
+  return { ok: true, parsed, totalSize };
+}
+```
+
+### Spec compliance
+
+ThinkWork tracks Agent Skills spec version in `SKILL.md` frontmatter (`min_agent_skills_version`). The runtime supports spec versions 1.0 and above; packs declaring a higher minimum than the runtime supports are rejected at upload time with a clear error.
+
+This is the compatibility seam that lets the spec evolve without breaking existing packs.
