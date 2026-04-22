@@ -13,6 +13,8 @@ import {
   and,
 } from "../../utils.js";
 import { requireTenantAdmin } from "./authz.js";
+import { resolveCallerUserId } from "./resolve-auth-user.js";
+import { runWithIdempotency } from "../../../lib/idempotency.js";
 
 const cognito = new CognitoIdentityProviderClient({});
 const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID || "";
@@ -23,12 +25,39 @@ export const inviteMember = async (
   ctx: GraphQLContext,
 ) => {
   const { tenantId } = args;
-  const { email, name, role } = args.input;
 
   // Gate BEFORE any Cognito write. If authz fails, no Cognito user is
   // created — otherwise a member could spam-create Cognito accounts by
   // calling this with arbitrary tenantIds.
   await requireTenantAdmin(ctx, tenantId);
+
+  const invokerUserId =
+    ctx.auth.authType === "apikey"
+      ? ctx.auth.principalId
+      : await resolveCallerUserId(ctx);
+
+  // Idempotency matters A LOT here — inviteMember's Cognito
+  // AdminCreateUser call sends an email to the invitee with a temp
+  // password. A retry without the cache would spam the invitee.
+  // Existing-user handling inside the core (line 54-71 below) already
+  // protects against duplicate Cognito sub creation; runWithIdempotency
+  // protects against duplicate email sends + duplicate tenant_members
+  // rows on retry.
+  return runWithIdempotency({
+    tenantId,
+    invokerUserId,
+    mutationName: "inviteMember",
+    inputs: args.input,
+    clientKey: args.input?.idempotencyKey ?? null,
+    fn: () => inviteMemberCore(tenantId, args.input),
+  });
+};
+
+async function inviteMemberCore(
+  tenantId: string,
+  input: { email: string; name?: string; role?: string },
+) {
+  const { email, name, role } = input;
 
   // 1. Create the Cognito user (sends temp password email)
   let cognitoSub: string;
@@ -111,4 +140,4 @@ export const inviteMember = async (
     .returning();
 
   return snakeToCamel(row);
-};
+}
