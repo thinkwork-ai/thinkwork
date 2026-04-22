@@ -7,6 +7,26 @@ type Tenant {
   plan: String!
   issuePrefix: String
   issueCounter: Int!
+  """
+  Sandbox kill switch. When false, the dispatcher does not register the
+  execute_code tool regardless of template opt-in. Default-true for new
+  tenants; the migration that added this column flipped every pre-existing
+  tenant to false so Phase 3b enforcement lands before the sandbox runs.
+  """
+  sandboxEnabled: Boolean!
+  """
+  Compliance classification: "standard" | "regulated" | "hipaa". Only
+  standard tenants may enable the sandbox; a compound CHECK on the tenants
+  table enforces this at the schema layer.
+  """
+  complianceTier: String!
+  """
+  Per-tenant AgentCore Code Interpreter IDs, populated asynchronously by
+  the agentcore-admin Lambda (plan Unit 5). Null during the provisioning
+  window.
+  """
+  sandboxInterpreterPublicId: String
+  sandboxInterpreterInternalId: String
   settings: TenantSettings
   members: [TenantMember!]!
   agents: [Agent!]!
@@ -124,6 +144,20 @@ input UpdateTenantSettingsInput {
   features: AWSJSON
 }
 
+"""
+Platform-operator-only input for sandbox + compliance-tier policy changes
+(plan Unit 6). Separate from UpdateTenantInput because these fields shift
+the tenant's security boundary and are audited in tenant_policy_events.
+Caller must be in the THINKWORK_PLATFORM_OPERATOR_EMAILS allowlist on the
+graphql-http Lambda.
+"""
+input UpdateTenantPolicyInput {
+  "Sandbox kill switch. Setting true while complianceTier != 'standard' is rejected."
+  sandboxEnabled: Boolean
+  "Compliance tier: 'standard' | 'regulated' | 'hipaa'. Non-standard coerces sandboxEnabled = false."
+  complianceTier: String
+}
+
 input AddTenantMemberInput {
   principalType: String!
   principalId: ID!
@@ -209,6 +243,12 @@ extend type Mutation {
   bootstrapUser: BootstrapResult!
   createTenant(input: CreateTenantInput!): Tenant!
   updateTenant(id: ID!, input: UpdateTenantInput!): Tenant!
+  """
+  Platform-operator-only mutation — see UpdateTenantPolicyInput. Changes
+  are audited in tenant_policy_events and must satisfy the compound
+  sandbox_requires_standard_tier CHECK on the tenants table.
+  """
+  updateTenantPolicy(tenantId: ID!, input: UpdateTenantPolicyInput!): Tenant!
   updateTenantSettings(
     tenantId: ID!
     input: UpdateTenantSettingsInput!
