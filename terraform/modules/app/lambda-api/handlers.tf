@@ -148,6 +148,11 @@ resource "aws_lambda_function" "handler" {
     "bootstrap-workspaces",
     "code-factory",
     "eval-runner",
+    # AgentCore Code Sandbox narrow REST endpoints (plan Unit 10 + Unit 11).
+    # Both are service-endpoint shape: the Strands container POSTs with
+    # Bearer API_AUTH_SECRET. No GraphQL resolver involvement, no extra IAM.
+    "sandbox-quota-check",
+    "sandbox-invocation-log",
   ]) : toset([])
 
   function_name = "thinkwork-${var.stage}-api-${each.key}"
@@ -294,6 +299,12 @@ locals {
     # GitHub App
     "ANY /api/github-app/{proxy+}" = "github-app"
     "POST /api/github/webhook"     = "github-app"
+
+    # AgentCore Code Sandbox (plan Unit 10 + Unit 11). Strands container
+    # calls both with Bearer API_AUTH_SECRET before + after every
+    # executeCode. 429 on quota denial, 201 on audit-row insert.
+    "POST /api/sandbox/quota/check-and-increment" = "sandbox-quota-check"
+    "POST /api/sandbox/invocations"               = "sandbox-invocation-log"
   } : {}
 }
 
