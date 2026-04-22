@@ -1,48 +1,108 @@
 ---
 title: Budgets, Usage, and Audit
-description: Spend controls, turn-level usage tracking, and audit logging for ThinkWork deployments.
+description: Per-turn cost capture via OTel spans, tenant budget enforcement that pauses agents when thresholds hit, and the append-only audit log that makes incident reconstruction possible.
 ---
 
-Budgets, usage tracking, and audit logs are the operational side of control in ThinkWork.
+import { Aside } from '@astrojs/starlight/components';
 
-## Budgets
+The second half of Control is about knowing what happened and bounding how much it cost. Three intertwined concerns:
 
-Budgets let you cap spending at the agent, tenant, or automation level. When a budget is exceeded, ThinkWork can alert or suspend work depending on configuration.
+- **Usage tracking** — per-turn cost, broken down by input tokens, output tokens, and tool call overhead.
+- **Budgets** — tenant and per-agent spend limits that actually *suspend* agents when hit, not just warn.
+- **Audit** — the durable, append-only record of every invocation that makes "what did the agent see, decide, and do?" answerable months later.
 
-## Usage tracking
+They share one spine: every turn has an id, and every cost record, budget check, and audit entry references that same id.
 
-ThinkWork tracks usage at the turn level, including:
+## How per-turn cost is captured
 
-- input and output tokens
-- estimated cost
-- model used
-- duration
-- tool activity
+AgentCore instruments every turn with OpenTelemetry spans. When a turn runs:
 
-That makes it possible to understand both spend and behavior.
+1. A root span opens when the invocation starts.
+2. Child spans wrap each model call (`converse`), each tool call, and each memory operation.
+3. Every model-call span records `input_tokens`, `output_tokens`, and the model id.
+4. Every tool-call span records the tool name, arguments size, and execution latency.
+5. The root span closes when the turn finishes; the full span tree is emitted to CloudWatch.
 
-## Auditability
+A cost reducer — running async off the span stream — converts each span into a dollar figure using per-model, per-region pricing tables, and writes a `thread_turn_costs` row for the turn. The row includes the breakdown (`model_cost_usd`, `tool_cost_usd`, `total_cost_usd`) plus the span ids so a spot-check can walk back to the raw OTel data.
 
-Agent invocations are also written to an audit log in S3 in your AWS account.
+The admin app's analytics surface reads from this table and caches results in the `useCostStore` — a Zustand store that the dashboard and analytics pages share so neither re-fetches cost data on navigation.
 
-This gives operators a durable record for:
+<Aside type="tip">
+  Per-turn cost is the granularity that matters for debugging a runaway agent. "Agent X spent $50 today" isn't actionable; "turn `T-01HQ...` spent $12 because it looped 40 tool calls" is. The turn-detail view surfaces this breakdown inline.
+</Aside>
 
-- debugging
-- compliance review
-- incident investigation
-- cost analysis
+## Budget enforcement
 
-## Why this matters
+Budgets are configured per agent template (fleet-wide cap) and per tenant (global cap):
 
-Control is not just about blocking bad output. It is also about being able to answer practical questions later, like:
+- **Per-template** — "agents on this template can spend at most $50 per agent per month."
+- **Per-tenant** — "this tenant's total spend across all agents can't exceed $5,000 per month."
 
-- what happened
-- what it cost
-- which agent did it
-- which policy or budget boundary fired
+Enforcement runs on a schedule, not at turn-start time. An EventBridge rule fires a budget reconciler Lambda every 15 minutes. The reconciler:
+
+1. Computes month-to-date spend per agent and per tenant from `thread_turn_costs`.
+2. Compares against the configured caps.
+3. Transitions any agent over its per-template cap to `PAUSED` status.
+4. Transitions every agent in a tenant that's over its tenant cap to `PAUSED`.
+5. Writes a `budget_enforced` audit record for each pause.
+
+Why reconciliation instead of turn-time blocking: the cost of every turn is known at span-close time, not span-open time, and ThinkWork doesn't want to pre-emptively reserve budget (which is a different and uglier problem). The 15-minute reconciler is the explicit tradeoff — budgets are enforced eventually, not instantaneously, with the expectation that the cap is set with some headroom.
+
+Unpausing is an operator action (admin app → agent detail → Resume) or an automatic reset at the start of the next billing period.
+
+## The audit log
+
+Every state-changing operation in ThinkWork emits an NDJSON record to an append-only S3 bucket. The records cover:
+
+- Agent turn invocations (full context assembled, full response generated, tool calls issued, memory reads performed).
+- Guardrail activations (which filter fired, what action was taken).
+- Tenant configuration changes (template edits, agent creation, connector updates).
+- Admin user actions (who approved which inbox item, who paused which agent).
+- Budget enforcement events.
+
+The bucket partitioning is `tenant_id/YYYY-MM-DD/` so a compliance query for one tenant's March activity is a single S3 `Select` over one prefix. The bucket has no `DeleteObject` permission on the Lambda role that writes — records are cryptographically immutable at the IAM level.
+
+Retention is handled via S3 Lifecycle: audit records transition to S3 Glacier after 90 days (configurable per deployment) and purge after the tenant's configured retention window (default: never, but many tenants configure 7 years for compliance).
+
+### Incident reconstruction
+
+When a question arrives about a specific turn — "why did this agent say that on April 2nd?" — the reconstruction path is:
+
+1. Find the `threadId` and approximate timestamp.
+2. `aws s3 select` over the audit prefix for the tenant + date.
+3. Filter to records matching the `threadId`.
+4. Read the turn record — it contains the full context that was assembled (thread history, retrieved documents, recalled memories, tool config), the full model response, every tool call with input + output, and every guardrail evaluation.
+
+You don't need the live database. You don't need the agent to still exist. You don't need the memory engine to still be running. The audit record is self-contained.
+
+## What "audit" doesn't cover
+
+Worth being honest about:
+
+- **Read operations are not audited.** Listing threads, viewing a dashboard, or reading a wiki page doesn't write to the audit log. Only state-changing operations do.
+- **Bedrock's own logs.** AWS CloudTrail records every Bedrock API call separately. ThinkWork's audit log records the *ThinkWork-level* invocation, not the raw Bedrock API call.
+- **Model prompts verbatim aren't stored forever by default.** The audit record stores the *assembled context* — the structured pieces of it — not every token of the final rendered prompt. This is a tradeoff: full prompt text would ~double the audit volume. The assembled context is enough for reconstruction in almost all cases; if full prompts are needed for compliance, there's a deployment flag to enable verbose prompt capture.
+
+## Known limits
+
+- **Budget enforcement is eventually-consistent (15 min).** A misbehaving agent can exceed its cap by a meaningful amount before the reconciler catches it. Set caps with headroom.
+- **No per-user budgets.** Budgets are per-template and per-tenant. A runaway end user hammering one agent will eat the whole tenant's budget if the template cap is higher than the single-user expected load.
+- **No budget alerts pre-enforcement.** The reconciler pauses agents; it doesn't warn operators at 80%. A Slack/email notification path is a planned follow-up.
+- **Cost numbers are estimates.** Per-turn cost uses published Bedrock pricing, which doesn't account for cross-region overages, on-demand vs. provisioned throughput, or reserved capacity. The numbers are directionally correct for budgeting; the canonical cost record is the AWS bill.
 
 ## Related pages
 
-- [Control Overview](/concepts/control/)
-- [Guardrails](/concepts/control/guardrails/)
-- [Architecture](/architecture/)
+- [Control (overview)](/concepts/control/) — where this fits
+- [Guardrails](/concepts/control/guardrails/) — the other half of Control
+- [Admin: Analytics](/applications/admin/analytics/) — the operator view of tenant and per-agent spend
+- [Admin: Security Center](/applications/admin/security-center/) — guardrail events and incident review
+- [Architecture](/architecture/) — where audit storage lives in the deployment
+
+## Under the hood
+
+- **Cost capture.** `apps/agent-core/src/otel.py` instruments every turn; the CloudWatch log group emits spans to a cost reducer Lambda in `packages/api/src/lib/billing/cost-reducer.ts`.
+- **Cost storage.** `thread_turn_costs` table in Aurora — one row per turn, foreign-keyed to `thread_turns`. Index on `(tenant_id, created_at)` for the common month-to-date query.
+- **Budget reconciler.** `packages/api/src/handlers/budget-reconciler.ts`. EventBridge rule `budget-reconciler-15min`, runs every 15 minutes per stage.
+- **Pause mechanism.** Reconciler issues `updateAgent` mutation with `status = 'PAUSED'`; admin app and mobile surfaces reflect this immediately via `OnAgentStatusChangedSubscription`.
+- **Audit bucket.** `s3://thinkwork-<stage>-audit/` with `s3:DeleteObject` denied on the Lambda role in IAM. Lifecycle policy is configured in Terraform per deployment.
+- **NDJSON record format.** `packages/api/src/lib/audit/record.ts` defines the schema; `thinkwork audit replay` in the CLI reads the bucket and re-plays records into a local SQLite DB for analysis.

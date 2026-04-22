@@ -1,46 +1,118 @@
 ---
 title: Scheduled and Event-driven
-description: "The two main automation entry points in ThinkWork: schedules and triggers."
+description: Two entry points into ThinkWork automations — cron-like schedules via AWS Scheduler and event triggers via EventBridge — plus the provisioning chain that turns a user-defined schedule into live infrastructure.
 ---
 
-Scheduled and event-driven automations are the main ways ThinkWork starts agent work without a person sending a message.
+import { Aside } from '@astrojs/starlight/components';
 
-## Scheduled automations
+Automations start from one of two entry points: a schedule fires at a predetermined time, or an event arrives and triggers a run. Both end up in the same Step Functions state machine and the same `AUTO-` thread. The difference is all at the front.
 
-A scheduled automation runs on an EventBridge schedule expression. It creates an `AUTO-` thread, invokes the configured agent, and records the full run in that thread.
+## The two entry points
 
-Common use cases:
+### Scheduled
 
-- daily digests
-- weekly summaries
-- periodic sync jobs
-- recurring health checks
+A schedule fires on a cron- or rate-like cadence: "every weekday at 9am," "every 30 minutes," "at 00:00 on the first of the month." Scheduling in ThinkWork is backed by **AWS Scheduler** (the newer service that replaced most EventBridge Scheduled Rules), because Scheduler gives you one-shot schedules, timezone support, dead-letter handling, and a cleaner primitives model than EventBridge rules.
 
-ThinkWork uses AWS EventBridge cron or rate expressions for these schedules.
+Every schedule in ThinkWork has:
 
-## Event-driven automations
+- A **cron or rate expression.**
+- A **target** — which agent to invoke, with which prompt, against which thread scope.
+- A **start and optional end window.**
+- A **tenant + owner scope** — schedules are tenant-scoped, and usually per-agent.
 
-An event-driven automation starts when a matching event occurs.
+Schedules are created and managed in the admin app (Scheduled Jobs surface) or via the GraphQL `createScheduledJob` mutation.
 
-Examples documented in the open source app include:
+### Event-driven
 
-- a new thread is created
-- a thread status changes
-- a connector event arrives
-- a custom webhook triggers the automation
+An event-driven automation fires when something external happens: a webhook arrives, a connector event lands, an external task changes state, a KPI crosses a threshold. Event-driven automations in ThinkWork route through **EventBridge** (the custom event bus, not scheduled rules). A triggering event carries a `detail-type`, `source`, and `detail` payload; ThinkWork's event trigger rules match on those fields.
 
-This is useful when work should happen because something changed, not because a clock ticked.
+Event-driven triggers in ThinkWork can be configured for:
 
-## Shared model
+- Connector events (`GitHub: new issue`, `Slack: app mention in #ops`).
+- External task events (`LastMile: task assigned to me`).
+- Internal events (agent completed a turn of a specific type; a guardrail fired; a budget was hit).
+- Webhook events (custom external webhook routed into the event bus).
 
-Both automation types still use the same underlying building blocks:
+## The provisioning chain
 
-- an automation definition
-- an `AUTO-` thread for each run
-- AgentCore invocation
-- Step Functions execution and status tracking
+The non-obvious part is what happens between "user created a schedule in the admin app" and "a schedule actually fires." There's a provisioning chain:
+
+```
+User creates schedule (admin app)
+        │  GraphQL: createScheduledJob
+        ▼
+scheduled_jobs row inserted in Aurora
+        │
+        ▼
+job-schedule-manager Lambda invoked
+        │  (reads scheduled_jobs, calls AWS Scheduler API)
+        ▼
+AWS Scheduler: CreateSchedule (or UpdateSchedule)
+        │
+        ▼
+When the schedule fires:
+AWS Scheduler → job-trigger Lambda
+        │  (resolves the job row, starts the Step Functions run)
+        ▼
+Step Functions state machine → AgentCore invocation → AUTO- thread
+```
+
+The chain exists because schedules are first-class ThinkWork records (`scheduled_jobs` in Aurora), not bare AWS Scheduler entries. The manager Lambda is what keeps the two in sync — if you update a schedule in the admin app, the manager reconciles the change to AWS Scheduler; if you delete a schedule, it removes the Scheduler entry.
+
+This indirection matters:
+
+- **You can query, audit, and enforce policy on the Aurora records.** Direct AWS Scheduler entries would be opaque to tenant-scoped GraphQL.
+- **Cross-tenant bulk operations are possible.** Operators can disable every schedule for a tenant by updating one column; the manager picks up the change.
+- **Schedule history is durable.** Aurora keeps the row even after a schedule is deleted, so audit queries like "what did we have scheduled last March?" are answerable.
+
+## A scheduling pitfall worth knowing
+
+If you're authoring schedules, know this: `rate()` expressions in AWS Scheduler are **not wall-clock**. A `rate(1 day)` schedule fires 24 hours after its creation timestamp, not at midnight. If you want "every day at 00:00 UTC," use a `cron()` expression.
+
+This bites people who create a schedule expecting a tidy daily run and discover their "daily digest" is firing at 3:47pm because that's when the schedule was provisioned. The manager Lambda does not normalize this — if you ask for `rate(1 day)`, you get `rate(1 day)` exactly as AWS Scheduler implements it.
+
+The admin app Scheduled Jobs form steers authors toward `cron()` expressions for this reason.
+
+## Debugging a schedule that didn't fire
+
+When a scheduled automation doesn't run, work the chain:
+
+1. **Did AWS Scheduler attempt to fire?** Check the Scheduler's history in the AWS console. A dead-letter entry tells you the target invocation failed.
+2. **Did `job-trigger` receive the invocation?** CloudWatch logs for the Lambda show entry/exit.
+3. **Did it find the `scheduled_jobs` row?** If the Aurora row was deleted but the Scheduler entry wasn't reconciled, the trigger Lambda will log "no matching job."
+4. **Did Step Functions start?** The trigger Lambda starts an execution; check the state machine's execution history.
+5. **Did AgentCore run?** The Step Functions execution has the AgentCore invocation as a step; check its output.
+
+Most missed runs are at step 1 or 2. Schedule drift between Aurora and Scheduler is the single most common class of bug, which is why the reconciler Lambda exists — but it's reconciler-based (eventual), not transactional.
+
+## Debugging a trigger that didn't fire
+
+For event-driven automations:
+
+1. **Did the event arrive on the bus?** EventBridge has a "Event history" view that shows every event received.
+2. **Did the trigger rule match?** Each rule's metrics page shows how many events matched vs. invoked. A mismatch means the event pattern is wrong.
+3. **Did the target Lambda succeed?** Same chain as scheduled from here.
+
+## Known limits
+
+- **No backfill for missed scheduled runs.** If AWS Scheduler failed to invoke your target for three days, those three runs are lost. The manager does not re-fire missed schedules.
+- **Trigger rules are tenant-scoped but event bus is deployment-scoped.** All tenants in a deployment share one event bus. The rule's own matcher enforces tenant scope.
+- **Provisioning is eventually consistent.** A new schedule takes a few seconds after creation before AWS Scheduler actually has it. If you're writing tests, don't expect turn-by-turn sync.
+- **Maximum schedule rate is 1-per-minute.** AWS Scheduler supports higher rates via batched invocation, but ThinkWork does not configure that path — fastest stable cadence is 1/min.
 
 ## Related pages
 
-- [Automations Overview](/concepts/automations/)
-- [Routines and Execution Model](/concepts/automations/routines-and-execution-model/)
+- [Automations (overview)](/concepts/automations/) — the umbrella
+- [Routines and Execution Model](/concepts/automations/routines-and-execution-model/) — what happens after the trigger fires
+- [Admin: Scheduled Jobs](/applications/admin/scheduled-jobs/) — the UI
+- [Threads: Lifecycle and Types](/concepts/threads/lifecycle-and-types/) — where AUTO threads fit
+- [Connectors](/concepts/connectors/) — how connector events become triggers
+
+## Under the hood
+
+- **Aurora tables.** `scheduled_jobs`, `event_triggers`, `job_runs`.
+- **Provisioning Lambda.** `packages/api/src/handlers/job-schedule-manager.ts` — called on every `scheduled_jobs` insert/update/delete to reconcile with AWS Scheduler.
+- **Trigger Lambda.** `packages/api/src/handlers/job-trigger.ts` — fired by both AWS Scheduler (scheduled path) and EventBridge rules (event-driven path); normalizes both to the same Step Functions input.
+- **State machine.** `terraform/modules/automations/step-function-automation.tf` — defines the states, retries, dead-letter handling.
+- **AWS Scheduler target.** Every schedule targets the `job-trigger` Lambda directly (not the state machine), because the Lambda normalizes input and resolves the current `scheduled_jobs` row at fire time. This decouples the fire-time payload from Scheduler's snapshot.
+- **EventBridge custom bus.** `thinkwork-<stage>-events`. Rule patterns live in `terraform/modules/automations/triggers.tf`.

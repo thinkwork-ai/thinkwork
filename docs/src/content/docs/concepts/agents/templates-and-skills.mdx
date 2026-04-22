@@ -1,56 +1,122 @@
 ---
 title: Templates and Skills
-description: Use agent templates for fleet-wide defaults and skill packs for reusable capabilities.
+description: Agent templates for fleet-wide defaults (model, guardrails, tool config) and skill packs for reusable agent capabilities — how the reuse model lets you change one thing and have it apply to a hundred agents.
 ---
 
-Agent Templates and skill packs are the two main reuse layers for managed agents.
+import { Aside } from '@astrojs/starlight/components';
 
-## Agent Templates
+Templates and skill packs are the two reuse layers for managed agents. A template is the *shape* of an agent — which model, which guardrail, which tool surface, which memory behavior. A skill pack is a *capability* — a named bundle of tools, instructions, and context that an agent can call on. Agents compose both.
 
-Agent Templates define the defaults you want many agents to share.
+The single most important property of this model: changing one template updates every agent assigned to it. Rotating models across a fleet is one write, not a hundred.
+
+## Why both exist
+
+You could imagine making every decision per-agent. Each agent picks its own model, writes its own guardrail, maintains its own tool list. That works for 3 agents and collapses at 30. The operational cost is:
+
+- **Drift.** Two agents that were supposed to behave the same drift apart over a year of independent edits.
+- **Migration pain.** A new Claude version ships; you have 45 agents to update, by hand.
+- **Auditability.** An operator asks "which agents currently use the strictest guardrail?" — there's no answer without reading every agent's config.
+
+Templates fix this by making model + guardrails + tool config + memory behavior a *named* configuration. Agents reference a template by id. Edit the template; every reference picks up the change on next invocation.
+
+Skill packs add a second axis: capabilities an agent has, separable from the agent's configuration. Several different templates (a support agent, a research agent, a sales-ops agent) might all share the same "CRM lookup" skill pack while differing wildly in their other configuration. Skill packs make that sharing clean.
+
+## Templates: fleet-wide defaults
 
 A template typically controls:
 
-- Model selection
-- Guardrails
-- Token and temperature limits
-- Tool categories
-- Memory-related defaults
+- **Model** — which Bedrock model the agent uses (e.g., `anthropic.claude-sonnet-4-6` or any model available via Bedrock).
+- **Guardrail** — the `guardrailId` referenced on every invocation.
+- **Inference params** — `maxTokens`, `temperature`, any Bedrock-specific tuning.
+- **Tool config** — which tool categories are enabled (SQL, S3, web, connector-provided MCP tools, built-in tools).
+- **Memory config** — which memory adapter, which recall strategy, which retention behavior.
+- **Skill packs** — default skill pack assignments every agent on this template inherits.
+- **Budget** — per-agent spend cap that budget enforcement measures against.
 
-That makes templates the right place for policy and runtime consistency. If you need to rotate models or tighten controls across a fleet, update the template instead of editing every agent.
+Assigning an agent to a template is a foreign-key relation — it's not a copy. When the template is updated, every agent on it reads the new values.
 
-## Skill packs
+### A rotation example
 
-Skill packs extend an agent with reusable instructions, tools, and static context.
+Claude 4.6 ships. Your fleet of 12 agents currently runs on `claude-sonnet-4-5`. You want to move them all to 4.6 with a one-week rollback window.
 
-A skill pack can provide:
+With templates:
 
-- **Tools** the agent can call
-- **Instructions** added to the system behavior
-- **Context** that should be present on every invoke
+1. Update the template's `modelId` to `anthropic.claude-sonnet-4-6`.
+2. All 12 agents pick up the new model on their next turn.
+3. If anything looks wrong, revert the template's `modelId` back to 4.5.
 
-ThinkWork stores skill packs in S3 and loads them at invocation time.
+Without templates, that's 12 individual updates, a custom query to find all affected agents, and a 12-step rollback if anything breaks. Templates reduce the blast radius to a single row.
 
-## How they work together
+## Skill packs: portable capabilities
 
-A common pattern is:
+A skill pack is a `SKILL.md` file (following the [Agent Skills spec](https://agentskills.io/specification)) plus optional supporting files, stored in your S3 skill catalog bucket. At invoke time, AgentCore:
 
-- Template decides the model and operating boundaries
-- Agent record defines purpose and prompt
-- Skill packs add domain-specific capabilities
-- Knowledge pages and memory settings shape what the agent can recall
+1. Reads the agent's assigned skill pack list.
+2. Downloads each skill pack from S3.
+3. Parses the `SKILL.md` for metadata, tools, and instructions.
+4. Injects the skill's tools into the agent's runtime tool surface.
+5. Prepends the skill's instructions into the agent's system prompt.
 
-This split keeps agent definitions small and makes reuse practical.
+The `SKILL.md` format is portable across any agent system that implements the Agent Skills spec — skills written for ThinkWork are the same skills you could use on Claude Desktop, AWS AgentCore, or any other compliant runtime.
 
-## Example: support fleet
+### What skill packs are good for
 
-For example, you might create:
+- **Encapsulating a tool cluster.** A "CRM lookup" skill pack that exposes `crm.getAccount`, `crm.listContacts`, `crm.createTicket` as tools with consistent error handling.
+- **Packaging domain instructions.** "When the user asks about billing, always cite the source document" lives in a `SKILL.md` so every agent assigned the billing skill has that instruction automatically.
+- **Templates of behavior.** A "support-tier-1" skill pack that combines CRM tools + response-tone instructions + escalation rules.
 
-- A `Support Standard` template using Claude Sonnet with guardrails enabled
-- A `ticketing` skill pack for issue actions
-- A `docs` knowledge source for product documentation
-- Default AgentCore LongTerm memory for customer continuity
+### What skill packs are *not* good for
 
-Then create separate agents for billing, onboarding, and technical support on top of the same base.
+- **Per-user configuration.** A skill pack is per-agent, not per-user. Credential storage for OAuth tokens lives elsewhere (SSM Parameter Store + mobile connect flows).
+- **Secrets or per-tenant data.** `SKILL.md` is plaintext in S3. Don't store tokens there.
+- **Full orchestration logic.** A skill pack is an agent capability, not a workflow. Multi-step orchestration belongs in [Routines](/concepts/automations/routines-and-execution-model/).
 
-See [Concepts: Agents](/concepts/agents/) for the full model and [Authoring Guide: Skill Packs](/guides/skill-packs/) for the SKILL.md format.
+## How templates and skills compose
+
+On an agent creation or update:
+
+```
+Agent
+  ├─ templateId: "tpl-support-v2"      ← inherits model, guardrail, tool config
+  ├─ skillPackIds: [                    ← inherited from template + per-agent additions
+  │     "sp-crm-lookup",
+  │     "sp-support-tone",
+  │     "sp-billing-responses"
+  │   ]
+  ├─ knowledgeBaseIds: ["kb-support-docs"]
+  └─ systemPromptOverride: "<optional per-agent override>"
+```
+
+An agent can add its own skill packs on top of what the template provides. It can override the system prompt for narrow specialization. But the template's model, guardrail, and budget are fixed — if you need a different model, use a different template.
+
+## Managing templates and skills
+
+Both surfaces live in the admin app:
+
+- [**Agent Templates**](/applications/admin/agent-templates/) — create, edit, and audit templates; see which agents are assigned.
+- [**Skills Catalog**](/applications/admin/skills-catalog/) — upload skill packs to S3, inspect parsed metadata, see which agents have them assigned.
+
+For authoring a skill pack, see the [Skill Packs authoring guide](/guides/skill-packs/) — it covers the `SKILL.md` format, how to expose tools, and how ThinkWork validates packs before accepting them into the catalog.
+
+## Known limits
+
+- **One template per agent.** You can't compose templates. If two templates would each be useful to this agent, you fork them or pick one.
+- **Skill packs don't version like templates do.** A skill pack is a file; uploading a new version overwrites the old. Templates have a history column; skill packs rely on S3 versioning.
+- **No staged rollout for template changes.** Editing a template takes effect on every agent's next invocation. For risky changes, route a subset of agents to a copy of the template first.
+- **Skill pack size limits.** AgentCore downloads every skill pack at invoke time; very large skill packs (many MB of references) add latency.
+
+## Related pages
+
+- [Concepts: Agents](/concepts/agents/) — the broader agent model
+- [Concepts: Managed Agents](/concepts/agents/managed-agents/) — the runtime that reads templates + skills
+- [Skill Packs (authoring guide)](/guides/skill-packs/) — how to write a `SKILL.md`
+- [Admin: Agent Templates](/applications/admin/agent-templates/) — operator surface
+- [Admin: Skills Catalog](/applications/admin/skills-catalog/) — operator surface
+
+## Under the hood
+
+- **Template storage.** `agent_templates` table in Aurora. Columns: `model_id`, `guardrail_id`, `guardrail_version`, `max_tokens`, `temperature`, `tool_config` (JSON), `memory_config` (JSON), `default_skill_pack_ids` (array), `default_budget_config` (JSON).
+- **Agent ↔ template reference.** `agents.template_id` foreign key. Cascade on template delete is set to SET NULL, not DELETE — orphaned agents are visible in the admin and must be explicitly reassigned or archived.
+- **Skill pack storage.** S3 bucket `thinkwork-<stage>-skill-catalog/skills/catalog/<pack-name>/`. Metadata parsed and cached in `skill_packs` Aurora table.
+- **Invocation-time loading.** `apps/agent-core/src/tools/skills.py` — downloads assigned skill packs, parses `SKILL.md`, injects tools into the Strands tool registry.
+- **Skill validation.** `packages/api/src/lib/skills/validator.ts` — runs on upload; enforces Agent Skills spec compliance and rejects packs with missing required metadata.

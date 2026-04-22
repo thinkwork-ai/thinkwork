@@ -1,47 +1,59 @@
 ---
 title: Knowledge Graph Direction
-description: Forward-looking direction for richer structured memory, framed clearly as roadmap rather than current core product surface.
+description: What graph-shaped memory ThinkWork already ships (entity edges, co-mention links, parent hierarchies) and where typed-relationship semantics are headed next.
 ---
 
-ThinkWork’s current Memory story does **not** depend on a full knowledge graph product surface.
+import { Aside } from '@astrojs/starlight/components';
 
-Today, the shipped story is simpler:
+When people talk about "agent knowledge graphs," they usually mean a typed-relationship graph: entities connected by named edges with semantics — *Person* `worksAt` *Company*, *Dish* `servedAt` *Restaurant*. ThinkWork doesn't have that *yet*. But it's worth being honest about what **is** already graph-shaped in the product today — because it's more than the original docs suggested — and where the typed layer is headed next.
 
-- threads are the system of record
-- document knowledge handles retrieved source material
-- long-term memory carries learned context forward
-- retrieval and context assembly decide what reaches a turn
+## What ThinkWork already builds
 
-A knowledge graph is the likely next step beyond that, not the current center of the product.
+The compounding-memory pipeline produces a real graph. Every entity or topic page is a node; every link between pages is an edge; and the pipeline writes two kinds of edges:
 
-## Why this direction matters
+- **`reference`** edges — "Taberna dos Mercadores references Lisbon." Written by the leaf planner when a memory mentions both pages, and by two deterministic emitters that run after the leaf pass:
+  - `emitDeterministicParentLinks` — city and journal clusters get references from every leaf page sourced by that cluster.
+  - `emitCoMentionLinks` — entity pages that share a source memory get reciprocal reference edges (capped at 10 directed edges per memory).
+- **`parent_of` / `child_of`** edges — the parent hierarchy, written when a section on one page gets promoted into its own page. "Austin" becomes parent of "Austin Activities," which can later become parent of "Austin Kid-Friendly Activities."
 
-A graph-shaped memory layer could make recall more relationship-aware by modeling entities and connections directly, such as:
+Every edge is stored in `wiki_page_links` with a `context` tag recording what caused it (`deterministic:city:<slug>`, `co_mention:<memory_unit_id>`, or the planner's rationale). That tag means operators can roll back any class of edges without touching the others.
 
-- customers and accounts
-- services and dependencies
-- incidents and linked decisions
-- people, teams, and ownership
-- concepts and their relationships over time
+The page graph is queryable today — `wiki_page_links` indexes on both endpoints, and the admin app's wiki browser renders it as a graph visualization.
 
-That could make memory more structured than document chunk retrieval or flat fact recall alone.
+## What's missing — typed semantics
 
-## How to think about it today
+What the graph currently lacks is a **predicate** layer. An edge knows that page A references page B; it doesn't know *how*. "Taberna dos Mercadores → Lisbon" is a reference edge the same way "Chef João → Taberna dos Mercadores" is, even though the first means "located in" and the second means "works at." That's a real limitation: it makes query-time reasoning harder ("find me everyone who worked at restaurants in Lisbon") and it forces the agent to infer relationship semantics from page context every time.
 
-Treat this as **forward direction**, not as something the current docs ask you to depend on.
+Typed relationships are the next layer of depth — not a rewrite of what exists today. The shape we're converging toward:
 
-If you are evaluating ThinkWork now, plan around:
+- **Edge type column.** `wiki_page_links.edge_type` becomes a richer enum with values like `located_in`, `works_at`, `owns`, `authored`, `member_of`, `mentions`, `derived_from`.
+- **Structured properties on edges.** `(A `located_in` B, since=2024-Q3, confidence=0.8)` — not every edge needs this, but for dated relationships and hedged claims it matters.
+- **Planner-written types.** The leaf planner will emit `edge_type` alongside the source memory citation. The section writer already cites memories per section; the planner will cite memories per edge type as well.
+- **Retrieval surfaces that use types.** The memory-retrieval tool grows `recall_by_edge_type` (or similar) so agents can ask graph-shaped questions directly.
 
-- **Threads** for the work record
-- **Memory** for context
-- **Document knowledge** for source material
-- **Long-term memory** for learned carry-forward context
+None of this rewrites what's already shipped. The current `reference` edges stay; typed edges layer on top.
 
-Then watch the roadmap for richer structured-memory and graph capabilities.
+## Why this order
+
+Shipping the graph before the types isn't accidental. Typed edges in an agent system are hard to get right in isolation — the model invents predicates that look useful on paper but don't hold up in recall, or it commits to an ontology that doesn't match the data's real shape. Shipping untyped edges first gives us the corpus to measure against before committing to a type vocabulary. The deterministic emitters, in particular, were built so we could measure link density and recall quality *before* asking the planner to commit to semantics.
+
+<Aside type="note">
+  If you're designing an agent today that relies on typed-relationship retrieval, don't wait for this layer — build it in your own skill pack or downstream service. The wiki API exposes pages, links, and sources; your skill pack can layer its own ontology over them. That's the right pattern until typed edges land natively.
+</Aside>
 
 ## Related pages
 
-- [Memory overview](/concepts/knowledge/)
-- [Document Knowledge](/concepts/knowledge/document-knowledge/)
-- [Long-term Memory](/concepts/knowledge/memory/)
-- [Roadmap](/roadmap/)
+- [Compounding Memory](/concepts/knowledge/compounding-memory/) — the overview of the page graph that's shipped today
+- [Compounding Memory: Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — where `reference` and `parent_of` edges are written
+- [Compounding Memory: Pages](/concepts/knowledge/compounding-memory-pages/) — the `wiki_page_links` data model
+- [Operating Compounding Memory](/guides/compounding-memory-operations/) — how to monitor link density + quality
+
+## Under the hood
+
+Today's graph, concretely:
+
+- **Edge storage.** `wiki_page_links(from_page_id, to_page_id, kind, context, created_at)` with a unique index on `(from_page_id, to_page_id, kind)` — replays are idempotent.
+- **Edge kinds shipped.** `reference`, `parent_of`, `child_of`.
+- **Edge `context` tags.** `deterministic:city:<slug>`, `deterministic:journal:<slug>`, `co_mention:<memory_unit_id>`, plus planner-emitted free-text rationale.
+- **Density metrics.** `links_written_deterministic`, `links_written_co_mention`, and `duplicate_candidates_count` on every compile job — see `docs/metrics/wiki-link-density.md` for the baseline snapshots.
+- **Rollback path.** Single `DELETE ... WHERE context LIKE 'deterministic:%'` drops every deterministic edge without touching planner-written references. Same pattern for co-mention edges via their `co_mention:` prefix.

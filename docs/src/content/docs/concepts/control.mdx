@@ -1,40 +1,64 @@
 ---
 title: Control
-description: Guardrails, budgets, usage tracking, and auditability for your ThinkWork deployment.
+description: Guardrails, budgets, usage tracking, and audit — how ThinkWork enforces boundaries on agent behavior and proves what happened after the fact.
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-Control is the operational boundary layer for ThinkWork. It answers two blunt questions:
+Control is the operational layer that turns ThinkWork from a demo into a production system. It answers two questions that every real deployment has to answer:
 
-- what are agents allowed to do
-- what actually happened when they did it
+1. **What are agents allowed to do?** Model-level safety, spend limits, tool access, role boundaries.
+2. **What actually happened when they did it?** Turn-level audit, cost tracking, incident reconstruction.
 
-That means Control is not just safety policy. It is also spend management, visibility, and auditability.
+Both matter equally. A system that only enforces boundaries is a black box; a system that only logs is a landmine waiting for a safety question. ThinkWork treats Control as one first-class concept instead of scattering it across three unrelated surfaces.
 
-## What Control covers
+## Why Control scales differently than demos
 
-In the current open source docs, Control includes:
+A single agent answering a single user's questions rarely needs guardrails, rarely needs a budget, and rarely needs an audit trail — because a human is watching. A fleet of agents running across multiple tenants, handling connector events while their operator is asleep, doesn't have that luxury.
 
-- guardrails at model invocation time
-- budgets and usage tracking
-- rate limits and spend boundaries
-- audit logging in your AWS account
+The problems that emerge with scale:
 
-## Why this matters
+- **Runaway spend.** A misconfigured agent that retries on every failure, or a prompt that accidentally triggers a recursive tool call, can burn hundreds of dollars in minutes. Without a budget, nobody notices until billing arrives.
+- **Safety boundary drift.** "Don't answer questions about X" lives in the system prompt. Every new agent, every prompt edit, every template fork risks dropping that boundary without anyone noticing. A guardrail applied at the template level doesn't drift.
+- **Incident retrospective.** "An agent told a customer the wrong price last Tuesday." Reconstructing that turn — what the agent saw in its context, which tool it called, what memory it recalled, what the guardrail evaluator did — requires a durable audit record. Not a log that rolled over; a durable record with the right partition key.
 
-As soon as agents move from demos into real work, you need a way to enforce boundaries and inspect behavior after the fact. ThinkWork treats that as a first-class concept instead of an afterthought.
+Control is the concept that bundles those three concerns together. One place to configure boundaries. One place to see what happened. One set of primitives that work across every agent, template, and tenant in the deployment.
+
+## What's in Control
 
 <CardGrid>
   <Card title="Guardrails" icon="shield-check">
-    Bedrock guardrails and the enforcement boundary for managed agents.
+    Bedrock Guardrails applied at model invocation time — topic filters, content filters, PII redaction, grounding checks — referenced from templates so the boundary applies to every agent on the template.
   </Card>
-  <Card title="Budgets, Usage, and Audit" icon="report">
-    Spend controls, turn-level usage tracking, and durable audit logs.
+  <Card title="Budgets, Usage, and Audit" icon="seti:settings">
+    Per-turn cost capture from OTel spans, tenant-level budget enforcement that can suspend agents when thresholds hit, and an append-only audit log for every invocation.
   </Card>
 </CardGrid>
 
-## Read this section
+## How Control interacts with the rest of the system
 
-- [Guardrails](/concepts/control/guardrails/)
-- [Budgets, Usage, and Audit](/concepts/control/budgets-usage-and-audit/)
+Control doesn't own agents, threads, or memory. It *wraps* them:
+
+- **Guardrails** hook into the Strands invocation path. When AgentCore assembles context and calls Bedrock, the guardrail evaluator runs before the response is returned to the thread. A blocked response becomes a visible event in the thread timeline — agents don't get a silently-edited response without the system recording that it happened.
+- **Budgets** hook into the turn accounting path. Every turn's cost is captured from OpenTelemetry spans that AgentCore emits (input tokens × model rate + output tokens × model rate + tool call costs). A tenant-level budget cap, when hit, flips the agent's status to `PAUSED` rather than silently continuing.
+- **Audit** hooks into every state-changing operation. Turn creation, tool call, memory write, guardrail activation, and tenant configuration change all emit NDJSON records to an append-only S3 bucket with no delete permission on the Lambda role. The bucket is partitioned by tenant + date; a single operation with a compliance ask can pull every relevant record.
+
+The fact that guardrail activations land in the thread timeline, cost lands on the turn, and audit lands in S3 — all addressable by the same `threadId` + `turnId` — is what makes incident reconstruction tractable. You're not stitching three disjoint systems together.
+
+## The tenant boundary
+
+Control is configured per tenant. A single ThinkWork deployment typically has multiple tenants (customers, internal business units, or environments), and their control surfaces are independent:
+
+- Tenant A can have strict PII redaction; tenant B can have none.
+- Tenant A can have a $500/month budget; tenant B can have no cap.
+- Tenant A's audit log lives in its own S3 prefix.
+
+This means one deployment can host production work, internal eval runs, and external customer workloads without their Control posture bleeding across. Row-level security on every relevant table enforces the boundary at the database level; IAM policies enforce it at the S3 level.
+
+## Related pages
+
+- [Guardrails](/concepts/control/guardrails/) — how Bedrock Guardrails integrate with the Strands agent loop
+- [Budgets, Usage, and Audit](/concepts/control/budgets-usage-and-audit/) — the cost pipeline and the audit log model
+- [Admin: Security Center](/applications/admin/security-center/) — the operator surface for reviewing guardrail hits and incidents
+- [Admin: Analytics](/applications/admin/analytics/) — tenant-level cost, usage, and activity views
+- [Architecture](/architecture/) — where audit storage and IAM boundaries live in the deployment
