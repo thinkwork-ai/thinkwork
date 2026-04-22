@@ -6,11 +6,22 @@ import {
 	invokeJobScheduleManager,
 } from "../../utils.js";
 import { writeUserMdForAssignment } from "../../../lib/user-md-writer.js";
+import { writeIdentityMdForAgent } from "../../../lib/identity-md-writer.js";
+import { invalidateComposerCache } from "../../../lib/workspace-overlay.js";
 
 export async function updateAgent(_parent: any, args: any, ctx: GraphQLContext) {
 	const i = args.input;
 	const updates: Record<string, unknown> = { updated_at: new Date() };
-	if (i.name !== undefined) updates.name = i.name;
+	if (i.name !== undefined) {
+		// Reject `null` and empty-string names loudly. Without this guard,
+		// `nameProvided` would be true while `nameActuallyChanged` (string
+		// typeof check) would be false — the DB would accept `null` but the
+		// IDENTITY.md writer would skip, silently drifting S3 from the DB.
+		if (typeof i.name !== "string" || i.name.trim() === "") {
+			throw new Error("Agent name must be a non-empty string");
+		}
+		updates.name = i.name;
+	}
 	if (i.role !== undefined) updates.role = i.role;
 	if (i.type !== undefined) updates.type = i.type.toLowerCase();
 	if (i.templateId !== undefined) updates.template_id = i.templateId;
@@ -25,26 +36,43 @@ export async function updateAgent(_parent: any, args: any, ctx: GraphQLContext) 
 	if (i.parentAgentId !== undefined) updates.parent_agent_id = i.parentAgentId;
 
 	const humanPairIdChanging = i.humanPairId !== undefined;
+	const nameProvided = i.name !== undefined;
 
-	// Unit 6: when humanPairId is set / changed / cleared, rewrite USER.md
-	// in the same transaction as the DB update so the S3 side-effect is
-	// atomic with the row change. An S3 failure rolls the update back and
-	// human_pair_id stays at its prior value — we never leave DB pointing
-	// at human B while USER.md still renders human A.
+	// Side-effect writes wrap in a transaction so DB + S3 stay atomic.
+	//
+	// - humanPairId change → writeUserMdForAssignment rewrites USER.md
+	//   (Unit 6). A failure rolls back the pair change so DB never points
+	//   at human B while USER.md still renders human A.
+	//
+	// - name change → writeIdentityMdForAgent does name-line surgery on
+	//   IDENTITY.md (personality-templates plan). A failure rolls back
+	//   the rename so the agent's DB name and IDENTITY.md never drift.
 	//
 	// Other update paths (runtime_config scheduled-job sync, etc.) stay
 	// out of the transaction — their side effects are recoverable via
-	// retry and shouldn't block a routine rename from committing.
+	// retry and shouldn't block a routine update from committing.
 	let row: typeof agents.$inferSelect | null = null;
-	if (humanPairIdChanging) {
+	// Cache invalidations to fire AFTER the txn commits. Firing inside the
+	// txn would clear the composer cache before the DB settles — if a later
+	// step rolls back, the composer would then read fresh S3 state that no
+	// longer matches the rolled-back DB row.
+	const cacheInvalidations: Array<{ tenantId: string; agentId: string }> = [];
+	if (humanPairIdChanging || nameProvided) {
 		row = await db.transaction(async (tx) => {
 			const [pre] = await tx
-				.select({ human_pair_id: agents.human_pair_id })
+				.select({
+					human_pair_id: agents.human_pair_id,
+					name: agents.name,
+					tenant_id: agents.tenant_id,
+				})
 				.from(agents)
 				.where(eq(agents.id, args.id));
 			if (!pre) throw new Error("Agent not found");
 			const oldPairId = pre.human_pair_id ?? null;
 			const newPairId = (i.humanPairId as string | null) ?? null;
+			const oldName = pre.name;
+			const nameActuallyChanged =
+				nameProvided && typeof i.name === "string" && i.name !== oldName;
 
 			const [updated] = await tx
 				.update(agents)
@@ -56,12 +84,16 @@ export async function updateAgent(_parent: any, args: any, ctx: GraphQLContext) 
 			// Only rewrite USER.md when the pair actually changed. Stable
 			// no-op reassignments (setting the same id) shouldn't burn an
 			// S3 PUT or invalidate cache.
-			if (oldPairId !== newPairId) {
+			if (humanPairIdChanging && oldPairId !== newPairId) {
 				try {
 					await writeUserMdForAssignment(tx, args.id, newPairId);
 					console.log(
 						`[updateAgent] user_md_write agentId=${args.id} success=true`,
 					);
+					cacheInvalidations.push({
+						tenantId: pre.tenant_id,
+						agentId: args.id,
+					});
 				} catch (err) {
 					const errorCategory =
 						(err as { code?: string } | null)?.code ||
@@ -74,8 +106,39 @@ export async function updateAgent(_parent: any, args: any, ctx: GraphQLContext) 
 				}
 			}
 
+			// Only rewrite IDENTITY.md when the name actually changed —
+			// burning a PUT + cache invalidation on every updateAgent that
+			// merely touches runtime_config would be wasteful.
+			if (nameActuallyChanged) {
+				try {
+					await writeIdentityMdForAgent(tx, args.id);
+					console.log(
+						`[updateAgent] identity_md_write agentId=${args.id} oldName=${oldName} newName=${i.name} success=true`,
+					);
+					cacheInvalidations.push({
+						tenantId: pre.tenant_id,
+						agentId: args.id,
+					});
+				} catch (err) {
+					const errorCategory =
+						(err as { code?: string } | null)?.code ||
+						(err as { name?: string } | null)?.name ||
+						"unknown";
+					console.warn(
+						`[updateAgent] identity_md_write agentId=${args.id} success=false errorCategory=${errorCategory}`,
+					);
+					throw err; // roll back the transaction
+				}
+			}
+
 			return updated;
 		});
+
+		// Txn committed successfully — now safe to invalidate the composer
+		// cache so the next read reflects the new S3 state.
+		for (const entry of cacheInvalidations) {
+			invalidateComposerCache(entry);
+		}
 	} else {
 		const [updated] = await db
 			.update(agents)

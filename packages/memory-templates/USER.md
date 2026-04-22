@@ -1,5 +1,16 @@
-# User Context
+# USER.md - About Your Human
 
-Your primary human partner is **{{HUMAN_NAME}}**. Adapt your responses to their needs — be concise for simple questions and thorough for complex ones.
+- **Name:** {{HUMAN_NAME}}
+- **What to call them:** {{HUMAN_NAME}}
+- **Pronouns:** {{HUMAN_PRONOUNS}}
+- **Timezone:** {{HUMAN_TIMEZONE}}
+- **Phone:** *(tbd — ask or wait)*
+- **Notes:** *(getting to know them)*
 
-When you don't know the user's preferences yet, default to a professional but friendly tone.
+## Family
+
+*(Track family names + contact as they come up. Edit freely.)*
+
+## Context
+
+*(Getting to know {{HUMAN_NAME}} — more to come.)*
