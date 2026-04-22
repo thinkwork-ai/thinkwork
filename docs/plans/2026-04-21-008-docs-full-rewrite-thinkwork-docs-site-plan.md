@@ -195,7 +195,7 @@ This happens *before* the rewrite units run so each unit starts with a concrete 
 
 Units are dependency-ordered. Units 1–2 unblock everything. Units 3–9 are the content rewrites, which can land in parallel PRs but must each pass the full build before merge. Unit 10 is the consolidation pass.
 
-- [ ] **Unit 1: House Style Guide (`docs/STYLE.md`)**
+- [x] **Unit 1: House Style Guide (`docs/STYLE.md`)**
 
 **Goal:** Codify the house style so every subsequent rewrite checks against an explicit rubric, and so future contributors have a reference.
 
@@ -234,7 +234,7 @@ Units are dependency-ordered. Units 1–2 unblock everything. Units 3–9 are th
 
 ---
 
-- [ ] **Unit 2: Page-by-page audit (`docs/STYLE-AUDIT.md`)**
+- [x] **Unit 2: Page-by-page audit (`docs/STYLE-AUDIT.md`)**
 
 **Goal:** Produce a concrete per-file classification so subsequent rewrite units know their exact scope.
 
@@ -271,7 +271,7 @@ Units are dependency-ordered. Units 1–2 unblock everything. Units 3–9 are th
 
 ---
 
-- [ ] **Unit 3: Rewrite `getting-started.mdx` + landing (`index.mdx`)**
+- [x] **Unit 3: Rewrite `getting-started.mdx` + landing (`index.mdx`)**
 
 **Goal:** Tighten the front door. Today's `getting-started.mdx` is already good but skips Step 6; `index.mdx` is card-grid-heavy with minimal narrative.
 
@@ -302,7 +302,7 @@ Units are dependency-ordered. Units 1–2 unblock everything. Units 3–9 are th
 
 ---
 
-- [ ] **Unit 4: Concepts — Threads (3 pages)**
+- [x] **Unit 4: Concepts — Threads (3 pages)**
 
 **Goal:** Rewrite the Threads hub + its two child pages to the house standard.
 
@@ -334,7 +334,7 @@ Units are dependency-ordered. Units 1–2 unblock everything. Units 3–9 are th
 
 ---
 
-- [ ] **Unit 5: Concepts — Agents (3 pages)**
+- [x] **Unit 5: Concepts — Agents (3 pages)**
 
 **Goal:** Rewrite Agents hub, Managed Agents, Templates and Skills.
 
@@ -366,7 +366,7 @@ Units are dependency-ordered. Units 1–2 unblock everything. Units 3–9 are th
 
 ---
 
-- [ ] **Unit 6: Concepts — Memory (8 pages)**
+- [x] **Unit 6: Concepts — Memory (8 pages)**
 
 **Goal:** Bring the Memory section up to the level of the compounding-memory-pipeline doc that already sits inside it.
 
@@ -405,7 +405,7 @@ Units are dependency-ordered. Units 1–2 unblock everything. Units 3–9 are th
 
 ---
 
-- [ ] **Unit 7: Concepts — Connectors, Control, Automations (9 pages)**
+- [x] **Unit 7: Concepts — Connectors, Control, Automations (9 pages)**
 
 **Goal:** Bring the remaining three Concepts sections up to standard.
 
@@ -649,6 +649,45 @@ This plan *is* the documentation plan. Specifically:
 - Docs deploys via the existing pipeline (Astro static build → wherever the site hosts today; `site:` in `astro.config.mjs` will uncomment when `docs.thinkwork.ai` custom domain lands — not in scope).
 - Each phase's PR should include a deploy preview link in its description for review.
 - No flags, no migration, no rollback concerns — content edits are trivially revertable per-commit.
+
+## Session 1 progress (2026-04-21)
+
+**Completed (Units 1–7, all Concepts section + front door):**
+
+- `docs/STYLE.md` — editorial standard for the site.
+- `docs/STYLE-AUDIT.md` — per-page classification (KEEP/POLISH/REWRITE). Net: 18 KEEP, 23 POLISH, 31 REWRITE (audit turned up that most pages are in better shape than the original plan assumed).
+- `index.mdx` — landing page: added "What ThinkWork is" narrative before the card grid.
+- `getting-started.mdx` — fixed the Step 5 → Step 7 numbering gap by adding Step 6 (review outputs); removed duplicate outputs block.
+- `concepts/threads.mdx` + `threads/lifecycle-and-types.mdx` + `threads/routing-and-metadata.mdx` — full rewrite of the Threads concept.
+- `concepts/agents.mdx` — reordered so GraphQL mutation is under-the-hood; managed-vs-connected framing up top.
+- `concepts/agents/managed-agents.mdx` — full invocation walking tour (cold start → assembly → Bedrock → Strands loop → post-turn side effects).
+- `concepts/agents/templates-and-skills.mdx` — full rewrite; fleet-wide reuse model explained before field tables.
+- `concepts/knowledge.mdx` — full rewrite of the Memory hub with the three-layer model.
+- `concepts/knowledge/document-knowledge.mdx`, `/memory.mdx`, `/retrieval-and-context.mdx`, `/knowledge-graph.mdx` — full rewrites.
+- `concepts/connectors.mdx` — polish; removed dated MCP-pattern section.
+- `concepts/connectors/mcp-tools.mdx` — polish; added the "two surfaces" distinction and the orphan fold.
+- `concepts/mcp-servers.mdx` — **deleted** (orphan); inbound links updated.
+- `concepts/control.mdx` + `control/guardrails.mdx` + `control/budgets-usage-and-audit.mdx` — full rewrites of the Control section.
+- `concepts/automations.mdx` + `automations/scheduled-and-event-driven.mdx` + `automations/routines-and-execution-model.mdx` — full rewrites.
+- Build passes cleanly (73 pages, no broken-link warnings).
+
+**Remaining work (Units 8–11):**
+
+- **Unit 8 — Applications: Admin (19–22 pages).** Per the audit, this is mostly POLISH (accuracy passes on flag names, routes, env vars). The six KEEP pages need only verification. The gold-standard `admin/threads.mdx` remains the template.
+- **Unit 9 — Applications: Mobile (6 pages) + CLI (2 pages).** Same shape — mostly POLISH, accuracy-focused. Mobile pages especially should verify against the Cognito sync invariant + Google-OAuth-only reality.
+- **Unit 10 — Deploy, API Reference, SDKs, Guides (15 pages).** Guides are already KEEP; Deploy/API/SDK are POLISH. Verify tfvars variable list + GraphQL schema snippets against the code at handoff time.
+- **Unit 11 — Consolidation.** Build + link integrity + final walkthrough. The build passes as of session 1 end; this unit's work is the final sidebar clickthrough + any drift caught during the Units 8–10 rewrites.
+
+**Recommended next-session approach:**
+
+1. Pull the branch `docs/full-rewrite-v1`.
+2. Read `docs/STYLE.md` and `docs/STYLE-AUDIT.md` to orient.
+3. Walk Unit 8 Admin pages in the audit order, applying the POLISH rubric from `STYLE.md`.
+4. Commit per section (Admin Work group, Admin Agents group, Admin Manage group).
+5. Unit 9 and 10 follow the same pattern.
+6. Unit 11 build pass is what greenlights the merge.
+
+The branch is ready for PR as-is if a phase-per-PR delivery is preferred — the Concepts section is coherent and reviewable in isolation.
 
 ## Sources & References
 
