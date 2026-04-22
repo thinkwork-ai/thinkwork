@@ -1,24 +1,18 @@
 /**
  * WorkspaceFileBadge (Unit 9).
  *
- * Renders a single badge describing where a workspace file is resolved
- * from in the overlay chain. Used in the agent + template workspace tree
- * views.
+ * Renders a tiny source-indicator icon for a workspace file in the overlay
+ * tree view. Filenames can run long — text badges push the name into
+ * ellipsis truncation — so this is an icon + tooltip instead of a label.
  *
  * Priority (top wins):
- *   1. updateAvailable → "Update available" (only meaningful for pinned
- *      files — caller is responsible for only setting it on PINNED_FILES)
- *   2. source === "agent-override" | "agent-override-pinned" → "Overridden"
- *   3. source === "template" | "template-pinned" → "Template"
- *   4. source === "defaults" → "Defaults"
- *
- * Pinned source labels collapse into the two operator-facing categories
- * (overridden / template) — the distinction between pinned and live
- * template content is not useful in the tree, only inside the accept
- * dialog.
+ *   1. updateAvailable → amber AlertCircle
+ *   2. agent-override(-pinned) → purple FilePen (file with edit pencil)
+ *   3. template(-pinned)       → blue LayoutTemplate
+ *   4. defaults                → muted Layers
  */
 
-import { Badge } from "@/components/ui/badge";
+import { AlertCircle, Circle, Layers, LayoutTemplate } from "lucide-react";
 
 export type ComposeSource =
 	| "agent-override"
@@ -38,12 +32,12 @@ export function WorkspaceFileBadge({
 }: WorkspaceFileBadgeProps) {
 	if (updateAvailable) {
 		return (
-			<Badge
-				variant="outline"
-				className="text-[10px] px-1 py-0 border-amber-500 text-amber-500"
+			<AlertCircle
+				className="h-3.5 w-3.5 shrink-0 text-amber-500"
+				aria-label="Template update available"
 			>
-				Update available
-			</Badge>
+				<title>Template update available</title>
+			</AlertCircle>
 		);
 	}
 
@@ -51,32 +45,32 @@ export function WorkspaceFileBadge({
 		case "agent-override":
 		case "agent-override-pinned":
 			return (
-				<Badge
-					variant="outline"
-					className="text-[10px] px-1 py-0 border-purple-500 text-purple-500"
+				<Circle
+					className="h-2 w-2 shrink-0 text-purple-500 fill-current"
+					aria-label="Overridden"
 				>
-					Overridden
-				</Badge>
+					<title>Overridden — agent-scoped edit</title>
+				</Circle>
 			);
 		case "template":
 		case "template-pinned":
 			return (
-				<Badge
-					variant="outline"
-					className="text-[10px] px-1 py-0 text-muted-foreground"
+				<LayoutTemplate
+					className="h-3.5 w-3.5 shrink-0 text-blue-400/70"
+					aria-label="Template"
 				>
-					Template
-				</Badge>
+					<title>Inherited from template</title>
+				</LayoutTemplate>
 			);
 		case "defaults":
 		default:
 			return (
-				<Badge
-					variant="outline"
-					className="text-[10px] px-1 py-0 text-muted-foreground"
+				<Layers
+					className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+					aria-label="Defaults"
 				>
-					Defaults
-				</Badge>
+					<title>Inherited from defaults</title>
+				</Layers>
 			);
 	}
 }

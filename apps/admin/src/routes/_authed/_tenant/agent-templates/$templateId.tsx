@@ -108,7 +108,6 @@ import {
   listWorkspaceFiles,
   putWorkspaceFile,
 } from "@/lib/workspace-files-api";
-import { WorkspaceFileBadge } from "@/components/WorkspaceFileBadge";
 
 // ---------------------------------------------------------------------------
 // Tree
@@ -185,7 +184,6 @@ function WsTreeItem({
       <div className="flex items-center gap-1.5 py-1 truncate">
         <File className="h-3 w-3 shrink-0 text-muted-foreground" />
         <span className="truncate">{node.name}</span>
-        <WorkspaceFileBadge source="template" />
       </div>
       <Button
         variant="ghost"
