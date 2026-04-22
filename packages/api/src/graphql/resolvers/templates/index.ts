@@ -13,6 +13,7 @@ import { createAgentFromTemplate } from "./createAgentFromTemplate.mutation.js";
 import { syncTemplateToAgent } from "./syncTemplateToAgent.mutation.js";
 import { syncTemplateToAllAgents } from "./syncTemplateToAllAgents.mutation.js";
 import { rollbackAgentVersion } from "./rollbackAgentVersion.mutation.js";
+import { acceptTemplateUpdateBulk } from "./acceptTemplateUpdateBulk.mutation.js";
 
 export const templateQueries = {
 	agentTemplates: agentTemplates_query,
@@ -30,4 +31,5 @@ export const templateMutations = {
 	syncTemplateToAgent,
 	syncTemplateToAllAgents,
 	rollbackAgentVersion,
+	acceptTemplateUpdateBulk,
 };

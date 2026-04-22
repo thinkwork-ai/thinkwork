@@ -129,6 +129,49 @@ function sha256Hex(content: string): string {
 	return createHash("sha256").update(content).digest("hex");
 }
 
+/**
+ * Public: compute sha256 of a string (stable hex digest, 64 chars).
+ */
+export function computeSha256(content: string): string {
+	return sha256Hex(content);
+}
+
+/**
+ * Public: read template/defaults base bytes. Used by Unit 9's
+ * acceptTemplateUpdate to compute the latest template hash for comparison
+ * against an agent's pinned hash.
+ */
+export async function readTemplateBaseWithFallback(
+	tenantSlug: string,
+	templateSlug: string,
+	path: string,
+): Promise<string | null> {
+	const bkt = bucket();
+	if (!bkt) throw new Error("WORKSPACE_BUCKET not configured");
+	return readWithFallback(bkt, tenantSlug, templateSlug, path);
+}
+
+/**
+ * Public: persist content to the content-addressable version store at
+ * `_catalog/{template}/workspace-versions/{path}@sha256:{hex}`. Idempotent
+ * (HEAD-before-PUT). Used by Unit 9 when advancing a pin to a new hash.
+ */
+export async function persistTemplateVersion(
+	tenantSlug: string,
+	templateSlug: string,
+	path: string,
+	sha256: string,
+	content: string,
+): Promise<void> {
+	const bkt = bucket();
+	if (!bkt) throw new Error("WORKSPACE_BUCKET not configured");
+	await ensureVersionStored(
+		bkt,
+		versionKey(tenantSlug, templateSlug, path, sha256),
+		content,
+	);
+}
+
 export interface InitializePinnedVersionsInput {
 	tenantSlug: string;
 	templateSlug: string;
