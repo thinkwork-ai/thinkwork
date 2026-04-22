@@ -59,6 +59,11 @@ output "api_endpoint" {
   value = module.api.api_endpoint
 }
 
+output "api_id" {
+  description = "aws_apigatewayv2_api.main.id — needed by the www-dns module to map api.<domain> onto the HTTP API."
+  value       = module.api.api_id
+}
+
 output "appsync_api_url" {
   value = module.appsync.graphql_api_url
 }

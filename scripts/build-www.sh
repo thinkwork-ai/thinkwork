@@ -24,6 +24,8 @@ tf_out() {
 
 WWW_BUCKET="$(tf_out www_bucket_name)"
 WWW_CF_ID="$(tf_out www_distribution_id)"
+API_ENDPOINT="$(tf_out api_endpoint)"
+API_DOMAIN="$(tf_out api_domain)"
 
 if [[ -z "$WWW_BUCKET" || -z "$WWW_CF_ID" ]]; then
   echo "✗ Missing www_bucket_name or www_distribution_id in Terraform outputs." >&2
@@ -31,9 +33,19 @@ if [[ -z "$WWW_BUCKET" || -z "$WWW_CF_ID" ]]; then
   exit 1
 fi
 
-echo "▸ Building www site ..."
+# Prefer the custom api.<domain> when it's configured; fall back to the raw
+# execute-api URL. The /pricing page reads PUBLIC_API_URL at build time to
+# POST /api/stripe/checkout-session.
+if [[ -n "$API_DOMAIN" ]]; then
+  PUBLIC_API_URL="https://${API_DOMAIN}"
+else
+  # tf_out trims trailing slash inconsistently; normalize.
+  PUBLIC_API_URL="${API_ENDPOINT%/}"
+fi
+
+echo "▸ Building www site (PUBLIC_API_URL=${PUBLIC_API_URL:-unset}) ..."
 cd "$REPO_ROOT"
-pnpm --filter @thinkwork/www build
+PUBLIC_API_URL="$PUBLIC_API_URL" pnpm --filter @thinkwork/www build
 
 echo "▸ Syncing to S3 bucket: $WWW_BUCKET ..."
 # Pass 1: content-hashed assets under /_astro/ — safe to mark immutable.

@@ -1,0 +1,27 @@
+---
+import PricingCard from "./PricingCard.astro";
+import { pricing } from "../lib/copy";
+---
+
+<div class="mx-auto grid max-w-6xl gap-6 md:grid-cols-3 md:gap-5">
+  {pricing.plans.map((plan) => (
+    <PricingCard
+      id={plan.id}
+      name={plan.name}
+      tagline={plan.tagline}
+      summary={plan.summary}
+      features={plan.features}
+      cta={plan.cta}
+      highlighted={plan.highlighted}
+    />
+  ))}
+</div>
+
+<div class="mx-auto mt-14 max-w-3xl text-center">
+  <ul class="space-y-2 text-xs leading-relaxed text-slate-500">
+    {pricing.smallPrint.map((line) => (
+      <li>{line}</li>
+    ))}
+  </ul>
+  <p class="mt-6 text-xs italic text-slate-600">{pricing.finePrint}</p>
+</div>
