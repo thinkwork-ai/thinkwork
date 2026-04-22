@@ -47,6 +47,26 @@ INSERT INTO connect_providers (name, display_name, provider_type, auth_type, con
       'identity',       'User.Read',
       'offline_access', 'offline_access'
     )
+  )),
+  ('github', 'GitHub', 'oauth2', 'oauth2', jsonb_build_object(
+    'authorization_url', 'https://github.com/login/oauth/authorize',
+    'token_url',         'https://github.com/login/oauth/access_token',
+    'userinfo_url',      'https://api.github.com/user',
+    'scopes', jsonb_build_object(
+      'repo',     'repo',
+      'org',      'read:org',
+      'identity', 'user:email'
+    )
+  )),
+  ('slack', 'Slack', 'oauth2', 'oauth2', jsonb_build_object(
+    'authorization_url', 'https://slack.com/oauth/v2/authorize',
+    'token_url',         'https://slack.com/api/oauth.v2.access',
+    'userinfo_url',      'https://slack.com/api/users.identity',
+    'scopes', jsonb_build_object(
+      'chat',     'chat:write',
+      'channels', 'channels:read',
+      'users',    'users:read'
+    )
   ))
 ON CONFLICT (name) DO UPDATE SET
   display_name  = EXCLUDED.display_name,

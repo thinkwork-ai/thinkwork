@@ -371,6 +371,18 @@ export async function buildSkillEnvOverrides(
 		envOverrides.LASTMILE_GRAPHQL_USERNAME = process.env.LASTMILE_GRAPHQL_USERNAME || "";
 		envOverrides.LASTMILE_GRAPHQL_PASSWORD = process.env.LASTMILE_GRAPHQL_PASSWORD || "";
 		envOverrides.LASTMILE_API_URL = process.env.LASTMILE_API_URL || "https://graphql-dev.lastmile-tei.com/graphql";
+	} else if (conn.provider_name === "github") {
+		// GitHub user OAuth token — exposed to the sandbox for `gh` CLI, the
+		// github REST API, and typed GitHub skills. Scope set at authorize time
+		// (repo / read:org / user:email per the sandbox plan).
+		envOverrides.GITHUB_ACCESS_TOKEN = accessToken;
+		envOverrides.GITHUB_CONNECTION_ID = connectionId;
+	} else if (conn.provider_name === "slack") {
+		// Slack user OAuth token — agents post on behalf of the invoking user.
+		// Scope set at authorize time (chat:write / channels:read / users:read
+		// per the sandbox plan).
+		envOverrides.SLACK_ACCESS_TOKEN = accessToken;
+		envOverrides.SLACK_CONNECTION_ID = connectionId;
 	}
 
 	// Always provide the API URL and secret so skills can call back
