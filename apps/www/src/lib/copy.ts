@@ -33,6 +33,8 @@ export const hero = {
   headlinePart1: "Start small. Build trust.",
   headlineAccent: "Scale AI safely.",
   lede: "The path from AI experiments to trusted AI work — visible work, governed expansion, and an AWS environment you own.",
+  thirdOption:
+    "A third path between banning AI and betting the company on it — gradual, governed, and signed off by security, cost, and audit from day one.",
   primaryCta: { label: "Read the docs", href: external.docs },
   secondaryCta: { label: "View on GitHub", href: external.github },
   headlineCandidates: [
@@ -79,50 +81,38 @@ export const proofStrip = [
   },
 ];
 
-export const adoption = {
-  eyebrow: "The third option",
-  headline:
-    "You shouldn't have to choose between banning AI and betting the company on it.",
-  lede: "Most organizations are being pushed toward one of two bad options. ThinkWork is the third — a gradual, governed path your security, cost, and audit teams can sign off on from day one.",
-  bullets: [
-    "Option one — block AI entirely, then watch shadow adoption spread through back channels anyway.",
-    "Option two — adopt faster than controls can keep up, without audit trail, ownership, or cost attribution.",
-    "Option three — adopt AI gradually, prove value early, and expand safely as trust grows.",
-  ],
-};
-
 export const journey = {
   eyebrow: "The AI adoption journey",
   headline: "A practical path to AI adoption.",
-  lede: "Start with one useful assistant in one real workflow. Keep every action visible in threads. Carry context forward with memory. Enforce limits with templates, budgets, and evaluations. Expand the role of AI as trust grows — without changing the governance model underneath.",
+  lede: "Start small, keep every action visible, expand as trust grows — without changing the governance model underneath.",
   steps: [
     {
       n: "01",
       title: "Start with small wins",
-      lede: "Begin with one assistant, one workflow, one team. Not full autonomy, not a moonshot — useful work like triaging inbound requests, drafting responses, summarizing work, routing tasks, or assisting inside a defined process.",
+      lede: "One assistant, one workflow, one team. Pilot without a platform bet.",
     },
     {
       n: "02",
       title: "Build trust through visible work",
-      lede: "Every action runs inside a thread with history, attribution, and audit. Memory carries context forward. Templates define what each agent can access and do. Budgets and evaluations keep adoption grounded.",
+      lede: "Every action lives in a thread — attributed, audited, inspectable.",
     },
     {
       n: "03",
       title: "Expand as confidence grows",
-      lede: "As teams see reliable results, assistants take on more responsibility, more system access, and bigger workflows — without changing the governance model.",
+      lede: "Assistants take on more scope as reliable results earn it.",
     },
     {
       n: "04",
       title: "Keep the harness yours",
-      lede: "As AI becomes more important, the walls around it matter more. Your runtime, data, audit trail, and memory stay inside your AWS account.",
+      lede: "Runtime, data, audit trail, and memory stay inside your boundary.",
     },
   ],
 };
 
 export const howItWorks = {
   eyebrow: "How ThinkWork works",
-  headline: "Four primitives, one system.",
-  lede: "Threads, memory, templates, and controls — built into the runtime, not bolted on later. Each primitive is a named surface your team can inspect, govern, and expand.",
+  headline: "Four primitives, one system harness.",
+  lede: "Threads, memory, templates, and controls — built into the runtime, not bolted on later.",
   primitives: [
     {
       title: "Threads",
@@ -256,6 +246,10 @@ export const costControl = {
     {
       title: "Evaluated in context",
       desc: "Cost shows up next to the turn that produced it, so spend and quality travel together.",
+    },
+    {
+      title: "Per-model breakdown",
+      desc: "Tokens in, tokens out, and cost broken out per model, so high-spend calls surface next to the choice that drove them.",
     },
   ],
   caption: "Admin web · analytics · cost view",
