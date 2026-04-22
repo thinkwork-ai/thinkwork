@@ -87,14 +87,7 @@ export const journey = {
     {
       n: "01",
       title: "Start with small wins",
-      lede: "Begin with one assistant, one workflow, one team. Not full autonomy, not a moonshot — useful work that saves time and proves the model.",
-      examples: [
-        "Triage inbound requests",
-        "Draft responses",
-        "Summarize work",
-        "Route tasks",
-        "Assist inside a defined process",
-      ],
+      lede: "Begin with one assistant, one workflow, one team. Not full autonomy, not a moonshot — useful work like triaging inbound requests, drafting responses, summarizing work, routing tasks, or assisting inside a defined process.",
     },
     {
       n: "02",
@@ -148,7 +141,7 @@ export const howItWorks = {
 
 export const controls = {
   eyebrow: "Governance that grows with usage",
-  headline: "Governance, enforced in code — not in policy documents.",
+  headline: "Governance, enforced in code, not in policy documents.",
   lede: "As agents multiply, spend climbs, and scope expands, the governance surface scales with usage — not an architecture rewrite. Five first-class controls keep AI accountable at every stage of adoption.",
   items: [
     {
@@ -277,7 +270,7 @@ export const evals = {
 
 export const systemModel = {
   eyebrow: "One admin console",
-  headline: "Agents, templates, cost, evaluations, memory — one admin console.",
+  headline: "Agents, templates, cost, evaluations, and memory in one admin console.",
   lede: "Four primitives, one surface wrapping them. Simple enough to hold in your head, strict enough to ship against.",
   nodes: [
     {
@@ -348,11 +341,11 @@ export const ownership = {
   headline: "Keep the harness yours.",
   lede: "ThinkWork deploys into the AWS account your team already operates. As AI becomes part of operations, your runtime, data, audit trail, and memory stay inside the boundary your ops team already enforces.",
   points: [
-    { title: "Runtime", desc: "Your runtime stays in your AWS account." },
-    { title: "Data", desc: "Your data stays in your boundary." },
-    { title: "Audit", desc: "Your audit trail stays inspectable." },
-    { title: "Memory", desc: "Your memory stays portable." },
-    { title: "Harness", desc: "Your harness stays yours." },
+    { title: "Runtime", desc: "Stays in your AWS account." },
+    { title: "Data", desc: "Stays in your boundary." },
+    { title: "Audit trail", desc: "Stays inspectable." },
+    { title: "Memory", desc: "Stays portable." },
+    { title: "Harness", desc: "Stays yours." },
   ],
 };
 
