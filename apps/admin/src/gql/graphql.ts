@@ -84,6 +84,12 @@ export type AddThreadCommentInput = {
   threadId: Scalars['ID']['input'];
 };
 
+export type AdminRoleCheckResult = {
+  __typename?: 'AdminRoleCheckResult';
+  /** One of: owner, admin, member, other. */
+  role: Scalars['String']['output'];
+};
+
 export type Agent = {
   __typename?: 'Agent';
   adapterConfig?: Maybe<Scalars['AWSJSON']['output']>;
@@ -2136,6 +2142,17 @@ export type Query = {
   __typename?: 'Query';
   _empty?: Maybe<Scalars['String']['output']>;
   activityLog: Array<ActivityLogEntry>;
+  /**
+   * Returns the caller's own role on the caller's own tenant.
+   *
+   * Used by the thinkwork-admin Python skill to pre-flight the
+   * server-side role gate before making a gated mutation. The query
+   * takes no arguments by design — it cannot be used as an enumeration
+   * oracle to probe arbitrary (userId, tenantId) pairs. The
+   * authoritative role gate remains `requireAdminOrApiKeyCaller` on
+   * each gated mutation.
+   */
+  adminRoleCheck: AdminRoleCheckResult;
   agent?: Maybe<Agent>;
   agentApiKeys: Array<AgentApiKey>;
   agentBudgetStatus?: Maybe<BudgetStatus>;
