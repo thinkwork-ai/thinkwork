@@ -1,24 +1,51 @@
-# Webhook smoke-test kit
+# skill_runs smoke-test kit
 
-Operator tooling for the cheapest viable end-to-end test of the composable-
-skills webhook ingress pattern (Unit 8). Nothing in this directory runs in
-CI — it's for manual verification against a deployed stage.
+Operator tooling for the cheapest viable end-to-end test of the four
+composition invocation paths — chat, catalog, scheduled, webhook. Part of
+`run-all.sh` is designed to run in CI against the just-deployed stage
+(see `CHECKS.md` for which subset); the rest is for manual verification.
 
-Context: composable-skills v1 shipped in PRs #334–#363 with zero
+Context: composable-skills v1 shipped in PRs #334–#363 with zero real
 end-to-end tests. The "integration tests" under
 `packages/api/test/integration/skill-runs/` are harness-backed mocks.
-This kit fills the gap for the two webhook paths (`crm-opportunity`,
-`task-event`) plus the chat/catalog anchor (`sales-prep`).
+This kit fills the gap.
 
 ## Files
 
 | File | Role |
 |------|------|
-| `webhook-secret-put.sh` | Create or rotate a per-(tenant, integration) signing secret in AWS Secrets Manager. |
+| `_env.sh` | Sourced helper: resolves `API_URL`, `API_AUTH_SECRET`, `DATABASE_URL`; provides `preflight_skill_runs_schema` + `wait_for_terminal_status`. |
+| `chat-smoke.sh` | POST `/api/skills/start` with `invocationSource=chat`; asserts `skill_runs` row transitions out of `running`. |
+| `catalog-smoke.sh` | POST `/api/skills/start` with `invocationSource=catalog`; same assertion. |
+| `scheduled-smoke.sh` | Insert `scheduled_jobs` + invoke `job-trigger` Lambda; asserts a scheduled `skill_runs` row. `--force` required (mutates DB). |
+| `run-all.sh` | Aggregator — runs chat + catalog + scheduled (or `--ci` subset) and prints a PASS/FAIL line per path. |
+| `webhook-secret-put.sh` | Create or rotate a per-(tenant, integration) signing secret in Secrets Manager. |
 | `webhook-smoke.sh` | HMAC-sign + POST a payload to the deployed webhook Lambda. |
+| `CHECKS.md` | Definition-of-passing + the full runbook per path. Read this first if a smoke fails. |
+| `fixtures/sales-prep-chat.json` | Inputs for `chat-smoke.sh` (distinct customer so dedup hash differs from catalog). |
+| `fixtures/sales-prep-catalog.json` | Inputs for `catalog-smoke.sh`. |
 | `fixtures/crm-opportunity-won.json` | Valid CRM close-won event. Triggers `customer-onboarding-reconciler`. |
 | `fixtures/task-completed.json` | Task completion event with a `triggeredByRunId` hook. Edit before using. |
 | `fixtures/task-completed-no-trigger.json` | Task completion without metadata — verifies the "skip, don't re-tick" branch. |
+
+## Quick start — run the full smoke suite
+
+```sh
+# Find a tenant + user on the target stage
+psql "$DATABASE_URL" -c "
+  SELECT t.id AS tenant_id, u.id AS user_id, u.email
+  FROM tenants t JOIN users u ON u.tenant_id = t.id
+  ORDER BY t.created_at LIMIT 5;
+"
+
+# Run all four paths (chat + catalog + scheduled)
+scripts/smoke/run-all.sh \
+  --tenant-id <tenant-uuid> \
+  --invoker-user-id <user-uuid>
+```
+
+See [`CHECKS.md`](CHECKS.md) for what each PASS/FAIL means, expected
+failure modes under "no connectors wired", and single-path invocations.
 
 All shell scripts are `bash` (tested on macOS 3.x / Linux 5.x). Require
 `aws`, `openssl`, `curl`, and `terraform` on `PATH`. The webhook-smoke
