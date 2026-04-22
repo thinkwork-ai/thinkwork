@@ -157,6 +157,23 @@ All checks passed.
 
 If any check fails, `doctor` prints the specific error and a remediation hint.
 
+## Step 6 — Review deployment outputs
+
+Before signing in, take a look at what got deployed. `thinkwork outputs` prints the key endpoints you'll need — the AppSync URL, the API Gateway URL, the admin app URL, and the Cognito pool id.
+
+```bash
+thinkwork outputs -s dev
+```
+
+```
+AppSync API URL:    https://abc123.appsync-api.us-east-1.amazonaws.com/graphql
+API Gateway URL:    https://xyz789.execute-api.us-east-1.amazonaws.com
+Admin App URL:      https://app.thinkwork.dev.example.com
+Cognito Pool ID:    us-east-1_ABC123XYZ
+```
+
+Bookmark the Admin App URL — that's your operator console. The AppSync and API Gateway URLs are what your clients (mobile app, SDKs, or custom integrations) will point at.
+
 ## Step 7 — Sign in to the deployed stack
 
 `thinkwork login` with `--stage <name>` signs you in to the Cognito user pool that was just provisioned. It opens your browser against Cognito's hosted UI (Google OAuth works if you configured it in `terraform.tfvars`), catches the redirect on a local loopback, and stashes the id/refresh tokens in `~/.thinkwork/config.json` under `sessions["dev"]`.
@@ -197,20 +214,7 @@ This stores the static `api_auth_secret` (from `terraform.tfvars` / the `graphql
 
 ## Step 8 — Invoke your first agent
 
-Use the GraphQL API to create a thread and send a message. Grab your AppSync endpoint from outputs:
-
-```bash
-thinkwork outputs -s dev
-```
-
-```
-AppSync API URL:    https://abc123.appsync-api.us-east-1.amazonaws.com/graphql
-API Gateway URL:    https://xyz789.execute-api.us-east-1.amazonaws.com
-Admin App URL:      https://app.thinkwork.dev.example.com
-Cognito Pool ID:    us-east-1_ABC123XYZ
-```
-
-Then send your first message. You can use the admin web app, a GraphQL client, or the test harness:
+With the outputs from Step 6, you're ready to send your first message. You can use the admin web app, a GraphQL client, or the test harness:
 
 <Tabs>
 <TabItem label="GraphQL (curl)">
