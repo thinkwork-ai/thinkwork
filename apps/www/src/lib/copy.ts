@@ -25,14 +25,14 @@ export const nav = [
 export const meta = {
   title: "ThinkWork — Start small. Build trust. Scale AI safely.",
   description:
-    "The path from AI experiments to trusted AI work. Visible work, governed expansion, and an AWS deployment boundary you own.",
+    "The path from AI experiments to trusted AI work. Visible work, governed expansion, and infrastructure you own.",
 };
 
 export const hero = {
   eyebrow: "The AI adoption journey",
   headlinePart1: "Start small. Build trust.",
   headlineAccent: "Scale AI safely.",
-  lede: "The path from AI experiments to trusted AI work — visible work, governed expansion, and an AWS deployment boundary you own.",
+  lede: "The path from AI experiments to trusted AI work — visible work, governed expansion, and an AWS environment you own.",
   primaryCta: { label: "Read the docs", href: external.docs },
   secondaryCta: { label: "View on GitHub", href: external.github },
   headlineCandidates: [
@@ -69,7 +69,8 @@ export const proofStrip = [
   },
   {
     label: "Your AWS account",
-    detail: "Runtime, data, audit trail, and memory stay inside your boundary.",
+    detail:
+      "Runtime, data, audit trail, and memory stay inside your AWS account.",
   },
   {
     label: "One system at every scale",
@@ -93,7 +94,7 @@ export const adoption = {
 export const journey = {
   eyebrow: "The AI adoption journey",
   headline: "A practical path to AI adoption.",
-  lede: "Start with one useful assistant in one real workflow. Keep every action visible in threads. Carry context forward with memory. Enforce boundaries with templates, budgets, and evaluations. Expand the role of AI as trust grows — without changing the governance model underneath.",
+  lede: "Start with one useful assistant in one real workflow. Keep every action visible in threads. Carry context forward with memory. Enforce limits with templates, budgets, and evaluations. Expand the role of AI as trust grows — without changing the governance model underneath.",
   steps: [
     {
       n: "01",
@@ -113,7 +114,7 @@ export const journey = {
     {
       n: "04",
       title: "Keep the harness yours",
-      lede: "As AI becomes more important, the boundary matters more. Your runtime, data, audit trail, and memory stay inside the AWS account your team already operates.",
+      lede: "As AI becomes more important, the walls around it matter more. Your runtime, data, audit trail, and memory stay inside your AWS account.",
     },
   ],
 };
@@ -139,9 +140,9 @@ export const howItWorks = {
     },
     {
       title: "Templates",
-      oneLiner: "Templates enforce boundaries.",
+      oneLiner: "Templates enforce limits.",
       detail:
-        "You decide what each agent is allowed to do — which tools, models, and knowledge it can use. Agents inherit that boundary.",
+        "You decide what each agent is allowed to do — which tools, models, and knowledge it can use. Agents inherit those limits.",
       href: "#templates",
     },
     {
@@ -161,7 +162,7 @@ export const controls = {
   items: [
     {
       title: "Runs in your AWS",
-      desc: "The runtime deploys into the account your team already operates. Your data, IAM, and network boundaries stay yours.",
+      desc: "The runtime deploys into your account. Your data, IAM, and network stay yours.",
       icon: "aws",
     },
     {
@@ -190,7 +191,7 @@ export const controls = {
 export const agentTemplates = {
   eyebrow: "Templates",
   headline: "You decide what each agent can do.",
-  lede: "Agent templates are the contract between a policy decision and the agents that enforce it. Define a template once and every agent created from it inherits the boundary.",
+  lede: "Agent templates are the contract between a policy decision and the agents that enforce it. Define a template once and every agent created from it inherits those limits.",
   features: [
     {
       title: "Tool block-lists",
@@ -350,10 +351,10 @@ export const mobile = {
 export const ownership = {
   eyebrow: "Ownership",
   headline: "Keep the harness yours.",
-  lede: "ThinkWork deploys into the AWS account your team already operates. As AI becomes part of operations, your runtime, data, audit trail, and memory stay inside the boundary your ops team already enforces.",
+  lede: "ThinkWork deploys into the AWS account your team already runs. As AI becomes part of operations, your runtime, data, audit trail, and memory stay inside the boundary your ops team already enforces.",
   points: [
     { title: "Runtime", desc: "Stays in your AWS account." },
-    { title: "Data", desc: "Stays in your boundary." },
+    { title: "Data", desc: "Stays in your account." },
     { title: "Audit trail", desc: "Stays inspectable." },
     { title: "Memory", desc: "Stays portable." },
     { title: "Harness", desc: "Stays yours." },
@@ -379,7 +380,7 @@ export const finalCta = {
   eyebrow: "Your AWS · Your rules",
   headlinePart1: "Adopt AI.",
   headlineAccent: "Keep control.",
-  lede: "Deploy into the AWS account your team already operates. Every agent, thread, cost event, and memory stays inside your boundary — under the IAM and governance your ops team already enforces.",
+  lede: "Deploy into the account your ops team already runs. Every agent, thread, cost event, and memory stays in your AWS — under the IAM and governance your ops team already enforces.",
   primaryCta: { label: "Read the docs", href: external.docs },
   secondaryCta: { label: "View on GitHub", href: external.github },
 };
