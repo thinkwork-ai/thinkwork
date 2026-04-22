@@ -62,7 +62,7 @@ We ship things only after they're load-bearing in production. Everything below i
 
 | Item | Status | Notes |
 | --- | --- | --- |
-| Knowledge Graph + Ontology Studio | Planned | Authoring UI for entity/relation schemas — a step beyond today's memory graph view |
+| Ontology Studio | Planned | Authoring UI for entity/relation schemas — a step beyond today's memory graph view |
 | AutoResearch | Planned | Long-running research agents with structured citations; schema reserved, runtime not wired |
 | Places service | Planned | Location/venue entity service for field- and route-based workflows |
 | Web end-user client | Planned | Browser counterpart to the mobile inbox; today the admin web app is operator-only |
