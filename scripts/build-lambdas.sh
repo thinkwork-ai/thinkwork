@@ -208,6 +208,9 @@ build_handler "webhooks-admin" \
 build_handler "webhook-deliveries-cleanup" \
   "$REPO_ROOT/packages/api/src/handlers/webhook-deliveries-cleanup.ts"
 
+build_handler "skill-runs-reconciler" \
+  "$REPO_ROOT/packages/api/src/handlers/skill-runs-reconciler.ts"
+
 # Unit 8 — composable-skills webhook ingress pattern. Each integration
 # has a thin handler under handlers/webhooks/; the shared helper
 # (_shared.ts) owns HMAC + bootstrap + dispatch.
