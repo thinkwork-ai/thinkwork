@@ -287,11 +287,21 @@ async function handleGet(
 	}
 }
 
-async function handleList(deps: HandlerDeps): Promise<APIGatewayProxyResult> {
+async function handleList(
+	deps: HandlerDeps,
+	includeContent: boolean,
+): Promise<APIGatewayProxyResult> {
 	const { target, tenantId } = deps;
 	if (target.kind === "agent") {
 		const ctx: ComposeContext = { tenantId };
-		const files = (await composeList(ctx, target.agentId)) as ComposeResult[];
+		// Strands container cold-start (Unit 7) sends includeContent=true
+		// and writes each file.content to /tmp/workspace. If we dropped the
+		// flag, the container would receive metadata-only entries and
+		// silently write nothing — the agent boots with no workspace on
+		// disk.
+		const files = (await composeList(ctx, target.agentId, {
+			includeContent,
+		})) as ComposeResult[];
 		return json(200, {
 			ok: true,
 			files: files.map((f) => ({
@@ -300,6 +310,7 @@ async function handleList(deps: HandlerDeps): Promise<APIGatewayProxyResult> {
 				sha256: f.sha256,
 				overridden:
 					f.source === "agent-override" || f.source === "agent-override-pinned",
+				...(includeContent ? { content: f.content } : {}),
 			})),
 		});
 	}
@@ -405,6 +416,12 @@ interface RequestBody {
 	path?: string;
 	content?: string;
 	acceptTemplateUpdate?: boolean;
+	/**
+	 * Unit 7 (Strands container cold-start) needs composed content inline
+	 * with the list to avoid N round-trips. The composer returns it when
+	 * this flag is true.
+	 */
+	includeContent?: boolean;
 	// Legacy shape — rejected loudly so buggy clients surface.
 	tenantSlug?: string;
 	instanceId?: string;
@@ -481,7 +498,7 @@ export async function handler(
 				return await handleGet(deps, body.path);
 			}
 			case "list":
-				return await handleList(deps);
+				return await handleList(deps, body.includeContent === true);
 			case "put": {
 				if (!body.path || body.content === undefined) {
 					return json(400, {
