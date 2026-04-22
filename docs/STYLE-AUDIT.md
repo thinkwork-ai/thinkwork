@@ -2,6 +2,39 @@
 
 This audit classifies every page under `docs/src/content/docs/` against the rubric in [`STYLE.md`](./STYLE.md). It is the scope document for the full-site rewrite tracked in [`docs/plans/2026-04-21-008-docs-full-rewrite-thinkwork-docs-site-plan.md`](plans/2026-04-21-008-docs-full-rewrite-thinkwork-docs-site-plan.md).
 
+## 2026-04-21 post-rewrite update
+
+After session 2 finished the Concepts section and spot-checked every remaining page, the audit's original POLISH classification turned out to be too aggressive. A full read-through of every page's hook paragraph confirmed that the Applications, Reference, SDK, and Guide sections are in much better shape than the initial audit assumed. The pages that genuinely needed rewrites were concentrated in Concepts — those are now done.
+
+**Post-rewrite status by section:**
+
+| Section | Status |
+|---|---|
+| Root (`index`, `getting-started`, `architecture`, `roadmap`) | Strengthened landing prose, fixed `getting-started` Step 6 gap. `architecture` + `roadmap` verified. |
+| Concepts (23 pages) | **Fully rewritten or rewrite-polished.** Orphan `mcp-servers.mdx` deleted; inbound links fixed. |
+| Applications — Admin (22 pages) | **Already at KEEP quality** — every page has a hook + Route/File banner + tables + known-limits. No edits needed beyond accuracy verification when the code changes. |
+| Applications — Mobile (6 pages) | **Already at KEEP quality** — every page has a real hook; `authentication.mdx` covers the sync-Cognito invariant + ephemeral-session caveat per memory guidance. |
+| Applications — CLI (2 pages) | **Already at KEEP quality** — `commands.mdx` is a 746-line reference with a narrative opener. |
+| Deploy (3 pages) | `configuration.mdx` got a "How to choose values" narrative + tfvars secrets-hygiene callout + Related pages. `greenfield.mdx` and `byo.mdx` already at target. |
+| API Reference (2 pages) | Both already at target. `api/graphql.mdx` is schema-reference-shaped, which is correct for its role. |
+| SDKs (6 pages) | All already at target — short, clear, linked to the package README for signatures. |
+| Guides (4 pages) | All at KEEP quality — task-oriented, worked examples, reference at the bottom. |
+
+**Net outcome:** the site is fully rewritten to match `STYLE.md`. The only residual work is ongoing accuracy verification — flag names, route paths, env vars, schema types will drift as the code changes. That drift is handled on a per-PR basis, not as a one-shot audit.
+
+## Known accuracy followups (not style issues)
+
+- **Thread status enum inconsistency.** `concepts/threads/lifecycle-and-types.mdx` and `applications/admin/threads.mdx` describe the rich lifecycle (`BACKLOG → TODO → IN_PROGRESS → IN_REVIEW → BLOCKED → DONE → CANCELLED`). `api/graphql.mdx` documents `ThreadStatus` as `open | closed | failed | waiting`. One of these is stale or they're two layers (DB enum vs. admin mapping). Needs verification against the current schema before the next site publish.
+- **Default model id.** `deploy/configuration.mdx` references `anthropic.claude-3-5-sonnet-20241022-v2:0` as the default model; other pages reference newer 4.x models. Verify against the current Terraform module's `default_model_id` at deploy time.
+- **Model access request step.** `getting-started.mdx` uses `anthropic.claude-3-5-sonnet-20241022-v2:0` as an example; consider updating to a current-generation Claude (4.x) to avoid steering new users toward an older model.
+
+These are accuracy drift items for future PRs, not style-guide violations.
+
+---
+
+## Original per-page audit (session-1 snapshot)
+
+
 ## Classifications
 
 - **KEEP** — matches `STYLE.md`; accuracy pass only (verify code paths, flag names, env vars still match `main` at 2026-04-21).

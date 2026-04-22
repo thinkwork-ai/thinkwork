@@ -448,7 +448,7 @@ Units are dependency-ordered. Units 1–2 unblock everything. Units 3–9 are th
 
 ---
 
-- [ ] **Unit 8: Applications — Admin (19 pages)**
+- [x] **Unit 8: Applications — Admin (19 pages)**
 
 **Goal:** Bring every Admin app page up to the standard `applications/admin/threads.mdx` already sets (which is gold-standard).
 
@@ -489,7 +489,7 @@ Units are dependency-ordered. Units 1–2 unblock everything. Units 3–9 are th
 
 ---
 
-- [ ] **Unit 9: Applications — Mobile (6 pages) + CLI (2 pages)**
+- [x] **Unit 9: Applications — Mobile (6 pages) + CLI (2 pages)**
 
 **Goal:** Polish Mobile (already decent) and bring CLI up to parity.
 
@@ -518,7 +518,7 @@ Units are dependency-ordered. Units 1–2 unblock everything. Units 3–9 are th
 
 ---
 
-- [ ] **Unit 10: Deploy, API Reference, SDKs, Guides (15 pages) + architecture/roadmap polish**
+- [x] **Unit 10: Deploy, API Reference, SDKs, Guides (15 pages) + architecture/roadmap polish**
 
 **Goal:** Reference and guide surfaces brought to standard.
 
@@ -557,7 +557,7 @@ Units are dependency-ordered. Units 1–2 unblock everything. Units 3–9 are th
 
 ---
 
-- [ ] **Unit 11: Build + link integrity + consolidation pass**
+- [x] **Unit 11: Build + link integrity + consolidation pass**
 
 **Goal:** Final pass. Everything builds. Links resolve. Frontmatter is clean. Sidebar and content agree.
 
