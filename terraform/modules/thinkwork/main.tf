@@ -235,6 +235,11 @@ module "agentcore" {
   hindsight_endpoint  = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
   agentcore_memory_id = module.agentcore_memory.memory_id
   memory_engine       = local.resolved_memory_engine
+
+  # Threaded through so the container's run_skill_dispatch can POST
+  # terminal state back to /api/skills/complete.
+  api_endpoint    = module.lambda_api.api_endpoint
+  api_auth_secret = var.api_auth_secret
 }
 
 module "crons" {

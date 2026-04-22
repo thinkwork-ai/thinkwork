@@ -38,6 +38,19 @@ variable "agentcore_memory_id" {
   default     = ""
 }
 
+variable "api_endpoint" {
+  description = "Deployed API Gateway base URL. Injected as THINKWORK_API_URL so the composition runner (run_skill dispatch) can POST terminal state back to /api/skills/complete."
+  type        = string
+  default     = ""
+}
+
+variable "api_auth_secret" {
+  description = "Service-auth bearer shared secret. Injected as API_AUTH_SECRET so the composition runner can authenticate to /api/skills/complete. Matches the lambda-api module's value."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "memory_engine" {
   description = "Active long-term memory engine ('hindsight' or 'agentcore'). Surfaced to the runtime as MEMORY_ENGINE for telemetry/debugging only; engine selection itself happens in the API's normalized memory layer when memory-retain is invoked."
   type        = string
@@ -260,6 +273,10 @@ resource "aws_lambda_function" "agentcore" {
       AGENTCORE_FILES_BUCKET = var.bucket_name
       MEMORY_ENGINE          = var.memory_engine
       MEMORY_RETAIN_FN_NAME  = local.memory_retain_fn_name
+      # Needed by run_skill_dispatch.py to POST terminal state back to
+      # /api/skills/complete after a composition run finishes.
+      THINKWORK_API_URL      = var.api_endpoint
+      API_AUTH_SECRET        = var.api_auth_secret
     }
   }
 
