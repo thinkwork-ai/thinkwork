@@ -458,6 +458,13 @@ export async function handler(event: InvokeEvent): Promise<void> {
     const invokeStart = Date.now();
     const invokePayload = {
       tenant_id: tenantId,
+      // Unit 7 tightened `_ensure_workspace_ready` to early-return when
+      // `workspace_tenant_id` is empty. chat-agent-invoke was never updated
+      // to send it — so the container skipped the composer fetch entirely,
+      // `/tmp/workspace` stayed empty, IDENTITY.md/USER.md never loaded, and
+      // the agent answered from system-workspace + a hallucinated identity.
+      // Matches agentcore-invoke.ts:237 and eval-runner.ts:276.
+      workspace_tenant_id: tenantId,
       assistant_id: agentId,
       thread_id: threadId,
       user_id: agent.human_pair_id || undefined,
