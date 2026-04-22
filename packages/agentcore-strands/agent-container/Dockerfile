@@ -60,6 +60,18 @@ COPY packages/agentcore-strands/agent-container/invocation_env.py .
 # runtime the first time the wiki tool is invoked — same class, zero cost
 # to fix while we're here.
 COPY packages/agentcore-strands/agent-container/wiki_tools.py .
+# AgentCore Code Sandbox execute_code tool (plan Unit 7). Lazy-imported
+# by server.py only when SANDBOX_INTERPRETER_ID is set; without this
+# COPY the import fails loud on first sandbox turn. Same class of bug
+# as the other entries in this block — see
+# docs/solutions/build-errors/dockerfile-explicit-copy-list-drops-new-tool-modules-2026-04-22.md.
+COPY packages/agentcore-strands/agent-container/sandbox_tool.py .
+
+# Build-time assertion: fail the image build loud if sandbox_tool.py is
+# missing or can't import cleanly. Without this, a regression on the
+# COPY line above only surfaces on the first sandbox-enabled turn in
+# production — hours after deploy.
+RUN python -c "import sandbox_tool; assert hasattr(sandbox_tool, 'build_execute_code_tool'), 'sandbox_tool missing factory'; print('sandbox_tool: OK')"
 
 # Copy shared Agent Container modules
 COPY packages/agentcore/agent-container/permissions.py .
