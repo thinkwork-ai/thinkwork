@@ -448,6 +448,9 @@ export type CompositionInvokePayload = {
     skillId: string;
     subjectEntityId?: string;
   };
+  // Per-run HMAC secret the container uses to sign its
+  // /api/skills/complete callback — see skill_runs.completion_hmac_secret.
+  completionHmacSecret: string;
 };
 
 export type CompositionInvokeResult =

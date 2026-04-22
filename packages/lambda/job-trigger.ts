@@ -11,7 +11,7 @@
  *   { triggerId, triggerType, tenantId, agentId?, routineId?, prompt?, scheduleName?, oneTime? }
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { getDb, ensureThreadForWork } from "@thinkwork/database-pg";
 import {
   agentWakeupRequests,
@@ -144,6 +144,7 @@ async function invokeAgentcoreRunSkill(payload: {
   skillId: string;
   skillVersion: number;
   resolvedInputs: Record<string, unknown>;
+  completionHmacSecret: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const fnName = process.env.AGENTCORE_FUNCTION_NAME;
   if (!fnName) {
@@ -167,6 +168,7 @@ async function invokeAgentcoreRunSkill(payload: {
         userId: payload.invokerUserId,
         skillId: payload.skillId,
       },
+      completionHmacSecret: payload.completionHmacSecret,
     };
     const res = await lambda.send(
       new InvokeCommand({
@@ -486,6 +488,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       // (tenant, invoker, skill, hash) WHERE status='running' makes
       // overlapping fires dedup cleanly.
       const resolvedInputsHash = hashResolvedInputs(resolvedInputs);
+      const completionHmacSecret = randomBytes(32).toString("hex");
       const inserted = await db
         .insert(skillRuns)
         .values({
@@ -500,6 +503,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
           resolved_inputs_hash: resolvedInputsHash,
           delivery_channels: (cfg.deliveryChannels as unknown[]) ?? [],
           status: "running",
+          completion_hmac_secret: completionHmacSecret,
         })
         .onConflictDoNothing({
           target: [
@@ -531,6 +535,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         skillId,
         skillVersion: runRow.skill_version,
         resolvedInputs,
+        completionHmacSecret,
       });
 
       if (!invokeResult.ok) {

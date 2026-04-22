@@ -26,6 +26,7 @@
  */
 
 import type { GraphQLContext } from "../../context.js";
+import { randomBytes } from "node:crypto";
 import {
 	db, eq, and, sql,
 	skillRuns,
@@ -99,6 +100,8 @@ export async function startSkillRun(
 	// expansion (e.g., customer slug → customer id) before this hash.
 	const resolvedInputs: Record<string, unknown> = rawInputs;
 	const resolvedInputsHash = hashResolvedInputs(resolvedInputs);
+	// Per-run HMAC secret — see PR #1 change 3 of the hardening plan.
+	const completionHmacSecret = randomBytes(32).toString("hex");
 
 	const inserted = await db
 		.insert(skillRuns)
@@ -114,6 +117,7 @@ export async function startSkillRun(
 			resolved_inputs_hash: resolvedInputsHash,
 			delivery_channels: deliveryChannels,
 			status: "running",
+			completion_hmac_secret: completionHmacSecret,
 		})
 		.onConflictDoNothing({
 			target: [
@@ -171,6 +175,7 @@ export async function startSkillRun(
 			userId,
 			skillId: i.skillId,
 		},
+		completionHmacSecret,
 	});
 
 	if (!invokeResult.ok) {

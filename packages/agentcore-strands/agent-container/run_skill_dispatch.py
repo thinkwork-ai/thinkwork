@@ -220,18 +220,26 @@ def _urlopen_with_retry(req, timeout: int, run_id: str):
 
 def post_skill_run_complete(run_id: str, tenant_id: str, status: str,
                              failure_reason: str | None = None,
-                             delivered_artifact_ref: dict | None = None) -> None:
+                             delivered_artifact_ref: dict | None = None,
+                             completion_hmac_secret: str | None = None) -> None:
     """POST terminal state to the TS /api/skills/complete endpoint.
 
     Mirrors the urllib pattern from write_memory_tool.py. Service-auth
-    via API_AUTH_SECRET (or THINKWORK_API_SECRET alias). Uses a bounded
-    retry (3 attempts, exponential backoff with jitter) to ride through
-    transient Aurora / API-gateway blips; the 15-minute
-    skill-runs-reconciler is the backstop for anything that makes it
-    past the retries. Failures log loudly but do NOT raise out of this
-    function — a dispatch coroutine should never throw because of a
-    writeback failure.
+    via API_AUTH_SECRET (or THINKWORK_API_SECRET alias) AND a per-run
+    HMAC header computed from completion_hmac_secret (arrived in the
+    run_skill envelope). The HMAC gate means a leaked API_AUTH_SECRET
+    plus a guessed runId cannot forge a completion for someone else's
+    run. Uses a bounded retry (3 attempts, exponential backoff with
+    jitter) to ride through transient Aurora / API-gateway blips; the
+    15-minute skill-runs-reconciler is the backstop for anything that
+    makes it past the retries. Failures log loudly but do NOT raise out
+    of this function — a dispatch coroutine should never throw because
+    of a writeback failure.
     """
+    import hmac as _hmac
+    import hashlib as _hashlib
+    import urllib.request
+
     api_url = os.environ.get("THINKWORK_API_URL") or ""
     api_secret = (
         os.environ.get("API_AUTH_SECRET")
@@ -250,17 +258,31 @@ def post_skill_run_complete(run_id: str, tenant_id: str, status: str,
     if delivered_artifact_ref is not None:
         body_dict["deliveredArtifactRef"] = delivered_artifact_ref
 
-    import urllib.request
-
     body = json.dumps(body_dict).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_secret}",
+    }
+    if completion_hmac_secret:
+        signature = _hmac.new(
+            completion_hmac_secret.encode("utf-8"),
+            run_id.encode("utf-8"),
+            _hashlib.sha256,
+        ).hexdigest()
+        headers["X-Skill-Run-Signature"] = f"sha256={signature}"
+    else:
+        # The envelope is supposed to carry this; if it doesn't, the server
+        # will 401 and the retry helper will surface the terminal failure.
+        logger.warning(
+            "run_skill: no completion_hmac_secret in envelope for runId=%s; "
+            "server will reject the completion POST",
+            run_id,
+        )
     req = urllib.request.Request(
         f"{api_url.rstrip('/')}/api/skills/complete",
         data=body,
         method="POST",
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_secret}",
-        },
+        headers=headers,
     )
     try:
         resp = _urlopen_with_retry(req, timeout=15, run_id=run_id)
@@ -297,6 +319,7 @@ async def dispatch_run_skill(payload: dict) -> dict:
     skill_id = payload.get("skillId") or ""
     resolved_inputs = payload.get("resolvedInputs") or {}
     scope = payload.get("scope") or {}
+    completion_hmac_secret = payload.get("completionHmacSecret") or ""
 
     if not (run_id and tenant_id and skill_id):
         return {
@@ -314,7 +337,11 @@ async def dispatch_run_skill(payload: dict) -> dict:
     except Exception as e:
         reason = f"failed to sync composition skill {skill_id!r} from S3: {e}"
         logger.error("run_skill: %s", reason)
-        post_skill_run_complete(run_id, tenant_id, "failed", failure_reason=reason)
+        post_skill_run_complete(
+            run_id, tenant_id, "failed",
+            failure_reason=reason,
+            completion_hmac_secret=completion_hmac_secret,
+        )
         return {"runId": run_id, "status": "failed", "failureReason": reason}
 
     # Load the composition (pydantic-validated). load_composition_skills
@@ -328,7 +355,11 @@ async def dispatch_run_skill(payload: dict) -> dict:
             f"(YAML missing or not execution: composition)"
         )
         logger.error("run_skill: %s", reason)
-        post_skill_run_complete(run_id, tenant_id, "failed", failure_reason=reason)
+        post_skill_run_complete(
+            run_id, tenant_id, "failed",
+            failure_reason=reason,
+            completion_hmac_secret=completion_hmac_secret,
+        )
         return {"runId": run_id, "status": "failed", "failureReason": reason}
 
     # Build the SkillDispatch. For each sub-skill requested by a composition
@@ -367,7 +398,11 @@ async def dispatch_run_skill(payload: dict) -> dict:
         status = "failed"
         failure_reason = f"composition_runner raised: {e}"
 
-    post_skill_run_complete(run_id, tenant_id, status, failure_reason=failure_reason)
+    post_skill_run_complete(
+        run_id, tenant_id, status,
+        failure_reason=failure_reason,
+        completion_hmac_secret=completion_hmac_secret,
+    )
     return {
         "runId": run_id,
         "status": status,

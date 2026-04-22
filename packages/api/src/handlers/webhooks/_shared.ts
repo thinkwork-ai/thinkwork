@@ -40,7 +40,7 @@ import type {
 	APIGatewayProxyEventV2,
 	APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import {
 	SecretsManagerClient,
 	GetSecretValueCommand,
@@ -341,6 +341,7 @@ export function createWebhookHandler(
 		const invokerUserId = await ensureTenantSystemUser(tenantId);
 		const resolvedInputs = dispatch.inputs;
 		const resolvedInputsHash = hashResolvedInputs(resolvedInputs);
+		const completionHmacSecret = randomBytes(32).toString("hex");
 
 		const inserted = await db
 			.insert(skillRuns)
@@ -356,6 +357,7 @@ export function createWebhookHandler(
 				resolved_inputs_hash: resolvedInputsHash,
 				triggered_by_run_id: dispatch.triggeredByRunId ?? null,
 				status: "running",
+				completion_hmac_secret: completionHmacSecret,
 			})
 			.onConflictDoNothing({
 				target: [
@@ -412,6 +414,7 @@ export function createWebhookHandler(
 				userId: invokerUserId,
 				skillId: dispatch.skillId,
 			},
+			completionHmacSecret,
 		});
 
 		if (!invokeResult.ok) {
