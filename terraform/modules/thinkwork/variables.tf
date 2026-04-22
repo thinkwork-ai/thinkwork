@@ -309,6 +309,26 @@ variable "admin_certificate_arn" {
 }
 
 # ---------------------------------------------------------------------------
+# API Gateway (custom domain — optional)
+# ---------------------------------------------------------------------------
+
+variable "api_domain" {
+  description = "Custom domain for the HTTP API Gateway (e.g. api.thinkwork.ai). Leave empty to keep only the default execute-api URL. When set, the www-dns module adds a SAN to the shared ACM cert and creates a Cloudflare CNAME pointing at the API Gateway regional domain."
+  type        = string
+  default     = ""
+}
+
+# ---------------------------------------------------------------------------
+# Stripe billing
+# ---------------------------------------------------------------------------
+
+variable "stripe_price_ids_json" {
+  description = "JSON object mapping internal plan names to Stripe price IDs for this stage, e.g. {\"starter\":\"price_...\",\"team\":\"price_...\"}. Non-secret; per-stage. Exposed to Lambdas as STRIPE_PRICE_IDS_JSON env var. The secret_key, publishable_key, and webhook_signing_secret live in Secrets Manager at thinkwork/${stage}/stripe/api-credentials — never in tfvars."
+  type        = string
+  default     = "{}"
+}
+
+# ---------------------------------------------------------------------------
 # SES inbound email (delegated subzone — Option A)
 # ---------------------------------------------------------------------------
 

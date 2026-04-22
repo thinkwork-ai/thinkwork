@@ -63,6 +63,17 @@ locals {
     GOOGLE_PRODUCTIVITY_OAUTH_SECRET_ARN = aws_secretsmanager_secret.oauth_google_productivity.arn
     OAUTH_CALLBACK_URL                   = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com/api/oauth/callback"
     REDIRECT_SUCCESS_URL                 = var.redirect_success_url
+
+    # Stripe billing — see stripe-secrets.tf. The ARN is the indirection;
+    # the actual keys live in Secrets Manager and are fetched by
+    # packages/api/src/lib/stripe-credentials.ts at cold-start. Price IDs
+    # are non-secret per-stage config carried as a plain JSON env var so
+    # staging/prod can use different products without a secret rotation.
+    STRIPE_CREDENTIALS_SECRET_ARN = aws_secretsmanager_secret.stripe_api_credentials.arn
+    STRIPE_PRICE_IDS_JSON         = var.stripe_price_ids_json
+    STRIPE_CHECKOUT_SUCCESS_URL   = "${var.admin_url}/onboarding/welcome?session_id={CHECKOUT_SESSION_ID}"
+    STRIPE_CHECKOUT_CANCEL_URL    = "${var.www_url}/pricing"
+    WWW_URL                       = var.www_url
   }
 
   # Per-handler env-var overrides. ARNs are constructed from the naming
