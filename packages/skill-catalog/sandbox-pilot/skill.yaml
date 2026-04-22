@@ -1,0 +1,31 @@
+slug: sandbox-pilot
+display_name: Sandbox Pilot (flagship demo)
+description: >
+  Reference template exercising the full AgentCore Code Sandbox path —
+  pulls skill_runs from Thinkwork's GraphQL + a GitHub issue body via the
+  sandbox's execute_code tool, joins them in pandas, uploads a chart to
+  S3, and posts the S3 URL to Slack. Use for dogfood validation when
+  onboarding a new tenant to the sandbox substrate.
+category: reference
+version: "1.0.0"
+author: thinkwork
+icon: beaker
+tags: [sandbox, pilot, reference, dogfood]
+execution: script
+scripts:
+  - name: run_pilot
+    path: scripts/pilot.py
+    description: "Runs the sandbox-pilot flagship demo end-to-end."
+triggers:
+  - "run the sandbox pilot"
+  - "sandbox smoke test"
+  - "sandbox flagship demo"
+# The template that wraps this skill opts into the sandbox via
+# `sandbox: { environment: "default-public", required_connections:
+# ["github", "slack"] }` on AgentTemplate (plan Unit 3). The script
+# itself only needs THINKWORK_API_URL + API_AUTH_SECRET because the
+# per-user OAuth tokens land in os.environ via the sandbox preamble
+# (plan Unit 8) when execute_code runs.
+requires_env:
+  - THINKWORK_API_URL
+  - THINKWORK_API_SECRET
