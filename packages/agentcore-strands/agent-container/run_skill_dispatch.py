@@ -37,6 +37,104 @@ class SkillNotRegisteredError(RuntimeError):
     """
 
 
+def _invoke_sub_skill(sub_skill_id: str, sub_inputs: dict):
+    """Execute one sub-skill referenced by a composition step.
+
+    Sync from S3 (idempotent — warm invocations reuse /tmp/skills), read
+    the sub-skill's skill.yaml, and dispatch on `execution`:
+
+      * `script` — import the declared script file and call its entry
+        function with `sub_inputs` kwargs. Deterministic; this is the
+        only execution mode wired today. Compositions that only reference
+        script sub-skills can reach `status='complete'`.
+      * anything else — raise SkillNotRegisteredError so the composition
+        runner surfaces a clean per-step failure with a named reason.
+        Context-mode (LLM-prompt) + agent-mode dispatch land in a follow-up.
+    """
+    import importlib.util
+    import os
+    import yaml  # type: ignore[import-untyped]
+
+    try:
+        from install_skills import install_skill_from_s3, SKILLS_DIR
+    except ImportError as exc:
+        raise SkillNotRegisteredError(
+            f"install_skills module unavailable: {exc}"
+        ) from exc
+
+    # Idempotent sync. Real install_skill_from_s3 is a no-op when the
+    # bucket env var is unset (tests), or when objects are already on disk.
+    try:
+        install_skill_from_s3(f"skills/catalog/{sub_skill_id}", sub_skill_id)
+    except Exception as exc:
+        raise SkillNotRegisteredError(
+            f"skill {sub_skill_id!r} failed to sync from S3: {exc}"
+        ) from exc
+
+    yaml_path = os.path.join(SKILLS_DIR, sub_skill_id, "skill.yaml")
+    if not os.path.isfile(yaml_path):
+        raise SkillNotRegisteredError(
+            f"skill {sub_skill_id!r} has no skill.yaml in {SKILLS_DIR}"
+        )
+
+    with open(yaml_path) as f:
+        meta = yaml.safe_load(f) or {}
+
+    execution = meta.get("execution") or ""
+    if execution != "script":
+        raise SkillNotRegisteredError(
+            f"skill {sub_skill_id!r} execution={execution!r} is not wired "
+            f"in the run_skill dispatch path yet (only 'script' is supported)"
+        )
+
+    scripts = meta.get("scripts") or []
+    if not scripts:
+        raise SkillNotRegisteredError(
+            f"skill {sub_skill_id!r} declares execution=script but has no "
+            f"`scripts:` entries"
+        )
+
+    # v1: each composition-invocable script skill declares exactly one
+    # entry script whose function name matches `scripts[0].name`. If a
+    # skill ever needs multi-entry dispatch, the step YAML would have to
+    # specify which function to call — not a concern for today's smokes.
+    entry = scripts[0]
+    script_path = os.path.join(SKILLS_DIR, sub_skill_id, entry.get("path", ""))
+    fn_name = entry.get("name") or ""
+    if not os.path.isfile(script_path) or not fn_name:
+        raise SkillNotRegisteredError(
+            f"skill {sub_skill_id!r} script_path={script_path!r} or "
+            f"fn_name={fn_name!r} missing"
+        )
+
+    # Dynamic import. Module name is namespaced so reloading the same
+    # skill across invocations doesn't collide with other modules.
+    module_key = f"_skill_{sub_skill_id.replace('-', '_')}_{fn_name}"
+    spec = importlib.util.spec_from_file_location(module_key, script_path)
+    if spec is None or spec.loader is None:
+        raise SkillNotRegisteredError(
+            f"skill {sub_skill_id!r} could not build import spec for {script_path}"
+        )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    fn = getattr(module, fn_name, None)
+    if not callable(fn):
+        raise SkillNotRegisteredError(
+            f"skill {sub_skill_id!r} script {script_path} has no callable "
+            f"named {fn_name!r}"
+        )
+
+    try:
+        return fn(**(sub_inputs or {}))
+    except TypeError as exc:
+        # Bad inputs shape — surface cleanly so the step fails with a named
+        # reason rather than a mystery stack trace.
+        raise SkillNotRegisteredError(
+            f"skill {sub_skill_id!r} refused inputs: {exc}"
+        ) from exc
+
+
 def post_skill_run_complete(run_id: str, tenant_id: str, status: str,
                              failure_reason: str | None = None,
                              delivered_artifact_ref: dict | None = None) -> None:
@@ -152,17 +250,22 @@ async def dispatch_run_skill(payload: dict) -> dict:
         post_skill_run_complete(run_id, tenant_id, "failed", failure_reason=reason)
         return {"runId": run_id, "status": "failed", "failureReason": reason}
 
-    # Build the SkillDispatch. This runtime has NO script skills registered
-    # for the composition path today (connectors are not wired yet — see
-    # docs/plans/2026-04-22-001-fix-composable-skills-prod-incident-e2e-plan.md).
-    # Every dispatch raises with a clean, named error; composition_runner
-    # catches and surfaces it as a step failure, which propagates to a failed
-    # CompositionResult. That's the designed "PASS = clean failure at the
-    # connector layer" condition.
+    # Build the SkillDispatch. For each sub-skill requested by a composition
+    # step, we sync the skill from S3, inspect its skill.yaml, and:
+    #   * execution: script — import the declared script file and call its
+    #     entry function with `inputs` kwargs. Deterministic, no LLM.
+    #   * everything else (context, composition, agent) — not yet wired in
+    #     the run_skill path; raise SkillNotRegisteredError so the step
+    #     fails cleanly with a named reason.
     async def dispatch(sub_skill_id: str, sub_inputs: dict):
-        raise SkillNotRegisteredError(
-            f"skill {sub_skill_id!r} not registered in this runtime"
-        )
+        try:
+            return _invoke_sub_skill(sub_skill_id, sub_inputs)
+        except SkillNotRegisteredError as exc:
+            # composition_runner only surfaces the exception class name, so
+            # log the full message here for CloudWatch debugging.
+            logger.warning("run_skill: sub-skill %r dispatch failed: %s",
+                           sub_skill_id, exc)
+            raise
 
     from composition_runner import run_composition
     try:

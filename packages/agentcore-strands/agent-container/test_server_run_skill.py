@@ -234,3 +234,78 @@ class PostCompletionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class InvokeSubSkillTests(unittest.TestCase):
+    """Covers the script-skill dispatch closure used by run_composition.
+
+    Uses a tmp /tmp/skills-style layout so the test exercises the real
+    import + call flow without hitting S3 or AWS.
+    """
+
+    def setUp(self):
+        import tempfile
+        self._tmp = tempfile.mkdtemp(prefix="smoke-skills-")
+        # Patch SKILLS_DIR in the install_skills module stub we inject into sys.modules.
+        self._install_mock = MagicMock(install_skill_from_s3=MagicMock(),
+                                       SKILLS_DIR=self._tmp)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    def _write_skill(self, slug: str, script_body: str, fn_name: str):
+        import os
+        skill_dir = os.path.join(self._tmp, slug)
+        os.makedirs(os.path.join(skill_dir, "scripts"), exist_ok=True)
+        with open(os.path.join(skill_dir, "skill.yaml"), "w") as f:
+            f.write(
+                "id: {slug}\n"
+                "execution: script\n"
+                "scripts:\n"
+                "  - name: {fn}\n"
+                "    path: scripts/entry.py\n".format(slug=slug, fn=fn_name)
+            )
+        with open(os.path.join(skill_dir, "scripts", "entry.py"), "w") as f:
+            f.write(script_body)
+
+    def test_script_skill_returns_value(self):
+        self._write_skill(
+            "echo-skill",
+            "def run(message, **_): return {'echoed': message}\n",
+            fn_name="run",
+        )
+        with patch.dict(sys.modules, {"install_skills": self._install_mock}):
+            out = run_skill_dispatch._invoke_sub_skill(
+                "echo-skill", {"message": "hi"}
+            )
+        self.assertEqual(out, {"echoed": "hi"})
+
+    def test_context_skill_raises_not_registered(self):
+        import os
+        slug = "ctx-skill"
+        skill_dir = os.path.join(self._tmp, slug)
+        os.makedirs(skill_dir, exist_ok=True)
+        with open(os.path.join(skill_dir, "skill.yaml"), "w") as f:
+            f.write("id: ctx-skill\nexecution: context\n")
+        with patch.dict(sys.modules, {"install_skills": self._install_mock}):
+            with self.assertRaises(run_skill_dispatch.SkillNotRegisteredError) as cm:
+                run_skill_dispatch._invoke_sub_skill("ctx-skill", {})
+        self.assertIn("execution='context'", str(cm.exception))
+
+    def test_missing_yaml_raises_not_registered(self):
+        with patch.dict(sys.modules, {"install_skills": self._install_mock}):
+            with self.assertRaises(run_skill_dispatch.SkillNotRegisteredError) as cm:
+                run_skill_dispatch._invoke_sub_skill("no-such-skill", {})
+        self.assertIn("skill.yaml", str(cm.exception))
+
+    def test_bad_inputs_shape_raises_not_registered(self):
+        self._write_skill(
+            "strict-skill",
+            "def run(required_field, **_): return 'ok'\n",
+            fn_name="run",
+        )
+        with patch.dict(sys.modules, {"install_skills": self._install_mock}):
+            with self.assertRaises(run_skill_dispatch.SkillNotRegisteredError) as cm:
+                run_skill_dispatch._invoke_sub_skill("strict-skill", {"wrong": 1})
+        self.assertIn("refused inputs", str(cm.exception))
