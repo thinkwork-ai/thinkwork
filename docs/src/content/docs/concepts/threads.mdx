@@ -1,44 +1,195 @@
 ---
 title: Threads
-description: The universal work container in ThinkWork. Every conversation, task, automation run, and connector event lands in a thread with history, status, and channel context.
+description: The universal work container in ThinkWork. Every conversation, automation run, and connector event lands in the same durable record with history, status, and channel context.
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
 
-A thread is the fundamental unit of work in ThinkWork. Whether work starts from a chat, automation, email, or connector event, it lands in the same thread model.
+A thread is the fundamental unit of work in ThinkWork. A chat message from a user, a Slack event from a connector, a scheduled automation turn, an inbound email — every one of them lands in a thread. Same shape, same lifecycle, same audit trail.
 
-That is one of ThinkWork's strongest ideas. You do not have one system for chat, another for workflows, and another for inbound integrations. You have one durable record of work.
+That choice is load-bearing. Most agent systems split "chat" from "workflows" from "integrations" into three code paths, three sets of UI affordances, and three state machines. ThinkWork deliberately doesn't. There is one container, and it carries enough metadata — channel, prefix, routing context — to specialize behavior per source without splitting the container itself.
 
-## What threads give you
+This page is the conceptual deep dive: why threads exist in this shape, what a thread actually holds, how the lifecycle works, and the invariants you can rely on. For the admin UI around threads, see [Admin: Threads](/applications/admin/threads/). For the mobile chat surface, see [Mobile: Threads & Chat](/applications/mobile/threads-and-chat/). For the GraphQL schema, see the [API reference](/api/graphql/).
 
-Threads provide the shared container for:
+## Why threads exist
 
-- message history
-- status tracking
-- channel identity
-- metadata from the source system
-- auditability and replayability
+The alternative — bespoke records for chat sessions, automation runs, and inbound webhooks — turns every cross-cutting concern into a special case. Audit logic has three implementations. Budget enforcement has three implementations. Handoff from an agent to a human has three implementations. Each one drifts independently, and each drift shows up as a product bug.
 
-## Why threads matter
+ThinkWork picks the other tradeoff: every piece of work is a thread, and every code path treats threads as the canonical state. That pays off when:
 
-Threads are the backbone that connects the rest of the platform:
+- **Handoff.** A Slack-originated thread escalates to a human. The admin app already has a thread detail view; the inbox already has an approval surface. No new surface to build because everything is already a thread.
+- **Audit.** A compliance question lands for an agent turn that happened three months ago. The thread still has the full record — messages, tool calls, memory reads, guardrail activations, cost — regardless of whether it started from chat, cron, or webhook.
+- **Composition.** Automations can spawn child threads. Connectors can reply into existing threads. Agents can pin context from a previous thread into a new one. All uniformly, because it's all the same shape.
+- **Tenancy.** Tenant isolation is enforced once, in the thread store. Every downstream surface that reads threads inherits the isolation for free.
+- **Replay.** The audit log is partitioned by thread id. Reconstructing a turn from three months ago — or replaying a bad automation run against a fixed agent prompt — is one scan, not a cross-system archaeology.
 
-- **Agents** respond inside threads
-- **Memory** is assembled from thread history and retained context
-- **Automations** create `AUTO-` threads for every run
-- **Connectors** map inbound systems onto the same thread model
-- **Control** uses thread activity for usage, budgets, and audit trails
+<Aside type="tip">
+  If you're coming from a system that separates conversations from workflows, expect a small rewiring. Once you see a chat thread and an automation run render through the same admin surface with the same filters, the shape clicks.
+</Aside>
 
-<CardGrid>
-  <Card title="Lifecycle and Types" icon="list-tree">
-    Statuses, prefixes, channels, and how ThinkWork models different kinds of work in one thread system.
-  </Card>
-  <Card title="Routing and Metadata" icon="seti:settings">
-    Channel-specific metadata and routing context for connector and app-originated work.
-  </Card>
-</CardGrid>
+## Anatomy of a thread
 
-## Read this section
+A thread is not a single record — it's a thread row plus an ordered set of messages, plus an ordered set of turns, plus channel-specific metadata. Different surfaces render different parts:
 
-- [Lifecycle and Types](/concepts/threads/lifecycle-and-types/)
-- [Routing and Metadata](/concepts/threads/routing-and-metadata/)
+```
+Thread
+ ├── Messages              ← what gets rendered as chat bubbles
+ │    ├── message 1 (role=user, body="book me a flight to Austin")
+ │    ├── message 2 (role=assistant, body="found 3 options...")
+ │    └── ...
+ ├── Turns                 ← execution wrappers around agent invocations
+ │    ├── turn 1 (model call + 3 tool calls + memory recall)
+ │    ├── turn 2 (model call + guardrail hit + no tool calls)
+ │    └── ...
+ └── Metadata              ← channel-specific context (Slack channel id, GitHub issue number, etc.)
+```
+
+**Messages are conversational.** They're what the user and the agent say to each other, in natural language. Chat views render messages. The admin thread timeline renders messages interleaved with execution events.
+
+**Turns are execution containers.** One user message typically triggers one turn. That turn wraps the model invocation plus every tool call, memory read, guardrail decision, and cost emission that happened during it. Turns are what the audit trail and cost accounting read. If a user's message triggered three tool calls before the agent produced its response, those all live inside one turn.
+
+**Metadata** holds channel-specific routing and replay context — the Slack thread id that lets outbound replies land in the right conversation, the GitHub issue number that identifies an issue, the email `Message-Id` that implements email threading standards.
+
+### Messages vs. turns — why both exist
+
+This distinction trips people up on first read. Consider a single user message: *"what's my calendar look like next Tuesday?"*
+
+- Exactly **one** message is written for the user's input.
+- Exactly **one** turn is written for the agent's invocation.
+- That turn internally records: the model call (tokens in/out, latency), a calendar-lookup tool call (input + output), a memory recall (the user's preference for concise summaries), a guardrail pass, and the final cost.
+- Exactly **one** message is written for the agent's response.
+
+So: 2 messages, 1 turn. The turn is the execution record; the messages are the conversation.
+
+If the user asks a follow-up, that's another message plus another turn, same thread.
+
+## The channel model
+
+Every thread has a channel set at creation time. Channel determines the prefix and which system produced the work:
+
+| Channel | Prefix | How work arrives | How agents reply |
+|---|---|---|---|
+| `CHAT` | `CHAT-` | User sends message in admin or mobile app | Streamed back to the app over a real-time subscription |
+| `AUTO` | `AUTO-` | Scheduler or event trigger fires | Response recorded on the thread; optional tool-call side-effects |
+| `SLACK` | `SLACK-` | Inbound Slack event to the Slack connector | Reply posted back to the originating Slack channel/thread |
+| `GITHUB` | `GITHUB-` | GitHub webhook (issue, PR, comment) | Comment posted via the GitHub API |
+| `EMAIL` | `EMAIL-` | Inbound email | Reply sent; `In-Reply-To` / `References` preserved |
+| `TASK` | `TASK-` | External task system webhook | Task state normalized back to the external system |
+
+The prefix is part of the thread id. A thread id is `<CHANNEL>-<ULID>`. That isn't just cosmetic — it's the first thing humans and tools read when orienting to a thread:
+
+1. **Readability.** An operator skimming logs immediately knows a `SLACK-01H…` id is a Slack thread.
+2. **Stable sort.** ULIDs are time-ordered, so a list sorted by id groups by channel and sorts by creation time at once.
+3. **Self-describing URLs.** `/threads/SLACK-01H…` tells you the shape of the rendering without a lookup.
+
+### Adding a new channel
+
+Channel support has three seams: a new channel value in the thread model, an inbound handler that maps provider events into the thread model, and an outbound handler that knows how to reply via the provider's API. The shape is the same for every channel; each connector fills it in.
+
+## Reopen, don't recreate
+
+This is the single most important invariant in the thread model.
+
+When a user follows up on a conversation ThinkWork had archived — say, someone replies to a Slack thread that was closed last week — the system **reopens the existing thread** rather than starting a new one.
+
+The reopen key is the channel-specific metadata, not the ThinkWork thread id directly:
+
+| Channel | Reopen key |
+|---|---|
+| Slack | The Slack thread timestamp (`thread_ts`) |
+| GitHub | The `(repo, issue_number)` pair |
+| Email | The email `Message-Id` chain (`In-Reply-To` + `References`) |
+| Task | The `(provider, external_task_id)` pair |
+
+That guarantees conversation continuity. An agent that answered a Slack question in March sees its own earlier answer when someone follows up in April. Without this, every follow-up would be a fresh thread with no memory of the conversation that preceded it.
+
+The reopen happens at the connector boundary — whenever an inbound event arrives, the connector looks for an existing open thread matching the external-system keys before deciding to create a new one. A thread in `DONE` status implicitly returns to `IN_PROGRESS` on reopen.
+
+## The status lifecycle
+
+Status answers *"where is this thread in its workflow right now?"* Seven values with deliberate semantics:
+
+| Status | Meaning |
+|---|---|
+| `BACKLOG` | Captured, but not scheduled for work yet |
+| `TODO` | Ready to be picked up |
+| `IN_PROGRESS` | Currently being worked on |
+| `IN_REVIEW` | Waiting on human review or approval |
+| `BLOCKED` | Stuck on a dependency or error |
+| `DONE` | Completed |
+| `CANCELLED` | Abandoned |
+
+The state machine is deliberately loose — any-to-any transitions are allowed — because real work doesn't flow cleanly. A thread can go `IN_PROGRESS → BLOCKED → IN_PROGRESS` multiple times in a day. `DONE` is terminal by convention but not by enforcement; a new message into a `DONE` thread reopens it (implicit `DONE → IN_PROGRESS`).
+
+The one hard rule: **no transitions are triggered by reads.** Opening a thread in the UI doesn't change its status. Status is written only by explicit mutations — agent activity, operator action, or connector event.
+
+### Priority is a separate axis
+
+Status answers "what workflow phase?" Priority answers "how urgent?" They're orthogonal:
+
+| Priority | Use |
+|---|---|
+| `CRITICAL` | Page-me-now work — outages, security incidents |
+| `URGENT` | Same-day, pre-empts other work |
+| `HIGH` | Next up in the queue |
+| `MEDIUM` | Default |
+| `LOW` | Eventually |
+
+The two together let operators group threads usefully — `IN_PROGRESS + CRITICAL` is a meaningfully different bucket than `IN_PROGRESS + LOW`. See [Admin: Threads](/applications/admin/threads/) for how the grouping surfaces in the operator UI.
+
+## Concurrency and ordering
+
+Real systems race. Two inbound events for the same external conversation can arrive within milliseconds of each other — a user hits send twice, an automation fires during a human reply, a webhook retries before the original was processed. The thread model has rules for this.
+
+### One running turn per thread
+
+A thread can only have **one running turn at a time**. This is the central concurrency invariant. If a new user message arrives while a turn is already in-flight, the new message is persisted immediately (so the user sees their message) but the agent invocation is deferred — queued behind the running turn.
+
+This prevents two agents from racing on the same thread and corrupting its state.
+
+### Messages preserve order
+
+Messages are ordered by creation time with a monotonic sequence number per thread as a tiebreaker. Two messages written at literally the same moment get distinct sequence numbers so the render order is stable.
+
+### Idempotent inbound delivery
+
+Webhooks retry. Connector handlers are expected to dedupe on provider-specific event ids before creating a message, so a replayed webhook becomes a no-op rather than a duplicate.
+
+### Metadata editing
+
+Two operators editing thread metadata simultaneously: last write wins on the overlapping fields. There's no CRDT model — high-concurrency metadata editing isn't a real ThinkWork use case.
+
+## Retention and archival
+
+Threads are durable by default. Three layers have opinions about lifetime:
+
+- **The thread store itself.** No retention cutoff. `DONE` threads from two years ago are still queryable. Operator UIs default to filtering them out of the default view, but the data is there.
+- **The audit log.** Every turn's full execution record is written to an append-only log. Retention is configured per deployment — the default is "keep indefinitely"; compliance-heavy tenants often configure 7-year retention with cold-storage transitions.
+- **Deletion.** True deletion of a thread is rare and operator-only. Even after a thread is deleted, its audit records persist — the audit log is the compliance source of truth; the thread row is an indexing layer on top. Most "deletion" in practice is archival, not row deletion.
+
+The mobile app has no delete surface at all. End-users archive, operators can delete, but audit always survives.
+
+## Known limits
+
+- **Bulk actions.** Multi-select for bulk archive, bulk assign, or bulk status change isn't part of the thread model today. Operators change threads one at a time.
+- **Thread merging.** Two threads can't currently be merged into one. A customer who emails and then follows up on Slack stays as two threads.
+- **Cross-channel routing rules.** A rule like "route any GitHub issue mentioning @on-call to the ops agent *and* fire PagerDuty" requires two separate routing configs today.
+- **Attachment upload.** The admin surfaces an attachment upload affordance on thread detail, but the handler is stubbed — the UI renders, the mutation is not wired end-to-end.
+- **No partial-thread export.** Exporting a single thread's full record (messages + turns + audit) has no dedicated export path — operators assemble it from the pieces.
+- **Concurrent-turn queueing is FIFO, not priority-aware.** If a `CRITICAL` thread has three queued turns behind an in-flight turn, they execute in arrival order, not priority order.
+
+## Related pages
+
+- [Lifecycle and Types](/concepts/threads/lifecycle-and-types/) — the channel model in more depth
+- [Routing and Metadata](/concepts/threads/routing-and-metadata/) — how inbound events map into the thread model
+- [Admin: Threads](/applications/admin/threads/) — the operator view: Kanban, table, filters, detail, audit
+- [Mobile: Threads & Chat](/applications/mobile/threads-and-chat/) — the end-user view
+- [Concepts: Managed Agents](/concepts/agents/managed-agents/) — what runs inside a turn
+- [Concepts: Connectors](/concepts/connectors/) — how inbound events become threads
+- [API Reference: GraphQL](/api/graphql/) — the thread queries, mutations, and subscriptions
+
+## Under the hood
+
+Threads live as rows in the operational database with tenant-scoped row-level security. Messages and turns are child tables, each with their own indexes for the common access patterns (list-by-thread, list-by-tenant-sorted-by-updated). The thread id is a prefixed ULID and is the primary key in the thread table and a foreign key everywhere else. AppSync subscriptions broadcast thread and turn updates to subscribed clients.
+
+For the admin app's use of these surfaces (query names, subscription wiring, live-update behavior), see [Admin: Threads](/applications/admin/threads/) and [Admin: Authentication & Tenancy](/applications/admin/authentication-and-tenancy/). For the GraphQL schema, see the [API reference](/api/graphql/).

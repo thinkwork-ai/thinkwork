@@ -1,67 +1,92 @@
 ---
 title: Document Knowledge
-description: How ThinkWork uses uploaded documents as a retrieval source inside the broader Memory layer.
+description: How ThinkWork uses uploaded documents — product docs, runbooks, policies — as a retrievable context source at agent invocation time, backed by Bedrock Knowledge Bases and pgvector.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Document knowledge is the part of Memory that starts from uploaded source material rather than prior interactions.
+Document knowledge is the part of Memory that starts from material you already wrote. A policy document, a product FAQ, a runbook, an API reference — something authoritative that should be a source of truth when the agent answers a question, not a hallucinated guess.
 
-Use it when the answer should come from documents your organization already owns, not from what an agent happened to learn during earlier work.
+An agent with document knowledge attached will, on every turn, retrieve the most relevant chunks from its assigned knowledge base and include them in context before the model generates a response. The agent doesn't memorize the documents; it grounds on them.
 
-## What it is good at
+## When to reach for it
 
-Document knowledge is a good fit for:
+Document knowledge is the right fit when:
 
-- product docs and internal runbooks
-- policies and operating procedures
-- FAQ-style support content
-- long-form reference material that changes occasionally
+- **The canonical answer lives in a document.** Product documentation, standard operating procedures, compliance policies — places where "what does the document say?" is the right question.
+- **You want citations.** Every retrieved chunk is traceable back to a specific source file, so agents can cite what they used.
+- **The content changes occasionally, not continuously.** A runbook updated monthly is a good fit. A feed of live events is not.
+- **You don't want the agent inventing facts.** Grounding reduces hallucination on questions where ground truth exists.
 
-This is a grounding layer, not a replacement for memory.
+And it's the *wrong* fit when:
 
-- **Document knowledge** answers: “What does the organization know from source material?”
-- **Long-term memory** answers: “What has this agent or team learned across work?”
+- **The useful context is what this agent has learned across work** — that's [Long-term Memory](/concepts/knowledge/memory/) and [Compounding Memory](/concepts/knowledge/compounding-memory/), not documents.
+- **The content is massive and sparsely relevant** — a million-line codebase isn't a knowledge base; it's a search target for a different tool.
+- **The question needs reasoning over a graph of entities** — document chunks won't reliably answer "which engineers owned which services in Q3."
 
-## Where it fits in ThinkWork
+## What happens at turn time
 
-The full model is:
+When an agent with a knowledge base attached receives a message, the retrieval step runs before model invocation:
 
-- **Threads** store what happened
-- **Document knowledge** provides retrieved source material
-- **Long-term memory** carries learned context forward
-- **Retrieval and context assembly** decide what reaches the turn
-
-That is why document knowledge lives under Memory. It is one context source, not the whole story.
-
-## Current implementation
-
-Today, ThinkWork’s document-backed retrieval path uses **Bedrock Knowledge Bases**.
-
-The rough flow is:
-
-```txt
-Document upload
-  -> S3 knowledge bucket
-  -> Bedrock Knowledge Base sync
-  -> embeddings + vector index
-  -> retrieval during agent turns
+```
+User message → embed query → query Bedrock KB → top-K chunks → assemble into context → model call
 ```
 
-The source files stay in S3 in your AWS account. Retrieval runs through Bedrock Knowledge Bases backed by Aurora Postgres with the `pgvector` extension — the same Aurora cluster that stores agents, threads, and memories. There is no separate vector database and no OpenSearch Serverless collection to pay for.
+Concretely:
 
-## Operational notes
+1. The user's message (plus optionally the last few turns for context) is embedded.
+2. Bedrock Knowledge Base retrieves the top-K most-similar chunks from its vector index. K is configurable per knowledge base; the default is 5.
+3. Each returned chunk includes its source file, an excerpt, and a similarity score.
+4. AgentCore assembles those chunks into a structured `<knowledge>` block in the model's context.
+5. The model generates a response, and its skill packs can cite chunks back to specific source files.
 
-- document sources do not automatically resync when files change
-- chunking strategy is set when the knowledge base is created
-- vector index lives in Aurora (`pgvector`), so there is no additional vector-store cost floor — you pay for the Aurora cluster you already have
+The retrieval is per-turn — documents updated this morning show up in afternoon responses (after the KB sync runs), no agent redeployment required.
 
-## What this page is not
+## How ingestion works
 
-This page is about document retrieval as a context source.
-It is not the full memory contract, and it is not the canonical record of work.
+A knowledge base is populated by syncing from an S3 bucket. You upload source documents (or point to an existing bucket the agent should read), and Bedrock's ingestion pipeline:
 
-For that broader model, start with:
-- [Memory overview](/concepts/knowledge/)
-- [Long-term Memory](/concepts/knowledge/memory/)
-- [Retrieval and Context](/concepts/knowledge/retrieval-and-context/)
+1. Chunks each document (configurable: fixed-size, semantic, hierarchical).
+2. Embeds each chunk using the KB's configured embedding model.
+3. Writes the chunks + embeddings into the vector index.
+
+ThinkWork configures the vector index to live in the same Aurora Postgres cluster as the rest of the system, via the `pgvector` extension. That means:
+
+- No separate vector database to run.
+- An Aurora snapshot restores both your agents' state *and* their KB vector index in one shot.
+- Query latency is low because the KB index is colocated with everything else the turn needs.
+
+<Aside type="tip">
+  Start with one focused knowledge base per agent rather than sharing a giant tenant-wide KB. Retrieval quality falls off sharply when the corpus is too broad; a 500-document KB tightly scoped to one product area outperforms a 5,000-document general KB.
+</Aside>
+
+## Assigning a KB to an agent
+
+Knowledge bases are assigned per agent in the admin app (Agents → agent detail → Knowledge tab) or via the GraphQL API. An agent can have multiple KBs attached; retrieval will query each and merge the top-K across them.
+
+The agent template can specify a default KB assignment — new agents created from that template inherit it. That makes fleet-wide KB rotation a single update to the template.
+
+## Known limits
+
+- **KB sync is not real-time.** Uploading a new document and immediately asking the agent about it will return "I don't know" until the next sync runs. Bedrock KBs sync on a configurable interval (often daily for production KBs; on-demand for dev).
+- **Chunk-size is a one-time decision.** Rechunking a KB requires a full re-ingestion. Pick a chunking strategy before loading a large corpus.
+- **No cross-KB semantic deduplication.** If two KBs both contain the same policy document, retrieval will return duplicates and the model is asked to reconcile.
+- **Retrieval is lexical-and-semantic, not graph-aware.** Document knowledge can't answer "which documents cite this one" — that's a graph question, better served by [Compounding Memory](/concepts/knowledge/compounding-memory/) over authored content.
+
+## Related pages
+
+- [Memory (overview)](/concepts/knowledge/) — where document knowledge sits relative to long-term and compounding memory
+- [Long-term Memory](/concepts/knowledge/memory/) — for agent-learned context, distinct from authored documents
+- [Retrieval and Context](/concepts/knowledge/retrieval-and-context/) — how retrieved chunks combine with thread history and recalled memories at turn time
+- [Admin: Knowledge Bases](/applications/admin/knowledge-bases/) — the operator surface for creating, syncing, and inspecting KBs
+- [Architecture](/architecture/) — where KBs fit in the data tier
+
+## Under the hood
+
+- **Backing service.** Amazon Bedrock Knowledge Bases. Managed service, provisioned by ThinkWork's Terraform module.
+- **Vector index.** Aurora Postgres + `pgvector` — no external vector DB. Index rows live in the `bedrock_knowledge_base_*` tables.
+- **Source storage.** S3 bucket per tenant (`s3://thinkwork-<stage>-kb-source/`), with lifecycle policies per knowledge base.
+- **Embedding model.** Configurable per KB; defaults to `amazon.titan-embed-text-v2:0` unless overridden in the KB spec.
+- **Retrieval API.** `bedrock-agent-runtime:Retrieve` called from AgentCore during context assembly; results merged into the model's system prompt via a `<knowledge>` block.
+- **Sync triggers.** Scheduled (via EventBridge) or on-demand (admin "Sync Now" button fires an ingestion job).
+- **Code path.** ThinkWork-side orchestration lives under `packages/api/src/`; the AgentCore-side retrieval integration lives in `packages/agentcore-strands/agent-container/`.

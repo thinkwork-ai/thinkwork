@@ -42,18 +42,7 @@ Common examples include:
 - See [Integrations](/concepts/connectors/integrations/) for Slack, GitHub, Google Workspace, inbound and outbound flows, auth, and routing
 - See [MCP Tools](/concepts/connectors/mcp-tools/) for MCP-based external tool connectors
 
-## MCP as a connector pattern
-
-ThinkWork supports MCP (Model Context Protocol) as a connector path under **Connectors**, not as a separate top-level product module.
-
-That means MCP sits inside the broader Connectors model:
-
-- **Threads** are still the unit of work
-- **Agents** still decide what to do in the thread
-- **Connectors** bring in outside systems, whether they are communication channels or tool servers
-- **Controls** still govern what agents can access and how usage is tracked
-
-If you want agents to call remote tools through MCP, see [MCP Tools](/concepts/connectors/mcp-tools/).
+MCP (Model Context Protocol) lives under Connectors rather than as a separate top-level concept because it *is* a connector — it brings an outside capability surface into the thread model, the same way Slack or GitHub does. The difference is that MCP connectors are tool-oriented (agents call them) while integrations are message-oriented (they produce threads). Threads are still the unit of work; agents still decide; controls still govern.
 
 ## Credential vault
 
@@ -121,10 +110,6 @@ Routing rules are configured per connector in the admin app. If no rule matches,
 
 <Aside type="tip">
 For simple deployments, set a default agent on each connector and skip routing rules entirely. Add rules later when you need to fan work out to specialized agents.
-</Aside>
-
-<Aside type="note">
-Need agents to use external tools instead of inbound channels? See [MCP Tools](/concepts/connectors/mcp-tools/) for the ThinkWork pattern for connecting remote tool servers through the Connectors layer. MCP stays under Connectors in the docs because it is one integration path, not a separate platform pillar.
 </Aside>
 
 ## Thread metadata from connectors

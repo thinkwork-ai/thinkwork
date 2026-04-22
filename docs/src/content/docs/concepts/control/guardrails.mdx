@@ -1,44 +1,89 @@
 ---
 title: Guardrails
-description: How ThinkWork applies Bedrock guardrails and other safety boundaries to managed agent work.
+description: How ThinkWork applies Bedrock Guardrails to managed agents — where the evaluator runs, what a guardrail hit looks like in a thread, and how to author a guardrail for your fleet.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-ThinkWork uses Amazon Bedrock Guardrails as the primary enforcement layer for managed agents.
+Guardrails are the safety boundary around model invocation. They run inside the Strands invocation path every time an agent calls Bedrock, and they enforce rules that shouldn't depend on a prompt being written correctly: disallowed topics, content filters, PII handling, grounding checks.
 
-## What guardrails do
+ThinkWork uses Amazon Bedrock Guardrails as the primary enforcement layer for managed agents, because it plugs into the same Bedrock Converse API path the agent is already using. There's no separate policy engine to run, no extra service to keep in sync.
 
-Guardrails are evaluated around model invocation and can:
+## What a guardrail actually does
 
-- block disallowed topics
-- filter unsafe content
-- detect or redact PII
-- apply grounding checks
-- enforce word or phrase filters
+A Bedrock Guardrail is a configuration object attached to a model invocation. When applied:
 
-## Where they are configured
+- **Input filtering** — runs on the user message before the model sees it. Can block the request outright (denied topic, policy-violating input) or redact content (PII).
+- **Output filtering** — runs on the model's response before it returns to the caller. Can block the response, redact content, or rewrite.
+- **Grounding checks** — can require the response to be grounded in a provided context source, blocking unsupported claims.
+- **Topic filters** — explicit "don't discuss X" policies at a topic level.
+- **Word and phrase lists** — custom block-lists.
+- **Content filters** — built-in categories (hate, violence, sexual content, prompt injection) at configurable severity thresholds.
 
-Guardrails are referenced from agent templates, which lets you apply the same safety boundary across a fleet of agents.
+The guardrail is evaluated *inside* the Bedrock call, not by a wrapper ThinkWork layers on top. That matters for correctness: the boundary can't be bypassed by a skill pack calling Bedrock directly, because every call that goes through the agent's configured template includes the guardrail id.
 
-That keeps enforcement in one place instead of scattering it across prompts.
+## Where guardrails attach
 
-## What happens on a guardrail hit
+Guardrails are referenced from **agent templates**, not from individual agents:
 
-When a guardrail blocks or alters a response, the resulting event is visible in ThinkWork's thread and control surfaces.
+```
+Agent template              →   guardrailId: "gr-default-safe"
+  Agent A (assigned template)  → inherits
+  Agent B (assigned template)  → inherits
+  Agent C (assigned template)  → inherits
+```
 
-This matters for debugging because you can distinguish:
+This is the important design choice. Boundaries don't drift agent-by-agent. When you edit the template's `guardrailId`, every agent on that template picks up the new guardrail on the next invocation — no restart required. Rotating a safety policy across a fleet of 100 agents is one write, not 100.
 
-- model behavior
-- tool behavior
-- policy enforcement
+A single agent can only reference one guardrail. Layering guardrails (a "base" + an "extension") isn't supported by Bedrock today — you compose the full guardrail policy in one Bedrock Guardrail object.
 
-<Aside type="note">
-The current open source docs clearly support guardrails. They do not document a separate approval workflow surface here, so this page stays focused on the enforcement model that is already described.
+## What a guardrail hit looks like
+
+When a guardrail blocks or modifies a response, the event is visible in three places, all tied to the same turn id:
+
+1. **Thread timeline.** The admin thread detail view renders a `guardrail_activated` event inline with the rest of the turn's activity. It shows which filter fired (e.g., "prompt_injection: severity=MEDIUM"), whether the action was `BLOCK` or `REDACT`, and the agent's fallback response.
+2. **Turn trace.** Expanding the turn's trace panel shows the full guardrail evaluator output: input and output scores, triggered categories, and latency.
+3. **Audit log.** The NDJSON audit record for that invocation includes the guardrail evaluator's full decision — useful for compliance reconstruction three months later.
+
+From the agent's side, a blocked response is handled like any other non-success. Strands surfaces the guardrail intervention to the agent loop, and AgentCore's standard fallback (a canned "I can't help with that" response, configurable per template) is what the user sees.
+
+## Authoring a guardrail
+
+You author guardrails in the AWS console (or via IaC) as Bedrock Guardrail resources, then reference the resulting `guardrailId` + `guardrailVersion` in a ThinkWork agent template.
+
+A minimal guardrail includes:
+
+- **Topic policies** — explicit topics to deny (e.g., "financial advice," "medical diagnosis").
+- **Content policies** — which of Bedrock's built-in categories to enforce and at what severity.
+- **Word lists** — custom deny-lists of terms.
+- **PII configuration** — which PII types to redact or block (emails, phone numbers, SSNs, etc.).
+- **Contextual grounding** — when the agent is answering from a knowledge base, require the response to be grounded in retrieved sources.
+
+ThinkWork provides a `gr-default-safe` starter guardrail in the Terraform module, intended as a reasonable default for most internal deployments. You'll want your own variants for tenant-specific policies — a customer-facing tenant likely needs stricter PII handling than an internal engineering tenant.
+
+<Aside type="tip">
+  Guardrail changes take effect on the next agent invocation. There's no rollout phase — once the template is updated, every new turn across every agent using that template runs the new guardrail. Test guardrail changes on a single agent on a test template first.
 </Aside>
+
+## Known limits
+
+- **One guardrail per agent.** You can't layer a base guardrail under a per-tenant extension; the full policy must be composed in a single Bedrock Guardrail object.
+- **No guardrail evaluation on connected (BYOB) agents.** ThinkWork only enforces guardrails for *managed* agents running through AgentCore + Bedrock. A connected agent running its own runtime bypasses this path; any guardrails on its own side are its own concern.
+- **Guardrail hits are counted, but not budgeted.** Frequent guardrail blocks aren't currently an input to budget enforcement. A misbehaving prompt that triggers 10,000 guardrail blocks in an hour won't suspend the agent on a "quality budget" the way a cost-budget hit does.
+- **Tool-call filtering is limited.** Guardrails are applied to model inputs and outputs, not tool call arguments. A skill pack that concatenates user input into a tool parameter needs its own sanitization.
 
 ## Related pages
 
-- [Control Overview](/concepts/control/)
-- [Budgets, Usage, and Audit](/concepts/control/budgets-usage-and-audit/)
-- [Agents](/concepts/agents/)
+- [Control (overview)](/concepts/control/) — where guardrails fit in the broader control surface
+- [Budgets, Usage, and Audit](/concepts/control/budgets-usage-and-audit/) — the other half of Control
+- [Concepts: Agents](/concepts/agents/) — how templates propagate guardrail configuration to individual agents
+- [Admin: Security Center](/applications/admin/security-center/) — the operator surface for reviewing guardrail hits
+- [Admin: Agent Templates](/applications/admin/agent-templates/) — where the `guardrailId` field is set per template
+
+## Under the hood
+
+Guardrails are Amazon Bedrock Guardrails — a managed AWS primitive. See the [Bedrock Guardrails documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails.html) for the underlying service.
+
+Inside ThinkWork, the agent template carries the guardrail id and version, and the AgentCore runtime (in `packages/agentcore-strands/agent-container/`) passes those into every Bedrock `converse` call. Guardrail activations are recorded on the turn and surfaced both in the admin thread timeline (see [Admin: Threads](/applications/admin/threads/)) and in the audit log.
+
+Starter guardrail resources are provisioned by the ThinkWork Terraform module; tenants can add their own by editing the Terraform configuration.

@@ -1,0 +1,188 @@
+---
+title: Templates
+description: Agent templates are the configuration reuse layer — one named template holds the model, guardrail, inference params, tool surface, memory behavior, and budget caps that a fleet of agents share. Edit the template; every agent picks up the change on the next invocation.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+An agent template is a named bundle of configuration that multiple agents share. Model selection, guardrail assignment, inference parameters, tool surface, memory behavior, budget caps — everything that shapes *how* an agent behaves — lives on the template. Agents *reference* templates; they don't copy values.
+
+That reference is the single most important property of the model: **edit the template once, and every agent using it picks up the change on the next invocation.** Rotating Claude versions across 100 agents is one write. Tightening guardrails across a tenant is one write. Cutting a budget cap in half is one write.
+
+This page is the conceptual deep dive: why templates exist in this shape, what a template carries, how inheritance and overrides work, and the fleet-rotation playbook that motivates the whole design. For the admin UI that surfaces templates to operators (the template editor, the sync flow, the linked-agents view), see [Admin: Agent Templates](/applications/admin/agent-templates/).
+
+## Why templates exist
+
+Imagine configuring every agent individually. Each agent picks its own model, writes its own guardrail reference, maintains its own tool enable-list. That works for three agents. It collapses at thirty. Three things go wrong:
+
+- **Drift.** Two agents that were supposed to behave identically diverge over a year of independent edits. Nobody remembers which was the "canonical" version.
+- **Migration pain.** A new Claude model ships. You now have 45 agents to update, by hand. Half get done this sprint, half don't, and behavior across the fleet silently splits.
+- **Audit collapse.** An operator asks "which agents currently use the strictest guardrail?" There's no answer without reading every agent's config individually.
+
+Templates are the specific answer. Model, guardrail, budget, tool config, memory behavior all live on the template. The agent points at the template. A query across the fleet gives one row per agent with consistent shape — auditable, changeable in one edit.
+
+<Aside type="tip">
+  If you find yourself copy-pasting configuration between agents, you want a template. If you find yourself copy-pasting *across templates*, you probably want a shared [skill pack](/concepts/agents/skills/) both templates reference.
+</Aside>
+
+## What a template carries
+
+Categorically — not field-by-field — a template bundles:
+
+### Model configuration
+
+The model id, max output tokens, temperature, and any other Bedrock inference parameters the agent should use. Changing the model id on a template swaps models for every agent on it on the next invocation. No redeploy.
+
+### Guardrail attachment
+
+The Bedrock Guardrail id (and version) applied on every Bedrock call for this template. Guardrails are enforced *inside* the model invocation, not wrapped around it — that's what makes them non-bypassable. If a skill pack tried to call Bedrock directly, it would still get the guardrail applied, because the runtime passes the guardrail id through every invocation configured for the template.
+
+### Tool configuration
+
+Which tool categories are exposed to the agent at runtime — SQL, S3, web search, connector-provided MCP tools, built-in tools. Flags, not prompt-level gates: a disabled category is actually absent from the tool registry, not just discouraged by instruction.
+
+Also here: the per-turn tool-call cap, the safety valve against runaway tool loops.
+
+### Memory behavior
+
+Which memory adapter the agent uses (Hindsight or AgentCore Memory), how many recalls to attempt, whether the agent participates in the compounding-memory wiki, how many wiki pages to surface per turn. See [Concepts: Memory](/concepts/knowledge/) for the adapter story.
+
+### Budget policy
+
+Monthly spend cap. Whether hitting the cap pauses the agent automatically. Optional soft per-turn cost signal that flags expensive turns in the audit without interrupting them.
+
+### Default skill and knowledge assignments
+
+Skill packs and knowledge bases that **new agents created from this template inherit**. These are seeds at creation time, not live-reference fields — see [Inheritance and overrides](#inheritance-and-overrides) below.
+
+### Metadata
+
+Name, description, category tag, published flag, source (built-in vs. tenant-created vs. imported). Informational — doesn't affect runtime behavior, just helps operators organize templates.
+
+## Inheritance and overrides
+
+The rule: **live fields come from the template on every turn; seed fields are copied to the agent and become editable.**
+
+| Axis | Source at runtime | Editable per-agent |
+|---|---|---|
+| Model id | Template | No |
+| Guardrail | Template | No |
+| Inference params (max tokens, temperature, …) | Template | No |
+| Tool config | Template | No |
+| Memory adapter + recall config | Template | No |
+| Budget cap | Template | No |
+| **Skill pack assignments** | Template (at create) | **Yes** |
+| **Knowledge base assignments** | Template (at create) | **Yes** |
+| **System prompt** | Template (at create) | **Yes**, often edited per-agent |
+
+Said another way: model + guardrail + budget + tool config are **live** — the dial the template owner turns. Skill/KB assignments and system prompt are **seeds** — the template sets the starting point; the agent evolves from there.
+
+This split is deliberate. The live dials are the ones where fleet-wide coherence matters (rotate models; tighten safety; cap spend). The seeded dials are where per-agent specialization matters (a support agent vs. a research agent on the same template need different system prompts).
+
+### Overriding a live field
+
+You can't. If an agent needs a different model, it needs a different template. Two options:
+
+1. **Fork the template.** Duplicate, change the field, assign the agent to the fork. Now you maintain two templates independently.
+2. **Split templates by axis of difference.** If half your fleet should run Sonnet and half Haiku, have two templates, not one.
+
+The no-override rule is intentional. Per-agent overrides would turn templates into advisory config and bring back all the drift problems they exist to solve.
+
+## The fleet rotation playbook
+
+This is the reason templates exist in the shape they do. Walkthrough of a real rotation, conceptually.
+
+**Scenario.** Claude 4.7 ships. Your tenant has 12 support agents running 4.6 via a template named *Support — Standard*. You want to move to 4.7 with a one-week rollback window.
+
+### Step 1 — Canary
+
+Fork the template to *Support — Canary 4.7*. Change the model id on the fork to 4.7. Reassign one agent (say, `support-canary`) to the new template.
+
+The canary agent now runs 4.7; the rest of the fleet stays on 4.6.
+
+### Step 2 — Observe for 48 hours
+
+Watch cost per turn, latency per turn, tool-call patterns for the canary vs. the rest of the fleet. Spot-check threads for regressions in response quality. Check whether the canary trips guardrails at a different rate.
+
+If anything looks wrong, reassign the canary back to *Support — Standard* and investigate. No rollback complexity — it's a template-id swap.
+
+### Step 3 — Roll out
+
+Canary clean after 48 hours. Update the canonical *Support — Standard* template's model id to 4.7. All 11 remaining agents pick up 4.7 on their next invocation. No deploy. No cache bust.
+
+### Step 4 — Delete the canary template
+
+Merge the canary agent back to *Support — Standard*, delete the fork. Done.
+
+### Step 5 — Rollback (if needed)
+
+If something surfaces later — a model regression, guardrail triggering more often — revert the template's model id back to 4.6. Next invocation across all agents is on 4.6 again. Total rollback time: seconds.
+
+Compare that to 12 individual per-agent rollbacks, each with its own potential typo, and the reason templates exist in this shape is self-evident.
+
+## Sync vs. live
+
+There's one class of template edit that does *not* propagate automatically: **default skill and knowledge-base assignments.**
+
+If a template originally seeded agents with `[crm, tone]` and you change the defaults to `[crm, tone, escalation]`, existing agents don't pick up the new skill pack. The defaults only apply at *agent creation time*.
+
+For this case there's an explicit **sync flow** in the admin UI: the template owner reviews a diff of what would change, chooses which agents to apply it to, and triggers the propagation. This is explicit on purpose. Propagating skill/KB changes silently would break agents that legitimately diverged — a support agent who had `escalation` removed on purpose would have it silently re-added.
+
+Live fields (model, guardrail, budget) don't need sync because agents never had their own copy.
+
+See [Admin: Agent Templates](/applications/admin/agent-templates/) for the sync flow UI.
+
+## Template categories and organization
+
+Tenants typically grow to a dozen-plus templates. Organizing them matters.
+
+### By axis of variation
+
+Templates diverge along a handful of real axes:
+
+- **Model tier.** Haiku for cheap/fast, Sonnet for balanced, Opus for hard reasoning.
+- **Guardrail strictness.** Customer-facing needs strict PII; internal tools tolerate more.
+- **Tool surface.** An eval agent needs no connectors; a support agent needs Slack + email + CRM.
+- **Budget class.** Internal tools on $10/month; customer-facing on $200/month.
+- **Memory adapter.** Most tenants use one adapter; occasionally an experimental template runs the other to compare.
+
+A natural template taxonomy mirrors these: *Support — Standard*, *Support — High-Volume (Haiku)*, *Research — Extended Thinking*, *Eval — Sandbox*.
+
+### Categories
+
+The `category` tag is free-text and used only for filtering in the admin. Most tenants settle on 3–5 (`support`, `research`, `automation`, `eval`, `sandbox`). Don't over-engineer — it's for operator eyes.
+
+### Publishing
+
+An unpublished template can be edited but can't be assigned to new agents. Use this for:
+
+- Draft templates you're iterating on before rollout.
+- Deprecated templates you're leaving around for the agents still using them but don't want anyone new to adopt.
+
+Existing assignments stay live even on unpublished templates — the gate is on *new* assignment, not on runtime.
+
+## Template forks and lineage
+
+Forks are templates created by duplicating another. ThinkWork tracks the parent relationship so forks know where they came from.
+
+Lineage is informational — the fork doesn't stay in sync with its parent automatically. But the admin app surfaces "your parent template has changed since this fork was created" so operators can decide whether to re-sync specific fields manually.
+
+Tenants that do frequent model rotations often maintain a two-template pattern: a *-Standard* and a *-Canary*. The canary is always a fork of Standard; rollouts are "promote canary values up to Standard."
+
+## Known limits
+
+- **No cross-template inheritance.** Templates are flat — no parent-extends-child runtime hierarchy. If you want a "base" template several others extend, you maintain that shape manually.
+- **No staged rollout for template edits.** Editing a template takes effect on every agent's next turn. For risky changes, use the canary pattern above — it's a staging mechanism the model supports by design.
+- **No in-flight turn awareness.** Changing a template while a turn is executing doesn't retroactively affect that turn — the turn completes with the old config. The next turn uses the new config.
+- **Built-in templates are read-only.** You can fork them, but you can't edit the originals. This prevents ThinkWork updates from surprising tenants who modified the built-ins.
+- **Per-template budgets are monthly only.** Weekly or per-agent-day budgets aren't supported today.
+
+## Related pages
+
+- [Concepts: Agents](/concepts/agents/) — the agent side of the template reference
+- [Concepts: Managed Agents](/concepts/agents/managed-agents/) — the runtime that reads templates on every invocation
+- [Concepts: Skills](/concepts/agents/skills/) — the other reuse layer; capabilities that cut across templates
+- [Concepts: Control](/concepts/control/) — guardrails and budgets that templates carry
+- [Admin: Agent Templates](/applications/admin/agent-templates/) — operator surface, template editor, sync flow, linked-agents view
+- [Admin: Agents](/applications/admin/agents/) — how agents reference templates in the admin UI
+- [API Reference: GraphQL](/api/graphql/) — template queries, mutations, and subscriptions

@@ -1,79 +1,110 @@
 ---
 title: Memory
-description: The harness-owned context layer for ThinkWork agents, spanning document retrieval, long-term memory, and turn assembly.
+description: The harness-owned context layer for ThinkWork agents — document retrieval, long-term memory, and the compounding-memory wiki, all above a stable contract.
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
 
-Memory is how ThinkWork carries useful context forward without treating every backend as the product.
+Memory is how ThinkWork carries useful context forward without treating any one backend as the product. It's the layer that decides — on every turn — what an agent should see *beyond* the latest user message: which documents to pull, which prior facts to recall, which entity pages from the agent's own wiki to surface, and how to weave all of that into the model's context window.
 
 The clean model is:
 
-- **Threads** keep the full record of work
-- **Memory** decides what context should carry forward into the current turn
-- **Agents** act on that assembled context
+- **Threads** keep the full record of work.
+- **Memory** decides what context should carry forward into the current turn.
+- **Agents** act on that assembled context.
 
-That means Memory is not just one store, and it is not just long-term recall. It is the harness-owned context layer above changing retrieval and memory engines.
+That means Memory is not just document retrieval (RAG), and not just long-term recall. It's the harness-owned context layer above whatever retrieval and memory engines we happen to use.
 
-## What belongs under Memory
+## Why we frame it this way
 
-Memory in ThinkWork spans four related concerns:
+Most agent systems conflate three different things — document retrieval, long-term memory, and turn assembly — and pick one backend as "the memory product." That's convenient in the short term and painful in the long term:
 
-- **Document knowledge** for uploaded source material and grounded retrieval
-- **Long-term memory** for facts and context learned from prior work
-- **Retrieval and context assembly** for how those pieces reach a turn
-- **Structured memory direction** for future graph-shaped memory and knowledge
+- When the backend changes, every agent's behavior changes.
+- When a new context source appears (a wiki, a graph, a new embedding model), the system has no seam to plug it in without rewriting.
+- When compliance asks "what did this agent know at the moment it made that decision," the answer depends on which backend is "memory" today.
+
+ThinkWork picks the other design. There's a stable memory contract owned by the harness. Underneath, engines come and go — Hindsight, AgentCore Memory, Bedrock Knowledge Bases, the compounding-memory wiki. Above, agents and tools see one interface.
+
+## The three layers
+
+Memory in ThinkWork spans three concerns. They are distinct; they don't collapse into "memory == KB" or "memory == chat history."
 
 <CardGrid>
   <Card title="Document Knowledge" icon="open-book">
-    Retrieved source material from uploaded documents. Good for policies, runbooks, and reference content.
+    Uploaded source material — policies, runbooks, reference docs — made retrievable at turn time via Bedrock Knowledge Bases (pgvector under the hood).
   </Card>
   <Card title="Long-term Memory" icon="seti:bookmark">
-    Carry-forward context learned from prior work. ThinkWork exposes one memory contract above pluggable engines.
+    Facts and preferences learned from prior work, held in an adapter-agnostic contract. Hindsight is the hosted default; AgentCore Memory is the serverless-friendly alternative.
+  </Card>
+  <Card title="Compounding Memory" icon="graph">
+    Raw memories continuously compiled into a navigable wiki of entity and topic pages — the system's deeper, structured answer to "what does this agent know?"
   </Card>
   <Card title="Retrieval and Context" icon="search">
-    How thread history, retrieved documents, and recalled memories come together inside a turn.
-  </Card>
-  <Card title="Structured Memory Direction" icon="graph">
-    Forward-looking direction for richer entity and relationship-aware memory. Roadmap, not current core product surface.
+    How thread history, retrieved documents, recalled memories, and wiki pages come together inside a single turn's context window.
   </Card>
 </CardGrid>
 
-## The current product truth
+### How the layers relate
 
-Today, the stable story should be read in this order:
+A single agent turn, at a glance:
 
-1. **Threads are the record of work**
-2. **Memory is the context layer**
-3. **ThinkWork exposes a stable memory contract above memory engines**
-4. **Document retrieval and long-term recall are implementation paths under that contract**
+```
+User message arrives in a thread
+        │
+        ▼
+  Context assembly (the Memory layer)
+        │
+        ├─ Recent thread history (windowed)
+        ├─ Long-term memory recall (Hindsight / AgentCore Memory)
+        ├─ Document retrieval (Bedrock KB)
+        ├─ Compounding-memory wiki pages (when the agent has one)
+        │
+        ▼
+  Assembled context → Bedrock model
+        │
+        ▼
+  Response + tool calls → back into the thread
+```
 
-ThinkWork currently supports two long-term memory adapters:
+Every layer is optional per agent. A focused chatbot may use only document knowledge. A long-running research agent adds long-term memory. An agent that lives in a rich workspace (a user's inbox, a product's Slack) uses all four. The harness handles the assembly without each agent's author wiring the pieces by hand.
 
-- **[Hindsight](https://hindsight.vectorize.io/)**
-- **[AgentCore Memory](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory.html)**
+## The adapter story
 
-Exactly one long-term memory engine is canonical per deployment.
+For long-term memory specifically, ThinkWork supports two adapters, and exactly one is canonical per deployment:
 
-- **Hosted ThinkWork** defaults to **[Hindsight](https://hindsight.vectorize.io/)**
-- **Self-hosted and serverless-friendly deployments** may choose **[AgentCore Memory](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory.html)**
+- **[Hindsight](https://hindsight.vectorize.io/)** — the default for hosted ThinkWork. Runs as an ECS service in your VPC, offers semantic search, entity extraction, and reflection primitives. Richer, slightly heavier.
+- **[AgentCore Memory](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory.html)** — the default for serverless-friendly deployments. Four built-in strategies (semantic, summarization, user-preference, episodic) with per-turn auto-retention. Thinner, no persistent service to run.
 
-Short-term and session context still come from thread history. Long-term memory should not masquerade as the thread record.
+Both adapters implement the same memory contract the harness exposes. Swapping adapters swaps engines; it does not swap APIs for tools, agents, or the compounding-memory pipeline built on top.
 
-## Why this framing matters
+<Aside type="note">
+  Short-term context still comes from thread history. Long-term memory should never masquerade as the thread record — the thread is always the canonical history of what happened.
+</Aside>
 
-This keeps the product honest.
+## Where compounding memory fits
 
-It avoids teaching people that:
-- memory is just another name for RAG,
-- AgentCore or [Hindsight](https://hindsight.vectorize.io/) are the conceptual model,
-- or long-term memory replaces thread history.
+The compounding-memory layer is the newest and most distinctive piece. It sits *above* the long-term memory adapter: raw memory records flow from Hindsight (or AgentCore Memory, when that path matures) into a compile pipeline that produces a continuously-updated wiki of entity and topic pages.
 
-The contract belongs to ThinkWork. Engines implement it.
+That wiki is not an index of memory; it's a derived, structured view of what the agent has learned. A memory record about "dinner at Franklin Barbecue" contributes to a Franklin Barbecue page (entity) and an Austin Restaurants page (topic hub). Agents read the wiki at recall time — often faster and more targeted than raw memory search — and operators browse it in the admin app to see what an agent actually knows.
 
-## Read this section
+This is the main reason memory in ThinkWork is framed as its own layer, not an implementation detail of an engine. The wiki works on top of Hindsight today; it will work on top of any adapter that implements the same recall contract.
 
-- [Document Knowledge](/concepts/knowledge/document-knowledge/)
-- [Long-term Memory](/concepts/knowledge/memory/)
-- [Retrieval and Context](/concepts/knowledge/retrieval-and-context/)
-- [Knowledge Graph Direction](/concepts/knowledge/knowledge-graph/)
+## Related pages
+
+- [Document Knowledge](/concepts/knowledge/document-knowledge/) — uploaded source material, Bedrock Knowledge Bases, pgvector
+- [Long-term Memory](/concepts/knowledge/memory/) — the adapter contract, Hindsight vs. AgentCore Memory
+- [Compounding Memory](/concepts/knowledge/compounding-memory/) — the wiki overview and when to turn it on
+- [Compounding Memory: Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — the leaf + aggregation compile passes in detail
+- [Compounding Memory: Pages](/concepts/knowledge/compounding-memory-pages/) — the page and link data model
+- [Retrieval and Context](/concepts/knowledge/retrieval-and-context/) — how the four sources are assembled at turn time
+- [Knowledge Graph Direction](/concepts/knowledge/knowledge-graph/) — what's shipped today vs. where structured memory is headed
+- [Operating Compounding Memory](/guides/compounding-memory-operations/) — hands-on recipes for running the wiki
+
+## Read this section in order
+
+If you're new to the memory model, read in this order:
+
+1. **Document Knowledge** — the easy entry point; most readers already have a mental model for RAG.
+2. **Long-term Memory** — the contract over adapters; why the harness owns this layer.
+3. **Compounding Memory** — what makes ThinkWork's memory distinctive.
+4. **Retrieval and Context** — how they all come together at turn time.

@@ -1,50 +1,123 @@
 ---
 title: Routines and Execution Model
-description: How ThinkWork runs automations and routines with Step Functions, AUTO threads, and recorded runs.
+description: Multi-step automations backed by AWS Step Functions — how agent invocations chain with tool calls and human-in-the-loop waits, how retries and failures propagate, and how every step lands back on the same AUTO- thread.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-ThinkWork documents routines as multi-step automations that can chain agent invocations, branching, and external actions.
+A single "invoke the agent with this prompt" is the simplest automation. Many useful automations are multi-step: fetch data, classify it, draft responses, wait for human approval, act on the results. ThinkWork calls these **routines**, and they're backed by AWS Step Functions state machines.
 
-## Execution model
+The design goal for routines is that each step is independently observable, retriable, and auditable — while still belonging to one coherent run that lands in one `AUTO-` thread.
 
-All automations are backed by AWS Step Functions.
+## The execution model
 
-A typical run looks like this:
+Every routine is a Step Functions state machine. States can be:
 
-1. EventBridge or an API trigger starts the state machine
-2. ThinkWork creates an `AUTO-` thread for the run
-3. AgentCore executes the configured step or prompt
-4. The run finishes as `succeeded` or `failed`
+- **Agent invocations** — call AgentCore with a prompt, wait for the response, continue.
+- **Tool invocations** — call a specific tool or connector directly (not through an agent).
+- **Branching** — `Choice` states that route based on prior output.
+- **Waits** — `Wait` states or the human-in-the-loop pattern via the Inbox.
+- **Parallel fan-out** — `Map` states that run the same step against many inputs.
+- **Failure handlers** — `Catch` blocks that route failures to retry logic or explicit error states.
 
-For routines, each step becomes part of the Step Functions execution path.
+Step Functions handles the state transitions, retries, timeouts, and dead-letter behavior. ThinkWork provides the integration layer: every state's output becomes the next state's input, and every agent-invocation state threads through the same thread + memory system as interactive chat.
 
-## Runs and debugging
+## A worked example
 
-Every automation run is recorded with status, timing, and the associated thread.
+Consider a real routine: "process every new customer support email that arrived overnight."
 
-That gives you two useful views of the same work:
+```
+Start
+  │
+  ▼
+FetchOvernightEmails  (Lambda: queries the email system for unread items)
+  │
+  ▼
+ForEachEmail  (Map state, concurrency=5)
+  ├─ ClassifyEmail       (Agent: "is this urgent, routine, or spam?")
+  ├─ Choice: isUrgent?
+  │    ├─ Yes → DraftUrgentReply  (Agent: generate a tight, pre-approved reply)
+  │    │         │
+  │    │         ▼
+  │    │      RequestApproval     (Inbox wait: operator approves or revises)
+  │    │         │
+  │    │         ▼
+  │    │      SendReply           (Tool: post the reply via email connector)
+  │    └─ No  → LogAndSkip        (just record that it was seen)
+  │
+  ▼
+RecordRunMetrics  (Lambda: write summary to the routine's AUTO thread)
+  │
+  ▼
+End
+```
 
-- the **thread view**, which shows the agent conversation and outputs
-- the **execution view**, which shows state-machine progress and failures
+Several things are worth noticing:
 
-## Manual triggers and retries
+- **Every agent invocation is a state.** They're not bundled into one giant "run the agent" step — each invocation is discrete, with its own input, output, and retry policy.
+- **The `RequestApproval` state uses the Inbox.** A Step Functions "Task Token" is issued and persisted as an inbox item; an operator approving the item resumes the state machine with their decision.
+- **Parallelism is explicit.** The `Map` state fans out up to 5 emails at a time; this is a state-machine-level parallelism guarantee, not an in-agent one.
+- **Failures are trapped at each step.** If `ClassifyEmail` fails three times in a row for one email, that email's branch fails but the others keep going.
 
-Automations can also be triggered manually, and retry behavior can be configured for failed runs.
+## The AUTO thread
 
-That makes it practical to:
+The whole run has one `AUTO-` thread attached. Every agent-invocation state writes into that thread's turn log — so a single thread contains the Classify turn, the Draft turn, the approval event, and the send result. An operator debugging "why did this routine do the wrong thing on email 3?" opens that thread and walks the turn timeline.
 
-- test before enabling a schedule
-- rerun a failed job
-- override the prompt for a one-off run
+For routines with very high fan-out (the Map state processes 10,000 items), ThinkWork supports a "run-per-item" mode where each Map iteration gets its own child `AUTO-` thread with the parent routine's thread as its `parentThreadId`. This keeps any one thread from drowning in a thousand turns.
 
-<Aside type="note">
-The docs describe Step Functions as the current execution backbone for automations and routines. They do not assume a broader workflow designer than the open source app currently documents.
+## Retries and failure handling
+
+Each state can configure:
+
+- **Retry policy.** Intervals, back-off multiplier, max attempts, which error categories to retry on.
+- **Catch handlers.** Route specific errors to fallback states (e.g., a classification failure routes to a "human classifies this one" state rather than failing the whole run).
+- **Timeouts.** Per-state timeout beyond which the state errors out.
+- **Dead-letter.** Failed executions can route to an SQS dead-letter queue for manual replay.
+
+ThinkWork's Terraform module ships opinionated defaults for these — retries on `ThrottlingException` and `ServiceUnavailable`, no retry on `AccessDeniedException`, 15-minute per-state timeout — but each routine can override them per step.
+
+## Where routines are defined
+
+Two authoring surfaces:
+
+- **Admin app Routines UI.** A visual builder for common patterns (the support-email example above would be authored here). Under the hood it generates an Amazon States Language (ASL) document and provisions a Step Functions state machine.
+- **IaC.** Complex routines with custom Lambda steps or unusual branching are authored directly as Terraform modules, versioning the ASL JSON in the repo.
+
+The IaC path is the right choice when the routine is going to live for years and needs code-review discipline. The UI path is the right choice for operational flows that will change quarterly.
+
+## Observability
+
+Three complementary views of a routine run:
+
+1. **The AUTO thread** — narrative timeline with every agent turn and every operator decision.
+2. **The Step Functions execution** — state-by-state status, input/output per state, retry counts, duration per state. Open via the admin app's Runs surface or the AWS console.
+3. **CloudWatch metrics** — aggregate health across many runs (success rate, p95 duration per state, retry rate, dead-letter count).
+
+For debugging one bad run, the thread + execution views are enough. For tracking routine health over weeks, CloudWatch is the one to watch.
+
+<Aside type="tip">
+  If a routine is failing intermittently, check the state-level retry metrics before the agent's output. A state that's retrying on every invocation means the upstream tool or connector is flaky, not that the agent is broken.
 </Aside>
+
+## Known limits
+
+- **No pause-and-edit.** Once a Step Functions execution starts, you can't edit its state-machine definition mid-run. The ASL version running is the version that started.
+- **No backward compatibility guarantee on routine edits.** Editing a routine in the admin app publishes a new ASL version. In-flight executions finish on the old version; new invocations use the new. If a step is removed, any execution waiting on that step fails.
+- **Map state max concurrency is 40.** Step Functions limits inline `Map` concurrency. For higher fan-out, fan through SQS to independent state machines.
+- **Human-in-the-loop waits have a 1-year max.** A task-token-based Inbox wait can live up to 1 year, but not beyond. Longer waits need periodic re-issue.
 
 ## Related pages
 
-- [Automations Overview](/concepts/automations/)
-- [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/)
-- [Threads](/concepts/threads/)
+- [Automations (overview)](/concepts/automations/) — the umbrella
+- [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/) — the entry points that start routines
+- [Admin: Routines](/applications/admin/routines/) — the operator UI
+- [Admin: Inbox](/applications/admin/inbox/) — the human-in-the-loop approval surface
+- [Threads: Lifecycle and Types](/concepts/threads/lifecycle-and-types/) — AUTO threads and parent/child threading
+
+## Under the hood
+
+Routines are backed by AWS Step Functions state machines provisioned through the ThinkWork Terraform module. Routine definitions (the state-machine ASL) are stored in the operational database; a publisher reconciles stored ASL with the deployed state machine when routines are edited.
+
+Human-in-the-loop waits use Step Functions task tokens, persisted on the Inbox item. Resolving the inbox item releases the token and resumes the execution.
+
+For the operator view of routines, see [Admin: Routines](/applications/admin/routines/). For the inbox surface that handles human-in-the-loop approvals, see [Admin: Inbox](/applications/admin/inbox/).
