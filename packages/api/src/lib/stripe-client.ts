@@ -14,9 +14,10 @@
 import Stripe from "stripe";
 import { getStripeCredentials } from "./stripe-credentials";
 
-// Pin to a recent, stable Stripe API version. Bump deliberately + review the
-// changelog before changing.
-export const STRIPE_API_VERSION: Stripe.LatestApiVersion = "2025-09-30.clover";
+// Pin to the Stripe API version that matches the SDK typings shipped with
+// the installed `stripe` package. Bump deliberately — review the changelog
+// at https://docs.stripe.com/upgrades before changing.
+export const STRIPE_API_VERSION: Stripe.LatestApiVersion = "2025-02-24.acacia";
 
 let cached: Stripe | null = null;
 

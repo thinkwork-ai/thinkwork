@@ -76,13 +76,13 @@ export async function provisionTenantFromStripeSession(
 		customer.name?.trim() ||
 		`${emailLocal}'s Workspace`;
 
-	// Stripe typings: current_period_end may be undefined on some subscription
-	// shapes; we coerce via the first item's period end when present.
+	// Stripe's `Subscription` type pins `current_period_end` to a number, but
+	// newer API versions report it as optional at runtime on some paused /
+	// incomplete states. Coerce defensively so this module keeps working
+	// through API upgrades without a typings chase.
 	const currentPeriodEndRaw =
-		(subscription as unknown as { current_period_end?: number })
-			.current_period_end ??
-		subscription.items.data[0]?.current_period_end ??
-		null;
+		(subscription as unknown as { current_period_end?: number | null })
+			.current_period_end ?? null;
 
 	return await db.transaction(async (tx) => {
 		const [tenant] = await tx

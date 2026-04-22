@@ -45,12 +45,10 @@ describe("stripe-plans", () => {
 	});
 
 	it("skips entries with empty / non-string values", () => {
-		process.env.STRIPE_PRICE_IDS_JSON = JSON.stringify({
-			starter: "price_starter",
-			team: "",
-			// @ts-expect-error — deliberately invalid for runtime robustness
-			pro: 42,
-		});
+		// Hand-constructed string so the TS-narrow shape at JSON.stringify time
+		// doesn't reject the deliberately-invalid entries we want to exercise.
+		process.env.STRIPE_PRICE_IDS_JSON =
+			'{"starter":"price_starter","team":"","pro":42}';
 		__resetStripePlansCacheForTest();
 		const plans = listPlans();
 		expect(plans.map((p) => p.internalPlan)).toEqual(["starter"]);
