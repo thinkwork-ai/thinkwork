@@ -81,6 +81,14 @@ vi.mock("../graphql/resolvers/core/authz.js", () => ({
   requireTenantAdmin: mockRequireTenantAdmin,
 }));
 
+// Unit 8c wired runWithIdempotency into createTeam. Stub the identity
+// resolver to return null so the helper short-circuits to fn() and the
+// existing requireTenantAdmin assertions remain valid.
+vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
+  resolveCallerUserId: vi.fn(async () => null),
+  resolveCallerTenantId: vi.fn(async () => null),
+}));
+
 // eslint-disable-next-line import/first
 import { createTeam } from "../graphql/resolvers/teams/createTeam.mutation.js";
 // eslint-disable-next-line import/first

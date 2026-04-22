@@ -94,6 +94,14 @@ vi.mock("../graphql/resolvers/core/authz.js", () => ({
   requireTenantAdmin: mockRequireTenantAdmin,
 }));
 
+// Unit 8c wired runWithIdempotency into createAgentTemplate. Stub the
+// identity resolver to null so the helper short-circuits and the
+// existing requireTenantAdmin assertions remain valid.
+vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
+  resolveCallerUserId: vi.fn(async () => null),
+  resolveCallerTenantId: vi.fn(async () => null),
+}));
+
 vi.mock("../lib/workspace-copy.js", () => ({
   copyDefaultsToTemplate: () => Promise.resolve(),
   overlayTemplateWorkspace: () => Promise.resolve(),
