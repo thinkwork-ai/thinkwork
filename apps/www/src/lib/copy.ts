@@ -15,53 +15,55 @@ export const external = {
 };
 
 export const nav = [
-  { label: "Controls", href: "#controls" },
-  { label: "System", href: "#system" },
-  { label: "Memory", href: "#memory" },
+  { label: "Journey", href: "#journey" },
+  { label: "How it works", href: "#how-it-works" },
+  { label: "Governance", href: "#controls" },
+  { label: "Ownership", href: "#ownership" },
   { label: "Quick start", href: "#quick-start" },
 ];
 
 export const meta = {
-  title: "ThinkWork — The admin console for governed AI adoption",
+  title: "ThinkWork — Start small. Build trust. Scale AI safely.",
   description:
-    "Enterprise-grade agent infrastructure with template-level capability grants, per-agent spend budgets, and security and accuracy evaluations — running inside the AWS account your team already operates.",
+    "A controlled path from AI experiments to trusted AI work. Visible threads, durable memory, capability-granted templates, and a deployment boundary you own.",
 };
 
 export const hero = {
-  eyebrow: "Governed AI adoption",
-  headlinePart1: "The admin console for",
-  headlineAccent: "governed AI adoption.",
-  lede: "Capability-granted templates, per-agent budgets, and security and accuracy evaluations — in one admin console. The runtime deploys into the AWS account your team already operates.",
+  eyebrow: "The AI adoption journey",
+  headlinePart1: "Start small. Build trust.",
+  headlineAccent: "Scale AI safely.",
+  lede: "ThinkWork is the path from AI experiments to trusted AI work — visible threads, durable memory, capability-granted templates, and a deployment boundary that stays inside the AWS account your team already operates.",
   primaryCta: { label: "Read the docs", href: external.docs },
   secondaryCta: { label: "View on GitHub", href: external.github },
   headlineCandidates: [
     // Locked: first entry is the winner; runner-ups kept for future copy iteration.
-    "The admin console for governed AI adoption.",
-    "AI adoption, governed from day one.",
-    "Agents your security team can sign off on.",
+    "Start small. Build trust. Scale AI safely.",
+    "From AI experiments to trusted AI work.",
+    "A controlled path to real AI work.",
+    "Adopt AI. Keep control.",
   ],
 };
 
 export const proofStrip = [
   {
-    label: "Runs in your AWS",
-    detail: "Deployed into the account your team already operates. No shared control plane.",
+    label: "Start small",
+    detail: "One assistant, one workflow, one team. Pilot without a platform bet.",
   },
   {
-    label: "Capability grants",
-    detail: "Template-level control over the tools, models, and knowledge each agent may use.",
+    label: "Visible work",
+    detail: "Every request, action, and outcome lives inside a durable, inspectable thread.",
   },
   {
-    label: "Centralized admin",
-    detail: "One console for agents, templates, budgets, evaluations, memory, and audit.",
+    label: "Governed expansion",
+    detail: "Template capability grants, per-agent budgets, and evaluations that scale with usage.",
   },
   {
-    label: "Spend budgets",
-    detail: "Real-time cost attribution per agent and model, with hard caps.",
+    label: "Your AWS account",
+    detail: "Runtime, data, audit trail, and memory stay inside your boundary.",
   },
   {
-    label: "Security + accuracy evaluations",
-    detail: "Evaluation suite for every template, powered by AWS Bedrock AgentCore.",
+    label: "One system at every scale",
+    detail: "The runtime a developer spins up in five commands is the runtime production runs on.",
   },
 ];
 
@@ -69,18 +71,85 @@ export const adoption = {
   eyebrow: "The third option",
   headline:
     "You shouldn't have to choose between banning AI and betting the company on it.",
-  lede: "Most organizations are being pushed toward one of two bad options: block agentic AI entirely and watch it happen through back channels anyway, or adopt it faster than the controls can keep up. ThinkWork is the third option — an agent platform designed so your security, cost, and audit teams can sign off on it from day one.",
+  lede: "Most organizations are being pushed toward one of two bad options. ThinkWork is the third — a gradual, governed path your security, cost, and audit teams can sign off on from day one.",
   bullets: [
-    "Not a SaaS control plane you have to trust. Your runtime, your network, your data.",
-    "Not a policy document. Controls are enforced in code, on every run.",
-    "One system at every scale. The runtime a developer spins up in five commands is the runtime production runs on.",
+    "Option one — block AI entirely, then watch shadow adoption spread through back channels anyway.",
+    "Option two — adopt faster than controls can keep up, without audit trail, ownership, or cost attribution.",
+    "Option three — adopt AI gradually, prove value early, and expand safely as trust grows.",
+  ],
+};
+
+export const journey = {
+  eyebrow: "The AI adoption journey",
+  headline: "A practical path to AI adoption.",
+  lede: "Start with one useful assistant in one real workflow. Keep every action visible in threads. Carry context forward with memory. Enforce boundaries with templates, budgets, and evaluations. Expand the role of AI as trust grows — without changing the governance model underneath.",
+  steps: [
+    {
+      n: "01",
+      title: "Start with small wins",
+      lede: "Begin with one assistant, one workflow, one team. Not full autonomy, not a moonshot — useful work that saves time and proves the model.",
+      examples: [
+        "Triage inbound requests",
+        "Draft responses",
+        "Summarize work",
+        "Route tasks",
+        "Assist inside a defined process",
+      ],
+    },
+    {
+      n: "02",
+      title: "Build trust through visible work",
+      lede: "Every action runs inside a thread with history, attribution, and audit. Memory carries context forward. Templates define what each agent can access and do. Budgets and evaluations keep adoption grounded.",
+    },
+    {
+      n: "03",
+      title: "Expand as confidence grows",
+      lede: "As teams see reliable results, assistants take on more responsibility, more system access, and bigger workflows — without changing the governance model.",
+    },
+    {
+      n: "04",
+      title: "Keep the harness yours",
+      lede: "As AI becomes more important, the boundary matters more. Your runtime, data, audit trail, and memory stay inside the AWS account your team already operates.",
+    },
+  ],
+};
+
+export const howItWorks = {
+  eyebrow: "How ThinkWork works",
+  headline: "Four primitives, one system.",
+  lede: "Threads, memory, templates, and controls — built into the runtime, not bolted on later. Each primitive is a named surface your team can inspect, govern, and expand.",
+  primitives: [
+    {
+      title: "Threads",
+      oneLiner: "Threads keep work visible.",
+      detail: "Every request, action, and outcome lives in one system of record — durable, attributed, and inspectable per thread, per agent, per tenant.",
+      href: "#audit",
+    },
+    {
+      title: "Memory",
+      oneLiner: "Memory carries context forward.",
+      detail: "Agents do not start from zero every time. Useful context, decisions, and knowledge stay available across threads, across teams, across time.",
+      href: "#memory",
+    },
+    {
+      title: "Templates",
+      oneLiner: "Templates enforce boundaries.",
+      detail: "You decide which tools, models, and knowledge each agent can use. Agents inherit the boundary — policy becomes code, not paperwork.",
+      href: "#templates",
+    },
+    {
+      title: "Controls",
+      oneLiner: "Controls make adoption governable.",
+      detail: "Budgets, guardrails, evaluations, and audit trails keep AI accountable as usage grows.",
+      href: "#controls",
+    },
   ],
 };
 
 export const controls = {
-  eyebrow: "Five controls",
-  headline: "Governance primitives, not bolted-on guardrails.",
-  lede: "Five first-class controls a governed rollout actually requires — built into the runtime, not add-ons layered on later.",
+  eyebrow: "Governance that grows with usage",
+  headline: "Governance, enforced in code — not in policy documents.",
+  lede: "As agents multiply, spend climbs, and scope expands, the governance surface scales with usage — not an architecture rewrite. Five first-class controls keep AI accountable at every stage of adoption.",
   items: [
     {
       title: "Runs in your AWS",
@@ -271,6 +340,19 @@ export const mobile = {
       title: "On TestFlight today",
       desc: "iOS first, live for early users. The Expo codebase is cross-platform; Android ships when the iOS shape is stable.",
     },
+  ],
+};
+
+export const ownership = {
+  eyebrow: "Ownership",
+  headline: "Keep the harness yours.",
+  lede: "ThinkWork deploys into the AWS account your team already operates. As AI becomes part of operations, your runtime, data, audit trail, and memory stay inside the boundary your ops team already enforces.",
+  points: [
+    { title: "Runtime", desc: "Your runtime stays in your AWS account." },
+    { title: "Data", desc: "Your data stays in your boundary." },
+    { title: "Audit", desc: "Your audit trail stays inspectable." },
+    { title: "Memory", desc: "Your memory stays portable." },
+    { title: "Harness", desc: "Your harness stays yours." },
   ],
 };
 
