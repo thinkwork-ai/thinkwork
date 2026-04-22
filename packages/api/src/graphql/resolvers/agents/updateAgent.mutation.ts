@@ -8,8 +8,43 @@ import {
 import { writeUserMdForAssignment } from "../../../lib/user-md-writer.js";
 import { writeIdentityMdForAgent } from "../../../lib/identity-md-writer.js";
 import { invalidateComposerCache } from "../../../lib/workspace-overlay.js";
+import { resolveCaller } from "../core/resolve-auth-user.js";
 
 export async function updateAgent(_parent: any, args: any, ctx: GraphQLContext) {
+	// Authz:
+	//
+	//   - Cognito JWT callers: resolve the caller's tenant_id, then scope
+	//     the update so only agents in that tenant can be targeted. This
+	//     closes the pre-existing cross-tenant rename gap (PR #386 review
+	//     finding ADV-005) — guessing another tenant's agent UUID used to
+	//     work; now the WHERE clause rejects it as "not found".
+	//
+	//   - Service-auth (apikey) callers: MUST present `x-agent-id` whose
+	//     value equals `args.id`. This lets agent self-serve tools call
+	//     the mutation (e.g., `update_agent_name`) while rejecting any
+	//     broader apikey-holder from renaming arbitrary agents. Missing
+	//     or mismatched header → FORBIDDEN.
+	const { tenantId: callerTenantId } = await resolveCaller(ctx);
+	if (ctx.auth.authType === "apikey") {
+		if (!ctx.auth.agentId || ctx.auth.agentId !== args.id) {
+			throw new Error(
+				"FORBIDDEN: service-auth callers must present x-agent-id matching the target agent id",
+			);
+		}
+		// Service caller must also have provided x-tenant-id (the apikey
+		// handler populates callerTenantId from that header).
+		if (!callerTenantId) {
+			throw new Error(
+				"FORBIDDEN: service-auth callers must present x-tenant-id",
+			);
+		}
+	} else {
+		// JWT callers: tenant is required for the scoped WHERE below.
+		if (!callerTenantId) {
+			throw new Error("UNAUTHORIZED: caller tenant could not be resolved");
+		}
+	}
+
 	const i = args.input;
 	const updates: Record<string, unknown> = { updated_at: new Date() };
 	if (i.name !== undefined) {
@@ -66,7 +101,12 @@ export async function updateAgent(_parent: any, args: any, ctx: GraphQLContext) 
 					tenant_id: agents.tenant_id,
 				})
 				.from(agents)
-				.where(eq(agents.id, args.id));
+				.where(
+					and(
+						eq(agents.id, args.id),
+						eq(agents.tenant_id, callerTenantId),
+					),
+				);
 			if (!pre) throw new Error("Agent not found");
 			const oldPairId = pre.human_pair_id ?? null;
 			const newPairId = (i.humanPairId as string | null) ?? null;
@@ -77,7 +117,12 @@ export async function updateAgent(_parent: any, args: any, ctx: GraphQLContext) 
 			const [updated] = await tx
 				.update(agents)
 				.set(updates)
-				.where(eq(agents.id, args.id))
+				.where(
+					and(
+						eq(agents.id, args.id),
+						eq(agents.tenant_id, callerTenantId),
+					),
+				)
 				.returning();
 			if (!updated) throw new Error("Agent not found");
 
@@ -136,14 +181,26 @@ export async function updateAgent(_parent: any, args: any, ctx: GraphQLContext) 
 
 		// Txn committed successfully — now safe to invalidate the composer
 		// cache so the next read reflects the new S3 state.
+		// Wrap each invalidation independently — if one throws, the remaining
+		// agents still get invalidated. A stale composer cache is recoverable
+		// (30s TTL) but silently skipping entries is not.
 		for (const entry of cacheInvalidations) {
-			invalidateComposerCache(entry);
+			try {
+				invalidateComposerCache(entry);
+			} catch (err) {
+				console.warn(
+					`[updateAgent] cache_invalidation agentId=${entry.agentId} failed:`,
+					err,
+				);
+			}
 		}
 	} else {
 		const [updated] = await db
 			.update(agents)
 			.set(updates)
-			.where(eq(agents.id, args.id))
+			.where(
+				and(eq(agents.id, args.id), eq(agents.tenant_id, callerTenantId)),
+			)
 			.returning();
 		if (!updated) throw new Error("Agent not found");
 		row = updated;

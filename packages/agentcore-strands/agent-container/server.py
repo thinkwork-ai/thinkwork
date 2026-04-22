@@ -515,6 +515,31 @@ def _call_strands_agent(system_prompt: str, messages: list,
     except Exception as e:
         logger.warning("write_memory registration failed: %s", e)
 
+    # Self-serve agent tools (docs/plans/2026-04-22-003-...-plan.md):
+    #   - update_agent_name: agent renames itself
+    #   - update_identity: agent edits its own IDENTITY.md personality fields
+    #   - update_user_profile: agent edits the paired human's structured profile
+    try:
+        from update_agent_name_tool import update_agent_name
+        tools.append(update_agent_name)
+        logger.info("workspace tool registered: update_agent_name")
+    except Exception as e:
+        logger.warning("update_agent_name registration failed: %s", e)
+
+    try:
+        from update_identity_tool import update_identity
+        tools.append(update_identity)
+        logger.info("workspace tool registered: update_identity")
+    except Exception as e:
+        logger.warning("update_identity registration failed: %s", e)
+
+    try:
+        from update_user_profile_tool import update_user_profile
+        tools.append(update_user_profile)
+        logger.info("workspace tool registered: update_user_profile")
+    except Exception as e:
+        logger.warning("update_user_profile registration failed: %s", e)
+
     _hindsight_enabled = bool(os.environ.get("HINDSIGHT_ENDPOINT"))
     if _hindsight_enabled:
         # Hindsight memory: retain/recall/reflect tools backed by the

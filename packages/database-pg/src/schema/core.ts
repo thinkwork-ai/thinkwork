@@ -108,6 +108,35 @@ export const userProfiles = pgTable("user_profiles", {
 	 * agent USER.md as {{HUMAN_PRONOUNS}} at assignment time. Null → renders as "—".
 	 */
 	pronouns: text("pronouns"),
+	/**
+	 * Short/preferred name — what the agent should call this human in chat
+	 * ("Eric" vs the full "Eric Odom"). Maintained by the agent via the
+	 * `update_user_profile` tool when the human says "just call me X".
+	 * Rendered into USER.md as {{HUMAN_CALL_BY}}. Null → renders as "—".
+	 */
+	call_by: text("call_by"),
+	/**
+	 * Free-form notes the agent maintains about the human — communication
+	 * preferences, working style, context. Rendered into USER.md as
+	 * {{HUMAN_NOTES}}. Null → renders as "—".
+	 *
+	 * Phone number for USER.md's {{HUMAN_PHONE}} is read from `users.phone`
+	 * — that column already exists for account-level contact info. No
+	 * separate profile column.
+	 */
+	notes: text("notes"),
+	/**
+	 * Free-form markdown describing the human's family / close contacts.
+	 * Rendered under USER.md's `## Family` section as {{HUMAN_FAMILY}}.
+	 * Null → renders as "—".
+	 */
+	family: text("family"),
+	/**
+	 * Free-form markdown capturing ongoing context about the human — projects,
+	 * recurring topics, situational color. Rendered under USER.md's
+	 * `## Context` section as {{HUMAN_CONTEXT}}. Null → renders as "—".
+	 */
+	context: text("context"),
 	created_at: timestamp("created_at", { withTimezone: true })
 		.notNull()
 		.default(sql`now()`),

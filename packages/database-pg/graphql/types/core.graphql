@@ -59,6 +59,17 @@ type UserProfile {
   displayName: String
   theme: String
   notificationPreferences: AWSJSON
+  title: String
+  timezone: String
+  pronouns: String
+  "Short/preferred name — what the agent should call this human in chat."
+  callBy: String
+  "Free-form notes the agent maintains about this human's preferences + style."
+  notes: String
+  "Free-form markdown describing the human's family / close contacts."
+  family: String
+  "Free-form markdown capturing ongoing context about the human."
+  context: String
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
 }
@@ -127,6 +138,17 @@ input UpdateUserProfileInput {
   displayName: String
   theme: String
   notificationPreferences: AWSJSON
+  title: String
+  timezone: String
+  pronouns: String
+  "Short/preferred name the agent should use in chat. Set via admin UI or agent self-serve tool."
+  callBy: String
+  "Free-form notes about the human's preferences + communication style."
+  notes: String
+  "Free-form markdown describing the human's family / close contacts."
+  family: String
+  "Free-form markdown capturing ongoing context about the human."
+  context: String
 }
 
 # --- Query / Mutation extensions ---

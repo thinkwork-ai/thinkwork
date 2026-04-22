@@ -148,26 +148,28 @@ _This file is yours to evolve. Update the lines above as your personality takes 
 /**
  * Mirror of \`packages/memory-templates/USER.md\`.
  *
- * Placeholders live only where we have DB-backed values. Phone, Notes,
- * Family, and Context are scaffolded prose the agent fills in over time
- * via \`write_memory\` as it learns about the human.
+ * Every line is backed by a DB column on \`user_profiles\` (or \`users\`
+ * for Name). Null columns render as em-dash. Agents maintain call_by /
+ * phone / notes / family / context via the \`update_user_profile\` tool
+ * (docs/plans/2026-04-22-003-feat-agent-self-serve-tools-plan.md); USER.md
+ * re-renders automatically when the DB row changes.
  */
 const USER_MD = `# USER.md - About Your Human
 
 - **Name:** {{HUMAN_NAME}}
-- **What to call them:** {{HUMAN_NAME}}
+- **What to call them:** {{HUMAN_CALL_BY}}
 - **Pronouns:** {{HUMAN_PRONOUNS}}
 - **Timezone:** {{HUMAN_TIMEZONE}}
-- **Phone:** *(tbd — ask or wait)*
-- **Notes:** *(getting to know them)*
+- **Phone:** {{HUMAN_PHONE}}
+- **Notes:** {{HUMAN_NOTES}}
 
 ## Family
 
-*(Track family names + contact as they come up. Edit freely.)*
+{{HUMAN_FAMILY}}
 
 ## Context
 
-*(Getting to know {{HUMAN_NAME}} — more to come.)*
+{{HUMAN_CONTEXT}}
 `;
 
 /**
@@ -327,6 +329,31 @@ Automatic retention handles most of this for you. Only call \`remember()\` when:
 - Recall before storing when you're not sure whether something is already known
 - Prefer complete sentences over fragments for better retrieval quality
 - Tags are applied automatically (agent, tenant, env) — you do not need to pass them
+
+## Editing Yourself and Your Human
+
+You have narrow tools to update structured facts about yourself and the human you're paired with. These write to the database and re-render your workspace files automatically — they're durable across sessions, re-pair events, and template migrations. Use them instead of faking state through memory calls.
+
+**You cannot fake any of these actions.** If a tool call fails, say so. If the tool doesn't exist for what you're asked, say so. Never roleplay success.
+
+### Tools you have
+
+- **\`update_agent_name(new_name)\`** — Rename yourself (updates DB + IDENTITY.md's Name line atomically). Use only when your human explicitly asks you to change your name. Your name is your identity; don't rename yourself on your own initiative.
+- **\`update_identity(field, value)\`** — Edit one of your IDENTITY.md personality fields: \`creature\`, \`vibe\`, \`emoji\`, \`avatar\`. Use when your human describes your personality or when you've learned something real about your own style. Never changes Name — that's \`update_agent_name\`.
+- **\`update_user_profile(field, value)\`** — Update a structured fact about your paired human. Fields: \`call_by\`, \`notes\`, \`family\`, \`context\`. Use this when the human tells you how they want to be addressed, their communication style, who's in their life, or what they're currently working on — anything durable. Phone lives on the user account itself and is editable only via admin UI.
+
+### When to use these vs \`write_memory\`
+
+- **Durable structured fact → the tool above.** "Call me Rick" → \`update_user_profile("call_by", "Rick")\`, not \`write_memory\`. The tool writes to the DB and USER.md re-renders automatically; \`write_memory\` only stores a note.
+- **Narrative / unstructured / ephemeral → \`write_memory\`.** Observations, one-off reminders, scratchpad thinking belong in \`memory/lessons.md\` / \`preferences.md\` / \`contacts.md\`.
+- **When in doubt, ask yourself:** "Should this survive a re-pair? Does my human expect USER.md to show this line?" If yes to either, use the self-serve tool. If no, write_memory.
+
+### What these tools cannot do
+
+- **Cannot rename other agents**, only yourself. Cross-agent edits are admin-only.
+- **Cannot change your human's email, phone, or account settings** — admin UI only.
+- **Cannot delete yourself, change your template, or change who you're paired with** — admin UI only.
+- **Cannot fake success.** Every tool returns a confirmation or an explicit error string. Report what actually happened.
 `;
 
 /**
@@ -439,7 +466,7 @@ _(empty — add entries as you encounter them)_
  *     `backfill-identity-md.ts` / `backfill-user-md.ts` (or a targeted
  *     accept-template-update flow) to refresh them.
  */
-export const DEFAULTS_VERSION = 2;
+export const DEFAULTS_VERSION = 3;
 
 // ---------------------------------------------------------------------------
 // Aggregator

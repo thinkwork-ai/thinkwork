@@ -19,6 +19,20 @@ export type Scalars = {
   AWSURL: { input: any; output: any; }
 };
 
+export type AcceptTemplateUpdateBulkResult = {
+  __typename?: 'AcceptTemplateUpdateBulkResult';
+  accepted: Scalars['Int']['output'];
+  failed: Scalars['Int']['output'];
+  results: Array<AcceptTemplateUpdateBulkResultEntry>;
+};
+
+export type AcceptTemplateUpdateBulkResultEntry = {
+  __typename?: 'AcceptTemplateUpdateBulkResultEntry';
+  agentId: Scalars['ID']['output'];
+  error?: Maybe<Scalars['String']['output']>;
+  success: Scalars['Boolean']['output'];
+};
+
 export type ActivityLogEntry = {
   __typename?: 'ActivityLogEntry';
   action: Scalars['String']['output'];
@@ -392,6 +406,14 @@ export type BudgetStatus = {
 
 export type CheckoutThreadInput = {
   runId: Scalars['String']['input'];
+};
+
+export type CompositionFeedbackSummary = {
+  __typename?: 'CompositionFeedbackSummary';
+  negative: Scalars['Int']['output'];
+  positive: Scalars['Int']['output'];
+  skillId: Scalars['String']['output'];
+  total: Scalars['Int']['output'];
 };
 
 export type ConcurrencySnapshot = {
@@ -1158,6 +1180,8 @@ export type ModelInvocation = {
 export type Mutation = {
   __typename?: 'Mutation';
   _empty?: Maybe<Scalars['String']['output']>;
+  acceptTemplateUpdate: Agent;
+  acceptTemplateUpdateBulk: AcceptTemplateUpdateBulkResult;
   addInboxItemComment: InboxItemComment;
   addInboxItemLink: InboxItemLink;
   addTeamAgent: TeamAgent;
@@ -1178,6 +1202,7 @@ export type Mutation = {
   bootstrapUser: BootstrapResult;
   cancelEvalRun: EvalRun;
   cancelInboxItem: InboxItem;
+  cancelSkillRun: SkillRun;
   cancelThreadTurn: ThreadTurn;
   captureMobileMemory: MobileMemoryCapture;
   checkoutThread: Thread;
@@ -1228,6 +1253,7 @@ export type Mutation = {
   deleteRecipe: Scalars['Boolean']['output'];
   deleteRoutine: Scalars['Boolean']['output'];
   deleteRoutineTrigger: Scalars['Boolean']['output'];
+  deleteRun: Scalars['Boolean']['output'];
   deleteTeam: Scalars['Boolean']['output'];
   deleteThread: Scalars['Boolean']['output'];
   deleteThreadComment: Scalars['Boolean']['output'];
@@ -1275,6 +1301,8 @@ export type Mutation = {
   setAgentSkills: Array<AgentSkill>;
   setRoutineTrigger: RoutineTrigger;
   startEvalRun: EvalRun;
+  startSkillRun: SkillRun;
+  submitRunFeedback: SkillRun;
   syncKnowledgeBase: KnowledgeBase;
   syncTemplateToAgent: Agent;
   syncTemplateToAllAgents: SyncSummary;
@@ -1304,6 +1332,19 @@ export type Mutation = {
   updateUserProfile: UserProfile;
   updateWebhook: Webhook;
   upsertBudgetPolicy: BudgetPolicy;
+};
+
+
+export type MutationAcceptTemplateUpdateArgs = {
+  agentId: Scalars['ID']['input'];
+  filename: Scalars['String']['input'];
+};
+
+
+export type MutationAcceptTemplateUpdateBulkArgs = {
+  filename: Scalars['String']['input'];
+  templateId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -1373,6 +1414,11 @@ export type MutationCancelEvalRunArgs = {
 
 export type MutationCancelInboxItemArgs = {
   id: Scalars['ID']['input'];
+};
+
+
+export type MutationCancelSkillRunArgs = {
+  runId: Scalars['ID']['input'];
 };
 
 
@@ -1584,6 +1630,11 @@ export type MutationDeleteRoutineArgs = {
 
 export type MutationDeleteRoutineTriggerArgs = {
   id: Scalars['ID']['input'];
+};
+
+
+export type MutationDeleteRunArgs = {
+  runId: Scalars['ID']['input'];
 };
 
 
@@ -1857,6 +1908,16 @@ export type MutationStartEvalRunArgs = {
 };
 
 
+export type MutationStartSkillRunArgs = {
+  input: StartSkillRunInput;
+};
+
+
+export type MutationSubmitRunFeedbackArgs = {
+  input: SubmitRunFeedbackInput;
+};
+
+
 export type MutationSyncKnowledgeBaseArgs = {
   id: Scalars['ID']['input'];
 };
@@ -2061,6 +2122,16 @@ export type PerformanceTimeSeries = {
   totalCostUsd: Scalars['Float']['output'];
 };
 
+export type PinStatusFile = {
+  __typename?: 'PinStatusFile';
+  filename: Scalars['String']['output'];
+  latestContent?: Maybe<Scalars['String']['output']>;
+  latestSha?: Maybe<Scalars['String']['output']>;
+  pinnedContent?: Maybe<Scalars['String']['output']>;
+  pinnedSha?: Maybe<Scalars['String']['output']>;
+  updateAvailable: Scalars['Boolean']['output'];
+};
+
 export type Query = {
   __typename?: 'Query';
   _empty?: Maybe<Scalars['String']['output']>;
@@ -2071,6 +2142,7 @@ export type Query = {
   agentCostBreakdown: CostSummary;
   agentEmailCapability?: Maybe<AgentEmailCapability>;
   agentPerformance: Array<AgentPerformance>;
+  agentPinStatus: Array<PinStatusFile>;
   agentTemplate?: Maybe<AgentTemplate>;
   agentTemplates: Array<AgentTemplate>;
   agentVersions: Array<AgentVersion>;
@@ -2081,6 +2153,7 @@ export type Query = {
   artifacts: Array<Artifact>;
   budgetPolicies: Array<BudgetPolicy>;
   budgetStatus: Array<BudgetStatus>;
+  compositionFeedbackSummary: Array<CompositionFeedbackSummary>;
   concurrencySnapshot: ConcurrencySnapshot;
   costByAgent: Array<AgentCostSummary>;
   costByModel: Array<ModelCostSummary>;
@@ -2149,6 +2222,8 @@ export type Query = {
   scheduledJob?: Maybe<ScheduledJob>;
   scheduledJobs: Array<ScheduledJob>;
   singleAgentPerformance?: Maybe<AgentPerformance>;
+  skillRun?: Maybe<SkillRun>;
+  skillRuns: Array<SkillRun>;
   team?: Maybe<Team>;
   teams: Array<Team>;
   templateSyncDiff: TemplateSyncDiff;
@@ -2254,6 +2329,11 @@ export type QueryAgentPerformanceArgs = {
 };
 
 
+export type QueryAgentPinStatusArgs = {
+  agentId: Scalars['ID']['input'];
+};
+
+
 export type QueryAgentTemplateArgs = {
   id: Scalars['ID']['input'];
 };
@@ -2313,6 +2393,12 @@ export type QueryBudgetPoliciesArgs = {
 
 export type QueryBudgetStatusArgs = {
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryCompositionFeedbackSummaryArgs = {
+  skillId?: InputMaybe<Scalars['String']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -2545,6 +2631,22 @@ export type QueryScheduledJobsArgs = {
 export type QuerySingleAgentPerformanceArgs = {
   agentId: Scalars['ID']['input'];
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QuerySkillRunArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QuerySkillRunsArgs = {
+  agentId?: InputMaybe<Scalars['ID']['input']>;
+  invocationSource?: InputMaybe<Scalars['String']['input']>;
+  invokerUserId?: InputMaybe<Scalars['ID']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  skillId?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -2909,6 +3011,31 @@ export type SendMessageInput = {
   toolResults?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
+export type SkillRun = {
+  __typename?: 'SkillRun';
+  agentId?: Maybe<Scalars['ID']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  deleteAt: Scalars['AWSDateTime']['output'];
+  deliveredArtifactRef?: Maybe<Scalars['AWSJSON']['output']>;
+  deliveryChannels?: Maybe<Scalars['AWSJSON']['output']>;
+  failureReason?: Maybe<Scalars['String']['output']>;
+  feedbackNote?: Maybe<Scalars['String']['output']>;
+  feedbackSignal?: Maybe<Scalars['String']['output']>;
+  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  id: Scalars['ID']['output'];
+  inputs?: Maybe<Scalars['AWSJSON']['output']>;
+  invocationSource: Scalars['String']['output'];
+  invokerUserId: Scalars['ID']['output'];
+  resolvedInputs?: Maybe<Scalars['AWSJSON']['output']>;
+  resolvedInputsHash: Scalars['String']['output'];
+  skillId: Scalars['String']['output'];
+  skillVersion: Scalars['Int']['output'];
+  startedAt: Scalars['AWSDateTime']['output'];
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
 export type StartEvalRunInput = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
   agentTemplateId?: InputMaybe<Scalars['ID']['input']>;
@@ -2917,10 +3044,26 @@ export type StartEvalRunInput = {
   testCaseIds?: InputMaybe<Array<Scalars['ID']['input']>>;
 };
 
+export type StartSkillRunInput = {
+  agentId?: InputMaybe<Scalars['ID']['input']>;
+  deliveryChannels?: InputMaybe<Scalars['AWSJSON']['input']>;
+  inputs?: InputMaybe<Scalars['AWSJSON']['input']>;
+  invocationSource: Scalars['String']['input'];
+  skillId: Scalars['String']['input'];
+  skillVersion?: InputMaybe<Scalars['Int']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
 export type StatusCount = {
   __typename?: 'StatusCount';
   count: Scalars['Int']['output'];
   status: Scalars['String']['output'];
+};
+
+export type SubmitRunFeedbackInput = {
+  note?: InputMaybe<Scalars['String']['input']>;
+  runId: Scalars['ID']['input'];
+  signal: Scalars['String']['input'];
 };
 
 export type Subscription = {
@@ -3463,9 +3606,20 @@ export type UpdateUserInput = {
 };
 
 export type UpdateUserProfileInput = {
+  /** Short/preferred name the agent should use in chat. Set via admin UI or agent self-serve tool. */
+  callBy?: InputMaybe<Scalars['String']['input']>;
+  /** Free-form markdown capturing ongoing context about the human. */
+  context?: InputMaybe<Scalars['String']['input']>;
   displayName?: InputMaybe<Scalars['String']['input']>;
+  /** Free-form markdown describing the human's family / close contacts. */
+  family?: InputMaybe<Scalars['String']['input']>;
+  /** Free-form notes about the human's preferences + communication style. */
+  notes?: InputMaybe<Scalars['String']['input']>;
   notificationPreferences?: InputMaybe<Scalars['AWSJSON']['input']>;
+  pronouns?: InputMaybe<Scalars['String']['input']>;
   theme?: InputMaybe<Scalars['String']['input']>;
+  timezone?: InputMaybe<Scalars['String']['input']>;
+  title?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpdateWebhookInput = {
@@ -3503,12 +3657,23 @@ export type User = {
 
 export type UserProfile = {
   __typename?: 'UserProfile';
+  /** Short/preferred name — what the agent should call this human in chat. */
+  callBy?: Maybe<Scalars['String']['output']>;
+  /** Free-form markdown capturing ongoing context about the human. */
+  context?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   displayName?: Maybe<Scalars['String']['output']>;
+  /** Free-form markdown describing the human's family / close contacts. */
+  family?: Maybe<Scalars['String']['output']>;
   id: Scalars['ID']['output'];
+  /** Free-form notes the agent maintains about this human's preferences + style. */
+  notes?: Maybe<Scalars['String']['output']>;
   notificationPreferences?: Maybe<Scalars['AWSJSON']['output']>;
+  pronouns?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
   theme?: Maybe<Scalars['String']['output']>;
+  timezone?: Maybe<Scalars['String']['output']>;
+  title?: Maybe<Scalars['String']['output']>;
   updatedAt: Scalars['AWSDateTime']['output'];
   userId: Scalars['ID']['output'];
 };
