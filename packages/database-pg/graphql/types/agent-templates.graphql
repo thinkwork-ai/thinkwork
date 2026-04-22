@@ -61,11 +61,28 @@ type TemplateSyncDiff {
   skillsAdded: [String!]!
   skillsRemoved: [String!]!
   skillsChanged: [String!]!
+  """
+  Per-skill preview of the operations the agent will lose (or gain) if
+  Push is applied now. Only includes entries for skills whose manifest
+  declares `permissions_model: operations` AND where the agent's
+  current state would diverge from the post-sync state. Empty array
+  when no permission change is pending. Surfaces in the sync dialog
+  so operators can see revocations before confirming.
+  """
+  permissionsChanges: [SkillPermissionsDelta!]!
   kbsAdded: [String!]!
   kbsRemoved: [String!]!
   filesAdded: [String!]!
   filesModified: [String!]!
   filesSame: [String!]!
+}
+
+type SkillPermissionsDelta {
+  skillId: String!
+  """Ops the agent will gain after sync (typically empty — intersection narrows)."""
+  added: [String!]!
+  """Ops the agent currently has but will lose after sync."""
+  removed: [String!]!
 }
 
 type SyncSummary {
