@@ -90,6 +90,15 @@ vi.mock("../graphql/resolvers/core/authz.js", () => ({
   requireTenantAdmin: mockRequireTenantAdmin,
 }));
 
+// Unit 8b wired `resolveCallerUserId` + `runWithIdempotency` into
+// createAgent. Stub the identity resolver to return null so the
+// idempotency helper short-circuits to a plain fn() call —
+// preserves the existing test's assertions about requireTenantAdmin.
+vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
+  resolveCallerUserId: vi.fn(async () => null),
+  resolveCallerTenantId: vi.fn(async () => null),
+}));
+
 // Stub workspace-map-generator so setAgentSkills' dynamic import doesn't hit disk
 vi.mock("../lib/workspace-map-generator.js", () => ({
   regenerateWorkspaceMap: () => Promise.resolve(),

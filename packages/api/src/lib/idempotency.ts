@@ -198,3 +198,91 @@ export async function failIdempotentMutation(
     })
     .where(eq(mutationIdempotency.id, id));
 }
+
+/**
+ * Higher-level wrapper used by resolvers. Encapsulates the full flow:
+ *
+ *   1. Skip idempotency entirely when `tenantId` or `invokerUserId` is
+ *      unresolvable — pre-Unit-1 callers, or cognito users whose JWT
+ *      hasn't been bootstrapped. In that case `runWithIdempotency` just
+ *      calls `fn()` and returns the result. Preserves existing admin SPA
+ *      / CLI flows during the migration.
+ *   2. Insert-or-load via `startOrLoadIdempotentMutation`. On `isNew=true`,
+ *      run `fn()`, commit via `completeIdempotentMutation` on success,
+ *      or `failIdempotentMutation` + rethrow on failure.
+ *   3. On `isNew=false`:
+ *        - `succeeded` → return the stored `resultJson` (typed by the caller).
+ *        - `failed` → throw the stored `failureReason` as a fresh error so
+ *          the caller sees the original failure class.
+ *        - `pending` → throw a specific "in-flight" error so the admin
+ *          skill can surface a retry-later refusal shape.
+ *
+ * `resultCoerce` lets the caller narrow the `unknown` result_json back
+ * to its resolver's return type. Defaults to a pass-through cast.
+ */
+export class MutationInFlightError extends Error {
+  constructor(public readonly idempotencyKey: string) {
+    super(
+      `mutation in-flight for idempotency key ${idempotencyKey} — retry shortly`,
+    );
+    this.name = "MutationInFlightError";
+  }
+}
+
+export async function runWithIdempotency<T>(params: {
+  tenantId: string | null;
+  invokerUserId: string | null;
+  mutationName: string;
+  inputs: Record<string, unknown>;
+  clientKey?: string | null;
+  fn: () => Promise<T>;
+  resultCoerce?: (raw: unknown) => T;
+}): Promise<T> {
+  const {
+    tenantId,
+    invokerUserId,
+    mutationName,
+    inputs,
+    clientKey,
+    fn,
+    resultCoerce = (raw) => raw as T,
+  } = params;
+
+  // Skip idempotency when we can't identify the (tenant, invoker) pair.
+  // Happens for non-apikey callers where resolveCallerUserId returns
+  // null (unusual but possible during auth bootstrapping) — and we
+  // never want to block the write on a missing invoker id.
+  if (!tenantId || !invokerUserId) {
+    return fn();
+  }
+
+  const loaded = await startOrLoadIdempotentMutation({
+    tenantId,
+    invokerUserId,
+    mutationName,
+    inputs,
+    clientKey,
+  });
+
+  if (!loaded.isNew) {
+    if (loaded.status === "succeeded") {
+      return resultCoerce(loaded.resultJson);
+    }
+    if (loaded.status === "failed") {
+      throw new Error(loaded.failureReason ?? "prior attempt failed");
+    }
+    // pending — rare without a cleanup job, but surfaces loudly so the
+    // admin skill can emit retry_later.
+    throw new MutationInFlightError(clientKey ?? loaded.id);
+  }
+
+  try {
+    const result = await fn();
+    await completeIdempotentMutation(loaded.id, result);
+    return result;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    await failIdempotentMutation(loaded.id, reason);
+    throw err;
+  }
+}
