@@ -33,6 +33,7 @@ except ImportError:
 
 _tracker_installed = False
 from install_skills import install_skills
+import invocation_env
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -1510,12 +1511,36 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
         # complete before we respond to the caller.
         if payload.get("kind") == "run_skill":
             from run_skill_dispatch import dispatch_run_skill
+            # Set the per-invocation env aliases (TENANT_ID / AGENT_ID /
+            # USER_ID / CURRENT_USER_ID / CURRENT_THREAD_ID) so sub-skills
+            # invoked by the composition see the same identity they'd see
+            # on the normal path. The run_skill envelope uses different
+            # key names (camelCase) — translate before applying. Cleared
+            # in `finally` so the warm container does not leak identity
+            # into the next invocation.
+            scope = payload.get("scope") or {}
+            invocation_env_keys = invocation_env.apply_invocation_env({
+                "workspace_tenant_id": payload.get("tenantId")
+                    or scope.get("tenantId")
+                    or "",
+                "assistant_id": payload.get("agentId")
+                    or scope.get("agentId")
+                    or "",
+                "user_id": payload.get("invokerUserId")
+                    or scope.get("invokerUserId")
+                    or "",
+                "thread_id": payload.get("threadId")
+                    or scope.get("threadId")
+                    or "",
+            })
             try:
                 result = asyncio.run(dispatch_run_skill(payload))
                 self._respond(200, result)
             except Exception as e:
                 logger.exception("run_skill: dispatch crashed")
                 self._respond(500, {"error": f"run_skill dispatch crashed: {e}"})
+            finally:
+                invocation_env.cleanup_invocation_env(invocation_env_keys)
             return
 
         tenant_id = payload.get("sessionId") or payload.get("tenant_id") or "unknown"
@@ -1571,18 +1596,19 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
         if instance_id:
             os.environ["_INSTANCE_ID"] = instance_id
 
-        if workspace_tenant_id:
-            os.environ["_MCP_TENANT_ID"] = workspace_tenant_id
-        if assistant_id:
-            os.environ["_MCP_AGENT_ID"] = assistant_id
-        if user_id:
-            os.environ["_MCP_USER_ID"] = user_id
-        if ticket_id:
-            os.environ["CURRENT_THREAD_ID"] = ticket_id
-        # Aliases for cleaner script skill access
-        os.environ["TENANT_ID"] = workspace_tenant_id or ""
-        os.environ["AGENT_ID"] = assistant_id or ""
-        os.environ["USER_ID"] = user_id or ""
+        # Per-invocation identity env (TENANT_ID / AGENT_ID / USER_ID /
+        # CURRENT_USER_ID / CURRENT_THREAD_ID + underscored MCP aliases).
+        # CURRENT_USER_ID is only set when user_id is truthy — a missing
+        # invoker must be distinguishable from an empty-string one so the
+        # admin skill's R15 "no invoker" refusal triggers correctly. The
+        # returned key list is cleared in the `finally` below so warm
+        # containers don't leak one invocation's identity into the next.
+        invocation_env_keys = invocation_env.apply_invocation_env({
+            "workspace_tenant_id": workspace_tenant_id,
+            "assistant_id": assistant_id,
+            "user_id": user_id,
+            "thread_id": ticket_id,
+        })
 
         # Selective skill sync for configured skills
         if skills_config:
@@ -1811,6 +1837,7 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
         finally:
             detach_eval_context(_eval_ctx_token)
             _cleanup_skill_env(injected_env_keys)
+            invocation_env.cleanup_invocation_env(invocation_env_keys)
 
     def do_DELETE(self):
         self._respond(405, {"error": "stateless — no sessions to terminate"})

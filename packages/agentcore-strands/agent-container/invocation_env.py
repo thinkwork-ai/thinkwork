@@ -1,0 +1,74 @@
+"""Per-invocation env-var setup for the Strands container.
+
+The AgentCore runtime reuses a warm container across invocations, so every
+request must set the per-invocation env (tenant / agent / user / thread)
+at entry and clear it in a `finally` block at exit. Otherwise one
+invocation's identity leaks into the next — most importantly, a
+webhook-triggered run could inherit the previous chat caller's
+`CURRENT_USER_ID` and silently pass the admin-skill R15 "no invoker"
+check.
+
+The normal `do_POST` path AND the `kind="run_skill"` composition branch
+must both call `apply_invocation_env`; today the `run_skill` branch
+returns before reaching the env block, leaving scripts without the
+identity aliases they expect.
+
+CURRENT_USER_ID is intentionally NOT set when the payload has no
+`user_id`. Downstream skills treat a missing key as "no invoker" and
+refuse; writing an empty string would bypass that check.
+"""
+
+from __future__ import annotations
+
+import os
+
+
+def apply_invocation_env(payload: dict) -> list[str]:
+    """Set per-invocation env vars from the payload.
+
+    Writes these keys when the corresponding payload field is a non-empty
+    string:
+
+    - `TENANT_ID`, `_MCP_TENANT_ID` ← `workspace_tenant_id`
+    - `AGENT_ID`, `_MCP_AGENT_ID`   ← `assistant_id`
+    - `USER_ID`, `_MCP_USER_ID`, `CURRENT_USER_ID` ← `user_id`
+    - `CURRENT_THREAD_ID`           ← `thread_id`
+
+    Returns the list of env keys it actually set, so the caller can pass
+    it back to `cleanup_invocation_env` to clear exactly those keys
+    without disturbing other env state.
+    """
+    keys: list[str] = []
+    workspace_tenant_id = payload.get("workspace_tenant_id") or ""
+    assistant_id = payload.get("assistant_id") or ""
+    user_id = payload.get("user_id") or ""
+    thread_id = payload.get("thread_id") or payload.get("ticket_id") or ""
+
+    if workspace_tenant_id:
+        os.environ["_MCP_TENANT_ID"] = workspace_tenant_id
+        keys.append("_MCP_TENANT_ID")
+        os.environ["TENANT_ID"] = workspace_tenant_id
+        keys.append("TENANT_ID")
+    if assistant_id:
+        os.environ["_MCP_AGENT_ID"] = assistant_id
+        keys.append("_MCP_AGENT_ID")
+        os.environ["AGENT_ID"] = assistant_id
+        keys.append("AGENT_ID")
+    if user_id:
+        os.environ["_MCP_USER_ID"] = user_id
+        keys.append("_MCP_USER_ID")
+        os.environ["USER_ID"] = user_id
+        keys.append("USER_ID")
+        os.environ["CURRENT_USER_ID"] = user_id
+        keys.append("CURRENT_USER_ID")
+    if thread_id:
+        os.environ["CURRENT_THREAD_ID"] = thread_id
+        keys.append("CURRENT_THREAD_ID")
+
+    return keys
+
+
+def cleanup_invocation_env(keys: list[str]) -> None:
+    """Pop the env keys that `apply_invocation_env` set for this invocation."""
+    for k in keys:
+        os.environ.pop(k, None)

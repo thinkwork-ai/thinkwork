@@ -12,7 +12,22 @@
 
 import { eq, and, ne, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
-import { agents, agentTemplates, agentSkills, messages, threads, tenants, tenantSkills, users, agentKnowledgeBases, knowledgeBases, threadTurns, costEvents, guardrails, guardrailBlocks } from "@thinkwork/database-pg/schema";
+import {
+  agents,
+  agentTemplates,
+  agentSkills,
+  messages,
+  threads,
+  tenants,
+  tenantSkills,
+  users,
+  agentKnowledgeBases,
+  knowledgeBases,
+  threadTurns,
+  costEvents,
+  guardrails,
+  guardrailBlocks,
+} from "@thinkwork/database-pg/schema";
 import { randomBytes } from "crypto";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import {
@@ -52,7 +67,8 @@ const THINKWORK_API_SECRET = process.env.THINKWORK_API_SECRET || "";
 const WORKSPACE_BUCKET = process.env.WORKSPACE_BUCKET || "";
 // API URL used by skills for callbacks (thread-management, email-send, etc.)
 // Reads THINKWORK_API_URL first, falls back to legacy MCP_BASE_URL until infra is updated.
-const THINKWORK_API_URL = process.env.THINKWORK_API_URL || process.env.MCP_BASE_URL || "";
+const THINKWORK_API_URL =
+  process.env.THINKWORK_API_URL || process.env.MCP_BASE_URL || "";
 const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
 
 const db = getDb();
@@ -95,7 +111,9 @@ interface InvokeEvent {
 export async function handler(event: InvokeEvent): Promise<void> {
   const { threadId, tenantId, agentId, userMessage } = event;
   const traceId = getTraceId();
-  console.log(`[chat-agent-invoke] threadId=${threadId} agentId=${agentId} traceId=${traceId}`);
+  console.log(
+    `[chat-agent-invoke] threadId=${threadId} agentId=${agentId} traceId=${traceId}`,
+  );
 
   let turnId: string | undefined;
   try {
@@ -127,7 +145,9 @@ export async function handler(event: InvokeEvent): Promise<void> {
       .where(eq(agentTemplates.id, agent.template_id));
 
     if (!agentTemplate) {
-      console.error(`[chat-agent-invoke] Agent template not found: ${agent.template_id}`);
+      console.error(
+        `[chat-agent-invoke] Agent template not found: ${agent.template_id}`,
+      );
       return;
     }
 
@@ -142,26 +162,63 @@ export async function handler(event: InvokeEvent): Promise<void> {
     const tenantSlug = tenant?.slug || "";
     const agentSlug = agent.slug || "";
 
-    // Look up current user's email for skill context (PRD-40: "me" resolution)
+    // Look up current user's id + email for skill context (PRD-40: "me"
+    // resolution + thinkwork-admin plan R13: CURRENT_USER_ID plumbing).
+    // Priority: triggering message sender → thread creator → agent's
+    // human pair. The human-pair fallback applies only to email (so the
+    // agent can still personalize "you" addressed copy); for the
+    // invoker-id plumbing we hard-stop at the thread creator. An
+    // agent-authored message or wakeup with no human thread creator
+    // leaves currentUserId empty, which R15 reads as "no invoker" and
+    // refuses admin-skill tool calls.
     let currentUserEmail = "";
+    let currentUserId = "";
     if (event.messageId) {
-      const [msg] = await db.select({ sender_id: messages.sender_id, sender_type: messages.sender_type }).from(messages).where(eq(messages.id, event.messageId));
+      const [msg] = await db
+        .select({
+          sender_id: messages.sender_id,
+          sender_type: messages.sender_type,
+        })
+        .from(messages)
+        .where(eq(messages.id, event.messageId));
       if (msg?.sender_type === "human" && msg.sender_id) {
-        const [u] = await db.select({ email: users.email }).from(users).where(eq(users.id, msg.sender_id));
+        currentUserId = msg.sender_id;
+        const [u] = await db
+          .select({ email: users.email })
+          .from(users)
+          .where(eq(users.id, msg.sender_id));
         currentUserEmail = u?.email || "";
       }
     }
-    if (!currentUserEmail) {
+    if (!currentUserId) {
       // Fallback: thread creator
-      const [thread] = await db.select({ created_by_id: threads.created_by_id, created_by_type: threads.created_by_type }).from(threads).where(eq(threads.id, threadId));
+      const [thread] = await db
+        .select({
+          created_by_id: threads.created_by_id,
+          created_by_type: threads.created_by_type,
+        })
+        .from(threads)
+        .where(eq(threads.id, threadId));
       if (thread?.created_by_type === "user" && thread.created_by_id) {
-        const [u] = await db.select({ email: users.email }).from(users).where(eq(users.id, thread.created_by_id));
-        currentUserEmail = u?.email || "";
+        currentUserId = thread.created_by_id;
+        if (!currentUserEmail) {
+          const [u] = await db
+            .select({ email: users.email })
+            .from(users)
+            .where(eq(users.id, thread.created_by_id));
+          currentUserEmail = u?.email || "";
+        }
       }
     }
     if (!currentUserEmail && agent.human_pair_id) {
-      // Fallback: agent's human pair (owner)
-      const [u] = await db.select({ email: users.email }).from(users).where(eq(users.id, agent.human_pair_id));
+      // Fallback FOR EMAIL ONLY: agent's human pair (owner). Do NOT use
+      // this as currentUserId — the pair is not the invoker of THIS
+      // invocation, and downstream admin skills must refuse when no
+      // real invoker is present.
+      const [u] = await db
+        .select({ email: users.email })
+        .from(users)
+        .where(eq(users.id, agent.human_pair_id));
       currentUserEmail = u?.email || "";
     }
 
@@ -176,7 +233,9 @@ export async function handler(event: InvokeEvent): Promise<void> {
     }
 
     // Resolve Bedrock guardrail: template-level → tenant default → none
-    let guardrailPayload: { guardrailIdentifier: string; guardrailVersion: string } | undefined;
+    let guardrailPayload:
+      | { guardrailIdentifier: string; guardrailVersion: string }
+      | undefined;
     let effectiveGuardrailId: string | null = agentTemplate.guardrail_id;
 
     if (effectiveGuardrailId) {
@@ -202,7 +261,12 @@ export async function handler(event: InvokeEvent): Promise<void> {
           bedrock_version: guardrails.bedrock_version,
         })
         .from(guardrails)
-        .where(and(eq(guardrails.tenant_id, tenantId), eq(guardrails.is_default, true)));
+        .where(
+          and(
+            eq(guardrails.tenant_id, tenantId),
+            eq(guardrails.is_default, true),
+          ),
+        );
       if (defaultGr?.bedrock_guardrail_id && defaultGr?.bedrock_version) {
         effectiveGuardrailId = defaultGr.id;
         guardrailPayload = {
@@ -213,11 +277,14 @@ export async function handler(event: InvokeEvent): Promise<void> {
     }
 
     if (guardrailPayload) {
-      console.log(`[chat-agent-invoke] Guardrail resolved: id=${effectiveGuardrailId} bedrock=${guardrailPayload.guardrailIdentifier}`);
+      console.log(
+        `[chat-agent-invoke] Guardrail resolved: id=${effectiveGuardrailId} bedrock=${guardrailPayload.guardrailIdentifier}`,
+      );
     }
 
     // Resolve blocked tools from agent template
-    const blockedTools: string[] = (agentTemplate.blocked_tools as string[] | null) || [];
+    const blockedTools: string[] =
+      (agentTemplate.blocked_tools as string[] | null) || [];
 
     // Look up agent's installed skills → build S3 keys for runtime
     // Join with tenant_skills to determine source (builtin/catalog → catalog prefix, tenant → agent prefix)
@@ -228,34 +295,53 @@ export async function handler(event: InvokeEvent): Promise<void> {
         source: tenantSkills.source,
       })
       .from(agentSkills)
-      .leftJoin(tenantSkills, and(
-        eq(tenantSkills.tenant_id, tenantId),
-        eq(tenantSkills.skill_id, agentSkills.skill_id),
-      ))
+      .leftJoin(
+        tenantSkills,
+        and(
+          eq(tenantSkills.tenant_id, tenantId),
+          eq(tenantSkills.skill_id, agentSkills.skill_id),
+        ),
+      )
       .where(eq(agentSkills.agent_id, agentId));
 
-    let skillsConfig = await Promise.all(skillRows.map(async (s: { skill_id: string; config: unknown; source: string | null }) => {
-      const config = (s.config as Record<string, unknown>) || {};
-      const envOverrides = await buildSkillEnvOverrides(config, tenantId).catch((err) => {
-        console.warn(`[chat-agent-invoke] envOverrides failed for skill ${s.skill_id}:`, err);
-        return null;
-      });
-      // Builtin/catalog skills use the canonical catalog prefix; tenant-created skills use the agent prefix
-      const isTenantCustom = s.source === "tenant";
-      const s3Key = isTenantCustom
-        ? `tenants/${tenantSlug}/skills/${s.skill_id}`
-        : `skills/catalog/${s.skill_id}`;
-      const merged = envOverrides ? { ...envOverrides } : {};
-      return {
-        skillId: s.skill_id,
-        s3Key,
-        secretRef: config.secretRef as string || undefined,
-        envOverrides: Object.keys(merged).length > 0 ? merged : undefined,
-      };
-    }));
+    let skillsConfig = await Promise.all(
+      skillRows.map(
+        async (s: {
+          skill_id: string;
+          config: unknown;
+          source: string | null;
+        }) => {
+          const config = (s.config as Record<string, unknown>) || {};
+          const envOverrides = await buildSkillEnvOverrides(
+            config,
+            tenantId,
+          ).catch((err) => {
+            console.warn(
+              `[chat-agent-invoke] envOverrides failed for skill ${s.skill_id}:`,
+              err,
+            );
+            return null;
+          });
+          // Builtin/catalog skills use the canonical catalog prefix; tenant-created skills use the agent prefix
+          const isTenantCustom = s.source === "tenant";
+          const s3Key = isTenantCustom
+            ? `tenants/${tenantSlug}/skills/${s.skill_id}`
+            : `skills/catalog/${s.skill_id}`;
+          const merged = envOverrides ? { ...envOverrides } : {};
+          return {
+            skillId: s.skill_id,
+            s3Key,
+            secretRef: (config.secretRef as string) || undefined,
+            envOverrides: Object.keys(merged).length > 0 ? merged : undefined,
+          };
+        },
+      ),
+    );
 
     // Default skill: agent-email-send — always available for all agents
-    const hasEmailSendSkill = skillsConfig.some((s) => s.skillId === "agent-email-send");
+    const hasEmailSendSkill = skillsConfig.some(
+      (s) => s.skillId === "agent-email-send",
+    );
     if (!hasEmailSendSkill) {
       skillsConfig.push({
         skillId: "agent-email-send",
@@ -277,7 +363,10 @@ export async function handler(event: InvokeEvent): Promise<void> {
     // Default skills: always available for all agents (Phase 4a/4b script skills).
     // web-search is NOT in this list — it's opt-in via tenant_builtin_tools below.
     const defaultSkills = [
-      { skillId: "agent-thread-management", s3Key: "skills/catalog/agent-thread-management" },
+      {
+        skillId: "agent-thread-management",
+        s3Key: "skills/catalog/agent-thread-management",
+      },
       { skillId: "artifacts", s3Key: "skills/catalog/artifacts" },
       { skillId: "workspace-memory", s3Key: "skills/catalog/workspace-memory" },
     ];
@@ -307,8 +396,13 @@ export async function handler(event: InvokeEvent): Promise<void> {
         // overrides so the tenant-configured provider + key still win.
         const existing = skillsConfig.find((s) => s.skillId === bt.toolSlug);
         if (existing) {
-          existing.envOverrides = { ...(existing.envOverrides || {}), ...bt.envOverrides };
-          console.log(`[chat-agent-invoke] Overlaid env for built-in tool '${bt.toolSlug}' (provider=${bt.provider})`);
+          existing.envOverrides = {
+            ...(existing.envOverrides || {}),
+            ...bt.envOverrides,
+          };
+          console.log(
+            `[chat-agent-invoke] Overlaid env for built-in tool '${bt.toolSlug}' (provider=${bt.provider})`,
+          );
           continue;
         }
         skillsConfig.push({
@@ -317,19 +411,28 @@ export async function handler(event: InvokeEvent): Promise<void> {
           secretRef: undefined,
           envOverrides: bt.envOverrides,
         });
-        console.log(`[chat-agent-invoke] Injected built-in tool '${bt.toolSlug}' (provider=${bt.provider})`);
+        console.log(
+          `[chat-agent-invoke] Injected built-in tool '${bt.toolSlug}' (provider=${bt.provider})`,
+        );
       }
     } catch (err) {
-      console.warn(`[chat-agent-invoke] Failed to load tenant built-in tools:`, err);
+      console.warn(
+        `[chat-agent-invoke] Failed to load tenant built-in tools:`,
+        err,
+      );
     }
 
     // Apply class tool_access policy — remove blocked skills
     if (blockedTools.length > 0) {
       const before = skillsConfig.length;
-      skillsConfig = skillsConfig.filter((s) => !blockedTools.includes(s.skillId));
+      skillsConfig = skillsConfig.filter(
+        (s) => !blockedTools.includes(s.skillId),
+      );
       const removed = before - skillsConfig.length;
       if (removed > 0) {
-        console.log(`[chat-agent-invoke] Class tool_access: removed ${removed} blocked skill(s)`);
+        console.log(
+          `[chat-agent-invoke] Class tool_access: removed ${removed} blocked skill(s)`,
+        );
       }
     }
 
@@ -342,24 +445,32 @@ export async function handler(event: InvokeEvent): Promise<void> {
         search_config: agentKnowledgeBases.search_config,
       })
       .from(agentKnowledgeBases)
-      .innerJoin(knowledgeBases, eq(agentKnowledgeBases.knowledge_base_id, knowledgeBases.id))
-      .where(and(
-        eq(agentKnowledgeBases.agent_id, agentId),
-        eq(agentKnowledgeBases.enabled, true),
-      ))
+      .innerJoin(
+        knowledgeBases,
+        eq(agentKnowledgeBases.knowledge_base_id, knowledgeBases.id),
+      )
+      .where(
+        and(
+          eq(agentKnowledgeBases.agent_id, agentId),
+          eq(agentKnowledgeBases.enabled, true),
+        ),
+      )
       .then((rows) => rows.filter((r) => r.aws_kb_id));
 
-    const knowledgeBasesConfig = kbRows.length > 0
-      ? kbRows.map((kb) => ({
-          awsKbId: kb.aws_kb_id,
-          name: kb.name,
-          description: kb.description,
-          searchConfig: kb.search_config,
-        }))
-      : undefined;
+    const knowledgeBasesConfig =
+      kbRows.length > 0
+        ? kbRows.map((kb) => ({
+            awsKbId: kb.aws_kb_id,
+            name: kb.name,
+            description: kb.description,
+            searchConfig: kb.search_config,
+          }))
+        : undefined;
 
     if (knowledgeBasesConfig) {
-      console.log(`[chat-agent-invoke] Agent ${agentId} has ${knowledgeBasesConfig.length} KB(s): ${knowledgeBasesConfig.map((k: any) => k.name).join(", ")}`);
+      console.log(
+        `[chat-agent-invoke] Agent ${agentId} has ${knowledgeBasesConfig.length} KB(s): ${knowledgeBasesConfig.map((k: any) => k.name).join(", ")}`,
+      );
     }
 
     // PRD-38: Sub-agents are now skill-based (mode: agent in skill.yaml).
@@ -368,7 +479,10 @@ export async function handler(event: InvokeEvent): Promise<void> {
 
     // 2a. Create a thread_turn record so the UI shows this invocation
     try {
-      const [countRow] = await db.select({ count: sql<number>`COUNT(*)::int` }).from(threadTurns).where(eq(threadTurns.thread_id, threadId));
+      const [countRow] = await db
+        .select({ count: sql<number>`COUNT(*)::int` })
+        .from(threadTurns)
+        .where(eq(threadTurns.thread_id, threadId));
       const turnNumber = (countRow?.count || 0) + 1;
 
       const [turnRow] = await db
@@ -388,7 +502,10 @@ export async function handler(event: InvokeEvent): Promise<void> {
 
       // Set wakeup_request_id = turn ID so cost lookup works
       if (turnId) {
-        await db.update(threadTurns).set({ wakeup_request_id: turnId }).where(eq(threadTurns.id, turnId));
+        await db
+          .update(threadTurns)
+          .set({ wakeup_request_id: turnId })
+          .where(eq(threadTurns.id, turnId));
       }
 
       // Notify subscribers that a turn started
@@ -401,7 +518,10 @@ export async function handler(event: InvokeEvent): Promise<void> {
         triggerName: "Chat",
       });
     } catch (turnErr) {
-      console.error(`[chat-agent-invoke] Failed to create thread_turn:`, turnErr);
+      console.error(
+        `[chat-agent-invoke] Failed to create thread_turn:`,
+        turnErr,
+      );
     }
 
     // 2c. Load prior conversation history for this thread from Aurora.
@@ -431,23 +551,32 @@ export async function handler(event: InvokeEvent): Promise<void> {
 
     const messagesHistory = priorMessageRows
       .reverse()
-      .filter((m: { role: string | null; content: string | null }) =>
-        (m.role === "user" || m.role === "assistant") &&
-        typeof m.content === "string" &&
-        m.content.length > 0,
+      .filter(
+        (m: { role: string | null; content: string | null }) =>
+          (m.role === "user" || m.role === "assistant") &&
+          typeof m.content === "string" &&
+          m.content.length > 0,
       )
       .map((m: { role: string | null; content: string | null }) => ({
         role: m.role as "user" | "assistant",
         content: m.content as string,
       }));
 
-    console.log(`[chat-agent-invoke] Loaded ${messagesHistory.length} prior messages for thread=${threadId}`);
+    console.log(
+      `[chat-agent-invoke] Loaded ${messagesHistory.length} prior messages for thread=${threadId}`,
+    );
 
     // Build MCP configs from agent_mcp_servers + tenant_mcp_servers (auth-resolved).
-    const mcpConfigs = await buildMcpConfigs(agentId, agent.human_pair_id, "[chat-agent-invoke]");
+    const mcpConfigs = await buildMcpConfigs(
+      agentId,
+      agent.human_pair_id,
+      "[chat-agent-invoke]",
+    );
 
     // 2d. Call AgentCore Lambda directly via the SDK (no Function URL).
-    console.log(`[chat-agent-invoke] Invoking AgentCore runtime=${runtimeType} model=${agentModel} skills=${skillsConfig.length} mcp=${mcpConfigs.length}`);
+    console.log(
+      `[chat-agent-invoke] Invoking AgentCore runtime=${runtimeType} model=${agentModel} skills=${skillsConfig.length} mcp=${mcpConfigs.length}`,
+    );
 
     if (!AGENTCORE_FUNCTION_NAME) {
       throw new Error("AGENTCORE_FUNCTION_NAME env var not set");
@@ -467,7 +596,10 @@ export async function handler(event: InvokeEvent): Promise<void> {
       workspace_tenant_id: tenantId,
       assistant_id: agentId,
       thread_id: threadId,
-      user_id: agent.human_pair_id || undefined,
+      // R15: only the actual human invoker (message sender / thread
+      // creator). Falling back to agent.human_pair_id would hand every
+      // wakeup a fake invoker and bypass the admin-skill refusal.
+      user_id: currentUserId || undefined,
       trace_id: traceId,
       message: userMessage,
       messages_history: messagesHistory,
@@ -504,26 +636,58 @@ export async function handler(event: InvokeEvent): Promise<void> {
       isBase64Encoded: false,
     });
 
-    const invokeRes = await lambdaClient.send(new InvokeCommand({
-      FunctionName: AGENTCORE_FUNCTION_NAME,
-      InvocationType: "RequestResponse",
-      Payload: new TextEncoder().encode(lambdaEventPayload),
-    }));
+    const invokeRes = await lambdaClient.send(
+      new InvokeCommand({
+        FunctionName: AGENTCORE_FUNCTION_NAME,
+        InvocationType: "RequestResponse",
+        Payload: new TextEncoder().encode(lambdaEventPayload),
+      }),
+    );
 
-    const rawPayload = invokeRes.Payload ? new TextDecoder().decode(invokeRes.Payload) : "{}";
+    const rawPayload = invokeRes.Payload
+      ? new TextDecoder().decode(invokeRes.Payload)
+      : "{}";
 
     if (invokeRes.FunctionError) {
       const errMsgText = `AgentCore Lambda ${invokeRes.FunctionError}: ${rawPayload.slice(0, 500)}`;
       console.error(`[chat-agent-invoke] ${errMsgText}`);
       if (turnId) {
         try {
-          await db.update(threadTurns).set({ status: "failed", finished_at: new Date(), error: errMsgText }).where(eq(threadTurns.id, turnId));
-          await notifyThreadTurnUpdate({ runId: turnId, tenantId, threadId, agentId, status: "failed", triggerName: "Chat" });
+          await db
+            .update(threadTurns)
+            .set({
+              status: "failed",
+              finished_at: new Date(),
+              error: errMsgText,
+            })
+            .where(eq(threadTurns.id, turnId));
+          await notifyThreadTurnUpdate({
+            runId: turnId,
+            tenantId,
+            threadId,
+            agentId,
+            status: "failed",
+            triggerName: "Chat",
+          });
         } catch {}
       }
-      const errMsg = await insertAssistantMessage(threadId, tenantId, agentId, `I'm sorry, I encountered an error processing your request. Please try again.`);
+      const errMsg = await insertAssistantMessage(
+        threadId,
+        tenantId,
+        agentId,
+        `I'm sorry, I encountered an error processing your request. Please try again.`,
+      );
       if (errMsg) {
-        await notifyNewMessage({ messageId: errMsg.id, threadId, tenantId, role: "assistant", content: "I'm sorry, I encountered an error processing your request. Please try again.", senderType: "agent", senderId: agentId });
+        await notifyNewMessage({
+          messageId: errMsg.id,
+          threadId,
+          tenantId,
+          role: "assistant",
+          content:
+            "I'm sorry, I encountered an error processing your request. Please try again.",
+          senderType: "agent",
+          senderId: agentId,
+        });
       }
       return;
     }
@@ -538,31 +702,64 @@ export async function handler(event: InvokeEvent): Promise<void> {
       console.error(`[chat-agent-invoke] ${errMsgText}`);
       if (turnId) {
         try {
-          await db.update(threadTurns).set({ status: "failed", finished_at: new Date(), error: errMsgText }).where(eq(threadTurns.id, turnId));
-          await notifyThreadTurnUpdate({ runId: turnId, tenantId, threadId, agentId, status: "failed", triggerName: "Chat" });
+          await db
+            .update(threadTurns)
+            .set({
+              status: "failed",
+              finished_at: new Date(),
+              error: errMsgText,
+            })
+            .where(eq(threadTurns.id, turnId));
+          await notifyThreadTurnUpdate({
+            runId: turnId,
+            tenantId,
+            threadId,
+            agentId,
+            status: "failed",
+            triggerName: "Chat",
+          });
         } catch {}
       }
-      const errMsg = await insertAssistantMessage(threadId, tenantId, agentId, `I'm sorry, I encountered an error processing your request. Please try again.`);
+      const errMsg = await insertAssistantMessage(
+        threadId,
+        tenantId,
+        agentId,
+        `I'm sorry, I encountered an error processing your request. Please try again.`,
+      );
       if (errMsg) {
-        await notifyNewMessage({ messageId: errMsg.id, threadId, tenantId, role: "assistant", content: "I'm sorry, I encountered an error processing your request. Please try again.", senderType: "agent", senderId: agentId });
+        await notifyNewMessage({
+          messageId: errMsg.id,
+          threadId,
+          tenantId,
+          role: "assistant",
+          content:
+            "I'm sorry, I encountered an error processing your request. Please try again.",
+          senderType: "agent",
+          senderId: agentId,
+        });
       }
       return;
     }
 
     const durationMs = Date.now() - invokeStart;
     const invokeResult = JSON.parse(adapterBodyStr) as Record<string, any>;
-    console.log(`[chat-agent-invoke] AgentCore response received in ${durationMs}ms`);
+    console.log(
+      `[chat-agent-invoke] AgentCore response received in ${durationMs}ms`,
+    );
 
     // Extract response text from AgentCore result
     const responseData = invokeResult.response || invokeResult;
     let responseText = extractResponseText(responseData);
 
     // Check for guardrail block
-    const guardrailBlock = invokeResult.guardrail_block ||
+    const guardrailBlock =
+      invokeResult.guardrail_block ||
       (invokeResult.response as Record<string, unknown>)?.guardrail_block;
 
     if (guardrailBlock?.blocked) {
-      console.log(`[chat-agent-invoke] Guardrail block detected: type=${guardrailBlock.type} action=${guardrailBlock.action}`);
+      console.log(
+        `[chat-agent-invoke] Guardrail block detected: type=${guardrailBlock.type} action=${guardrailBlock.action}`,
+      );
       responseText = "This request was blocked by a content policy.";
 
       if (effectiveGuardrailId) {
@@ -581,16 +778,23 @@ export async function handler(event: InvokeEvent): Promise<void> {
           });
           console.log(`[chat-agent-invoke] Guardrail block recorded to DB`);
         } catch (blockErr) {
-          console.error(`[chat-agent-invoke] Failed to record guardrail block:`, blockErr);
+          console.error(
+            `[chat-agent-invoke] Failed to record guardrail block:`,
+            blockErr,
+          );
         }
       }
     }
 
-    console.log(`[chat-agent-invoke] Extracted response (${responseText.length} chars): ${responseText.slice(0, 100)}`);
+    console.log(
+      `[chat-agent-invoke] Extracted response (${responseText.length} chars): ${responseText.slice(0, 100)}`,
+    );
 
     // Record cost events (PRD-02)
     const usage = extractUsage(invokeResult);
-    const bedrockRequestIds = (responseData as any)?.bedrock_request_ids as string[] | undefined;
+    const bedrockRequestIds = (responseData as any)?.bedrock_request_ids as
+      | string[]
+      | undefined;
 
     try {
       const costResult = await recordCostEvents({
@@ -628,17 +832,18 @@ export async function handler(event: InvokeEvent): Promise<void> {
     // captured by the agent container's hindsight_usage_capture monkey-patch
     // and emit one cost_events row per call. Each entry is shaped:
     //   { phase: 'retain'|'reflect', model: string, input_tokens, output_tokens }
-    const hindsightUsage = ((responseData as any)?.hindsight_usage
-      || (invokeResult.hindsight_usage)
-      || []) as Array<{
-        phase: "retain" | "reflect";
-        model: string;
-        input_tokens: number;
-        output_tokens: number;
-      }>;
+    const hindsightUsage = ((responseData as any)?.hindsight_usage ||
+      invokeResult.hindsight_usage ||
+      []) as Array<{
+      phase: "retain" | "reflect";
+      model: string;
+      input_tokens: number;
+      output_tokens: number;
+    }>;
     if (hindsightUsage.length > 0) {
       try {
-        const { recordHindsightCost } = await import("../lib/hindsight-cost.js");
+        const { recordHindsightCost } =
+          await import("../lib/hindsight-cost.js");
         for (const entry of hindsightUsage) {
           await recordHindsightCost({
             tenantId,
@@ -653,31 +858,43 @@ export async function handler(event: InvokeEvent): Promise<void> {
             source: "agent_invoke",
           });
         }
-        console.log(`[chat-agent-invoke] Recorded ${hindsightUsage.length} Hindsight cost event(s)`);
+        console.log(
+          `[chat-agent-invoke] Recorded ${hindsightUsage.length} Hindsight cost event(s)`,
+        );
       } catch (hsCostErr) {
-        console.error(`[chat-agent-invoke] Hindsight cost recording failed:`, hsCostErr);
+        console.error(
+          `[chat-agent-invoke] Hindsight cost recording failed:`,
+          hsCostErr,
+        );
       }
     }
 
     // 2b2. Record tool costs (Nova Act, browser sessions, etc.)
-    const toolCosts = (invokeResult.tool_costs || (invokeResult.response as Record<string, unknown>)?.tool_costs || []) as Array<Record<string, unknown>>;
+    const toolCosts = (invokeResult.tool_costs ||
+      (invokeResult.response as Record<string, unknown>)?.tool_costs ||
+      []) as Array<Record<string, unknown>>;
     if (toolCosts.length > 0) {
       try {
         for (const tc of toolCosts) {
-          await db.insert(costEvents).values({
-            tenant_id: tenantId,
-            agent_id: agentId,
-            thread_id: threadId || undefined,
-            request_id: crypto.randomUUID(),
-            event_type: String(tc.event_type || "tool_cost"),
-            amount_usd: String(tc.amount_usd || "0.000000"),
-            provider: String(tc.provider || "unknown"),
-            duration_ms: (tc.duration_ms as number) || null,
-            trace_id: traceId || undefined,
-            metadata: tc.metadata || {},
-          }).onConflictDoNothing();
+          await db
+            .insert(costEvents)
+            .values({
+              tenant_id: tenantId,
+              agent_id: agentId,
+              thread_id: threadId || undefined,
+              request_id: crypto.randomUUID(),
+              event_type: String(tc.event_type || "tool_cost"),
+              amount_usd: String(tc.amount_usd || "0.000000"),
+              provider: String(tc.provider || "unknown"),
+              duration_ms: (tc.duration_ms as number) || null,
+              trace_id: traceId || undefined,
+              metadata: tc.metadata || {},
+            })
+            .onConflictDoNothing();
         }
-        console.log(`[chat-agent-invoke] Recorded ${toolCosts.length} tool cost(s)`);
+        console.log(
+          `[chat-agent-invoke] Recorded ${toolCosts.length} tool cost(s)`,
+        );
       } catch (err) {
         console.error(`[chat-agent-invoke] Tool cost recording failed:`, err);
       }
@@ -697,9 +914,19 @@ export async function handler(event: InvokeEvent): Promise<void> {
               input_tokens: usage.inputTokens,
               output_tokens: usage.outputTokens,
               cached_read_tokens: usage.cachedReadTokens,
-              tools_called: (invokeResult.tools_called || (invokeResult.response as Record<string, unknown>)?.tools_called || []) as string[],
-              tool_costs: toolCosts.map((tc) => ({ event_type: tc.event_type, amount_usd: tc.amount_usd, provider: tc.provider })),
-              tool_invocations: (invokeResult.tool_invocations || (invokeResult.response as Record<string, unknown>)?.tool_invocations || []) as any[],
+              tools_called: (invokeResult.tools_called ||
+                (invokeResult.response as Record<string, unknown>)
+                  ?.tools_called ||
+                []) as string[],
+              tool_costs: toolCosts.map((tc) => ({
+                event_type: tc.event_type,
+                amount_usd: tc.amount_usd,
+                provider: tc.provider,
+              })),
+              tool_invocations: (invokeResult.tool_invocations ||
+                (invokeResult.response as Record<string, unknown>)
+                  ?.tool_invocations ||
+                []) as any[],
             },
           })
           .where(eq(threadTurns.id, turnId));
@@ -713,7 +940,10 @@ export async function handler(event: InvokeEvent): Promise<void> {
           triggerName: "Chat",
         });
       } catch (turnErr) {
-        console.error(`[chat-agent-invoke] Failed to update thread_turn:`, turnErr);
+        console.error(
+          `[chat-agent-invoke] Failed to update thread_turn:`,
+          turnErr,
+        );
       }
     }
 
@@ -726,10 +956,18 @@ export async function handler(event: InvokeEvent): Promise<void> {
     const displayResponse = responseText;
 
     // Extract tool invocations for GenUI rendering
-    const toolInvocations = (invokeResult.tool_invocations || (invokeResult.response as Record<string, unknown>)?.tool_invocations || []) as Array<Record<string, unknown>>;
+    const toolInvocations = (invokeResult.tool_invocations ||
+      (invokeResult.response as Record<string, unknown>)?.tool_invocations ||
+      []) as Array<Record<string, unknown>>;
 
     // 3. Insert assistant message into DB (with GenUI tool results if present)
-    const assistantMsg = await insertAssistantMessage(threadId, tenantId, agentId, displayResponse, toolInvocations);
+    const assistantMsg = await insertAssistantMessage(
+      threadId,
+      tenantId,
+      agentId,
+      displayResponse,
+      toolInvocations,
+    );
 
     // 3a. Link orphan artifacts created during this turn to the thread + message.
     // The Strands runtime doesn't forward thread_id to MCP tools, so artifacts
@@ -740,30 +978,48 @@ export async function handler(event: InvokeEvent): Promise<void> {
         const { artifacts } = await import("@thinkwork/database-pg/schema");
         const { isNull, gte } = await import("drizzle-orm");
         const turnStart = new Date(Date.now() - (durationMs + 5000)); // turn duration + buffer
-        await db.update(artifacts).set({
-          thread_id: threadId,
-          source_message_id: assistantMsg.id,
-        }).where(and(
-          eq(artifacts.agent_id, agentId),
-          eq(artifacts.tenant_id, tenantId),
-          isNull(artifacts.source_message_id),
-          gte(artifacts.created_at, turnStart),
-        ));
+        await db
+          .update(artifacts)
+          .set({
+            thread_id: threadId,
+            source_message_id: assistantMsg.id,
+          })
+          .where(
+            and(
+              eq(artifacts.agent_id, agentId),
+              eq(artifacts.tenant_id, tenantId),
+              isNull(artifacts.source_message_id),
+              gte(artifacts.created_at, turnStart),
+            ),
+          );
       } catch (err) {
-        console.error(`[chat-agent-invoke] Failed to link orphan artifacts:`, err);
+        console.error(
+          `[chat-agent-invoke] Failed to link orphan artifacts:`,
+          err,
+        );
       }
     }
 
     // 3b. Bump thread timestamps — last_turn_completed_at drives inbox sorting
     try {
       const { threads } = await import("@thinkwork/database-pg/schema");
-      await db.update(threads).set({
-        updated_at: new Date(),
-        last_turn_completed_at: new Date(),
-        last_response_preview: displayResponse.replace(/[#*_`]/g, "").trim().slice(0, 200) || null,
-      }).where(eq(threads.id, threadId));
+      await db
+        .update(threads)
+        .set({
+          updated_at: new Date(),
+          last_turn_completed_at: new Date(),
+          last_response_preview:
+            displayResponse
+              .replace(/[#*_`]/g, "")
+              .trim()
+              .slice(0, 200) || null,
+        })
+        .where(eq(threads.id, threadId));
     } catch (err) {
-      console.error(`[chat-agent-invoke] Failed to update thread updated_at:`, err);
+      console.error(
+        `[chat-agent-invoke] Failed to update thread updated_at:`,
+        err,
+      );
     }
 
     // PRD-22: Signal processing removed — agents use thread-management tools directly
@@ -784,12 +1040,18 @@ export async function handler(event: InvokeEvent): Promise<void> {
     // 4b. Notify thread update so the home screen list re-sorts
     try {
       const { notifyThreadUpdate } = await import("../graphql/notify.js");
-      notifyThreadUpdate({ threadId, tenantId, status: "in_progress", title: "" }).catch(() => {});
+      notifyThreadUpdate({
+        threadId,
+        tenantId,
+        status: "in_progress",
+        title: "",
+      }).catch(() => {});
     } catch {}
 
     // 4c. Send push notification to user devices
     try {
-      const { sendTurnCompletedPush } = await import("../lib/push-notifications.js");
+      const { sendTurnCompletedPush } =
+        await import("../lib/push-notifications.js");
       await sendTurnCompletedPush({
         threadId,
         tenantId,
@@ -800,7 +1062,6 @@ export async function handler(event: InvokeEvent): Promise<void> {
     } catch (err) {
       console.error("[chat-agent-invoke] Push notification failed:", err);
     }
-
   } catch (err) {
     console.error(`[chat-agent-invoke] Error:`, err);
     // Best-effort: mark turn as failed
@@ -824,17 +1085,36 @@ export async function handler(event: InvokeEvent): Promise<void> {
           triggerName: "Chat",
         });
       } catch (turnErr) {
-        console.error(`[chat-agent-invoke] Failed to update thread_turn on error:`, turnErr);
+        console.error(
+          `[chat-agent-invoke] Failed to update thread_turn on error:`,
+          turnErr,
+        );
       }
     }
     // Best-effort: insert an error message and notify
     try {
-      const errMsg = await insertAssistantMessage(threadId, tenantId, agentId, `I'm sorry, something went wrong. Please try again.`);
+      const errMsg = await insertAssistantMessage(
+        threadId,
+        tenantId,
+        agentId,
+        `I'm sorry, something went wrong. Please try again.`,
+      );
       if (errMsg) {
-        await notifyNewMessage({ messageId: errMsg.id, threadId, tenantId, role: "assistant", content: "I'm sorry, something went wrong. Please try again.", senderType: "agent", senderId: agentId });
+        await notifyNewMessage({
+          messageId: errMsg.id,
+          threadId,
+          tenantId,
+          role: "assistant",
+          content: "I'm sorry, something went wrong. Please try again.",
+          senderType: "agent",
+          senderId: agentId,
+        });
       }
     } catch (innerErr) {
-      console.error(`[chat-agent-invoke] Failed to insert error message:`, innerErr);
+      console.error(
+        `[chat-agent-invoke] Failed to insert error message:`,
+        innerErr,
+      );
     }
   }
 }
@@ -851,7 +1131,9 @@ async function insertAssistantMessage(
     // MCP tools return _type JSON directly (Places, CRM, Tasks)
     const genuiResults = (toolInvocations || [])
       .filter((inv) => inv.genui_data)
-      .flatMap((inv) => Array.isArray(inv.genui_data) ? inv.genui_data : [inv.genui_data])
+      .flatMap((inv) =>
+        Array.isArray(inv.genui_data) ? inv.genui_data : [inv.genui_data],
+      )
       .filter((item) => item && item._type);
 
     const [row] = await db
@@ -864,16 +1146,26 @@ async function insertAssistantMessage(
         sender_type: "agent",
         sender_id: agentId,
         tool_results: genuiResults.length > 0 ? genuiResults : undefined,
-        metadata: toolInvocations && toolInvocations.length > 0
-          ? { tool_invocations: toolInvocations.map(({ genui_data, ...rest }) => rest) }
-          : undefined,
+        metadata:
+          toolInvocations && toolInvocations.length > 0
+            ? {
+                tool_invocations: toolInvocations.map(
+                  ({ genui_data, ...rest }) => rest,
+                ),
+              }
+            : undefined,
       })
       .returning({ id: messages.id });
 
-    console.log(`[chat-agent-invoke] Inserted assistant message: ${row.id}${genuiResults.length > 0 ? ` (${genuiResults.length} genui results)` : ""}`);
+    console.log(
+      `[chat-agent-invoke] Inserted assistant message: ${row.id}${genuiResults.length > 0 ? ` (${genuiResults.length} genui results)` : ""}`,
+    );
     return row;
   } catch (err) {
-    console.error(`[chat-agent-invoke] Failed to insert assistant message:`, err);
+    console.error(
+      `[chat-agent-invoke] Failed to insert assistant message:`,
+      err,
+    );
     return null;
   }
 }
@@ -888,7 +1180,9 @@ async function notifyNewMessage(payload: {
   senderId: string;
 }): Promise<void> {
   if (!APPSYNC_ENDPOINT || !APPSYNC_API_KEY) {
-    console.warn(`[chat-agent-invoke] AppSync not configured, skipping notification`);
+    console.warn(
+      `[chat-agent-invoke] AppSync not configured, skipping notification`,
+    );
     return;
   }
 
@@ -938,13 +1232,19 @@ async function notifyNewMessage(payload: {
 
     const responseBody = await response.text();
     if (!response.ok) {
-      console.error(`[chat-agent-invoke] AppSync notify failed: ${response.status} ${responseBody}`);
+      console.error(
+        `[chat-agent-invoke] AppSync notify failed: ${response.status} ${responseBody}`,
+      );
     } else {
       // Log GraphQL errors even on HTTP 200
       if (responseBody.includes('"errors"')) {
-        console.error(`[chat-agent-invoke] AppSync notify GraphQL errors: ${responseBody}`);
+        console.error(
+          `[chat-agent-invoke] AppSync notify GraphQL errors: ${responseBody}`,
+        );
       } else {
-        console.log(`[chat-agent-invoke] AppSync notifyNewMessage sent for ${payload.messageId}`);
+        console.log(
+          `[chat-agent-invoke] AppSync notifyNewMessage sent for ${payload.messageId}`,
+        );
       }
     }
   } catch (err) {
@@ -1003,4 +1303,3 @@ async function notifyThreadTurnUpdate(payload: {
     console.error(`[chat-agent-invoke] notifyThreadTurnUpdate error:`, err);
   }
 }
-
