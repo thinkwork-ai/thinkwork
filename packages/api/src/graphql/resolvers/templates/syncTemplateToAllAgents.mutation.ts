@@ -11,13 +11,22 @@
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, agents, agentTemplates } from "../../utils.js";
 import { syncTemplateToAgent } from "./syncTemplateToAgent.mutation.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireTenantAdmin, requireNotFromAdminSkill } from "../core/authz.js";
 
 export async function syncTemplateToAllAgents(
   _parent: any,
   args: any,
   ctx: GraphQLContext,
 ) {
+  // R17: catastrophic-tier gate. Tenant-wide fan-out has catastrophic
+  // blast radius — a compromised admin widens a template, then any
+  // apikey caller (e.g. an agent holding thinkwork-admin with
+  // sync_template_to_all_agents in its allowlist) propagates the
+  // widened ceiling to every linked agent in one call. Blocking apikey
+  // callers forces this action through a Cognito-authenticated admin
+  // session. Single-agent syncTemplateToAgent is unaffected.
+  requireNotFromAdminSkill(ctx);
+
   const { templateId } = args;
 
   const [template] = await db

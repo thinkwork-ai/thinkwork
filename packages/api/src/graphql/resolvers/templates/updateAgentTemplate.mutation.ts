@@ -1,12 +1,29 @@
+import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, agentTemplates, snakeToCamel, sql } from "../../utils.js";
 import { validateTemplateSandbox } from "../../../lib/templates/sandbox-config.js";
+import { requireTenantAdmin } from "../core/authz.js";
 
 export async function updateAgentTemplate(
   _parent: any,
   args: any,
-  _ctx: GraphQLContext,
+  ctx: GraphQLContext,
 ) {
+  // Resolve the target template's tenant so the role gate runs against the
+  // authoritative row-derived tenantId, not a caller-supplied one. This
+  // closes the P0 auth gap — prior to this change the mutation executed a
+  // raw Drizzle UPDATE with no auth check at all (R15).
+  const [template] = await db
+    .select({ tenant_id: agentTemplates.tenant_id })
+    .from(agentTemplates)
+    .where(eq(agentTemplates.id, args.id));
+  if (!template) {
+    throw new GraphQLError("Agent template not found", {
+      extensions: { code: "NOT_FOUND" },
+    });
+  }
+  await requireTenantAdmin(ctx, template.tenant_id!);
+
   const i = args.input;
 
   const set: Record<string, any> = { updated_at: sql`now()` };
