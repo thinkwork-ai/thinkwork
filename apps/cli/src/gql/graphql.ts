@@ -19,6 +19,20 @@ export type Scalars = {
   AWSURL: { input: any; output: any; }
 };
 
+export type AcceptTemplateUpdateBulkResult = {
+  __typename?: 'AcceptTemplateUpdateBulkResult';
+  accepted: Scalars['Int']['output'];
+  failed: Scalars['Int']['output'];
+  results: Array<AcceptTemplateUpdateBulkResultEntry>;
+};
+
+export type AcceptTemplateUpdateBulkResultEntry = {
+  __typename?: 'AcceptTemplateUpdateBulkResultEntry';
+  agentId: Scalars['ID']['output'];
+  error?: Maybe<Scalars['String']['output']>;
+  success: Scalars['Boolean']['output'];
+};
+
 export type ActivityLogEntry = {
   __typename?: 'ActivityLogEntry';
   action: Scalars['String']['output'];
@@ -392,6 +406,14 @@ export type BudgetStatus = {
 
 export type CheckoutThreadInput = {
   runId: Scalars['String']['input'];
+};
+
+export type CompositionFeedbackSummary = {
+  __typename?: 'CompositionFeedbackSummary';
+  negative: Scalars['Int']['output'];
+  positive: Scalars['Int']['output'];
+  skillId: Scalars['String']['output'];
+  total: Scalars['Int']['output'];
 };
 
 export type ConcurrencySnapshot = {
@@ -1102,15 +1124,16 @@ export type MobileMemoryCapture = {
 export type MobileWikiSearchResult = {
   __typename?: 'MobileWikiSearchResult';
   /**
-   * Source memory unit ids whose recall hits caused this page to appear, in
-   * Hindsight rank order (best-ranked first).
+   * Retained for wire-format compatibility with older mobile clients.
+   * Always [] on the FTS path; pages match their own compiled text, not
+   * source memory units.
    */
   matchingMemoryIds: Array<Scalars['ID']['output']>;
   page: WikiPage;
   /**
-   * Reciprocal-rank surfacing score = 1 / (bestRank + 60), where bestRank
-   * is the lowest Hindsight position of any memory citing this page.
-   * Higher is better. Not comparable across queries.
+   * Postgres `ts_rank(search_tsv, plainto_tsquery('english', query))` on
+   * the page's compiled text. Higher is better. Not comparable across
+   * queries.
    */
   score: Scalars['Float']['output'];
 };
@@ -1157,6 +1180,8 @@ export type ModelInvocation = {
 export type Mutation = {
   __typename?: 'Mutation';
   _empty?: Maybe<Scalars['String']['output']>;
+  acceptTemplateUpdate: Agent;
+  acceptTemplateUpdateBulk: AcceptTemplateUpdateBulkResult;
   addInboxItemComment: InboxItemComment;
   addInboxItemLink: InboxItemLink;
   addTeamAgent: TeamAgent;
@@ -1177,6 +1202,7 @@ export type Mutation = {
   bootstrapUser: BootstrapResult;
   cancelEvalRun: EvalRun;
   cancelInboxItem: InboxItem;
+  cancelSkillRun: SkillRun;
   cancelThreadTurn: ThreadTurn;
   captureMobileMemory: MobileMemoryCapture;
   checkoutThread: Thread;
@@ -1227,6 +1253,7 @@ export type Mutation = {
   deleteRecipe: Scalars['Boolean']['output'];
   deleteRoutine: Scalars['Boolean']['output'];
   deleteRoutineTrigger: Scalars['Boolean']['output'];
+  deleteRun: Scalars['Boolean']['output'];
   deleteTeam: Scalars['Boolean']['output'];
   deleteThread: Scalars['Boolean']['output'];
   deleteThreadComment: Scalars['Boolean']['output'];
@@ -1274,6 +1301,8 @@ export type Mutation = {
   setAgentSkills: Array<AgentSkill>;
   setRoutineTrigger: RoutineTrigger;
   startEvalRun: EvalRun;
+  startSkillRun: SkillRun;
+  submitRunFeedback: SkillRun;
   syncKnowledgeBase: KnowledgeBase;
   syncTemplateToAgent: Agent;
   syncTemplateToAllAgents: SyncSummary;
@@ -1303,6 +1332,19 @@ export type Mutation = {
   updateUserProfile: UserProfile;
   updateWebhook: Webhook;
   upsertBudgetPolicy: BudgetPolicy;
+};
+
+
+export type MutationAcceptTemplateUpdateArgs = {
+  agentId: Scalars['ID']['input'];
+  filename: Scalars['String']['input'];
+};
+
+
+export type MutationAcceptTemplateUpdateBulkArgs = {
+  filename: Scalars['String']['input'];
+  templateId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -1372,6 +1414,11 @@ export type MutationCancelEvalRunArgs = {
 
 export type MutationCancelInboxItemArgs = {
   id: Scalars['ID']['input'];
+};
+
+
+export type MutationCancelSkillRunArgs = {
+  runId: Scalars['ID']['input'];
 };
 
 
@@ -1583,6 +1630,11 @@ export type MutationDeleteRoutineArgs = {
 
 export type MutationDeleteRoutineTriggerArgs = {
   id: Scalars['ID']['input'];
+};
+
+
+export type MutationDeleteRunArgs = {
+  runId: Scalars['ID']['input'];
 };
 
 
@@ -1856,6 +1908,16 @@ export type MutationStartEvalRunArgs = {
 };
 
 
+export type MutationStartSkillRunArgs = {
+  input: StartSkillRunInput;
+};
+
+
+export type MutationSubmitRunFeedbackArgs = {
+  input: SubmitRunFeedbackInput;
+};
+
+
 export type MutationSyncKnowledgeBaseArgs = {
   id: Scalars['ID']['input'];
 };
@@ -2060,6 +2122,16 @@ export type PerformanceTimeSeries = {
   totalCostUsd: Scalars['Float']['output'];
 };
 
+export type PinStatusFile = {
+  __typename?: 'PinStatusFile';
+  filename: Scalars['String']['output'];
+  latestContent?: Maybe<Scalars['String']['output']>;
+  latestSha?: Maybe<Scalars['String']['output']>;
+  pinnedContent?: Maybe<Scalars['String']['output']>;
+  pinnedSha?: Maybe<Scalars['String']['output']>;
+  updateAvailable: Scalars['Boolean']['output'];
+};
+
 export type Query = {
   __typename?: 'Query';
   _empty?: Maybe<Scalars['String']['output']>;
@@ -2070,6 +2142,7 @@ export type Query = {
   agentCostBreakdown: CostSummary;
   agentEmailCapability?: Maybe<AgentEmailCapability>;
   agentPerformance: Array<AgentPerformance>;
+  agentPinStatus: Array<PinStatusFile>;
   agentTemplate?: Maybe<AgentTemplate>;
   agentTemplates: Array<AgentTemplate>;
   agentVersions: Array<AgentVersion>;
@@ -2080,6 +2153,7 @@ export type Query = {
   artifacts: Array<Artifact>;
   budgetPolicies: Array<BudgetPolicy>;
   budgetStatus: Array<BudgetStatus>;
+  compositionFeedbackSummary: Array<CompositionFeedbackSummary>;
   concurrencySnapshot: ConcurrencySnapshot;
   costByAgent: Array<AgentCostSummary>;
   costByModel: Array<ModelCostSummary>;
@@ -2116,14 +2190,17 @@ export type Query = {
    */
   mobileMemorySearch: Array<MobileMemoryCapture>;
   /**
-   * Ranked wiki-page search for mobile. Runs the same Hindsight recall the
-   * mobile memory search does, then reverse-joins each hit through
-   * `wiki_section_sources` to the compiled pages that cite it. Pages are
-   * deduplicated (one row per page) and ranked by the sum of Hindsight hit
-   * scores across all of the page's matching source memories — so a page
-   * cited by multiple strong hits ranks higher than one cited by a single
-   * weak hit. `matchingMemoryIds` preserves input rank order so the client
-   * can show "why this page matched" without a second round trip.
+   * Ranked wiki-page search for mobile. Runs a Postgres full-text query
+   * (`plainto_tsquery('english', …)` + `ts_rank`) against the GIN-indexed
+   * `search_tsv` generated column on `wiki_pages` (title || summary ||
+   * body_md), scoped to one (tenant, agent) pair. Returns results in
+   * `ts_rank` DESC order, tie-broken by `last_compiled_at` DESC.
+   *
+   * Previously routed through Hindsight semantic recall; on the compiled
+   * wiki corpus FTS is near-instant and matches the query shape mobile
+   * users actually type (page titles, keywords). `matchingMemoryIds` is
+   * retained for wire-format compatibility and is always [] on this path —
+   * pages match their own compiled text, not source memory units.
    */
   mobileWikiSearch: Array<MobileWikiSearchResult>;
   modelCatalog: Array<ModelCatalogEntry>;
@@ -2145,6 +2222,8 @@ export type Query = {
   scheduledJob?: Maybe<ScheduledJob>;
   scheduledJobs: Array<ScheduledJob>;
   singleAgentPerformance?: Maybe<AgentPerformance>;
+  skillRun?: Maybe<SkillRun>;
+  skillRuns: Array<SkillRun>;
   team?: Maybe<Team>;
   teams: Array<Team>;
   templateSyncDiff: TemplateSyncDiff;
@@ -2179,6 +2258,19 @@ export type Query = {
    * Powers the `thinkwork wiki status` CLI command.
    */
   wikiCompileJobs: Array<WikiCompileJob>;
+  /**
+   * Pages this page links OUT to — the "Connected Pages" surface. Mirrors
+   * wikiBacklinks in the opposite direction; reads wiki_page_links where
+   * from_page_id = pageId. Deduplicated by target so a parent/child pair
+   * with both a `reference` link and a `parent_of` link returns once.
+   */
+  wikiConnectedPages: Array<WikiPage>;
+  /**
+   * Agent-scoped force-graph: every active wiki page + every page-to-page
+   * link whose endpoints are both active in the same `(tenant, owner)`
+   * scope. Links that reference archived pages are excluded. One round-trip.
+   */
+  wikiGraph: WikiGraph;
   /** Read one compiled page by slug. `ownerId` is required. */
   wikiPage?: Maybe<WikiPage>;
   /**
@@ -2234,6 +2326,11 @@ export type QueryAgentPerformanceArgs = {
   from?: InputMaybe<Scalars['AWSDateTime']['input']>;
   tenantId: Scalars['ID']['input'];
   to?: InputMaybe<Scalars['AWSDateTime']['input']>;
+};
+
+
+export type QueryAgentPinStatusArgs = {
+  agentId: Scalars['ID']['input'];
 };
 
 
@@ -2296,6 +2393,12 @@ export type QueryBudgetPoliciesArgs = {
 
 export type QueryBudgetStatusArgs = {
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryCompositionFeedbackSummaryArgs = {
+  skillId?: InputMaybe<Scalars['String']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -2531,6 +2634,22 @@ export type QuerySingleAgentPerformanceArgs = {
 };
 
 
+export type QuerySkillRunArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QuerySkillRunsArgs = {
+  agentId?: InputMaybe<Scalars['ID']['input']>;
+  invocationSource?: InputMaybe<Scalars['String']['input']>;
+  invokerUserId?: InputMaybe<Scalars['ID']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  skillId?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
 export type QueryTeamArgs = {
   id: Scalars['ID']['input'];
 };
@@ -2679,6 +2798,17 @@ export type QueryWikiBacklinksArgs = {
 export type QueryWikiCompileJobsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   ownerId?: InputMaybe<Scalars['ID']['input']>;
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryWikiConnectedPagesArgs = {
+  pageId: Scalars['ID']['input'];
+};
+
+
+export type QueryWikiGraphArgs = {
+  ownerId: Scalars['ID']['input'];
   tenantId: Scalars['ID']['input'];
 };
 
@@ -2881,6 +3011,31 @@ export type SendMessageInput = {
   toolResults?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
+export type SkillRun = {
+  __typename?: 'SkillRun';
+  agentId?: Maybe<Scalars['ID']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  deleteAt: Scalars['AWSDateTime']['output'];
+  deliveredArtifactRef?: Maybe<Scalars['AWSJSON']['output']>;
+  deliveryChannels?: Maybe<Scalars['AWSJSON']['output']>;
+  failureReason?: Maybe<Scalars['String']['output']>;
+  feedbackNote?: Maybe<Scalars['String']['output']>;
+  feedbackSignal?: Maybe<Scalars['String']['output']>;
+  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  id: Scalars['ID']['output'];
+  inputs?: Maybe<Scalars['AWSJSON']['output']>;
+  invocationSource: Scalars['String']['output'];
+  invokerUserId: Scalars['ID']['output'];
+  resolvedInputs?: Maybe<Scalars['AWSJSON']['output']>;
+  resolvedInputsHash: Scalars['String']['output'];
+  skillId: Scalars['String']['output'];
+  skillVersion: Scalars['Int']['output'];
+  startedAt: Scalars['AWSDateTime']['output'];
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
 export type StartEvalRunInput = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
   agentTemplateId?: InputMaybe<Scalars['ID']['input']>;
@@ -2889,10 +3044,26 @@ export type StartEvalRunInput = {
   testCaseIds?: InputMaybe<Array<Scalars['ID']['input']>>;
 };
 
+export type StartSkillRunInput = {
+  agentId?: InputMaybe<Scalars['ID']['input']>;
+  deliveryChannels?: InputMaybe<Scalars['AWSJSON']['input']>;
+  inputs?: InputMaybe<Scalars['AWSJSON']['input']>;
+  invocationSource: Scalars['String']['input'];
+  skillId: Scalars['String']['input'];
+  skillVersion?: InputMaybe<Scalars['Int']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
 export type StatusCount = {
   __typename?: 'StatusCount';
   count: Scalars['Int']['output'];
   status: Scalars['String']['output'];
+};
+
+export type SubmitRunFeedbackInput = {
+  note?: InputMaybe<Scalars['String']['input']>;
+  runId: Scalars['ID']['input'];
+  signal: Scalars['String']['input'];
 };
 
 export type Subscription = {
@@ -3435,9 +3606,20 @@ export type UpdateUserInput = {
 };
 
 export type UpdateUserProfileInput = {
+  /** Short/preferred name the agent should use in chat. Set via admin UI or agent self-serve tool. */
+  callBy?: InputMaybe<Scalars['String']['input']>;
+  /** Free-form markdown capturing ongoing context about the human. */
+  context?: InputMaybe<Scalars['String']['input']>;
   displayName?: InputMaybe<Scalars['String']['input']>;
+  /** Free-form markdown describing the human's family / close contacts. */
+  family?: InputMaybe<Scalars['String']['input']>;
+  /** Free-form notes about the human's preferences + communication style. */
+  notes?: InputMaybe<Scalars['String']['input']>;
   notificationPreferences?: InputMaybe<Scalars['AWSJSON']['input']>;
+  pronouns?: InputMaybe<Scalars['String']['input']>;
   theme?: InputMaybe<Scalars['String']['input']>;
+  timezone?: InputMaybe<Scalars['String']['input']>;
+  title?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpdateWebhookInput = {
@@ -3475,12 +3657,23 @@ export type User = {
 
 export type UserProfile = {
   __typename?: 'UserProfile';
+  /** Short/preferred name — what the agent should call this human in chat. */
+  callBy?: Maybe<Scalars['String']['output']>;
+  /** Free-form markdown capturing ongoing context about the human. */
+  context?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   displayName?: Maybe<Scalars['String']['output']>;
+  /** Free-form markdown describing the human's family / close contacts. */
+  family?: Maybe<Scalars['String']['output']>;
   id: Scalars['ID']['output'];
+  /** Free-form notes the agent maintains about this human's preferences + style. */
+  notes?: Maybe<Scalars['String']['output']>;
   notificationPreferences?: Maybe<Scalars['AWSJSON']['output']>;
+  pronouns?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
   theme?: Maybe<Scalars['String']['output']>;
+  timezone?: Maybe<Scalars['String']['output']>;
+  title?: Maybe<Scalars['String']['output']>;
   updatedAt: Scalars['AWSDateTime']['output'];
   userId: Scalars['ID']['output'];
 };
@@ -3548,6 +3741,39 @@ export type WikiCompileJob = {
   trigger: Scalars['String']['output'];
 };
 
+export type WikiGraph = {
+  __typename?: 'WikiGraph';
+  edges: Array<WikiGraphEdge>;
+  nodes: Array<WikiGraphNode>;
+};
+
+export type WikiGraphEdge = {
+  __typename?: 'WikiGraphEdge';
+  label: Scalars['String']['output'];
+  source: Scalars['ID']['output'];
+  target: Scalars['ID']['output'];
+  weight: Scalars['Float']['output'];
+};
+
+/**
+ * Agent-scoped force-graph payload: all active pages and their [[...]] links
+ * for one `(tenant, owner)` scope. Shaped to match the legacy `memoryGraph`
+ * wire contract so the admin force-graph component can swap data sources
+ * with minimal client changes. `type` is always `"page"` on nodes; the
+ * Wiki page type (`ENTITY`/`TOPIC`/`DECISION`) lives in `entityType`.
+ */
+export type WikiGraphNode = {
+  __typename?: 'WikiGraphNode';
+  edgeCount: Scalars['Int']['output'];
+  entityType: WikiPageType;
+  id: Scalars['ID']['output'];
+  label: Scalars['String']['output'];
+  latestThreadId?: Maybe<Scalars['String']['output']>;
+  slug: Scalars['String']['output'];
+  strategy?: Maybe<Scalars['String']['output']>;
+  type: Scalars['String']['output'];
+};
+
 /**
  * Dispatch acknowledgement for `bootstrapJournalImport`. The actual ingest
  * runs on a dedicated worker Lambda (`wiki-bootstrap-import`) because
@@ -3569,18 +3795,63 @@ export type WikiPage = {
   __typename?: 'WikiPage';
   aliases: Array<Scalars['String']['output']>;
   bodyMd?: Maybe<Scalars['String']['output']>;
+  /**
+   * Pages that were promoted out of this page's sections — the reverse of
+   * `parent`. Empty for pages that have never had a child promoted.
+   */
+  children: Array<WikiPage>;
   createdAt: Scalars['AWSDateTime']['output'];
   id: Scalars['ID']['output'];
   lastCompiledAt?: Maybe<Scalars['AWSDateTime']['output']>;
   ownerId: Scalars['ID']['output'];
+  /**
+   * Parent hub when this page was promoted from a section on another page.
+   * Null for top-level pages. Reads `wiki_pages.parent_page_id`.
+   */
+  parent?: Maybe<WikiPage>;
+  /**
+   * If this page was promoted out of a section on a parent page, the section
+   * it came from. Null when this page is top-level or the parent section has
+   * since been archived.
+   */
+  promotedFromSection?: Maybe<WikiPromotedFromSection>;
+  /**
+   * Active pages rolled up into this page's named section — the denormalized
+   * aggregation view (`aggregation.linked_page_ids` on the section jsonb).
+   * Empty when the section doesn't exist or carries no aggregation metadata.
+   */
+  sectionChildren: Array<WikiPage>;
   sections: Array<WikiPageSection>;
   slug: Scalars['String']['output'];
+  /**
+   * Distinct memory_units (Hindsight records) that source at least one section
+   * on this page. Counts through `wiki_section_sources`. Hit on detail screens
+   * only — list screens must NOT request this (N+1 risk).
+   */
+  sourceMemoryCount: Scalars['Int']['output'];
+  /**
+   * Up to `limit` memory_unit ids that source sections on this page, ordered
+   * by most recently-cited. Server-side capped at 50. Pairs with
+   * `MemoryRecord` drill-in so a page's "Based on N memories" badge can
+   * resolve to the actual records.
+   */
+  sourceMemoryIds: Array<Scalars['ID']['output']>;
   status: Scalars['String']['output'];
   summary?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
   title: Scalars['String']['output'];
   type: WikiPageType;
   updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+
+export type WikiPageSectionChildrenArgs = {
+  sectionSlug: Scalars['String']['input'];
+};
+
+
+export type WikiPageSourceMemoryIdsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 export type WikiPageSection = {
@@ -3604,6 +3875,18 @@ export enum WikiPageType {
   Entity = 'ENTITY',
   Topic = 'TOPIC'
 }
+
+/**
+ * Provenance linkage between a promoted page and the section it was derived
+ * from. Populated only for pages whose `parent_page_id` is set AND whose
+ * parent has a section in which `aggregation.promoted_page_id` points back.
+ */
+export type WikiPromotedFromSection = {
+  __typename?: 'WikiPromotedFromSection';
+  parentPage: WikiPage;
+  sectionHeading: Scalars['String']['output'];
+  sectionSlug: Scalars['String']['output'];
+};
 
 export type WikiResetCursorResult = {
   __typename?: 'WikiResetCursorResult';

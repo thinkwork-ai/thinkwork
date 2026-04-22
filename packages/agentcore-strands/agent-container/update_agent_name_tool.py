@@ -117,11 +117,21 @@ def update_agent_name(new_name: str) -> str:
 
     errors = payload.get("errors")
     if errors:
-        message = (errors[0] or {}).get("message") if errors else "unknown error"
+        message = (errors[0] or {}).get("message") or "unknown error"
         return f"update_agent_name: rename failed ({message})."
 
     data = (payload.get("data") or {}).get("updateAgent")
-    if not data or data.get("id") != agent_id:
-        return "update_agent_name: unexpected response shape."
+    # Validate that the rename actually took by comparing the returned
+    # name to what we requested — not just the id (authz would prevent a
+    # wrong id anyway). Trimmed because server-side sanitization may have
+    # collapsed leading/trailing whitespace.
+    if not data:
+        return "update_agent_name: unexpected response shape (empty data)."
+    returned_name = (data.get("name") or "").strip()
+    if returned_name != new_name.strip():
+        return (
+            f"update_agent_name: rename returned unexpected name "
+            f"{returned_name!r} (requested {new_name.strip()!r})."
+        )
 
     return f"update_agent_name: renamed to {data.get('name')!r}."

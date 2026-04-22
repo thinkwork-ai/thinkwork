@@ -173,7 +173,7 @@ def update_user_profile(field: UserProfileField, value: str) -> str:
 
     errors = payload.get("errors")
     if errors:
-        message = (errors[0] or {}).get("message") if errors else "unknown error"
+        message = (errors[0] or {}).get("message") or "unknown error"
         return f"update_user_profile: save failed ({message})."
 
     data = (payload.get("data") or {}).get("updateUserProfile")

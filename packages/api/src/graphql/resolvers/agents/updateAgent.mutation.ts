@@ -181,8 +181,18 @@ export async function updateAgent(_parent: any, args: any, ctx: GraphQLContext) 
 
 		// Txn committed successfully — now safe to invalidate the composer
 		// cache so the next read reflects the new S3 state.
+		// Wrap each invalidation independently — if one throws, the remaining
+		// agents still get invalidated. A stale composer cache is recoverable
+		// (30s TTL) but silently skipping entries is not.
 		for (const entry of cacheInvalidations) {
-			invalidateComposerCache(entry);
+			try {
+				invalidateComposerCache(entry);
+			} catch (err) {
+				console.warn(
+					`[updateAgent] cache_invalidation agentId=${entry.agentId} failed:`,
+					err,
+				);
+			}
 		}
 	} else {
 		const [updated] = await db

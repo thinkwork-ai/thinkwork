@@ -57,6 +57,7 @@ def _post_update_identity(
             "Content-Type": "application/json",
             "x-api-key": api_secret,
             "x-tenant-id": tenant_id,
+            "x-agent-id": agent_id,
         },
     )
     with urllib.request.urlopen(req, timeout=15) as resp:

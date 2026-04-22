@@ -6,7 +6,7 @@
  * the bearer path is gone — every caller sends a Cognito ID token.
  *
  * Request shape (Unit 5):
- *   { action: "get" | "list" | "put" | "delete" | "regenerate-map",
+ *   { action: "get" | "list" | "put" | "delete" | "regenerate-map" | "update-identity-field",
  *     agentId?: string, templateId?: string, defaults?: true,
  *     path?: string, content?: string, acceptTemplateUpdate?: boolean }
  *
@@ -445,7 +445,19 @@ async function handleUpdateIdentityField(
 			error: "update-identity-field requires agentId",
 		});
 	}
-	if (!(field in IDENTITY_FIELD_ANCHORS)) {
+	// Service-auth (apikey) callers must present x-agent-id matching the
+	// target agent. Mirrors the updateAgent mutation's authz guard —
+	// without this, any apikey holder in the tenant can edit another
+	// agent's IDENTITY.md personality fields.
+	if (deps.auth.authType === "apikey") {
+		if (!deps.auth.agentId || deps.auth.agentId !== target.agentId) {
+			return json(403, {
+				ok: false,
+				error: "Service-auth callers must present x-agent-id matching the target agent",
+			});
+		}
+	}
+	if (!Object.prototype.hasOwnProperty.call(IDENTITY_FIELD_ANCHORS, field)) {
 		return json(400, {
 			ok: false,
 			error: `Unknown identity field '${field}'. Allowed: creature, vibe, emoji, avatar.`,
@@ -458,7 +470,10 @@ async function handleUpdateIdentityField(
 	// treatment. Newlines collapsed to spaces so a value can't inject
 	// extra markdown bullets; the regex replacer function form prevents
 	// `$&`, `$'`, `` $` ``, `$1` from expanding as backreferences.
-	const safeValue = value.replace(/[\r\n]+/g, " ").trim();
+	// Includes U+2028 LINE SEPARATOR + U+2029 PARAGRAPH SEPARATOR — these
+	// are treated as line breaks by some Markdown renderers and can
+	// otherwise inject a forged bullet past the \r\n guard.
+	const safeValue = value.replace(/[\r\n\u2028\u2029]+/g, " ").trim();
 	const typedField = field as keyof typeof IDENTITY_FIELD_ANCHORS;
 	const anchor = IDENTITY_FIELD_ANCHORS[typedField];
 	const label = identityFieldLabel(typedField);

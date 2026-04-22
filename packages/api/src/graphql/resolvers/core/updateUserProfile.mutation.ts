@@ -2,6 +2,7 @@ import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import {
 	agents,
+	and,
 	db,
 	eq,
 	snakeToCamel,
@@ -56,10 +57,21 @@ export const updateUserProfile = async (
 				{ extensions: { code: "FORBIDDEN" } },
 			);
 		}
+		if (!target.tenant_id) {
+			throw new GraphQLError(
+				"Target user has no tenant; service-auth cannot edit",
+				{ extensions: { code: "FORBIDDEN" } },
+			);
+		}
 		const [agent] = await db
-			.select({ human_pair_id: agents.human_pair_id })
+			.select({ human_pair_id: agents.human_pair_id, tenant_id: agents.tenant_id })
 			.from(agents)
-			.where(eq(agents.id, ctx.auth.agentId));
+			.where(
+				and(
+					eq(agents.id, ctx.auth.agentId),
+					eq(agents.tenant_id, target.tenant_id),
+				),
+			);
 		if (!agent || agent.human_pair_id !== args.userId) {
 			throw new GraphQLError(
 				"Agent is not paired with the target user",
@@ -80,6 +92,29 @@ export const updateUserProfile = async (
 	}
 
 	const i = args.input;
+
+	// Server-side mirror of the tool-level 10KB cap. Prevents an apikey
+	// holder calling GraphQL directly from writing unbounded content and
+	// bloating every USER.md re-render in the fan-out.
+	const MAX_FIELD_LENGTH = 10_000;
+	for (const field of [
+		"callBy",
+		"notes",
+		"family",
+		"context",
+		"title",
+		"timezone",
+		"pronouns",
+	] as const) {
+		const value = i[field];
+		if (typeof value === "string" && value.length > MAX_FIELD_LENGTH) {
+			throw new GraphQLError(
+				`${field} exceeds ${MAX_FIELD_LENGTH} characters`,
+				{ extensions: { code: "BAD_INPUT" } },
+			);
+		}
+	}
+
 	const updates: Record<string, unknown> = { updated_at: new Date() };
 	if (i.displayName !== undefined) updates.display_name = i.displayName;
 	if (i.theme !== undefined) updates.theme = i.theme;
@@ -154,8 +189,18 @@ export const updateUserProfile = async (
 		return updated;
 	});
 
+	// Wrap each invalidation independently — if one throws, the remaining
+	// agents still get invalidated. A stale composer cache is recoverable
+	// (30s TTL) but silently skipping entries is not.
 	for (const entry of cacheInvalidations) {
-		invalidateComposerCache(entry);
+		try {
+			invalidateComposerCache(entry);
+		} catch (err) {
+			console.warn(
+				`[updateUserProfile] cache_invalidation agentId=${entry.agentId} failed:`,
+				err,
+			);
+		}
 	}
 
 	return snakeToCamel(row);
