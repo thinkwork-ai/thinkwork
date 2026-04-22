@@ -192,6 +192,12 @@ variable "stripe_price_ids_json" {
   default     = "{}"
 }
 
+variable "stripe_welcome_from_email" {
+  description = "Override From: address on the Stripe post-checkout welcome email. Must be an SES-verified identity. Empty string falls back to the in-code default (hello@agents.thinkwork.ai, which uses the already-verified SES inbound domain). Set to hello@thinkwork.ai once the bare-apex sender identity is verified."
+  type        = string
+  default     = ""
+}
+
 variable "appsync_realtime_url" {
   description = "AppSync realtime/WebSocket endpoint URL"
   type        = string
