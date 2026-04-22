@@ -30,6 +30,14 @@ locals {
     THINKWORK_API_SECRET    = var.api_auth_secret
     EMAIL_HMAC_SECRET       = var.api_auth_secret
     THINKWORK_API_URL       = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com"
+    # Comma-separated allowlist of caller emails permitted to invoke
+    # operator-gated mutations (updateTenantPolicy, sandbox fixture
+    # setup, etc.). Resolved against ctx.auth.email, which is pulled
+    # from the Cognito JWT for user callers and from the
+    # `x-principal-email` header for service-auth callers (see
+    # packages/api/src/lib/cognito-auth.ts). Empty ⇒ the gate
+    # rejects every call, which is the safe default pre-rollout.
+    THINKWORK_PLATFORM_OPERATOR_EMAILS = var.platform_operator_emails
     AGENTCORE_FUNCTION_NAME = var.agentcore_function_name
     WORKSPACE_BUCKET        = var.bucket_name
     HINDSIGHT_ENDPOINT      = var.hindsight_endpoint

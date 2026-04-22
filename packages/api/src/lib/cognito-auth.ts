@@ -96,7 +96,15 @@ export async function authenticate(headers: Record<string, string | undefined>):
 			return {
 				principalId: headers["x-principal-id"] || null,
 				tenantId: headers["x-tenant-id"] || null,
-				email: null,
+				// Apikey auth has no JWT to pull an email from, but
+				// operator-gated mutations (updateTenantPolicy, sandbox
+				// fixture setup) still need to know which human is driving
+				// the service call. Callers pass `x-principal-email`
+				// alongside the api key; downstream resolvers check it
+				// against their own allowlist (e.g.
+				// THINKWORK_PLATFORM_OPERATOR_EMAILS). No email header ⇒
+				// no operator-gated mutation runs.
+				email: headers["x-principal-email"] || null,
 				authType: "apikey",
 				agentId: headers["x-agent-id"] || null,
 			};

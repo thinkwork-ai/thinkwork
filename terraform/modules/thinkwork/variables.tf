@@ -56,6 +56,12 @@ variable "redirect_success_url" {
   default     = "https://app.thinkwork.ai/settings/credentials"
 }
 
+variable "platform_operator_emails" {
+  description = "Comma-separated allowlist of emails permitted to invoke operator-gated GraphQL mutations (updateTenantPolicy, sandbox fixture setup, etc.). Forwarded to graphql-http as THINKWORK_PLATFORM_OPERATOR_EMAILS. Empty ⇒ the gate rejects every call."
+  type        = string
+  default     = ""
+}
+
 # ---------------------------------------------------------------------------
 # BYO Foundation (all optional — defaults to creating everything)
 # ---------------------------------------------------------------------------
