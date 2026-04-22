@@ -33,8 +33,6 @@ export const hero = {
   headlinePart1: "Start small. Build trust.",
   headlineAccent: "Scale AI safely.",
   lede: "The path from AI experiments to trusted AI work — visible work, governed expansion, and an AWS environment you own.",
-  thirdOption:
-    "A third path between banning AI and betting the company on it — gradual, governed, and signed off by security, cost, and audit from day one.",
   primaryCta: { label: "Read the docs", href: external.docs },
   secondaryCta: { label: "View on GitHub", href: external.github },
   headlineCandidates: [
