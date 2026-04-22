@@ -5,7 +5,7 @@ description: >
   Admin / owner role required; every operation is gated per-agent at the
   resolver via agent_skills.permissions.operations.
 category: platform
-version: "0.2.0"
+version: "0.3.0"
 author: thinkwork
 icon: shield
 tags: [admin, platform, onboarding]
@@ -84,4 +84,81 @@ scripts:
   - name: get_artifact
     path: scripts/operations/reads.py
     description: "Fetch an artifact by id."
+    default_enabled: true
+
+  # Unit 8 mutations. default_enabled flags follow the plan's inventory
+  # table — opt-in for operations with tenant-wide blast radius. Admins
+  # extend per-agent via agent_skills.permissions.operations to allow
+  # opt-in ops for a specific agent.
+  - name: update_tenant
+    path: scripts/operations/tenants.py
+    description: "Update tenant name, plan, or issue prefix."
+    default_enabled: true
+  - name: add_tenant_member
+    path: scripts/operations/tenants.py
+    description: "Add an existing user or agent to tenant_members."
+    default_enabled: true
+  - name: update_tenant_member
+    path: scripts/operations/tenants.py
+    description: "Change a member's role or status. Last-owner guard enforced server-side."
+    default_enabled: true
+  - name: remove_tenant_member
+    path: scripts/operations/tenants.py
+    description: "Hard-delete a tenant member (OPT-IN — destructive)."
+    default_enabled: false
+  - name: invite_member
+    path: scripts/operations/tenants.py
+    description: "Invite a new user by email — creates Cognito user + member row."
+    default_enabled: true
+  - name: create_team
+    path: scripts/operations/teams.py
+    description: "Create a team in a tenant."
+    default_enabled: true
+  - name: add_team_agent
+    path: scripts/operations/teams.py
+    description: "Add an agent to a team."
+    default_enabled: true
+  - name: add_team_user
+    path: scripts/operations/teams.py
+    description: "Add a user to a team."
+    default_enabled: true
+  - name: remove_team_agent
+    path: scripts/operations/teams.py
+    description: "Remove an agent from a team (OPT-IN)."
+    default_enabled: false
+  - name: remove_team_user
+    path: scripts/operations/teams.py
+    description: "Remove a user from a team (OPT-IN)."
+    default_enabled: false
+  - name: create_agent
+    path: scripts/operations/agents.py
+    description: "Create a new agent, optionally linked to a template."
+    default_enabled: true
+  - name: set_agent_skills
+    path: scripts/operations/agents.py
+    description: "Replace the full agent_skills set for an agent."
+    default_enabled: true
+  - name: set_agent_capabilities
+    path: scripts/operations/agents.py
+    description: "Replace the agent_capabilities set for an agent."
+    default_enabled: true
+  - name: create_agent_template
+    path: scripts/operations/templates.py
+    description: "Create an agent template."
+    default_enabled: true
+  - name: create_agent_from_template
+    path: scripts/operations/templates.py
+    description: "Instantiate an agent from a template."
+    default_enabled: true
+  - name: sync_template_to_agent
+    path: scripts/operations/templates.py
+    description: "Sync one linked agent to its template."
+    default_enabled: true
+  - name: sync_template_to_all_agents
+    path: scripts/operations/templates.py
+    description: "Sync every linked agent to a template (OPT-IN — tenant-wide blast)."
+    default_enabled: false
+  - name: accept_template_update
+    path: scripts/operations/templates.py
+    description: "Advance an agent's pinned hash for a guardrail-class file."
     default_enabled: true
