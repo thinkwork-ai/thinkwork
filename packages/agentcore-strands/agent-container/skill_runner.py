@@ -36,6 +36,30 @@ logger = logging.getLogger(__name__)
 SKILLS_DIR = "/tmp/skills"
 
 
+def _coerce_scalar(raw: str) -> Any:
+    """Coerce a bare YAML scalar to a Python value.
+
+    Covers the shapes the hand-rolled parser actually emits: quoted and
+    unquoted strings, `true` / `false`, and integers. Anything else
+    passes through as a stripped string. Matches the top-level coercion
+    in _parse_skill_yaml so list-item dict values and dict-continuation
+    values get the same treatment — without it, `default_enabled: true`
+    in a `scripts:` list item lands as the literal string `"true"` and
+    every `is True` / `== True` check silently fails.
+    """
+    v = raw.strip().strip('"')
+    if v == "true":
+        return True
+    if v == "false":
+        return False
+    if v.lstrip("-").isdigit():
+        try:
+            return int(v)
+        except ValueError:
+            pass
+    return v
+
+
 def _parse_skill_yaml(filepath: str) -> dict | None:
     """Parse a simple skill.yaml file into a dict."""
     if not os.path.isfile(filepath):
@@ -63,7 +87,7 @@ def _parse_skill_yaml(filepath: str) -> dict | None:
                 if ": " in val and not val.startswith('"'):
                     k, _, v = val.partition(": ")
                     # Always start a new dict for each "- key: value" entry
-                    current_list.append({k.strip(): v.strip().strip('"')})
+                    current_list.append({k.strip(): _coerce_scalar(v)})
                 else:
                     current_list.append(val.strip('"'))
             continue
@@ -72,7 +96,7 @@ def _parse_skill_yaml(filepath: str) -> dict | None:
         if stripped.startswith("    ") and current_list and isinstance(current_list[-1], dict):
             parts = stripped.strip().split(": ", 1)
             if len(parts) == 2:
-                current_list[-1][parts[0].strip()] = parts[1].strip().strip('"')
+                current_list[-1][parts[0].strip()] = _coerce_scalar(parts[1])
             continue
 
         # Top-level key: value

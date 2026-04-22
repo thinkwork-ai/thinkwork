@@ -1,0 +1,28 @@
+slug: thinkwork-admin
+display_name: ThinkWork Admin
+description: >
+  Drive the ThinkWork platform — create agents, templates, teams, and members.
+  Admin / owner role required; every operation is gated per-agent at the
+  resolver via agent_skills.permissions.operations.
+category: platform
+version: "0.1.0"
+author: thinkwork
+icon: shield
+tags: [admin, platform, onboarding]
+execution: script
+mode: tool
+is_default: false
+
+requires_env:
+  - THINKWORK_API_URL
+  - THINKWORK_API_SECRET
+  - TENANT_ID
+  - AGENT_ID
+  - CURRENT_USER_ID
+
+# Operation manifest. Units 7 (reads) and 8 (onboarding mutations) populate
+# this list. Each entry must set `default_enabled` to a bool so the wrapper
+# and the skill-catalog sync-db job can tell the default onboarding cut
+# apart from opt-in operations. Until those units land, this section stays
+# empty and the skill will not expose any tool functions.
+scripts: []
