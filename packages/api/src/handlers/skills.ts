@@ -2497,6 +2497,11 @@ async function startSkillRunService(
 				skillRuns.skill_id,
 				skillRuns.resolved_inputs_hash,
 			],
+			// Match the partial unique index `uq_skill_runs_dedup_active`
+			// (WHERE status='running'). Without this predicate Postgres
+			// cannot resolve the ON CONFLICT target against a partial index
+			// and raises error 42P10.
+			where: sql`status = 'running'`,
 		})
 		.returning();
 
