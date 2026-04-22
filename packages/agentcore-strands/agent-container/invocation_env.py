@@ -65,6 +65,37 @@ def apply_invocation_env(payload: dict) -> list[str]:
         os.environ["CURRENT_THREAD_ID"] = thread_id
         keys.append("CURRENT_THREAD_ID")
 
+    # Sandbox (plan Unit 9). Dispatcher sets sandbox_* payload fields only
+    # when pre-flight returned status=ready; server.py reads
+    # SANDBOX_INTERPRETER_ID to gate execute_code registration. Keys are
+    # cleared per-invocation so a warm container can't leak one tenant's
+    # interpreter/secret paths into the next invocation.
+    sandbox_interpreter_id = payload.get("sandbox_interpreter_id") or ""
+    sandbox_environment = payload.get("sandbox_environment") or ""
+    sandbox_secret_paths = payload.get("sandbox_secret_paths") or ""
+    sandbox_tenant_id = payload.get("sandbox_tenant_id") or ""
+    sandbox_user_id = payload.get("sandbox_user_id") or ""
+    sandbox_stage = payload.get("sandbox_stage") or ""
+
+    if sandbox_interpreter_id:
+        os.environ["SANDBOX_INTERPRETER_ID"] = sandbox_interpreter_id
+        keys.append("SANDBOX_INTERPRETER_ID")
+    if sandbox_environment:
+        os.environ["SANDBOX_ENVIRONMENT"] = sandbox_environment
+        keys.append("SANDBOX_ENVIRONMENT")
+    if sandbox_secret_paths:
+        os.environ["SANDBOX_SECRET_PATHS"] = sandbox_secret_paths
+        keys.append("SANDBOX_SECRET_PATHS")
+    if sandbox_tenant_id:
+        os.environ["SANDBOX_TENANT_ID"] = sandbox_tenant_id
+        keys.append("SANDBOX_TENANT_ID")
+    if sandbox_user_id:
+        os.environ["SANDBOX_USER_ID"] = sandbox_user_id
+        keys.append("SANDBOX_USER_ID")
+    if sandbox_stage:
+        os.environ["SANDBOX_STAGE"] = sandbox_stage
+        keys.append("SANDBOX_STAGE")
+
     return keys
 
 
