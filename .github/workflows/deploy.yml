@@ -244,7 +244,15 @@ jobs:
           DB_PASS=$(aws secretsmanager get-secret-value \
             --secret-id "${{ steps.outputs.outputs.db_secret_arn }}" \
             --query SecretString --output text | jq -r .password)
-          export DATABASE_URL="postgresql://thinkwork_admin:${DB_PASS}@${{ steps.outputs.outputs.db_endpoint }}:5432/thinkwork?sslmode=no-verify"
+          # db-migrate-manual.sh shells out to psql, which rejects the
+          # `sslmode=no-verify` extension (it's a Node pg driver value,
+          # not a Postgres / psql one). Use sslmode=require instead —
+          # same RDS-compatible behavior (encrypt, don't verify CA) but
+          # actually accepted by psql. scripts/bootstrap-workspace.sh
+          # sed-replaces no-verify → require for the same reason; this
+          # fix applies the substitution up-front so the drift step
+          # doesn't need the sed dance.
+          export DATABASE_URL="postgresql://thinkwork_admin:${DB_PASS}@${{ steps.outputs.outputs.db_endpoint }}:5432/thinkwork?sslmode=require"
           bash scripts/db-migrate-manual.sh
 
   # ── Build & deploy admin app ─────────────────────────────────────
