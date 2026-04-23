@@ -136,6 +136,7 @@ resource "aws_lambda_function" "handler" {
     "stripe-checkout",
     "stripe-webhook",
     "stripe-portal",
+    "stripe-subscription",
     "teams",
     "team-members",
     "tenants",
@@ -274,6 +275,8 @@ locals {
     "POST /api/stripe/webhook"             = "stripe-webhook"
     "POST /api/stripe/portal-session"      = "stripe-portal"
     "OPTIONS /api/stripe/portal-session"   = "stripe-portal"
+    "GET /api/stripe/subscription"         = "stripe-subscription"
+    "OPTIONS /api/stripe/subscription"     = "stripe-subscription"
 
     # Routines
     "ANY /api/routines/{proxy+}" = "routines"
