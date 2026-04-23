@@ -92,7 +92,11 @@ function BillingPage() {
   }, [getToken]);
 
   useEffect(() => {
-    if (roleLoading || role !== "owner") {
+    if (roleLoading) {
+      // Role fetch still in flight; don't decide yet.
+      return;
+    }
+    if (role !== "owner") {
       setLoading(false);
       return;
     }
@@ -117,7 +121,12 @@ function BillingPage() {
         setLoading(false);
       }
     })();
-  }, [getToken]);
+    // Deps must include role + roleLoading so this re-runs when the
+    // role fetch resolves (null → "owner"). Previously only [getToken]
+    // meant the initial run saw roleLoading=true, skipped, and never
+    // re-ran — so the subscription fetch never fired and state stayed
+    // null → UI rendered "FREE" regardless of DB state.
+  }, [getToken, role, roleLoading]);
 
   async function startUpgrade(planId: PlanId) {
     setUpgradingPlan(planId);
@@ -241,7 +250,7 @@ function BillingPage() {
         </Card>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="max-w-xl">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -277,62 +286,39 @@ function BillingPage() {
             {state?.customerEmail && (
               <Row label="Billed to" value={state.customerEmail} />
             )}
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Manage subscription</CardTitle>
-            <CardDescription>
-              Update your card, change plan, download invoices, or cancel
-              — all from Stripe's secure portal.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
             {state?.hasCustomer ? (
-              <div className="space-y-3">
-                <p className="text-muted-foreground text-sm leading-6">
-                  Change plan, update your card, download invoices, or
-                  cancel — all from Stripe's secure portal.
-                </p>
-                <Button
-                  onClick={() => openPortal("home")}
-                  disabled={portalLoading}
-                  className="w-full"
-                >
-                  {portalLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Opening portal…
-                    </>
-                  ) : (
-                    <>
-                      Manage subscription
-                      <ExternalLink className="ml-2 h-4 w-4" />
-                    </>
-                  )}
-                </Button>
-                <p className="text-muted-foreground pt-2 text-xs leading-5">
-                  Cancel deactivates your workspace after the current
-                  billing period. Data is retained for 30 days —
-                  resubscribe within that window to restore everything.
-                </p>
-              </div>
+              <Button
+                onClick={() => openPortal("home")}
+                disabled={portalLoading}
+                className="w-full"
+              >
+                {portalLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Opening portal…
+                  </>
+                ) : (
+                  <>
+                    Manage Subscription
+                    <ExternalLink className="ml-2 h-4 w-4" />
+                  </>
+                )}
+              </Button>
             ) : (
-              <div className="space-y-4 text-sm text-muted-foreground">
-                <p>
-                  You're on the free plan. Upgrade to unlock higher
-                  limits, template-level capability grants, and priority
-                  support.
-                </p>
-                <Button
-                  className="w-full"
-                  onClick={() => setPickerOpen(true)}
-                >
-                  See plans
-                </Button>
-              </div>
+              <Button
+                className="w-full"
+                onClick={() => setPickerOpen(true)}
+              >
+                See plans
+              </Button>
             )}
+
+            <p className="text-muted-foreground text-xs leading-5">
+              {state?.hasCustomer
+                ? "Change plan, update your card, download invoices, or cancel — all inside Stripe's secure portal. Cancel deactivates your workspace after the current billing period; data is retained for 30 days."
+                : "You're on the free plan. Upgrade to unlock higher limits, template-level capability grants, and priority support."}
+            </p>
           </CardContent>
         </Card>
       </div>

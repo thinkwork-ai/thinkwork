@@ -29,6 +29,10 @@ export async function handler(
 	const preflight = handleCors(event);
 	if (preflight) return preflight;
 
+	console.log(
+		`[stripe-subscription] method=${event.requestContext.http.method} origin=${event.headers?.origin ?? "-"} hasAuth=${!!(event.headers?.authorization || event.headers?.Authorization)}`,
+	);
+
 	if (event.requestContext.http.method !== "GET") {
 		return error("Method not allowed", 405);
 	}
