@@ -26,6 +26,7 @@ const {
 } = Astro.props;
 
 const isFeatured = variant === "featured";
+const isRetainer = type === "Monthly retainer";
 ---
 
 <article
@@ -38,17 +39,25 @@ const isFeatured = variant === "featured";
   ]}
 >
   <header class="mb-5">
-    <p
+    <span
       class:list={[
-        "text-[11px] font-semibold uppercase tracking-[0.22em]",
-        isFeatured ? "text-brand" : "text-slate-500",
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]",
+        isRetainer
+          ? "border-brand/40 bg-brand/[0.12] text-brand"
+          : "border-white/15 bg-white/[0.04] text-slate-300",
       ]}
     >
+      <span
+        class:list={[
+          "h-1 w-1 rounded-full",
+          isRetainer ? "bg-brand" : "bg-slate-400",
+        ]}
+      ></span>
       {type}
-    </p>
+    </span>
     <h3
       class:list={[
-        "mt-2 font-semibold tracking-tight text-slate-50",
+        "mt-4 font-semibold tracking-tight text-slate-50",
         isFeatured ? "text-2xl" : "text-xl",
       ]}
     >

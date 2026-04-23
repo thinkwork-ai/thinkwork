@@ -434,7 +434,7 @@ export const services = {
   hero: {
     eyebrow: "Services",
     headlinePart1: "First pilot. Full rollout.",
-    headlineAccent: "One governance model.",
+    headlineAccent: "One operating model.",
     lede:
       "Strategy, launch, and recurring operations for teams adopting AI — productized services, not open-ended consulting.",
     primaryCta: {
@@ -447,9 +447,16 @@ export const services = {
     },
   },
   positioning: {
-    headline: "One contract surface for the whole adoption arc.",
+    headline: "One partner across the full adoption arc.",
     body:
       "Scoping, launch, managed operations, workflow expansion, governance, and program advisory — packaged as fixed-fee engagements and monthly retainers rather than billable hours. The shape of the engagement is named up front; the scope doesn't drift.",
+    startingPointsLabel: "Common starting points",
+    startingPoints: [
+      "Support and triage",
+      "Approvals and internal operations",
+      "Reporting and workflow automation",
+      "Connector-driven task flows",
+    ],
   },
   how: {
     eyebrow: "Engagement lifecycle",
@@ -485,9 +492,9 @@ export const services = {
   },
   packages: {
     eyebrow: "Service packages",
-    headline: "Six shapes for six situations.",
+    headline: "Fixed-fee launches. Monthly retainers.",
     lede:
-      "Fixed-fee engagements for bounded launches. Monthly retainers for ongoing work. Every package scoped up front, no open meter.",
+      "Every package scoped up front — no billable hours, no open meter, no drift from the engagement shape we agreed to.",
     secondaryHeadline: "Additional packages",
     secondaryLede:
       "Ongoing governance and program-level support for teams that have moved past the first workflow.",
@@ -624,7 +631,7 @@ export const services = {
   },
   engagementModel: {
     eyebrow: "Engagement model",
-    headline: "Fixed-scope launches. Recurring retainers.",
+    headline: "Start with a launch. Keep with a retainer.",
     body:
       "Most teams start with a Strategy Sprint or a Pilot Launch. From there, the recurring shapes take over — Managed Operations, Workflow Expansion, Governance and Evaluation, or Program Advisory. The progression is linear but not forced; one engagement does not obligate the next.",
     bullets: [
