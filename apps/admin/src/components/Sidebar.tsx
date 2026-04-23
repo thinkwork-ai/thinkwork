@@ -193,11 +193,11 @@ export function AppSidebar() {
   const agentsItems: NavItem[] = [
     { to: "/agents", icon: Bot, label: "Agents", badge: agentCount },
     { to: "/agent-templates", icon: LayoutTemplate, label: "Agent Templates" },
-    { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
     { to: "/capabilities", icon: Puzzle, label: "Capabilities" },
     { to: "/memory", icon: Brain, label: "Memories" },
     { to: "/wiki", icon: Network, label: "Wiki Pages" },
     { to: "/knowledge-bases", icon: BookOpen, label: "Knowledge Bases" },
+    { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },
     { to: "/security", icon: Shield, label: "Security Center" },
   ];
 
@@ -205,7 +205,7 @@ export function AppSidebar() {
     { to: "/analytics", icon: BarChart3, label: "Analytics" },
     { to: "/scheduled-jobs", icon: CalendarClock, label: "Automations" },
     { to: "/webhooks", icon: Webhook, label: "Webhooks" },
-    { to: "/humans", icon: Users, label: "Humans" },
+    { to: "/people", icon: Users, label: "People" },
     ...(isOwner
       ? [{ to: "/billing", icon: CreditCard, label: "Billing" } as NavItem]
       : []),

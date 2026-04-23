@@ -13,7 +13,7 @@ import { TenantMembersListQuery } from "@/lib/graphql-queries";
 import { HumanProfileSection } from "@/components/humans/HumanProfileSection";
 import { HumanMembershipSection } from "@/components/humans/HumanMembershipSection";
 
-export const Route = createFileRoute("/_authed/_tenant/humans/$humanId")({
+export const Route = createFileRoute("/_authed/_tenant/people/$humanId")({
   component: HumanDetailPage,
 });
 
@@ -35,10 +35,10 @@ function HumanDetailPage() {
     [result.data, humanId],
   );
 
-  const humanName = member?.user?.name ?? member?.user?.email ?? "Human";
+  const humanName = member?.user?.name ?? member?.user?.email ?? "Person";
 
   useBreadcrumbs([
-    { label: "Humans", href: "/humans" },
+    { label: "People", href: "/people" },
     { label: humanName },
   ]);
 
@@ -48,12 +48,12 @@ function HumanDetailPage() {
 
   if (!member || !member.user || member.principalType.toUpperCase() !== "USER") {
     return (
-      <PageLayout header={<PageHeader title="Human not found" />}>
+      <PageLayout header={<PageHeader title="Person not found" />}>
         <EmptyState
           icon={Users}
-          title="This human could not be loaded"
+          title="This person could not be loaded"
           description="They may have been removed from the tenant."
-          action={{ label: "Back to Humans", onClick: () => navigate({ to: "/humans" }) }}
+          action={{ label: "Back to People", onClick: () => navigate({ to: "/people" }) }}
         />
       </PageLayout>
     );
@@ -99,7 +99,7 @@ function HumanDetailPage() {
           callerIsOwner={callerIsOwner}
           onRemoved={() => {
             reexecute({ requestPolicy: "network-only" });
-            navigate({ to: "/humans" });
+            navigate({ to: "/people" });
           }}
         />
       </div>

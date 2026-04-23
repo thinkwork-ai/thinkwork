@@ -13,6 +13,7 @@ import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as OnboardingWelcomeRouteImport } from './routes/onboarding/welcome'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 import { Route as AuthedTenantRouteImport } from './routes/_authed/_tenant'
@@ -20,6 +21,7 @@ import { Route as AuthedTenantSettingsRouteImport } from './routes/_authed/_tena
 import { Route as AuthedTenantOrgRouteImport } from './routes/_authed/_tenant/org'
 import { Route as AuthedTenantDashboardRouteImport } from './routes/_authed/_tenant/dashboard'
 import { Route as AuthedTenantCapabilitiesRouteImport } from './routes/_authed/_tenant/capabilities'
+import { Route as AuthedTenantBillingRouteImport } from './routes/_authed/_tenant/billing'
 import { Route as AuthedTenantAnalyticsRouteImport } from './routes/_authed/_tenant/analytics'
 import { Route as AuthedTenantWikiIndexRouteImport } from './routes/_authed/_tenant/wiki/index'
 import { Route as AuthedTenantWebhooksIndexRouteImport } from './routes/_authed/_tenant/webhooks/index'
@@ -28,10 +30,10 @@ import { Route as AuthedTenantSkillRunsIndexRouteImport } from './routes/_authed
 import { Route as AuthedTenantSecurityIndexRouteImport } from './routes/_authed/_tenant/security/index'
 import { Route as AuthedTenantScheduledJobsIndexRouteImport } from './routes/_authed/_tenant/scheduled-jobs/index'
 import { Route as AuthedTenantRoutinesIndexRouteImport } from './routes/_authed/_tenant/routines/index'
+import { Route as AuthedTenantPeopleIndexRouteImport } from './routes/_authed/_tenant/people/index'
 import { Route as AuthedTenantMemoryIndexRouteImport } from './routes/_authed/_tenant/memory/index'
 import { Route as AuthedTenantKnowledgeBasesIndexRouteImport } from './routes/_authed/_tenant/knowledge-bases/index'
 import { Route as AuthedTenantInboxIndexRouteImport } from './routes/_authed/_tenant/inbox/index'
-import { Route as AuthedTenantHumansIndexRouteImport } from './routes/_authed/_tenant/humans/index'
 import { Route as AuthedTenantEvaluationsIndexRouteImport } from './routes/_authed/_tenant/evaluations/index'
 import { Route as AuthedTenantCapabilitiesIndexRouteImport } from './routes/_authed/_tenant/capabilities/index'
 import { Route as AuthedTenantArtifactsIndexRouteImport } from './routes/_authed/_tenant/artifacts/index'
@@ -43,9 +45,9 @@ import { Route as AuthedTenantThreadsThreadIdRouteImport } from './routes/_authe
 import { Route as AuthedTenantSkillRunsRunIdRouteImport } from './routes/_authed/_tenant/skill-runs/$runId'
 import { Route as AuthedTenantScheduledJobsScheduledJobIdRouteImport } from './routes/_authed/_tenant/scheduled-jobs/$scheduledJobId'
 import { Route as AuthedTenantRoutinesRoutineIdRouteImport } from './routes/_authed/_tenant/routines/$routineId'
+import { Route as AuthedTenantPeopleHumanIdRouteImport } from './routes/_authed/_tenant/people/$humanId'
 import { Route as AuthedTenantKnowledgeBasesKbIdRouteImport } from './routes/_authed/_tenant/knowledge-bases/$kbId'
 import { Route as AuthedTenantInboxInboxItemIdRouteImport } from './routes/_authed/_tenant/inbox/$inboxItemId'
-import { Route as AuthedTenantHumansHumanIdRouteImport } from './routes/_authed/_tenant/humans/$humanId'
 import { Route as AuthedTenantEvaluationsRunIdRouteImport } from './routes/_authed/_tenant/evaluations/$runId'
 import { Route as AuthedTenantCapabilitiesMcpServersRouteImport } from './routes/_authed/_tenant/capabilities/mcp-servers'
 import { Route as AuthedTenantCapabilitiesBuiltinToolsRouteImport } from './routes/_authed/_tenant/capabilities/builtin-tools'
@@ -95,6 +97,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OnboardingWelcomeRoute = OnboardingWelcomeRouteImport.update({
+  id: '/onboarding/welcome',
+  path: '/onboarding/welcome',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InviteTokenRoute = InviteTokenRouteImport.update({
   id: '/invite/$token',
   path: '/invite/$token',
@@ -130,6 +137,11 @@ const AuthedTenantCapabilitiesRoute =
     path: '/capabilities',
     getParentRoute: () => AuthedTenantRoute,
   } as any)
+const AuthedTenantBillingRoute = AuthedTenantBillingRouteImport.update({
+  id: '/billing',
+  path: '/billing',
+  getParentRoute: () => AuthedTenantRoute,
+} as any)
 const AuthedTenantAnalyticsRoute = AuthedTenantAnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
@@ -176,6 +188,11 @@ const AuthedTenantRoutinesIndexRoute =
     path: '/routines/',
     getParentRoute: () => AuthedTenantRoute,
   } as any)
+const AuthedTenantPeopleIndexRoute = AuthedTenantPeopleIndexRouteImport.update({
+  id: '/people/',
+  path: '/people/',
+  getParentRoute: () => AuthedTenantRoute,
+} as any)
 const AuthedTenantMemoryIndexRoute = AuthedTenantMemoryIndexRouteImport.update({
   id: '/memory/',
   path: '/memory/',
@@ -190,11 +207,6 @@ const AuthedTenantKnowledgeBasesIndexRoute =
 const AuthedTenantInboxIndexRoute = AuthedTenantInboxIndexRouteImport.update({
   id: '/inbox/',
   path: '/inbox/',
-  getParentRoute: () => AuthedTenantRoute,
-} as any)
-const AuthedTenantHumansIndexRoute = AuthedTenantHumansIndexRouteImport.update({
-  id: '/humans/',
-  path: '/humans/',
   getParentRoute: () => AuthedTenantRoute,
 } as any)
 const AuthedTenantEvaluationsIndexRoute =
@@ -262,6 +274,12 @@ const AuthedTenantRoutinesRoutineIdRoute =
     path: '/routines/$routineId',
     getParentRoute: () => AuthedTenantRoute,
   } as any)
+const AuthedTenantPeopleHumanIdRoute =
+  AuthedTenantPeopleHumanIdRouteImport.update({
+    id: '/people/$humanId',
+    path: '/people/$humanId',
+    getParentRoute: () => AuthedTenantRoute,
+  } as any)
 const AuthedTenantKnowledgeBasesKbIdRoute =
   AuthedTenantKnowledgeBasesKbIdRouteImport.update({
     id: '/knowledge-bases/$kbId',
@@ -272,12 +290,6 @@ const AuthedTenantInboxInboxItemIdRoute =
   AuthedTenantInboxInboxItemIdRouteImport.update({
     id: '/inbox/$inboxItemId',
     path: '/inbox/$inboxItemId',
-    getParentRoute: () => AuthedTenantRoute,
-  } as any)
-const AuthedTenantHumansHumanIdRoute =
-  AuthedTenantHumansHumanIdRouteImport.update({
-    id: '/humans/$humanId',
-    path: '/humans/$humanId',
     getParentRoute: () => AuthedTenantRoute,
   } as any)
 const AuthedTenantEvaluationsRunIdRoute =
@@ -460,7 +472,9 @@ export interface FileRoutesByFullPath {
   '/sign-in': typeof SignInRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/onboarding/welcome': typeof OnboardingWelcomeRoute
   '/analytics': typeof AuthedTenantAnalyticsRouteWithChildren
+  '/billing': typeof AuthedTenantBillingRoute
   '/capabilities': typeof AuthedTenantCapabilitiesRouteWithChildren
   '/dashboard': typeof AuthedTenantDashboardRoute
   '/org': typeof AuthedTenantOrgRoute
@@ -476,9 +490,9 @@ export interface FileRoutesByFullPath {
   '/capabilities/builtin-tools': typeof AuthedTenantCapabilitiesBuiltinToolsRoute
   '/capabilities/mcp-servers': typeof AuthedTenantCapabilitiesMcpServersRoute
   '/evaluations/$runId': typeof AuthedTenantEvaluationsRunIdRoute
-  '/humans/$humanId': typeof AuthedTenantHumansHumanIdRoute
   '/inbox/$inboxItemId': typeof AuthedTenantInboxInboxItemIdRoute
   '/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeBasesKbIdRoute
+  '/people/$humanId': typeof AuthedTenantPeopleHumanIdRoute
   '/routines/$routineId': typeof AuthedTenantRoutinesRoutineIdRoute
   '/scheduled-jobs/$scheduledJobId': typeof AuthedTenantScheduledJobsScheduledJobIdRoute
   '/skill-runs/$runId': typeof AuthedTenantSkillRunsRunIdRoute
@@ -490,10 +504,10 @@ export interface FileRoutesByFullPath {
   '/artifacts/': typeof AuthedTenantArtifactsIndexRoute
   '/capabilities/': typeof AuthedTenantCapabilitiesIndexRoute
   '/evaluations/': typeof AuthedTenantEvaluationsIndexRoute
-  '/humans/': typeof AuthedTenantHumansIndexRoute
   '/inbox/': typeof AuthedTenantInboxIndexRoute
   '/knowledge-bases/': typeof AuthedTenantKnowledgeBasesIndexRoute
   '/memory/': typeof AuthedTenantMemoryIndexRoute
+  '/people/': typeof AuthedTenantPeopleIndexRoute
   '/routines/': typeof AuthedTenantRoutinesIndexRoute
   '/scheduled-jobs/': typeof AuthedTenantScheduledJobsIndexRoute
   '/security/': typeof AuthedTenantSecurityIndexRoute
@@ -526,6 +540,8 @@ export interface FileRoutesByTo {
   '/sign-in': typeof SignInRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/onboarding/welcome': typeof OnboardingWelcomeRoute
+  '/billing': typeof AuthedTenantBillingRoute
   '/dashboard': typeof AuthedTenantDashboardRoute
   '/org': typeof AuthedTenantOrgRoute
   '/settings': typeof AuthedTenantSettingsRoute
@@ -540,9 +556,9 @@ export interface FileRoutesByTo {
   '/capabilities/builtin-tools': typeof AuthedTenantCapabilitiesBuiltinToolsRoute
   '/capabilities/mcp-servers': typeof AuthedTenantCapabilitiesMcpServersRoute
   '/evaluations/$runId': typeof AuthedTenantEvaluationsRunIdRoute
-  '/humans/$humanId': typeof AuthedTenantHumansHumanIdRoute
   '/inbox/$inboxItemId': typeof AuthedTenantInboxInboxItemIdRoute
   '/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeBasesKbIdRoute
+  '/people/$humanId': typeof AuthedTenantPeopleHumanIdRoute
   '/routines/$routineId': typeof AuthedTenantRoutinesRoutineIdRoute
   '/scheduled-jobs/$scheduledJobId': typeof AuthedTenantScheduledJobsScheduledJobIdRoute
   '/skill-runs/$runId': typeof AuthedTenantSkillRunsRunIdRoute
@@ -554,10 +570,10 @@ export interface FileRoutesByTo {
   '/artifacts': typeof AuthedTenantArtifactsIndexRoute
   '/capabilities': typeof AuthedTenantCapabilitiesIndexRoute
   '/evaluations': typeof AuthedTenantEvaluationsIndexRoute
-  '/humans': typeof AuthedTenantHumansIndexRoute
   '/inbox': typeof AuthedTenantInboxIndexRoute
   '/knowledge-bases': typeof AuthedTenantKnowledgeBasesIndexRoute
   '/memory': typeof AuthedTenantMemoryIndexRoute
+  '/people': typeof AuthedTenantPeopleIndexRoute
   '/routines': typeof AuthedTenantRoutinesIndexRoute
   '/scheduled-jobs': typeof AuthedTenantScheduledJobsIndexRoute
   '/security': typeof AuthedTenantSecurityIndexRoute
@@ -593,7 +609,9 @@ export interface FileRoutesById {
   '/_authed/_tenant': typeof AuthedTenantRouteWithChildren
   '/auth/callback': typeof AuthCallbackRoute
   '/invite/$token': typeof InviteTokenRoute
+  '/onboarding/welcome': typeof OnboardingWelcomeRoute
   '/_authed/_tenant/analytics': typeof AuthedTenantAnalyticsRouteWithChildren
+  '/_authed/_tenant/billing': typeof AuthedTenantBillingRoute
   '/_authed/_tenant/capabilities': typeof AuthedTenantCapabilitiesRouteWithChildren
   '/_authed/_tenant/dashboard': typeof AuthedTenantDashboardRoute
   '/_authed/_tenant/org': typeof AuthedTenantOrgRoute
@@ -609,9 +627,9 @@ export interface FileRoutesById {
   '/_authed/_tenant/capabilities/builtin-tools': typeof AuthedTenantCapabilitiesBuiltinToolsRoute
   '/_authed/_tenant/capabilities/mcp-servers': typeof AuthedTenantCapabilitiesMcpServersRoute
   '/_authed/_tenant/evaluations/$runId': typeof AuthedTenantEvaluationsRunIdRoute
-  '/_authed/_tenant/humans/$humanId': typeof AuthedTenantHumansHumanIdRoute
   '/_authed/_tenant/inbox/$inboxItemId': typeof AuthedTenantInboxInboxItemIdRoute
   '/_authed/_tenant/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeBasesKbIdRoute
+  '/_authed/_tenant/people/$humanId': typeof AuthedTenantPeopleHumanIdRoute
   '/_authed/_tenant/routines/$routineId': typeof AuthedTenantRoutinesRoutineIdRoute
   '/_authed/_tenant/scheduled-jobs/$scheduledJobId': typeof AuthedTenantScheduledJobsScheduledJobIdRoute
   '/_authed/_tenant/skill-runs/$runId': typeof AuthedTenantSkillRunsRunIdRoute
@@ -623,10 +641,10 @@ export interface FileRoutesById {
   '/_authed/_tenant/artifacts/': typeof AuthedTenantArtifactsIndexRoute
   '/_authed/_tenant/capabilities/': typeof AuthedTenantCapabilitiesIndexRoute
   '/_authed/_tenant/evaluations/': typeof AuthedTenantEvaluationsIndexRoute
-  '/_authed/_tenant/humans/': typeof AuthedTenantHumansIndexRoute
   '/_authed/_tenant/inbox/': typeof AuthedTenantInboxIndexRoute
   '/_authed/_tenant/knowledge-bases/': typeof AuthedTenantKnowledgeBasesIndexRoute
   '/_authed/_tenant/memory/': typeof AuthedTenantMemoryIndexRoute
+  '/_authed/_tenant/people/': typeof AuthedTenantPeopleIndexRoute
   '/_authed/_tenant/routines/': typeof AuthedTenantRoutinesIndexRoute
   '/_authed/_tenant/scheduled-jobs/': typeof AuthedTenantScheduledJobsIndexRoute
   '/_authed/_tenant/security/': typeof AuthedTenantSecurityIndexRoute
@@ -661,7 +679,9 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/auth/callback'
     | '/invite/$token'
+    | '/onboarding/welcome'
     | '/analytics'
+    | '/billing'
     | '/capabilities'
     | '/dashboard'
     | '/org'
@@ -677,9 +697,9 @@ export interface FileRouteTypes {
     | '/capabilities/builtin-tools'
     | '/capabilities/mcp-servers'
     | '/evaluations/$runId'
-    | '/humans/$humanId'
     | '/inbox/$inboxItemId'
     | '/knowledge-bases/$kbId'
+    | '/people/$humanId'
     | '/routines/$routineId'
     | '/scheduled-jobs/$scheduledJobId'
     | '/skill-runs/$runId'
@@ -691,10 +711,10 @@ export interface FileRouteTypes {
     | '/artifacts/'
     | '/capabilities/'
     | '/evaluations/'
-    | '/humans/'
     | '/inbox/'
     | '/knowledge-bases/'
     | '/memory/'
+    | '/people/'
     | '/routines/'
     | '/scheduled-jobs/'
     | '/security/'
@@ -727,6 +747,8 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/auth/callback'
     | '/invite/$token'
+    | '/onboarding/welcome'
+    | '/billing'
     | '/dashboard'
     | '/org'
     | '/settings'
@@ -741,9 +763,9 @@ export interface FileRouteTypes {
     | '/capabilities/builtin-tools'
     | '/capabilities/mcp-servers'
     | '/evaluations/$runId'
-    | '/humans/$humanId'
     | '/inbox/$inboxItemId'
     | '/knowledge-bases/$kbId'
+    | '/people/$humanId'
     | '/routines/$routineId'
     | '/scheduled-jobs/$scheduledJobId'
     | '/skill-runs/$runId'
@@ -755,10 +777,10 @@ export interface FileRouteTypes {
     | '/artifacts'
     | '/capabilities'
     | '/evaluations'
-    | '/humans'
     | '/inbox'
     | '/knowledge-bases'
     | '/memory'
+    | '/people'
     | '/routines'
     | '/scheduled-jobs'
     | '/security'
@@ -793,7 +815,9 @@ export interface FileRouteTypes {
     | '/_authed/_tenant'
     | '/auth/callback'
     | '/invite/$token'
+    | '/onboarding/welcome'
     | '/_authed/_tenant/analytics'
+    | '/_authed/_tenant/billing'
     | '/_authed/_tenant/capabilities'
     | '/_authed/_tenant/dashboard'
     | '/_authed/_tenant/org'
@@ -809,9 +833,9 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/capabilities/builtin-tools'
     | '/_authed/_tenant/capabilities/mcp-servers'
     | '/_authed/_tenant/evaluations/$runId'
-    | '/_authed/_tenant/humans/$humanId'
     | '/_authed/_tenant/inbox/$inboxItemId'
     | '/_authed/_tenant/knowledge-bases/$kbId'
+    | '/_authed/_tenant/people/$humanId'
     | '/_authed/_tenant/routines/$routineId'
     | '/_authed/_tenant/scheduled-jobs/$scheduledJobId'
     | '/_authed/_tenant/skill-runs/$runId'
@@ -823,10 +847,10 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/artifacts/'
     | '/_authed/_tenant/capabilities/'
     | '/_authed/_tenant/evaluations/'
-    | '/_authed/_tenant/humans/'
     | '/_authed/_tenant/inbox/'
     | '/_authed/_tenant/knowledge-bases/'
     | '/_authed/_tenant/memory/'
+    | '/_authed/_tenant/people/'
     | '/_authed/_tenant/routines/'
     | '/_authed/_tenant/scheduled-jobs/'
     | '/_authed/_tenant/security/'
@@ -861,6 +885,7 @@ export interface RootRouteChildren {
   SignInRoute: typeof SignInRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   InviteTokenRoute: typeof InviteTokenRoute
+  OnboardingWelcomeRoute: typeof OnboardingWelcomeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -891,6 +916,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding/welcome': {
+      id: '/onboarding/welcome'
+      path: '/onboarding/welcome'
+      fullPath: '/onboarding/welcome'
+      preLoaderRoute: typeof OnboardingWelcomeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/invite/$token': {
@@ -940,6 +972,13 @@ declare module '@tanstack/react-router' {
       path: '/capabilities'
       fullPath: '/capabilities'
       preLoaderRoute: typeof AuthedTenantCapabilitiesRouteImport
+      parentRoute: typeof AuthedTenantRoute
+    }
+    '/_authed/_tenant/billing': {
+      id: '/_authed/_tenant/billing'
+      path: '/billing'
+      fullPath: '/billing'
+      preLoaderRoute: typeof AuthedTenantBillingRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
     '/_authed/_tenant/analytics': {
@@ -998,6 +1037,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedTenantRoutinesIndexRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
+    '/_authed/_tenant/people/': {
+      id: '/_authed/_tenant/people/'
+      path: '/people'
+      fullPath: '/people/'
+      preLoaderRoute: typeof AuthedTenantPeopleIndexRouteImport
+      parentRoute: typeof AuthedTenantRoute
+    }
     '/_authed/_tenant/memory/': {
       id: '/_authed/_tenant/memory/'
       path: '/memory'
@@ -1017,13 +1063,6 @@ declare module '@tanstack/react-router' {
       path: '/inbox'
       fullPath: '/inbox/'
       preLoaderRoute: typeof AuthedTenantInboxIndexRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/humans/': {
-      id: '/_authed/_tenant/humans/'
-      path: '/humans'
-      fullPath: '/humans/'
-      preLoaderRoute: typeof AuthedTenantHumansIndexRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
     '/_authed/_tenant/evaluations/': {
@@ -1103,6 +1142,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedTenantRoutinesRoutineIdRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
+    '/_authed/_tenant/people/$humanId': {
+      id: '/_authed/_tenant/people/$humanId'
+      path: '/people/$humanId'
+      fullPath: '/people/$humanId'
+      preLoaderRoute: typeof AuthedTenantPeopleHumanIdRouteImport
+      parentRoute: typeof AuthedTenantRoute
+    }
     '/_authed/_tenant/knowledge-bases/$kbId': {
       id: '/_authed/_tenant/knowledge-bases/$kbId'
       path: '/knowledge-bases/$kbId'
@@ -1115,13 +1161,6 @@ declare module '@tanstack/react-router' {
       path: '/inbox/$inboxItemId'
       fullPath: '/inbox/$inboxItemId'
       preLoaderRoute: typeof AuthedTenantInboxInboxItemIdRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
-    '/_authed/_tenant/humans/$humanId': {
-      id: '/_authed/_tenant/humans/$humanId'
-      path: '/humans/$humanId'
-      fullPath: '/humans/$humanId'
-      preLoaderRoute: typeof AuthedTenantHumansHumanIdRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
     '/_authed/_tenant/evaluations/$runId': {
@@ -1386,6 +1425,7 @@ const AuthedTenantCapabilitiesRouteWithChildren =
 
 interface AuthedTenantRouteChildren {
   AuthedTenantAnalyticsRoute: typeof AuthedTenantAnalyticsRouteWithChildren
+  AuthedTenantBillingRoute: typeof AuthedTenantBillingRoute
   AuthedTenantCapabilitiesRoute: typeof AuthedTenantCapabilitiesRouteWithChildren
   AuthedTenantDashboardRoute: typeof AuthedTenantDashboardRoute
   AuthedTenantOrgRoute: typeof AuthedTenantOrgRoute
@@ -1396,9 +1436,9 @@ interface AuthedTenantRouteChildren {
   AuthedTenantAgentsInvitesRoute: typeof AuthedTenantAgentsInvitesRoute
   AuthedTenantAgentsNewRoute: typeof AuthedTenantAgentsNewRoute
   AuthedTenantEvaluationsRunIdRoute: typeof AuthedTenantEvaluationsRunIdRoute
-  AuthedTenantHumansHumanIdRoute: typeof AuthedTenantHumansHumanIdRoute
   AuthedTenantInboxInboxItemIdRoute: typeof AuthedTenantInboxInboxItemIdRoute
   AuthedTenantKnowledgeBasesKbIdRoute: typeof AuthedTenantKnowledgeBasesKbIdRoute
+  AuthedTenantPeopleHumanIdRoute: typeof AuthedTenantPeopleHumanIdRoute
   AuthedTenantRoutinesRoutineIdRoute: typeof AuthedTenantRoutinesRoutineIdRoute
   AuthedTenantScheduledJobsScheduledJobIdRoute: typeof AuthedTenantScheduledJobsScheduledJobIdRoute
   AuthedTenantSkillRunsRunIdRoute: typeof AuthedTenantSkillRunsRunIdRoute
@@ -1408,10 +1448,10 @@ interface AuthedTenantRouteChildren {
   AuthedTenantAgentsIndexRoute: typeof AuthedTenantAgentsIndexRoute
   AuthedTenantArtifactsIndexRoute: typeof AuthedTenantArtifactsIndexRoute
   AuthedTenantEvaluationsIndexRoute: typeof AuthedTenantEvaluationsIndexRoute
-  AuthedTenantHumansIndexRoute: typeof AuthedTenantHumansIndexRoute
   AuthedTenantInboxIndexRoute: typeof AuthedTenantInboxIndexRoute
   AuthedTenantKnowledgeBasesIndexRoute: typeof AuthedTenantKnowledgeBasesIndexRoute
   AuthedTenantMemoryIndexRoute: typeof AuthedTenantMemoryIndexRoute
+  AuthedTenantPeopleIndexRoute: typeof AuthedTenantPeopleIndexRoute
   AuthedTenantRoutinesIndexRoute: typeof AuthedTenantRoutinesIndexRoute
   AuthedTenantScheduledJobsIndexRoute: typeof AuthedTenantScheduledJobsIndexRoute
   AuthedTenantSecurityIndexRoute: typeof AuthedTenantSecurityIndexRoute
@@ -1436,6 +1476,7 @@ interface AuthedTenantRouteChildren {
 
 const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantAnalyticsRoute: AuthedTenantAnalyticsRouteWithChildren,
+  AuthedTenantBillingRoute: AuthedTenantBillingRoute,
   AuthedTenantCapabilitiesRoute: AuthedTenantCapabilitiesRouteWithChildren,
   AuthedTenantDashboardRoute: AuthedTenantDashboardRoute,
   AuthedTenantOrgRoute: AuthedTenantOrgRoute,
@@ -1448,9 +1489,9 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantAgentsInvitesRoute: AuthedTenantAgentsInvitesRoute,
   AuthedTenantAgentsNewRoute: AuthedTenantAgentsNewRoute,
   AuthedTenantEvaluationsRunIdRoute: AuthedTenantEvaluationsRunIdRoute,
-  AuthedTenantHumansHumanIdRoute: AuthedTenantHumansHumanIdRoute,
   AuthedTenantInboxInboxItemIdRoute: AuthedTenantInboxInboxItemIdRoute,
   AuthedTenantKnowledgeBasesKbIdRoute: AuthedTenantKnowledgeBasesKbIdRoute,
+  AuthedTenantPeopleHumanIdRoute: AuthedTenantPeopleHumanIdRoute,
   AuthedTenantRoutinesRoutineIdRoute: AuthedTenantRoutinesRoutineIdRoute,
   AuthedTenantScheduledJobsScheduledJobIdRoute:
     AuthedTenantScheduledJobsScheduledJobIdRoute,
@@ -1461,10 +1502,10 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantAgentsIndexRoute: AuthedTenantAgentsIndexRoute,
   AuthedTenantArtifactsIndexRoute: AuthedTenantArtifactsIndexRoute,
   AuthedTenantEvaluationsIndexRoute: AuthedTenantEvaluationsIndexRoute,
-  AuthedTenantHumansIndexRoute: AuthedTenantHumansIndexRoute,
   AuthedTenantInboxIndexRoute: AuthedTenantInboxIndexRoute,
   AuthedTenantKnowledgeBasesIndexRoute: AuthedTenantKnowledgeBasesIndexRoute,
   AuthedTenantMemoryIndexRoute: AuthedTenantMemoryIndexRoute,
+  AuthedTenantPeopleIndexRoute: AuthedTenantPeopleIndexRoute,
   AuthedTenantRoutinesIndexRoute: AuthedTenantRoutinesIndexRoute,
   AuthedTenantScheduledJobsIndexRoute: AuthedTenantScheduledJobsIndexRoute,
   AuthedTenantSecurityIndexRoute: AuthedTenantSecurityIndexRoute,
@@ -1519,6 +1560,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignInRoute: SignInRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   InviteTokenRoute: InviteTokenRoute,
+  OnboardingWelcomeRoute: OnboardingWelcomeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
