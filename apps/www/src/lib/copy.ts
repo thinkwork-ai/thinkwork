@@ -521,9 +521,9 @@ export const services = {
       },
       {
         n: "04",
-        title: "Operate monthly",
+        title: "Run and improve",
         body:
-          "Ongoing platform support, optimization, and governance review. Recurring cadence, recurring value. No quarterly restart.",
+          "Ongoing platform support, optimization, and governance review. A steady operating cadence — no quarterly restarts, no re-onboarding.",
       },
     ],
   },
@@ -545,8 +545,7 @@ export const services = {
         body:
           "A focused strategy engagement that ends with a chosen starting point, a governance model, and a 30/60/90 rollout plan.",
         includes: [
-          "Use case selection",
-          "Workflow prioritization",
+          "Use case and workflow selection",
           "Governance and controls model",
           "Pilot success metrics",
           "30/60/90 rollout plan",
@@ -565,10 +564,9 @@ export const services = {
         body:
           "Environment setup, first workflow, templates, connectors, and evaluations — shipped on Cloud or self-hosted.",
         includes: [
-          "Environment setup, Cloud or self-hosted",
+          "Environment setup (Cloud or self-hosted)",
           "First assistant or workflow",
-          "Templates and control configuration",
-          "Connector setup",
+          "Templates, controls, and connectors",
           "Launch and handoff",
         ],
         outcome:
@@ -585,11 +583,9 @@ export const services = {
         body:
           "Recurring support that keeps the platform healthy and governed — without building an in-house platform team on day one.",
         includes: [
-          "Environment health checks",
-          "Admin and configuration support",
-          "Upgrade and release support",
-          "Issue triage",
-          "Monthly operations review",
+          "Environment health and issue triage",
+          "Admin, configuration, and upgrade support",
+          "Operations review on a regular cadence",
         ],
         outcome:
           "A production deployment that stays current, audited, and operational — without a dedicated in-house platform team.",
@@ -605,11 +601,9 @@ export const services = {
         body:
           "Recurring delivery of new assistants, workflows, connectors, and templates as the organization earns trust in earlier ones.",
         includes: [
-          "New workflows each month",
-          "Connector rollout",
-          "Template and agent updates",
-          "Backlog prioritization",
-          "Cross-team rollout support",
+          "New workflows on a regular cadence",
+          "Connector rollout and template updates",
+          "Backlog prioritization and cross-team rollout",
         ],
         outcome:
           "A steady cadence of new governed workflows shipping on top of your existing deployment.",
@@ -625,11 +619,9 @@ export const services = {
         body:
           "Evaluation tuning, guardrail updates, incident review, and audit support — so quality and safety scale with adoption.",
         includes: [
-          "Evaluation tuning",
-          "Guardrail updates",
-          "Incident review",
-          "Audit support",
-          "Policy refinement",
+          "Evaluation tuning and guardrail updates",
+          "Incident review and audit support",
+          "Policy refinement as usage grows",
         ],
         outcome:
           "Controls that keep pace with usage growth, with incident and audit coverage maintained.",
@@ -645,11 +637,9 @@ export const services = {
         body:
           "Advisory support for adoption sequencing, KPI review, cross-team planning, and executive alignment — above any single pilot.",
         includes: [
-          "Adoption roadmap reviews",
+          "Adoption roadmap and rollout prioritization",
           "KPI and outcome review",
-          "Rollout prioritization",
-          "Cross-team planning",
-          "Leadership check-ins",
+          "Cross-team planning and leadership check-ins",
         ],
         outcome:
           "A program-level view of adoption — sequencing, KPIs, and cross-team alignment kept visible to leadership.",
