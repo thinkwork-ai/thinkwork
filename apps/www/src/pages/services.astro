@@ -108,7 +108,6 @@ const secondaryItems = services.packages.items.filter(
         eyebrow={services.packages.eyebrow}
         headline={services.packages.headline}
         lede={services.packages.lede}
-        align="center"
         width="wide"
       />
       <div class="mt-14 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
@@ -129,7 +128,7 @@ const secondaryItems = services.packages.items.filter(
 
     {/* 5. Additional packages (secondary) */}
     <SectionShell tone="default">
-      <div class="mx-auto max-w-3xl text-center">
+      <div class="max-w-3xl">
         <h2 class="text-balance text-2xl font-semibold tracking-tight text-slate-100 md:text-3xl">
           {services.packages.secondaryHeadline}
         </h2>
@@ -137,7 +136,7 @@ const secondaryItems = services.packages.items.filter(
           {services.packages.secondaryLede}
         </p>
       </div>
-      <div class="mx-auto mt-12 grid max-w-5xl gap-5 md:grid-cols-2">
+      <div class="mt-12 grid gap-5 md:grid-cols-2">
         {secondaryItems.map((pkg) => (
           <ServiceCard
             id={pkg.id}
