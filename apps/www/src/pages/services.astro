@@ -167,51 +167,7 @@ const secondaryItems = services.packages.items.filter(
       </div>
     </SectionShell>
 
-    {/* 6. Specialized support */}
-    <SectionShell tone="raised">
-      <SectionHeader
-        eyebrow={services.specializedSupport.eyebrow}
-        headline={services.specializedSupport.headline}
-        align="center"
-        width="wide"
-      />
-      <ul class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {services.specializedSupport.tiles.map((tile) => (
-          <li class="flex h-full flex-col rounded-2xl border border-white/8 bg-white/[0.015] p-5">
-            <h3 class="text-sm font-semibold tracking-tight text-slate-100">
-              {tile.title}
-            </h3>
-            <p class="mt-3 text-[13px] leading-relaxed text-slate-400">
-              {tile.body}
-            </p>
-          </li>
-        ))}
-      </ul>
-    </SectionShell>
-
-    {/* 7. Engagement model */}
-    <SectionShell tone="default">
-      <SectionHeader
-        eyebrow={services.engagementModel.eyebrow}
-        headline={services.engagementModel.headline}
-        lede={services.engagementModel.body}
-        align="center"
-        width="wide"
-      />
-      <ul class="mx-auto mt-10 flex max-w-2xl flex-col items-center gap-3">
-        {services.engagementModel.bullets.map((bullet) => (
-          <li class="flex items-center gap-3 text-sm text-slate-300">
-            <svg
-              class="h-1.5 w-1.5 flex-none rounded-full bg-brand"
-              aria-hidden="true"
-            ></svg>
-            <span>{bullet}</span>
-          </li>
-        ))}
-      </ul>
-    </SectionShell>
-
-    {/* 8. FAQ */}
+    {/* 6. FAQ */}
     <SectionShell tone="raised">
       <SectionHeader
         eyebrow={services.faq.eyebrow}

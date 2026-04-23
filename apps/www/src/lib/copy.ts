@@ -603,43 +603,6 @@ export const services = {
       },
     ] satisfies ServicePackage[],
   },
-  specializedSupport: {
-    eyebrow: "Specialized support",
-    headline: "Add-ons for deeper implementation work.",
-    tiles: [
-      {
-        title: "Knowledge and memory operations",
-        body:
-          "Knowledge base setup, retrieval tuning, memory refinement, and wiki/context structure.",
-      },
-      {
-        title: "Connector and workflow implementation",
-        body:
-          "Slack, email, GitHub, Google Workspace, and other workflow and system integrations.",
-      },
-      {
-        title: "Training and enablement",
-        body:
-          "Admin training, operator onboarding, team workshops, and rollout playbooks.",
-      },
-      {
-        title: "Cost and performance optimization",
-        body:
-          "Spend review, model routing, template tuning, and monthly optimization recommendations.",
-      },
-    ],
-  },
-  engagementModel: {
-    eyebrow: "Engagement model",
-    headline: "Start with a launch. Keep with a retainer.",
-    body:
-      "Most teams start with a Strategy Sprint or a Pilot Launch. From there, the recurring shapes take over — Managed Operations, Workflow Expansion, Governance and Evaluation, or Program Advisory. The progression is linear but not forced; one engagement does not obligate the next.",
-    bullets: [
-      "Start with a bounded launch.",
-      "Move to a monthly retainer when the first workflow is live.",
-      "Add retainers as adoption expands.",
-    ],
-  },
   faq: {
     eyebrow: "FAQ",
     headline: "Common questions.",
