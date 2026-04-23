@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation } from "urql";
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
@@ -53,7 +53,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { ModelSelect } from "@/components/agents/ModelSelect";
 import {
@@ -81,8 +81,16 @@ import {
 } from "@/lib/mcp-api";
 import { TemplateSyncDialog } from "./-components/TemplateSyncDialog";
 
+const VALID_TABS = [
+  "configuration",
+  "workspace",
+  "skills",
+  "mcp-servers",
+] as const;
+type TabSlug = (typeof VALID_TABS)[number];
+
 export const Route = createFileRoute(
-  "/_authed/_tenant/agent-templates/$templateId",
+  "/_authed/_tenant/agent-templates/$templateId/$tab",
 )({
   component: TemplateEditorPage,
 });
@@ -234,8 +242,11 @@ function TemplateEditorPage() {
   const tenantId = tenant?.id;
   const tenantSlug = tenant?.slug;
   const navigate = useNavigate();
-  const { templateId } = Route.useParams();
+  const { templateId, tab: tabParam } = Route.useParams();
   const isNew = templateId === "new";
+  const tab: TabSlug = (VALID_TABS as readonly string[]).includes(tabParam)
+    ? (tabParam as TabSlug)
+    : "configuration";
 
   useBreadcrumbs([
     { label: "Agent Templates", href: "/agent-templates" },
@@ -252,7 +263,6 @@ function TemplateEditorPage() {
   const [blockedTools, setBlockedTools] = useState<string[]>([]);
   const [guardrailId, setGuardrailId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState("config");
 
   // State -- skills
   const [templateSkills, setTemplateSkills] = useState<TemplateSkill[]>([]);
@@ -426,10 +436,10 @@ function TemplateEditorPage() {
   }, [templateId, isNew]);
 
   useEffect(() => {
-    if (activeTab === "workspace" && !isNew) {
+    if (tab === "workspace" && !isNew) {
       loadWorkspaceFiles();
     }
-  }, [activeTab, loadWorkspaceFiles, isNew]);
+  }, [tab, loadWorkspaceFiles, isNew]);
 
   const loadFileContent = async (path: string) => {
     if (!templateId) return;
@@ -614,8 +624,11 @@ function TemplateEditorPage() {
         });
         if (res.data?.createAgentTemplate?.id) {
           navigate({
-            to: "/agent-templates/$templateId",
-            params: { templateId: res.data.createAgentTemplate.id },
+            to: "/agent-templates/$templateId/$tab",
+            params: {
+              templateId: res.data.createAgentTemplate.id,
+              tab: "configuration",
+            },
             replace: true,
           });
         }
@@ -675,12 +688,60 @@ function TemplateEditorPage() {
               <p className="text-xs text-muted-foreground">{slug}</p>
             )}
           </div>
-          <ToggleGroup type="single" value={activeTab} onValueChange={(v) => v && setActiveTab(v)} variant="outline">
-            <ToggleGroupItem value="config" className="px-4">Configuration</ToggleGroupItem>
-            <ToggleGroupItem value="workspace" className="px-4" disabled={isNew}>Workspace</ToggleGroupItem>
-            <ToggleGroupItem value="skills" className="px-4" disabled={isNew}>Skills</ToggleGroupItem>
-            <ToggleGroupItem value="mcp" className="px-4" disabled={isNew}>MCP Servers</ToggleGroupItem>
-          </ToggleGroup>
+          <Tabs value={tab}>
+            <TabsList>
+              <TabsTrigger value="configuration" asChild className="px-4">
+                <Link
+                  to="/agent-templates/$templateId/$tab"
+                  params={{ templateId, tab: "configuration" }}
+                >
+                  Configuration
+                </Link>
+              </TabsTrigger>
+              <TabsTrigger
+                value="workspace"
+                asChild
+                className="px-4"
+                disabled={isNew}
+              >
+                <Link
+                  to="/agent-templates/$templateId/$tab"
+                  params={{ templateId, tab: "workspace" }}
+                  disabled={isNew}
+                >
+                  Workspace
+                </Link>
+              </TabsTrigger>
+              <TabsTrigger
+                value="skills"
+                asChild
+                className="px-4"
+                disabled={isNew}
+              >
+                <Link
+                  to="/agent-templates/$templateId/$tab"
+                  params={{ templateId, tab: "skills" }}
+                  disabled={isNew}
+                >
+                  Skills
+                </Link>
+              </TabsTrigger>
+              <TabsTrigger
+                value="mcp-servers"
+                asChild
+                className="px-4"
+                disabled={isNew}
+              >
+                <Link
+                  to="/agent-templates/$templateId/$tab"
+                  params={{ templateId, tab: "mcp-servers" }}
+                  disabled={isNew}
+                >
+                  MCP Servers
+                </Link>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
           <div className="flex items-center gap-2">
             <Button onClick={handleSave} disabled={saving || !name || !slug || !model}>
               {saving ? (
@@ -706,7 +767,7 @@ function TemplateEditorPage() {
     >
       <div className="w-full">
         {/* Configuration Tab */}
-        {activeTab === "config" && (
+        {tab === "configuration" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
@@ -822,7 +883,7 @@ function TemplateEditorPage() {
         )}
 
         {/* Skills Tab */}
-        {activeTab === "skills" && (
+        {tab === "skills" && (
           <DataTable
             columns={[
               {
@@ -903,8 +964,8 @@ function TemplateEditorPage() {
           />
         )}
 
-        {/* Permissions editor dialog (Unit 8) — rendered outside the
-            activeTab conditional so state persists across tab switches. */}
+        {/* Permissions editor dialog (Unit 8) — rendered unconditionally
+            so state persists across tab changes. */}
         <TemplatePermissionsDialog
           slug={permissionsDialogSlug}
           meta={
@@ -927,7 +988,7 @@ function TemplateEditorPage() {
         />
 
         {/* MCP Servers Tab */}
-        {activeTab === "mcp" && (
+        {tab === "mcp-servers" && (
           <DataTable
             columns={[
               {
@@ -981,7 +1042,7 @@ function TemplateEditorPage() {
         )}
 
         {/* Workspace Tab */}
-        {activeTab === "workspace" && !isNew && (() => {
+        {tab === "workspace" && !isNew && (() => {
           const wsTree = buildTree(wsFiles);
           const wsIsDirty = wsContent !== wsOriginalContent;
           return (
