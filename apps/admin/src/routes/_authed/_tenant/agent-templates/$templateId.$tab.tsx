@@ -31,7 +31,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -102,16 +101,6 @@ const CATEGORIES = [
   { value: "personal", label: "Personal" },
   { value: "operations", label: "Operations" },
   { value: "custom", label: "Custom" },
-];
-
-const AVAILABLE_TOOLS = [
-  { id: "artifacts", label: "Artifacts" },
-  { id: "agent-thread-management", label: "Thread Management" },
-  { id: "agent-email-send", label: "Email Send" },
-  { id: "web-search", label: "Web Search" },
-  { id: "workspace-memory", label: "Workspace Memory" },
-  { id: "lastmile-tasks", label: "LastMile Tasks" },
-  { id: "lastmile-p21", label: "LastMile P21" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -611,14 +600,6 @@ function TemplateEditorPage() {
     }
   };
 
-  const toggleBlockedTool = (toolId: string) => {
-    setBlockedTools((prev) =>
-      prev.includes(toolId)
-        ? prev.filter((t) => t !== toolId)
-        : [...prev, toolId],
-    );
-  };
-
   // Save handler -- includes skills in the update
   const handleSave = async () => {
     if (!tenantId || !name || !slug) return;
@@ -803,7 +784,7 @@ function TemplateEditorPage() {
       <div className="w-full">
         {/* Configuration Tab */}
         {tab === "configuration" && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="max-w-[750px] space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm">Basic Information</CardTitle>
@@ -817,6 +798,10 @@ function TemplateEditorPage() {
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Customer Support Agent"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label>Model</Label>
+                  <ModelSelect value={model} onValueChange={setModel} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="slug">Slug</Label>
@@ -868,60 +853,11 @@ function TemplateEditorPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">Template Configuration</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Model</Label>
-                  <ModelSelect value={model} onValueChange={setModel} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Blocked Tools</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Checked tools will be blocked for agents using this template.
-                  </p>
-                  <div className="space-y-2 pt-1">
-                    {AVAILABLE_TOOLS.map((tool) => (
-                      <div key={tool.id} className="flex items-center gap-2">
-                        <Checkbox
-                          id={`blocked-${tool.id}`}
-                          checked={blockedTools.includes(tool.id)}
-                          onCheckedChange={() => toggleBlockedTool(tool.id)}
-                        />
-                        <Label
-                          htmlFor={`blocked-${tool.id}`}
-                          className="text-sm font-normal cursor-pointer"
-                        >
-                          {tool.label}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="guardrailId">Guardrail</Label>
-                  <Input
-                    id="guardrailId"
-                    value={guardrailId || ""}
-                    onChange={(e) =>
-                      setGuardrailId(e.target.value || null)
-                    }
-                    placeholder="Guardrail ID (Phase 4)"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Guardrail dropdown coming in Phase 4.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="lg:col-span-2">
-              <CardHeader>
                 <CardTitle className="text-sm">Code Sandbox</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1">
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-4">
+                  <div className="flex-1 space-y-1">
                     <Label htmlFor="sandbox-enabled" className="font-normal">
                       Enable <code>execute_code</code> for agents in this template
                     </Label>
@@ -929,37 +865,33 @@ function TemplateEditorPage() {
                       Opts this template into the AgentCore Code Interpreter sandbox. The tool only registers on a turn if the tenant also has <code>sandbox_enabled</code> set.
                     </p>
                   </div>
+                  {sandboxEnabled && (
+                    <div className="w-60 space-y-1">
+                      <Label className="text-xs">Network mode</Label>
+                      <Select
+                        value={sandboxEnv}
+                        onValueChange={(v) => setSandboxEnv(v as SandboxEnv)}
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="default-public">
+                            default-public (egress)
+                          </SelectItem>
+                          <SelectItem value="internal-only">
+                            internal-only (compute)
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <Switch
                     id="sandbox-enabled"
                     checked={sandboxEnabled}
                     onCheckedChange={setSandboxEnabled}
                   />
                 </div>
-
-                {sandboxEnabled && (
-                  <div className="pt-2 border-t space-y-2 max-w-md">
-                    <Label>Network mode</Label>
-                    <Select
-                      value={sandboxEnv}
-                      onValueChange={(v) => setSandboxEnv(v as SandboxEnv)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="default-public">
-                          default-public (public egress)
-                        </SelectItem>
-                        <SelectItem value="internal-only">
-                          internal-only (no egress)
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Use <code>default-public</code> when the agent needs to reach external APIs. <code>internal-only</code> is compute-only.
-                    </p>
-                  </div>
-                )}
               </CardContent>
             </Card>
           </div>
