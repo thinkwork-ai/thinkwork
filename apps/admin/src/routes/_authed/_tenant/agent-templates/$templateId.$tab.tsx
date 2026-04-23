@@ -264,6 +264,19 @@ function TemplateEditorPage() {
   const [guardrailId, setGuardrailId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // State -- sandbox (null persisted ⇒ template does not use the sandbox)
+  type SandboxEnv = "default-public" | "internal-only";
+  const [sandboxEnabled, setSandboxEnabled] = useState(false);
+  const [sandboxEnv, setSandboxEnv] = useState<SandboxEnv>("default-public");
+  const [sandboxRequiredConnections, setSandboxRequiredConnections] =
+    useState<string[]>([]);
+  const SANDBOX_CONNECTION_OPTIONS = ["github", "slack"] as const;
+  const toggleSandboxConnection = (id: string) => {
+    setSandboxRequiredConnections((prev) =>
+      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id],
+    );
+  };
+
   // State -- skills
   const [templateSkills, setTemplateSkills] = useState<TemplateSkill[]>([]);
   const [catalog, setCatalog] = useState<CatalogSkill[]>([]);
@@ -396,6 +409,24 @@ function TemplateEditorPage() {
         setTemplateSkills(skills);
       }
 
+      // Sandbox opt-in hydration. AWSJSON may arrive as string or object;
+      // null means the template doesn't use the sandbox.
+      const sbRaw = (t as any).sandbox;
+      const sb =
+        typeof sbRaw === "string" && sbRaw ? JSON.parse(sbRaw) : sbRaw;
+      if (sb && typeof sb === "object") {
+        setSandboxEnabled(true);
+        setSandboxEnv(
+          sb.environment === "internal-only" ? "internal-only" : "default-public",
+        );
+        setSandboxRequiredConnections(
+          Array.isArray(sb.required_connections) ? sb.required_connections : [],
+        );
+      } else {
+        setSandboxEnabled(false);
+        setSandboxEnv("default-public");
+        setSandboxRequiredConnections([]);
+      }
     }
   }, [result.data]);
 
@@ -604,6 +635,17 @@ function TemplateEditorPage() {
 
     const skillsJson = JSON.stringify(templateSkills);
 
+    // null persisted ⇒ template does not use the sandbox; otherwise the
+    // dispatcher reads environment + required_connections at invocation
+    // time. Shape is validated server-side by
+    // packages/api/src/lib/templates/sandbox-config.ts.
+    const sandboxJson = sandboxEnabled
+      ? JSON.stringify({
+          environment: sandboxEnv,
+          required_connections: sandboxRequiredConnections,
+        })
+      : JSON.stringify(null);
+
     try {
       if (isNew) {
         const res = await createTemplate({
@@ -616,6 +658,7 @@ function TemplateEditorPage() {
             icon: icon || undefined,
             config,
             skills: skillsJson,
+            sandbox: sandboxJson,
 
             model: model || undefined,
             guardrailId: guardrailId || undefined,
@@ -643,6 +686,7 @@ function TemplateEditorPage() {
             icon: icon || undefined,
             config,
             skills: skillsJson,
+            sandbox: sandboxJson,
 
             model: model || undefined,
             guardrailId: guardrailId || undefined,
@@ -877,6 +921,79 @@ function TemplateEditorPage() {
                     Guardrail dropdown coming in Phase 4.
                   </p>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="text-sm">Code Sandbox</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="sandbox-enabled" className="font-normal">
+                      Enable <code>execute_code</code> for agents in this template
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Opts this template into the AgentCore Code Interpreter sandbox. The tool only registers on a turn if the tenant also has <code>sandbox_enabled</code> set.
+                    </p>
+                  </div>
+                  <Switch
+                    id="sandbox-enabled"
+                    checked={sandboxEnabled}
+                    onCheckedChange={setSandboxEnabled}
+                  />
+                </div>
+
+                {sandboxEnabled && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t">
+                    <div className="space-y-2">
+                      <Label>Network mode</Label>
+                      <Select
+                        value={sandboxEnv}
+                        onValueChange={(v) => setSandboxEnv(v as SandboxEnv)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="default-public">
+                            default-public (public egress)
+                          </SelectItem>
+                          <SelectItem value="internal-only">
+                            internal-only (no egress)
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Use <code>default-public</code> when the agent needs to call external APIs (GitHub, Slack, etc). <code>internal-only</code> is compute-only.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Required connections</Label>
+                      <p className="text-xs text-muted-foreground">
+                        OAuth providers the invoking user must have connected. Tokens land in <code>os.environ</code> inside the sandbox for the turn.
+                      </p>
+                      <div className="space-y-2 pt-1">
+                        {SANDBOX_CONNECTION_OPTIONS.map((id) => (
+                          <div key={id} className="flex items-center gap-2">
+                            <Checkbox
+                              id={`sandbox-conn-${id}`}
+                              checked={sandboxRequiredConnections.includes(id)}
+                              onCheckedChange={() => toggleSandboxConnection(id)}
+                            />
+                            <Label
+                              htmlFor={`sandbox-conn-${id}`}
+                              className="text-sm font-normal cursor-pointer capitalize"
+                            >
+                              {id}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
