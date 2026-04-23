@@ -135,6 +135,8 @@ resource "aws_lambda_function" "handler" {
     "oauth-callback",
     "stripe-checkout",
     "stripe-webhook",
+    "stripe-portal",
+    "stripe-subscription",
     "teams",
     "team-members",
     "tenants",
@@ -271,6 +273,10 @@ locals {
     "POST /api/stripe/checkout-session"    = "stripe-checkout"
     "OPTIONS /api/stripe/checkout-session" = "stripe-checkout"
     "POST /api/stripe/webhook"             = "stripe-webhook"
+    "POST /api/stripe/portal-session"      = "stripe-portal"
+    "OPTIONS /api/stripe/portal-session"   = "stripe-portal"
+    "GET /api/stripe/subscription"         = "stripe-subscription"
+    "OPTIONS /api/stripe/subscription"     = "stripe-subscription"
 
     # Routines
     "ANY /api/routines/{proxy+}" = "routines"

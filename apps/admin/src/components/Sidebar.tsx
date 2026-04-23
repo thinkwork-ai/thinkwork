@@ -9,6 +9,7 @@ import {
   Repeat,
   BarChart3,
   Settings,
+  CreditCard,
   Puzzle,
   Brain,
   FileText,
@@ -178,6 +179,7 @@ export function AppSidebar() {
     { to: "/scheduled-jobs", icon: CalendarClock, label: "Automations" },
     { to: "/webhooks", icon: Webhook, label: "Webhooks" },
     { to: "/humans", icon: Users, label: "Humans" },
+    { to: "/billing", icon: CreditCard, label: "Billing" },
     { to: "/settings", icon: Settings, label: "Settings" },
   ];
 
