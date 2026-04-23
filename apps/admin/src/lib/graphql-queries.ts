@@ -1488,6 +1488,7 @@ export const AgentTemplateDetailQuery = graphql(`
       blockedTools
       config
       skills
+      sandbox
       knowledgeBaseIds
       isPublished
       createdAt
@@ -1517,6 +1518,7 @@ export const UpdateAgentTemplateMutation = graphql(`
       blockedTools
       config
       skills
+      sandbox
       knowledgeBaseIds
       updatedAt
     }
@@ -1526,6 +1528,21 @@ export const UpdateAgentTemplateMutation = graphql(`
 export const DeleteAgentTemplateMutation = graphql(`
   mutation DeleteAgentTemplate($id: ID!) {
     deleteAgentTemplate(id: $id)
+  }
+`);
+
+// Minimal tenant read for surfaces that need to show sandbox policy
+// state (Built-in Tools page, policy audit panels). Not the full tenant
+// — just the sandbox-adjacent fields.
+export const TenantSandboxStatusQuery = graphql(`
+  query TenantSandboxStatus($id: ID!) {
+    tenant(id: $id) {
+      id
+      sandboxEnabled
+      complianceTier
+      sandboxInterpreterPublicId
+      sandboxInterpreterInternalId
+    }
   }
 `);
 
