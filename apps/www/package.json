@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@astrojs/tailwind": "^6.0.2",
+    "@thinkwork/pricing-config": "workspace:*",
     "astro": "^5.5.0",
     "tailwindcss": "^3.4.17"
   }

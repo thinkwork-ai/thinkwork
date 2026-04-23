@@ -1,8 +1,15 @@
 import { useState } from "react";
-import { View, Image, ScrollView, Pressable, useWindowDimensions } from "react-native";
+import {
+  View,
+  Image,
+  ScrollView,
+  Pressable,
+  useWindowDimensions,
+  ActivityIndicator,
+} from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { CheckCircle, User, Zap, Building2, Mail } from "lucide-react-native";
+import { CheckCircle, Star } from "lucide-react-native";
 import {
   Card,
   CardContent,
@@ -14,8 +21,8 @@ import { Button } from "@/components/ui/button";
 import { Text, H2, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
 import { useColorScheme } from "nativewind";
-
-type PlanType = "basic" | "pro" | "enterprise";
+import { plans, type Plan, type PlanId } from "@thinkwork/pricing-config";
+import { startStripeCheckout } from "@/lib/stripe-checkout";
 
 export default function PaymentScreen() {
   const router = useRouter();
@@ -24,15 +31,35 @@ export default function PaymentScreen() {
   const { width } = useWindowDimensions();
   const isWide = width >= 768;
 
-  const [selectedPlan, setSelectedPlan] = useState<PlanType>("basic");
+  const [pendingPlanId, setPendingPlanId] = useState<PlanId | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleContinue = () => {
-    if (selectedPlan === "enterprise") {
-      // TODO: open contact form or email
-      return;
+  async function handlePlanPress(plan: Plan) {
+    if (pendingPlanId) return;
+    setErrorMessage(null);
+    setPendingPlanId(plan.id);
+
+    try {
+      const result = await startStripeCheckout(plan.id);
+      if (result.status === "completed") {
+        router.replace(
+          `/onboarding/complete?session_id=${encodeURIComponent(result.sessionId)}&paid=1`,
+        );
+        return;
+      }
+      if (result.status === "error") {
+        setErrorMessage(result.message);
+        return;
+      }
+      // cancel / dismiss / locked: user explicitly backed out — no banner.
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error ? err.message : "Could not start checkout",
+      );
+    } finally {
+      setPendingPlanId(null);
     }
-    router.push(`/sign-up?plan=${selectedPlan}`);
-  };
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-white dark:bg-neutral-950">
@@ -45,7 +72,9 @@ export default function PaymentScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        <Card className={`w-full self-center ${isWide ? "max-w-4xl" : "max-w-lg"}`}>
+        <Card
+          className={`w-full self-center ${isWide ? "max-w-4xl" : "max-w-lg"}`}
+        >
           <CardHeader className="items-center pb-4">
             <View className="mb-3">
               <Image
@@ -55,197 +84,138 @@ export default function PaymentScreen() {
               />
             </View>
             <CardTitle>
-              <H2 className="tracking-wider text-center" numberOfLines={1} adjustsFontSizeToFit>Welcome to ThinkWork</H2>
+              <H2
+                className="tracking-wider text-center"
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                Pick your plan
+              </H2>
             </CardTitle>
             <CardDescription>
               <Muted className="text-center">
-                Choose your plan to get started
+                Infrastructure you own. Plans that scale with usage.
               </Muted>
             </CardDescription>
           </CardHeader>
 
           <CardContent className="gap-4">
-            <View className={isWide ? "flex-row gap-4 items-stretch" : "gap-4"}>
-              {/* Basic Plan Card */}
-              <Pressable onPress={() => setSelectedPlan("basic")} style={isWide ? { flex: 1 } : undefined}>
-                <View
-                  className={`rounded-xl border-2 p-4 ${isWide ? "flex-1 " : ""}${
-                    selectedPlan === "basic"
-                      ? "border-primary bg-primary/5"
-                      : "border-neutral-200 dark:border-neutral-700"
-                  }`}
-                >
-                  <View className="flex-row items-center justify-between mb-3">
-                    <View className="flex-row items-center">
-                      <User size={20} color={selectedPlan === "basic" ? colors.primary : colors.muted} />
-                      <Text className="ml-2 font-bold text-lg">Pro</Text>
-                    </View>
-                    {selectedPlan === "basic" && (
-                      <View className="bg-primary px-3 py-1.5 rounded-full">
-                        <Text className="text-white text-xs font-semibold">
-                          SELECTED
-                        </Text>
+            <View
+              className={
+                isWide ? "flex-row gap-4 items-stretch" : "gap-4"
+              }
+            >
+              {plans.map((plan) => {
+                const isPending = pendingPlanId === plan.id;
+                const isDisabled =
+                  pendingPlanId !== null && pendingPlanId !== plan.id;
+                return (
+                  <Pressable
+                    key={plan.id}
+                    onPress={() => handlePlanPress(plan)}
+                    disabled={isDisabled || isPending}
+                    style={isWide ? { flex: 1 } : undefined}
+                  >
+                    <View
+                      className={`rounded-xl border-2 p-4 ${isWide ? "flex-1 " : ""}${
+                        plan.highlighted
+                          ? "border-primary bg-primary/5"
+                          : "border-neutral-200 dark:border-neutral-700"
+                      }${isDisabled ? " opacity-40" : ""}`}
+                    >
+                      <View className="flex-row items-center justify-between mb-3">
+                        <View className="flex-row items-center">
+                          <Text className="font-bold text-lg">
+                            {plan.name}
+                          </Text>
+                        </View>
+                        {plan.highlighted && (
+                          <View className="bg-primary px-3 py-1.5 rounded-full flex-row items-center gap-1">
+                            <Star size={12} color={colors.background} />
+                            <Text className="text-white text-xs font-semibold">
+                              RECOMMENDED
+                            </Text>
+                          </View>
+                        )}
                       </View>
-                    )}
-                  </View>
 
-                  <View className="mb-4">
-                    <Text className="text-3xl font-bold">
-                      $49
-                      <Text className="text-base font-normal text-neutral-500">
-                        /month
+                      <Text
+                        size="sm"
+                        variant="muted"
+                        className="font-semibold uppercase tracking-wider mb-3"
+                      >
+                        {plan.tagline}
                       </Text>
-                    </Text>
-                  </View>
-
-                  <View className="gap-2">
-                    <View className="flex-row items-center">
-                      <View style={{ minWidth: 16 }}><CheckCircle size={16} color={colors.primary} /></View>
-                      <Text className="ml-2 text-sm">1 hosted AI agent</Text>
-                    </View>
-                    <View className="flex-row items-center">
-                      <View style={{ minWidth: 16 }}><CheckCircle size={16} color={colors.primary} /></View>
-                      <Text className="ml-2 text-sm">Unlimited threads</Text>
-                    </View>
-                    <View className="flex-row items-center">
-                      <View style={{ minWidth: 16 }}><CheckCircle size={16} color={colors.primary} /></View>
-                      <Text className="ml-2 text-sm">Agent file browser</Text>
-                    </View>
-                    <View className="flex-row items-center">
-                      <View style={{ minWidth: 16 }}><CheckCircle size={16} color={colors.primary} /></View>
-                      <Text className="ml-2 text-sm">Real-time sync across devices</Text>
-                    </View>
-                    <View className="flex-row items-center">
-                      <View style={{ minWidth: 16 }}><CheckCircle size={16} color={colors.primary} /></View>
-                      <Text className="ml-2 text-sm">Connect via Telegram, Discord, Slack</Text>
-                    </View>
-                  </View>
-                </View>
-              </Pressable>
-
-              {/* Pro Plan Card */}
-              <Pressable onPress={() => setSelectedPlan("pro")} style={isWide ? { flex: 1 } : undefined}>
-                <View
-                  className={`rounded-xl border-2 p-4 ${isWide ? "flex-1 " : ""}${
-                    selectedPlan === "pro"
-                      ? "border-primary bg-primary/5"
-                      : "border-neutral-200 dark:border-neutral-700"
-                  }`}
-                >
-                  <View className="flex-row items-center justify-between mb-3">
-                    <View className="flex-row items-center">
-                      <Zap size={20} color={selectedPlan === "pro" ? colors.primary : colors.muted} />
-                      <Text className="ml-2 font-bold text-lg">Business</Text>
-                    </View>
-                    {selectedPlan === "pro" && (
-                      <View className="bg-primary px-3 py-1.5 rounded-full">
-                        <Text className="text-white text-xs font-semibold">
-                          SELECTED
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-
-                  <View className="mb-4">
-                    <Text className="text-3xl font-bold">
-                      $199
-                      <Text className="text-base font-normal text-neutral-500">
-                        /month
+                      <Text size="sm" className="mb-4">
+                        {plan.summary}
                       </Text>
-                    </Text>
-                  </View>
 
-                  <View className="gap-2">
-                    <View className="flex-row items-center">
-                      <View style={{ minWidth: 16 }}><CheckCircle size={16} color={colors.primary} /></View>
-                      <Text className="ml-2 text-sm">Everything in Pro</Text>
-                    </View>
-                    <View className="flex-row items-center">
-                      <View style={{ minWidth: 16 }}><CheckCircle size={16} color={colors.primary} /></View>
-                      <Text className="ml-2 text-sm">Multiple hosted agents</Text>
-                    </View>
-                    <View className="flex-row items-center">
-                      <View style={{ minWidth: 16 }}><CheckCircle size={16} color={colors.primary} /></View>
-                      <Text className="ml-2 text-sm">BYOB — connect your own OpenClaw</Text>
-                    </View>
-                    <View className="flex-row items-center">
-                      <View style={{ minWidth: 16 }}><CheckCircle size={16} color={colors.primary} /></View>
-                      <Text className="ml-2 text-sm">Thread routing to specific agents</Text>
-                    </View>
-                    <View className="flex-row items-center">
-                      <View style={{ minWidth: 16 }}><CheckCircle size={16} color={colors.primary} /></View>
-                      <Text className="ml-2 text-sm">Invite codes for external agents</Text>
-                    </View>
-                  </View>
-                </View>
-              </Pressable>
-
-              {/* Enterprise Plan Card */}
-              <Pressable onPress={() => setSelectedPlan("enterprise")} style={isWide ? { flex: 1 } : undefined}>
-                <View
-                  className={`rounded-xl border-2 p-4 ${isWide ? "flex-1 " : ""}${
-                    selectedPlan === "enterprise"
-                      ? "border-primary bg-primary/5"
-                      : "border-neutral-200 dark:border-neutral-700"
-                  }`}
-                >
-                  <View className="flex-row items-center justify-between mb-3">
-                    <View className="flex-row items-center">
-                      <Building2 size={20} color={selectedPlan === "enterprise" ? colors.primary : colors.muted} />
-                      <Text className="ml-2 font-bold text-lg">Enterprise</Text>
-                    </View>
-                    {selectedPlan === "enterprise" && (
-                      <View className="bg-primary px-3 py-1.5 rounded-full">
-                        <Text className="text-white text-xs font-semibold">
-                          SELECTED
-                        </Text>
+                      <View className="gap-2 mb-4">
+                        {plan.features.map((feature) => (
+                          <View
+                            key={feature}
+                            className="flex-row items-start"
+                          >
+                            <View style={{ minWidth: 16, marginTop: 2 }}>
+                              <CheckCircle
+                                size={16}
+                                color={colors.primary}
+                              />
+                            </View>
+                            <Text className="ml-2 text-sm flex-1">
+                              {feature}
+                            </Text>
+                          </View>
+                        ))}
                       </View>
-                    )}
-                  </View>
 
-                  <View className="mb-4">
-                    <View className="flex-row items-center">
-                      <Mail size={18} color={colors.foreground} />
-                      <Text className="ml-2 text-lg font-bold">Contact Us</Text>
+                      <Button
+                        size="default"
+                        variant={plan.highlighted ? "default" : "outline"}
+                        onPress={() => handlePlanPress(plan)}
+                        disabled={isDisabled || isPending}
+                      >
+                        {isPending ? (
+                          <View className="flex-row items-center gap-2">
+                            <ActivityIndicator
+                              size="small"
+                              color={colors.background}
+                            />
+                            <Text>Opening checkout…</Text>
+                          </View>
+                        ) : (
+                          <Text>{plan.cta}</Text>
+                        )}
+                      </Button>
                     </View>
-                  </View>
-
-                  <View className="gap-2">
-                    <View className="flex-row items-center">
-                      <View style={{ minWidth: 16 }}><CheckCircle size={16} color={colors.primary} /></View>
-                      <Text className="ml-2 text-sm">Everything in Business</Text>
-                    </View>
-                    <View className="flex-row items-center">
-                      <View style={{ minWidth: 16 }}><CheckCircle size={16} color={colors.primary} /></View>
-                      <Text className="ml-2 text-sm">Dedicated infrastructure</Text>
-                    </View>
-                    <View className="flex-row items-center">
-                      <View style={{ minWidth: 16 }}><CheckCircle size={16} color={colors.primary} /></View>
-                      <Text className="ml-2 text-sm">Team Memory — cross-agent knowledge</Text>
-                    </View>
-                    <View className="flex-row items-center">
-                      <View style={{ minWidth: 16 }}><CheckCircle size={16} color={colors.primary} /></View>
-                      <Text className="ml-2 text-sm">Priority support</Text>
-                    </View>
-                    <View className="flex-row items-center">
-                      <View style={{ minWidth: 16 }}><CheckCircle size={16} color={colors.primary} /></View>
-                      <Text className="ml-2 text-sm">SSO/SAML, audit logging (coming soon)</Text>
-                    </View>
-                  </View>
-                </View>
-              </Pressable>
+                  </Pressable>
+                );
+              })}
             </View>
 
-            <View className={isWide ? "items-center" : ""}>
-              <View className={isWide ? "w-64" : ""}>
-                <Button onPress={handleContinue} size={isWide ? "default" : "lg"}>
-                  {selectedPlan === "enterprise" ? "Contact Sales" : "Create Account"}
-                </Button>
+            {errorMessage && (
+              <View className="rounded-lg border border-red-500/40 bg-red-500/10 p-3">
+                <Text size="sm" className="text-red-300 text-center">
+                  {errorMessage}
+                </Text>
+                <Text
+                  size="xs"
+                  variant="muted"
+                  className="text-center mt-1"
+                >
+                  Tap a plan to retry, or email hello@thinkwork.ai.
+                </Text>
               </View>
+            )}
 
-              <Text size="xs" variant="muted" className="text-center leading-5 px-2 mt-4">
-                By continuing, you agree to our Terms of Service and Privacy
-                Policy. You can cancel anytime.
+            <View className={isWide ? "items-center" : ""}>
+              <Text
+                size="xs"
+                variant="muted"
+                className="text-center leading-5 px-2 mt-2"
+              >
+                Every plan deploys into your AWS account. Prices are in
+                USD, billed monthly. Cancel anytime.
               </Text>
 
               <Pressable

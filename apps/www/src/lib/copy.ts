@@ -370,6 +370,12 @@ export const finalCta = {
   secondaryCta: { label: "View on GitHub", href: external.github },
 };
 
+// Plan catalog pulled from the shared workspace package so the mobile app
+// renders the exact same plans without duplication. Don't edit plan data
+// here — change it in packages/pricing-config/src/plans.ts and it ripples
+// to both surfaces.
+import { plans as sharedPlans } from "@thinkwork/pricing-config";
+
 export const pricing = {
   meta: {
     title: "ThinkWork pricing — Agent infrastructure in your AWS.",
@@ -381,56 +387,7 @@ export const pricing = {
   headlineAccent: "Plans that scale with usage.",
   lede:
     "Every plan ships the same AWS-native runtime. Deployment boundary stays inside the account your team already operates. Pick a plan by the shape of your operation — not by the capabilities you're allowed to use.",
-  plans: [
-    {
-      id: "starter",
-      name: "Starter",
-      tagline: "One team. Bounded pilot.",
-      summary:
-        "For a single ops team standing up a controlled pilot inside their AWS account.",
-      features: [
-        "One tenant",
-        "Up to 10 agents, 5 templates",
-        "Visible threads + durable memory",
-        "Evaluations + budgets",
-        "Community support",
-      ],
-      cta: "Start pilot",
-      highlighted: false,
-    },
-    {
-      id: "team",
-      name: "Team",
-      tagline: "Cross-team expansion.",
-      summary:
-        "For organizations moving from one pilot to several owned-workflows under shared governance.",
-      features: [
-        "Up to 5 tenants",
-        "Up to 100 agents, 20 templates",
-        "All Starter capabilities",
-        "Template-level capability grants",
-        "Priority email support",
-      ],
-      cta: "Choose Team",
-      highlighted: true,
-    },
-    {
-      id: "enterprise",
-      name: "Enterprise",
-      tagline: "Fleet-scale agent operations.",
-      summary:
-        "For enterprises running many teams across one AWS deployment boundary.",
-      features: [
-        "Unlimited tenants",
-        "400+ agents, 5+ templates per tenant",
-        "All Team capabilities",
-        "Enterprise SSO + audit exports",
-        "Named support + SLA",
-      ],
-      cta: "Talk to us",
-      highlighted: false,
-    },
-  ],
+  plans: sharedPlans,
   smallPrint: [
     "Every plan deploys into your AWS account; we never operate shared infrastructure.",
     "Charged in USD, billed monthly. Annual contracts available on Enterprise.",

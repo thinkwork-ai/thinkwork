@@ -307,6 +307,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.90.21
         version: 5.97.0(react@19.1.0)
+      '@thinkwork/pricing-config':
+        specifier: workspace:*
+        version: link:../../packages/pricing-config
       '@thinkwork/react-native-sdk':
         specifier: workspace:*
         version: link:../../packages/react-native-sdk
@@ -482,6 +485,9 @@ importers:
       '@astrojs/tailwind':
         specifier: ^6.0.2
         version: 6.0.2(astro@5.18.1(@azure/identity@4.13.1)(@types/node@25.6.0)(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3))(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.3))(ts-node@10.9.2(@types/node@25.6.0)(typescript@5.9.3))
+      '@thinkwork/pricing-config':
+        specifier: workspace:*
+        version: link:../../packages/pricing-config
       astro:
         specifier: ^5.5.0
         version: 5.18.1(@azure/identity@4.13.1)(@types/node@25.6.0)(jiti@2.6.1)(lightningcss@1.32.0)(rollup@4.60.1)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
@@ -740,6 +746,18 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^3.2.4
+        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+
+  packages/pricing-config:
+    devDependencies:
+      '@types/node':
+        specifier: ^25.3.3
+        version: 25.6.0
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.1
         version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/react-native-sdk:
