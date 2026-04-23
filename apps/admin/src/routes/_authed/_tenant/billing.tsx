@@ -293,32 +293,31 @@ function BillingPage() {
               <Row label="Billed to" value={state.customerEmail} />
             )}
 
-            {state?.hasCustomer ? (
-              <Button
-                onClick={() => openPortal("home")}
-                disabled={portalLoading}
-                className="w-full"
-              >
-                {portalLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Opening portal…
-                  </>
-                ) : (
-                  <>
-                    Manage Subscription
-                    <ExternalLink className="ml-2 h-4 w-4" />
-                  </>
-                )}
-              </Button>
-            ) : (
-              <Button
-                className="w-full"
-                onClick={() => setPickerOpen(true)}
-              >
-                See plans
-              </Button>
-            )}
+            <div className="flex justify-end">
+              {state?.hasCustomer ? (
+                <Button
+                  size="sm"
+                  onClick={() => openPortal("home")}
+                  disabled={portalLoading}
+                >
+                  {portalLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Opening portal…
+                    </>
+                  ) : (
+                    <>
+                      Manage Subscription
+                      <ExternalLink className="ml-2 h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <Button size="sm" onClick={() => setPickerOpen(true)}>
+                  See plans
+                </Button>
+              )}
+            </div>
 
             <p className="text-muted-foreground text-xs leading-5">
               {state?.hasCustomer
