@@ -418,9 +418,11 @@ export type ServicePackage = {
   id: string;
   name: string;
   type: "Fixed-fee" | "Ongoing operations";
+  timeline: string;
   oneLiner: string;
   body: string;
   includes: string[];
+  outcome: string;
   bestFor: string;
   variant: "featured" | "secondary";
 };
@@ -538,9 +540,10 @@ export const services = {
         id: "strategy-sprint",
         name: "AI Adoption Strategy Sprint",
         type: "Fixed-fee",
+        timeline: "2 weeks",
         oneLiner: "The first workflow, the first metric, the first rollout plan.",
         body:
-          "A focused strategy engagement that ends with a chosen starting point, a governance model, and a 30/60/90 rollout plan. Not a deck.",
+          "A focused strategy engagement that ends with a chosen starting point, a governance model, and a 30/60/90 rollout plan.",
         includes: [
           "Use case selection",
           "Workflow prioritization",
@@ -548,6 +551,8 @@ export const services = {
           "Pilot success metrics",
           "30/60/90 rollout plan",
         ],
+        outcome:
+          "A named first workflow, a governance model, and a rollout plan — decisions made, not a deck.",
         bestFor: "Teams at the beginning.",
         variant: "featured",
       },
@@ -555,9 +560,10 @@ export const services = {
         id: "pilot-launch",
         name: "ThinkWork Pilot Launch",
         type: "Fixed-fee",
+        timeline: "4–6 weeks",
         oneLiner: "The first governed workflow, live in production.",
         body:
-          "Environment setup, first assistant or workflow, templates, connectors, and evaluations — shipped on ThinkWork Cloud or into your own deployment.",
+          "Environment setup, first workflow, templates, connectors, and evaluations — shipped on Cloud or self-hosted.",
         includes: [
           "Environment setup, Cloud or self-hosted",
           "First assistant or workflow",
@@ -565,6 +571,8 @@ export const services = {
           "Connector setup",
           "Launch and handoff",
         ],
+        outcome:
+          "One governed workflow in production, with its first success metrics tracked.",
         bestFor: "Teams ready to move from planning to execution.",
         variant: "featured",
       },
@@ -572,9 +580,10 @@ export const services = {
         id: "managed-ops",
         name: "Managed ThinkWork Operations",
         type: "Ongoing operations",
+        timeline: "Ongoing",
         oneLiner: "Ongoing operations for a production ThinkWork deployment.",
         body:
-          "Recurring support that keeps the platform healthy, governed, and moving — without building an in-house platform team on day one.",
+          "Recurring support that keeps the platform healthy and governed — without building an in-house platform team on day one.",
         includes: [
           "Environment health checks",
           "Admin and configuration support",
@@ -582,6 +591,8 @@ export const services = {
           "Issue triage",
           "Monthly operations review",
         ],
+        outcome:
+          "A production deployment that stays current, audited, and operational — without a dedicated in-house platform team.",
         bestFor: "Teams running ThinkWork in production without dedicated platform ops.",
         variant: "featured",
       },
@@ -589,9 +600,10 @@ export const services = {
         id: "workflow-expansion",
         name: "Workflow Expansion Support",
         type: "Ongoing operations",
+        timeline: "Ongoing",
         oneLiner: "The next wave of workflows, shipped on a cadence.",
         body:
-          "A recurring service focused on adding assistants, workflows, connectors, and templates as the organization earns trust in earlier ones.",
+          "Recurring delivery of new assistants, workflows, connectors, and templates as the organization earns trust in earlier ones.",
         includes: [
           "New workflows each month",
           "Connector rollout",
@@ -599,6 +611,8 @@ export const services = {
           "Backlog prioritization",
           "Cross-team rollout support",
         ],
+        outcome:
+          "A steady cadence of new governed workflows shipping on top of your existing deployment.",
         bestFor: "Teams with early traction that want to keep shipping.",
         variant: "featured",
       },
@@ -606,9 +620,10 @@ export const services = {
         id: "governance-eval",
         name: "Governance & Evaluation Support",
         type: "Ongoing operations",
+        timeline: "Ongoing",
         oneLiner: "Governance that evolves with usage.",
         body:
-          "Evaluation tuning, guardrail updates, incident review, and audit support — so quality, safety, and accountability scale with adoption.",
+          "Evaluation tuning, guardrail updates, incident review, and audit support — so quality and safety scale with adoption.",
         includes: [
           "Evaluation tuning",
           "Guardrail updates",
@@ -616,6 +631,8 @@ export const services = {
           "Audit support",
           "Policy refinement",
         ],
+        outcome:
+          "Controls that keep pace with usage growth, with incident and audit coverage maintained.",
         bestFor: "Security-conscious teams and growing deployments.",
         variant: "secondary",
       },
@@ -623,9 +640,10 @@ export const services = {
         id: "advisory",
         name: "AI Program Advisory",
         type: "Ongoing operations",
+        timeline: "Quarterly cadence",
         oneLiner: "Cross-functional rollout support for leadership.",
         body:
-          "Ongoing advisory support for adoption sequencing, KPI review, cross-team planning, and executive alignment — above any single pilot.",
+          "Advisory support for adoption sequencing, KPI review, cross-team planning, and executive alignment — above any single pilot.",
         includes: [
           "Adoption roadmap reviews",
           "KPI and outcome review",
@@ -633,6 +651,8 @@ export const services = {
           "Cross-team planning",
           "Leadership check-ins",
         ],
+        outcome:
+          "A program-level view of adoption — sequencing, KPIs, and cross-team alignment kept visible to leadership.",
         bestFor: "Organizations turning early wins into a broader AI program.",
         variant: "secondary",
       },
