@@ -73,6 +73,17 @@ export const tenants = pgTable(
     // bootstrapUser directly (free signups) or once a paid tenant is claimed.
     // Partial unique index enforced via drizzle/0022_stripe_billing_indexes.sql.
     pending_owner_email: text("pending_owner_email"),
+    // Soft-delete marker for canceled / churned tenants. Set by the
+    // stripe-webhook Lambda when customer.subscription.deleted fires
+    // (and in the future, by any other deactivation path: operator
+    // delete, abuse lockout). A separate scheduled sweeper hard-deletes
+    // rows where deactivated_at < now() - 30 days. See
+    // docs/plans/2026-04-23-001-feat-stripe-upgrade-and-cancel-soft-delete-plan.md.
+    deactivated_at: timestamp("deactivated_at", { withTimezone: true }),
+    // Human-readable reason ('stripe_subscription_canceled',
+    // 'operator_delete', etc.). Free-text so new reasons don't need a
+    // migration.
+    deactivation_reason: text("deactivation_reason"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),

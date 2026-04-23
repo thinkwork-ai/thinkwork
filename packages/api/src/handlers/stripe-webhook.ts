@@ -26,18 +26,23 @@ import type {
 	APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
 import type Stripe from "stripe";
+import { eq } from "drizzle-orm";
 import { getStripeClient } from "../lib/stripe-client.js";
 import { getStripeCredentials } from "../lib/stripe-credentials.js";
 import { provisionTenantFromStripeSession } from "../lib/stripe-provision-tenant.js";
+import { attachStripeSubscriptionToTenant } from "../lib/stripe-attach-subscription.js";
 import { sendStripeWelcomeEmail } from "../lib/stripe-welcome-email.js";
 import {
 	applyStripeSubscriptionUpdate,
 	applyStripePaymentFailed,
 } from "../lib/stripe-update-subscription.js";
-import { db } from "../lib/db.js";
+import { db, tenants } from "../graphql/utils.js";
 import { schema } from "@thinkwork/database-pg";
 
 const { stripeEvents } = schema;
+
+const UUID_RE =
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function json(
 	body: unknown,
@@ -162,6 +167,29 @@ export async function handler(
 					return json({ error: "Session incomplete" }, 500);
 				}
 
+				// Branch: "tenant:<uuid>" client_reference_id = upgrade flow
+				// for an existing authenticated tenant. Otherwise it's a new
+				// signup; pre-provision + send welcome email.
+				const cref = full.client_reference_id || "";
+				if (cref.startsWith("tenant:")) {
+					const tenantId = cref.slice("tenant:".length);
+					if (!UUID_RE.test(tenantId)) {
+						console.error(
+							`[stripe-webhook] Upgrade session ${session.id} has malformed client_reference_id=${cref}`,
+						);
+						return json({ error: "Malformed client_reference_id" }, 400);
+					}
+					const attached = await attachStripeSubscriptionToTenant({
+						tenantId,
+						customer: customer as Stripe.Customer,
+						subscription: subscription as Stripe.Subscription,
+					});
+					console.log(
+						`[stripe-webhook] Upgrade attached sub=${attached.stripeSubscriptionId} plan=${attached.plan} tenant=${attached.tenantId} from session ${session.id}`,
+					);
+					return json({ received: true, tenantId: attached.tenantId, upgrade: true });
+				}
+
 				const result = await provisionTenantFromStripeSession({
 					session: full,
 					customer: customer as Stripe.Customer,
@@ -196,6 +224,30 @@ export async function handler(
 					);
 					return json({ received: true, skipped: "no_customer_row" });
 				}
+
+				// Soft-delete the tenant when Stripe confirms the subscription
+				// is gone. Hard-delete (cascade-drop data) runs separately via
+				// a scheduled sweeper 30 days later — deliberate grace window
+				// so accidental cancels can be reversed by clearing
+				// deactivated_at (or by the user re-subscribing, which the
+				// upgrade path in stripe-attach-subscription.ts handles).
+				if (
+					stripeEvent.type === "customer.subscription.deleted" &&
+					res.tenantId
+				) {
+					await db
+						.update(tenants)
+						.set({
+							deactivated_at: new Date(),
+							deactivation_reason: "stripe_subscription_canceled",
+							updated_at: new Date(),
+						})
+						.where(eq(tenants.id, res.tenantId));
+					console.log(
+						`[stripe-webhook] Soft-deleted tenant=${res.tenantId} (sub=${sub.id} canceled)`,
+					);
+				}
+
 				console.log(
 					`[stripe-webhook] ${stripeEvent.type} tenant=${res.tenantId} status=${res.newStatus} plan=${res.newPlan ?? "unchanged"}`,
 				);
