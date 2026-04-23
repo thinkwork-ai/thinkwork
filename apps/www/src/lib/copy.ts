@@ -448,6 +448,27 @@ export const services = {
       href: "#packages",
     },
   },
+  proof: {
+    eyebrow: "Platform and posture",
+    items: [
+      {
+        label: "AWS Bedrock AgentCore",
+        detail: "Native agent execution with Bedrock's governance primitives — not hand-rolled orchestration.",
+      },
+      {
+        label: "Per-tenant Cognito + IAM",
+        detail: "Identity isolation enforced at the AWS layer, not in application glue.",
+      },
+      {
+        label: "Full audit + evaluation log",
+        detail: "Every agent run, tool call, and evaluation result retained for QA and compliance review.",
+      },
+      {
+        label: "Cloud or self-hosted",
+        detail: "Same platform either way — hosted by us or inside your own AWS account.",
+      },
+    ] as Array<{ label: string; detail?: string }>,
+  },
   positioning: {
     headline: "One partner across the full adoption arc.",
     body:
