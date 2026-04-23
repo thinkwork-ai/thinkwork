@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
+import { useQuery } from "urql";
 import {
   Loader2,
   CheckCircle2,
@@ -9,7 +10,9 @@ import {
   Trash2,
   Wrench,
   Search,
+  Boxes,
 } from "lucide-react";
+import { TenantSandboxStatusQuery } from "@/lib/graphql-queries";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageSkeleton } from "@/components/PageSkeleton";
@@ -193,6 +196,7 @@ function BuiltinToolsPage() {
   return (
     <>
       <div className="flex flex-col h-full min-h-0">
+        <SandboxStatusCard tenantId={tenant?.id} />
         <div className="shrink-0 flex items-center gap-4 mb-4">
           <div className="relative" style={{ width: "16rem" }}>
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -460,5 +464,71 @@ function ConfigureDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sandbox Status — read-only. Sandbox is tenant-policy-gated + per-template
+// opt-in, not a provider-keyed tool like Web Search, so it lives outside the
+// DataTable. Operators flip the per-tenant switch via updateTenantPolicy;
+// template authors opt in via the Agent Template → Configuration tab.
+// ---------------------------------------------------------------------------
+
+function SandboxStatusCard({ tenantId }: { tenantId: string | undefined }) {
+  const [{ data, fetching }] = useQuery({
+    query: TenantSandboxStatusQuery,
+    variables: { id: tenantId ?? "" },
+    pause: !tenantId,
+  });
+  if (!tenantId || fetching || !data?.tenant) return null;
+
+  const t = data.tenant;
+  const enabled = !!t.sandboxEnabled;
+  const hasPub = !!t.sandboxInterpreterPublicId;
+  const hasInt = !!t.sandboxInterpreterInternalId;
+  const provisioned = hasPub && hasInt;
+
+  return (
+    <div className="shrink-0 mb-4 rounded-md border bg-card">
+      <div className="flex items-start gap-3 p-4">
+        <Boxes className="h-5 w-5 mt-0.5 text-muted-foreground shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="font-medium">Code Sandbox</h3>
+            <Badge
+              variant="secondary"
+              className={`text-xs ${
+                enabled
+                  ? "bg-green-500/15 text-green-600 dark:text-green-400"
+                  : "bg-muted text-muted-foreground"
+              }`}
+            >
+              {enabled ? "Enabled" : "Disabled"}
+            </Badge>
+            <Badge variant="outline" className="text-xs font-mono">
+              tier: {t.complianceTier ?? "standard"}
+            </Badge>
+            <Badge
+              variant="secondary"
+              className={`text-xs ${
+                provisioned
+                  ? "bg-green-500/15 text-green-600 dark:text-green-400"
+                  : "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400"
+              }`}
+            >
+              {provisioned ? "Interpreters provisioned" : "Provisioning pending"}
+            </Badge>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Lets agents run Python via the <code>execute_code</code> tool against real data in your AWS account. Enrollment is per-template — toggle it on the Agent Template's Configuration tab. The tool only registers on a turn when both the tenant policy and the template opt-in are on.
+          </p>
+          {!provisioned && enabled && (
+            <p className="mt-2 text-xs text-yellow-700 dark:text-yellow-400">
+              AgentCore Code Interpreter IDs aren't populated yet. Turns calling <code>execute_code</code> will fail with <code>SandboxProvisioning</code> until the agentcore-admin Lambda completes.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
