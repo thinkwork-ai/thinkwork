@@ -61,7 +61,8 @@
       "router": {},
       "eas": {
         "projectId": "ff3bfecf-778d-40b6-9215-6c853187413d"
-      }
+      },
+      "apiUrl": "https://api.thinkwork.ai"
     },
     "owner": "thinkwork-ai",
     "runtimeVersion": {

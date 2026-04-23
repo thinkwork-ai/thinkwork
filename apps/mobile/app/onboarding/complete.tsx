@@ -14,13 +14,59 @@ import { useAgents } from "@/lib/hooks/use-agents";
 
 export default function CompleteScreen() {
   const router = useRouter();
-  const { plan } = useLocalSearchParams<{ plan?: string }>();
+  const { plan, paid, session_id } = useLocalSearchParams<{
+    plan?: string;
+    paid?: string;
+    session_id?: string;
+  }>();
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
-  const { isAuthenticated, isLoading: authLoading, signOut, user } = useAuth();
+  const {
+    isAuthenticated,
+    isLoading: authLoading,
+    signOut,
+    user,
+    signInWithGoogle,
+  } = useAuth();
   const tenantId = (user as any)?.tenantId;
 
   const [, executeUpdateTenant] = useUpdateTenant();
+
+  // Post-Stripe-checkout entry branch: the apps/www/m/checkout-complete
+  // bounce page redirects here with ?paid=1&session_id=... after a
+  // successful Stripe Checkout. Only applies when the user is not yet
+  // authenticated (they paid, but haven't signed in with Google). If
+  // they're already authenticated, the existing provisioning flow below
+  // handles the transition.
+  const isPostCheckoutClaim =
+    paid === "1" && !!session_id && !isAuthenticated && !authLoading;
+  const sessionIdRef = useRef<string | null>(session_id ?? null);
+  // Keep a latest-values ref so an unmount/remount during the 2.2s
+  // delay doesn't lose the session id (see
+  // docs/solutions/best-practices/react-native-force-sim-camera-persistence-2026-04-20.md).
+  if (session_id && sessionIdRef.current !== session_id) {
+    sessionIdRef.current = session_id;
+  }
+  const claimStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isPostCheckoutClaim || claimStartedRef.current) return;
+    claimStartedRef.current = true;
+
+    // ~2.2s lets the Stripe webhook land server-side and pre-provision
+    // the tenant row before we kick Google OAuth — same budget used by
+    // the web welcome page.
+    const timer = setTimeout(() => {
+      try {
+        signInWithGoogle();
+      } catch (err) {
+        console.error("[CompleteScreen] post-checkout Google sign-in failed:", err);
+        claimStartedRef.current = false;
+      }
+    }, 2200);
+
+    return () => clearTimeout(timer);
+  }, [isPostCheckoutClaim, signInWithGoogle]);
 
   const selectedPlan = plan === "enterprise" ? "enterprise" : plan === "pro" ? "pro" : "basic";
 
@@ -104,6 +150,45 @@ export default function CompleteScreen() {
     setError(null);
     hasStarted.current = false;
   };
+
+  if (isPostCheckoutClaim) {
+    return (
+      <SafeAreaView className="flex-1 bg-white dark:bg-neutral-950">
+        <View className="flex-1 items-center justify-center px-6">
+          <View className="mb-8">
+            <Image
+              source={require("@/assets/logo.png")}
+              style={{ width: 100, height: 80 }}
+              resizeMode="contain"
+            />
+          </View>
+
+          <Animated.View
+            style={{ transform: [{ rotate: spin }], marginBottom: 24 }}
+          >
+            <Loader2 size={32} color={colors.primary} />
+          </Animated.View>
+
+          <H2 className="text-center mb-3">Finalizing your account…</H2>
+          <Muted className="text-center mb-2 px-4 leading-5">
+            Payment received. Signing you in with Google in a moment so we
+            can claim your workspace.
+          </Muted>
+          <Muted className="text-center px-4 leading-5 mt-1">
+            If the redirect doesn't fire on its own, tap below.
+          </Muted>
+          <View className="mt-8 w-full max-w-xs">
+            <Button
+              size="lg"
+              onPress={() => signInWithGoogle()}
+            >
+              Continue with Google
+            </Button>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-white dark:bg-neutral-950">
