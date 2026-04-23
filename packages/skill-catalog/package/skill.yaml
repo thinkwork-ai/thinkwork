@@ -1,7 +1,7 @@
 slug: package
 display_name: Package
 description: Render a synthesis into a final deliverable using a named template. Deterministic — template substitution only, no LLM call at this step. Supported formats in v1 are sales_brief, health_report, and renewal_risk.
-category: composable-primitive
+category: workflow
 version: "0.1.0"
 author: thinkwork
 icon: file-text

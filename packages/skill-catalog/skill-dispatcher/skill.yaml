@@ -5,7 +5,7 @@ description: >
   that matches a registered composition (sales prep, account health review,
   renewal prep, etc.), call start_composition to kick off the run. Do NOT use
   this for single-tool skills — invoke those directly.
-category: composable-primitive
+category: workflow
 version: "0.1.0"
 author: thinkwork
 icon: git-branch
