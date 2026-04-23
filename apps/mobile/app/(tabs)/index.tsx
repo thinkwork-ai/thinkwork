@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { View, FlatList, RefreshControl, Pressable, Platform, KeyboardAvoidingView, Keyboard, Alert, AppState } from "react-native";
+import Constants from "expo-constants";
 import * as Updates from "expo-updates";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/lib/auth-context";
@@ -29,7 +30,7 @@ import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { COLORS } from "@/lib/theme";
-import { ListTodo, Bot, Settings, LogOut, RefreshCw, Filter, ChevronDown, ChevronRight, X, Zap, Check, CheckSquare, ListChecks, Circle, AlertCircle, Clock, Lock } from "lucide-react-native";
+import { ListTodo, Bot, Settings, LogOut, RefreshCw, Filter, ChevronDown, ChevronRight, X, Zap, Check, CheckSquare, ListChecks, Circle, AlertCircle, Clock, Lock, CreditCard } from "lucide-react-native";
 import { IconTopologyStar3, IconList, IconLetterCase } from "@tabler/icons-react-native";
 import { ThreadChannel } from "@/lib/gql/graphql";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
@@ -47,10 +48,43 @@ import { WorkspacePickerSheet, type WorkspacePickerSheetRef, type SubAgent } fro
 import { useQuickActions, useCreateQuickAction, useUpdateQuickAction, useDeleteQuickAction, type QuickAction } from "@/lib/hooks/use-quick-actions";
 import { getThreadHeaderLabel } from "@/lib/thread-display";
 
+function resolveApiUrl(): string {
+  const fromExtra =
+    (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ??
+    "";
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL ?? "";
+  return (fromExtra || fromEnv || "https://api.thinkwork.ai").replace(/\/$/, "");
+}
+
 export default function ThreadsScreen() {
   const router = useRouter();
-  const { user, refreshCounter, signOut } = useAuth();
+  const { user, refreshCounter, signOut, getToken } = useAuth();
   const tenantId = user?.tenantId;
+
+  // Role gate for owner-only menu items (Billing). One-shot fetch on mount —
+  // role doesn't change while a session is alive.
+  const [callerRole, setCallerRole] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken?.();
+        if (!token) return;
+        const res = await fetch(`${resolveApiUrl()}/api/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { role?: string | null };
+        if (!cancelled) setCallerRole(data.role ?? null);
+      } catch {
+        /* silent; Billing menu item just stays hidden */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken]);
+  const isOwner = callerRole === "owner";
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? COLORS.dark : COLORS.light;
@@ -456,6 +490,7 @@ export default function ThreadsScreen() {
                 { label: "Automations", icon: Zap, onPress: () => router.push("/settings/automations") },
                 { label: "Credential Locker", icon: Lock, onPress: () => router.push("/settings/credentials") },
                 { label: "User Settings", icon: Settings, onPress: () => router.push("/settings/user-settings") },
+                ...(isOwner ? [{ label: "Billing", icon: CreditCard, onPress: () => router.push("/settings/billing") }] : []),
                 ...(Platform.OS !== "web" ? [{
                   label: "Update App",
                   icon: RefreshCw,
