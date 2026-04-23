@@ -72,7 +72,7 @@ const isFeatured = variant === "featured";
     </p>
   </header>
 
-  <ul class="mb-6 flex-1 space-y-2.5">
+  <ul class="mb-6 space-y-2.5">
     {includes.map((item) => (
       <li class="flex gap-2.5 text-[13px] text-slate-300">
         <svg
@@ -90,11 +90,12 @@ const isFeatured = variant === "featured";
     ))}
   </ul>
 
-  <p class="border-t border-white/5 pt-4 text-[12px] leading-5 text-slate-500">
-    <span class="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+  <div class="mt-auto border-t border-white/5 pt-4">
+    <p class="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
       Best for
-    </span>
-    <br />
-    {bestFor}
-  </p>
+    </p>
+    <p class="mt-1.5 min-h-[60px] text-[12px] leading-5 text-slate-500">
+      {bestFor}
+    </p>
+  </div>
 </article>
