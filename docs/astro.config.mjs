@@ -45,6 +45,7 @@ export default defineConfig({
                 { label: "Managed Agents", slug: "concepts/agents/managed-agents" },
                 { label: "Templates", slug: "concepts/agents/templates" },
                 { label: "Skills", slug: "concepts/agents/skills" },
+                { label: "Code Sandbox", slug: "concepts/agents/code-sandbox" },
                 {
                   label: "Composable Skills",
                   collapsed: true,
