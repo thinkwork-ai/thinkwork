@@ -19,7 +19,7 @@ import { TenantMembersListQuery } from "@/lib/graphql-queries";
 import { relativeTime } from "@/lib/utils";
 import { InviteMemberDialog } from "@/components/humans/InviteMemberDialog";
 
-export const Route = createFileRoute("/_authed/_tenant/humans/")({
+export const Route = createFileRoute("/_authed/_tenant/people/")({
   component: HumansPage,
 });
 
@@ -102,7 +102,7 @@ function HumansPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
-  useBreadcrumbs([{ label: "Humans" }]);
+  useBreadcrumbs([{ label: "People" }]);
 
   const [result, reexecute] = useQuery({
     query: TenantMembersListQuery,
@@ -142,7 +142,7 @@ function HumansPage() {
     <PageLayout
       header={
         <>
-          <PageHeader title="Humans" />
+          <PageHeader title="People" />
 
           <div className="flex items-center gap-2 mt-4">
             <div className="relative flex-1 max-w-sm">
@@ -175,7 +175,7 @@ function HumansPage() {
           data={rows}
           filterValue={search}
           onRowClick={(row) =>
-            navigate({ to: "/humans/$humanId", params: { humanId: row.id } })
+            navigate({ to: "/people/$humanId", params: { humanId: row.id } })
           }
         />
       )}
