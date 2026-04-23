@@ -6,7 +6,9 @@ const { title = data.title, tagline, actions = [] } = data.hero || {};
 ---
 
 <div class="hero">
-  <div class="hero-glow" aria-hidden="true"></div>
+  <div class="hero-glow" aria-hidden="true">
+    <div class="hero-hairline" aria-hidden="true"></div>
+  </div>
   <div class="hero-inner">
     <div class="hero-mark">
       <BrainMark size={160} title="ThinkWork" />
@@ -32,7 +34,6 @@ const { title = data.title, tagline, actions = [] } = data.hero || {};
 <style>
   .hero {
     position: relative;
-    overflow: hidden;
     padding: 5rem 1.5rem 4rem;
   }
 
@@ -42,12 +43,43 @@ const { title = data.title, tagline, actions = [] } = data.hero || {};
     }
   }
 
+  /* Viewport-bleed horizontally + extend vertically beyond .hero's padding
+     so the blurred ellipses fade into transparent in every direction
+     instead of being clipped at hero-box edges. Mirrors www's hero glow
+     wrapper (apps/www Hero.astro: inset-x-0 -top-24 -bottom-32).
+     Relies on html { overflow-x: hidden } in custom.css to guard against
+     100vw > document width on Windows + classic scrollbars. */
   .hero-glow {
     position: absolute;
-    inset: 0;
+    left: 50%;
+    top: -6rem;
+    bottom: -8rem;
+    width: 100vw;
+    transform: translateX(-50%);
+    overflow: hidden;
     pointer-events: none;
   }
 
+  /* Top-edge hairline — matches apps/www Hero's inset-x-0 top-0 h-px
+     gradient rule so side-by-side visual coherence holds. */
+  .hero-hairline {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      transparent,
+      rgba(255, 255, 255, 0.1),
+      transparent
+    );
+  }
+
+  /* Dark-mode glow — toned down from www's 8%/10% because the docs hero
+     is shorter than www's, so the same intensity reads as a rectangular
+     panel rather than ambient light. 3%/4% keeps the brand tint
+     perceptible but not dominant. */
   .hero-glow::before {
     content: "";
     position: absolute;
@@ -57,7 +89,7 @@ const { title = data.title, tagline, actions = [] } = data.hero || {};
     height: 720px;
     transform: translateX(-50%);
     border-radius: 9999px;
-    background: color-mix(in srgb, var(--sl-color-accent) 8%, transparent);
+    background: color-mix(in srgb, var(--sl-color-accent) 3%, transparent);
     filter: blur(160px);
   }
 
@@ -70,7 +102,7 @@ const { title = data.title, tagline, actions = [] } = data.hero || {};
     height: 480px;
     transform: translateX(-50%);
     border-radius: 9999px;
-    background: color-mix(in srgb, var(--sl-color-accent) 10%, transparent);
+    background: color-mix(in srgb, var(--sl-color-accent) 4%, transparent);
     filter: blur(140px);
   }
 

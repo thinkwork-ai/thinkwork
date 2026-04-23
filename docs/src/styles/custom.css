@@ -11,6 +11,14 @@
  * defaults, so we must match Starlight's theme-attribute scheme exactly.
  */
 
+/* Guard the hero viewport-bleed (width: 100vw in Hero.astro .hero-glow)
+   against horizontal scroll on Windows + classic scrollbars, where
+   100vw > document clientWidth by the scrollbar's reserved width.
+   Starlight does not ship this rule globally. */
+html {
+  overflow-x: hidden;
+}
+
 :root {
   /* Brand ramp — sync with apps/www/tailwind.config.mjs brand.* */
   --brand-50: #f0f9ff;
@@ -148,6 +156,16 @@ a.site-title svg {
 [data-has-hero] .sl-markdown-content .sl-heading-wrapper {
   text-align: center;
   justify-content: center;
+}
+
+/* Light-mode hero glow — keep proportional to dark-mode tone-down.
+   Dark ships 3%/4%; light scales to 2%/3% since the near-white
+   background amplifies even tiny amounts of brand-blue wash. */
+:root[data-theme="light"] .hero-glow::before {
+  background: color-mix(in srgb, var(--sl-color-accent) 2%, transparent);
+}
+:root[data-theme="light"] .hero-glow::after {
+  background: color-mix(in srgb, var(--sl-color-accent) 3%, transparent);
 }
 
 /* Secondary hero CTA — light-mode pass (dark-mode lives in Hero.astro). */
