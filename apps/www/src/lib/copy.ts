@@ -490,7 +490,6 @@ export const services = {
     headline: "Six shapes for six situations.",
     lede:
       "Fixed-fee engagements for bounded launches. Monthly retainers for ongoing work. Every package scoped up front, no open meter.",
-    featuredHeadline: "Featured packages",
     secondaryHeadline: "Additional packages",
     secondaryLede:
       "Ongoing governance and program-level support for teams that have moved past the first workflow.",
