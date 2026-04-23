@@ -1,0 +1,168 @@
+---
+title: Code Sandbox
+description: The per-tenant execute_code substrate — how an agent template opts in, what the agent sees at invocation time, where the guardrails live, and the residual-threat list the v1 substrate names up front.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The Code Sandbox is the `execute_code` tool surface an agent can use to run Python against real data inside your AWS account. It's peer-class with [Managed Agents](/concepts/agents/managed-agents/) — ThinkWork handles provisioning, the per-turn lifecycle, and the audit trail; you assign it to a template and the agent picks it up on the next invocation.
+
+The sandbox runs on **Bedrock AgentCore Code Interpreter**, one instance per tenant. That per-tenant fanout is load-bearing: it's what makes the IAM boundary between tenants a structural property of AWS itself, not a thing ThinkWork has to enforce in application code.
+
+This page is the conceptual deep dive. For the operator-side runbook — toggling policy, triaging the four named failure modes, reading the residual-threat classes — see [Sandbox environments (runbook)](https://github.com/thinkwork-ai/thinkwork/blob/main/docs/guides/sandbox-environments.md).
+
+## When to reach for the sandbox
+
+The sandbox is the right tool when:
+
+- **The agent needs to compute, not just call.** "Join these two result sets and summarise by region" is pandas + matplotlib, not a string-munging prompt.
+- **The data lives in your AWS account.** S3 buckets, Secrets Manager secrets, other tenant-scoped infrastructure. The sandbox runs inside your VPC's IAM world, so it can reach them without an egress API.
+- **You want OAuth credentials injected for one turn, then vaporised.** GitHub / Slack / Google tokens land in `os.environ` before the user code runs and are deleted after the session ends.
+- **You need the audit trail.** Every invocation writes a `sandbox_invocations` row with tenant_id, agent_id, session_id, exit_status, byte counts, and a SHA-256 of the executed code.
+
+The sandbox is *not* the right tool when:
+
+- **You want to ship a general-purpose REPL to end users.** It's an agent-facing tool, not an IDE. There is no out-of-turn persistence.
+- **You're on a regulated compliance tier.** The v1 substrate is explicitly **not HIPAA-certified**; regulated tenants have `sandbox_enabled = false` as the platform default. See the residual-threat list below.
+- **You need long-running compute.** Each turn creates a fresh session, runs one or a few `execute_code` calls, and stops the session. If you need minutes of compute, reach for [Routines](/concepts/automations/routines-and-execution-model/) or a background job.
+
+<Aside type="tip">
+  The calibration question: "does this computation need to read or produce structured data that wouldn't fit in a chat response?" If yes, sandbox. If the answer is a paragraph of text, the model handles it directly.
+</Aside>
+
+## How a template opts in
+
+Sandbox enrollment is a template-level field, not an agent-level flag. The whole template population opts in or out together; individual agents inherit the template's choice.
+
+```yaml
+sandbox:
+  environment: default-public
+  required_connections:
+    - github
+    - slack
+```
+
+- **`environment`** — networking policy for the Code Interpreter instance. `default-public` means the sandbox has public egress (needed for calling GitHub, Slack, third-party APIs). The alternative `default-sandbox` has no egress and is reserved for compute-only workloads.
+- **`required_connections`** — OAuth providers the invoking user must have connected. The dispatcher refuses to register the sandbox tool on a turn where any named connection is missing or expired; the agent sees a structured `SandboxMissingConnection` error instead of a half-wired tool.
+
+A template that declares `sandbox` but the tenant has `sandbox_enabled = false` fails closed at dispatch time — the tool never registers, and the agent gets a structured `SandboxProvisioning` error it can explain to the user.
+
+For the admin surface that toggles per-tenant policy, see the operator runbook's [Toggling tenant policy](https://github.com/thinkwork-ai/thinkwork/blob/main/docs/guides/sandbox-environments.md#toggling-tenant-policy) section.
+
+## What the agent sees
+
+At invocation time, when a template declaring `sandbox` runs for a tenant with `sandbox_enabled = true`, the dispatcher registers a single Strands tool:
+
+```python
+execute_code(code: str) -> dict
+```
+
+The agent passes a block of Python; the tool returns a structured result:
+
+```json
+{
+  "ok": true,
+  "stdout": "...",
+  "stderr": "...",
+  "exit_status": "ok",
+  "duration_ms": 1842
+}
+```
+
+On error paths — cap breach, missing connection, provisioning failure, timeout — `ok` is `false` and `error` carries a named class the agent can react to:
+
+| `error` value | Meaning |
+|---|---|
+| `SandboxProvisioning` | Tenant has the policy on but interpreter IDs aren't populated yet. Transient during cold deploys. |
+| `SandboxCapExceeded` | Circuit breaker fired. `error_message` carries `dimension` (`tenant_daily` / `agent_hourly`) and `resets_at`. |
+| `SandboxMissingConnection` | Invoking user hasn't authorised a `required_connections` provider, or the token expired. |
+| `ConnectionRevoked` | Close-to-use variant of the above — pre-flight passed but the connection flipped to `expired` before the secrets write. |
+
+Agents are expected to recover gracefully — "I can't run that because you need to connect your GitHub account first" is the conversational shape; the cap-breach shape is "I've hit the daily cap, please try again at 00:00 UTC."
+
+### The preamble
+
+Before the agent's user code runs, the dispatcher executes a preamble that injects OAuth tokens into the sandbox session's environment:
+
+```python
+os.environ["GITHUB_ACCESS_TOKEN"] = "<per-invocation secret>"
+os.environ["SLACK_ACCESS_TOKEN"]  = "<per-invocation secret>"
+```
+
+The tokens are fetched from Secrets Manager at pre-flight time into paths scoped by `tenant_id`, `agent_id`, `session_id`. When the session stops — end of turn, always — the paths are deleted. Tokens never appear in `sandbox_invocations`, never flow through the agent's turn transcript, and never leave the sandbox session.
+
+The `sitecustomize.py` stdio redactor runs inside the Code Interpreter image and scrubs known-shape token prefixes (`ghp_`, `xoxb-`, `ya29.`, `Authorization: Bearer`, JWT triples) from stdout/stderr before CloudWatch ingests them. A CloudWatch subscription-filter backstop catches anything that slips past the primary wrapper.
+
+## Per-turn lifecycle
+
+One line per step, in order, for one turn that calls `execute_code` once:
+
+1. **Dispatch** — user message lands, agent + template resolved.
+2. **Pre-flight** — policy check, interpreter-ready check, required-connections check.
+3. **Secrets write** — OAuth tokens for this user × provider land in Secrets Manager at per-invocation paths.
+4. **Tool register** — `execute_code` appears in the Strands tool surface for this turn only.
+5. **Agent calls `execute_code(code)`** — the substrate call begins.
+6. **Quota check** — atomic `WHERE count < cap` increment against `sandbox_tenant_daily_counters` + `sandbox_agent_hourly_counters`. Breach ⇒ `SandboxCapExceeded`, no session created.
+7. **Session start** — `StartCodeInterpreterSession` against the tenant's interpreter.
+8. **Preamble** — `executeCode(preamble)` injects tokens and registers the stdio redactor.
+9. **User code** — `executeCode(user_code)` runs the agent's Python.
+10. **Audit row** — one `sandbox_invocations` row written with exit_status, byte counts, executed_code_hash, session_id.
+11. **Session stop** — `StopCodeInterpreterSession` + `DeleteSecret` on the per-invocation paths.
+
+The turn continues — the agent sees the tool result and decides whether to answer, call another tool, or call `execute_code` again. Every subsequent `execute_code` call on the same turn reuses the same session but re-runs the quota check and writes a fresh audit row.
+
+## Circuit breakers
+
+Two caps, both per-tenant, both enforced by the `sandbox-quota-check` Lambda:
+
+| Dimension | Default cap | Stored in |
+|---|---|---|
+| `tenant_daily` | 1000 calls / UTC day | `sandbox_tenant_daily_counters` |
+| `agent_hourly` | 100 calls / UTC hour | `sandbox_agent_hourly_counters` |
+
+Both are raised via SSM (`/thinkwork/{stage}/sandbox/caps/*`), not by redeploy. Setting either to `0` is a legitimate kill-switch — the tool registers but every call rejects, which is the behaviour you want if an incident demands killing sandbox traffic without redeploying.
+
+Breaches surface to the agent as `SandboxCapExceeded` with `resets_at`; the agent is expected to acknowledge in chat rather than retry.
+
+## The audit row
+
+Every call writes exactly one `sandbox_invocations` row. The columns worth knowing:
+
+- `session_id` — join key to `/aws/bedrock-agentcore/runtimes/*` log streams.
+- `executed_code_hash` — SHA-256 of the user code. Stable across tenants, so repeat invocations of the same code correlate cleanly.
+- `stdout_bytes` / `stderr_bytes` — **raw pre-truncation** sizes. Stdout is truncated at 256 KB in the agent-visible result; stderr at 32 KB. The full content lives in CloudWatch.
+- `stdout_truncated` / `stderr_truncated` — `true` when the limits fired.
+- `exit_status` — `ok | error | timeout | oom | cap_exceeded | provisioning | connection_revoked`.
+- `failure_reason` — populated when `ok = false`; carries the tool-level error message.
+
+Retention defaults to 30 days with a 180-day ceiling enforced by a DB CHECK constraint. The table is append-only; there's no update path.
+
+## Residual threats — named up front
+
+The v1 substrate ships with four threat classes explicitly called out. They are *not bugs*; they are hardening tracks already on the v2 roadmap. Surfacing them here up front is the model peer harnesses (Anthropic Managed Agents, LangChain Deep Agents) have converged on.
+
+| Track | Class | v2 fix |
+|---|---|---|
+| **T1** | Prompt-injection token exfil — a compromised agent on `default-public` can POST tokens to an attacker host | In-process credential proxy: tokens never in `os.environ`; proxy wraps `requests` / `urllib` / `subprocess` and attaches credentials only for declared-allowed destinations |
+| **T1b** | Intra-tenant template-author exfil — tenant-wildcard IAM path lets a shared template read other users' sandbox tokens | Per-user ABAC session tags, or the same in-process credential proxy (the proxy addresses both simultaneously) |
+| **T2** | Malicious `pip install` credential harvest — runtime `pip install` has no allowlist; typo-squatted packages execute at import with tokens in `os.environ` | Private PyPI mirror + install allowlist, or preamble-after-install ordering |
+| **T3** | PHI/PII handling — the sandbox isn't HIPAA-certified; regulated-tenant platform default is `sandbox_enabled = false` | Regulated-tenant-specific environment with per-log-group encryption and shorter retention |
+
+There's also a stdout-bypass class — `os.write(fd, ...)`, C-extension direct writes, `multiprocessing` workers in fresh processes, adversarial split-writes across the redactor's rolling-buffer window. The CloudWatch subscription-filter backstop covers the subset whose values match known OAuth prefixes; the in-process credential proxy is the structural fix.
+
+Operators triaging a "did we leak a token?" incident should check the residual-threat list first. If the leak matches a named class, the incident is expected and will land under v2. If it matches no class, that's a real regression in the stdio redactor and platform security should be paged — see the runbook's [When to call platform security](https://github.com/thinkwork-ai/thinkwork/blob/main/docs/guides/sandbox-environments.md#when-to-call-platform-security) section.
+
+## How it sits next to the rest of the stack
+
+- **Skills** that need `execute_code` declare it via the template's `sandbox` block. They don't register the tool themselves. See [Skills](/concepts/agents/skills/).
+- **Templates** control *which* tenant populations get the sandbox. Flipping a template's `sandbox` block on rolls out to every agent instanced from it. See [Templates](/concepts/agents/templates/).
+- **Connectors** supply the OAuth tokens the preamble injects. The per-user mobile Connect flow is the authoritative source; the sandbox pulls through the same token store. See [Connectors](/concepts/connectors/).
+- **Guardrails** evaluate the agent's responses, not the sandbox's Python. If you need to gate what code the agent writes, that's a system-prompt and template-level decision, not a sandbox feature.
+- **Budgets** include sandbox calls — the cost-per-call is a configurable line item in the tenant's usage accounting. See [Budgets, Usage, and Audit](/concepts/control/budgets-usage-and-audit/).
+
+## See also
+
+- [Sandbox environments — operator runbook](https://github.com/thinkwork-ai/thinkwork/blob/main/docs/guides/sandbox-environments.md) — toggling policy, triaging the four named failure modes, what to monitor in CloudWatch, when to call platform security.
+- [AgentCore Code Sandbox plan](https://github.com/thinkwork-ai/thinkwork/blob/main/docs/plans/2026-04-22-006-feat-agentcore-code-sandbox-plan.md) — the 13-unit implementation plan with per-unit test scenarios.
+- [Sandbox E2E harness](https://github.com/thinkwork-ai/thinkwork/tree/main/packages/api/test/integration/sandbox) — live-infra test suite with the required env vars + run commands.
+- [`sandbox-pilot` reference skill](https://github.com/thinkwork-ai/thinkwork/tree/main/packages/skill-catalog/sandbox-pilot) — a skill pack exercising the full sandbox path end-to-end, used by operators to validate a fresh stage.
