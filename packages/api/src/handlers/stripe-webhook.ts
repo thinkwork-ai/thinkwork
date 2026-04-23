@@ -30,6 +30,10 @@ import { getStripeClient } from "../lib/stripe-client.js";
 import { getStripeCredentials } from "../lib/stripe-credentials.js";
 import { provisionTenantFromStripeSession } from "../lib/stripe-provision-tenant.js";
 import { sendStripeWelcomeEmail } from "../lib/stripe-welcome-email.js";
+import {
+	applyStripeSubscriptionUpdate,
+	applyStripePaymentFailed,
+} from "../lib/stripe-update-subscription.js";
 import { db } from "../lib/db.js";
 import { schema } from "@thinkwork/database-pg";
 
@@ -181,6 +185,60 @@ export async function handler(
 				});
 
 				return json({ received: true, tenantId: result.tenantId });
+			}
+			case "customer.subscription.updated":
+			case "customer.subscription.deleted": {
+				const sub = stripeEvent.data.object as Stripe.Subscription;
+				const res = await applyStripeSubscriptionUpdate(sub);
+				if (!res.updated) {
+					console.warn(
+						`[stripe-webhook] ${stripeEvent.type} for sub=${sub.id}: no stripe_customer row yet; acking`,
+					);
+					return json({ received: true, skipped: "no_customer_row" });
+				}
+				console.log(
+					`[stripe-webhook] ${stripeEvent.type} tenant=${res.tenantId} status=${res.newStatus} plan=${res.newPlan ?? "unchanged"}`,
+				);
+				return json({ received: true, tenantId: res.tenantId });
+			}
+			case "invoice.payment_succeeded": {
+				// Stripe typings mark subscription on Invoice as optional; for
+				// subscription invoices it's always present. Re-fetch the sub
+				// so we pick up the refreshed current_period_end.
+				const invoice = stripeEvent.data.object as Stripe.Invoice;
+				const subId =
+					typeof (invoice as unknown as { subscription?: unknown }).subscription === "string"
+						? ((invoice as unknown as { subscription: string }).subscription)
+						: (invoice as unknown as { subscription?: { id?: string } }).subscription?.id;
+				if (!subId) {
+					console.log(
+						`[stripe-webhook] invoice.payment_succeeded without subscription (id=${invoice.id}) — acking`,
+					);
+					return json({ received: true });
+				}
+				const freshSub = (await stripe.subscriptions.retrieve(
+					subId,
+				)) as Stripe.Subscription;
+				const res = await applyStripeSubscriptionUpdate(freshSub);
+				console.log(
+					`[stripe-webhook] invoice.payment_succeeded tenant=${res.tenantId} period_end renewed`,
+				);
+				return json({ received: true, tenantId: res.tenantId });
+			}
+			case "invoice.payment_failed": {
+				const invoice = stripeEvent.data.object as Stripe.Invoice;
+				const subId =
+					typeof (invoice as unknown as { subscription?: unknown }).subscription === "string"
+						? ((invoice as unknown as { subscription: string }).subscription)
+						: (invoice as unknown as { subscription?: { id?: string } }).subscription?.id;
+				if (!subId) {
+					return json({ received: true });
+				}
+				const res = await applyStripePaymentFailed(subId);
+				console.log(
+					`[stripe-webhook] invoice.payment_failed sub=${subId} tenant=${res.tenantId ?? "unknown"} → past_due`,
+				);
+				return json({ received: true, tenantId: res.tenantId });
 			}
 			default:
 				console.log(

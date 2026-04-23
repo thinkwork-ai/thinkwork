@@ -163,6 +163,9 @@ build_handler "stripe-checkout" \
 build_handler "stripe-webhook" \
   "$REPO_ROOT/packages/api/src/handlers/stripe-webhook.ts"
 
+build_handler "stripe-portal" \
+  "$REPO_ROOT/packages/api/src/handlers/stripe-portal.ts"
+
 build_handler "teams" \
   "$REPO_ROOT/packages/api/src/handlers/teams.ts"
 
