@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard,
   MessagesSquare,
@@ -157,6 +158,32 @@ export function AppSidebar() {
     (r: any) => r.status === "ACTIVE",
   ).length;
 
+  // Role gate for owner-only nav entries (Billing). Cheap one-shot fetch
+  // on mount; the role doesn't change while a session is alive.
+  const { getToken } = useAuth();
+  const [callerRole, setCallerRole] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const res = await fetch(`${API_URL}/api/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { role?: string | null };
+        if (!cancelled) setCallerRole(data.role ?? null);
+      } catch {
+        /* silent; Billing just stays hidden */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken]);
+  const isOwner = callerRole === "owner";
+
   const workItems: NavItem[] = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
     { to: "/threads", icon: MessagesSquare, label: "Threads", badge: threadCount ? formatCount(threadCount) : undefined },
@@ -179,7 +206,9 @@ export function AppSidebar() {
     { to: "/scheduled-jobs", icon: CalendarClock, label: "Automations" },
     { to: "/webhooks", icon: Webhook, label: "Webhooks" },
     { to: "/humans", icon: Users, label: "Humans" },
-    { to: "/billing", icon: CreditCard, label: "Billing" },
+    ...(isOwner
+      ? [{ to: "/billing", icon: CreditCard, label: "Billing" } as NavItem]
+      : []),
     { to: "/settings", icon: Settings, label: "Settings" },
   ];
 

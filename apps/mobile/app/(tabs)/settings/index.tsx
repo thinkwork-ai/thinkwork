@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, type ReactNode } from "react";
 import { View, Pressable, Platform, ActivityIndicator, Switch, ScrollView, Alert } from "react-native";
 import { useColorScheme } from "nativewind";
 import { useRouter } from "expo-router";
+import Constants from "expo-constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Updates from "expo-updates";
 import { useAuth } from "@/lib/auth-context";
@@ -222,11 +223,44 @@ function UpdateButton({ colors, compact }: { colors: typeof COLORS.light; compac
   );
 }
 
+function resolveApiUrl(): string {
+  const fromExtra =
+    (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ??
+    "";
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL ?? "";
+  return (fromExtra || fromEnv || "https://api.thinkwork.ai").replace(/\/$/, "");
+}
+
 export default function SettingsScreen() {
   const { colorScheme, setColorScheme } = useColorScheme();
-  const { user } = useAuth();
+  const { user, getToken } = useAuth();
   const router = useRouter();
   const { isWide } = useMediaQuery();
+
+  // Role gate for owner-only rows (Billing). One-shot fetch on mount —
+  // role doesn't change while a session is alive.
+  const [callerRole, setCallerRole] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken?.();
+        if (!token) return;
+        const res = await fetch(`${resolveApiUrl()}/api/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { role?: string | null };
+        if (!cancelled) setCallerRole(data.role ?? null);
+      } catch {
+        /* silent; Billing row just stays hidden */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken]);
+  const isOwner = callerRole === "owner";
 
   const {
     isSupported: biometricSupported,
@@ -318,6 +352,13 @@ export default function SettingsScreen() {
               onPress={() => router.push("/settings/usage")}
               colors={colors}
             />
+            {isOwner && (
+              <SettingsNavRow
+                label="Billing"
+                onPress={() => router.push("/settings/billing")}
+                colors={colors}
+              />
+            )}
             <View className="flex-row items-center justify-between py-3">
               <Text className="text-base text-neutral-500 dark:text-neutral-400">Theme</Text>
               <View className="flex-row gap-2">

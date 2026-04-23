@@ -40,11 +40,44 @@ function BillingPage() {
   const { getToken } = useAuth();
 
   const [state, setState] = useState<SubscriptionState | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const [roleLoading, setRoleLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
 
+  // Defense-in-depth role check: the sidebar hides Billing for non-owners,
+  // but direct URL access shouldn't leak the UI. Short-circuit the
+  // subscription fetch on non-owners to keep the gate fast.
   useEffect(() => {
+    (async () => {
+      setRoleLoading(true);
+      try {
+        const token = await getToken();
+        if (!token) {
+          setRole(null);
+          return;
+        }
+        const res = await fetch(`${API_URL}/api/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          setRole(null);
+          return;
+        }
+        const data = (await res.json()) as { role?: string | null };
+        setRole(data.role ?? null);
+      } finally {
+        setRoleLoading(false);
+      }
+    })();
+  }, [getToken]);
+
+  useEffect(() => {
+    if (roleLoading || role !== "owner") {
+      setLoading(false);
+      return;
+    }
     (async () => {
       setLoading(true);
       setError(null);
@@ -94,7 +127,7 @@ function BillingPage() {
     }
   }
 
-  if (loading) {
+  if (roleLoading || loading) {
     return (
       <PageLayout
         header={
@@ -105,6 +138,33 @@ function BillingPage() {
         }
       >
         <PageSkeleton />
+      </PageLayout>
+    );
+  }
+
+  if (role !== "owner") {
+    return (
+      <PageLayout
+        header={
+          <PageHeader
+            title="Billing"
+            description="Subscription and payment details"
+          />
+        }
+      >
+        <Card>
+          <CardContent className="flex items-start gap-3 pt-6">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-none text-muted-foreground" />
+            <div className="text-sm">
+              <div className="font-medium">Owner access only</div>
+              <div className="text-muted-foreground mt-1">
+                Billing is managed by the workspace owner. Ask them to
+                open this page, or reach out to hello@thinkwork.ai if
+                you need help.
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </PageLayout>
     );
   }

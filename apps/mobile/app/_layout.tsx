@@ -276,6 +276,7 @@ function RootLayoutNav() {
         <Stack.Screen name="settings/credentials" />
         <Stack.Screen name="settings/integration-detail" />
         <Stack.Screen name="settings/usage" />
+        <Stack.Screen name="settings/billing" options={{ headerShown: false }} />
         <Stack.Screen name="invite/[token]" />
         <Stack.Screen name="team/[id]" />
         <Stack.Screen name="team/add-users" />
