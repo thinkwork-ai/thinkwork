@@ -148,7 +148,12 @@ function BillingPage() {
       }
       const data = (await res.json()) as { url?: string };
       if (!data.url) throw new Error("Checkout did not return a URL");
-      window.location.assign(data.url);
+      // Open in a new tab so the admin SPA doesn't lose its state and
+      // the user can get back to their workspace just by closing the
+      // Stripe tab. noopener + noreferrer prevents the popup from
+      // reaching back into window.opener.
+      window.open(data.url, "_blank", "noopener,noreferrer");
+      setUpgradingPlan(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setUpgradingPlan(null);
@@ -181,9 +186,10 @@ function BillingPage() {
       }
       const data = (await res.json()) as { url?: string };
       if (!data.url) throw new Error("Portal session did not return a URL");
-      window.location.assign(data.url);
+      window.open(data.url, "_blank", "noopener,noreferrer");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    } finally {
       setPortalLoading(false);
     }
   }
