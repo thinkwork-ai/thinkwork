@@ -169,6 +169,9 @@ build_handler "stripe-portal" \
 build_handler "stripe-subscription" \
   "$REPO_ROOT/packages/api/src/handlers/stripe-subscription.ts"
 
+build_handler "auth-me" \
+  "$REPO_ROOT/packages/api/src/handlers/auth-me.ts"
+
 build_handler "teams" \
   "$REPO_ROOT/packages/api/src/handlers/teams.ts"
 
