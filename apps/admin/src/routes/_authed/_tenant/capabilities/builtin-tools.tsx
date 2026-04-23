@@ -10,7 +10,6 @@ import {
   Trash2,
   Wrench,
   Search,
-  Boxes,
 } from "lucide-react";
 import { TenantSandboxStatusQuery } from "@/lib/graphql-queries";
 import { useTenant } from "@/context/TenantContext";
@@ -58,9 +57,20 @@ type CatalogEntry = {
   name: string;
   description: string;
   providers: Array<{ id: string; label: string }>;
+  /** Tools with no provider slot (e.g. policy-gated capabilities like Code
+   * Sandbox) skip the configure dialog and render a read-only row. */
+  kind?: "provider-keyed" | "policy-gated";
 };
 
 const CATALOG: CatalogEntry[] = [
+  {
+    slug: "code-sandbox",
+    name: "Code Sandbox",
+    description:
+      "Lets agents run Python via execute_code against real data in your AWS account. Policy-gated at the tenant level; opt-in per agent template on the template's Configuration tab.",
+    providers: [],
+    kind: "policy-gated",
+  },
   {
     slug: "web-search",
     name: "Web Search",
@@ -71,9 +81,18 @@ const CATALOG: CatalogEntry[] = [
       { id: "serpapi", label: "SerpAPI" },
     ],
   },
-];
+].sort((a, b) => a.name.localeCompare(b.name));
 
-type Row = CatalogEntry & { state: BuiltinTool | null };
+type SandboxState = {
+  sandboxEnabled: boolean;
+  complianceTier: string | null;
+  hasInterpreters: boolean;
+};
+
+type Row = CatalogEntry & {
+  state: BuiltinTool | null;
+  sandbox?: SandboxState;
+};
 
 // ---------------------------------------------------------------------------
 // Columns
@@ -107,8 +126,41 @@ const columns: ColumnDef<Row>[] = [
   {
     accessorKey: "enabled",
     header: () => <div className="text-center">Status</div>,
-    size: 110,
+    size: 150,
     cell: ({ row }) => {
+      // Policy-gated tools (Code Sandbox) derive their Enabled/Disabled
+      // from tenant policy + provisioning state, not from the
+      // builtin-tools handler's per-provider row.
+      if (row.original.kind === "policy-gated") {
+        const sb = row.original.sandbox;
+        if (!sb) {
+          return (
+            <div className="flex justify-center">
+              <Badge variant="secondary" className="text-xs">
+                Loading…
+              </Badge>
+            </div>
+          );
+        }
+        const enabled = sb.sandboxEnabled;
+        const provisioning = enabled && !sb.hasInterpreters;
+        return (
+          <div className="flex justify-center">
+            <Badge
+              variant="secondary"
+              className={`text-xs gap-1 ${
+                provisioning
+                  ? "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400"
+                  : enabled
+                    ? "bg-green-500/15 text-green-600 dark:text-green-400"
+                    : "bg-muted text-muted-foreground"
+              }`}
+            >
+              {provisioning ? "Provisioning" : enabled ? "Enabled" : "Disabled"}
+            </Badge>
+          </div>
+        );
+      }
       const st = row.original.state;
       const enabled = st?.enabled === true;
       const configured = !!st;
@@ -120,8 +172,8 @@ const columns: ColumnDef<Row>[] = [
               enabled
                 ? "bg-green-500/15 text-green-600 dark:text-green-400"
                 : configured
-                ? "bg-muted text-muted-foreground"
-                : "bg-muted text-muted-foreground"
+                  ? "bg-muted text-muted-foreground"
+                  : "bg-muted text-muted-foreground"
             }`}
           >
             {enabled ? "Enabled" : configured ? "Disabled" : "Not configured"}
@@ -162,6 +214,7 @@ const columns: ColumnDef<Row>[] = [
 function BuiltinToolsPage() {
   const { tenant } = useTenant();
   const tenantSlug = tenant?.slug;
+  const tenantId = tenant?.id;
   useBreadcrumbs([
     { label: "Capabilities", href: "/capabilities" },
     { label: "Built-in Tools" },
@@ -171,6 +224,24 @@ function BuiltinToolsPage() {
   const [loading, setLoading] = useState(true);
   const [activeRow, setActiveRow] = useState<Row | null>(null);
   const [search, setSearch] = useState("");
+
+  // Policy-gated tools (Code Sandbox) read their Enabled/Disabled state
+  // from the tenant row, not from the listBuiltinTools API.
+  const [{ data: sandboxData }] = useQuery({
+    query: TenantSandboxStatusQuery,
+    variables: { id: tenantId ?? "" },
+    pause: !tenantId,
+  });
+
+  const sandboxState: SandboxState | undefined = sandboxData?.tenant
+    ? {
+        sandboxEnabled: !!sandboxData.tenant.sandboxEnabled,
+        complianceTier: sandboxData.tenant.complianceTier ?? null,
+        hasInterpreters:
+          !!sandboxData.tenant.sandboxInterpreterPublicId &&
+          !!sandboxData.tenant.sandboxInterpreterInternalId,
+      }
+    : undefined;
 
   const refresh = useCallback(() => {
     if (!tenantSlug) return;
@@ -191,12 +262,12 @@ function BuiltinToolsPage() {
   const rows: Row[] = CATALOG.map((c) => ({
     ...c,
     state: tools.find((t) => t.toolSlug === c.slug) ?? null,
+    sandbox: c.kind === "policy-gated" ? sandboxState : undefined,
   }));
 
   return (
     <>
       <div className="flex flex-col h-full min-h-0">
-        <SandboxStatusCard tenantId={tenant?.id} />
         <div className="shrink-0 flex items-center gap-4 mb-4">
           <div className="relative" style={{ width: "16rem" }}>
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -215,7 +286,13 @@ function BuiltinToolsPage() {
             filterValue={search}
             scrollable
             tableClassName="table-fixed [&_tbody_tr]:h-10"
-            onRowClick={(r) => setActiveRow(r)}
+            onRowClick={(r) => {
+              // Policy-gated tools have no per-tenant config surface here.
+              // Direct operators to the right place instead of opening the
+              // provider-keyed configure dialog.
+              if (r.kind === "policy-gated") return;
+              setActiveRow(r);
+            }}
           />
         </div>
       </div>
@@ -467,68 +544,3 @@ function ConfigureDialog({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Sandbox Status — read-only. Sandbox is tenant-policy-gated + per-template
-// opt-in, not a provider-keyed tool like Web Search, so it lives outside the
-// DataTable. Operators flip the per-tenant switch via updateTenantPolicy;
-// template authors opt in via the Agent Template → Configuration tab.
-// ---------------------------------------------------------------------------
-
-function SandboxStatusCard({ tenantId }: { tenantId: string | undefined }) {
-  const [{ data, fetching }] = useQuery({
-    query: TenantSandboxStatusQuery,
-    variables: { id: tenantId ?? "" },
-    pause: !tenantId,
-  });
-  if (!tenantId || fetching || !data?.tenant) return null;
-
-  const t = data.tenant;
-  const enabled = !!t.sandboxEnabled;
-  const hasPub = !!t.sandboxInterpreterPublicId;
-  const hasInt = !!t.sandboxInterpreterInternalId;
-  const provisioned = hasPub && hasInt;
-
-  return (
-    <div className="shrink-0 mb-4 rounded-md border bg-card">
-      <div className="flex items-start gap-3 p-4">
-        <Boxes className="h-5 w-5 mt-0.5 text-muted-foreground shrink-0" />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-medium">Code Sandbox</h3>
-            <Badge
-              variant="secondary"
-              className={`text-xs ${
-                enabled
-                  ? "bg-green-500/15 text-green-600 dark:text-green-400"
-                  : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {enabled ? "Enabled" : "Disabled"}
-            </Badge>
-            <Badge variant="outline" className="text-xs font-mono">
-              tier: {t.complianceTier ?? "standard"}
-            </Badge>
-            <Badge
-              variant="secondary"
-              className={`text-xs ${
-                provisioned
-                  ? "bg-green-500/15 text-green-600 dark:text-green-400"
-                  : "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400"
-              }`}
-            >
-              {provisioned ? "Interpreters provisioned" : "Provisioning pending"}
-            </Badge>
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Lets agents run Python via the <code>execute_code</code> tool against real data in your AWS account. Enrollment is per-template — toggle it on the Agent Template's Configuration tab. The tool only registers on a turn when both the tenant policy and the template opt-in are on.
-          </p>
-          {!provisioned && enabled && (
-            <p className="mt-2 text-xs text-yellow-700 dark:text-yellow-400">
-              AgentCore Code Interpreter IDs aren't populated yet. Turns calling <code>execute_code</code> will fail with <code>SandboxProvisioning</code> until the agentcore-admin Lambda completes.
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}

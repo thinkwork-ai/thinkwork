@@ -264,18 +264,14 @@ function TemplateEditorPage() {
   const [guardrailId, setGuardrailId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // State -- sandbox (null persisted ⇒ template does not use the sandbox)
+  // State -- sandbox (null persisted ⇒ template does not use the sandbox).
+  // required_connections is intentionally not surfaced: OAuth token
+  // injection into the sandbox process space is a named residual threat
+  // (T1/T1b/T2) — agents that need OAuth'd work should call a composable
+  // skill instead. execute_code stays a pure-compute primitive.
   type SandboxEnv = "default-public" | "internal-only";
   const [sandboxEnabled, setSandboxEnabled] = useState(false);
   const [sandboxEnv, setSandboxEnv] = useState<SandboxEnv>("default-public");
-  const [sandboxRequiredConnections, setSandboxRequiredConnections] =
-    useState<string[]>([]);
-  const SANDBOX_CONNECTION_OPTIONS = ["github", "slack"] as const;
-  const toggleSandboxConnection = (id: string) => {
-    setSandboxRequiredConnections((prev) =>
-      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id],
-    );
-  };
 
   // State -- skills
   const [templateSkills, setTemplateSkills] = useState<TemplateSkill[]>([]);
@@ -410,7 +406,8 @@ function TemplateEditorPage() {
       }
 
       // Sandbox opt-in hydration. AWSJSON may arrive as string or object;
-      // null means the template doesn't use the sandbox.
+      // null means the template doesn't use the sandbox. required_connections
+      // from older rows is read but no longer editable from the UI.
       const sbRaw = (t as any).sandbox;
       const sb =
         typeof sbRaw === "string" && sbRaw ? JSON.parse(sbRaw) : sbRaw;
@@ -419,13 +416,9 @@ function TemplateEditorPage() {
         setSandboxEnv(
           sb.environment === "internal-only" ? "internal-only" : "default-public",
         );
-        setSandboxRequiredConnections(
-          Array.isArray(sb.required_connections) ? sb.required_connections : [],
-        );
       } else {
         setSandboxEnabled(false);
         setSandboxEnv("default-public");
-        setSandboxRequiredConnections([]);
       }
     }
   }, [result.data]);
@@ -635,15 +628,13 @@ function TemplateEditorPage() {
 
     const skillsJson = JSON.stringify(templateSkills);
 
-    // null persisted ⇒ template does not use the sandbox; otherwise the
-    // dispatcher reads environment + required_connections at invocation
-    // time. Shape is validated server-side by
-    // packages/api/src/lib/templates/sandbox-config.ts.
+    // null persisted ⇒ template does not use the sandbox. Shape validated
+    // server-side by packages/api/src/lib/templates/sandbox-config.ts.
+    // required_connections is intentionally omitted — the UI no longer
+    // surfaces OAuth-into-sandbox; server-side validator continues to
+    // accept legacy rows that carry the field until the cleanup sweep.
     const sandboxJson = sandboxEnabled
-      ? JSON.stringify({
-          environment: sandboxEnv,
-          required_connections: sandboxRequiredConnections,
-        })
+      ? JSON.stringify({ environment: sandboxEnv })
       : JSON.stringify(null);
 
     try {
@@ -946,52 +937,27 @@ function TemplateEditorPage() {
                 </div>
 
                 {sandboxEnabled && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t">
-                    <div className="space-y-2">
-                      <Label>Network mode</Label>
-                      <Select
-                        value={sandboxEnv}
-                        onValueChange={(v) => setSandboxEnv(v as SandboxEnv)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="default-public">
-                            default-public (public egress)
-                          </SelectItem>
-                          <SelectItem value="internal-only">
-                            internal-only (no egress)
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        Use <code>default-public</code> when the agent needs to call external APIs (GitHub, Slack, etc). <code>internal-only</code> is compute-only.
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Required connections</Label>
-                      <p className="text-xs text-muted-foreground">
-                        OAuth providers the invoking user must have connected. Tokens land in <code>os.environ</code> inside the sandbox for the turn.
-                      </p>
-                      <div className="space-y-2 pt-1">
-                        {SANDBOX_CONNECTION_OPTIONS.map((id) => (
-                          <div key={id} className="flex items-center gap-2">
-                            <Checkbox
-                              id={`sandbox-conn-${id}`}
-                              checked={sandboxRequiredConnections.includes(id)}
-                              onCheckedChange={() => toggleSandboxConnection(id)}
-                            />
-                            <Label
-                              htmlFor={`sandbox-conn-${id}`}
-                              className="text-sm font-normal cursor-pointer capitalize"
-                            >
-                              {id}
-                            </Label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                  <div className="pt-2 border-t space-y-2 max-w-md">
+                    <Label>Network mode</Label>
+                    <Select
+                      value={sandboxEnv}
+                      onValueChange={(v) => setSandboxEnv(v as SandboxEnv)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="default-public">
+                          default-public (public egress)
+                        </SelectItem>
+                        <SelectItem value="internal-only">
+                          internal-only (no egress)
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Use <code>default-public</code> when the agent needs to reach external APIs. <code>internal-only</code> is compute-only.
+                    </p>
                   </div>
                 )}
               </CardContent>
