@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, CreditCard, ExternalLink, AlertCircle } from "lucide-react";
+import {
+  Loader2,
+  CreditCard,
+  ExternalLink,
+  AlertCircle,
+  Check,
+  Star,
+} from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageHeader } from "@/components/PageHeader";
@@ -15,6 +22,15 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { plans, type PlanId } from "@thinkwork/pricing-config";
 
 // Thin REST client so we don't pull the urql graphql-client into this
 // screen. Billing is the only caller for now; promote to shared helper
@@ -45,6 +61,8 @@ function BillingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [upgradingPlan, setUpgradingPlan] = useState<PlanId | null>(null);
 
   // Defense-in-depth role check: the sidebar hides Billing for non-owners,
   // but direct URL access shouldn't leak the UI. Short-circuit the
@@ -101,7 +119,40 @@ function BillingPage() {
     })();
   }, [getToken]);
 
-  async function openPortal() {
+  async function startUpgrade(planId: PlanId) {
+    setUpgradingPlan(planId);
+    setError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      const res = await fetch(`${API_URL}/api/stripe/checkout-session`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ plan: planId }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      const data = (await res.json()) as { url?: string };
+      if (!data.url) throw new Error("Checkout did not return a URL");
+      window.location.assign(data.url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setUpgradingPlan(null);
+    }
+  }
+
+  type PortalFlow =
+    | "home"
+    | "payment_method_update"
+    | "subscription_cancel"
+    | "subscription_update";
+
+  async function openPortal(flow: PortalFlow = "home") {
     setPortalLoading(true);
     setError(null);
     try {
@@ -113,6 +164,7 @@ function BillingPage() {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
+        body: flow === "home" ? undefined : JSON.stringify({ flow }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -238,23 +290,34 @@ function BillingPage() {
           </CardHeader>
           <CardContent>
             {state?.hasCustomer ? (
-              <Button
-                onClick={openPortal}
-                disabled={portalLoading}
-                className="w-full"
-              >
-                {portalLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Opening portal…
-                  </>
-                ) : (
-                  <>
-                    Open Stripe portal
-                    <ExternalLink className="ml-2 h-4 w-4" />
-                  </>
-                )}
-              </Button>
+              <div className="space-y-3">
+                <p className="text-muted-foreground text-sm leading-6">
+                  Change plan, update your card, download invoices, or
+                  cancel — all from Stripe's secure portal.
+                </p>
+                <Button
+                  onClick={() => openPortal("home")}
+                  disabled={portalLoading}
+                  className="w-full"
+                >
+                  {portalLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Opening portal…
+                    </>
+                  ) : (
+                    <>
+                      Manage subscription
+                      <ExternalLink className="ml-2 h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+                <p className="text-muted-foreground pt-2 text-xs leading-5">
+                  Cancel deactivates your workspace after the current
+                  billing period. Data is retained for 30 days —
+                  resubscribe within that window to restore everything.
+                </p>
+              </div>
             ) : (
               <div className="space-y-4 text-sm text-muted-foreground">
                 <p>
@@ -262,14 +325,87 @@ function BillingPage() {
                   limits, template-level capability grants, and priority
                   support.
                 </p>
-                <Button asChild className="w-full">
-                  <a href="https://thinkwork.ai/pricing">See plans</a>
+                <Button
+                  className="w-full"
+                  onClick={() => setPickerOpen(true)}
+                >
+                  See plans
                 </Button>
               </div>
             )}
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Choose a plan</DialogTitle>
+            <DialogDescription>
+              Payment redirects to Stripe Checkout. The subscription
+              attaches to your current workspace on success — no data
+              migration needed.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            <div className="grid gap-4 md:grid-cols-3">
+              {plans.map((plan) => {
+                const isPending = upgradingPlan === plan.id;
+                const isDisabled =
+                  upgradingPlan !== null && upgradingPlan !== plan.id;
+                return (
+                  <div
+                    key={plan.id}
+                    className={`flex flex-col rounded-xl border p-4 ${
+                      plan.highlighted
+                        ? "border-primary/60 bg-primary/5"
+                        : "border-border"
+                    } ${isDisabled ? "opacity-40" : ""}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="font-semibold">{plan.name}</div>
+                      {plan.highlighted && (
+                        <Badge variant="default" className="gap-1">
+                          <Star className="h-3 w-3" /> Recommended
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="text-muted-foreground text-xs font-medium uppercase tracking-wider mt-1">
+                      {plan.tagline}
+                    </div>
+                    <p className="text-muted-foreground text-sm mt-2">
+                      {plan.summary}
+                    </p>
+                    <ul className="my-4 space-y-2 flex-1">
+                      {plan.features.map((feat) => (
+                        <li key={feat} className="flex gap-2 text-sm">
+                          <Check className="mt-0.5 h-4 w-4 flex-none text-primary" />
+                          <span>{feat}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <Button
+                      onClick={() => startUpgrade(plan.id)}
+                      disabled={isDisabled || isPending}
+                      variant={plan.highlighted ? "default" : "outline"}
+                      className="w-full"
+                    >
+                      {isPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Opening checkout…
+                        </>
+                      ) : (
+                        plan.cta
+                      )}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
     </PageLayout>
   );
 }

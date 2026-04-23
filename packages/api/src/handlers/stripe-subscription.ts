@@ -39,15 +39,21 @@ export async function handler(
 	}
 
 	// Resolve tenant (JWT claim, or email fallback for Google-federated users).
+	// Email match is case-insensitive — Google can return mixed-case in the
+	// JWT email claim while our users table stores lowercase.
 	let tenantId = auth.tenantId;
-	if (!tenantId && auth.email) {
+	const emailLower = auth.email ? auth.email.toLowerCase() : null;
+	if (!tenantId && emailLower) {
 		const [userRow] = await db
 			.select()
 			.from(users)
-			.where(eq(users.email, auth.email))
+			.where(eq(users.email, emailLower))
 			.limit(1);
 		tenantId = userRow?.tenant_id ?? null;
 	}
+	console.log(
+		`[stripe-subscription] auth.email=${auth.email} auth.tenantId=${auth.tenantId} resolved=${tenantId ?? "null"}`,
+	);
 	if (!tenantId) {
 		return json({ error: "No tenant resolved for the caller" }, 403);
 	}

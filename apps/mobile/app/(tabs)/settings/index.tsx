@@ -352,20 +352,21 @@ export default function SettingsScreen() {
               onPress={() => router.push("/settings/usage")}
               colors={colors}
             />
-            {isOwner && (
-              <SettingsNavRow
-                label="Billing"
-                onPress={() => router.push("/settings/billing")}
-                colors={colors}
-              />
-            )}
-            <View className="flex-row items-center justify-between py-3">
+            <View className="flex-row items-center justify-between py-3 border-b border-neutral-200 dark:border-neutral-800">
               <Text className="text-base text-neutral-500 dark:text-neutral-400">Theme</Text>
               <View className="flex-row gap-2">
                 <ThemeButton option="light" current={themePreference} onPress={() => handleThemeChange("light")} colors={colors} compact />
                 <ThemeButton option="dark" current={themePreference} onPress={() => handleThemeChange("dark")} colors={colors} compact />
               </View>
             </View>
+            {isOwner && (
+              <SettingsNavRow
+                label="Billing"
+                onPress={() => router.push("/settings/billing")}
+                colors={colors}
+                isLast
+              />
+            )}
           </View>
         </WebContent>
       </ScrollView>
