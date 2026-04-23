@@ -27,6 +27,7 @@
     "@shopify/react-native-skia": "2.2.12",
     "@tabler/icons-react-native": "^3.37.1",
     "@tanstack/react-query": "^5.90.21",
+    "@thinkwork/pricing-config": "workspace:*",
     "@thinkwork/react-native-sdk": "workspace:*",
     "@urql/exchange-graphcache": "^8.0.0",
     "amazon-cognito-identity-js": "^6.3.14",
