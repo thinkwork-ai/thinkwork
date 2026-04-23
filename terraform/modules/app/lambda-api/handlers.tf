@@ -181,6 +181,10 @@ resource "aws_lambda_function" "handler" {
     # Bearer API_AUTH_SECRET. No GraphQL resolver involvement, no extra IAM.
     "sandbox-quota-check",
     "sandbox-invocation-log",
+    # Admin-Ops MCP — JSON-RPC endpoint at POST /mcp/admin, exposes the
+    # @thinkwork/admin-ops package as MCP tools for Strands agents. Uses
+    # the same API_AUTH_SECRET bearer the rest of the REST surface accepts.
+    "admin-ops-mcp",
   ]) : toset([])
 
   function_name = "thinkwork-${var.stage}-api-${each.key}"
@@ -345,6 +349,13 @@ locals {
     # executeCode. 429 on quota denial, 201 on audit-row insert.
     "POST /api/sandbox/quota/check-and-increment" = "sandbox-quota-check"
     "POST /api/sandbox/invocations"               = "sandbox-invocation-log"
+
+    # Admin-Ops MCP server — single JSON-RPC endpoint. The Strands
+    # container POSTs MCP messages with Bearer API_AUTH_SECRET. Tool
+    # handlers proxy back out to the REST API at /api/tenants, etc.,
+    # using the same bearer, so the MCP Lambda never touches Aurora
+    # directly.
+    "POST /mcp/admin" = "admin-ops-mcp"
   } : {}
 }
 

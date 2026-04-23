@@ -298,6 +298,9 @@ build_handler "bootstrap-workspaces" \
 build_handler "agentcore-admin" \
   "$REPO_ROOT/packages/lambda/agentcore-admin.ts"
 
+build_handler "admin-ops-mcp" \
+  "$REPO_ROOT/packages/lambda/admin-ops-mcp.ts"
+
 build_handler "github-workspace" \
   "$REPO_ROOT/packages/lambda/github-workspace.ts"
 
