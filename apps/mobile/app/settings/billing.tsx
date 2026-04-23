@@ -3,20 +3,18 @@ import { View, ScrollView, ActivityIndicator, Modal, Pressable } from "react-nat
 import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
 import { useColorScheme } from "nativewind";
-import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  CreditCard,
   ExternalLink,
   AlertCircle,
-  ArrowLeft,
   Check,
   Star,
   X,
 } from "lucide-react-native";
 import { useAuth } from "@/lib/auth-context";
-import { Text, H2, Muted } from "@/components/ui/typography";
+import { Text, Muted } from "@/components/ui/typography";
 import { Button } from "@/components/ui/button";
+import { DetailLayout } from "@/components/layout/detail-layout";
 import { COLORS } from "@/lib/theme";
 import { plans, type PlanId } from "@thinkwork/pricing-config";
 import { startStripeCheckout } from "@/lib/stripe-checkout";
@@ -40,7 +38,6 @@ interface SubscriptionState {
 }
 
 export default function BillingScreen() {
-  const router = useRouter();
   const { getToken } = useAuth();
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
@@ -181,19 +178,7 @@ export default function BillingScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-white dark:bg-neutral-950">
-      <View className="flex-row items-center gap-3 px-4 py-3 border-b border-neutral-200 dark:border-neutral-800">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onPress={() => router.back()}
-          accessibilityLabel="Back"
-        >
-          <ArrowLeft size={20} color={colors.foreground} />
-        </Button>
-        <H2>Billing</H2>
-      </View>
-
+    <DetailLayout title="Billing">
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
@@ -226,8 +211,7 @@ export default function BillingScreen() {
             )}
 
             <View className="rounded-xl border border-neutral-200 dark:border-neutral-800 overflow-hidden">
-              <View className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800 flex-row items-center gap-2">
-                <CreditCard size={16} color={colors.mutedForeground} />
+              <View className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800">
                 <Text className="font-semibold">Current plan</Text>
               </View>
               <View className="px-4 py-3 gap-3">
@@ -324,7 +308,7 @@ export default function BillingScreen() {
       >
         <SafeAreaView className="flex-1 bg-white dark:bg-neutral-950">
           <View className="flex-row items-center justify-between px-4 py-3 border-b border-neutral-200 dark:border-neutral-800">
-            <H2>Choose a plan</H2>
+            <Text className="text-lg font-semibold">Choose a plan</Text>
             <Pressable
               onPress={() => !upgradingPlan && setPickerOpen(false)}
               disabled={!!upgradingPlan}
@@ -413,7 +397,7 @@ export default function BillingScreen() {
           </ScrollView>
         </SafeAreaView>
       </Modal>
-    </SafeAreaView>
+    </DetailLayout>
   );
 }
 
