@@ -1,32 +1,141 @@
+/*
+ * ThinkWork docs — Starlight theme customization.
+ *
+ * Brand ramp mirrors apps/www/tailwind.config.mjs (brand.*) and the
+ * font stack mirrors apps/www/tailwind.config.mjs (fontFamily.sans).
+ * Keep values in sync when either canonical source changes.
+ *
+ * Theme scoping: dark overrides are scoped to :root[data-theme='dark']
+ * (NOT bare :root) so they do not leak into light mode. custom.css is
+ * loaded unlayered; unlayered rules beat Starlight's @layer starlight.base
+ * defaults, so we must match Starlight's theme-attribute scheme exactly.
+ */
+
 :root {
-  --sl-color-accent-low: #1a1a2e;
-  --sl-color-accent: #e2e8f0;
-  --sl-color-accent-high: #f8fafc;
-  --sl-color-white: #ffffff;
-  --sl-color-gray-1: #e2e8f0;
-  --sl-color-gray-2: #cbd5e1;
-  --sl-color-gray-3: #94a3b8;
-  --sl-color-gray-4: #64748b;
-  --sl-color-gray-5: #475569;
-  --sl-color-gray-6: #1e293b;
-  --sl-color-black: #0f172a;
+  /* Brand ramp — sync with apps/www/tailwind.config.mjs brand.* */
+  --brand-50: #f0f9ff;
+  --brand-100: #e0f2fe;
+  --brand-200: #bae6fd;
+  --brand-300: #7dd3fc;
+  --brand-400: #38bdf8;
+  --brand-500: #0ea5e9;
+  --brand-600: #0284c7;
+  --brand-700: #0369a1;
+  --brand-800: #075985;
+  --brand-900: #0c4a6e;
+
+  /* Font stack — verbatim from apps/www/tailwind.config.mjs fontFamily.sans.
+     Overriding --sl-font aligns docs with www's system-ui stack. */
+  --sl-font:
+    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
 }
 
+/* Dark mode — match apps/www's #070a0f near-black + brand sky-blue accent.
+   Starlight ships dark as the default in a bare :root; we scope to the
+   explicit attribute so these overrides don't bleed into light mode.
+
+   Rails (sidebar + TOC) are lifted one step above --sl-color-bg so the
+   information architecture reads even without strong borders. */
 :root[data-theme="dark"] {
-  --sl-color-accent-low: #1e293b;
-  --sl-color-accent: #94a3b8;
-  --sl-color-accent-high: #e2e8f0;
+  --sl-color-accent-low: var(--brand-900);
+  --sl-color-accent: var(--brand-400);
+  --sl-color-accent-high: var(--brand-300);
+  --sl-color-text-accent: var(--brand-400);
+
+  --sl-color-bg: #070a0f;
+  --sl-color-bg-nav: #070a0f;
+  --sl-color-bg-sidebar: #0c1118; /* subtle lift from bg — ~5% raised */
+
+  /* Hairlines — apps/www's border-white/5 translated to Starlight's three
+     hairline tokens (shade = sidebar rule, base = TOC rule, light = in-body). */
+  --sl-color-hairline-shade: rgba(255, 255, 255, 0.06);
+  --sl-color-hairline: rgba(255, 255, 255, 0.06);
+  --sl-color-hairline-light: rgba(255, 255, 255, 0.05);
+
+  /* Gray ramp — slate, Starlight's inverted direction
+     (gray-1 lightest / gray-6 darkest surface). */
+  --sl-color-gray-1: #e2e8f0; /* slate-200 — heading text */
+  --sl-color-gray-2: #cbd5e1; /* slate-300 — body text */
+  --sl-color-gray-3: #94a3b8; /* slate-400 — muted */
+  --sl-color-gray-4: #64748b; /* slate-500 — quiet */
+  --sl-color-gray-5: #334155; /* slate-700 — rules, borders */
+  --sl-color-gray-6: #1e293b; /* slate-800 — elevated surface */
 }
 
-/* Shrink the header brain mark and tighten its gap to the "ThinkWork"
-   wordmark. Starlight defaults size the logo to the full nav height
-   which is too loud against the small title text. */
+/* Light mode — deeper brand shade for contrast on white + subtle rail lift
+   so sidebar and TOC read as navigation zones, not blank space. */
+:root[data-theme="light"] {
+  --sl-color-accent-low: var(--brand-100);
+  --sl-color-accent: var(--brand-700);
+  --sl-color-accent-high: var(--brand-900);
+  --sl-color-text-accent: var(--brand-700);
+
+  /* Lift rails to slate-50; main content stays on Starlight's white. */
+  --sl-color-bg-sidebar: #f8fafc; /* slate-50 */
+
+  --sl-color-hairline-shade: rgba(15, 23, 42, 0.08);
+  --sl-color-hairline: rgba(15, 23, 42, 0.08);
+  --sl-color-hairline-light: rgba(15, 23, 42, 0.06);
+}
+
+/* Right-hand TOC rail — Starlight's .right-sidebar has no background by
+   default. Fill the reserved column so the TOC reads as a zone paired
+   with the left sidebar. Only applies at Starlight's two-column breakpoint. */
+@media (min-width: 72rem) {
+  .right-sidebar-container {
+    background-color: var(--sl-color-bg-sidebar);
+  }
+  .right-sidebar {
+    background-color: var(--sl-color-bg-sidebar);
+  }
+}
+
+/* Translucent fixed header — matches apps/www's chrome treatment.
+   Starlight's .header is already position: fixed (PageFrame.astro);
+   we layer backdrop-blur + thin rule on top in both modes. */
+header.header {
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+:root[data-theme="dark"] header.header {
+  background-color: color-mix(in srgb, #070a0f 80%, transparent);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+:root[data-theme="light"] header.header {
+  background-color: color-mix(in srgb, #ffffff 80%, transparent);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+/* Inline link hover in prose — subtle lift toward accent-high. */
+.sl-markdown-content a[href]:hover {
+  color: var(--sl-color-accent-high);
+}
+
+/* Section rules in prose — echo apps/www's border-white/5 between sections. */
+:root[data-theme="dark"] .sl-markdown-content hr {
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  margin: 2.5rem 0;
+}
+
+:root[data-theme="light"] .sl-markdown-content hr {
+  border: 0;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  margin: 2.5rem 0;
+}
+
+/* Site title — SiteTitle.astro renders BrainMark inline, so currentColor
+   tints it brand blue. Tighten gap and size the mark consistently. */
 a.site-title {
   gap: 0.5rem;
+  color: var(--sl-color-accent);
 }
-a.site-title img {
-  max-height: 1.75rem;
-  width: auto;
+a.site-title svg {
+  width: 1.75rem;
+  height: 1.75rem;
 }
 
 /* Center body content on the splash landing page and add breathing room. */
@@ -39,6 +148,18 @@ a.site-title img {
 [data-has-hero] .sl-markdown-content .sl-heading-wrapper {
   text-align: center;
   justify-content: center;
+}
+
+/* Secondary hero CTA — light-mode pass (dark-mode lives in Hero.astro). */
+:root[data-theme="light"] .hero-btn.secondary {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: rgba(15, 23, 42, 0.02);
+  color: var(--sl-color-text);
+}
+
+:root[data-theme="light"] .hero-btn.secondary:hover {
+  border-color: rgba(15, 23, 42, 0.2);
+  background: rgba(15, 23, 42, 0.05);
 }
 
 /* Constrain mobile-screenshot images so iPhone-resolution PNGs (~1200px
