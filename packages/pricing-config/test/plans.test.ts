@@ -37,7 +37,8 @@ describe("pricing-config", () => {
 	});
 
 	it("getPlanById returns undefined for unknown ids", () => {
-		// @ts-expect-error — deliberately passing an id outside the union
+		// The function accepts `PlanId | string` so unknown strings pass
+		// compilation but resolve to undefined at runtime.
 		expect(getPlanById("nonexistent")).toBeUndefined();
 	});
 
