@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation } from "urql";
 import CodeMirror from "@uiw/react-codemirror";
@@ -311,6 +311,14 @@ function TemplateEditorPage() {
   }, []);
 
   const catalogMap = new Map(catalog.map((s) => [s.slug, s]));
+
+  const sortedCatalog = useMemo(
+    () =>
+      [...catalog].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+      ),
+    [catalog],
+  );
 
   // Lazily fetch manifest details (scripts, permissions_model) for any
   // templateSkill whose details we don't yet have. listCatalog's payload
@@ -889,7 +897,7 @@ function TemplateEditorPage() {
                 },
               },
             ]}
-            data={catalog}
+            data={sortedCatalog}
             pageSize={0}
             tableClassName="table-fixed"
           />

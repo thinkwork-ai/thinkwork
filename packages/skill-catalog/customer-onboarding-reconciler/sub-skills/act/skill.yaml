@@ -5,7 +5,7 @@ description: >
   what tasks to create this tick. MUST NOT wait for human input — read
   state, create missing tasks, exit. HITL happens between ticks, not
   inside one.
-category: composable-primitive
+category: workflow
 version: "0.1.0"
 author: thinkwork
 execution: context

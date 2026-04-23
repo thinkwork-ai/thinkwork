@@ -5,7 +5,7 @@ description: >
   declare a parallel step and the composition runner executes the branches
   concurrently. This entry exists so admins can see gather in the catalog
   alongside the other composition primitives.
-category: composable-primitive
+category: workflow
 version: "0.1.0"
 author: thinkwork
 icon: layers
