@@ -290,49 +290,32 @@ function BillingPage() {
           </CardHeader>
           <CardContent>
             {state?.hasCustomer ? (
-              <div className="grid gap-2">
+              <div className="space-y-3">
+                <p className="text-muted-foreground text-sm leading-6">
+                  Change plan, update your card, download invoices, or
+                  cancel — all from Stripe's secure portal.
+                </p>
                 <Button
-                  onClick={() => openPortal("subscription_update")}
+                  onClick={() => openPortal("home")}
                   disabled={portalLoading}
-                  variant="default"
+                  className="w-full"
                 >
                   {portalLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Opening portal…
+                    </>
                   ) : (
                     <>
-                      Change plan
+                      Manage subscription
                       <ExternalLink className="ml-2 h-4 w-4" />
                     </>
                   )}
                 </Button>
-                <Button
-                  onClick={() => openPortal("payment_method_update")}
-                  disabled={portalLoading}
-                  variant="outline"
-                >
-                  Update payment method
-                  <ExternalLink className="ml-2 h-4 w-4" />
-                </Button>
-                <Button
-                  onClick={() => openPortal("home")}
-                  disabled={portalLoading}
-                  variant="outline"
-                >
-                  Invoice history & receipts
-                  <ExternalLink className="ml-2 h-4 w-4" />
-                </Button>
-                <Button
-                  onClick={() => openPortal("subscription_cancel")}
-                  disabled={portalLoading}
-                  variant="destructive"
-                >
-                  Cancel subscription
-                  <ExternalLink className="ml-2 h-4 w-4" />
-                </Button>
                 <p className="text-muted-foreground pt-2 text-xs leading-5">
                   Cancel deactivates your workspace after the current
-                  billing period. Data is retained for 30 days — resubscribe
-                  within that window to restore everything.
+                  billing period. Data is retained for 30 days —
+                  resubscribe within that window to restore everything.
                 </p>
               </div>
             ) : (

@@ -260,75 +260,32 @@ export default function BillingScreen() {
               {state?.hasCustomer ? (
                 <>
                   <Muted className="leading-5">
-                    Manage your subscription through Stripe's secure
-                    portal.
+                    Change plan, update your card, download invoices, or
+                    cancel — all from Stripe's secure portal.
                   </Muted>
-                  <View className="gap-2">
-                    <Button
-                      onPress={() => openPortal("subscription_update")}
-                      disabled={portalLoading}
-                      size="lg"
-                    >
+                  <Button
+                    onPress={() => openPortal("home")}
+                    disabled={portalLoading}
+                    size="lg"
+                  >
+                    {portalLoading ? (
                       <View className="flex-row items-center gap-2">
-                        {portalLoading ? (
-                          <ActivityIndicator
-                            size="small"
-                            color={colors.background}
-                          />
-                        ) : (
-                          <>
-                            <Text>Change plan</Text>
-                            <ExternalLink
-                              size={14}
-                              color={colors.background}
-                            />
-                          </>
-                        )}
+                        <ActivityIndicator
+                          size="small"
+                          color={colors.background}
+                        />
+                        <Text>Opening portal…</Text>
                       </View>
-                    </Button>
-                    <Button
-                      onPress={() => openPortal("payment_method_update")}
-                      disabled={portalLoading}
-                      variant="outline"
-                      size="lg"
-                    >
+                    ) : (
                       <View className="flex-row items-center gap-2">
-                        <Text>Update payment method</Text>
+                        <Text>Manage subscription</Text>
                         <ExternalLink
                           size={14}
-                          color={colors.foreground}
+                          color={colors.background}
                         />
                       </View>
-                    </Button>
-                    <Button
-                      onPress={() => openPortal("home")}
-                      disabled={portalLoading}
-                      variant="outline"
-                      size="lg"
-                    >
-                      <View className="flex-row items-center gap-2">
-                        <Text>Invoice history & receipts</Text>
-                        <ExternalLink
-                          size={14}
-                          color={colors.foreground}
-                        />
-                      </View>
-                    </Button>
-                    <Button
-                      onPress={() => openPortal("subscription_cancel")}
-                      disabled={portalLoading}
-                      variant="destructive"
-                      size="lg"
-                    >
-                      <View className="flex-row items-center gap-2">
-                        <Text>Cancel subscription</Text>
-                        <ExternalLink
-                          size={14}
-                          color={colors.destructive}
-                        />
-                      </View>
-                    </Button>
-                  </View>
+                    )}
+                  </Button>
                   <Text
                     size="xs"
                     variant="muted"
