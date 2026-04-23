@@ -65,7 +65,7 @@ const secondaryItems = services.packages.items.filter(
 
     {/* 2. Positioning */}
     <SectionShell tone="raised">
-      <div class="mx-auto max-w-3xl">
+      <div class="mx-auto max-w-3xl text-center">
         <h2 class="text-balance text-3xl font-bold leading-[1.15] tracking-tight md:text-4xl">
           {services.positioning.headline}
         </h2>
@@ -81,6 +81,7 @@ const secondaryItems = services.packages.items.filter(
         eyebrow={services.how.eyebrow}
         headline={services.how.headline}
         lede={services.how.lede}
+        align="center"
         width="wide"
       />
       <ol class="mt-14 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
@@ -108,6 +109,7 @@ const secondaryItems = services.packages.items.filter(
         eyebrow={services.packages.eyebrow}
         headline={services.packages.headline}
         lede={services.packages.lede}
+        align="center"
         width="wide"
       />
       <div class="mt-14 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
@@ -128,7 +130,7 @@ const secondaryItems = services.packages.items.filter(
 
     {/* 5. Additional packages (secondary) */}
     <SectionShell tone="default">
-      <div class="max-w-3xl">
+      <div class="mx-auto max-w-3xl text-center">
         <h2 class="text-balance text-2xl font-semibold tracking-tight text-slate-100 md:text-3xl">
           {services.packages.secondaryHeadline}
         </h2>
@@ -136,7 +138,7 @@ const secondaryItems = services.packages.items.filter(
           {services.packages.secondaryLede}
         </p>
       </div>
-      <div class="mt-12 grid gap-5 md:grid-cols-2">
+      <div class="mx-auto mt-12 grid max-w-5xl gap-5 md:grid-cols-2">
         {secondaryItems.map((pkg) => (
           <ServiceCard
             id={pkg.id}
@@ -157,6 +159,7 @@ const secondaryItems = services.packages.items.filter(
       <SectionHeader
         eyebrow={services.specializedSupport.eyebrow}
         headline={services.specializedSupport.headline}
+        align="center"
         width="wide"
       />
       <ul class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -175,33 +178,24 @@ const secondaryItems = services.packages.items.filter(
 
     {/* 7. Engagement model */}
     <SectionShell tone="default">
-      <div class="mx-auto grid max-w-5xl gap-12 md:grid-cols-[1fr_1fr] md:gap-16">
-        <div>
-          <p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-brand/90">
-            <span class="mr-2 inline-block h-1 w-1 rounded-full bg-brand align-middle"></span>
-            {services.engagementModel.eyebrow}
-          </p>
-          <h2 class="mt-5 text-balance text-3xl font-bold leading-[1.15] tracking-tight md:text-4xl">
-            {services.engagementModel.headline}
-          </h2>
-        </div>
-        <div>
-          <p class="text-base leading-relaxed text-slate-400">
-            {services.engagementModel.body}
-          </p>
-          <ul class="mt-6 space-y-3">
-            {services.engagementModel.bullets.map((bullet) => (
-              <li class="flex gap-3 text-sm text-slate-300">
-                <svg
-                  class="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-brand"
-                  aria-hidden="true"
-                ></svg>
-                <span>{bullet}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
+      <SectionHeader
+        eyebrow={services.engagementModel.eyebrow}
+        headline={services.engagementModel.headline}
+        lede={services.engagementModel.body}
+        align="center"
+        width="wide"
+      />
+      <ul class="mx-auto mt-10 flex max-w-2xl flex-col items-center gap-3">
+        {services.engagementModel.bullets.map((bullet) => (
+          <li class="flex items-center gap-3 text-sm text-slate-300">
+            <svg
+              class="h-1.5 w-1.5 flex-none rounded-full bg-brand"
+              aria-hidden="true"
+            ></svg>
+            <span>{bullet}</span>
+          </li>
+        ))}
+      </ul>
     </SectionShell>
 
     {/* 8. FAQ */}
@@ -209,6 +203,7 @@ const secondaryItems = services.packages.items.filter(
       <SectionHeader
         eyebrow={services.faq.eyebrow}
         headline={services.faq.headline}
+        align="center"
         width="wide"
       />
       <div class="mx-auto mt-12 max-w-3xl divide-y divide-white/8">
