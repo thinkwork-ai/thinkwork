@@ -58,10 +58,10 @@ import { Route as AuthedTenantAgentsNewRouteImport } from './routes/_authed/_ten
 import { Route as AuthedTenantAgentsInvitesRouteImport } from './routes/_authed/_tenant/agents/invites'
 import { Route as AuthedTenantAgentsAgentIdRouteImport } from './routes/_authed/_tenant/agents/$agentId'
 import { Route as AuthedTenantAgentTemplatesDefaultsRouteImport } from './routes/_authed/_tenant/agent-templates/defaults'
-import { Route as AuthedTenantAgentTemplatesTemplateIdRouteImport } from './routes/_authed/_tenant/agent-templates/$templateId'
 import { Route as AuthedTenantEvaluationsStudioIndexRouteImport } from './routes/_authed/_tenant/evaluations/studio/index'
 import { Route as AuthedTenantCapabilitiesSkillsIndexRouteImport } from './routes/_authed/_tenant/capabilities/skills/index'
 import { Route as AuthedTenantAnalyticsSkillRunsIndexRouteImport } from './routes/_authed/_tenant/analytics/skill-runs/index'
+import { Route as AuthedTenantAgentTemplatesTemplateIdIndexRouteImport } from './routes/_authed/_tenant/agent-templates/$templateId.index'
 import { Route as AuthedTenantEvaluationsStudioNewRouteImport } from './routes/_authed/_tenant/evaluations/studio/new'
 import { Route as AuthedTenantEvaluationsStudioTestCaseIdRouteImport } from './routes/_authed/_tenant/evaluations/studio/$testCaseId'
 import { Route as AuthedTenantCapabilitiesSkillsBuilderRouteImport } from './routes/_authed/_tenant/capabilities/skills/builder'
@@ -74,6 +74,7 @@ import { Route as AuthedTenantAgentsAgentIdSkillsRouteImport } from './routes/_a
 import { Route as AuthedTenantAgentsAgentIdMemoryRouteImport } from './routes/_authed/_tenant/agents/$agentId_.memory'
 import { Route as AuthedTenantAgentsAgentIdKnowledgeRouteImport } from './routes/_authed/_tenant/agents/$agentId_.knowledge'
 import { Route as AuthedTenantAgentTemplatesTemplateIdSyncRouteImport } from './routes/_authed/_tenant/agent-templates/$templateId_.sync'
+import { Route as AuthedTenantAgentTemplatesTemplateIdTabRouteImport } from './routes/_authed/_tenant/agent-templates/$templateId.$tab'
 import { Route as AuthedTenantAgentsAgentIdScheduledJobsIndexRouteImport } from './routes/_authed/_tenant/agents/$agentId_.scheduled-jobs.index'
 import { Route as AuthedTenantEvaluationsStudioEditTestCaseIdRouteImport } from './routes/_authed/_tenant/evaluations/studio/edit.$testCaseId'
 import { Route as AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRouteImport } from './routes/_authed/_tenant/agents/$agentId_.scheduled-jobs.$scheduledJobId'
@@ -351,12 +352,6 @@ const AuthedTenantAgentTemplatesDefaultsRoute =
     path: '/agent-templates/defaults',
     getParentRoute: () => AuthedTenantRoute,
   } as any)
-const AuthedTenantAgentTemplatesTemplateIdRoute =
-  AuthedTenantAgentTemplatesTemplateIdRouteImport.update({
-    id: '/agent-templates/$templateId',
-    path: '/agent-templates/$templateId',
-    getParentRoute: () => AuthedTenantRoute,
-  } as any)
 const AuthedTenantEvaluationsStudioIndexRoute =
   AuthedTenantEvaluationsStudioIndexRouteImport.update({
     id: '/evaluations/studio/',
@@ -374,6 +369,12 @@ const AuthedTenantAnalyticsSkillRunsIndexRoute =
     id: '/skill-runs/',
     path: '/skill-runs/',
     getParentRoute: () => AuthedTenantAnalyticsRoute,
+  } as any)
+const AuthedTenantAgentTemplatesTemplateIdIndexRoute =
+  AuthedTenantAgentTemplatesTemplateIdIndexRouteImport.update({
+    id: '/agent-templates/$templateId/',
+    path: '/agent-templates/$templateId/',
+    getParentRoute: () => AuthedTenantRoute,
   } as any)
 const AuthedTenantEvaluationsStudioNewRoute =
   AuthedTenantEvaluationsStudioNewRouteImport.update({
@@ -447,6 +448,12 @@ const AuthedTenantAgentTemplatesTemplateIdSyncRoute =
     path: '/agent-templates/$templateId/sync',
     getParentRoute: () => AuthedTenantRoute,
   } as any)
+const AuthedTenantAgentTemplatesTemplateIdTabRoute =
+  AuthedTenantAgentTemplatesTemplateIdTabRouteImport.update({
+    id: '/agent-templates/$templateId/$tab',
+    path: '/agent-templates/$templateId/$tab',
+    getParentRoute: () => AuthedTenantRoute,
+  } as any)
 const AuthedTenantAgentsAgentIdScheduledJobsIndexRoute =
   AuthedTenantAgentsAgentIdScheduledJobsIndexRouteImport.update({
     id: '/agents/$agentId_/scheduled-jobs/',
@@ -479,7 +486,6 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthedTenantDashboardRoute
   '/org': typeof AuthedTenantOrgRoute
   '/settings': typeof AuthedTenantSettingsRoute
-  '/agent-templates/$templateId': typeof AuthedTenantAgentTemplatesTemplateIdRoute
   '/agent-templates/defaults': typeof AuthedTenantAgentTemplatesDefaultsRoute
   '/agents/$agentId': typeof AuthedTenantAgentsAgentIdRoute
   '/agents/invites': typeof AuthedTenantAgentsInvitesRoute
@@ -515,6 +521,7 @@ export interface FileRoutesByFullPath {
   '/threads/': typeof AuthedTenantThreadsIndexRoute
   '/webhooks/': typeof AuthedTenantWebhooksIndexRoute
   '/wiki/': typeof AuthedTenantWikiIndexRoute
+  '/agent-templates/$templateId/$tab': typeof AuthedTenantAgentTemplatesTemplateIdTabRoute
   '/agent-templates/$templateId/sync': typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute
   '/agents/$agentId/knowledge': typeof AuthedTenantAgentsAgentIdKnowledgeRoute
   '/agents/$agentId/memory': typeof AuthedTenantAgentsAgentIdMemoryRoute
@@ -527,6 +534,7 @@ export interface FileRoutesByFullPath {
   '/capabilities/skills/builder': typeof AuthedTenantCapabilitiesSkillsBuilderRoute
   '/evaluations/studio/$testCaseId': typeof AuthedTenantEvaluationsStudioTestCaseIdRoute
   '/evaluations/studio/new': typeof AuthedTenantEvaluationsStudioNewRoute
+  '/agent-templates/$templateId/': typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute
   '/analytics/skill-runs/': typeof AuthedTenantAnalyticsSkillRunsIndexRoute
   '/capabilities/skills/': typeof AuthedTenantCapabilitiesSkillsIndexRoute
   '/evaluations/studio/': typeof AuthedTenantEvaluationsStudioIndexRoute
@@ -545,7 +553,6 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthedTenantDashboardRoute
   '/org': typeof AuthedTenantOrgRoute
   '/settings': typeof AuthedTenantSettingsRoute
-  '/agent-templates/$templateId': typeof AuthedTenantAgentTemplatesTemplateIdRoute
   '/agent-templates/defaults': typeof AuthedTenantAgentTemplatesDefaultsRoute
   '/agents/$agentId': typeof AuthedTenantAgentsAgentIdRoute
   '/agents/invites': typeof AuthedTenantAgentsInvitesRoute
@@ -581,6 +588,7 @@ export interface FileRoutesByTo {
   '/threads': typeof AuthedTenantThreadsIndexRoute
   '/webhooks': typeof AuthedTenantWebhooksIndexRoute
   '/wiki': typeof AuthedTenantWikiIndexRoute
+  '/agent-templates/$templateId/$tab': typeof AuthedTenantAgentTemplatesTemplateIdTabRoute
   '/agent-templates/$templateId/sync': typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute
   '/agents/$agentId/knowledge': typeof AuthedTenantAgentsAgentIdKnowledgeRoute
   '/agents/$agentId/memory': typeof AuthedTenantAgentsAgentIdMemoryRoute
@@ -593,6 +601,7 @@ export interface FileRoutesByTo {
   '/capabilities/skills/builder': typeof AuthedTenantCapabilitiesSkillsBuilderRoute
   '/evaluations/studio/$testCaseId': typeof AuthedTenantEvaluationsStudioTestCaseIdRoute
   '/evaluations/studio/new': typeof AuthedTenantEvaluationsStudioNewRoute
+  '/agent-templates/$templateId': typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute
   '/analytics/skill-runs': typeof AuthedTenantAnalyticsSkillRunsIndexRoute
   '/capabilities/skills': typeof AuthedTenantCapabilitiesSkillsIndexRoute
   '/evaluations/studio': typeof AuthedTenantEvaluationsStudioIndexRoute
@@ -616,7 +625,6 @@ export interface FileRoutesById {
   '/_authed/_tenant/dashboard': typeof AuthedTenantDashboardRoute
   '/_authed/_tenant/org': typeof AuthedTenantOrgRoute
   '/_authed/_tenant/settings': typeof AuthedTenantSettingsRoute
-  '/_authed/_tenant/agent-templates/$templateId': typeof AuthedTenantAgentTemplatesTemplateIdRoute
   '/_authed/_tenant/agent-templates/defaults': typeof AuthedTenantAgentTemplatesDefaultsRoute
   '/_authed/_tenant/agents/$agentId': typeof AuthedTenantAgentsAgentIdRoute
   '/_authed/_tenant/agents/invites': typeof AuthedTenantAgentsInvitesRoute
@@ -652,6 +660,7 @@ export interface FileRoutesById {
   '/_authed/_tenant/threads/': typeof AuthedTenantThreadsIndexRoute
   '/_authed/_tenant/webhooks/': typeof AuthedTenantWebhooksIndexRoute
   '/_authed/_tenant/wiki/': typeof AuthedTenantWikiIndexRoute
+  '/_authed/_tenant/agent-templates/$templateId/$tab': typeof AuthedTenantAgentTemplatesTemplateIdTabRoute
   '/_authed/_tenant/agent-templates/$templateId_/sync': typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute
   '/_authed/_tenant/agents/$agentId_/knowledge': typeof AuthedTenantAgentsAgentIdKnowledgeRoute
   '/_authed/_tenant/agents/$agentId_/memory': typeof AuthedTenantAgentsAgentIdMemoryRoute
@@ -664,6 +673,7 @@ export interface FileRoutesById {
   '/_authed/_tenant/capabilities/skills/builder': typeof AuthedTenantCapabilitiesSkillsBuilderRoute
   '/_authed/_tenant/evaluations/studio/$testCaseId': typeof AuthedTenantEvaluationsStudioTestCaseIdRoute
   '/_authed/_tenant/evaluations/studio/new': typeof AuthedTenantEvaluationsStudioNewRoute
+  '/_authed/_tenant/agent-templates/$templateId/': typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute
   '/_authed/_tenant/analytics/skill-runs/': typeof AuthedTenantAnalyticsSkillRunsIndexRoute
   '/_authed/_tenant/capabilities/skills/': typeof AuthedTenantCapabilitiesSkillsIndexRoute
   '/_authed/_tenant/evaluations/studio/': typeof AuthedTenantEvaluationsStudioIndexRoute
@@ -686,7 +696,6 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/org'
     | '/settings'
-    | '/agent-templates/$templateId'
     | '/agent-templates/defaults'
     | '/agents/$agentId'
     | '/agents/invites'
@@ -722,6 +731,7 @@ export interface FileRouteTypes {
     | '/threads/'
     | '/webhooks/'
     | '/wiki/'
+    | '/agent-templates/$templateId/$tab'
     | '/agent-templates/$templateId/sync'
     | '/agents/$agentId/knowledge'
     | '/agents/$agentId/memory'
@@ -734,6 +744,7 @@ export interface FileRouteTypes {
     | '/capabilities/skills/builder'
     | '/evaluations/studio/$testCaseId'
     | '/evaluations/studio/new'
+    | '/agent-templates/$templateId/'
     | '/analytics/skill-runs/'
     | '/capabilities/skills/'
     | '/evaluations/studio/'
@@ -752,7 +763,6 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/org'
     | '/settings'
-    | '/agent-templates/$templateId'
     | '/agent-templates/defaults'
     | '/agents/$agentId'
     | '/agents/invites'
@@ -788,6 +798,7 @@ export interface FileRouteTypes {
     | '/threads'
     | '/webhooks'
     | '/wiki'
+    | '/agent-templates/$templateId/$tab'
     | '/agent-templates/$templateId/sync'
     | '/agents/$agentId/knowledge'
     | '/agents/$agentId/memory'
@@ -800,6 +811,7 @@ export interface FileRouteTypes {
     | '/capabilities/skills/builder'
     | '/evaluations/studio/$testCaseId'
     | '/evaluations/studio/new'
+    | '/agent-templates/$templateId'
     | '/analytics/skill-runs'
     | '/capabilities/skills'
     | '/evaluations/studio'
@@ -822,7 +834,6 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/dashboard'
     | '/_authed/_tenant/org'
     | '/_authed/_tenant/settings'
-    | '/_authed/_tenant/agent-templates/$templateId'
     | '/_authed/_tenant/agent-templates/defaults'
     | '/_authed/_tenant/agents/$agentId'
     | '/_authed/_tenant/agents/invites'
@@ -858,6 +869,7 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/threads/'
     | '/_authed/_tenant/webhooks/'
     | '/_authed/_tenant/wiki/'
+    | '/_authed/_tenant/agent-templates/$templateId/$tab'
     | '/_authed/_tenant/agent-templates/$templateId_/sync'
     | '/_authed/_tenant/agents/$agentId_/knowledge'
     | '/_authed/_tenant/agents/$agentId_/memory'
@@ -870,6 +882,7 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/capabilities/skills/builder'
     | '/_authed/_tenant/evaluations/studio/$testCaseId'
     | '/_authed/_tenant/evaluations/studio/new'
+    | '/_authed/_tenant/agent-templates/$templateId/'
     | '/_authed/_tenant/analytics/skill-runs/'
     | '/_authed/_tenant/capabilities/skills/'
     | '/_authed/_tenant/evaluations/studio/'
@@ -1233,13 +1246,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedTenantAgentTemplatesDefaultsRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
-    '/_authed/_tenant/agent-templates/$templateId': {
-      id: '/_authed/_tenant/agent-templates/$templateId'
-      path: '/agent-templates/$templateId'
-      fullPath: '/agent-templates/$templateId'
-      preLoaderRoute: typeof AuthedTenantAgentTemplatesTemplateIdRouteImport
-      parentRoute: typeof AuthedTenantRoute
-    }
     '/_authed/_tenant/evaluations/studio/': {
       id: '/_authed/_tenant/evaluations/studio/'
       path: '/evaluations/studio'
@@ -1260,6 +1266,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/analytics/skill-runs/'
       preLoaderRoute: typeof AuthedTenantAnalyticsSkillRunsIndexRouteImport
       parentRoute: typeof AuthedTenantAnalyticsRoute
+    }
+    '/_authed/_tenant/agent-templates/$templateId/': {
+      id: '/_authed/_tenant/agent-templates/$templateId/'
+      path: '/agent-templates/$templateId'
+      fullPath: '/agent-templates/$templateId/'
+      preLoaderRoute: typeof AuthedTenantAgentTemplatesTemplateIdIndexRouteImport
+      parentRoute: typeof AuthedTenantRoute
     }
     '/_authed/_tenant/evaluations/studio/new': {
       id: '/_authed/_tenant/evaluations/studio/new'
@@ -1343,6 +1356,13 @@ declare module '@tanstack/react-router' {
       path: '/agent-templates/$templateId/sync'
       fullPath: '/agent-templates/$templateId/sync'
       preLoaderRoute: typeof AuthedTenantAgentTemplatesTemplateIdSyncRouteImport
+      parentRoute: typeof AuthedTenantRoute
+    }
+    '/_authed/_tenant/agent-templates/$templateId/$tab': {
+      id: '/_authed/_tenant/agent-templates/$templateId/$tab'
+      path: '/agent-templates/$templateId/$tab'
+      fullPath: '/agent-templates/$templateId/$tab'
+      preLoaderRoute: typeof AuthedTenantAgentTemplatesTemplateIdTabRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
     '/_authed/_tenant/agents/$agentId_/scheduled-jobs/': {
@@ -1430,7 +1450,6 @@ interface AuthedTenantRouteChildren {
   AuthedTenantDashboardRoute: typeof AuthedTenantDashboardRoute
   AuthedTenantOrgRoute: typeof AuthedTenantOrgRoute
   AuthedTenantSettingsRoute: typeof AuthedTenantSettingsRoute
-  AuthedTenantAgentTemplatesTemplateIdRoute: typeof AuthedTenantAgentTemplatesTemplateIdRoute
   AuthedTenantAgentTemplatesDefaultsRoute: typeof AuthedTenantAgentTemplatesDefaultsRoute
   AuthedTenantAgentsAgentIdRoute: typeof AuthedTenantAgentsAgentIdRoute
   AuthedTenantAgentsInvitesRoute: typeof AuthedTenantAgentsInvitesRoute
@@ -1459,6 +1478,7 @@ interface AuthedTenantRouteChildren {
   AuthedTenantThreadsIndexRoute: typeof AuthedTenantThreadsIndexRoute
   AuthedTenantWebhooksIndexRoute: typeof AuthedTenantWebhooksIndexRoute
   AuthedTenantWikiIndexRoute: typeof AuthedTenantWikiIndexRoute
+  AuthedTenantAgentTemplatesTemplateIdTabRoute: typeof AuthedTenantAgentTemplatesTemplateIdTabRoute
   AuthedTenantAgentTemplatesTemplateIdSyncRoute: typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute
   AuthedTenantAgentsAgentIdKnowledgeRoute: typeof AuthedTenantAgentsAgentIdKnowledgeRoute
   AuthedTenantAgentsAgentIdMemoryRoute: typeof AuthedTenantAgentsAgentIdMemoryRoute
@@ -1468,6 +1488,7 @@ interface AuthedTenantRouteChildren {
   AuthedTenantAgentsAgentIdWorkspacesRoute: typeof AuthedTenantAgentsAgentIdWorkspacesRoute
   AuthedTenantEvaluationsStudioTestCaseIdRoute: typeof AuthedTenantEvaluationsStudioTestCaseIdRoute
   AuthedTenantEvaluationsStudioNewRoute: typeof AuthedTenantEvaluationsStudioNewRoute
+  AuthedTenantAgentTemplatesTemplateIdIndexRoute: typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute
   AuthedTenantEvaluationsStudioIndexRoute: typeof AuthedTenantEvaluationsStudioIndexRoute
   AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute: typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute
   AuthedTenantEvaluationsStudioEditTestCaseIdRoute: typeof AuthedTenantEvaluationsStudioEditTestCaseIdRoute
@@ -1481,8 +1502,6 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantDashboardRoute: AuthedTenantDashboardRoute,
   AuthedTenantOrgRoute: AuthedTenantOrgRoute,
   AuthedTenantSettingsRoute: AuthedTenantSettingsRoute,
-  AuthedTenantAgentTemplatesTemplateIdRoute:
-    AuthedTenantAgentTemplatesTemplateIdRoute,
   AuthedTenantAgentTemplatesDefaultsRoute:
     AuthedTenantAgentTemplatesDefaultsRoute,
   AuthedTenantAgentsAgentIdRoute: AuthedTenantAgentsAgentIdRoute,
@@ -1513,6 +1532,8 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantThreadsIndexRoute: AuthedTenantThreadsIndexRoute,
   AuthedTenantWebhooksIndexRoute: AuthedTenantWebhooksIndexRoute,
   AuthedTenantWikiIndexRoute: AuthedTenantWikiIndexRoute,
+  AuthedTenantAgentTemplatesTemplateIdTabRoute:
+    AuthedTenantAgentTemplatesTemplateIdTabRoute,
   AuthedTenantAgentTemplatesTemplateIdSyncRoute:
     AuthedTenantAgentTemplatesTemplateIdSyncRoute,
   AuthedTenantAgentsAgentIdKnowledgeRoute:
@@ -1528,6 +1549,8 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantEvaluationsStudioTestCaseIdRoute:
     AuthedTenantEvaluationsStudioTestCaseIdRoute,
   AuthedTenantEvaluationsStudioNewRoute: AuthedTenantEvaluationsStudioNewRoute,
+  AuthedTenantAgentTemplatesTemplateIdIndexRoute:
+    AuthedTenantAgentTemplatesTemplateIdIndexRoute,
   AuthedTenantEvaluationsStudioIndexRoute:
     AuthedTenantEvaluationsStudioIndexRoute,
   AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute:
