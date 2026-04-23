@@ -423,22 +423,20 @@ export type ServicePackage = {
   includes: string[];
   bestFor: string;
   variant: "featured" | "secondary";
-  cta: string;
-  mailtoSubject: string;
 };
 
 export const services = {
   meta: {
     title: "ThinkWork Services — Pilot to production, governed.",
     description:
-      "Productized services for AI adoption: strategy, pilot launch, managed operations, workflow expansion, governance, and program advisory. Delivered into the AWS account your team already operates.",
+      "Productized services for AI adoption: strategy, pilot launch, managed operations, workflow expansion, governance, and program advisory. Delivered on ThinkWork Cloud or into your own deployment.",
   },
   hero: {
     eyebrow: "Services",
     headlinePart1: "First pilot. Full rollout.",
     headlineAccent: "One governance model.",
     lede:
-      "Strategy, launch, and recurring operations for teams adopting AI inside their own AWS boundary — productized services, not open-ended consulting.",
+      "Strategy, launch, and recurring operations for teams adopting AI — productized services, not open-ended consulting.",
     primaryCta: {
       label: "Talk to us",
       mailtoSubject: "ThinkWork Services — general inquiry",
@@ -469,7 +467,7 @@ export const services = {
         n: "02",
         title: "Launch the pilot",
         body:
-          "The first assistant or workflow, live inside your AWS. Templates, connectors, and evaluations configured. Visible output in days, not quarters.",
+          "The first assistant or workflow, live in production. Templates, connectors, and evaluations configured. Visible output in days, not quarters.",
       },
       {
         n: "03",
@@ -510,18 +508,16 @@ export const services = {
         ],
         bestFor: "Teams at the beginning.",
         variant: "featured",
-        cta: "Talk to us",
-        mailtoSubject: "ThinkWork Services — Strategy Sprint inquiry",
       },
       {
         id: "pilot-launch",
         name: "ThinkWork Pilot Launch",
         type: "Fixed-fee",
-        oneLiner: "The first governed workflow, live in your AWS.",
+        oneLiner: "The first governed workflow, live in production.",
         body:
-          "Environment setup, first assistant or workflow, templates, connectors, and evaluations — shipped inside the AWS account you already operate.",
+          "Environment setup, first assistant or workflow, templates, connectors, and evaluations — shipped on ThinkWork Cloud or into your own deployment.",
         includes: [
-          "Environment setup in your AWS",
+          "Environment setup, Cloud or self-hosted",
           "First assistant or workflow",
           "Templates and control configuration",
           "Connector setup",
@@ -529,8 +525,6 @@ export const services = {
         ],
         bestFor: "Teams ready to move from planning to execution.",
         variant: "featured",
-        cta: "Talk to us",
-        mailtoSubject: "ThinkWork Services — Pilot Launch inquiry",
       },
       {
         id: "managed-ops",
@@ -548,8 +542,6 @@ export const services = {
         ],
         bestFor: "Teams running ThinkWork in production without dedicated platform ops.",
         variant: "featured",
-        cta: "Talk to us",
-        mailtoSubject: "ThinkWork Services — Managed Operations inquiry",
       },
       {
         id: "workflow-expansion",
@@ -567,8 +559,6 @@ export const services = {
         ],
         bestFor: "Teams with early traction that want to keep shipping.",
         variant: "featured",
-        cta: "Talk to us",
-        mailtoSubject: "ThinkWork Services — Workflow Expansion inquiry",
       },
       {
         id: "governance-eval",
@@ -586,8 +576,6 @@ export const services = {
         ],
         bestFor: "Security-conscious teams and growing deployments.",
         variant: "secondary",
-        cta: "Talk to us",
-        mailtoSubject: "ThinkWork Services — Governance and Evaluation inquiry",
       },
       {
         id: "advisory",
@@ -605,8 +593,6 @@ export const services = {
         ],
         bestFor: "Organizations turning early wins into a broader AI program.",
         variant: "secondary",
-        cta: "Talk to us",
-        mailtoSubject: "ThinkWork Services — Program Advisory inquiry",
       },
     ] satisfies ServicePackage[],
   },
@@ -654,7 +640,7 @@ export const services = {
       {
         q: "How is this different from hiring an AI consultant?",
         a:
-          "A consultant delivers a recommendation. ThinkWork services deliver a governed workflow running inside your AWS boundary — and optionally, the monthly operating model that keeps it running.",
+          "A consultant delivers a recommendation. ThinkWork services deliver a governed workflow running in production — and optionally, the monthly operating model that keeps it running.",
       },
       {
         q: "What does the first engagement usually look like?",
@@ -662,9 +648,9 @@ export const services = {
           "Either an AI Adoption Strategy Sprint (for teams still choosing where to start) or a ThinkWork Pilot Launch (for teams ready to ship a first workflow). Both are fixed-fee and time-boxed.",
       },
       {
-        q: "Does ThinkWork run in our AWS or yours?",
+        q: "Do services cover hosted and self-hosted deployments?",
         a:
-          "Yours. Every engagement deploys into the AWS account your team already operates. No shared infrastructure on our side.",
+          "Both. ThinkWork is open-source; the hosted option is the same platform, just operated by us. Services cover launch, operations, and expansion on either path, and teams can move between them without rewriting workflows.",
       },
       {
         q: "What becomes recurring?",
@@ -685,8 +671,8 @@ export const services = {
   },
   closingCta: {
     eyebrow: "Start with one workflow",
-    headlinePart1: "One workflow, governed,",
-    headlineAccent: "inside your AWS.",
+    headlinePart1: "One workflow, governed.",
+    headlineAccent: "Running in production.",
     body:
       "Whether you need help scoping the first pilot or operating ThinkWork as adoption grows, the starting point is an email. Tell us where you are and we'll come back with a shape.",
     primaryCta: {

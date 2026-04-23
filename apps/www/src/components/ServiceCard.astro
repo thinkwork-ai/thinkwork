@@ -1,9 +1,7 @@
 ---
 // One service package rendered as a card. Used on /services for both featured
-// and secondary variants. CTA is a plain <a href="mailto:..."> — no JS handler,
-// unlike PricingCard.astro which wires to the Stripe checkout endpoint.
-
-import { servicesContactEmail } from "../lib/copy";
+// and secondary variants. Cards are informational — intake is handled by the
+// shared hero + closing CTAs on the page, not per-card buttons.
 
 interface Props {
   id: string;
@@ -14,8 +12,6 @@ interface Props {
   includes: string[];
   bestFor: string;
   variant: "featured" | "secondary";
-  cta: string;
-  mailtoSubject: string;
 }
 
 const {
@@ -27,12 +23,9 @@ const {
   includes,
   bestFor,
   variant,
-  cta,
-  mailtoSubject,
 } = Astro.props;
 
 const isFeatured = variant === "featured";
-const mailtoHref = `mailto:${servicesContactEmail}?subject=${encodeURIComponent(mailtoSubject)}`;
 ---
 
 <article
@@ -97,23 +90,11 @@ const mailtoHref = `mailto:${servicesContactEmail}?subject=${encodeURIComponent(
     ))}
   </ul>
 
-  <p class="mb-5 border-t border-white/5 pt-4 text-[12px] leading-5 text-slate-500">
+  <p class="border-t border-white/5 pt-4 text-[12px] leading-5 text-slate-500">
     <span class="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
       Best for
     </span>
     <br />
     {bestFor}
   </p>
-
-  <a
-    href={mailtoHref}
-    class:list={[
-      "block rounded-xl text-center text-sm font-semibold transition",
-      isFeatured
-        ? "bg-brand px-6 py-3 text-slate-950 shadow-lg shadow-brand/20 hover:scale-[1.02] hover:bg-brand-300"
-        : "border border-white/15 bg-white/[0.04] px-5 py-2.5 text-slate-100 hover:border-white/30 hover:bg-white/[0.08]",
-    ]}
-  >
-    {cta}
-  </a>
 </article>
