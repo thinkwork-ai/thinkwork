@@ -74,11 +74,12 @@ export async function handler(
 	// (Google-federated users don't have custom:tenant_id until the
 	// pre-token trigger lands — memory feedback_oauth_tenant_resolver).
 	let tenantId = auth.tenantId;
-	if (!tenantId && auth.email) {
+	const emailLower = auth.email ? auth.email.toLowerCase() : null;
+	if (!tenantId && emailLower) {
 		const [userRow] = await db
 			.select()
 			.from(users)
-			.where(eq(users.email, auth.email))
+			.where(eq(users.email, emailLower))
 			.limit(1);
 		tenantId = userRow?.tenant_id ?? null;
 	}
