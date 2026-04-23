@@ -1,0 +1,25 @@
+{
+  "name": "@thinkwork/admin-ops",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Typed client functions for Thinkwork admin operations — shared by the CLI and the admin-ops MCP server.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tenants": "./src/tenants.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.3",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}
