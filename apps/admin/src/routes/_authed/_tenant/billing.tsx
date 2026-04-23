@@ -146,7 +146,13 @@ function BillingPage() {
     }
   }
 
-  async function openPortal() {
+  type PortalFlow =
+    | "home"
+    | "payment_method_update"
+    | "subscription_cancel"
+    | "subscription_update";
+
+  async function openPortal(flow: PortalFlow = "home") {
     setPortalLoading(true);
     setError(null);
     try {
@@ -158,6 +164,7 @@ function BillingPage() {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
+        body: flow === "home" ? undefined : JSON.stringify({ flow }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -283,23 +290,51 @@ function BillingPage() {
           </CardHeader>
           <CardContent>
             {state?.hasCustomer ? (
-              <Button
-                onClick={openPortal}
-                disabled={portalLoading}
-                className="w-full"
-              >
-                {portalLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Opening portal…
-                  </>
-                ) : (
-                  <>
-                    Open Stripe portal
-                    <ExternalLink className="ml-2 h-4 w-4" />
-                  </>
-                )}
-              </Button>
+              <div className="grid gap-2">
+                <Button
+                  onClick={() => openPortal("subscription_update")}
+                  disabled={portalLoading}
+                  variant="default"
+                >
+                  {portalLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      Change plan
+                      <ExternalLink className="ml-2 h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onClick={() => openPortal("payment_method_update")}
+                  disabled={portalLoading}
+                  variant="outline"
+                >
+                  Update payment method
+                  <ExternalLink className="ml-2 h-4 w-4" />
+                </Button>
+                <Button
+                  onClick={() => openPortal("home")}
+                  disabled={portalLoading}
+                  variant="outline"
+                >
+                  Invoice history & receipts
+                  <ExternalLink className="ml-2 h-4 w-4" />
+                </Button>
+                <Button
+                  onClick={() => openPortal("subscription_cancel")}
+                  disabled={portalLoading}
+                  variant="destructive"
+                >
+                  Cancel subscription
+                  <ExternalLink className="ml-2 h-4 w-4" />
+                </Button>
+                <p className="text-muted-foreground pt-2 text-xs leading-5">
+                  Cancel deactivates your workspace after the current
+                  billing period. Data is retained for 30 days — resubscribe
+                  within that window to restore everything.
+                </p>
+              </div>
             ) : (
               <div className="space-y-4 text-sm text-muted-foreground">
                 <p>

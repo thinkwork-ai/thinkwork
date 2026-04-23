@@ -138,7 +138,13 @@ export default function BillingScreen() {
     }
   }
 
-  async function openPortal() {
+  type PortalFlow =
+    | "home"
+    | "payment_method_update"
+    | "subscription_cancel"
+    | "subscription_update";
+
+  async function openPortal(flow: PortalFlow = "home") {
     setPortalLoading(true);
     setError(null);
     try {
@@ -150,6 +156,7 @@ export default function BillingScreen() {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
+        body: flow === "home" ? undefined : JSON.stringify({ flow }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -253,32 +260,84 @@ export default function BillingScreen() {
               {state?.hasCustomer ? (
                 <>
                   <Muted className="leading-5">
-                    Update your card, change plan, download invoices, or
-                    cancel — all from Stripe's secure portal.
+                    Manage your subscription through Stripe's secure
+                    portal.
                   </Muted>
-                  <Button
-                    onPress={openPortal}
-                    disabled={portalLoading}
-                    size="lg"
-                  >
-                    {portalLoading ? (
+                  <View className="gap-2">
+                    <Button
+                      onPress={() => openPortal("subscription_update")}
+                      disabled={portalLoading}
+                      size="lg"
+                    >
                       <View className="flex-row items-center gap-2">
-                        <ActivityIndicator
-                          size="small"
-                          color={colors.background}
-                        />
-                        <Text>Opening portal…</Text>
+                        {portalLoading ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={colors.background}
+                          />
+                        ) : (
+                          <>
+                            <Text>Change plan</Text>
+                            <ExternalLink
+                              size={14}
+                              color={colors.background}
+                            />
+                          </>
+                        )}
                       </View>
-                    ) : (
+                    </Button>
+                    <Button
+                      onPress={() => openPortal("payment_method_update")}
+                      disabled={portalLoading}
+                      variant="outline"
+                      size="lg"
+                    >
                       <View className="flex-row items-center gap-2">
-                        <Text>Open Stripe portal</Text>
+                        <Text>Update payment method</Text>
                         <ExternalLink
-                          size={16}
-                          color={colors.background}
+                          size={14}
+                          color={colors.foreground}
                         />
                       </View>
-                    )}
-                  </Button>
+                    </Button>
+                    <Button
+                      onPress={() => openPortal("home")}
+                      disabled={portalLoading}
+                      variant="outline"
+                      size="lg"
+                    >
+                      <View className="flex-row items-center gap-2">
+                        <Text>Invoice history & receipts</Text>
+                        <ExternalLink
+                          size={14}
+                          color={colors.foreground}
+                        />
+                      </View>
+                    </Button>
+                    <Button
+                      onPress={() => openPortal("subscription_cancel")}
+                      disabled={portalLoading}
+                      variant="destructive"
+                      size="lg"
+                    >
+                      <View className="flex-row items-center gap-2">
+                        <Text>Cancel subscription</Text>
+                        <ExternalLink
+                          size={14}
+                          color={colors.destructive}
+                        />
+                      </View>
+                    </Button>
+                  </View>
+                  <Text
+                    size="xs"
+                    variant="muted"
+                    className="leading-5 mt-2"
+                  >
+                    Cancel deactivates your workspace after the current
+                    billing period. Data is retained for 30 days —
+                    resubscribe within that window to restore everything.
+                  </Text>
                 </>
               ) : (
                 <>
