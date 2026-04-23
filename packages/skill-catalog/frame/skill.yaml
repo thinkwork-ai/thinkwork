@@ -1,7 +1,7 @@
 slug: frame
 display_name: Frame
 description: Restate a problem in a structured way before gathering data. Returns goal, constraints, known unknowns, and decision criteria so downstream steps have a clean target. Composition-only primitive — not intended for direct chat use.
-category: composable-primitive
+category: workflow
 version: "0.1.0"
 author: thinkwork
 icon: target

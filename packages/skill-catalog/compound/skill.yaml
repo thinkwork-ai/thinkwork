@@ -6,7 +6,7 @@ description: >
   start; `compound_reflect` extracts up to 3 new observations from the
   completed run and stores them under the same scope. Paired — edit
   docstrings together.
-category: composable-primitive
+category: workflow
 version: "0.1.0"
 author: thinkwork
 icon: repeat
