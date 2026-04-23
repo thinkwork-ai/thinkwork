@@ -46,19 +46,38 @@ export type StripeCheckoutResult =
 	| { status: "locked" }
 	| { status: "error"; message: string };
 
+export interface StripeCheckoutOptions {
+	/**
+	 * Cognito ID token. When present the Lambda treats this as an
+	 * upgrade for the caller's existing tenant (sets
+	 * client_reference_id = "tenant:<uuid>"); the webhook attaches the
+	 * new subscription to that tenant rather than provisioning a new
+	 * one. Omit for the signup flow from /onboarding/payment.
+	 */
+	bearerToken?: string;
+}
+
 export async function startStripeCheckout(
 	planId: PlanId,
+	opts: StripeCheckoutOptions = {},
 ): Promise<StripeCheckoutResult> {
 	const apiUrl = resolveApiUrl().replace(/\/$/, "");
 
 	const successUrl = `https://thinkwork.ai/m/checkout-complete?session_id=${STRIPE_SESSION_TEMPLATE}`;
 	const cancelUrl = "https://thinkwork.ai/pricing";
 
+	const headers: Record<string, string> = {
+		"Content-Type": "application/json",
+	};
+	if (opts.bearerToken) {
+		headers.Authorization = `Bearer ${opts.bearerToken}`;
+	}
+
 	let checkoutUrl: string;
 	try {
 		const res = await fetch(`${apiUrl}/api/stripe/checkout-session`, {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			headers,
 			body: JSON.stringify({
 				plan: planId,
 				successUrl,
