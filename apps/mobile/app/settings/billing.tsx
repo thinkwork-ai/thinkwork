@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { View, ScrollView, ActivityIndicator } from "react-native";
+import { View, ScrollView, ActivityIndicator, Modal, Pressable } from "react-native";
 import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
 import { useColorScheme } from "nativewind";
@@ -10,12 +10,16 @@ import {
   ExternalLink,
   AlertCircle,
   ArrowLeft,
-  ChevronRight,
+  Check,
+  Star,
+  X,
 } from "lucide-react-native";
 import { useAuth } from "@/lib/auth-context";
 import { Text, H2, Muted } from "@/components/ui/typography";
 import { Button } from "@/components/ui/button";
 import { COLORS } from "@/lib/theme";
+import { plans, type PlanId } from "@thinkwork/pricing-config";
+import { startStripeCheckout } from "@/lib/stripe-checkout";
 
 // Mirror the stripe-checkout helper's API base resolution.
 function resolveApiUrl(): string {
@@ -46,6 +50,8 @@ export default function BillingScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [upgradingPlan, setUpgradingPlan] = useState<PlanId | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,6 +94,49 @@ export default function BillingScreen() {
       cancelled = true;
     };
   }, [getToken]);
+
+  async function handleUpgrade(planId: PlanId) {
+    setUpgradingPlan(planId);
+    setError(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      const result = await startStripeCheckout(planId, { bearerToken: token });
+      if (result.status === "completed") {
+        // Upgrade: user is already authed, so just close the picker and
+        // refetch the subscription. Stripe webhook attaches the sub to
+        // the existing tenant; next focus will show the paid state.
+        setPickerOpen(false);
+        setUpgradingPlan(null);
+        // Refetch subscription state after a short delay to let the
+        // webhook land.
+        setTimeout(async () => {
+          try {
+            const token2 = await getToken();
+            if (!token2) return;
+            const res = await fetch(
+              `${resolveApiUrl()}/api/stripe/subscription`,
+              { headers: { Authorization: `Bearer ${token2}` } },
+            );
+            if (res.ok) {
+              setState((await res.json()) as SubscriptionState);
+            }
+          } catch {
+            /* best-effort refetch */
+          }
+        }, 1500);
+        return;
+      }
+      if (result.status === "error") {
+        setError(result.message);
+      }
+      // cancel / dismiss / locked: user backed out of Stripe, no message.
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setUpgradingPlan(null);
+    }
+  }
 
   async function openPortal() {
     setPortalLoading(true);
@@ -239,13 +288,10 @@ export default function BillingScreen() {
                     priority support.
                   </Muted>
                   <Button
-                    onPress={() => router.push("/onboarding/payment")}
+                    onPress={() => setPickerOpen(true)}
                     size="lg"
                   >
-                    <View className="flex-row items-center gap-2">
-                      <Text>See plans</Text>
-                      <ChevronRight size={16} color={colors.background} />
-                    </View>
+                    <Text>See plans</Text>
                   </Button>
                 </>
               )}
@@ -253,6 +299,104 @@ export default function BillingScreen() {
           </View>
         )}
       </ScrollView>
+
+      <Modal
+        visible={pickerOpen}
+        animationType="slide"
+        presentationStyle="formSheet"
+        onRequestClose={() => !upgradingPlan && setPickerOpen(false)}
+      >
+        <SafeAreaView className="flex-1 bg-white dark:bg-neutral-950">
+          <View className="flex-row items-center justify-between px-4 py-3 border-b border-neutral-200 dark:border-neutral-800">
+            <H2>Choose a plan</H2>
+            <Pressable
+              onPress={() => !upgradingPlan && setPickerOpen(false)}
+              disabled={!!upgradingPlan}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <X size={24} color={colors.foreground} />
+            </Pressable>
+          </View>
+          <ScrollView
+            className="flex-1"
+            contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+          >
+            <Muted className="leading-5 mb-4">
+              Payment redirects to Stripe Checkout. The subscription
+              attaches to your current workspace on success — your data
+              and settings stay put.
+            </Muted>
+            <View className="gap-4">
+              {plans.map((plan) => {
+                const isPending = upgradingPlan === plan.id;
+                const isDisabled =
+                  upgradingPlan !== null && upgradingPlan !== plan.id;
+                return (
+                  <View
+                    key={plan.id}
+                    className={`rounded-xl border-2 p-4 ${
+                      plan.highlighted
+                        ? "border-primary bg-primary/5"
+                        : "border-neutral-200 dark:border-neutral-700"
+                    } ${isDisabled ? "opacity-40" : ""}`}
+                  >
+                    <View className="flex-row items-center justify-between mb-2">
+                      <Text className="font-bold text-lg">{plan.name}</Text>
+                      {plan.highlighted && (
+                        <View className="bg-primary px-3 py-1 rounded-full flex-row items-center gap-1">
+                          <Star size={10} color={colors.background} />
+                          <Text className="text-white text-xs font-semibold">
+                            RECOMMENDED
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text
+                      size="sm"
+                      variant="muted"
+                      className="font-semibold uppercase tracking-wider mb-2"
+                    >
+                      {plan.tagline}
+                    </Text>
+                    <Text size="sm" className="mb-3">
+                      {plan.summary}
+                    </Text>
+                    <View className="gap-2 mb-4">
+                      {plan.features.map((feat) => (
+                        <View key={feat} className="flex-row items-start">
+                          <View style={{ minWidth: 16, marginTop: 2 }}>
+                            <Check size={14} color={colors.primary} />
+                          </View>
+                          <Text size="sm" className="ml-2 flex-1">
+                            {feat}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                    <Button
+                      onPress={() => handleUpgrade(plan.id)}
+                      disabled={isDisabled || isPending}
+                      variant={plan.highlighted ? "default" : "outline"}
+                    >
+                      {isPending ? (
+                        <View className="flex-row items-center gap-2">
+                          <ActivityIndicator
+                            size="small"
+                            color={colors.background}
+                          />
+                          <Text>Opening checkout…</Text>
+                        </View>
+                      ) : (
+                        <Text>{plan.cta}</Text>
+                      )}
+                    </Button>
+                  </View>
+                );
+              })}
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
