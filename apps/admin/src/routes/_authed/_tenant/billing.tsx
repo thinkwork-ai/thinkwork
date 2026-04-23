@@ -92,7 +92,11 @@ function BillingPage() {
   }, [getToken]);
 
   useEffect(() => {
-    if (roleLoading || role !== "owner") {
+    if (roleLoading) {
+      // Role fetch still in flight; don't decide yet.
+      return;
+    }
+    if (role !== "owner") {
       setLoading(false);
       return;
     }
@@ -117,7 +121,12 @@ function BillingPage() {
         setLoading(false);
       }
     })();
-  }, [getToken]);
+    // Deps must include role + roleLoading so this re-runs when the
+    // role fetch resolves (null → "owner"). Previously only [getToken]
+    // meant the initial run saw roleLoading=true, skipped, and never
+    // re-ran — so the subscription fetch never fired and state stayed
+    // null → UI rendered "FREE" regardless of DB state.
+  }, [getToken, role, roleLoading]);
 
   async function startUpgrade(planId: PlanId) {
     setUpgradingPlan(planId);
