@@ -14,12 +14,16 @@ export const external = {
   quickStartDocs: "https://docs.thinkwork.ai/getting-started",
 };
 
+// Top nav is deliberately short — Platform / Pricing / Docs is the whole
+// surface. Platform = the homepage (product overview); the label is
+// stronger than a generic "Home" because ThinkWork *is* a platform.
+// Homepage section anchors (Journey / How it works / Governance /
+// Quick start) are still reachable by scrolling once on `/`.
+//
+// Docs + GitHub icon + Login are hardcoded in Header.astro after this list.
 export const nav = [
-  { label: "Journey", href: "#journey" },
-  { label: "How it works", href: "#how-it-works" },
-  { label: "Governance", href: "#controls" },
+  { label: "Platform", href: "/" },
   { label: "Pricing", href: "/pricing" },
-  { label: "Quick start", href: "#quick-start" },
 ];
 
 export const meta = {
