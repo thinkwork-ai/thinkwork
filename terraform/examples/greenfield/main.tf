@@ -136,6 +136,12 @@ variable "ses_inbound_domain" {
   default     = ""
 }
 
+variable "stripe_price_ids_json" {
+  description = "JSON object mapping internal plan names to Stripe price IDs for this stage, e.g. {\"starter\":\"price_...\",\"team\":\"price_...\"}. Non-secret; per-stage. Exposed to Lambdas as STRIPE_PRICE_IDS_JSON env var. The secret keys themselves live in AWS Secrets Manager at thinkwork/<stage>/stripe/api-credentials — never in tfvars."
+  type        = string
+  default     = "{}"
+}
+
 variable "lastmile_tasks_api_url" {
   description = <<-EOT
     OPTIONAL fallback base URL for the LastMile Tasks REST API.
@@ -265,6 +271,9 @@ module "thinkwork" {
   wiki_aggregation_pass_enabled      = var.wiki_aggregation_pass_enabled
   wiki_deterministic_linking_enabled = var.wiki_deterministic_linking_enabled
   google_places_api_key              = var.google_places_api_key
+
+  # Stripe billing — internal-plan → price-id map (per-stage, non-secret).
+  stripe_price_ids_json = var.stripe_price_ids_json
 
   # Greenfield: create everything (all defaults are true)
 }
