@@ -11,6 +11,7 @@
 import { readdirSync, readFileSync, statSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { parse as parseYaml } from "yaml";
 import { getDb } from "@thinkwork/database-pg";
 import { skillCatalog } from "@thinkwork/database-pg/schema";
 import { sql } from "drizzle-orm";
@@ -18,84 +19,8 @@ import { sql } from "drizzle-orm";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const catalogRoot = join(__dirname, "..");
 
-// ---------------------------------------------------------------------------
-// Minimal YAML parser (reused from generate-index.ts)
-// ---------------------------------------------------------------------------
-
-function parseSkillYaml(content: string) {
-	const result: Record<string, unknown> = {};
-	let currentKey = "";
-	let currentType: "list" | "map" | "" = "";
-	const lines = content.split("\n");
-
-	for (let i = 0; i < lines.length; i++) {
-		const line = lines[i];
-		if (line.trim() === "" || line.trim().startsWith("#")) continue;
-
-		const listMatch = line.match(/^\s+-\s+(.+)$/);
-		if (listMatch && currentKey && currentType === "list") {
-			const arr = result[currentKey] as string[];
-			arr.push(listMatch[1].trim());
-			continue;
-		}
-
-		const mapMatch = line.match(/^\s+(\w[\w_]*)\s*:\s*(.+)$/);
-		if (mapMatch && currentKey && currentType === "map") {
-			const map = result[currentKey] as Record<string, string>;
-			let val = mapMatch[2].trim();
-			if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
-			map[mapMatch[1]] = val;
-			continue;
-		}
-
-		const kvMatch = line.match(/^(\w[\w_]*)\s*:\s*(.*)$/);
-		if (kvMatch) {
-			const [, key, rawValue] = kvMatch;
-			let value: unknown = rawValue.trim();
-
-			if (
-				typeof value === "string" &&
-				value.startsWith("[") &&
-				value.endsWith("]")
-			) {
-				value = value
-					.slice(1, -1)
-					.split(",")
-					.map((s) => s.trim());
-				result[key] = value;
-				currentKey = "";
-				currentType = "";
-				continue;
-			}
-
-			if (
-				typeof value === "string" &&
-				value.startsWith('"') &&
-				value.endsWith('"')
-			) {
-				value = value.slice(1, -1);
-			}
-
-			if (value === "" || value === "|") {
-				const nextLine = lines[i + 1] || "";
-				if (nextLine.match(/^\s+-\s+/)) {
-					result[key] = [];
-					currentType = "list";
-				} else {
-					result[key] = {};
-					currentType = "map";
-				}
-				currentKey = key;
-				continue;
-			}
-
-			result[key] = value;
-			currentKey = key;
-			currentType = "";
-		}
-	}
-
-	return result;
+function parseSkillYaml(content: string): Record<string, unknown> {
+	return (parseYaml(content) as Record<string, unknown>) ?? {};
 }
 
 // ---------------------------------------------------------------------------
