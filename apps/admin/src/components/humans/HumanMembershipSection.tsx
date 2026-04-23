@@ -38,12 +38,29 @@ export interface HumanMembershipSectionProps {
   onRemoved: () => void;
 }
 
+/**
+ * Match uncoded pg connection-class error messages that surface as GraphQL
+ * errors without an `extensions.code`. Once the server's Yoga `maskError`
+ * hook is in production every such error carries
+ * `extensions.code: "SERVICE_UNAVAILABLE"` — but we keep the message-level
+ * heuristic as defense in depth for any resolver that throws before
+ * reaching the mask, and so admin users on older backends still get a
+ * readable toast instead of a raw libpq string.
+ */
+function looksLikePgConnectionError(message: string | undefined): boolean {
+  if (!message) return false;
+  return (
+    message.includes("timeout exceeded when trying to connect") ||
+    message.includes("Connection terminated unexpectedly") ||
+    message.includes("ECONNRESET") ||
+    message.includes("ECONNREFUSED")
+  );
+}
+
 function mapMutationErrorToToast(error: CombinedError) {
-  // Network-layer failures (fetch rejected, CORS, 5xx before GraphQL could
-  // respond) arrive with `networkError` set and no `graphQLErrors`. The
-  // default `error.message` in that path renders as "[Network] …" — which
-  // users reported as "ERROR HTTP_ERROR" in issue #470 — so we substitute a
-  // plain-language message that tells the operator what to do next.
+  // Network-layer failures (fetch rejected, CORS, browser offline) arrive
+  // with `networkError` set and no `graphQLErrors`. Show a plain-language
+  // message rather than urql's default `[Network] …` wrapper.
   if (error.networkError && error.graphQLErrors.length === 0) {
     toast.error("Couldn't reach the server. Check your connection and try again.");
     return;
@@ -59,7 +76,7 @@ function mapMutationErrorToToast(error: CombinedError) {
     toast.error("You don't have permission to make this change.");
     return;
   }
-  if (code === "SERVICE_UNAVAILABLE") {
+  if (code === "SERVICE_UNAVAILABLE" || looksLikePgConnectionError(first?.message)) {
     toast.error("The server is temporarily unavailable. Try again in a moment.");
     return;
   }
