@@ -1,0 +1,110 @@
+---
+// One service package rendered as a card. Used on /services for both featured
+// and secondary variants. Cards are informational — intake is handled by the
+// shared hero + closing CTAs on the page, not per-card buttons.
+
+interface Props {
+  id: string;
+  name: string;
+  type: "Fixed-fee" | "Monthly retainer";
+  oneLiner: string;
+  body: string;
+  includes: string[];
+  bestFor: string;
+  variant: "featured" | "secondary";
+}
+
+const {
+  id,
+  name,
+  type,
+  oneLiner,
+  body,
+  includes,
+  bestFor,
+  variant,
+} = Astro.props;
+
+const isFeatured = variant === "featured";
+const isRetainer = type === "Monthly retainer";
+---
+
+<article
+  data-service-id={id}
+  class:list={[
+    "relative flex h-full flex-col rounded-3xl border backdrop-blur-xl transition",
+    isFeatured
+      ? "border-brand/30 bg-gradient-to-b from-brand/[0.08] to-white/[0.03] p-8 shadow-[0_0_80px_-30px] shadow-brand/25"
+      : "border-white/10 bg-white/[0.02] p-6 hover:border-white/20 hover:bg-white/[0.04]",
+  ]}
+>
+  <header class="mb-5">
+    <span
+      class:list={[
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]",
+        isRetainer
+          ? "border-brand/40 bg-brand/[0.12] text-brand"
+          : "border-white/15 bg-white/[0.04] text-slate-300",
+      ]}
+    >
+      <span
+        class:list={[
+          "h-1 w-1 rounded-full",
+          isRetainer ? "bg-brand" : "bg-slate-400",
+        ]}
+      ></span>
+      {type}
+    </span>
+    <h3
+      class:list={[
+        "mt-4 font-semibold tracking-tight text-slate-50",
+        isFeatured ? "text-2xl" : "text-xl",
+      ]}
+    >
+      {name}
+    </h3>
+    <p
+      class:list={[
+        "mt-2 font-medium text-slate-300",
+        isFeatured ? "text-base" : "text-sm",
+      ]}
+    >
+      {oneLiner}
+    </p>
+    <p
+      class:list={[
+        "mt-3 leading-relaxed text-slate-400",
+        isFeatured ? "text-sm" : "text-[13px]",
+      ]}
+    >
+      {body}
+    </p>
+  </header>
+
+  <ul class="mb-6 space-y-2.5">
+    {includes.map((item) => (
+      <li class="flex gap-2.5 text-[13px] text-slate-300">
+        <svg
+          class="mt-0.5 h-3.5 w-3.5 flex-none text-brand"
+          viewBox="0 0 16 16"
+          aria-hidden="true"
+        >
+          <path
+            fill="currentColor"
+            d="M6.5 11.793 3.354 8.646a.5.5 0 0 1 .708-.708L6.5 10.379l5.44-5.44a.5.5 0 1 1 .708.708l-5.793 5.792a.5.5 0 0 1-.707 0z"
+          />
+        </svg>
+        <span>{item}</span>
+      </li>
+    ))}
+  </ul>
+
+  <div class="mt-auto border-t border-white/5 pt-4">
+    <p class="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+      Best for
+    </p>
+    <p class="mt-1.5 min-h-[60px] text-[12px] leading-5 text-slate-500">
+      {bestFor}
+    </p>
+  </div>
+</article>
