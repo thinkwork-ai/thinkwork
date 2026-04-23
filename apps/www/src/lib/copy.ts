@@ -435,8 +435,10 @@ export const services = {
     eyebrow: "Services",
     headlinePart1: "First pilot. Full rollout.",
     headlineAccent: "One operating model.",
+    headlineOutcome:
+      "We help teams launch their first governed AI workflow, then operate and expand it safely.",
     lede:
-      "Strategy, launch, and recurring operations for teams adopting AI — productized services, not open-ended consulting.",
+      "Strategy, launch, and ongoing operations for teams adopting AI — productized services, not open-ended consulting.",
     primaryCta: {
       label: "Talk to us",
       mailtoSubject: "ThinkWork Services — general inquiry",

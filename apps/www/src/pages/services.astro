@@ -37,11 +37,16 @@ const secondaryItems = services.packages.items.filter(
         <h1
           class="mt-8 text-balance text-4xl font-extrabold leading-[1.05] tracking-tight md:text-5xl lg:text-6xl"
         >
-          {services.hero.headlinePart1}<br class="hidden md:inline" />
-          <span class="text-brand"> {services.hero.headlineAccent}</span>
+          {services.hero.headlinePart1}<br class="hidden md:inline" />{" "}
+          <span class="text-brand">{services.hero.headlineAccent}</span>
         </h1>
         <p
-          class="mx-auto mt-6 max-w-2xl text-pretty text-base leading-relaxed text-slate-400 md:text-lg"
+          class="mx-auto mt-7 max-w-2xl text-balance text-lg font-medium leading-snug text-slate-200 md:text-xl"
+        >
+          {services.hero.headlineOutcome}
+        </p>
+        <p
+          class="mx-auto mt-5 max-w-2xl text-pretty text-base leading-relaxed text-slate-400 md:text-lg"
         >
           {services.hero.lede}
         </p>
