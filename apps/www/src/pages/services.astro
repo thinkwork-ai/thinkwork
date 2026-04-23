@@ -1,0 +1,275 @@
+---
+import Base from "../layouts/Base.astro";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+import SectionShell from "../components/SectionShell.astro";
+import SectionHeader from "../components/SectionHeader.astro";
+import ServiceCard from "../components/ServiceCard.astro";
+import { services, servicesContactEmail } from "../lib/copy";
+
+const heroPrimaryMailto = `mailto:${servicesContactEmail}?subject=${encodeURIComponent(
+  services.hero.primaryCta.mailtoSubject,
+)}`;
+const closingPrimaryMailto = `mailto:${servicesContactEmail}?subject=${encodeURIComponent(
+  services.closingCta.primaryCta.mailtoSubject,
+)}`;
+
+const featuredItems = services.packages.items.filter(
+  (pkg) => pkg.variant === "featured",
+);
+const secondaryItems = services.packages.items.filter(
+  (pkg) => pkg.variant === "secondary",
+);
+---
+
+<Base title={services.meta.title} description={services.meta.description}>
+  <Header />
+
+  <main>
+    {/* 1. Hero */}
+    <SectionShell tone="default" glow="center">
+      <div class="mx-auto max-w-4xl text-center">
+        <p
+          class="inline-flex items-center gap-2.5 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-300 backdrop-blur"
+        >
+          <span class="h-1 w-1 rounded-full bg-brand"></span>
+          {services.hero.eyebrow}
+        </p>
+        <h1
+          class="mt-8 text-balance text-4xl font-extrabold leading-[1.05] tracking-tight md:text-5xl lg:text-6xl"
+        >
+          {services.hero.headlinePart1}<br class="hidden md:inline" />
+          <span class="text-brand"> {services.hero.headlineAccent}</span>
+        </h1>
+        <p
+          class="mx-auto mt-6 max-w-2xl text-pretty text-base leading-relaxed text-slate-400 md:text-lg"
+        >
+          {services.hero.lede}
+        </p>
+        <div class="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <a
+            href={heroPrimaryMailto}
+            class="rounded-xl bg-brand px-6 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-brand/20 transition hover:scale-[1.02] hover:bg-brand-300"
+          >
+            {services.hero.primaryCta.label}
+          </a>
+          <a
+            href={services.hero.secondaryCta.href}
+            class="rounded-xl border border-white/15 bg-white/[0.04] px-6 py-3 text-sm font-semibold text-slate-100 transition hover:border-white/30 hover:bg-white/[0.08]"
+          >
+            {services.hero.secondaryCta.label}
+          </a>
+        </div>
+      </div>
+    </SectionShell>
+
+    {/* 2. Positioning */}
+    <SectionShell tone="raised">
+      <div class="mx-auto max-w-3xl">
+        <h2 class="text-balance text-3xl font-bold leading-[1.15] tracking-tight md:text-4xl">
+          {services.positioning.headline}
+        </h2>
+        <p class="mt-6 text-lg leading-relaxed text-slate-400">
+          {services.positioning.body}
+        </p>
+      </div>
+    </SectionShell>
+
+    {/* 3. How it works — engagement lifecycle */}
+    <SectionShell tone="default" glow="top">
+      <SectionHeader
+        eyebrow={services.how.eyebrow}
+        headline={services.how.headline}
+        lede={services.how.lede}
+        width="wide"
+      />
+      <ol class="mt-14 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+        {services.how.steps.map((step) => (
+          <li
+            class="relative flex h-full flex-col rounded-2xl border border-white/10 bg-white/[0.02] p-6 backdrop-blur-xl"
+          >
+            <p class="font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-brand/70">
+              {step.n}
+            </p>
+            <h3 class="mt-3 text-lg font-semibold tracking-tight text-slate-50">
+              {step.title}
+            </h3>
+            <p class="mt-3 text-sm leading-relaxed text-slate-400">
+              {step.body}
+            </p>
+          </li>
+        ))}
+      </ol>
+    </SectionShell>
+
+    {/* 4. Featured packages */}
+    <SectionShell id="packages" tone="raised" glow="center">
+      <SectionHeader
+        eyebrow={services.packages.eyebrow}
+        headline={services.packages.headline}
+        lede={services.packages.lede}
+        align="center"
+        width="wide"
+      />
+      <div class="mt-14 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+        {featuredItems.map((pkg) => (
+          <ServiceCard
+            id={pkg.id}
+            name={pkg.name}
+            type={pkg.type}
+            oneLiner={pkg.oneLiner}
+            body={pkg.body}
+            includes={pkg.includes}
+            bestFor={pkg.bestFor}
+            variant={pkg.variant}
+            cta={pkg.cta}
+            mailtoSubject={pkg.mailtoSubject}
+          />
+        ))}
+      </div>
+    </SectionShell>
+
+    {/* 5. Additional packages (secondary) */}
+    <SectionShell tone="default">
+      <div class="mx-auto max-w-3xl text-center">
+        <h2 class="text-balance text-2xl font-semibold tracking-tight text-slate-100 md:text-3xl">
+          {services.packages.secondaryHeadline}
+        </h2>
+        <p class="mt-4 text-sm leading-relaxed text-slate-400 md:text-base">
+          {services.packages.secondaryLede}
+        </p>
+      </div>
+      <div class="mx-auto mt-12 grid max-w-5xl gap-5 md:grid-cols-2">
+        {secondaryItems.map((pkg) => (
+          <ServiceCard
+            id={pkg.id}
+            name={pkg.name}
+            type={pkg.type}
+            oneLiner={pkg.oneLiner}
+            body={pkg.body}
+            includes={pkg.includes}
+            bestFor={pkg.bestFor}
+            variant={pkg.variant}
+            cta={pkg.cta}
+            mailtoSubject={pkg.mailtoSubject}
+          />
+        ))}
+      </div>
+    </SectionShell>
+
+    {/* 6. Specialized support */}
+    <SectionShell tone="raised">
+      <SectionHeader
+        eyebrow={services.specializedSupport.eyebrow}
+        headline={services.specializedSupport.headline}
+        width="wide"
+      />
+      <ul class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {services.specializedSupport.tiles.map((tile) => (
+          <li class="flex h-full flex-col rounded-2xl border border-white/8 bg-white/[0.015] p-5">
+            <h3 class="text-sm font-semibold tracking-tight text-slate-100">
+              {tile.title}
+            </h3>
+            <p class="mt-3 text-[13px] leading-relaxed text-slate-400">
+              {tile.body}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </SectionShell>
+
+    {/* 7. Engagement model */}
+    <SectionShell tone="default">
+      <div class="mx-auto grid max-w-5xl gap-12 md:grid-cols-[1fr_1fr] md:gap-16">
+        <div>
+          <p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-brand/90">
+            <span class="mr-2 inline-block h-1 w-1 rounded-full bg-brand align-middle"></span>
+            {services.engagementModel.eyebrow}
+          </p>
+          <h2 class="mt-5 text-balance text-3xl font-bold leading-[1.15] tracking-tight md:text-4xl">
+            {services.engagementModel.headline}
+          </h2>
+        </div>
+        <div>
+          <p class="text-base leading-relaxed text-slate-400">
+            {services.engagementModel.body}
+          </p>
+          <ul class="mt-6 space-y-3">
+            {services.engagementModel.bullets.map((bullet) => (
+              <li class="flex gap-3 text-sm text-slate-300">
+                <svg
+                  class="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-brand"
+                  aria-hidden="true"
+                ></svg>
+                <span>{bullet}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </SectionShell>
+
+    {/* 8. FAQ */}
+    <SectionShell tone="raised">
+      <SectionHeader
+        eyebrow={services.faq.eyebrow}
+        headline={services.faq.headline}
+        width="wide"
+      />
+      <div class="mx-auto mt-12 max-w-3xl divide-y divide-white/8">
+        {services.faq.items.map((item) => (
+          <article class="py-6 first:pt-0 last:pb-0">
+            <h3 class="text-lg font-semibold tracking-tight text-slate-100">
+              {item.q}
+            </h3>
+            <p class="mt-3 text-[15px] leading-relaxed text-slate-400">
+              {item.a}
+            </p>
+          </article>
+        ))}
+      </div>
+    </SectionShell>
+
+    {/* 9. Closing CTA — inlined; FinalCTA.astro has no props */}
+    <section class="relative overflow-visible border-t border-white/5 py-28 md:py-36">
+      <div
+        class="pointer-events-none absolute inset-x-0 -top-32 -bottom-24 overflow-hidden"
+      >
+        <div
+          class="absolute left-1/2 top-[12%] h-[340px] w-[760px] -translate-x-1/2 rounded-full bg-brand/8 blur-[150px]"
+        ></div>
+        <div
+          class="absolute left-1/2 bottom-[-10%] h-[320px] w-[900px] -translate-x-1/2 rounded-full bg-brand/6 blur-[160px]"
+        ></div>
+        <div
+          class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand/25 to-transparent"
+        ></div>
+      </div>
+      <div class="relative mx-auto max-w-4xl px-6 text-center">
+        <p
+          class="inline-flex items-center gap-2.5 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-300 backdrop-blur"
+        >
+          <span class="h-1 w-1 rounded-full bg-brand"></span>
+          {services.closingCta.eyebrow}
+        </p>
+        <h2 class="mt-6 text-balance text-3xl font-bold tracking-tight md:text-5xl lg:text-6xl">
+          {services.closingCta.headlinePart1}{" "}
+          <span class="text-brand">{services.closingCta.headlineAccent}</span>
+        </h2>
+        <p class="mx-auto mt-6 max-w-2xl text-pretty text-lg leading-relaxed text-slate-400">
+          {services.closingCta.body}
+        </p>
+        <div class="mt-10 flex justify-center">
+          <a
+            href={closingPrimaryMailto}
+            class="rounded-xl bg-brand px-6 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-brand/20 transition hover:scale-[1.02] hover:bg-brand-300"
+          >
+            {services.closingCta.primaryCta.label}
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <Footer />
+</Base>

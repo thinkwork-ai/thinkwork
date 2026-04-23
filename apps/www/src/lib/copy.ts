@@ -14,15 +14,16 @@ export const external = {
   quickStartDocs: "https://docs.thinkwork.ai/getting-started",
 };
 
-// Top nav is deliberately short — Platform / Pricing / Docs is the whole
-// surface. Platform = the homepage (product overview); the label is
-// stronger than a generic "Home" because ThinkWork *is* a platform.
-// Homepage section anchors (Journey / How it works / Governance /
-// Quick start) are still reachable by scrolling once on `/`.
+// Top nav is deliberately short — Platform / Services / Pricing / Docs is the
+// whole surface. Platform = the homepage (product overview); Services = the
+// delivered engagement surface; Pricing = hosted plan shapes. Homepage section
+// anchors (Journey / How it works / Governance / Quick start) are still
+// reachable by scrolling once on `/`.
 //
 // Docs + GitHub icon + Login are hardcoded in Header.astro after this list.
 export const nav = [
   { label: "Platform", href: "/" },
+  { label: "Services", href: "/services" },
   { label: "Pricing", href: "/pricing" },
 ];
 
@@ -399,4 +400,299 @@ export const pricing = {
   ],
   finePrint:
     "Final pricing confirmed during checkout. Contact us for procurement, security review, or annual billing.",
+};
+
+// Services page. Peer of /pricing — productized delivery (strategy, launch,
+// ops, expansion, governance, advisory), not hosted-plan shapes. Contact is
+// mailto-only; subject lines route inbound by package so the services mailbox
+// can triage without a form. Do NOT cross-link to /pricing from here — the two
+// audiences have different buying motions; see the services brainstorm doc.
+export const servicesContactEmail = "hello@thinkwork.ai";
+
+export type ServicesMailto = {
+  label: string;
+  mailtoSubject: string;
+};
+
+export type ServicePackage = {
+  id: string;
+  name: string;
+  type: "Fixed-fee" | "Monthly retainer";
+  oneLiner: string;
+  body: string;
+  includes: string[];
+  bestFor: string;
+  variant: "featured" | "secondary";
+  cta: string;
+  mailtoSubject: string;
+};
+
+export const services = {
+  meta: {
+    title: "ThinkWork Services — Pilot to production, governed.",
+    description:
+      "Productized services for AI adoption: strategy, pilot launch, managed operations, workflow expansion, governance, and program advisory. Delivered into the AWS account your team already operates.",
+  },
+  hero: {
+    eyebrow: "Services",
+    headlinePart1: "First pilot. Full rollout.",
+    headlineAccent: "One governance model.",
+    lede:
+      "Strategy, launch, and recurring operations for teams adopting AI inside their own AWS boundary — productized services, not open-ended consulting.",
+    primaryCta: {
+      label: "Talk to us",
+      mailtoSubject: "ThinkWork Services — general inquiry",
+    } satisfies ServicesMailto,
+    secondaryCta: {
+      label: "See service packages",
+      href: "#packages",
+    },
+  },
+  positioning: {
+    headline: "One contract surface for the whole adoption arc.",
+    body:
+      "Scoping, launch, managed operations, workflow expansion, governance, and program advisory — packaged as fixed-fee engagements and monthly retainers rather than billable hours. The shape of the engagement is named up front; the scope doesn't drift.",
+  },
+  how: {
+    eyebrow: "Engagement lifecycle",
+    headline: "Four phases. One engagement arc.",
+    lede:
+      "Scope, launch, expand, operate — in that order. Each phase has a defined shape and a defined exit. Later phases compound the earlier ones; they don't replace them.",
+    steps: [
+      {
+        n: "01",
+        title: "Scope the first win",
+        body:
+          "One workflow, one team, one set of controls. Success metrics, ownership, and governance model named before any code lands.",
+      },
+      {
+        n: "02",
+        title: "Launch the pilot",
+        body:
+          "The first assistant or workflow, live inside your AWS. Templates, connectors, and evaluations configured. Visible output in days, not quarters.",
+      },
+      {
+        n: "03",
+        title: "Expand safely",
+        body:
+          "Workflows, connectors, and templates added as trust grows. The governance model stays constant; surface area expands beneath it.",
+      },
+      {
+        n: "04",
+        title: "Operate monthly",
+        body:
+          "Ongoing platform support, optimization, and governance review. Recurring cadence, recurring value. No quarterly restart.",
+      },
+    ],
+  },
+  packages: {
+    eyebrow: "Service packages",
+    headline: "Six shapes for six situations.",
+    lede:
+      "Fixed-fee engagements for bounded launches. Monthly retainers for ongoing work. Every package scoped up front, no open meter.",
+    featuredHeadline: "Featured packages",
+    secondaryHeadline: "Additional packages",
+    secondaryLede:
+      "Ongoing governance and program-level support for teams that have moved past the first workflow.",
+    items: [
+      {
+        id: "strategy-sprint",
+        name: "AI Adoption Strategy Sprint",
+        type: "Fixed-fee",
+        oneLiner: "The first workflow, the first metric, the first rollout plan.",
+        body:
+          "A focused strategy engagement that ends with a chosen starting point, a governance model, and a 30/60/90 rollout plan. Not a deck.",
+        includes: [
+          "Use case selection",
+          "Workflow prioritization",
+          "Governance and controls model",
+          "Pilot success metrics",
+          "30/60/90 rollout plan",
+        ],
+        bestFor: "Teams at the beginning.",
+        variant: "featured",
+        cta: "Talk to us",
+        mailtoSubject: "ThinkWork Services — Strategy Sprint inquiry",
+      },
+      {
+        id: "pilot-launch",
+        name: "ThinkWork Pilot Launch",
+        type: "Fixed-fee",
+        oneLiner: "The first governed workflow, live in your AWS.",
+        body:
+          "Environment setup, first assistant or workflow, templates, connectors, and evaluations — shipped inside the AWS account you already operate.",
+        includes: [
+          "Environment setup in your AWS",
+          "First assistant or workflow",
+          "Templates and control configuration",
+          "Connector setup",
+          "Launch and handoff",
+        ],
+        bestFor: "Teams ready to move from planning to execution.",
+        variant: "featured",
+        cta: "Talk to us",
+        mailtoSubject: "ThinkWork Services — Pilot Launch inquiry",
+      },
+      {
+        id: "managed-ops",
+        name: "Managed ThinkWork Operations",
+        type: "Monthly retainer",
+        oneLiner: "Ongoing operations for a production ThinkWork deployment.",
+        body:
+          "Recurring support that keeps the platform healthy, governed, and moving — without building an in-house platform team on day one.",
+        includes: [
+          "Environment health checks",
+          "Admin and configuration support",
+          "Upgrade and release support",
+          "Issue triage",
+          "Monthly operations review",
+        ],
+        bestFor: "Teams running ThinkWork in production without dedicated platform ops.",
+        variant: "featured",
+        cta: "Talk to us",
+        mailtoSubject: "ThinkWork Services — Managed Operations inquiry",
+      },
+      {
+        id: "workflow-expansion",
+        name: "Workflow Expansion Retainer",
+        type: "Monthly retainer",
+        oneLiner: "The next wave of workflows, shipped on a cadence.",
+        body:
+          "A recurring service focused on adding assistants, workflows, connectors, and templates as the organization earns trust in earlier ones.",
+        includes: [
+          "New workflows each month",
+          "Connector rollout",
+          "Template and agent updates",
+          "Backlog prioritization",
+          "Cross-team rollout support",
+        ],
+        bestFor: "Teams with early traction that want to keep shipping.",
+        variant: "featured",
+        cta: "Talk to us",
+        mailtoSubject: "ThinkWork Services — Workflow Expansion inquiry",
+      },
+      {
+        id: "governance-eval",
+        name: "Governance and Evaluation Retainer",
+        type: "Monthly retainer",
+        oneLiner: "Governance that evolves with usage.",
+        body:
+          "Evaluation tuning, guardrail updates, incident review, and audit support — so quality, safety, and accountability scale with adoption.",
+        includes: [
+          "Evaluation tuning",
+          "Guardrail updates",
+          "Incident review",
+          "Audit support",
+          "Policy refinement",
+        ],
+        bestFor: "Security-conscious teams and growing deployments.",
+        variant: "secondary",
+        cta: "Talk to us",
+        mailtoSubject: "ThinkWork Services — Governance and Evaluation inquiry",
+      },
+      {
+        id: "advisory",
+        name: "AI Program Advisory",
+        type: "Monthly retainer",
+        oneLiner: "Cross-functional rollout support for leadership.",
+        body:
+          "A recurring advisory retainer for adoption sequencing, KPI review, cross-team planning, and executive alignment — above any single pilot.",
+        includes: [
+          "Adoption roadmap reviews",
+          "KPI and outcome review",
+          "Rollout prioritization",
+          "Cross-team planning",
+          "Leadership check-ins",
+        ],
+        bestFor: "Organizations turning early wins into a broader AI program.",
+        variant: "secondary",
+        cta: "Talk to us",
+        mailtoSubject: "ThinkWork Services — Program Advisory inquiry",
+      },
+    ] satisfies ServicePackage[],
+  },
+  specializedSupport: {
+    eyebrow: "Specialized support",
+    headline: "Add-ons for deeper implementation work.",
+    tiles: [
+      {
+        title: "Knowledge and memory operations",
+        body:
+          "Knowledge base setup, retrieval tuning, memory refinement, and wiki/context structure.",
+      },
+      {
+        title: "Connector and workflow implementation",
+        body:
+          "Slack, email, GitHub, Google Workspace, and other workflow and system integrations.",
+      },
+      {
+        title: "Training and enablement",
+        body:
+          "Admin training, operator onboarding, team workshops, and rollout playbooks.",
+      },
+      {
+        title: "Cost and performance optimization",
+        body:
+          "Spend review, model routing, template tuning, and monthly optimization recommendations.",
+      },
+    ],
+  },
+  engagementModel: {
+    eyebrow: "Engagement model",
+    headline: "Fixed-scope launches. Recurring retainers.",
+    body:
+      "Most teams start with a Strategy Sprint or a Pilot Launch. From there, the recurring shapes take over — Managed Operations, Workflow Expansion, Governance and Evaluation, or Program Advisory. The progression is linear but not forced; one engagement does not obligate the next.",
+    bullets: [
+      "Start with a bounded launch.",
+      "Move to a monthly retainer when the first workflow is live.",
+      "Add retainers as adoption expands.",
+    ],
+  },
+  faq: {
+    eyebrow: "FAQ",
+    headline: "Common questions.",
+    items: [
+      {
+        q: "How is this different from hiring an AI consultant?",
+        a:
+          "A consultant delivers a recommendation. ThinkWork services deliver a governed workflow running inside your AWS boundary — and optionally, the monthly operating model that keeps it running.",
+      },
+      {
+        q: "What does the first engagement usually look like?",
+        a:
+          "Either an AI Adoption Strategy Sprint (for teams still choosing where to start) or a ThinkWork Pilot Launch (for teams ready to ship a first workflow). Both are fixed-fee and time-boxed.",
+      },
+      {
+        q: "Does ThinkWork run in our AWS or yours?",
+        a:
+          "Yours. Every engagement deploys into the AWS account your team already operates. No shared infrastructure on our side.",
+      },
+      {
+        q: "What becomes recurring?",
+        a:
+          "Managed Operations, Workflow Expansion, Governance and Evaluation, and Program Advisory are all monthly retainers. Scope, cadence, and deliverables are named up front, not reconciled at the end of the month.",
+      },
+      {
+        q: "Can we start small?",
+        a:
+          "Yes — that's the default shape. Start with one workflow, prove value, expand from there. The governance model stays the same as surface area grows.",
+      },
+      {
+        q: "Do you only work on strategy?",
+        a:
+          "No. Strategy, deployment, launch, governance, expansion, and ongoing operations are all in scope. The through-line is delivery, not advice.",
+      },
+    ],
+  },
+  closingCta: {
+    eyebrow: "Start with one workflow",
+    headlinePart1: "One workflow, governed,",
+    headlineAccent: "inside your AWS.",
+    body:
+      "Whether you need help scoping the first pilot or operating ThinkWork as adoption grows, the starting point is an email. Tell us where you are and we'll come back with a shape.",
+    primaryCta: {
+      label: "Talk to us",
+      mailtoSubject: "ThinkWork Services — general inquiry",
+    } satisfies ServicesMailto,
+  },
 };

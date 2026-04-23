@@ -1,0 +1,119 @@
+---
+// One service package rendered as a card. Used on /services for both featured
+// and secondary variants. CTA is a plain <a href="mailto:..."> — no JS handler,
+// unlike PricingCard.astro which wires to the Stripe checkout endpoint.
+
+import { servicesContactEmail } from "../lib/copy";
+
+interface Props {
+  id: string;
+  name: string;
+  type: "Fixed-fee" | "Monthly retainer";
+  oneLiner: string;
+  body: string;
+  includes: string[];
+  bestFor: string;
+  variant: "featured" | "secondary";
+  cta: string;
+  mailtoSubject: string;
+}
+
+const {
+  id,
+  name,
+  type,
+  oneLiner,
+  body,
+  includes,
+  bestFor,
+  variant,
+  cta,
+  mailtoSubject,
+} = Astro.props;
+
+const isFeatured = variant === "featured";
+const mailtoHref = `mailto:${servicesContactEmail}?subject=${encodeURIComponent(mailtoSubject)}`;
+---
+
+<article
+  data-service-id={id}
+  class:list={[
+    "relative flex h-full flex-col rounded-3xl border backdrop-blur-xl transition",
+    isFeatured
+      ? "border-brand/30 bg-gradient-to-b from-brand/[0.08] to-white/[0.03] p-8 shadow-[0_0_80px_-30px] shadow-brand/25"
+      : "border-white/10 bg-white/[0.02] p-6 hover:border-white/20 hover:bg-white/[0.04]",
+  ]}
+>
+  <header class="mb-5">
+    <p
+      class:list={[
+        "text-[11px] font-semibold uppercase tracking-[0.22em]",
+        isFeatured ? "text-brand" : "text-slate-500",
+      ]}
+    >
+      {type}
+    </p>
+    <h3
+      class:list={[
+        "mt-2 font-semibold tracking-tight text-slate-50",
+        isFeatured ? "text-2xl" : "text-xl",
+      ]}
+    >
+      {name}
+    </h3>
+    <p
+      class:list={[
+        "mt-2 font-medium text-slate-300",
+        isFeatured ? "text-base" : "text-sm",
+      ]}
+    >
+      {oneLiner}
+    </p>
+    <p
+      class:list={[
+        "mt-3 leading-relaxed text-slate-400",
+        isFeatured ? "text-sm" : "text-[13px]",
+      ]}
+    >
+      {body}
+    </p>
+  </header>
+
+  <ul class="mb-6 flex-1 space-y-2.5">
+    {includes.map((item) => (
+      <li class="flex gap-2.5 text-[13px] text-slate-300">
+        <svg
+          class="mt-0.5 h-3.5 w-3.5 flex-none text-brand"
+          viewBox="0 0 16 16"
+          aria-hidden="true"
+        >
+          <path
+            fill="currentColor"
+            d="M6.5 11.793 3.354 8.646a.5.5 0 0 1 .708-.708L6.5 10.379l5.44-5.44a.5.5 0 1 1 .708.708l-5.793 5.792a.5.5 0 0 1-.707 0z"
+          />
+        </svg>
+        <span>{item}</span>
+      </li>
+    ))}
+  </ul>
+
+  <p class="mb-5 border-t border-white/5 pt-4 text-[12px] leading-5 text-slate-500">
+    <span class="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+      Best for
+    </span>
+    <br />
+    {bestFor}
+  </p>
+
+  <a
+    href={mailtoHref}
+    class:list={[
+      "block rounded-xl text-center text-sm font-semibold transition",
+      isFeatured
+        ? "bg-brand px-6 py-3 text-slate-950 shadow-lg shadow-brand/20 hover:scale-[1.02] hover:bg-brand-300"
+        : "border border-white/15 bg-white/[0.04] px-5 py-2.5 text-slate-100 hover:border-white/30 hover:bg-white/[0.08]",
+    ]}
+  >
+    {cta}
+  </a>
+</article>
