@@ -23,6 +23,7 @@ import {
   RemoveTenantMemberMutation,
 } from "@/lib/graphql-queries";
 import { RemoveHumanConfirmDialog } from "./RemoveHumanConfirmDialog";
+import type { CombinedError } from "urql";
 
 export interface HumanMembershipSectionProps {
   memberId: string;
@@ -37,7 +38,19 @@ export interface HumanMembershipSectionProps {
   onRemoved: () => void;
 }
 
-function mapErrorToToast(message: string, code?: unknown) {
+function mapMutationErrorToToast(error: CombinedError) {
+  // Network-layer failures (fetch rejected, CORS, 5xx before GraphQL could
+  // respond) arrive with `networkError` set and no `graphQLErrors`. The
+  // default `error.message` in that path renders as "[Network] …" — which
+  // users reported as "ERROR HTTP_ERROR" in issue #470 — so we substitute a
+  // plain-language message that tells the operator what to do next.
+  if (error.networkError && error.graphQLErrors.length === 0) {
+    toast.error("Couldn't reach the server. Check your connection and try again.");
+    return;
+  }
+
+  const first = error.graphQLErrors[0];
+  const code = first?.extensions?.code;
   if (code === "LAST_OWNER") {
     toast.error("Cannot remove or demote the last owner of a tenant.");
     return;
@@ -46,7 +59,14 @@ function mapErrorToToast(message: string, code?: unknown) {
     toast.error("You don't have permission to make this change.");
     return;
   }
-  toast.error(message);
+  if (code === "SERVICE_UNAVAILABLE") {
+    toast.error("The server is temporarily unavailable. Try again in a moment.");
+    return;
+  }
+  // Any other coded or uncoded GraphQL error: show the server's message so
+  // the operator sees something actionable, not the urql `[GraphQL] …`
+  // wrapper.
+  toast.error(first?.message ?? error.message);
 }
 
 export function HumanMembershipSection({
@@ -81,8 +101,7 @@ export function HumanMembershipSection({
       input: { role: newRole },
     });
     if (result.error) {
-      const code = result.error.graphQLErrors?.[0]?.extensions?.code;
-      mapErrorToToast(result.error.message, code);
+      mapMutationErrorToToast(result.error);
       setRole(currentRole); // revert UI
       return;
     }
@@ -92,8 +111,7 @@ export function HumanMembershipSection({
   async function handleRemove() {
     const result = await removeMember({ id: memberId });
     if (result.error) {
-      const code = result.error.graphQLErrors?.[0]?.extensions?.code;
-      mapErrorToToast(result.error.message, code);
+      mapMutationErrorToToast(result.error);
       return;
     }
     setConfirmOpen(false);
