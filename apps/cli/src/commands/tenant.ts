@@ -1,10 +1,16 @@
 /**
  * `thinkwork tenant ...` — tenant (workspace) CRUD and settings.
  *
- * Scaffolded in Phase 0; ships in Phase 2.
+ * `list` and `get` are wired to the `@thinkwork/admin-ops` package; the rest
+ * remain `notYetImplemented` until the package grows their ops.
  */
 
 import { Command } from "commander";
+import { createClient, tenants as tenantOps, AdminOpsError } from "@thinkwork/admin-ops";
+import { resolveApiConfig } from "../api-client.js";
+import { resolveStage } from "../lib/resolve-stage.js";
+import { printError } from "../ui.js";
+import { printJson, printTable } from "../lib/output.js";
 import { notYetImplemented } from "../lib/stub.js";
 
 export function registerTenantCommand(program: Command): void {
@@ -18,13 +24,80 @@ export function registerTenantCommand(program: Command): void {
     .alias("ls")
     .description("List tenants the caller can see.")
     .option("-s, --stage <name>", "Deployment stage")
-    .action(() => notYetImplemented("tenant list", 2));
+    .addHelpText(
+      "after",
+      `
+Examples:
+  $ thinkwork tenant list
+  $ thinkwork tenant list -s dev
+  $ thinkwork tenant list --json | jq '.[].slug'
+`,
+    )
+    .action(async (opts: { stage?: string }) => {
+      try {
+        const stage = await resolveStage({ flag: opts.stage });
+        const api = resolveApiConfig(stage);
+        if (!api) process.exit(1);
+
+        const client = createClient({ apiUrl: api!.apiUrl, authSecret: api!.authSecret });
+        const rows = await tenantOps.listTenants(client);
+
+        printJson(rows);
+        printTable(rows as unknown as Array<Record<string, unknown>>, [
+          { key: "slug", header: "SLUG" },
+          { key: "name", header: "NAME" },
+          { key: "plan", header: "PLAN" },
+          { key: "id", header: "ID" },
+        ]);
+      } catch (err) {
+        printError(err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
+    });
 
   tenant
     .command("get <idOrSlug>")
     .description("Fetch one tenant by ID or slug.")
     .option("-s, --stage <name>", "Deployment stage")
-    .action(() => notYetImplemented("tenant get", 2));
+    .addHelpText(
+      "after",
+      `
+Examples:
+  $ thinkwork tenant get acme
+  $ thinkwork tenant get 0a2b... --json
+`,
+    )
+    .action(async (idOrSlug: string, opts: { stage?: string }) => {
+      try {
+        const stage = await resolveStage({ flag: opts.stage });
+        const api = resolveApiConfig(stage);
+        if (!api) process.exit(1);
+
+        const client = createClient({ apiUrl: api!.apiUrl, authSecret: api!.authSecret });
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          idOrSlug,
+        );
+        const tenant = isUuid
+          ? await tenantOps.getTenant(client, idOrSlug)
+          : await tenantOps.getTenantBySlug(client, idOrSlug);
+
+        printJson(tenant);
+        printTable([tenant as unknown as Record<string, unknown>], [
+          { key: "slug", header: "SLUG" },
+          { key: "name", header: "NAME" },
+          { key: "plan", header: "PLAN" },
+          { key: "issue_prefix", header: "PREFIX" },
+          { key: "id", header: "ID" },
+        ]);
+      } catch (err) {
+        if (err instanceof AdminOpsError && err.status === 404) {
+          printError(`Tenant "${idOrSlug}" not found`);
+          process.exit(2);
+        }
+        printError(err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
+    });
 
   tenant
     .command("create [name]")

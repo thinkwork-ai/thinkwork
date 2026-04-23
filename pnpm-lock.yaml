@@ -231,6 +231,9 @@ importers:
       '@inquirer/prompts':
         specifier: ^8.4.1
         version: 8.4.1(@types/node@25.6.0)
+      '@thinkwork/admin-ops':
+        specifier: workspace:*
+        version: link:../../packages/admin-ops
       '@urql/core':
         specifier: ^6.0.0
         version: 6.0.1(graphql@16.13.2)
@@ -516,6 +519,18 @@ importers:
 
   examples/skill-pack: {}
 
+  packages/admin-ops:
+    devDependencies:
+      '@types/node':
+        specifier: ^25.3.3
+        version: 25.6.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.6.1)(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+
   packages/agent-tools:
     dependencies:
       '@aws-sdk/client-s3':
@@ -707,6 +722,9 @@ importers:
       '@octokit/rest':
         specifier: ^22.0.1
         version: 22.0.1
+      '@thinkwork/admin-ops':
+        specifier: workspace:*
+        version: link:../admin-ops
       '@thinkwork/database-pg':
         specifier: workspace:*
         version: link:../database-pg
@@ -741,6 +759,9 @@ importers:
       '@smithy/node-http-handler':
         specifier: ^4.5.2
         version: 4.5.2
+      '@types/aws-lambda':
+        specifier: ^8.10.145
+        version: 8.10.161
       '@types/node':
         specifier: ^25.3.3
         version: 25.6.0
