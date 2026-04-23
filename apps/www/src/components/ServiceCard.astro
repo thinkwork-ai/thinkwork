@@ -6,7 +6,7 @@
 interface Props {
   id: string;
   name: string;
-  type: "Fixed-fee" | "Monthly retainer";
+  type: "Fixed-fee" | "Ongoing operations";
   oneLiner: string;
   body: string;
   includes: string[];
@@ -26,7 +26,7 @@ const {
 } = Astro.props;
 
 const isFeatured = variant === "featured";
-const isRetainer = type === "Monthly retainer";
+const isOngoing = type === "Ongoing operations";
 ---
 
 <article
@@ -42,7 +42,7 @@ const isRetainer = type === "Monthly retainer";
     <span
       class:list={[
         "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]",
-        isRetainer
+        isOngoing
           ? "border-brand/40 bg-brand/[0.12] text-brand"
           : "border-white/15 bg-white/[0.04] text-slate-300",
       ]}
@@ -50,7 +50,7 @@ const isRetainer = type === "Monthly retainer";
       <span
         class:list={[
           "h-1 w-1 rounded-full",
-          isRetainer ? "bg-brand" : "bg-slate-400",
+          isOngoing ? "bg-brand" : "bg-slate-400",
         ]}
       ></span>
       {type}

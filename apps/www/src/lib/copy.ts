@@ -417,7 +417,7 @@ export type ServicesMailto = {
 export type ServicePackage = {
   id: string;
   name: string;
-  type: "Fixed-fee" | "Monthly retainer";
+  type: "Fixed-fee" | "Ongoing operations";
   oneLiner: string;
   body: string;
   includes: string[];
@@ -449,7 +449,7 @@ export const services = {
   positioning: {
     headline: "One partner across the full adoption arc.",
     body:
-      "Scoping, launch, managed operations, workflow expansion, governance, and program advisory — packaged as fixed-fee engagements and monthly retainers rather than billable hours. The shape of the engagement is named up front; the scope doesn't drift.",
+      "Scoping, launch, managed operations, workflow expansion, governance, and program advisory — packaged as fixed-fee engagements and ongoing operational support rather than billable hours. The shape of the engagement is named up front; the scope doesn't drift.",
     startingPointsLabel: "Common starting points",
     startingPoints: [
       {
@@ -504,7 +504,7 @@ export const services = {
   },
   packages: {
     eyebrow: "Service packages",
-    headline: "Fixed-fee launches. Monthly retainers.",
+    headline: "Fixed-fee launches. Ongoing operations.",
     lede:
       "Every package scoped up front — no billable hours, no open meter, no drift from the engagement shape we agreed to.",
     secondaryHeadline: "Additional packages",
@@ -548,7 +548,7 @@ export const services = {
       {
         id: "managed-ops",
         name: "Managed ThinkWork Operations",
-        type: "Monthly retainer",
+        type: "Ongoing operations",
         oneLiner: "Ongoing operations for a production ThinkWork deployment.",
         body:
           "Recurring support that keeps the platform healthy, governed, and moving — without building an in-house platform team on day one.",
@@ -564,8 +564,8 @@ export const services = {
       },
       {
         id: "workflow-expansion",
-        name: "Workflow Expansion Retainer",
-        type: "Monthly retainer",
+        name: "Workflow Expansion Support",
+        type: "Ongoing operations",
         oneLiner: "The next wave of workflows, shipped on a cadence.",
         body:
           "A recurring service focused on adding assistants, workflows, connectors, and templates as the organization earns trust in earlier ones.",
@@ -581,8 +581,8 @@ export const services = {
       },
       {
         id: "governance-eval",
-        name: "Governance and Evaluation Retainer",
-        type: "Monthly retainer",
+        name: "Governance & Evaluation Support",
+        type: "Ongoing operations",
         oneLiner: "Governance that evolves with usage.",
         body:
           "Evaluation tuning, guardrail updates, incident review, and audit support — so quality, safety, and accountability scale with adoption.",
@@ -599,10 +599,10 @@ export const services = {
       {
         id: "advisory",
         name: "AI Program Advisory",
-        type: "Monthly retainer",
+        type: "Ongoing operations",
         oneLiner: "Cross-functional rollout support for leadership.",
         body:
-          "A recurring advisory retainer for adoption sequencing, KPI review, cross-team planning, and executive alignment — above any single pilot.",
+          "Ongoing advisory support for adoption sequencing, KPI review, cross-team planning, and executive alignment — above any single pilot.",
         includes: [
           "Adoption roadmap reviews",
           "KPI and outcome review",
@@ -622,7 +622,7 @@ export const services = {
       {
         q: "How is this different from hiring an AI consultant?",
         a:
-          "A consultant delivers a recommendation. ThinkWork services deliver a governed workflow running in production — and optionally, the monthly operating model that keeps it running.",
+          "A consultant delivers a recommendation. ThinkWork services deliver a governed workflow running in production — and optionally, the ongoing operating model that keeps it running.",
       },
       {
         q: "What does the first engagement usually look like?",
@@ -635,9 +635,9 @@ export const services = {
           "Both. ThinkWork is open-source; the hosted option is the same platform, just operated by us. Services cover launch, operations, and expansion on either path, and teams can move between them without rewriting workflows.",
       },
       {
-        q: "What becomes recurring?",
+        q: "What happens after launch?",
         a:
-          "Managed Operations, Workflow Expansion, Governance and Evaluation, and Program Advisory are all monthly retainers. Scope, cadence, and deliverables are named up front, not reconciled at the end of the month.",
+          "Managed Operations, Workflow Expansion Support, Governance & Evaluation Support, and Program Advisory are all ongoing-operations packages. Scope, cadence, and deliverables are named up front — no billable-hour meter, no end-of-month reconciliation.",
       },
       {
         q: "Can we start small?",
