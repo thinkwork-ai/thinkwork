@@ -23,6 +23,7 @@ import {
   RemoveTenantMemberMutation,
 } from "@/lib/graphql-queries";
 import { RemoveHumanConfirmDialog } from "./RemoveHumanConfirmDialog";
+import type { CombinedError } from "urql";
 
 export interface HumanMembershipSectionProps {
   memberId: string;
@@ -37,7 +38,36 @@ export interface HumanMembershipSectionProps {
   onRemoved: () => void;
 }
 
-function mapErrorToToast(message: string, code?: unknown) {
+/**
+ * Match uncoded pg connection-class error messages that surface as GraphQL
+ * errors without an `extensions.code`. Once the server's Yoga `maskError`
+ * hook is in production every such error carries
+ * `extensions.code: "SERVICE_UNAVAILABLE"` — but we keep the message-level
+ * heuristic as defense in depth for any resolver that throws before
+ * reaching the mask, and so admin users on older backends still get a
+ * readable toast instead of a raw libpq string.
+ */
+function looksLikePgConnectionError(message: string | undefined): boolean {
+  if (!message) return false;
+  return (
+    message.includes("timeout exceeded when trying to connect") ||
+    message.includes("Connection terminated unexpectedly") ||
+    message.includes("ECONNRESET") ||
+    message.includes("ECONNREFUSED")
+  );
+}
+
+function mapMutationErrorToToast(error: CombinedError) {
+  // Network-layer failures (fetch rejected, CORS, browser offline) arrive
+  // with `networkError` set and no `graphQLErrors`. Show a plain-language
+  // message rather than urql's default `[Network] …` wrapper.
+  if (error.networkError && error.graphQLErrors.length === 0) {
+    toast.error("Couldn't reach the server. Check your connection and try again.");
+    return;
+  }
+
+  const first = error.graphQLErrors[0];
+  const code = first?.extensions?.code;
   if (code === "LAST_OWNER") {
     toast.error("Cannot remove or demote the last owner of a tenant.");
     return;
@@ -46,7 +76,14 @@ function mapErrorToToast(message: string, code?: unknown) {
     toast.error("You don't have permission to make this change.");
     return;
   }
-  toast.error(message);
+  if (code === "SERVICE_UNAVAILABLE" || looksLikePgConnectionError(first?.message)) {
+    toast.error("The server is temporarily unavailable. Try again in a moment.");
+    return;
+  }
+  // Any other coded or uncoded GraphQL error: show the server's message so
+  // the operator sees something actionable, not the urql `[GraphQL] …`
+  // wrapper.
+  toast.error(first?.message ?? error.message);
 }
 
 export function HumanMembershipSection({
@@ -81,8 +118,7 @@ export function HumanMembershipSection({
       input: { role: newRole },
     });
     if (result.error) {
-      const code = result.error.graphQLErrors?.[0]?.extensions?.code;
-      mapErrorToToast(result.error.message, code);
+      mapMutationErrorToToast(result.error);
       setRole(currentRole); // revert UI
       return;
     }
@@ -92,8 +128,7 @@ export function HumanMembershipSection({
   async function handleRemove() {
     const result = await removeMember({ id: memberId });
     if (result.error) {
-      const code = result.error.graphQLErrors?.[0]?.extensions?.code;
-      mapErrorToToast(result.error.message, code);
+      mapMutationErrorToToast(result.error);
       return;
     }
     setConfirmOpen(false);

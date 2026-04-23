@@ -5,13 +5,14 @@
  * and builds the executable schema with resolver maps.
  */
 
-import { createYoga } from "graphql-yoga";
+import { createYoga, createGraphQLError, maskError } from "graphql-yoga";
 import { useDepthLimit } from "@envelop/depth-limit";
 import { useDisableIntrospection } from "@graphql-yoga/plugin-disable-introspection";
 import { makeExecutableSchema } from "@graphql-tools/schema";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { GraphQLScalarType, Kind } from "graphql";
+import { isConnectionError } from "@thinkwork/database-pg";
 import { createContext, type GraphQLContext } from "./context.js";
 import { queryResolvers, mutationResolvers, typeResolvers } from "./resolvers/index.js";
 
@@ -113,8 +114,26 @@ export const yoga = createYoga<GraphQLContext>({
 	],
 	// GraphiQL explorer in dev, disabled in prod
 	graphiql: !IS_PROD,
-	// Mask internal error details in production
-	maskedErrors: IS_PROD,
+	// Mask internal error details in production, but detect pg
+	// connection-class failures first and surface them as a coded GraphQL
+	// error so the UI can render a specific toast. Without this, a pool
+	// acquisition timeout bubbles up as a generic 500 and shows as
+	// "ERROR HTTP_ERROR" to the operator (issue #470).
+	maskedErrors: {
+		maskError(error: unknown, message: string, isDev?: boolean) {
+			const underlying =
+				error && typeof error === "object" && "originalError" in error
+					? (error as { originalError?: unknown }).originalError
+					: error;
+			if (isConnectionError(underlying) || isConnectionError(error)) {
+				return createGraphQLError(
+					"The database is temporarily unavailable. Please try again.",
+					{ extensions: { code: "SERVICE_UNAVAILABLE" } },
+				);
+			}
+			return maskError(error, message, isDev);
+		},
+	},
 	// Disable landing page in production
 	landingPage: !IS_PROD,
 });
