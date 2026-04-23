@@ -32,7 +32,6 @@ const secondaryItems = services.packages.items.filter(
         <p
           class="inline-flex items-center gap-2.5 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-300 backdrop-blur"
         >
-          <span class="h-1 w-1 rounded-full bg-brand"></span>
           {services.hero.eyebrow}
         </p>
         <h1
@@ -74,14 +73,27 @@ const secondaryItems = services.packages.items.filter(
         </p>
       </div>
 
-      <div class="mx-auto mt-12 max-w-5xl">
+      <div class="mx-auto mt-14 max-w-6xl">
         <p class="text-center font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-brand/70">
           {services.positioning.startingPointsLabel}
         </p>
-        <ul class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {services.positioning.startingPoints.map((point) => (
-            <li class="rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3 text-center text-[13px] font-medium text-slate-300">
-              {point}
+        <ul class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {services.positioning.startingPoints.map((point, index) => (
+            <li class="group relative rounded-2xl bg-gradient-to-br from-brand/30 via-white/10 to-white/[0.02] p-[1px] transition duration-300 hover:from-brand/60 hover:via-brand/20 hover:to-white/[0.06]">
+              <div class="relative flex h-full flex-col rounded-2xl bg-[#070b14] p-6">
+                <div class="flex items-center justify-between">
+                  <span class="font-mono text-[11px] font-semibold tracking-[0.18em] text-brand">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <span class="h-1.5 w-1.5 rounded-full bg-brand/60 shadow-[0_0_12px_rgba(56,189,248,0.55)]"></span>
+                </div>
+                <h3 class="mt-5 text-lg font-semibold leading-snug tracking-tight text-white">
+                  {point.title}
+                </h3>
+                <p class="mt-3 text-[13.5px] leading-relaxed text-slate-400">
+                  {point.body}
+                </p>
+              </div>
             </li>
           ))}
         </ul>
@@ -208,7 +220,6 @@ const secondaryItems = services.packages.items.filter(
         <p
           class="inline-flex items-center gap-2.5 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-300 backdrop-blur"
         >
-          <span class="h-1 w-1 rounded-full bg-brand"></span>
           {services.closingCta.eyebrow}
         </p>
         <h2 class="mt-6 text-balance text-3xl font-bold tracking-tight md:text-5xl lg:text-6xl">

@@ -452,10 +452,22 @@ export const services = {
       "Scoping, launch, managed operations, workflow expansion, governance, and program advisory — packaged as fixed-fee engagements and monthly retainers rather than billable hours. The shape of the engagement is named up front; the scope doesn't drift.",
     startingPointsLabel: "Common starting points",
     startingPoints: [
-      "Support and triage",
-      "Approvals and internal operations",
-      "Reporting and workflow automation",
-      "Connector-driven task flows",
+      {
+        title: "Support and triage",
+        body: "Inbox, ticket routing, and first-response automation anchored in the workflows your team already runs.",
+      },
+      {
+        title: "Approvals and internal ops",
+        body: "Multi-step approval chains and operational handoffs with human gates kept exactly where they matter.",
+      },
+      {
+        title: "Reporting and automation",
+        body: "Scheduled reports, cross-system data stitching, and recurring workflows that replace manual pulls.",
+      },
+      {
+        title: "Connector-driven task flows",
+        body: "Agents that act through Slack, GitHub, and Google Workspace — not just chat about them.",
+      },
     ],
   },
   how: {
