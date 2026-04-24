@@ -188,6 +188,11 @@ resource "aws_lambda_function" "handler" {
     # Admin-ops-mcp authenticates incoming tokens by sha256-hash lookup
     # against tenant_mcp_admin_keys, populated by this handler's routes.
     "mcp-admin-keys",
+    # One-shot tenant provisioning: mints a tkm_ key + stores in Secrets
+    # Manager at thinkwork/<stage>/mcp/<tenantId>/admin-ops + upserts
+    # tenant_mcp_servers. SM IAM is already granted on thinkwork/* by
+    # aws_iam_role_policy.lambda_secrets in main.tf (Create/Update/Get).
+    "mcp-admin-provision",
   ]) : toset([])
 
   function_name = "thinkwork-${var.stage}-api-${each.key}"
@@ -367,6 +372,13 @@ locals {
     "POST /api/tenants/{tenantId}/mcp-admin-keys"               = "mcp-admin-keys"
     "GET /api/tenants/{tenantId}/mcp-admin-keys"                = "mcp-admin-keys"
     "DELETE /api/tenants/{tenantId}/mcp-admin-keys/{keyId}"     = "mcp-admin-keys"
+
+    # One-shot tenant provisioning for the admin-ops MCP. Mints a fresh
+    # tkm_ key + stores it in Secrets Manager at
+    # thinkwork/<stage>/mcp/<tenantId>/admin-ops + upserts the
+    # tenant_mcp_servers row so the runtime picks the server up for
+    # any agent that gets it assigned via agent_mcp_servers.
+    "POST /api/tenants/{tenantId}/mcp-admin-provision" = "mcp-admin-provision"
   } : {}
 }
 

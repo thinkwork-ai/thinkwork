@@ -601,4 +601,119 @@ old one.
         process.exit(1);
       }
     });
+
+  // ---------------------------------------------------------------------------
+  // `thinkwork mcp provision` — one-shot tenant provisioning for admin-ops.
+  //
+  // Mints a fresh tkm_ token, stores it in Secrets Manager, and upserts the
+  // tenant_mcp_servers row so the runtime picks up the admin-ops MCP for any
+  // agent that gets it assigned via agent_mcp_servers. Safe to re-run —
+  // rotates the key + retires the previous token.
+  // ---------------------------------------------------------------------------
+
+  mcp
+    .command("provision")
+    .description(
+      "Provision the admin-ops MCP for a tenant: mint a new key + store in Secrets Manager + register in tenant_mcp_servers.",
+    )
+    .option("-s, --stage <name>", "Deployment stage")
+    .option("-t, --tenant <slug>", "Tenant slug or UUID (omit with --all)")
+    .option(
+      "--url <url>",
+      "Override the MCP endpoint URL (defaults to the stage's execute-api or MCP_CUSTOM_DOMAIN)",
+    )
+    .option("--all", "Provision for every tenant the caller can see (backfill mode)")
+    .addHelpText(
+      "after",
+      `
+Examples:
+  # One tenant (interactive picker or -t)
+  $ thinkwork mcp provision -t acme
+
+  # Explicit custom-domain URL
+  $ thinkwork mcp provision -t acme --url https://mcp.thinkwork.ai/mcp/admin
+
+  # Backfill every tenant at once
+  $ thinkwork mcp provision --all
+
+The raw token is stored in Secrets Manager and duplicated into
+tenant_mcp_servers.auth_config — it is NOT printed on stdout. After
+provisioning, each agent still needs the server assigned via the admin
+SPA (or a future \`thinkwork mcp assign\` CLI pass).
+`,
+    )
+    .action(async (opts: { stage?: string; tenant?: string; url?: string; all?: boolean }) => {
+      try {
+        if (opts.all && opts.tenant) {
+          printError("--all and --tenant are mutually exclusive.");
+          process.exit(1);
+        }
+
+        const stage = await resolveStage({ flag: opts.stage });
+        const api = resolveApiConfig(stage);
+        if (!api) process.exit(1);
+
+        async function provisionOne(tenantIdOrSlug: string, label: string) {
+          const res = await apiFetch(
+            api!.apiUrl,
+            api!.authSecret,
+            `/api/tenants/${encodeURIComponent(tenantIdOrSlug)}/mcp-admin-provision`,
+            {
+              method: "POST",
+              body: JSON.stringify(opts.url ? { url: opts.url } : {}),
+            },
+          );
+          printSuccess(
+            `${label}: ${res.provisioned} (tenant_mcp_servers.id=${res.tenantMcpServerId}, url=${res.url})`,
+          );
+          return res;
+        }
+
+        if (opts.all) {
+          const tenantRows = await apiFetch(
+            api!.apiUrl,
+            api!.authSecret,
+            "/api/tenants",
+            {},
+          );
+          if (!Array.isArray(tenantRows) || tenantRows.length === 0) {
+            printWarning("No tenants found.");
+            return;
+          }
+          printHeader("mcp provision --all", stage);
+          const results: Array<{ slug: string; ok: boolean; reason?: string }> = [];
+          for (const t of tenantRows as Array<{ slug: string; name: string; id: string }>) {
+            try {
+              await provisionOne(t.slug, `${t.name} (${t.slug})`);
+              results.push({ slug: t.slug, ok: true });
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              printError(`  ✗ ${t.slug}: ${msg}`);
+              results.push({ slug: t.slug, ok: false, reason: msg });
+            }
+          }
+          const ok = results.filter((r) => r.ok).length;
+          const bad = results.length - ok;
+          if (bad === 0) {
+            printSuccess(`All ${ok} tenants provisioned.`);
+          } else {
+            printWarning(`${ok}/${results.length} succeeded; ${bad} failed.`);
+            process.exit(1);
+          }
+          return;
+        }
+
+        const tenant = await resolveTenantRest({
+          flag: opts.tenant,
+          stage,
+          apiUrl: api!.apiUrl,
+          authSecret: api!.authSecret,
+        });
+        await provisionOne(tenant.slug, tenant.slug);
+      } catch (err) {
+        if (isCancellation(err)) return;
+        printError(err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
+    });
 }

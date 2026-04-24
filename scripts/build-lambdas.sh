@@ -304,6 +304,9 @@ build_handler "admin-ops-mcp" \
 build_handler "mcp-admin-keys" \
   "$REPO_ROOT/packages/api/src/handlers/mcp-admin-keys.ts"
 
+build_handler "mcp-admin-provision" \
+  "$REPO_ROOT/packages/api/src/handlers/mcp-admin-provision.ts"
+
 build_handler "github-workspace" \
   "$REPO_ROOT/packages/lambda/github-workspace.ts"
 
