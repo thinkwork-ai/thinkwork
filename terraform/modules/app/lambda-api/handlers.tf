@@ -208,6 +208,10 @@ resource "aws_lambda_function" "handler" {
     # Hourly sweeper: reaps orphan S3 staging from failed / interrupted
     # plugin install sagas + marks matching plugin_uploads rows 'failed'.
     "plugin-staging-sweeper",
+    # Resolved Capability Manifest write endpoint (plan §U15). Strands
+    # container POSTs one row per agent-session-start. Shared
+    # API_AUTH_SECRET bearer (runtime→API; no tenant OAuth).
+    "manifest-log",
   ]) : toset([])
 
   function_name = "thinkwork-${var.stage}-api-${each.key}"
@@ -417,6 +421,12 @@ locals {
     "OPTIONS /api/plugins"                     = "plugin-upload"
     "GET /api/plugins/{uploadId}"              = "plugin-upload"
     "OPTIONS /api/plugins/{uploadId}"          = "plugin-upload"
+
+    # Resolved Capability Manifest write endpoint (plan §U15). Strands
+    # container posts one row per agent-session-start. Shared
+    # API_AUTH_SECRET; no tenant OAuth.
+    "POST /api/runtime/manifests"    = "manifest-log"
+    "OPTIONS /api/runtime/manifests" = "manifest-log"
   } : {}
 }
 

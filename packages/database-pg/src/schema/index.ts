@@ -28,6 +28,7 @@ export * from "./webhooks";
 export * from "./webhook-deliveries";
 export * from "./recipes";
 export * from "./skills";
+export * from "./capability-catalog";
 export * from "./guardrails";
 export * from "./agent-templates";
 export * from "./activity-log";
