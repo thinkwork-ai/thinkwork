@@ -552,7 +552,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
         try:
             from strands import tool as _sb_tool_decorator
             from sandbox_tool import build_execute_code_tool, new_session_state
-            from sandbox_preamble import PreambleInputs, build_preamble
+            from sandbox_preamble import build_preamble
             # bedrock-agentcore runtime client wrappers. Lazy-imported so
             # the container boots cleanly on stages without the SDK.
             from bedrock_agentcore.tools.code_interpreter_client import (
@@ -563,29 +563,12 @@ def _call_strands_agent(system_prompt: str, messages: list,
             # dict (call-frame-local to _call_strands_agent).
             _sb_state = new_session_state()
 
-            # Resolve the preamble source once, from the fields the
-            # dispatcher wrote onto the invocation env (plan Unit 9).
-            # SANDBOX_SECRET_PATHS is a JSON string of connection_type
-            # → Secrets Manager ARN path; build_preamble turns it into
-            # the Python source for executeCode call #1.
-            import json as _sb_json
-            try:
-                _sb_secret_paths = _sb_json.loads(
-                    os.environ.get("SANDBOX_SECRET_PATHS", "{}"),
-                )
-            except Exception as _sb_err:
-                logger.warning(
-                    "SANDBOX_SECRET_PATHS parse failed: %s", _sb_err,
-                )
-                _sb_secret_paths = {}
-            _sb_preamble_source = build_preamble(
-                PreambleInputs(
-                    tenant_id=os.environ.get("SANDBOX_TENANT_ID", ""),
-                    user_id=os.environ.get("SANDBOX_USER_ID", ""),
-                    stage=os.environ.get("SANDBOX_STAGE", ""),
-                    secret_paths=_sb_secret_paths,
-                ),
-            )
+            # Preamble is executeCode call #1 — sitecustomize readiness
+            # check only. The retired OAuth token injection path is gone
+            # (see docs/plans/2026-04-23-006). The dispatcher no longer
+            # threads SANDBOX_SECRET_PATHS / SANDBOX_TENANT_ID /
+            # SANDBOX_USER_ID / SANDBOX_STAGE onto the invocation env.
+            _sb_preamble_source = build_preamble()
 
             async def _start_session(ipi: str, timeout: int) -> str:
                 # code_session is a context manager on the sync client;
@@ -673,10 +656,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
                 or os.environ.get("THINKWORK_API_SECRET")
                 or ""
             )
-            _sb_tenant = (
-                os.environ.get("SANDBOX_TENANT_ID", "")
-                or os.environ.get("TENANT_ID", "")
-            )
+            _sb_tenant = os.environ.get("TENANT_ID", "")
             _sb_agent = os.environ.get("AGENT_ID", "")
 
             async def _check_quota() -> dict:

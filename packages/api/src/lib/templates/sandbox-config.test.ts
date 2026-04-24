@@ -13,41 +13,24 @@ describe("validateTemplateSandbox", () => {
     });
   });
 
-  it("accepts a fully valid object", () => {
-    const r = validateTemplateSandbox({
-      environment: "default-public",
-      required_connections: ["github", "slack"],
-    });
-    expect(r).toEqual({
+  it("accepts a minimal valid object", () => {
+    expect(
+      validateTemplateSandbox({ environment: "default-public" }),
+    ).toEqual({
       ok: true,
-      value: {
-        environment: "default-public",
-        required_connections: ["github", "slack"],
-      },
+      value: { environment: "default-public" },
     });
   });
 
-  it("accepts internal-only with empty required_connections", () => {
-    const r = validateTemplateSandbox({
-      environment: "internal-only",
-      required_connections: [],
-    });
+  it("accepts internal-only", () => {
+    const r = validateTemplateSandbox({ environment: "internal-only" });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value?.environment).toBe("internal-only");
   });
 
-  it("defaults missing required_connections to empty array", () => {
-    const r = validateTemplateSandbox({ environment: "internal-only" });
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.value?.required_connections).toEqual([]);
-  });
-
   it("parses a JSON-string payload (matches other template-field behavior)", () => {
     const r = validateTemplateSandbox(
-      JSON.stringify({
-        environment: "default-public",
-        required_connections: ["google"],
-      }),
+      JSON.stringify({ environment: "default-public" }),
     );
     expect(r.ok).toBe(true);
   });
@@ -75,39 +58,23 @@ describe("validateTemplateSandbox", () => {
     if (!r.ok) expect(r.error).toMatch(/environment: required string/);
   });
 
-  it("rejects required_connections that is not an array", () => {
+  it("rejects a payload with `required_connections` (retired field)", () => {
     const r = validateTemplateSandbox({
       environment: "default-public",
-      required_connections: "github",
+      required_connections: ["github"],
     });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatch(/must be an array/);
+    if (!r.ok)
+      expect(r.error).toMatch(/required_connections is no longer accepted/);
   });
 
-  it("rejects unknown connection type (plan test scenario: 'notion')", () => {
+  it("rejects an empty `required_connections` array (still the retired field)", () => {
     const r = validateTemplateSandbox({
       environment: "default-public",
-      required_connections: ["notion"],
+      required_connections: [],
     });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatch(/"notion" is not an allowed/);
-  });
-
-  it("rejects duplicate entries in required_connections", () => {
-    const r = validateTemplateSandbox({
-      environment: "default-public",
-      required_connections: ["github", "github"],
-    });
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatch(/duplicate entry/);
-  });
-
-  it("rejects non-string entries in required_connections", () => {
-    const r = validateTemplateSandbox({
-      environment: "default-public",
-      required_connections: [42],
-    });
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatch(/entries must be strings/);
+    if (!r.ok)
+      expect(r.error).toMatch(/required_connections is no longer accepted/);
   });
 });

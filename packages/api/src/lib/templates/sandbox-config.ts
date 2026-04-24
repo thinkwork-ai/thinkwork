@@ -6,10 +6,18 @@
  * Shape:
  *   {
  *     environment: "default-public" | "internal-only",
- *     required_connections: ("google" | "github" | "slack")[],
  *   }
  *
  * Lives at the resolver boundary because the schema column is plain jsonb.
+ *
+ * Historical note: v1 also accepted a `required_connections` array that
+ * injected OAuth tokens into the sandbox's os.environ via the preamble.
+ * That path was retired (see docs/plans/2026-04-23-006-refactor-sandbox-
+ * drop-required-connections-plan.md) — OAuth'd work belongs in
+ * composable-skill connector scripts, not a credential-laden Python
+ * runtime. The validator now rejects the field on write and silently
+ * strips it on hydration so legacy rows keep round-tripping without
+ * surprising anyone.
  */
 
 import {
@@ -17,20 +25,8 @@ import {
   type SandboxEnvironment,
 } from "@thinkwork/database-pg/schema";
 
-// v1 allowed connection_type identifiers per brainstorm R11 + plan Unit 2
-// (github + slack shipped in #419). If the set grows, extend this list.
-export const SANDBOX_ALLOWED_CONNECTION_TYPES = [
-  "google",
-  "github",
-  "slack",
-] as const;
-
-export type SandboxConnectionType =
-  (typeof SANDBOX_ALLOWED_CONNECTION_TYPES)[number];
-
 export interface TemplateSandbox {
   environment: SandboxEnvironment;
-  required_connections: SandboxConnectionType[];
 }
 
 export type SandboxValidationResult =
@@ -42,8 +38,9 @@ export type SandboxValidationResult =
  * create/update mutation. Returns `{ ok: true, value: null }` for
  * `null | undefined` (the template does not opt into the sandbox).
  *
- * Rejects unknown environments, unknown connection types, duplicates, and
- * malformed shapes with a specific error the resolver surfaces verbatim.
+ * Rejects unknown environments, malformed shapes, and the retired
+ * `required_connections` field with a specific error the resolver
+ * surfaces verbatim.
  */
 export function validateTemplateSandbox(raw: unknown): SandboxValidationResult {
   if (raw === null || raw === undefined) {
@@ -59,8 +56,7 @@ export function validateTemplateSandbox(raw: unknown): SandboxValidationResult {
   if (typeof value !== "object" || Array.isArray(value) || value === null) {
     return {
       ok: false,
-      error:
-        "sandbox: must be an object with `environment` and `required_connections`",
+      error: "sandbox: must be an object with `environment`",
     };
   }
 
@@ -77,50 +73,21 @@ export function validateTemplateSandbox(raw: unknown): SandboxValidationResult {
   }
   const environment = v.environment as SandboxEnvironment;
 
-  // required_connections is optional — default to empty list if omitted. The
-  // template may need a sandbox without OAuth credentials (internal-data
-  // scripting), so required_connections = [] is a legitimate v1 shape.
-  let required_connections: SandboxConnectionType[] = [];
-  if (v.required_connections !== undefined && v.required_connections !== null) {
-    if (!Array.isArray(v.required_connections)) {
-      return {
-        ok: false,
-        error:
-          "sandbox.required_connections: must be an array of connection type strings",
-      };
-    }
-    const seen = new Set<string>();
-    for (const item of v.required_connections) {
-      if (typeof item !== "string") {
-        return {
-          ok: false,
-          error: "sandbox.required_connections: entries must be strings",
-        };
-      }
-      if (
-        !SANDBOX_ALLOWED_CONNECTION_TYPES.includes(
-          item as SandboxConnectionType,
-        )
-      ) {
-        return {
-          ok: false,
-          error: `sandbox.required_connections: "${item}" is not an allowed connection type; allowed: ${SANDBOX_ALLOWED_CONNECTION_TYPES.join(", ")}`,
-        };
-      }
-      if (seen.has(item)) {
-        return {
-          ok: false,
-          error: `sandbox.required_connections: duplicate entry "${item}"`,
-        };
-      }
-      seen.add(item);
-      required_connections.push(item as SandboxConnectionType);
-    }
+  // required_connections is retired. Reject on write so operators can't
+  // reintroduce OAuth-into-sandbox via raw GraphQL. Hydration of legacy
+  // rows silently strips the key (see resolvers / admin editor — both
+  // read only `environment` now).
+  if ("required_connections" in v) {
+    return {
+      ok: false,
+      error:
+        "sandbox.required_connections is no longer accepted — use composable-skill connectors for OAuth-ed work",
+    };
   }
 
   return {
     ok: true,
-    value: { environment, required_connections },
+    value: { environment },
   };
 }
 

@@ -401,11 +401,9 @@ def _audit_row(
         started_at_wall + (duration_ms / 1000.0), tz=datetime.UTC,
     ).isoformat()
     return {
-        "tenant_id": os.environ.get("SANDBOX_TENANT_ID", "")
-        or os.environ.get("TENANT_ID", ""),
+        "tenant_id": os.environ.get("TENANT_ID", ""),
         "agent_id": os.environ.get("AGENT_ID", "") or None,
-        "user_id": os.environ.get("SANDBOX_USER_ID", "")
-        or os.environ.get("USER_ID", ""),
+        "user_id": os.environ.get("USER_ID", ""),
         "template_id": os.environ.get("TEMPLATE_ID", "") or None,
         "session_id": session_id,
         "environment_id": os.environ.get("SANDBOX_ENVIRONMENT", ""),
