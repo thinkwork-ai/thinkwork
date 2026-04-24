@@ -50,17 +50,19 @@ describe("u8-status audit script", () => {
     const donePattern = /\| done \| (\d+) \|/;
     const match = out.match(donePattern);
     expect(match).not.toBeNull();
-    expect(Number(match![1])).toBeGreaterThanOrEqual(18);
+    expect(Number(match![1])).toBeGreaterThanOrEqual(19);
   });
 
-  it("still tracks remaining composition slugs for the next PR to pick up", () => {
+  it("has no composition slugs left for the deliverable-shape series", () => {
     const out = runAudit();
     const compositionPattern = /\| composition \| (\d+) \|/;
     const match = out.match(compositionPattern);
     expect(match).not.toBeNull();
-    // One composition slug remains: renewal-prep. smoke-package-only is
-    // a smoke-probe (counted separately) and migrates last with U6.
-    expect(Number(match![1])).toBe(1);
+    // Composition bucket is empty post renewal-prep migration. The last
+    // remaining `execution: composition` slug is smoke-package-only,
+    // which is counted in the smoke-probe bucket and migrates last with
+    // U6's composition_runner deletion.
+    expect(Number(match![1])).toBe(0);
   });
 
   it("keeps the smoke-probe bucket honest (smoke-package-only stays there)", () => {
