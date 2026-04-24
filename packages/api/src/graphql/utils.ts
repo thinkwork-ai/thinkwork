@@ -399,11 +399,11 @@ export async function invokeJobScheduleManager(
 }
 
 // ---------------------------------------------------------------------------
-// Composition invoke — agentcore-invoke Lambda with a synthetic run envelope
+// Skill-run invoke — agentcore-invoke Lambda with a synthetic run envelope
 // ---------------------------------------------------------------------------
 //
-// The composition runner lives inside the AgentCore container and responds
-// to a new kind of envelope `{kind: "run_skill", skillId, runId, ...}`. The
+// The unified skill dispatcher lives inside the AgentCore container and
+// responds to a `{kind: "run_skill", skillId, runId, ...}` envelope. The
 // agentcore-invoke Lambda routes this envelope to the container in the same
 // shape chat turns take today (it's just a different request body).
 //
@@ -412,15 +412,15 @@ export async function invokeJobScheduleManager(
 // either transitions the skill_runs row out of `running` or returns the
 // error to the client.
 
-let _compositionInvokeFnName: string | null | undefined;
-async function getCompositionInvokeFnName(): Promise<string | null> {
-  if (_compositionInvokeFnName !== undefined) return _compositionInvokeFnName;
+let _skillRunInvokeFnName: string | null | undefined;
+async function getSkillRunInvokeFnName(): Promise<string | null> {
+  if (_skillRunInvokeFnName !== undefined) return _skillRunInvokeFnName;
   // Reuse the same Lambda as chat invocation — there's exactly one
   // agentcore-invoke Lambda, it just handles multiple envelope kinds.
   const envName = process.env.AGENTCORE_FUNCTION_NAME;
   if (envName) {
-    _compositionInvokeFnName = envName;
-    return _compositionInvokeFnName;
+    _skillRunInvokeFnName = envName;
+    return _skillRunInvokeFnName;
   }
   try {
     let stage = process.env.STAGE || "";
@@ -438,17 +438,17 @@ async function getCompositionInvokeFnName(): Promise<string | null> {
         Name: `/thinkwork/${stage}/agentcore-invoke-fn-name`,
       }),
     );
-    _compositionInvokeFnName = res.Parameter?.Value || null;
+    _skillRunInvokeFnName = res.Parameter?.Value || null;
   } catch (err) {
     console.warn(
-      `[graphql] composition invoke SSM lookup failed: ${(err as Error)?.name}: ${(err as Error)?.message}`,
+      `[graphql] skill-run invoke SSM lookup failed: ${(err as Error)?.name}: ${(err as Error)?.message}`,
     );
-    _compositionInvokeFnName = null;
+    _skillRunInvokeFnName = null;
   }
-  return _compositionInvokeFnName;
+  return _skillRunInvokeFnName;
 }
 
-export type CompositionInvokePayload = {
+export type SkillRunInvokePayload = {
   kind: "run_skill";
   runId: string;
   tenantId: string;
@@ -457,7 +457,7 @@ export type CompositionInvokePayload = {
   skillVersion: number;
   invocationSource: string;
   resolvedInputs: Record<string, unknown>;
-  // snake_case — composition_runner._scope_to_inputs (Python) reads
+  // snake_case — the container's dispatch path reads
   // tenant_id/user_id/skill_id/subject_entity_id. Every pre-hardening
   // camelCase emit silently coerced to "" on the Python side; the bug
   // hid because no context-mode sub-skill had landed yet. See change 4
@@ -473,20 +473,20 @@ export type CompositionInvokePayload = {
   completionHmacSecret: string;
 };
 
-export type CompositionInvokeResult =
+export type SkillRunInvokeResult =
   | { ok: true }
   | { ok: false; error: string };
 
 /**
- * Invoke the composition runner inside the AgentCore container. Synchronous
- * (RequestResponse) so failures surface to startSkillRun and the mutation
- * can transition the run row out of `running`.
+ * Invoke the unified skill dispatcher inside the AgentCore container.
+ * Synchronous (RequestResponse) so failures surface to startSkillRun and the
+ * mutation can transition the run row out of `running`.
  */
-export async function invokeComposition(
-  payload: CompositionInvokePayload,
-): Promise<CompositionInvokeResult> {
+export async function invokeSkillRun(
+  payload: SkillRunInvokePayload,
+): Promise<SkillRunInvokeResult> {
   try {
-    const fnName = await getCompositionInvokeFnName();
+    const fnName = await getSkillRunInvokeFnName();
     if (!fnName) {
       return {
         ok: false,
@@ -527,7 +527,7 @@ export async function invokeComposition(
       const raw = res.Payload ? new TextDecoder().decode(res.Payload) : "";
       return {
         ok: false,
-        error: `composition invoke threw: ${raw || res.FunctionError}`,
+        error: `skill-run invoke threw: ${raw || res.FunctionError}`,
       };
     }
     if (res.Payload) {
@@ -543,7 +543,7 @@ export async function invokeComposition(
               : JSON.stringify(parsed.body);
           return {
             ok: false,
-            error: `composition invoke returned ${parsed.statusCode}: ${inner}`,
+            error: `skill-run invoke returned ${parsed.statusCode}: ${inner}`,
           };
         }
       } catch {
@@ -553,7 +553,7 @@ export async function invokeComposition(
     return { ok: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[graphql] Failed to invoke composition:", err);
+    console.error("[graphql] Failed to invoke skill run:", err);
     return { ok: false, error: message };
   }
 }

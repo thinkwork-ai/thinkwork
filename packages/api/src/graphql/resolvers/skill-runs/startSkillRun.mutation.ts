@@ -1,5 +1,5 @@
 /**
- * startSkillRun — single entry point for every composition invocation path.
+ * startSkillRun — single entry point for every skill-run invocation path.
  *
  * Chat intent (skill-dispatcher), scheduled (job-trigger), admin catalog
  * ("Run now"), and webhook (Unit 8) all call this mutation. The resolver
@@ -9,7 +9,8 @@
  *      client's tenantId).
  *   2. A durable audit row in `skill_runs` — inserted in `running` status
  *      before the AgentCore kickoff, transitioned out of `running` on
- *      failure, and left for the composition runner to update on success.
+ *      failure, and left for the unified skill dispatcher to update on
+ *      success.
  *   3. Dedup via the partial unique index on (tenant, invoker, skill,
  *      resolved_inputs_hash) WHERE status='running' — a second call with
  *      identical inputs while the first is still running returns the first
@@ -31,7 +32,7 @@ import {
 	db, eq, and, sql,
 	skillRuns,
 	snakeToCamel,
-	invokeComposition,
+	invokeSkillRun,
 	hashResolvedInputs,
 } from "../../utils.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
@@ -161,7 +162,7 @@ export async function startSkillRun(
 	// Fire the synthetic envelope at agentcore-invoke. RequestResponse per
 	// auto-memory feedback_avoid_fire_and_forget_lambda_invokes so enqueue
 	// errors surface to the client.
-	const invokeResult = await invokeComposition({
+	const invokeResult = await invokeSkillRun({
 		kind: "run_skill",
 		runId: runRow.id,
 		tenantId,
@@ -193,7 +194,7 @@ export async function startSkillRun(
 			.returning();
 		runRow = failed ?? runRow;
 		throw new StartSkillRunError(
-			`composition invoke failed: ${invokeResult.error}`,
+			`skill-run invoke failed: ${invokeResult.error}`,
 		);
 	}
 

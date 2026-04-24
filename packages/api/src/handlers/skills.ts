@@ -439,15 +439,15 @@ export async function handler(
 
 		// POST /api/skills/start — service-to-service wrapper around startSkillRun.
 		// The AgentCore-container's dispatcher skill calls this with API_AUTH_SECRET
-		// to kick off a composition on behalf of the chat invoker. See Unit 5.
+		// to kick off a skill run on behalf of the chat invoker. See Unit 5.
 		if (path === "/api/skills/start" && method === "POST") {
 			return startSkillRunService(event);
 		}
 
 		// POST /api/skills/complete — service-to-service terminal-state writeback.
 		// The agentcore container calls this from its kind="run_skill" branch
-		// after run_composition() returns, so skill_runs.status transitions out
-		// of `running`. Mirrors the auth + body-shape convention of /start.
+		// after the unified dispatcher returns, so skill_runs.status transitions
+		// out of `running`. Mirrors the auth + body-shape convention of /start.
 		if (path === "/api/skills/complete" && method === "POST") {
 			return completeSkillRunService(event);
 		}
@@ -764,7 +764,6 @@ async function getCatalogIndex(): Promise<APIGatewayProxyStructuredResultV2> {
 			tags: r.tags || [],
 			source: r.source,
 			is_default: r.is_default,
-			execution: r.execution,
 			requires_env: r.requires_env || [],
 			oauth_provider: r.oauth_provider,
 			oauth_scopes: r.oauth_scopes || [],
@@ -838,7 +837,6 @@ async function getTenantSkills(
 			description: skillCatalog.description,
 			category: skillCatalog.category,
 			icon: skillCatalog.icon,
-			execution: skillCatalog.execution,
 			is_default: skillCatalog.is_default,
 			oauth_provider: skillCatalog.oauth_provider,
 			mcp_server: skillCatalog.mcp_server,
@@ -863,7 +861,6 @@ async function getTenantSkills(
 			version: r.version,
 			icon: r.icon,
 			source: r.source,
-			execution: r.execution,
 			is_default: r.is_default,
 			catalogVersion: r.catalog_version,
 			oauthProvider: r.oauth_provider,
@@ -2556,10 +2553,10 @@ async function listS3Keys(prefix: string): Promise<string[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Composition start (Unit 5) — service-to-service wrapper around startSkillRun.
+// Skill-run start (Unit 5) — service-to-service wrapper around startSkillRun.
 //
 // The AgentCore-container dispatcher skill calls this with API_AUTH_SECRET
-// to start a composition on behalf of the chat invoker. We trust the caller
+// to start a skill run on behalf of the chat invoker. We trust the caller
 // (container runs inside our infra + has the secret) to assert the invoker's
 // identity. Cognito-JWT-driven callers should use the GraphQL mutation
 // instead — this endpoint is explicitly for service identities that have
@@ -2666,7 +2663,7 @@ async function startSkillRunService(
 	if (inserted.length === 0) {
 		// Dedup hit — surface the active run so the dispatcher can tell
 		// the user "already running, view progress" without starting a
-		// duplicate composition.
+		// duplicate skill run.
 		const [existing] = await db
 			.select()
 			.from(skillRuns)
@@ -2707,16 +2704,16 @@ async function startSkillRunService(
 				updated_at: new Date(),
 			})
 			.where(eq(skillRuns.id, runRow.id));
-		return error(`composition invoke failed: ${invokeResult.error}`, 502);
+		return error(`skill run invoke failed: ${invokeResult.error}`, 502);
 	}
 
 	return json({ runId: runRow.id, status: "running", deduped: false });
 }
 
 // ---------------------------------------------------------------------------
-// Composition complete — terminal-state writeback from the agentcore container.
+// Skill-run complete — terminal-state writeback from the agentcore container.
 //
-// After run_composition() returns, the container POSTs the terminal state
+// After the unified dispatcher returns, the container POSTs the terminal state
 // here so skill_runs.status transitions out of `running`. Service-auth only
 // (Bearer API_AUTH_SECRET); tenant-integrity-checked against the row by id.
 // ---------------------------------------------------------------------------
@@ -2795,7 +2792,7 @@ async function completeSkillRunService(
 	}
 
 	// Only `running` rows are eligible for this writeback. Terminal-to-terminal
-	// transitions (e.g. failed → cancelled) aren't something run_composition
+	// transitions (e.g. failed → cancelled) aren't something the dispatcher
 	// should be producing — reject so we don't silently overwrite prior state.
 	// The atomic CAS in the UPDATE (change 5) is the authoritative check;
 	// this early return is a fast-path for the common case.
@@ -2925,8 +2922,8 @@ async function invokeAgentcoreRunSkill(payload: {
 			skillVersion: payload.skillVersion,
 			invocationSource: payload.invocationSource,
 			resolvedInputs: payload.resolvedInputs,
-			// snake_case — Python's composition_runner._scope_to_inputs reads
-			// tenant_id/user_id/skill_id. See change 4 of the hardening plan.
+			// snake_case — the container's dispatch reads tenant_id/user_id/
+			// skill_id. See change 4 of the hardening plan.
 			scope: {
 				tenant_id: payload.tenantId,
 				user_id: payload.invokerUserId,
