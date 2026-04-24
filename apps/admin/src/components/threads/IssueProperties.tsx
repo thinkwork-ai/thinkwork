@@ -4,7 +4,6 @@ import { graphql } from "@/gql";
 import { useMutation, useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
 import { StatusIcon } from "./StatusIcon";
-import { PriorityIcon } from "@/components/PriorityIcon";
 import { Identity } from "@/components/Identity";
 import { cn, formatDateTime, relativeTime } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
@@ -39,8 +38,6 @@ interface Thread {
   id: string;
   tenantId: string;
   status: string;
-  priority: string;
-  type: string;
   assigneeType: string | null;
   assigneeId: string | null;
   agentId: string | null;
@@ -119,8 +116,6 @@ const UpdateThreadMutation = graphql(`
     updateThread(id: $id, input: $input) {
       id
       status
-      priority
-      type
       assigneeType
       assigneeId
       dueAt
@@ -158,51 +153,6 @@ function sortAgentsByRecency(agents: Agent[], recentIds: string[]): Agent[] {
     if (oa !== ob) return oa - ob;
     return a.name.localeCompare(b.name);
   });
-}
-
-// ---------------------------------------------------------------------------
-// Priority picker (wraps the existing PriorityIcon)
-// ---------------------------------------------------------------------------
-
-const allPriorities = ["critical", "urgent", "high", "medium", "low"];
-
-function PriorityPicker({
-  priority,
-  onChange,
-}: {
-  priority: string;
-  onChange: (p: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button className="inline-flex items-center gap-1.5 cursor-pointer hover:bg-accent/50 rounded px-1 -mx-1 py-0.5 transition-colors">
-          <PriorityIcon priority={priority} showLabel />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-36 p-1" align="start">
-        {allPriorities.map((p) => (
-          <Button
-            key={p}
-            variant="ghost"
-            size="sm"
-            className={cn(
-              "w-full justify-start gap-2 text-xs",
-              p === priority && "bg-accent",
-            )}
-            onClick={() => {
-              onChange(p);
-              setOpen(false);
-            }}
-          >
-            <PriorityIcon priority={p} showLabel />
-          </Button>
-        ))}
-      </PopoverContent>
-    </Popover>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -366,10 +316,6 @@ export function IssueProperties({
     doUpdate({ status: status.toUpperCase() });
   };
 
-  const handlePriorityChange = (priority: string) => {
-    doUpdate({ priority: priority.toUpperCase() });
-  };
-
   const currentLabelIds = new Set(
     (thread.labelAssignments ?? []).map((la) => la.labelId),
   );
@@ -433,9 +379,8 @@ export function IssueProperties({
     ? agents.find((a) => a.id === thread.assigneeId) ?? thread.agent
     : thread.agent;
 
-  // -- Normalized status/priority for display --------------------------------
+  // -- Normalized status for display -----------------------------------------
   const statusLower = thread.status.toLowerCase();
-  const priorityLower = thread.priority.toLowerCase();
 
   // -- Trigger renderers -----------------------------------------------------
 
@@ -659,14 +604,6 @@ export function IssueProperties({
             status={statusLower}
             onChange={handleStatusChange}
             showLabel
-          />
-        </PropertyRow>
-
-        {/* Priority */}
-        <PropertyRow label="Priority">
-          <PriorityPicker
-            priority={priorityLower}
-            onChange={handlePriorityChange}
           />
         </PropertyRow>
 

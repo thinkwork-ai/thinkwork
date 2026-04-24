@@ -8,8 +8,6 @@ import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 export const threads_query = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const conditions = [eq(threads.tenant_id, args.tenantId)];
 	if (args.status) conditions.push(eq(threads.status, args.status.toLowerCase()));
-	if (args.priority) conditions.push(eq(threads.priority, args.priority.toLowerCase()));
-	if (args.type) conditions.push(eq(threads.type, args.type.toLowerCase()));
 	if (args.channel) {
 		conditions.push(eq(threads.channel, args.channel.toLowerCase()));
 	} else {

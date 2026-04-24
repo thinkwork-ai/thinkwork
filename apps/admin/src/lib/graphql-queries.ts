@@ -387,15 +387,13 @@ export const SetAgentKnowledgeBasesMutation = gql`
 // ---------------------------------------------------------------------------
 
 export const ThreadsListQuery = graphql(`
-  query ThreadsList($tenantId: ID!, $status: ThreadStatus, $search: String, $type: ThreadType, $priority: ThreadPriority) {
-    threads(tenantId: $tenantId, status: $status, search: $search, type: $type, priority: $priority) {
+  query ThreadsList($tenantId: ID!, $status: ThreadStatus, $search: String) {
+    threads(tenantId: $tenantId, status: $status, search: $search) {
       id
       number
       identifier
       title
       status
-      priority
-      type
       assigneeType
       assigneeId
       agentId
@@ -418,16 +416,14 @@ export const ThreadsListQuery = graphql(`
 `);
 
 export const ThreadsPagedQuery = gql`
-  query ThreadsPaged($tenantId: ID!, $statuses: [String!], $priorities: [String!], $search: String, $showArchived: Boolean, $sortField: String, $sortDir: String, $limit: Int, $offset: Int) {
-    threadsPaged(tenantId: $tenantId, statuses: $statuses, priorities: $priorities, search: $search, showArchived: $showArchived, sortField: $sortField, sortDir: $sortDir, limit: $limit, offset: $offset) {
+  query ThreadsPaged($tenantId: ID!, $statuses: [String!], $search: String, $showArchived: Boolean, $sortField: String, $sortDir: String, $limit: Int, $offset: Int) {
+    threadsPaged(tenantId: $tenantId, statuses: $statuses, search: $search, showArchived: $showArchived, sortField: $sortField, sortDir: $sortDir, limit: $limit, offset: $offset) {
       items {
         id
         number
         identifier
         title
         status
-        priority
-        type
         assigneeType
         assigneeId
         agentId
@@ -461,8 +457,6 @@ export const ThreadDetailQuery = graphql(`
       title
       description
       status
-      priority
-      type
       assigneeType
       assigneeId
       agentId
@@ -530,8 +524,6 @@ export const UpdateThreadMutation = graphql(`
     updateThread(id: $id, input: $input) {
       id
       status
-      priority
-      type
       title
       assigneeType
       assigneeId
@@ -773,7 +765,6 @@ export const InboxItemDetailQuery = graphql(`
         identifier
         title
         status
-        priority
       }
       createdAt
       updatedAt

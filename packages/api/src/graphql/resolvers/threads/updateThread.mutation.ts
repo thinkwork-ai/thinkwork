@@ -44,9 +44,7 @@ export const updateThread = async (_parent: any, args: any, ctx: GraphQLContext)
 			updates.checkout_run_id = null;
 		}
 	}
-	if (i.priority !== undefined) updates.priority = i.priority.toLowerCase();
 	if (i.channel !== undefined) updates.channel = i.channel.toLowerCase();
-	if (i.type !== undefined) updates.type = i.type.toLowerCase();
 	if (i.assigneeType !== undefined) updates.assignee_type = i.assigneeType;
 	if (i.assigneeId !== undefined) updates.assignee_id = i.assigneeId;
 	if (i.billingCode !== undefined) updates.billing_code = i.billingCode;

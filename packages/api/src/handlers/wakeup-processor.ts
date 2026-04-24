@@ -987,7 +987,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           title: threads.title,
           description: threads.description,
           status: threads.status,
-          priority: threads.priority,
           channel: threads.channel,
           metadata: threads.metadata,
         })
@@ -1000,7 +999,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           title: threadRow.title,
           description: threadRow.description || undefined,
           status: threadRow.status,
-          priority: threadRow.priority,
           channel: threadRow.channel,
         };
       }

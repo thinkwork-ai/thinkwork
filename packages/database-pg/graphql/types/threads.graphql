@@ -11,21 +11,6 @@ enum ThreadStatus {
   CANCELLED
 }
 
-enum ThreadPriority {
-  LOW
-  MEDIUM
-  HIGH
-  URGENT
-  CRITICAL
-}
-
-enum ThreadType {
-  TASK
-  BUG
-  FEATURE
-  QUESTION
-}
-
 enum ThreadChannel {
   CHAT
   EMAIL
@@ -46,8 +31,6 @@ type Thread {
   title: String!
   description: String
   status: ThreadStatus!
-  priority: ThreadPriority!
-  type: ThreadType!
   channel: ThreadChannel!
   assigneeType: String
   assigneeId: ID
@@ -119,8 +102,6 @@ input CreateThreadInput {
   agentId: ID
   title: String!
   description: String
-  priority: ThreadPriority
-  type: ThreadType
   channel: ThreadChannel
   assigneeType: String
   assigneeId: ID
@@ -140,8 +121,6 @@ input UpdateThreadInput {
   title: String
   description: String
   status: ThreadStatus
-  priority: ThreadPriority
-  type: ThreadType
   channel: ThreadChannel
   assigneeType: String
   assigneeId: ID
@@ -181,8 +160,6 @@ extend type Query {
   threads(
     tenantId: ID!
     status: ThreadStatus
-    priority: ThreadPriority
-    type: ThreadType
     channel: ThreadChannel
     agentId: ID
     assigneeId: ID
@@ -193,7 +170,6 @@ extend type Query {
   threadsPaged(
     tenantId: ID!
     statuses: [String!]
-    priorities: [String!]
     search: String
     showArchived: Boolean
     sortField: String

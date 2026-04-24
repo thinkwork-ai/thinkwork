@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 
 interface DialogState {
-  newThread: { open: boolean; defaults?: Partial<{ title: string; agentId: string; teamId: string; status: string; priority: string; type: string }> };
+  newThread: { open: boolean; defaults?: Partial<{ title: string; agentId: string; teamId: string; status: string }> };
   newAgent: { open: boolean; defaults?: Partial<{ name: string; type: string }> };
   newTeam: { open: boolean; defaults?: Partial<{ name: string }> };
   newRoutine: { open: boolean; defaults?: Partial<{ name: string; teamId: string }> };

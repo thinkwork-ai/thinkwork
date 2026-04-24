@@ -690,7 +690,6 @@ export const ThreadsQuery = graphql(`
   query Threads(
     $tenantId: ID!
     $status: ThreadStatus
-    $priority: ThreadPriority
     $channel: ThreadChannel
     $agentId: ID
     $assigneeId: ID
@@ -700,7 +699,6 @@ export const ThreadsQuery = graphql(`
     threads(
       tenantId: $tenantId
       status: $status
-      priority: $priority
       channel: $channel
       agentId: $agentId
       assigneeId: $assigneeId
@@ -715,8 +713,6 @@ export const ThreadsQuery = graphql(`
       title
       description
       status
-      priority
-      type
       channel
       assigneeType
       assigneeId
@@ -748,8 +744,6 @@ export const ThreadQuery = graphql(`
       title
       description
       status
-      priority
-      type
       channel
       assigneeType
       assigneeId
@@ -792,13 +786,13 @@ export const ThreadQuery = graphql(`
 
 export const CreateThreadMutation = graphql(`
   mutation CreateThread($input: CreateThreadInput!) {
-    createThread(input: $input) { id number title status priority type createdAt }
+    createThread(input: $input) { id number title status createdAt }
   }
 `);
 
 export const UpdateThreadMutation = graphql(`
   mutation UpdateThread($id: ID!, $input: UpdateThreadInput!) {
-    updateThread(id: $id, input: $input) { id title status priority updatedAt }
+    updateThread(id: $id, input: $input) { id title status updatedAt }
   }
 `);
 
@@ -926,7 +920,6 @@ export const InboxItemsQuery = graphql(`
         identifier
         title
         status
-        priority
       }
       createdAt
       updatedAt
@@ -973,7 +966,6 @@ export const InboxItemQuery = graphql(`
         identifier
         title
         status
-        priority
       }
       createdAt
       updatedAt

@@ -98,15 +98,15 @@ describe("renderPromptTemplate", () => {
 		const ctx: PromptTemplateContext = {
 			tenant: { id: "t-1", slug: "acme" },
 			agent: { id: "a-1", slug: "researcher", name: "Research Agent" },
-			thread: { id: "tk-1", title: "Analyze data", status: "in_progress", priority: "high" },
+			thread: { id: "tk-1", title: "Analyze data", status: "in_progress" },
 		};
 
 		const result = renderPromptTemplate(
-			"You are {{agent.name}} working for {{tenant.slug}}. Current thread: {{thread.title}} ({{thread.priority}})",
+			"You are {{agent.name}} working for {{tenant.slug}}. Current thread: {{thread.title}} ({{thread.status}})",
 			ctx,
 		);
 
-		expect(result).toBe("You are Research Agent working for acme. Current thread: Analyze data (high)");
+		expect(result).toBe("You are Research Agent working for acme. Current thread: Analyze data (in_progress)");
 	});
 
 	it("leaves unknown placeholders as-is", () => {
@@ -147,7 +147,7 @@ describe("renderPromptTemplate", () => {
 			"# {{agent.name}} — {{tenant.slug}}",
 			"",
 			"You are working on thread {{thread.identifier}}: {{thread.title}}",
-			"Priority: {{thread.priority}}",
+			"Status: {{thread.status}}",
 			"Channel: {{thread.channel}}",
 		].join("\n");
 
@@ -157,14 +157,14 @@ describe("renderPromptTemplate", () => {
 			thread: {
 				identifier: "CHAT-42",
 				title: "Fix login bug",
-				priority: "critical",
+				status: "in_progress",
 				channel: "manual",
 			},
 		});
 
 		expect(result).toContain("# Coder — acme");
 		expect(result).toContain("CHAT-42: Fix login bug");
-		expect(result).toContain("Priority: critical");
+		expect(result).toContain("Status: in_progress");
 	});
 });
 

@@ -75,7 +75,6 @@ interface ThreadRowProps {
     title: string;
     lastResponsePreview?: string | null;
     status: string;
-    type: string;
     channel?: string;
     agentId?: string;
     updatedAt: string;
@@ -176,7 +175,7 @@ export function ThreadRow({ thread, agentName, isUnread, isActive, turnStatus, o
     };
   });
 
-  const channelKey = (thread.channel || thread.type || "").toUpperCase();
+  const channelKey = (thread.channel || "").toUpperCase();
   const chan = CHANNEL_CONFIG[channelKey] || DEFAULT_CHANNEL;
   const ChannelIcon = chan.icon;
 

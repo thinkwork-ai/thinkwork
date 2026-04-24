@@ -20,12 +20,6 @@ export const threadsPaged_query = async (_parent: any, args: any, ctx: GraphQLCo
 		conditions.push(sql`${threads.status} = ANY(${lower})`);
 	}
 
-	// Filter: priorities (array)
-	if (args.priorities?.length) {
-		const lower = args.priorities.map((p: string) => p.toLowerCase());
-		conditions.push(sql`${threads.priority} = ANY(${lower})`);
-	}
-
 	// Filter: search
 	if (args.search) {
 		conditions.push(
@@ -44,9 +38,6 @@ export const threadsPaged_query = async (_parent: any, args: any, ctx: GraphQLCo
 	switch (sortField) {
 		case "status":
 			orderClause = dirFn(threads.status);
-			break;
-		case "priority":
-			orderClause = dirFn(threads.priority);
 			break;
 		case "title":
 			orderClause = dirFn(threads.title);

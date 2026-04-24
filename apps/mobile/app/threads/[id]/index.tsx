@@ -222,18 +222,6 @@ export default function ThreadDetailScreen() {
             label="Agent"
             value={getAgentName(thread.agentId)}
           />
-          {thread.type && (
-            <InfoRow
-              label="Type"
-              value={thread.type}
-            />
-          )}
-          {thread.priority && (
-            <InfoRow
-              label="Priority"
-              value={thread.priority}
-            />
-          )}
           {thread.number && (
             <InfoRow
               label="Number"
