@@ -6,7 +6,7 @@ import SectionShell from "../components/SectionShell.astro";
 import SectionHeader from "../components/SectionHeader.astro";
 import PricingGrid from "../components/PricingGrid.astro";
 import FinalCTA from "../components/FinalCTA.astro";
-import { pricing } from "../lib/copy";
+import { pricing, finalCtaCloud } from "../lib/copy";
 
 // PUBLIC_API_URL is injected at build time by scripts/build-www.sh from the
 // Terraform `api_endpoint` output (or the custom api.thinkwork.ai domain
@@ -32,25 +32,14 @@ const PUBLIC_API_URL = import.meta.env.PUBLIC_API_URL ?? "";
         <p class="mx-auto mt-6 max-w-2xl text-pretty text-base leading-relaxed text-slate-400 md:text-lg">
           {pricing.lede}
         </p>
-
-        <ul class="mx-auto mt-8 max-w-2xl space-y-1.5 text-left text-[13px] leading-relaxed text-slate-500">
-          {pricing.clarifier.map((line) => (
-            <li class="flex gap-2.5">
-              <span class="mt-2 h-1 w-1 flex-none rounded-full bg-slate-500" aria-hidden="true"></span>
-              <span>{line}</span>
-            </li>
-          ))}
-        </ul>
       </div>
 
       <div class="mt-16">
         <PricingGrid />
       </div>
-    </SectionShell>
 
-    <SectionShell tone="default">
-      <div class="mx-auto max-w-3xl text-center">
-        <p class="text-pretty text-base leading-relaxed text-slate-400">
+      <div class="mx-auto mb-12 mt-14 max-w-3xl text-center">
+        <p class="text-sm leading-relaxed text-slate-400">
           {pricing.servicesCrossLink.prompt}
           {" "}
           <a
@@ -63,7 +52,7 @@ const PUBLIC_API_URL = import.meta.env.PUBLIC_API_URL ?? "";
       </div>
     </SectionShell>
 
-    <FinalCTA />
+    <FinalCTA tight copy={finalCtaCloud} />
   </main>
 
   <Footer />

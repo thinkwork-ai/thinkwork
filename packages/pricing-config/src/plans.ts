@@ -24,7 +24,7 @@ export const plans: readonly Plan[] = Object.freeze([
 		name: "Starter",
 		tagline: "One team. Bounded pilot.",
 		summary:
-			"For a single ops team standing up a controlled pilot inside their AWS account.",
+			"For a single ops team standing up a controlled, fully-managed pilot on ThinkWork Cloud.",
 		features: Object.freeze([
 			"One tenant",
 			"Up to 10 agents, 5 templates",
@@ -56,7 +56,7 @@ export const plans: readonly Plan[] = Object.freeze([
 		name: "Enterprise",
 		tagline: "Fleet-scale agent operations.",
 		summary:
-			"For enterprises running many teams across one AWS deployment boundary.",
+			"For enterprises running many teams across a governed agent fleet on ThinkWork Cloud.",
 		features: Object.freeze([
 			"Unlimited tenants",
 			"400+ agents, 5+ templates per tenant",

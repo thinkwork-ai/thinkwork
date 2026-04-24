@@ -375,39 +375,53 @@ export const finalCta = {
   secondaryCta: { label: "View on GitHub", href: external.github },
 };
 
+// Cloud-variant FinalCTA. Same shape as `finalCta` so the component can swap
+// between them via a prop. The homepage keeps the self-managed framing
+// (customer's AWS); /cloud uses this one to match the fully-hosted
+// positioning.
+export const finalCtaCloud: typeof finalCta = {
+  eyebrow: "Fully managed",
+  headlinePart1: "Adopt AI.",
+  headlineAccent: "Skip the infrastructure.",
+  lede: "Use ThinkWork without running the platform. We operate the runtime end-to-end — governance, evaluations, and audit log included — so your team focuses on the work, not the ops.",
+  points: [
+    { title: "Runtime", desc: "Operated by us." },
+    { title: "Governance", desc: "Built in." },
+    { title: "Audit trail", desc: "Always on." },
+    { title: "Memory", desc: "Durable." },
+    { title: "Setup", desc: "None required." },
+  ],
+  primaryCta: { label: "Read the docs", href: external.docs },
+  secondaryCta: { label: "View on GitHub", href: external.github },
+};
+
 // Plan catalog pulled from the shared workspace package so the mobile app
 // renders the exact same plans without duplication. Don't edit plan data
 // here — change it in packages/pricing-config/src/plans.ts and it ripples
 // to both surfaces.
 import { plans as sharedPlans } from "@thinkwork/pricing-config";
 
-// /cloud page — ThinkWork Cloud is the hosted-plans product surface. Managed
-// deployments inside the customer's own AWS boundary — we operate the runtime,
-// they own the account. Export name stays `pricing` for now to avoid transient
-// breakage while pricing.astro still imports from it; the file is deleted in
-// the same PR, and any rename can happen in a follow-up sweep.
+// /cloud page — ThinkWork Cloud is the fully-hosted product surface for
+// teams that want to use ThinkWork without operating the Enterprise Agent
+// Harness themselves. Self-managed (customer-run AWS deployment) is the
+// separate Enterprise product; Services is the separate human-delivered
+// engagement surface. Export name stays `pricing` for now to avoid
+// transient breakage while the earlier rename settles.
 export const pricing = {
   meta: {
-    title: "ThinkWork Cloud — Hosted agent plans in your AWS boundary.",
+    title: "ThinkWork Cloud — Fully hosted AI agent platform.",
     description:
-      "Managed ThinkWork deployments inside your own AWS account. Plans for teams adopting governed AI work — visible workflows, durable memory, and evaluations that scale with usage.",
+      "ThinkWork Cloud is the fully-hosted option — we operate the agent platform end-to-end so your team can use it without running the Enterprise Agent Harness. Governed AI work on subscription plans that scale with usage.",
   },
   eyebrow: "ThinkWork Cloud",
-  headline: "Hosted agent infrastructure,",
-  headlineAccent: "deployed inside your AWS.",
+  headline: "Fully managed AI agents,",
+  headlineAccent: "no infrastructure to run.",
   lede:
-    "Managed plans for teams adopting governed AI work. Every plan deploys into the AWS account your team already operates — ThinkWork runs the runtime, you own the boundary.",
-  clarifier: [
-    "This page covers hosted ThinkWork Cloud plans.",
-    "Services (strategy, launch, operations, advisory) are separate — see Services.",
-    "AWS usage (Bedrock, Aurora, CloudFront) is billed separately to your account.",
-    "Self-hosted deployment remains available through the open-source docs.",
-  ],
+    "Subscribe to ThinkWork Cloud and use a governed AI agent platform operated end-to-end by us. For teams that want the product, not the Enterprise Agent Harness to deploy and manage themselves.",
   plans: sharedPlans,
   smallPrint: [
-    "Every plan deploys into your AWS account; we never operate shared infrastructure.",
+    "Fully managed — ThinkWork operates the platform and all underlying AWS infrastructure.",
     "Charged in USD, billed monthly. Annual contracts available on Enterprise.",
-    "Prices exclude AWS usage (Bedrock, Aurora, CloudFront) and Stripe processing fees.",
   ],
   finePrint:
     "Final pricing confirmed during checkout. Contact us for procurement, security review, or annual billing.",
@@ -442,7 +456,11 @@ export type ServicePackage = {
   includes: string[];
   outcome: string;
   bestFor: string;
-  variant: "featured" | "secondary";
+  // Optional CTA. Only the Cloud Hosting card uses this today — all other
+  // services intake through the shared hero + closing CTAs. If this field
+  // is unset, the card renders without a button (the historical pattern).
+  ctaHref?: string;
+  ctaLabel?: string;
 };
 
 export const services = {
@@ -546,13 +564,10 @@ export const services = {
     ],
   },
   packages: {
-    eyebrow: "Service packages",
-    headline: "Fixed-fee launches. Ongoing operations.",
+    eyebrow: "Services",
+    headline: "Practical help from first workflow to ongoing operations.",
     lede:
-      "Every package scoped up front — no billable hours, no open meter, no drift from the engagement shape we agreed to.",
-    secondaryHeadline: "Additional packages",
-    secondaryLede:
-      "Ongoing governance and program-level support for teams that have moved past the first workflow.",
+      "Every package scoped up front — no billable hours, no open meter, no drift from the engagement shape we agreed to. Cloud Hosting sits alongside as a handoff to the managed-deployment plan for teams that want us to operate the runtime.",
     items: [
       {
         id: "strategy-sprint",
@@ -571,7 +586,6 @@ export const services = {
         outcome:
           "A named first workflow, a governance model, and a rollout plan — decisions made, not a deck.",
         bestFor: "Teams at the beginning.",
-        variant: "featured",
       },
       {
         id: "pilot-launch",
@@ -590,7 +604,6 @@ export const services = {
         outcome:
           "One governed workflow in production, with its first success metrics tracked.",
         bestFor: "Teams ready to move from planning to execution.",
-        variant: "featured",
       },
       {
         id: "managed-ops",
@@ -599,16 +612,16 @@ export const services = {
         timeline: "Ongoing",
         oneLiner: "Ongoing operations for a production ThinkWork deployment.",
         body:
-          "Recurring support that keeps the platform healthy and governed — without building an in-house platform team on day one.",
+          "Recurring support that keeps the platform healthy, governed, and evaluated — without building an in-house platform team on day one.",
         includes: [
           "Environment health and issue triage",
           "Admin, configuration, and upgrade support",
+          "Evaluation tuning and guardrail review",
           "Operations review on a regular cadence",
         ],
         outcome:
           "A production deployment that stays current, audited, and operational — without a dedicated in-house platform team.",
         bestFor: "Teams running ThinkWork in production without dedicated platform ops.",
-        variant: "featured",
       },
       {
         id: "workflow-expansion",
@@ -626,43 +639,26 @@ export const services = {
         outcome:
           "A steady cadence of new governed workflows shipping on top of your existing deployment.",
         bestFor: "Teams with early traction that want to keep shipping.",
-        variant: "featured",
       },
       {
-        id: "governance-eval",
-        name: "Governance & Evaluation Support",
+        id: "cloud-hosting",
+        name: "ThinkWork Cloud",
         type: "Ongoing operations",
-        timeline: "Ongoing",
-        oneLiner: "Governance that evolves with usage.",
+        timeline: "Per plan tier",
+        oneLiner: "Fully managed ThinkWork — no Agent Harness to run.",
         body:
-          "Evaluation tuning, guardrail updates, incident review, and audit support — so quality and safety scale with adoption.",
+          "The hosted option when you want to use ThinkWork without deploying and operating the Enterprise Agent Harness yourself. Same platform, operated end-to-end by us.",
         includes: [
-          "Evaluation tuning and guardrail updates",
-          "Incident review and audit support",
-          "Policy refinement as usage grows",
+          "Runtime operated by ThinkWork",
+          "No AWS setup on your side",
+          "Plan tiers that scale with usage",
+          "No self-hosted ops burden",
         ],
         outcome:
-          "Controls that keep pace with usage growth, with incident and audit coverage maintained.",
-        bestFor: "Security-conscious teams and growing deployments.",
-        variant: "secondary",
-      },
-      {
-        id: "advisory",
-        name: "AI Program Advisory",
-        type: "Ongoing operations",
-        timeline: "Quarterly cadence",
-        oneLiner: "Cross-functional rollout support for leadership.",
-        body:
-          "Advisory support for adoption sequencing, KPI review, cross-team planning, and executive alignment — above any single pilot.",
-        includes: [
-          "Adoption roadmap and rollout prioritization",
-          "KPI and outcome review",
-          "Cross-team planning and leadership check-ins",
-        ],
-        outcome:
-          "A program-level view of adoption — sequencing, KPIs, and cross-team alignment kept visible to leadership.",
-        bestFor: "Organizations turning early wins into a broader AI program.",
-        variant: "secondary",
+          "ThinkWork running as a managed plan — deployed, updated, and governed by us on your behalf.",
+        bestFor: "Teams that want the product, not the Agent Harness to operate.",
+        ctaHref: "/cloud",
+        ctaLabel: "View plans",
       },
     ] satisfies ServicePackage[],
   },
