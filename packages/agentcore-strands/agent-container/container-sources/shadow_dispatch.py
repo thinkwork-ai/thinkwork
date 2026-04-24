@@ -3,12 +3,12 @@
 ## What it does
 
 When the env var ``SKILL_DISPATCH_SHADOW`` names a skill slug, every real
-invocation of that slug runs *both* the legacy path (today:
-``run_skill_dispatch``) and the new unified path
-(``skill_dispatcher.dispatch_skill_script``). The model and the user see
-**only** the legacy path's result — shadow never changes behavior. The
+invocation of that slug runs *both* the currently-live path and the
+candidate replacement (today:
+``skill_dispatcher.dispatch_skill_script``). The model and the user see
+**only** the live path's result — shadow never changes behavior. The
 dispatcher logs a structured ``capability_shadow_divergence`` CloudWatch
-line per call with the signals U7 needs to decide cutover:
+line per call with the signals needed to decide cutover:
 
   * ``slug``, ``tenant_id``, ``environment``
   * ``old_hash`` / ``new_hash`` — sha256 of the JSON-serialised result
@@ -19,16 +19,17 @@ line per call with the signals U7 needs to decide cutover:
   * ``shape`` — top-level keys of the new result for per-stage triage
 
 30+ days clean per slug = shape divergence < 5% + zero human-judged
-semantic regressions → U6 flips the cutover for that slug. The dashboard
-that surfaces this lives in the CloudWatch Log Insights saved queries
-(not shipped in this PR — it's a console artifact).
+semantic regressions → cutover flips for that slug. The dashboard that
+surfaces this lives in the CloudWatch Log Insights saved queries.
 
-## Why ship now
+## Why kept post-U6
 
-Per the plan, U6 (delete composition_runner + column drops) is gated on
-U7 PASS. Without shadow infra, there is no way to declare pre-migration
-equivalence for LLM-mediated skills. This module is the instrumentation;
-per-slug soak is the run-time evidence.
+U6 removed the parallel composition runner but left the shadow harness
+in place. It's the instrumentation for any future per-slug old→new
+cutover the runtime needs — cheap to keep, zero cost when the
+``SKILL_DISPATCH_SHADOW`` flag is empty, and the structured log
+contract (``capability_shadow_divergence``) is load-bearing for the
+saved CloudWatch queries.
 
 ## Invariants
 

@@ -6,9 +6,8 @@ priority, top_k cap, and graceful-degradation when the boto3 client
 raises.
 
 These tests stub out the AgentCore Memory client entirely — no AWS
-calls. The scope-to-namespace mapping is the load-bearing contract
-future units (composition_runner auto-compound) depend on; pin it
-down explicitly.
+calls. The scope-to-namespace mapping is the load-bearing contract the
+chat agent's recall / reflect tools depend on; pin it down explicitly.
 """
 
 from __future__ import annotations
@@ -148,8 +147,8 @@ class TestStoreLearning(unittest.TestCase):
         self.assertFalse(ok)
 
     def test_store_swallows_boto_exception(self):
-        """Reflect writes must not surface errors to the composition run.
-        memory.store_learning returns False and compositions continue."""
+        """Reflect writes must not surface errors to the caller.
+        memory.store_learning returns False and the caller proceeds."""
         fake = mock.MagicMock()
         fake.batch_create_memory_records.side_effect = RuntimeError("AWS down")
         with mock.patch.object(memory, "_get_agentcore_client", return_value=fake):
@@ -260,7 +259,7 @@ class TestRecallLearnings(unittest.TestCase):
         self.assertEqual(out[0]["priority"], 0)  # user tier wins
 
     def test_recall_swallows_boto_exception(self):
-        """recall must not fail the composition — if AgentCore is down,
+        """recall must not fail the caller — if AgentCore is down,
         return empty and let the run continue without context."""
         fake = mock.MagicMock()
         fake.retrieve_memories.side_effect = RuntimeError("AWS down")
