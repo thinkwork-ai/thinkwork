@@ -183,7 +183,7 @@ describe("admin-ops-mcp Lambda", () => {
 		expect(body.result.capabilities.tools).toBeDefined();
 	});
 
-	it("tools/list returns the tenant tools", async () => {
+	it("tools/list returns every registered admin-ops tool", async () => {
 		dbLookupResult = [{ id: "key-uuid", tenant_id: "tenant-uuid" }];
 		const res = await handler(
 			makeEvent(
@@ -192,8 +192,51 @@ describe("admin-ops-mcp Lambda", () => {
 			),
 		);
 		const body = JSON.parse(res.body ?? "{}");
-		const names = body.result.tools.map((t: { name: string }) => t.name).sort();
-		expect(names).toEqual(["tenants_get", "tenants_list", "tenants_update"]);
+		const names = body.result.tools.map((t: { name: string }) => t.name);
+
+		// Must include the original tenant tools + the full ported set from
+		// teams/agents/templates/users/artifacts. Assert presence of a curated
+		// subset — exact count is allowed to drift as ops are added.
+		const mustHave = [
+			"tenants_list",
+			"tenants_get",
+			"tenants_update",
+			"me",
+			"users_get",
+			"tenant_members_list",
+			"agents_list",
+			"agents_get",
+			"agents_list_all",
+			"agents_create",
+			"agents_set_skills",
+			"agents_set_capabilities",
+			"teams_list",
+			"teams_get",
+			"teams_create",
+			"teams_add_agent",
+			"teams_add_user",
+			"teams_remove_agent",
+			"teams_remove_user",
+			"templates_list",
+			"templates_get",
+			"templates_linked_agents",
+			"templates_create",
+			"templates_create_agent",
+			"templates_sync_to_agent",
+			"templates_sync_to_all_agents",
+			"templates_accept_update",
+			"artifacts_list",
+			"artifacts_get",
+		];
+		for (const n of mustHave) {
+			expect(names, `missing tool: ${n}`).toContain(n);
+		}
+		// Every tool must carry a non-empty description + object inputSchema.
+		for (const tool of body.result.tools) {
+			expect(tool.description).toBeTypeOf("string");
+			expect(tool.description.length).toBeGreaterThan(0);
+			expect(tool.inputSchema.type).toBe("object");
+		}
 	});
 
 	it("tools/call pins tenantId from the matching key regardless of caller args", async () => {

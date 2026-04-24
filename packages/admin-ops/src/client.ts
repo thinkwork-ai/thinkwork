@@ -10,6 +10,7 @@ export interface AdminOpsClientConfig {
 
 export interface AdminOpsClient {
 	fetch<T = unknown>(path: string, init?: RequestInit): Promise<T>;
+	graphql<T = unknown>(query: string, variables?: Record<string, unknown>): Promise<T>;
 	readonly apiUrl: string;
 	readonly tenantId: string | undefined;
 	withTenant(tenantId: string): AdminOpsClient;
@@ -54,10 +55,26 @@ export function createClient(config: AdminOpsClientConfig): AdminOpsClient {
 		return res.json() as Promise<T>;
 	};
 
+	const doGraphql = async <T>(
+		query: string,
+		variables?: Record<string, unknown>,
+	): Promise<T> => {
+		const res = await doFetch<{ data?: T; errors?: Array<{ message: string }> }>("/graphql", {
+			method: "POST",
+			body: JSON.stringify({ query, variables: variables ?? {} }),
+		});
+		if (res.errors && res.errors.length > 0) {
+			const msg = res.errors.map((e) => e.message).join("; ");
+			throw new AdminOpsError(200, msg, res);
+		}
+		return res.data as T;
+	};
+
 	return {
 		apiUrl: base,
 		tenantId: config.tenantId,
 		fetch: doFetch,
+		graphql: doGraphql,
 		withTenant(tenantId: string) {
 			return createClient({ ...config, tenantId });
 		},
