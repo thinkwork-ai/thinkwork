@@ -23,6 +23,7 @@ import {
 	GetSecretValueCommand,
 	UpdateSecretCommand,
 } from "@aws-sdk/client-secrets-manager";
+import { mcpHashMatches } from "./mcp-server-hash.js";
 
 export interface McpServerConfig {
 	name: string;
@@ -41,6 +42,11 @@ export async function buildMcpConfigs(
 ): Promise<McpServerConfig[]> {
 	const mcpConfigs: McpServerConfig[] = [];
 
+	// U11 gate: only approved + enabled servers whose pinned `url_hash`
+	// still matches (url, auth_config) reach the runtime. Pending /
+	// rejected rows, and approved rows whose fields drifted, are dropped
+	// here with a log line so operators see the reason a capability
+	// vanished. This is the SI-5 defensive layer.
 	const mcpRows = await db
 		.select({
 			mcp_server_id: tenantMcpServers.id,
@@ -51,15 +57,45 @@ export async function buildMcpConfigs(
 			auth_type: tenantMcpServers.auth_type,
 			auth_config: tenantMcpServers.auth_config,
 			server_enabled: tenantMcpServers.enabled,
+			server_status: tenantMcpServers.status,
+			server_url_hash: tenantMcpServers.url_hash,
 			assignment_enabled: agentMcpServers.enabled,
 			assignment_config: agentMcpServers.config,
 		})
 		.from(agentMcpServers)
 		.innerJoin(tenantMcpServers, eq(agentMcpServers.mcp_server_id, tenantMcpServers.id))
-		.where(and(eq(agentMcpServers.agent_id, agentId), eq(agentMcpServers.enabled, true)));
+		.where(and(
+			eq(agentMcpServers.agent_id, agentId),
+			eq(agentMcpServers.enabled, true),
+			eq(tenantMcpServers.status, "approved"),
+			eq(tenantMcpServers.enabled, true),
+		));
 
 	for (const mcp of mcpRows) {
 		if (!mcp.server_enabled) continue;
+		// Defensive invariant: the SQL WHERE already filters by
+		// status='approved', but drift between `url_hash` and the
+		// current (url, auth_config) indicates the approval no longer
+		// applies. Treat as pending without blocking the rest of the
+		// agent's MCP fleet.
+		//
+		// `url_hash IS NULL` means the row was pre-existing at the U3
+		// migration (which grandfathered live servers in as approved
+		// without computing a hash) — allow it. U11 approvals always
+		// write url_hash, so future mutations are hash-guarded.
+		if (
+			mcp.server_url_hash &&
+			!mcpHashMatches(
+				mcp.server_url_hash,
+				mcp.url,
+				mcp.auth_config as Record<string, unknown> | null,
+			)
+		) {
+			console.warn(
+				`${logPrefix} skipping ${mcp.slug}: url_hash mismatch with (url, auth_config); re-approval required`,
+			);
+			continue;
+		}
 
 		let token: string | undefined;
 

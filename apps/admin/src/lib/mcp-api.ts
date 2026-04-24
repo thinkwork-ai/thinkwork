@@ -1,3 +1,5 @@
+import { getIdToken } from "@/lib/auth";
+
 const API_URL = import.meta.env.VITE_API_URL || "";
 const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
 
@@ -17,9 +19,34 @@ async function apiFetch(path: string, options: RequestInit = {}) {
   return res.json();
 }
 
+/**
+ * Cognito-authenticated fetch for routes gated by requireTenantAdmin.
+ * The mcp-approval handler rejects service-key callers without a
+ * principal-id header, so approve/reject flow through Cognito only.
+ */
+async function cognitoFetch(path: string, options: RequestInit = {}) {
+  const token = await getIdToken();
+  if (!token) throw new Error("Not authenticated");
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...options.headers,
+    },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+export type McpApprovalStatus = "pending" | "approved" | "rejected";
 
 export type McpServer = {
   id: string;
@@ -32,6 +59,10 @@ export type McpServer = {
   tools?: Array<{ name: string; description?: string }>;
   enabled: boolean;
   createdAt?: string;
+  status?: McpApprovalStatus;
+  urlHash?: string | null;
+  approvedBy?: string | null;
+  approvedAt?: string | null;
 };
 
 export type McpServerInput = {
@@ -175,4 +206,38 @@ export function unassignMcpFromAgent(
   return apiFetch(`/api/skills/agents/${agentId}/mcp-servers/${mcpServerId}`, {
     method: "DELETE",
   });
+}
+
+// ---------------------------------------------------------------------------
+// Admin approval (plan §U11). Cognito JWT only — gated by requireTenantAdmin.
+// ---------------------------------------------------------------------------
+
+export function approveMcpServer(
+  tenantId: string,
+  serverId: string,
+): Promise<{
+  id: string;
+  status: "approved";
+  url_hash: string;
+  approved_by: string;
+  approved_at: string;
+}> {
+  return cognitoFetch(
+    `/api/tenants/${tenantId}/mcp-servers/${serverId}/approve`,
+    { method: "POST" },
+  );
+}
+
+export function rejectMcpServer(
+  tenantId: string,
+  serverId: string,
+  reason?: string,
+): Promise<{ id: string; status: "rejected"; reason: string | null }> {
+  return cognitoFetch(
+    `/api/tenants/${tenantId}/mcp-servers/${serverId}/reject`,
+    {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    },
+  );
 }

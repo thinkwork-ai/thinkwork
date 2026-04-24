@@ -313,6 +313,17 @@ build_handler "mcp-admin-keys" \
 build_handler "mcp-admin-provision" \
   "$REPO_ROOT/packages/api/src/handlers/mcp-admin-provision.ts"
 
+# Admin approve/reject for plugin-installed MCP servers (plan §U11, SI-5).
+#   POST /api/tenants/:tenantId/mcp-servers/:serverId/approve
+#   POST /api/tenants/:tenantId/mcp-servers/:serverId/reject
+build_handler "mcp-approval" \
+  "$REPO_ROOT/packages/api/src/handlers/mcp-approval.ts"
+
+# Daily TTL sweeper — auto-rejects pending MCP servers older than 30 days.
+# Triggered by EventBridge (see terraform/modules/app/lambda-api/schedules.tf).
+build_handler "mcp-approval-sweeper" \
+  "$REPO_ROOT/packages/api/src/handlers/mcp-approval-sweeper.ts"
+
 build_handler "github-workspace" \
   "$REPO_ROOT/packages/lambda/github-workspace.ts"
 
