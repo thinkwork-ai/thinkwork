@@ -12,6 +12,7 @@
   "scripts": {
     "build": "tsc --build",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
@@ -27,6 +28,7 @@
     "drizzle-kit": "^0.31.10",
     "postgres": "^3.4.8",
     "tsx": "^4.21.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.1"
   }
 }

@@ -198,30 +198,57 @@ type Mutation {
 
 type Subscription {
   _empty: String
-  onAgentStatusChanged(tenantId: ID!): AgentStatusEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  onAgentStatusChanged(tenantId: ID!): AgentStatusEvent
+    @aws_api_key
+    @aws_cognito_user_pools
+    @aws_iam
     @aws_subscribe(mutations: ["notifyAgentStatus"])
 
-  onNewMessage(threadId: ID!): NewMessageEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  onNewMessage(threadId: ID!): NewMessageEvent
+    @aws_api_key
+    @aws_cognito_user_pools
+    @aws_iam
     @aws_subscribe(mutations: ["notifyNewMessage"])
 
-  onHeartbeatActivity(tenantId: ID!): HeartbeatActivityEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  onHeartbeatActivity(tenantId: ID!): HeartbeatActivityEvent
+    @aws_api_key
+    @aws_cognito_user_pools
+    @aws_iam
     @aws_subscribe(mutations: ["notifyHeartbeatActivity"])
 
-  onThreadUpdated(tenantId: ID!): ThreadUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  onThreadUpdated(tenantId: ID!): ThreadUpdateEvent
+    @aws_api_key
+    @aws_cognito_user_pools
+    @aws_iam
     @aws_subscribe(mutations: ["notifyThreadUpdate"])
 
-  onInboxItemStatusChanged(tenantId: ID!): InboxItemStatusEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  onInboxItemStatusChanged(tenantId: ID!): InboxItemStatusEvent
+    @aws_api_key
+    @aws_cognito_user_pools
+    @aws_iam
     @aws_subscribe(mutations: ["notifyInboxItemUpdate"])
 
-  onThreadTurnUpdated(tenantId: ID!): ThreadTurnUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  onThreadTurnUpdated(tenantId: ID!): ThreadTurnUpdateEvent
+    @aws_api_key
+    @aws_cognito_user_pools
+    @aws_iam
     @aws_subscribe(mutations: ["notifyThreadTurnUpdate"])
 
-  onOrgUpdated(tenantId: ID!): OrgUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  onOrgUpdated(tenantId: ID!): OrgUpdateEvent
+    @aws_api_key
+    @aws_cognito_user_pools
+    @aws_iam
     @aws_subscribe(mutations: ["notifyOrgUpdate"])
 
-  onCostRecorded(tenantId: ID!): CostRecordedEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  onCostRecorded(tenantId: ID!): CostRecordedEvent
+    @aws_api_key
+    @aws_cognito_user_pools
+    @aws_iam
     @aws_subscribe(mutations: ["notifyCostRecorded"])
 
-  onEvalRunUpdated(tenantId: ID!): EvalRunUpdateEvent @aws_api_key @aws_cognito_user_pools @aws_iam
+  onEvalRunUpdated(tenantId: ID!): EvalRunUpdateEvent
+    @aws_api_key
+    @aws_cognito_user_pools
+    @aws_iam
     @aws_subscribe(mutations: ["notifyEvalRunUpdate"])
 }

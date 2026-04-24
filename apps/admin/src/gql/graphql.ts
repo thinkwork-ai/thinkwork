@@ -3297,6 +3297,16 @@ export type Tenant = {
    */
   complianceTier: Scalars['String']['output'];
   createdAt: Scalars['AWSDateTime']['output'];
+  /**
+   * Per-tenant kill switches for built-in tools (plan #007 R6/R7). Array of
+   * slug strings (e.g. ["execute_code", "web_search"]). Empty array = all
+   * built-ins available (subject to template blocks). The runtime applies
+   * this as a narrow-only filter at Agent(tools=...) construction; template
+   * blocks intersect (a template cannot unblock what the tenant disabled).
+   * Admin UI for editing this field defers to a follow-up PR; until then
+   * operators mutate the column directly.
+   */
+  disabledBuiltinTools: Array<Scalars['String']['output']>;
   id: Scalars['ID']['output'];
   issueCounter: Scalars['Int']['output'];
   issuePrefix?: Maybe<Scalars['String']['output']>;
