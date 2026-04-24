@@ -104,7 +104,7 @@ curl -s -X POST "${THINKWORK_API_URL}" \
   -H "Content-Type: application/json" \
   -d "$(cat <<EOF
 {
-  "query": "query ListSubThreads(\$tenantId: ID!, \$parentId: ID) { threads(tenantId: \$tenantId, parentId: \$parentId) { id number identifier title status priority assigneeId } }",
+  "query": "query ListSubThreads(\$tenantId: ID!, \$parentId: ID) { threads(tenantId: \$tenantId, parentId: \$parentId) { id number identifier title status assigneeId } }",
   "variables": {
     "tenantId": "${TENANT_ID}",
     "parentId": "${CURRENT_THREAD_ID}"
@@ -122,7 +122,7 @@ curl -s -X POST "${THINKWORK_API_URL}" \
   -H "Content-Type: application/json" \
   -d "$(cat <<EOF
 {
-  "query": "query GetThread(\$id: ID!) { thread(id: \$id) { id number identifier title description status priority type assigneeType assigneeId parentId blockedBy { id blockedByThreadId } blocks { id threadId } isBlocked comments { id content authorType createdAt } } }",
+  "query": "query GetThread(\$id: ID!) { thread(id: \$id) { id number identifier title description status assigneeType assigneeId blockedBy { id blockedByThreadId } blocks { id threadId } isBlocked } }",
   "variables": {
     "id": "THREAD_ID"
   }

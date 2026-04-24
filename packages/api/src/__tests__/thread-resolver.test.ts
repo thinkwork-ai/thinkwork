@@ -22,7 +22,7 @@ function assertTransition(from: string, to: string): void {
 	}
 }
 
-const ENUM_FIELDS = new Set(["status", "priority", "type"]);
+const ENUM_FIELDS = new Set(["status"]);
 
 function snakeToCamel(obj: Record<string, unknown>): Record<string, unknown> {
 	const result: Record<string, unknown> = {};
@@ -121,31 +121,20 @@ describe("snakeToCamel", () => {
 });
 
 describe("threadToCamel", () => {
-	it("uppercases enum fields (status, priority, type)", () => {
+	it("uppercases the status enum field", () => {
 		const result = threadToCamel({
 			id: "123",
 			status: "in_progress",
-			priority: "high",
-			type: "bug",
 			title: "Fix something",
 		});
 		expect(result.status).toBe("IN_PROGRESS");
-		expect(result.priority).toBe("HIGH");
-		expect(result.type).toBe("BUG");
 		expect(result.title).toBe("Fix something"); // not uppercased
 	});
 
 	it("handles all 7 statuses", () => {
 		for (const status of ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"]) {
-			const result = threadToCamel({ status, priority: "medium", type: "task" });
+			const result = threadToCamel({ status });
 			expect(result.status).toBe(status.toUpperCase());
-		}
-	});
-
-	it("handles all priorities including critical", () => {
-		for (const priority of ["low", "medium", "high", "urgent", "critical"]) {
-			const result = threadToCamel({ status: "backlog", priority, type: "task" });
-			expect(result.priority).toBe(priority.toUpperCase());
 		}
 	});
 
@@ -154,8 +143,6 @@ describe("threadToCamel", () => {
 			tenant_id: "abc",
 			checkout_run_id: "run-1",
 			status: "backlog",
-			priority: "low",
-			type: "task",
 		});
 		expect(result.tenantId).toBe("abc");
 		expect(result.checkoutRunId).toBe("run-1");

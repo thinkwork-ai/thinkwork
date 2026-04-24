@@ -1,5 +1,5 @@
 /**
- * `thinkwork thread ...` — work items (tasks, chats, bugs, questions).
+ * `thinkwork thread ...` — work items in a tenant.
  *
  * Maps 1:1 to the admin "Threads" UI. Scaffolded in Phase 0; action bodies
  * land in Phase 1 — see apps/cli/README.md#roadmap.
@@ -13,7 +13,7 @@ export function registerThreadCommand(program: Command): void {
     .command("thread")
     .alias("threads")
     .description(
-      "Create, list, update, and comment on threads (tasks, chats, bugs, questions) in a tenant.",
+      "Create, list, update, and comment on threads in a tenant.",
     );
 
   thread

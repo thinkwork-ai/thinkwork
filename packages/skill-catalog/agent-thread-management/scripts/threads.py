@@ -91,7 +91,7 @@ def _resolve_user_by_email(email: str) -> dict | None:
 # Public API — 10 functions (all use GraphQL)
 # ---------------------------------------------------------------------------
 
-THREAD_FIELDS = "id title status priority type channel parentId agentId assigneeType assigneeId description number identifier dueAt createdAt"
+THREAD_FIELDS = "id title status channel agentId assigneeType assigneeId description number identifier dueAt createdAt"
 
 
 @_safe
@@ -99,7 +99,6 @@ def create_sub_thread(title: str, description: str,
                       parent_thread_id: str = "",
                       channel: str = "TASK",
                       assignee_email: str = "",
-                      priority: str = "MEDIUM",
                       due_date: str = "") -> str:
     """Create a child task under a parent thread. Defaults to TASK channel.
 
@@ -112,7 +111,6 @@ def create_sub_thread(title: str, description: str,
         assignee_email: Email of the user to assign. If provided, resolves to
             user ID and sets assignee_type to 'user'. If omitted, assigns to
             the current agent.
-        priority: LOW, MEDIUM, HIGH, URGENT, or CRITICAL. Defaults to MEDIUM.
         due_date: Optional ISO-8601 due date (e.g. '2026-04-15T09:00:00Z').
 
     Returns:
@@ -137,12 +135,9 @@ def create_sub_thread(title: str, description: str,
         "agentId": AGENT_ID,
         "title": title,
         "description": description or None,
-        "type": "TASK",
         "channel": channel.upper(),
-        "parentId": parent or None,
         "assigneeType": assignee_type,
         "assigneeId": assignee_id,
-        "priority": priority.upper(),
     }
     if due_date:
         input_data["dueAt"] = due_date
@@ -184,13 +179,12 @@ def update_thread_status(
     channel: str = "",
     title: str = "",
     description: str = "",
-    priority: str = "",
     due_date: str = "",
     assignee_email: str = "",
 ) -> str:
     """Update a thread's status and optionally other fields. To convert a
     chat thread into a task, set channel='TASK' along with the desired
-    status, title, description, priority, and due_date.
+    status, title, description, and due_date.
 
     Args:
         thread_id: UUID of the thread to update.
@@ -199,7 +193,6 @@ def update_thread_status(
         channel: Optional. Set to 'TASK' to promote a chat thread to a task.
         title: Optional new title.
         description: Optional new description.
-        priority: Optional. LOW, MEDIUM, HIGH, URGENT, or CRITICAL.
         due_date: Optional ISO-8601 due date.
         assignee_email: Optional email to assign as owner.
 
@@ -218,8 +211,6 @@ def update_thread_status(
         input_data["title"] = title
     if description:
         input_data["description"] = description
-    if priority:
-        input_data["priority"] = priority.upper()
     if due_date:
         input_data["dueAt"] = due_date
     if assignee_email:
@@ -241,7 +232,6 @@ def promote_to_task(
     thread_id: str = "",
     title: str = "",
     description: str = "",
-    priority: str = "MEDIUM",
     due_date: str = "",
     assignee_email: str = "",
 ) -> str:
@@ -253,7 +243,6 @@ def promote_to_task(
         thread_id: UUID of the thread to promote. Defaults to CURRENT_THREAD_ID.
         title: Optional new title for the task.
         description: Optional description with task details.
-        priority: LOW, MEDIUM, HIGH, URGENT, or CRITICAL.
         due_date: Optional ISO-8601 due date.
         assignee_email: Optional email of the user to assign as owner.
 
@@ -264,7 +253,6 @@ def promote_to_task(
     input_data: dict = {
         "channel": "TASK",
         "status": "TODO",
-        "priority": priority.upper(),
     }
     if title:
         input_data["title"] = title

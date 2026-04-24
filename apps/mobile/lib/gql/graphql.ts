@@ -978,7 +978,6 @@ export type LinkedThread = {
   id: Scalars['ID']['output'];
   identifier?: Maybe<Scalars['String']['output']>;
   number: Scalars['Int']['output'];
-  priority?: Maybe<Scalars['String']['output']>;
   status: Scalars['String']['output'];
   title: Scalars['String']['output'];
 };

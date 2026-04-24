@@ -18,13 +18,6 @@ type Documents = {
     "\n  mutation CreateSubAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      slug\n    }\n  }\n": typeof types.CreateSubAgentDocument,
     "\n  mutation DeleteSubAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n": typeof types.DeleteSubAgentDocument,
     "\n  mutation CreateThread($input: CreateThreadInput!) {\n    createThread(input: $input) {\n      id\n      number\n      title\n      status\n      createdAt\n    }\n  }\n": typeof types.CreateThreadDocument,
-    "\n  query AgentsForPicker($tenantId: ID!) {\n    agents: allTenantAgents(tenantId: $tenantId) {\n      id\n      name\n      status\n      avatarUrl\n    }\n  }\n": typeof types.AgentsForPickerDocument,
-    "\n  query TenantLabelsForProperties($tenantId: ID!) {\n    threadLabels(tenantId: $tenantId) {\n      id\n      name\n      color\n    }\n  }\n": typeof types.TenantLabelsForPropertiesDocument,
-    "\n  mutation CreateThreadLabelFromProperties($input: CreateThreadLabelInput!) {\n    createThreadLabel(input: $input) {\n      id\n      name\n      color\n    }\n  }\n": typeof types.CreateThreadLabelFromPropertiesDocument,
-    "\n  mutation DeleteThreadLabelFromProperties($id: ID!) {\n    deleteThreadLabel(id: $id)\n  }\n": typeof types.DeleteThreadLabelFromPropertiesDocument,
-    "\n  mutation AssignThreadLabelFromProperties($threadId: ID!, $labelId: ID!) {\n    assignThreadLabel(threadId: $threadId, labelId: $labelId) {\n      id\n      labelId\n    }\n  }\n": typeof types.AssignThreadLabelFromPropertiesDocument,
-    "\n  mutation RemoveThreadLabelFromProperties($threadId: ID!, $labelId: ID!) {\n    removeThreadLabel(threadId: $threadId, labelId: $labelId)\n  }\n": typeof types.RemoveThreadLabelFromPropertiesDocument,
-    "\n  mutation UpdateThreadFromProperties($id: ID!, $input: UpdateThreadInput!) {\n    updateThread(id: $id, input: $input) {\n      id\n      status\n      assigneeType\n      assigneeId\n      dueAt\n      updatedAt\n    }\n  }\n": typeof types.UpdateThreadFromPropertiesDocument,
     "\n  query TenantLabels($tenantId: ID!) {\n    threadLabels(tenantId: $tenantId) {\n      id\n      name\n      color\n    }\n  }\n": typeof types.TenantLabelsDocument,
     "\n  mutation CreateThreadLabel($input: CreateThreadLabelInput!) {\n    createThreadLabel(input: $input) {\n      id\n      name\n      color\n    }\n  }\n": typeof types.CreateThreadLabelDocument,
     "\n  mutation AssignThreadLabel($threadId: ID!, $labelId: ID!) {\n    assignThreadLabel(threadId: $threadId, labelId: $labelId) {\n      id\n      labelId\n    }\n  }\n": typeof types.AssignThreadLabelDocument,
@@ -157,13 +150,6 @@ const documents: Documents = {
     "\n  mutation CreateSubAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      slug\n    }\n  }\n": types.CreateSubAgentDocument,
     "\n  mutation DeleteSubAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n": types.DeleteSubAgentDocument,
     "\n  mutation CreateThread($input: CreateThreadInput!) {\n    createThread(input: $input) {\n      id\n      number\n      title\n      status\n      createdAt\n    }\n  }\n": types.CreateThreadDocument,
-    "\n  query AgentsForPicker($tenantId: ID!) {\n    agents: allTenantAgents(tenantId: $tenantId) {\n      id\n      name\n      status\n      avatarUrl\n    }\n  }\n": types.AgentsForPickerDocument,
-    "\n  query TenantLabelsForProperties($tenantId: ID!) {\n    threadLabels(tenantId: $tenantId) {\n      id\n      name\n      color\n    }\n  }\n": types.TenantLabelsForPropertiesDocument,
-    "\n  mutation CreateThreadLabelFromProperties($input: CreateThreadLabelInput!) {\n    createThreadLabel(input: $input) {\n      id\n      name\n      color\n    }\n  }\n": types.CreateThreadLabelFromPropertiesDocument,
-    "\n  mutation DeleteThreadLabelFromProperties($id: ID!) {\n    deleteThreadLabel(id: $id)\n  }\n": types.DeleteThreadLabelFromPropertiesDocument,
-    "\n  mutation AssignThreadLabelFromProperties($threadId: ID!, $labelId: ID!) {\n    assignThreadLabel(threadId: $threadId, labelId: $labelId) {\n      id\n      labelId\n    }\n  }\n": types.AssignThreadLabelFromPropertiesDocument,
-    "\n  mutation RemoveThreadLabelFromProperties($threadId: ID!, $labelId: ID!) {\n    removeThreadLabel(threadId: $threadId, labelId: $labelId)\n  }\n": types.RemoveThreadLabelFromPropertiesDocument,
-    "\n  mutation UpdateThreadFromProperties($id: ID!, $input: UpdateThreadInput!) {\n    updateThread(id: $id, input: $input) {\n      id\n      status\n      assigneeType\n      assigneeId\n      dueAt\n      updatedAt\n    }\n  }\n": types.UpdateThreadFromPropertiesDocument,
     "\n  query TenantLabels($tenantId: ID!) {\n    threadLabels(tenantId: $tenantId) {\n      id\n      name\n      color\n    }\n  }\n": types.TenantLabelsDocument,
     "\n  mutation CreateThreadLabel($input: CreateThreadLabelInput!) {\n    createThreadLabel(input: $input) {\n      id\n      name\n      color\n    }\n  }\n": types.CreateThreadLabelDocument,
     "\n  mutation AssignThreadLabel($threadId: ID!, $labelId: ID!) {\n    assignThreadLabel(threadId: $threadId, labelId: $labelId) {\n      id\n      labelId\n    }\n  }\n": types.AssignThreadLabelDocument,
@@ -322,34 +308,6 @@ export function graphql(source: "\n  mutation DeleteSubAgent($id: ID!) {\n    de
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation CreateThread($input: CreateThreadInput!) {\n    createThread(input: $input) {\n      id\n      number\n      title\n      status\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  mutation CreateThread($input: CreateThreadInput!) {\n    createThread(input: $input) {\n      id\n      number\n      title\n      status\n      createdAt\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  query AgentsForPicker($tenantId: ID!) {\n    agents: allTenantAgents(tenantId: $tenantId) {\n      id\n      name\n      status\n      avatarUrl\n    }\n  }\n"): (typeof documents)["\n  query AgentsForPicker($tenantId: ID!) {\n    agents: allTenantAgents(tenantId: $tenantId) {\n      id\n      name\n      status\n      avatarUrl\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  query TenantLabelsForProperties($tenantId: ID!) {\n    threadLabels(tenantId: $tenantId) {\n      id\n      name\n      color\n    }\n  }\n"): (typeof documents)["\n  query TenantLabelsForProperties($tenantId: ID!) {\n    threadLabels(tenantId: $tenantId) {\n      id\n      name\n      color\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  mutation CreateThreadLabelFromProperties($input: CreateThreadLabelInput!) {\n    createThreadLabel(input: $input) {\n      id\n      name\n      color\n    }\n  }\n"): (typeof documents)["\n  mutation CreateThreadLabelFromProperties($input: CreateThreadLabelInput!) {\n    createThreadLabel(input: $input) {\n      id\n      name\n      color\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  mutation DeleteThreadLabelFromProperties($id: ID!) {\n    deleteThreadLabel(id: $id)\n  }\n"): (typeof documents)["\n  mutation DeleteThreadLabelFromProperties($id: ID!) {\n    deleteThreadLabel(id: $id)\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  mutation AssignThreadLabelFromProperties($threadId: ID!, $labelId: ID!) {\n    assignThreadLabel(threadId: $threadId, labelId: $labelId) {\n      id\n      labelId\n    }\n  }\n"): (typeof documents)["\n  mutation AssignThreadLabelFromProperties($threadId: ID!, $labelId: ID!) {\n    assignThreadLabel(threadId: $threadId, labelId: $labelId) {\n      id\n      labelId\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  mutation RemoveThreadLabelFromProperties($threadId: ID!, $labelId: ID!) {\n    removeThreadLabel(threadId: $threadId, labelId: $labelId)\n  }\n"): (typeof documents)["\n  mutation RemoveThreadLabelFromProperties($threadId: ID!, $labelId: ID!) {\n    removeThreadLabel(threadId: $threadId, labelId: $labelId)\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  mutation UpdateThreadFromProperties($id: ID!, $input: UpdateThreadInput!) {\n    updateThread(id: $id, input: $input) {\n      id\n      status\n      assigneeType\n      assigneeId\n      dueAt\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  mutation UpdateThreadFromProperties($id: ID!, $input: UpdateThreadInput!) {\n    updateThread(id: $id, input: $input) {\n      id\n      status\n      assigneeType\n      assigneeId\n      dueAt\n      updatedAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

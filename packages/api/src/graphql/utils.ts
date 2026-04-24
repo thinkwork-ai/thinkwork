@@ -649,7 +649,7 @@ export async function recordActivity(
 // Helpers: snake_case DB rows → camelCase GraphQL fields
 // ---------------------------------------------------------------------------
 
-const ENUM_FIELDS = new Set(["status", "priority", "type", "channel"]);
+const ENUM_FIELDS = new Set(["status", "channel"]);
 
 export function snakeToCamel(
   obj: Record<string, unknown>,

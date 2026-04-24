@@ -73,7 +73,6 @@ export async function materializeProcess(
 				parent_id: parentThreadId,
 				description: step.instructions,
 				status: stepStatus,
-				priority: step.priority,
 				assignee_type: resolvedAssignee ? "agent" : undefined,
 				assignee_id: resolvedAssignee || undefined,
 				created_by_type: "system",

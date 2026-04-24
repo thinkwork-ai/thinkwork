@@ -26,7 +26,6 @@ export const inboxItem = async (_parent: any, args: any, ctx: GraphQLContext) =>
 			identifier: threads.identifier,
 			title: threads.title,
 			status: threads.status,
-			priority: threads.priority,
 		}).from(threads).where(inArray(threads.id, threadLinkIds))) as Record<string, unknown>[];
 	}
 	return {
