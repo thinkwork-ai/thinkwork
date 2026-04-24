@@ -10,7 +10,7 @@ import Animated, {
   runOnJS,
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
-import { ChevronRight, Check, X, Archive, MessageSquare, Mail, Briefcase, Webhook, FileText, CheckSquare, ListChecks, type LucideIcon } from "lucide-react-native";
+import { ChevronRight, Check, X, Archive, MessageSquare, Mail, Briefcase, Webhook, FileText, CheckSquare, type LucideIcon } from "lucide-react-native";
 import { IconClockBolt } from "@tabler/icons-react-native";
 import { Text, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
@@ -77,7 +77,6 @@ interface ThreadRowProps {
     status: string;
     type: string;
     channel?: string;
-    childCount?: number;
     agentId?: string;
     updatedAt: string;
     lastActivityAt?: string | null;
@@ -178,11 +177,7 @@ export function ThreadRow({ thread, agentName, isUnread, isActive, turnStatus, o
   });
 
   const channelKey = (thread.channel || thread.type || "").toUpperCase();
-  // Show ListChecks icon for CHAT threads that have task children
-  const hasTaskChildren = channelKey === "CHAT" && (thread.childCount ?? 0) > 0;
-  const chan = hasTaskChildren
-    ? { icon: ListChecks, bg: "rgba(20,184,166,0.15)", fg: "#14b8a6" }
-    : (CHANNEL_CONFIG[channelKey] || DEFAULT_CHANNEL);
+  const chan = CHANNEL_CONFIG[channelKey] || DEFAULT_CHANNEL;
   const ChannelIcon = chan.icon;
 
   const content = (

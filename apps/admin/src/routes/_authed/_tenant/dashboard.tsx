@@ -332,7 +332,6 @@ function ThreadDetailDialog({ item, open, onOpenChange, navigate }: { item: Acti
   });
 
   const thread = result.data?.thread;
-  const comments = thread?.comments ?? [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -359,23 +358,6 @@ function ThreadDetailDialog({ item, open, onOpenChange, navigate }: { item: Acti
               <>
                 <Separator />
                 <div><span className="text-xs text-muted-foreground">Description</span><p className="mt-1 text-sm whitespace-pre-wrap">{thread.description}</p></div>
-              </>
-            )}
-            {comments.length > 0 && (
-              <>
-                <Separator />
-                <div className="space-y-3">
-                  <span className="text-xs text-muted-foreground">Comments ({comments.length})</span>
-                  {(comments as any[]).map((c: any) => (
-                    <div key={c.id} className="rounded-md bg-muted/50 px-3 py-2 text-sm space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium capitalize">{c.authorType?.toLowerCase().replace(/_/g, " ") ?? "Unknown"}</span>
-                        <span className="text-xs text-muted-foreground">{new Date(c.createdAt).toLocaleString()}</span>
-                      </div>
-                      <p className="whitespace-pre-wrap">{c.content}</p>
-                    </div>
-                  ))}
-                </div>
               </>
             )}
           </div>

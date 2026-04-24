@@ -33,9 +33,6 @@ export const threadsPaged_query = async (_parent: any, args: any, ctx: GraphQLCo
 		);
 	}
 
-	// Exclude child threads (sub-threads)
-	conditions.push(sql`${threads.parent_id} IS NULL`);
-
 	const whereClause = and(...conditions);
 
 	// Sort

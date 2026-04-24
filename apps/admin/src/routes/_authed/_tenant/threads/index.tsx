@@ -172,9 +172,6 @@ type ThreadItem = {
   readonly assigneeType?: string | null;
   readonly assigneeId?: string | null;
   readonly checkoutRunId?: string | null;
-  readonly commentCount: number;
-  readonly childCount: number;
-  readonly parentId?: string | null;
   readonly lastActivityAt?: any;
   readonly lastTurnCompletedAt?: any;
   readonly lastReadAt?: any;
@@ -470,22 +467,6 @@ function ThreadsPage() {
 
               {/* Trailing */}
               <span className="ml-auto hidden shrink-0 items-center sm:flex">
-                {(thread.commentCount > 0 || thread.childCount > 0) && (
-                  <span className="flex w-[60px] items-center justify-end gap-2">
-                    {thread.commentCount > 0 && (
-                      <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
-                        <MessageSquare className="h-3 w-3" />
-                        {thread.commentCount}
-                      </span>
-                    )}
-                    {thread.childCount > 0 && (
-                      <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
-                        <GitBranch className="h-3 w-3" />
-                        {thread.childCount}
-                      </span>
-                    )}
-                  </span>
-                )}
                 <Popover
                   open={assigneePickerIssueId === thread.id}
                   onOpenChange={(open) => {

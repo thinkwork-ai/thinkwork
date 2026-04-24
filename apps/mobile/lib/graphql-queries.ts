@@ -730,9 +730,7 @@ export const ThreadsQuery = graphql(`
       lastActivityAt
       lastTurnCompletedAt
       lastReadAt
-      parentId
       lastResponsePreview
-      childCount
       createdAt
       updatedAt
     }
@@ -756,33 +754,6 @@ export const ThreadQuery = graphql(`
       assigneeType
       assigneeId
       reporterId
-      parentId
-      children {
-        id
-        identifier
-        title
-        description
-        status
-        priority
-        channel
-        assigneeType
-        assigneeId
-        assignee { id name }
-        dueAt
-        children {
-          id
-          identifier
-          title
-          description
-          status
-          priority
-          channel
-          assigneeType
-          assigneeId
-          assignee { id name }
-          dueAt
-        }
-      }
       labels
       metadata
       dueAt

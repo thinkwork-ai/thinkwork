@@ -237,50 +237,13 @@ export default function ThreadDetailRoute() {
 
   const visibleMessages = messages;
   const visibleTurns = turns;
-  const childThreads = (thread?.children ?? []) as any[];
-  const allDescendantTasks = useMemo(() => {
-    const result: any[] = [];
-    for (const child of childThreads) {
-      result.push(child);
-      for (const grandchild of (child.children ?? [])) {
-        result.push(grandchild);
-      }
-    }
-    return result;
-  }, [childThreads]);
-  const hasChildren = allDescendantTasks.length > 0;
-  const [detailTab, setDetailTab] = useState<"thread" | "tasks">("thread");
 
   const handleMarkDone = useCallback(async () => {
     if (!threadId) return;
-    // Check for open sub-tasks and confirm if needed
-    const openTasks = allDescendantTasks.filter((t: any) => {
-      const s = (t.status || "").toUpperCase();
-      return s !== "DONE" && s !== "CANCELLED";
-    });
-    if (openTasks.length > 0) {
-      Alert.alert(
-        "Complete all sub-tasks?",
-        `This will also mark ${openTasks.length} open sub-task${openTasks.length > 1 ? "s" : ""} as done.`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Complete All",
-            style: "destructive",
-            onPress: async () => {
-              await executeUpdateThread({ id: threadId, input: { status: "DONE" as any } });
-              reexecuteThread({ requestPolicy: "network-only" });
-              router.back();
-            },
-          },
-        ],
-      );
-      return;
-    }
     await executeUpdateThread({ id: threadId, input: { status: "DONE" as any } });
     reexecuteThread({ requestPolicy: "network-only" });
     router.back();
-  }, [threadId, allDescendantTasks, executeUpdateThread, reexecuteThread, router]);
+  }, [threadId, executeUpdateThread, reexecuteThread, router]);
 
   const quickActionsRef = useRef<QuickActionsSheetRef>(null);
   const webViewSheetRef = useRef<WebViewSheetRef>(null);
