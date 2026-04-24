@@ -2157,6 +2157,14 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
 
 
 def main():
+    # Build provenance — emit the commit SHA + build time the image was
+    # stamped with by deploy.yml. When a warm runtime holds onto a stale
+    # image (AgentCore doesn't auto-repull), a single grep for
+    # THINKWORK_BUILD in CloudWatch answers which commit is actually live.
+    _git_sha = os.environ.get("THINKWORK_GIT_SHA", "unknown")
+    _build_time = os.environ.get("THINKWORK_BUILD_TIME", "unknown")
+    logger.info("THINKWORK_BUILD git_sha=%s build_time=%s", _git_sha, _build_time)
+
     # Register the eval-attribution span processor so every span carries
     # session.id / tenant.id / agent.id / thread.id from baggage. Logs a
     # warning if the global TracerProvider isn't an SDK provider yet, in

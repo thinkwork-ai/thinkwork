@@ -109,6 +109,16 @@ ENV PORT=8080
 ENV HOME=/home/strandsuser
 ENV AWS_REGION=us-east-1
 ENV AGENTCORE_FILES_BUCKET=""
+
+# Build provenance — wired by deploy.yml so a single log line on boot
+# answers "which image is this container actually running?". When the
+# runtime sticks on a stale image (see AgentCore runtime no-auto-repull),
+# grepping THINKWORK_BUILD= in the boot log tells you the bound commit
+# without having to cross-reference ECR tags.
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
+ENV THINKWORK_GIT_SHA=${GIT_SHA}
+ENV THINKWORK_BUILD_TIME=${BUILD_TIME}
 # AgentCore Memory ID — always populated by Terraform. Managed memory is
 # always on; Hindsight is an optional add-on enabled when HINDSIGHT_ENDPOINT
 # is also set in the environment.

@@ -17,3 +17,5 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
+      - name: Lint AgentCore IAM grants vs boto3 calls
+        run: pnpm lint:agentcore-iam
