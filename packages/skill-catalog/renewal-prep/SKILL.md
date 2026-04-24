@@ -3,102 +3,124 @@ name: renewal-prep
 description: >
   Renewal conversation prep — contract terms, usage trends, AR posture,
   renewal history, NPS, support load. Produces a renewal_risk brief
-  ordered by deal-impact likelihood. Model drives sub-skill invocation
-  via the Skill meta-tool.
+  ordered by deal-impact likelihood.
 license: Proprietary
 metadata:
   author: thinkwork
   version: "2.0.0"
+allowed-tools:
+  - Skill
+  - recall
+  - reflect
 ---
 
 # Renewal Prep
 
-Agent-driven renewal-risk brief. The model invokes each sub-skill via
-the `Skill(slug, inputs)` meta-tool in the order described below and
-degrades gracefully when optional sub-skills are unavailable.
-
-## What a rep gets
-
-A `renewal_risk` Markdown deliverable ordered by which facts most
-likely affect renewal outcome: expiring contract terms, usage trend
-direction, delinquent AR, recent escalations, NPS softening, pricing
-signals. Synthesis uses `focus: "risks"` to keep talking points ordered
-by deal-impact likelihood.
+You are producing a renewal-risk brief for a rep heading into a renewal conversation with `customer`. The brief is ordered by which facts most likely affect deal outcome: expiring contract terms, usage trend, delinquent AR, recent escalations, NPS softening.
 
 ## Inputs
 
 | Field            | Required | Type   | Notes |
 |------------------|----------|--------|-------|
-| `customer`       | Yes      | string | Customer identifier. Resolver: `resolve_customer`. |
+| `customer`       | Yes      | string | Customer identifier. |
 | `renewal_date`   | Yes      | date   | Contract renewal / expiry date. |
-| `contract_value` | No       | string | Free-form (e.g., `"$120k ARR"`). Rendered into the package template's header. |
+| `contract_value` | No       | string | Free-form (e.g. `"$120k ARR"`). Rendered into the package header. |
 
-## How to run it
+## Deliverable shape
 
-Call each step via `Skill(slug, inputs)`. Run the gather sub-skills in
-whatever order the runtime prefers — synthesize only needs the merged
-result. Skip a gather step if the sub-skill is missing or errors,
-except `contract_summary` (see "Degrading gracefully" below).
+Four-section brief via `Skill("package", {format: "renewal_risk", ...})`:
 
-1. **Frame the goal.** Call `Skill("frame", {problem})` with
-   `problem = "Renewal prep for {customer}. Renewal on {renewal_date}. Contract value: {contract_value}."`
-   Store as `framed`.
-2. **Gather in parallel.** Call these sub-skills and collect successful
-   returns into a single `gathered` object keyed by sub-skill name.
-   Renewal decisions turn on multiple signals and a missing one can
-   mislead — report every footered step to the rep.
-   - `contract_summary({customer})` — **required**; if it errors, stop
-     and tell the user the contract connector is unavailable. Without
-     renewal date / term / auto-renew clause / price there's nothing
-     to anchor on.
-   - `product_usage_summary({customer, period: "last_quarter"})` —
-     optional; footer "Product usage data unavailable" if missing.
-   - `renewal_history_summary({customer})` — optional; footer
-     "Renewal history unavailable" if missing.
-   - `ar_summary({customer})` — optional; footer "AR data unavailable"
-     if missing. AR delinquency is a near-deterministic churn signal,
-     so call this one out prominently in the rep-facing footer.
-   - `nps_summary({customer, period: "last_year"})` — optional; footer
-     if missing.
-   - `support_incidents_summary({customer, period: "last_quarter"})` —
-     optional; footer if missing.
-3. **Synthesize.** Call
-   `Skill("synthesize", {framed, gathered, focus: "risks"})`. Note
-   the hard-coded `focus: "risks"` — renewal prep is a risk-oriented
-   exercise; passing a different focus dilutes the signal.
-4. **Package.** Call
-   `Skill("package", {synthesis, format: "renewal_risk"})` to render
-   the final Markdown deliverable with renewal-specific header fields
-   (renewal date, contract value).
+- **Risks** — ordered by deal-impact likelihood (AR delinquency first, then usage decline, then escalations, etc.).
+- **Opportunities** — re-engagement or expansion levers.
+- **Open questions** — what the rep must clarify before the renewal call.
+- **Talking points** — the renewal-call agenda, top-down by probability of affecting the outcome.
 
-Implicit before/after:
+Cite every finding. Never invent facts.
 
-- Before step 1: `recall` or `hindsight_recall` surfaces prior
-  learnings scoped to `(tenant, user, skill, customer)`.
-- After step 4: `reflect` or `hindsight_reflect` extracts up to 3 new
-  learnings from the run.
+## Method
+
+### 1. Pull prior learnings
+
+```
+recall({skill_id: "renewal-prep", subject_entity_id: customer})
+```
+
+Renewal learnings are often high-signal ("Last year's renewal slipped because we never surfaced the AR past-due"). Let them shape synthesis.
+
+### 2. Scratch-restate the goal
+
+Internal scratchpad (≤150 words):
+
+- **Goal:** Specific renewal picture for `customer`, `renewal_date`, `contract_value`.
+- **Constraints:** Rep audience, renewal-conversation framing.
+- **Known unknowns:** What you need to resolve before writing.
+- **Decision criteria:** Would a rep know what to say first?
+
+### 3. Gather in parallel
+
+Fire these concurrently:
+
+**Critical (abort if it fails):**
+- `Skill("contract_summary", {customer})` — renewal date, term, auto-renew clause, price. Without this the brief has nothing to anchor on.
+
+**Nice-to-have (degrade gracefully — footer note per missing source):**
+- `Skill("product_usage_summary", {customer, period: "last_quarter"})` — MAU trend, feature adoption.
+- `Skill("renewal_history_summary", {customer})` — prior renewal outcomes, precedents, discount history.
+- `Skill("ar_summary", {customer})` — invoice status, DSO, past-due. **Call out AR delinquency prominently in the footer if this is unavailable** — it's a near-deterministic churn signal.
+- `Skill("nps_summary", {customer, period: "last_year"})` — NPS trend, detractor themes.
+- `Skill("support_incidents_summary", {customer, period: "last_quarter"})` — ticket volume, escalations.
+
+If a nice-to-have tool errors: continue with a footer note. For the AR case specifically, add a stronger warning: `> WARNING: AR status unavailable — verify delinquency manually before the call.`
+
+### 4. Synthesize
+
+Focus hardcoded to **risks** for this skill — renewal prep is inherently risk-oriented. Rules:
+
+- **Order Risks by deal-impact likelihood.** AR past-due > usage decline > escalations > NPS softening > champion churn. Use the actual gathered data to refine the order.
+- **Opportunities stay short.** Re-engagement tactics only; don't pad.
+- **Open questions:** What the rep must clarify before the renewal call.
+- **Talking points:** Renewal-call agenda, top-down by probability of affecting outcome.
+
+Cite every finding. 400 words max across the four sections.
+
+### 5. Render
+
+```
+Skill("package", {
+  format: "renewal_risk",
+  synthesis: {
+    risks: [...],
+    opportunities: [...],
+    open_questions: [...],
+    talking_points: [...]
+  },
+  metadata: { customer, renewal_date, contract_value }
+})
+```
+
+Return the rendered Markdown verbatim.
+
+### 6. Reflect
+
+```
+reflect({
+  skill_id: "renewal-prep",
+  subject_entity_id: customer,
+  text: "..."
+})
+```
+
+Up to 3 observations. Skip if nothing new.
 
 ## Degrading gracefully
 
-- `contract_summary` is **critical** — a renewal brief anchored on
-  missing contract context is worse than none. Abort with a clear user
-  message if this step errors or returns empty.
-- For every other gather sub-skill: catch the error, record
-  `<step-name> unavailable: <reason>` in the deliverable's footer, and
-  continue with the remaining context. Call out AR delinquency
-  unavailability prominently — it's a near-deterministic churn
-  signal the rep must not overlook.
-- If `synthesize` fails after a partial gather, don't call `package` —
-  return the framed problem + whatever was gathered so the rep can
-  triage instead of reading a half-hallucinated brief.
+- **Contract critical:** If `contract_summary` errors or returns empty, stop. Tell the user the contract connector is unavailable.
+- **AR unavailability warrants a stronger footer than other missing sources** — call it out explicitly in bold.
+- **Synthesis failure after partial gather:** Skip render, return the scratchpad + gathered data so the rep can triage.
 
 ## Scheduling
 
-Daily 07:00 UTC. The default scheduled-job binding reads
-`from_tenant_config: upcoming_renewal_customer` — i.e., the tenant owns
-the rotation (which account hits the morning brief today). This is the
-cleanest separation of concerns: the skill knows *how* to prep a
-renewal; the tenant owns the *when*.
+Default: daily 07:00 UTC. The scheduled-job binding reads `from_tenant_config: upcoming_renewal_customer` — tenants own the rotation (which account gets the morning brief today). This is the cleanest separation: the skill knows *how* to prep, the tenant owns the *when*.
 
 ## Invocation paths
 
@@ -110,31 +132,21 @@ renewal; the tenant owns the *when*.
 
 ## Tenant overrides
 
-Tenants can change `triggers.schedule.expression` — e.g., flip the
-07:00 UTC default to a local-timezone morning brief. Nothing else is
-overridable. Attempting to pass a config that touches a non-allowlisted
-field is rejected at `setAgentSkills` time.
+Only `triggers.schedule.expression` — local-timezone morning brief, etc. Nothing else.
 
-## Relationship to account-health-review
+## Relationship to sales-prep / account-health-review
 
-Both are risk-oriented analyses that use the same frame / synthesize /
-package sub-skills, but they diverge in three places:
+All three share the four-section shape, but:
 
-1. **Gather set is deeper** (6 vs 5 sub-skills) and contract-led rather
-   than engagement-led.
-2. **Template is `renewal_risk`** — the package renders a
-   renewal-specific header (renewal date, contract value) and orders
-   talking points by deal-impact likelihood, not by general risk
-   severity.
-3. **Schedule cadence is daily**, not weekly — renewal windows are
-   time-sensitive and a weekly cadence misses deals.
+- **sales-prep:** general meeting prep, external signals (web / wiki), `sales_brief` template.
+- **account-health-review:** periodic internal review, engagement telemetry, `health_report` template, weekly cadence.
+- **renewal-prep (this skill):** contract-anchored, deal-impact ordering, `renewal_risk` template, daily cadence.
 
-Same four primitives (frame / gather / synthesize / package) do the
-work; this skill's job is to pick the right gather set, focus hint,
-and package template.
+Connector changes should pressure-test against all three.
 
-## Migration note
+## What this skill does NOT do
 
-v2.0.0 landed the current `execution: context` shape (plan §U8): the
-model invokes each sub-skill directly via the Skill meta-tool so the
-same renewal workflow runs on the unified dispatch path.
+- Doesn't call retired helper skills (`frame`, `synthesize`, `gather`, `compound`).
+- Doesn't email/slack the brief.
+- Doesn't modify CRM, contract, or AR records.
+- Doesn't schedule follow-ups.

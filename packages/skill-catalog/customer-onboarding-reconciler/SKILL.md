@@ -3,47 +3,30 @@ name: customer-onboarding-reconciler
 description: >
   Reconciler-shaped skill that drives a new customer from opportunity-won
   to fully onboarded. Every invocation reads current state, creates only
-  the tasks that are still missing, and exits. Webhook anchor for D7a /
-  D7b in the composable-skills plan.
+  the tasks that are still missing, and exits.
 license: Proprietary
 metadata:
   author: thinkwork
   version: "2.0.0"
+allowed-tools:
+  - Skill
+  - recall
+  - reflect
 ---
 
 # Customer Onboarding Reconciler
 
-Agent-driven reconciler tick. The model invokes each sub-skill via the
-`Skill(slug, inputs)` meta-tool in the three-phase order below. Fail
-fast on missing critical gather — duplicates in the task system are
-the worst-case outcome of an unsafe tick.
+You are a **reconciler**: on every invocation, compare the desired set of onboarding tasks to what already exists, create the missing ones, and exit. You do NOT wait on humans. Waits happen *between* your invocations — when a task finishes, a webhook re-invokes you and you reconcile again.
 
 ## Why this is a reconciler, not a workflow
 
-Onboarding waits on humans: clarification answers, contract signatures,
-payment setup, team assignments. A workflow-shape composition would try
-to encode those waits inline — which is exactly what the plan's D7a
-decision rejected. Instead, this skill treats onboarding as a
-desired-state problem: given the customer's current state and the
-opportunity context, produce the set of tasks that should exist. Create
-what's missing, leave what's already present. Exit. When a task
-finishes, a task-event webhook re-invokes and we reconcile again.
+Onboarding waits on humans: clarification answers, contract signatures, payment setup, team assignments. A workflow shape would try to encode those waits inline — which is exactly wrong for a stateless, pooled agent runtime. This skill treats onboarding as a desired-state problem:
 
-Over many ticks the skill converges. No single invocation holds an
-AgentCore session open; no scheduler owns "wait for X days." The task
-system owns the HITL state.
+> *Given the customer's current state and the opportunity context, produce the set of tasks that should exist. Create what's missing, leave what's already present. Exit.*
 
-## Naming (U8 migration note)
+Over many ticks the skill converges. No single invocation holds a session open; no scheduler owns "wait for X days." The task system owns the HITL state.
 
-The plan's canonical name for this skill is `customer-onboarding`. A
-legacy `execution: context` skill with that slug already exists
-(`packages/skill-catalog/customer-onboarding/`), so U8 followed the
-recommended default in
-`docs/solutions/workflow-issues/skill-catalog-slug-collision-execution-mode-transitions-2026-04-21.md`:
-pick a different canonical slug rather than coordinate a data
-migration. The reconciler lives at `customer-onboarding-reconciler` and
-the legacy `customer-onboarding` continues working unchanged for any
-tenants that still reference it.
+**Never `asyncio.sleep` or otherwise wait for humans within a tick.** If you find yourself wanting to, the answer is to exit — the next tick will handle whatever triggered the wait.
 
 ## Inputs
 
@@ -52,95 +35,117 @@ tenants that still reference it.
 | `customerId`    | Yes      | string | Stable CRM customer id. |
 | `opportunityId` | Yes      | string | Stable CRM opportunity id. |
 
-## How a tick runs
+## Method
 
-Call each step via `Skill(slug, inputs)`. Do NOT `asyncio.sleep` or
-otherwise wait for humans within a tick — waiting defeats the
-reconciler model. CI's `no-blocking-sleep` lint enforces this on any
-sub-skill the agent might author.
+### 1. Pull prior learnings
 
-1. **Gather current state (parallel-safe).** Call these three sub-skills
-   and collect successful returns into `gathered`:
-   - `crm_account_summary({customer: customerId})` — **critical**.
-   - `lastmile_tasks_list({subject_kind: "customer", subject_id: customerId, trigger: "customer-onboarding-reconciler"})` — **critical**.
-   - `crm_opportunity_summary({opportunity: opportunityId})` — optional
-     (footer note on missing contract context).
+```
+recall({skill_id: "customer-onboarding-reconciler", subject_entity_id: customerId})
+```
 
-   If **either** critical gather errors or returns empty, ABORT the
-   tick. Do not proceed to act. A tick that acts on partial state will
-   duplicate tasks the next time the real `existing_tasks` comes back.
+Onboarding learnings tend to be order-preferences ("This tenant wants PO setup before contract signing"). Let them shape step 3's gap analysis.
 
-2. **Synthesize the gap.** Call `Skill("synthesize", {framed, gathered, focus: "gap_analysis"})`
-   with `framed = "Onboarding reconciliation for customer {customerId}."`
-   Store the result as `gap_analysis`. The focus is hard-coded — this
-   skill is specifically a gap analysis, not a general summary.
+### 2. Gather current state in parallel
 
-3. **Act on the gap.** Call
-   `Skill("customer-onboarding-reconciler/act", {customerId, opportunityId, gap_analysis, existing_tasks: gathered.existing_tasks})`.
-   The `act` sub-skill decides what to mutate this tick. Given the gap
-   analysis + existing tasks, it calls `lastmile_tasks_create` only for
-   missing tasks.
+Fire these concurrently:
 
-Implicit before/after:
+**Critical (abort tick if either fails):**
+- `Skill("crm_account_summary", {customer: customerId})` — customer record: industry, size, contract stage, key contacts.
+- `Skill("lastmile_tasks_list", {subject_kind: "customer", subject_id: customerId, trigger: "customer-onboarding-reconciler"})` — **all existing tasks this reconciler has created before, regardless of status.**
 
-- Before step 1: `recall` (managed memory) or `hindsight_recall` (when
-  Hindsight is enabled) surfaces prior learnings scoped to
-  `(tenant, customer, skill)`. On the first tick the pool is empty; on
-  later ticks the runner may surface "ABC Fuels wants PO setup moved
-  ahead of contract signing."
-- After step 3: `reflect` or `hindsight_reflect` captures up to 3
-  learnings — patterns like "tasks created in this order tend to
-  finish this fast."
+**Nice-to-have:**
+- `Skill("crm_opportunity_summary", {opportunity: opportunityId})` — deal shape, contract amount, close date. Footer note if missing.
 
-## Termination
+If **either** critical gather errors or returns empty, **ABORT the tick**. Do not proceed to step 3. A tick that acts on partial state will duplicate tasks the next time the real `existing_tasks` comes back.
 
-Subsequent ticks observe that `existing_tasks ⊇ tasks the gap analysis
-would create` and the `act` sub-skill emits an empty action summary.
-Delivery-layer logic treats an empty action summary as a no-op: the run
-still records as `complete`, but nothing is announced to the agent
-owner. The reconciler-HITL integration test asserts this explicitly —
-tick N with all tasks complete produces zero new tasks and zero
-duplicate creates.
+### 3. Compute the gap (inline)
+
+Given the customer's current state + the opportunity context, determine what tasks should exist. A standard onboarding includes:
+
+- **Intake call** — 30-min kickoff with the customer's project lead.
+- **Contract signature** — countersigned MSA + SOW.
+- **Billing setup** — PO, payment method, invoice recipient.
+- **Technical provisioning** — subdomain, SSO config, seat provisioning.
+- **Team assignments** — CSM + AE + support handoff.
+- **Documentation handoff** — onboarding kit, admin guide.
+
+Adjust based on prior-learnings (step 1) and opportunity context (step 2's optional gather). Example adjustments:
+- Contract already signed in the opportunity record → skip "contract signature."
+- SMB tier (`crm_account_summary.tier === "SMB"`) → collapse "team assignments" into "CSM only."
+- Prior learnings say "customer prefers PO before contract" → reorder those two.
+
+**Gap = (desired tasks) − (existing tasks matching subject+trigger).**
+
+Produce your gap analysis as a structured list: each entry has `{title, description, assignee_hint, depends_on?}`.
+
+Keep the gap list internal — don't render it as output. It feeds step 4 only.
+
+### 4. Create the missing tasks
+
+For each entry in the gap, call:
+
+```
+Skill("lastmile_tasks_create", {
+  subject_kind: "customer",
+  subject_id: customerId,
+  trigger: "customer-onboarding-reconciler",
+  title: "...",
+  description: "...",
+  assignee_hint: "...",
+  depends_on: [...]  // optional; task ids from existing_tasks that must complete first
+})
+```
+
+**Do not create a task if an existing task matches `{subject, trigger, title}` — even if the existing one is `done`.** Matching is case-insensitive on title after trimming. This is the idempotency invariant: multiple ticks with the same gap produce zero duplicate creates.
+
+### 5. Reflect (if anything worth saving)
+
+```
+reflect({
+  skill_id: "customer-onboarding-reconciler",
+  subject_entity_id: customerId,
+  text: "..."
+})
+```
+
+Up to 3 observations. Good patterns: ordering preferences, timing patterns, tier-specific adjustments. Skip if the tick was routine.
+
+## Termination invariant
+
+Subsequent ticks observe that `existing_tasks ⊇ desired_tasks` and the gap is empty. Creating zero tasks is a valid, expected outcome — it means the customer's onboarding is in a steady state.
+
+An empty-gap tick still records as `status=complete` in `skill_runs`, but the delivery layer treats an empty-action tick as a no-op: nothing is announced to the agent owner. Only ticks that actually create tasks produce notifications.
 
 ## Invocation paths
 
 | Path    | Entry point                                 | Typical invocation |
 |---------|---------------------------------------------|---------------------|
-| webhook | `POST /webhooks/crm-opportunity/{tenantId}` | CRM `opportunity.won` event |
-| webhook | `POST /webhooks/task-event/{tenantId}`      | A task spawned by a prior tick flips to `done` |
-| catalog | admin `startSkillRun` mutation              | Operator forces a tick from the admin Skills detail page |
+| webhook | `POST /webhooks/crm-opportunity/{tenantId}` | CRM `opportunity.won` event starts onboarding |
+| webhook | `POST /webhooks/task-event/{tenantId}`      | A task finishes → reconcile again |
+| catalog | admin `startSkillRun` mutation              | Operator forces a tick from the admin |
 
-No `scheduled` trigger in v1 — reconciliation is event-driven. A cron
-fallback is a plausible Phase-2 addition once we see how long quiet
-periods actually run.
+No `scheduled` trigger in v1 — reconciliation is event-driven. A cron fallback is a plausible Phase-2 addition once we see how long quiet periods actually run.
 
 ## Delivery
 
-Runs route notifications to the owning agent's configured channel (DM,
-email, or admin fallback). There is no chat thread because
-webhook-triggered runs don't have an invoker thread. The run still
-shows up in the admin UI under the owning agent.
-
-If the owning agent is null the run emits a `notification_pending`
-metric and routes to a tenant-admin fallback channel if one is
-configured; otherwise the run completes with `notification_pending=true`
-and the admin sees it in the filter.
+Webhook-triggered runs don't have an invoker thread, so notifications route to the owning agent's configured channel (DM, email, admin fallback). If the owning agent is null the run emits a `notification_pending` metric and routes to a tenant-admin fallback; otherwise completes with `notification_pending=true` and the admin sees it in the filter.
 
 ## Connector dependencies
 
 - `crm_account_summary` — customer-level CRM adapter.
-- `crm_opportunity_summary` — opportunity-level CRM adapter (separate
-  endpoint in most CRMs).
-- `lastmile_tasks_list` / `lastmile_tasks_create` — the task-system
-  connectors used by the `act` sub-skill.
+- `crm_opportunity_summary` — opportunity-level CRM adapter.
+- `lastmile_tasks_list` / `lastmile_tasks_create` — task-system connectors.
 
-At launch, connector failures in `crm_account_summary` or
-`lastmile_tasks_list` abort the tick. Once the connector surface
-stabilizes (post-launch), this skill can relax the contract gather to
-footer-only — contract context is nice-to-have but not load-bearing.
+At launch, failures in `crm_account_summary` or `lastmile_tasks_list` abort the tick. Once the connector surface stabilizes, this skill can relax `crm_opportunity_summary` to footer-only (already nice-to-have) and consider relaxing others post-launch.
 
-## Migration note
+## Naming note
 
-v2.0.0 landed the current `execution: context` shape (plan §U8): the
-model invokes each sub-skill directly via the Skill meta-tool so the
-same reconciler semantics run on the unified dispatch path.
+The plan's canonical name for this skill is `customer-onboarding`, but a legacy `execution: context` skill with that slug already exists (`packages/skill-catalog/customer-onboarding/`). This skill lives at `customer-onboarding-reconciler`. The legacy slug continues working for any tenants that still reference it.
+
+## What this skill does NOT do
+
+- Doesn't wait for humans within a tick.
+- Doesn't call retired helper skills (`frame`, `synthesize`, `gather`, `compound`).
+- Doesn't modify CRM records.
+- Doesn't delete or reassign tasks — creation-only.
+- Doesn't re-create tasks that already exist in any status (done tasks still count as existing).

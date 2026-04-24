@@ -1,96 +1,127 @@
 ---
 name: account-health-review
 description: >
-  Periodic review of customer health signals. Aggregates engagement,
-  usage, AR posture, support load, and CRM notes over a configurable
-  window; produces a health_report deliverable. Model drives sub-skill
-  invocation via the Skill meta-tool.
+  Periodic risk-focused review of a customer's health signals. Aggregates
+  CRM, product usage, AR posture, support load, and engagement over a
+  configurable window; produces a health_report deliverable.
 license: Proprietary
 metadata:
   author: thinkwork
   version: "2.0.0"
+allowed-tools:
+  - Skill
+  - recall
+  - reflect
 ---
 
 # Account Health Review
 
-Agent-driven risk-focused review. The model invokes each sub-skill via
-the `Skill(slug, inputs)` meta-tool in the order described below and
-degrades gracefully when optional sub-skills are unavailable.
-
-## What a CSM / AE gets
-
-A `health_report` Markdown deliverable with Risks / Opportunities /
-Open questions / Talking points — same shape as `sales-prep`, but the
-synthesis is steered toward `focus: risks` and the gather set swaps in
-product-usage + engagement signals instead of web + wiki research.
+You are producing a risk-focused health report on `customer` over `period`. The audience is an internal CSM or AE reviewing the account ahead of a QBR, renewal, or standing check-in. The deliverable has a fixed shape; this document is the contract + method.
 
 ## Inputs
 
 | Field        | Required | Type   | Notes |
 |--------------|----------|--------|-------|
-| `customer`   | Yes      | string | Customer identifier. Resolver: `resolve_customer`. |
+| `customer`   | Yes      | string | Customer identifier. |
 | `period`     | No       | enum   | `last_30_days` \| `last_quarter` \| `last_year`. Default `last_30_days`. |
-| `agent_name` | No       | string | Optional; passed to the `package` template. |
+| `agent_name` | No       | string | Passed to the `package` template for attribution. |
 
-## How to run it
+## Deliverable shape
 
-Call each step via `Skill(slug, inputs)`. Run the gather sub-skills in
-whatever order the runtime prefers — synthesize only needs the merged
-result. Skip a gather step if the sub-skill is missing or errors,
-except `crm_account_summary` (see "Degrading gracefully" below).
+Same four-section shape as `sales-prep`, but **always risk-oriented**:
 
-1. **Frame the goal.** Call `Skill("frame", {problem})` with
-   `problem = "Account health review for {customer} over {period}."`
-   Store as `framed`.
-2. **Gather in parallel.** Call these sub-skills with `{customer}` (and
-   `{period}` where noted). Collect successful returns into a single
-   `gathered` object keyed by sub-skill name.
-   - `crm_account_summary({customer, period})` — **required for a
-     useful review**; if it errors, stop here and tell the user the CRM
-     connector is unavailable. Don't fabricate account context.
-   - `product_usage_summary({customer, period})` — optional; footer
-     "Product usage data unavailable" if missing.
-   - `ar_summary({customer})` — optional; footer "AR data unavailable"
-     if missing.
-   - `support_incidents_summary({customer, period})` — optional; footer
-     "Support data unavailable" if missing.
-   - `engagement_summary({customer, period})` — optional; footer
-     "Engagement data unavailable" if missing.
-3. **Synthesize.** Call
-   `Skill("synthesize", {framed, gathered, focus: "risks"})`. Note
-   the hard-coded `focus: "risks"` — health reviews are inherently
-   risk-oriented; passing a different focus dilutes the signal.
-4. **Package.** Call
-   `Skill("package", {synthesis, format: "health_report"})` to render
-   the final Markdown deliverable.
+- **Risks** — degradation signals from CRM + AR + support + engagement.
+- **Opportunities** — expansion or stabilization levers that surfaced.
+- **Open questions** — what the CSM should clarify before the next touchpoint.
+- **Talking points** — ordered most-to-least important for the next conversation.
 
-Implicit before/after:
+Cite every finding. Never invent facts. Use `Skill("package", {format: "health_report", ...})` for the final render.
 
-- Before step 1: `recall` (managed memory) or `hindsight_recall` (when
-  Hindsight is enabled) surfaces prior learnings scoped to
-  `(tenant, user, skill, customer)`.
-- After step 4: `reflect` or `hindsight_reflect` extracts up to 3 new
-  learnings from the run and stores them under the same scope.
+## Method
+
+### 1. Pull prior learnings
+
+```
+recall({skill_id: "account-health-review", subject_entity_id: customer})
+```
+
+Health-review learnings tend to be *patterns* (e.g. "Always check AR before talking about renewal"). Weight them into step 4's synthesis.
+
+### 2. Scratch-restate the goal
+
+Internal scratchpad (≤150 words, not part of output):
+
+- **Goal:** Specific health picture for `customer` over `period`.
+- **Constraints:** Internal audience, no customer-facing tone.
+- **Known unknowns:** What you need gather to answer.
+- **Decision criteria:** Would a CSM know what to say next?
+
+### 3. Gather in parallel
+
+Fire these concurrently:
+
+**Critical (abort if it fails):**
+- `Skill("crm_account_summary", {customer, period})` — account shape, AE, renewal date, last activity. Without this the review has no anchor.
+
+**Nice-to-have (degrade gracefully — footer note per missing source):**
+- `Skill("product_usage_summary", {customer, period})` — MAU, feature adoption, trend.
+- `Skill("ar_summary", {customer})` — invoice status, DSO, past-due.
+- `Skill("support_incidents_summary", {customer, period})` — ticket volume, NPS, severity mix.
+- `Skill("engagement_summary", {customer, period})` — meeting cadence, email responsiveness, champion activity.
+
+If a nice-to-have tool is missing or errors: continue. Footer line: `> Note: support data unavailable.` (etc.)
+
+### 4. Synthesize
+
+Focus is **always `risks`** for this skill — even when the customer looks healthy, the CSM wants to see what *could* go wrong. Produce the four sections with these rules:
+
+- **Risks:** Lead. Quantify where possible (e.g. "Open tickets up 3× vs. last period"). Every risk cites its source.
+- **Opportunities:** Short. Expansion or re-engagement levers only; don't pad.
+- **Open questions:** Things the CSM needs to clarify with the customer or AE.
+- **Talking points:** Ranked top-5 topics for the next touchpoint.
+
+Cite every finding. 400 words max across the four sections.
+
+### 5. Render
+
+```
+Skill("package", {
+  format: "health_report",
+  synthesis: {
+    risks: [...],
+    opportunities: [...],
+    open_questions: [...],
+    talking_points: [...]
+  },
+  metadata: { customer, period, agent_name }
+})
+```
+
+Return the rendered Markdown verbatim.
+
+### 6. Reflect
+
+If the run surfaced a pattern worth keeping — a new risk indicator, a correction to a prior assumption, a source that paid off — call:
+
+```
+reflect({
+  skill_id: "account-health-review",
+  subject_entity_id: customer,
+  text: "..."
+})
+```
+
+Up to 3 observations per run. Skip if nothing new.
 
 ## Degrading gracefully
 
-- `crm_account_summary` is **critical** — a health review anchored on
-  missing CRM context is worse than none. Abort with a clear user
-  message if this step errors or returns empty.
-- For every other gather sub-skill: catch the error, record
-  `<step-name> unavailable: <reason>` in the deliverable's footer, and
-  continue with the remaining context.
-- If `synthesize` fails after a partial gather, don't call `package` —
-  return the framed problem + whatever was gathered so the CSM can
-  triage instead of reading a half-hallucinated report.
+- **CRM critical:** If `crm_account_summary` errors or returns empty, stop. Tell the user the CRM connector is unavailable — don't fabricate account context.
+- **Every other gather:** Catch, record in footer, continue.
+- **Synthesis failure:** If step 4 can't produce a coherent brief from the partial gather, skip step 5 and return the scratchpad + gathered data so the CSM can triage manually.
 
 ## Scheduling
 
-Default: weekly, Monday 09:00. Tenants typically override the
-expression to match their standing-meeting rhythm (e.g., Thursday
-morning for QBR prep teams). The `from_tenant_config: default_customer`
-binding lets a tenant point the weekly review at a rotating focus
-account without re-authoring the schedule.
+Default: weekly, Monday 09:00. Tenants typically override to match their standing-meeting rhythm (e.g. Thursday morning for QBR-heavy teams). The `from_tenant_config: default_customer` binding lets the weekly review target a rotating focus account without re-authoring the schedule.
 
 ## Invocation paths
 
@@ -102,33 +133,23 @@ account without re-authoring the schedule.
 
 ## Tenant overrides
 
-Tenants can change these per the `tenant_overridable` allowlist:
+- `inputs.period.default` — flip to `last_quarter` for longer-cadence accounts.
+- `triggers.schedule.expression` — different day/time.
 
-- `inputs.period.default` — flip to `last_quarter` for teams with
-  longer-cadence relationships.
-- `triggers.schedule.expression` — flip the cron for a team that runs
-  health reviews on a different day / time.
-
-Nothing else is overridable. Attempting to pass a config that touches a
-non-allowlisted field is rejected at `setAgentSkills` time.
+Everything else is fixed.
 
 ## Relationship to sales-prep
 
-Similar shape (frame / gather / synthesize / package) with two
-deliberate differences:
+Same four-section shape, different method:
 
-1. **Focus hint is `risks`**, hard-coded in step 3. Health reviews are
-   inherently risk-oriented.
-2. **Gather reaches product + engagement telemetry**, not
-   outside-the-firewall signals (web / wiki). The review audience is
-   the internal team, not customer-facing conversation.
+- **Focus hardcoded to `risks`** (not an input).
+- **Gather set targets internal telemetry** (product usage, engagement) rather than external signals (web / wiki).
+- **Audience is internal** (CSM/AE), not customer-facing.
 
-Changes to the shared `frame` / `synthesize` / `package` sub-skills
-should pressure-test against both — they're the two deliverable-shaped
-anchors in the catalog.
+Changes to the connector contracts (`crm_account_summary`, `ar_summary`, etc.) should pressure-test against both skills — they're the two deliverable anchors in the catalog.
 
-## Migration note
+## What this skill does NOT do
 
-v2.0.0 landed the current `execution: context` shape (plan §U8): the
-model invokes each sub-skill directly via the Skill meta-tool so the
-same health-review workflow runs on the unified dispatch path.
+- Doesn't call retired helper skills (`frame`, `synthesize`, `gather`, `compound`) — framing + synthesis happen inline in steps 2 and 4.
+- Doesn't email or post the report — delivery is a downstream channel.
+- Doesn't modify CRM records.
