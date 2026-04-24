@@ -6,7 +6,7 @@ import type { APIGatewayProxyEventV2 } from "aws-lambda";
 // to reach Aurora. Each test overrides `dbLookupResult` to drive the path.
 // ---------------------------------------------------------------------------
 let dbLookupResult:
-	| { id: string; tenant_id: string }[]
+	| { id: string; tenant_id: string; created_by_user_id?: string | null }[]
 	| { throws: unknown }
 	| undefined = [];
 
@@ -35,6 +35,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
 		key_hash: "key_hash",
 		revoked_at: "revoked_at",
 		last_used_at: "last_used_at",
+		created_by_user_id: "created_by_user_id",
 	},
 }));
 
@@ -267,6 +268,90 @@ describe("admin-ops-mcp Lambda", () => {
 		const fetchCall = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
 		const headers = (fetchCall[1] as RequestInit).headers as Record<string, string>;
 		expect(headers["x-tenant-id"]).toBe("pinned-tenant-uuid");
+	});
+
+	it("tools/call forwards createdByUserId from the key row as x-principal-id when caller didn't supply one", async () => {
+		dbLookupResult = [
+			{ id: "key-uuid", tenant_id: "tenant-uuid", created_by_user_id: "owner-uuid" },
+		];
+		global.fetch = vi.fn().mockResolvedValue(
+			new Response(JSON.stringify([]), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			}),
+		) as unknown as typeof fetch;
+
+		await handler(
+			makeEvent(
+				{
+					jsonrpc: "2.0",
+					id: 10,
+					method: "tools/call",
+					params: { name: "tenants_list", arguments: {} },
+				},
+				{ authHeader: "Bearer tkm_abc" },
+			),
+		);
+
+		const headers = ((global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![1] as RequestInit).headers as Record<string, string>;
+		expect(headers["x-principal-id"]).toBe("owner-uuid");
+	});
+
+	it("tools/call prefers caller-supplied principalId over key's createdByUserId", async () => {
+		dbLookupResult = [
+			{ id: "key-uuid", tenant_id: "tenant-uuid", created_by_user_id: "owner-uuid" },
+		];
+		global.fetch = vi.fn().mockResolvedValue(
+			new Response(JSON.stringify([]), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			}),
+		) as unknown as typeof fetch;
+
+		await handler(
+			makeEvent(
+				{
+					jsonrpc: "2.0",
+					id: 11,
+					method: "tools/call",
+					params: {
+						name: "tenants_list",
+						arguments: { principalId: "caller-supplied-user" },
+					},
+				},
+				{ authHeader: "Bearer tkm_abc" },
+			),
+		);
+
+		const headers = ((global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![1] as RequestInit).headers as Record<string, string>;
+		expect(headers["x-principal-id"]).toBe("caller-supplied-user");
+	});
+
+	it("tools/call omits x-principal-id when key has no createdByUserId and caller didn't supply one", async () => {
+		dbLookupResult = [
+			{ id: "key-uuid", tenant_id: "tenant-uuid", created_by_user_id: null },
+		];
+		global.fetch = vi.fn().mockResolvedValue(
+			new Response(JSON.stringify([]), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			}),
+		) as unknown as typeof fetch;
+
+		await handler(
+			makeEvent(
+				{
+					jsonrpc: "2.0",
+					id: 12,
+					method: "tools/call",
+					params: { name: "tenants_list", arguments: {} },
+				},
+				{ authHeader: "Bearer tkm_abc" },
+			),
+		);
+
+		const headers = ((global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![1] as RequestInit).headers as Record<string, string>;
+		expect(headers["x-principal-id"]).toBeUndefined();
 	});
 
 	it("tools/call superuser (API_AUTH_SECRET) accepts caller-supplied tenantId", async () => {

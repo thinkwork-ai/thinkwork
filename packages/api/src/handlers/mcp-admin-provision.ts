@@ -23,13 +23,21 @@
  * Routes:
  *   POST /api/tenants/:tenantId/mcp-admin-provision
  *     Authorization: Bearer <API_AUTH_SECRET> (bootstrap auth path)
- *     body: { url?: string, name?: string }
+ *     body: { url?: string, name?: string, createdByUserId?: string }
  *       url — override MCP endpoint URL. Defaults to the stage's own
  *             API Gateway URL + /mcp/admin.
  *       name — human label for the tenant_mcp_admin_keys row.
- *     → 201 { tenantMcpServerId, keyId, secretArn, url, provisioned }
+ *       createdByUserId — delegate MCP calls through this user's
+ *         principal. Resolvers gated on tenant-admin look up
+ *         ctx.auth.principalId against tenant_members; without a
+ *         real user here, admin-scoped tools refuse. Defaults to the
+ *         tenant's earliest-joined active owner.
+ *     → 201 { tenantMcpServerId, keyId, secretArn, url, provisioned,
+ *             createdByUserId }
  *       provisioned: "created" | "rotated" — "rotated" when an earlier
  *       admin-ops slug already existed; the old key is revoked.
+ *       createdByUserId: the user the MCP key was minted against
+ *       (echoed so the caller can confirm the delegation).
  *
  * Bootstrap via validateApiSecret matches mcp-admin-keys + sandbox-quota.
  * A Cognito-aware auth path will land with the admin SPA's provisioning UI.
@@ -39,7 +47,7 @@ import type {
 	APIGatewayProxyEventV2,
 	APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { and, eq, isNull, ne } from "drizzle-orm";
+import { and, asc, eq, isNull, ne } from "drizzle-orm";
 import {
 	SecretsManagerClient,
 	CreateSecretCommand,
@@ -50,6 +58,7 @@ import { getDb } from "@thinkwork/database-pg";
 import {
 	tenantMcpAdminKeys,
 	tenantMcpServers,
+	tenantMembers,
 	tenants,
 } from "@thinkwork/database-pg/schema";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
@@ -166,7 +175,7 @@ export async function handler(
 
 	const tenantIdOrSlug = match[1]!;
 
-	let body: { url?: string; name?: string };
+	let body: { url?: string; name?: string; createdByUserId?: string };
 	try {
 		body = JSON.parse(event.body || "{}");
 	} catch {
@@ -179,10 +188,38 @@ export async function handler(
 	}
 	const keyName = (body.name?.trim() || "default").slice(0, 100);
 
+	if (body.createdByUserId && !UUID_RE.test(body.createdByUserId)) {
+		return error("createdByUserId must be a valid UUID", 400);
+	}
+
 	try {
 		const db = getDb();
 		const tenantId = await resolveTenantUuid(db, tenantIdOrSlug);
 		if (!tenantId) return notFound("Tenant not found");
+
+		// Resolve the user the key will be minted against. Priority:
+		//   1. body.createdByUserId — explicit caller override (CLI flag or UI).
+		//   2. Earliest-joined active owner of the tenant — the natural admin
+		//      to delegate MCP calls through; guarantees a valid principalId
+		//      on every tool invocation.
+		//   3. null — no tenant has an owner (shouldn't happen post-signup);
+		//      resolvers gated on admin role will refuse, which is the
+		//      fail-safe outcome.
+		let createdByUserId: string | null = body.createdByUserId ?? null;
+		if (!createdByUserId) {
+			const [owner] = await db
+				.select({ principalId: tenantMembers.principal_id })
+				.from(tenantMembers)
+				.where(and(
+					eq(tenantMembers.tenant_id, tenantId),
+					eq(tenantMembers.role, "owner"),
+					eq(tenantMembers.principal_type, "user"),
+					eq(tenantMembers.status, "active"),
+				))
+				.orderBy(asc(tenantMembers.created_at))
+				.limit(1);
+			createdByUserId = owner?.principalId ?? null;
+		}
 
 		// 1. Generate + insert new tenant-scoped admin key.
 		const { raw, hash } = generateToken();
@@ -192,6 +229,7 @@ export async function handler(
 				tenant_id: tenantId,
 				key_hash: hash,
 				name: keyName,
+				created_by_user_id: createdByUserId,
 			})
 			.returning({ id: tenantMcpAdminKeys.id });
 
@@ -279,6 +317,7 @@ export async function handler(
 				secretArn,
 				url,
 				provisioned,
+				createdByUserId,
 			},
 			201,
 		);
