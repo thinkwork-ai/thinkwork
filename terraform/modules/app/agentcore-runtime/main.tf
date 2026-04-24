@@ -167,6 +167,28 @@ resource "aws_iam_role_policy" "agentcore" {
         Resource = "*"
       },
       {
+        # Code Sandbox (execute_code tool). The runtime starts a
+        # Code Interpreter session at the top of every sandbox-
+        # registered turn and executes the preamble + user code
+        # against it. Without this, the runtime role can register
+        # the tool but every invocation fails with
+        # AccessDeniedException on StartCodeInterpreterSession.
+        # Resource wildcards under code-interpreter-custom/* so any
+        # tenant's interpreter (provisioned under this account) is
+        # reachable by the Strands runtime.
+        Sid    = "AgentCoreCodeInterpreter"
+        Effect = "Allow"
+        Action = [
+          "bedrock-agentcore:StartCodeInterpreterSession",
+          "bedrock-agentcore:StopCodeInterpreterSession",
+          "bedrock-agentcore:InvokeCodeInterpreter",
+          "bedrock-agentcore:GetCodeInterpreterSession",
+          "bedrock-agentcore:ListCodeInterpreterSessions",
+          "bedrock-agentcore:GetCodeInterpreter",
+        ]
+        Resource = "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:code-interpreter-custom/*"
+      },
+      {
         Sid    = "CloudWatchLogs"
         Effect = "Allow"
         Action = [
