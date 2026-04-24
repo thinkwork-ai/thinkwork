@@ -442,8 +442,8 @@ export const services = {
     lede:
       "Strategy, launch, and ongoing operations for teams adopting AI — productized services, not open-ended consulting.",
     primaryCta: {
-      label: "Talk to us",
-      mailtoSubject: "ThinkWork Services — general inquiry",
+      label: "Scope a pilot",
+      mailtoSubject: "ThinkWork Services — scope a pilot",
     } satisfies ServicesMailto,
     secondaryCta: {
       label: "See service packages",
@@ -691,8 +691,8 @@ export const services = {
     body:
       "Whether you need help scoping the first pilot or operating ThinkWork as adoption grows, the starting point is an email. Tell us where you are and we'll come back with a shape.",
     primaryCta: {
-      label: "Talk to us",
-      mailtoSubject: "ThinkWork Services — general inquiry",
+      label: "Scope a pilot",
+      mailtoSubject: "ThinkWork Services — scope a pilot",
     } satisfies ServicesMailto,
   },
 };
