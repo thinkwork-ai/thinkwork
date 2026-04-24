@@ -1823,7 +1823,12 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
             os.environ["_INSTANCE_ID"] = instance_id
 
         # Per-invocation identity env (TENANT_ID / AGENT_ID / USER_ID /
-        # CURRENT_USER_ID / CURRENT_THREAD_ID + underscored MCP aliases).
+        # CURRENT_USER_ID / CURRENT_THREAD_ID + underscored MCP aliases),
+        # plus the sandbox fields when the dispatcher's pre-flight
+        # returned status=ready. Without threading sandbox_interpreter_id
+        # through here, apply_invocation_env never sets
+        # SANDBOX_INTERPRETER_ID in os.environ and the execute_code
+        # registration branch below (see ~line 545) silently skips.
         # CURRENT_USER_ID is only set when user_id is truthy — a missing
         # invoker must be distinguishable from an empty-string one so the
         # admin skill's R15 "no invoker" refusal triggers correctly. The
@@ -1834,6 +1839,8 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
             "assistant_id": assistant_id,
             "user_id": user_id,
             "thread_id": ticket_id,
+            "sandbox_interpreter_id": payload.get("sandbox_interpreter_id") or "",
+            "sandbox_environment": payload.get("sandbox_environment") or "",
         })
 
         # Selective skill sync for configured skills
