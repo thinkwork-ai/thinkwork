@@ -1,11 +1,22 @@
 id: sales-prep
-version: 1
-execution: composition
+version: 2
+execution: context
 mode: tool
 name: "Prep for Meeting"
 description: >
   Gather account context, financials, activity, and external signals for a
   sales meeting. Produces a packaged brief the rep can read in 60 seconds.
+
+# U8 migration (plan §U8, 2026-04-24): converted from execution:composition
+# → execution:context. The model drives the frame → gather → synthesize →
+# package sequence itself via the Skill() meta-tool (U5 session allowlist),
+# replacing composition_runner. Pattern:
+#   Skill("frame", ...)          — restate goal
+#   Skill("web-search", ...) etc — parallel gather, model judges failures
+#   Skill("synthesize", ...)     — four-section analysis
+#   Skill("package", ...)        — deterministic template render
+# The SKILL.md body describes the sequencing rules + graceful-degradation
+# policy the model must follow. See U4 skill dispatcher + U5 Skill tool.
 
 # Typed inputs — the dispatcher / scheduled job / admin catalog resolves
 # values into these shapes before calling startSkillRun.
@@ -48,67 +59,13 @@ triggers:
       meeting_date:
         today_plus_N: 1
 
-# Two destinations in v1. Agent_owner is a Unit 8 reconciler path.
-delivery:
-  - chat
-  - email
-
-# Per-run ceiling so a badly-configured branch can't drain the tenant budget.
-budget_cap:
-  tokens: 120000
-
-# The composition body. Ordering matters: frame before gather so the focus
-# hint reaches the parallel branches' prompts; synthesize reads both; package
-# renders the final artifact deterministically.
-steps:
-  - id: frame
-    mode: sequential
-    skill: frame
-    inputs:
-      problem: "Prep for meeting with {customer} on {meeting_date}. Focus: {focus}."
-    output: framed
-
-  - id: gather
-    mode: parallel
-    on_branch_failure: continue_with_footer
-    branches:
-      - id: crm
-        skill: crm_account_summary
-        inputs:
-          customer: "{customer}"
-        critical: true
-      - id: ar
-        skill: ar_summary
-        inputs:
-          customer: "{customer}"
-      - id: tickets
-        skill: support_incidents_summary
-        inputs:
-          customer: "{customer}"
-      - id: web
-        skill: web_research
-        inputs:
-          customer: "{customer}"
-          date: "{meeting_date}"
-      - id: wiki
-        skill: wiki_search
-        inputs:
-          customer: "{customer}"
-    output: gathered
-
-  - id: synthesize
-    mode: sequential
-    skill: synthesize
-    inputs:
-      framed: "{framed}"
-      gathered: "{gathered}"
-      focus: "{focus}"
-    output: synthesis
-
-  - id: package
-    mode: sequential
-    skill: package
-    inputs:
-      synthesis: "{synthesis}"
-      format: sales_brief
-    output: deliverable
+# Sub-skills the model invokes via Skill(). Ship as an explicit
+# allowlist so template-scoped session_allowlist (U5) can include them
+# automatically when sales-prep is assigned to a template.
+requires_skills:
+  - frame
+  - synthesize
+  - package
+  - web-search
+  # CRM / AR / support-incidents / wiki skills ship in separate PRDs;
+  # missing sub-skills degrade gracefully per SKILL.md body's policy.
