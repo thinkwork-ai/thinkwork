@@ -46,12 +46,15 @@ describe("u8-status audit script", () => {
     expect(out).toContain("## Migration guidance");
   });
 
-  it("reports at least one migrated slug (sales-prep or later)", () => {
+  it("reports the deliverable set + connectors as `done`", () => {
     const out = runAudit();
     const donePattern = /\| done \| (\d+) \|/;
     const match = out.match(donePattern);
     expect(match).not.toBeNull();
-    expect(Number(match![1])).toBeGreaterThanOrEqual(20);
+    // Post pure-skill-spec cleanup the 4 composition primitives (frame,
+    // synthesize, gather, compound) are gone. Remaining deliverables +
+    // connectors + built-ins still clear 16.
+    expect(Number(match![1])).toBeGreaterThanOrEqual(16);
   });
 
   it("has no regressed slugs (composition / declarative / unsupported)", () => {
@@ -82,13 +85,16 @@ describe("sales-prep (U8 first migration exemplar)", () => {
     expect(yml.steps).toBeUndefined();
   });
 
-  it("declares requires_skills so template session_allowlist can include sub-skills", () => {
+  it("declares requires_skills so template session_allowlist includes the real tool-call dependencies", () => {
     const yml = readYaml("sales-prep");
     expect(Array.isArray(yml.requires_skills)).toBe(true);
     const required = yml.requires_skills as string[];
-    for (const slug of ["frame", "synthesize", "package"]) {
-      expect(required).toContain(slug);
-    }
+    // Post pure-skill-spec cleanup: framing + synthesis happen inline,
+    // only `package` and connector slugs belong on requires_skills.
+    expect(required).toContain("package");
+    expect(required).not.toContain("frame");
+    expect(required).not.toContain("synthesize");
+    expect(required).not.toContain("gather");
   });
 
   it("keeps the original inputs contract (customer, meeting_date, focus)", () => {
