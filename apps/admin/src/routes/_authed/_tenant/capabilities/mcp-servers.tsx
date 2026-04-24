@@ -41,6 +41,8 @@ import {
   deleteMcpServer,
   testMcpServer,
   updateMcpServer,
+  approveMcpServer,
+  rejectMcpServer,
   type McpServer,
 } from "@/lib/mcp-api";
 
@@ -100,6 +102,26 @@ const columns: ColumnDef<McpServer>[] = [
     },
   },
   {
+    accessorKey: "status",
+    header: () => <div className="text-center">Approval</div>,
+    size: 110,
+    cell: ({ row }) => {
+      const status = row.original.status ?? "approved";
+      const styles: Record<string, string> = {
+        pending: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+        approved: "bg-green-500/15 text-green-600 dark:text-green-400",
+        rejected: "bg-muted text-muted-foreground line-through",
+      };
+      return (
+        <div className="flex justify-center">
+          <Badge variant="secondary" className={`text-xs ${styles[status] ?? ""}`}>
+            {status}
+          </Badge>
+        </div>
+      );
+    },
+  },
+  {
     accessorKey: "enabled",
     header: () => <div className="text-center">Status</div>,
     size: 100,
@@ -123,6 +145,7 @@ const columns: ColumnDef<McpServer>[] = [
 function McpServersPage() {
   const { tenant } = useTenant();
   const tenantSlug = tenant?.slug;
+  const tenantId = tenant?.id;
   useBreadcrumbs([
     { label: "Capabilities", href: "/capabilities" },
     { label: "MCP Servers" },
@@ -202,6 +225,7 @@ function McpServersPage() {
         <ServerDetailDialog
           server={detailServer}
           tenantSlug={tenantSlug || ""}
+          tenantId={tenantId || ""}
           onClose={() => setDetailServer(null)}
           onChanged={refresh}
         />
@@ -337,11 +361,13 @@ function AddServerDialog({
 function ServerDetailDialog({
   server,
   tenantSlug,
+  tenantId,
   onClose,
   onChanged,
 }: {
   server: McpServer;
   tenantSlug: string;
+  tenantId: string;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -352,6 +378,9 @@ function ServerDetailDialog({
   const [toggling, setToggling] = useState(false);
   const [enabled, setEnabled] = useState(server.enabled !== false);
   const [showTools, setShowTools] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [showRejectInput, setShowRejectInput] = useState(false);
 
   const handleTest = async () => {
     setTesting(true); setTestResult(null);
@@ -392,6 +421,42 @@ function ServerDetailDialog({
       toast.error("Delete failed");
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!tenantId) {
+      toast.error("Tenant context missing");
+      return;
+    }
+    setApproving(true);
+    try {
+      await approveMcpServer(tenantId, server.id);
+      toast.success("Server approved");
+      onClose();
+      onChanged();
+    } catch (e) {
+      toast.error(`Approve failed: ${(e as Error).message}`);
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!tenantId) {
+      toast.error("Tenant context missing");
+      return;
+    }
+    setApproving(true);
+    try {
+      await rejectMcpServer(tenantId, server.id, rejectReason.trim() || undefined);
+      toast.success("Server rejected");
+      onClose();
+      onChanged();
+    } catch (e) {
+      toast.error(`Reject failed: ${(e as Error).message}`);
+    } finally {
+      setApproving(false);
     }
   };
 
@@ -478,6 +543,52 @@ function ServerDetailDialog({
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Approval controls (plan §U11) — only render when status is set. */}
+          {server.status === "pending" && (
+            <div className="border-t pt-3 space-y-2">
+              <div className="text-sm font-medium">Admin approval</div>
+              <p className="text-xs text-muted-foreground">
+                This MCP server was installed by a plugin and requires approval before
+                any agent can invoke it. Approving pins the current URL and auth config
+                — any later change reverts the row back to pending.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="default" size="sm" onClick={handleApprove} disabled={approving}>
+                  {approving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
+                  Approve
+                </Button>
+                {!showRejectInput ? (
+                  <Button variant="outline" size="sm" onClick={() => setShowRejectInput(true)} disabled={approving}>
+                    Reject…
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-2 w-full">
+                    <Input
+                      placeholder="Reason (optional, ≤500 chars)"
+                      value={rejectReason}
+                      onChange={(e) => setRejectReason(e.target.value.slice(0, 500))}
+                      className="flex-1"
+                    />
+                    <Button variant="destructive" size="sm" onClick={handleReject} disabled={approving}>
+                      Confirm reject
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => { setShowRejectInput(false); setRejectReason(""); }}>
+                      Cancel
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {server.status === "rejected" && (
+            <div className="border-t pt-3">
+              <Button variant="outline" size="sm" onClick={handleApprove} disabled={approving}>
+                {approving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
+                Re-approve
+              </Button>
             </div>
           )}
 
