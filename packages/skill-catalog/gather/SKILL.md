@@ -83,9 +83,7 @@ The model makes five calls; the runtime runs them concurrently.
 
 ## Migration note
 
-This catalog entry was `execution: declarative` through v0.1.0 and
-existed to document `composition_runner`'s special-cased
-`mode: parallel` step. The post-U8 runtime doesn't have a composition
-runner (see U6); v1.0.0 (this version) converts the entry to
-`execution: context` and repurposes it as authoring guidance for the
-same pattern expressed via model-driven `Skill()` calls.
+v1.0.0 landed the current `execution: context` shape — the entry ships
+as authoring guidance for the parallel fan-out pattern expressed via
+model-driven `Skill()` calls. The pre-V1 declarative runtime hook was
+retired with plan §U6.

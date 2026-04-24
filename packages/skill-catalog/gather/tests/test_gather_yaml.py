@@ -1,8 +1,8 @@
-"""Structural tests for the `gather` primitive's skill.yaml.
+"""Structural tests for the `gather` catalog entry.
 
-Gather is a declarative stub — the real parallel semantics live in the
-composition_runner. These tests lock down the stub's shape so admins
-and composition authors see a coherent catalog entry.
+Post-U8 gather is authoring guidance (execution: context), not a
+runtime primitive. These tests lock down the stub's shape so admins
+and skill authors see a coherent catalog entry.
 """
 
 from __future__ import annotations
@@ -26,25 +26,18 @@ def test_yaml_parses_as_mapping() -> None:
     assert isinstance(data, dict)
 
 
-def test_execution_is_declarative() -> None:
-    """`declarative` signals: do not register as an agent tool. The
-    composition runner special-cases parallel steps — gather has no
-    script or prompt of its own."""
+def test_execution_is_context() -> None:
+    """Post-U8 gather ships as a context skill with authoring
+    guidance. The legacy runtime scaffolding is gone with U6."""
     data = _load()
-    assert data["execution"] == "declarative"
+    assert data["execution"] == "context"
 
 
-def test_no_scripts_or_prompts() -> None:
+def test_no_scripts() -> None:
     data = _load()
-    assert "scripts" not in data, "gather must not declare scripts — it's declarative"
-    # If a prompts/ directory existed that would be a misleading signal
-    # to tool loaders; enforce its absence.
-    assert not (SKILL_DIR / "prompts").exists()
-
-
-def test_composition_only_flag() -> None:
-    data = _load()
-    assert data.get("invocable_from") == "composition"
+    assert "scripts" not in data, (
+        "gather must not declare scripts — it is documentation"
+    )
 
 
 def test_standalone_invocation_error_is_actionable() -> None:
@@ -54,20 +47,22 @@ def test_standalone_invocation_error_is_actionable() -> None:
     msg = data.get("standalone_invocation_error")
     assert isinstance(msg, str) and msg.strip()
     # Must point the reader at the right fix.
-    assert "composition" in msg.lower()
-    assert "parallel" in msg.lower()
+    assert "skill" in msg.lower()
+    assert "parallel" in msg.lower() or "fan-out" in msg.lower() or "fan out" in msg.lower()
 
 
 def test_skill_md_exists_and_documents_contract() -> None:
     assert SKILL_MD.is_file()
-    text = SKILL_MD.read_text(encoding="utf-8")
-    for marker in ("mode: parallel", "branches:", "critical", "timeout_seconds"):
+    text = SKILL_MD.read_text(encoding="utf-8").lower()
+    # The SKILL.md body is authoring guidance — must still call out the
+    # core shape (parallel, critical-branch semantics, bounded timeout).
+    for marker in ("parallel", "critical", "timeout"):
         assert marker in text, f"SKILL.md missing marker {marker!r}"
 
 
 def test_skill_md_warns_against_blocking_waits() -> None:
     """The reconciler contract forbids sub-skills from blocking on external
-    events. SKILL.md must remind authors of this — the CI lint catches
-    the Python violation, but the doc should set the expectation."""
+    events. SKILL.md must remind authors of this — the doc sets the
+    expectation even though the legacy runtime enforcement is gone."""
     text = SKILL_MD.read_text(encoding="utf-8").lower()
     assert "reconciler" in text or "do not block" in text or "does not block" in text

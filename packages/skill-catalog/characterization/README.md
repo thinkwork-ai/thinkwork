@@ -8,7 +8,7 @@ pre-migration equivalence gate (plan §U7).
 | Skill type                                                               | Coverage                                          | File                                   |
 | ------------------------------------------------------------------------ | ------------------------------------------------- | -------------------------------------- |
 | Deterministic script skills (`run(**args) -> dict` with pure-ish inputs) | Byte-equal fixture comparison                     | this directory                         |
-| LLM-mediated / composition / context skills                              | 60-day shadow-traffic A/B with divergence metrics | `container-sources/shadow_dispatch.py` |
+| LLM-mediated / context skills                                            | 60-day shadow-traffic A/B with divergence metrics | `container-sources/shadow_dispatch.py` |
 
 Deterministic coverage is cheap — one test process, no sandbox
 roundtrip, no LLM call. It catches the "skill authors accidentally

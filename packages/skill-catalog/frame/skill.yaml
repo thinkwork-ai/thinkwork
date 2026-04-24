@@ -1,18 +1,18 @@
 slug: frame
 display_name: Frame
-description: Restate a problem in a structured way before gathering data. Returns goal, constraints, known unknowns, and decision criteria so downstream steps have a clean target. Composition-only primitive — not intended for direct chat use.
+description: Restate a problem in a structured way before gathering data. Returns goal, constraints, known unknowns, and decision criteria so downstream steps have a clean target. Sub-skill — invoked via the Skill meta-tool by deliverable-shape skills, not intended for direct chat use.
 category: workflow
 version: "0.1.0"
 author: thinkwork
 icon: target
-tags: [composition, primitive, framing]
+tags: [primitive, framing, sub-skill]
 execution: context
 mode: tool
 
-# Composition-only: this skill is designed to be invoked by a composition step,
-# not picked up ad hoc from chat. Admins should not enable `frame` as a direct
-# agent tool; the composition_runner calls it with resolved inputs.
-invocable_from: composition
+# Sub-skill: this skill is designed to be invoked via the Skill meta-tool
+# by a parent deliverable-shape skill, not picked up ad hoc from chat.
+# Admins should not enable `frame` as a direct agent tool.
+invocable_from: sub_skill
 
 inputs:
   problem:
@@ -22,5 +22,5 @@ inputs:
     type: string
     required: false
 
-# Named string the composition runner stores as a step output.
+# Named string downstream sub-skills look up when referencing frame's output.
 output: framed

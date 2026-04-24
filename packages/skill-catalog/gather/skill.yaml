@@ -11,13 +11,11 @@ category: workflow
 version: "1.0.0"
 author: thinkwork
 icon: layers
-tags: [composition, primitive, parallel, fan-out, guidance]
+tags: [primitive, parallel, fan-out, guidance]
 
-# U8 migration (plan §U8, 2026-04-24): converted from
-# execution:declarative → execution:context. The legacy composition
-# runner's special-cased `mode: parallel` step is retired with U6; the
-# SKILL.md body now documents how skill authors describe parallel
-# fan-out for model-driven execution.
+# Authoring guidance shipped as a context skill — the SKILL.md body
+# documents how skill authors describe parallel fan-out patterns for
+# model-driven execution. No runtime primitive of its own.
 execution: context
 mode: tool
 

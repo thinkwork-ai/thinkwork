@@ -45,9 +45,7 @@ import { parse as parseYaml } from "yaml";
 
 export type YamlExecution =
   | "script"
-  | "composition"
   | "context"
-  | "declarative"
   | "mcp"
   | "unknown";
 
@@ -117,9 +115,7 @@ export interface SkillRow extends SkillMetadata, SkillSignals, SkillVerdict {}
 
 const EXECUTION_TYPES: readonly YamlExecution[] = [
   "script",
-  "composition",
   "context",
-  "declarative",
   "mcp",
 ];
 
