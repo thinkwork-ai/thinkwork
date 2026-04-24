@@ -5,8 +5,8 @@ import type {
 import { eq, and, desc, gte, sql, count } from "drizzle-orm";
 import { schema } from "@thinkwork/database-pg";
 import { db } from "../lib/db.js";
-import { authenticate } from "../lib/cognito-auth.js";
-import { handleCors, json, error, notFound, unauthorized } from "../lib/response.js";
+import { requireTenantMembership } from "../lib/tenant-membership.js";
+import { handleCors, json, error, notFound } from "../lib/response.js";
 import {
 	BedrockClient,
 	CreateGuardrailCommand,
@@ -52,14 +52,18 @@ export async function handler(
 	event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
 	if (event.requestContext.http.method === "OPTIONS") return { statusCode: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "*", "Access-Control-Allow-Headers": "*" }, body: "" };
-	const auth = await authenticate(event.headers);
-	if (!auth) return unauthorized();
 
-	const tenantId = event.headers["x-tenant-id"];
-	if (!tenantId) return error("Missing x-tenant-id header");
+	const tenantHeader = event.headers["x-tenant-id"];
+	if (!tenantHeader) return error("Missing x-tenant-id header");
 
 	const method = event.requestContext.http.method;
 	const path = event.rawPath;
+
+	const verdict = await requireTenantMembership(event, tenantHeader, {
+		requiredRoles: method === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+	});
+	if (!verdict.ok) return error(verdict.reason, verdict.status);
+	const tenantId = verdict.tenantId;
 
 	try {
 		// GET /api/guardrails

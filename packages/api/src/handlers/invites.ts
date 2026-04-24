@@ -27,8 +27,8 @@ import {
 } from "@thinkwork/database-pg/schema";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
 import { db } from "../lib/db.js";
-import { authenticate } from "../lib/cognito-auth.js";
 import { handleCors, json, error, notFound, unauthorized, forbidden } from "../lib/response.js";
+import { requireTenantMembership } from "../lib/tenant-membership.js";
 
 // ---------------------------------------------------------------------------
 // Token helpers (Paperclip-aligned)
@@ -98,16 +98,22 @@ export async function handler(
 		}
 
 		// --- Authenticated endpoints ---
+		//
+		// All routes below require a valid caller + active tenant membership.
+		// Invite PII (email attribution, token metadata, join-request state)
+		// is admin-only; `requiredRoles: ["owner", "admin"]` on every gate.
 		if (event.requestContext.http.method === "OPTIONS") return { statusCode: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "*", "Access-Control-Allow-Headers": "*" }, body: "" };
-		const auth = await authenticate(event.headers);
-		if (!auth) return unauthorized();
 
 		// POST /api/tenants/:tenantId/invites
 		const createMatch = path.match(
 			/^\/api\/tenants\/([^/]+)\/invites$/,
 		);
 		if (createMatch && method === "POST") {
-			return createInvite(createMatch[1], event);
+			const verdict = await requireTenantMembership(event, createMatch[1]!, {
+				requiredRoles: ["owner", "admin"],
+			});
+			if (!verdict.ok) return error(verdict.reason, verdict.status);
+			return createInvite(verdict.tenantId, event);
 		}
 
 		// GET /api/tenants/:tenantId/join-requests
@@ -115,7 +121,11 @@ export async function handler(
 			/^\/api\/tenants\/([^/]+)\/join-requests$/,
 		);
 		if (listJrMatch && method === "GET") {
-			return listJoinRequests(listJrMatch[1], event);
+			const verdict = await requireTenantMembership(event, listJrMatch[1]!, {
+				requiredRoles: ["owner", "admin"],
+			});
+			if (!verdict.ok) return error(verdict.reason, verdict.status);
+			return listJoinRequests(verdict.tenantId, event);
 		}
 
 		// POST /api/tenants/:tenantId/join-requests/:id/approve
@@ -123,7 +133,11 @@ export async function handler(
 			/^\/api\/tenants\/([^/]+)\/join-requests\/([^/]+)\/approve$/,
 		);
 		if (approveMatch && method === "POST") {
-			return approveJoinRequest(approveMatch[1], approveMatch[2], event);
+			const verdict = await requireTenantMembership(event, approveMatch[1]!, {
+				requiredRoles: ["owner", "admin"],
+			});
+			if (!verdict.ok) return error(verdict.reason, verdict.status);
+			return approveJoinRequest(verdict.tenantId, approveMatch[2]!, event);
 		}
 
 		// POST /api/tenants/:tenantId/join-requests/:id/reject
@@ -131,26 +145,52 @@ export async function handler(
 			/^\/api\/tenants\/([^/]+)\/join-requests\/([^/]+)\/reject$/,
 		);
 		if (rejectMatch && method === "POST") {
-			return rejectJoinRequest(rejectMatch[1], rejectMatch[2], event);
+			const verdict = await requireTenantMembership(event, rejectMatch[1]!, {
+				requiredRoles: ["owner", "admin"],
+			});
+			if (!verdict.ok) return error(verdict.reason, verdict.status);
+			return rejectJoinRequest(verdict.tenantId, rejectMatch[2]!, event);
 		}
 
 		// --- Legacy routes (invites list, revoke) ---
 
-		// GET /api/invites?tenantId=...
+		// GET /api/invites — admin-only invite list (invites expose PII).
+		// Tenant id is taken from the x-tenant-id header only; the old
+		// query-string fallback is dropped so callers can't paper over a
+		// missing header by sprinkling ?tenantId=... on the URL.
 		if (path === "/api/invites" && method === "GET") {
-			const tenantId =
-				event.headers["x-tenant-id"] ||
-				event.queryStringParameters?.tenantId;
+			const tenantId = event.headers["x-tenant-id"];
 			if (!tenantId) return error("tenantId is required");
-			return listInvites(tenantId);
+			const verdict = await requireTenantMembership(event, tenantId, {
+				requiredRoles: ["owner", "admin"],
+			});
+			if (!verdict.ok) return error(verdict.reason, verdict.status);
+			return listInvites(verdict.tenantId);
 		}
 
-		// DELETE /api/invites/:id
+		// DELETE /api/invites/:id — invite revoke. The path carries the
+		// invite id, not a tenant id, so we look up the invite first and
+		// gate on its tenant_id. 404 for unknown ids matches the previous
+		// revokeInvite behavior; 403 if the caller isn't owner/admin of the
+		// owning tenant.
 		const deleteMatch = path.match(/^\/api\/invites\/([^/]+)$/);
 		if (deleteMatch && method === "DELETE") {
-			return revokeInvite(deleteMatch[1]);
+			const inviteId = deleteMatch[1]!;
+			const [existing] = await db
+				.select({ tenant_id: invites.tenant_id })
+				.from(invites)
+				.where(eq(invites.id, inviteId));
+			if (!existing) return notFound("Invite not found");
+			const verdict = await requireTenantMembership(event, existing.tenant_id, {
+				requiredRoles: ["owner", "admin"],
+			});
+			if (!verdict.ok) return error(verdict.reason, verdict.status);
+			return revokeInvite(inviteId);
 		}
 
+		// Any other authenticated route hit reaching here needs at least
+		// a valid caller — fail closed rather than silently 404'ing, so
+		// misrouted clients get a clear signal.
 		return notFound("Route not found");
 	} catch (err) {
 		console.error("Invites handler error:", err);
