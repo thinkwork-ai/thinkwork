@@ -22,6 +22,10 @@
  *      letting RUNNING latch forever.
  */
 
+// Keep in sync with the `ThreadLifecycleStatus` enum in
+// packages/database-pg/graphql/types/threads.graphql. packages/api has no
+// GraphQL codegen, so this union is hand-maintained — adding or renaming
+// a value here must match the canonical GraphQL enum and vice versa.
 export type ThreadLifecycleStatus =
 	| "RUNNING"
 	| "COMPLETED"
@@ -67,7 +71,12 @@ export function deriveLifecycleStatus({
 			return "IDLE";
 		default:
 			// Unknown status — route to FAILED so operators notice and the
-			// mapping gets updated.
+			// mapping gets updated. Log so silent drift surfaces in
+			// CloudWatch; the mapping table needs updating when
+			// thread_turns.status adds a new value.
+			console.warn(
+				`[lifecycle-status] Unknown thread_turns.status value "${status}" — routing to FAILED`,
+			);
 			return "FAILED";
 	}
 }

@@ -3381,7 +3381,7 @@ export type Thread = {
   lastReadAt?: Maybe<Scalars['AWSDateTime']['output']>;
   lastResponsePreview?: Maybe<Scalars['String']['output']>;
   lastTurnCompletedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  lifecycleStatus: ThreadLifecycleStatus;
+  lifecycleStatus?: Maybe<ThreadLifecycleStatus>;
   messages: MessageConnection;
   metadata?: Maybe<Scalars['AWSJSON']['output']>;
   number: Scalars['Int']['output'];

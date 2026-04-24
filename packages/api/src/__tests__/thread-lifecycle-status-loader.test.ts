@@ -143,6 +143,21 @@ describe("threadLifecycleStatus DataLoader", () => {
 		expect(await threadLifecycleStatus.load("t-empty")).toBe("IDLE");
 	});
 
+	it("filters system_event rows out of the latest-turn probe (escalate/delegate don't flip to COMPLETED)", async () => {
+		// U2's escalateThread/delegateThread write a thread_turns row with
+		// kind='system_event' + status='succeeded'. Without the kind filter
+		// in the DISTINCT ON probe, a just-escalated thread would report
+		// COMPLETED immediately. This test asserts the filter is applied —
+		// if the loader queries with the kind filter, the dbExecuteMock
+		// only sees agent_turn rows and this thread has none, so the
+		// lifecycle falls through to IDLE (not COMPLETED).
+		dbSelectMock.mockReturnValue(selectChain([]));
+		dbExecuteMock.mockResolvedValue({ rows: [] }); // loader-with-kind-filter returns no rows
+
+		const { threadLifecycleStatus } = createThreadLoaders();
+		expect(await threadLifecycleStatus.load("t-just-escalated")).toBe("IDLE");
+	});
+
 	it("coerces ISO-string created_at (JSON-decoded from db.execute) back to a Date", async () => {
 		// Some raw SQL drivers return created_at as a string. Loader must
 		// rehydrate it so deriveLifecycleStatus can compute age.

@@ -136,6 +136,22 @@ describe("deriveLifecycleStatus", () => {
 		).toBe("IDLE");
 	});
 
+	// ── Unknown status safety net ─────────────────────────────────────
+
+	it("unknown thread_turns.status value → FAILED (surfaces mapping gaps to operators)", () => {
+		// If a future migration adds a new status without updating this
+		// mapping, the default branch routes to FAILED so the stuck row
+		// lands in operator triage rather than silently resolving RUNNING
+		// or the wrong state.
+		expect(
+			deriveLifecycleStatus({
+				hasActiveTurn: false,
+				latestTurn: { status: "some_future_status", created_at: FRESH_QUEUED_AT },
+				now: NOW,
+			}),
+		).toBe("FAILED");
+	});
+
 	// ── Contracts ─────────────────────────────────────────────────────
 
 	it("never returns AWAITING_USER — reserved for future user-input-awaiting signal", () => {
@@ -173,8 +189,10 @@ describe("deriveLifecycleStatus", () => {
 		outputs.push(
 			deriveLifecycleStatus({ hasActiveTurn: true, latestTurn: null, now: NOW }),
 		);
+		const emittable = ["RUNNING", "COMPLETED", "CANCELLED", "FAILED", "IDLE"];
 		for (const output of outputs) {
 			expect(output).not.toBe("AWAITING_USER");
+			expect(emittable).toContain(output);
 		}
 	});
 
