@@ -1,38 +1,53 @@
-import React, { useState, useMemo, useCallback } from "react";
-import { View, Pressable, ScrollView, Alert, Modal, Dimensions } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useState, useMemo } from "react";
+import { View, Pressable, ScrollView } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 import { useColorScheme } from "nativewind";
-import { Check, Circle, ChevronDown, ChevronUp } from "lucide-react-native";
+import { ChevronDown, ChevronUp } from "lucide-react-native";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { useAuth } from "@/lib/auth-context";
 import { Text } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
-import { getThreadHeaderLabel } from "@/lib/thread-display";
-import { useQuery, useMutation } from "urql";
-import {
-  ThreadQuery,
-  AgentsQuery,
-  UpdateThreadMutation,
-} from "@/lib/graphql-queries";
+import { useQuery } from "urql";
+import { ThreadQuery, AgentsQuery } from "@/lib/graphql-queries";
 
-function statusColor(status: string, isDark: boolean): string {
+// ThreadLifecycleStatus → label + dot color. Read-only; status is derived
+// server-side via `thread.lifecycleStatus` (U4, #546). Null signals a DB
+// loader error and renders nothing.
+const LIFECYCLE_LABELS: Record<string, string> = {
+  RUNNING: "Running",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+  FAILED: "Failed",
+  IDLE: "Idle",
+  AWAITING_USER: "Awaiting user",
+};
+
+function lifecycleColor(status: string | null | undefined, isDark: boolean): string {
+  if (!status) return isDark ? "#a3a3a3" : "#737373";
   switch (status) {
-    case "IN_PROGRESS": return isDark ? "#60a5fa" : "#2563eb";
-    case "TODO": return isDark ? "#a78bfa" : "#7c3aed";
-    case "BLOCKED": return isDark ? "#f87171" : "#dc2626";
-    case "DONE": return isDark ? "#4ade80" : "#16a34a";
-    case "BACKLOG": return isDark ? "#a3a3a3" : "#737373";
-    default: return isDark ? "#a3a3a3" : "#737373";
+    case "RUNNING": return isDark ? "#60a5fa" : "#2563eb";
+    case "COMPLETED": return isDark ? "#4ade80" : "#16a34a";
+    case "CANCELLED": return isDark ? "#facc15" : "#ca8a04";
+    case "FAILED": return isDark ? "#f87171" : "#dc2626";
+    default: return isDark ? "#a3a3a3" : "#737373"; // IDLE / AWAITING_USER / unknown
   }
 }
 
-const STATUS_OPTIONS = [
-  { label: "In Progress", value: "IN_PROGRESS" },
-  { label: "Todo", value: "TODO" },
-  { label: "Blocked", value: "BLOCKED" },
-  { label: "Done", value: "DONE" },
-  { label: "Backlog", value: "BACKLOG" },
-];
+// ThreadChannel → operator-facing Trigger label. Mirrors admin U6's
+// TRIGGER_LABELS in apps/admin/src/routes/_authed/_tenant/threads/$threadId.tsx.
+const TRIGGER_LABELS: Record<string, string> = {
+  chat: "Manual chat",
+  manual: "Manual chat",
+  schedule: "Schedule",
+  webhook: "Webhook",
+  api: "Automation",
+  email: "Email",
+};
+
+function triggerLabel(channel: string | null | undefined): string {
+  if (!channel) return "—";
+  return TRIGGER_LABELS[channel.toLowerCase()] ?? channel;
+}
 
 function relativeTime(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -82,16 +97,27 @@ function PropertyRow({ label, children }: { label: string; children: React.React
   );
 }
 
+function LifecycleBadge({ status, isDark }: { status: string | null | undefined; isDark: boolean }) {
+  if (!status) return <Text className="text-sm text-neutral-400">—</Text>;
+  const label = LIFECYCLE_LABELS[status] ?? "Idle";
+  const color = lifecycleColor(status, isDark);
+  return (
+    <View className="flex-row items-center gap-1.5">
+      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
+      <Text className="text-sm font-medium">{label}</Text>
+    </View>
+  );
+}
+
 export default function ThreadInfoRoute() {
   const { threadId } = useLocalSearchParams<{ threadId: string }>();
-  const router = useRouter();
   const { user } = useAuth();
   const tenantId = user?.tenantId;
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? COLORS.dark : COLORS.light;
 
-  const [{ data: threadData }, reexecuteThread] = useQuery({
+  const [{ data: threadData }] = useQuery({
     query: ThreadQuery,
     variables: { id: threadId! },
     pause: !threadId,
@@ -109,40 +135,6 @@ export default function ThreadInfoRoute() {
     return agent?.name || "Agent";
   }, [agentsData?.agents, thread?.agentId]);
 
-  // ── Status ──
-  const [optimisticStatus, setOptimisticStatus] = useState<string | null>(null);
-  const serverStatus = (thread?.status || "IN_PROGRESS").toUpperCase();
-  const currentStatus = optimisticStatus || serverStatus;
-
-  const [statusDropdownVisible, setStatusDropdownVisible] = useState(false);
-  const [statusAnchor, setStatusAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
-  const statusTriggerRef = React.useRef<View>(null);
-  const [statusSaving, setStatusSaving] = useState(false);
-
-  const [, executeUpdateThread] = useMutation(UpdateThreadMutation);
-
-  const handleStatusChange = useCallback(async (newStatus: string) => {
-    if (!threadId) return;
-    setStatusDropdownVisible(false);
-    setStatusSaving(true);
-    const { error } = await executeUpdateThread({ id: threadId, input: { status: newStatus as any } });
-    setStatusSaving(false);
-    if (error) {
-      Alert.alert("Error", "Failed to update status.");
-      return;
-    }
-    setOptimisticStatus(newStatus);
-    if (newStatus === "DONE") router.back();
-    else reexecuteThread({ requestPolicy: "network-only" });
-  }, [threadId, executeUpdateThread, router, reexecuteThread]);
-
-  const openStatusDropdown = useCallback(() => {
-    statusTriggerRef.current?.measureInWindow((x, y, width, height) => {
-      setStatusAnchor({ x, y, width, height });
-      setStatusDropdownVisible(true);
-    });
-  }, []);
-
   const [propertiesExpanded, setPropertiesExpanded] = useState(true);
 
   if (!threadId) return <View className="flex-1 bg-white dark:bg-black" />;
@@ -156,16 +148,11 @@ export default function ThreadInfoRoute() {
         {propertiesExpanded && (
           <>
             <PropertyRow label="Status">
-              <Pressable
-                ref={statusTriggerRef}
-                onPress={statusSaving ? undefined : openStatusDropdown}
-                disabled={statusSaving}
-                className="flex-row items-center gap-1.5 active:opacity-70 rounded-md border border-neutral-300 dark:border-neutral-700 px-2.5 py-1"
-              >
-                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusColor(currentStatus, isDark) }} />
-                <Text className="text-sm font-medium">{STATUS_OPTIONS.find((o) => o.value === currentStatus)?.label || currentStatus}</Text>
-                <ChevronDown size={14} color={colors.mutedForeground} />
-              </Pressable>
+              <LifecycleBadge status={thread?.lifecycleStatus} isDark={isDark} />
+            </PropertyRow>
+
+            <PropertyRow label="Trigger">
+              <Text className="text-sm font-medium">{triggerLabel(thread?.channel)}</Text>
             </PropertyRow>
 
             <PropertyRow label="Agent">
@@ -187,59 +174,6 @@ export default function ThreadInfoRoute() {
         )}
 
       </ScrollView>
-
-      {/* Status dropdown modal */}
-      {statusDropdownVisible && statusAnchor && (
-        <Modal visible transparent animationType="fade" onRequestClose={() => setStatusDropdownVisible(false)}>
-          <Pressable style={{ flex: 1 }} onPress={() => setStatusDropdownVisible(false)}>
-            <View
-              onStartShouldSetResponder={() => true}
-              style={{
-                position: "absolute",
-                top: statusAnchor.y + statusAnchor.height + 4,
-                right: Dimensions.get("window").width - (statusAnchor.x + statusAnchor.width),
-                minWidth: 180,
-                backgroundColor: isDark ? "#1c1c1e" : "#ffffff",
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)",
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: isDark ? 0.5 : 0.15,
-                shadowRadius: 12,
-                elevation: 8,
-                overflow: "hidden",
-              }}
-            >
-              {STATUS_OPTIONS.map((opt, i) => {
-                const isSelected = currentStatus === opt.value;
-                const isLast = i === STATUS_OPTIONS.length - 1;
-                return (
-                  <Pressable
-                    key={opt.value}
-                    onPress={() => handleStatusChange(opt.value)}
-                    className="flex-row items-center justify-between px-4 py-3 active:opacity-70"
-                    style={!isLast ? {
-                      borderBottomWidth: 0.5,
-                      borderBottomColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
-                    } : undefined}
-                  >
-                    <View className="flex-row items-center gap-2">
-                      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusColor(opt.value, isDark) }} />
-                      <Text className={`text-sm ${isSelected ? "font-semibold" : ""}`}
-                        style={isSelected ? { color: colors.primary } : undefined}
-                      >
-                        {opt.label}
-                      </Text>
-                    </View>
-                    {isSelected && <Check size={16} color={colors.primary} />}
-                  </Pressable>
-                );
-              })}
-            </View>
-          </Pressable>
-        </Modal>
-      )}
     </DetailLayout>
   );
 }

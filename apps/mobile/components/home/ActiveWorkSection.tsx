@@ -9,11 +9,34 @@ interface ThreadRow {
   id: string;
   identifier?: string | null;
   title: string;
-  status: string;
-  type: string;
+  lifecycleStatus?: string | null;
   channel?: string;
   agentId?: string;
   updatedAt: string;
+}
+
+// ThreadLifecycleStatus → operator-facing label. Mirrors admin's
+// ThreadLifecycleBadge.
+const LIFECYCLE_LABELS: Record<string, string> = {
+  RUNNING: "Running",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+  FAILED: "Failed",
+  IDLE: "Idle",
+  AWAITING_USER: "Awaiting user",
+};
+
+function lifecycleVariant(status: string | null | undefined): "default" | "secondary" | "destructive" | "outline" {
+  if (!status) return "outline";
+  switch (status) {
+    case "RUNNING": return "secondary";
+    case "FAILED": return "destructive";
+    case "COMPLETED":
+    case "CANCELLED":
+    case "IDLE":
+    case "AWAITING_USER":
+    default: return "outline";
+  }
 }
 
 interface ActiveWorkSectionProps {
@@ -32,15 +55,6 @@ function formatRelativeTime(dateStr: string): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
-}
-
-function statusVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
-  switch (status.toUpperCase()) {
-    case "OPEN": return "default";
-    case "IN_PROGRESS": return "secondary";
-    case "CLOSED": case "DONE": return "outline";
-    default: return "outline";
-  }
 }
 
 export function ActiveWorkSection({ threads, onThreadPress, onViewAll, agentNames }: ActiveWorkSectionProps) {
@@ -89,8 +103,12 @@ export function ActiveWorkSection({ threads, onThreadPress, onViewAll, agentName
                       {thread.identifier}
                     </Text>
                   )}
-                  <Badge variant={statusVariant(thread.status)}>
-                    <Text className="text-[10px]">{thread.status}</Text>
+                  <Badge variant={lifecycleVariant(thread.lifecycleStatus)}>
+                    <Text className="text-[10px]">
+                      {thread.lifecycleStatus
+                        ? (LIFECYCLE_LABELS[thread.lifecycleStatus] ?? "Idle")
+                        : "—"}
+                    </Text>
                   </Badge>
                 </View>
                 <Text className="text-sm" numberOfLines={1}>

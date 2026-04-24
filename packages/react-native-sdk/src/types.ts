@@ -64,6 +64,7 @@ export interface Thread {
   identifier?: string | null;
   title: string;
   status?: string;
+  lifecycleStatus?: string | null;
   channel?: string;
   assigneeId?: string | null;
   lastActivityAt?: string | null;

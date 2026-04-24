@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { View, Pressable, Modal, Dimensions, Alert, Animated } from "react-native";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { View, Pressable } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ChevronLeft, Check } from "lucide-react-native";
+import { ChevronLeft } from "lucide-react-native";
 import { useAuth } from "@/lib/auth-context";
 import {
   useAgents,
@@ -21,14 +21,26 @@ import { useQuery } from "urql";
 // chat-oriented SDK Thread type exposes.
 import { ThreadsQuery } from "@/lib/graphql-queries";
 
-function statusColor(status: string, isDark: boolean): string {
+// ThreadLifecycleStatus → operator-facing label. Mirrors admin's
+// ThreadLifecycleBadge (apps/admin/src/components/threads/ThreadLifecycleBadge.tsx).
+// Read-only; lifecycle is derived server-side via thread.lifecycleStatus (U4).
+const LIFECYCLE_LABELS: Record<string, string> = {
+  RUNNING: "Running",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+  FAILED: "Failed",
+  IDLE: "Idle",
+  AWAITING_USER: "Awaiting user",
+};
+
+function lifecycleColor(status: string | null | undefined, isDark: boolean): string {
+  if (!status) return isDark ? "#a3a3a3" : "#737373";
   switch (status) {
-    case "IN_PROGRESS": return isDark ? "#60a5fa" : "#2563eb"; // blue
-    case "TODO": return isDark ? "#a78bfa" : "#7c3aed"; // purple
-    case "BLOCKED": return isDark ? "#f87171" : "#dc2626"; // red
-    case "DONE": return isDark ? "#4ade80" : "#16a34a"; // green
-    case "BACKLOG": return isDark ? "#a3a3a3" : "#737373"; // gray
-    default: return isDark ? "#a3a3a3" : "#737373";
+    case "RUNNING": return isDark ? "#60a5fa" : "#2563eb"; // blue
+    case "COMPLETED": return isDark ? "#4ade80" : "#16a34a"; // green
+    case "CANCELLED": return isDark ? "#facc15" : "#ca8a04"; // yellow
+    case "FAILED": return isDark ? "#f87171" : "#dc2626"; // red
+    default: return isDark ? "#a3a3a3" : "#737373"; // IDLE / AWAITING_USER
   }
 }
 
@@ -118,86 +130,29 @@ export default function ChatRoute() {
     }
     if (!(chatThreads as any[]).length || !activeAgent?.id) return null;
     const active = (chatThreads as any[])
-      .filter((t: any) => t.agentId === activeAgent.id && t.type === "CHAT" && t.status !== "DONE")
+      .filter((t: any) =>
+        t.agentId === activeAgent.id
+        && t.channel === "CHAT"
+        && !t.archivedAt
+        && t.lifecycleStatus !== "COMPLETED"
+        && t.lifecycleStatus !== "CANCELLED",
+      )
       .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return active[0] ?? null;
   }, [chatThreads, activeAgent?.id, paramThreadId, paramIdentifier]);
 
   const threadIdentifier = activeThread?.identifier || paramIdentifier || "New Thread";
-  const [optimisticStatus, setOptimisticStatus] = useState<string | null>(null);
-  const serverStatus = (activeThread as any)?.status?.toUpperCase() || "IN_PROGRESS";
-  const currentStatus = optimisticStatus || serverStatus;
-
-  // Clear optimistic status once server catches up
-  useEffect(() => {
-    if (optimisticStatus && serverStatus === optimisticStatus) {
-      setOptimisticStatus(null);
-    }
-  }, [serverStatus, optimisticStatus]);
-
-  // Status dropdown
-  const [statusDropdownVisible, setStatusDropdownVisible] = useState(false);
-  const [statusAnchor, setStatusAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
-  const statusRef = useRef<View>(null);
-
-  const STATUS_OPTIONS = [
-    { label: "In Progress", value: "IN_PROGRESS" },
-    { label: "Todo", value: "TODO" },
-    { label: "Blocked", value: "BLOCKED" },
-    { label: "Done", value: "DONE" },
-    { label: "Backlog", value: "BACKLOG" },
-  ];
-
-  const [statusSaving, setStatusSaving] = useState(false);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    if (statusSaving) {
-      const anim = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 0.3, duration: 600, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-        ]),
-      );
-      anim.start();
-      return () => anim.stop();
-    } else {
-      pulseAnim.setValue(1);
-    }
-  }, [statusSaving]);
-
-  const handleStatusChange = useCallback(async (newStatus: string) => {
-    if (!activeThread?.id) return;
-    setStatusDropdownVisible(false);
-    setStatusSaving(true);
-    try {
-      await updateThread(activeThread.id, { status: newStatus as any });
-    } catch {
-      setStatusSaving(false);
-      Alert.alert("Error", "Failed to update status. Please try again.");
-      return;
-    }
-    setStatusSaving(false);
-    setOptimisticStatus(newStatus);
-    if (newStatus === "DONE") {
-      router.back();
-    } else {
-      reexecuteThreads({ requestPolicy: "network-only" });
-    }
-  }, [activeThread?.id, updateThread, router, reexecuteThreads]);
-
-  const openStatusDropdown = useCallback(() => {
-    statusRef.current?.measureInWindow((x, y, width, height) => {
-      setStatusAnchor({ x, y, width, height });
-      setStatusDropdownVisible(true);
-    });
-  }, []);
+  const lifecycleStatus = activeThread?.lifecycleStatus;
+  const lifecycleLabel = lifecycleStatus ? (LIFECYCLE_LABELS[lifecycleStatus] ?? "Idle") : null;
+  const lifecycleDotColor = lifecycleColor(lifecycleStatus, isDark);
 
   const handleNewChat = useCallback(() => {
     if (!activeAgent?.id) return;
     if (activeThread?.id) {
-      updateThread(activeThread.id, { status: "DONE" as any })
-        .catch((e: any) => console.error("[Chat] Failed to close thread:", e));
+      // Archive instead of the retired status=DONE transition (U9): lifecycle
+      // is derived server-side; "done" as a user action maps to archiving.
+      updateThread(activeThread.id, { archivedAt: new Date().toISOString() })
+        .catch((e: any) => console.error("[Chat] Failed to archive thread:", e));
     }
     setChatKey((k) => k + 1);
   }, [activeAgent?.id, activeThread?.id, updateThread]);
@@ -220,28 +175,21 @@ export default function ChatRoute() {
             <Text className="text-base" numberOfLines={1}>{(activeThread as any)?.title || threadIdentifier}</Text>
           </Pressable>
 
-          {/* Right: Status dropdown */}
-          {activeThread?.id ? (
-            <Pressable
-              ref={statusRef}
-              onPress={statusSaving ? undefined : openStatusDropdown}
-              disabled={statusSaving}
+          {/* Right: read-only lifecycle badge (U9 — status picker retired) */}
+          {activeThread?.id && lifecycleLabel ? (
+            <View
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+                borderRadius: 999,
+                borderWidth: 1,
+                borderColor: lifecycleDotColor,
+              }}
             >
-              <Animated.View
-                style={{
-                  opacity: pulseAnim,
-                  paddingHorizontal: 10,
-                  paddingVertical: 4,
-                  borderRadius: 999,
-                  borderWidth: 1,
-                  borderColor: statusColor(currentStatus, isDark),
-                }}
-              >
-                <Text className="text-xs font-medium" style={{ color: statusColor(currentStatus, isDark) }}>
-                  {STATUS_OPTIONS.find((o) => o.value === currentStatus)?.label || currentStatus}
-                </Text>
-              </Animated.View>
-            </Pressable>
+              <Text className="text-xs font-medium" style={{ color: lifecycleDotColor }}>
+                {lifecycleLabel}
+              </Text>
+            </View>
           ) : (
             <View style={{ width: 80 }} />
           )}
@@ -267,55 +215,6 @@ export default function ChatRoute() {
         hideHeader
       />
 
-      {/* Status dropdown */}
-      {statusDropdownVisible && statusAnchor && (
-        <Modal visible transparent animationType="fade" onRequestClose={() => setStatusDropdownVisible(false)}>
-          <Pressable style={{ flex: 1 }} onPress={() => setStatusDropdownVisible(false)}>
-            <View
-              onStartShouldSetResponder={() => true}
-              style={{
-                position: "absolute",
-                top: statusAnchor.y + statusAnchor.height + 4,
-                right: Dimensions.get("window").width - (statusAnchor.x + statusAnchor.width),
-                minWidth: 160,
-                backgroundColor: isDark ? "#1c1c1e" : "#ffffff",
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)",
-                shadowColor: "#000",
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: isDark ? 0.5 : 0.15,
-                shadowRadius: 12,
-                elevation: 8,
-                overflow: "hidden",
-              }}
-            >
-              {STATUS_OPTIONS.map((opt, i) => {
-                const isSelected = currentStatus === opt.value;
-                const isLast = i === STATUS_OPTIONS.length - 1;
-                return (
-                  <Pressable
-                    key={opt.value}
-                    onPress={() => handleStatusChange(opt.value)}
-                    className="flex-row items-center justify-between px-4 py-3 active:opacity-70"
-                    style={!isLast ? {
-                      borderBottomWidth: 0.5,
-                      borderBottomColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
-                    } : undefined}
-                  >
-                    <Text className={`text-sm ${isSelected ? "font-semibold" : ""}`}
-                      style={isSelected ? { color: colors.primary } : undefined}
-                    >
-                      {opt.label}
-                    </Text>
-                    {isSelected && <Check size={16} color={colors.primary} />}
-                  </Pressable>
-                );
-              })}
-            </View>
-          </Pressable>
-        </Modal>
-      )}
     </View>
   );
 }
