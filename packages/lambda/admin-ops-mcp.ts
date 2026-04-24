@@ -33,6 +33,11 @@ import {
 	AdminOpsError,
 	createClient,
 	tenants as tenantOps,
+	teams as teamOps,
+	agents as agentOps,
+	templates as templateOps,
+	users as userOps,
+	artifacts as artifactOps,
 } from "@thinkwork/admin-ops";
 
 const MCP_PROTOCOL_VERSION = "2024-11-05";
@@ -175,6 +180,489 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
 					throw new Error("At least one of name, plan, or issue_prefix is required");
 				}
 				return tenantOps.updateTenant(clientFor(args), id, input);
+			},
+		},
+
+		// -------------------------------------------------------------------
+		// Self / user reads
+		// -------------------------------------------------------------------
+		{
+			name: "me",
+			description: "Return the caller's own User record.",
+			inputSchema: { type: "object", properties: {}, additionalProperties: false },
+			async handler(args) {
+				return userOps.me(clientFor(args));
+			},
+		},
+		{
+			name: "users_get",
+			description: "Fetch a user by id.",
+			inputSchema: {
+				type: "object",
+				properties: { id: { type: "string", description: "User UUID." } },
+				required: ["id"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				return userOps.getUser(clientFor(args), (args as { id: string }).id);
+			},
+		},
+		{
+			name: "tenant_members_list",
+			description: "List all members (role + status per principal) of a tenant.",
+			inputSchema: {
+				type: "object",
+				properties: { tenantId: { type: "string", description: "Tenant UUID." } },
+				required: ["tenantId"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				return userOps.listTenantMembers(clientFor(args), (args as { tenantId: string }).tenantId);
+			},
+		},
+
+		// -------------------------------------------------------------------
+		// Agent reads
+		// -------------------------------------------------------------------
+		{
+			name: "agents_list",
+			description: "List agents in a tenant, optionally filtered by status/type/includeSystem.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					tenantId: { type: "string" },
+					status: { type: "string", description: "AgentStatus enum filter." },
+					type: { type: "string", description: "AgentType enum filter." },
+					includeSystem: { type: "boolean" },
+				},
+				required: ["tenantId"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				return agentOps.listAgents(clientFor(args), args as unknown as agentOps.ListAgentsInput);
+			},
+		},
+		{
+			name: "agents_get",
+			description: "Fetch a single agent by id.",
+			inputSchema: {
+				type: "object",
+				properties: { id: { type: "string" } },
+				required: ["id"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				return agentOps.getAgent(clientFor(args), (args as { id: string }).id);
+			},
+		},
+		{
+			name: "agents_list_all",
+			description:
+				"Unfiltered agent inventory for a tenant — subs + system optional. Use for reconcilers that need every agent.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					tenantId: { type: "string" },
+					includeSystem: { type: "boolean" },
+					includeSubAgents: { type: "boolean" },
+				},
+				required: ["tenantId"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				return agentOps.listAllTenantAgents(
+					clientFor(args),
+					args as unknown as agentOps.ListAllTenantAgentsInput,
+				);
+			},
+		},
+
+		// -------------------------------------------------------------------
+		// Agent mutations
+		// -------------------------------------------------------------------
+		{
+			name: "agents_create",
+			description:
+				"Create a new agent in a tenant, optionally linked to a template. Use templates to stamp out new agents at scale.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					tenantId: { type: "string" },
+					templateId: { type: "string" },
+					name: { type: "string" },
+					role: { type: "string" },
+					type: { type: "string" },
+					systemPrompt: { type: "string" },
+					reportsTo: { type: "string" },
+					humanPairId: { type: "string" },
+					parentAgentId: { type: "string" },
+					adapterType: { type: "string" },
+					avatarUrl: { type: "string" },
+					budgetMonthlyCents: { type: "integer" },
+					idempotencyKey: { type: "string" },
+				},
+				required: ["tenantId", "templateId", "name"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				return agentOps.createAgent(clientFor(args), args as unknown as agentOps.CreateAgentInput);
+			},
+		},
+		{
+			name: "agents_set_skills",
+			description:
+				"Replace the full agent_skills set for an agent. Empty list is rejected server-side to guard against stale-UI wipes.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					agentId: { type: "string" },
+					skills: {
+						type: "array",
+						items: { type: "object", additionalProperties: true },
+						description:
+							"Each: { skillId, config?, permissions?, rateLimitRpm?, modelOverride?, enabled? }",
+					},
+					idempotencyKey: { type: "string" },
+				},
+				required: ["agentId", "skills"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				const a = args as { agentId: string; skills: agentOps.AgentSkillInput[]; idempotencyKey?: string };
+				return agentOps.setAgentSkills(clientFor(args), a.agentId, a.skills, a.idempotencyKey);
+			},
+		},
+		{
+			name: "agents_set_capabilities",
+			description: "Replace the agent_capabilities set for an agent.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					agentId: { type: "string" },
+					capabilities: {
+						type: "array",
+						items: { type: "object", additionalProperties: true },
+						description: "Each: { capability, config?, enabled? }",
+					},
+					idempotencyKey: { type: "string" },
+				},
+				required: ["agentId", "capabilities"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				const a = args as {
+					agentId: string;
+					capabilities: agentOps.AgentCapabilityInput[];
+					idempotencyKey?: string;
+				};
+				return agentOps.setAgentCapabilities(clientFor(args), a.agentId, a.capabilities, a.idempotencyKey);
+			},
+		},
+
+		// -------------------------------------------------------------------
+		// Team reads + mutations
+		// -------------------------------------------------------------------
+		{
+			name: "teams_list",
+			description: "List all teams in a tenant.",
+			inputSchema: {
+				type: "object",
+				properties: { tenantId: { type: "string" } },
+				required: ["tenantId"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				return teamOps.listTeams(clientFor(args), (args as { tenantId: string }).tenantId);
+			},
+		},
+		{
+			name: "teams_get",
+			description: "Fetch a single team by id.",
+			inputSchema: {
+				type: "object",
+				properties: { id: { type: "string" } },
+				required: ["id"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				return teamOps.getTeam(clientFor(args), (args as { id: string }).id);
+			},
+		},
+		{
+			name: "teams_create",
+			description: "Create a team in a tenant.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					tenantId: { type: "string" },
+					name: { type: "string" },
+					description: { type: "string" },
+					type: { type: "string" },
+					budgetMonthlyCents: { type: "integer" },
+					idempotencyKey: { type: "string" },
+				},
+				required: ["tenantId", "name"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				return teamOps.createTeam(clientFor(args), args as unknown as teamOps.CreateTeamInput);
+			},
+		},
+		{
+			name: "teams_add_agent",
+			description: "Add an agent to a team.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					teamId: { type: "string" },
+					agentId: { type: "string" },
+					role: { type: "string", description: 'Default "member".' },
+					idempotencyKey: { type: "string" },
+				},
+				required: ["teamId", "agentId"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				const a = args as unknown as { teamId: string } & teamOps.AddTeamAgentInput;
+				return teamOps.addTeamAgent(clientFor(args), a.teamId, a);
+			},
+		},
+		{
+			name: "teams_add_user",
+			description: "Add a user to a team.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					teamId: { type: "string" },
+					userId: { type: "string" },
+					role: { type: "string", description: 'Default "member".' },
+					idempotencyKey: { type: "string" },
+				},
+				required: ["teamId", "userId"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				const a = args as unknown as { teamId: string } & teamOps.AddTeamUserInput;
+				return teamOps.addTeamUser(clientFor(args), a.teamId, a);
+			},
+		},
+		{
+			name: "teams_remove_agent",
+			description: "Remove an agent from a team.",
+			inputSchema: {
+				type: "object",
+				properties: { teamId: { type: "string" }, agentId: { type: "string" } },
+				required: ["teamId", "agentId"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				const a = args as { teamId: string; agentId: string };
+				return teamOps.removeTeamAgent(clientFor(args), a.teamId, a.agentId);
+			},
+		},
+		{
+			name: "teams_remove_user",
+			description: "Remove a user from a team.",
+			inputSchema: {
+				type: "object",
+				properties: { teamId: { type: "string" }, userId: { type: "string" } },
+				required: ["teamId", "userId"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				const a = args as { teamId: string; userId: string };
+				return teamOps.removeTeamUser(clientFor(args), a.teamId, a.userId);
+			},
+		},
+
+		// -------------------------------------------------------------------
+		// Agent-template reads + mutations
+		// -------------------------------------------------------------------
+		{
+			name: "templates_list",
+			description: "List agent templates for a tenant.",
+			inputSchema: {
+				type: "object",
+				properties: { tenantId: { type: "string" } },
+				required: ["tenantId"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				return templateOps.listTemplates(clientFor(args), (args as { tenantId: string }).tenantId);
+			},
+		},
+		{
+			name: "templates_get",
+			description: "Fetch a template by id.",
+			inputSchema: {
+				type: "object",
+				properties: { id: { type: "string" } },
+				required: ["id"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				return templateOps.getTemplate(clientFor(args), (args as { id: string }).id);
+			},
+		},
+		{
+			name: "templates_linked_agents",
+			description: "List all agents currently linked to a given template.",
+			inputSchema: {
+				type: "object",
+				properties: { templateId: { type: "string" } },
+				required: ["templateId"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				return templateOps.listLinkedAgentsForTemplate(
+					clientFor(args),
+					(args as { templateId: string }).templateId,
+				);
+			},
+		},
+		{
+			name: "templates_create",
+			description: "Create an agent template in a tenant.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					tenantId: { type: "string" },
+					name: { type: "string" },
+					slug: { type: "string" },
+					description: { type: "string" },
+					category: { type: "string" },
+					model: { type: "string" },
+					isPublished: { type: "boolean" },
+					idempotencyKey: { type: "string" },
+				},
+				required: ["tenantId", "name", "slug"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				return templateOps.createAgentTemplate(
+					clientFor(args),
+					args as unknown as templateOps.CreateAgentTemplateInput,
+				);
+			},
+		},
+		{
+			name: "templates_create_agent",
+			description:
+				"Stamp a new agent from a template (the core stamp-out-an-enterprise recipe).",
+			inputSchema: {
+				type: "object",
+				properties: {
+					templateId: { type: "string" },
+					tenantId: { type: "string" },
+					name: { type: "string" },
+					role: { type: "string" },
+					humanPairId: { type: "string" },
+					parentAgentId: { type: "string" },
+					budgetMonthlyCents: { type: "integer" },
+					idempotencyKey: { type: "string" },
+				},
+				required: ["templateId", "tenantId", "name"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				return templateOps.createAgentFromTemplate(
+					clientFor(args),
+					args as unknown as templateOps.CreateAgentFromTemplateInput,
+				);
+			},
+		},
+		{
+			name: "templates_sync_to_agent",
+			description: "Sync one specific agent to its template's current configuration.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					templateId: { type: "string" },
+					agentId: { type: "string" },
+					idempotencyKey: { type: "string" },
+				},
+				required: ["templateId", "agentId"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				const a = args as { templateId: string; agentId: string; idempotencyKey?: string };
+				return templateOps.syncTemplateToAgent(clientFor(args), a.templateId, a.agentId, a.idempotencyKey);
+			},
+		},
+		{
+			name: "templates_sync_to_all_agents",
+			description:
+				"OPT-IN: Sync every linked agent to the template. Tenant-wide blast radius — server-side authz enforces admin role.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					templateId: { type: "string" },
+					idempotencyKey: { type: "string" },
+				},
+				required: ["templateId"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				const a = args as { templateId: string; idempotencyKey?: string };
+				return templateOps.syncTemplateToAllAgents(clientFor(args), a.templateId, a.idempotencyKey);
+			},
+		},
+		{
+			name: "templates_accept_update",
+			description:
+				"Acknowledge and accept a pending template update on a specific agent (the companion to sync_to_all when you want per-agent control).",
+			inputSchema: {
+				type: "object",
+				properties: {
+					agentId: { type: "string" },
+					idempotencyKey: { type: "string" },
+				},
+				required: ["agentId"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				const a = args as { agentId: string; idempotencyKey?: string };
+				return templateOps.acceptTemplateUpdate(clientFor(args), a.agentId, a.idempotencyKey);
+			},
+		},
+
+		// -------------------------------------------------------------------
+		// Artifact reads
+		// -------------------------------------------------------------------
+		{
+			name: "artifacts_list",
+			description: "List artifacts in a tenant, filterable by thread/agent/type/status.",
+			inputSchema: {
+				type: "object",
+				properties: {
+					tenantId: { type: "string" },
+					threadId: { type: "string" },
+					agentId: { type: "string" },
+					type: { type: "string", description: "ArtifactType enum filter." },
+					status: { type: "string", description: "ArtifactStatus enum filter." },
+					limit: { type: "integer" },
+				},
+				required: ["tenantId"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				return artifactOps.listArtifacts(
+					clientFor(args),
+					args as unknown as artifactOps.ListArtifactsInput,
+				);
+			},
+		},
+		{
+			name: "artifacts_get",
+			description: "Fetch an artifact by id.",
+			inputSchema: {
+				type: "object",
+				properties: { id: { type: "string" } },
+				required: ["id"],
+				additionalProperties: false,
+			},
+			async handler(args) {
+				return artifactOps.getArtifact(clientFor(args), (args as { id: string }).id);
 			},
 		},
 	];
