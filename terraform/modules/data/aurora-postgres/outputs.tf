@@ -28,3 +28,8 @@ output "database_engine" {
   description = "Which engine is running (aurora-serverless or rds-postgres)"
   value       = var.database_engine
 }
+
+output "aws_s3_iam_role_arn" {
+  description = "ARN of the IAM role attached to the Aurora cluster for `aws_s3.query_export_to_s3` (only when backups_bucket_arn is set). Null otherwise. Useful for confirming the role attachment in post-deploy runbooks."
+  value       = local.enable_aws_s3 ? aws_iam_role.aurora_aws_s3[0].arn : null
+}
