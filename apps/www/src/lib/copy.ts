@@ -381,17 +381,28 @@ export const finalCta = {
 // to both surfaces.
 import { plans as sharedPlans } from "@thinkwork/pricing-config";
 
+// /cloud page — ThinkWork Cloud is the hosted-plans product surface. Managed
+// deployments inside the customer's own AWS boundary — we operate the runtime,
+// they own the account. Export name stays `pricing` for now to avoid transient
+// breakage while pricing.astro still imports from it; the file is deleted in
+// the same PR, and any rename can happen in a follow-up sweep.
 export const pricing = {
   meta: {
-    title: "ThinkWork pricing — Agent infrastructure in your AWS.",
+    title: "ThinkWork Cloud — Hosted agent plans in your AWS boundary.",
     description:
-      "Plans for teams adopting AI work inside their own AWS boundary — visible workflows, governed expansion, durable memory, and evaluations that scale with usage.",
+      "Managed ThinkWork deployments inside your own AWS account. Plans for teams adopting governed AI work — visible workflows, durable memory, and evaluations that scale with usage.",
   },
-  eyebrow: "Pricing",
-  headline: "Infrastructure you own.",
-  headlineAccent: "Plans that scale with usage.",
+  eyebrow: "ThinkWork Cloud",
+  headline: "Hosted agent infrastructure,",
+  headlineAccent: "deployed inside your AWS.",
   lede:
-    "Every plan ships the same AWS-native runtime. Deployment boundary stays inside the account your team already operates. Pick a plan by the shape of your operation — not by the capabilities you're allowed to use.",
+    "Managed plans for teams adopting governed AI work. Every plan deploys into the AWS account your team already operates — ThinkWork runs the runtime, you own the boundary.",
+  clarifier: [
+    "This page covers hosted ThinkWork Cloud plans.",
+    "Services (strategy, launch, operations, advisory) are separate — see Services.",
+    "AWS usage (Bedrock, Aurora, CloudFront) is billed separately to your account.",
+    "Self-hosted deployment remains available through the open-source docs.",
+  ],
   plans: sharedPlans,
   smallPrint: [
     "Every plan deploys into your AWS account; we never operate shared infrastructure.",
@@ -400,13 +411,20 @@ export const pricing = {
   ],
   finePrint:
     "Final pricing confirmed during checkout. Contact us for procurement, security review, or annual billing.",
+  servicesCrossLink: {
+    prompt: "Need help launching workflows, governance, or rollout?",
+    linkLabel: "See Services",
+    href: "/services",
+  },
 };
 
-// Services page. Peer of /pricing — productized delivery (strategy, launch,
+// Services page. Peer of /cloud — productized delivery (strategy, launch,
 // ops, expansion, governance, advisory), not hosted-plan shapes. Contact is
 // mailto-only; subject lines route inbound by package so the services mailbox
-// can triage without a form. Do NOT cross-link to /pricing from here — the two
-// audiences have different buying motions; see the services brainstorm doc.
+// can triage without a form. Cross-linking Services → Cloud is expected
+// (Cloud Hosting card); the older "do not cross-link" rule was written when
+// /pricing was a generic subscription page and has been superseded by the
+// 2026-04-24 Cloud/Services IA split.
 export const servicesContactEmail = "hello@thinkwork.ai";
 
 export type ServicesMailto = {

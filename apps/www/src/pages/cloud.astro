@@ -32,10 +32,34 @@ const PUBLIC_API_URL = import.meta.env.PUBLIC_API_URL ?? "";
         <p class="mx-auto mt-6 max-w-2xl text-pretty text-base leading-relaxed text-slate-400 md:text-lg">
           {pricing.lede}
         </p>
+
+        <ul class="mx-auto mt-8 max-w-2xl space-y-1.5 text-left text-[13px] leading-relaxed text-slate-500">
+          {pricing.clarifier.map((line) => (
+            <li class="flex gap-2.5">
+              <span class="mt-2 h-1 w-1 flex-none rounded-full bg-slate-500" aria-hidden="true"></span>
+              <span>{line}</span>
+            </li>
+          ))}
+        </ul>
       </div>
 
       <div class="mt-16">
         <PricingGrid />
+      </div>
+    </SectionShell>
+
+    <SectionShell tone="default">
+      <div class="mx-auto max-w-3xl text-center">
+        <p class="text-pretty text-base leading-relaxed text-slate-400">
+          {pricing.servicesCrossLink.prompt}
+          {" "}
+          <a
+            href={pricing.servicesCrossLink.href}
+            class="font-semibold text-brand underline-offset-4 hover:underline"
+          >
+            {pricing.servicesCrossLink.linkLabel} &rarr;
+          </a>
+        </p>
       </div>
     </SectionShell>
 
