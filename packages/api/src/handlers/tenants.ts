@@ -13,6 +13,8 @@ import { db } from "../lib/db.js";
 import { authenticate } from "../lib/cognito-auth.js";
 import { handleCors, json, error, notFound, unauthorized } from "../lib/response.js";
 import { resolveTenantId } from "../lib/tenants.js";
+import { requireTenantMembership } from "../lib/tenant-membership.js";
+import { resolveCallerFromAuth } from "../graphql/resolvers/core/resolve-auth-user.js";
 
 const { tenants, tenantMembers, tenantSettings, users } = schema;
 
@@ -27,22 +29,40 @@ export async function handler(
 	event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
 	if (event.requestContext.http.method === "OPTIONS") return { statusCode: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "*", "Access-Control-Allow-Headers": "*" }, body: "" };
-	const auth = await authenticate(event.headers);
-	if (!auth) return unauthorized();
 
 	const method = event.requestContext.http.method;
 	const path = event.rawPath;
 
+	// Helper: gate a sub-route by tenant membership. GETs let any active
+	// member read; mutations require owner/admin. Returns verdict.tenantId
+	// (helper-resolved, authoritative — supports slug + UUID).
+	const gate = (tenantIdOrSlug: string) =>
+		requireTenantMembership(event, tenantIdOrSlug, {
+			requiredRoles:
+				method === "GET"
+					? ["owner", "admin", "member"]
+					: ["owner", "admin"],
+		});
+
 	try {
-		// GET /api/tenants — list all tenants (CLI picker; bearer-authed)
+		// GET /api/tenants — list-all (filtered to caller memberships;
+		// apikey callers see everything for the CLI tenant picker).
+		// TODO(PR-B): there is no POST /api/tenants (create-tenant) route
+		// in this handler today. If one is added, gate it behind apikey
+		// or an explicit operator role — a plain Cognito JWT shouldn't be
+		// enough to create tenants. Tracked under plan 2026-04-24-006.
 		if (path === "/api/tenants" && method === "GET") {
-			return listTenants();
+			const auth = await authenticate(event.headers);
+			if (!auth) return unauthorized();
+			return listTenants(auth);
 		}
 
 		// GET /api/tenants/by-slug/:slug (must match before /:id)
 		const slugMatch = path.match(/^\/api\/tenants\/by-slug\/([^/]+)$/);
 		if (slugMatch && method === "GET") {
-			return getTenantBySlug(slugMatch[1]);
+			const verdict = await gate(slugMatch[1]);
+			if (!verdict.ok) return error(verdict.reason, verdict.status);
+			return getTenant(verdict.tenantId);
 		}
 
 		// POST /api/tenants/:slug/invites — invite a human teammate.
@@ -50,7 +70,9 @@ export async function handler(
 		// because this does the full Cognito AdminCreateUser + DB upsert flow.
 		const inviteMatch = path.match(/^\/api\/tenants\/([^/]+)\/invites$/);
 		if (inviteMatch && method === "POST") {
-			return inviteMember(inviteMatch[1], event);
+			const verdict = await gate(inviteMatch[1]);
+			if (!verdict.ok) return error(verdict.reason, verdict.status);
+			return inviteMember(verdict.tenantId, event);
 		}
 
 		// Routes with /api/tenants/:id/members/:memberId
@@ -58,36 +80,42 @@ export async function handler(
 			/^\/api\/tenants\/([^/]+)\/members\/([^/]+)$/,
 		);
 		if (memberDetailMatch) {
-			const [, tenantId, memberId] = memberDetailMatch;
-			if (method === "DELETE") return removeMember(tenantId, memberId);
-			if (method === "PUT") return updateMemberRole(tenantId, memberId, event);
+			const [, tenantIdOrSlug, memberId] = memberDetailMatch;
+			const verdict = await gate(tenantIdOrSlug);
+			if (!verdict.ok) return error(verdict.reason, verdict.status);
+			if (method === "DELETE") return removeMember(verdict.tenantId, memberId);
+			if (method === "PUT")
+				return updateMemberRole(verdict.tenantId, memberId, event);
 			return error("Method not allowed", 405);
 		}
 
 		// Routes with /api/tenants/:id/members
 		const membersMatch = path.match(/^\/api\/tenants\/([^/]+)\/members$/);
 		if (membersMatch) {
-			const tenantId = membersMatch[1];
-			if (method === "GET") return listMembers(tenantId);
-			if (method === "POST") return addMember(tenantId, event);
+			const verdict = await gate(membersMatch[1]);
+			if (!verdict.ok) return error(verdict.reason, verdict.status);
+			if (method === "GET") return listMembers(verdict.tenantId);
+			if (method === "POST") return addMember(verdict.tenantId, event);
 			return error("Method not allowed", 405);
 		}
 
 		// Routes with /api/tenants/:id/settings
 		const settingsMatch = path.match(/^\/api\/tenants\/([^/]+)\/settings$/);
 		if (settingsMatch) {
-			const tenantId = settingsMatch[1];
-			if (method === "GET") return getSettings(tenantId);
-			if (method === "PUT") return updateSettings(tenantId, event);
+			const verdict = await gate(settingsMatch[1]);
+			if (!verdict.ok) return error(verdict.reason, verdict.status);
+			if (method === "GET") return getSettings(verdict.tenantId);
+			if (method === "PUT") return updateSettings(verdict.tenantId, event);
 			return error("Method not allowed", 405);
 		}
 
 		// Routes with /api/tenants/:id
 		const idMatch = path.match(/^\/api\/tenants\/([^/]+)$/);
 		if (idMatch) {
-			const tenantId = idMatch[1];
-			if (method === "GET") return getTenant(tenantId);
-			if (method === "PUT") return updateTenant(tenantId, event);
+			const verdict = await gate(idMatch[1]);
+			if (!verdict.ok) return error(verdict.reason, verdict.status);
+			if (method === "GET") return getTenant(verdict.tenantId);
+			if (method === "PUT") return updateTenant(verdict.tenantId, event);
 			return error("Method not allowed", 405);
 		}
 
@@ -99,10 +127,34 @@ export async function handler(
 }
 
 // ---------------------------------------------------------------------------
-// Tenant listing — powers the CLI tenant picker
+// Tenant listing — powers the CLI tenant picker + admin SPA tenant switcher
+//
+// Apikey callers (CLI/CI with the shared service secret) see every tenant so
+// the tenant-picker keeps working for ops. Cognito callers are filtered to
+// tenants where they have an active tenant_members row — preventing a
+// signed-in user from enumerating every tenant in the deployment.
 // ---------------------------------------------------------------------------
 
-async function listTenants(): Promise<APIGatewayProxyStructuredResultV2> {
+async function listTenants(
+	auth: import("../lib/cognito-auth.js").AuthResult,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	if (auth.authType === "apikey") {
+		const rows = await db
+			.select({
+				id: tenants.id,
+				name: tenants.name,
+				slug: tenants.slug,
+				plan: tenants.plan,
+				createdAt: tenants.created_at,
+			})
+			.from(tenants)
+			.orderBy(asc(tenants.name));
+		return json(rows);
+	}
+
+	const { userId } = await resolveCallerFromAuth(auth);
+	if (!userId) return json([]);
+
 	const rows = await db
 		.select({
 			id: tenants.id,
@@ -112,6 +164,14 @@ async function listTenants(): Promise<APIGatewayProxyStructuredResultV2> {
 			createdAt: tenants.created_at,
 		})
 		.from(tenants)
+		.innerJoin(tenantMembers, eq(tenantMembers.tenant_id, tenants.id))
+		.where(
+			and(
+				eq(tenantMembers.principal_type, "user"),
+				eq(tenantMembers.principal_id, userId),
+				eq(tenantMembers.status, "active"),
+			),
+		)
 		.orderBy(asc(tenants.name));
 	return json(rows);
 }
@@ -122,7 +182,7 @@ async function listTenants(): Promise<APIGatewayProxyStructuredResultV2> {
 // ---------------------------------------------------------------------------
 
 async function inviteMember(
-	tenantSlug: string,
+	tenantId: string,
 	event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
 	if (!COGNITO_USER_POOL_ID) {
@@ -137,9 +197,6 @@ async function inviteMember(
 	if (!email || !email.includes("@")) {
 		return error("email is required and must look like an email address");
 	}
-
-	const tenantId = await resolveTenantId(tenantSlug);
-	if (!tenantId) return notFound(`Tenant "${tenantSlug}" not found`);
 
 	// 1. Cognito user — create new or fetch existing sub.
 	let cognitoSub: string;
@@ -257,17 +314,6 @@ async function getTenant(
 	id: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
 	const [tenant] = await db.select().from(tenants).where(eq(tenants.id, id));
-	if (!tenant) return notFound("Tenant not found");
-	return json(tenant);
-}
-
-async function getTenantBySlug(
-	slug: string,
-): Promise<APIGatewayProxyStructuredResultV2> {
-	const [tenant] = await db
-		.select()
-		.from(tenants)
-		.where(eq(tenants.slug, slug));
 	if (!tenant) return notFound("Tenant not found");
 	return json(tenant);
 }
