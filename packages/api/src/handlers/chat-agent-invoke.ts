@@ -13,19 +13,11 @@
 import { eq, and, ne, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
-  agents,
-  agentTemplates,
-  agentSkills,
   messages,
   threads,
-  tenants,
-  tenantSkills,
   users,
-  agentKnowledgeBases,
-  knowledgeBases,
   threadTurns,
   costEvents,
-  guardrails,
   guardrailBlocks,
 } from "@thinkwork/database-pg/schema";
 import { randomBytes } from "crypto";
@@ -37,17 +29,15 @@ import {
   notifyCostRecorded,
 } from "../lib/cost-recording.js";
 import {
-  buildSkillEnvOverrides,
-  resolveConnectionForUser,
-} from "../lib/oauth-token.js";
-import { buildMcpConfigs } from "../lib/mcp-configs.js";
-import { loadTenantBuiltinTools } from "./skills.js";
-import {
   applySandboxPayloadFields,
   checkSandboxPreflight,
   type SandboxPreflightResult,
-  type TemplateSandboxConfig,
 } from "../lib/sandbox-preflight.js";
+import {
+  AgentNotFoundError,
+  AgentTemplateNotFoundError,
+  resolveAgentRuntimeConfig,
+} from "../lib/resolve-agent-runtime-config.js";
 // PRD-22: Signal protocol removed — agents use tools for thread state transitions
 
 /**
@@ -126,61 +116,10 @@ export async function handler(event: InvokeEvent): Promise<void> {
 
   let turnId: string | undefined;
   try {
-    // 1. Look up agent + its template for runtime type, model, security posture
-    const [agent] = await db
-      .select({
-        adapter_type: agents.adapter_type,
-        name: agents.name,
-        slug: agents.slug,
-        human_pair_id: agents.human_pair_id,
-        template_id: agents.template_id,
-      })
-      .from(agents)
-      .where(eq(agents.id, agentId));
-
-    if (!agent) {
-      console.error(`[chat-agent-invoke] Agent not found: ${agentId}`);
-      return;
-    }
-
-    // Look up the agent's template (model, guardrail, blocked tools, sandbox)
-    const [agentTemplate] = await db
-      .select({
-        model: agentTemplates.model,
-        guardrail_id: agentTemplates.guardrail_id,
-        blocked_tools: agentTemplates.blocked_tools,
-        sandbox: agentTemplates.sandbox,
-      })
-      .from(agentTemplates)
-      .where(eq(agentTemplates.id, agent.template_id));
-
-    if (!agentTemplate) {
-      console.error(
-        `[chat-agent-invoke] Agent template not found: ${agent.template_id}`,
-      );
-      return;
-    }
-
-    const runtimeType = "strands"; // All agents use Strands (SDK deprecated)
-    const agentModel = agentTemplate.model || null;
-
-    // Look up tenant slug for workspace path
-    const [tenant] = await db
-      .select({ slug: tenants.slug })
-      .from(tenants)
-      .where(eq(tenants.id, tenantId));
-    const tenantSlug = tenant?.slug || "";
-    const agentSlug = agent.slug || "";
-
-    // Look up current user's id + email for skill context (PRD-40: "me"
-    // resolution + thinkwork-admin plan R13: CURRENT_USER_ID plumbing).
-    // Priority: triggering message sender → thread creator → agent's
-    // human pair. The human-pair fallback applies only to email (so the
-    // agent can still personalize "you" addressed copy); for the
-    // invoker-id plumbing we hard-stop at the thread creator. An
-    // agent-authored message or wakeup with no human thread creator
-    // leaves currentUserId empty, which R15 reads as "no invoker" and
-    // refuses admin-skill tool calls.
+    // 1. Resolve per-invoker identity (message sender → thread creator →
+    //    agent human pair for email only). This is the PER-TURN piece that
+    //    the shared `resolveAgentRuntimeConfig` helper does NOT own — it's
+    //    specific to the triggering chat event.
     let currentUserEmail = "";
     let currentUserId = "";
     if (event.messageId) {
@@ -220,262 +159,65 @@ export async function handler(event: InvokeEvent): Promise<void> {
         }
       }
     }
-    if (!currentUserEmail && agent.human_pair_id) {
-      // Fallback FOR EMAIL ONLY: agent's human pair (owner). Do NOT use
-      // this as currentUserId — the pair is not the invoker of THIS
-      // invocation, and downstream admin skills must refuse when no
-      // real invoker is present.
-      const [u] = await db
-        .select({ email: users.email })
-        .from(users)
-        .where(eq(users.id, agent.human_pair_id));
-      currentUserEmail = u?.email || "";
-    }
 
-    // Look up human pair name for personality file bootstrap
-    let humanName = "";
-    if (agent.human_pair_id) {
-      const [human] = await db
-        .select({ name: users.name })
-        .from(users)
-        .where(eq(users.id, agent.human_pair_id));
-      humanName = human?.name || "";
-    }
-
-    // Resolve Bedrock guardrail: template-level → tenant default → none
-    let guardrailPayload:
-      | { guardrailIdentifier: string; guardrailVersion: string }
-      | undefined;
-    let effectiveGuardrailId: string | null = agentTemplate.guardrail_id;
-
-    if (effectiveGuardrailId) {
-      const [gr] = await db
-        .select({
-          bedrock_guardrail_id: guardrails.bedrock_guardrail_id,
-          bedrock_version: guardrails.bedrock_version,
-        })
-        .from(guardrails)
-        .where(eq(guardrails.id, effectiveGuardrailId));
-      if (gr?.bedrock_guardrail_id && gr?.bedrock_version) {
-        guardrailPayload = {
-          guardrailIdentifier: gr.bedrock_guardrail_id,
-          guardrailVersion: gr.bedrock_version,
-        };
+    // 2. Resolve agent runtime config (agent + template + tenant + skills +
+    //    KBs + MCP + guardrail + sandbox template). Shared with the
+    //    skill-run dispatcher's `/api/agents/runtime-config` endpoint.
+    let runtimeConfig;
+    try {
+      runtimeConfig = await resolveAgentRuntimeConfig({
+        tenantId,
+        agentId,
+        currentUserId: currentUserId || undefined,
+        currentUserEmail: currentUserEmail || undefined,
+        // Email-only fallback to the agent's human pair (R15: only for
+        // personalizing "you" in email copy — never used as currentUserId).
+        allowHumanPairEmailFallback: true,
+        logPrefix: "[chat-agent-invoke]",
+        thinkworkApiUrl: THINKWORK_API_URL,
+        thinkworkApiSecret: THINKWORK_API_SECRET,
+        appsyncApiKey: APPSYNC_API_KEY,
+      });
+    } catch (err) {
+      if (err instanceof AgentNotFoundError) {
+        console.error(`[chat-agent-invoke] ${err.message}`);
+        return;
       }
-    } else {
-      // Fall back to tenant default guardrail
-      const [defaultGr] = await db
-        .select({
-          id: guardrails.id,
-          bedrock_guardrail_id: guardrails.bedrock_guardrail_id,
-          bedrock_version: guardrails.bedrock_version,
-        })
-        .from(guardrails)
-        .where(
-          and(
-            eq(guardrails.tenant_id, tenantId),
-            eq(guardrails.is_default, true),
-          ),
-        );
-      if (defaultGr?.bedrock_guardrail_id && defaultGr?.bedrock_version) {
-        effectiveGuardrailId = defaultGr.id;
-        guardrailPayload = {
-          guardrailIdentifier: defaultGr.bedrock_guardrail_id,
-          guardrailVersion: defaultGr.bedrock_version,
-        };
+      if (err instanceof AgentTemplateNotFoundError) {
+        console.error(`[chat-agent-invoke] ${err.message}`);
+        return;
       }
+      throw err;
     }
+
+    // The helper's human-pair email fallback may have filled currentUserEmail
+    // for us (when the chat event didn't carry a sender_id + thread creator).
+    // Propagate that back into the local variable so the log + sandbox
+    // preflight blocks below see the resolved value.
+    // Note: the helper does not modify currentUserId, matching R15.
+    // (Tracking the helper's "did I fallback?" bit isn't worth the API
+    // surface area — reconstructing it via users lookup is cheap if ever
+    // needed.)
+
+    const runtimeType = runtimeConfig.runtimeType;
+    const agentModel = runtimeConfig.templateModel;
+    const tenantSlug = runtimeConfig.tenantSlug;
+    const agentSlug = runtimeConfig.agentSlug;
+    const humanName = runtimeConfig.humanName ?? "";
+    const guardrailPayload = runtimeConfig.guardrailConfig;
+    const skillsConfig = runtimeConfig.skillsConfig;
+    const knowledgeBasesConfig = runtimeConfig.knowledgeBasesConfig;
+    const agent = {
+      name: runtimeConfig.agentName,
+      slug: runtimeConfig.agentSlug,
+      human_pair_id: runtimeConfig.humanPairId,
+    };
 
     if (guardrailPayload) {
       console.log(
-        `[chat-agent-invoke] Guardrail resolved: id=${effectiveGuardrailId} bedrock=${guardrailPayload.guardrailIdentifier}`,
+        `[chat-agent-invoke] Guardrail resolved: bedrock=${guardrailPayload.guardrailIdentifier}`,
       );
     }
-
-    // Resolve blocked tools from agent template
-    const blockedTools: string[] =
-      (agentTemplate.blocked_tools as string[] | null) || [];
-
-    // Look up agent's installed skills → build S3 keys for runtime
-    // Join with tenant_skills to determine source (builtin/catalog → catalog prefix, tenant → agent prefix)
-    const skillRows = await db
-      .select({
-        skill_id: agentSkills.skill_id,
-        config: agentSkills.config,
-        source: tenantSkills.source,
-      })
-      .from(agentSkills)
-      .leftJoin(
-        tenantSkills,
-        and(
-          eq(tenantSkills.tenant_id, tenantId),
-          eq(tenantSkills.skill_id, agentSkills.skill_id),
-        ),
-      )
-      .where(eq(agentSkills.agent_id, agentId));
-
-    let skillsConfig = await Promise.all(
-      skillRows.map(
-        async (s: {
-          skill_id: string;
-          config: unknown;
-          source: string | null;
-        }) => {
-          const config = (s.config as Record<string, unknown>) || {};
-          const envOverrides = await buildSkillEnvOverrides(
-            config,
-            tenantId,
-          ).catch((err) => {
-            console.warn(
-              `[chat-agent-invoke] envOverrides failed for skill ${s.skill_id}:`,
-              err,
-            );
-            return null;
-          });
-          // Builtin/catalog skills use the canonical catalog prefix; tenant-created skills use the agent prefix
-          const isTenantCustom = s.source === "tenant";
-          const s3Key = isTenantCustom
-            ? `tenants/${tenantSlug}/skills/${s.skill_id}`
-            : `skills/catalog/${s.skill_id}`;
-          const merged = envOverrides ? { ...envOverrides } : {};
-          return {
-            skillId: s.skill_id,
-            s3Key,
-            secretRef: (config.secretRef as string) || undefined,
-            envOverrides: Object.keys(merged).length > 0 ? merged : undefined,
-          };
-        },
-      ),
-    );
-
-    // Default skill: agent-email-send — always available for all agents
-    const hasEmailSendSkill = skillsConfig.some(
-      (s) => s.skillId === "agent-email-send",
-    );
-    if (!hasEmailSendSkill) {
-      skillsConfig.push({
-        skillId: "agent-email-send",
-        s3Key: "skills/catalog/agent-email-send",
-        secretRef: undefined,
-        envOverrides: {
-          AGENT_EMAIL_ADDRESS: `${agentSlug}@agents.thinkwork.ai`,
-          AGENT_ID: agentId,
-          THINKWORK_API_URL: THINKWORK_API_URL,
-          THINKWORK_API_SECRET: THINKWORK_API_SECRET,
-          INBOUND_MESSAGE_ID: "",
-          INBOUND_SUBJECT: "",
-          INBOUND_FROM: "",
-          INBOUND_BODY: "",
-        },
-      });
-    }
-
-    // Default skills: always available for all agents (Phase 4a/4b script skills).
-    // web-search is NOT in this list — it's opt-in via tenant_builtin_tools below.
-    const defaultSkills = [
-      {
-        skillId: "agent-thread-management",
-        s3Key: "skills/catalog/agent-thread-management",
-      },
-      { skillId: "artifacts", s3Key: "skills/catalog/artifacts" },
-      { skillId: "workspace-memory", s3Key: "skills/catalog/workspace-memory" },
-    ];
-    for (const ds of defaultSkills) {
-      if (!skillsConfig.some((s) => s.skillId === ds.skillId)) {
-        const env: Record<string, string> = {
-          THINKWORK_API_URL: THINKWORK_API_URL,
-          THINKWORK_API_SECRET: THINKWORK_API_SECRET,
-          GRAPHQL_API_KEY: APPSYNC_API_KEY,
-          AGENT_ID: agentId,
-        };
-        if (currentUserEmail) env.CURRENT_USER_EMAIL = currentUserEmail;
-        skillsConfig.push({
-          ...ds,
-          secretRef: undefined,
-          envOverrides: env,
-        });
-      }
-    }
-
-    // Tenant-configured built-in tools (web-search, …): only injected when a row
-    // exists with enabled=true AND a usable API key in Secrets Manager.
-    try {
-      const builtinTools = await loadTenantBuiltinTools(tenantId);
-      for (const bt of builtinTools) {
-        // If an agent_skills row already added this tool, overlay our env
-        // overrides so the tenant-configured provider + key still win.
-        const existing = skillsConfig.find((s) => s.skillId === bt.toolSlug);
-        if (existing) {
-          existing.envOverrides = {
-            ...(existing.envOverrides || {}),
-            ...bt.envOverrides,
-          };
-          console.log(
-            `[chat-agent-invoke] Overlaid env for built-in tool '${bt.toolSlug}' (provider=${bt.provider})`,
-          );
-          continue;
-        }
-        skillsConfig.push({
-          skillId: bt.toolSlug,
-          s3Key: `skills/catalog/${bt.toolSlug}`,
-          secretRef: undefined,
-          envOverrides: bt.envOverrides,
-        });
-        console.log(
-          `[chat-agent-invoke] Injected built-in tool '${bt.toolSlug}' (provider=${bt.provider})`,
-        );
-      }
-    } catch (err) {
-      console.warn(
-        `[chat-agent-invoke] Failed to load tenant built-in tools:`,
-        err,
-      );
-    }
-
-    // Apply class tool_access policy — remove blocked skills
-    if (blockedTools.length > 0) {
-      const before = skillsConfig.length;
-      skillsConfig = skillsConfig.filter(
-        (s) => !blockedTools.includes(s.skillId),
-      );
-      const removed = before - skillsConfig.length;
-      if (removed > 0) {
-        console.log(
-          `[chat-agent-invoke] Class tool_access: removed ${removed} blocked skill(s)`,
-        );
-      }
-    }
-
-    // Look up agent's assigned knowledge bases (PRD-13)
-    const kbRows = await db
-      .select({
-        aws_kb_id: knowledgeBases.aws_kb_id,
-        name: knowledgeBases.name,
-        description: knowledgeBases.description,
-        search_config: agentKnowledgeBases.search_config,
-      })
-      .from(agentKnowledgeBases)
-      .innerJoin(
-        knowledgeBases,
-        eq(agentKnowledgeBases.knowledge_base_id, knowledgeBases.id),
-      )
-      .where(
-        and(
-          eq(agentKnowledgeBases.agent_id, agentId),
-          eq(agentKnowledgeBases.enabled, true),
-        ),
-      )
-      .then((rows) => rows.filter((r) => r.aws_kb_id));
-
-    const knowledgeBasesConfig =
-      kbRows.length > 0
-        ? kbRows.map((kb) => ({
-            awsKbId: kb.aws_kb_id,
-            name: kb.name,
-            description: kb.description,
-            searchConfig: kb.search_config,
-          }))
-        : undefined;
 
     if (knowledgeBasesConfig) {
       console.log(
@@ -576,12 +318,8 @@ export async function handler(event: InvokeEvent): Promise<void> {
       `[chat-agent-invoke] Loaded ${messagesHistory.length} prior messages for thread=${threadId}`,
     );
 
-    // Build MCP configs from agent_mcp_servers + tenant_mcp_servers (auth-resolved).
-    const mcpConfigs = await buildMcpConfigs(
-      agentId,
-      agent.human_pair_id,
-      "[chat-agent-invoke]",
-    );
+    // MCP configs already resolved by runtimeConfig.
+    const mcpConfigs = runtimeConfig.mcpConfigs;
 
     // 2d. Call AgentCore Lambda directly via the SDK (no Function URL).
     console.log(
@@ -600,15 +338,14 @@ export async function handler(event: InvokeEvent): Promise<void> {
     // fallback would hand every webhook-triggered run the agent owner's
     // sandbox tokens.
     let sandboxPreflight: SandboxPreflightResult | null = null;
-    if (currentUserId && agentTemplate.sandbox) {
+    if (currentUserId && runtimeConfig.sandboxTemplate) {
       try {
         sandboxPreflight = await checkSandboxPreflight({
           stage: STAGE,
           tenantId,
           agentId,
           userId: currentUserId,
-          templateSandbox:
-            agentTemplate.sandbox as TemplateSandboxConfig | null,
+          templateSandbox: runtimeConfig.sandboxTemplate,
         });
         console.log(
           `[chat-agent-invoke] sandbox pre-flight: ${sandboxPreflight.status}`,
@@ -809,12 +546,12 @@ export async function handler(event: InvokeEvent): Promise<void> {
       );
       responseText = "This request was blocked by a content policy.";
 
-      if (effectiveGuardrailId) {
+      if (runtimeConfig.guardrailId) {
         try {
           await db.insert(guardrailBlocks).values({
             tenant_id: tenantId,
             agent_id: agentId,
-            guardrail_id: effectiveGuardrailId,
+            guardrail_id: runtimeConfig.guardrailId,
             thread_id: threadId || undefined,
             block_type: guardrailBlock.type || "INPUT",
             action: guardrailBlock.action || "BLOCKED",
