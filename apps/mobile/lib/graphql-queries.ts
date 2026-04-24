@@ -839,12 +839,6 @@ export const UpdateThreadMutation = graphql(`
   }
 `);
 
-export const AddThreadCommentMutation = graphql(`
-  mutation AddThreadComment($input: AddThreadCommentInput!) {
-    addThreadComment(input: $input) { id threadId content authorType authorId createdAt }
-  }
-`);
-
 // ---------------------------------------------------------------------------
 // Subscriptions
 // ---------------------------------------------------------------------------
