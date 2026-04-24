@@ -12,7 +12,7 @@
     query: "Create a sub-thread for writing the Q2 marketing report"
   assert:
     - type: llm-rubric
-      value: "The response should create a single sub-thread with a clear title and description for the marketing report"
+      value: "The response should create a single sub-thread with a clear title for the marketing report"
 
 # Status updates with valid values
 - vars:

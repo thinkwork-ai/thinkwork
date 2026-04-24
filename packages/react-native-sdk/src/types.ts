@@ -64,8 +64,6 @@ export interface Thread {
   identifier?: string | null;
   title: string;
   status?: string;
-  priority?: string;
-  type?: string;
   channel?: string;
   assigneeId?: string | null;
   lastActivityAt?: string | null;
@@ -104,10 +102,7 @@ export interface CreateThreadInput {
   tenantId: string;
   title: string;
   agentId?: string;
-  description?: string;
   channel?: string;
-  type?: string;
-  priority?: string;
   createdByType?: string;
   createdById?: string;
   // Optional opening user message. Lets hosts avoid the "create thread then
@@ -118,10 +113,7 @@ export interface CreateThreadInput {
 
 export interface UpdateThreadInput {
   title?: string;
-  description?: string;
   status?: string;
-  priority?: string;
-  type?: string;
   channel?: string;
   assigneeType?: string;
   assigneeId?: string;

@@ -10,13 +10,9 @@ export interface UseThreadsArgs {
   assigneeId?: string | null;
   /** `ThreadStatus` enum value (e.g. "IN_PROGRESS"). */
   status?: string | null;
-  /** `ThreadPriority` enum value (e.g. "HIGH"). */
-  priority?: string | null;
-  /** `ThreadType` enum value (e.g. "TASK"). */
-  type?: string | null;
   /** `ThreadChannel` enum value (e.g. "CHAT"). */
   channel?: string | null;
-  /** Full-text search across thread title + description. */
+  /** Full-text search across thread titles. */
   search?: string | null;
   limit?: number;
   /** Opaque cursor from a previous page (lexicographic `id` cursor). */
@@ -28,8 +24,6 @@ export function useThreads({
   agentId,
   assigneeId,
   status,
-  priority,
-  type,
   channel,
   search,
   limit,
@@ -42,8 +36,6 @@ export function useThreads({
       agentId: agentId ?? null,
       assigneeId: assigneeId ?? null,
       status: status ?? null,
-      priority: priority ?? null,
-      type: type ?? null,
       channel: channel ?? null,
       search: search ?? null,
       limit,

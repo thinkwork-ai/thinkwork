@@ -4,7 +4,6 @@ import { useQuery, useMutation } from "urql";
 import { useTenant } from "@/context/TenantContext";
 import { useDialog } from "@/context/DialogContext";
 import { cn } from "@/lib/utils";
-import { PriorityIcon } from "@/components/PriorityIcon";
 import { StatusIcon } from "./StatusIcon";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -19,7 +18,6 @@ import {
 } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogBody,
@@ -52,8 +50,6 @@ const CreateThreadMutation = graphql(`
       number
       title
       status
-      priority
-      type
       createdAt
     }
   }
@@ -64,8 +60,6 @@ const CreateThreadMutation = graphql(`
 // ---------------------------------------------------------------------------
 
 const STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked"] as const;
-const PRIORITIES = ["low", "medium", "high", "urgent", "critical"] as const;
-const THREAD_TYPES = ["task", "bug", "feature", "question"] as const;
 
 const DRAFT_KEY = "thinkwork:thread-draft";
 const DEBOUNCE_MS = 800;
@@ -80,10 +74,7 @@ function statusLabel(s: string): string {
 
 const threadSchema = z.object({
   title: z.string().min(1, "Title is required"),
-  description: z.string(),
   status: z.string(),
-  priority: z.string(),
-  type: z.string(),
   agentId: z.string(),
   dueAt: z.string(),
 });
@@ -96,10 +87,7 @@ type ThreadFormValues = z.infer<typeof threadSchema>;
 
 const INITIAL_FORM: ThreadFormValues = {
   title: "",
-  description: "",
   status: "backlog",
-  priority: "medium",
-  type: "task",
   agentId: "",
   dueAt: "",
 };
@@ -221,9 +209,6 @@ export function ThreadFormDialog({
         input: {
           tenantId,
           title: values.title.trim(),
-          description: values.description.trim() || undefined,
-          type: values.type.toUpperCase() as any,
-          priority: values.priority.toUpperCase() as any,
           agentId: values.agentId || undefined,
           assigneeType: values.agentId ? "AGENT" : undefined,
           assigneeId: values.agentId || undefined,
@@ -240,9 +225,6 @@ export function ThreadFormDialog({
         id: initial?.id!,
         input: {
           title: values.title.trim(),
-          description: values.description.trim() || undefined,
-          type: values.type.toUpperCase() as any,
-          priority: values.priority.toUpperCase() as any,
           status: values.status.toUpperCase().replace(/ /g, "_") as any,
           assigneeType: values.agentId ? "AGENT" : undefined,
           assigneeId: values.agentId || undefined,
@@ -304,25 +286,6 @@ export function ThreadFormDialog({
                 )}
               />
 
-              {/* Description */}
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Add description..."
-                        rows={4}
-                        className="text-sm resize-none"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
               {/* Inline property row */}
               <div className="flex flex-wrap items-center gap-2">
                 {/* Status */}
@@ -352,74 +315,6 @@ export function ThreadFormDialog({
                             >
                               <StatusIcon status={s} />
                               {statusLabel(s)}
-                            </button>
-                          ))}
-                        </PopoverContent>
-                      </Popover>
-                    </FormItem>
-                  )}
-                />
-
-                {/* Priority */}
-                <FormField
-                  control={form.control}
-                  name="priority"
-                  render={({ field }) => (
-                    <FormItem>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <button type="button" className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs hover:bg-accent/50 transition-colors">
-                            <PriorityIcon priority={field.value} />
-                            <span>{statusLabel(field.value)}</span>
-                            <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-40 p-1" align="start">
-                          {PRIORITIES.map((p) => (
-                            <button
-                              type="button"
-                              key={p}
-                              className={cn(
-                                "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent/50",
-                                field.value === p && "bg-accent",
-                              )}
-                              onClick={() => field.onChange(p)}
-                            >
-                              <PriorityIcon priority={p} />
-                              {statusLabel(p)}
-                            </button>
-                          ))}
-                        </PopoverContent>
-                      </Popover>
-                    </FormItem>
-                  )}
-                />
-
-                {/* Type */}
-                <FormField
-                  control={form.control}
-                  name="type"
-                  render={({ field }) => (
-                    <FormItem>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <button type="button" className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs hover:bg-accent/50 transition-colors">
-                            <span>{statusLabel(field.value)}</span>
-                            <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-40 p-1" align="start">
-                          {THREAD_TYPES.map((t) => (
-                            <button
-                              type="button"
-                              key={t}
-                              className={cn(
-                                "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent/50",
-                                field.value === t && "bg-accent",
-                              )}
-                              onClick={() => field.onChange(t)}
-                            >
-                              {statusLabel(t)}
                             </button>
                           ))}
                         </PopoverContent>
@@ -542,8 +437,6 @@ export function CreateThreadDialog() {
       initial={defaults ? {
         title: defaults.title,
         status: defaults.status,
-        priority: defaults.priority,
-        type: defaults.type,
         agentId: defaults.agentId,
       } : undefined}
     />

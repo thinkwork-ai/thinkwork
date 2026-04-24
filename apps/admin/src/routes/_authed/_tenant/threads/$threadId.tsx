@@ -9,7 +9,6 @@ import { InlineEditor } from "@/components/threads/InlineEditor";
 import { LiveRunWidget } from "@/components/threads/LiveRunWidget";
 import { StatusIcon } from "@/components/threads/StatusIcon";
 import { StatusBadge } from "@/components/StatusBadge";
-import { PriorityIcon } from "@/components/PriorityIcon";
 import { Identity } from "@/components/Identity";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Button } from "@/components/ui/button";
@@ -80,21 +79,6 @@ const STATUS_OPTIONS = [
   { value: "CANCELLED", label: "Cancelled" },
 ];
 
-const PRIORITY_OPTIONS = [
-  { value: "CRITICAL", label: "Critical" },
-  { value: "URGENT", label: "Urgent" },
-  { value: "HIGH", label: "High" },
-  { value: "MEDIUM", label: "Medium" },
-  { value: "LOW", label: "Low" },
-];
-
-const TYPE_OPTIONS = [
-  { value: "TASK", label: "Task" },
-  { value: "BUG", label: "Bug" },
-  { value: "FEATURE", label: "Feature" },
-  { value: "QUESTION", label: "Question" },
-];
-
 // ---------------------------------------------------------------------------
 // Activity types & helpers
 // ---------------------------------------------------------------------------
@@ -159,21 +143,12 @@ function formatAction(
           : `changed the status to ${humanizeValue(details.status)}`,
       );
     }
-    if (details.priority !== undefined) {
-      const from = previous.priority;
-      parts.push(
-        from
-          ? `changed the priority from ${humanizeValue(from)} to ${humanizeValue(details.priority)}`
-          : `changed the priority to ${humanizeValue(details.priority)}`,
-      );
-    }
     if (details.assigneeId !== undefined) {
       parts.push(
         details.assigneeId ? "assigned the thread" : "unassigned the thread",
       );
     }
     if (details.title !== undefined) parts.push("updated the title");
-    if (details.description !== undefined) parts.push("updated the description");
 
     if (parts.length > 0) return parts.join(", ");
   }
@@ -476,16 +451,6 @@ function ThreadDetailPage() {
           as="h2"
           className="text-xl font-bold"
         />
-
-        {/* Description */}
-        <InlineEditor
-          value={thread.description ?? ""}
-          onSave={(description) => handleFieldUpdate({ description })}
-          as="p"
-          className="text-[15px] leading-7"
-          placeholder="Add a description..."
-          multiline
-        />
         </div>
 
         {/* ── Activity (turns + messages merged timeline) ─────────── */}
@@ -576,10 +541,7 @@ function ThreadDetailPage() {
         initial={{
           id: threadId,
           title: thread.title,
-          description: thread.description ?? "",
           status: thread.status.toLowerCase().replace(/ /g, "_"),
-          priority: thread.priority.toLowerCase(),
-          type: thread.type.toLowerCase(),
           agentId: thread.agent?.id ?? "",
           dueAt: thread.dueAt ?? "",
         }}
@@ -619,8 +581,6 @@ interface ThreadPropertiesProps {
   thread: {
     readonly id: string;
     readonly status: string;
-    readonly priority: string;
-    readonly type: string;
     readonly assigneeType?: string | null;
     readonly assigneeId?: string | null;
     readonly agent?: { readonly id: string; readonly name: string; readonly avatarUrl?: string | null } | null;
@@ -643,14 +603,6 @@ function ThreadProperties({ thread, agents, onUpdate, inline }: ThreadProperties
     void onUpdate({ status: status as any });
   };
 
-  const handlePriorityChange = (priority: string) => {
-    void onUpdate({ priority: priority as any });
-  };
-
-  const handleTypeChange = (type: string) => {
-    void onUpdate({ type: type as any });
-  };
-
   return (
     <div className={cn("space-y-3", !inline && "p-4")}>
       {!inline && <h3 className="text-sm font-semibold text-muted-foreground">Properties</h3>}
@@ -662,36 +614,6 @@ function ThreadProperties({ thread, agents, onUpdate, inline }: ThreadProperties
           </SelectTrigger>
           <SelectContent>
             {STATUS_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </PropRow>
-
-      <PropRow label="Priority">
-        <Select value={thread.priority} onValueChange={handlePriorityChange}>
-          <SelectTrigger className="w-[120px] h-7 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PRIORITY_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </PropRow>
-
-      <PropRow label="Type">
-        <Select value={thread.type} onValueChange={handleTypeChange}>
-          <SelectTrigger className="w-[120px] h-7 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {TYPE_OPTIONS.map((opt) => (
               <SelectItem key={opt.value} value={opt.value}>
                 {opt.label}
               </SelectItem>

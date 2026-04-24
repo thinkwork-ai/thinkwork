@@ -4,7 +4,6 @@ import { FlashList } from "@shopify/flash-list";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/lib/auth-context";
 import { useAgents, useCreateThread } from "@thinkwork/react-native-sdk";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Text, Muted } from "@/components/ui/typography";
 import { MobileRow } from "@/components/ui/mobile-row";
@@ -19,29 +18,17 @@ import { useQuery } from "urql";
 //            Keep local ThreadsQuery until SDK widens.
 import { ThreadsQuery } from "@/lib/graphql-queries";
 
-type ThreadType = "CHAT" | "TASK" | "EMAIL" | "SYSTEM";
-type ThreadStatus = "OPEN" | "IN_PROGRESS" | "CLOSED";
-
 interface Thread {
   id: string;
   tenantId: string;
   agentId?: string | null;
   number?: number | null;
   title: string;
-  type: string;
   status: string;
-  priority?: string | null;
   createdAt: string;
   updatedAt: string;
   closedAt?: string | null;
 }
-
-const TYPE_CONFIG: Record<string, { label: string; variant: "outline" | "secondary" | "success" | "warning" | "destructive" }> = {
-  CHAT: { label: "Chat", variant: "outline" },
-  TASK: { label: "Task", variant: "secondary" },
-  EMAIL: { label: "Email", variant: "warning" },
-  SYSTEM: { label: "System", variant: "destructive" },
-};
 
 function formatRelativeTime(timestamp: number | null | undefined): string {
   if (!timestamp) return "\u2014";
@@ -56,32 +43,6 @@ function formatRelativeTime(timestamp: number | null | undefined): string {
   if (hours < 24) return `${hours}h ago`;
   if (days < 7) return `${days}d ago`;
   return new Date(timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-function TypeBadge({ type }: { type: string }) {
-  const config = TYPE_CONFIG[type] || TYPE_CONFIG.CHAT;
-  return <Badge variant={config.variant}>{config.label}</Badge>;
-}
-
-function FilterPill({ label, count, isActive, onPress }: { label: string; count: number; isActive: boolean; onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      className={`px-4 h-9 rounded-full items-center justify-center ${
-        isActive
-          ? "bg-sky-500"
-          : "bg-neutral-100 dark:bg-neutral-800"
-      }`}
-    >
-      <Text className={`text-base font-medium ${
-        isActive
-          ? "text-white"
-          : "text-neutral-700 dark:text-neutral-300"
-      }`}>
-        {label} ({count})
-      </Text>
-    </Pressable>
-  );
 }
 
 // Mobile row component
@@ -116,7 +77,6 @@ function ThreadRowItem({
           </Text>
         </View>
       }
-      line1Right={<TypeBadge type={thread.type} />}
       line2Left={
         <>
           <Muted className="text-sm" numberOfLines={1}>{assignee}</Muted>
@@ -147,7 +107,6 @@ function CreateThreadModal({
   const tenantId = user?.tenantId;
   const createThread = useCreateThread();
   const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [showAgentPicker, setShowAgentPicker] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -178,12 +137,9 @@ function CreateThreadModal({
       await createThread({
         tenantId,
         title: title.trim(),
-        description: description.trim() || undefined,
-        type: "TASK",
         agentId: effectiveAgentId,
       });
       setTitle("");
-      setDescription("");
       setSelectedAgentId(null);
       onClose();
     } catch (err) {
@@ -195,7 +151,6 @@ function CreateThreadModal({
 
   const handleClose = () => {
     setTitle("");
-    setDescription("");
     setSelectedAgentId(null);
     setShowAgentPicker(false);
     onClose();
@@ -235,22 +190,6 @@ function CreateThreadModal({
               value={title}
               onChangeText={setTitle}
               autoCapitalize="words"
-            />
-          </View>
-
-          {/* Description */}
-          <View className="mb-4">
-            <Text className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
-              Description (optional)
-            </Text>
-            <TextInput
-              className="h-24 border border-neutral-300 dark:border-neutral-700 rounded-lg px-3 py-2 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100"
-              placeholder="Add more details..."
-              placeholderTextColor="#71717a"
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              textAlignVertical="top"
             />
           </View>
 
@@ -349,7 +288,6 @@ export default function ThreadsScreen() {
     [sdkAgents],
   );
   const [refreshing, setRefreshing] = useState(false);
-  const [typeFilter, setTypeFilter] = useState<string>("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const onRefresh = useCallback(() => {
@@ -380,13 +318,6 @@ export default function ThreadsScreen() {
           {item.number ? `#${item.number} ` : ""}{item.title}
         </Text>
       ),
-    },
-    {
-      key: "type",
-      header: "Type",
-      flex: 1,
-      minWidth: 100,
-      render: (item) => <TypeBadge type={item.type} />,
     },
     {
       key: "assignee",
@@ -420,24 +351,12 @@ export default function ThreadsScreen() {
     },
   ], [getAgentName]);
 
-  // Filter and sort logic (newest first)
+  // Sort logic (newest first)
   const filteredThreads = useMemo(() => {
-    return threads
-      .filter((t: Thread) => {
-        if (typeFilter === "all") return true;
-        return t.type === typeFilter;
-      })
-      .sort((a: Thread, b: Thread) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [threads, typeFilter]);
-
-  const typeCounts = useMemo(() => {
-    return threads.reduce((acc: Record<string, number>, t: Thread) => {
-      acc[t.type] = (acc[t.type] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    return [...threads].sort(
+      (a: Thread, b: Thread) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
   }, [threads]);
-
-  const activeCount = threads.length;
 
   const isLoading = threadsFetching || agentsFetching;
 
@@ -458,26 +377,6 @@ export default function ThreadsScreen() {
         </View>
       ) : (
         <>
-          {/* Filter Bar */}
-          <View className="border-b border-neutral-200 dark:border-neutral-800">
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10, gap: 8, flexDirection: "row" }}
-            >
-              <FilterPill label="All" count={activeCount} isActive={typeFilter === "all"} onPress={() => setTypeFilter("all")} />
-              {Object.keys(TYPE_CONFIG).map((type) => (
-                <FilterPill
-                  key={type}
-                  label={TYPE_CONFIG[type].label}
-                  count={typeCounts[type] || 0}
-                  isActive={typeFilter === type}
-                  onPress={() => setTypeFilter(type)}
-                />
-              ))}
-            </ScrollView>
-          </View>
-
           {/* Thread List */}
           {isLargeScreen ? (
             <ScrollView

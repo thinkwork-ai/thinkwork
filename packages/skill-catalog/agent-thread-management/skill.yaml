@@ -17,7 +17,7 @@ scripts:
     description: "Block a thread until another completes"
   - name: update_thread_status
     path: scripts/threads.py
-    description: "Update thread status, channel, title, description, priority, due date, and assignee. Use channel=TASK to promote a chat to a task."
+    description: "Update thread status, channel, title, due date, and assignee. Use channel=TASK to promote a chat to a task."
   - name: add_comment
     path: scripts/threads.py
     description: "Add a comment to a thread"
@@ -26,7 +26,7 @@ scripts:
     description: "List sub-threads with optional status filter"
   - name: get_thread_details
     path: scripts/threads.py
-    description: "Get full thread details including comments and dependencies"
+    description: "Get a thread record by id (title, status, channel, assignee, identifier, dueAt)"
   - name: escalate_thread
     path: scripts/threads.py
     description: "Escalate a thread to the supervisor agent"

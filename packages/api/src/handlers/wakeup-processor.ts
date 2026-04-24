@@ -893,12 +893,11 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         try {
           const { threads } = await import("@thinkwork/database-pg/schema");
           const [t] = await db
-            .select({ title: threads.title, description: threads.description })
+            .select({ title: threads.title })
             .from(threads)
             .where(eq(threads.id, runThreadId));
           if (t) {
             threadContext = `\n\nThread: ${t.title}`;
-            if (t.description) threadContext += `\n\n${t.description}`;
           }
         } catch (err) {
           console.warn(
@@ -985,9 +984,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         .select({
           identifier: threads.identifier,
           title: threads.title,
-          description: threads.description,
           status: threads.status,
-          priority: threads.priority,
           channel: threads.channel,
           metadata: threads.metadata,
         })
@@ -998,9 +995,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           id: runThreadId,
           identifier: threadRow.identifier || undefined,
           title: threadRow.title,
-          description: threadRow.description || undefined,
           status: threadRow.status,
-          priority: threadRow.priority,
           channel: threadRow.channel,
         };
       }

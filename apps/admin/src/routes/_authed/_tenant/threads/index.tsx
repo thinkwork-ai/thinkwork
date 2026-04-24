@@ -21,10 +21,8 @@ import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
 import { EmptyState } from "@/components/EmptyState";
 import { PageSkeleton } from "@/components/PageSkeleton";
-import { PriorityIcon } from "@/components/PriorityIcon";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatusIcon } from "@/components/threads/StatusIcon";
-import { KanbanBoard } from "@/components/threads/KanbanBoard";
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,7 +31,6 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import {
-  FilterBarViewToggle,
   FilterBarSort,
   FilterBarGroup,
   FilterBarPopover,
@@ -52,7 +49,6 @@ export const Route = createFileRoute("/_authed/_tenant/threads/")({
 /* ------------------------------------------------------------------ */
 
 const statusOrder = ["in_progress", "todo", "backlog", "in_review", "blocked", "done", "cancelled"];
-const priorityOrder = ["critical", "urgent", "high", "medium", "low"];
 
 function statusLabel(s: string): string {
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -64,24 +60,20 @@ function statusLabel(s: string): string {
 
 type ThreadViewState = {
   statuses: string[];
-  priorities: string[];
   assignees: string[];
-  sortField: "status" | "priority" | "title" | "created" | "updated";
+  sortField: "status" | "title" | "created" | "updated";
   sortDir: "asc" | "desc";
-  groupBy: "status" | "priority" | "assignee" | "none";
-  viewMode: "list" | "board";
+  groupBy: "status" | "assignee" | "none";
   collapsedGroups: string[];
   showArchived: boolean;
 };
 
 const defaultViewState: ThreadViewState = {
   statuses: [],
-  priorities: [],
   assignees: [],
   sortField: "updated",
   sortDir: "desc",
   groupBy: "none",
-  viewMode: "list",
   collapsedGroups: [],
   showArchived: false,
 };
@@ -165,8 +157,6 @@ type ThreadItem = {
   readonly identifier?: string | null;
   readonly title: string;
   readonly status: string;
-  readonly priority: string;
-  readonly type: string;
   readonly agentId?: string | null;
   readonly agent?: { readonly id: string; readonly name: string; readonly avatarUrl?: string | null } | null;
   readonly assigneeType?: string | null;
@@ -195,9 +185,6 @@ function applyFilters(threads: ThreadItem[], state: ThreadViewState): ThreadItem
   if (state.statuses.length > 0) {
     result = result.filter((t) => state.statuses.includes(t.status.toLowerCase()));
   }
-  if (state.priorities.length > 0) {
-    result = result.filter((t) => state.priorities.includes(t.priority.toLowerCase()));
-  }
   if (state.assignees.length > 0) {
     result = result.filter((thread) => {
       for (const assignee of state.assignees) {
@@ -217,8 +204,6 @@ function sortThreads(threads: ThreadItem[], state: ThreadViewState): ThreadItem[
     switch (state.sortField) {
       case "status":
         return dir * (statusOrder.indexOf(a.status.toLowerCase()) - statusOrder.indexOf(b.status.toLowerCase()));
-      case "priority":
-        return dir * (priorityOrder.indexOf(a.priority.toLowerCase()) - priorityOrder.indexOf(b.priority.toLowerCase()));
       case "title":
         return dir * a.title.localeCompare(b.title);
       case "created":
@@ -238,7 +223,6 @@ function sortThreads(threads: ThreadItem[], state: ThreadViewState): ThreadItem[
 function countActiveFilters(state: ThreadViewState): number {
   let count = 0;
   if (state.statuses.length > 0) count++;
-  if (state.priorities.length > 0) count++;
   if (state.assignees.length > 0) count++;
   if (state.showArchived) count++;
   return count;
@@ -290,7 +274,7 @@ function ThreadsPage() {
       return next;
     });
     // Reset to first page when filters/sort change
-    if (patch.statuses !== undefined || patch.priorities !== undefined || patch.showArchived !== undefined || patch.sortField !== undefined || patch.sortDir !== undefined) {
+    if (patch.statuses !== undefined || patch.showArchived !== undefined || patch.sortField !== undefined || patch.sortDir !== undefined) {
       setPageIndex(0);
     }
   }, [scopedKey]);
@@ -302,7 +286,6 @@ function ThreadsPage() {
       tenantId: tenantId!,
       search: debouncedSearch || undefined,
       statuses: viewState.statuses.length > 0 ? viewState.statuses : undefined,
-      priorities: viewState.priorities.length > 0 ? viewState.priorities : undefined,
       showArchived: viewState.showArchived,
       sortField: viewState.sortField,
       sortDir: viewState.sortDir,
@@ -348,8 +331,6 @@ function ThreadsPage() {
     .map((t: any) => ({
       ...t,
       status: t.status.toLowerCase(),
-      priority: t.priority.toLowerCase(),
-      type: t.type.toLowerCase(),
     }));
 
   const agentName = useCallback((id: string | null) => {
@@ -381,12 +362,6 @@ function ThreadsPage() {
         .filter((s) => groups[s]?.length)
         .map((s) => ({ key: s, label: statusLabel(s), items: groups[s]! }));
     }
-    if (viewState.groupBy === "priority") {
-      const groups = groupBy(filtered, (i) => i.priority);
-      return priorityOrder
-        .filter((p) => groups[p]?.length)
-        .map((p) => ({ key: p, label: statusLabel(p), items: groups[p]! }));
-    }
     // assignee
     const groups = groupBy(filtered, (t) => t.agentId ?? "__unassigned");
     return Object.keys(groups).map((key) => ({
@@ -400,7 +375,6 @@ function ThreadsPage() {
     const defaults: Record<string, string> = {};
     if (groupKey) {
       if (viewState.groupBy === "status") defaults.status = groupKey;
-      else if (viewState.groupBy === "priority") defaults.priority = groupKey;
       else if (viewState.groupBy === "assignee" && groupKey !== "__unassigned") {
         defaults.agentId = groupKey;
       }
@@ -411,7 +385,6 @@ function ThreadsPage() {
   const handleUpdateThread = useCallback((id: string, data: Record<string, unknown>) => {
     const input: Record<string, unknown> = {};
     if (data.status) input.status = (data.status as string).toUpperCase();
-    if (data.priority) input.priority = (data.priority as string).toUpperCase();
     if (data.assigneeId !== undefined) input.assigneeId = data.assigneeId;
     if (data.assigneeType !== undefined) input.assigneeType = data.assigneeType;
     if (data.agentId !== undefined) {
@@ -440,11 +413,8 @@ function ThreadsPage() {
           const identifier = thread.identifier ?? `#${thread.number}`;
           return (
             <div className="flex h-10 items-center gap-2 overflow-hidden pl-3 pr-3 text-sm sm:gap-3">
-              {/* Leading: priority + status + identifier */}
+              {/* Leading: status + identifier */}
               <span className="flex shrink-0 items-center gap-2">
-                <span className="hidden sm:inline-flex">
-                  <PriorityIcon priority={thread.priority} />
-                </span>
                 <span
                   className="shrink-0"
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
@@ -583,14 +553,9 @@ function ThreadsPage() {
         </div>
 
         <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
-          <FilterBarViewToggle
-            value={viewState.viewMode}
-            onChange={(v) => updateView({ viewMode: v as "list" | "board" })}
-          />
-
           <FilterBarPopover
             activeCount={activeFilterCount}
-            onClearAll={() => updateView({ statuses: [], priorities: [], assignees: [], showArchived: false })}
+            onClearAll={() => updateView({ statuses: [], assignees: [], showArchived: false })}
           >
             {/* Quick filters */}
             <div className="space-y-1.5">
@@ -628,27 +593,15 @@ function ThreadsPage() {
                 selected={viewState.statuses}
                 onChange={(statuses) => updateView({ statuses })}
               />
-              <div className="space-y-3">
-                <FilterBarFacet
-                  label="Priority"
-                  options={priorityOrder.map((p) => ({
-                    value: p,
-                    label: statusLabel(p),
-                    icon: <PriorityIcon priority={p} />,
-                  }))}
-                  selected={viewState.priorities}
-                  onChange={(priorities) => updateView({ priorities })}
-                />
-                <FilterBarFacet
-                  label="Assignee"
-                  options={[
-                    { value: "__unassigned", label: "No assignee" },
-                    ...agents.map((a: any) => ({ value: a.id, label: a.name })),
-                  ]}
-                  selected={viewState.assignees}
-                  onChange={(assignees) => updateView({ assignees })}
-                />
-              </div>
+              <FilterBarFacet
+                label="Assignee"
+                options={[
+                  { value: "__unassigned", label: "No assignee" },
+                  ...agents.map((a: any) => ({ value: a.id, label: a.name })),
+                ]}
+                selected={viewState.assignees}
+                onChange={(assignees) => updateView({ assignees })}
+              />
             </div>
 
             <div className="border-t border-border" />
@@ -673,40 +626,34 @@ function ThreadsPage() {
             </label>
           </FilterBarPopover>
 
-          <div className={viewState.viewMode === "board" ? "opacity-40 pointer-events-none" : ""}>
-            <FilterBarSort
-              options={[
-                { value: "status", label: "Status" },
-                { value: "priority", label: "Priority" },
-                { value: "title", label: "Title" },
-                { value: "created", label: "Created" },
-                { value: "updated", label: "Last Activity" },
-              ]}
-              field={viewState.sortField}
-              direction={viewState.sortDir}
-              onChange={(field, dir) => updateView({ sortField: field as any, sortDir: dir })}
-            />
-          </div>
+          <FilterBarSort
+            options={[
+              { value: "status", label: "Status" },
+              { value: "title", label: "Title" },
+              { value: "created", label: "Created" },
+              { value: "updated", label: "Last Activity" },
+            ]}
+            field={viewState.sortField}
+            direction={viewState.sortDir}
+            onChange={(field, dir) => updateView({ sortField: field as any, sortDir: dir })}
+          />
 
-          <div className={viewState.viewMode === "board" ? "opacity-40 pointer-events-none" : ""}>
-            <FilterBarGroup
-              options={[
-                { value: "status", label: "Status" },
-                { value: "priority", label: "Priority" },
-                { value: "assignee", label: "Assignee" },
-                { value: "none", label: "None" },
-              ]}
-              value={viewState.groupBy}
-              onChange={(v) => updateView({ groupBy: v as any })}
-            />
-          </div>
+          <FilterBarGroup
+            options={[
+              { value: "status", label: "Status" },
+              { value: "assignee", label: "Assignee" },
+              { value: "none", label: "None" },
+            ]}
+            value={viewState.groupBy}
+            onChange={(v) => updateView({ groupBy: v as any })}
+          />
         </div>
       </div>
         </>
       }
     >
       {/* Empty state */}
-      {filtered.length === 0 && viewState.viewMode === "list" && (
+      {filtered.length === 0 && (
         <EmptyState
           icon={MessagesSquare}
           title="No threads match the current filters or search."
@@ -714,13 +661,7 @@ function ThreadsPage() {
         />
       )}
 
-      {/* Board or List view */}
-      {viewState.viewMode === "board" ? (
-        <KanbanBoard
-          threads={filtered}
-          onUpdateThread={handleUpdateThread}
-        />
-      ) : viewState.groupBy === "none" && filtered.length > 0 ? (
+      {viewState.groupBy === "none" && filtered.length > 0 ? (
         <DataTable
           columns={threadColumns}
           data={filtered}

@@ -1,10 +1,9 @@
 import { type ReactNode, useEffect, useState } from "react";
-import { Check, Filter, X, ArrowUpDown, Layers, Search, Table2, Columns3 } from "lucide-react";
+import { Check, Filter, X, ArrowUpDown, Layers, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -211,46 +210,6 @@ export function FilterBarGroup({
         </div>
       </PopoverContent>
     </Popover>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// FilterBarViewToggle — list/board toggle using ToggleGroup
-// ---------------------------------------------------------------------------
-
-interface FilterBarViewToggleProps {
-  value: string;
-  onChange: (value: string) => void;
-  options?: { value: string; icon: ReactNode; label: string }[];
-}
-
-export function FilterBarViewToggle({
-  value,
-  onChange,
-  options = [
-    { value: "list", icon: <Table2 className="h-3.5 w-3.5" />, label: "Table" },
-    { value: "board", icon: <Columns3 className="h-3.5 w-3.5" />, label: "Board" },
-  ],
-}: FilterBarViewToggleProps) {
-  return (
-    <ToggleGroup
-      type="single"
-      value={value}
-      onValueChange={(v) => v && onChange(v)}
-      className="mr-1 border border-border bg-background/50"
-    >
-      {options.map((opt) => (
-        <ToggleGroupItem
-          key={opt.value}
-          value={opt.value}
-          aria-label={opt.label}
-          className="h-7 gap-1.5 px-2 text-xs"
-        >
-          {opt.icon}
-          <span className="hidden sm:inline">{opt.label}</span>
-        </ToggleGroupItem>
-      ))}
-    </ToggleGroup>
   );
 }
 

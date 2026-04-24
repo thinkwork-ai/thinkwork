@@ -17,7 +17,7 @@ function assertInboxItemTransition(from: string, to: string): void {
 	}
 }
 
-const ENUM_FIELDS = new Set(["status", "priority", "type"]);
+const ENUM_FIELDS = new Set(["status"]);
 
 function snakeToCamel(obj: Record<string, unknown>): Record<string, unknown> {
 	const result: Record<string, unknown> = {};

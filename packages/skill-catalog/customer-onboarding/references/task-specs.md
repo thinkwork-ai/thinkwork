@@ -16,12 +16,6 @@
 | Tax exempt | Gather tax exempt form from {customer} | Unassigned | MEDIUM |
 | Fuel customer | Set up fuel account for {customer} | Unassigned | MEDIUM |
 
-## Description guidelines
-
-Every `create_sub_thread` call requires a `description`. Write 1-2 sentences incorporating the customer's specific details from intake (customer type, tax status, credit info). Example:
-
-> "Draft and send the onboarding contract to Acme Corp for signature. This is a fuel customer, tax exempt, with a $10k credit line request."
-
 ## Title guidelines
 
-Use clear, specific titles: "Draft and send contract to Acme Corp" not "Contract".
+Use clear, specific titles that incorporate the customer's specific details from intake (customer type, tax status, credit info). Example: "Draft and send contract to Acme Corp (fuel, tax exempt, $10k credit line request)" not "Contract".
