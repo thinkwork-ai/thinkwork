@@ -41,6 +41,7 @@ EXPECTED_CONTAINER_SOURCES: tuple[str, ...] = (
     "sandbox_preamble",
     "sandbox_tool",
     "server",
+    "shadow_dispatch",
     "skill_dispatcher",
     "skill_inputs",
     "skill_meta_tool",
