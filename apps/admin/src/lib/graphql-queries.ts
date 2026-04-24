@@ -416,8 +416,8 @@ export const ThreadsListQuery = graphql(`
 `);
 
 export const ThreadsPagedQuery = gql`
-  query ThreadsPaged($tenantId: ID!, $statuses: [String!], $search: String, $showArchived: Boolean, $sortField: String, $sortDir: String, $limit: Int, $offset: Int) {
-    threadsPaged(tenantId: $tenantId, statuses: $statuses, search: $search, showArchived: $showArchived, sortField: $sortField, sortDir: $sortDir, limit: $limit, offset: $offset) {
+  query ThreadsPaged($tenantId: ID!, $search: String, $showArchived: Boolean, $sortField: String, $sortDir: String, $limit: Int, $offset: Int) {
+    threadsPaged(tenantId: $tenantId, search: $search, showArchived: $showArchived, sortField: $sortField, sortDir: $sortDir, limit: $limit, offset: $offset) {
       items {
         id
         number
