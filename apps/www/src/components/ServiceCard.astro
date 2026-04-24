@@ -6,10 +6,12 @@
 interface Props {
   id: string;
   name: string;
-  type: "Fixed-fee" | "Monthly retainer";
+  type: "Fixed-fee" | "Ongoing operations";
+  timeline: string;
   oneLiner: string;
   body: string;
   includes: string[];
+  outcome: string;
   bestFor: string;
   variant: "featured" | "secondary";
 }
@@ -18,15 +20,17 @@ const {
   id,
   name,
   type,
+  timeline,
   oneLiner,
   body,
   includes,
+  outcome,
   bestFor,
   variant,
 } = Astro.props;
 
 const isFeatured = variant === "featured";
-const isRetainer = type === "Monthly retainer";
+const isOngoing = type === "Ongoing operations";
 ---
 
 <article
@@ -39,22 +43,27 @@ const isRetainer = type === "Monthly retainer";
   ]}
 >
   <header class="mb-5">
-    <span
-      class:list={[
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]",
-        isRetainer
-          ? "border-brand/40 bg-brand/[0.12] text-brand"
-          : "border-white/15 bg-white/[0.04] text-slate-300",
-      ]}
-    >
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
       <span
         class:list={[
-          "h-1 w-1 rounded-full",
-          isRetainer ? "bg-brand" : "bg-slate-400",
+          "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em]",
+          isOngoing
+            ? "border-brand/40 bg-brand/[0.12] text-brand"
+            : "border-white/15 bg-white/[0.04] text-slate-300",
         ]}
-      ></span>
-      {type}
-    </span>
+      >
+        <span
+          class:list={[
+            "h-1 w-1 rounded-full",
+            isOngoing ? "bg-brand" : "bg-slate-400",
+          ]}
+        ></span>
+        {type}
+      </span>
+      <span class="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+        Timeline · <span class="text-slate-200">{timeline}</span>
+      </span>
+    </div>
     <h3
       class:list={[
         "mt-4 font-semibold tracking-tight text-slate-50",
@@ -98,6 +107,15 @@ const isRetainer = type === "Monthly retainer";
       </li>
     ))}
   </ul>
+
+  <div class="border-t border-white/5 pt-4">
+    <p class="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+      Outcome
+    </p>
+    <p class="mt-1.5 min-h-[72px] text-[12px] leading-5 text-slate-300">
+      {outcome}
+    </p>
+  </div>
 
   <div class="mt-auto border-t border-white/5 pt-4">
     <p class="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
