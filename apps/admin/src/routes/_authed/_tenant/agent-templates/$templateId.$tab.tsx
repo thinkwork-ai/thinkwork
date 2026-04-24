@@ -781,7 +781,7 @@ function TemplateEditorPage() {
         </div>
       }
     >
-      <div className="w-full">
+      <div className="w-full h-full">
         {/* Configuration Tab */}
         {tab === "configuration" && (
           <div className="max-w-[750px] space-y-6">
@@ -1061,11 +1061,11 @@ function TemplateEditorPage() {
           const wsTree = buildTree(wsFiles);
           const wsIsDirty = wsContent !== wsOriginalContent;
           return (
-            <>
-              <div className="grid grid-cols-[250px_1fr] gap-0 h-[calc(100vh-160px)] border rounded-md overflow-hidden">
+            <div className="h-full flex flex-col min-h-0">
+              <div className="flex flex-1 min-h-0 border rounded-md overflow-hidden">
                 {/* File Tree */}
-                <div className="border-r bg-background overflow-y-auto">
-                  <div className="flex items-center justify-between px-3 py-2 border-b">
+                <div className="w-[250px] shrink-0 border-r bg-background flex flex-col">
+                  <div className="flex items-center justify-between px-3 py-2 border-b shrink-0">
                     <span className="text-sm text-muted-foreground">
                       {wsFiles.length} file{wsFiles.length !== 1 ? "s" : ""}
                     </span>
@@ -1086,7 +1086,7 @@ function TemplateEditorPage() {
                       <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                     </div>
                   ) : (
-                    <div className="py-1">
+                    <div className="flex-1 overflow-y-auto py-1">
                       {wsTree.map((node) => (
                         <WsTreeItem
                           key={node.path}
@@ -1101,7 +1101,7 @@ function TemplateEditorPage() {
                 </div>
 
                 {/* Editor */}
-                <div className="flex flex-col bg-background">
+                <div className="flex-1 flex flex-col min-w-0 bg-background">
                   {wsSelectedFile ? (
                     <>
                       <div className="flex items-center justify-between px-3 py-1.5 border-b">
@@ -1180,7 +1180,7 @@ function TemplateEditorPage() {
                   </div>
                 </DialogContent>
               </Dialog>
-            </>
+            </div>
           );
         })()}
       </div>
