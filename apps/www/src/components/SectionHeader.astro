@@ -1,7 +1,5 @@
 ---
 // Unified eyebrow + headline + lede lockup. Used by every section that has a heading.
-// Eyebrow carries a leading brand dot and an optional step marker so numbered
-// sections all look the same.
 
 interface Props {
   eyebrow: string;
@@ -34,7 +32,6 @@ const widthClass =
 
 <div class:list={[alignClass, widthClass]}>
   <p class="inline-flex items-center gap-2.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-brand/90">
-    <span class="h-1 w-1 rounded-full bg-brand"></span>
     {step && <span class="font-mono text-[10px] text-brand/60">{step}</span>}
     <span>{eyebrow}</span>
   </p>

@@ -417,10 +417,12 @@ export type ServicesMailto = {
 export type ServicePackage = {
   id: string;
   name: string;
-  type: "Fixed-fee" | "Monthly retainer";
+  type: "Fixed-fee" | "Ongoing operations";
+  timeline: string;
   oneLiner: string;
   body: string;
   includes: string[];
+  outcome: string;
   bestFor: string;
   variant: "featured" | "secondary";
 };
@@ -435,27 +437,62 @@ export const services = {
     eyebrow: "Services",
     headlinePart1: "First pilot. Full rollout.",
     headlineAccent: "One operating model.",
+    headlineOutcome:
+      "We help teams launch their first governed AI workflow, then operate and expand it safely.",
     lede:
-      "Strategy, launch, and recurring operations for teams adopting AI — productized services, not open-ended consulting.",
+      "Strategy, launch, and ongoing operations for teams adopting AI — productized services, not open-ended consulting.",
     primaryCta: {
-      label: "Talk to us",
-      mailtoSubject: "ThinkWork Services — general inquiry",
+      label: "Scope a pilot",
+      mailtoSubject: "ThinkWork Services — scope a pilot",
     } satisfies ServicesMailto,
     secondaryCta: {
       label: "See service packages",
       href: "#packages",
     },
   },
+  proof: {
+    eyebrow: "Platform and posture",
+    items: [
+      {
+        label: "AWS Bedrock AgentCore",
+        detail: "Native agent execution with Bedrock's governance primitives — not hand-rolled orchestration.",
+      },
+      {
+        label: "Per-tenant Cognito + IAM",
+        detail: "Identity isolation enforced at the AWS layer, not in application glue.",
+      },
+      {
+        label: "Full audit + evaluation log",
+        detail: "Every agent run, tool call, and evaluation result retained for QA and compliance review.",
+      },
+      {
+        label: "Cloud or self-hosted",
+        detail: "Same platform either way — hosted by us or inside your own AWS account.",
+      },
+    ] as Array<{ label: string; detail?: string }>,
+  },
   positioning: {
     headline: "One partner across the full adoption arc.",
     body:
-      "Scoping, launch, managed operations, workflow expansion, governance, and program advisory — packaged as fixed-fee engagements and monthly retainers rather than billable hours. The shape of the engagement is named up front; the scope doesn't drift.",
+      "Scoping, launch, managed operations, workflow expansion, governance, and program advisory — packaged as fixed-fee engagements and ongoing operational support rather than billable hours. The shape of the engagement is named up front; the scope doesn't drift.",
     startingPointsLabel: "Common starting points",
     startingPoints: [
-      "Support and triage",
-      "Approvals and internal operations",
-      "Reporting and workflow automation",
-      "Connector-driven task flows",
+      {
+        title: "Support and triage",
+        body: "Inbox, ticket routing, and first-response automation anchored in the workflows your team already runs.",
+      },
+      {
+        title: "Approvals and internal ops",
+        body: "Multi-step approval chains and operational handoffs with human gates kept exactly where they matter.",
+      },
+      {
+        title: "Reporting and automation",
+        body: "Scheduled reports, cross-system data stitching, and recurring workflows that replace manual pulls.",
+      },
+      {
+        title: "Connector-driven task flows",
+        body: "Agents that act through Slack, GitHub, and Google Workspace — not just chat about them.",
+      },
     ],
   },
   how: {
@@ -484,15 +521,15 @@ export const services = {
       },
       {
         n: "04",
-        title: "Operate monthly",
+        title: "Run and improve",
         body:
-          "Ongoing platform support, optimization, and governance review. Recurring cadence, recurring value. No quarterly restart.",
+          "Ongoing platform support, optimization, and governance review. A steady operating cadence — no quarterly restarts, no re-onboarding.",
       },
     ],
   },
   packages: {
     eyebrow: "Service packages",
-    headline: "Fixed-fee launches. Monthly retainers.",
+    headline: "Fixed-fee launches. Ongoing operations.",
     lede:
       "Every package scoped up front — no billable hours, no open meter, no drift from the engagement shape we agreed to.",
     secondaryHeadline: "Additional packages",
@@ -503,16 +540,18 @@ export const services = {
         id: "strategy-sprint",
         name: "AI Adoption Strategy Sprint",
         type: "Fixed-fee",
+        timeline: "2 weeks",
         oneLiner: "The first workflow, the first metric, the first rollout plan.",
         body:
-          "A focused strategy engagement that ends with a chosen starting point, a governance model, and a 30/60/90 rollout plan. Not a deck.",
+          "A focused strategy engagement that ends with a chosen starting point, a governance model, and a 30/60/90 rollout plan.",
         includes: [
-          "Use case selection",
-          "Workflow prioritization",
+          "Use case and workflow selection",
           "Governance and controls model",
           "Pilot success metrics",
           "30/60/90 rollout plan",
         ],
+        outcome:
+          "A named first workflow, a governance model, and a rollout plan — decisions made, not a deck.",
         bestFor: "Teams at the beginning.",
         variant: "featured",
       },
@@ -520,84 +559,90 @@ export const services = {
         id: "pilot-launch",
         name: "ThinkWork Pilot Launch",
         type: "Fixed-fee",
+        timeline: "4–6 weeks",
         oneLiner: "The first governed workflow, live in production.",
         body:
-          "Environment setup, first assistant or workflow, templates, connectors, and evaluations — shipped on ThinkWork Cloud or into your own deployment.",
+          "Environment setup, first workflow, templates, connectors, and evaluations — shipped on Cloud or self-hosted.",
         includes: [
-          "Environment setup, Cloud or self-hosted",
+          "Environment setup (Cloud or self-hosted)",
           "First assistant or workflow",
-          "Templates and control configuration",
-          "Connector setup",
+          "Templates, controls, and connectors",
           "Launch and handoff",
         ],
+        outcome:
+          "One governed workflow in production, with its first success metrics tracked.",
         bestFor: "Teams ready to move from planning to execution.",
         variant: "featured",
       },
       {
         id: "managed-ops",
         name: "Managed ThinkWork Operations",
-        type: "Monthly retainer",
+        type: "Ongoing operations",
+        timeline: "Ongoing",
         oneLiner: "Ongoing operations for a production ThinkWork deployment.",
         body:
-          "Recurring support that keeps the platform healthy, governed, and moving — without building an in-house platform team on day one.",
+          "Recurring support that keeps the platform healthy and governed — without building an in-house platform team on day one.",
         includes: [
-          "Environment health checks",
-          "Admin and configuration support",
-          "Upgrade and release support",
-          "Issue triage",
-          "Monthly operations review",
+          "Environment health and issue triage",
+          "Admin, configuration, and upgrade support",
+          "Operations review on a regular cadence",
         ],
+        outcome:
+          "A production deployment that stays current, audited, and operational — without a dedicated in-house platform team.",
         bestFor: "Teams running ThinkWork in production without dedicated platform ops.",
         variant: "featured",
       },
       {
         id: "workflow-expansion",
-        name: "Workflow Expansion Retainer",
-        type: "Monthly retainer",
+        name: "Workflow Expansion Support",
+        type: "Ongoing operations",
+        timeline: "Ongoing",
         oneLiner: "The next wave of workflows, shipped on a cadence.",
         body:
-          "A recurring service focused on adding assistants, workflows, connectors, and templates as the organization earns trust in earlier ones.",
+          "Recurring delivery of new assistants, workflows, connectors, and templates as the organization earns trust in earlier ones.",
         includes: [
-          "New workflows each month",
-          "Connector rollout",
-          "Template and agent updates",
-          "Backlog prioritization",
-          "Cross-team rollout support",
+          "New workflows on a regular cadence",
+          "Connector rollout and template updates",
+          "Backlog prioritization and cross-team rollout",
         ],
+        outcome:
+          "A steady cadence of new governed workflows shipping on top of your existing deployment.",
         bestFor: "Teams with early traction that want to keep shipping.",
         variant: "featured",
       },
       {
         id: "governance-eval",
-        name: "Governance and Evaluation Retainer",
-        type: "Monthly retainer",
+        name: "Governance & Evaluation Support",
+        type: "Ongoing operations",
+        timeline: "Ongoing",
         oneLiner: "Governance that evolves with usage.",
         body:
-          "Evaluation tuning, guardrail updates, incident review, and audit support — so quality, safety, and accountability scale with adoption.",
+          "Evaluation tuning, guardrail updates, incident review, and audit support — so quality and safety scale with adoption.",
         includes: [
-          "Evaluation tuning",
-          "Guardrail updates",
-          "Incident review",
-          "Audit support",
-          "Policy refinement",
+          "Evaluation tuning and guardrail updates",
+          "Incident review and audit support",
+          "Policy refinement as usage grows",
         ],
+        outcome:
+          "Controls that keep pace with usage growth, with incident and audit coverage maintained.",
         bestFor: "Security-conscious teams and growing deployments.",
         variant: "secondary",
       },
       {
         id: "advisory",
         name: "AI Program Advisory",
-        type: "Monthly retainer",
+        type: "Ongoing operations",
+        timeline: "Quarterly cadence",
         oneLiner: "Cross-functional rollout support for leadership.",
         body:
-          "A recurring advisory retainer for adoption sequencing, KPI review, cross-team planning, and executive alignment — above any single pilot.",
+          "Advisory support for adoption sequencing, KPI review, cross-team planning, and executive alignment — above any single pilot.",
         includes: [
-          "Adoption roadmap reviews",
+          "Adoption roadmap and rollout prioritization",
           "KPI and outcome review",
-          "Rollout prioritization",
-          "Cross-team planning",
-          "Leadership check-ins",
+          "Cross-team planning and leadership check-ins",
         ],
+        outcome:
+          "A program-level view of adoption — sequencing, KPIs, and cross-team alignment kept visible to leadership.",
         bestFor: "Organizations turning early wins into a broader AI program.",
         variant: "secondary",
       },
@@ -610,7 +655,7 @@ export const services = {
       {
         q: "How is this different from hiring an AI consultant?",
         a:
-          "A consultant delivers a recommendation. ThinkWork services deliver a governed workflow running in production — and optionally, the monthly operating model that keeps it running.",
+          "A consultant delivers a recommendation. ThinkWork services deliver a governed workflow running in production — and optionally, the ongoing operating model that keeps it running.",
       },
       {
         q: "What does the first engagement usually look like?",
@@ -623,9 +668,9 @@ export const services = {
           "Both. ThinkWork is open-source; the hosted option is the same platform, just operated by us. Services cover launch, operations, and expansion on either path, and teams can move between them without rewriting workflows.",
       },
       {
-        q: "What becomes recurring?",
+        q: "What happens after launch?",
         a:
-          "Managed Operations, Workflow Expansion, Governance and Evaluation, and Program Advisory are all monthly retainers. Scope, cadence, and deliverables are named up front, not reconciled at the end of the month.",
+          "Managed Operations, Workflow Expansion Support, Governance & Evaluation Support, and Program Advisory are all ongoing-operations packages. Scope, cadence, and deliverables are named up front — no billable-hour meter, no end-of-month reconciliation.",
       },
       {
         q: "Can we start small?",
@@ -646,8 +691,8 @@ export const services = {
     body:
       "Whether you need help scoping the first pilot or operating ThinkWork as adoption grows, the starting point is an email. Tell us where you are and we'll come back with a shape.",
     primaryCta: {
-      label: "Talk to us",
-      mailtoSubject: "ThinkWork Services — general inquiry",
+      label: "Scope a pilot",
+      mailtoSubject: "ThinkWork Services — scope a pilot",
     } satisfies ServicesMailto,
   },
 };
