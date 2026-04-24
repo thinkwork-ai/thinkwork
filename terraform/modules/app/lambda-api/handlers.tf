@@ -193,6 +193,14 @@ resource "aws_lambda_function" "handler" {
     # tenant_mcp_servers. SM IAM is already granted on thinkwork/* by
     # aws_iam_role_policy.lambda_secrets in main.tf (Create/Update/Get).
     "mcp-admin-provision",
+    # Plugin-installed MCP server admin approval (plan §U11, SI-5). Cognito
+    # JWT admin caller → approve/reject. Approve computes url_hash =
+    # sha256(canonical(url, auth_config)) and pins it; any subsequent
+    # mutation to those fields reverts the row to 'pending'.
+    "mcp-approval",
+    # Daily sweeper: auto-rejects MCP servers pending > 30 days. Triggered
+    # by EventBridge schedule (mcp-approval-sweeper-daily).
+    "mcp-approval-sweeper",
   ]) : toset([])
 
   function_name = "thinkwork-${var.stage}-api-${each.key}"
@@ -379,6 +387,15 @@ locals {
     # tenant_mcp_servers row so the runtime picks the server up for
     # any agent that gets it assigned via agent_mcp_servers.
     "POST /api/tenants/{tenantId}/mcp-admin-provision" = "mcp-admin-provision"
+
+    # MCP server admin approval (plan §U11, SI-5). Plugin-uploaded MCP
+    # servers land with status='pending'; these routes flip them to
+    # approved/rejected. Cognito JWT only (mcp-approval handler rejects
+    # apikey callers) — the admin SPA is the sole UI surface.
+    "POST /api/tenants/{tenantId}/mcp-servers/{serverId}/approve"    = "mcp-approval"
+    "OPTIONS /api/tenants/{tenantId}/mcp-servers/{serverId}/approve" = "mcp-approval"
+    "POST /api/tenants/{tenantId}/mcp-servers/{serverId}/reject"     = "mcp-approval"
+    "OPTIONS /api/tenants/{tenantId}/mcp-servers/{serverId}/reject"  = "mcp-approval"
   } : {}
 }
 
@@ -449,6 +466,31 @@ resource "aws_scheduler_schedule" "webhook_deliveries_cleanup" {
 
   target {
     arn      = aws_lambda_function.handler["webhook-deliveries-cleanup"].arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# ---------------------------------------------------------------------------
+# MCP approval TTL sweeper — daily auto-reject of pending rows > 30 days old
+# (plan §U11). A plugin whose MCP sat uncurated for a month is stale: clear
+# pending to keep the admin queue honest and surface the reject action in
+# the audit log.
+# ---------------------------------------------------------------------------
+
+resource "aws_scheduler_schedule" "mcp_approval_sweeper" {
+  count = local.use_local_zips ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-mcp-approval-sweeper"
+  group_name          = "default"
+  schedule_expression = "cron(15 4 * * ? *)" # daily at 04:15 UTC (offset from webhook cleanup)
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["mcp-approval-sweeper"].arn
     role_arn = aws_iam_role.scheduler.arn
   }
 }

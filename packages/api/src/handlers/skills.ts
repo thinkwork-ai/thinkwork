@@ -27,6 +27,8 @@ import { parse as parseYaml } from "yaml";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
 import { handleCors, json, error, notFound, unauthorized } from "../lib/response.js";
 import { resolveTenantId } from "../lib/tenants.js";
+import { applyMcpServerFieldUpdate } from "../lib/mcp-server-update.js";
+import { computeMcpUrlHash } from "../lib/mcp-server-hash.js";
 
 const s3 = new S3Client({});
 const sm = new SecretsManagerClient({});
@@ -424,9 +426,16 @@ async function mcpOAuthAuthorize(
 		const dcrData = await dcrRes.json() as { client_id: string };
 		clientId = dcrData.client_id;
 
-		// Cache the discovered endpoints + client_id for next time
+		// Cache the discovered endpoints + client_id for next time. This is a
+		// system-internal discovery write, not an admin intent change — we
+		// also recompute `url_hash` so the row stays approved and the SI-5
+		// defensive check in buildMcpConfigs keeps matching. Without the
+		// recompute, approved OAuth servers would self-revoke the first
+		// time a user initiated OAuth (auth_config drift → hash mismatch).
+		const nextAuthConfig = { authorize_endpoint: authorizeEndpoint, token_endpoint: tokenEndpoint, client_id: clientId };
 		await db.update(tenantMcpServers).set({
-			auth_config: { authorize_endpoint: authorizeEndpoint, token_endpoint: tokenEndpoint, client_id: clientId },
+			auth_config: nextAuthConfig,
+			url_hash: computeMcpUrlHash(server.url, nextAuthConfig),
 			updated_at: new Date(),
 		}).where(eq(tenantMcpServers.id, mcpServerId));
 	}
@@ -1333,6 +1342,13 @@ async function mcpListTenantServers(
 			oauthProvider: r.oauth_provider,
 			tools: r.tools,
 			enabled: r.enabled,
+			// Plan §U11 admin-approval metadata. Existing rows default to
+			// 'approved' so the admin UI can filter without bespoke
+			// migration logic on the client.
+			status: r.status,
+			urlHash: r.url_hash,
+			approvedBy: r.approved_by,
+			approvedAt: r.approved_at,
 			createdAt: r.created_at,
 		})),
 	});
@@ -1379,19 +1395,18 @@ async function mcpRegisterServer(
 		.where(and(eq(tenantMcpServers.tenant_id, tenantId), eq(tenantMcpServers.slug, slug)));
 
 	if (existing) {
-		await db
-			.update(tenantMcpServers)
-			.set({
-				name,
-				url,
-				transport: transport || "streamable-http",
-				auth_type: authType || "none",
-				auth_config: authConfig,
-				oauth_provider: oauthProvider || null,
-				updated_at: new Date(),
-			})
-			.where(eq(tenantMcpServers.id, existing.id));
-		return json({ id: existing.id, slug, updated: true });
+		// SI-5: route through applyMcpServerFieldUpdate so url/auth_config
+		// changes on an approved row revert the approval. Echo the
+		// revert flag so the admin CLI / SPA can surface the state change.
+		const { revertedToPending } = await applyMcpServerFieldUpdate(db, existing.id, {
+			name,
+			url,
+			transport: transport || "streamable-http",
+			auth_type: authType || "none",
+			auth_config: authConfig,
+			oauth_provider: oauthProvider || null,
+		});
+		return json({ id: existing.id, slug, updated: true, revertedToPending });
 	}
 
 	const [inserted] = await db
@@ -1436,20 +1451,26 @@ async function mcpUpdateServer(
 	if (!tenantId) return error("Tenant not found", 404);
 
 	const body = JSON.parse(event.body || "{}");
-	const updates: Record<string, unknown> = { updated_at: new Date() };
-	if (body.name !== undefined) updates.name = body.name;
-	if (body.url !== undefined) updates.url = body.url;
-	if (body.transport !== undefined) updates.transport = body.transport;
-	if (body.enabled !== undefined) updates.enabled = body.enabled;
 
-	const result = await db
-		.update(tenantMcpServers)
-		.set(updates)
+	// Confirm the row belongs to this tenant before mutating. The
+	// applyMcpServerFieldUpdate helper is tenant-agnostic (matches on
+	// id only), so enforce the tenant match here.
+	const [existing] = await db
+		.select({ id: tenantMcpServers.id })
+		.from(tenantMcpServers)
 		.where(and(eq(tenantMcpServers.id, serverId), eq(tenantMcpServers.tenant_id, tenantId)))
-		.returning({ id: tenantMcpServers.id });
+		.limit(1);
+	if (!existing) return notFound("MCP server not found");
 
-	if (result.length === 0) return notFound("MCP server not found");
-	return json({ ok: true, id: serverId });
+	const { revertedToPending } = await applyMcpServerFieldUpdate(db, serverId, {
+		name: body.name,
+		url: body.url,
+		transport: body.transport,
+		auth_config: body.auth_config,
+		enabled: body.enabled,
+	});
+
+	return json({ ok: true, id: serverId, revertedToPending });
 }
 
 async function mcpDeleteServer(
