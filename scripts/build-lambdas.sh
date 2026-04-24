@@ -320,6 +320,12 @@ build_handler "mcp-admin-keys" \
 build_handler "mcp-admin-provision" \
   "$REPO_ROOT/packages/api/src/handlers/mcp-admin-provision.ts"
 
+# Runtime → API manifest-log endpoint (plan §U15). The Strands container
+# POSTs one row per agent session start. Shared API_AUTH_SECRET; no tenant
+# OAuth. Ships inert — U15 part 2 wires the Python capture path.
+build_handler "manifest-log" \
+  "$REPO_ROOT/packages/api/src/handlers/manifest-log.ts"
+
 # Admin approve/reject for plugin-installed MCP servers (plan §U11, SI-5).
 #   POST /api/tenants/:tenantId/mcp-servers/:serverId/approve
 #   POST /api/tenants/:tenantId/mcp-servers/:serverId/reject
