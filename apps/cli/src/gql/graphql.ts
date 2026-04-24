@@ -82,14 +82,6 @@ export type AddTenantMemberInput = {
   role?: InputMaybe<Scalars['String']['input']>;
 };
 
-export type AddThreadCommentInput = {
-  authorId?: InputMaybe<Scalars['ID']['input']>;
-  authorType?: InputMaybe<Scalars['String']['input']>;
-  content: Scalars['String']['input'];
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  threadId: Scalars['ID']['input'];
-};
-
 export type AdminRoleCheckResult = {
   __typename?: 'AdminRoleCheckResult';
   /** One of: owner, admin, member, other. */
@@ -1236,7 +1228,6 @@ export type Mutation = {
   addTeamAgent: TeamAgent;
   addTeamUser: TeamUser;
   addTenantMember: TenantMember;
-  addThreadComment: ThreadComment;
   addThreadDependency: ThreadDependency;
   approveInboxItem: InboxItem;
   assignThreadLabel: ThreadLabelAssignment;
@@ -1305,7 +1296,6 @@ export type Mutation = {
   deleteRun: Scalars['Boolean']['output'];
   deleteTeam: Scalars['Boolean']['output'];
   deleteThread: Scalars['Boolean']['output'];
-  deleteThreadComment: Scalars['Boolean']['output'];
   deleteThreadLabel: Scalars['Boolean']['output'];
   deleteWebhook: Scalars['Boolean']['output'];
   escalateThread: Thread;
@@ -1386,7 +1376,6 @@ export type Mutation = {
   updateTenantPolicy: Tenant;
   updateTenantSettings: TenantSettings;
   updateThread: Thread;
-  updateThreadComment: ThreadComment;
   updateThreadLabel: ThreadLabel;
   updateUser: User;
   updateUserProfile: UserProfile;
@@ -1434,11 +1423,6 @@ export type MutationAddTeamUserArgs = {
 export type MutationAddTenantMemberArgs = {
   input: AddTenantMemberInput;
   tenantId: Scalars['ID']['input'];
-};
-
-
-export type MutationAddThreadCommentArgs = {
-  input: AddThreadCommentInput;
 };
 
 
@@ -1705,11 +1689,6 @@ export type MutationDeleteTeamArgs = {
 
 
 export type MutationDeleteThreadArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
-export type MutationDeleteThreadCommentArgs = {
   id: Scalars['ID']['input'];
 };
 
@@ -2120,12 +2099,6 @@ export type MutationUpdateTenantSettingsArgs = {
 export type MutationUpdateThreadArgs = {
   id: Scalars['ID']['input'];
   input: UpdateThreadInput;
-};
-
-
-export type MutationUpdateThreadCommentArgs = {
-  content: Scalars['String']['input'];
-  id: Scalars['ID']['input'];
 };
 
 

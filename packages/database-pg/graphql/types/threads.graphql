@@ -171,14 +171,6 @@ input UpdateThreadInput {
   lastReadAt: AWSDateTime
 }
 
-input AddThreadCommentInput {
-  threadId: ID!
-  content: String!
-  authorType: String
-  authorId: ID
-  metadata: AWSJSON
-}
-
 input CreateThreadLabelInput {
   tenantId: ID!
   name: String!
@@ -241,10 +233,6 @@ extend type Mutation {
 
   checkoutThread(id: ID!, input: CheckoutThreadInput!): Thread!
   releaseThread(id: ID!, input: ReleaseThreadInput!): Thread!
-
-  addThreadComment(input: AddThreadCommentInput!): ThreadComment!
-  updateThreadComment(id: ID!, content: String!): ThreadComment!
-  deleteThreadComment(id: ID!): Boolean!
 
   createThreadLabel(input: CreateThreadLabelInput!): ThreadLabel!
   updateThreadLabel(id: ID!, input: UpdateThreadLabelInput!): ThreadLabel!

@@ -511,9 +511,6 @@ function ThreadDetailPage() {
             comments={comments}
             messages={threadMessages}
             agentMap={agentMap}
-            threadStatus={thread.status.toLowerCase().replace(/ /g, "_")}
-            draftKey={`thinkwork:thread-comment-draft:${thread.id}`}
-            onCommentAdded={refetch}
             onOpenArtifact={openArtifact}
           />
         </div>
