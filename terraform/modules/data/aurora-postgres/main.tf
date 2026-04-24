@@ -31,9 +31,14 @@ locals {
   db_security_group_id = local.create ? aws_security_group.db[0].id : var.existing_db_security_group_id
 
   # aws_s3 Aurora extension opts in when an Aurora cluster exists AND the
-  # caller supplied a destination bucket. Non-aurora engines short-circuit
-  # before aws_rds_cluster.main[0] is dereferenced.
-  enable_aws_s3 = local.use_aurora && var.backups_bucket_arn != null
+  # caller set enable_aws_s3 = true. Plan-time gate is the explicit bool,
+  # not the backups_bucket_arn nullness — a freshly-created bucket's ARN
+  # is "known after apply," which broke count evaluation on greenfield
+  # deploys (see PR #526 for the incident). The ARN is still used inside
+  # the IAM policy body (jsonencode interpolates at apply time, fine).
+  # Non-aurora engines short-circuit before aws_rds_cluster.main[0] is
+  # dereferenced.
+  enable_aws_s3 = local.use_aurora && var.enable_aws_s3
 }
 
 data "aws_region" "current" {}

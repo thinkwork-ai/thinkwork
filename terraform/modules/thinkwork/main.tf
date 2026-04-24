@@ -136,8 +136,11 @@ module "database" {
   # Enables the `aws_s3` Aurora extension and attaches an IAM role that can
   # PutObject into the backups bucket's pre-drop/* prefix. Used by
   # destructive migrations (e.g. U5 of the thread-detail cleanup plan) to
-  # snapshot row data before DROP TABLE.
+  # snapshot row data before DROP TABLE. `enable_aws_s3` is the plan-time
+  # gate (the bucket's ARN is known-after-apply on greenfield, so it can't
+  # drive `count` directly); the ARN still feeds the IAM policy body.
   backups_bucket_arn = module.s3_backups.bucket_arn
+  enable_aws_s3      = var.database_engine == "aurora-serverless"
 }
 
 module "bedrock_kb" {
