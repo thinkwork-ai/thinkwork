@@ -1,0 +1,23 @@
+# Resolved Capability Manifest read surface (plan §U15 pt 2/3).
+#
+# Admin UI reads the last N manifests for a given agent or template so
+# an operator can see exactly what capabilities the session was granted.
+# The manifest_json field is opaque AWSJSON — the runtime (U15 pt 2
+# Python capture) can evolve the shape without a server-side resolver
+# rename.
+
+type RuntimeManifest {
+  id: ID!
+  sessionId: String!
+  tenantId: ID!
+  agentId: ID
+  templateId: ID
+  userId: ID
+  manifestJson: AWSJSON!
+  createdAt: AWSDateTime!
+}
+
+extend type Query {
+  runtimeManifestsByAgent(agentId: ID!, limit: Int): [RuntimeManifest!]!
+  runtimeManifestsByTemplate(templateId: ID!, limit: Int): [RuntimeManifest!]!
+}

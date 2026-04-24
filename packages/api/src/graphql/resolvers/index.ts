@@ -28,6 +28,7 @@ import { webhookMutations } from "./webhooks/index.js";
 import { evaluationsQueries, evaluationsMutations } from "./evaluations/index.js";
 import { wikiQueries, wikiMutations } from "./wiki/index.js";
 import { skillRunsQueries, skillRunsMutations } from "./skill-runs/index.js";
+import { runtimeQueries } from "./runtime/index.js";
 
 export const queryResolvers: Record<string, any> = {
 	_empty: () => null,
@@ -49,6 +50,7 @@ export const queryResolvers: Record<string, any> = {
 	...evaluationsQueries,
 	...wikiQueries,
 	...skillRunsQueries,
+	...runtimeQueries,
 };
 
 export const mutationResolvers: Record<string, any> = {
