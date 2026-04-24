@@ -10,9 +10,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { ScheduledJobFormDialog, type ScheduledJobFormData } from "@/components/scheduled-jobs/ScheduledJobFormDialog";
 import { relativeTime } from "@/lib/utils";
-
-const API_URL = import.meta.env.VITE_API_URL || "";
-const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
+import { apiFetch as authedApiFetch } from "@/lib/api-fetch";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,20 +46,11 @@ type ThreadTurnRow = {
 // ---------------------------------------------------------------------------
 
 async function apiFetch<T>(path: string, tenantId: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-      "x-tenant-id": tenantId,
-      ...options.headers,
-    },
+  const { headers, ...rest } = options;
+  return authedApiFetch<T>(path, {
+    ...rest,
+    extraHeaders: { "x-tenant-id": tenantId, ...(headers as Record<string, string> | undefined) },
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`${res.status}: ${body}`);
-  }
-  return res.json();
 }
 
 // ---------------------------------------------------------------------------

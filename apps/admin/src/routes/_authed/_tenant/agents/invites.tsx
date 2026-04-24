@@ -43,9 +43,7 @@ import {
 } from "@/components/ui/form";
 import { useAuth } from "@/context/AuthContext";
 import { relativeTime } from "@/lib/utils";
-
-const API_URL = import.meta.env.VITE_API_URL || "";
-const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
+import { apiFetch as authedApiFetch, ApiError } from "@/lib/api-fetch";
 
 export const Route = createFileRoute("/_authed/_tenant/agents/invites")({
   component: InvitesPage,
@@ -79,19 +77,19 @@ type JoinRequestRow = {
 // ---------------------------------------------------------------------------
 
 async function apiFetch(path: string, options: RequestInit = {}) {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-      ...options.headers,
-    },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
+  const { headers, ...rest } = options;
+  try {
+    return await authedApiFetch<any>(path, {
+      ...rest,
+      extraHeaders: headers as Record<string, string> | undefined,
+    });
+  } catch (err) {
+    if (err instanceof ApiError) {
+      const body = err.body as { error?: string } | null;
+      throw new Error(body?.error || `HTTP ${err.status}`);
+    }
+    throw err;
   }
-  return res.json();
 }
 
 // ---------------------------------------------------------------------------

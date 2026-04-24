@@ -380,8 +380,12 @@ jobs:
 
       - name: Build & deploy
         run: bash scripts/build-admin.sh ${{ env.STAGE }}
-        env:
-          API_AUTH_SECRET: ${{ secrets.API_AUTH_SECRET }}
+        # API_AUTH_SECRET is intentionally NOT passed to the admin build.
+        # The admin SPA authenticates REST calls with the user's Cognito
+        # id token (see apps/admin/src/lib/api-fetch.ts). Never re-inject
+        # the secret here — Vite inlines it into the public JS bundle.
+        # The server-side Lambda env injection (terraform-apply step
+        # above) is a separate path and remains untouched.
 
   # ── Build & deploy docs site ────────────────────────────────────
   build-docs:

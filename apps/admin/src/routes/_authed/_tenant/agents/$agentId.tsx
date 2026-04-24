@@ -29,6 +29,7 @@ import { AgentRollbackButton } from "@/components/agents/AgentRollbackButton";
 import { Badge } from "@/components/ui/badge";
 import { Puzzle, CalendarDays, Brain, FolderOpen, Shield } from "lucide-react";
 import { listGuardrails, type Guardrail } from "@/lib/guardrails-api";
+import { apiFetch } from "@/lib/api-fetch";
 
 export const Route = createFileRoute("/_authed/_tenant/agents/$agentId")({
   component: AgentDetailPage,
@@ -163,18 +164,13 @@ function AgentDetailPage() {
   const fetchTriggerCount = useCallback(async () => {
     if (!tenantId) return;
     try {
-      const API_URL = import.meta.env.VITE_API_URL || "";
-      const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
-      const triggers = await fetch(`${API_URL}/api/scheduled-jobs`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-          "x-tenant-id": tenantId,
-        },
-      }).then((r) => r.json()) as { agent_id: string | null }[];
+      const triggers = await apiFetch<{ agent_id: string | null }[]>(
+        "/api/scheduled-jobs",
+        { extraHeaders: { "x-tenant-id": tenantId } },
+      );
       setTriggerCount(triggers.filter((t) => t.agent_id === agentId).length);
     } catch {
-      // non-critical
+      // non-critical (NotReadyError and transient failures both swallowed)
     }
   }, [tenantId, agentId]);
   useEffect(() => { fetchTriggerCount(); }, [fetchTriggerCount]);

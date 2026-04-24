@@ -5,7 +5,7 @@ import type {
 import { eq, and, desc, gte, lte } from "drizzle-orm";
 import { schema } from "@thinkwork/database-pg";
 import { db } from "../lib/db.js";
-import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
+import { authenticate } from "../lib/cognito-auth.js";
 import { handleCors, json, error, unauthorized } from "../lib/response.js";
 
 const { activityLog } = schema;
@@ -18,8 +18,8 @@ export async function handler(
 	event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
 	if (event.requestContext.http.method === "OPTIONS") return { statusCode: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "*", "Access-Control-Allow-Headers": "*" }, body: "" };
-	const token = extractBearerToken(event);
-	if (!token || !validateApiSecret(token)) return unauthorized();
+	const auth = await authenticate(event.headers);
+	if (!auth) return unauthorized();
 
 	const tenantId = event.headers["x-tenant-id"];
 	if (!tenantId) return error("Missing x-tenant-id header");

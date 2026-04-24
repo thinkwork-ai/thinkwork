@@ -23,9 +23,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { cn, relativeTime } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-
-const API_URL = import.meta.env.VITE_API_URL || "";
-const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
+import { apiFetch as authedApiFetch } from "@/lib/api-fetch";
 
 export const Route = createFileRoute("/_authed/_tenant/agents/$agentId_/scheduled-jobs/$scheduledJobId")({
   component: AgentScheduledJobDetailPage,
@@ -64,20 +62,11 @@ type RunRow = {
 };
 
 async function apiFetch<T>(path: string, tenantId: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-      "x-tenant-id": tenantId,
-      ...options.headers,
-    },
+  const { headers, ...rest } = options;
+  return authedApiFetch<T>(path, {
+    ...rest,
+    extraHeaders: { "x-tenant-id": tenantId, ...(headers as Record<string, string> | undefined) },
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`${res.status}: ${body}`);
-  }
-  return res.json();
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -219,17 +208,10 @@ function EditScheduledJobButton({ scheduledJob, tenantId, onSaved }: { scheduled
           timezone: scheduledJob.timezone,
         }}
         onSubmit={async (data) => {
-          const res = await fetch(`${API_URL}/api/scheduled-jobs/${scheduledJob.id}`, {
+          const updated = await apiFetch<ScheduledJob>(`/api/scheduled-jobs/${scheduledJob.id}`, tenantId, {
             method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-              "x-tenant-id": tenantId,
-            },
             body: JSON.stringify(data),
           });
-          if (!res.ok) throw new Error(await res.text());
-          const updated = await res.json();
           onSaved(updated);
         }}
       />

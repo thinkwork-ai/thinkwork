@@ -1,20 +1,20 @@
-const API_URL = import.meta.env.VITE_API_URL || "";
-const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
+import { apiFetch, ApiError } from "@/lib/api-fetch";
 
-async function apiFetch(path: string, options: RequestInit = {}) {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-      ...options.headers,
-    },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
+// Preserve the legacy external error shape (`new Error(body.error || "HTTP N")`)
+// so consumers that string-match on the message keep working.
+async function request<T>(
+  path: string,
+  options: { method?: string; body?: string; extraHeaders?: Record<string, string> } = {},
+): Promise<T> {
+  try {
+    return await apiFetch<T>(path, options);
+  } catch (err) {
+    if (err instanceof ApiError) {
+      const body = err.body as { error?: string } | null;
+      throw new Error(body?.error || `HTTP ${err.status}`);
+    }
+    throw err;
   }
-  return res.json();
 }
 
 export type BuiltinTool = {
@@ -46,8 +46,8 @@ export type BuiltinToolTestResult = {
 export function listBuiltinTools(
   tenantSlug: string,
 ): Promise<{ tools: BuiltinTool[] }> {
-  return apiFetch("/api/skills/builtin-tools", {
-    headers: { "x-tenant-slug": tenantSlug },
+  return request("/api/skills/builtin-tools", {
+    extraHeaders: { "x-tenant-slug": tenantSlug },
   });
 }
 
@@ -56,9 +56,9 @@ export function upsertBuiltinTool(
   slug: string,
   input: BuiltinToolInput,
 ): Promise<{ id: string; toolSlug: string; created?: boolean; updated?: boolean }> {
-  return apiFetch(`/api/skills/builtin-tools/${slug}`, {
+  return request(`/api/skills/builtin-tools/${slug}`, {
     method: "PUT",
-    headers: { "x-tenant-slug": tenantSlug },
+    extraHeaders: { "x-tenant-slug": tenantSlug },
     body: JSON.stringify(input),
   });
 }
@@ -67,9 +67,9 @@ export function deleteBuiltinTool(
   tenantSlug: string,
   slug: string,
 ): Promise<{ ok: boolean }> {
-  return apiFetch(`/api/skills/builtin-tools/${slug}`, {
+  return request(`/api/skills/builtin-tools/${slug}`, {
     method: "DELETE",
-    headers: { "x-tenant-slug": tenantSlug },
+    extraHeaders: { "x-tenant-slug": tenantSlug },
   });
 }
 
@@ -78,9 +78,9 @@ export function testBuiltinTool(
   slug: string,
   body: { provider?: string; apiKey?: string } = {},
 ): Promise<BuiltinToolTestResult> {
-  return apiFetch(`/api/skills/builtin-tools/${slug}/test`, {
+  return request(`/api/skills/builtin-tools/${slug}/test`, {
     method: "POST",
-    headers: { "x-tenant-slug": tenantSlug },
+    extraHeaders: { "x-tenant-slug": tenantSlug },
     body: JSON.stringify(body),
   });
 }

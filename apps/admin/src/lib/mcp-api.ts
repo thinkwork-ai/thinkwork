@@ -1,22 +1,28 @@
+import { apiFetch, ApiError } from "@/lib/api-fetch";
 import { getIdToken } from "@/lib/auth";
 
+// Base URL retained for `cognitoFetch` below (MCP-approval flow uses a
+// Cognito-only route that's orthogonal to apiFetch's apikey-accepting
+// handler). VITE_API_AUTH_SECRET intentionally removed — the admin
+// bundle no longer ships a service secret.
 const API_URL = import.meta.env.VITE_API_URL || "";
-const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
 
-async function apiFetch(path: string, options: RequestInit = {}) {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-      ...options.headers,
-    },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
+// Preserve the legacy external error shape (`new Error(body.error || "HTTP N")`)
+// so consumers that string-match on the message keep working. apiFetch already
+// surfaces the best-effort error body; we just re-throw as a plain Error.
+async function request<T>(
+  path: string,
+  options: { method?: string; body?: string; extraHeaders?: Record<string, string> } = {},
+): Promise<T> {
+  try {
+    return await apiFetch<T>(path, options);
+  } catch (err) {
+    if (err instanceof ApiError) {
+      const body = err.body as { error?: string } | null;
+      throw new Error(body?.error || `HTTP ${err.status}`);
+    }
+    throw err;
   }
-  return res.json();
 }
 
 /**
@@ -86,8 +92,8 @@ export type AgentMcpServer = McpServer & {
 export function listMcpServers(
   tenantSlug: string,
 ): Promise<{ servers: McpServer[] }> {
-  return apiFetch("/api/skills/mcp-servers", {
-    headers: { "x-tenant-slug": tenantSlug },
+  return request("/api/skills/mcp-servers", {
+    extraHeaders: { "x-tenant-slug": tenantSlug },
   });
 }
 
@@ -95,9 +101,9 @@ export function registerMcpServer(
   tenantSlug: string,
   config: McpServerInput,
 ): Promise<{ id: string; slug: string }> {
-  return apiFetch("/api/skills/mcp-servers", {
+  return request("/api/skills/mcp-servers", {
     method: "POST",
-    headers: { "x-tenant-slug": tenantSlug },
+    extraHeaders: { "x-tenant-slug": tenantSlug },
     body: JSON.stringify(config),
   });
 }
@@ -107,9 +113,9 @@ export function updateMcpServer(
   serverId: string,
   updates: Partial<McpServerInput & { enabled: boolean }>,
 ): Promise<{ ok: boolean }> {
-  return apiFetch(`/api/skills/mcp-servers/${serverId}`, {
+  return request(`/api/skills/mcp-servers/${serverId}`, {
     method: "PUT",
-    headers: { "x-tenant-slug": tenantSlug },
+    extraHeaders: { "x-tenant-slug": tenantSlug },
     body: JSON.stringify(updates),
   });
 }
@@ -118,9 +124,9 @@ export function deleteMcpServer(
   tenantSlug: string,
   serverId: string,
 ): Promise<{ ok: boolean }> {
-  return apiFetch(`/api/skills/mcp-servers/${serverId}`, {
+  return request(`/api/skills/mcp-servers/${serverId}`, {
     method: "DELETE",
-    headers: { "x-tenant-slug": tenantSlug },
+    extraHeaders: { "x-tenant-slug": tenantSlug },
   });
 }
 
@@ -128,9 +134,9 @@ export function testMcpServer(
   tenantSlug: string,
   serverId: string,
 ): Promise<{ ok: boolean; tools?: Array<{ name: string; description?: string }>; error?: string }> {
-  return apiFetch(`/api/skills/mcp-servers/${serverId}/test`, {
+  return request(`/api/skills/mcp-servers/${serverId}/test`, {
     method: "POST",
-    headers: { "x-tenant-slug": tenantSlug },
+    extraHeaders: { "x-tenant-slug": tenantSlug },
   });
 }
 
@@ -141,14 +147,14 @@ export function testMcpServer(
 export function getTemplateMcpServers(
   templateId: string,
 ): Promise<{ mcpServers: Array<{ mcp_server_id: string; enabled: boolean; name?: string; url?: string; authType?: string }> }> {
-  return apiFetch(`/api/skills/templates/${templateId}/mcp-servers`);
+  return request(`/api/skills/templates/${templateId}/mcp-servers`);
 }
 
 export function assignMcpToTemplate(
   templateId: string,
   mcpServerId: string,
 ): Promise<{ id: string }> {
-  return apiFetch(`/api/skills/templates/${templateId}/mcp-servers`, {
+  return request(`/api/skills/templates/${templateId}/mcp-servers`, {
     method: "POST",
     body: JSON.stringify({ mcpServerId }),
   });
@@ -158,7 +164,7 @@ export function unassignMcpFromTemplate(
   templateId: string,
   mcpServerId: string,
 ): Promise<{ ok: boolean }> {
-  return apiFetch(`/api/skills/templates/${templateId}/mcp-servers/${mcpServerId}`, {
+  return request(`/api/skills/templates/${templateId}/mcp-servers/${mcpServerId}`, {
     method: "DELETE",
   });
 }
@@ -175,7 +181,7 @@ export type OAuthProvider = {
 };
 
 export function listOAuthProviders(): Promise<{ providers: OAuthProvider[] }> {
-  return apiFetch("/api/skills/oauth-providers");
+  return request("/api/skills/oauth-providers");
 }
 
 // ---------------------------------------------------------------------------
@@ -185,7 +191,7 @@ export function listOAuthProviders(): Promise<{ providers: OAuthProvider[] }> {
 export function listAgentMcpServers(
   agentId: string,
 ): Promise<{ servers: AgentMcpServer[] }> {
-  return apiFetch(`/api/skills/agents/${agentId}/mcp-servers`);
+  return request(`/api/skills/agents/${agentId}/mcp-servers`);
 }
 
 export function assignMcpToAgent(
@@ -193,7 +199,7 @@ export function assignMcpToAgent(
   mcpServerId: string,
   config?: Record<string, unknown>,
 ): Promise<{ id: string }> {
-  return apiFetch(`/api/skills/agents/${agentId}/mcp-servers`, {
+  return request(`/api/skills/agents/${agentId}/mcp-servers`, {
     method: "POST",
     body: JSON.stringify({ mcpServerId, config }),
   });
@@ -203,7 +209,7 @@ export function unassignMcpFromAgent(
   agentId: string,
   mcpServerId: string,
 ): Promise<{ ok: boolean }> {
-  return apiFetch(`/api/skills/agents/${agentId}/mcp-servers/${mcpServerId}`, {
+  return request(`/api/skills/agents/${agentId}/mcp-servers/${mcpServerId}`, {
     method: "DELETE",
   });
 }
