@@ -71,7 +71,6 @@ export async function materializeProcess(
 			.update(threads)
 			.set({
 				parent_id: parentThreadId,
-				description: step.instructions,
 				status: stepStatus,
 				assignee_type: resolvedAssignee ? "agent" : undefined,
 				assignee_id: resolvedAssignee || undefined,
@@ -79,6 +78,7 @@ export async function materializeProcess(
 				metadata: {
 					processStep: step.id,
 					processTemplateSlug: template.title,
+					processStepInstructions: step.instructions,
 				},
 				updated_at: new Date(),
 			})
