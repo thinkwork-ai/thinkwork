@@ -467,14 +467,14 @@ export const services = {
   meta: {
     title: "ThinkWork Services — Pilot to production, governed.",
     description:
-      "Productized services for AI adoption: strategy, pilot launch, managed operations, workflow expansion, governance, and program advisory. Delivered on ThinkWork Cloud or into your own deployment.",
+      "Productized services for AI adoption: strategy, pilot launch, managed operations, and workflow expansion. Delivered on ThinkWork Cloud or into your own deployment.",
   },
   hero: {
     eyebrow: "Services",
     headlinePart1: "First pilot. Full rollout.",
     headlineAccent: "One operating model.",
     headlineOutcome:
-      "We help teams launch their first governed AI workflow, then operate and expand it safely.",
+      "We help teams scope, launch, operate, and expand governed AI workflows.",
     lede:
       "Strategy, launch, and ongoing operations for teams adopting AI — productized services, not open-ended consulting.",
     primaryCta: {
@@ -508,9 +508,9 @@ export const services = {
     ] as Array<{ label: string; detail?: string }>,
   },
   positioning: {
-    headline: "One partner across the full adoption arc.",
+    headline: "One partner from first workflow to ongoing operations.",
     body:
-      "Scoping, launch, managed operations, workflow expansion, governance, and program advisory — packaged as fixed-fee engagements and ongoing operational support rather than billable hours. The shape of the engagement is named up front; the scope doesn't drift.",
+      "Scoping, launch, managed operations, and workflow expansion — packaged as fixed-fee engagements and ongoing operational support rather than billable hours. The shape of the engagement is named up front; the scope doesn't drift.",
     startingPointsLabel: "Common starting points",
     startingPoints: [
       {
@@ -531,43 +531,11 @@ export const services = {
       },
     ],
   },
-  how: {
-    eyebrow: "Engagement lifecycle",
-    headline: "Four phases. One engagement arc.",
-    lede:
-      "Scope, launch, expand, operate — in that order. Each phase has a defined shape and a defined exit. Later phases compound the earlier ones; they don't replace them.",
-    steps: [
-      {
-        n: "01",
-        title: "Scope the first win",
-        body:
-          "One workflow, one team, one set of controls. Success metrics, ownership, and governance model named before any code lands.",
-      },
-      {
-        n: "02",
-        title: "Launch the pilot",
-        body:
-          "The first assistant or workflow, live in production. Templates, connectors, and evaluations configured. Visible output in days, not quarters.",
-      },
-      {
-        n: "03",
-        title: "Expand safely",
-        body:
-          "Workflows, connectors, and templates added as trust grows. The governance model stays constant; surface area expands beneath it.",
-      },
-      {
-        n: "04",
-        title: "Run and improve",
-        body:
-          "Ongoing platform support, optimization, and governance review. A steady operating cadence — no quarterly restarts, no re-onboarding.",
-      },
-    ],
-  },
   packages: {
     eyebrow: "Services",
     headline: "Practical help from first workflow to ongoing operations.",
     lede:
-      "Every package scoped up front — no billable hours, no open meter, no drift from the engagement shape we agreed to. Cloud Hosting sits alongside as a handoff to the managed-deployment plan for teams that want us to operate the runtime.",
+      "Every package scoped up front — no billable hours, no open meter, no drift from the engagement shape we agreed to.",
     items: [
       {
         id: "strategy-sprint",
@@ -620,8 +588,8 @@ export const services = {
           "Operations review on a regular cadence",
         ],
         outcome:
-          "A production deployment that stays current, audited, and operational — without a dedicated in-house platform team.",
-        bestFor: "Teams running ThinkWork in production without dedicated platform ops.",
+          "A production deployment that stays current, audited, and operational.",
+        bestFor: "Teams without dedicated platform ops.",
       },
       {
         id: "workflow-expansion",
@@ -680,11 +648,6 @@ export const services = {
         q: "Do services cover hosted and self-hosted deployments?",
         a:
           "Both. ThinkWork is open-source; the hosted option is the same platform, just operated by us. Services cover launch, operations, and expansion on either path, and teams can move between them without rewriting workflows.",
-      },
-      {
-        q: "What happens after launch?",
-        a:
-          "Managed Operations, Workflow Expansion Support, Governance & Evaluation Support, and Program Advisory are all ongoing-operations packages. Scope, cadence, and deliverables are named up front — no billable-hour meter, no end-of-month reconciliation.",
       },
       {
         q: "Can we start small?",

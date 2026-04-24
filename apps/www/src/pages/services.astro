@@ -123,35 +123,7 @@ const packageItems = services.packages.items;
       </div>
     </SectionShell>
 
-    {/* 3. How it works — engagement lifecycle */}
-    <SectionShell tone="default" glow="top">
-      <SectionHeader
-        eyebrow={services.how.eyebrow}
-        headline={services.how.headline}
-        lede={services.how.lede}
-        align="center"
-        width="wide"
-      />
-      <ol class="mt-14 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-        {services.how.steps.map((step) => (
-          <li
-            class="relative flex h-full flex-col rounded-2xl border border-white/10 bg-white/[0.02] p-6 backdrop-blur-xl"
-          >
-            <p class="font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-brand/70">
-              {step.n}
-            </p>
-            <h3 class="mt-3 text-lg font-semibold tracking-tight text-slate-50">
-              {step.title}
-            </h3>
-            <p class="mt-3 text-sm leading-relaxed text-slate-400">
-              {step.body}
-            </p>
-          </li>
-        ))}
-      </ol>
-    </SectionShell>
-
-    {/* 4. Services packages (single consolidated list incl. Cloud Hosting handoff) */}
+    {/* 3. Services packages (single consolidated list incl. Cloud Hosting handoff) */}
     <SectionShell id="packages" tone="raised" glow="center">
       <SectionHeader
         eyebrow={services.packages.eyebrow}
