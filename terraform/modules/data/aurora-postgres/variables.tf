@@ -118,7 +118,13 @@ variable "deletion_protection" {
 # ---------------------------------------------------------------------------
 
 variable "backups_bucket_arn" {
-  description = "ARN of the S3 backups bucket Aurora should be allowed to write to via the aws_s3 extension (aws_s3.query_export_to_s3). When set, attaches an IAM role to the Aurora cluster granting s3:PutObject on that bucket. Null disables the feature. Only effective when database_engine = 'aurora-serverless'."
+  description = "ARN of the S3 backups bucket Aurora should be allowed to write to via the aws_s3 extension (aws_s3.query_export_to_s3). Used as the Resource in the attached IAM policy; only takes effect when enable_aws_s3 = true. A not-yet-created bucket's ARN is 'known after apply' — gating on this nullness broke count at plan time, so use enable_aws_s3 as the plan-time gate instead."
   type        = string
   default     = null
+}
+
+variable "enable_aws_s3" {
+  description = "Plan-time gate for the aws_s3 Aurora extension IAM role. Set true when Aurora should be allowed to PutObject into backups_bucket_arn. Only effective when database_engine = 'aurora-serverless'. Defaults to false to preserve the prior 'opt-in by passing backups_bucket_arn' shape when this variable is omitted."
+  type        = bool
+  default     = false
 }
