@@ -166,6 +166,7 @@ export async function startSkillRun(
 		kind: "run_skill",
 		runId: runRow.id,
 		tenantId,
+		agentId: i.agentId ?? null,
 		invokerUserId: userId,
 		skillId: i.skillId,
 		skillVersion: runRow.skill_version,

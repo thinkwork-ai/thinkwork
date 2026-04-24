@@ -452,6 +452,12 @@ export type SkillRunInvokePayload = {
   kind: "run_skill";
   runId: string;
   tenantId: string;
+  // Agent whose runtime config (template, skills, MCP, memory, guardrail)
+  // the dispatcher fetches to build the synthetic chat turn. Required in
+  // practice — a null/empty agentId causes the Python dispatcher to reject
+  // the envelope with _MISSING_AGENT_REASON. Callers that don't know the
+  // agent should not have inserted a skill_runs row to begin with.
+  agentId: string | null;
   invokerUserId: string;
   skillId: string;
   skillVersion: number;

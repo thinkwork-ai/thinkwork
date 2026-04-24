@@ -250,8 +250,15 @@ describe("job-trigger skill_run happy path", () => {
 		expect(envelope.tenantId).toBe("T1");
 		expect(envelope.invokerUserId).toBe("U1");
 		expect(envelope.invocationSource).toBe("scheduled");
+		// Regression pin for P0: agentId must flow through; Python
+		// dispatcher rejects null-agent envelopes with
+		// _MISSING_AGENT_REASON and the scheduled path would go dark.
+		expect(envelope.agentId).toBe("A1");
 		expect(envelope.resolvedInputs.customer).toBe("ABC Fuels");
 		expect(envelope.resolvedInputs.meeting_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+		// U4 contract — must stay asynchronous so the agent loop has the
+		// full 900s AgentCore Lambda budget.
+		expect(cmd.input).toMatchObject({ InvocationType: "Event" });
 	});
 });
 

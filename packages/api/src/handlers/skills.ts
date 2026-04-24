@@ -2869,6 +2869,7 @@ async function startSkillRunService(
 	const invokeResult = await invokeAgentcoreRunSkill({
 		runId: runRow.id,
 		tenantId,
+		agentId: agentId ?? null,
 		invokerUserId,
 		skillId,
 		skillVersion: runRow.skill_version,
@@ -3077,6 +3078,7 @@ function hashResolvedInputs(resolvedInputs: Record<string, unknown>): string {
 async function invokeAgentcoreRunSkill(payload: {
 	runId: string;
 	tenantId: string;
+	agentId: string | null;
 	invokerUserId: string;
 	skillId: string;
 	skillVersion: number;
@@ -3097,6 +3099,7 @@ async function invokeAgentcoreRunSkill(payload: {
 			kind: "run_skill" as const,
 			runId: payload.runId,
 			tenantId: payload.tenantId,
+			agentId: payload.agentId,
 			invokerUserId: payload.invokerUserId,
 			skillId: payload.skillId,
 			skillVersion: payload.skillVersion,

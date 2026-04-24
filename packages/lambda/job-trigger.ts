@@ -140,6 +140,7 @@ export async function resolveInputBindings(
 async function invokeAgentcoreRunSkill(payload: {
   runId: string;
   tenantId: string;
+  agentId: string | null;
   invokerUserId: string;
   skillId: string;
   skillVersion: number;
@@ -161,6 +162,7 @@ async function invokeAgentcoreRunSkill(payload: {
       kind: "run_skill" as const,
       runId: payload.runId,
       tenantId: payload.tenantId,
+      agentId: payload.agentId,
       invokerUserId: payload.invokerUserId,
       skillId: payload.skillId,
       skillVersion: payload.skillVersion,
@@ -535,6 +537,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       const invokeResult = await invokeAgentcoreRunSkill({
         runId: runRow.id,
         tenantId,
+        agentId: targetAgentId ?? null,
         invokerUserId,
         skillId,
         skillVersion: runRow.skill_version,
