@@ -22,8 +22,10 @@ mode: tool
 # Not a standalone chat anchor — the model encounters this skill as a
 # referenced sub-skill in other SKILL.md bodies (sales-prep,
 # account-health-review, renewal-prep). No chat_intent, no schedule,
-# no webhook triggers.
-triggers: {}
+# no webhook triggers. Empty *list* (not empty map) so the bootstrap
+# sync script can hand the value straight to the skill_catalog.triggers
+# text[] column without a PgArray coercion error.
+triggers: []
 
 # No sub-skills of its own — this is descriptive content, not an
 # orchestrator.
