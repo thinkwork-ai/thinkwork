@@ -113,28 +113,45 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Build and push to ECR
+      # Two single-platform builds, not a manifest list.
+      #
+      # Lambda's UpdateFunctionCode rejects OCI manifest lists with
+      # "image manifest, config or layer media type ... is not
+      # supported". Bedrock AgentCore Runtime wants arm64.
+      # Emitting two separate tags lets each consumer point at a
+      # single-platform image it can actually pull. Layers are shared
+      # via the GHA cache so the second build reuses everything up to
+      # the platform-specific steps.
+
+      - name: Build and push amd64 (Lambda)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: packages/agentcore-strands/agent-container/Dockerfile
-          # Multi-arch: Lambda (thinkwork-${STAGE}-agentcore) runs x86_64
-          # while Bedrock AgentCore Runtime requires arm64. A manifest
-          # list at the SHA tag lets both consumers pull the variant
-          # they need from one image URI. Previously this was
-          # linux/amd64 only — AgentCore Runtime silently kept serving
-          # a months-old cached arm64 image because every UpdateRuntime
-          # attempt fails with "Architecture incompatible" on amd64.
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
-            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:latest
             ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:latest
+          cache-from: type=gha,scope=amd64
+          cache-to: type=gha,scope=amd64,mode=max
           provenance: false
 
-      - name: Update Lambda function code (x86_64 variant)
+      - name: Build and push arm64 (AgentCore Runtime)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/agentcore-strands/agent-container/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}-arm64
+            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:latest-arm64
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,scope=arm64,mode=max
+          provenance: false
+
+      - name: Update Lambda function code (x86_64)
         run: |
           aws lambda update-function-code \
             --function-name thinkwork-${{ env.STAGE }}-agentcore \
@@ -162,7 +179,10 @@ jobs:
             echo "No Strands runtime ID in SSM — skipping (first greenfield apply will create it)."
             exit 0
           fi
-          NEW_IMAGE="${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}"
+          # -arm64 suffix: UpdateAgentRuntime requires a single-platform
+          # arm64 manifest. The unsuffixed ${sha} tag is amd64 (for
+          # Lambda). Both point at the same commit's code.
+          NEW_IMAGE="${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}-arm64"
           echo "Updating runtime $RUNTIME_ID to $NEW_IMAGE"
           # Preserve roleArn / network / protocol from the existing
           # runtime — hard-coding them here would drift from terraform.
