@@ -13,7 +13,7 @@ import { formatUsd, relativeTime } from "@/lib/utils";
 
 // NOTE: region is hardcoded to us-east-1. Pre-existing; a regional-constants
 // sweep will replace this with a stage-aware value.
-export const CW_CONSOLE_BASE = "https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1";
+const CW_CONSOLE_BASE = "https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1";
 
 export function xrayTraceUrl(traceId: string): string {
   return `${CW_CONSOLE_BASE}#xray:traces/${traceId}`;
@@ -54,7 +54,7 @@ export function ThreadTraces({ threadId, tenantId }: ThreadTracesProps) {
     pause: !threadId || !tenantId,
   });
 
-  const traces = (result.data as any)?.threadTraces ?? [];
+  const traces = result.data?.threadTraces ?? [];
 
   if (traces.length === 0 && !result.fetching) {
     return (
@@ -80,7 +80,7 @@ export function ThreadTraces({ threadId, tenantId }: ThreadTracesProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {traces.map((trace: any, idx: number) => (
+          {traces.map((trace, idx) => (
             <TableRow key={`${trace.traceId}-${idx}`}>
               <TableCell className="text-xs text-muted-foreground truncate">
                 {relativeTime(trace.createdAt)}
@@ -89,15 +89,15 @@ export function ThreadTraces({ threadId, tenantId }: ThreadTracesProps) {
                 {trace.agentName || "--"}
               </TableCell>
               <TableCell className="text-xs text-muted-foreground truncate" title={trace.model || ""}>
-                {shortenModel(trace.model)}
+                {shortenModel(trace.model ?? null)}
                 {trace.estimated && (
                   <Badge variant="outline" className="ml-1 text-[10px] px-1">est</Badge>
                 )}
               </TableCell>
-              <TableCell className="text-right text-xs tabular-nums">{formatTokens(trace.inputTokens)}</TableCell>
-              <TableCell className="text-right text-xs tabular-nums">{formatTokens(trace.outputTokens)}</TableCell>
-              <TableCell className="text-right text-xs tabular-nums">{formatDuration(trace.durationMs)}</TableCell>
-              <TableCell className="text-right text-xs tabular-nums">{formatUsd(trace.costUsd)}</TableCell>
+              <TableCell className="text-right text-xs tabular-nums">{formatTokens(trace.inputTokens ?? null)}</TableCell>
+              <TableCell className="text-right text-xs tabular-nums">{formatTokens(trace.outputTokens ?? null)}</TableCell>
+              <TableCell className="text-right text-xs tabular-nums">{formatDuration(trace.durationMs ?? null)}</TableCell>
+              <TableCell className="text-right text-xs tabular-nums">{formatUsd(trace.costUsd ?? 0)}</TableCell>
               <TableCell className="text-right">
                 {trace.traceId ? (
                   <a

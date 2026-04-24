@@ -744,8 +744,7 @@ function TracesSection({ threadId, tenantId }: { threadId: string; tenantId: str
     variables: { threadId, tenantId },
     pause: !threadId || !tenantId,
   });
-  const firstTraceId =
-    (tracesResult.data as any)?.threadTraces?.[0]?.traceId ?? null;
+  const firstTraceId = tracesResult.data?.threadTraces?.[0]?.traceId ?? null;
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
