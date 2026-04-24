@@ -24,7 +24,6 @@ class TestWriteMemoryTool(unittest.TestCase):
         os.environ["AGENT_ID"] = "agent-marco"
         os.environ["THINKWORK_API_URL"] = "https://api.example.test"
         os.environ["API_AUTH_SECRET"] = "test-secret"
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         # Force re-import so env vars are fresh.
         for mod in ("write_memory_tool",):
             if mod in sys.modules:

@@ -6,14 +6,8 @@ actually valid Python and matches the documented shape.
 from __future__ import annotations
 
 import ast
-import os
-import sys
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-if _HERE not in sys.path:
-    sys.path.insert(0, _HERE)
-
-import sandbox_preamble as sp  # type: ignore  # noqa: E402
+import sandbox_preamble as sp  # type: ignore
 
 
 def test_preamble_version_comment_is_present():

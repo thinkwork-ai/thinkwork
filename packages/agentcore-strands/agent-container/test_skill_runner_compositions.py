@@ -9,12 +9,9 @@ Run with: uv run --no-project --with pydantic --with PyYAML --with pytest \\
 from __future__ import annotations
 
 import os
-import sys
 import tempfile
 import textwrap
 import unittest
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import skill_runner
 

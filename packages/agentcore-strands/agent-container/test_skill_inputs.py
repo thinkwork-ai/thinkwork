@@ -7,12 +7,9 @@ Run with: uv run pytest packages/agentcore-strands/agent-container/test_skill_in
 from __future__ import annotations
 
 import os
-import sys
 import tempfile
 import textwrap
 import unittest
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from pydantic import ValidationError
 from skill_inputs import (
