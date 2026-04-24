@@ -26,7 +26,7 @@ scripts:
     description: "List sub-threads with optional status filter"
   - name: get_thread_details
     path: scripts/threads.py
-    description: "Get full thread details including comments and dependencies"
+    description: "Get a thread record by id (title, status, channel, assignee, identifier, dueAt)"
   - name: escalate_thread
     path: scripts/threads.py
     description: "Escalate a thread to the supervisor agent"

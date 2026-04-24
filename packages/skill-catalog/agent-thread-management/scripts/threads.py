@@ -313,13 +313,14 @@ def list_sub_threads(parent_thread_id: str = "",
 
 @_safe
 def get_thread_details(thread_id: str) -> str:
-    """Retrieve full details for a single thread including comments.
+    """Retrieve the thread record for a single thread by id.
 
     Args:
         thread_id: UUID of the thread.
 
     Returns:
-        JSON with the thread object and its comments.
+        JSON with the thread object (id, title, status, channel, agent,
+        assignee, number, identifier, dueAt, createdAt).
     """
     result = _graphql(
         f"query($id: ID!) {{ thread(id: $id) {{ {THREAD_FIELDS} }} }}",

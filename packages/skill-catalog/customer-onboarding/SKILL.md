@@ -44,7 +44,7 @@ Parse the JSON. Briefly echo back what you got (one sentence — "Got it: Beta, 
 
 ## Step 3: Create tasks
 
-Read `references/task-specs.md` for the full task list, descriptions, and assignment rules. Create every applicable task using `create_sub_thread` before sending any message.
+Read `references/task-specs.md` for the full task list and assignment rules. Create every applicable task using `create_sub_thread` before sending any message.
 
 ## Step 4: Promote this thread
 
