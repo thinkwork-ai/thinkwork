@@ -190,15 +190,6 @@ export async function handler(event: InvokeEvent): Promise<void> {
       throw err;
     }
 
-    // The helper's human-pair email fallback may have filled currentUserEmail
-    // for us (when the chat event didn't carry a sender_id + thread creator).
-    // Propagate that back into the local variable so the log + sandbox
-    // preflight blocks below see the resolved value.
-    // Note: the helper does not modify currentUserId, matching R15.
-    // (Tracking the helper's "did I fallback?" bit isn't worth the API
-    // surface area — reconstructing it via users lookup is cheap if ever
-    // needed.)
-
     const runtimeType = runtimeConfig.runtimeType;
     const agentModel = runtimeConfig.templateModel;
     const tenantSlug = runtimeConfig.tenantSlug;
