@@ -84,6 +84,16 @@ export const tenants = pgTable(
     // 'operator_delete', etc.). Free-text so new reasons don't need a
     // migration.
     deactivation_reason: text("deactivation_reason"),
+    // Per-tenant kill switches for built-in tools (plan #007 §R6, R7). JSONB
+    // array of slug strings ['execute_code', 'web_search', ...]. Empty array
+    // = all built-ins available (subject to template blocks). Runtime filter
+    // intersects with template.blocked_tools at Agent(tools=...) construction;
+    // tenant disable always wins (a template cannot unblock what the tenant
+    // disabled). Admin UI for editing this column defers per the plan's
+    // §Scope Boundaries → Deferred to Follow-Up Work.
+    disabled_builtin_tools: jsonb("disabled_builtin_tools")
+      .notNull()
+      .default([]),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
