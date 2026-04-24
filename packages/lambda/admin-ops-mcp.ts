@@ -88,15 +88,32 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
 	// Tenant pinning: a tenant-scoped key forces tenantId on every downstream
 	// call regardless of what the caller passed. A superuser (API_AUTH_SECRET)
 	// falls back to the caller-supplied tenantId — reserved for bootstrap.
+	//
+	// Principal fallback: GraphQL resolvers gated on tenant-admin look up
+	// ctx.auth.principalId against tenant_members. Resolve priority:
+	//   1. args.principalId — MCP tool caller (Strands runtime) asserts the
+	//      real invoking human. Matches the Python skill's CURRENT_USER_ID.
+	//   2. auth.createdByUserId — the user the tenant's admin key was minted
+	//      against (defaulted to the tenant's first owner on provision).
+	//      Ensures every MCP call has some admin principal even when the
+	//      caller doesn't thread one through.
+	//   3. undefined — the apikey branch in authenticate() will set
+	//      ctx.auth.principalId to null, and resolvers that require admin
+	//      role will refuse. Expected behavior for unprovisioned keys.
 	const clientFor = (args: Record<string, unknown>) => {
 		const pinnedTenantId = auth.tenantId;
 		const argTenantId =
 			typeof args.tenantId === "string" ? args.tenantId : undefined;
 		const tenantId = pinnedTenantId ?? argTenantId;
+
+		const argPrincipalId =
+			typeof args.principalId === "string" ? args.principalId : undefined;
+		const principalId = argPrincipalId ?? auth.createdByUserId;
+
 		return createClient({
 			apiUrl,
 			authSecret,
-			principalId: typeof args.principalId === "string" ? args.principalId : undefined,
+			principalId,
 			principalEmail:
 				typeof args.principalEmail === "string" ? args.principalEmail : undefined,
 			tenantId,
@@ -797,6 +814,14 @@ export interface AuthResult {
 	tenantId?: string;
 	/** Key row id, when authenticated via tenant_mcp_admin_keys. */
 	keyId?: string;
+	/**
+	 * User the key was minted against — typically the tenant owner that ran
+	 * `thinkwork mcp provision`. Forwarded to downstream REST/GraphQL calls
+	 * as `x-principal-id` when the MCP tool caller doesn't supply their
+	 * own. Without it, resolvers gated on tenant-admin (tenant_members
+	 * lookup against ctx.auth.principalId) would refuse every call.
+	 */
+	createdByUserId?: string;
 	/** True when the caller used the shared API_AUTH_SECRET (cross-tenant access). */
 	superuser: boolean;
 }
@@ -822,6 +847,7 @@ async function authenticate(event: APIGatewayProxyEventV2): Promise<AuthResult |
 			.select({
 				id: tenantMcpAdminKeys.id,
 				tenant_id: tenantMcpAdminKeys.tenant_id,
+				created_by_user_id: tenantMcpAdminKeys.created_by_user_id,
 			})
 			.from(tenantMcpAdminKeys)
 			.where(
@@ -839,7 +865,13 @@ async function authenticate(event: APIGatewayProxyEventV2): Promise<AuthResult |
 				.catch((err: unknown) => {
 					console.warn("admin-ops-mcp: last_used_at bump failed", err);
 				});
-			return { ok: true, tenantId: row.tenant_id, keyId: row.id, superuser: false };
+			return {
+				ok: true,
+				tenantId: row.tenant_id,
+				keyId: row.id,
+				createdByUserId: row.created_by_user_id ?? undefined,
+				superuser: false,
+			};
 		}
 	} catch (err: unknown) {
 		// DB unavailable — fall through to superuser check so break-glass still
