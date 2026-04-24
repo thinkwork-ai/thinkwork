@@ -64,7 +64,11 @@ export async function startStripeCheckout(
 	const apiUrl = resolveApiUrl().replace(/\/$/, "");
 
 	const successUrl = `https://thinkwork.ai/m/checkout-complete?session_id=${STRIPE_SESSION_TEMPLATE}`;
-	const cancelUrl = "https://thinkwork.ai/pricing";
+	// /pricing was renamed to /cloud on 2026-04-24. Older installed mobile
+	// builds still carry this constant pointing at /pricing and will hit the
+	// www-side meta-refresh redirect — that's acceptable; new builds cancel
+	// straight to /cloud.
+	const cancelUrl = "https://thinkwork.ai/cloud";
 
 	const headers: Record<string, string> = {
 		"Content-Type": "application/json",

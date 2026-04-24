@@ -2,7 +2,7 @@
  * Canonical plan catalog for ThinkWork self-serve billing.
  *
  * Shared by:
- *   - apps/www/src/pages/pricing.astro (marketing pricing page)
+ *   - apps/www/src/pages/cloud.astro (ThinkWork Cloud plans page)
  *   - apps/mobile/app/onboarding/payment.tsx (mobile pricing screen)
  *
  * Any change here ripples to both surfaces. When adding a plan, also:
