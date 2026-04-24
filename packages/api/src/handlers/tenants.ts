@@ -10,7 +10,7 @@ import {
 } from "@aws-sdk/client-cognito-identity-provider";
 import { schema } from "@thinkwork/database-pg";
 import { db } from "../lib/db.js";
-import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
+import { authenticate } from "../lib/cognito-auth.js";
 import { handleCors, json, error, notFound, unauthorized } from "../lib/response.js";
 import { resolveTenantId } from "../lib/tenants.js";
 
@@ -27,8 +27,8 @@ export async function handler(
 	event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
 	if (event.requestContext.http.method === "OPTIONS") return { statusCode: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "*", "Access-Control-Allow-Headers": "*" }, body: "" };
-	const token = extractBearerToken(event);
-	if (!token || !validateApiSecret(token)) return unauthorized();
+	const auth = await authenticate(event.headers);
+	if (!auth) return unauthorized();
 
 	const method = event.requestContext.http.method;
 	const path = event.rawPath;
