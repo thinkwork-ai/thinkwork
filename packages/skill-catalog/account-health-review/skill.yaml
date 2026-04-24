@@ -1,12 +1,18 @@
 id: account-health-review
-version: 1
-execution: composition
+version: 2
+execution: context
 mode: tool
 name: "Account Health Review"
 description: >
   Periodic review of a customer account's health signals — engagement,
   usage, support load, financial posture. Produces a health report CSMs
   and AEs can skim ahead of a standing check-in.
+
+# U8 migration (plan §U8, 2026-04-24): converted from execution:composition
+# → execution:context. The model drives the frame → gather → synthesize →
+# package sequence itself via the Skill() meta-tool (U5 session allowlist),
+# replacing composition_runner. Pattern mirrors sales-prep — same four
+# phases with a risk-steered synthesize + product/engagement gather set.
 
 inputs:
   customer:
@@ -44,65 +50,12 @@ triggers:
       period:
         literal: last_30_days
 
-delivery:
-  - chat
-  - email
-
-budget_cap:
-  tokens: 100000
-
-steps:
-  - id: frame
-    mode: sequential
-    skill: frame
-    inputs:
-      problem: "Account health review for {customer} over {period}."
-    output: framed
-
-  - id: gather
-    mode: parallel
-    on_branch_failure: continue_with_footer
-    branches:
-      - id: crm
-        skill: crm_account_summary
-        inputs:
-          customer: "{customer}"
-          period: "{period}"
-        critical: true
-      - id: usage
-        skill: product_usage_summary
-        inputs:
-          customer: "{customer}"
-          period: "{period}"
-      - id: ar
-        skill: ar_summary
-        inputs:
-          customer: "{customer}"
-      - id: tickets
-        skill: support_incidents_summary
-        inputs:
-          customer: "{customer}"
-          period: "{period}"
-      - id: engagement
-        skill: engagement_summary
-        inputs:
-          customer: "{customer}"
-          period: "{period}"
-    output: gathered
-
-  - id: synthesize
-    mode: sequential
-    skill: synthesize
-    inputs:
-      framed: "{framed}"
-      gathered: "{gathered}"
-      focus: risks
-    output: synthesis
-
-  - id: package
-    mode: sequential
-    skill: package
-    inputs:
-      synthesis: "{synthesis}"
-      format: health_report
-    output: deliverable
+# Sub-skills the model invokes via Skill(). Template-scoped
+# session_allowlist (U5) auto-includes these when account-health-review
+# is assigned to a template. CRM / AR / support-incidents / product-usage /
+# engagement skills ship in separate PRDs; missing sub-skills degrade
+# gracefully per SKILL.md body's policy.
+requires_skills:
+  - frame
+  - synthesize
+  - package
