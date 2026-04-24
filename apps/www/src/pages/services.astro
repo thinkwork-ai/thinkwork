@@ -14,12 +14,7 @@ const closingPrimaryMailto = `mailto:${servicesContactEmail}?subject=${encodeURI
   services.closingCta.primaryCta.mailtoSubject,
 )}`;
 
-const featuredItems = services.packages.items.filter(
-  (pkg) => pkg.variant === "featured",
-);
-const secondaryItems = services.packages.items.filter(
-  (pkg) => pkg.variant === "secondary",
-);
+const packageItems = services.packages.items;
 ---
 
 <Base title={services.meta.title} description={services.meta.description}>
@@ -156,7 +151,7 @@ const secondaryItems = services.packages.items.filter(
       </ol>
     </SectionShell>
 
-    {/* 4. Featured packages */}
+    {/* 4. Services packages (single consolidated list incl. Cloud Hosting handoff) */}
     <SectionShell id="packages" tone="raised" glow="center">
       <SectionHeader
         eyebrow={services.packages.eyebrow}
@@ -165,8 +160,8 @@ const secondaryItems = services.packages.items.filter(
         align="center"
         width="wide"
       />
-      <div class="mt-14 grid gap-y-8 gap-x-5 md:gap-y-6 md:grid-cols-2 xl:grid-cols-4">
-        {featuredItems.map((pkg) => (
+      <div class="mt-14 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {packageItems.map((pkg) => (
           <ServiceCard
             id={pkg.id}
             name={pkg.name}
@@ -177,35 +172,8 @@ const secondaryItems = services.packages.items.filter(
             includes={pkg.includes}
             outcome={pkg.outcome}
             bestFor={pkg.bestFor}
-            variant={pkg.variant}
-          />
-        ))}
-      </div>
-    </SectionShell>
-
-    {/* 5. Additional packages (secondary) */}
-    <SectionShell tone="default">
-      <div class="mx-auto max-w-3xl text-center">
-        <h2 class="text-balance text-2xl font-semibold tracking-tight text-slate-100 md:text-3xl">
-          {services.packages.secondaryHeadline}
-        </h2>
-        <p class="mt-4 text-sm leading-relaxed text-slate-400 md:text-base">
-          {services.packages.secondaryLede}
-        </p>
-      </div>
-      <div class="mx-auto mt-12 grid max-w-5xl gap-y-8 gap-x-5 md:gap-y-6 md:grid-cols-2">
-        {secondaryItems.map((pkg) => (
-          <ServiceCard
-            id={pkg.id}
-            name={pkg.name}
-            type={pkg.type}
-            timeline={pkg.timeline}
-            oneLiner={pkg.oneLiner}
-            body={pkg.body}
-            includes={pkg.includes}
-            outcome={pkg.outcome}
-            bestFor={pkg.bestFor}
-            variant={pkg.variant}
+            ctaHref={pkg.ctaHref}
+            ctaLabel={pkg.ctaLabel}
           />
         ))}
       </div>
