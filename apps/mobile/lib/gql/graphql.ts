@@ -290,6 +290,15 @@ export type AgentTemplate = {
   knowledgeBaseIds?: Maybe<Scalars['AWSJSON']['output']>;
   model?: Maybe<Scalars['String']['output']>;
   name: Scalars['String']['output'];
+  /**
+   * Sandbox opt-in metadata for the AgentCore Code Interpreter sandbox
+   * (plan Unit 3). Shape validated at create/update time by
+   * packages/api/src/lib/templates/sandbox-config.ts:
+   *   { environment: "default-public" | "internal-only",
+   *     required_connections: ["google" | "github" | "slack", ...] }
+   * Null means the template does not use the sandbox.
+   */
+  sandbox?: Maybe<Scalars['AWSJSON']['output']>;
   skills?: Maybe<Scalars['AWSJSON']['output']>;
   slug: Scalars['String']['output'];
   source: Scalars['String']['output'];
@@ -536,6 +545,12 @@ export type CreateAgentTemplateInput = {
   knowledgeBaseIds?: InputMaybe<Scalars['AWSJSON']['input']>;
   model?: InputMaybe<Scalars['String']['input']>;
   name: Scalars['String']['input'];
+  /**
+   * Sandbox opt-in metadata; see AgentTemplate.sandbox. Validated at
+   * resolver boundary. Omit (or pass null) for templates that do not
+   * opt into the sandbox.
+   */
+  sandbox?: InputMaybe<Scalars['AWSJSON']['input']>;
   skills?: InputMaybe<Scalars['AWSJSON']['input']>;
   slug: Scalars['String']['input'];
   tenantId: Scalars['ID']['input'];
@@ -1363,6 +1378,12 @@ export type Mutation = {
   updateTeam: Team;
   updateTenant: Tenant;
   updateTenantMember: TenantMember;
+  /**
+   * Platform-operator-only mutation — see UpdateTenantPolicyInput. Changes
+   * are audited in tenant_policy_events and must satisfy the compound
+   * sandbox_requires_standard_tier CHECK on the tenants table.
+   */
+  updateTenantPolicy: Tenant;
   updateTenantSettings: TenantSettings;
   updateThread: Thread;
   updateThreadComment: ThreadComment;
@@ -2081,6 +2102,12 @@ export type MutationUpdateTenantArgs = {
 export type MutationUpdateTenantMemberArgs = {
   id: Scalars['ID']['input'];
   input: UpdateTenantMemberInput;
+};
+
+
+export type MutationUpdateTenantPolicyArgs = {
+  input: UpdateTenantPolicyInput;
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -3067,6 +3094,15 @@ export type SendMessageInput = {
   toolResults?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
+export type SkillPermissionsDelta = {
+  __typename?: 'SkillPermissionsDelta';
+  /** Ops the agent will gain after sync (typically empty — intersection narrows). */
+  added: Array<Scalars['String']['output']>;
+  /** Ops the agent currently has but will lose after sync. */
+  removed: Array<Scalars['String']['output']>;
+  skillId: Scalars['String']['output'];
+};
+
 export type SkillRun = {
   __typename?: 'SkillRun';
   agentId?: Maybe<Scalars['ID']['output']>;
@@ -3236,6 +3272,15 @@ export type TemplateSyncDiff = {
   filesSame: Array<Scalars['String']['output']>;
   kbsAdded: Array<Scalars['String']['output']>;
   kbsRemoved: Array<Scalars['String']['output']>;
+  /**
+   * Per-skill preview of the operations the agent will lose (or gain) if
+   * Push is applied now. Only includes entries for skills whose manifest
+   * declares `permissions_model: operations` AND where the agent's
+   * current state would diverge from the post-sync state. Empty array
+   * when no permission change is pending. Surfaces in the sync dialog
+   * so operators can see revocations before confirming.
+   */
+  permissionsChanges: Array<SkillPermissionsDelta>;
   roleChange?: Maybe<RoleChange>;
   skillsAdded: Array<Scalars['String']['output']>;
   skillsChanged: Array<Scalars['String']['output']>;
@@ -3245,13 +3290,43 @@ export type TemplateSyncDiff = {
 export type Tenant = {
   __typename?: 'Tenant';
   agents: Array<Agent>;
+  /**
+   * Compliance classification: "standard" | "regulated" | "hipaa". Only
+   * standard tenants may enable the sandbox; a compound CHECK on the tenants
+   * table enforces this at the schema layer.
+   */
+  complianceTier: Scalars['String']['output'];
   createdAt: Scalars['AWSDateTime']['output'];
+  /**
+   * Per-tenant kill switches for built-in tools (plan #007 R6/R7). Array of
+   * slug strings (e.g. ["execute_code", "web_search"]). Empty array = all
+   * built-ins available (subject to template blocks). The runtime applies
+   * this as a narrow-only filter at Agent(tools=...) construction; template
+   * blocks intersect (a template cannot unblock what the tenant disabled).
+   * Admin UI for editing this field defers to a follow-up PR; until then
+   * operators mutate the column directly.
+   */
+  disabledBuiltinTools: Array<Scalars['String']['output']>;
   id: Scalars['ID']['output'];
   issueCounter: Scalars['Int']['output'];
   issuePrefix?: Maybe<Scalars['String']['output']>;
   members: Array<TenantMember>;
   name: Scalars['String']['output'];
   plan: Scalars['String']['output'];
+  /**
+   * Sandbox kill switch. When false, the dispatcher does not register the
+   * execute_code tool regardless of template opt-in. Default-true for new
+   * tenants; the migration that added this column flipped every pre-existing
+   * tenant to false so Phase 3b enforcement lands before the sandbox runs.
+   */
+  sandboxEnabled: Scalars['Boolean']['output'];
+  sandboxInterpreterInternalId?: Maybe<Scalars['String']['output']>;
+  /**
+   * Per-tenant AgentCore Code Interpreter IDs, populated asynchronously by
+   * the agentcore-admin Lambda (plan Unit 5). Null during the provisioning
+   * window.
+   */
+  sandboxInterpreterPublicId?: Maybe<Scalars['String']['output']>;
   settings?: Maybe<TenantSettings>;
   slug: Scalars['String']['output'];
   teams: Array<Team>;
@@ -3547,6 +3622,11 @@ export type UpdateAgentTemplateInput = {
   knowledgeBaseIds?: InputMaybe<Scalars['AWSJSON']['input']>;
   model?: InputMaybe<Scalars['String']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
+  /**
+   * Sandbox opt-in metadata; see AgentTemplate.sandbox. Pass null to
+   * clear; omit to leave unchanged.
+   */
+  sandbox?: InputMaybe<Scalars['AWSJSON']['input']>;
   skills?: InputMaybe<Scalars['AWSJSON']['input']>;
   slug?: InputMaybe<Scalars['String']['input']>;
 };
@@ -3631,6 +3711,20 @@ export type UpdateTenantMemberInput = {
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   role?: InputMaybe<Scalars['String']['input']>;
   status?: InputMaybe<Scalars['String']['input']>;
+};
+
+/**
+ * Platform-operator-only input for sandbox + compliance-tier policy changes
+ * (plan Unit 6). Separate from UpdateTenantInput because these fields shift
+ * the tenant's security boundary and are audited in tenant_policy_events.
+ * Caller must be in the THINKWORK_PLATFORM_OPERATOR_EMAILS allowlist on the
+ * graphql-http Lambda.
+ */
+export type UpdateTenantPolicyInput = {
+  /** Compliance tier: 'standard' | 'regulated' | 'hipaa'. Non-standard coerces sandboxEnabled = false. */
+  complianceTier?: InputMaybe<Scalars['String']['input']>;
+  /** Sandbox kill switch. Setting true while complianceTier != 'standard' is rejected. */
+  sandboxEnabled?: InputMaybe<Scalars['Boolean']['input']>;
 };
 
 export type UpdateTenantSettingsInput = {
