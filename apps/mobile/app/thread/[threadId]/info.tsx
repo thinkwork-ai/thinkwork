@@ -22,7 +22,8 @@ const LIFECYCLE_LABELS: Record<string, string> = {
   AWAITING_USER: "Awaiting user",
 };
 
-function lifecycleColor(status: string, isDark: boolean): string {
+function lifecycleColor(status: string | null | undefined, isDark: boolean): string {
+  if (!status) return isDark ? "#a3a3a3" : "#737373";
   switch (status) {
     case "RUNNING": return isDark ? "#60a5fa" : "#2563eb";
     case "COMPLETED": return isDark ? "#4ade80" : "#16a34a";

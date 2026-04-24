@@ -142,7 +142,7 @@ export default function ChatRoute() {
   }, [chatThreads, activeAgent?.id, paramThreadId, paramIdentifier]);
 
   const threadIdentifier = activeThread?.identifier || paramIdentifier || "New Thread";
-  const lifecycleStatus = (activeThread as any)?.lifecycleStatus as string | null | undefined;
+  const lifecycleStatus = activeThread?.lifecycleStatus;
   const lifecycleLabel = lifecycleStatus ? (LIFECYCLE_LABELS[lifecycleStatus] ?? "Idle") : null;
   const lifecycleDotColor = lifecycleColor(lifecycleStatus, isDark);
 
@@ -151,7 +151,7 @@ export default function ChatRoute() {
     if (activeThread?.id) {
       // Archive instead of the retired status=DONE transition (U9): lifecycle
       // is derived server-side; "done" as a user action maps to archiving.
-      updateThread(activeThread.id, { archivedAt: new Date().toISOString() as any })
+      updateThread(activeThread.id, { archivedAt: new Date().toISOString() })
         .catch((e: any) => console.error("[Chat] Failed to archive thread:", e));
     }
     setChatKey((k) => k + 1);

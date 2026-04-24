@@ -352,7 +352,9 @@ export default function ThreadsScreen() {
       flex: 1,
       minWidth: 80,
       render: (item) => (
-        <Muted className="text-sm">{item.status}</Muted>
+        <Muted className="text-sm">
+          {lifecycleLabel((item as any).lifecycleStatus)}
+        </Muted>
       ),
     },
     {
