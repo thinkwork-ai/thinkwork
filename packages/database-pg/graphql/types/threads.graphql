@@ -1,4 +1,4 @@
-# Thread domain types (PRD-01): Thread, ThreadComment, ThreadLabel,
+# Thread domain types (PRD-01): Thread, ThreadLabel,
 # ThreadAttachment and related enums/inputs.
 
 enum ThreadStatus {
@@ -72,9 +72,7 @@ type Thread {
   lastReadAt: AWSDateTime
   createdByType: String
   createdById: String
-  comments: [ThreadComment!]!
   attachments: [ThreadAttachment!]!
-  commentCount: Int!
   childCount: Int!
   costSummary: Float
   lastActivityAt: AWSDateTime
@@ -85,18 +83,6 @@ type Thread {
 type ThreadsPage {
   items: [Thread!]!
   totalCount: Int!
-}
-
-type ThreadComment {
-  id: ID!
-  threadId: ID!
-  tenantId: ID!
-  authorType: String
-  authorId: ID
-  content: String!
-  metadata: AWSJSON
-  createdAt: AWSDateTime!
-  updatedAt: AWSDateTime!
 }
 
 type ThreadLabel {

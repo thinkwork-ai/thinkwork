@@ -140,5 +140,5 @@ export const createThread = async (_parent: any, args: any, ctx: GraphQLContext)
 		}
 	}
 
-	return { ...threadToCamel(row), commentCount: 0, childCount: 0 };
+	return { ...threadToCamel(row), childCount: 0 };
 };
