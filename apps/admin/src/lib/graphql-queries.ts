@@ -456,6 +456,7 @@ export const ThreadDetailQuery = graphql(`
       identifier
       title
       status
+      lifecycleStatus
       assigneeType
       assigneeId
       agentId

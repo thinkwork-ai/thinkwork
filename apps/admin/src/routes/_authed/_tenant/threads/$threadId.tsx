@@ -9,6 +9,7 @@ import { InlineEditor } from "@/components/threads/InlineEditor";
 import { LiveRunWidget } from "@/components/threads/LiveRunWidget";
 import { StatusIcon } from "@/components/threads/StatusIcon";
 import { StatusBadge } from "@/components/StatusBadge";
+import { ThreadLifecycleBadge } from "@/components/threads/ThreadLifecycleBadge";
 import { Identity } from "@/components/Identity";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Button } from "@/components/ui/button";
@@ -69,15 +70,38 @@ export const Route = createFileRoute("/_authed/_tenant/threads/$threadId")({
 // Constants
 // ---------------------------------------------------------------------------
 
-const STATUS_OPTIONS = [
-  { value: "BACKLOG", label: "Backlog" },
-  { value: "TODO", label: "Todo" },
-  { value: "IN_PROGRESS", label: "In Progress" },
-  { value: "IN_REVIEW", label: "In Review" },
-  { value: "BLOCKED", label: "Blocked" },
-  { value: "DONE", label: "Done" },
-  { value: "CANCELLED", label: "Cancelled" },
-];
+const TRIGGER_LABELS: Record<string, string> = {
+  chat: "Manual chat",
+  manual: "Manual chat",
+  schedule: "Schedule",
+  webhook: "Webhook",
+  api: "Automation",
+  email: "Email",
+};
+
+function triggerLabel(channel: string | null | undefined): string {
+  if (channel === null || channel === undefined || channel === "") return "—";
+  const lower = channel.toLowerCase();
+  // Unrecognized values render the raw string (not "Unknown") so unexpected
+  // channels surface during review instead of hiding silently.
+  return TRIGGER_LABELS[lower] ?? channel;
+}
+
+function formatTurnCostSummary(
+  turnCount: number,
+  tokenCount: number,
+  costSummary: number | null | undefined,
+): string {
+  const parts: string[] = [];
+  parts.push(`${turnCount} turn${turnCount === 1 ? "" : "s"}`);
+  if (tokenCount > 0) {
+    parts.push(`${tokenCount.toLocaleString()} token${tokenCount === 1 ? "" : "s"}`);
+  }
+  if (costSummary !== null && costSummary !== undefined && costSummary > 0) {
+    parts.push(`$${costSummary.toFixed(4)}`);
+  }
+  return parts.join(" · ");
+}
 
 // ---------------------------------------------------------------------------
 // Activity types & helpers
@@ -329,6 +353,7 @@ function ThreadDetailPage() {
           thread={thread}
           agents={agents}
           onUpdate={handleFieldUpdate}
+          loading={threadResult.fetching && !thread.lifecycleStatus}
         />,
       );
     }
@@ -481,7 +506,13 @@ function ThreadDetailPage() {
         {/* Properties */}
         <div className="rounded-lg border border-border bg-accent/30 p-3.5 space-y-3">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Properties</h3>
-          <ThreadProperties thread={thread} agents={agents} onUpdate={handleFieldUpdate} inline />
+          <ThreadProperties
+            thread={thread}
+            agents={agents}
+            onUpdate={handleFieldUpdate}
+            inline
+            loading={threadResult.fetching && !thread.lifecycleStatus}
+          />
         </div>
 
         {/* Attachments */}
@@ -564,6 +595,7 @@ function ThreadDetailPage() {
                 agents={agents}
                 onUpdate={handleFieldUpdate}
                 inline
+                loading={threadResult.fetching && !thread.lifecycleStatus}
               />
             </div>
           </ScrollArea>
@@ -580,7 +612,8 @@ function ThreadDetailPage() {
 interface ThreadPropertiesProps {
   thread: {
     readonly id: string;
-    readonly status: string;
+    readonly lifecycleStatus?: string | null;
+    readonly channel?: string | null;
     readonly assigneeType?: string | null;
     readonly assigneeId?: string | null;
     readonly agent?: { readonly id: string; readonly name: string; readonly avatarUrl?: string | null } | null;
@@ -590,37 +623,72 @@ interface ThreadPropertiesProps {
     readonly completedAt?: string | null;
     readonly cancelledAt?: string | null;
     readonly checkoutRunId?: string | null;
+    readonly costSummary?: number | null;
+    readonly messages?: {
+      readonly edges?: ReadonlyArray<{
+        readonly node?: {
+          readonly role?: string | null;
+          readonly tokenCount?: number | null;
+        } | null;
+      }> | null;
+    } | null;
     readonly createdAt: string;
     readonly updatedAt: string;
   };
   agents: readonly { readonly id: string; readonly name: string; readonly avatarUrl?: string | null; readonly status: string }[];
   onUpdate: (data: Record<string, unknown>) => Promise<void>;
   inline?: boolean;
+  loading?: boolean;
 }
 
-function ThreadProperties({ thread, agents, onUpdate, inline }: ThreadPropertiesProps) {
-  const handleStatusChange = (status: string) => {
-    void onUpdate({ status: status as any });
-  };
+function ThreadProperties({ thread, agents, onUpdate, inline, loading }: ThreadPropertiesProps) {
+  // Turn + token + cost summary computed from the existing messages edges.
+  // Turn count = assistant message count (a proxy for agent-turn count that
+  // avoids an extra query; mirrors the Activity header's existing shape).
+  // Tokens = sum of tokenCount across all messages.
+  const edges = thread.messages?.edges ?? [];
+  let turnCount = 0;
+  let tokenCount = 0;
+  for (const edge of edges) {
+    const node = edge?.node;
+    if (!node) continue;
+    if (node.role === "assistant") turnCount++;
+    if (typeof node.tokenCount === "number") tokenCount += node.tokenCount;
+  }
+  const turnCostSummary = formatTurnCostSummary(turnCount, tokenCount, thread.costSummary ?? null);
+
+  // ThreadLifecycleStatus is a string literal union on the server; cast the
+  // codegen'd GraphQL scalar string to match the badge's prop type.
+  const lifecycle = (thread.lifecycleStatus ?? null) as
+    | "RUNNING"
+    | "COMPLETED"
+    | "CANCELLED"
+    | "FAILED"
+    | "IDLE"
+    | "AWAITING_USER"
+    | null;
 
   return (
     <div className={cn("space-y-3", !inline && "p-4")}>
       {!inline && <h3 className="text-sm font-semibold text-muted-foreground">Properties</h3>}
 
       <PropRow label="Status">
-        <Select value={thread.status} onValueChange={handleStatusChange}>
-          <SelectTrigger className="w-[140px] h-7 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <ThreadLifecycleBadge
+          lifecycleStatus={lifecycle}
+          threadId={thread.id}
+          loading={loading ?? false}
+        />
       </PropRow>
+
+      <PropRow label="Trigger">
+        <span className="text-xs">{triggerLabel(thread.channel)}</span>
+      </PropRow>
+
+      {turnCount > 0 && (
+        <PropRow label="Turns">
+          <span className="text-xs text-muted-foreground">{turnCostSummary}</span>
+        </PropRow>
+      )}
 
       {thread.agent && (
         <PropRow label="Agent">
