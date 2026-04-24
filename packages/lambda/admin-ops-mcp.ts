@@ -315,7 +315,6 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
 					parentAgentId: { type: "string" },
 					adapterType: { type: "string" },
 					avatarUrl: { type: "string" },
-					budgetMonthlyCents: { type: "integer" },
 					idempotencyKey: { type: "string" },
 				},
 				required: ["tenantId", "templateId", "name"],
@@ -565,20 +564,17 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
 		{
 			name: "templates_create_agent",
 			description:
-				"Stamp a new agent from a template (the core stamp-out-an-enterprise recipe).",
+				"Stamp a new agent from a template (the core stamp-out-an-enterprise recipe). The server derives tenant + role from the template; callers only supply identity.",
 			inputSchema: {
 				type: "object",
 				properties: {
 					templateId: { type: "string" },
-					tenantId: { type: "string" },
-					name: { type: "string" },
-					role: { type: "string" },
-					humanPairId: { type: "string" },
-					parentAgentId: { type: "string" },
-					budgetMonthlyCents: { type: "integer" },
+					name: { type: "string", description: "Display name for the new agent." },
+					slug: { type: "string", description: "URL-safe slug." },
+					teamId: { type: "string", description: "Optional: team to attach the agent to." },
 					idempotencyKey: { type: "string" },
 				},
-				required: ["templateId", "tenantId", "name"],
+				required: ["templateId", "name", "slug"],
 				additionalProperties: false,
 			},
 			async handler(args) {
