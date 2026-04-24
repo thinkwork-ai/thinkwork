@@ -55,6 +55,4 @@ triggers:
 # engagement skills ship in separate PRDs; missing sub-skills degrade
 # gracefully per SKILL.md body's policy.
 requires_skills:
-  - frame
-  - synthesize
   - package
