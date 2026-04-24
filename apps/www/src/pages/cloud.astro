@@ -6,7 +6,7 @@ import SectionShell from "../components/SectionShell.astro";
 import SectionHeader from "../components/SectionHeader.astro";
 import PricingGrid from "../components/PricingGrid.astro";
 import FinalCTA from "../components/FinalCTA.astro";
-import { pricing } from "../lib/copy";
+import { pricing, finalCtaCloud } from "../lib/copy";
 
 // PUBLIC_API_URL is injected at build time by scripts/build-www.sh from the
 // Terraform `api_endpoint` output (or the custom api.thinkwork.ai domain
@@ -37,9 +37,22 @@ const PUBLIC_API_URL = import.meta.env.PUBLIC_API_URL ?? "";
       <div class="mt-16">
         <PricingGrid />
       </div>
+
+      <div class="mx-auto mb-12 mt-14 max-w-3xl text-center">
+        <p class="text-sm leading-relaxed text-slate-400">
+          {pricing.servicesCrossLink.prompt}
+          {" "}
+          <a
+            href={pricing.servicesCrossLink.href}
+            class="font-semibold text-brand underline-offset-4 hover:underline"
+          >
+            {pricing.servicesCrossLink.linkLabel} &rarr;
+          </a>
+        </p>
+      </div>
     </SectionShell>
 
-    <FinalCTA />
+    <FinalCTA tight copy={finalCtaCloud} />
   </main>
 
   <Footer />

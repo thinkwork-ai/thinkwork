@@ -1,6 +1,14 @@
 ---
 import BrainMark from "./BrainMark.astro";
 import { external, nav } from "../lib/copy";
+
+// Normalize so /cloud and /cloud/ both resolve to /cloud for comparison.
+const currentPath = Astro.url.pathname.replace(/\/+$/, "") || "/";
+const isActive = (href: string) => {
+  const target = href.replace(/\/+$/, "") || "/";
+  if (target === "/") return currentPath === "/";
+  return currentPath === target || currentPath.startsWith(`${target}/`);
+};
 ---
 
 <header class="fixed top-0 left-0 right-0 z-50 border-b border-white/5 bg-[#070a0f]/80 backdrop-blur-xl">
@@ -12,7 +20,18 @@ import { external, nav } from "../lib/copy";
 
     <div class="hidden items-center gap-7 md:flex">
       {nav.map((item) => (
-        <a href={item.href} class="text-sm text-slate-400 transition hover:text-white">{item.label}</a>
+        <a
+          href={item.href}
+          aria-current={isActive(item.href) ? "page" : undefined}
+          class:list={[
+            "text-sm transition",
+            isActive(item.href)
+              ? "font-semibold text-white"
+              : "text-slate-400 hover:text-white",
+          ]}
+        >
+          {item.label}
+        </a>
       ))}
       <a href={external.docs} class="text-sm text-slate-400 transition hover:text-white">Docs</a>
       <a
@@ -42,7 +61,18 @@ import { external, nav } from "../lib/copy";
   <div id="mobile-menu" class="hidden border-t border-white/5 bg-[#070a0f] px-6 pb-6 md:hidden">
     <div class="flex flex-col gap-4 pt-4">
       {nav.map((item) => (
-        <a href={item.href} class="text-sm text-slate-400 hover:text-white">{item.label}</a>
+        <a
+          href={item.href}
+          aria-current={isActive(item.href) ? "page" : undefined}
+          class:list={[
+            "text-sm",
+            isActive(item.href)
+              ? "font-semibold text-white"
+              : "text-slate-400 hover:text-white",
+          ]}
+        >
+          {item.label}
+        </a>
       ))}
       <a href={external.docs} class="text-sm text-slate-400 hover:text-white">Docs</a>
       <a href={external.github} class="flex items-center gap-2 text-sm text-slate-400 hover:text-white">
