@@ -24,6 +24,19 @@ Steps to bring `mcp.thinkwork.ai` (or any subdomain of a Cloudflare-managed zone
 
 The `mcp_custom_domain_ready` Terraform variable is the explicit gate between the two passes.
 
+## How apply happens: CI is the default
+
+Thinkwork's production deploys run through `.github/workflows/deploy.yml`, which invokes `terraform apply` with every variable supplied via explicit `-var` flags — **tfvars files are not read by CI**. The two MCP variables are plumbed from GitHub repository variables:
+
+| Terraform variable         | Source                              |
+| -------------------------- | ----------------------------------- |
+| `mcp_custom_domain`        | `vars.MCP_CUSTOM_DOMAIN`            |
+| `mcp_custom_domain_ready`  | `vars.MCP_CUSTOM_DOMAIN_READY` (default `false`) |
+
+Set these under GitHub → Settings → Secrets and variables → Actions → Variables before the first apply.
+
+Local `thinkwork deploy` still reads `terraform/examples/greenfield/terraform.tfvars`, so hand deploys work identically — set `mcp_custom_domain = "mcp.thinkwork.ai"` and `mcp_custom_domain_ready = false|true` there and run `thinkwork deploy`.
+
 ## Prerequisites
 
 - The MCP Lambda is deployed (merged PR #480 + #482).
@@ -34,42 +47,60 @@ The `mcp_custom_domain_ready` Terraform variable is the explicit gate between th
 
 ### 1. First apply — create the ACM cert
 
-In `terraform.tfvars` for the target stage:
+In GitHub Actions repo variables:
 
-```hcl
-mcp_custom_domain       = "mcp.thinkwork.ai"
-mcp_custom_domain_ready = false   # default; stays false for the first apply
+```
+MCP_CUSTOM_DOMAIN       = mcp.thinkwork.ai
+MCP_CUSTOM_DOMAIN_READY = false
 ```
 
-Then:
+Push to `main` (or run the Deploy workflow manually). The `terraform-apply` job creates the ACM cert in `pending_validation` state and exposes two outputs:
+
+- `mcp_custom_domain_cert_arn` — the ACM cert ARN
+- `mcp_custom_domain_validation` — list of `{ name, type, value }` CNAMEs to add
+
+Fetch the ARN from the deployed stack:
 
 ```bash
-thinkwork deploy -s prod   # runs `terraform apply` under the hood
+aws acm list-certificates --region us-east-1 \
+  --query "CertificateSummaryList[?DomainName=='mcp.thinkwork.ai'].CertificateArn" \
+  --output text
 ```
 
-Output includes:
-
-- `mcp_custom_domain_cert_arn` — the ACM cert ARN (pending validation)
-- `mcp_custom_domain_validation` — list of `{ name, type, value }` CNAMEs to add
+(Or pull it from terraform outputs if you have local state: `terraform output -raw mcp_custom_domain_cert_arn`.)
 
 ### 2. Sync validation records to Cloudflare
 
+**Direct-args mode** (preferred — no local TF state required):
+
 ```bash
 export CLOUDFLARE_API_TOKEN=...   # Zone.DNS:Edit on thinkwork.ai
-pnpm cf:sync-mcp -- --terraform-dir $THINKWORK_TERRAFORM_DIR
+pnpm cf:sync-mcp -- \
+  --domain mcp.thinkwork.ai \
+  --cert-arn arn:aws:acm:us-east-1:<acct>:certificate/<uuid>
 ```
 
 The script:
+- Runs `aws acm describe-certificate` to pull `DomainValidationOptions`.
 - Finds the `thinkwork.ai` zone ID via Cloudflare's zone list API.
 - Upserts each ACM validation CNAME (idempotent: PUTs existing, POSTs new).
-- Does NOT add the final `mcp.thinkwork.ai` record yet — that's `--finalize`.
+- Does **not** add the final `mcp.thinkwork.ai` record yet — that's `--finalize`.
+
+Use `--verify-only` to preview the plan without writing.
+
+**Terraform-output mode** (back-compat — needs local `terraform init` against the remote state backend):
+
+```bash
+pnpm cf:sync-mcp -- --terraform-dir terraform/examples/greenfield
+```
 
 ### 3. Wait for ACM to validate
 
 ~5 minutes typical. Poll:
 
 ```bash
-aws acm describe-certificate --certificate-arn "$(terraform output -raw mcp_custom_domain_cert_arn)" \
+aws acm describe-certificate \
+  --certificate-arn arn:aws:acm:us-east-1:<acct>:certificate/<uuid> \
   --query 'Certificate.Status' --output text
 ```
 
@@ -77,26 +108,41 @@ Wait for `ISSUED`.
 
 ### 4. Second apply — create the API Gateway custom domain + mapping
 
-Flip the flag in `terraform.tfvars`:
+Flip the GitHub variable:
 
-```hcl
-mcp_custom_domain       = "mcp.thinkwork.ai"
-mcp_custom_domain_ready = true   # ← second-pass toggle
 ```
+MCP_CUSTOM_DOMAIN_READY = true
+```
+
+Push an empty commit or re-run the Deploy workflow. The second apply creates `aws_apigatewayv2_domain_name.mcp` and the `aws_apigatewayv2_api_mapping.mcp`.
+
+Grab the regional target domain:
 
 ```bash
-thinkwork deploy -s prod
+aws apigatewayv2 get-domain-name \
+  --domain-name mcp.thinkwork.ai \
+  --query 'DomainNameConfigurations[0].TargetDomainName' \
+  --output text
 ```
-
-Output now includes `mcp_custom_domain_target` with the regional target domain.
 
 ### 5. Finalize — add the production CNAME
 
+**Direct-args mode:**
+
 ```bash
-pnpm cf:sync-mcp -- --terraform-dir $THINKWORK_TERRAFORM_DIR --finalize
+pnpm cf:sync-mcp -- \
+  --domain mcp.thinkwork.ai \
+  --finalize \
+  --target d-abc123.execute-api.us-east-1.amazonaws.com
 ```
 
-This adds the final CNAME: `mcp.thinkwork.ai → <regional API Gateway target>`.
+**Terraform-output mode:**
+
+```bash
+pnpm cf:sync-mcp -- --terraform-dir terraform/examples/greenfield --finalize
+```
+
+Either form writes the final CNAME: `mcp.thinkwork.ai → <regional API Gateway target>`.
 
 ### 6. Smoke test
 
@@ -108,16 +154,11 @@ curl -v -X POST \
   https://mcp.thinkwork.ai/mcp/admin
 ```
 
-Expected: `200` with a JSON-RPC response listing `tenants_get`, `tenants_list`, `tenants_update`.
+Expected: `200` with a JSON-RPC response listing the 29 admin-ops tools.
 
 ## Rollback
 
-```hcl
-mcp_custom_domain       = ""
-mcp_custom_domain_ready = false
-```
-
-Then `thinkwork deploy`. Terraform destroys the domain, mapping, and cert. Cloudflare DNS records are left in place — delete manually via the Cloudflare dashboard or a future `--cleanup` flag on the sync script.
+Unset the GitHub variables (or set `MCP_CUSTOM_DOMAIN = ""`) and redeploy. Terraform destroys the domain, mapping, and cert. Cloudflare DNS records are left in place — delete manually via the Cloudflare dashboard or a future `--cleanup` flag on the sync script.
 
 ## Token hygiene
 
