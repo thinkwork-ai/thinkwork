@@ -393,6 +393,39 @@ thinkwork mcp unassign <server-id> --agent <agent-id> -s <stage>
 
 Run `thinkwork mcp <sub> --help` for the full options list on each subcommand, including `--auth-type` (`none` | `tenant_api_key` | `oauth`) and `--transport` (`streamable-http` | `sse`).
 
+### mcp key create / list / revoke
+
+Per-tenant Bearer tokens for the admin-ops MCP server (served at `mcp.thinkwork.ai/mcp/admin`). Each token is scoped to one tenant; callers present it as `Authorization: Bearer tkm_…` against the admin-ops HTTP endpoint.
+
+```bash
+# Mint a new tkm_ token (printed ONCE — save it immediately)
+thinkwork mcp key create -t <tenant-slug> [--name <label>] -s <stage>
+
+# List existing keys for a tenant (metadata only; raw tokens never returned)
+thinkwork mcp key list -t <tenant-slug> [--all] -s <stage>   # --all includes revoked rows
+
+# Revoke a key by id (idempotent)
+thinkwork mcp key revoke <key-id> -t <tenant-slug> -s <stage>
+```
+
+Server-side the token is stored as a SHA-256 hash in `tenant_mcp_admin_keys`; the raw value lives only in Secrets Manager at `/thinkwork/<stage>/mcp/<tenantId>/<server-slug>`. Rotate by creating a new key + revoking the old one.
+
+### mcp provision
+
+One-shot idempotent provisioning of the admin-ops MCP for a tenant: mints a fresh `tkm_` token, stores it in Secrets Manager, and upserts the matching `tenant_mcp_servers` row so agents can subscribe.
+
+```bash
+# Single tenant (interactive picker or -t)
+thinkwork mcp provision -t <slug> [--url https://mcp.thinkwork.ai/mcp/admin] -s <stage>
+
+# Backfill every tenant at once
+thinkwork mcp provision --all -s <stage>
+```
+
+The raw token is **not** printed by `provision` — it only lives in Secrets Manager + the `tenant_mcp_servers.auth_config` row. Re-running `provision` rotates the "default" key and retires the previous one. After provisioning, each agent still needs the server assigned via `thinkwork mcp assign` (or the admin SPA's MCP Servers tab).
+
+The admin SPA's Agent Templates → MCP Servers tab also exposes a **Generate and save a new key** button for `tenant_api_key` servers that calls the same provision path — admins don't need the CLI for the common case.
+
 ---
 
 ## tools
