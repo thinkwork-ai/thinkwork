@@ -297,8 +297,8 @@ resource "aws_lambda_function" "agentcore" {
       MEMORY_RETAIN_FN_NAME  = local.memory_retain_fn_name
       # Needed by run_skill_dispatch.py to POST terminal state back to
       # /api/skills/complete after a composition run finishes.
-      THINKWORK_API_URL      = var.api_endpoint
-      API_AUTH_SECRET        = var.api_auth_secret
+      THINKWORK_API_URL = var.api_endpoint
+      API_AUTH_SECRET   = var.api_auth_secret
     }
   }
 
@@ -315,6 +315,67 @@ resource "aws_lambda_function" "agentcore" {
 # AgentCore is invoked directly via the Lambda SDK (InvokeCommand) from
 # chat-agent-invoke — no Function URL is needed, and exposing one would be
 # a public attack surface for prompt injection.
+
+################################################################################
+# Async-invoke hardening — plan §U4 (InvocationType=Event)
+#
+# Post §U4 the kind=run_skill dispatch flipped to InvocationType=Event so the
+# agent loop has the full 900s Lambda budget. AWS Lambda async-invoke defaults
+# to MaximumRetryAttempts=2, which on this path means a single transient
+# failure (5xx on the /api/skills/complete callback, container OOM, etc.)
+# causes the whole agent turn to run again on a fresh invocation. The agent
+# turn is NOT idempotent — Bedrock tokens get re-burned and (in pathological
+# cases) a second partial deliverable could overwrite the first before
+# /api/skills/complete's atomic CAS rejects it with 409.
+#
+# MaximumRetryAttempts=0 makes the dispatch one-shot. The two durable
+# backstops remain:
+#   1. /api/skills/complete's atomic compare-and-swap on status='running' —
+#      idempotent writeback even if a retry did somehow fire.
+#   2. skill-runs-reconciler cron — flips rows stuck in `running` past the
+#      stale cutoff (default 15 min) to `failed` so the dedup slot frees.
+#
+# Failed invokes (IAM, image-pull, crash-before-callback) land in the
+# `async_dlq` SQS queue for operator visibility. 14-day retention matches
+# the reconciler's backstop window with margin.
+################################################################################
+
+resource "aws_sqs_queue" "agentcore_async_dlq" {
+  name                       = "thinkwork-${var.stage}-agentcore-async-dlq"
+  message_retention_seconds  = 1209600 # 14 days
+  visibility_timeout_seconds = 900     # matches Lambda timeout
+  sqs_managed_sse_enabled    = true
+
+  tags = {
+    Name = "thinkwork-${var.stage}-agentcore-async-dlq"
+  }
+}
+
+resource "aws_iam_role_policy" "agentcore_dlq_send" {
+  name = "agentcore-dlq-send"
+  role = aws_iam_role.agentcore.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["sqs:SendMessage"]
+      Resource = aws_sqs_queue.agentcore_async_dlq.arn
+    }]
+  })
+}
+
+resource "aws_lambda_function_event_invoke_config" "agentcore" {
+  function_name                = aws_lambda_function.agentcore.function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
+
+  destination_config {
+    on_failure {
+      destination = aws_sqs_queue.agentcore_async_dlq.arn
+    }
+  }
+}
 
 ################################################################################
 # Outputs
@@ -338,4 +399,14 @@ output "agentcore_function_name" {
 output "agentcore_function_arn" {
   description = "AgentCore Lambda function ARN (for IAM policy on callers)"
   value       = aws_lambda_function.agentcore.arn
+}
+
+output "agentcore_async_dlq_arn" {
+  description = "SQS queue ARN that catches failed kind=run_skill async invokes"
+  value       = aws_sqs_queue.agentcore_async_dlq.arn
+}
+
+output "agentcore_async_dlq_url" {
+  description = "SQS queue URL for operator inspection of failed async invokes"
+  value       = aws_sqs_queue.agentcore_async_dlq.url
 }

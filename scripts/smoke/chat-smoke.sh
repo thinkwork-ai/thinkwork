@@ -17,10 +17,9 @@
 #   * Intent classification — the dispatcher skill in the Strands
 #     container decides which deliverable to route to. Here we skip
 #     straight to the dispatch endpoint with a pre-built envelope.
-#   * Runtime execution — per plan §U6 the container currently
-#     terminates every `kind=run_skill` envelope with the canonical
-#     unsupported-runtime reason. That terminal failure IS the
-#     passing condition.
+#   * Live connector integration — if the skill references connectors
+#     not registered on this stage, the row lands on `failed` with a
+#     specific reason. Still a passing smoke: the dispatch loop ran.
 #
 # Usage:
 #   scripts/smoke/chat-smoke.sh \

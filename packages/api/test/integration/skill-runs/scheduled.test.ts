@@ -4,7 +4,8 @@
  * Production path:
  *   EventBridge fires → job-trigger.ts sees triggerType="skill_run" →
  *   resolves bindings → INSERT skill_runs (invocationSource="scheduled")
- *   → invokeAgentcoreRunSkill(RequestResponse) → row flips to complete.
+ *   → invokeAgentcoreRunSkill(Event enqueue, §U4) → agent turn runs out
+ *   of band → /api/skills/complete HMAC callback flips row to complete.
  *
  * The harness's startRun() mirrors this sequence; what this test pins is
  * the shape of a scheduled run: `invocation_source="scheduled"`, the

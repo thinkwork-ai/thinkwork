@@ -404,6 +404,7 @@ export function createWebhookHandler(
 			kind: "run_skill",
 			runId: runRow.id,
 			tenantId,
+			agentId: dispatch.agentId ?? null,
 			invokerUserId,
 			skillId: dispatch.skillId,
 			skillVersion: runRow.skill_version,

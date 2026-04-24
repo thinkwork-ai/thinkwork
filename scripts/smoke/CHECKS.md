@@ -7,25 +7,22 @@ script exits `0` on PASS, `1` on FAIL, and prints exactly one
 ## What "passing" means today
 
 Each smoke PASSes when `skill_runs.status` transitions out of
-`running` within the timeout — whether to `complete` (dispatch
-finished, artifact delivered) or to `failed` with a `failure_reason`
-that names the specific reason (missing connector, unsupported kind,
-etc.). Both outcomes prove the full dispatch → runtime → DB loop
-works end-to-end.
+`running` within the timeout — whether to `complete` (the agent ran
+the skill end-to-end and produced a deliverable) or to `failed` with a
+`failure_reason` that names the specific reason (missing connector,
+agent loop error, config-fetch failure, etc.). Both outcomes prove
+the full dispatch → runtime → DB loop works end-to-end.
 
-Post plan §U6 every `kind=run_skill` envelope currently terminates as
-`failed` with the canonical "kind=run_skill is unsupported in this
-runtime" reason — the composition runner was deleted and a replacement
-out-of-band dispatcher has not landed yet. The smokes therefore
-validate the **row lifecycle** (POST → insert → container → writeback),
-not runtime execution:
-
-- `/api/skills/start` inserts a `running` row, invokes the agentcore
-  Lambda, and returns a `runId`.
-- The container branches on `kind="run_skill"`, logs the unsupported
-  envelope, and POSTs `status=failed` to `/api/skills/complete`.
-- `/api/skills/complete` (service-auth) validates the transition and
-  updates `skill_runs.status` + `failure_reason` + `finished_at`.
+Post plan §U6 the composition runner was deleted and shipped a
+placeholder that failed every envelope fast. Plan §U4 (the real
+skill-run dispatcher) replaces that placeholder with a headless agent
+loop: the container fetches the agent's runtime config from
+`/api/agents/runtime-config`, builds a synthetic chat turn instructing
+the model to run the skill with the given inputs, and executes via the
+same `_execute_agent_turn` path chat turns use. Terminal state
+(`complete` with an inline deliverable, or `failed` with a specific
+reason) comes back via the HMAC-signed `/api/skills/complete`
+callback.
 
 **What the smokes prove end-to-end:**
 
@@ -135,9 +132,12 @@ webhook-smoke happy-path call.
 
 ## Known gaps
 
-- **Runtime execution is offline** — per plan §U6 the `kind=run_skill`
-  path fails fast with the canonical unsupported-runtime reason. A
-  replacement out-of-band dispatcher will land after U6.
+- **Webhook runs with null agentId fail fast** — per plan §U4 the
+  dispatcher requires an `agentId` on every envelope. Webhook resolvers
+  that don't hint an agent land on `failed` with
+  `failure_reason="run_skill requires an agentId — webhook-sourced runs
+  without one are deferred to a follow-up"`. A tenant-admin fallback is
+  tracked as deferred work.
 - The catalog path uses the **service endpoint** `/api/skills/start`,
   not the admin GraphQL `startSkillRun` mutation — the mutation
   requires a Cognito JWT we don't have programmatic access to. The

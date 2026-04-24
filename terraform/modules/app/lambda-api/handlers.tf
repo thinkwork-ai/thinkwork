@@ -181,6 +181,12 @@ resource "aws_lambda_function" "handler" {
     # Bearer API_AUTH_SECRET. No GraphQL resolver involvement, no extra IAM.
     "sandbox-quota-check",
     "sandbox-invocation-log",
+    # Skill-run dispatcher runtime-config fetch (plan
+    # docs/plans/2026-04-24-008-feat-skill-run-dispatcher-plan.md §U1). The
+    # Strands container's `kind=run_skill` handler calls this with Bearer
+    # API_AUTH_SECRET to pull the agent's template + skills + MCP + KBs
+    # before building the headless agent turn.
+    "agents-runtime-config",
     # Admin-Ops MCP — JSON-RPC endpoint at POST /mcp/admin, exposes the
     # @thinkwork/admin-ops package as MCP tools for Strands agents.
     "admin-ops-mcp",
@@ -382,6 +388,9 @@ locals {
     # executeCode. 429 on quota denial, 201 on audit-row insert.
     "POST /api/sandbox/quota/check-and-increment" = "sandbox-quota-check"
     "POST /api/sandbox/invocations"               = "sandbox-invocation-log"
+
+    # Skill-run dispatcher runtime-config fetch. Service-auth GET.
+    "GET /api/agents/runtime-config" = "agents-runtime-config"
 
     # Admin-Ops MCP server — single JSON-RPC endpoint. Strands agents
     # (and anyone else) POST with Bearer <tenant-scoped token> issued by
