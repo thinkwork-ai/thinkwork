@@ -326,6 +326,14 @@ build_handler "mcp-admin-provision" \
 build_handler "manifest-log" \
   "$REPO_ROOT/packages/api/src/handlers/manifest-log.ts"
 
+# Runtime → API capability-catalog list (plan §U15 pt 3/3, SI-7). GET
+# /api/runtime/capability-catalog?type=tool&source=builtin returns the
+# allowed slug set the Strands runtime uses to enforce "a tool that
+# isn't in the catalog can't register." Gated behind RCM_ENFORCE=true
+# on the container side.
+build_handler "capability-catalog-list" \
+  "$REPO_ROOT/packages/api/src/handlers/capability-catalog-list.ts"
+
 # Admin approve/reject for plugin-installed MCP servers (plan §U11, SI-5).
 #   POST /api/tenants/:tenantId/mcp-servers/:serverId/approve
 #   POST /api/tenants/:tenantId/mcp-servers/:serverId/reject
