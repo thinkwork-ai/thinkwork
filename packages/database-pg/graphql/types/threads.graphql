@@ -11,6 +11,19 @@ enum ThreadStatus {
   CANCELLED
 }
 
+# Derived lifecycle status — computed per-request from thread_turns.
+# RUNNING is emitted when a fresh (≤ 5 min) queued or running turn exists;
+# AWAITING_USER is reserved for future user-input-awaiting signal and is
+# not emitted by v1.
+enum ThreadLifecycleStatus {
+  RUNNING
+  COMPLETED
+  CANCELLED
+  FAILED
+  IDLE
+  AWAITING_USER
+}
+
 enum ThreadChannel {
   CHAT
   EMAIL
@@ -55,6 +68,7 @@ type Thread {
   attachments: [ThreadAttachment!]!
   costSummary: Float
   lastActivityAt: AWSDateTime
+  lifecycleStatus: ThreadLifecycleStatus!
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
 }
