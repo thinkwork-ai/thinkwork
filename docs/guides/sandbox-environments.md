@@ -187,6 +187,69 @@ Key columns:
 
 Retention: 30 days by default, 180-day ceiling enforced by a CHECK.
 
+## Triaging a dark deploy
+
+The deploy pipeline can succeed end-to-end while the sandbox substrate on a stage does nothing new. Every job in `.github/workflows/deploy.yml` finishes green (Build Container, Terraform Apply, etc.), `aws lambda get-function-configuration` shows the new image, and the AgentCore runtime keeps serving a weeks-old container anyway. This section is the minimum triage recipe for the class.
+
+**The runtime does not auto-repull.** Bedrock AgentCore resolves `agentRuntimeArtifact.containerConfiguration.containerUri` at `UpdateAgentRuntime` time, not per-invocation. Pushing a new image tag to ECR doesn't move the runtime on its own. The deploy pipeline has an explicit `Update AgentCore Runtime` step (PR #489) that calls the API with each new SHA-tagged arm64 image. If that step is skipped, falls back, or fails silently, the runtime stays pinned.
+
+### Verify the runtime is current
+
+```bash
+aws bedrock-agentcore-control get-agent-runtime \
+  --region us-east-1 \
+  --agent-runtime-id $(aws ssm get-parameter --name /thinkwork/${STAGE}/agentcore/runtime-id-strands --region us-east-1 --query Parameter.Value --output text) \
+  --query '{v:agentRuntimeVersion,image:agentRuntimeArtifact.containerConfiguration.containerUri,updated:lastUpdatedAt}'
+```
+
+The `updated` timestamp should be after the last merge that touched `packages/agentcore-strands/**`. If it isn't, the runtime is dark.
+
+The image URI should end with `-arm64` (see `docs/solutions/build-errors/multi-arch-image-lambda-vs-agentcore-split-tags-2026-04-24.md` for why). A URI without that suffix is from before the multi-arch split — the runtime will refuse `UpdateAgentRuntime` with `ValidationException: Architecture incompatible for uri`.
+
+### Verify the pinned image still exists in ECR
+
+```bash
+aws ecr describe-images \
+  --repository-name thinkwork-${STAGE}-agentcore \
+  --image-ids imageTag=<tag-from-get-agent-runtime> \
+  --region us-east-1
+```
+
+`ImageNotFoundException` means the runtime is pinned to a tag ECR has already pruned — the runtime is still healthy because it cached the image internally, but a cold restart would fail to pull. Push a fresh image + `UpdateAgentRuntime` to a SHA-tagged URI and move on.
+
+### What to check when a fresh invocation reports "no execute_code tool"
+
+1. `[chat-agent-invoke] sandbox pre-flight: ready` appears in the dispatcher Lambda log — dispatcher side is fine.
+2. Runtime's `Raw payload keys: [...]` line includes `sandbox_interpreter_id` + `sandbox_environment` — payload reached the container.
+3. Runtime's `sandbox tool registered: execute_code (interpreter=... env=default-public)` line fires — registration branch entered.
+4. If (3) is absent despite (2) being present, `apply_invocation_env` may not be threading the sandbox fields. See `docs/solutions/patterns/apply-invocation-env-field-passthrough-2026-04-24.md`.
+
+## Reading sandbox CloudWatch events
+
+The runtime emits an informational `sandbox stream event shape: [...]` log line on the first few events of each `InvokeCodeInterpreter` response. The shape should be `['result']` — one top-level `result` key per event carrying the MCP tool-result envelope. If a future SDK release changes the shape, this log is the fastest way to spot it before the consumer quietly drops output.
+
+### `stdout_bytes=0` despite `exit_status='ok'`
+
+Means the code ran (session opened, `InvokeCodeInterpreter` returned, session closed) but the event-stream consumer dropped every output chunk. Previously broke after a silent event-shape change; the consumer now reads MCP-style `result.structuredContent.stdout` as primary + `result.content[].type='text'` as fallback. If the condition recurs, the stream-shape log above is the triage anchor. Full details in `docs/solutions/best-practices/invoke-code-interpreter-stream-mcp-shape-2026-04-24.md`.
+
+### IAM denials land in `failure_reason` verbatim
+
+`sandbox_invocations.failure_reason` captures the full AWS error text when `exit_status='error'`. Grepping for `AccessDenied` surfaces IAM gaps directly:
+
+```sql
+SELECT exit_status, substring(failure_reason, 1, 200) AS reason
+FROM sandbox_invocations
+WHERE tenant_id = '...'
+  AND failure_reason LIKE '%AccessDenied%'
+ORDER BY started_at DESC LIMIT 10;
+```
+
+The error message includes the full ARN + action string — copy-pasteable straight into a terraform IAM statement. The session that opened this runbook's "Named v2 hardening tracks" section hit this exact pattern when `bedrock-agentcore:StartCodeInterpreterSession` wasn't on the runtime role (see `docs/solutions/integration-issues/agentcore-runtime-role-missing-code-interpreter-perms-2026-04-24.md`).
+
+### Full history of fresh-deploy gotchas
+
+`docs/solutions/workflow-issues/deploy-silent-arch-mismatch-took-a-week-to-surface-2026-04-24.md` is the consolidated meta-learning with every gap the sandbox-verify session uncovered. Start there for architectural context before opening individual incident docs.
+
 ## Named v2 hardening tracks
 
 The substrate ships with these residuals explicit. They are **not

@@ -11,6 +11,10 @@ The sandbox runs on **Bedrock AgentCore Code Interpreter**, one instance per ten
 
 `execute_code` is a **pure-compute primitive**. It computes on data the agent already has or can reach via the session's per-tenant IAM role — it does not carry per-user OAuth credentials. Agents that need OAuth-ed work (post to Slack, open a GitHub issue) call a composable-skill connector script instead.
 
+<Aside type="note" title="Status">
+Shipped and verified end-to-end on dev, 2026-04-24. A sandbox-enabled agent calling `execute_code` produces a `sandbox_invocations` row with non-null `session_id`, populated `stdout_bytes`, and `exit_status='ok'`. See the [runbook's "Triaging a dark deploy"](https://github.com/thinkwork-ai/thinkwork/blob/main/docs/guides/sandbox-environments.md#triaging-a-dark-deploy) section for how to confirm the path is live after deploys.
+</Aside>
+
 This page is the conceptual deep dive. For the operator-side runbook — toggling policy, triaging failure modes, reading the residual-threat classes — see [Sandbox environments (runbook)](https://github.com/thinkwork-ai/thinkwork/blob/main/docs/guides/sandbox-environments.md).
 
 ## When to reach for the sandbox
@@ -83,16 +87,20 @@ The first thing any sandbox session does is a one-line **readiness check**: `exe
 One line per step, in order, for one turn that calls `execute_code` once:
 
 1. **Dispatch** — user message lands, agent + template resolved.
-2. **Pre-flight** — policy check + interpreter-ready check.
+2. **Pre-flight** — policy check + interpreter-ready check. Dispatcher threads `sandbox_interpreter_id` + `sandbox_environment` onto the invocation payload.
 3. **Tool register** — `execute_code` appears in the Strands tool surface for this turn only.
 4. **Agent calls `execute_code(code)`** — the substrate call begins.
 5. **Quota check** — atomic `WHERE count < cap` increment against `sandbox_tenant_daily_counters` + `sandbox_agent_hourly_counters`. Breach ⇒ `SandboxCapExceeded`, no session created.
-6. **Session start** — `StartCodeInterpreterSession` against the tenant's interpreter, followed by the readiness preamble.
-7. **User code** — `executeCode(user_code)` runs the agent's Python.
+6. **Session start** — raw boto3 `bedrock-agentcore.StartCodeInterpreterSession` against the tenant's interpreter, followed by the readiness preamble (`sitecustomize.installed()` check) as `InvokeCodeInterpreter` call #1.
+7. **User code** — `InvokeCodeInterpreter` with `name="executeCode"` runs the agent's Python. Response is an event stream of MCP tool-result envelopes (`result.content[]` for streaming text + `result.structuredContent` for `{stdout, stderr, exitCode}`).
 8. **Audit row** — one `sandbox_invocations` row written with exit_status, byte counts, executed_code_hash, session_id.
 9. **Session stop** — `StopCodeInterpreterSession`.
 
 The turn continues — the agent sees the tool result and decides whether to answer, call another tool, or call `execute_code` again. Every subsequent `execute_code` call on the same turn reuses the same session but re-runs the quota check and writes a fresh audit row.
+
+<Aside type="tip" title="Operational note">
+The runtime calls Bedrock AgentCore Code Interpreter through the raw boto3 `bedrock-agentcore` client, not through the SDK's `code_session` context-manager wrapper. Raw boto3 is pinned to the documented AWS API shape, which survived two independent drifts in the wrapper library across one minor-version bump. See [`docs/solutions/best-practices/bedrock-agentcore-sdk-version-drift-prefer-raw-boto3-2026-04-24.md`](https://github.com/thinkwork-ai/thinkwork/blob/main/docs/solutions/best-practices/bedrock-agentcore-sdk-version-drift-prefer-raw-boto3-2026-04-24.md).
+</Aside>
 
 ## Circuit breakers
 
