@@ -132,6 +132,10 @@ const SUPERVISOR_AGENT = {
   tenant_id: "tenant-A",
 };
 
+const SUPERVISOR_ROW = {
+  tenant_id: "tenant-A",
+};
+
 const UPDATED_THREAD = {
   id: "thread-1",
   tenant_id: "tenant-A",
@@ -179,7 +183,48 @@ describe("escalateThread — U2 refactor off thread_comments", () => {
     expect(turn.result_json.event).toBe("escalate");
     expect(turn.result_json.reason).toBe("needs supervisor");
     expect(turn.result_json.new_assignee_id).toBe("agent-supervisor");
+    // Regression guard: previous_assignee_id must come from the pre-UPDATE
+    // threadRow, not the post-UPDATE row (which has assignee_id=supervisorId
+    // by construction). An earlier iteration read the post-UPDATE row and
+    // produced null here for every escalation.
+    expect(turn.result_json.previous_assignee_id).toBe("agent-original");
     expect(capturedInserts.agentWakeupRequests).toHaveLength(1);
+  });
+
+  it("self-supervising agent (reports_to === current assignee) → previous_assignee_id is null", async () => {
+    const selfSupAgent = {
+      reports_to: "agent-original", // reports to themselves
+      name: "Solo",
+      tenant_id: "tenant-A",
+    };
+    mockThreadRows.mockReturnValue([THREAD_ROW]); // thread assigned to agent-original
+    mockMemberRows.mockReturnValue([{ role: "admin" }]);
+    mockAgentRows.mockReturnValue([selfSupAgent]);
+    mockUpdateReturning.mockReturnValue([{ ...UPDATED_THREAD, assignee_id: "agent-original" }]);
+
+    await escalateThread({}, {
+      input: { threadId: "thread-1", reason: "x", agentId: "agent-original" },
+    }, cognitoCtx());
+
+    expect(capturedInserts.threadTurns[0].result_json.previous_assignee_id).toBeNull();
+  });
+
+  it("supervisor in different tenant → 'Thread not found' (new supervisor-tenant check, not the input-agent check)", async () => {
+    mockThreadRows.mockReturnValue([THREAD_ROW]);
+    mockMemberRows.mockReturnValue([{ role: "admin" }]);
+    // First agents query (the escalating agent): in-tenant, has reports_to.
+    // Second agents query (the supervisor tenant check): cross-tenant.
+    mockAgentRows
+      .mockReturnValueOnce([SUPERVISOR_AGENT])
+      .mockReturnValueOnce([{ tenant_id: "tenant-B" }]);
+
+    await expect(
+      escalateThread({}, {
+        input: { threadId: "thread-1", reason: "x", agentId: "agent-original" },
+      }, cognitoCtx()),
+    ).rejects.toThrow(/Thread not found/);
+    expect(capturedInserts.threadTurns).toEqual([]);
+    expect(capturedInserts.agentWakeupRequests).toEqual([]);
   });
 
   it("thread row missing → 'Thread not found' before any side effect", async () => {
