@@ -479,8 +479,19 @@ export type SkillRunInvokeResult =
 
 /**
  * Invoke the unified skill dispatcher inside the AgentCore container.
- * Synchronous (RequestResponse) so failures surface to startSkillRun and the
- * mutation can transition the run row out of `running`.
+ *
+ * Asynchronous (InvocationType: Event) per plan §U4. The AgentCore
+ * Lambda's ceiling is 900s and the real agent loop regularly takes
+ * 10-60s; RequestResponse with the 28s graphql-http socket timeout
+ * would falsely time out while the work ran to completion server-side.
+ * The authoritative execution-result signal is the HMAC-signed
+ * /api/skills/complete callback that the container POSTs, so the
+ * RequestResponse sync-error channel isn't load-bearing for this path.
+ * Enqueue-level errors (IAM, Lambda not found) still surface: AWS
+ * returns 4xx/5xx on Invoke itself, which we re-expose via the
+ * ok/error return. `feedback_avoid_fire_and_forget_lambda_invokes`
+ * does not apply — that rule governs paths with no callback; we have
+ * a durable one.
  */
 export async function invokeSkillRun(
   payload: SkillRunInvokePayload,
@@ -496,15 +507,7 @@ export async function invokeSkillRun(
     }
     const { LambdaClient, InvokeCommand } =
       await import("@aws-sdk/client-lambda");
-    const { NodeHttpHandler } = await import("@smithy/node-http-handler");
-    // 28s socketTimeout leaves 2s headroom before the graphql-http
-    // Lambda's 30s ceiling (and API Gateway's 29s cap). Without it a
-    // slow agentcore can block past those limits and we lose the chance
-    // to transition skill_runs out of `running` before the client
-    // times out.
-    const lambda = new LambdaClient({
-      requestHandler: new NodeHttpHandler({ socketTimeout: 28_000 }),
-    });
+    const lambda = new LambdaClient({});
     const body = JSON.stringify(payload);
     const lambdaPayload = JSON.stringify({
       requestContext: { http: { method: "POST", path: "/invocations" } },
@@ -519,36 +522,18 @@ export async function invokeSkillRun(
     const res = await lambda.send(
       new InvokeCommand({
         FunctionName: fnName,
-        InvocationType: "RequestResponse",
+        InvocationType: "Event",
         Payload: new TextEncoder().encode(lambdaPayload),
       }),
     );
-    if (res.FunctionError) {
-      const raw = res.Payload ? new TextDecoder().decode(res.Payload) : "";
+    // Event-type invoke returns 202 on successful enqueue and 4xx/5xx
+    // on enqueue failure. FunctionError + Payload only populate on
+    // RequestResponse, so we only need StatusCode here.
+    if (typeof res.StatusCode === "number" && res.StatusCode >= 400) {
       return {
         ok: false,
-        error: `skill-run invoke threw: ${raw || res.FunctionError}`,
+        error: `skill-run Event invoke returned ${res.StatusCode}`,
       };
-    }
-    if (res.Payload) {
-      try {
-        const parsed = JSON.parse(new TextDecoder().decode(res.Payload)) as {
-          statusCode?: number;
-          body?: string;
-        };
-        if (typeof parsed.statusCode === "number" && parsed.statusCode >= 400) {
-          const inner =
-            typeof parsed.body === "string"
-              ? parsed.body
-              : JSON.stringify(parsed.body);
-          return {
-            ok: false,
-            error: `skill-run invoke returned ${parsed.statusCode}: ${inner}`,
-          };
-        }
-      } catch {
-        // Non-JSON response — treat as opaque success since FunctionError was not set.
-      }
     }
     return { ok: true };
   } catch (err) {

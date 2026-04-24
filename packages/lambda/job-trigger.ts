@@ -153,13 +153,10 @@ async function invokeAgentcoreRunSkill(payload: {
   try {
     const { LambdaClient, InvokeCommand } =
       await import("@aws-sdk/client-lambda");
-    const { NodeHttpHandler } = await import("@smithy/node-http-handler");
-    // 28s socketTimeout leaves 2s headroom before the 30s Lambda
-    // ceiling; a slow agentcore otherwise blocks the caller past its
-    // timeout with no way to return a structured error.
-    const lambda = new LambdaClient({
-      requestHandler: new NodeHttpHandler({ socketTimeout: 28_000 }),
-    });
+    // Plan §U4: kind=run_skill uses InvocationType: Event so the agent
+    // loop has the full 900s AgentCore Lambda budget. Execution result
+    // comes back via the HMAC-signed /api/skills/complete callback.
+    const lambda = new LambdaClient({});
     const envelope = {
       kind: "run_skill" as const,
       runId: payload.runId,
@@ -181,7 +178,7 @@ async function invokeAgentcoreRunSkill(payload: {
     const res = await lambda.send(
       new InvokeCommand({
         FunctionName: fnName,
-        InvocationType: "RequestResponse",
+        InvocationType: "Event",
         Payload: new TextEncoder().encode(
           JSON.stringify({
             requestContext: { http: { method: "POST", path: "/invocations" } },
@@ -196,11 +193,10 @@ async function invokeAgentcoreRunSkill(payload: {
         ),
       }),
     );
-    if (res.FunctionError) {
-      const raw = res.Payload ? new TextDecoder().decode(res.Payload) : "";
+    if (typeof res.StatusCode === "number" && res.StatusCode >= 400) {
       return {
         ok: false,
-        error: `agentcore-invoke threw: ${raw || res.FunctionError}`,
+        error: `agentcore-invoke Event enqueue returned ${res.StatusCode}`,
       };
     }
     return { ok: true };
