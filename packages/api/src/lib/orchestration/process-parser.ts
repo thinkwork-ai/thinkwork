@@ -11,7 +11,6 @@ export interface ProcessStep {
 	id: string;
 	title: string;
 	assignee: string;
-	priority: string;
 	dependsOn: string[];
 	gate: "none" | "human";
 	gatePollInterval?: string;
@@ -171,7 +170,6 @@ function parseStepBlock(header: string, body: string[]): ProcessStep | null {
 		id,
 		title: title.trim(),
 		assignee: fields.assignee || "{{current_agent}}",
-		priority: fields.priority || "medium",
 		dependsOn,
 		gate,
 		gatePollInterval: fields.gate_poll_interval,

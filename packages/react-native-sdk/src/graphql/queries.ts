@@ -31,8 +31,6 @@ export const ThreadsQuery = gql`
     $agentId: ID
     $assigneeId: ID
     $status: ThreadStatus
-    $priority: ThreadPriority
-    $type: ThreadType
     $channel: ThreadChannel
     $search: String
     $limit: Int
@@ -43,8 +41,6 @@ export const ThreadsQuery = gql`
       agentId: $agentId
       assigneeId: $assigneeId
       status: $status
-      priority: $priority
-      type: $type
       channel: $channel
       search: $search
       limit: $limit
@@ -58,8 +54,6 @@ export const ThreadsQuery = gql`
       identifier
       title
       status
-      priority
-      type
       channel
       lastActivityAt
       lastReadAt
@@ -88,8 +82,6 @@ export const ThreadQuery = gql`
       identifier
       title
       status
-      priority
-      type
       channel
       lastActivityAt
       lastReadAt

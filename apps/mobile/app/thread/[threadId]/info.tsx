@@ -168,18 +168,6 @@ export default function ThreadInfoRoute() {
               </Pressable>
             </PropertyRow>
 
-            {thread?.priority && (
-              <PropertyRow label="Priority">
-                <Text className="text-sm font-medium">{(thread.priority as string).charAt(0) + (thread.priority as string).slice(1).toLowerCase()}</Text>
-              </PropertyRow>
-            )}
-
-            {thread?.type && (
-              <PropertyRow label="Type">
-                <Text className="text-sm font-medium">{(thread.type as string).charAt(0) + (thread.type as string).slice(1).toLowerCase()}</Text>
-              </PropertyRow>
-            )}
-
             <PropertyRow label="Agent">
               <Text className="text-sm font-medium">{agentName}</Text>
             </PropertyRow>

@@ -677,15 +677,12 @@ export type CreateThreadInput = {
   channel?: InputMaybe<ThreadChannel>;
   createdById?: InputMaybe<Scalars['String']['input']>;
   createdByType?: InputMaybe<Scalars['String']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
   dueAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
   firstMessage?: InputMaybe<Scalars['String']['input']>;
   labels?: InputMaybe<Scalars['AWSJSON']['input']>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  priority?: InputMaybe<ThreadPriority>;
   tenantId: Scalars['ID']['input'];
   title: Scalars['String']['input'];
-  type?: InputMaybe<ThreadType>;
 };
 
 export type CreateThreadLabelInput = {
@@ -980,7 +977,6 @@ export type LinkedThread = {
   id: Scalars['ID']['output'];
   identifier?: Maybe<Scalars['String']['output']>;
   number: Scalars['Int']['output'];
-  priority?: Maybe<Scalars['String']['output']>;
   status: Scalars['String']['output'];
   title: Scalars['String']['output'];
 };
@@ -2801,18 +2797,15 @@ export type QueryThreadsArgs = {
   channel?: InputMaybe<ThreadChannel>;
   cursor?: InputMaybe<Scalars['String']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
-  priority?: InputMaybe<ThreadPriority>;
   search?: InputMaybe<Scalars['String']['input']>;
   status?: InputMaybe<ThreadStatus>;
   tenantId: Scalars['ID']['input'];
-  type?: InputMaybe<ThreadType>;
 };
 
 
 export type QueryThreadsPagedArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   offset?: InputMaybe<Scalars['Int']['input']>;
-  priorities?: InputMaybe<Array<Scalars['String']['input']>>;
   search?: InputMaybe<Scalars['String']['input']>;
   showArchived?: InputMaybe<Scalars['Boolean']['input']>;
   sortDir?: InputMaybe<Scalars['String']['input']>;
@@ -3379,7 +3372,6 @@ export type Thread = {
   createdAt: Scalars['AWSDateTime']['output'];
   createdById?: Maybe<Scalars['String']['output']>;
   createdByType?: Maybe<Scalars['String']['output']>;
-  description?: Maybe<Scalars['String']['output']>;
   dueAt?: Maybe<Scalars['AWSDateTime']['output']>;
   id: Scalars['ID']['output'];
   identifier?: Maybe<Scalars['String']['output']>;
@@ -3392,14 +3384,12 @@ export type Thread = {
   messages: MessageConnection;
   metadata?: Maybe<Scalars['AWSJSON']['output']>;
   number: Scalars['Int']['output'];
-  priority: ThreadPriority;
   reporter?: Maybe<User>;
   reporterId?: Maybe<Scalars['ID']['output']>;
   startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   status: ThreadStatus;
   tenantId: Scalars['ID']['output'];
   title: Scalars['String']['output'];
-  type: ThreadType;
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
@@ -3460,14 +3450,6 @@ export type ThreadLabelAssignment = {
   tenantId: Scalars['ID']['output'];
   threadId: Scalars['ID']['output'];
 };
-
-export enum ThreadPriority {
-  Critical = 'CRITICAL',
-  High = 'HIGH',
-  Low = 'LOW',
-  Medium = 'MEDIUM',
-  Urgent = 'URGENT'
-}
 
 export enum ThreadStatus {
   Backlog = 'BACKLOG',
@@ -3537,13 +3519,6 @@ export type ThreadTurnUpdateEvent = {
   triggerName?: Maybe<Scalars['String']['output']>;
   updatedAt: Scalars['AWSDateTime']['output'];
 };
-
-export enum ThreadType {
-  Bug = 'BUG',
-  Feature = 'FEATURE',
-  Question = 'QUESTION',
-  Task = 'TASK'
-}
 
 export type ThreadUpdateEvent = {
   __typename?: 'ThreadUpdateEvent';
@@ -3720,15 +3695,12 @@ export type UpdateThreadInput = {
   assigneeType?: InputMaybe<Scalars['String']['input']>;
   billingCode?: InputMaybe<Scalars['String']['input']>;
   channel?: InputMaybe<ThreadChannel>;
-  description?: InputMaybe<Scalars['String']['input']>;
   dueAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
   labels?: InputMaybe<Scalars['AWSJSON']['input']>;
   lastReadAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  priority?: InputMaybe<ThreadPriority>;
   status?: InputMaybe<ThreadStatus>;
   title?: InputMaybe<Scalars['String']['input']>;
-  type?: InputMaybe<ThreadType>;
 };
 
 export type UpdateThreadLabelInput = {

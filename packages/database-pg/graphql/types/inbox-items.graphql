@@ -60,7 +60,6 @@ type LinkedThread {
   identifier: String
   title: String!
   status: String!
-  priority: String
 }
 
 type ActivityLogEntry {

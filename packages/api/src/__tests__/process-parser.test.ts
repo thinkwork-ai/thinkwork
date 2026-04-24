@@ -59,13 +59,6 @@ describe("parseProcessTemplate", () => {
 			expect(result.steps[2].gatePollInterval).toBe("24h");
 		});
 
-		it("parses priorities", () => {
-			const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
-
-			expect(result.steps[0].priority).toBe("high");
-			expect(result.steps[3].priority).toBe("medium");
-		});
-
 		it("parses assignee template variables", () => {
 			const result = parseProcessTemplate(EXAMPLE_TEMPLATE!);
 
@@ -134,7 +127,6 @@ describe("parseProcessTemplate", () => {
 			const step = result.steps[0];
 
 			expect(step.assignee).toBe("{{current_agent}}");
-			expect(step.priority).toBe("medium");
 			expect(step.gate).toBe("none");
 			expect(step.dependsOn).toEqual([]);
 			expect(step.gatePollInterval).toBeUndefined();

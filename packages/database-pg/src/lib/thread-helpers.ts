@@ -75,7 +75,6 @@ export async function ensureThreadForWork(opts: EnsureThreadOpts): Promise<Ensur
 			title: opts.title || "Untitled conversation",
 			status: initialStatus,
 			channel,
-			type: "task",
 			assignee_type: opts.agentId ? "agent" : undefined,
 			assignee_id: opts.agentId || undefined,
 			created_by_type: opts.userId ? "user" : "system",

@@ -1,5 +1,5 @@
 /**
- * `thinkwork thread ...` — work items (tasks, chats, bugs, questions).
+ * `thinkwork thread ...` — work items in a tenant.
  *
  * Maps 1:1 to the admin "Threads" UI. Scaffolded in Phase 0; action bodies
  * land in Phase 1 — see apps/cli/README.md#roadmap.
@@ -13,7 +13,7 @@ export function registerThreadCommand(program: Command): void {
     .command("thread")
     .alias("threads")
     .description(
-      "Create, list, update, and comment on threads (tasks, chats, bugs, questions) in a tenant.",
+      "Create, list, update, and comment on threads in a tenant.",
     );
 
   thread
@@ -23,10 +23,9 @@ export function registerThreadCommand(program: Command): void {
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--status <status>", "Filter: BACKLOG | TODO | IN_PROGRESS | IN_REVIEW | BLOCKED | DONE | CANCELLED")
-    .option("--priority <p>", "Filter: LOW | MEDIUM | HIGH | URGENT")
     .option("--assignee <id>", "Filter by assignee (user or agent ID). Use `me` to match the caller.")
     .option("--agent <id>", "Filter threads worked on by a specific agent")
-    .option("--search <q>", "Full-text search over title/body")
+    .option("--search <q>", "Full-text search over thread titles")
     .option("--limit <n>", "Max rows (default 50)", "50")
     .option("--archived", "Include archived threads")
     .addHelpText(
@@ -37,7 +36,7 @@ Examples:
   $ thinkwork thread list --status IN_PROGRESS
 
   # Pipe to jq
-  $ thinkwork thread list --json | jq '.[] | select(.priority=="URGENT")'
+  $ thinkwork thread list --json | jq '.[] | select(.status=="IN_PROGRESS")'
 
   # Everything assigned to me
   $ thinkwork thread list --assignee me
@@ -66,22 +65,19 @@ Examples:
     .description("Create a new thread. Prompts for missing fields when running in a TTY.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--type <type>", "TASK | CHAT | BUG | QUESTION", "TASK")
-    .option("--priority <p>", "LOW | MEDIUM | HIGH | URGENT", "MEDIUM")
     .option("--assignee <id>", "Assign on create (user or agent ID)")
-    .option("--body <text>", "Description body (markdown)")
     .option("--due <iso>", "Due date as ISO-8601")
     .option("--label <name...>", "Attach label(s) by name (repeatable)")
     .addHelpText(
       "after",
       `
 Examples:
-  # Fully interactive — walkthrough prompts for title, type, priority, assignee.
+  # Fully interactive — walkthrough prompts for title and assignee.
   $ thinkwork thread create
 
   # Scripted
   $ thinkwork thread create "Investigate latency spike" \\
-      --priority HIGH --assignee agt-obs-1 --label ops --label oncall
+      --assignee agt-obs-1 --label ops --label oncall
 
   # Mix: pass the title, prompt for the rest.
   $ thinkwork thread create "Investigate latency spike"
@@ -91,21 +87,19 @@ Examples:
 
   thread
     .command("update <id>")
-    .description("Update a thread's title, status, priority, assignee, labels, or due date.")
+    .description("Update a thread's title, status, assignee, labels, or due date.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--title <t>", "Rename")
     .option("--status <s>", "Move to a new status")
-    .option("--priority <p>", "LOW | MEDIUM | HIGH | URGENT")
     .option("--assignee <id>", "Reassign (user or agent ID)")
     .option("--due <iso>", "Due date")
-    .option("--body <text>", "Replace description body")
     .addHelpText(
       "after",
       `
 Examples:
   $ thinkwork thread update thr-abc --status IN_REVIEW
-  $ thinkwork thread update thr-abc --assignee agt-ops --priority URGENT
+  $ thinkwork thread update thr-abc --assignee agt-ops
 `,
     )
     .action(() => notYetImplemented("thread update", 1));
