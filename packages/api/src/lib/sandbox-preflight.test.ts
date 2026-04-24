@@ -106,6 +106,7 @@ describe("applySandboxPayloadFields", () => {
     applySandboxPayloadFields(payload, {
       status: "not-requested",
       reason: "template_did_not_opt_in",
+      caller: "execute_code",
     });
     expect(payload).toEqual({});
   });
@@ -116,6 +117,7 @@ describe("applySandboxPayloadFields", () => {
       status: "ready",
       environment: "default-public",
       interpreterId: "ci-abc",
+      caller: "execute_code",
     });
     expect(payload).toEqual({
       existing: "keep me",

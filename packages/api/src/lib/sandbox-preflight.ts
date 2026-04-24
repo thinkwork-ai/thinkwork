@@ -32,6 +32,16 @@ export interface TemplateSandboxConfig {
   environment: SandboxEnvironmentId;
 }
 
+/**
+ * Which caller is asking for a preflight. `execute_code` is the historical
+ * path — the agent's direct code-execution tool. `skill_dispatch` is the
+ * new unified dispatcher (plan #007 §U4) that runs every skill-with-scripts
+ * in the same sandbox. Semantics today are identical; surfacing the caller
+ * gives logs + metrics enough context to separate sandbox-tool usage from
+ * skill-dispatch usage once U5+ wires dispatch into the runtime.
+ */
+export type SandboxPreflightCaller = "execute_code" | "skill_dispatch";
+
 export interface SandboxPreflightInput {
   stage: string;
   tenantId: string;
@@ -40,26 +50,36 @@ export interface SandboxPreflightInput {
   userId: string;
   /** template.sandbox as validated by Unit 3; null = template did not opt in. */
   templateSandbox: TemplateSandboxConfig | null;
+  /**
+   * Which caller asked for the preflight. Defaults to `execute_code` for
+   * backwards compatibility with every pre-V1 call site. Dispatcher paths
+   * set this to `skill_dispatch`.
+   */
+  caller?: SandboxPreflightCaller;
 }
 
 export type SandboxPreflightResult =
   | {
       status: "not-requested";
       reason: "template_did_not_opt_in";
+      caller: SandboxPreflightCaller;
     }
   | {
       status: "disabled";
       reason: "tenant_sandbox_disabled";
+      caller: SandboxPreflightCaller;
     }
   | {
       status: "provisioning";
       reason: "interpreter_not_ready";
       environment: SandboxEnvironmentId;
+      caller: SandboxPreflightCaller;
     }
   | {
       status: "ready";
       environment: SandboxEnvironmentId;
       interpreterId: string;
+      caller: SandboxPreflightCaller;
     };
 
 /**
@@ -71,8 +91,14 @@ export type SandboxPreflightResult =
 export async function checkSandboxPreflight(
   input: SandboxPreflightInput,
 ): Promise<SandboxPreflightResult> {
+  const caller: SandboxPreflightCaller = input.caller ?? "execute_code";
+
   if (!input.templateSandbox) {
-    return { status: "not-requested", reason: "template_did_not_opt_in" };
+    return {
+      status: "not-requested",
+      reason: "template_did_not_opt_in",
+      caller,
+    };
   }
   const { environment } = input.templateSandbox;
 
@@ -87,7 +113,7 @@ export async function checkSandboxPreflight(
     .where(eq(tenants.id, input.tenantId))
     .limit(1);
   if (!tenant || !tenant.sandbox_enabled) {
-    return { status: "disabled", reason: "tenant_sandbox_disabled" };
+    return { status: "disabled", reason: "tenant_sandbox_disabled", caller };
   }
 
   // 2. Interpreter-ready gate, independent of sandbox_enabled (plan R-Q10).
@@ -100,10 +126,11 @@ export async function checkSandboxPreflight(
       status: "provisioning",
       reason: "interpreter_not_ready",
       environment,
+      caller,
     };
   }
 
-  return { status: "ready", environment, interpreterId };
+  return { status: "ready", environment, interpreterId, caller };
 }
 
 /**
