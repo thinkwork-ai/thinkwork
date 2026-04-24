@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { apiFetch, NotReadyError } from "@/lib/api-fetch";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,7 +40,6 @@ const TenantContext = createContext<TenantContextValue | null>(null);
 // ---------------------------------------------------------------------------
 
 const API_URL = import.meta.env.VITE_API_URL || "";
-const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
 const GRAPHQL_URL = import.meta.env.VITE_GRAPHQL_HTTP_URL || `${API_URL}/graphql`;
 
 export function TenantProvider({ children }: { children: ReactNode }) {
@@ -47,6 +47,11 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Bumps to retry when apiFetch throws NotReadyError — the Cognito session
+  // may be hydrated into AuthContext before the token cache is populated, and
+  // AuthProvider wraps us so tenantId arrives before getIdToken() returns a
+  // value. Rather than restructuring the provider tree, tolerate the race.
+  const [authRetryTick, setAuthRetryTick] = useState(0);
   const bootstrapAttempted = useRef(false);
 
   const tenantId = user?.tenantId ?? null;
@@ -61,21 +66,9 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      const res = await fetch(`${API_URL}/api/tenants/${tenantId}`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(API_AUTH_SECRET
-            ? { Authorization: `Bearer ${API_AUTH_SECRET}` }
-            : {}),
-          "x-tenant-id": tenantId,
-        },
+      const data = await apiFetch<any>(`/api/tenants/${tenantId}`, {
+        extraHeaders: { "x-tenant-id": tenantId },
       });
-
-      if (!res.ok) {
-        throw new Error(`Failed to fetch tenant: ${res.status}`);
-      }
-
-      const data = await res.json();
       setTenant({
         id: data.id,
         name: data.name,
@@ -83,10 +76,17 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         plan: data.plan,
         logoUrl: data.logo_url,
       });
+      setIsLoading(false);
     } catch (err) {
+      if (err instanceof NotReadyError) {
+        // Auth hasn't hydrated yet — don't surface this as a fatal error;
+        // keep tenant null, stay in loading, and retry shortly. The effect
+        // re-runs when authRetryTick bumps.
+        setTimeout(() => setAuthRetryTick((n) => n + 1), 100);
+        return;
+      }
       console.error("TenantContext fetch error:", err);
       setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
       setIsLoading(false);
     }
   }
@@ -155,7 +155,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, tenantId]);
+  }, [isAuthenticated, tenantId, authRetryTick]);
 
   return (
     <TenantContext.Provider

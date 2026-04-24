@@ -16,9 +16,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { SchedulePicker, type SchedulePickerValue } from "@/components/schedule-picker/SchedulePicker";
-
-const API_URL = import.meta.env.VITE_API_URL || "";
-const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
+import { apiFetch } from "@/lib/api-fetch";
 
 type AgentOption = { id: string; name: string };
 
@@ -98,14 +96,9 @@ export function ScheduledJobFormDialog({
   // Load agents
   useEffect(() => {
     if (!open) return;
-    fetch(`${API_URL}/api/agents`, {
-      headers: {
-        "Content-Type": "application/json",
-        ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-        "x-tenant-id": tenantId,
-      },
+    apiFetch<AgentOption[]>("/api/agents", {
+      extraHeaders: { "x-tenant-id": tenantId },
     })
-      .then((r) => r.json())
       .then((data) => setAgents(Array.isArray(data) ? data : []))
       .catch(() => setAgents([]));
   }, [open, tenantId]);
