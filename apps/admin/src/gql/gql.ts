@@ -17,10 +17,7 @@ type Documents = {
     "\n\tmutation AcceptTemplateUpdate($agentId: ID!, $filename: String!) {\n\t\tacceptTemplateUpdate(agentId: $agentId, filename: $filename) {\n\t\t\tid\n\t\t\tname\n\t\t\tslug\n\t\t}\n\t}\n": typeof types.AcceptTemplateUpdateDocument,
     "\n  mutation CreateSubAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      slug\n    }\n  }\n": typeof types.CreateSubAgentDocument,
     "\n  mutation DeleteSubAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n": typeof types.DeleteSubAgentDocument,
-    "\n  mutation AddThreadComment($input: AddThreadCommentInput!) {\n    addThreadComment(input: $input) {\n      id\n      authorType\n      authorId\n      content\n      createdAt\n    }\n  }\n": typeof types.AddThreadCommentDocument,
-    "\n  mutation AddThreadCommentThread($input: AddThreadCommentInput!) {\n    addThreadComment(input: $input) {\n      id\n      authorType\n      authorId\n      content\n      createdAt\n    }\n  }\n": typeof types.AddThreadCommentThreadDocument,
     "\n  mutation CreateThread($input: CreateThreadInput!) {\n    createThread(input: $input) {\n      id\n      number\n      title\n      status\n      priority\n      type\n      createdAt\n    }\n  }\n": typeof types.CreateThreadDocument,
-    "\n  mutation AddThreadCommentActivity($input: AddThreadCommentInput!) {\n    addThreadComment(input: $input) {\n      id\n      authorType\n      authorId\n      content\n      createdAt\n    }\n  }\n": typeof types.AddThreadCommentActivityDocument,
     "\n  query AgentsForPicker($tenantId: ID!) {\n    agents: allTenantAgents(tenantId: $tenantId) {\n      id\n      name\n      status\n      avatarUrl\n    }\n  }\n": typeof types.AgentsForPickerDocument,
     "\n  query TenantLabelsForProperties($tenantId: ID!) {\n    threadLabels(tenantId: $tenantId) {\n      id\n      name\n      color\n    }\n  }\n": typeof types.TenantLabelsForPropertiesDocument,
     "\n  mutation CreateThreadLabelFromProperties($input: CreateThreadLabelInput!) {\n    createThreadLabel(input: $input) {\n      id\n      name\n      color\n    }\n  }\n": typeof types.CreateThreadLabelFromPropertiesDocument,
@@ -159,10 +156,7 @@ const documents: Documents = {
     "\n\tmutation AcceptTemplateUpdate($agentId: ID!, $filename: String!) {\n\t\tacceptTemplateUpdate(agentId: $agentId, filename: $filename) {\n\t\t\tid\n\t\t\tname\n\t\t\tslug\n\t\t}\n\t}\n": types.AcceptTemplateUpdateDocument,
     "\n  mutation CreateSubAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      slug\n    }\n  }\n": types.CreateSubAgentDocument,
     "\n  mutation DeleteSubAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n": types.DeleteSubAgentDocument,
-    "\n  mutation AddThreadComment($input: AddThreadCommentInput!) {\n    addThreadComment(input: $input) {\n      id\n      authorType\n      authorId\n      content\n      createdAt\n    }\n  }\n": types.AddThreadCommentDocument,
-    "\n  mutation AddThreadCommentThread($input: AddThreadCommentInput!) {\n    addThreadComment(input: $input) {\n      id\n      authorType\n      authorId\n      content\n      createdAt\n    }\n  }\n": types.AddThreadCommentThreadDocument,
     "\n  mutation CreateThread($input: CreateThreadInput!) {\n    createThread(input: $input) {\n      id\n      number\n      title\n      status\n      priority\n      type\n      createdAt\n    }\n  }\n": types.CreateThreadDocument,
-    "\n  mutation AddThreadCommentActivity($input: AddThreadCommentInput!) {\n    addThreadComment(input: $input) {\n      id\n      authorType\n      authorId\n      content\n      createdAt\n    }\n  }\n": types.AddThreadCommentActivityDocument,
     "\n  query AgentsForPicker($tenantId: ID!) {\n    agents: allTenantAgents(tenantId: $tenantId) {\n      id\n      name\n      status\n      avatarUrl\n    }\n  }\n": types.AgentsForPickerDocument,
     "\n  query TenantLabelsForProperties($tenantId: ID!) {\n    threadLabels(tenantId: $tenantId) {\n      id\n      name\n      color\n    }\n  }\n": types.TenantLabelsForPropertiesDocument,
     "\n  mutation CreateThreadLabelFromProperties($input: CreateThreadLabelInput!) {\n    createThreadLabel(input: $input) {\n      id\n      name\n      color\n    }\n  }\n": types.CreateThreadLabelFromPropertiesDocument,
@@ -327,19 +321,7 @@ export function graphql(source: "\n  mutation DeleteSubAgent($id: ID!) {\n    de
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  mutation AddThreadComment($input: AddThreadCommentInput!) {\n    addThreadComment(input: $input) {\n      id\n      authorType\n      authorId\n      content\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  mutation AddThreadComment($input: AddThreadCommentInput!) {\n    addThreadComment(input: $input) {\n      id\n      authorType\n      authorId\n      content\n      createdAt\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  mutation AddThreadCommentThread($input: AddThreadCommentInput!) {\n    addThreadComment(input: $input) {\n      id\n      authorType\n      authorId\n      content\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  mutation AddThreadCommentThread($input: AddThreadCommentInput!) {\n    addThreadComment(input: $input) {\n      id\n      authorType\n      authorId\n      content\n      createdAt\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
 export function graphql(source: "\n  mutation CreateThread($input: CreateThreadInput!) {\n    createThread(input: $input) {\n      id\n      number\n      title\n      status\n      priority\n      type\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  mutation CreateThread($input: CreateThreadInput!) {\n    createThread(input: $input) {\n      id\n      number\n      title\n      status\n      priority\n      type\n      createdAt\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  mutation AddThreadCommentActivity($input: AddThreadCommentInput!) {\n    addThreadComment(input: $input) {\n      id\n      authorType\n      authorId\n      content\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  mutation AddThreadCommentActivity($input: AddThreadCommentInput!) {\n    addThreadComment(input: $input) {\n      id\n      authorType\n      authorId\n      content\n      createdAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

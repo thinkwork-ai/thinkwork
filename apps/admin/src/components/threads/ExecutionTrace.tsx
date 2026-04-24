@@ -3,17 +3,11 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAuth } from "@/context/AuthContext";
 import { useTenant } from "@/context/TenantContext";
-import { useQuery, useMutation, useSubscription } from "urql";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { useQuery, useSubscription } from "urql";
 import { graphql } from "@/gql";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { formatCost } from "@/lib/activity-utils";
 import { ThreadTurnsForThreadQuery, ThreadTurnEventsQuery, TurnInvocationLogsQuery, OnThreadTurnUpdatedSubscription } from "@/lib/graphql-queries";
 import { formatDateTime, relativeTime } from "@/lib/utils";
@@ -819,137 +813,6 @@ const CommentRow = memo(function CommentRow({
   );
 });
 
-// ─── Comment Form ────────────────────────────────────────────────────────────
-
-const AddThreadCommentMutation = graphql(`
-  mutation AddThreadCommentActivity($input: AddThreadCommentInput!) {
-    addThreadComment(input: $input) {
-      id
-      authorType
-      authorId
-      content
-      createdAt
-    }
-  }
-`);
-
-const CLOSED_STATUSES = new Set(["done", "cancelled"]);
-const DRAFT_DEBOUNCE_MS = 800;
-
-function loadDraft(draftKey: string): string {
-  try { return localStorage.getItem(draftKey) ?? ""; } catch { return ""; }
-}
-function saveDraft(draftKey: string, value: string) {
-  try {
-    if (value.trim()) localStorage.setItem(draftKey, value);
-    else localStorage.removeItem(draftKey);
-  } catch { /* ignore */ }
-}
-function clearDraft(draftKey: string) {
-  try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
-}
-
-const commentSchema = z.object({ body: z.string().min(1), reopen: z.boolean() });
-type CommentFormValues = z.infer<typeof commentSchema>;
-
-function CommentForm({
-  threadId,
-  threadStatus,
-  draftKey,
-  onCommentAdded,
-}: {
-  threadId: string;
-  threadStatus?: string;
-  draftKey?: string;
-  onCommentAdded?: () => void;
-}) {
-  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [{ fetching }, addComment] = useMutation(AddThreadCommentMutation);
-  const isClosed = threadStatus ? CLOSED_STATUSES.has(threadStatus.toLowerCase().replace(/ /g, "_")) : false;
-
-  const form = useForm<CommentFormValues>({
-    resolver: zodResolver(commentSchema),
-    defaultValues: { body: "", reopen: true },
-  });
-
-  const bodyValue = form.watch("body");
-
-  useEffect(() => {
-    if (!draftKey) return;
-    const draft = loadDraft(draftKey);
-    if (draft) form.setValue("body", draft);
-  }, [draftKey, form]);
-
-  useEffect(() => {
-    if (!draftKey) return;
-    if (draftTimer.current) clearTimeout(draftTimer.current);
-    draftTimer.current = setTimeout(() => saveDraft(draftKey, bodyValue), DRAFT_DEBOUNCE_MS);
-  }, [bodyValue, draftKey]);
-
-  useEffect(() => () => { if (draftTimer.current) clearTimeout(draftTimer.current); }, []);
-
-  async function handleSubmit(values: CommentFormValues) {
-    const trimmed = values.body.trim();
-    if (!trimmed) return;
-    const result = await addComment({ input: { threadId: threadId, content: trimmed } });
-    if (!result.error) {
-      form.reset({ body: "", reopen: false });
-      if (draftKey) clearDraft(draftKey);
-      onCommentAdded?.();
-    }
-  }
-
-  const canSubmit = !fetching && !!bodyValue.trim();
-
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-2">
-        <FormField
-          control={form.control}
-          name="body"
-          render={({ field }) => (
-            <FormItem>
-              <FormControl>
-                <Textarea
-                  placeholder="Leave a comment..."
-                  rows={3}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                      e.preventDefault();
-                      void form.handleSubmit(handleSubmit)();
-                    }
-                  }}
-                  {...field}
-                />
-              </FormControl>
-            </FormItem>
-          )}
-        />
-        <div className="flex items-center justify-end gap-3">
-          {isClosed && (
-            <FormField
-              control={form.control}
-              name="reopen"
-              render={({ field }) => (
-                <FormItem>
-                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
-                    <FormControl>
-                      <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
-                    Re-open
-                  </label>
-                </FormItem>
-              )}
-            />
-          )}
-          <Button type="submit" size="sm" disabled={!canSubmit}>
-            {fetching ? "Posting..." : "Comment"}
-          </Button>
-        </div>
-      </form>
-    </Form>
-  );
-}
 
 // ─── Message Row (chat messages in timeline) ────────────────────────────────
 
@@ -1068,9 +931,6 @@ interface ExecutionTraceProps {
   comments?: ThreadComment[];
   messages?: ChatMessage[];
   agentMap?: Map<string, AgentRef>;
-  threadStatus?: string;
-  draftKey?: string;
-  onCommentAdded?: () => void;
   onOpenArtifact?: (artifact: { id: string; title: string; type: string; status: string }) => void;
 }
 
@@ -1080,9 +940,6 @@ export function ExecutionTrace({
   comments = [],
   messages = [],
   agentMap,
-  threadStatus,
-  draftKey,
-  onCommentAdded,
   onOpenArtifact,
 }: ExecutionTraceProps) {
   const { user } = useAuth();
@@ -1219,13 +1076,6 @@ export function ExecutionTrace({
         </div>
       )}
 
-      {/* Comment input */}
-      <CommentForm
-        threadId={threadId}
-        threadStatus={threadStatus}
-        draftKey={draftKey}
-        onCommentAdded={onCommentAdded}
-      />
     </div>
   );
 }

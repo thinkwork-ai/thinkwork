@@ -10,9 +10,6 @@ import { updateThread } from "./updateThread.mutation.js";
 import { deleteThread } from "./deleteThread.mutation.js";
 import { checkoutThread } from "./checkoutThread.mutation.js";
 import { releaseThread } from "./releaseThread.mutation.js";
-import { addThreadComment } from "./addThreadComment.mutation.js";
-import { updateThreadComment } from "./updateThreadComment.mutation.js";
-import { deleteThreadComment } from "./deleteThreadComment.mutation.js";
 import { createThreadLabel } from "./createThreadLabel.mutation.js";
 import { updateThreadLabel } from "./updateThreadLabel.mutation.js";
 import { deleteThreadLabel } from "./deleteThreadLabel.mutation.js";
@@ -38,9 +35,6 @@ export const threadMutations = {
 	deleteThread,
 	checkoutThread,
 	releaseThread,
-	addThreadComment,
-	updateThreadComment,
-	deleteThreadComment,
 	createThreadLabel,
 	updateThreadLabel,
 	deleteThreadLabel,
