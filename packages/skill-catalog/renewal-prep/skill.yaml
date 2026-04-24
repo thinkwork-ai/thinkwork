@@ -1,12 +1,20 @@
 id: renewal-prep
-version: 1
-execution: composition
+version: 2
+execution: context
 mode: tool
 name: "Renewal Prep"
 description: >
   Prep a customer renewal conversation. Pulls contract terms, recent
   usage, support posture, renewal history, and win/loss signals, then
   renders a renewal_risk brief ordered by deal-impact likelihood.
+
+# U8 migration (plan §U8, 2026-04-24): converted from execution:composition
+# → execution:context. The model drives the frame → gather → synthesize →
+# package sequence itself via the Skill() meta-tool (U5 session allowlist),
+# replacing composition_runner. Pattern mirrors sales-prep + account-health-
+# review — same four phases with a risk-steered synthesize and a renewal-
+# specific gather set (contract + usage + renewal history + AR + NPS +
+# tickets). Focus hard-coded at "risks".
 
 inputs:
   customer:
@@ -43,68 +51,12 @@ triggers:
       renewal_date:
         from_tenant_config: upcoming_renewal_date
 
-delivery:
-  - chat
-  - email
-
-budget_cap:
-  tokens: 150000
-
-steps:
-  - id: frame
-    mode: sequential
-    skill: frame
-    inputs:
-      problem: "Renewal prep for {customer}. Renewal on {renewal_date}. Contract value: {contract_value}."
-    output: framed
-
-  - id: gather
-    mode: parallel
-    on_branch_failure: continue_with_footer
-    branches:
-      - id: contract
-        skill: contract_summary
-        inputs:
-          customer: "{customer}"
-        critical: true
-      - id: usage_trend
-        skill: product_usage_summary
-        inputs:
-          customer: "{customer}"
-          period: last_quarter
-      - id: renewal_history
-        skill: renewal_history_summary
-        inputs:
-          customer: "{customer}"
-      - id: ar
-        skill: ar_summary
-        inputs:
-          customer: "{customer}"
-      - id: nps
-        skill: nps_summary
-        inputs:
-          customer: "{customer}"
-          period: last_year
-      - id: tickets
-        skill: support_incidents_summary
-        inputs:
-          customer: "{customer}"
-          period: last_quarter
-    output: gathered
-
-  - id: synthesize
-    mode: sequential
-    skill: synthesize
-    inputs:
-      framed: "{framed}"
-      gathered: "{gathered}"
-      focus: risks
-    output: synthesis
-
-  - id: package
-    mode: sequential
-    skill: package
-    inputs:
-      synthesis: "{synthesis}"
-      format: renewal_risk
-    output: deliverable
+# Sub-skills the model invokes via Skill(). Template-scoped
+# session_allowlist (U5) auto-includes these when renewal-prep is
+# assigned to a template. Connector skills (contract, product-usage,
+# renewal-history, AR, NPS, support-incidents) ship in separate PRDs;
+# missing sub-skills degrade gracefully per SKILL.md body's policy.
+requires_skills:
+  - frame
+  - synthesize
+  - package
