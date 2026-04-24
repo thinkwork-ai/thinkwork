@@ -25,12 +25,31 @@ describe("createClient", () => {
 			headers: {
 				"Content-Type": "application/json",
 				Authorization: "Bearer s3cret",
+				"x-api-key": "s3cret",
 				"x-principal-id": "user-123",
 				"x-principal-email": "eric@example.com",
 				"x-tenant-id": "tenant-abc",
 				"x-agent-id": "agent-xyz",
 			},
 		});
+	});
+
+	it("sends x-api-key even when no principal/tenant is set — GraphQL apikey branch needs it", async () => {
+		const fetchImpl = vi.fn().mockResolvedValue(
+			new Response("{}", {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			}),
+		);
+		const client = createClient({
+			apiUrl: "https://api.example.com",
+			authSecret: "s3cret",
+			fetchImpl,
+		});
+		await client.fetch("/graphql", { method: "POST", body: "{}" });
+		const headers = (fetchImpl.mock.calls[0]![1] as RequestInit).headers as Record<string, string>;
+		expect(headers["x-api-key"]).toBe("s3cret");
+		expect(headers.Authorization).toBe("Bearer s3cret");
 	});
 
 	it("omits optional headers when not provided", async () => {
