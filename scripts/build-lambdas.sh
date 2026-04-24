@@ -190,11 +190,18 @@ build_handler "invites" \
 build_handler "skills" \
   "$REPO_ROOT/packages/api/src/handlers/skills.ts"
 
-# Plugin upload handler (V1 agent-architecture plan §U10). Two routes:
-#   POST /api/plugins/presign → presigned PUT URL for the zip
-#   POST /api/plugins/upload  → validator + three-phase install saga
+# Plugin upload handler (V1 agent-architecture plan §U10). Four routes:
+#   POST /api/plugins/presign    → presigned PUT URL for the zip
+#   POST /api/plugins/upload     → validator + three-phase install saga
+#   GET  /api/plugins            → list recent uploads for the tenant
+#   GET  /api/plugins/:uploadId  → detail for a single upload
 build_handler "plugin-upload" \
   "$REPO_ROOT/packages/api/src/handlers/plugin-upload.ts"
+
+# Hourly sweeper — reaps orphan S3 staging (> 1h) from failed or interrupted
+# plugin upload sagas (plan §U10). Triggered by EventBridge.
+build_handler "plugin-staging-sweeper" \
+  "$REPO_ROOT/packages/api/src/handlers/plugin-staging-sweeper.ts"
 
 build_handler "activity" \
   "$REPO_ROOT/packages/api/src/handlers/activity.ts"
