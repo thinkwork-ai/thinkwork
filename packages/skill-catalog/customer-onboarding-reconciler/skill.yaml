@@ -54,6 +54,8 @@ triggers:
 # assigned to a template. CRM + lastmile_tasks_* connectors ship in
 # separate PRDs; the critical-fail policy in SKILL.md governs their
 # availability requirements.
-requires_skills:
-  - synthesize
-  - customer-onboarding-reconciler/act
+# Real tool-call dependencies the model invokes via Skill(). Gap analysis
+# happens inline in SKILL.md; no helper sub-skills needed. The CRM +
+# lastmile_tasks_* connectors ship in separate PRDs; the critical-fail
+# policy in SKILL.md governs availability requirements.
+requires_skills: []

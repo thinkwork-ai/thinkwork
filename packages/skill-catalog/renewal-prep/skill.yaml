@@ -56,6 +56,4 @@ triggers:
 # renewal-history, AR, NPS, support-incidents) ship in separate PRDs;
 # missing sub-skills degrade gracefully per SKILL.md body's policy.
 requires_skills:
-  - frame
-  - synthesize
   - package

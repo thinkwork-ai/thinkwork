@@ -1,126 +1,153 @@
 ---
 name: sales-prep
 description: >
-  Pre-meeting brief for a sales rep. One input (customer + meeting date +
-  focus) produces a packaged deliverable covering account context,
-  financials, open tickets, external signals, and customer-specific wiki
-  notes. Model drives sub-skill invocation via the Skill meta-tool.
+  Produce a pre-meeting brief for a sales rep covering account context,
+  financials, open incidents, external signals, and talking points.
+  Chat / schedule / catalog / webhook anchor for the deliverable-shape
+  skill pattern.
 license: Proprietary
 metadata:
   author: thinkwork
   version: "2.0.0"
+allowed-tools:
+  - Skill
+  - recall
+  - reflect
+  - web_search
+  - wiki_search
 ---
 
 # Sales Prep
 
-Agent-driven multi-step brief for a sales rep. The model invokes each
-sub-skill via the `Skill(slug, inputs)` meta-tool in the order described
-below and degrades gracefully when optional sub-skills are unavailable.
-
-## What a rep gets
-
-A Markdown brief with four sections rendered by the `package` sub-skill's
-`sales_brief` template:
-
-- **Risks** — drawn from CRM + AR + support incidents.
-- **Opportunities** — expansion signals from usage + web + wiki.
-- **Open questions** — things the rep should resolve pre-meeting.
-- **Talking points** — ordered most-to-least important for the
-  meeting's stated focus.
-
-Each section carries citations back to the sub-skill call that surfaced
-the fact — no hallucinated claims.
+You are producing a Markdown brief that a sales rep reads in 60 seconds before a meeting with `customer` on `meeting_date`. The deliverable has a fixed shape; this document is the contract + method.
 
 ## Inputs
 
-| Field          | Required | Type   | Notes |
-|----------------|----------|--------|-------|
-| `customer`     | Yes      | string | Customer identifier. Resolver: `resolve_customer`. |
-| `meeting_date` | Yes      | date   | ISO-8601 date of the meeting. |
-| `focus`        | No       | enum   | `financial` \| `expansion` \| `risks` \| `general`. Default `general`. |
+| Field          | Required | Type  | Notes |
+|----------------|----------|-------|-------|
+| `customer`     | Yes      | string | Customer identifier. |
+| `meeting_date` | Yes      | date  | ISO-8601. |
+| `focus`        | No       | enum  | `financial` \| `expansion` \| `risks` \| `general`. Default `general`. |
 
-## How to run it
+## Deliverable shape
 
-Call each step via `Skill(slug, inputs)`. Run the gather sub-skills in
-whatever order the runtime prefers — the synthesize step only needs the
-merged result, not a specific ordering. Skip a gather step if the
-sub-skill is missing or returns an error, except `crm_account_summary`
-(see "Degrading gracefully" below).
+The rep gets a Markdown brief with four sections, in this order:
 
-1. **Frame the goal.** Call `Skill("frame", {problem})` with
-   `problem = "Prep for meeting with {customer} on {meeting_date}. Focus: {focus}."`
-   Store the return as `framed`.
-2. **Gather in parallel.** Call these sub-skills with `{customer}` (and
-   `{meeting_date}` where noted). Collect successful returns into a
-   single `gathered` object keyed by sub-skill name.
-   - `crm_account_summary(customer)` — **required for a useful brief**;
-     if it errors, stop here and tell the user the CRM connector is
-     unavailable. Don't fabricate account context.
-   - `ar_summary(customer)` — optional; footer "AR data unavailable"
-     if missing.
-   - `support_incidents_summary(customer)` — optional; footer
-     "Support data unavailable" if missing.
-   - `web-search({query: customer, date: meeting_date})` — optional.
-   - `wiki_search({query: customer})` — optional.
-3. **Synthesize.** Call
-   `Skill("synthesize", {framed, gathered, focus})`. Store as
-   `synthesis`.
-4. **Package.** Call
-   `Skill("package", {synthesis, format: "sales_brief"})` to render the
-   final Markdown deliverable.
+- **Risks** — pulled from CRM, AR, and support signals.
+- **Opportunities** — expansion signals from usage, web, and wiki.
+- **Open questions** — things the rep should resolve pre-meeting.
+- **Talking points** — ordered most-to-least important for the focus.
 
-Implicit before/after:
+Every finding cites its source (e.g. `CRM: ARR $380k, renewal 2026-Q2`). **Never invent facts.** If you don't have a source, put it in Open questions, not Risks or Opportunities.
 
-- Before step 1: `recall` (managed memory) or `hindsight_recall` (when
-  Hindsight is enabled) surfaces prior learnings scoped to
-  `(tenant, user, skill, customer)`.
-- After step 4: `reflect` or `hindsight_reflect` extracts up to 3 new
-  learnings from the run and stores them under the same scope.
+The final output is produced by `Skill("package", {format: "sales_brief", synthesis: <your analysis>})` — that tool deterministically renders the four sections into the canonical template.
 
-## Degrading gracefully
+## Method
 
-- `crm_account_summary` is **critical** — an account brief anchored on
-  missing CRM context is worse than no brief. Abort with a clear user
-  message if this step errors or returns empty.
-- For every other gather sub-skill: catch the error, record
-  `<step-name> unavailable: <reason>` in the deliverable's footer, and
-  continue with the remaining context.
-- If `synthesize` fails after a partial gather, don't call `package` —
-  return the framed problem + whatever was gathered so the rep can
-  triage instead of reading a half-hallucinated brief.
+### 1. Pull prior learnings (before anything else)
 
-## Invocation paths
+```
+recall({skill_id: "sales-prep", subject_entity_id: customer})
+```
 
-| Path      | Entry point              | Typical invocation |
-|-----------|--------------------------|---------------------|
-| chat      | skill-dispatcher         | "prep me for ABC Fuels Thursday" |
-| scheduled | job-trigger              | cron `0 14 ? * MON-FRI *` with `from_tenant_config: default_customer` |
-| catalog   | `startSkillRun` mutation | Admin UI "Run now" button |
+These are things past runs for this customer taught you — preferences, gotchas, corrections. Weight them heavily in your synthesis.
 
-## Tenant overrides
+### 2. Scratch-restate the goal
 
-Tenants can change these per the `tenant_overridable` allowlist:
+Write a one-paragraph scratchpad (do NOT include it in the deliverable) with four labeled lines:
 
-- `inputs.focus.default` — e.g., a tenant that cares only about renewals
-  can set default to `risks`.
-- `triggers.schedule.expression` — e.g., the afternoon brief becomes a
-  morning brief by flipping to `0 8 ? * MON-FRI *`.
+- **Goal:** What a good brief looks like for this specific customer + meeting_date + focus.
+- **Constraints:** Time-to-read, tone, data sensitivity, anything else the brief must respect.
+- **Known unknowns:** Facts you need to resolve before writing.
+- **Decision criteria:** How the rep will judge the brief good enough.
 
-Nothing else is overridable. Attempting to pass a config that touches a
-non-allowlisted field is rejected at `setAgentSkills` time.
+Keep this under 150 words. It's internal, not part of the output.
+
+### 3. Gather in parallel
+
+Fire these tool calls concurrently — don't wait on one before starting the next:
+
+**Critical (abort if it fails):**
+- `Skill("crm_account_summary", {customer})` — ARR, renewal date, AE, last activity. Without this the brief has nothing to anchor on.
+
+**Nice-to-have (degrade gracefully — note absence in a footer):**
+- `Skill("ar_summary", {customer})` — invoice status, DSO, past-due amounts.
+- `Skill("support_incidents_summary", {customer})` — open tickets, NPS.
+- `web_search({query: "<customer name> news 2026"})` — recent public signals.
+- `wiki_search({query: customer})` — tenant-specific notes.
+
+If a nice-to-have tool errors, isn't registered, or returns empty: continue. At the end of the deliverable add a footer line per missing source, e.g. `> Note: support data unavailable.`
+
+### 4. Synthesize
+
+Reading the gathered data alongside the `focus` parameter, produce the four sections:
+
+- **Focus `risks`** → lead with Risks; keep Opportunities short.
+- **Focus `expansion`** → lead with Opportunities; surface usage trends.
+- **Focus `financial`** → put ARR / renewal posture / AR in Risks and Opportunities.
+- **Focus `general`** (default) → balance all four sections.
+
+Rules:
+- Cite every finding.
+- Specific numbers over adjectives.
+- 400 words max across the four sections.
+- Don't promote Known unknowns from step 2 into Risks unless you confirm a negative signal — they belong in Open questions.
+
+### 5. Render
+
+```
+Skill("package", {
+  format: "sales_brief",
+  synthesis: {
+    risks: [...],
+    opportunities: [...],
+    open_questions: [...],
+    talking_points: [...]
+  },
+  metadata: { customer, meeting_date, focus }
+})
+```
+
+Return the rendered Markdown as your final output. Do not reformat it — `package` produced the canonical shape.
+
+### 6. Reflect
+
+If you learned something non-obvious about this customer — a preferred source, a correction, a recurring pattern — call `reflect` with up to 3 observations:
+
+```
+reflect({
+  skill_id: "sales-prep",
+  subject_entity_id: customer,
+  text: "..."
+})
+```
+
+Skip this step if the run didn't surface anything new.
 
 ## Connector dependencies
 
-The gather steps call connector skills that live in separate PRDs:
+The gather step calls connector skills that ship in separate PRDs:
 
-- `crm_account_summary` — single-tenant CRM adapter.
-- `ar_summary` — ERP/billing adapter.
+- `crm_account_summary` — CRM adapter (Salesforce / HubSpot / etc.)
+- `ar_summary` — ERP / billing adapter.
 - `support_incidents_summary` — helpdesk adapter.
-- `web-search` — already shipped.
-- `wiki_search` — already shipped (wiki tools).
+- `web_search` — shipped.
+- `wiki_search` — shipped.
 
-## Migration note
+If a connector is not registered in the current session allowlist, the call fails cleanly and step 3's graceful-degradation footer kicks in.
 
-v2.0.0 landed the current `execution: context` shape (plan §U8): the
-model invokes each sub-skill directly via the Skill meta-tool so the
-same pre-meeting workflow runs on the unified dispatch path.
+## Tenant overrides
+
+Tenants can change these via the `tenant_overridable` allowlist (see `skill.yaml`):
+
+- `inputs.focus.default` — a renewals-heavy tenant might flip to `risks`.
+- `triggers.schedule.expression` — afternoon brief → morning brief, etc.
+
+Everything else is fixed. Attempting to override an unlisted field is rejected at `setAgentSkills` time.
+
+## What this skill does NOT do
+
+- Doesn't send the brief (email/slack is a separate delivery channel).
+- Doesn't schedule follow-ups (use `schedule_followup` tool separately).
+- Doesn't modify CRM records.
+- Doesn't call retired helper skills (`frame`, `synthesize`, `gather`, `compound`) — the framing + analysis happen inline in steps 2 and 4.

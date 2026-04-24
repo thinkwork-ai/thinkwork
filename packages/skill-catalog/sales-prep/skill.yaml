@@ -58,13 +58,12 @@ triggers:
       meeting_date:
         today_plus_N: 1
 
-# Sub-skills the model invokes via Skill(). Ship as an explicit
-# allowlist so template-scoped session_allowlist (U5) can include them
-# automatically when sales-prep is assigned to a template.
+# Real tool-call dependencies the model invokes via Skill(). Listed so
+# the template session_allowlist (U5) auto-includes them when sales-prep
+# is assigned. Framing + synthesis happen inline per SKILL.md; no helper
+# skills are needed for those.
 requires_skills:
-  - frame
-  - synthesize
   - package
   - web-search
-  # CRM / AR / support-incidents / wiki skills ship in separate PRDs;
-  # missing sub-skills degrade gracefully per SKILL.md body's policy.
+  # CRM / AR / support-incidents / wiki connectors ship in separate PRDs;
+  # missing connectors degrade gracefully per SKILL.md body's policy.
