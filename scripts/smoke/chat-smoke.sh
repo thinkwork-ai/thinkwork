@@ -1,25 +1,26 @@
 #!/usr/bin/env bash
 # chat-smoke.sh — end-to-end smoke for the chat (skill-dispatcher) path.
 #
-# POSTs a sales-prep composition to /api/skills/start with
-# invocationSource=chat — the envelope the Strands skill-dispatcher
-# produces when a user intent routes to a composition. Polls skill_runs
-# until the row transitions out of `running`. Exits 0 with a single
-# `PASS …` line or 1 with `FAIL:<reason>`.
+# POSTs a sales-prep envelope to /api/skills/start with
+# invocationSource=chat — the shape the Strands skill-dispatcher
+# produces when a user intent routes to a deliverable-shape skill.
+# Polls skill_runs until the row transitions out of `running`. Exits
+# 0 with a single `PASS …` line or 1 with `FAIL:<reason>`.
 #
 # What this covers:
 #   * Service-endpoint auth (Bearer API_AUTH_SECRET)
 #   * skill_runs insert under invocation_source=chat
 #   * agentcore-invoke Lambda dispatch (RequestResponse)
-#   * composition_runner lifecycle transition out of `running`
+#   * Container lifecycle transition out of `running`
 #
 # What this does NOT cover:
 #   * Intent classification — the dispatcher skill in the Strands
-#     container decides to invoke compositions. Here we skip straight
-#     to the dispatch endpoint with a pre-built envelope.
-#   * End-to-end delivery (no real connectors wired; the composition
-#     will reach the gather step and fail at crm_account_summary or
-#     similar — that failure IS the passing condition).
+#     container decides which deliverable to route to. Here we skip
+#     straight to the dispatch endpoint with a pre-built envelope.
+#   * Runtime execution — per plan §U6 the container currently
+#     terminates every `kind=run_skill` envelope with the canonical
+#     unsupported-runtime reason. That terminal failure IS the
+#     passing condition.
 #
 # Usage:
 #   scripts/smoke/chat-smoke.sh \
@@ -37,7 +38,7 @@
 #
 # Exit codes:
 #   0 — PASS
-#   1 — FAIL (composition stuck in running past timeout, or dispatch 4xx/5xx)
+#   1 — FAIL (row stuck in running past timeout, or dispatch 4xx/5xx)
 #   2 — usage / env resolution error
 
 set -euo pipefail

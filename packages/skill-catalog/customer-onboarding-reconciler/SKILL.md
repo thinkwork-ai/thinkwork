@@ -141,8 +141,6 @@ footer-only — contract context is nice-to-have but not load-bearing.
 
 ## Migration note
 
-This skill was `execution: composition` + 3-step `composition_runner`
-YAML through v1.0.0. v2.0.0 migrated to `execution: context` (plan §U8):
-the model invokes each sub-skill directly via the Skill meta-tool so
-the same reconciler semantics no longer need a separate composition
-runtime.
+v2.0.0 landed the current `execution: context` shape (plan §U8): the
+model invokes each sub-skill directly via the Skill meta-tool so the
+same reconciler semantics run on the unified dispatch path.

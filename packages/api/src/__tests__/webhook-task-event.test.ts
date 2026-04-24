@@ -41,7 +41,7 @@ vi.mock("drizzle-orm", () => ({
 
 vi.mock("../graphql/utils.js", () => ({
 	hashResolvedInputs: vi.fn(() => "hash-fixed"),
-	invokeComposition: vi.fn(async () => ({ ok: true })),
+	invokeSkillRun: vi.fn(async () => ({ ok: true })),
 }));
 
 vi.mock("@aws-sdk/client-secrets-manager", () => ({

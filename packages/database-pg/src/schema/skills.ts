@@ -39,10 +39,6 @@ export const skillCatalog = pgTable(
     source: text("source").notNull().default("builtin"),
     /** Auto-install for all tenants */
     is_default: boolean("is_default").notNull().default(false),
-    /** 'script' | 'mcp' | 'context' */
-    execution: text("execution").notNull().default("context"),
-    /** PRD-38: 'tool' (direct parent tools) | 'agent' (sub-agent with own reasoning loop) */
-    mode: text("mode").notNull().default("tool"),
     requires_env: text("requires_env").array(),
     oauth_provider: text("oauth_provider"),
     oauth_scopes: text("oauth_scopes").array(),
@@ -64,7 +60,6 @@ export const skillCatalog = pgTable(
   },
   (table) => [
     index("idx_skill_catalog_category").on(table.category),
-    index("idx_skill_catalog_execution").on(table.execution),
   ],
 );
 

@@ -55,10 +55,6 @@ interface SkillInfo {
   triggers?: string[];
   /** PRD-31: Reference file names available in this skill */
   references?: string[];
-  /** PRD-31: Execution type (script, mcp, context) */
-  execution?: string | null;
-  /** PRD-38: Skill execution mode — 'tool' (direct parent tools) or 'agent' (sub-agent) */
-  mode?: string | null;
   /** Workspace slugs that use this skill (parsed from workspace CONTEXT.md files) */
   usedIn: string[];
 }
@@ -272,7 +268,7 @@ export async function regenerateWorkspaceMap(agentId: string): Promise<void> {
   // 5. Build skill catalog with "Used In" mapping + PRD-31 metadata from DB
   const catalogLookup = new Map<string, {
     name: string; description: string | null; mcp_server: string | null;
-    triggers: string[] | null; execution: string; mode: string;
+    triggers: string[] | null;
   }>();
   try {
     const { skillCatalog } = await import("@thinkwork/database-pg/schema");
@@ -282,8 +278,6 @@ export async function regenerateWorkspaceMap(agentId: string): Promise<void> {
       description: skillCatalog.description,
       mcp_server: skillCatalog.mcp_server,
       triggers: skillCatalog.triggers,
-      execution: skillCatalog.execution,
-      mode: skillCatalog.mode,
     }).from(skillCatalog).execute();
     for (const row of catalogRows) {
       catalogLookup.set(row.slug, row);
@@ -316,8 +310,6 @@ export async function regenerateWorkspaceMap(agentId: string): Promise<void> {
       description: catalog?.description || "",
       mcpServer: catalog?.mcp_server || (config.mcpServer as string) || undefined,
       triggers: catalog?.triggers || undefined,
-      execution: catalog?.execution || undefined,
-      mode: catalog?.mode || "tool",
       usedIn,
     };
   });
@@ -389,23 +381,20 @@ function renderAgentsMap(
   lines.push("```");
   lines.push("");
 
-  // Skills & Tools (PRD-38: skills as sub-agents)
+  // Skills & Tools
   lines.push("## Skills & Tools");
   lines.push("");
   lines.push("**IMPORTANT**: Tools like `create_sub_thread`, `search_users`, `schedule_followup`, `list_sub_threads` etc. are registered directly on you. Always call these tools directly — do NOT delegate to another agent when you already have the required tool.");
   lines.push("");
-  lines.push("Skills with **mode: agent** run as sub-agents — only delegate to them for tasks requiring autonomous multi-step reasoning you cannot do yourself.");
-  lines.push("Skills with **mode: tool** provide tools already registered on you — call their functions directly, never delegate.");
-  lines.push("Use the `skills` tool with a skill name to get detailed instructions before first use.");
+  lines.push("Use the `Skill` meta-tool with a skill name to invoke a skill; nested skills are supported up to the plan's depth budget.");
   lines.push("");
   if (skills.length > 0) {
-    lines.push("| Skill | Mode | Description | Triggers |");
-    lines.push("|-------|------|-------------|----------|");
+    lines.push("| Skill | Description | Triggers |");
+    lines.push("|-------|-------------|----------|");
     for (const skill of skills) {
       const desc = skill.description ? skill.description.slice(0, 80) : "—";
       const triggers = skill.triggers?.slice(0, 3).join(", ") || "—";
-      const mode = skill.mode || "tool";
-      lines.push(`| ${skill.name} | ${mode} | ${desc} | ${triggers} |`);
+      lines.push(`| ${skill.name} | ${desc} | ${triggers} |`);
     }
   } else {
     lines.push("No skills assigned.");
@@ -422,18 +411,6 @@ function renderAgentsMap(
       const usedIn = kb.usedIn.length > 0 ? kb.usedIn.join(", ") : "(all workspaces)";
       lines.push(`| ${kb.name} | ${kb.description} | ${usedIn} |`);
     }
-    lines.push("");
-  }
-
-  // Delegation guidance
-  const agentSkills = skills.filter((s) => s.mode === "agent");
-  if (agentSkills.length > 0) {
-    lines.push("## Delegation");
-    lines.push("");
-    lines.push(
-      "For complex multi-step tasks, delegate to the appropriate mode:agent skill. " +
-      "Include relevant context from your knowledge domains in the query.",
-    );
     lines.push("");
   }
 
@@ -460,7 +437,7 @@ function renderContextRouter(agentName: string, workspaces: WorkspaceSummary[]):
     }
     lines.push("");
     lines.push(
-      "Use your skills (mode: agent or mode: tool) to take actions. Knowledge domains provide context for decision-making.",
+      "Use your skills to take actions. Knowledge domains provide context for decision-making.",
     );
   } else {
     lines.push("No knowledge domains configured.");

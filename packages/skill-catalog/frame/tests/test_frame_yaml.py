@@ -1,10 +1,7 @@
 """Structural tests for the `frame` primitive's skill.yaml.
 
-Deliberately does NOT import composition_runner or skill_inputs — those
-are Unit 1's runtime code. This test only validates the YAML shape so
-Unit 2 can merge independently. Once both units are on main,
-scripts/validate-skill-catalog.sh and the composition_runner's own
-test suite cover the deeper contract.
+Validates the YAML shape + prompt-file contract. The deeper runtime
+contract is covered by scripts/validate-skill-catalog.sh.
 """
 
 from __future__ import annotations
@@ -48,16 +45,10 @@ def test_inputs_are_typed() -> None:
     assert inputs["context"].get("required") in (False, None)
 
 
-def test_composition_only_flag() -> None:
-    """Frame is a composition-only primitive; admins should not enable it as a
-    direct agent tool. The flag captures that intent declaratively so later
-    units can enforce it at registration time."""
-    data = _load()
-    assert data.get("invocable_from") == "composition"
-
-
 def test_declares_output_name() -> None:
-    """composition_runner uses `output` as the named-output key for the step."""
+    """The named-output key is part of the skill contract even though the
+    runtime composition path has been removed — downstream skills still
+    reference `framed` when pulling frame's output."""
     data = _load()
     assert data.get("output") == "framed"
 

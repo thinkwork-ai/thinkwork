@@ -1,8 +1,7 @@
 """Structural tests for the `synthesize` primitive's skill.yaml.
 
-YAML-only validation — no imports from Unit 1's composition_runner or
-skill_inputs. Once both units are on main, the validate-skill-catalog.sh
-script and composition_runner tests cover deeper integration.
+YAML-only validation. Deeper integration is covered by
+scripts/validate-skill-catalog.sh.
 """
 
 from __future__ import annotations
@@ -35,9 +34,9 @@ def test_required_metadata_present() -> None:
     assert data["execution"] == "context"
 
 
-def test_inputs_match_composition_placeholders() -> None:
-    """Compositions pass named outputs from prior steps as `framed` and
-    `gathered`. Synthesize must accept both."""
+def test_inputs_match_expected_placeholders() -> None:
+    """Upstream skills pass named outputs `framed` and `gathered`.
+    Synthesize must accept both."""
     data = _load()
     inputs = data["inputs"]
     assert inputs["framed"]["required"] is True
@@ -46,11 +45,6 @@ def test_inputs_match_composition_placeholders() -> None:
     # shouldn't block the step if absent.
     assert inputs["focus"].get("required") in (False, None)
     assert inputs["prior_learnings"].get("required") in (False, None)
-
-
-def test_composition_only_flag() -> None:
-    data = _load()
-    assert data.get("invocable_from") == "composition"
 
 
 def test_declares_output_name() -> None:

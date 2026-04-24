@@ -1,15 +1,16 @@
-"""Skill dispatcher — start composition runs via service-to-service REST call.
+"""Skill dispatcher — start skill runs via service-to-service REST call.
 
-The LLM reads the enabled composition skills, matches user intent, resolves
-inputs, and calls `start_composition(skill_id, invocation_source, inputs, ...)`.
-This module is the thin HTTP client that forwards the call to the API's
-`POST /api/skills/start` endpoint. The endpoint mirrors the GraphQL
-`startSkillRun` mutation's contract; we use the REST variant here because
-the container authenticates with `THINKWORK_API_SECRET`, not a Cognito JWT.
+The LLM reads the enabled deliverable-shape skills, matches user intent,
+resolves inputs, and calls `start_skill_run(skill_id, invocation_source,
+inputs, ...)`. This module is the thin HTTP client that forwards the
+call to the API's `POST /api/skills/start` endpoint. The endpoint
+mirrors the GraphQL `startSkillRun` mutation's contract; we use the
+REST variant here because the container authenticates with
+`THINKWORK_API_SECRET`, not a Cognito JWT.
 
 Two tools:
-  * start_composition — kicks off a run, returns {runId, status, deduped}.
-  * composition_status — polls a previously-started run by id.
+  * start_skill_run — kicks off a run, returns {runId, status, deduped}.
+  * skill_run_status — polls a previously-started run by id.
 """
 
 import json
@@ -24,7 +25,7 @@ TENANT_ID = os.environ.get("TENANT_ID", "") or os.environ.get("_MCP_TENANT_ID", 
 CURRENT_USER_ID = os.environ.get("CURRENT_USER_ID", "")
 
 
-def start_composition(
+def start_skill_run(
     skill_id: str,
     invocation_source: str = "chat",
     inputs: dict[str, Any] | None = None,
@@ -32,21 +33,21 @@ def start_composition(
     skill_version: int = 1,
     delivery_channels: list[str] | None = None,
 ) -> str:
-    """Start a composition skill run for the current user.
+    """Start a skill run for the current user.
 
     Args:
-        skill_id: Slug of the composition skill (e.g., "sales-prep").
+        skill_id: Slug of the deliverable-shape skill (e.g., "sales-prep").
         invocation_source: One of "chat" | "scheduled" | "catalog" | "webhook".
             Chat intent always uses "chat". The scheduled/webhook sources
             are for non-dispatcher callers.
-        inputs: Resolved inputs dict per the composition's schema. Empty
-            dict is valid for compositions that declare no inputs.
+        inputs: Resolved inputs dict per the skill's schema. Empty dict
+            is valid for skills that declare no inputs.
         agent_id: Optional agent id for delivery targeting (e.g. for the
-            agent-owner channel on reconciler compositions). Empty =
+            agent-owner channel on reconciler-shaped skills). Empty =
             agent unspecified.
-        skill_version: Composition version to run. Defaults to 1.
+        skill_version: Skill version to run. Defaults to 1.
         delivery_channels: Optional list naming where the deliverable
-            lands (e.g. ["chat", "email"]). Empty uses the composition's
+            lands (e.g. ["chat", "email"]). Empty uses the skill's
             declared defaults.
 
     Returns:
@@ -83,11 +84,11 @@ def start_composition(
     return _post("/api/skills/start", body)
 
 
-def composition_status(run_id: str) -> str:
-    """Fetch the current status of a composition run.
+def skill_run_status(run_id: str) -> str:
+    """Fetch the current status of a skill run.
 
     Args:
-        run_id: The runId returned by start_composition.
+        run_id: The runId returned by start_skill_run.
 
     Returns:
         JSON string mirroring the run's shape, or {"error": "..."}.
@@ -100,7 +101,7 @@ def composition_status(run_id: str) -> str:
     # here, but Unit 5 scopes the dispatcher to start-only. Surface the
     # limitation so the LLM knows not to promise progress polling yet.
     return json.dumps({
-        "error": "composition_status not yet implemented — see run-detail page for progress",
+        "error": "skill_run_status not yet implemented — see run-detail page for progress",
         "runId": run_id,
     })
 

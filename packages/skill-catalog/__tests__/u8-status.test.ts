@@ -3,9 +3,10 @@
  *
  * Keeps three guard rails on the U8 per-slug migration:
  *
- *   1. The audit script runs, emits the expected markdown skeleton.
- *   2. At least one composition → context migration has shipped (if 0,
- *      either the audit's detection is broken or the PR stack regressed).
+ *   1. The audit script runs and emits the expected markdown skeleton.
+ *   2. The `regressed` bucket is empty — no slug still declares a
+ *      composition or declarative execution type now that U6 has
+ *      removed the runtime for those.
  *   3. The first-migration exemplar (`sales-prep`) stays on the new
  *      shape: `execution: context`, no `steps:` block, `requires_skills`
  *      declared, SKILL.md still valid frontmatter.
@@ -45,7 +46,7 @@ describe("u8-status audit script", () => {
     expect(out).toContain("## Migration guidance");
   });
 
-  it("reports at least one migrated composition slug (sales-prep or later)", () => {
+  it("reports at least one migrated slug (sales-prep or later)", () => {
     const out = runAudit();
     const donePattern = /\| done \| (\d+) \|/;
     const match = out.match(donePattern);
@@ -53,42 +54,30 @@ describe("u8-status audit script", () => {
     expect(Number(match![1])).toBeGreaterThanOrEqual(20);
   });
 
-  it("has no composition slugs left for the deliverable-shape series", () => {
+  it("has no regressed slugs (composition / declarative / unsupported)", () => {
     const out = runAudit();
-    const compositionPattern = /\| composition \| (\d+) \|/;
-    const match = out.match(compositionPattern);
-    expect(match).not.toBeNull();
-    // Composition bucket is empty. The last remaining
-    // `execution: composition` slug is smoke-package-only, counted in
-    // the smoke-probe bucket (it migrates last with U6's
-    // composition_runner deletion).
-    expect(Number(match![1])).toBe(0);
-  });
-
-  it("has no declarative slugs left post-gather migration", () => {
-    const out = runAudit();
-    const declarativePattern = /\| declarative \| (\d+) \|/;
-    const match = out.match(declarativePattern);
+    const regressedPattern = /\| regressed \| (\d+) \|/;
+    const match = out.match(regressedPattern);
     expect(match).not.toBeNull();
     expect(Number(match![1])).toBe(0);
   });
 
-  it("keeps the smoke-probe bucket honest (smoke-package-only stays there)", () => {
+  it("has no unknown slugs — every skill.yaml parses + declares execution", () => {
     const out = runAudit();
-    const probePattern = /\| smoke-probe \| (\d+) \|/;
-    const match = out.match(probePattern);
+    const unknownPattern = /\| unknown \| (\d+) \|/;
+    const match = out.match(unknownPattern);
     expect(match).not.toBeNull();
-    expect(Number(match![1])).toBe(1);
+    expect(Number(match![1])).toBe(0);
   });
 });
 
 describe("sales-prep (U8 first migration exemplar)", () => {
-  it("declares execution: context, not composition", () => {
+  it("declares execution: context on the post-U8 shape", () => {
     const yml = readYaml("sales-prep");
     expect(yml.execution).toBe("context");
   });
 
-  it("has no steps: block (composition_runner is the retired path)", () => {
+  it("has no steps: block (the composition runner is the retired path)", () => {
     const yml = readYaml("sales-prep");
     expect(yml.steps).toBeUndefined();
   });

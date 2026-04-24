@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # catalog-smoke.sh — end-to-end smoke for the catalog invocation path.
 #
-# POSTs a sales-prep composition to /api/skills/start with
+# POSTs a sales-prep envelope to /api/skills/start with
 # invocationSource=catalog, then polls skill_runs until the row
 # transitions out of `running`. Exits 0 with a single `PASS …` line or
 # 1 with `FAIL:<reason>`.
@@ -10,14 +10,14 @@
 #   * Service-endpoint auth (Bearer API_AUTH_SECRET)
 #   * skill_runs insert under the correct (tenant, invoker, source)
 #   * agentcore-invoke Lambda dispatch (RequestResponse)
-#   * composition_runner lifecycle transition out of `running`
+#   * Container lifecycle transition out of `running`
 #
 # What this does NOT cover:
 #   * The admin UI's GraphQL startSkillRun mutation path (needs a
 #     Cognito JWT — left to the manual "admin Run now" check).
-#   * End-to-end delivery (no real connectors wired; the composition
-#     will reach the gather step and fail at crm_account_summary or
-#     similar — that failure IS the passing condition).
+#   * Runtime execution — per plan §U6 the container currently terminates
+#     every `kind=run_skill` envelope with the canonical unsupported-
+#     runtime reason. That terminal failure IS the passing condition.
 #
 # Usage:
 #   scripts/smoke/catalog-smoke.sh \
@@ -35,7 +35,7 @@
 #
 # Exit codes:
 #   0 — PASS
-#   1 — FAIL (composition stuck in running past timeout, or dispatch 4xx/5xx)
+#   1 — FAIL (row stuck in running past timeout, or dispatch 4xx/5xx)
 #   2 — usage / env resolution error
 
 set -euo pipefail
@@ -123,7 +123,7 @@ echo "catalog-smoke: inserted skill_run id=$RUN_ID — polling up to ${TIMEOUT}s
 
 wait_for_terminal_status "$RUN_ID" "$TIMEOUT"
 
-# Passing condition: the row reached a terminal status — which today means
-# the composition_runner tried the gather step and hit a missing connector.
-# `complete` is also acceptable (connector wired, skill returned).
+# Passing condition: the row reached a terminal status. Post §U6 that
+# currently means `failed` with the unsupported-runtime reason; any
+# terminal state is a PASS (writeback path verified).
 echo "PASS catalog run_id=$RUN_ID status=$SMOKE_RESULT_STATUS reason=${SMOKE_RESULT_REASON:-none}"

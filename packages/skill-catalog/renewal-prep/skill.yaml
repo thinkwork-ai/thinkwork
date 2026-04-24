@@ -8,13 +8,12 @@ description: >
   usage, support posture, renewal history, and win/loss signals, then
   renders a renewal_risk brief ordered by deal-impact likelihood.
 
-# U8 migration (plan §U8, 2026-04-24): converted from execution:composition
-# → execution:context. The model drives the frame → gather → synthesize →
-# package sequence itself via the Skill() meta-tool (U5 session allowlist),
-# replacing composition_runner. Pattern mirrors sales-prep + account-health-
-# review — same four phases with a risk-steered synthesize and a renewal-
-# specific gather set (contract + usage + renewal history + AR + NPS +
-# tickets). Focus hard-coded at "risks".
+# Agent-driven deliverable: the model drives the frame → gather →
+# synthesize → package sequence itself via the Skill() meta-tool (U5
+# session allowlist). Pattern mirrors sales-prep + account-health-
+# review — same four phases with a risk-steered synthesize and a
+# renewal-specific gather set (contract + usage + renewal history +
+# AR + NPS + tickets). Focus hard-coded at "risks".
 
 inputs:
   customer:

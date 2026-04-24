@@ -1,50 +1,44 @@
 # skill_runs smoke-test checks
 
-Operator runbook for the four composition invocation paths. Each
+Operator runbook for the four skill-run invocation paths. Each
 script exits `0` on PASS, `1` on FAIL, and prints exactly one
 `PASS …` or `FAIL:<reason>` line so `run-all.sh` can aggregate them.
 
 ## What "passing" means today
 
 Each smoke PASSes when `skill_runs.status` transitions out of
-`running` within the timeout — whether to `complete` (composition
+`running` within the timeout — whether to `complete` (dispatch
 finished, artifact delivered) or to `failed` with a `failure_reason`
-that names a specific missing skill (e.g. `step 'frame' failed: frame
-error: SkillNotRegisteredError`). Both outcomes prove the full
-dispatch → runtime → DB loop works end-to-end.
+that names the specific reason (missing connector, unsupported kind,
+etc.). Both outcomes prove the full dispatch → runtime → DB loop
+works end-to-end.
 
-On today's dev stack, the run_skill dispatch closure wires both
-`execution: script` (deterministic Python functions) and
-`execution: context` (LLM-prompt via Bedrock Converse) sub-skills.
-`execution: agent` sub-skills still raise `SkillNotRegisteredError`.
-That means:
+Post plan §U6 every `kind=run_skill` envelope currently terminates as
+`failed` with the canonical "kind=run_skill is unsupported in this
+runtime" reason — the composition runner was deleted and a replacement
+out-of-band dispatcher has not landed yet. The smokes therefore
+validate the **row lifecycle** (POST → insert → container → writeback),
+not runtime execution:
 
-- Compositions whose only step is a script skill (e.g.
-  `smoke-package-only` → `package`) run to `status='complete'`.
-- Compositions that start with a context-mode sub-skill (e.g.
-  `sales-prep` → `frame` → `gather` → `synthesize` → `package`) now
-  progress past the context steps. The first failure typically comes
-  from the `gather` branch, which references one or more missing
-  script-mode connectors (e.g. `crm_account_summary not registered`)
-  — still a clean named failure, still a PASS per the composable-
-  skills plan.
-- A composition that reaches a not-yet-wired `execution: agent`
-  sub-skill fails with `execution='agent' is not wired` — clean PASS.
+- `/api/skills/start` inserts a `running` row, invokes the agentcore
+  Lambda, and returns a `runId`.
+- The container branches on `kind="run_skill"`, logs the unsupported
+  envelope, and POSTs `status=failed` to `/api/skills/complete`.
+- `/api/skills/complete` (service-auth) validates the transition and
+  updates `skill_runs.status` + `failure_reason` + `finished_at`.
 
 **What the smokes prove end-to-end:**
 
 - Schema + migrations applied correctly (pre-flight `to_regclass` probe).
 - `POST /api/skills/start` accepts the service envelope, inserts a
   `skill_runs` row, and invokes the agentcore Lambda.
-- The agentcore container branches on `kind="run_skill"`, loads the
-  composition YAML from S3, runs `composition_runner.run_composition`
-  with a dispatch closure, and POSTs terminal state back to
-  `/api/skills/complete`.
+- The agentcore container branches on `kind="run_skill"` and POSTs
+  terminal state back to `/api/skills/complete`.
 - `/api/skills/complete` (service-auth) validates the transition and
   updates `skill_runs.status` + `failure_reason` + `finished_at`.
 - `job-trigger` Lambda reads a `scheduled_jobs` row, resolves input
   bindings, inserts a `skill_runs` row with `invocation_source=
-  'scheduled'`, and the composition runs through the same path.
+  'scheduled'`, and the same lifecycle runs.
 - All three paths deduplicate correctly via the partial unique index.
 
 A script FAILs when:
@@ -54,8 +48,8 @@ A script FAILs when:
 - The dispatch endpoint returns non-200 (`FAIL:dispatch_http_<code>`)
   or the Lambda invoke fails (`FAIL:lambda_invoke_rc_<code>`).
 - The inserted `skill_runs` row is still `status='running'` after the
-  timeout — the composition runner hung, crashed, or the completion
-  callback never arrived (`FAIL:timeout_still_running …`).
+  timeout — the container hung, crashed, or the completion callback
+  never arrived (`FAIL:timeout_still_running …`).
 - The scheduled path couldn't insert the fixture `scheduled_jobs` row
   or the job-trigger Lambda didn't produce a matching `skill_runs`
   row within 10s (`FAIL:insert_scheduled_job` / `FAIL:no_skill_run_row`).
@@ -141,17 +135,9 @@ webhook-smoke happy-path call.
 
 ## Known gaps
 
-- **No real connector script skills are registered** — the dispatch
-  closure in
-  `packages/agentcore-strands/agent-container/run_skill_dispatch.py`
-  now handles `script` and `context` sub-skills, but the `gather`
-  branches of `sales-prep` / `renewal-prep` reference CRM / AR /
-  support / web / wiki connectors that aren't loaded on dev. Those
-  compositions terminate at the first missing connector with a clean
-  `SkillNotRegisteredError`. The R13 adoption criterion from the
-  composable-skills v1 plan covers wiring the connector adapters;
-  once any of those land, individual compositions could reach
-  `status=complete` instead.
+- **Runtime execution is offline** — per plan §U6 the `kind=run_skill`
+  path fails fast with the canonical unsupported-runtime reason. A
+  replacement out-of-band dispatcher will land after U6.
 - The catalog path uses the **service endpoint** `/api/skills/start`,
   not the admin GraphQL `startSkillRun` mutation — the mutation
   requires a Cognito JWT we don't have programmatic access to. The

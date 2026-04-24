@@ -1,10 +1,10 @@
 /**
- * cancelSkillRun — flip a running composition to `cancelled`.
+ * cancelSkillRun — flip a running skill run to `cancelled`.
  *
- * The composition_runner checks `skill_runs.status` between steps (plan
- * D3) and aborts when it observes `cancelled`. This resolver just writes
- * the status and returns the row — the runner's cooperative check is what
- * actually stops the work.
+ * The container's dispatch path checks `skill_runs.status` between phases
+ * (plan D3) and aborts when it observes `cancelled`. This resolver just
+ * writes the status and returns the row — the runtime's cooperative check
+ * is what actually stops the work.
  *
  * Authz: only the invoker or a tenant admin can cancel. Cross-tenant
  * cancellation returns 404 (not 403) to avoid leaking existence.

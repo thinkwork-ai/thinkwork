@@ -1,12 +1,12 @@
 # skill_runs smoke-test kit
 
 Operator tooling for the cheapest viable end-to-end test of the four
-composition invocation paths — chat, catalog, scheduled, webhook. Part of
+skill-run invocation paths — chat, catalog, scheduled, webhook. Part of
 `run-all.sh` is designed to run in CI against the just-deployed stage
 (see `CHECKS.md` for which subset); the rest is for manual verification.
 
-Context: composable-skills v1 shipped in PRs #334–#363 with zero real
-end-to-end tests. The "integration tests" under
+Context: the V1 agent-architecture plan shipped its persistence + ingress
+tooling with zero real end-to-end tests. The "integration tests" under
 `packages/api/test/integration/skill-runs/` are harness-backed mocks.
 This kit fills the gap.
 
@@ -86,14 +86,13 @@ scripts/smoke/webhook-smoke.sh \
    - `invoker_user_id` = the tenant's system-user uuid (first ever
      webhook call for the tenant also inserts a row into
      `tenant_system_users`)
-   - `status` transitions `running` → (probably) `failed` once
-     `composition_runner.py` hits the gather step, because the
-     `crm_account_summary` / `lastmile_tasks_list` connector skills
-     aren't wired up yet. **A clean failure at that layer is a
-     passing smoke test** — it proves the webhook path reaches the
-     composition_runner.
-3. `failure_reason` names the missing connector, not an auth or
-   dispatch error.
+   - `status` transitions `running` → `failed` with the canonical
+     "kind=run_skill is unsupported in this runtime" reason (post
+     §U6). **A clean failure at the runtime layer is a passing
+     smoke test** — it proves the webhook path reaches the container
+     and the completion callback updates the row.
+3. `failure_reason` names the unsupported-runtime cutover, not an
+   auth or dispatch error.
 
 **Verify with:**
 
@@ -200,9 +199,9 @@ path runs cleanly up to the point where real data lookup would happen:
 - ✅ `tenant_system_users` bootstrap works
 - ✅ `skill_runs` inserts under the correct actor
 - ✅ `agentcore-invoke` gets called with the right envelope
-- ✅ composition_runner attempts the composition and fails at a
-  specific missing connector — not at auth, dispatch, or envelope
-  parsing
+- ✅ the container branches on `kind=run_skill` and returns the
+  canonical U6 unsupported-runtime failure — not an auth, dispatch,
+  or envelope-parsing error
 - ✅ `triggered_by_run_id` populates on tick 2
 
 Anything failing before the connector layer is a real bug and blocks

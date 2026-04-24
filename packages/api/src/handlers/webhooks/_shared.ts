@@ -28,7 +28,7 @@
  *     inversion of resolveCaller (the defense-in-depth point of D7b).
  *
  * This module imports `canonicalizeForHash`, `hashResolvedInputs`, and
- * `invokeComposition` from graphql/utils.js so there's no 4th inlined copy
+ * `invokeSkillRun` from graphql/utils.js so there's no 4th inlined copy
  * of those helpers — see
  * docs/solutions/best-practices/inline-helpers-vs-shared-package-for-cross-surface-code-2026-04-21.md
  * for why three inline copies was acceptable and why a 4th would have been
@@ -55,7 +55,7 @@ import { db } from "../../lib/db.js";
 import { error, json } from "../../lib/response.js";
 import {
 	hashResolvedInputs,
-	invokeComposition,
+	invokeSkillRun,
 } from "../../graphql/utils.js";
 
 const sm = new SecretsManagerClient({});
@@ -400,7 +400,7 @@ export function createWebhookHandler(
 		}
 
 		const runRow = inserted[0];
-		const invokeResult = await invokeComposition({
+		const invokeResult = await invokeSkillRun({
 			kind: "run_skill",
 			runId: runRow.id,
 			tenantId,
@@ -427,7 +427,7 @@ export function createWebhookHandler(
 					updated_at: new Date(),
 				})
 				.where(eq(skillRuns.id, runRow.id));
-			return error(`composition invoke failed: ${invokeResult.error}`, 502);
+			return error(`skill-run invoke failed: ${invokeResult.error}`, 502);
 		}
 
 		return json({ runId: runRow.id, deduped: false });
