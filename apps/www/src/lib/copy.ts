@@ -14,17 +14,17 @@ export const external = {
   quickStartDocs: "https://docs.thinkwork.ai/getting-started",
 };
 
-// Top nav is deliberately short — Platform / Services / Pricing / Docs is the
+// Top nav is deliberately short — Platform / Services / Cloud / Docs is the
 // whole surface. Platform = the homepage (product overview); Services = the
-// delivered engagement surface; Pricing = hosted plan shapes. Homepage section
-// anchors (Journey / How it works / Governance / Quick start) are still
-// reachable by scrolling once on `/`.
+// delivered engagement surface; Cloud = hosted ThinkWork plans. Homepage
+// section anchors (Journey / How it works / Governance / Quick start) are
+// still reachable by scrolling once on `/`.
 //
 // Docs + GitHub icon + Login are hardcoded in Header.astro after this list.
 export const nav = [
   { label: "Platform", href: "/" },
   { label: "Services", href: "/services" },
-  { label: "Pricing", href: "/pricing" },
+  { label: "Cloud", href: "/cloud" },
 ];
 
 export const meta = {
@@ -375,38 +375,70 @@ export const finalCta = {
   secondaryCta: { label: "View on GitHub", href: external.github },
 };
 
+// Cloud-variant FinalCTA. Same shape as `finalCta` so the component can swap
+// between them via a prop. The homepage keeps the self-managed framing
+// (customer's AWS); /cloud uses this one to match the fully-hosted
+// positioning.
+export const finalCtaCloud: typeof finalCta = {
+  eyebrow: "Fully managed",
+  headlinePart1: "Adopt AI.",
+  headlineAccent: "Skip the infrastructure.",
+  lede: "Use ThinkWork without running the platform. We operate the runtime end-to-end — governance, evaluations, and audit log included — so your team focuses on the work, not the ops.",
+  points: [
+    { title: "Runtime", desc: "Operated by us." },
+    { title: "Governance", desc: "Built in." },
+    { title: "Audit trail", desc: "Always on." },
+    { title: "Memory", desc: "Durable." },
+    { title: "Setup", desc: "None required." },
+  ],
+  primaryCta: { label: "Read the docs", href: external.docs },
+  secondaryCta: { label: "View on GitHub", href: external.github },
+};
+
 // Plan catalog pulled from the shared workspace package so the mobile app
 // renders the exact same plans without duplication. Don't edit plan data
 // here — change it in packages/pricing-config/src/plans.ts and it ripples
 // to both surfaces.
 import { plans as sharedPlans } from "@thinkwork/pricing-config";
 
+// /cloud page — ThinkWork Cloud is the fully-hosted product surface for
+// teams that want to use ThinkWork without operating the Enterprise Agent
+// Harness themselves. Self-managed (customer-run AWS deployment) is the
+// separate Enterprise product; Services is the separate human-delivered
+// engagement surface. Export name stays `pricing` for now to avoid
+// transient breakage while the earlier rename settles.
 export const pricing = {
   meta: {
-    title: "ThinkWork pricing — Agent infrastructure in your AWS.",
+    title: "ThinkWork Cloud — Fully hosted AI agent platform.",
     description:
-      "Plans for teams adopting AI work inside their own AWS boundary — visible workflows, governed expansion, durable memory, and evaluations that scale with usage.",
+      "ThinkWork Cloud is the fully-hosted option — we operate the agent platform end-to-end so your team can use it without running the Enterprise Agent Harness. Governed AI work on subscription plans that scale with usage.",
   },
-  eyebrow: "Pricing",
-  headline: "Infrastructure you own.",
-  headlineAccent: "Plans that scale with usage.",
+  eyebrow: "ThinkWork Cloud",
+  headline: "Fully managed AI agents,",
+  headlineAccent: "no infrastructure to run.",
   lede:
-    "Every plan ships the same AWS-native runtime. Deployment boundary stays inside the account your team already operates. Pick a plan by the shape of your operation — not by the capabilities you're allowed to use.",
+    "Subscribe to ThinkWork Cloud and use a governed AI agent platform operated end-to-end by us. For teams that want the product, not the Enterprise Agent Harness to deploy and manage themselves.",
   plans: sharedPlans,
   smallPrint: [
-    "Every plan deploys into your AWS account; we never operate shared infrastructure.",
+    "Fully managed — ThinkWork operates the platform and all underlying AWS infrastructure.",
     "Charged in USD, billed monthly. Annual contracts available on Enterprise.",
-    "Prices exclude AWS usage (Bedrock, Aurora, CloudFront) and Stripe processing fees.",
   ],
   finePrint:
     "Final pricing confirmed during checkout. Contact us for procurement, security review, or annual billing.",
+  servicesCrossLink: {
+    prompt: "Need help launching workflows, governance, or rollout?",
+    linkLabel: "See Services",
+    href: "/services",
+  },
 };
 
-// Services page. Peer of /pricing — productized delivery (strategy, launch,
+// Services page. Peer of /cloud — productized delivery (strategy, launch,
 // ops, expansion, governance, advisory), not hosted-plan shapes. Contact is
 // mailto-only; subject lines route inbound by package so the services mailbox
-// can triage without a form. Do NOT cross-link to /pricing from here — the two
-// audiences have different buying motions; see the services brainstorm doc.
+// can triage without a form. Cross-linking Services → Cloud is expected
+// (Cloud Hosting card); the older "do not cross-link" rule was written when
+// /pricing was a generic subscription page and has been superseded by the
+// 2026-04-24 Cloud/Services IA split.
 export const servicesContactEmail = "hello@thinkwork.ai";
 
 export type ServicesMailto = {
@@ -424,21 +456,25 @@ export type ServicePackage = {
   includes: string[];
   outcome: string;
   bestFor: string;
-  variant: "featured" | "secondary";
+  // Optional CTA. Only the Cloud Hosting card uses this today — all other
+  // services intake through the shared hero + closing CTAs. If this field
+  // is unset, the card renders without a button (the historical pattern).
+  ctaHref?: string;
+  ctaLabel?: string;
 };
 
 export const services = {
   meta: {
     title: "ThinkWork Services — Pilot to production, governed.",
     description:
-      "Productized services for AI adoption: strategy, pilot launch, managed operations, workflow expansion, governance, and program advisory. Delivered on ThinkWork Cloud or into your own deployment.",
+      "Productized services for AI adoption: strategy, pilot launch, managed operations, and workflow expansion. Delivered on ThinkWork Cloud or into your own deployment.",
   },
   hero: {
     eyebrow: "Services",
     headlinePart1: "First pilot. Full rollout.",
     headlineAccent: "One operating model.",
     headlineOutcome:
-      "We help teams launch their first governed AI workflow, then operate and expand it safely.",
+      "We help teams scope, launch, operate, and expand governed AI workflows.",
     lede:
       "Strategy, launch, and ongoing operations for teams adopting AI — productized services, not open-ended consulting.",
     primaryCta: {
@@ -472,9 +508,9 @@ export const services = {
     ] as Array<{ label: string; detail?: string }>,
   },
   positioning: {
-    headline: "One partner across the full adoption arc.",
+    headline: "One partner from first workflow to ongoing operations.",
     body:
-      "Scoping, launch, managed operations, workflow expansion, governance, and program advisory — packaged as fixed-fee engagements and ongoing operational support rather than billable hours. The shape of the engagement is named up front; the scope doesn't drift.",
+      "Scoping, launch, managed operations, and workflow expansion — packaged as fixed-fee engagements and ongoing operational support rather than billable hours. The shape of the engagement is named up front; the scope doesn't drift.",
     startingPointsLabel: "Common starting points",
     startingPoints: [
       {
@@ -495,46 +531,11 @@ export const services = {
       },
     ],
   },
-  how: {
-    eyebrow: "Engagement lifecycle",
-    headline: "Four phases. One engagement arc.",
-    lede:
-      "Scope, launch, expand, operate — in that order. Each phase has a defined shape and a defined exit. Later phases compound the earlier ones; they don't replace them.",
-    steps: [
-      {
-        n: "01",
-        title: "Scope the first win",
-        body:
-          "One workflow, one team, one set of controls. Success metrics, ownership, and governance model named before any code lands.",
-      },
-      {
-        n: "02",
-        title: "Launch the pilot",
-        body:
-          "The first assistant or workflow, live in production. Templates, connectors, and evaluations configured. Visible output in days, not quarters.",
-      },
-      {
-        n: "03",
-        title: "Expand safely",
-        body:
-          "Workflows, connectors, and templates added as trust grows. The governance model stays constant; surface area expands beneath it.",
-      },
-      {
-        n: "04",
-        title: "Run and improve",
-        body:
-          "Ongoing platform support, optimization, and governance review. A steady operating cadence — no quarterly restarts, no re-onboarding.",
-      },
-    ],
-  },
   packages: {
-    eyebrow: "Service packages",
-    headline: "Fixed-fee launches. Ongoing operations.",
+    eyebrow: "Services",
+    headline: "Practical help from first workflow to ongoing operations.",
     lede:
       "Every package scoped up front — no billable hours, no open meter, no drift from the engagement shape we agreed to.",
-    secondaryHeadline: "Additional packages",
-    secondaryLede:
-      "Ongoing governance and program-level support for teams that have moved past the first workflow.",
     items: [
       {
         id: "strategy-sprint",
@@ -553,7 +554,6 @@ export const services = {
         outcome:
           "A named first workflow, a governance model, and a rollout plan — decisions made, not a deck.",
         bestFor: "Teams at the beginning.",
-        variant: "featured",
       },
       {
         id: "pilot-launch",
@@ -572,7 +572,6 @@ export const services = {
         outcome:
           "One governed workflow in production, with its first success metrics tracked.",
         bestFor: "Teams ready to move from planning to execution.",
-        variant: "featured",
       },
       {
         id: "managed-ops",
@@ -581,16 +580,16 @@ export const services = {
         timeline: "Ongoing",
         oneLiner: "Ongoing operations for a production ThinkWork deployment.",
         body:
-          "Recurring support that keeps the platform healthy and governed — without building an in-house platform team on day one.",
+          "Recurring support that keeps the platform healthy, governed, and evaluated — without building an in-house platform team on day one.",
         includes: [
           "Environment health and issue triage",
           "Admin, configuration, and upgrade support",
+          "Evaluation tuning and guardrail review",
           "Operations review on a regular cadence",
         ],
         outcome:
-          "A production deployment that stays current, audited, and operational — without a dedicated in-house platform team.",
-        bestFor: "Teams running ThinkWork in production without dedicated platform ops.",
-        variant: "featured",
+          "A production deployment that stays current, audited, and operational.",
+        bestFor: "Teams without dedicated platform ops.",
       },
       {
         id: "workflow-expansion",
@@ -608,43 +607,26 @@ export const services = {
         outcome:
           "A steady cadence of new governed workflows shipping on top of your existing deployment.",
         bestFor: "Teams with early traction that want to keep shipping.",
-        variant: "featured",
       },
       {
-        id: "governance-eval",
-        name: "Governance & Evaluation Support",
+        id: "cloud-hosting",
+        name: "ThinkWork Cloud",
         type: "Ongoing operations",
-        timeline: "Ongoing",
-        oneLiner: "Governance that evolves with usage.",
+        timeline: "Per plan tier",
+        oneLiner: "Fully managed ThinkWork — no Agent Harness to run.",
         body:
-          "Evaluation tuning, guardrail updates, incident review, and audit support — so quality and safety scale with adoption.",
+          "The hosted option when you want to use ThinkWork without deploying and operating the Enterprise Agent Harness yourself. Same platform, operated end-to-end by us.",
         includes: [
-          "Evaluation tuning and guardrail updates",
-          "Incident review and audit support",
-          "Policy refinement as usage grows",
+          "Runtime operated by ThinkWork",
+          "No AWS setup on your side",
+          "Plan tiers that scale with usage",
+          "No self-hosted ops burden",
         ],
         outcome:
-          "Controls that keep pace with usage growth, with incident and audit coverage maintained.",
-        bestFor: "Security-conscious teams and growing deployments.",
-        variant: "secondary",
-      },
-      {
-        id: "advisory",
-        name: "AI Program Advisory",
-        type: "Ongoing operations",
-        timeline: "Quarterly cadence",
-        oneLiner: "Cross-functional rollout support for leadership.",
-        body:
-          "Advisory support for adoption sequencing, KPI review, cross-team planning, and executive alignment — above any single pilot.",
-        includes: [
-          "Adoption roadmap and rollout prioritization",
-          "KPI and outcome review",
-          "Cross-team planning and leadership check-ins",
-        ],
-        outcome:
-          "A program-level view of adoption — sequencing, KPIs, and cross-team alignment kept visible to leadership.",
-        bestFor: "Organizations turning early wins into a broader AI program.",
-        variant: "secondary",
+          "ThinkWork running as a managed plan — deployed, updated, and governed by us on your behalf.",
+        bestFor: "Teams that want the product, not the Agent Harness to operate.",
+        ctaHref: "/cloud",
+        ctaLabel: "View plans",
       },
     ] satisfies ServicePackage[],
   },
@@ -666,11 +648,6 @@ export const services = {
         q: "Do services cover hosted and self-hosted deployments?",
         a:
           "Both. ThinkWork is open-source; the hosted option is the same platform, just operated by us. Services cover launch, operations, and expansion on either path, and teams can move between them without rewriting workflows.",
-      },
-      {
-        q: "What happens after launch?",
-        a:
-          "Managed Operations, Workflow Expansion Support, Governance & Evaluation Support, and Program Advisory are all ongoing-operations packages. Scope, cadence, and deliverables are named up front — no billable-hour meter, no end-of-month reconciliation.",
       },
       {
         q: "Can we start small?",

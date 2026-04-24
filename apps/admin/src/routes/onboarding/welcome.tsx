@@ -73,12 +73,12 @@ function WelcomePage() {
             <CardDescription>
               We couldn't find a checkout session in the URL. If you completed
               a payment, check your inbox for a receipt, or head back to
-              pricing to try again.
+              plans to try again.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button asChild className="w-full">
-              <a href="https://thinkwork.ai/pricing">Return to pricing</a>
+              <a href="https://thinkwork.ai/cloud">Return to plans</a>
             </Button>
           </CardContent>
         </Card>

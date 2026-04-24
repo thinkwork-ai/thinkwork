@@ -1,12 +1,36 @@
 ---
-import { finalCta } from "../lib/copy";
+import { finalCta as defaultFinalCta } from "../lib/copy";
+
+interface Props {
+  // When true, drops the top border + gradient divider and reduces top
+  // padding so the CTA flows out of a tight preceding section without
+  // a visible seam. Used on /cloud where the plans block ends close to
+  // the CTA and the default divider reads as dead space.
+  tight?: boolean;
+  // Optional content override — used by /cloud to swap in
+  // fully-hosted framing without affecting the homepage's
+  // self-managed "your AWS, your rules" positioning.
+  copy?: typeof defaultFinalCta;
+}
+
+const { tight = false, copy } = Astro.props;
+const finalCta = copy ?? defaultFinalCta;
 ---
 
-<section class="relative overflow-visible border-t border-white/5 py-28 md:py-36">
+<section
+  class:list={[
+    "relative overflow-visible",
+    tight
+      ? "pb-28 pt-12 md:pb-36 md:pt-16"
+      : "border-t border-white/5 py-28 md:py-36",
+  ]}
+>
   <div class="pointer-events-none absolute inset-x-0 -top-32 -bottom-24 overflow-hidden">
     <div class="absolute left-1/2 top-[12%] h-[340px] w-[760px] -translate-x-1/2 rounded-full bg-brand/8 blur-[150px]"></div>
     <div class="absolute left-1/2 bottom-[-10%] h-[320px] w-[900px] -translate-x-1/2 rounded-full bg-brand/6 blur-[160px]"></div>
-    <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand/25 to-transparent"></div>
+    {!tight && (
+      <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand/25 to-transparent"></div>
+    )}
   </div>
   <div class="relative mx-auto max-w-5xl px-6 text-center">
     <p class="inline-flex items-center gap-2.5 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-300 backdrop-blur">

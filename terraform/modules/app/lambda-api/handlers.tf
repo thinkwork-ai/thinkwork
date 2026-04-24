@@ -80,7 +80,7 @@ locals {
     STRIPE_CREDENTIALS_SECRET_ARN = aws_secretsmanager_secret.stripe_api_credentials.arn
     STRIPE_PRICE_IDS_JSON         = var.stripe_price_ids_json
     STRIPE_CHECKOUT_SUCCESS_URL   = "${var.admin_url}/onboarding/welcome?session_id={CHECKOUT_SESSION_ID}"
-    STRIPE_CHECKOUT_CANCEL_URL    = "${var.www_url}/pricing"
+    STRIPE_CHECKOUT_CANCEL_URL    = "${var.www_url}/cloud"
     WWW_URL                       = var.www_url
     # Override the welcome email's From: address. Defaults to
     # hello@agents.thinkwork.ai (the already-verified SES inbound domain);
