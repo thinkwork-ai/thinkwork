@@ -2,7 +2,7 @@
 
 Per-tenant AgentCore Code Interpreter substrate for the `execute_code`
 Strands tool. This runbook covers the first-30-days ops surface:
-toggling policy, debugging the four named failure modes, and reading
+toggling policy, debugging the two named failure modes, and reading
 the residual-threats list so incident response understands what the
 substrate does and does not promise.
 
@@ -10,23 +10,26 @@ substrate does and does not promise.
 
 ```
 Dispatcher (chat-agent-invoke / wakeup-processor)
-    ↓  checkSandboxPreflight → writeSandboxSecrets → secretPaths
-    ↓  applySandboxPayloadFields → invokePayload.sandbox_*
+    ↓  checkSandboxPreflight → ready | disabled | provisioning | not-requested
+    ↓  applySandboxPayloadFields → invokePayload.sandbox_interpreter_id + sandbox_environment
     ↓
 Strands container (invocation_env → os.environ.SANDBOX_*)
     ↓  server.py sees SANDBOX_INTERPRETER_ID → registers execute_code
     ↓
 Agent calls execute_code(code)
-    ↓  POST /api/sandbox/quota/check-and-increment  (Unit 10 — circuit breaker)
+    ↓  POST /api/sandbox/quota/check-and-increment  (circuit breaker)
     ↓  StartCodeInterpreterSession                  (per-turn)
-    ↓  executeCode(preamble)                        (Unit 8 — token injection)
-    ↓     sitecustomize.register_token()            (Unit 4 — stdio redactor)
-    ↓     os.environ[GITHUB_ACCESS_TOKEN] = ...
+    ↓  executeCode(preamble)                        (sitecustomize readiness check only)
     ↓  executeCode(user_code)                       (actual agent work)
-    ↓  POST /api/sandbox/invocations                (Unit 11 — audit row)
+    ↓  POST /api/sandbox/invocations                (audit row)
     ↓
-Turn end: StopCodeInterpreterSession + DeleteSecret(sandbox SM paths)
+Turn end: StopCodeInterpreterSession
 ```
+
+`execute_code` is a pure-compute primitive. The preamble confirms the
+stdio redactor is installed, then user code runs. The session does not
+carry per-user OAuth credentials — agents that need OAuth-ed work call
+composable-skill connector scripts.
 
 ## Toggling tenant policy
 
@@ -80,7 +83,7 @@ LIMIT 20;
 Append-only table; no retention sweep. Regulators can subpoena this
 directly.
 
-## Debugging the four named failure modes
+## Debugging the two named failure modes
 
 ### 1. `SandboxProvisioning`
 
@@ -108,9 +111,9 @@ WHERE id = '...';
     --cli-binary-format raw-in-base64-out /tmp/out.json
   ```
 - One null + one populated → partial provisioning. Re-run is
-  idempotent (Unit 5's list-then-create + clientToken pattern).
+  idempotent (list-then-create + clientToken pattern).
 - When the tenant-provisioning Lambda terraform resource lands, the
-  scheduled reconciler (plan Unit 6 follow-up) will do this on its own.
+  scheduled reconciler will do this on its own.
 
 ### 2. `SandboxCapExceeded`
 
@@ -153,44 +156,8 @@ redeploy the sandbox-quota-check Lambda (or wait for SSM-to-env
 refresh). The handler reads `SANDBOX_TENANT_DAILY_CAP` /
 `SANDBOX_AGENT_HOURLY_CAP`; `cap=0` is a legitimate kill-switch.
 
-**Revisit trigger** (plan R-Q8): raise to 2000/day if any tenant hits
-the cap **≥3 times in a week**, or after 30 days of production data.
-
-### 3. `SandboxMissingConnection`
-
-Agent gets `ok: false`, the dispatcher log for the turn shows
-`sandbox not registered for this turn: missing-connection` with the
-list of missing `connection_types`.
-
-**Cause:** template declares `required_connections` but the invoking
-user hasn't authorized one of them (or the connection flipped to
-`expired` mid-invocation).
-
-**Triage:**
-
-```sql
-SELECT cp.name, c.status, c.updated_at
-FROM connections c
-JOIN connect_providers cp ON cp.id = c.provider_id
-WHERE c.user_id = '...' AND c.tenant_id = '...'
-ORDER BY cp.name;
-```
-
-- User never authorized → send them to the mobile self-serve connect
-  UI for the missing provider.
-- Status `expired` → token refresh failed; the connection is marked
-  expired by `oauth-token.ts:markConnectionExpired`. Re-authorize
-  re-creates the row with refresh tokens the sandbox can use.
-
-### 4. `ConnectionRevoked`
-
-Close-to-use variant of #3 — the pre-flight passed but the secrets
-write's `rechecConnectionStatus` caught an `expired` flip between
-pre-flight and `PutSecretValue`. Surfaces as `SandboxCapExceeded`'s
-sibling shape in the dispatcher log.
-
-**Triage** — same as #3; the user re-authorizes, the next invocation
-succeeds.
+**Revisit trigger**: raise to 2000/day if any tenant hits the cap
+**≥3 times in a week**, or after 30 days of production data.
 
 ## Investigating a specific invocation
 
@@ -206,7 +173,7 @@ ORDER BY started_at DESC;
 
 Key columns:
 
-- `exit_status` — `ok | error | timeout | oom | cap_exceeded | provisioning | connection_revoked`
+- `exit_status` — `ok | error | timeout | oom | cap_exceeded | provisioning`
 - `duration_ms` — total tool-call wall-clock
 - `stdout_bytes` / `stderr_bytes` — **raw pre-truncation** sizes;
   content lives in CloudWatch
@@ -222,44 +189,42 @@ Retention: 30 days by default, 180-day ceiling enforced by a CHECK.
 
 ## Named v2 hardening tracks
 
-v1 ships with these residuals explicit. The brainstorm + plan both
-name them; they are **not bugs**.
+The substrate ships with these residuals explicit. They are **not
+bugs**.
 
 | Track | Class | Mitigation plan |
 |---|---|---|
-| **T1** — prompt-injection token exfil | any compromised agent under `default-public` network can POST tokens to an attacker host | v2 in-process credential proxy: tokens never in `os.environ`; the proxy wraps `requests`/`urllib`/`subprocess` and attaches credentials only for declared-allowed destinations |
-| **T1b** — intra-tenant template-author exfil | tenant-wildcard IAM path lets a shared template read other users' sandbox tokens | v2 per-user ABAC session tags OR the same in-process credential proxy (proxy addresses both simultaneously) |
-| **T2** — malicious `pip install` credential harvest | runtime `pip install` has no allowlist; typo-squatted / compromised packages execute at import time with tokens in `os.environ` | v2 private PyPI mirror + install allowlist; OR preamble-after-install ordering |
+| **T2** — malicious `pip install` | runtime `pip install` has no allowlist; typo-squatted / compromised packages execute at import time with access to whatever data the session reads | v2 private PyPI mirror + install allowlist |
 | **T3** — PHI/PII handling | sandbox isn't HIPAA-certified; regulated-tenant default is `sandbox_enabled = false` | v2 regulated-tenant-specific environment with per-log-group encryption + shorter retention |
-| **Stdout-bypass** class | `os.write(fd, ...)`, subprocess inheriting fds, C-extension writes, `multiprocessing` workers, split-writes | Unit 12 CloudWatch backstop covers the subset whose values match known OAuth prefixes (`ghp_`, `xoxb-`, `ya29.`, JWTs, `Authorization: Bearer`); in-process credential proxy is the structural fix |
+| **Stdout-bypass** class | `os.write(fd, ...)`, subprocess inheriting fds, C-extension writes, `multiprocessing` workers, split-writes | CloudWatch subscription-filter backstop covers the subset whose values match known OAuth prefixes (in case an agent *prints* a token fetched from an API response); primary stdio redactor in `sitecustomize.py` covers everything flowing through Python's normal print path |
 
-## The R13 invariant — honestly scoped
+## Stdio redactor invariant — honestly scoped
 
-R13 says: **no token value reaches a persisted log via Python-stdio-mediated
-writes or via known-shape CloudWatch patterns.** That's what the primary
-`sitecustomize.py` wrapper (Unit 4) and the Unit 12 subscription-filter
-backstop deliver.
+The sandbox guarantees: **no value matching a known OAuth prefix
+(`ghp_`, `xoxb-`, `ya29.`, `Authorization: Bearer`, JWT triples) reaches
+a persisted log via Python's stdio, and a CloudWatch subscription-filter
+backstop catches matches that slip past the primary wrapper.**
 
-**Explicitly out of R13's scope** (named residuals, not gaps):
+**Explicitly out of scope** (named residuals, not gaps):
 
 - Direct `os.write(fd, ...)` writes
 - `subprocess.run(['env'])`, `subprocess.run(['cat', '/proc/self/environ'])`
 - C extensions writing to fd 1 directly
-- `multiprocessing` workers in fresh Python processes (the session
-  token set is empty there)
+- `multiprocessing` workers in fresh Python processes (the redactor's
+  session state is empty there)
 - Adversarial split-writes fragmenting a token across more bytes than
   the rolling-buffer window
 
 When investigating a "how did a token leak" incident, **check the
 residual list first**. If the leak matches a named residual class, the
-incident is expected — it's what the v2 credential proxy will fix. If
-it doesn't match any named class, that's a real regression.
+incident is expected. If it doesn't match any named class, that's a
+real regression.
 
 ## What to monitor in CloudWatch
 
 | Query | Signal |
 |---|---|
-| `filter @message like /SandboxCapExceeded/` | Revisit-trigger signal (R-Q8) |
+| `filter @message like /SandboxCapExceeded/` | Revisit-trigger signal |
 | `filter @message like /sandbox tool registered/` | Pre-flight decided to register per turn |
 | `filter @message like /sandbox pre-flight/` | Pre-flight decision log (status field) |
 | `filter @message like /StopSession failed/` | AgentCore session cleanup issues |

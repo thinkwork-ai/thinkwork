@@ -445,8 +445,8 @@ def test_quota_none_behaves_like_pre_unit_10(interpreter_env):
 
 def test_audit_emits_row_on_successful_call(interpreter_env, monkeypatch):
     """Happy path — audit row carries tenant/user/env, hash, duration."""
-    monkeypatch.setenv("SANDBOX_TENANT_ID", "11111111-2222-3333-4444-555555555555")
-    monkeypatch.setenv("SANDBOX_USER_ID", "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+    monkeypatch.setenv("TENANT_ID", "11111111-2222-3333-4444-555555555555")
+    monkeypatch.setenv("USER_ID", "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
     monkeypatch.setenv("AGENT_ID", "ffffffff-1111-2222-3333-444444444444")
 
     logged: list[dict] = []

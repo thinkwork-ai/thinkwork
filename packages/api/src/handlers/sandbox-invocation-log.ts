@@ -49,7 +49,6 @@ const ALLOWED_EXIT_STATUSES = new Set([
   "oom",
   "cap_exceeded",
   "provisioning",
-  "connection_revoked",
 ]);
 const ALLOWED_SOURCES = new Set(["chat", "scheduled", "composition"]);
 

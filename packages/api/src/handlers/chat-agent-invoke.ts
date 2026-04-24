@@ -662,19 +662,13 @@ export async function handler(event: InvokeEvent): Promise<void> {
     } as Record<string, unknown>;
 
     if (sandboxPreflight && currentUserId) {
-      applySandboxPayloadFields(invokePayload, sandboxPreflight, {
-        tenantId,
-        userId: currentUserId,
-        stage: STAGE,
-      });
+      applySandboxPayloadFields(invokePayload, sandboxPreflight);
       if (sandboxPreflight.status !== "ready") {
         console.log(
           `[chat-agent-invoke] sandbox not registered for this turn: ${sandboxPreflight.status}`,
-          sandboxPreflight.status === "missing-connection"
-            ? { missing: sandboxPreflight.missingConnections }
-            : sandboxPreflight.status === "provisioning"
-              ? { environment: sandboxPreflight.environment }
-              : {},
+          sandboxPreflight.status === "provisioning"
+            ? { environment: sandboxPreflight.environment }
+            : {},
         );
       }
     }
