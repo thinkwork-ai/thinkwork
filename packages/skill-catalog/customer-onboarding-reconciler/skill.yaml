@@ -11,12 +11,11 @@ description: >
   are still missing, and exits. HITL happens between ticks, not inside a
   single invocation.
 
-# U8 migration (plan §U8, 2026-04-24): converted from execution:composition
-# → execution:context. The model drives the three-phase
-# gather → synthesize → act reconciler tick itself via the Skill() meta-tool
-# (U5 session allowlist), replacing composition_runner. The reconciler
-# semantics are preserved — fail-fast on missing critical gather, no
-# delivery fan-out, no one-shot package step.
+# Agent-driven reconciler: the model drives the three-phase
+# gather → synthesize → act tick itself via the Skill() meta-tool (U5
+# session allowlist). The reconciler semantics are preserved —
+# fail-fast on missing critical gather, no delivery fan-out, no
+# one-shot package step.
 
 # Typed inputs — the resolver converts slugs to ids; the reconciler only
 # needs the stable customer / opportunity identifiers.

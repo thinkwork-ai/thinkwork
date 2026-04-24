@@ -121,8 +121,6 @@ The gather steps call connector skills that live in separate PRDs:
 
 ## Migration note
 
-This skill was `execution: composition` + 5-step `composition_runner`
-YAML through v1.0.0. v2.0.0 migrated to `execution: context` (plan §U8):
-the model invokes each sub-skill directly via the Skill meta-tool so
-the same pre-meeting workflow no longer needs a separate composition
-runtime.
+v2.0.0 landed the current `execution: context` shape (plan §U8): the
+model invokes each sub-skill directly via the Skill meta-tool so the
+same pre-meeting workflow runs on the unified dispatch path.

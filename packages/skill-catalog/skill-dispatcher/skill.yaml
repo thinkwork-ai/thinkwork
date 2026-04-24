@@ -1,26 +1,26 @@
 slug: skill-dispatcher
 display_name: Skill Dispatcher
 description: >
-  Chat intent router for composition skills. When the user asks for something
-  that matches a registered composition (sales prep, account health review,
-  renewal prep, etc.), call start_composition to kick off the run. Do NOT use
-  this for single-tool skills — invoke those directly.
+  Chat intent router for deliverable-shape skills. When the user asks for
+  something that matches a registered skill (sales prep, account health
+  review, renewal prep, etc.), call start_skill_run to kick off the run.
+  Do NOT use this for single-tool skills — invoke those directly.
 category: workflow
-version: "0.1.0"
+version: "0.2.0"
 author: thinkwork
 icon: git-branch
-tags: [composition, dispatcher, routing]
+tags: [dispatcher, routing]
 execution: script
 mode: tool
 is_default: true
 
 scripts:
-  - name: start_composition
+  - name: start_skill_run
     path: scripts/dispatch.py
-    description: "Start a composition skill run for the current user with resolved inputs. Returns runId + status."
-  - name: composition_status
+    description: "Start a skill run for the current user with resolved inputs. Returns runId + status."
+  - name: skill_run_status
     path: scripts/dispatch.py
-    description: "Fetch the status of a previously-started composition run by runId. Returns status, started_at, finished_at, delivered_artifact_ref."
+    description: "Fetch the status of a previously-started skill run by runId. Returns status, started_at, finished_at, delivered_artifact_ref."
 
 triggers:
   - "prep me for"

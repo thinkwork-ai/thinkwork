@@ -1,13 +1,13 @@
 /**
- * Integration: chat intent → skill-dispatcher → startSkillRun → composition
+ * Integration: chat intent → skill-dispatcher → startSkillRun → skill run
  * completes → deliverable recorded on the run row.
  *
  * This test exercises the chat invocation path's shape: the dispatcher
  * passes a user's typed invocation down to startSkillRun with
- * invocationSource="chat", and the composition completes with a
- * rendered deliverable that the delivery layer would attach to the
- * thread. We don't run the actual AgentCore composition_runner — the
- * harness scripts a deliverable-shaped composition's outcome.
+ * invocationSource="chat", and the skill run completes with a rendered
+ * deliverable that the delivery layer would attach to the thread. We
+ * don't run the actual AgentCore dispatch path — the harness scripts a
+ * deliverable-shaped run's outcome.
  */
 
 import { describe, it, expect } from "vitest";
@@ -18,11 +18,11 @@ describe("integration: chat-intent invocation of sales-prep", () => {
 		const h = createHarness();
 
 		h.agentcore.setScript(async ({ envelope, memory }) => {
-			// Production composition_runner: recall → frame → gather →
-			// synthesize → package → reflect. The harness compresses that
-			// into a single scripted tick; the interesting production-
-			// boundary behavior is the recall call before + reflect call
-			// after, which tests assert separately.
+			// Production dispatch invariant: recall before the run, reflect
+			// after it. The harness compresses that into a single scripted
+			// tick; the interesting production-boundary behavior is the
+			// recall call before + reflect call after, which tests assert
+			// separately.
 			memory.recall({
 				tenantId: envelope.tenantId,
 				userId: envelope.invokerUserId,

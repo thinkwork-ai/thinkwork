@@ -10,7 +10,7 @@ to real infra.
 
 | File | Role |
 |------|------|
-| `stub-agentcore.ts` | Recorder for `invokeComposition` envelopes. Lets tests script per-envelope outcomes (success with rendered deliverable, critical-branch failure, cancellation mid-tick). |
+| `stub-agentcore.ts` | Recorder for `invokeSkillRun` envelopes. Lets tests script per-envelope outcomes (success with rendered deliverable, critical-branch failure, cancellation mid-tick). |
 | `stub-agentcore-memory.ts` | In-memory `recall` / `reflect`. Seeds prior learnings; captures new learnings written by a run. |
 | `stub-task-system.ts` | Holds the tasks the `act` sub-skill creates. Tracks `existing_tasks` between ticks. The reconciler-HITL loop test uses this to assert no duplicate creates. |
 | `mock-graphql-client.ts` | Minimal typed client for `startSkillRun` / `cancelSkillRun` / `compositionFeedbackSummary`. Each test injects whichever GraphQL resolvers it needs. |
@@ -26,7 +26,7 @@ weakens every test that uses it. Three invariants to maintain:
    mock-db's `onConflictDoNothing` contract returns `[]` when the
    test's scripted state says "same hash already in `running`." Tests
    rely on this for dedup assertions.
-2. **`invokeComposition` is RequestResponse.** The harness's stub
+2. **`invokeSkillRun` is RequestResponse.** The harness's stub
    resolves synchronously so an error in the invoke path surfaces
    back to `startSkillRun` and the run row transitions to `failed`.
 3. **`compound.recall` sees only the learnings the stub was seeded

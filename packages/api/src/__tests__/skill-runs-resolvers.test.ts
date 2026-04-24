@@ -13,7 +13,7 @@
  *   * skillRun / skillRuns / compositionFeedbackSummary — tenant +
  *     invoker scoping, limit clamp.
  *
- * DB, invokeComposition, and resolveCaller are mocked at the module
+ * DB, invokeSkillRun, and resolveCaller are mocked at the module
  * boundary. No DB required.
  */
 
@@ -25,14 +25,14 @@ const {
 	mockUpdate,
 	mockDelete,
 	mockResolveCaller,
-	mockInvokeComposition,
+	mockInvokeSkillRun,
 } = vi.hoisted(() => ({
 	mockSelect: vi.fn(),
 	mockInsert: vi.fn(),
 	mockUpdate: vi.fn(),
 	mockDelete: vi.fn(),
 	mockResolveCaller: vi.fn(),
-	mockInvokeComposition: vi.fn(),
+	mockInvokeSkillRun: vi.fn(),
 }));
 
 // `db` chainable stubs -------------------------------------------------------
@@ -116,7 +116,7 @@ vi.mock("../graphql/utils.js", () => ({
 		started_at: "skill_runs.started_at",
 	},
 	snakeToCamel: (obj: Record<string, unknown>) => obj,
-	invokeComposition: mockInvokeComposition,
+	invokeSkillRun: mockInvokeSkillRun,
 	hashResolvedInputs: (v: Record<string, unknown>) =>
 		`hash:${JSON.stringify(v)}`,
 }));
@@ -139,7 +139,7 @@ const OK_CTX = { auth: {} } as any;
 beforeEach(() => {
 	vi.clearAllMocks();
 	mockResolveCaller.mockResolvedValue({ userId: "U1", tenantId: "T1" });
-	mockInvokeComposition.mockResolvedValue({ ok: true });
+	mockInvokeSkillRun.mockResolvedValue({ ok: true });
 	mockSelect.mockReset();
 	mockInsert.mockReset();
 	mockUpdate.mockReset();
@@ -167,8 +167,8 @@ describe("startSkillRun", () => {
 			},
 		}, OK_CTX) as Record<string, unknown>;
 		expect(out.id).toBe("run-1");
-		expect(mockInvokeComposition).toHaveBeenCalledTimes(1);
-		const payload = mockInvokeComposition.mock.calls[0]![0] as Record<string, unknown>;
+		expect(mockInvokeSkillRun).toHaveBeenCalledTimes(1);
+		const payload = mockInvokeSkillRun.mock.calls[0]![0] as Record<string, unknown>;
 		expect(payload.kind).toBe("run_skill");
 		expect(payload.runId).toBe("run-1");
 		expect(payload.tenantId).toBe("T1");
@@ -218,16 +218,16 @@ describe("startSkillRun", () => {
 			input: { skillId: "sales-prep", invocationSource: "chat", inputs: { customer: "ABC" } },
 		}, OK_CTX) as Record<string, unknown>;
 		expect(out.id).toBe("run-existing");
-		expect(mockInvokeComposition).not.toHaveBeenCalled();
+		expect(mockInvokeSkillRun).not.toHaveBeenCalled();
 	});
 
-	it("transitions the row to failed when invokeComposition errors, then throws", async () => {
+	it("transitions the row to failed when invokeSkillRun errors, then throws", async () => {
 		mockInsert.mockReturnValue([insertedRow]);
 		mockUpdate.mockReturnValue([{ ...insertedRow, status: "failed", failure_reason: "nope" }]);
-		mockInvokeComposition.mockResolvedValueOnce({ ok: false, error: "nope" });
+		mockInvokeSkillRun.mockResolvedValueOnce({ ok: false, error: "nope" });
 		await expect(
 			startSkillRun(null, { input: { skillId: "s", invocationSource: "chat" } }, OK_CTX),
-		).rejects.toThrow(/composition invoke failed/);
+		).rejects.toThrow(/skill-run invoke failed/);
 		expect(mockUpdate).toHaveBeenCalledTimes(1);
 	});
 

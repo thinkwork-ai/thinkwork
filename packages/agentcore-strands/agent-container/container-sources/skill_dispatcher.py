@@ -1,9 +1,9 @@
 """Unified dispatcher for every skill-with-scripts invocation.
 
-This replaces the pre-V1 branching (``composition_runner.py`` +
-``skill_inputs.py`` + the execution-type switches in ``run_skill_dispatch``)
-with a single function: load a skill bundle, run its ``entrypoint.run``
-inside an AgentCore Code Interpreter session, parse the JSON it prints.
+This replaces the pre-V1 branching (the retired orchestrator module
+plus the execution-type switches in ``run_skill_dispatch``) with a
+single function: load a skill bundle, run its ``entrypoint.run`` inside
+an AgentCore Code Interpreter session, parse the JSON it prints.
 
 ## Contract with skill authors
 

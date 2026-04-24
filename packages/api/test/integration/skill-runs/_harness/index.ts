@@ -10,7 +10,7 @@
  *   const run = await h.startRun({ skillId, inputs, invocationSource: "chat" });
  *   h.advance(); // drive whichever scripted envelope is next
  *
- * The harness exposes `.calls.invokeComposition` and `.calls.skillRuns`
+ * The harness exposes `.calls.invokeSkillRun` and `.calls.skillRuns`
  * so assertions can verify exact counts without touching internals.
  */
 
@@ -183,10 +183,10 @@ export class StubTaskSystem {
 }
 
 // ---------------------------------------------------------------------------
-// Stub AgentCore invoke — records envelopes, runs a scripted composition
+// Stub AgentCore invoke — records envelopes, runs a scripted skill run
 // ---------------------------------------------------------------------------
 
-export type CompositionScript = (ctx: {
+export type SkillRunScript = (ctx: {
 	envelope: InvokeEnvelope;
 	memory: StubAgentCoreMemory;
 	tasks: StubTaskSystem;
@@ -198,21 +198,21 @@ export type CompositionScript = (ctx: {
 
 export class StubAgentCore {
 	public readonly envelopes: InvokeEnvelope[] = [];
-	private script: CompositionScript;
+	private script: SkillRunScript;
 	private memory: StubAgentCoreMemory;
 	private tasks: StubTaskSystem;
 
 	constructor(
 		memory: StubAgentCoreMemory,
 		tasks: StubTaskSystem,
-		script?: CompositionScript,
+		script?: SkillRunScript,
 	) {
 		this.memory = memory;
 		this.tasks = tasks;
 		this.script = script ?? (async () => ({ ok: true }));
 	}
 
-	setScript(script: CompositionScript) {
+	setScript(script: SkillRunScript) {
 		this.script = script;
 	}
 
@@ -372,7 +372,7 @@ export function createHarness(opts: HarnessOptions = {}) {
 
 		const invokeResult = await agentcore.invoke(envelope);
 		// Post-invoke: respect terminal transitions that happened while the
-		// composition was running (e.g. an explicit cancelRun). The harness
+		// skill run was running (e.g. an explicit cancelRun). The harness
 		// models production behavior where `cancelled` is sticky even if
 		// the final envelope reports success.
 		const current = runs.byId(inserted.id);

@@ -295,27 +295,10 @@ def _build_system_prompt(skills_config: list | None = None, kb_config: list | No
         logger.info("AGENTS.md found — skipping skill injection (%d skills in map)",
                      len(skills_config) if skills_config else 0)
 
-    # PRD-40: Inject execution:context skills directly into the system prompt.
-    # These skills have SKILL.md instructions that must be always-on, not on-demand.
-    if skills_config:
-        import re
-        for skill in skills_config:
-            sid = skill.get("skillId", "")
-            skill_yaml_path = os.path.join("/tmp/skills", sid, "skill.yaml")
-            skill_md_path = os.path.join("/tmp/skills", sid, "SKILL.md")
-            if os.path.isfile(skill_yaml_path) and os.path.isfile(skill_md_path):
-                try:
-                    with open(skill_yaml_path) as yf:
-                        yaml_text = yf.read()
-                    # Simple check for execution: context without full YAML parser
-                    if re.search(r"^\s*execution:\s*context\s*$", yaml_text, re.MULTILINE):
-                        with open(skill_md_path) as mf:
-                            md_content = mf.read().strip()
-                        if md_content:
-                            parts.append(md_content)
-                            logger.info("Injected context skill %s SKILL.md (%d chars)", sid, len(md_content))
-                except Exception as e:
-                    logger.warning("Failed to inject context skill %s: %s", sid, e)
+    # U6: the PRD-40 execution-type context-body loop that inlined every
+    # execution: context skill's SKILL.md body into the system prompt is
+    # gone. With U5's `Skill` meta-tool live, skill bodies load on demand
+    # via `Skill(name=...)` instead of riding in every turn's prompt.
 
     # Add knowledge base information to system prompt
     if kb_config:
@@ -1218,8 +1201,8 @@ def _call_strands_agent(system_prompt: str, messages: list,
     # 4. Register skill tools (PRD-38: skills as sub-agents)
     # mode: tool  → scripts registered as direct tools on parent
     # mode: agent → skill invocation spins up a sub-agent with its own reasoning loop
-    from skill_runner import register_skill_tools_grouped
-    tool_mode_tools, agent_mode_tools, skill_meta = register_skill_tools_grouped(skills_config or [])
+    from skill_runner import register_skill_tools
+    tool_mode_tools, agent_mode_tools, skill_meta = register_skill_tools(skills_config or [])
     tools.extend(tool_mode_tools)
     if tool_mode_tools:
         logger.info("mode:tool skill tools registered on parent: %d", len(tool_mode_tools))
@@ -1922,21 +1905,20 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
 
         logger.info("Raw payload keys: %s", list(payload.keys()))
 
-        # kind="run_skill" envelope — composition dispatch path. The TS
+        # kind="run_skill" envelope — skill-run dispatch path. The TS
         # /api/skills/start handler fires this shape via agentcore-invoke
         # when a caller (chat dispatcher, admin catalog, scheduled job,
-        # webhook) wants to run a composition. Handled synchronously within
+        # webhook) wants to run a skill. Handled synchronously within
         # this invocation; terminal state is POSTed back to /api/skills/
         # complete before we respond to the caller.
         if payload.get("kind") == "run_skill":
             from run_skill_dispatch import dispatch_run_skill
             # Set the per-invocation env aliases (TENANT_ID / AGENT_ID /
-            # USER_ID / CURRENT_USER_ID / CURRENT_THREAD_ID) so sub-skills
-            # invoked by the composition see the same identity they'd see
-            # on the normal path. The run_skill envelope uses different
-            # key names (camelCase) — translate before applying. Cleared
-            # in `finally` so the warm container does not leak identity
-            # into the next invocation.
+            # USER_ID / CURRENT_USER_ID / CURRENT_THREAD_ID) so the
+            # dispatcher sees the same identity the normal path would.
+            # The run_skill envelope uses camelCase keys — translate before
+            # applying. Cleared in `finally` so the warm container does
+            # not leak identity into the next invocation.
             scope = payload.get("scope") or {}
             invocation_env_keys = invocation_env.apply_invocation_env({
                 "workspace_tenant_id": payload.get("tenantId")

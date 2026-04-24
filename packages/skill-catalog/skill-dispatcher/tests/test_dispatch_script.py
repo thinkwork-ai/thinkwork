@@ -58,7 +58,7 @@ def _fake_response(payload: dict):
     return R()
 
 
-def test_start_composition_happy_path() -> None:
+def test_start_skill_run_happy_path() -> None:
     mod = _load_module()
     captured: dict = {}
 
@@ -69,7 +69,7 @@ def test_start_composition_happy_path() -> None:
         return _fake_response({"runId": "run-1", "status": "running", "deduped": False})
 
     with mock.patch("urllib.request.urlopen", fake_urlopen):
-        out = json.loads(mod.start_composition(
+        out = json.loads(mod.start_skill_run(
             skill_id="sales-prep",
             invocation_source="chat",
             inputs={"customer": "cust-abc", "meeting_date": "2026-05-01"},
@@ -90,7 +90,7 @@ def test_start_composition_happy_path() -> None:
     assert body["inputs"] == {"customer": "cust-abc", "meeting_date": "2026-05-01"}
 
 
-def test_start_composition_dedup_hit_surfaces_flag() -> None:
+def test_start_skill_run_dedup_hit_surfaces_flag() -> None:
     """The service handler returns deduped=true when an identical run is
     already active. The LLM should see that flag and tell the user
     'already running' rather than starting a duplicate."""
@@ -99,7 +99,7 @@ def test_start_composition_dedup_hit_surfaces_flag() -> None:
         "urllib.request.urlopen",
         return_value=_fake_response({"runId": "run-existing", "status": "running", "deduped": True}),
     ):
-        out = json.loads(mod.start_composition(
+        out = json.loads(mod.start_skill_run(
             skill_id="sales-prep", invocation_source="chat",
         ))
     assert out["deduped"] is True
@@ -109,7 +109,7 @@ def test_start_composition_dedup_hit_surfaces_flag() -> None:
 def test_missing_env_returns_clean_error() -> None:
     mod = _load_module(env={})
     with mock.patch("urllib.request.urlopen") as fake:
-        out = json.loads(mod.start_composition(skill_id="sales-prep"))
+        out = json.loads(mod.start_skill_run(skill_id="sales-prep"))
     fake.assert_not_called()
     assert "THINKWORK_API_URL" in out["error"]
 
@@ -120,7 +120,7 @@ def test_missing_tenant_returns_clean_error() -> None:
         "THINKWORK_API_SECRET": "s",
     })
     with mock.patch("urllib.request.urlopen") as fake:
-        out = json.loads(mod.start_composition(skill_id="sales-prep"))
+        out = json.loads(mod.start_skill_run(skill_id="sales-prep"))
     fake.assert_not_called()
     assert "TENANT_ID" in out["error"] or "CURRENT_USER_ID" in out["error"]
 
@@ -128,7 +128,7 @@ def test_missing_tenant_returns_clean_error() -> None:
 def test_missing_skill_id_rejected() -> None:
     mod = _load_module()
     with mock.patch("urllib.request.urlopen") as fake:
-        out = json.loads(mod.start_composition(skill_id=""))
+        out = json.loads(mod.start_skill_run(skill_id=""))
     fake.assert_not_called()
     assert "skill_id" in out["error"]
 
@@ -136,7 +136,7 @@ def test_missing_skill_id_rejected() -> None:
 def test_invalid_invocation_source_rejected() -> None:
     mod = _load_module()
     with mock.patch("urllib.request.urlopen") as fake:
-        out = json.loads(mod.start_composition(skill_id="s", invocation_source="chatroom"))
+        out = json.loads(mod.start_skill_run(skill_id="s", invocation_source="chatroom"))
     fake.assert_not_called()
     assert "invocation_source" in out["error"]
 
@@ -153,7 +153,7 @@ def test_api_http_error_surfaces_status() -> None:
     # Attach a body the error handler can read.
     err.read = lambda: b'{"error":"tenant mismatch"}'  # type: ignore[attr-defined]
     with mock.patch("urllib.request.urlopen", side_effect=err):
-        out = json.loads(mod.start_composition(skill_id="s"))
+        out = json.loads(mod.start_skill_run(skill_id="s"))
     assert "HTTP 400" in out["error"]
     assert "tenant mismatch" in out["error"]
 
@@ -163,33 +163,33 @@ def test_api_network_error_surfaces_reason() -> None:
 
     mod = _load_module()
     with mock.patch("urllib.request.urlopen", side_effect=urllib.error.URLError("timed out")):
-        out = json.loads(mod.start_composition(skill_id="s"))
+        out = json.loads(mod.start_skill_run(skill_id="s"))
     assert "network error" in out["error"]
     assert "timed out" in out["error"]
 
 
 def test_empty_inputs_valid() -> None:
-    """A composition with no required inputs must still be startable."""
+    """A skill with no required inputs must still be startable."""
     mod = _load_module()
     with mock.patch(
         "urllib.request.urlopen",
         return_value=_fake_response({"runId": "r", "status": "running", "deduped": False}),
     ) as fake:
-        out = json.loads(mod.start_composition(skill_id="no-input-composition"))
+        out = json.loads(mod.start_skill_run(skill_id="no-input-skill"))
     fake.assert_called_once()
     assert out["status"] == "running"
 
 
-def test_composition_status_is_stubbed_honestly() -> None:
+def test_skill_run_status_is_stubbed_honestly() -> None:
     """Unit 5 doesn't implement status polling — the stub must return a
     clear error so the LLM knows not to promise progress updates yet."""
     mod = _load_module()
-    out = json.loads(mod.composition_status("run-1"))
+    out = json.loads(mod.skill_run_status("run-1"))
     assert "error" in out
     assert "not yet implemented" in out["error"]
 
 
-def test_composition_status_empty_run_id() -> None:
+def test_skill_run_status_empty_run_id() -> None:
     mod = _load_module()
-    out = json.loads(mod.composition_status(""))
+    out = json.loads(mod.skill_run_status(""))
     assert "run_id" in out["error"]

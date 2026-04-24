@@ -169,8 +169,8 @@ async function invokeAgentcoreRunSkill(payload: {
       skillVersion: payload.skillVersion,
       invocationSource: "scheduled" as const,
       resolvedInputs: payload.resolvedInputs,
-      // snake_case — Python's composition_runner._scope_to_inputs reads
-      // tenant_id/user_id/skill_id. See change 4 of the hardening plan.
+      // snake_case — the container's dispatch reads tenant_id/user_id/
+      // skill_id. See change 4 of the hardening plan.
       scope: {
         tenant_id: payload.tenantId,
         user_id: payload.invokerUserId,
@@ -362,14 +362,14 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         );
       }
     } else if (triggerType === "skill_run") {
-      // Composable skill runs (Unit 6). The scheduled_jobs row's config
-      // carries the target skill id + input bindings + the invoker user
-      // whose identity this scheduled run takes on. Fire path:
+      // Scheduled skill runs. The scheduled_jobs row's config carries the
+      // target skill id + input bindings + the invoker user whose identity
+      // this scheduled run takes on. Fire path:
       //
       //   deprovisioned? → pause job
       //   bindings invalid? → write invalid_binding audit row
       //   skill disabled for the agent? → write skipped_disabled audit row
-      //   otherwise → insert running skill_runs row + invoke composition
+      //   otherwise → insert running skill_runs row + invoke the dispatcher
       //
       // On dedup hit (partial unique index) we observe the prior active
       // run and skip the new invoke — a safe no-op under EventBridge
@@ -455,7 +455,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       const resolvedInputs = bindingResult.resolved;
 
       // Skill-enabled check. When the schedule targets an agent, we
-      // confirm that agent still has the skill enabled. Compositions
+      // confirm that agent still has the skill enabled. Skill runs
       // not gated to a specific agent (webhook-style, no agentId) skip
       // this check — the container validates at dispatch time.
       if (targetAgentId) {

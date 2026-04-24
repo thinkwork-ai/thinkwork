@@ -24,14 +24,14 @@ const {
 	mockSelect,
 	mockInsert,
 	mockUpdate,
-	mockInvokeComposition,
+	mockInvokeSkillRun,
 	mockHashResolvedInputs,
 	mockFetchSigningSecret,
 } = vi.hoisted(() => ({
 	mockSelect: vi.fn(),
 	mockInsert: vi.fn(),
 	mockUpdate: vi.fn(),
-	mockInvokeComposition: vi.fn(),
+	mockInvokeSkillRun: vi.fn(),
 	mockHashResolvedInputs: vi.fn(() => "hash-fixed"),
 	mockFetchSigningSecret: vi.fn(),
 }));
@@ -89,7 +89,7 @@ vi.mock("drizzle-orm", () => ({
 
 vi.mock("../graphql/utils.js", () => ({
 	hashResolvedInputs: mockHashResolvedInputs,
-	invokeComposition: mockInvokeComposition,
+	invokeSkillRun: mockInvokeSkillRun,
 }));
 
 vi.mock("@aws-sdk/client-secrets-manager", () => ({
@@ -169,7 +169,7 @@ beforeEach(() => {
 	vi.resetAllMocks();
 	mockHashResolvedInputs.mockReturnValue("hash-fixed");
 	mockFetchSigningSecret.mockResolvedValue(SECRET);
-	mockInvokeComposition.mockResolvedValue({ ok: true });
+	mockInvokeSkillRun.mockResolvedValue({ ok: true });
 	__resetRateLimitForTests();
 });
 
@@ -203,8 +203,8 @@ describe("webhook happy path", () => {
 		const body = JSON.parse(res.body as string);
 		expect(body.runId).toBe("run-1");
 		expect(body.deduped).toBe(false);
-		expect(mockInvokeComposition).toHaveBeenCalledTimes(1);
-		const envelope = mockInvokeComposition.mock.calls[0][0];
+		expect(mockInvokeSkillRun).toHaveBeenCalledTimes(1);
+		const envelope = mockInvokeSkillRun.mock.calls[0][0];
 		expect(envelope).toMatchObject({
 			kind: "run_skill",
 			invocationSource: "webhook",
@@ -315,7 +315,7 @@ describe("webhook dedup", () => {
 		const body = JSON.parse(res.body as string);
 		expect(body.runId).toBe("run-existing");
 		expect(body.deduped).toBe(true);
-		expect(mockInvokeComposition).not.toHaveBeenCalled();
+		expect(mockInvokeSkillRun).not.toHaveBeenCalled();
 	});
 
 	it("returns 500 when dedup hit + no matching active run (race)", async () => {
@@ -334,7 +334,7 @@ describe("webhook invoke failure", () => {
 		const handler = makeHandler();
 		queueSystemUserBootstrap();
 		mockInsert.mockReturnValueOnce([{ id: "run-1", skill_version: 1 }]);
-		mockInvokeComposition.mockResolvedValueOnce({
+		mockInvokeSkillRun.mockResolvedValueOnce({
 			ok: false,
 			error: "agentcore threw",
 		});
@@ -368,7 +368,7 @@ describe("webhook actor identity", () => {
 		const res = await handler(makeEvent(payload));
 
 		expect(res.statusCode).toBe(200);
-		const envelope = mockInvokeComposition.mock.calls[0][0];
+		const envelope = mockInvokeSkillRun.mock.calls[0][0];
 		expect(envelope.invokerUserId).toBe("system-actor-SAFE");
 		expect(envelope.invokerUserId).not.toBe("victim-user");
 	});

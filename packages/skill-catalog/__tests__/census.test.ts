@@ -81,18 +81,18 @@ describe("census — happy path", () => {
     );
     writeSkill(
       fixtureRoot,
-      "pure-composition",
+      "pure-context",
       [
-        "id: pure-composition",
-        "execution: composition",
+        "id: pure-context",
+        "execution: context",
         "mode: tool",
-        "description: No scripts, LLM-mediated",
+        "description: No scripts, SKILL.md-only",
       ].join("\n"),
     );
 
     const metas = collectSkillMetadata(fixtureRoot);
     expect(metas.map((m) => m.slug)).toEqual([
-      "pure-composition",
+      "pure-context",
       "script-multi",
       "script-single",
     ]);
@@ -111,9 +111,9 @@ describe("census — happy path", () => {
       byMeta["script-multi"]!.scripts.every((s) => s.path === "scripts/ops.py"),
     ).toBe(true);
 
-    expect(byMeta["pure-composition"]!.execution).toBe("composition");
-    expect(byMeta["pure-composition"]!.scripts).toHaveLength(0);
-    expect(byMeta["pure-composition"]!.hasScriptsDir).toBe(false);
+    expect(byMeta["pure-context"]!.execution).toBe("context");
+    expect(byMeta["pure-context"]!.scripts).toHaveLength(0);
+    expect(byMeta["pure-context"]!.hasScriptsDir).toBe(false);
 
     // Zero rows + dormant → retirement-candidate-pending-signoff.
     // Zero rows + NOT dormant → zero-rows-safe-swap.
@@ -133,7 +133,7 @@ describe("census — happy path", () => {
       "collapse-via-action-proposed",
     );
     expect(classifySkill(byMeta["script-multi"]!, fresh).numEntries).toBe(3);
-    expect(classifySkill(byMeta["pure-composition"]!, dormant).bucket).toBe(
+    expect(classifySkill(byMeta["pure-context"]!, dormant).bucket).toBe(
       "retirement-candidate-pending-signoff",
     );
   });
@@ -317,11 +317,11 @@ describe("census — multi-entry decisions", () => {
 describe("parseSkillYaml", () => {
   it("accepts id: as a slug alias", () => {
     const meta = parseSkillYaml(
-      ["id: legacy-id-form", "execution: composition"].join("\n"),
+      ["id: legacy-id-form", "execution: context"].join("\n"),
       "/tmp/legacy-id-form/skill.yaml",
     );
     expect(meta.slug).toBe("legacy-id-form");
-    expect(meta.execution).toBe("composition");
+    expect(meta.execution).toBe("context");
   });
 
   it("coerces unknown execution values to `unknown` instead of silently passing through", () => {
@@ -377,7 +377,7 @@ describe("collectSkillMetadata", () => {
     writeSkill(fixtureRoot, "a-slug", "slug: a-slug\nexecution: script\n", {
       scriptsDir: true,
     });
-    writeSkill(fixtureRoot, "c-slug", "slug: c-slug\nexecution: declarative\n");
+    writeSkill(fixtureRoot, "c-slug", "slug: c-slug\nexecution: mcp\n");
 
     const first = collectSkillMetadata(fixtureRoot).map((m) => m.slug);
     const second = collectSkillMetadata(fixtureRoot).map((m) => m.slug);

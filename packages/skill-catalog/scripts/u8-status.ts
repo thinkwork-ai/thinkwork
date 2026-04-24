@@ -6,19 +6,17 @@
  * each catalog slug, what's the state of its U8 migration, and what's
  * the next step?"
  *
+ * Post-U6 the legacy composition + declarative shapes are gone — this
+ * script is kept as a drift tripwire: if a slug ever regresses to a
+ * removed execution type the census surfaces it under `regressed`
+ * rather than silently shipping a broken catalog entry.
+ *
  * Migration states:
- *   - done              — execution is already `script` or `context`; no
- *                         composition_runner involvement.
- *   - composition       — still uses `execution: composition`. Candidate
- *                         for conversion to `context` (model drives via
- *                         Skill() meta-tool) or `script` (deterministic
- *                         entrypoint).
- *   - declarative       — uses the older `execution: declarative` shape.
- *                         Treat like composition for migration purposes.
- *   - smoke-probe       — composition slugs whose explicit purpose is to
- *                         exercise composition_runner end-to-end (e.g.,
- *                         `smoke-package-only`). MUST be migrated LAST,
- *                         alongside U6's composition_runner deletion.
+ *   - done              — execution is `script` or `context`.
+ *   - regressed         — skill.yaml declares an execution value the
+ *                         runtime no longer handles (anything outside
+ *                         `script` | `context`). Post-U6 this must
+ *                         stay at zero.
  *   - unknown           — skill.yaml missing or malformed.
  *
  * Usage:
@@ -32,17 +30,9 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 
-// Kept up to date as the skill-catalog grows — skills whose explicit
-// purpose is to exercise composition_runner end-to-end. Retiring
-// composition_runner (U6) retires these too.
-const SMOKE_PROBES = new Set<string>(["smoke-package-only"]);
+const SUPPORTED_EXECUTIONS = new Set<string>(["script", "context"]);
 
-type MigrationState =
-  | "done"
-  | "composition"
-  | "declarative"
-  | "smoke-probe"
-  | "unknown";
+type MigrationState = "done" | "regressed" | "unknown";
 
 interface SlugStatus {
   slug: string;
@@ -116,16 +106,12 @@ function inspect(slug: string, catalog: string): SlugStatus {
   const steps = Array.isArray(y.steps) ? (y.steps as unknown[]) : [];
 
   let state: MigrationState;
-  if (SMOKE_PROBES.has(slug) && execution === "composition") {
-    state = "smoke-probe";
-  } else if (execution === "composition") {
-    state = "composition";
-  } else if (execution === "declarative") {
-    state = "declarative";
-  } else if (execution === "script" || execution === "context") {
+  if (!execution) {
+    state = "unknown";
+  } else if (SUPPORTED_EXECUTIONS.has(execution)) {
     state = "done";
   } else {
-    state = "unknown";
+    state = "regressed";
   }
 
   return {
@@ -142,9 +128,7 @@ function inspect(slug: string, catalog: string): SlugStatus {
 function render(statuses: SlugStatus[]): string {
   const byState: Record<MigrationState, SlugStatus[]> = {
     done: [],
-    composition: [],
-    declarative: [],
-    "smoke-probe": [],
+    regressed: [],
     unknown: [],
   };
   for (const s of statuses) byState[s.state].push(s);
@@ -158,9 +142,7 @@ function render(statuses: SlugStatus[]): string {
   lines.push("| State | Count |");
   lines.push("| --- | ---: |");
   lines.push(`| done | ${byState.done.length} |`);
-  lines.push(`| composition | ${byState.composition.length} |`);
-  lines.push(`| declarative | ${byState.declarative.length} |`);
-  lines.push(`| smoke-probe | ${byState["smoke-probe"].length} |`);
+  lines.push(`| regressed | ${byState.regressed.length} |`);
   lines.push(`| unknown | ${byState.unknown.length} |`);
   lines.push("");
   lines.push("## Per-slug detail\n");
@@ -176,23 +158,16 @@ function render(statuses: SlugStatus[]): string {
   lines.push("");
   lines.push("## Migration guidance\n");
   lines.push(
-    "- **composition** slugs → convert to `execution: context` when the " +
-      "SKILL.md body already documents the composition step-by-step " +
-      "(model drives via the Skill meta-tool from U5). Drop `steps:`, " +
-      "`delivery:`, and `budget_cap:` from skill.yaml; keep `inputs:` and " +
-      "`triggers:`.",
+    "- **regressed** slugs → a catalog entry declared an execution type " +
+      "the runtime no longer supports (anything outside `script` | " +
+      "`context`). Post-U6 this count must stay at zero — CI should " +
+      "treat a non-empty bucket as a failure.",
   );
   lines.push(
-    "- **declarative** slugs → same pattern as composition; the declarative " +
-      "block is a legacy composition shape.",
+    "- **unknown** → skill.yaml missing or malformed; fix the file.",
   );
   lines.push(
-    "- **smoke-probe** → migrate LAST, alongside U6's composition_runner " +
-      "deletion. These exist specifically to exercise composition_runner.",
-  );
-  lines.push(
-    "- **done** / **script-only** → no change needed for U8; rely on U7's " +
-      "characterization harness for regression signal.",
+    "- **done** → no action needed; the runtime knows how to dispatch.",
   );
   lines.push("");
   return lines.join("\n");
