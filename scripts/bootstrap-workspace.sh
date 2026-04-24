@@ -72,6 +72,20 @@ cd "$REPO_ROOT"
 pnpm -C packages/database-pg exec tsx "$REPO_ROOT/packages/skill-catalog/scripts/sync-catalog-db.ts"
 echo ""
 
+# ── 2a. Regenerate workspace maps for every agent ───────────────────────────
+# When the catalog adds or retires slugs (e.g. the composition primitives
+# deleted in the pure-skill-spec cleanup), existing agents' AGENTS.md files
+# still list the old set until someone re-saves their skills. This step
+# forces a regen pass so every agent's S3 workspace picks up the new
+# canonical skill list on the same deploy that ships the catalog change.
+#
+# Per-agent failure is caught + logged inside the script; a single bad
+# workspace cannot wedge the deploy.
+
+echo "── Regenerating agent workspace maps ──"
+pnpm -C packages/api exec tsx "$REPO_ROOT/packages/api/scripts/regen-all-workspace-maps.ts" || true
+echo ""
+
 # ── 2b. Upload skill catalog files to S3 ────────────────────────────────────
 # Each skill directory (SKILL.md, skill.yaml, scripts/, etc.) is uploaded to
 # skills/catalog/<slug>/ so the admin UI can display and edit them, and
@@ -84,9 +98,24 @@ for skill_dir in "$REPO_ROOT/packages/skill-catalog"/*/; do
   if [ "$slug" = "scripts" ]; then
     continue  # the sync scripts dir is not a skill
   fi
-  aws s3 sync "$skill_dir" "s3://$BUCKET/skills/catalog/$slug/" --quiet
+  # --delete so a rewritten SKILL.md doesn't stack stale files on top of the
+  # new tree (old prompts/ directories, retired scripts, etc.). The target
+  # prefix is slug-scoped, so --delete only affects this slug's objects.
+  aws s3 sync "$skill_dir" "s3://$BUCKET/skills/catalog/$slug/" --delete --quiet
   file_count=$(find "$skill_dir" -type f | wc -l | tr -d ' ')
   echo "  ✓ $slug ($file_count files)"
+done
+
+# ── 2c. Remove retired slugs from S3 ────────────────────────────────────────
+# Belt + suspenders: slugs that USED to live in the catalog but were retired
+# (composition-era primitives — frame, synthesize, gather, compound) need
+# their S3 artifacts cleaned up so the container's install_skill_from_s3
+# can't accidentally resurrect them on a warm start. The sync-catalog-db.ts
+# script also deletes the matching builtin rows from skill_catalog.
+RETIRED_SLUGS=(frame synthesize gather compound)
+for retired in "${RETIRED_SLUGS[@]}"; do
+  aws s3 rm --recursive "s3://$BUCKET/skills/catalog/$retired/" --quiet || true
+  echo "  ✗ ${retired} (retired — S3 prefix cleared)"
 done
 echo ""
 
