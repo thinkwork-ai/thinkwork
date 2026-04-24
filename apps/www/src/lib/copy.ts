@@ -14,17 +14,17 @@ export const external = {
   quickStartDocs: "https://docs.thinkwork.ai/getting-started",
 };
 
-// Top nav is deliberately short — Platform / Services / Pricing / Docs is the
+// Top nav is deliberately short — Platform / Services / Cloud / Docs is the
 // whole surface. Platform = the homepage (product overview); Services = the
-// delivered engagement surface; Pricing = hosted plan shapes. Homepage section
-// anchors (Journey / How it works / Governance / Quick start) are still
-// reachable by scrolling once on `/`.
+// delivered engagement surface; Cloud = hosted ThinkWork plans. Homepage
+// section anchors (Journey / How it works / Governance / Quick start) are
+// still reachable by scrolling once on `/`.
 //
 // Docs + GitHub icon + Login are hardcoded in Header.astro after this list.
 export const nav = [
   { label: "Platform", href: "/" },
   { label: "Services", href: "/services" },
-  { label: "Pricing", href: "/pricing" },
+  { label: "Cloud", href: "/cloud" },
 ];
 
 export const meta = {
