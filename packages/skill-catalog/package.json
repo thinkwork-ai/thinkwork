@@ -2,8 +2,20 @@
   "name": "@thinkwork/skill-catalog",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "Base skill catalog — markdown-based skills synced to S3 on deploy",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "census": "tsx scripts/census.ts"
+  },
   "devDependencies": {
+    "@thinkwork/database-pg": "workspace:*",
+    "@types/node": "^25.3.3",
+    "drizzle-orm": "^0.39.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.1",
     "yaml": "^2.8.2"
   }
 }
