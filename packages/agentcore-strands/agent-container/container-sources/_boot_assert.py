@@ -30,6 +30,7 @@ import sys
 # container-sources/ modules — these travel into /app via the wildcard COPY.
 EXPECTED_CONTAINER_SOURCES: tuple[str, ...] = (
     "api_memory_client",
+    "api_runtime_config",
     "builtin_tool_filter",
     "capability_catalog",
     "capability_manifest",

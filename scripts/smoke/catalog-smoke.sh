@@ -15,9 +15,10 @@
 # What this does NOT cover:
 #   * The admin UI's GraphQL startSkillRun mutation path (needs a
 #     Cognito JWT — left to the manual "admin Run now" check).
-#   * Runtime execution — per plan §U6 the container currently terminates
-#     every `kind=run_skill` envelope with the canonical unsupported-
-#     runtime reason. That terminal failure IS the passing condition.
+#   * Live connector integration — if the target skill references
+#     connectors that aren't registered in this stage (crm_account_summary
+#     etc.), the run lands on `failed` with a specific reason. Still a
+#     passing smoke: the dispatch loop reached the agent's turn.
 #
 # Usage:
 #   scripts/smoke/catalog-smoke.sh \
@@ -123,7 +124,9 @@ echo "catalog-smoke: inserted skill_run id=$RUN_ID — polling up to ${TIMEOUT}s
 
 wait_for_terminal_status "$RUN_ID" "$TIMEOUT"
 
-# Passing condition: the row reached a terminal status. Post §U6 that
-# currently means `failed` with the unsupported-runtime reason; any
-# terminal state is a PASS (writeback path verified).
+# Passing condition: the row reached a terminal status. `complete`
+# means the agent produced the deliverable end-to-end; `failed` with
+# a specific reason (connector missing, agent loop error, etc.) still
+# PASSES because the full dispatch → agent → writeback loop ran.
+# Only a stuck-running or transport error FAILs the smoke.
 echo "PASS catalog run_id=$RUN_ID status=$SMOKE_RESULT_STATUS reason=${SMOKE_RESULT_REASON:-none}"

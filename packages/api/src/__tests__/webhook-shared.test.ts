@@ -212,6 +212,29 @@ describe("webhook happy path", () => {
 			invokerUserId: SYSTEM_USER,
 			skillId: "customer-onboarding-reconciler",
 		});
+		// Resolver didn't hint an agentId → envelope must still carry the
+		// field so the Python dispatcher reads it (as null) rather than
+		// falling through to a missing-key path. Null-agent envelopes are
+		// rejected in the dispatcher with _MISSING_AGENT_REASON by design.
+		expect(envelope).toHaveProperty("agentId");
+		expect(envelope.agentId).toBeNull();
+	});
+
+	it("threads resolver-hinted agentId into the envelope", async () => {
+		const handler = makeHandler(async () => ({
+			ok: true as const,
+			skillId: "customer-onboarding-reconciler",
+			agentId: "agent-hinted-by-resolver",
+			inputs: { customerId: "cust-1" },
+		}));
+		queueSystemUserBootstrap();
+		mockInsert.mockReturnValueOnce([{ id: "run-2", skill_version: 1 }]);
+
+		const res = await handler(makeEvent(JSON.stringify({ customerId: "cust-1" })));
+
+		expect(res.statusCode).toBe(200);
+		const envelope = mockInvokeSkillRun.mock.calls[0][0];
+		expect(envelope.agentId).toBe("agent-hinted-by-resolver");
 	});
 });
 

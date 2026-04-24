@@ -157,10 +157,11 @@ describe("startSkillRun", () => {
 		status: "running",
 	};
 
-	it("inserts a row, invokes AgentCore RequestResponse, and returns the run", async () => {
+	it("inserts a row, invokes AgentCore Event, and returns the run", async () => {
 		mockInsert.mockReturnValue([insertedRow]);
 		const out = await startSkillRun(null, {
 			input: {
+				agentId: "agent-42",
 				skillId: "sales-prep",
 				invocationSource: "chat",
 				inputs: { customer: "ABC" },
@@ -172,8 +173,22 @@ describe("startSkillRun", () => {
 		expect(payload.kind).toBe("run_skill");
 		expect(payload.runId).toBe("run-1");
 		expect(payload.tenantId).toBe("T1");
+		// Regression pin for P0: agentId must flow through to the envelope.
+		// The Python dispatcher rejects null-agentId envelopes with
+		// _MISSING_AGENT_REASON, so if this ever drops to undefined the
+		// entire chat/catalog/scheduled dispatch path goes inert in prod.
+		expect(payload.agentId).toBe("agent-42");
 		expect(payload.invokerUserId).toBe("U1");
 		expect(payload.invocationSource).toBe("chat");
+	});
+
+	it("defaults agentId to null when not provided in input", async () => {
+		mockInsert.mockReturnValue([insertedRow]);
+		await startSkillRun(null, {
+			input: { skillId: "sales-prep", invocationSource: "chat" },
+		}, OK_CTX);
+		const payload = mockInvokeSkillRun.mock.calls[0]![0] as Record<string, unknown>;
+		expect(payload.agentId).toBeNull();
 	});
 
 	it("rejects unauthorized caller", async () => {

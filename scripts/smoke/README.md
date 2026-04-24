@@ -86,13 +86,14 @@ scripts/smoke/webhook-smoke.sh \
    - `invoker_user_id` = the tenant's system-user uuid (first ever
      webhook call for the tenant also inserts a row into
      `tenant_system_users`)
-   - `status` transitions `running` → `failed` with the canonical
-     "kind=run_skill is unsupported in this runtime" reason (post
-     §U6). **A clean failure at the runtime layer is a passing
-     smoke test** — it proves the webhook path reaches the container
-     and the completion callback updates the row.
-3. `failure_reason` names the unsupported-runtime cutover, not an
-   auth or dispatch error.
+   - `status` transitions `running` → `complete` (the agent ran the
+     reconciler tick end-to-end and the deliverable landed on the row)
+     OR `running` → `failed` with a specific reason (missing
+     connector, agent loop error, config-fetch failure, etc.). Both
+     prove the webhook path reaches the container and the completion
+     callback updates the row.
+3. `failure_reason` names the specific cause, not an auth or dispatch
+   error.
 
 **Verify with:**
 
@@ -199,9 +200,10 @@ path runs cleanly up to the point where real data lookup would happen:
 - ✅ `tenant_system_users` bootstrap works
 - ✅ `skill_runs` inserts under the correct actor
 - ✅ `agentcore-invoke` gets called with the right envelope
-- ✅ the container branches on `kind=run_skill` and returns the
-  canonical U6 unsupported-runtime failure — not an auth, dispatch,
-  or envelope-parsing error
+- ✅ the container branches on `kind=run_skill`, fetches the agent
+  runtime config, runs the headless agent turn, and POSTs
+  `/api/skills/complete` — the terminal state can be `complete` or
+  `failed` with a specific reason; either proves the full loop works
 - ✅ `triggered_by_run_id` populates on tick 2
 
 Anything failing before the connector layer is a real bug and blocks

@@ -2869,6 +2869,7 @@ async function startSkillRunService(
 	const invokeResult = await invokeAgentcoreRunSkill({
 		runId: runRow.id,
 		tenantId,
+		agentId: agentId ?? null,
 		invokerUserId,
 		skillId,
 		skillVersion: runRow.skill_version,
@@ -3077,6 +3078,7 @@ function hashResolvedInputs(resolvedInputs: Record<string, unknown>): string {
 async function invokeAgentcoreRunSkill(payload: {
 	runId: string;
 	tenantId: string;
+	agentId: string | null;
 	invokerUserId: string;
 	skillId: string;
 	skillVersion: number;
@@ -3088,18 +3090,16 @@ async function invokeAgentcoreRunSkill(payload: {
 	if (!fnName) return { ok: false, error: "AGENTCORE_FUNCTION_NAME env var not set" };
 	try {
 		const { LambdaClient, InvokeCommand } = await import("@aws-sdk/client-lambda");
-		const { NodeHttpHandler } = await import("@smithy/node-http-handler");
-		// 28s socketTimeout leaves 2s headroom before this Lambda's 30s
-		// ceiling (and API Gateway's 29s cap). Without it a slow agentcore
-		// can block past those limits and we lose the chance to return a
-		// structured 502 to the caller.
-		const lambda = new LambdaClient({
-			requestHandler: new NodeHttpHandler({ socketTimeout: 28_000 }),
-		});
+		// Plan §U4: kind=run_skill uses InvocationType: Event so the agent
+		// loop has the full 900s AgentCore Lambda budget rather than the
+		// 28s socket cap RequestResponse required. Execution result comes
+		// back via the HMAC-signed /api/skills/complete callback.
+		const lambda = new LambdaClient({});
 		const envelope = {
 			kind: "run_skill" as const,
 			runId: payload.runId,
 			tenantId: payload.tenantId,
+			agentId: payload.agentId,
 			invokerUserId: payload.invokerUserId,
 			skillId: payload.skillId,
 			skillVersion: payload.skillVersion,
@@ -3119,7 +3119,7 @@ async function invokeAgentcoreRunSkill(payload: {
 		};
 		const res = await lambda.send(new InvokeCommand({
 			FunctionName: fnName,
-			InvocationType: "RequestResponse",
+			InvocationType: "Event",
 			Payload: new TextEncoder().encode(JSON.stringify({
 				requestContext: { http: { method: "POST", path: "/invocations" } },
 				rawPath: "/invocations",
@@ -3131,9 +3131,14 @@ async function invokeAgentcoreRunSkill(payload: {
 				isBase64Encoded: false,
 			})),
 		}));
-		if (res.FunctionError) {
-			const raw = res.Payload ? new TextDecoder().decode(res.Payload) : "";
-			return { ok: false, error: `agentcore-invoke threw: ${raw || res.FunctionError}` };
+		// Event-type invoke: AWS returns 202 on successful enqueue. Only
+		// enqueue-level errors surface here; execution errors arrive via
+		// the /api/skills/complete callback writing skill_runs.status.
+		if (typeof res.StatusCode === "number" && res.StatusCode >= 400) {
+			return {
+				ok: false,
+				error: `agentcore-invoke Event enqueue returned ${res.StatusCode}`,
+			};
 		}
 		return { ok: true };
 	} catch (err) {

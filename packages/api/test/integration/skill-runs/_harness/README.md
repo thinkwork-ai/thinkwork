@@ -26,9 +26,13 @@ weakens every test that uses it. Three invariants to maintain:
    mock-db's `onConflictDoNothing` contract returns `[]` when the
    test's scripted state says "same hash already in `running`." Tests
    rely on this for dedup assertions.
-2. **`invokeSkillRun` is RequestResponse.** The harness's stub
-   resolves synchronously so an error in the invoke path surfaces
-   back to `startSkillRun` and the run row transitions to `failed`.
+2. **The harness's `invokeSkillRun` stub resolves synchronously.** In
+   production (post §U4) `invokeAgentcoreRunSkill` uses
+   `InvocationType: "Event"` and terminal state arrives via the
+   `/api/skills/complete` HMAC callback, not the invoke return value.
+   The harness shortcut resolves inline so invoke-path errors surface
+   back to `startSkillRun` and the run row transitions to `failed`
+   without needing a callback round-trip in tests.
 3. **`compound.recall` sees only the learnings the stub was seeded
    with before the run.** Reflections from the same run do NOT feed
    back into recall — that's a next-run effect and the
