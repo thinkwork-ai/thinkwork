@@ -1881,6 +1881,212 @@ def _cleanup_skill_env(keys: list):
         os.environ.pop(k, None)
 
 
+def _execute_agent_turn(payload: dict) -> dict:
+    """Run one Strands agent turn for a chat-invoke-shaped payload.
+
+    Shared execution path between the chat handler (AgentCoreHandler.do_POST
+    default-kind branch) and the ``kind=run_skill`` dispatcher
+    (run_skill_dispatch.dispatch_run_skill). Both construct a payload in the
+    same shape -- per-agent config resolved by
+    ``resolveAgentRuntimeConfig`` plus per-turn fields (message, messages_
+    history, user_id, thread_id, trigger_channel) -- and expect back the
+    response text plus strands usage.
+
+    Extracted for plan docs/plans/2026-04-24-008-feat-skill-run-dispatcher-
+    plan.md §U2 so the dispatcher does not re-implement the ~170-line
+    prologue (skill install, workspace bootstrap, skill-env injection, eval
+    span attrs, messages + system_prompt build, _call_strands_agent).
+
+    Caller responsibilities:
+      * ``invocation_env.apply_invocation_env`` before calling, with cleanup
+        in a ``finally``. This helper sets per-skill env vars
+        (``_inject_skill_env``) but not the core invocation identity.
+      * Post-call side effects: audit, retain, log_agent_invocation,
+        HTTP response formatting, skill_runs writeback, etc. This helper
+        does NOT format the chat-completion response shape or call the
+        auto-retain pipeline.
+      * Guardrail-exception handling: if ``_call_strands_agent`` raises an
+        exception whose message contains "guardrail" or "content policy"
+        with a guardrail_config in the payload, the caller is expected to
+        classify that as a blocked response rather than an error.
+
+    Cleanup handled inside the helper (via ``finally``):
+      * ``detach_eval_context`` on the span token.
+      * ``_cleanup_skill_env`` on injected skill env vars.
+
+    Returns a dict with:
+      * ``response_text`` (str) -- the model's final answer.
+      * ``strands_usage`` (dict) -- token counts, request ids, tool costs,
+        hindsight_usage, optional guardrail_block.
+      * ``duration_ms`` (int) -- wall-clock time for the agent turn.
+      * ``invocation_tool_costs`` (list) -- drained ``_tool_costs`` snapshot.
+
+    Raises whatever ``_call_strands_agent`` raises. Caller must
+    ``try/except`` around it.
+    """
+    workspace_tenant_id = payload.get("workspace_tenant_id") or ""
+    assistant_id = payload.get("assistant_id") or ""
+    tenant_slug = payload.get("tenant_slug") or ""
+    instance_id = payload.get("instance_id") or ""
+    agent_name = payload.get("agent_name") or ""
+    human_name = payload.get("human_name") or ""
+    message = validate_message(payload.get("message", ""))
+    trigger_channel = payload.get("trigger_channel") or ""
+    context_profile_name = payload.get("context_profile") or ""
+    request_model = payload.get("model", "")
+    skills_config = payload.get("skills")
+    knowledge_bases_config = payload.get("knowledge_bases")
+    guardrail_config = payload.get("guardrail_config")
+    mcp_configs = payload.get("mcp_configs") or []
+    thread_metadata = payload.get("thread_metadata") or {}
+    workflow_skill = payload.get("workflow_skill")
+    disabled_builtin_tools = payload.get("disabled_builtin_tools") or []
+    template_blocked_tools = payload.get("blocked_tools") or []
+    tenant_id_for_audit = (
+        payload.get("sessionId") or payload.get("tenant_id") or "unknown"
+    )
+    ticket_id = payload.get("thread_id") or payload.get("ticket_id") or ""
+
+    # Set per-payload env (caller already ran apply_invocation_env for
+    # identity; these are orthogonal — workspace / composer / hindsight).
+    workspace_bucket = payload.get("workspace_bucket") or ""
+    if workspace_bucket:
+        os.environ["AGENTCORE_FILES_BUCKET"] = workspace_bucket
+    thinkwork_api_url = payload.get("thinkwork_api_url") or ""
+    if thinkwork_api_url:
+        os.environ["THINKWORK_API_URL"] = thinkwork_api_url
+    thinkwork_api_secret = payload.get("thinkwork_api_secret") or ""
+    if thinkwork_api_secret:
+        os.environ["THINKWORK_API_SECRET"] = thinkwork_api_secret
+        os.environ["API_AUTH_SECRET"] = thinkwork_api_secret
+    hindsight_endpoint = payload.get("hindsight_endpoint") or ""
+    if hindsight_endpoint:
+        os.environ["HINDSIGHT_ENDPOINT"] = hindsight_endpoint
+    if instance_id:
+        os.environ["_INSTANCE_ID"] = instance_id
+    if assistant_id:
+        os.environ["_ASSISTANT_ID"] = assistant_id
+
+    # Selective skill sync for configured skills.
+    if skills_config:
+        from install_skills import install_skill_from_s3
+        for skill in skills_config:
+            skill_id = skill.get("skillId", "")
+            s3_key = skill.get("s3Key", "")
+            if skill_id and s3_key:
+                install_skill_from_s3(s3_key, skill_id)
+
+    # Sync workspace from S3.
+    _ensure_workspace_ready(
+        workspace_tenant_id,
+        assistant_id,
+        skills_config,
+        tenant_slug=tenant_slug,
+        instance_id=instance_id,
+        agent_name=agent_name,
+        human_name=human_name,
+    )
+
+    injected_env_keys = _inject_skill_env(skills_config) if skills_config else []
+
+    from eval_span_attrs import attach_eval_context, detach_eval_context
+    eval_ctx_token = attach_eval_context(
+        session_id=tenant_id_for_audit,
+        tenant_id=workspace_tenant_id,
+        agent_id=assistant_id,
+        thread_id=ticket_id,
+    )
+
+    try:
+        # Build messages from history + current.
+        messages = []
+        history_payload = payload.get("messages_history") or []
+        if isinstance(history_payload, list):
+            for hmsg in history_payload:
+                if not isinstance(hmsg, dict):
+                    continue
+                role = hmsg.get("role")
+                content = hmsg.get("content")
+                if (
+                    role in ("user", "assistant")
+                    and isinstance(content, str)
+                    and content
+                ):
+                    messages.append({"role": role, "content": content})
+        messages.append({"role": "user", "content": message})
+
+        # Resolve profile (workspace_files hint or fallback to ROUTER.md).
+        harness_files = payload.get("workspace_files")
+        profile = None
+        effective_skills = skills_config
+        if harness_files and isinstance(harness_files, list):
+            from router_parser import ContextProfile
+            profile = ContextProfile(load=harness_files, skills=["all"])
+        else:
+            from router_parser import resolve_profile, filter_skills
+            router_path = os.path.join(WORKSPACE_DIR, "ROUTER.md")
+            profile = resolve_profile(
+                router_path,
+                channel=trigger_channel,
+                context_profile=context_profile_name or None,
+            )
+            if profile and skills_config:
+                effective_skills = filter_skills(skills_config, profile.skills)
+
+        has_workspace_map = os.path.isfile(os.path.join(WORKSPACE_DIR, "AGENTS.md"))
+        parent_kb_config = (
+            None if has_workspace_map else knowledge_bases_config
+        )
+        system_prompt = _build_system_prompt(
+            effective_skills, parent_kb_config, profile=profile
+        )
+
+        external_block = format_external_task_context(thread_metadata)
+        if external_block:
+            system_prompt += "\n\n---\n\n" + external_block
+
+        workflow_block = format_workflow_skill_context(workflow_skill)
+        if workflow_block:
+            system_prompt += "\n\n---\n\n" + workflow_block
+
+        if knowledge_bases_config and not has_workspace_map:
+            try:
+                kb_context = _retrieve_kb_context(knowledge_bases_config, message)
+                if kb_context:
+                    system_prompt += "\n\n---\n\n" + kb_context
+            except Exception as e:
+                logger.warning("KB retrieval failed: %s", e)
+
+        start_ms = int(time.time() * 1000)
+        response_text, strands_usage = _call_strands_agent(
+            system_prompt,
+            messages,
+            model=request_model,
+            skills_config=skills_config,
+            guardrail_config=guardrail_config,
+            mcp_configs=mcp_configs if mcp_configs else None,
+            disabled_builtin_tools=disabled_builtin_tools,
+            template_blocked_tools=template_blocked_tools,
+        )
+        duration_ms = int(time.time() * 1000) - start_ms
+
+        # Drain per-invocation tool costs. The chat handler also clears this
+        # list on guardrail failure inside its except block; our caller
+        # handles that case by relying on the outer except re-clearing.
+        invocation_tool_costs = list(_tool_costs)
+        _tool_costs.clear()
+
+        return {
+            "response_text": response_text,
+            "strands_usage": strands_usage,
+            "duration_ms": duration_ms,
+            "invocation_tool_costs": invocation_tool_costs,
+        }
+    finally:
+        detach_eval_context(eval_ctx_token)
+        _cleanup_skill_env(injected_env_keys)
+
+
 class AgentCoreHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # noqa: A002
         logger.info(fmt, *args)
@@ -1955,66 +2161,22 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                     tenant_slug, instance_id, workspace_tenant_id, assistant_id)
         message = validate_message(payload.get("message", ""))
         use_memory = payload.get("use_memory", False) and bool(ticket_id)
-        skills_config = payload.get("skills")
-        knowledge_bases_config = payload.get("knowledge_bases")
-        trigger_channel = payload.get("trigger_channel") or ""
-        context_profile_name = payload.get("context_profile") or ""
+        logger.info("use_memory=%s", use_memory)
         request_model = payload.get("model", "")
-        agent_name = payload.get("agent_name") or ""
-        human_name = payload.get("human_name") or ""
         guardrail_config = payload.get("guardrail_config")
         mcp_configs = payload.get("mcp_configs") or []
-        thread_metadata = payload.get("thread_metadata") or {}
-        workflow_skill = payload.get("workflow_skill")
-        # U12 tenant kill-switch + template-block. Both arrive as plain lists
-        # from the Lambda caller; the filter normalizes internally. Empty /
-        # missing defaults to no-op so the runtime stays backward-compatible
-        # with callers that have not been updated yet.
-        disabled_builtin_tools = payload.get("disabled_builtin_tools") or []
-        template_blocked_tools = payload.get("blocked_tools") or []
         if mcp_configs:
             logger.info("MCP configs received: %d servers (%s)",
                         len(mcp_configs),
                         ", ".join(c.get("name", c.get("url", "?")) for c in mcp_configs))
 
-        # Set workspace bucket from payload (injected by SST)
-        workspace_bucket = payload.get("workspace_bucket") or ""
-        if workspace_bucket:
-            os.environ["AGENTCORE_FILES_BUCKET"] = workspace_bucket
-            logger.info("AGENTCORE_FILES_BUCKET set from payload: %s", workspace_bucket)
-
-        # Unit 7: composer endpoint URL + service secret for workspace fetch
-        # + write_memory tool. chat-agent-invoke.ts plumbs these through.
-        thinkwork_api_url = payload.get("thinkwork_api_url") or ""
-        if thinkwork_api_url:
-            os.environ["THINKWORK_API_URL"] = thinkwork_api_url
-        thinkwork_api_secret = payload.get("thinkwork_api_secret") or ""
-        if thinkwork_api_secret:
-            os.environ["THINKWORK_API_SECRET"] = thinkwork_api_secret
-            # API_AUTH_SECRET is the canonical name on the backend; match it
-            # here so both names resolve.
-            os.environ["API_AUTH_SECRET"] = thinkwork_api_secret
-
-        hindsight_endpoint = payload.get("hindsight_endpoint") or ""
-        if hindsight_endpoint:
-            os.environ["HINDSIGHT_ENDPOINT"] = hindsight_endpoint
-            logger.info("HINDSIGHT_ENDPOINT set from payload: %s", hindsight_endpoint)
-
-        if instance_id:
-            os.environ["_INSTANCE_ID"] = instance_id
-
-        # Per-invocation identity env (TENANT_ID / AGENT_ID / USER_ID /
-        # CURRENT_USER_ID / CURRENT_THREAD_ID + underscored MCP aliases),
-        # plus the sandbox fields when the dispatcher's pre-flight
-        # returned status=ready. Without threading sandbox_interpreter_id
-        # through here, apply_invocation_env never sets
-        # SANDBOX_INTERPRETER_ID in os.environ and the execute_code
-        # registration branch below (see ~line 545) silently skips.
-        # CURRENT_USER_ID is only set when user_id is truthy — a missing
-        # invoker must be distinguishable from an empty-string one so the
-        # admin skill's R15 "no invoker" refusal triggers correctly. The
-        # returned key list is cleared in the `finally` below so warm
-        # containers don't leak one invocation's identity into the next.
+        # Per-invocation identity env. Sandbox fields ride the chat payload
+        # when the caller's pre-flight returned status=ready; they would be
+        # absent from a run_skill envelope. Returned key list is cleared in
+        # the `finally` so warm containers don't leak identity across
+        # invocations. CURRENT_USER_ID is only set when user_id is truthy —
+        # a missing invoker must be distinguishable from an empty-string
+        # one so the admin skill's R15 "no invoker" refusal triggers.
         invocation_env_keys = invocation_env.apply_invocation_env({
             "workspace_tenant_id": workspace_tenant_id,
             "assistant_id": assistant_id,
@@ -2024,145 +2186,17 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
             "sandbox_environment": payload.get("sandbox_environment") or "",
         })
 
-        # Selective skill sync for configured skills
-        if skills_config:
-            from install_skills import install_skill_from_s3
-            for skill in skills_config:
-                skill_id = skill.get("skillId", "")
-                s3_key = skill.get("s3Key", "")
-                if skill_id and s3_key:
-                    install_skill_from_s3(s3_key, skill_id)
-
-        # Sync workspace from S3
-        _ensure_workspace_ready(workspace_tenant_id, assistant_id, skills_config,
-                                tenant_slug=tenant_slug, instance_id=instance_id,
-                                agent_name=agent_name, human_name=human_name)
-
-        # Inject skill credentials from Secrets Manager
-        injected_env_keys = _inject_skill_env(skills_config) if skills_config else []
-
-        # Tag every span emitted during this invocation with stable IDs so
-        # the eval-runner can query CloudWatch aws/spans by session.id and
-        # hand the resulting batch to AgentCore Evaluations.
-        from eval_span_attrs import attach_eval_context, detach_eval_context
-        _eval_ctx_token = attach_eval_context(
-            session_id=tenant_id,
-            tenant_id=workspace_tenant_id,
-            agent_id=assistant_id,
-            thread_id=ticket_id,
-        )
-
         try:
-            if assistant_id:
-                os.environ["_ASSISTANT_ID"] = assistant_id
-
-            # Build messages from history pre-loaded by the API layer from
-            # Aurora `messages` table. chat-agent-invoke selects the last 30
-            # turns and ships them inline in `messages_history`, and we hand
-            # the list to Strands directly. Automatic retention into AgentCore
-            # Memory happens AFTER the Strands call returns (see the
-            # store_turn_pair hook after _audit_response below) so background
-            # strategies can extract facts for future recall.
-            messages = []
-            history_payload = payload.get("messages_history") or []
-            if isinstance(history_payload, list):
-                for hmsg in history_payload:
-                    if not isinstance(hmsg, dict):
-                        continue
-                    role = hmsg.get("role")
-                    content = hmsg.get("content")
-                    if role in ("user", "assistant") and isinstance(content, str) and content:
-                        messages.append({"role": role, "content": content})
-
-            # Always append the current user message last
-            messages.append({"role": "user", "content": message})
-            logger.info("Built messages list: %d prior + 1 current (use_memory=%s)",
-                        len(messages) - 1, use_memory)
-
-            # Resolve context: prefer harness-provided workspace_files, fall back to ROUTER.md
-            harness_files = payload.get("workspace_files")
-            profile = None
-            effective_skills = skills_config
-
-            if harness_files and isinstance(harness_files, list):
-                # Harness resolved profile — use provided file list directly
-                from router_parser import ContextProfile
-                profile = ContextProfile(load=harness_files, skills=["all"])
-                logger.info("Using harness-provided workspace_files: %d files", len(harness_files))
-            else:
-                # Fallback: parse ROUTER.md locally (BYOB-compatible path)
-                from router_parser import resolve_profile, filter_skills
-                router_path = os.path.join(WORKSPACE_DIR, "ROUTER.md")
-                profile = resolve_profile(router_path, channel=trigger_channel,
-                                          context_profile=context_profile_name or None)
-                if profile and skills_config:
-                    effective_skills = filter_skills(skills_config, profile.skills)
-
-            # Build system prompt from workspace files (profile-aware)
-            # When AGENTS.md exists (workspace mode), skip KB injection on parent —
-            # KBs are assigned per-workspace, not auto-injected on every turn.
-            has_workspace_map = os.path.isfile(os.path.join(WORKSPACE_DIR, "AGENTS.md"))
-            parent_kb_config = None if has_workspace_map else knowledge_bases_config
-            system_prompt = _build_system_prompt(effective_skills, parent_kb_config,
-                                                 profile=profile)
-
-            # External-task context injection: when the thread carries an
-            # external-task envelope (LastMile etc.), append a structured
-            # summary so the agent knows what task the user is looking at.
-            # Without this the agent only sees the literal user message and
-            # has no idea the conversation is about a specific task.
-            external_block = format_external_task_context(thread_metadata)
-            if external_block:
-                system_prompt += "\n\n---\n\n" + external_block
-                logger.info("Injected external-task context into system prompt (%d chars)",
-                            len(external_block))
-
-            # Workflow-skill injection: on task-creation threads the
-            # per-workflow `skill` block from LastMile carries the
-            # workflow's intake instructions, form schema, and — critically —
-            # the workflowId the agent must pass verbatim to
-            # `workflow_task_create`. Without this block the agent has no
-            # way to substitute the real workflow id and ends up passing
-            # the literal template string, which LastMile rejects with
-            # "Workflow not found".
-            workflow_block = format_workflow_skill_context(workflow_skill)
-            if workflow_block:
-                system_prompt += "\n\n---\n\n" + workflow_block
-                logger.info("Injected workflow-skill context into system prompt (%d chars)",
-                            len(workflow_block))
-
-            # Auto-retrieve relevant KB context — only for agents WITHOUT workspace map
-            if knowledge_bases_config and not has_workspace_map:
-                try:
-                    kb_context = _retrieve_kb_context(knowledge_bases_config, message)
-                    if kb_context:
-                        system_prompt += "\n\n---\n\n" + kb_context
-                except Exception as e:
-                    logger.warning("KB retrieval failed: %s", e)
-            elif has_workspace_map and knowledge_bases_config:
-                logger.info("Skipping parent KB injection — KBs managed per-workspace (%d KBs)",
-                            len(knowledge_bases_config))
-
             start_ms = int(time.time() * 1000)
             try:
-                # Call Strands Agent SDK
-                response_text, strands_usage = _call_strands_agent(
-                    system_prompt, messages, model=request_model,
-                    skills_config=skills_config,
-                    guardrail_config=guardrail_config,
-                    mcp_configs=mcp_configs if mcp_configs else None,
-                    disabled_builtin_tools=disabled_builtin_tools,
-                    template_blocked_tools=template_blocked_tools,
-                )
-
-                duration_ms = int(time.time() * 1000) - start_ms
+                turn_result = _execute_agent_turn(payload)
+                response_text = turn_result["response_text"]
+                strands_usage = turn_result["strands_usage"]
+                duration_ms = turn_result["duration_ms"]
+                invocation_tool_costs = turn_result["invocation_tool_costs"]
 
                 input_tokens = strands_usage.get("input_tokens", 0)
                 output_tokens = strands_usage.get("output_tokens", 0)
-
-                # Collect tool costs from this invocation
-                invocation_tool_costs = list(_tool_costs)
-                _tool_costs.clear()
 
                 result = {
                     "id": f"chatcmpl_{int(time.time())}",
@@ -2251,8 +2285,6 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                     logger.error("Strands agent invocation failed tenant_id=%s error=%s", tenant_id, e)
                     self._respond(500, _error_response(str(e)))
         finally:
-            detach_eval_context(_eval_ctx_token)
-            _cleanup_skill_env(injected_env_keys)
             invocation_env.cleanup_invocation_env(invocation_env_keys)
 
     def do_DELETE(self):
