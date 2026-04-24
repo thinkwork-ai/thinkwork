@@ -233,17 +233,8 @@ export default function ThreadDetailRoute() {
   const isPreSyncExternalTask = false;
   const externalProviderLabel: string | null = null;
   const useTaskFlatList = false;
-  const isDone = thread?.status?.toUpperCase() === "DONE";
-
   const visibleMessages = messages;
   const visibleTurns = turns;
-
-  const handleMarkDone = useCallback(async () => {
-    if (!threadId) return;
-    await executeUpdateThread({ id: threadId, input: { status: "DONE" as any } });
-    reexecuteThread({ requestPolicy: "network-only" });
-    router.back();
-  }, [threadId, executeUpdateThread, reexecuteThread, router]);
 
   const quickActionsRef = useRef<QuickActionsSheetRef>(null);
   const webViewSheetRef = useRef<WebViewSheetRef>(null);

@@ -6,7 +6,6 @@ import { Text } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
 
 export interface ThreadFilters {
-  statuses: string[];
   channels: string[];
   agentId: string;
   showArchived: boolean;
@@ -16,15 +15,6 @@ interface ThreadFilterBarProps {
   filters: ThreadFilters;
   onFiltersChange: (filters: ThreadFilters) => void;
 }
-
-const STATUS_OPTIONS = [
-  { label: "Open", value: "OPEN" },
-  { label: "In Progress", value: "IN_PROGRESS" },
-  { label: "Blocked", value: "BLOCKED" },
-  { label: "Todo", value: "TODO" },
-  { label: "Done", value: "DONE" },
-  { label: "Backlog", value: "BACKLOG" },
-];
 
 const CHANNEL_OPTIONS = [
   { label: "Chat", value: "CHAT" },
@@ -182,30 +172,17 @@ function FilterButton({
 export function ThreadFilterBar({ filters, onFiltersChange }: ThreadFilterBarProps) {
   const { colorScheme } = useColorScheme();
   const fColors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
-  const [activeDropdown, setActiveDropdown] = useState<"status" | "channel" | null>(null);
+  const [activeDropdown, setActiveDropdown] = useState<"channel" | null>(null);
   const [anchor, setAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
 
-  const statusRef = useRef<View>(null);
   const channelRef = useRef<View>(null);
 
-  const openDropdown = useCallback((type: "status" | "channel", ref: React.RefObject<View | null>) => {
+  const openDropdown = useCallback((type: "channel", ref: React.RefObject<View | null>) => {
     ref.current?.measureInWindow((x, y, width, height) => {
       setAnchor({ x, y, width, height });
       setActiveDropdown(type);
     });
   }, []);
-
-  const toggleStatus = useCallback((value: string) => {
-    if (value === "__CLEAR__") {
-      onFiltersChange({ ...filters, statuses: [] });
-      return;
-    }
-    const current = filters.statuses;
-    const next = current.includes(value)
-      ? current.filter((v) => v !== value)
-      : [...current, value];
-    onFiltersChange({ ...filters, statuses: next });
-  }, [filters, onFiltersChange]);
 
   const toggleChannel = useCallback((value: string) => {
     if (value === "__CLEAR__") {
@@ -221,13 +198,6 @@ export function ThreadFilterBar({ filters, onFiltersChange }: ThreadFilterBarPro
 
   return (
     <View className="flex-row items-center gap-2 px-4 py-2.5 border-b border-neutral-200 dark:border-neutral-800">
-      <FilterButton
-        label="Status"
-        value={summarize(filters.statuses, STATUS_OPTIONS)}
-        isActive={filters.statuses.length > 0}
-        onPress={() => openDropdown("status", statusRef)}
-        buttonRef={statusRef}
-      />
       <FilterButton
         label="Type"
         value={summarize(filters.channels, CHANNEL_OPTIONS)}
@@ -250,14 +220,6 @@ export function ThreadFilterBar({ filters, onFiltersChange }: ThreadFilterBarPro
         </Text>
       </Pressable>
 
-      <MultiSelectDropdown
-        visible={activeDropdown === "status"}
-        anchor={anchor}
-        options={STATUS_OPTIONS}
-        selected={filters.statuses}
-        onToggle={toggleStatus}
-        onClose={() => setActiveDropdown(null)}
-      />
       <MultiSelectDropdown
         visible={activeDropdown === "channel"}
         anchor={anchor}

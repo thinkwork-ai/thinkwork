@@ -125,23 +125,21 @@ export default function ThreadsScreen() {
   }, [agents]);
 
   // ── Thread filters + query (scoped to active agent) ────────────────────
-  const [filters, setFilters] = useState<ThreadFilters>({ statuses: [], channels: [], agentId: "", showArchived: false });
+  const [filters, setFilters] = useState<ThreadFilters>({ channels: [], agentId: "", showArchived: false });
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const hasActiveFilters = filters.statuses.length > 0 || filters.channels.length > 0 || filters.showArchived;
+  const hasActiveFilters = filters.channels.length > 0 || filters.showArchived;
 
   // Only apply filters when the filter panel is open
-  const appliedFilters = filtersOpen ? filters : { statuses: [], channels: [], agentId: "", showArchived: false } as ThreadFilters;
+  const appliedFilters = filtersOpen ? filters : { channels: [], agentId: "", showArchived: false } as ThreadFilters;
 
   // Use agent from filter, or fall back to active agent from header picker
   const effectiveAgentId = appliedFilters.agentId || activeAgent?.id;
 
   const queryVars = useMemo(() => {
     const vars: any = { tenantId: tenantId! };
-    // Pass single status to server if exactly one selected, otherwise filter client-side
-    if (appliedFilters.statuses.length === 1) vars.status = appliedFilters.statuses[0];
     if (effectiveAgentId) vars.agentId = effectiveAgentId;
     return vars;
-  }, [tenantId, appliedFilters.statuses, effectiveAgentId]);
+  }, [tenantId, effectiveAgentId]);
 
   const [{ data: threadsData }, reexecute] = useQuery({
     query: ThreadsQuery,
@@ -224,11 +222,6 @@ export default function ThreadsScreen() {
     if (!appliedFilters.showArchived) {
       threads = threads.filter((t: any) => !t.archivedAt && !archivedIds.has(t.id));
     }
-    // Multi-status filter (client-side when >1 selected)
-    if (appliedFilters.statuses.length > 1) {
-      const set = new Set(appliedFilters.statuses.map((s) => s.toLowerCase()));
-      threads = threads.filter((t: any) => set.has((t.status || "").toLowerCase()));
-    }
     // Multi-channel filter
     if (appliedFilters.channels.length > 0) {
       const set = new Set(appliedFilters.channels);
@@ -242,7 +235,7 @@ export default function ThreadsScreen() {
       const bTime = new Date(b.lastTurnCompletedAt || b.createdAt).getTime();
       return bTime - aTime;
     });
-  }, [threadsData?.threads, appliedFilters.statuses, appliedFilters.channels, appliedFilters.showArchived, activeAgent?.id, archivedIds]);
+  }, [threadsData?.threads, appliedFilters.channels, appliedFilters.showArchived, activeAgent?.id, archivedIds]);
 
   const [refreshing, setRefreshing] = useState(false);
   const handleRefresh = useCallback(() => {

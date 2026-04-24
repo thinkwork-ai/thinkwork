@@ -7,7 +7,6 @@ import {
   useAgents,
   useMessages,
   useThread,
-  useUpdateThread,
 } from "@thinkwork/react-native-sdk";
 import { useMe } from "@/lib/hooks/use-users";
 import { Badge } from "@/components/ui/badge";
@@ -24,15 +23,32 @@ import {
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { COLORS } from "@/lib/theme";
 
-type ThreadStatus = "OPEN" | "IN_PROGRESS" | "CLOSED";
-
-const STATUS_LABELS: Record<string, string> = {
-  OPEN: "Open",
-  IN_PROGRESS: "In Progress",
-  CLOSED: "Closed",
+// Lifecycle status → operator-facing label. Mirrors admin's ThreadLifecycleBadge
+// (apps/admin/src/components/threads/ThreadLifecycleBadge.tsx). Read-only;
+// lifecycle is derived server-side via thread.lifecycleStatus (U4, #546).
+const LIFECYCLE_LABELS: Record<string, string> = {
+  RUNNING: "Running",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+  FAILED: "Failed",
+  IDLE: "Idle",
+  AWAITING_USER: "Awaiting user",
 };
 
-const STATUS_ORDER: string[] = ["OPEN", "IN_PROGRESS", "CLOSED"];
+// ThreadChannel → operator-facing Trigger label.
+const TRIGGER_LABELS: Record<string, string> = {
+  chat: "Manual chat",
+  manual: "Manual chat",
+  schedule: "Schedule",
+  webhook: "Webhook",
+  api: "Automation",
+  email: "Email",
+};
+
+function triggerLabel(channel: string | null | undefined): string {
+  if (!channel) return "—";
+  return TRIGGER_LABELS[channel.toLowerCase()] ?? channel;
+}
 
 function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleString(undefined, {
@@ -110,15 +126,12 @@ export default function ThreadDetailScreen() {
   const { agents } = useAgents({ tenantId });
   const { messages } = useMessages(id);
 
-  const executeUpdateThread = useUpdateThread();
-
   // TODO: deleteThread — replace with GraphQL mutation
   const deleteThread = async (_args: { threadId: string }) => {
     throw new Error("TODO: implement deleteThread via GraphQL");
   };
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const { colorScheme } = useColorScheme();
   const themeColors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
@@ -149,15 +162,12 @@ export default function ThreadDetailScreen() {
     );
   }
 
-  const status = thread.status as string;
+  const lifecycleStatus = (thread as any).lifecycleStatus as string | null | undefined;
+  const lifecycleLabel = lifecycleStatus ? (LIFECYCLE_LABELS[lifecycleStatus] ?? "Idle") : "—";
 
   const getAgentName = (agentId?: any) => {
     if (!agentId) return "None";
     return agents?.find((a: any) => a.id === agentId)?.name ?? "Unknown";
-  };
-
-  const handleStatusChange = async (newStatus: string) => {
-    await executeUpdateThread(id as string, { status: newStatus });
   };
 
   const hasMeta = (thread as any).metadata != null && typeof (thread as any).metadata === "object" && Object.keys((thread as any).metadata).length > 0;
@@ -182,42 +192,8 @@ export default function ThreadDetailScreen() {
 
         {/* Summary Card */}
         <View className="mt-4 bg-white dark:bg-neutral-900 rounded-xl overflow-hidden border border-neutral-100 dark:border-neutral-800">
-          <InfoRow
-            label="Status"
-            valueComponent={
-              <Pressable onPress={() => setShowStatusPicker(!showStatusPicker)}>
-                <Text className="text-base text-sky-500 font-medium">
-                  {STATUS_LABELS[status] || status}
-                </Text>
-              </Pressable>
-            }
-          />
-          {showStatusPicker && (
-            <View className="border-b border-neutral-100 dark:border-neutral-800 py-1 px-4">
-              {STATUS_ORDER.map((s) => (
-                <Pressable
-                  key={s}
-                  onPress={() => {
-                    handleStatusChange(s);
-                    setShowStatusPicker(false);
-                  }}
-                  className={`px-3 py-2.5 rounded-lg mb-0.5 ${
-                    status === s ? "bg-sky-500/10" : ""
-                  }`}
-                >
-                  <Text
-                    className={`text-base ${
-                      status === s
-                        ? "text-sky-500 font-semibold"
-                        : "text-neutral-700 dark:text-neutral-300"
-                    }`}
-                  >
-                    {STATUS_LABELS[s] || s}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
+          <InfoRow label="Status" value={lifecycleLabel} />
+          <InfoRow label="Trigger" value={triggerLabel((thread as any).channel)} />
           <InfoRow
             label="Agent"
             value={getAgentName(thread.agentId)}

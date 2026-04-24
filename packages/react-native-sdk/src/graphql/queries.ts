@@ -82,6 +82,7 @@ export const ThreadQuery = gql`
       identifier
       title
       status
+      lifecycleStatus
       channel
       lastActivityAt
       lastReadAt
