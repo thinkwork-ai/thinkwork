@@ -22,7 +22,6 @@ export function registerThreadCommand(program: Command): void {
     .description("List threads in a tenant with optional filters.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--status <status>", "Filter: BACKLOG | TODO | IN_PROGRESS | IN_REVIEW | BLOCKED | DONE | CANCELLED")
     .option("--assignee <id>", "Filter by assignee (user or agent ID). Use `me` to match the caller.")
     .option("--agent <id>", "Filter threads worked on by a specific agent")
     .option("--search <q>", "Full-text search over thread titles")
@@ -32,14 +31,14 @@ export function registerThreadCommand(program: Command): void {
       "after",
       `
 Examples:
-  # Open work on the default stage/tenant
-  $ thinkwork thread list --status IN_PROGRESS
-
-  # Pipe to jq
-  $ thinkwork thread list --json | jq '.[] | select(.status=="IN_PROGRESS")'
-
   # Everything assigned to me
   $ thinkwork thread list --assignee me
+
+  # Limit + JSON for piping
+  $ thinkwork thread list --limit 100 --json | jq '.[] | .title'
+
+  # Archived threads only
+  $ thinkwork thread list --archived
 `,
     )
     .action(() => notYetImplemented("thread list", 1));
@@ -87,45 +86,21 @@ Examples:
 
   thread
     .command("update <id>")
-    .description("Update a thread's title, status, assignee, labels, or due date.")
+    .description("Update a thread's title, assignee, labels, or due date.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--title <t>", "Rename")
-    .option("--status <s>", "Move to a new status")
     .option("--assignee <id>", "Reassign (user or agent ID)")
     .option("--due <iso>", "Due date")
     .addHelpText(
       "after",
       `
 Examples:
-  $ thinkwork thread update thr-abc --status IN_REVIEW
+  $ thinkwork thread update thr-abc --title "New title"
   $ thinkwork thread update thr-abc --assignee agt-ops
 `,
     )
     .action(() => notYetImplemented("thread update", 1));
-
-  thread
-    .command("close <id>")
-    .description("Mark a thread DONE. Shortcut for `thread update <id> --status DONE`.")
-    .option("-s, --stage <name>", "Deployment stage")
-    .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--comment <text>", "Add a closing comment")
-    .addHelpText(
-      "after",
-      `
-Examples:
-  $ thinkwork thread close thr-abc
-  $ thinkwork thread close thr-abc --comment "fixed in #124"
-`,
-    )
-    .action(() => notYetImplemented("thread close", 1));
-
-  thread
-    .command("reopen <id>")
-    .description("Move a thread from DONE/CANCELLED back to TODO.")
-    .option("-s, --stage <name>", "Deployment stage")
-    .option("-t, --tenant <slug>", "Tenant slug")
-    .action(() => notYetImplemented("thread reopen", 1));
 
   thread
     .command("checkout <id>")
@@ -144,10 +119,9 @@ Examples:
 
   thread
     .command("release <id>")
-    .description("Release a checked-out thread, optionally moving it to a new status.")
+    .description("Release a checked-out thread (unlocks it so another agent can claim it).")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--status <s>", "Status to release into")
     .action(() => notYetImplemented("thread release", 1));
 
   thread
