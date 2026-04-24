@@ -220,6 +220,31 @@ variable "wiki_deterministic_linking_enabled" {
   default     = "true"
 }
 
+variable "mcp_custom_domain" {
+  description = <<-EOT
+    MCP custom domain (e.g. "mcp.thinkwork.ai"). Empty disables the
+    custom-domain setup — the MCP endpoint stays reachable at the API
+    Gateway execute-api URL. When set, an ACM cert is created on the
+    first apply; flip `mcp_custom_domain_ready = true` on a second
+    apply after DNS validation completes. See
+    docs/solutions/patterns/mcp-custom-domain-setup-2026-04-23.md.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "mcp_custom_domain_ready" {
+  description = <<-EOT
+    Second-apply gate for the MCP custom domain. Stays false on the
+    first apply (cert creation + DNS validation). Flip to true after
+    ACM shows the cert as ISSUED so the second apply can create the
+    API Gateway custom domain + mapping. Ignored when
+    mcp_custom_domain is empty.
+  EOT
+  type        = bool
+  default     = false
+}
+
 locals {
   www_dns_enabled = var.www_domain != "" && var.cloudflare_zone_id != ""
   docs_domain     = var.www_domain != "" ? "docs.${var.www_domain}" : ""
@@ -274,6 +299,14 @@ module "thinkwork" {
 
   # Stripe billing — internal-plan → price-id map (per-stage, non-secret).
   stripe_price_ids_json = var.stripe_price_ids_json
+
+  # MCP custom domain (e.g. mcp.thinkwork.ai). Two-apply flow: the first
+  # apply creates the ACM cert (mcp_custom_domain_ready=false), the
+  # second apply attaches the domain + API mapping after DNS validation
+  # (mcp_custom_domain_ready=true). Runbook:
+  # docs/solutions/patterns/mcp-custom-domain-setup-2026-04-23.md
+  mcp_custom_domain       = var.mcp_custom_domain
+  mcp_custom_domain_ready = var.mcp_custom_domain_ready
 
   # Greenfield: create everything (all defaults are true)
 }
@@ -488,4 +521,25 @@ output "ses_inbound_name_servers" {
 output "ses_inbound_mx_target" {
   description = "MX target host for the email subdomain. Already written into the subzone by Terraform — informational."
   value       = module.thinkwork.ses_inbound_mx_target
+}
+
+# MCP custom domain — consumed by `pnpm cf:sync-mcp`.
+output "mcp_custom_domain" {
+  description = "Configured MCP custom domain (e.g., mcp.thinkwork.ai), or empty when disabled."
+  value       = module.thinkwork.mcp_custom_domain
+}
+
+output "mcp_custom_domain_cert_arn" {
+  description = "ACM cert ARN for the MCP custom domain. Pass to `pnpm cf:sync-mcp --cert-arn` in direct-args mode."
+  value       = module.thinkwork.mcp_custom_domain_cert_arn
+}
+
+output "mcp_custom_domain_validation" {
+  description = "DNS validation records to add to Cloudflare for ACM to issue the cert. Each record: { name, type, value }."
+  value       = module.thinkwork.mcp_custom_domain_validation
+}
+
+output "mcp_custom_domain_target" {
+  description = "Regional target for the final mcp CNAME — only populated on the second apply after mcp_custom_domain_ready=true. { target_domain_name, hosted_zone_id } or null."
+  value       = module.thinkwork.mcp_custom_domain_target
 }
