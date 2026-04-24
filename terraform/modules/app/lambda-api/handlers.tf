@@ -212,6 +212,12 @@ resource "aws_lambda_function" "handler" {
     # container POSTs one row per agent-session-start. Shared
     # API_AUTH_SECRET bearer (runtime→API; no tenant OAuth).
     "manifest-log",
+    # SI-7 catalog-list read endpoint (plan §U15 pt 3/3). Strands
+    # container fetches the allowed builtin-tool slug set once per
+    # session-start + feature-flag-gated enforcement filter drops
+    # catalog-missing tools before Agent(tools=...). Shared
+    # API_AUTH_SECRET bearer.
+    "capability-catalog-list",
   ]) : toset([])
 
   function_name = "thinkwork-${var.stage}-api-${each.key}"
@@ -427,6 +433,11 @@ locals {
     # API_AUTH_SECRET; no tenant OAuth.
     "POST /api/runtime/manifests"    = "manifest-log"
     "OPTIONS /api/runtime/manifests" = "manifest-log"
+
+    # SI-7 catalog-list read (plan §U15 pt 3/3). Strands container fetches
+    # the allowed slug set once per session-start. Shared API_AUTH_SECRET.
+    "GET /api/runtime/capability-catalog"     = "capability-catalog-list"
+    "OPTIONS /api/runtime/capability-catalog" = "capability-catalog-list"
   } : {}
 }
 

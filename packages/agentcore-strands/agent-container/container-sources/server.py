@@ -1502,6 +1502,60 @@ def _call_strands_agent(system_prompt: str, messages: list,
     log_filter_result("[builtin-tool-filter]", _filter_result)
     tools = _filter_result.tools
 
+    # U15 pt 3/3 — SI-7 capability-catalog enforcement.
+    #
+    # Always fetch the catalog's allowed built-in slug set + log a
+    # shadow-compare diagnostic so operators can see whether flipping
+    # RCM_ENFORCE=true would change this session's tool surface. When
+    # RCM_ENFORCE is on AND the fetch succeeded, drop any registered
+    # tool whose slug isn't in the catalog — a catalog-missing built-in
+    # fails closed. Fail-open otherwise: a network blip on the catalog
+    # fetch must not take the agent offline; CloudWatch captures both
+    # the fetch failure and the shadow-compare for post-mortem.
+    try:
+        from capability_catalog import (
+            fetch_allowed_slugs,
+            filter_by_catalog,
+            is_enforcement_enabled,
+            log_shadow_compare,
+        )
+        _rcm_registered_slugs = []
+        for _t in tools:
+            _tname = getattr(_t, "tool_name", None) or getattr(_t, "__name__", None)
+            if isinstance(_tname, str) and _tname:
+                _rcm_registered_slugs.append(_tname)
+        _rcm_catalog = fetch_allowed_slugs(type_="tool", source="builtin")
+        _rcm_enforce = is_enforcement_enabled()
+        log_shadow_compare(
+            registered_slugs=_rcm_registered_slugs,
+            catalog_slugs=_rcm_catalog.slugs,
+            enforcement_enabled=_rcm_enforce,
+            catalog_ok=_rcm_catalog.ok,
+        )
+        if _rcm_enforce and _rcm_catalog.ok:
+            _rcm_filtered = filter_by_catalog(
+                tools, allowed_slugs=_rcm_catalog.slugs,
+            )
+            if _rcm_filtered.dropped_slugs:
+                logger.warning(
+                    "[capability-catalog] SI-7 dropped %d tool(s): %s",
+                    len(_rcm_filtered.dropped_slugs),
+                    list(_rcm_filtered.dropped_slugs),
+                )
+            tools = _rcm_filtered.tools
+        elif _rcm_enforce and not _rcm_catalog.ok:
+            # Flag is on but we couldn't fetch — hold behavior rather
+            # than accidentally stripping every tool. The shadow log
+            # above already recorded the incident.
+            logger.warning(
+                "[capability-catalog] SI-7 enforcement requested but "
+                "catalog fetch failed (%s) — falling back to unfiltered "
+                "tool list to avoid a closed-fail storm",
+                _rcm_catalog.error,
+            )
+    except Exception as _rcm_err:
+        logger.warning("capability_catalog enforcement step failed: %s", _rcm_err)
+
     # U15 Resolved Capability Manifest — emit a structured log + best-
     # effort POST to /api/runtime/manifests so admins can see exactly what
     # this session was granted. The persistence path is non-blocking:
