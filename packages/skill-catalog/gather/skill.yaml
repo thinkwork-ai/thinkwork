@@ -1,26 +1,42 @@
 slug: gather
-display_name: Gather
+display_name: Gather (parallel-fan-out guidance)
 description: >
-  Parallel fan-out primitive. Not a runnable skill on its own — compositions
-  declare a parallel step and the composition runner executes the branches
-  concurrently. This entry exists so admins can see gather in the catalog
-  alongside the other composition primitives.
+  Authoring guidance for parallel sub-skill invocation inside
+  agent-driven skills. Not a runtime primitive — the post-U8 runtime
+  relies on the model invoking Skill() calls independently; this
+  catalog entry documents the pattern for skill authors and gives the
+  model a canonical description to cite when a skill's SKILL.md says
+  "gather in parallel."
 category: workflow
-version: "0.1.0"
+version: "1.0.0"
 author: thinkwork
 icon: layers
-tags: [composition, primitive, parallel, fan-out]
+tags: [composition, primitive, parallel, fan-out, guidance]
 
-# `declarative` signals: do not load this as an agent tool. The composition
-# runner special-cases `mode: parallel` steps and runs their branches via
-# asyncio.gather; there is no script, prompt, or MCP to invoke here.
-execution: declarative
-invocable_from: composition
+# U8 migration (plan §U8, 2026-04-24): converted from
+# execution:declarative → execution:context. The legacy composition
+# runner's special-cased `mode: parallel` step is retired with U6; the
+# SKILL.md body now documents how skill authors describe parallel
+# fan-out for model-driven execution.
+execution: context
+mode: tool
 
-# Admin discoverability only. If an admin tries to enable gather as a
-# direct agent tool, the skill registry should refuse with the message
-# below.
+# Not a standalone chat anchor — the model encounters this skill as a
+# referenced sub-skill in other SKILL.md bodies (sales-prep,
+# account-health-review, renewal-prep). No chat_intent, no schedule,
+# no webhook triggers.
+triggers: {}
+
+# No sub-skills of its own — this is descriptive content, not an
+# orchestrator.
+requires_skills: []
+
+# Admin discoverability only. If an admin accidentally enables gather
+# as a direct agent tool, the skill registry surfaces this message
+# rather than loading an empty Skill() invocation.
 standalone_invocation_error: >
-  The `gather` primitive is executed by the composition runner. It is not
-  a runnable skill on its own. Use it inside a composition step with
-  `mode: parallel` and declare the branches you want to fan out.
+  The `gather` catalog entry is authoring guidance, not a runnable
+  skill. It describes the parallel fan-out pattern other skills
+  reference from their SKILL.md bodies. To use the pattern, invoke
+  each sub-skill in its own `Skill(...)` call; the runtime handles
+  concurrency.
