@@ -190,6 +190,12 @@ build_handler "invites" \
 build_handler "skills" \
   "$REPO_ROOT/packages/api/src/handlers/skills.ts"
 
+# Plugin upload handler (V1 agent-architecture plan §U10). Two routes:
+#   POST /api/plugins/presign → presigned PUT URL for the zip
+#   POST /api/plugins/upload  → validator + three-phase install saga
+build_handler "plugin-upload" \
+  "$REPO_ROOT/packages/api/src/handlers/plugin-upload.ts"
+
 build_handler "activity" \
   "$REPO_ROOT/packages/api/src/handlers/activity.ts"
 
