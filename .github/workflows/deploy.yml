@@ -507,7 +507,15 @@ jobs:
   # ── Deploy summary ──────────────────────────────────────────────
   summary:
     name: Deploy Summary
-    needs: [terraform-apply, migration-drift-check, build-admin, build-docs, build-www, bootstrap]
+    needs:
+      [
+        terraform-apply,
+        migration-drift-check,
+        build-admin,
+        build-docs,
+        build-www,
+        bootstrap,
+      ]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:
