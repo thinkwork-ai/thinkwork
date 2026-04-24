@@ -55,7 +55,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
 import { getDb } from "@thinkwork/database-pg";
 import {
@@ -104,11 +104,13 @@ export async function handler(
   const method = event.requestContext.http.method;
   const path = event.rawPath;
 
-  if (method !== "POST") {
+  if (method !== "POST" && method !== "GET") {
     return error(`Method ${method} not allowed`, 405);
   }
 
-  if (!workspaceBucket()) {
+  // The POST routes (presign + upload) need WORKSPACE_BUCKET; GET routes
+  // don't touch S3 so they skip this check.
+  if (method === "POST" && !workspaceBucket()) {
     return error("WORKSPACE_BUCKET env is not configured", 500);
   }
 
@@ -140,6 +142,24 @@ export async function handler(
     }
     if (path === "/api/plugins/upload" && method === "POST") {
       return await handleUpload(tenantId, auth.principalId, event);
+    }
+    if (path === "/api/plugins" && method === "GET") {
+      return await handleListUploads(tenantId);
+    }
+    // Require UUID so reserved endpoints (`/presign`, `/upload`) can't
+    // be mistaken for upload IDs — a GET to those under an auth'd admin
+    // should be a clean 405 rather than a database miss.
+    const detailMatch = path.match(
+      /^\/api\/plugins\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i,
+    );
+    if (detailMatch && method === "GET") {
+      return await handleGetUpload(tenantId, detailMatch[1]!);
+    }
+    if (
+      method === "GET" &&
+      (path === "/api/plugins/upload" || path === "/api/plugins/presign")
+    ) {
+      return error(`Method GET not allowed on ${path}`, 405);
     }
     return notFound(`Route ${method} ${path} not found`);
   } catch (e) {
@@ -294,6 +314,64 @@ async function handleUpload(
     },
     warnings: validation.warnings,
   });
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/plugins — list recent uploads for the tenant
+// GET /api/plugins/:uploadId — detail for a single upload
+// ---------------------------------------------------------------------------
+
+const MAX_LIST_RESULTS = 50;
+
+async function handleListUploads(
+  tenantId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const rows = await getDb()
+    .select({
+      id: pluginUploads.id,
+      uploaded_by: pluginUploads.uploaded_by,
+      uploaded_at: pluginUploads.uploaded_at,
+      bundle_sha256: pluginUploads.bundle_sha256,
+      plugin_name: pluginUploads.plugin_name,
+      plugin_version: pluginUploads.plugin_version,
+      status: pluginUploads.status,
+      error_message: pluginUploads.error_message,
+    })
+    .from(pluginUploads)
+    .where(eq(pluginUploads.tenant_id, tenantId))
+    .orderBy(desc(pluginUploads.uploaded_at))
+    .limit(MAX_LIST_RESULTS);
+  return json({ uploads: rows });
+}
+
+async function handleGetUpload(
+  tenantId: string,
+  uploadId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const [row] = await getDb()
+    .select({
+      id: pluginUploads.id,
+      tenant_id: pluginUploads.tenant_id,
+      uploaded_by: pluginUploads.uploaded_by,
+      uploaded_at: pluginUploads.uploaded_at,
+      bundle_sha256: pluginUploads.bundle_sha256,
+      plugin_name: pluginUploads.plugin_name,
+      plugin_version: pluginUploads.plugin_version,
+      status: pluginUploads.status,
+      s3_staging_prefix: pluginUploads.s3_staging_prefix,
+      error_message: pluginUploads.error_message,
+    })
+    .from(pluginUploads)
+    .where(eq(pluginUploads.id, uploadId))
+    .limit(1);
+  if (!row || row.tenant_id !== tenantId) {
+    // Cross-tenant + not-found both return 404 — admin learns nothing
+    // extra from a 403 here, tenant isolation > UX polish.
+    return notFound("plugin upload not found");
+  }
+  const { tenant_id: _t, ...safe } = row;
+  void _t;
+  return json({ upload: safe });
 }
 
 // ---------------------------------------------------------------------------
