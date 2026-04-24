@@ -380,3 +380,15 @@ variable "google_places_api_key" {
   default     = ""
   sensitive   = true
 }
+
+variable "mcp_custom_domain" {
+  description = "MCP custom domain (e.g., 'mcp.thinkwork.ai'). Empty disables custom-domain setup — the MCP endpoint stays reachable at the API Gateway execute-api URL. When set, an ACM cert is created on the first apply; flip `mcp_custom_domain_ready = true` on a second apply after DNS validation completes. See docs/solutions/patterns/mcp-custom-domain-setup-2026-04-23.md."
+  type        = string
+  default     = ""
+}
+
+variable "mcp_custom_domain_ready" {
+  description = "Two-apply gate for the MCP custom domain. Leave false on the first apply (cert-only). After running `pnpm cf:sync-mcp` + waiting ~5 min for ACM validation, flip to true and re-apply to create the API Gateway domain + mapping."
+  type        = bool
+  default     = false
+}
