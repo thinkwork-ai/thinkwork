@@ -4,24 +4,24 @@ admin-catalog skill runs.
 The TS /api/skills/start handler fires `kind=run_skill` envelopes at the
 agentcore Lambda via agentcore-invoke. This module owns:
 
-  * Validating the envelope has the minimum fields needed to complete
-    the row cleanly.
-  * Sending a terminal `failed` writeback to /api/skills/complete with a
-    clear reason when the runtime cannot execute the target.
+  * Validating the envelope (runId, tenantId, skillId, agentId required;
+    webhook-sourced null agentId is rejected fast per plan §U1 and
+    deferred to a follow-up).
+  * Fetching the agent's runtime config from the TS API
+    (``api_runtime_config.fetch``).
+  * Building a synthetic user message: "Run the <skillId> skill with
+    these inputs: <json>".
+  * Running a headless Strands agent turn via the shared
+    ``server._execute_agent_turn`` helper — reuses the exact same
+    prologue (skill install, workspace ready, system prompt, tool
+    registration) the chat loop uses, so sales-prep run via scheduled
+    job and sales-prep run via chat both behave identically.
+  * POSTing terminal status back to ``/api/skills/complete`` with
+    HMAC-signed callback so skill_runs.status transitions out of
+    `running`.
 
-U6 removed the parallel orchestrator module (plus its input-parser
-sibling) that used to execute ``kind=run_skill`` envelopes. Every V1
-skill now declares ``execution: context`` and runs inside the chat
-agent loop via the ``Skill`` meta-tool (U5). The sandboxed unified
-dispatcher (U4, ``skill_dispatcher.dispatch_skill_script``) is wired
-into the chat loop but does not yet have a production wiring for
-out-of-band skill_runs envelopes — that wiring is out of scope for U6.
-
-Until a replacement dispatcher lands here, ``kind=run_skill`` envelopes
-simply fail fast with a named reason so scheduled / webhook / catalog
-callers see a clean `failed` row instead of a stuck `running` row. The
-user authorized this cutover: per docs/plans/2026-04-23-007 §U6, the
-orchestrator deletion ships before the dispatcher replacement.
+Plan: ``docs/plans/2026-04-24-008-feat-skill-run-dispatcher-plan.md``
+(§U3). Replaces the post-§U6 unsupported-runtime rejector in PR #542.
 """
 
 from __future__ import annotations
@@ -41,6 +41,16 @@ logger = logging.getLogger(__name__)
 # seconds and include ±0.5s jitter to avoid thundering-herd on cold starts.
 _COMPLETE_RETRY_DELAYS = (1.0, 3.0, 9.0)
 _COMPLETE_RETRY_JITTER = 0.5
+
+# Reason string written to skill_runs.failure_reason when the envelope
+# carries a null agentId. Webhook-sourced envelopes are the only path
+# that emits null; those runs are deferred to a follow-up PR that will
+# route to a tenant-admin fallback agent (plan §U3 Deferred to Follow-Up
+# Work).
+_MISSING_AGENT_REASON = (
+    "run_skill requires an agentId — webhook-sourced runs without one "
+    "are deferred to a follow-up"
+)
 
 
 def _urlopen_with_retry(req, timeout: int, run_id: str):
@@ -200,54 +210,231 @@ def post_skill_run_complete(run_id: str, tenant_id: str, status: str,
         logger.error("run_skill: completion POST failed runId=%s err=%s", run_id, e)
 
 
-# Human-readable reason returned to callers and written to skill_runs.failure_reason
-# when the envelope lands during the U6 cutover window. Kept as a module constant
-# so tests can assert it verbatim.
-_U6_UNSUPPORTED_REASON = (
-    "kind=run_skill is unsupported in this runtime: U6 removed the composition "
-    "runner and a replacement out-of-band dispatcher has not landed yet. "
-    "Skills are invoked via the Skill() meta-tool inside chat — scheduled / "
-    "webhook / catalog paths that target skill_runs are temporarily offline "
-    "per plan #007 §U6."
-)
+def _build_synthetic_payload(
+    envelope: dict, runtime_config: dict, user_message: str,
+) -> dict:
+    """Shape a chat-invoke-style payload from a run_skill envelope + the
+    runtime config fetched from /api/agents/runtime-config.
+
+    Accepts ``runtime_config`` with either camelCase (TS endpoint shape)
+    or snake_case keys. The REST endpoint returns the helper's camelCase
+    AgentRuntimeConfig shape today, so we translate here. Tests pass
+    snake_case for simplicity.
+    """
+    scope = envelope.get("scope") or {}
+
+    def _cfg(key_camel: str, key_snake: str | None = None) -> object:
+        if key_camel in runtime_config:
+            return runtime_config[key_camel]
+        if key_snake and key_snake in runtime_config:
+            return runtime_config[key_snake]
+        return None
+
+    tenant_id = envelope.get("tenantId") or scope.get("tenantId") or ""
+    agent_id = envelope.get("agentId") or scope.get("agentId") or ""
+    invoker_user_id = (
+        envelope.get("invokerUserId") or scope.get("invokerUserId") or ""
+    )
+    thread_id = envelope.get("threadId") or scope.get("threadId") or ""
+
+    payload: dict = {
+        "tenant_id": tenant_id,
+        "workspace_tenant_id": tenant_id,
+        "assistant_id": agent_id,
+        "user_id": invoker_user_id,
+        "thread_id": thread_id,
+        "tenant_slug": _cfg("tenantSlug", "tenant_slug") or "",
+        "instance_id": _cfg("agentSlug", "agent_slug") or "",
+        "agent_name": _cfg("agentName", "agent_name") or "",
+        "human_name": _cfg("humanName", "human_name") or "",
+        "runtime_type": _cfg("runtimeType", "runtime_type") or "strands",
+        "model": _cfg("templateModel", "template_model") or "",
+        "skills": _cfg("skillsConfig", "skills") or [],
+        "knowledge_bases": _cfg("knowledgeBasesConfig", "knowledge_bases"),
+        "guardrail_config": _cfg("guardrailConfig", "guardrail_config"),
+        "mcp_configs": _cfg("mcpConfigs", "mcp_configs") or [],
+        "blocked_tools": _cfg("blockedTools", "blocked_tools") or [],
+        "thinkwork_api_url": os.environ.get("THINKWORK_API_URL") or "",
+        "thinkwork_api_secret": os.environ.get("THINKWORK_API_SECRET")
+            or os.environ.get("API_AUTH_SECRET") or "",
+        "hindsight_endpoint": os.environ.get("HINDSIGHT_ENDPOINT") or "",
+        "workspace_bucket": os.environ.get("AGENTCORE_FILES_BUCKET") or "",
+        "message": user_message,
+        "messages_history": [],
+        "trigger_channel": "run_skill",
+        "use_memory": False,
+    }
+    return payload
+
+
+def _format_user_message(skill_id: str, resolved_inputs: dict) -> str:
+    """Synthetic user prompt handed to the Strands agent.
+
+    The agent sees the skill's SKILL.md via the AgentSkills plugin's
+    progressive disclosure; this prompt just tells it which skill to
+    run and with what args. Kept deliberately simple — the model reads
+    the SKILL.md body on demand via the plugin's built-in ``skills``
+    tool, and the body carries the method.
+    """
+    try:
+        args_json = json.dumps(resolved_inputs or {}, indent=2, sort_keys=True)
+    except (TypeError, ValueError):
+        args_json = repr(resolved_inputs)
+    return (
+        f"Run the `{skill_id}` skill with these inputs:\n\n"
+        f"```json\n{args_json}\n```\n\n"
+        f"Follow the skill's SKILL.md body. Produce the final "
+        f"deliverable as your response — don't wrap it in a status "
+        f"summary."
+    )
 
 
 async def dispatch_run_skill(payload: dict) -> dict:
-    """Terminate a kind='run_skill' envelope with a structured failure.
+    """Execute a ``kind=run_skill`` envelope end-to-end.
 
-    Until a replacement dispatcher is wired, every envelope lands as
-    ``failed`` with ``_U6_UNSUPPORTED_REASON``. The run row still
-    transitions cleanly (so dedup slots free up and admins see the
-    failure in the UI) — the only difference from a "normal" failure
-    is that no Python execution ran against the skill.
+    Plan §U3. Envelope → runtime config fetch → synthetic chat turn via
+    ``server._execute_agent_turn`` → /api/skills/complete callback.
+
+    Invocation env (TENANT_ID / AGENT_ID / USER_ID / CURRENT_USER_ID /
+    CURRENT_THREAD_ID + underscored MCP aliases) is already applied by
+    the caller in ``server.py``'s run_skill branch; this function does
+    NOT touch ``invocation_env.apply/cleanup``.
+
+    Returns a small status dict the HTTP handler forwards verbatim. The
+    authoritative state lives in Postgres via the completion callback.
     """
     run_id = payload.get("runId") or ""
     tenant_id = payload.get("tenantId") or ""
     skill_id = payload.get("skillId") or ""
+    agent_id = payload.get("agentId") or ""
+    resolved_inputs = payload.get("resolvedInputs") or {}
+    scope = payload.get("scope") or {}
     completion_hmac_secret = payload.get("completionHmacSecret") or ""
+    invoker_user_id = (
+        payload.get("invokerUserId") or scope.get("invokerUserId") or ""
+    )
 
     if not (run_id and tenant_id and skill_id):
-        # Pre-HMAC failure — we cannot reach the complete endpoint
-        # without a runId/tenantId, so just return the structured error.
-        # The TS caller will transition the row itself.
         return {
             "runId": run_id,
             "status": "failed",
             "error": "missing runId/tenantId/skillId",
         }
 
-    logger.warning(
-        "run_skill: failing envelope for skillId=%s runId=%s — %s",
-        skill_id, run_id, _U6_UNSUPPORTED_REASON,
+    if not agent_id:
+        logger.warning(
+            "run_skill: rejecting envelope with null agentId runId=%s skillId=%s",
+            run_id, skill_id,
+        )
+        post_skill_run_complete(
+            run_id, tenant_id, "failed",
+            failure_reason=_MISSING_AGENT_REASON,
+            completion_hmac_secret=completion_hmac_secret,
+        )
+        return {
+            "runId": run_id,
+            "status": "failed",
+            "failureReason": _MISSING_AGENT_REASON,
+        }
+
+    from api_runtime_config import (
+        AgentConfigNotFoundError,
+        RuntimeConfigFetchError,
+        fetch as _fetch_runtime_config,
     )
 
+    try:
+        runtime_config = _fetch_runtime_config(
+            agent_id=agent_id,
+            tenant_id=tenant_id,
+            current_user_id=invoker_user_id or None,
+        )
+    except AgentConfigNotFoundError as exc:
+        logger.error("run_skill: %s", exc.reason)
+        post_skill_run_complete(
+            run_id, tenant_id, "failed",
+            failure_reason=exc.reason,
+            completion_hmac_secret=completion_hmac_secret,
+        )
+        return {
+            "runId": run_id,
+            "status": "failed",
+            "failureReason": exc.reason,
+        }
+    except RuntimeConfigFetchError as exc:
+        reason = f"runtime-config fetch failed: {exc.reason}"
+        logger.error("run_skill: %s", reason)
+        post_skill_run_complete(
+            run_id, tenant_id, "failed",
+            failure_reason=reason,
+            completion_hmac_secret=completion_hmac_secret,
+        )
+        return {
+            "runId": run_id,
+            "status": "failed",
+            "failureReason": reason,
+        }
+
+    user_message = _format_user_message(skill_id, resolved_inputs)
+    synthetic_payload = _build_synthetic_payload(
+        payload, runtime_config, user_message,
+    )
+
+    try:
+        from server import _execute_agent_turn
+    except ImportError as exc:
+        reason = f"_execute_agent_turn unavailable: {exc}"
+        logger.error("run_skill: %s", reason)
+        post_skill_run_complete(
+            run_id, tenant_id, "failed",
+            failure_reason=reason,
+            completion_hmac_secret=completion_hmac_secret,
+        )
+        return {
+            "runId": run_id,
+            "status": "failed",
+            "failureReason": reason,
+        }
+
+    try:
+        turn_result = _execute_agent_turn(synthetic_payload)
+        response_text = str(turn_result.get("response_text") or "")
+    except Exception as exc:
+        logger.exception("run_skill: _execute_agent_turn raised")
+        reason = f"agent loop crashed: {exc}"
+        post_skill_run_complete(
+            run_id, tenant_id, "failed",
+            failure_reason=reason,
+            completion_hmac_secret=completion_hmac_secret,
+        )
+        return {
+            "runId": run_id,
+            "status": "failed",
+            "failureReason": reason,
+        }
+
+    if not response_text.strip():
+        reason = "agent produced no final text"
+        logger.warning("run_skill: %s runId=%s skillId=%s", reason, run_id, skill_id)
+        post_skill_run_complete(
+            run_id, tenant_id, "failed",
+            failure_reason=reason,
+            completion_hmac_secret=completion_hmac_secret,
+        )
+        return {
+            "runId": run_id,
+            "status": "failed",
+            "failureReason": reason,
+        }
+
+    delivered_artifact_ref = {"type": "inline", "payload": response_text}
     post_skill_run_complete(
-        run_id, tenant_id, "failed",
-        failure_reason=_U6_UNSUPPORTED_REASON,
+        run_id, tenant_id, "complete",
+        delivered_artifact_ref=delivered_artifact_ref,
         completion_hmac_secret=completion_hmac_secret,
     )
     return {
         "runId": run_id,
-        "status": "failed",
-        "failureReason": _U6_UNSUPPORTED_REASON,
+        "status": "complete",
+        "deliveredArtifactRef": delivered_artifact_ref,
     }
