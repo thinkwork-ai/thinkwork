@@ -40,6 +40,11 @@ export const SKILL_FIELDS =
 export const CAPABILITY_FIELDS = "agentId capability config enabled";
 
 export const ARTIFACT_FIELDS =
-	"id tenantId threadId agentId type status title contentRef createdAt updatedAt";
+	// Artifact has `content: String` (the body) — the Python skill's
+	// ARTIFACT_FIELDS was `contentRef`, which the schema doesn't expose.
+	// Including summary + metadata + s3Key opportunistically since the
+	// type does carry them and they're useful for agents working with
+	// artifacts.
+	"id tenantId threadId agentId type status title content summary s3Key metadata createdAt updatedAt";
 
 export const SYNC_SUMMARY_FIELDS = "agentsSynced agentsFailed errors";

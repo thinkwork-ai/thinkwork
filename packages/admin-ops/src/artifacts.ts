@@ -13,8 +13,11 @@ export interface Artifact {
 	agentId: string | null;
 	type: string;
 	status: string;
-	title: string | null;
-	contentRef: string | null;
+	title: string;
+	content: string | null;
+	summary: string | null;
+	s3Key: string | null;
+	metadata: Record<string, unknown> | null;
 	createdAt: string;
 	updatedAt: string;
 }
