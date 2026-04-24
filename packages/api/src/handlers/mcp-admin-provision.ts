@@ -47,7 +47,7 @@ import type {
 	APIGatewayProxyEventV2,
 	APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { and, asc, eq, isNull, ne } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import {
 	SecretsManagerClient,
 	CreateSecretCommand,
@@ -221,7 +221,22 @@ export async function handler(
 			createdByUserId = owner?.principalId ?? null;
 		}
 
-		// 1. Generate + insert new tenant-scoped admin key.
+		// 1. Revoke any existing active key with the same (tenant, name).
+		// The partial unique index `uq_tenant_mcp_admin_keys_active_name`
+		// (tenant_id, name) WHERE revoked_at IS NULL would otherwise
+		// collide the INSERT below. Running revoke-before-insert makes
+		// `thinkwork mcp provision --all` idempotent — a re-run rotates
+		// the "default" key without operator intervention.
+		await db
+			.update(tenantMcpAdminKeys)
+			.set({ revoked_at: new Date() })
+			.where(and(
+				eq(tenantMcpAdminKeys.tenant_id, tenantId),
+				eq(tenantMcpAdminKeys.name, keyName),
+				isNull(tenantMcpAdminKeys.revoked_at),
+			));
+
+		// 2. Generate + insert the new tenant-scoped admin key.
 		const { raw, hash } = generateToken();
 		const [keyRow] = await db
 			.insert(tenantMcpAdminKeys)
@@ -236,13 +251,6 @@ export async function handler(
 		if (!keyRow) {
 			return error("Failed to create admin key", 500);
 		}
-
-		// If a same-named active key already existed, the insert above would
-		// have collided on uq_tenant_mcp_admin_keys_active_name. Catching that
-		// class: revoke the existing same-named key first + retry. Simpler
-		// approach for now: surface the conflict to the caller — they can
-		// choose to name the new key differently or revoke the old one via
-		// `thinkwork mcp key revoke`.
 
 		// 2. Store raw token in Secrets Manager.
 		const secretName = secretNameFor(tenantId);
@@ -280,17 +288,10 @@ export async function handler(
 				.where(eq(tenantMcpServers.id, existingServer.id));
 			tenantMcpServerId = existingServer.id;
 			provisioned = "rotated";
-
-			// Revoke any OTHER active admin-ops keys for this tenant so the
-			// old token stops working. Our fresh key (keyRow.id) stays active.
-			await db
-				.update(tenantMcpAdminKeys)
-				.set({ revoked_at: new Date() })
-				.where(and(
-					eq(tenantMcpAdminKeys.tenant_id, tenantId),
-					isNull(tenantMcpAdminKeys.revoked_at),
-					ne(tenantMcpAdminKeys.id, keyRow.id),
-				));
+			// The same-name key was already revoked in step 1, so the old
+			// default token is dead. Other named keys (e.g. "ci") are
+			// intentionally left alone — each name is a separate credential
+			// for a separate consumer.
 		} else {
 			const [inserted] = await db
 				.insert(tenantMcpServers)

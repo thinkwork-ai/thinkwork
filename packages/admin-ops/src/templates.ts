@@ -103,12 +103,10 @@ export async function createAgentTemplate(
 
 export interface CreateAgentFromTemplateInput {
 	templateId: string;
-	tenantId: string;
 	name: string;
-	role?: string;
-	humanPairId?: string;
-	parentAgentId?: string;
-	budgetMonthlyCents?: number;
+	slug: string;
+	/** Optional team to attach the new agent to. */
+	teamId?: string;
 	idempotencyKey?: string;
 }
 

@@ -19,7 +19,6 @@ export interface Agent {
 	type: string | null;
 	adapterType: string | null;
 	status: string;
-	budgetMonthlyCents: number | null;
 	humanPairId: string | null;
 	templateId: string | null;
 	parentAgentId: string | null;
@@ -119,7 +118,6 @@ export interface CreateAgentInput {
 	parentAgentId?: string;
 	adapterType?: string;
 	avatarUrl?: string;
-	budgetMonthlyCents?: number;
 	idempotencyKey?: string;
 }
 
