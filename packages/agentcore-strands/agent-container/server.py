@@ -580,7 +580,16 @@ def _call_strands_agent(system_prompt: str, messages: list,
                 loop = _a.get_event_loop()
 
                 def _start():
-                    ctx = _code_session(ipi)
+                    # code_session signature is (region, *, identifier=...).
+                    # Passing the interpreter id positionally used to land
+                    # it on the region slot — boto3 then rejected it with
+                    # "Provided region_name ... doesn't match a supported
+                    # format" and the agent saw SandboxError on every
+                    # execute_code call.
+                    ctx = _code_session(
+                        os.environ.get("AWS_REGION", "us-east-1"),
+                        identifier=ipi,
+                    )
                     sess = ctx.__enter__()
                     _sb_state["_code_session_ctx"] = ctx
                     session_id = getattr(
