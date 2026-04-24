@@ -1,48 +1,40 @@
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { useActiveTurnsStore } from "@/stores/active-turns-store";
+import { ThreadLifecycleStatus } from "@/gql/graphql";
 
-// ThreadLifecycleStatus enum mirror — keep in sync with
-// packages/database-pg/graphql/types/threads.graphql.
-// AWAITING_USER is reserved; v1 never emits it and this component renders
-// it as IDLE styling if it ever arrives.
-type LifecycleStatus =
-	| "RUNNING"
-	| "COMPLETED"
-	| "CANCELLED"
-	| "FAILED"
-	| "IDLE"
-	| "AWAITING_USER";
-
-const styles: Record<LifecycleStatus, { dot: string; badge: string; label: string }> = {
-	RUNNING: {
+// Codegen'd enum — see packages/database-pg/graphql/types/threads.graphql.
+// If the server adds a new enum value, TypeScript will flag the missing key
+// in the `styles` Record below at build time.
+const styles: Record<ThreadLifecycleStatus, { dot: string; badge: string; label: string }> = {
+	[ThreadLifecycleStatus.Running]: {
 		dot: "bg-blue-500 animate-pulse",
 		badge: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
 		label: "Running",
 	},
-	COMPLETED: {
+	[ThreadLifecycleStatus.Completed]: {
 		dot: "bg-green-500",
 		badge: "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300",
 		label: "Completed",
 	},
-	CANCELLED: {
+	[ThreadLifecycleStatus.Cancelled]: {
 		dot: "bg-yellow-500",
 		badge: "bg-yellow-50 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300",
 		label: "Cancelled",
 	},
-	FAILED: {
+	[ThreadLifecycleStatus.Failed]: {
 		dot: "bg-red-500",
 		badge: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
 		label: "Failed",
 	},
-	IDLE: {
+	[ThreadLifecycleStatus.Idle]: {
 		dot: "bg-gray-400",
 		badge: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
 		label: "Idle",
 	},
 	// AWAITING_USER is reserved in the enum but not emitted by v1.
 	// Render as IDLE styling so the UI degrades gracefully if it ever arrives.
-	AWAITING_USER: {
+	[ThreadLifecycleStatus.AwaitingUser]: {
 		dot: "bg-gray-400",
 		badge: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
 		label: "Awaiting user",
@@ -51,7 +43,7 @@ const styles: Record<LifecycleStatus, { dot: string; badge: string; label: strin
 
 interface ThreadLifecycleBadgeProps {
 	/** Resolver-derived status. Null during initial fetch or on loader error. */
-	lifecycleStatus: LifecycleStatus | null | undefined;
+	lifecycleStatus: ThreadLifecycleStatus | null | undefined;
 	/** Thread id — used to consult the active-turns store for real-time override. */
 	threadId: string;
 	/** When true and there's no prior value, render a skeleton pulse. */
@@ -76,12 +68,11 @@ export function ThreadLifecycleBadge({
 	size = "md",
 	className,
 }: ThreadLifecycleBadgeProps) {
-	const activeThreadIds = useActiveTurnsStore((s) => s._activeThreadIds);
-	const hasActiveTurn = activeThreadIds.has(threadId);
+	const hasActiveTurn = useActiveTurnsStore((s) => s._activeThreadIds.has(threadId));
 
 	// Active-turn override wins. Falls through to the resolver-derived status.
-	const effective: LifecycleStatus | null = hasActiveTurn
-		? "RUNNING"
+	const effective: ThreadLifecycleStatus | null = hasActiveTurn
+		? ThreadLifecycleStatus.Running
 		: (lifecycleStatus ?? null);
 
 	if (!effective) {
@@ -101,7 +92,9 @@ export function ThreadLifecycleBadge({
 		return null;
 	}
 
-	const s = styles[effective];
+	// Defensive fallback: if the server ever emits a new enum value the client
+	// bundle doesn't know about, render as IDLE rather than throwing.
+	const s = styles[effective] ?? styles[ThreadLifecycleStatus.Idle];
 
 	return (
 		<Badge

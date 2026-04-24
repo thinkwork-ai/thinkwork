@@ -7,20 +7,17 @@ import { useDialog } from "@/context/DialogContext";
 import { usePanel } from "@/context/PanelContext";
 import { InlineEditor } from "@/components/threads/InlineEditor";
 import { LiveRunWidget } from "@/components/threads/LiveRunWidget";
-import { StatusIcon } from "@/components/threads/StatusIcon";
-import { StatusBadge } from "@/components/StatusBadge";
 import { ThreadLifecycleBadge } from "@/components/threads/ThreadLifecycleBadge";
 import { Identity } from "@/components/Identity";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { graphql } from "@/gql";
+import { ThreadLifecycleStatus } from "@/gql/graphql";
 import {
   ThreadDetailQuery,
   UpdateThreadMutation,
@@ -34,15 +31,10 @@ import { cn } from "@/lib/utils";
 import {
   ChevronDown,
   ChevronRight,
-  Edit2,
-  EyeOff,
   FileText,
-  ListTree,
   Lock,
-  MessageSquare,
   MoreHorizontal,
   Paperclip,
-  Plus,
   SlidersHorizontal,
   Trash2,
 } from "lucide-react";
@@ -351,15 +343,13 @@ function ThreadDetailPage() {
       openPanel(
         <ThreadProperties
           thread={thread}
-          agents={agents}
-          onUpdate={handleFieldUpdate}
           loading={threadResult.fetching && !thread.lifecycleStatus}
         />,
       );
     }
     return () => closePanel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [thread, agents, handleFieldUpdate]);
+  }, [thread]);
 
   // ---- Loading & Error states ----
   if (threadResult.fetching && !thread) return <PageSkeleton />;
@@ -508,8 +498,6 @@ function ThreadDetailPage() {
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Properties</h3>
           <ThreadProperties
             thread={thread}
-            agents={agents}
-            onUpdate={handleFieldUpdate}
             inline
             loading={threadResult.fetching && !thread.lifecycleStatus}
           />
@@ -592,8 +580,6 @@ function ThreadDetailPage() {
             <div className="px-4 pb-4">
               <ThreadProperties
                 thread={thread}
-                agents={agents}
-                onUpdate={handleFieldUpdate}
                 inline
                 loading={threadResult.fetching && !thread.lifecycleStatus}
               />
@@ -612,7 +598,7 @@ function ThreadDetailPage() {
 interface ThreadPropertiesProps {
   thread: {
     readonly id: string;
-    readonly lifecycleStatus?: string | null;
+    readonly lifecycleStatus?: ThreadLifecycleStatus | null;
     readonly channel?: string | null;
     readonly assigneeType?: string | null;
     readonly assigneeId?: string | null;
@@ -635,13 +621,11 @@ interface ThreadPropertiesProps {
     readonly createdAt: string;
     readonly updatedAt: string;
   };
-  agents: readonly { readonly id: string; readonly name: string; readonly avatarUrl?: string | null; readonly status: string }[];
-  onUpdate: (data: Record<string, unknown>) => Promise<void>;
   inline?: boolean;
   loading?: boolean;
 }
 
-function ThreadProperties({ thread, agents, onUpdate, inline, loading }: ThreadPropertiesProps) {
+function ThreadProperties({ thread, inline, loading }: ThreadPropertiesProps) {
   // Turn + token + cost summary computed from the existing messages edges.
   // Turn count = assistant message count (a proxy for agent-turn count that
   // avoids an extra query; mirrors the Activity header's existing shape).
@@ -657,24 +641,13 @@ function ThreadProperties({ thread, agents, onUpdate, inline, loading }: ThreadP
   }
   const turnCostSummary = formatTurnCostSummary(turnCount, tokenCount, thread.costSummary ?? null);
 
-  // ThreadLifecycleStatus is a string literal union on the server; cast the
-  // codegen'd GraphQL scalar string to match the badge's prop type.
-  const lifecycle = (thread.lifecycleStatus ?? null) as
-    | "RUNNING"
-    | "COMPLETED"
-    | "CANCELLED"
-    | "FAILED"
-    | "IDLE"
-    | "AWAITING_USER"
-    | null;
-
   return (
     <div className={cn("space-y-3", !inline && "p-4")}>
       {!inline && <h3 className="text-sm font-semibold text-muted-foreground">Properties</h3>}
 
       <PropRow label="Status">
         <ThreadLifecycleBadge
-          lifecycleStatus={lifecycle}
+          lifecycleStatus={thread.lifecycleStatus ?? null}
           threadId={thread.id}
           loading={loading ?? false}
         />
