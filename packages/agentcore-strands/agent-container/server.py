@@ -553,69 +553,87 @@ def _call_strands_agent(system_prompt: str, messages: list,
             from strands import tool as _sb_tool_decorator
             from sandbox_tool import build_execute_code_tool, new_session_state
             from sandbox_preamble import build_preamble
-            # bedrock-agentcore runtime client wrappers. Lazy-imported so
-            # the container boots cleanly on stages without the SDK.
-            from bedrock_agentcore.tools.code_interpreter_client import (
-                code_session as _code_session,
+            import boto3 as _sb_boto3
+
+            # Raw boto3 bedrock-agentcore client. The SDK's
+            # `code_session` context manager wrapper was unreliable
+            # across versions (its return value has different probe
+            # shapes depending on release). Using the boto3 client
+            # directly pins us to the documented public API —
+            # StartCodeInterpreterSession, InvokeCodeInterpreter,
+            # StopCodeInterpreterSession — and doesn't guess method
+            # names.
+            _sb_client = _sb_boto3.client(
+                "bedrock-agentcore",
+                region_name=os.environ.get("AWS_REGION", "us-east-1"),
             )
-            # Inject thin callables over the bedrock-agentcore control
-            # surface. Session id + lifecycle stay in our session_state
-            # dict (call-frame-local to _call_strands_agent).
             _sb_state = new_session_state()
 
             # Preamble is executeCode call #1 — sitecustomize readiness
             # check only. The retired OAuth token injection path is gone
-            # (see docs/plans/2026-04-23-006). The dispatcher no longer
-            # threads SANDBOX_SECRET_PATHS / SANDBOX_TENANT_ID /
-            # SANDBOX_USER_ID / SANDBOX_STAGE onto the invocation env.
+            # (see docs/plans/2026-04-23-006).
             _sb_preamble_source = build_preamble()
 
+            def _consume_invoke_stream(stream) -> dict:
+                """Drain InvokeCodeInterpreter's event stream into
+                {stdout, stderr, exit_code}. The API emits a sequence of
+                chunks; we accumulate text and pull structured fields
+                from the terminal event."""
+                stdout_chunks: list[str] = []
+                stderr_chunks: list[str] = []
+                exit_code = 0
+                for event in stream:
+                    # Different event shapes from the stream. We don't
+                    # assume a fixed schema — just pull known keys.
+                    if not isinstance(event, dict):
+                        continue
+                    for _k, _v in event.items():
+                        if isinstance(_v, dict):
+                            text = _v.get("text") or _v.get("content") or ""
+                            if _k.lower().startswith("stdout") and text:
+                                stdout_chunks.append(text)
+                            elif _k.lower().startswith("stderr") and text:
+                                stderr_chunks.append(text)
+                            elif "exitCode" in _v:
+                                exit_code = int(_v["exitCode"])
+                        elif isinstance(_v, (bytes, str)) and _k.lower().startswith("stdout"):
+                            stdout_chunks.append(
+                                _v.decode() if isinstance(_v, bytes) else _v,
+                            )
+                        elif isinstance(_v, (bytes, str)) and _k.lower().startswith("stderr"):
+                            stderr_chunks.append(
+                                _v.decode() if isinstance(_v, bytes) else _v,
+                            )
+                return {
+                    "stdout": "".join(stdout_chunks),
+                    "stderr": "".join(stderr_chunks),
+                    "exit_code": exit_code,
+                }
+
             async def _start_session(ipi: str, timeout: int) -> str:
-                # code_session is a context manager on the sync client;
-                # wrap it in a threadpool so the async caller sees an
-                # awaitable interface without blocking the loop.
-                # NOTE: kept as an async wrapper so the full path can swap
-                # for a native async client without changing callers.
                 import asyncio as _a
                 loop = _a.get_event_loop()
 
                 def _start():
-                    # code_session signature is (region, *, identifier=...).
-                    # Passing the interpreter id positionally used to land
-                    # it on the region slot — boto3 then rejected it with
-                    # "Provided region_name ... doesn't match a supported
-                    # format" and the agent saw SandboxError on every
-                    # execute_code call.
-                    ctx = _code_session(
-                        os.environ.get("AWS_REGION", "us-east-1"),
-                        identifier=ipi,
+                    resp = _sb_client.start_code_interpreter_session(
+                        codeInterpreterIdentifier=ipi,
+                        sessionTimeoutSeconds=timeout,
                     )
-                    sess = ctx.__enter__()
-                    _sb_state["_code_session_ctx"] = ctx
-                    session_id = getattr(
-                        sess, "session_id", getattr(sess, "id", ""),
+                    session_id = resp.get("sessionId") or resp.get("SessionId") or ""
+                    _sb_state["session_id"] = session_id
+                    _sb_state["interpreter_id"] = ipi
+                    # Preamble runs as executeCode call #1 — the
+                    # sitecustomize readiness check. User code runs
+                    # as call #2+. Failing here aborts the session
+                    # before user code sees an unmitigated image.
+                    stream = _sb_client.invoke_code_interpreter(
+                        codeInterpreterIdentifier=ipi,
+                        sessionId=session_id,
+                        name="executeCode",
+                        arguments={"code": _sb_preamble_source, "language": "python"},
                     )
-                    # Plan Unit 8: preamble runs as executeCode call #1
-                    # BEFORE any user code, so triple-quote tricks can't
-                    # escape a boundary that doesn't exist in one source.
-                    # If the preamble fails, session-start fails — the
-                    # tool factory's error mapping surfaces SandboxError
-                    # to the agent.
-                    inner = (
-                        ctx.__enter__.__self__
-                        if hasattr(ctx, "__enter__")
-                        else None
-                    )
-                    target = inner or ctx
-                    for name in ("invoke", "execute", "run"):
-                        if hasattr(target, name):
-                            getattr(target, name)(_sb_preamble_source)
-                            break
-                    else:
-                        raise RuntimeError(
-                            "bedrock_agentcore code_session has no "
-                            "invoke/execute/run — cannot run preamble",
-                        )
+                    # Drain the stream to surface any preamble error.
+                    _consume_invoke_stream(stream.get("stream", []))
                     return session_id
 
                 return await loop.run_in_executor(None, _start)
@@ -623,30 +641,31 @@ def _call_strands_agent(system_prompt: str, messages: list,
             async def _stop_session(ipi: str, sess: str) -> None:
                 import asyncio as _a
                 loop = _a.get_event_loop()
-                ctx = _sb_state.pop("_code_session_ctx", None)
-                if ctx is None:
-                    return
+
                 def _stop():
-                    ctx.__exit__(None, None, None)
+                    try:
+                        _sb_client.stop_code_interpreter_session(
+                            codeInterpreterIdentifier=ipi,
+                            sessionId=sess,
+                        )
+                    except Exception as e:
+                        logger.warning("StopSession failed: %s", e)
+
                 await loop.run_in_executor(None, _stop)
 
             async def _run_code(ipi: str, sess: str, code: str) -> dict:
                 import asyncio as _a
                 loop = _a.get_event_loop()
-                ctx = _sb_state.get("_code_session_ctx")
-                if ctx is None:
-                    raise RuntimeError("sandbox session not started")
+
                 def _run():
-                    # code_session yields an object with an invoke() / execute()
-                    # method depending on SDK version; we probe both.
-                    inner = ctx.__enter__.__self__ if hasattr(ctx, "__enter__") else None
-                    target = inner or ctx
-                    for name in ("invoke", "execute", "run"):
-                        if hasattr(target, name):
-                            return getattr(target, name)(code)
-                    raise RuntimeError(
-                        "bedrock_agentcore code_session has no invoke/execute/run",
+                    stream = _sb_client.invoke_code_interpreter(
+                        codeInterpreterIdentifier=ipi,
+                        sessionId=sess,
+                        name="executeCode",
+                        arguments={"code": code, "language": "python"},
                     )
+                    return _consume_invoke_stream(stream.get("stream", []))
+
                 return await loop.run_in_executor(None, _run)
 
             # Quota circuit breaker (plan Unit 10). Posts to the narrow
