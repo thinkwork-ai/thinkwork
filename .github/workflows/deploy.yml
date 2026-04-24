@@ -43,6 +43,10 @@ jobs:
             container:
               - 'packages/agentcore-strands/**'
               - 'packages/agentcore/**'
+              # Build config changes count as container changes — a
+              # platform or base-image tweak must rebuild even if no
+              # Python source moved.
+              - '.github/workflows/deploy.yml'
             terraform:
               - 'terraform/**'
             skills:
@@ -86,7 +90,10 @@ jobs:
       needs.detect-changes.outputs.container == 'true' ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Multi-arch QEMU builds are 3-5x slower than single-arch native.
+    # 30 is comfortable headroom; 20 was already tight for the old
+    # amd64-only build with playwright installed.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -99,6 +106,11 @@ jobs:
       - uses: aws-actions/amazon-ecr-login@v2
         id: ecr
 
+      # QEMU lets the amd64 GHA runner cross-build the arm64 variant.
+      # setup-buildx-action auto-installs this in most cases but
+      # pinning the action is cheap and makes multi-arch reliable.
+      - uses: docker/setup-qemu-action@v3
+
       - uses: docker/setup-buildx-action@v3
 
       - name: Build and push to ECR
@@ -106,7 +118,14 @@ jobs:
         with:
           context: .
           file: packages/agentcore-strands/agent-container/Dockerfile
-          platforms: linux/amd64
+          # Multi-arch: Lambda (thinkwork-${STAGE}-agentcore) runs x86_64
+          # while Bedrock AgentCore Runtime requires arm64. A manifest
+          # list at the SHA tag lets both consumers pull the variant
+          # they need from one image URI. Previously this was
+          # linux/amd64 only — AgentCore Runtime silently kept serving
+          # a months-old cached arm64 image because every UpdateRuntime
+          # attempt fails with "Architecture incompatible" on amd64.
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:latest
@@ -115,7 +134,7 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: false
 
-      - name: Update Lambda function code
+      - name: Update Lambda function code (x86_64 variant)
         run: |
           aws lambda update-function-code \
             --function-name thinkwork-${{ env.STAGE }}-agentcore \
@@ -124,6 +143,45 @@ jobs:
           aws lambda wait function-updated \
             --function-name thinkwork-${{ env.STAGE }}-agentcore \
             --region ${{ env.AWS_REGION }}
+
+      - name: Update AgentCore Runtime (arm64 variant)
+        # Bedrock AgentCore Runtime doesn't repull on its own — it pins
+        # to whatever containerUri UpdateAgentRuntime last set. Without
+        # this step the runtime keeps serving a previous build's arm64
+        # image indefinitely, regardless of how many times we push the
+        # tag. Idempotent: skips cleanly on greenfield stages where
+        # the runtime SSM param hasn't been published yet (first
+        # terraform-apply on that stage writes it).
+        run: |
+          set -euo pipefail
+          RUNTIME_ID=$(aws ssm get-parameter \
+            --name /thinkwork/${{ env.STAGE }}/agentcore/runtime-id-strands \
+            --region ${{ env.AWS_REGION }} \
+            --query Parameter.Value --output text 2>/dev/null || echo "")
+          if [ -z "$RUNTIME_ID" ] || [ "$RUNTIME_ID" = "None" ]; then
+            echo "No Strands runtime ID in SSM — skipping (first greenfield apply will create it)."
+            exit 0
+          fi
+          NEW_IMAGE="${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}"
+          echo "Updating runtime $RUNTIME_ID to $NEW_IMAGE"
+          # Preserve roleArn / network / protocol from the existing
+          # runtime — hard-coding them here would drift from terraform.
+          CURRENT=$(aws bedrock-agentcore-control get-agent-runtime \
+            --region ${{ env.AWS_REGION }} \
+            --agent-runtime-id "$RUNTIME_ID" \
+            --output json)
+          ROLE_ARN=$(echo "$CURRENT" | jq -r '.roleArn')
+          NETWORK_MODE=$(echo "$CURRENT" | jq -r '.networkConfiguration.networkMode')
+          SERVER_PROTOCOL=$(echo "$CURRENT" | jq -r '.protocolConfiguration.serverProtocol')
+          aws bedrock-agentcore-control update-agent-runtime \
+            --region ${{ env.AWS_REGION }} \
+            --agent-runtime-id "$RUNTIME_ID" \
+            --role-arn "$ROLE_ARN" \
+            --network-configuration "networkMode=$NETWORK_MODE" \
+            --protocol-configuration "serverProtocol=$SERVER_PROTOCOL" \
+            --agent-runtime-artifact "containerConfiguration={containerUri=$NEW_IMAGE}" \
+            --query '{version:agentRuntimeVersion,status:status,image:agentRuntimeArtifact.containerConfiguration.containerUri}' \
+            --output json
 
   # ── Terraform apply ──────────────────────────────────────────────
   terraform-apply:
