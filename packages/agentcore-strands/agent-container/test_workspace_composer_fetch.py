@@ -15,15 +15,11 @@ from __future__ import annotations
 import io
 import json
 import os
-import sys
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from workspace_composer_client import (  # noqa: E402
+from workspace_composer_client import (
     compute_fingerprint,
     fetch_composed_workspace,
     write_composed_to_dir,

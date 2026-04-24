@@ -18,11 +18,9 @@ from __future__ import annotations
 import os
 import sys
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-import run_skill_dispatch  # noqa: E402
+import run_skill_dispatch
 
 
 class DispatchRunSkillTests(unittest.IsolatedAsyncioTestCase):

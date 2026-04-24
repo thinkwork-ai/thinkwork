@@ -20,6 +20,14 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import boto3
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Boot-time filesystem check — fails loud with the missing module name(s) when
+# the Dockerfile COPY block drifts vs container-sources/. This is defense in
+# depth over the wildcard COPY that replaced the per-module explicit list.
+from _boot_assert import check as _boot_assert_check  # noqa: E402
+
+_boot_assert_check(os.path.dirname(os.path.abspath(__file__)))
+
 from permissions import read_permission_profile
 from observability import log_agent_invocation, log_permission_denied
 from safety import validate_message

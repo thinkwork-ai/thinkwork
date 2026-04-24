@@ -11,15 +11,11 @@ passed through `.strip().strip('"')` with no bool/int coercion, so any
 from __future__ import annotations
 
 import os
-import sys
 import tempfile
 import textwrap
 import unittest
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
-
-import skill_runner  # noqa: E402
+import skill_runner
 
 
 class SkillYamlCoercionTests(unittest.TestCase):

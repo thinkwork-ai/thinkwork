@@ -12,14 +12,9 @@ Run with: python -m unittest packages/agentcore-strands/agent-container/test_wor
 from __future__ import annotations
 
 import json
-import os
-import sys
 import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from workflow_skill_context import format_workflow_skill_context  # noqa: E402
-
+from workflow_skill_context import format_workflow_skill_context
 
 SAMPLE_FORM = {
     "id": "eng_task_intake",
