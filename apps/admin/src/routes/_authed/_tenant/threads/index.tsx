@@ -9,8 +9,6 @@ import {
   User,
   Search,
   Lock,
-  MessageSquare,
-  GitBranch,
   Archive,
 } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
@@ -27,7 +25,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import {
   FilterBarSort,
@@ -35,7 +32,7 @@ import {
   FilterBarPopover,
   FilterBarFacet,
 } from "@/components/ui/data-table-filter-bar";
-import { ThreadsListQuery, ThreadsPagedQuery, AgentsListQuery, UpdateThreadMutation, OnThreadUpdatedSubscription, OnThreadTurnUpdatedSubscription } from "@/lib/graphql-queries";
+import { ThreadsPagedQuery, AgentsListQuery, UpdateThreadMutation, OnThreadUpdatedSubscription, OnThreadTurnUpdatedSubscription } from "@/lib/graphql-queries";
 import { cn, relativeTime } from "@/lib/utils";
 import { useActiveTurnsStore } from "@/stores/active-turns-store";
 
@@ -68,8 +65,18 @@ const defaultViewState: ThreadViewState = {
   showArchived: false,
 };
 
-const SORT_FIELD_VALUES: readonly SortField[] = ["title", "created", "updated"];
-const GROUP_BY_VALUES: readonly GroupBy[] = ["assignee", "none"];
+// `as const satisfies` pins the arrays to the SortField/GroupBy unions at
+// definition — if the union grows and these tuples don't, TS fails at build.
+const SORT_FIELD_VALUES = ["title", "created", "updated"] as const satisfies readonly SortField[];
+const GROUP_BY_VALUES = ["assignee", "none"] as const satisfies readonly GroupBy[];
+
+function isSortField(v: unknown): v is SortField {
+  return typeof v === "string" && (SORT_FIELD_VALUES as readonly string[]).includes(v);
+}
+
+function isGroupBy(v: unknown): v is GroupBy {
+  return typeof v === "string" && (GROUP_BY_VALUES as readonly string[]).includes(v);
+}
 
 // Defensive rehydrate: U3d/U4/U7 retired the task-era status/priority axis, so
 // any prior session's localStorage may carry `statuses`, `priorities`, `viewMode`,
@@ -80,21 +87,17 @@ function getViewState(key: string): ThreadViewState {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return { ...defaultViewState };
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return { ...defaultViewState };
-    const sortField: SortField = SORT_FIELD_VALUES.includes(parsed.sortField)
-      ? parsed.sortField
-      : defaultViewState.sortField;
-    const groupBy: GroupBy = GROUP_BY_VALUES.includes(parsed.groupBy)
-      ? parsed.groupBy
-      : defaultViewState.groupBy;
+    const p = parsed as Record<string, unknown>;
     return {
-      assignees: Array.isArray(parsed.assignees) ? parsed.assignees.filter((v: unknown) => typeof v === "string") : [],
-      sortField,
-      sortDir: parsed.sortDir === "asc" ? "asc" : "desc",
-      groupBy,
-      collapsedGroups: Array.isArray(parsed.collapsedGroups) ? parsed.collapsedGroups.filter((v: unknown) => typeof v === "string") : [],
-      showArchived: parsed.showArchived === true,
+      assignees: Array.isArray(p.assignees) ? p.assignees.filter((v): v is string => typeof v === "string") : [],
+      sortField: isSortField(p.sortField) ? p.sortField : defaultViewState.sortField,
+      // Any non-'asc' value (including undefined or a future third direction) falls to 'desc'.
+      sortDir: p.sortDir === "asc" ? "asc" : "desc",
+      groupBy: isGroupBy(p.groupBy) ? p.groupBy : defaultViewState.groupBy,
+      collapsedGroups: Array.isArray(p.collapsedGroups) ? p.collapsedGroups.filter((v): v is string => typeof v === "string") : [],
+      showArchived: p.showArchived === true,
     };
   } catch {
     return { ...defaultViewState };
@@ -208,12 +211,15 @@ function ThreadsPage() {
     return () => window.clearTimeout(t);
   }, [issueSearch]);
 
-  // Reload view state when tenant changes
+  // Reload view state when tenant changes. Reset pagination too — a stale
+  // `pageIndex=N` against a smaller tenant produces an empty page because
+  // offset=N*PAGE_SIZE overshoots the tenant's totalCount.
   const prevScopedKey = useRef(scopedKey);
   useEffect(() => {
     if (prevScopedKey.current !== scopedKey) {
       prevScopedKey.current = scopedKey;
       setViewState(getViewState(scopedKey));
+      setPageIndex(0);
     }
   }, [scopedKey]);
 
@@ -223,8 +229,16 @@ function ThreadsPage() {
       saveViewState(scopedKey, next);
       return next;
     });
-    // Reset to first page when filters/sort change
-    if (patch.showArchived !== undefined || patch.sortField !== undefined || patch.sortDir !== undefined) {
+    // Reset to first page when filters/sort change.
+    // `assignees` is included because the assignee facet narrows the effective
+    // result set; leaving `pageIndex` stale on a narrowed set shows a blank
+    // page at the previous offset.
+    if (
+      patch.assignees !== undefined ||
+      patch.showArchived !== undefined ||
+      patch.sortField !== undefined ||
+      patch.sortDir !== undefined
+    ) {
       setPageIndex(0);
     }
   }, [scopedKey]);
