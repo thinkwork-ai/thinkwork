@@ -201,6 +201,13 @@ resource "aws_lambda_function" "handler" {
     # Daily sweeper: auto-rejects MCP servers pending > 30 days. Triggered
     # by EventBridge schedule (mcp-approval-sweeper-daily).
     "mcp-approval-sweeper",
+    # Plugin upload REST handler (plan §U10). Four routes:
+    # POST /api/plugins/presign + /upload, GET /api/plugins (+ /:uploadId).
+    # Cognito JWT; admin-role gated. Needs WORKSPACE_BUCKET env for S3.
+    "plugin-upload",
+    # Hourly sweeper: reaps orphan S3 staging from failed / interrupted
+    # plugin install sagas + marks matching plugin_uploads rows 'failed'.
+    "plugin-staging-sweeper",
   ]) : toset([])
 
   function_name = "thinkwork-${var.stage}-api-${each.key}"
@@ -396,6 +403,20 @@ locals {
     "OPTIONS /api/tenants/{tenantId}/mcp-servers/{serverId}/approve" = "mcp-approval"
     "POST /api/tenants/{tenantId}/mcp-servers/{serverId}/reject"     = "mcp-approval"
     "OPTIONS /api/tenants/{tenantId}/mcp-servers/{serverId}/reject"  = "mcp-approval"
+
+    # Plugin upload admin surface (plan §U10). Admin SPA drives the full
+    # flow: POST /presign → browser PUT to presigned S3 URL → POST /upload
+    # (validator + three-phase install saga). GET routes back the admin's
+    # plugin history view. handleCors() short-circuits OPTIONS before auth
+    # — required for the browser to preflight successfully.
+    "POST /api/plugins/presign"                = "plugin-upload"
+    "OPTIONS /api/plugins/presign"             = "plugin-upload"
+    "POST /api/plugins/upload"                 = "plugin-upload"
+    "OPTIONS /api/plugins/upload"              = "plugin-upload"
+    "GET /api/plugins"                         = "plugin-upload"
+    "OPTIONS /api/plugins"                     = "plugin-upload"
+    "GET /api/plugins/{uploadId}"              = "plugin-upload"
+    "OPTIONS /api/plugins/{uploadId}"          = "plugin-upload"
   } : {}
 }
 
@@ -466,6 +487,31 @@ resource "aws_scheduler_schedule" "webhook_deliveries_cleanup" {
 
   target {
     arn      = aws_lambda_function.handler["webhook-deliveries-cleanup"].arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Plugin staging sweeper — hourly orphan-S3 cleanup for interrupted install
+# sagas (plan §U10). WORKSPACE_BUCKET env on the Lambda role already grants
+# the list+delete IAM; this schedule is the hourly trigger. The sweeper's
+# own cutoff constant (60 min) is independent of this cron cadence.
+# ---------------------------------------------------------------------------
+
+resource "aws_scheduler_schedule" "plugin_staging_sweeper" {
+  count = local.use_local_zips ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-plugin-staging-sweeper"
+  group_name          = "default"
+  schedule_expression = "rate(1 hour)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["plugin-staging-sweeper"].arn
     role_arn = aws_iam_role.scheduler.arn
   }
 }

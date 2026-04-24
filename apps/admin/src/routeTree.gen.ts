@@ -60,12 +60,14 @@ import { Route as AuthedTenantAgentsAgentIdRouteImport } from './routes/_authed/
 import { Route as AuthedTenantAgentTemplatesDefaultsRouteImport } from './routes/_authed/_tenant/agent-templates/defaults'
 import { Route as AuthedTenantEvaluationsStudioIndexRouteImport } from './routes/_authed/_tenant/evaluations/studio/index'
 import { Route as AuthedTenantCapabilitiesSkillsIndexRouteImport } from './routes/_authed/_tenant/capabilities/skills/index'
+import { Route as AuthedTenantCapabilitiesPluginsIndexRouteImport } from './routes/_authed/_tenant/capabilities/plugins/index'
 import { Route as AuthedTenantAnalyticsSkillRunsIndexRouteImport } from './routes/_authed/_tenant/analytics/skill-runs/index'
 import { Route as AuthedTenantAgentTemplatesTemplateIdIndexRouteImport } from './routes/_authed/_tenant/agent-templates/$templateId.index'
 import { Route as AuthedTenantEvaluationsStudioNewRouteImport } from './routes/_authed/_tenant/evaluations/studio/new'
 import { Route as AuthedTenantEvaluationsStudioTestCaseIdRouteImport } from './routes/_authed/_tenant/evaluations/studio/$testCaseId'
 import { Route as AuthedTenantCapabilitiesSkillsBuilderRouteImport } from './routes/_authed/_tenant/capabilities/skills/builder'
 import { Route as AuthedTenantCapabilitiesSkillsSlugRouteImport } from './routes/_authed/_tenant/capabilities/skills/$slug'
+import { Route as AuthedTenantCapabilitiesPluginsUploadIdRouteImport } from './routes/_authed/_tenant/capabilities/plugins/$uploadId'
 import { Route as AuthedTenantAnalyticsSkillRunsRunIdRouteImport } from './routes/_authed/_tenant/analytics/skill-runs/$runId'
 import { Route as AuthedTenantAgentsAgentIdWorkspacesRouteImport } from './routes/_authed/_tenant/agents/$agentId_.workspaces'
 import { Route as AuthedTenantAgentsAgentIdWorkspaceRouteImport } from './routes/_authed/_tenant/agents/$agentId_.workspace'
@@ -364,6 +366,12 @@ const AuthedTenantCapabilitiesSkillsIndexRoute =
     path: '/skills/',
     getParentRoute: () => AuthedTenantCapabilitiesRoute,
   } as any)
+const AuthedTenantCapabilitiesPluginsIndexRoute =
+  AuthedTenantCapabilitiesPluginsIndexRouteImport.update({
+    id: '/plugins/',
+    path: '/plugins/',
+    getParentRoute: () => AuthedTenantCapabilitiesRoute,
+  } as any)
 const AuthedTenantAnalyticsSkillRunsIndexRoute =
   AuthedTenantAnalyticsSkillRunsIndexRouteImport.update({
     id: '/skill-runs/',
@@ -398,6 +406,12 @@ const AuthedTenantCapabilitiesSkillsSlugRoute =
   AuthedTenantCapabilitiesSkillsSlugRouteImport.update({
     id: '/skills/$slug',
     path: '/skills/$slug',
+    getParentRoute: () => AuthedTenantCapabilitiesRoute,
+  } as any)
+const AuthedTenantCapabilitiesPluginsUploadIdRoute =
+  AuthedTenantCapabilitiesPluginsUploadIdRouteImport.update({
+    id: '/plugins/$uploadId',
+    path: '/plugins/$uploadId',
     getParentRoute: () => AuthedTenantCapabilitiesRoute,
   } as any)
 const AuthedTenantAnalyticsSkillRunsRunIdRoute =
@@ -530,12 +544,14 @@ export interface FileRoutesByFullPath {
   '/agents/$agentId/workspace': typeof AuthedTenantAgentsAgentIdWorkspaceRoute
   '/agents/$agentId/workspaces': typeof AuthedTenantAgentsAgentIdWorkspacesRoute
   '/analytics/skill-runs/$runId': typeof AuthedTenantAnalyticsSkillRunsRunIdRoute
+  '/capabilities/plugins/$uploadId': typeof AuthedTenantCapabilitiesPluginsUploadIdRoute
   '/capabilities/skills/$slug': typeof AuthedTenantCapabilitiesSkillsSlugRoute
   '/capabilities/skills/builder': typeof AuthedTenantCapabilitiesSkillsBuilderRoute
   '/evaluations/studio/$testCaseId': typeof AuthedTenantEvaluationsStudioTestCaseIdRoute
   '/evaluations/studio/new': typeof AuthedTenantEvaluationsStudioNewRoute
   '/agent-templates/$templateId/': typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute
   '/analytics/skill-runs/': typeof AuthedTenantAnalyticsSkillRunsIndexRoute
+  '/capabilities/plugins/': typeof AuthedTenantCapabilitiesPluginsIndexRoute
   '/capabilities/skills/': typeof AuthedTenantCapabilitiesSkillsIndexRoute
   '/evaluations/studio/': typeof AuthedTenantEvaluationsStudioIndexRoute
   '/agents/$agentId/scheduled-jobs/$scheduledJobId': typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute
@@ -597,12 +613,14 @@ export interface FileRoutesByTo {
   '/agents/$agentId/workspace': typeof AuthedTenantAgentsAgentIdWorkspaceRoute
   '/agents/$agentId/workspaces': typeof AuthedTenantAgentsAgentIdWorkspacesRoute
   '/analytics/skill-runs/$runId': typeof AuthedTenantAnalyticsSkillRunsRunIdRoute
+  '/capabilities/plugins/$uploadId': typeof AuthedTenantCapabilitiesPluginsUploadIdRoute
   '/capabilities/skills/$slug': typeof AuthedTenantCapabilitiesSkillsSlugRoute
   '/capabilities/skills/builder': typeof AuthedTenantCapabilitiesSkillsBuilderRoute
   '/evaluations/studio/$testCaseId': typeof AuthedTenantEvaluationsStudioTestCaseIdRoute
   '/evaluations/studio/new': typeof AuthedTenantEvaluationsStudioNewRoute
   '/agent-templates/$templateId': typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute
   '/analytics/skill-runs': typeof AuthedTenantAnalyticsSkillRunsIndexRoute
+  '/capabilities/plugins': typeof AuthedTenantCapabilitiesPluginsIndexRoute
   '/capabilities/skills': typeof AuthedTenantCapabilitiesSkillsIndexRoute
   '/evaluations/studio': typeof AuthedTenantEvaluationsStudioIndexRoute
   '/agents/$agentId/scheduled-jobs/$scheduledJobId': typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute
@@ -669,12 +687,14 @@ export interface FileRoutesById {
   '/_authed/_tenant/agents/$agentId_/workspace': typeof AuthedTenantAgentsAgentIdWorkspaceRoute
   '/_authed/_tenant/agents/$agentId_/workspaces': typeof AuthedTenantAgentsAgentIdWorkspacesRoute
   '/_authed/_tenant/analytics/skill-runs/$runId': typeof AuthedTenantAnalyticsSkillRunsRunIdRoute
+  '/_authed/_tenant/capabilities/plugins/$uploadId': typeof AuthedTenantCapabilitiesPluginsUploadIdRoute
   '/_authed/_tenant/capabilities/skills/$slug': typeof AuthedTenantCapabilitiesSkillsSlugRoute
   '/_authed/_tenant/capabilities/skills/builder': typeof AuthedTenantCapabilitiesSkillsBuilderRoute
   '/_authed/_tenant/evaluations/studio/$testCaseId': typeof AuthedTenantEvaluationsStudioTestCaseIdRoute
   '/_authed/_tenant/evaluations/studio/new': typeof AuthedTenantEvaluationsStudioNewRoute
   '/_authed/_tenant/agent-templates/$templateId/': typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute
   '/_authed/_tenant/analytics/skill-runs/': typeof AuthedTenantAnalyticsSkillRunsIndexRoute
+  '/_authed/_tenant/capabilities/plugins/': typeof AuthedTenantCapabilitiesPluginsIndexRoute
   '/_authed/_tenant/capabilities/skills/': typeof AuthedTenantCapabilitiesSkillsIndexRoute
   '/_authed/_tenant/evaluations/studio/': typeof AuthedTenantEvaluationsStudioIndexRoute
   '/_authed/_tenant/agents/$agentId_/scheduled-jobs/$scheduledJobId': typeof AuthedTenantAgentsAgentIdScheduledJobsScheduledJobIdRoute
@@ -740,12 +760,14 @@ export interface FileRouteTypes {
     | '/agents/$agentId/workspace'
     | '/agents/$agentId/workspaces'
     | '/analytics/skill-runs/$runId'
+    | '/capabilities/plugins/$uploadId'
     | '/capabilities/skills/$slug'
     | '/capabilities/skills/builder'
     | '/evaluations/studio/$testCaseId'
     | '/evaluations/studio/new'
     | '/agent-templates/$templateId/'
     | '/analytics/skill-runs/'
+    | '/capabilities/plugins/'
     | '/capabilities/skills/'
     | '/evaluations/studio/'
     | '/agents/$agentId/scheduled-jobs/$scheduledJobId'
@@ -807,12 +829,14 @@ export interface FileRouteTypes {
     | '/agents/$agentId/workspace'
     | '/agents/$agentId/workspaces'
     | '/analytics/skill-runs/$runId'
+    | '/capabilities/plugins/$uploadId'
     | '/capabilities/skills/$slug'
     | '/capabilities/skills/builder'
     | '/evaluations/studio/$testCaseId'
     | '/evaluations/studio/new'
     | '/agent-templates/$templateId'
     | '/analytics/skill-runs'
+    | '/capabilities/plugins'
     | '/capabilities/skills'
     | '/evaluations/studio'
     | '/agents/$agentId/scheduled-jobs/$scheduledJobId'
@@ -878,12 +902,14 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/agents/$agentId_/workspace'
     | '/_authed/_tenant/agents/$agentId_/workspaces'
     | '/_authed/_tenant/analytics/skill-runs/$runId'
+    | '/_authed/_tenant/capabilities/plugins/$uploadId'
     | '/_authed/_tenant/capabilities/skills/$slug'
     | '/_authed/_tenant/capabilities/skills/builder'
     | '/_authed/_tenant/evaluations/studio/$testCaseId'
     | '/_authed/_tenant/evaluations/studio/new'
     | '/_authed/_tenant/agent-templates/$templateId/'
     | '/_authed/_tenant/analytics/skill-runs/'
+    | '/_authed/_tenant/capabilities/plugins/'
     | '/_authed/_tenant/capabilities/skills/'
     | '/_authed/_tenant/evaluations/studio/'
     | '/_authed/_tenant/agents/$agentId_/scheduled-jobs/$scheduledJobId'
@@ -1260,6 +1286,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedTenantCapabilitiesSkillsIndexRouteImport
       parentRoute: typeof AuthedTenantCapabilitiesRoute
     }
+    '/_authed/_tenant/capabilities/plugins/': {
+      id: '/_authed/_tenant/capabilities/plugins/'
+      path: '/plugins'
+      fullPath: '/capabilities/plugins/'
+      preLoaderRoute: typeof AuthedTenantCapabilitiesPluginsIndexRouteImport
+      parentRoute: typeof AuthedTenantCapabilitiesRoute
+    }
     '/_authed/_tenant/analytics/skill-runs/': {
       id: '/_authed/_tenant/analytics/skill-runs/'
       path: '/skill-runs'
@@ -1300,6 +1333,13 @@ declare module '@tanstack/react-router' {
       path: '/skills/$slug'
       fullPath: '/capabilities/skills/$slug'
       preLoaderRoute: typeof AuthedTenantCapabilitiesSkillsSlugRouteImport
+      parentRoute: typeof AuthedTenantCapabilitiesRoute
+    }
+    '/_authed/_tenant/capabilities/plugins/$uploadId': {
+      id: '/_authed/_tenant/capabilities/plugins/$uploadId'
+      path: '/plugins/$uploadId'
+      fullPath: '/capabilities/plugins/$uploadId'
+      preLoaderRoute: typeof AuthedTenantCapabilitiesPluginsUploadIdRouteImport
       parentRoute: typeof AuthedTenantCapabilitiesRoute
     }
     '/_authed/_tenant/analytics/skill-runs/$runId': {
@@ -1418,8 +1458,10 @@ interface AuthedTenantCapabilitiesRouteChildren {
   AuthedTenantCapabilitiesBuiltinToolsRoute: typeof AuthedTenantCapabilitiesBuiltinToolsRoute
   AuthedTenantCapabilitiesMcpServersRoute: typeof AuthedTenantCapabilitiesMcpServersRoute
   AuthedTenantCapabilitiesIndexRoute: typeof AuthedTenantCapabilitiesIndexRoute
+  AuthedTenantCapabilitiesPluginsUploadIdRoute: typeof AuthedTenantCapabilitiesPluginsUploadIdRoute
   AuthedTenantCapabilitiesSkillsSlugRoute: typeof AuthedTenantCapabilitiesSkillsSlugRoute
   AuthedTenantCapabilitiesSkillsBuilderRoute: typeof AuthedTenantCapabilitiesSkillsBuilderRoute
+  AuthedTenantCapabilitiesPluginsIndexRoute: typeof AuthedTenantCapabilitiesPluginsIndexRoute
   AuthedTenantCapabilitiesSkillsIndexRoute: typeof AuthedTenantCapabilitiesSkillsIndexRoute
 }
 
@@ -1430,10 +1472,14 @@ const AuthedTenantCapabilitiesRouteChildren: AuthedTenantCapabilitiesRouteChildr
     AuthedTenantCapabilitiesMcpServersRoute:
       AuthedTenantCapabilitiesMcpServersRoute,
     AuthedTenantCapabilitiesIndexRoute: AuthedTenantCapabilitiesIndexRoute,
+    AuthedTenantCapabilitiesPluginsUploadIdRoute:
+      AuthedTenantCapabilitiesPluginsUploadIdRoute,
     AuthedTenantCapabilitiesSkillsSlugRoute:
       AuthedTenantCapabilitiesSkillsSlugRoute,
     AuthedTenantCapabilitiesSkillsBuilderRoute:
       AuthedTenantCapabilitiesSkillsBuilderRoute,
+    AuthedTenantCapabilitiesPluginsIndexRoute:
+      AuthedTenantCapabilitiesPluginsIndexRoute,
     AuthedTenantCapabilitiesSkillsIndexRoute:
       AuthedTenantCapabilitiesSkillsIndexRoute,
   }

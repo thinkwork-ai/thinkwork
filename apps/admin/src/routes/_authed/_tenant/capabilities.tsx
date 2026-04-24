@@ -1,4 +1,9 @@
-import { createFileRoute, Link, Outlet, useLocation } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  Outlet,
+  useLocation,
+} from "@tanstack/react-router";
 import { Puzzle } from "lucide-react";
 import { PageLayout } from "@/components/PageLayout";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -13,7 +18,9 @@ function CapabilitiesLayout() {
     ? "builtin-tools"
     : pathname.startsWith("/capabilities/mcp-servers")
       ? "mcp-servers"
-      : "skills";
+      : pathname.startsWith("/capabilities/plugins")
+        ? "plugins"
+        : "skills";
 
   return (
     <PageLayout
@@ -36,6 +43,9 @@ function CapabilitiesLayout() {
                 </TabsTrigger>
                 <TabsTrigger value="mcp-servers" asChild className="px-2">
                   <Link to="/capabilities/mcp-servers">MCP Servers</Link>
+                </TabsTrigger>
+                <TabsTrigger value="plugins" asChild className="px-2">
+                  <Link to="/capabilities/plugins">Plugins</Link>
                 </TabsTrigger>
               </TabsList>
             </Tabs>

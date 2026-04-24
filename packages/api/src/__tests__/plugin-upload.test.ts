@@ -314,7 +314,7 @@ describe("plugin-upload handler — POST /api/plugins/upload", () => {
 // ---------------------------------------------------------------------------
 
 describe("plugin-upload handler — method enforcement", () => {
-  it("returns 405 for a GET request (auth still runs first)", async () => {
+  it("returns 405 for a GET to /api/plugins/upload (reserved POST route)", async () => {
     mockAuthenticate.mockResolvedValueOnce({
       principalId: "u1",
       tenantId: "tenant-a",
@@ -322,8 +322,16 @@ describe("plugin-upload handler — method enforcement", () => {
       authType: "cognito",
       agentId: null,
     });
+    mockMemberRows.mockReturnValueOnce([{ role: "admin" }]);
     const res = await handler(
       makeEvent({ method: "GET", path: "/api/plugins/upload" }),
+    );
+    expect(res.statusCode).toBe(405);
+  });
+
+  it("returns 405 for a DELETE request (method gate rejects non-POST/GET)", async () => {
+    const res = await handler(
+      makeEvent({ method: "DELETE", path: "/api/plugins/upload" }),
     );
     expect(res.statusCode).toBe(405);
   });
