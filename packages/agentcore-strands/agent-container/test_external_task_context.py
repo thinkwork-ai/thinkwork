@@ -10,13 +10,9 @@ Run with: python -m unittest packages/agentcore-strands/agent-container/test_ext
 
 from __future__ import annotations
 
-import os
-import sys
 import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from external_task_context import format_external_task_context  # noqa: E402
+from external_task_context import format_external_task_context
 
 
 def _envelope(**core_overrides):

@@ -8,11 +8,7 @@ Run with: uv run --no-project --with pydantic --with PyYAML --with pytest \\
 from __future__ import annotations
 
 import asyncio
-import os
-import sys
 import unittest
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from composition_runner import CompositionResult, run_composition
 from skill_inputs import CompositionSkill

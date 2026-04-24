@@ -15,11 +15,7 @@ Contract:
 from __future__ import annotations
 
 import asyncio
-import os
-import sys
 import unittest
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from composition_runner import run_composition
 from skill_inputs import CompositionSkill

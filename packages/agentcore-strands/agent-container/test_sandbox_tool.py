@@ -8,17 +8,12 @@ exercise the full decision tree against fakes.
 from __future__ import annotations
 
 import asyncio
-import os
-import sys
 
 import pytest
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-if _HERE not in sys.path:
-    sys.path.insert(0, _HERE)
 # Direct import — dataclasses in Python 3.13 look up cls.__module__ in
 # sys.modules, which the spec_from_file_location path doesn't populate.
-import sandbox_tool as st  # type: ignore  # noqa: E402
+import sandbox_tool as st  # type: ignore
 
 # ---------------------------------------------------------------------------
 # _shape_payload — output shape + truncation
