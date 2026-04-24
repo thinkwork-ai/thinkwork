@@ -220,12 +220,25 @@ export async function resolveAgentRuntimeConfig(
 	const agentSlug = agent.slug ?? "";
 
 	// Resolve email: explicit override → users lookup → optional human-pair fallback.
+	//
+	// All three users lookups are tenant-scoped because this function is
+	// reachable via the service-auth REST endpoint where `currentUserId` is
+	// a query-string parameter. Without the tenant predicate any holder of
+	// API_AUTH_SECRET could enumerate arbitrary users' emails by flipping
+	// the tenantId they claim to own while passing another tenant's userId.
+	// The human_pair_id lookups are already derived from the tenant-scoped
+	// agent row, but we scope them the same way as defense-in-depth.
 	let currentUserEmail = opts.currentUserEmail ?? "";
 	if (!currentUserEmail && opts.currentUserId) {
 		const [u] = await db
 			.select({ email: users.email })
 			.from(users)
-			.where(eq(users.id, opts.currentUserId));
+			.where(
+				and(
+					eq(users.id, opts.currentUserId),
+					eq(users.tenant_id, opts.tenantId),
+				),
+			);
 		currentUserEmail = u?.email ?? "";
 	}
 	if (
@@ -236,7 +249,12 @@ export async function resolveAgentRuntimeConfig(
 		const [u] = await db
 			.select({ email: users.email })
 			.from(users)
-			.where(eq(users.id, agent.human_pair_id));
+			.where(
+				and(
+					eq(users.id, agent.human_pair_id),
+					eq(users.tenant_id, opts.tenantId),
+				),
+			);
 		currentUserEmail = u?.email ?? "";
 	}
 
@@ -245,7 +263,12 @@ export async function resolveAgentRuntimeConfig(
 		const [human] = await db
 			.select({ name: users.name })
 			.from(users)
-			.where(eq(users.id, agent.human_pair_id));
+			.where(
+				and(
+					eq(users.id, agent.human_pair_id),
+					eq(users.tenant_id, opts.tenantId),
+				),
+			);
 		humanName = human?.name ?? undefined;
 	}
 

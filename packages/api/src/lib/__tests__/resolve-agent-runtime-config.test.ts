@@ -11,13 +11,19 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { rowsQueue, mockBuildSkillEnvOverrides, mockLoadTenantBuiltinTools, mockBuildMcpConfigs } =
-	vi.hoisted(() => ({
-		rowsQueue: [] as unknown[][],
-		mockBuildSkillEnvOverrides: vi.fn(),
-		mockLoadTenantBuiltinTools: vi.fn(),
-		mockBuildMcpConfigs: vi.fn(),
-	}));
+const {
+	rowsQueue,
+	whereCalls,
+	mockBuildSkillEnvOverrides,
+	mockLoadTenantBuiltinTools,
+	mockBuildMcpConfigs,
+} = vi.hoisted(() => ({
+	rowsQueue: [] as unknown[][],
+	whereCalls: [] as unknown[],
+	mockBuildSkillEnvOverrides: vi.fn(),
+	mockLoadTenantBuiltinTools: vi.fn(),
+	mockBuildMcpConfigs: vi.fn(),
+}));
 
 function takeRows(): unknown[] {
 	const next = rowsQueue.shift();
@@ -29,7 +35,8 @@ vi.mock("@thinkwork/database-pg", () => ({
 	getDb: () => ({
 		select: () => ({
 			from: () => ({
-				where: () => ({
+				where: (pred: unknown) => ({
+					__capture: whereCalls.push(pred),
 					then: (fn: (rows: unknown[]) => unknown) =>
 						Promise.resolve(fn(takeRows())),
 					leftJoin: () => ({
@@ -72,7 +79,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
 		tenant_id: "tenantSkills.tenant_id",
 		skill_id: "tenantSkills.skill_id",
 	},
-	users: { id: "users.id" },
+	users: { id: "users.id", tenant_id: "users.tenant_id" },
 	agentKnowledgeBases: {
 		agent_id: "agentKnowledgeBases.agent_id",
 		enabled: "agentKnowledgeBases.enabled",
@@ -87,8 +94,11 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
 }));
 
 vi.mock("drizzle-orm", () => ({
-	eq: () => ({}),
-	and: () => ({}),
+	// Return tagged objects so the test can inspect which column/value
+	// pairs were passed into each `.where(...)` — required to verify the
+	// tenant predicate is applied on users lookups.
+	eq: (col: unknown, val: unknown) => ({ op: "eq", col, val }),
+	and: (...preds: unknown[]) => ({ op: "and", preds }),
 }));
 
 vi.mock("../oauth-token.js", () => ({
@@ -143,11 +153,24 @@ function stageTenantSlug(slug = "acme") {
 
 beforeEach(() => {
 	rowsQueue.length = 0;
+	whereCalls.length = 0;
 	vi.clearAllMocks();
 	mockBuildSkillEnvOverrides.mockResolvedValue(null);
 	mockLoadTenantBuiltinTools.mockResolvedValue([]);
 	mockBuildMcpConfigs.mockResolvedValue([]);
 });
+
+function collectEqPairs(pred: unknown): Array<{ col: unknown; val: unknown }> {
+	const out: Array<{ col: unknown; val: unknown }> = [];
+	function walk(p: unknown) {
+		if (!p || typeof p !== "object") return;
+		const anyP = p as { op?: string; col?: unknown; val?: unknown; preds?: unknown[] };
+		if (anyP.op === "eq") out.push({ col: anyP.col, val: anyP.val });
+		if (anyP.op === "and" && Array.isArray(anyP.preds)) anyP.preds.forEach(walk);
+	}
+	walk(pred);
+	return out;
+}
 
 describe("resolveAgentRuntimeConfig", () => {
 	it("throws AgentNotFoundError when the agent lookup returns no rows", async () => {
@@ -235,6 +258,35 @@ describe("resolveAgentRuntimeConfig", () => {
 			guardrailIdentifier: "bg-123",
 			guardrailVersion: "1",
 		});
+	});
+
+	it("scopes the currentUserId email lookup to the calling tenant (P0-B)", async () => {
+		// Regression: the service-auth REST endpoint accepts currentUserId
+		// as a query param. Without a tenant predicate any holder of
+		// API_AUTH_SECRET could enumerate cross-tenant emails. Assert both
+		// predicates are applied to the users lookup.
+		const OTHER_USER = "44444444-4444-4444-4444-444444444444";
+		stageAgentRow();
+		stageTemplateRow();
+		stageTenantSlug();
+		rowsQueue.push([]); // guardrail
+		rowsQueue.push([]); // skills
+		rowsQueue.push([]); // kbs
+		rowsQueue.push([]); // users lookup — empty because predicate rejects cross-tenant
+		await resolveAgentRuntimeConfig({
+			tenantId: TENANT_ID,
+			agentId: AGENT_ID,
+			currentUserId: OTHER_USER,
+		});
+		// Find the users lookup where-call: it's the one whose eq-pairs
+		// include users.id = OTHER_USER.
+		const usersWhere = whereCalls.find((w) =>
+			collectEqPairs(w).some((p) => p.col === "users.id" && p.val === OTHER_USER),
+		);
+		expect(usersWhere).toBeDefined();
+		const pairs = collectEqPairs(usersWhere);
+		expect(pairs).toContainEqual({ col: "users.id", val: OTHER_USER });
+		expect(pairs).toContainEqual({ col: "users.tenant_id", val: TENANT_ID });
 	});
 
 	it("passes CURRENT_USER_EMAIL through to default-skill envOverrides", async () => {
