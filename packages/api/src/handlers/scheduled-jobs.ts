@@ -33,8 +33,8 @@ import {
 	evalRuns,
 } from "@thinkwork/database-pg/schema";
 import { db } from "../lib/db.js";
-import { authenticate } from "../lib/cognito-auth.js";
-import { handleCors, json, error, notFound, unauthorized } from "../lib/response.js";
+import { requireTenantMembership, type TenantMemberRole } from "../lib/tenant-membership.js";
+import { json, error, notFound } from "../lib/response.js";
 import { ensureThreadForWork } from "../lib/thread-helpers.js";
 
 // ---------------------------------------------------------------------------
@@ -118,12 +118,41 @@ async function invokeJobScheduleManager(
 // Router
 // ---------------------------------------------------------------------------
 
+/**
+ * Enforce tenant membership for every HTTP route in this handler.
+ *
+ * All routes here are user-facing (admin SPA / mobile / CLI). AWS
+ * Scheduler does NOT reach these endpoints — it invokes
+ * `packages/lambda/job-trigger.ts` directly via the Lambda SDK. So
+ * every route, including `/fire` and `/wakeup`, must verify that the
+ * caller is a member of the target tenant.
+ */
+async function checkMembership(
+	event: APIGatewayProxyEventV2,
+	method: string,
+): Promise<
+	| { ok: true; tenantId: string }
+	| { ok: false; response: APIGatewayProxyStructuredResultV2 }
+> {
+	const tenantHeader = event.headers["x-tenant-id"];
+	if (!tenantHeader) {
+		return { ok: false, response: error("Missing x-tenant-id header") };
+	}
+	const requiredRoles: TenantMemberRole[] =
+		method === "GET"
+			? ["owner", "admin", "member"]
+			: ["owner", "admin"];
+	const verdict = await requireTenantMembership(event, tenantHeader, {
+		requiredRoles,
+	});
+	if (!verdict.ok) return { ok: false, response: error(verdict.reason, verdict.status) };
+	return { ok: true, tenantId: verdict.tenantId };
+}
+
 export async function handler(
 	event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
 	if (event.requestContext.http.method === "OPTIONS") return { statusCode: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "*", "Access-Control-Allow-Headers": "*" }, body: "" };
-	const auth = await authenticate(event.headers);
-	if (!auth) return unauthorized();
 
 	const method = event.requestContext.http.method;
 	const path = event.rawPath;
@@ -131,63 +160,83 @@ export async function handler(
 	try {
 		// --- Scheduled Jobs (definitions) ---
 
-		// POST /api/scheduled-jobs/:id/fire — manual fire
+		// POST /api/scheduled-jobs/:id/fire — manual fire (admin-SPA button, NOT a scheduler callback)
 		const fireMatch = path.match(/^\/api\/scheduled-jobs\/([^/]+)\/fire$/);
 		if (fireMatch) {
-			if (method === "POST") return fireScheduledJob(fireMatch[1], event);
-			return error("Method not allowed", 405);
+			if (method !== "POST") return error("Method not allowed", 405);
+			const check = await checkMembership(event, method);
+			if (!check.ok) return check.response;
+			return fireScheduledJob(fireMatch[1], event, check.tenantId);
 		}
 
 		// GET/PUT/DELETE /api/scheduled-jobs/:id
 		const triggerIdMatch = path.match(/^\/api\/scheduled-jobs\/([^/]+)$/);
 		if (triggerIdMatch) {
-			if (method === "GET") return getScheduledJob(triggerIdMatch[1]);
-			if (method === "PUT") return updateScheduledJob(triggerIdMatch[1], event);
-			if (method === "DELETE") return deleteScheduledJob(triggerIdMatch[1], event);
-			return error("Method not allowed", 405);
+			if (method !== "GET" && method !== "PUT" && method !== "DELETE") {
+				return error("Method not allowed", 405);
+			}
+			const check = await checkMembership(event, method);
+			if (!check.ok) return check.response;
+			if (method === "GET") return getScheduledJob(triggerIdMatch[1], check.tenantId);
+			if (method === "PUT") return updateScheduledJob(triggerIdMatch[1], event, check.tenantId);
+			return deleteScheduledJob(triggerIdMatch[1], event, check.tenantId);
 		}
 
 		// GET/POST /api/scheduled-jobs
 		if (path === "/api/scheduled-jobs") {
-			if (method === "GET") return listScheduledJobs(event);
-			if (method === "POST") return createScheduledJob(event);
-			return error("Method not allowed", 405);
+			if (method !== "GET" && method !== "POST") {
+				return error("Method not allowed", 405);
+			}
+			const check = await checkMembership(event, method);
+			if (!check.ok) return check.response;
+			if (method === "GET") return listScheduledJobs(event, check.tenantId);
+			return createScheduledJob(event, check.tenantId);
 		}
 
 		// --- Trigger Runs ---
 
-		// POST /api/thread-turns/wakeup/:agentId — on-demand wakeup
+		// POST /api/thread-turns/wakeup/:agentId — on-demand wakeup (admin-SPA, NOT scheduler callback)
 		const wakeupMatch = path.match(/^\/api\/trigger-runs\/wakeup\/([^/]+)$/);
 		if (wakeupMatch) {
-			if (method === "POST") return triggerWakeup(wakeupMatch[1], event);
-			return error("Method not allowed", 405);
+			if (method !== "POST") return error("Method not allowed", 405);
+			const check = await checkMembership(event, method);
+			if (!check.ok) return check.response;
+			return triggerWakeup(wakeupMatch[1], event, check.tenantId);
 		}
 
 		// GET /api/thread-turns/:id/events
 		const eventsMatch = path.match(/^\/api\/trigger-runs\/([^/]+)\/events$/);
 		if (eventsMatch) {
-			if (method === "GET") return listEvents(eventsMatch[1], event);
-			return error("Method not allowed", 405);
+			if (method !== "GET") return error("Method not allowed", 405);
+			const check = await checkMembership(event, method);
+			if (!check.ok) return check.response;
+			return listEvents(eventsMatch[1], event, check.tenantId);
 		}
 
 		// POST /api/thread-turns/:id/cancel
 		const cancelMatch = path.match(/^\/api\/trigger-runs\/([^/]+)\/cancel$/);
 		if (cancelMatch) {
-			if (method === "POST") return cancelRun(cancelMatch[1]);
-			return error("Method not allowed", 405);
+			if (method !== "POST") return error("Method not allowed", 405);
+			const check = await checkMembership(event, method);
+			if (!check.ok) return check.response;
+			return cancelRun(cancelMatch[1], check.tenantId);
 		}
 
 		// GET /api/thread-turns/:id
 		const runIdMatch = path.match(/^\/api\/trigger-runs\/([^/]+)$/);
 		if (runIdMatch) {
-			if (method === "GET") return getRun(runIdMatch[1]);
-			return error("Method not allowed", 405);
+			if (method !== "GET") return error("Method not allowed", 405);
+			const check = await checkMembership(event, method);
+			if (!check.ok) return check.response;
+			return getRun(runIdMatch[1], check.tenantId);
 		}
 
 		// GET /api/thread-turns
 		if (path === "/api/thread-turns") {
-			if (method === "GET") return listRuns(event);
-			return error("Method not allowed", 405);
+			if (method !== "GET") return error("Method not allowed", 405);
+			const check = await checkMembership(event, method);
+			if (!check.ok) return check.response;
+			return listRuns(event, check.tenantId);
 		}
 
 		return notFound("Route not found");
@@ -203,10 +252,8 @@ export async function handler(
 
 async function listScheduledJobs(
 	event: APIGatewayProxyEventV2,
+	tenantId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const tenantId = event.headers["x-tenant-id"];
-	if (!tenantId) return error("x-tenant-id header is required");
-
 	const conditions = [eq(scheduledJobs.tenant_id, tenantId)];
 
 	const params = event.queryStringParameters || {};
@@ -227,18 +274,20 @@ async function listScheduledJobs(
 
 async function getScheduledJob(
 	id: string,
+	tenantId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const [row] = await db.select().from(scheduledJobs).where(eq(scheduledJobs.id, id));
+	const [row] = await db
+		.select()
+		.from(scheduledJobs)
+		.where(and(eq(scheduledJobs.id, id), eq(scheduledJobs.tenant_id, tenantId)));
 	if (!row) return notFound("Trigger not found");
 	return json(row);
 }
 
 async function createScheduledJob(
 	event: APIGatewayProxyEventV2,
+	tenantId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const tenantId = event.headers["x-tenant-id"];
-	if (!tenantId) return error("x-tenant-id header is required");
-
 	let body: Record<string, unknown> = {};
 	try { body = event.body ? JSON.parse(event.body) : {}; } catch { return error("Invalid JSON body"); }
 
@@ -297,17 +346,15 @@ async function createScheduledJob(
 	const [refreshed] = await db
 		.select()
 		.from(scheduledJobs)
-		.where(eq(scheduledJobs.id, row.id));
+		.where(and(eq(scheduledJobs.id, row.id), eq(scheduledJobs.tenant_id, tenantId)));
 	return json(refreshed || row, 201);
 }
 
 async function updateScheduledJob(
 	id: string,
 	event: APIGatewayProxyEventV2,
+	tenantId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const tenantId = event.headers["x-tenant-id"];
-	if (!tenantId) return error("x-tenant-id header is required");
-
 	let body: Record<string, unknown> = {};
 	try { body = event.body ? JSON.parse(event.body) : {}; } catch { return error("Invalid JSON body"); }
 
@@ -352,17 +399,15 @@ async function updateScheduledJob(
 	const [refreshed] = await db
 		.select()
 		.from(scheduledJobs)
-		.where(eq(scheduledJobs.id, updated.id));
+		.where(and(eq(scheduledJobs.id, updated.id), eq(scheduledJobs.tenant_id, tenantId)));
 	return json(refreshed || updated);
 }
 
 async function deleteScheduledJob(
 	id: string,
 	event: APIGatewayProxyEventV2,
+	tenantId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const tenantId = event.headers["x-tenant-id"];
-	if (!tenantId) return error("x-tenant-id header is required");
-
 	// Read the trigger first to get the eb_schedule_name before we clear it
 	const [existing] = await db
 		.select()
@@ -385,7 +430,9 @@ async function deleteScheduledJob(
 		.where(eq(threadTurns.trigger_id, id));
 
 	// Hard delete the scheduled job row
-	await db.delete(scheduledJobs).where(eq(scheduledJobs.id, id));
+	await db
+		.delete(scheduledJobs)
+		.where(and(eq(scheduledJobs.id, id), eq(scheduledJobs.tenant_id, tenantId)));
 
 	return json({ ok: true, id });
 }
@@ -393,10 +440,8 @@ async function deleteScheduledJob(
 async function fireScheduledJob(
 	triggerId: string,
 	event: APIGatewayProxyEventV2,
+	tenantId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const tenantId = event.headers["x-tenant-id"];
-	if (!tenantId) return error("x-tenant-id header is required");
-
 	const [trig] = await db
 		.select()
 		.from(scheduledJobs)
@@ -496,10 +541,8 @@ async function fireScheduledJob(
 
 async function listRuns(
 	event: APIGatewayProxyEventV2,
+	tenantId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const tenantId = event.headers["x-tenant-id"];
-	if (!tenantId) return error("x-tenant-id header is required");
-
 	const conditions = [eq(threadTurns.tenant_id, tenantId)];
 
 	const params = event.queryStringParameters || {};
@@ -520,17 +563,34 @@ async function listRuns(
 	return json(rows);
 }
 
-async function getRun(id: string): Promise<APIGatewayProxyStructuredResultV2> {
-	const [run] = await db.select().from(threadTurns).where(eq(threadTurns.id, id));
+async function getRun(
+	id: string,
+	tenantId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const [run] = await db
+		.select()
+		.from(threadTurns)
+		.where(and(eq(threadTurns.id, id), eq(threadTurns.tenant_id, tenantId)));
+	// Cross-tenant hit falls through the tenant_id filter and returns 404,
+	// preserving existence opacity across tenants.
 	if (!run) return notFound("Trigger run not found");
 	return json(run);
 }
 
-async function cancelRun(id: string): Promise<APIGatewayProxyStructuredResultV2> {
+async function cancelRun(
+	id: string,
+	tenantId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
 	const [updated] = await db
 		.update(threadTurns)
 		.set({ status: "cancelled", finished_at: new Date() })
-		.where(and(eq(threadTurns.id, id), eq(threadTurns.status, "running")))
+		.where(
+			and(
+				eq(threadTurns.id, id),
+				eq(threadTurns.tenant_id, tenantId),
+				eq(threadTurns.status, "running"),
+			),
+		)
 		.returning();
 
 	if (!updated) return notFound("Running trigger run not found");
@@ -544,7 +604,18 @@ async function cancelRun(id: string): Promise<APIGatewayProxyStructuredResultV2>
 async function listEvents(
 	runId: string,
 	event: APIGatewayProxyEventV2,
+	tenantId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
+	// Pre-check: only list events for runs owned by the caller's tenant.
+	// Cross-tenant lookup returns 404 so existence isn't leaked across
+	// tenants.
+	const [parent] = await db
+		.select({ id: threadTurns.id })
+		.from(threadTurns)
+		.where(and(eq(threadTurns.id, runId), eq(threadTurns.tenant_id, tenantId)))
+		.limit(1);
+	if (!parent) return notFound("Trigger run not found");
+
 	const params = event.queryStringParameters || {};
 	const limit = Math.min(Number(params.limit) || 100, 500);
 
@@ -568,10 +639,8 @@ async function listEvents(
 async function triggerWakeup(
 	agentId: string,
 	event: APIGatewayProxyEventV2,
+	tenantId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const tenantId = event.headers["x-tenant-id"];
-	if (!tenantId) return error("x-tenant-id header is required");
-
 	const [agent] = await db
 		.select({ id: agents.id, tenant_id: agents.tenant_id })
 		.from(agents)
