@@ -85,6 +85,11 @@ resource "aws_s3_bucket_lifecycle_configuration" "backups" {
 resource "aws_s3_bucket_policy" "backups_https_only" {
   bucket = aws_s3_bucket.backups.id
 
+  # aws_s3_bucket_public_access_block must apply first; otherwise account-
+  # level BPA defaults can intermittently reject the bucket-policy PUT with
+  # AccessDenied during initial apply.
+  depends_on = [aws_s3_bucket_public_access_block.backups]
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
