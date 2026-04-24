@@ -76,8 +76,11 @@ import {
   getTemplateMcpServers,
   assignMcpToTemplate,
   unassignMcpFromTemplate,
+  getMcpKeyStatus,
   type McpServer,
+  type McpKeyStatus,
 } from "@/lib/mcp-api";
+import { ApiKeyDialog } from "@/components/mcp/ApiKeyDialog";
 import { TemplateSyncDialog } from "./-components/TemplateSyncDialog";
 
 const VALID_TABS = [
@@ -280,6 +283,11 @@ function TemplateEditorPage() {
   const [templateMcpServers, setTemplateMcpServers] = useState<Array<{ mcp_server_id: string; enabled: boolean }>>([]);
   const [availableMcpServers, setAvailableMcpServers] = useState<McpServer[]>([]);
   const [addMcpDialogOpen, setAddMcpDialogOpen] = useState(false);
+  // tenant_api_key servers: id → {hasKey, lastFour}. Used to decide
+  // whether enabling the toggle needs to open the ApiKeyDialog first
+  // and to render the last-4 preview badge.
+  const [mcpKeyStatus, setMcpKeyStatus] = useState<Record<string, McpKeyStatus>>({});
+  const [apiKeyDialogServer, setApiKeyDialogServer] = useState<McpServer | null>(null);
 
   // State -- workspace
   const [wsFiles, setWsFiles] = useState<string[]>([]);
@@ -412,13 +420,31 @@ function TemplateEditorPage() {
     }
   }, [result.data]);
 
-  // Load MCP servers: template assignments + tenant registry
+  // Load MCP servers: template assignments + tenant registry. For every
+  // tenant_api_key server, also probe its key-status so the toggle knows
+  // whether to open the configure-key dialog and the row can render a
+  // last-4 badge.
   useEffect(() => {
-    if (tenantSlug) {
-      listMcpServers(tenantSlug)
-        .then((r) => setAvailableMcpServers(r.servers || []))
-        .catch(console.error);
-    }
+    if (!tenantSlug) return;
+    listMcpServers(tenantSlug)
+      .then(async (r) => {
+        const servers = r.servers || [];
+        setAvailableMcpServers(servers);
+        const apiKeyServers = servers.filter((s) => s.authType === "tenant_api_key");
+        const statusEntries = await Promise.all(
+          apiKeyServers.map(async (s) => {
+            try {
+              const status = await getMcpKeyStatus(tenantSlug, s.id);
+              return [s.id, status] as const;
+            } catch (err) {
+              console.error("key-status probe failed for", s.id, err);
+              return [s.id, { authType: s.authType, hasKey: false, lastFour: null } satisfies McpKeyStatus] as const;
+            }
+          }),
+        );
+        setMcpKeyStatus(Object.fromEntries(statusEntries));
+      })
+      .catch(console.error);
   }, [tenantSlug]);
 
   useEffect(() => {
@@ -1015,12 +1041,39 @@ function TemplateEditorPage() {
               {
                 accessorKey: "authType",
                 header: "Auth",
-                size: 100,
-                cell: ({ row }: any) => (
-                  <Badge variant="outline" className="text-[10px]">
-                    {row.original.authType === "oauth" ? "OAuth" : row.original.authType === "tenant_api_key" ? "API Key" : "None"}
-                  </Badge>
-                ),
+                size: 180,
+                cell: ({ row }: any) => {
+                  const authType = row.original.authType;
+                  const label = authType === "oauth" ? "OAuth" : authType === "tenant_api_key" ? "API Key" : "None";
+                  const status = mcpKeyStatus[row.original.id];
+                  return (
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[10px]">{label}</Badge>
+                      {authType === "tenant_api_key" && (
+                        <>
+                          {status?.hasKey ? (
+                            <button
+                              type="button"
+                              onClick={() => setApiKeyDialogServer(row.original)}
+                              className="font-mono text-[10px] text-muted-foreground hover:text-foreground hover:underline"
+                              title="Click to rotate"
+                            >
+                              …{status.lastFour}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setApiKeyDialogServer(row.original)}
+                              className="text-[10px] text-amber-500 hover:text-amber-400 hover:underline"
+                            >
+                              no key — configure
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                },
               },
               {
                 id: "tools",
@@ -1036,11 +1089,22 @@ function TemplateEditorPage() {
                 size: 80,
                 cell: ({ row }: any) => {
                   const isEnabled = templateMcpServers.some((ts) => ts.mcp_server_id === row.original.id);
+                  const authType = row.original.authType;
+                  const status = mcpKeyStatus[row.original.id];
+                  const needsKey = authType === "tenant_api_key" && !status?.hasKey;
                   return (
                     <div className="flex justify-end">
                       <Switch
                         checked={isEnabled}
                         onCheckedChange={async (checked) => {
+                          if (checked && needsKey) {
+                            // Don't flip the toggle — open the configure-key
+                            // dialog instead. Enabling without a key would
+                            // give the agent an MCP server it can't
+                            // authenticate against.
+                            setApiKeyDialogServer(row.original);
+                            return;
+                          }
                           if (checked) await addMcpServer(row.original.id);
                           else await removeMcpServer(row.original.id);
                         }}
@@ -1193,6 +1257,31 @@ function TemplateEditorPage() {
         templateName={name}
         linkedAgentCount={linkedAgentCount}
       />
+
+      {/* Tenant API-key configure / rotate dialog for tenant_api_key MCP servers */}
+      {apiKeyDialogServer && tenantSlug && (
+        <ApiKeyDialog
+          open={!!apiKeyDialogServer}
+          onOpenChange={(o) => {
+            if (!o) setApiKeyDialogServer(null);
+          }}
+          tenantSlug={tenantSlug}
+          serverId={apiKeyDialogServer.id}
+          serverName={apiKeyDialogServer.name}
+          isRotation={!!mcpKeyStatus[apiKeyDialogServer.id]?.hasKey}
+          onSuccess={(lastFour) => {
+            setMcpKeyStatus((prev) => ({
+              ...prev,
+              [apiKeyDialogServer.id]: {
+                authType: apiKeyDialogServer.authType || "tenant_api_key",
+                hasKey: true,
+                lastFour,
+              },
+            }));
+            setApiKeyDialogServer(null);
+          }}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

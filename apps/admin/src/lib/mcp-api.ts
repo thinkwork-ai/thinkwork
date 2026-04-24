@@ -141,6 +141,45 @@ export function testMcpServer(
 }
 
 // ---------------------------------------------------------------------------
+// Tenant-wide API key management for tenant_api_key MCP servers
+// ---------------------------------------------------------------------------
+
+export type McpKeyStatus = {
+  authType: string;
+  hasKey: boolean;
+  lastFour: string | null;
+};
+
+export function getMcpKeyStatus(
+  tenantSlug: string,
+  serverId: string,
+): Promise<McpKeyStatus> {
+  return request(`/api/skills/mcp-servers/${serverId}/key-status`, {
+    extraHeaders: { "x-tenant-slug": tenantSlug },
+  });
+}
+
+/**
+ * Set or rotate the tenant API key for a `tenant_api_key` MCP server.
+ * Two modes:
+ *   - `{ apiKey }` — store a caller-supplied token (paste flow)
+ *   - `{ mintNew: true }` — auto-generate a tkm_ token server-side
+ * Response carries the last-4 preview so the row can update without a
+ * second fetch.
+ */
+export function setMcpApiKey(
+  tenantSlug: string,
+  serverId: string,
+  body: { apiKey: string } | { mintNew: true },
+): Promise<{ ok: boolean; lastFour: string; minted: boolean }> {
+  return request(`/api/skills/mcp-servers/${serverId}/api-key`, {
+    method: "PUT",
+    extraHeaders: { "x-tenant-slug": tenantSlug },
+    body: JSON.stringify(body),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Template MCP assignments
 // ---------------------------------------------------------------------------
 
