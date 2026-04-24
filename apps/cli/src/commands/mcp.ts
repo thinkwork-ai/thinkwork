@@ -1,7 +1,9 @@
 import { Command } from "commander";
 import chalk from "chalk";
+import { createClient, adminKeys, AdminOpsError } from "@thinkwork/admin-ops";
 import { apiFetch, resolveApiConfig } from "../api-client.js";
 import { printHeader, printError, printSuccess, printWarning } from "../ui.js";
+import { printJson, printTable } from "../lib/output.js";
 import { resolveStage } from "../lib/resolve-stage.js";
 import { resolveTenantRest } from "../lib/resolve-tenant-rest.js";
 import { isCancellation } from "../lib/interactive.js";
@@ -487,4 +489,116 @@ Examples:
         }
       },
     );
+
+  // ---------------------------------------------------------------------------
+  // `thinkwork mcp key ...` — per-tenant admin-ops MCP Bearer tokens.
+  //
+  // Generates/lists/revokes tokens that the admin-ops MCP server (POST
+  // /mcp/admin) accepts as Bearer auth. Each token scopes inbound calls
+  // to one tenant; the raw value is printed once at creation and never
+  // retrievable again.
+  // ---------------------------------------------------------------------------
+
+  const key = mcp
+    .command("key")
+    .alias("keys")
+    .description("Manage per-tenant Bearer tokens for the admin-ops MCP server.");
+
+  key
+    .command("create")
+    .description(
+      "Generate a new MCP admin token. Prints the raw token ONCE — save it immediately.",
+    )
+    .option("-s, --stage <name>", "Deployment stage")
+    .option("-t, --tenant <slug>", "Tenant slug or UUID")
+    .option("--name <label>", 'Human label for the key (default "default")')
+    .addHelpText(
+      "after",
+      `
+Examples:
+  $ thinkwork mcp key create -t acme --name ci
+  $ thinkwork mcp key create -t acme --json   # token surfaces under .token
+
+The token is shown ONCE. Hand it to the MCP client immediately; the server
+stores only the SHA-256 hash. To rotate, create a new one and revoke the
+old one.
+`,
+    )
+    .action(async (opts: { stage?: string; tenant?: string; name?: string }) => {
+      try {
+        const ctx = await resolveMcpContext(opts);
+        const client = createClient({
+          apiUrl: ctx.api.apiUrl,
+          authSecret: ctx.api.authSecret,
+        });
+        const created = await adminKeys.createAdminKey(client, ctx.tenant.slug, {
+          name: opts.name,
+        });
+        printJson(created);
+        printWarning("This token will NOT be shown again. Copy it now.");
+        printSuccess(`MCP admin key created: ${chalk.bold(created.name)} (${created.id})`);
+        console.log(`  ${chalk.dim("Token:")} ${chalk.cyan(created.token)}`);
+      } catch (err) {
+        if (isCancellation(err)) return;
+        printError(err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
+    });
+
+  key
+    .command("list")
+    .alias("ls")
+    .description("List MCP admin keys for a tenant (metadata only, never the raw token).")
+    .option("-s, --stage <name>", "Deployment stage")
+    .option("-t, --tenant <slug>", "Tenant slug or UUID")
+    .option("--all", "Include revoked keys")
+    .action(async (opts: { stage?: string; tenant?: string; all?: boolean }) => {
+      try {
+        const ctx = await resolveMcpContext(opts);
+        const client = createClient({
+          apiUrl: ctx.api.apiUrl,
+          authSecret: ctx.api.authSecret,
+        });
+        const all = await adminKeys.listAdminKeys(client, ctx.tenant.slug);
+        const rows = opts.all ? all : all.filter((k) => !k.revoked_at);
+
+        printJson(rows);
+        printTable(rows as unknown as Array<Record<string, unknown>>, [
+          { key: "name", header: "NAME" },
+          { key: "id", header: "ID" },
+          { key: "created_at", header: "CREATED" },
+          { key: "last_used_at", header: "LAST USED" },
+          { key: "revoked_at", header: "REVOKED" },
+        ]);
+      } catch (err) {
+        if (isCancellation(err)) return;
+        printError(err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
+    });
+
+  key
+    .command("revoke <id>")
+    .description("Revoke an MCP admin key. Idempotent — revoking an already-revoked key is a no-op.")
+    .option("-s, --stage <name>", "Deployment stage")
+    .option("-t, --tenant <slug>", "Tenant slug or UUID")
+    .action(async (keyId: string, opts: { stage?: string; tenant?: string }) => {
+      try {
+        const ctx = await resolveMcpContext(opts);
+        const client = createClient({
+          apiUrl: ctx.api.apiUrl,
+          authSecret: ctx.api.authSecret,
+        });
+        await adminKeys.revokeAdminKey(client, ctx.tenant.slug, keyId);
+        printSuccess(`MCP admin key revoked: ${keyId}`);
+      } catch (err) {
+        if (err instanceof AdminOpsError && err.status === 404) {
+          printError(`Key ${keyId} not found for tenant ${opts.tenant ?? ""}`);
+          process.exit(2);
+        }
+        if (isCancellation(err)) return;
+        printError(err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
+    });
 }

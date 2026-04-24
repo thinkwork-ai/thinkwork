@@ -301,6 +301,9 @@ build_handler "agentcore-admin" \
 build_handler "admin-ops-mcp" \
   "$REPO_ROOT/packages/lambda/admin-ops-mcp.ts"
 
+build_handler "mcp-admin-keys" \
+  "$REPO_ROOT/packages/api/src/handlers/mcp-admin-keys.ts"
+
 build_handler "github-workspace" \
   "$REPO_ROOT/packages/lambda/github-workspace.ts"
 

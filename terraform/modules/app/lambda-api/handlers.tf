@@ -182,9 +182,12 @@ resource "aws_lambda_function" "handler" {
     "sandbox-quota-check",
     "sandbox-invocation-log",
     # Admin-Ops MCP — JSON-RPC endpoint at POST /mcp/admin, exposes the
-    # @thinkwork/admin-ops package as MCP tools for Strands agents. Uses
-    # the same API_AUTH_SECRET bearer the rest of the REST surface accepts.
+    # @thinkwork/admin-ops package as MCP tools for Strands agents.
     "admin-ops-mcp",
+    # MCP admin key management — per-tenant Bearer tokens for admin-ops.
+    # Admin-ops-mcp authenticates incoming tokens by sha256-hash lookup
+    # against tenant_mcp_admin_keys, populated by this handler's routes.
+    "mcp-admin-keys",
   ]) : toset([])
 
   function_name = "thinkwork-${var.stage}-api-${each.key}"
@@ -350,12 +353,20 @@ locals {
     "POST /api/sandbox/quota/check-and-increment" = "sandbox-quota-check"
     "POST /api/sandbox/invocations"               = "sandbox-invocation-log"
 
-    # Admin-Ops MCP server — single JSON-RPC endpoint. The Strands
-    # container POSTs MCP messages with Bearer API_AUTH_SECRET. Tool
-    # handlers proxy back out to the REST API at /api/tenants, etc.,
-    # using the same bearer, so the MCP Lambda never touches Aurora
-    # directly.
+    # Admin-Ops MCP server — single JSON-RPC endpoint. Strands agents
+    # (and anyone else) POST with Bearer <tenant-scoped token> issued by
+    # the mcp-admin-keys handler below. The shared API_AUTH_SECRET is
+    # retained as a break-glass superuser path for bootstrap/debug.
     "POST /mcp/admin" = "admin-ops-mcp"
+
+    # MCP admin key management — per-tenant Bearer token CRUD. Tokens
+    # are shown ONCE at creation (POST returns raw value); server stores
+    # sha256 hash only. These specific routes take precedence over the
+    # existing `ANY /api/tenants/{proxy+}` route (tenants handler) per
+    # API Gateway v2's most-specific-match rule.
+    "POST /api/tenants/{tenantId}/mcp-admin-keys"               = "mcp-admin-keys"
+    "GET /api/tenants/{tenantId}/mcp-admin-keys"                = "mcp-admin-keys"
+    "DELETE /api/tenants/{tenantId}/mcp-admin-keys/{keyId}"     = "mcp-admin-keys"
   } : {}
 }
 
