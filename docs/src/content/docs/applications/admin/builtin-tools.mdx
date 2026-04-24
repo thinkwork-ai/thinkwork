@@ -12,11 +12,14 @@ Built-in tools are provider-scoped capabilities that ship with ThinkWork itself,
 
 ## What's in the catalog
 
-The catalog is deliberately small. In the current release, the catalog is effectively a single entry — **Web Search** — with two provider options:
+The catalog is deliberately small. Two tools ship in the current release — **Web Search** (credentialed, tenant API key) and **Code Sandbox** (policy-gated, no tenant API key).
 
-| Tool | Providers |
-|---|---|
-| Web Search | Exa, SerpAPI |
+| Tool | Kind | Providers |
+|---|---|---|
+| Web Search | Credentialed | Exa, SerpAPI |
+| Code Sandbox | Policy-gated | `agentcore` (fixed) |
+
+Rows have two different treatments in the list. **Credentialed** rows open a Configure dialog for provider + API key + test. **Policy-gated** rows open a read-only Info dialog — their configuration lives in tenant policy and per-template opt-in, not on this page.
 
 The catalog is defined in both the admin UI (as a hardcoded array) and the backend (`BUILTIN_TOOL_CATALOG`). Extending the catalog requires code in both places — the UI hardcodes the slug, display name, description, and available provider list so the form can render the right fields.
 
@@ -63,9 +66,25 @@ The Test button fires a provider-specific call — for Web Search, it runs a can
 
 Testing does not require saving first — the dialog lets the operator test with a new key before committing it to the vault.
 
+## Code Sandbox (policy-gated)
+
+Code Sandbox is the `execute_code` tool backed by Bedrock AgentCore Code Interpreter. Unlike Web Search, there is no tenant API key to configure — the capability is gated by tenant policy and opted into per agent template. Clicking the row opens a read-only **Info dialog**, not the Configure dialog.
+
+The dialog shows:
+
+- **Provider** — the fixed `agentcore` badge. One public and one internal-only Code Interpreter are provisioned per tenant on first enrollment.
+- **Status** — `Enabled` (green) when tenant policy is on and both interpreters are provisioned, `Provisioning` (yellow) when policy is on but interpreter IDs haven't landed yet, `Disabled` (muted) when tenant policy is off.
+- **Compliance tier** — outline badge reading `tier: standard` or whichever tier the tenant is on.
+- **Agent template opt-in** — pointer to where this gets turned on per template: any **Agent Template → Configuration** tab, under the **Code Sandbox** card.
+- **Tenant policy toggle** — note that the tenant-level kill switch (`sandbox_enabled`) and compliance tier flow through the `updateTenantPolicy` mutation. A first-class admin toggle on this page is waiting on the platform-operator email allowlist; until then, tenant policy is adjusted by operators with platform-level access.
+
+The `execute_code` tool only registers on a turn when **both** the template is opted in **and** the tenant has `sandbox_enabled` set. Either gate closed means the tool is absent from the turn's tool list. See the [Code Sandbox concept page](/concepts/agents/code-sandbox/) for the full runtime flow.
+
 ## Assigning to agents
 
-Built-in tools don't need to be assigned in the same way skills or MCP servers do — once configured at the tenant level, every agent that has the tool in its system prompt or tool policy can use it. Disabling the tool at the tenant level immediately cuts off all agents; there is no per-agent opt-in for built-in tools in the current release.
+Built-in tools don't need to be assigned in the same way skills or MCP servers do — once configured at the tenant level, every agent that has the tool in its system prompt or tool policy can use it. Disabling the tool at the tenant level immediately cuts off all agents; there is no per-agent opt-in for credentialed built-in tools in the current release.
+
+Code Sandbox is the exception: tenant policy is necessary but not sufficient. Each agent template must also opt in from its Configuration tab's Sandbox card (see [Agent Templates](/applications/admin/agent-templates/#code-sandbox-card)).
 
 <Aside type="note">
 This is a simpler model than skills or MCP. It's appropriate for a small set of shared utilities (search, email, calendar) where per-agent configuration would be more friction than value. If you need per-agent control over the same capability, wrap it as a skill or MCP server instead.

@@ -49,6 +49,7 @@ The detail page is a split layout: form fields on the left, a CodeMirror editor 
 - **MCP Servers table** — link/unlink tenant-registered MCP servers (sourced via the REST `listMcpServers` / `assignMcpToTemplate` / `unassignMcpFromTemplate` API module)
 - **Guardrail assignment** — pick a guardrail from the list registered in the [Security Center](/applications/admin/security-center/)
 - **Budget caps** — monthly spend cap; inherited by all child agents unless overridden
+- **Code Sandbox card** — opt this template into the `execute_code` tool and pick a network mode (see below)
 
 ### Right pane — system prompt editor
 
@@ -57,6 +58,17 @@ A full CodeMirror editor in markdown mode, vscodeDark theme. The system prompt i
 ### Linked agents section
 
 Below the main form, the template detail page lists every agent currently linked to this template. For each linked agent, the row shows its name, status, and (after a sync is triggered) its sync status.
+
+### Code Sandbox card
+
+The Configuration tab carries a **Code Sandbox** card that controls the template's opt-in to the AgentCore Code Interpreter sandbox. The card has a single toggle — **Enable `execute_code` for agents in this template** — and, when enabled, a **Network mode** dropdown with two options:
+
+- **`default-public` (egress)** — the sandbox can make outbound HTTPS calls. Routed to the tenant's public Code Interpreter instance.
+- **`internal-only` (compute)** — the sandbox has no network egress. Routed to the no-egress Code Interpreter instance. Use this for pure-compute workloads that must not reach the internet.
+
+The toggle persists to the template's `sandbox` field as JSON: `{ "environment": "default-public" | "internal-only" }` when opted in, `null` when the template doesn't use the sandbox. The shape is validated server-side by `packages/api/src/lib/templates/sandbox-config.ts`.
+
+The `execute_code` tool only registers on a turn when **both** the template is opted in on this card **and** the tenant has `sandbox_enabled` set in tenant policy. Template opt-in without tenant policy is a no-op. See [Admin → Built-in Tools](/applications/admin/builtin-tools/#code-sandbox-policy-gated) for the tenant-policy side of the gate and the [Code Sandbox concept page](/concepts/agents/code-sandbox/) for how the opt-in flows through to the agent runtime.
 
 ## The Workspace tab
 
