@@ -123,6 +123,10 @@ jobs:
       # via the GHA cache so the second build reuses everything up to
       # the platform-specific steps.
 
+      - name: Compute build timestamp
+        id: build_time
+        run: echo "value=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - name: Build and push amd64 (Lambda)
         uses: docker/build-push-action@v6
         with:
@@ -133,6 +137,9 @@ jobs:
           tags: |
             ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}
             ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:latest
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.build_time.outputs.value }}
           cache-from: type=gha,scope=amd64
           cache-to: type=gha,scope=amd64,mode=max
           provenance: false
@@ -147,6 +154,9 @@ jobs:
           tags: |
             ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}-arm64
             ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:latest-arm64
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.build_time.outputs.value }}
           cache-from: type=gha,scope=arm64
           cache-to: type=gha,scope=arm64,mode=max
           provenance: false
