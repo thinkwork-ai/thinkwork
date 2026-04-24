@@ -1502,6 +1502,43 @@ def _call_strands_agent(system_prompt: str, messages: list,
     log_filter_result("[builtin-tool-filter]", _filter_result)
     tools = _filter_result.tools
 
+    # U15 Resolved Capability Manifest — emit a structured log + best-
+    # effort POST to /api/runtime/manifests so admins can see exactly what
+    # this session was granted. The persistence path is non-blocking:
+    # CloudWatch is the durable observation, the POST is the convenience
+    # for admin-UI read-back. Failures are logged + swallowed so manifest
+    # infra can never block a session.
+    try:
+        from capability_manifest import build_and_log as _rcm_build_and_log
+        _rcm_skills = [
+            {"slug": s.get("slug") or s.get("skillId") or "", "source": s.get("source", "builtin")}
+            for s in (skills_config or [])
+            if isinstance(s, dict) and (s.get("slug") or s.get("skillId"))
+        ]
+        _rcm_mcps = [
+            {
+                "name": m.get("name") or "",
+                "url": m.get("url") or "",
+                "status": "approved",  # buildMcpConfigs already filters to approved
+            }
+            for m in (mcp_configs or [])
+            if isinstance(m, dict)
+        ]
+        _rcm_build_and_log(
+            session_id=os.environ.get("_SESSION_ID") or os.environ.get("CURRENT_THREAD_ID") or "",
+            tenant_id=os.environ.get("TENANT_ID") or "",
+            agent_id=os.environ.get("AGENT_ID") or "",
+            template_id=os.environ.get("TEMPLATE_ID") or "",
+            user_id=os.environ.get("CURRENT_USER_ID") or os.environ.get("USER_ID") or "",
+            tools=tools,
+            skills=_rcm_skills,
+            mcp_servers=_rcm_mcps,
+            tenant_disabled_builtins=disabled_builtin_tools or (),
+            template_blocked_tools=template_blocked_tools or (),
+        )
+    except Exception as _rcm_err:
+        logger.warning("capability_manifest build_and_log failed: %s", _rcm_err)
+
     agent = Agent(
         model=bedrock_model,
         system_prompt=system_prompt,

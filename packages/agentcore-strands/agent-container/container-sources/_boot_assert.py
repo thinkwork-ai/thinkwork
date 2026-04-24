@@ -31,6 +31,7 @@ import sys
 EXPECTED_CONTAINER_SOURCES: tuple[str, ...] = (
     "api_memory_client",
     "builtin_tool_filter",
+    "capability_manifest",
     "composition_runner",
     "eval_span_attrs",
     "external_task_context",

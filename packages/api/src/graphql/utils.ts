@@ -90,6 +90,8 @@ import {
   // Sandbox (AgentCore Code Sandbox plan)
   tenantPolicyEvents,
   sandboxInvocations,
+  // Resolved Capability Manifest (plan §U15)
+  resolvedCapabilityManifests,
 } from "@thinkwork/database-pg/schema";
 import { checkAndFireUnblockWakeups } from "../lib/orchestration/thread-release.js";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
@@ -156,6 +158,7 @@ export {
   mutationIdempotency,
   tenantPolicyEvents,
   sandboxInvocations,
+  resolvedCapabilityManifests,
   checkAndFireUnblockWakeups,
   generateSlug,
 };
