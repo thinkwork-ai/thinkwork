@@ -19,9 +19,9 @@ import {
 	GetSecretValueCommand,
 	ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
-import { eq, and, sql, inArray } from "drizzle-orm";
+import { eq, and, sql, inArray, isNull } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
-import { agentSkills, skillCatalog, skillRuns, tenantSkills, tenantMcpServers, agentMcpServers, agentTemplateMcpServers, tenantBuiltinTools, connections, connectProviders, users } from "@thinkwork/database-pg/schema";
+import { agentSkills, skillCatalog, skillRuns, tenantSkills, tenantMcpServers, tenantMcpAdminKeys, agentMcpServers, agentTemplateMcpServers, tenantBuiltinTools, connections, connectProviders, users } from "@thinkwork/database-pg/schema";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { parse as parseYaml } from "yaml";
 import { authenticate } from "../lib/cognito-auth.js";
@@ -307,6 +307,37 @@ export async function handler(
 				if (!_v.ok) return error(_v.reason, _v.status);
 			}
 			return mcpDeleteServer(tenantSlug, mcpUpdateMatch[1]);
+		}
+
+		// GET /api/skills/mcp-servers/:id/key-status — whether a tenant API key
+		// is configured for this MCP server (and a last-4 preview for admins).
+		const mcpKeyStatusMatch = path.match(/^\/api\/skills\/mcp-servers\/([^/]+)\/key-status$/);
+		if (mcpKeyStatusMatch && method === "GET") {
+			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: ["owner", "admin", "member"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
+			return mcpKeyStatus(tenantSlug, mcpKeyStatusMatch[1]);
+		}
+
+		// PUT /api/skills/mcp-servers/:id/api-key — set or rotate the tenant
+		// API key for an mcp server. Accepts either `{ apiKey: "..." }` to
+		// store a caller-supplied key, or `{ mintNew: true }` to auto-generate
+		// via the admin-ops provision path. owner/admin only — writes both
+		// Secrets Manager and tenant_mcp_servers.auth_config.
+		const mcpSetKeyMatch = path.match(/^\/api\/skills\/mcp-servers\/([^/]+)\/api-key$/);
+		if (mcpSetKeyMatch && method === "PUT") {
+			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: ["owner", "admin"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
+			return mcpSetApiKey(tenantSlug, mcpSetKeyMatch[1], event);
 		}
 
 		// POST /api/skills/mcp-servers/:id/test — test connection + cache tools
@@ -1618,6 +1649,158 @@ async function mcpDeleteServer(
 
 	if (deleted.length === 0) return notFound("MCP server not found");
 	return json({ ok: true, deleted: serverId });
+}
+
+/**
+ * GET /api/skills/mcp-servers/:id/key-status
+ *
+ * Returns whether a tenant API key is configured for this MCP server.
+ * For admin-ops style servers (auth_type = "tenant_api_key"), the admin
+ * SPA uses this to decide whether to open the set-key dialog when an
+ * admin flips the per-template enable toggle.
+ *
+ * Response:
+ *   - `authType`: echo of auth_type so the client doesn't need to
+ *     re-fetch the whole server row.
+ *   - `hasKey`: true when auth_config.token is a non-empty string.
+ *   - `lastFour`: last 4 characters of the stored token (admin-only
+ *     readable preview; never returns the full token).
+ */
+async function mcpKeyStatus(
+	tenantSlug: string,
+	serverId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const badUuid = requireUuid(serverId);
+	if (badUuid) return badUuid;
+	const tenantId = await resolveTenantId(tenantSlug);
+	if (!tenantId) return error("Tenant not found", 404);
+
+	const [row] = await db
+		.select({ auth_type: tenantMcpServers.auth_type, auth_config: tenantMcpServers.auth_config })
+		.from(tenantMcpServers)
+		.where(and(eq(tenantMcpServers.id, serverId), eq(tenantMcpServers.tenant_id, tenantId)))
+		.limit(1);
+
+	if (!row) return notFound("MCP server not found");
+
+	const authConfig = (row.auth_config as Record<string, unknown> | null) || {};
+	const token = typeof authConfig.token === "string" ? (authConfig.token as string) : "";
+	const hasKey = token.length > 0;
+
+	return json({
+		authType: row.auth_type,
+		hasKey,
+		lastFour: hasKey ? token.slice(-4) : null,
+	});
+}
+
+/**
+ * PUT /api/skills/mcp-servers/:id/api-key
+ *
+ * Set or rotate the tenant API key for an MCP server. Two modes:
+ *
+ *   { apiKey: "tkm_..." }      — store a caller-supplied token.
+ *   { mintNew: true }          — auto-generate via the admin-ops
+ *                                  provision flow (tkm_ + sha256 hash
+ *                                  in tenant_mcp_admin_keys; raw token
+ *                                  in Secrets Manager + auth_config).
+ *
+ * Writes both Secrets Manager (authoritative source) and
+ * tenant_mcp_servers.auth_config.token (back-compat for mcp-configs
+ * readers). Returns the last-4 preview so the client can update its
+ * row without a second round-trip.
+ *
+ * owner/admin only — gate enforced by caller.
+ */
+async function mcpSetApiKey(
+	tenantSlug: string,
+	serverId: string,
+	event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+	const badUuid = requireUuid(serverId);
+	if (badUuid) return badUuid;
+	const tenantId = await resolveTenantId(tenantSlug);
+	if (!tenantId) return error("Tenant not found", 404);
+
+	const [server] = await db
+		.select({ id: tenantMcpServers.id, slug: tenantMcpServers.slug, auth_type: tenantMcpServers.auth_type })
+		.from(tenantMcpServers)
+		.where(and(eq(tenantMcpServers.id, serverId), eq(tenantMcpServers.tenant_id, tenantId)))
+		.limit(1);
+
+	if (!server) return notFound("MCP server not found");
+	if (server.auth_type !== "tenant_api_key") {
+		return error(
+			`Server auth_type is "${server.auth_type}", not "tenant_api_key". API key management only applies to tenant_api_key servers.`,
+			400,
+		);
+	}
+
+	let body: { apiKey?: string; mintNew?: boolean };
+	try {
+		body = JSON.parse(event.body || "{}");
+	} catch {
+		return error("Invalid JSON body", 400);
+	}
+
+	let rawToken: string;
+	if (body.mintNew === true) {
+		// Mint a fresh tkm_ token and persist the sha256 hash in
+		// tenant_mcp_admin_keys. Mirrors mcp-admin-provision's flow so
+		// admin-ops validation via the sha256 lookup keeps working.
+		const suffix = randomBytes(32).toString("base64url");
+		rawToken = `tkm_${suffix}`;
+		const hash = createHash("sha256").update(rawToken).digest("hex");
+		// Revoke any existing active default key to respect the
+		// partial unique index uq_tenant_mcp_admin_keys_active_name.
+		await db
+			.update(tenantMcpAdminKeys)
+			.set({ revoked_at: new Date() })
+			.where(and(
+				eq(tenantMcpAdminKeys.tenant_id, tenantId),
+				eq(tenantMcpAdminKeys.name, "default"),
+				isNull(tenantMcpAdminKeys.revoked_at),
+			));
+		await db.insert(tenantMcpAdminKeys).values({
+			tenant_id: tenantId,
+			key_hash: hash,
+			name: "default",
+		});
+	} else if (typeof body.apiKey === "string" && body.apiKey.length > 0) {
+		// Caller-supplied key. Don't validate the prefix — operators may
+		// BYO a token from outside the tkm_ namespace (future). We just
+		// store what they gave us.
+		rawToken = body.apiKey;
+	} else {
+		return error("Either apiKey (string) or mintNew=true must be supplied", 400);
+	}
+
+	// Upsert Secrets Manager + auth_config.
+	const secretName = `thinkwork/${STAGE}/mcp/${tenantId}/${server.slug}`;
+	const secretValue = JSON.stringify({ type: "mcpApiKey", token: rawToken });
+	try {
+		await sm.send(new UpdateSecretCommand({ SecretId: secretName, SecretString: secretValue }));
+	} catch (err: unknown) {
+		if (err instanceof ResourceNotFoundException) {
+			await sm.send(new CreateSecretCommand({ Name: secretName, SecretString: secretValue }));
+		} else {
+			throw err;
+		}
+	}
+
+	await db
+		.update(tenantMcpServers)
+		.set({
+			auth_config: { secretRef: secretName, token: rawToken },
+			updated_at: new Date(),
+		})
+		.where(eq(tenantMcpServers.id, serverId));
+
+	return json({
+		ok: true,
+		lastFour: rawToken.slice(-4),
+		minted: body.mintNew === true,
+	});
 }
 
 async function mcpTestConnection(
