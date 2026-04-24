@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard,
   MessagesSquare,
@@ -24,6 +23,7 @@ import {
 } from "lucide-react";
 import { useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
+import { apiFetch, NotReadyError } from "@/lib/api-fetch";
 import { InboxItemsListQuery, AgentsListQuery, ThreadsListQuery, ThreadsPagedQuery, RoutinesListQuery } from "@/lib/graphql-queries";
 import { InboxItemStatus } from "@/gql/graphql";
 import { Badge } from "@/components/ui/badge";
@@ -121,32 +121,37 @@ export function AppSidebar() {
   });
   const threadCount = (threadsResult.data as any)?.threadsPaged?.totalCount ?? 0;
 
-  // REST-based active counts for Manage section
-  const API_URL = import.meta.env.VITE_API_URL || "";
-  const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
-
+  // REST-based active counts for Manage section. Highest-traffic REST call
+  // site in the admin — fires on every tenant-scoped page load. If the auth
+  // session hasn't hydrated yet apiFetch throws NotReadyError; we bump a
+  // retry counter so the effect re-fires on the next tick once the token is
+  // available. Other errors are non-fatal for the cosmetic count badges.
   const [activeScheduledJobs, setActiveScheduledJobs] = useState(0);
   const [activeRoutines, setActiveRoutines] = useState(0);
   const [activeWebhooks, setActiveWebhooks] = useState(0);
+  const [authRetryTick, setAuthRetryTick] = useState(0);
 
   const fetchManageCounts = useCallback(async () => {
     if (!tenantId) return;
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      "x-tenant-id": tenantId,
-      ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-    };
+    const extraHeaders = { "x-tenant-id": tenantId };
     try {
       const [jobs, webhooks] = await Promise.all([
-        fetch(`${API_URL}/api/scheduled-jobs`, { headers }).then((r) => r.json()) as Promise<{ enabled: boolean }[]>,
-        fetch(`${API_URL}/api/webhooks`, { headers }).then((r) => r.json()) as Promise<{ enabled: boolean }[]>,
+        apiFetch<{ enabled: boolean }[]>("/api/scheduled-jobs", { extraHeaders }),
+        apiFetch<{ enabled: boolean }[]>("/api/webhooks", { extraHeaders }),
       ]);
       setActiveScheduledJobs(jobs.filter((j) => j.enabled).length);
       setActiveWebhooks(webhooks.filter((w) => w.enabled).length);
-    } catch { /* non-fatal */ }
-  }, [tenantId, API_URL, API_AUTH_SECRET]);
+    } catch (err) {
+      if (err instanceof NotReadyError) {
+        // Auth still hydrating — schedule a retry on the next tick.
+        const t = setTimeout(() => setAuthRetryTick((n) => n + 1), 100);
+        return () => clearTimeout(t);
+      }
+      // Other failures are non-fatal for sidebar counts.
+    }
+  }, [tenantId]);
 
-  useEffect(() => { fetchManageCounts(); }, [fetchManageCounts]);
+  useEffect(() => { fetchManageCounts(); }, [fetchManageCounts, authRetryTick]);
 
   // Routines active count from GraphQL
   const [routinesResult] = useQuery({
@@ -159,29 +164,29 @@ export function AppSidebar() {
   ).length;
 
   // Role gate for owner-only nav entries (Billing). Cheap one-shot fetch
-  // on mount; the role doesn't change while a session is alive.
-  const { getToken } = useAuth();
+  // on mount; the role doesn't change while a session is alive. If auth
+  // hasn't hydrated yet we retry once on the next tick.
   const [callerRole, setCallerRole] = useState<string | null>(null);
+  const [roleRetryTick, setRoleRetryTick] = useState(0);
   useEffect(() => {
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     (async () => {
       try {
-        const token = await getToken();
-        if (!token) return;
-        const res = await fetch(`${API_URL}/api/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) return;
-        const data = (await res.json()) as { role?: string | null };
+        const data = await apiFetch<{ role?: string | null }>("/api/auth/me");
         if (!cancelled) setCallerRole(data.role ?? null);
-      } catch {
-        /* silent; Billing just stays hidden */
+      } catch (err) {
+        if (err instanceof NotReadyError && !cancelled) {
+          timer = setTimeout(() => setRoleRetryTick((n) => n + 1), 100);
+        }
+        /* other errors: silent; Billing just stays hidden */
       }
     })();
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
-  }, [getToken]);
+  }, [roleRetryTick]);
   const isOwner = callerRole === "owner";
 
   const workItems: NavItem[] = [

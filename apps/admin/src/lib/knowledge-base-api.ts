@@ -3,23 +3,28 @@
  * Communicates with the KB files Lambda for list/delete and gets presigned URLs for upload.
  */
 
-const API_URL = import.meta.env.VITE_API_URL || "";
-const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
+import { apiFetch, ApiError } from "@/lib/api-fetch";
 
 async function kbFilesApi(body: Record<string, unknown>) {
-  const res = await fetch(`${API_URL}/api/knowledge-bases/files`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`KB Files API ${res.status}: ${text}`);
+  // Preserve the legacy error shape (`KB Files API <status>: <text>`) so
+  // consumers that string-match on the message keep working.
+  try {
+    return await apiFetch<any>("/api/knowledge-bases/files", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    if (err instanceof ApiError) {
+      const text =
+        typeof err.body === "string"
+          ? err.body
+          : err.body != null
+            ? JSON.stringify(err.body)
+            : "";
+      throw new Error(`KB Files API ${err.status}: ${text}`);
+    }
+    throw err;
   }
-  return res.json();
 }
 
 export interface KbDocument {

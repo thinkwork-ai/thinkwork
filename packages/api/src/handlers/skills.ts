@@ -24,7 +24,7 @@ import { getDb } from "@thinkwork/database-pg";
 import { agentSkills, skillCatalog, skillRuns, tenantSkills, tenantMcpServers, agentMcpServers, agentTemplateMcpServers, tenantBuiltinTools, connections, connectProviders, users } from "@thinkwork/database-pg/schema";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { parse as parseYaml } from "yaml";
-import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
+import { authenticate } from "../lib/cognito-auth.js";
 import { handleCors, json, error, notFound, unauthorized } from "../lib/response.js";
 import { resolveTenantId } from "../lib/tenants.js";
 import { applyMcpServerFieldUpdate } from "../lib/mcp-server-update.js";
@@ -65,12 +65,10 @@ export async function handler(
 		}
 	}
 
-	// Accept Bearer token (admin UI), x-api-key (mobile app), or AppSync API key
-	const token = extractBearerToken(event) || event.headers["x-api-key"] || "";
-	const apiSecret = process.env.API_AUTH_SECRET || "";
-	const appsyncKey = process.env.APPSYNC_API_KEY || process.env.GRAPHQL_API_KEY || "";
-	const isAuthed = (apiSecret && token === apiSecret) || (appsyncKey && token === appsyncKey);
-	if (!token || !isAuthed) return unauthorized();
+	// Accept Cognito JWT (admin UI, mobile), Bearer API_AUTH_SECRET (service), or
+	// x-api-key (AppSync / app-manager). Validation lives in authenticate().
+	const auth = await authenticate(event.headers);
+	if (!auth) return unauthorized();
 
 	try {
 		// --- Catalog routes ---

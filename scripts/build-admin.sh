@@ -42,13 +42,15 @@ COGNITO_DOMAIN="https://${AUTH_DOMAIN}.auth.${REGION}.amazoncognito.com"
 # Construct WebSocket URL from AppSync API URL
 APPSYNC_WS_URL="${APPSYNC_REALTIME_URL}"
 
-# API auth secret — from env var or empty
-AUTH_SECRET="${API_AUTH_SECRET:-}"
-
 echo "▸ Building admin app ..."
 cd "$REPO_ROOT"
 
-# Write production env file
+# Write production env file.
+#
+# VITE_API_AUTH_SECRET is intentionally absent. The admin SPA authenticates
+# REST calls with the user's Cognito id token (via apiFetch in
+# apps/admin/src/lib/api-fetch.ts). Never re-add a service-to-service
+# secret here — Vite inlines it into the public JS bundle.
 cat > apps/admin/.env.production <<EOF
 VITE_GRAPHQL_HTTP_URL=${API_ENDPOINT}/graphql
 VITE_GRAPHQL_URL=${APPSYNC_API_URL}
@@ -58,7 +60,6 @@ VITE_COGNITO_USER_POOL_ID=${USER_POOL_ID}
 VITE_COGNITO_CLIENT_ID=${ADMIN_CLIENT_ID}
 VITE_COGNITO_DOMAIN=${COGNITO_DOMAIN}
 VITE_API_URL=${API_ENDPOINT}
-VITE_API_AUTH_SECRET=${AUTH_SECRET}
 EOF
 
 pnpm --filter admin build

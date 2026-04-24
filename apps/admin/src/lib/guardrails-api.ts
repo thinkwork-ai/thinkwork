@@ -1,20 +1,21 @@
-const API_URL = import.meta.env.VITE_API_URL || "";
-const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
+import { apiFetch, ApiError } from "@/lib/api-fetch";
 
-async function apiFetch(path: string, options: RequestInit = {}) {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-      ...options.headers,
-    },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
+// Preserve the legacy external error shape (`new Error(body.error || "HTTP N")`)
+// so consumers that string-match on the message keep working. apiFetch already
+// surfaces the best-effort error body; we just re-throw as a plain Error.
+async function request<T>(
+  path: string,
+  options: { method?: string; body?: string; extraHeaders?: Record<string, string> } = {},
+): Promise<T> {
+  try {
+    return await apiFetch<T>(path, options);
+  } catch (err) {
+    if (err instanceof ApiError) {
+      const body = err.body as { error?: string } | null;
+      throw new Error(body?.error || `HTTP ${err.status}`);
+    }
+    throw err;
   }
-  return res.json();
 }
 
 // ---------------------------------------------------------------------------
@@ -93,14 +94,14 @@ function tenantHeaders(tenantId: string) {
 }
 
 export function listGuardrails(tenantId: string): Promise<Guardrail[]> {
-  return apiFetch("/api/guardrails", {
-    headers: tenantHeaders(tenantId),
+  return request("/api/guardrails", {
+    extraHeaders: tenantHeaders(tenantId),
   });
 }
 
 export function getGuardrail(tenantId: string, id: string): Promise<Guardrail> {
-  return apiFetch(`/api/guardrails/${id}`, {
-    headers: tenantHeaders(tenantId),
+  return request(`/api/guardrails/${id}`, {
+    extraHeaders: tenantHeaders(tenantId),
   });
 }
 
@@ -108,9 +109,9 @@ export function createGuardrail(
   tenantId: string,
   data: { name: string; description?: string; config: GuardrailConfig },
 ): Promise<Guardrail> {
-  return apiFetch("/api/guardrails", {
+  return request("/api/guardrails", {
     method: "POST",
-    headers: tenantHeaders(tenantId),
+    extraHeaders: tenantHeaders(tenantId),
     body: JSON.stringify(data),
   });
 }
@@ -120,17 +121,17 @@ export function updateGuardrail(
   id: string,
   data: { name?: string; description?: string; config?: GuardrailConfig },
 ): Promise<Guardrail> {
-  return apiFetch(`/api/guardrails/${id}`, {
+  return request(`/api/guardrails/${id}`, {
     method: "PUT",
-    headers: tenantHeaders(tenantId),
+    extraHeaders: tenantHeaders(tenantId),
     body: JSON.stringify(data),
   });
 }
 
 export function deleteGuardrail(tenantId: string, id: string): Promise<{ deleted: boolean }> {
-  return apiFetch(`/api/guardrails/${id}`, {
+  return request(`/api/guardrails/${id}`, {
     method: "DELETE",
-    headers: tenantHeaders(tenantId),
+    extraHeaders: tenantHeaders(tenantId),
   });
 }
 
@@ -139,16 +140,16 @@ export function toggleDefault(
   id: string,
   isDefault: boolean,
 ): Promise<Guardrail> {
-  return apiFetch(`/api/guardrails/${id}/default`, {
+  return request(`/api/guardrails/${id}/default`, {
     method: "PUT",
-    headers: tenantHeaders(tenantId),
+    extraHeaders: tenantHeaders(tenantId),
     body: JSON.stringify({ is_default: isDefault }),
   });
 }
 
 export function getGuardrailStats(tenantId: string): Promise<GuardrailStats> {
-  return apiFetch("/api/guardrails/stats", {
-    headers: tenantHeaders(tenantId),
+  return request("/api/guardrails/stats", {
+    extraHeaders: tenantHeaders(tenantId),
   });
 }
 
@@ -157,9 +158,9 @@ export function assignTemplates(
   guardrailId: string,
   templateIds: string[],
 ): Promise<{ assigned: number }> {
-  return apiFetch(`/api/guardrails/${guardrailId}/templates`, {
+  return request(`/api/guardrails/${guardrailId}/templates`, {
     method: "PUT",
-    headers: tenantHeaders(tenantId),
+    extraHeaders: tenantHeaders(tenantId),
     body: JSON.stringify({ template_ids: templateIds }),
   });
 }

@@ -1,20 +1,21 @@
-const API_URL = import.meta.env.VITE_API_URL || "";
-const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
+import { apiFetch, ApiError } from "@/lib/api-fetch";
 
-async function apiFetch(path: string, options: RequestInit = {}) {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-      ...options.headers,
-    },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
+// Preserve the legacy external error shape (`new Error(body.error || "HTTP N")`)
+// so consumers that string-match on the message keep working. apiFetch already
+// surfaces the best-effort error body; we just re-throw as a plain Error.
+async function request<T>(
+  path: string,
+  options: { method?: string; body?: string; extraHeaders?: Record<string, string> } = {},
+): Promise<T> {
+  try {
+    return await apiFetch<T>(path, options);
+  } catch (err) {
+    if (err instanceof ApiError) {
+      const body = err.body as { error?: string } | null;
+      throw new Error(body?.error || `HTTP ${err.status}`);
+    }
+    throw err;
   }
-  return res.json();
 }
 
 // ---------------------------------------------------------------------------
@@ -78,22 +79,22 @@ export type InstalledSkill = {
 // ---------------------------------------------------------------------------
 
 export function listCatalog(): Promise<CatalogSkill[]> {
-  return apiFetch("/api/skills/catalog");
+  return request("/api/skills/catalog");
 }
 
 export function getCatalogSkill(slug: string): Promise<CatalogSkill> {
-  return apiFetch(`/api/skills/catalog/${slug}`);
+  return request(`/api/skills/catalog/${slug}`);
 }
 
 export function listCatalogFiles(slug: string): Promise<string[]> {
-  return apiFetch(`/api/skills/catalog/${slug}/files`);
+  return request(`/api/skills/catalog/${slug}/files`);
 }
 
 export function getCatalogFile(
   slug: string,
   path: string,
 ): Promise<{ path: string; content: string }> {
-  return apiFetch(`/api/skills/catalog/${slug}/files/${path}`);
+  return request(`/api/skills/catalog/${slug}/files/${path}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -103,8 +104,8 @@ export function getCatalogFile(
 export function listTenantSkills(
   tenantSlug: string,
 ): Promise<InstalledSkill[]> {
-  return apiFetch("/api/skills/tenant", {
-    headers: { "x-tenant-slug": tenantSlug },
+  return request("/api/skills/tenant", {
+    extraHeaders: { "x-tenant-slug": tenantSlug },
   });
 }
 
@@ -112,9 +113,9 @@ export function installSkill(
   tenantSlug: string,
   slug: string,
 ): Promise<{ success: boolean; slug: string }> {
-  return apiFetch(`/api/skills/tenant/${slug}/install`, {
+  return request(`/api/skills/tenant/${slug}/install`, {
     method: "POST",
-    headers: { "x-tenant-slug": tenantSlug },
+    extraHeaders: { "x-tenant-slug": tenantSlug },
   });
 }
 
@@ -122,9 +123,9 @@ export function uninstallSkill(
   tenantSlug: string,
   slug: string,
 ): Promise<{ success: boolean; slug: string }> {
-  return apiFetch(`/api/skills/tenant/${slug}`, {
+  return request(`/api/skills/tenant/${slug}`, {
     method: "DELETE",
-    headers: { "x-tenant-slug": tenantSlug },
+    extraHeaders: { "x-tenant-slug": tenantSlug },
   });
 }
 
@@ -133,8 +134,8 @@ export function getTenantFile(
   slug: string,
   path: string,
 ): Promise<{ path: string; content: string }> {
-  return apiFetch(`/api/skills/tenant/${slug}/files/${path}`, {
-    headers: { "x-tenant-slug": tenantSlug },
+  return request(`/api/skills/tenant/${slug}/files/${path}`, {
+    extraHeaders: { "x-tenant-slug": tenantSlug },
   });
 }
 
@@ -144,9 +145,9 @@ export function saveTenantFile(
   path: string,
   content: string,
 ): Promise<{ success: boolean }> {
-  return apiFetch(`/api/skills/tenant/${slug}/files/${path}`, {
+  return request(`/api/skills/tenant/${slug}/files/${path}`, {
     method: "PUT",
-    headers: { "x-tenant-slug": tenantSlug },
+    extraHeaders: { "x-tenant-slug": tenantSlug },
     body: JSON.stringify({ content }),
   });
 }
@@ -160,9 +161,9 @@ export function installSkillToAgent(
   agentSlug: string,
   skillSlug: string,
 ): Promise<{ success: boolean; slug: string }> {
-  return apiFetch(`/api/skills/agent/${agentSlug}/install/${skillSlug}`, {
+  return request(`/api/skills/agent/${agentSlug}/install/${skillSlug}`, {
     method: "POST",
-    headers: { "x-tenant-slug": tenantSlug },
+    extraHeaders: { "x-tenant-slug": tenantSlug },
   });
 }
 
@@ -175,7 +176,7 @@ export function saveSkillCredentials(
   skillId: string,
   env: Record<string, string>,
 ): Promise<{ ok: boolean; secretRef: string }> {
-  return apiFetch(`/api/skills/agent/${agentId}/${skillId}/credentials`, {
+  return request(`/api/skills/agent/${agentId}/${skillId}/credentials`, {
     method: "POST",
     body: JSON.stringify({ env }),
   });
@@ -189,9 +190,9 @@ export function createTenantSkill(
   tenantSlug: string,
   opts: { name: string; slug?: string; description?: string },
 ): Promise<{ success: boolean; slug: string; files: string[] }> {
-  return apiFetch("/api/skills/tenant/create", {
+  return request("/api/skills/tenant/create", {
     method: "POST",
-    headers: { "x-tenant-slug": tenantSlug },
+    extraHeaders: { "x-tenant-slug": tenantSlug },
     body: JSON.stringify(opts),
   });
 }
@@ -200,9 +201,9 @@ export function getUploadUrl(
   tenantSlug: string,
   slug: string,
 ): Promise<{ uploadUrl: string; key: string }> {
-  return apiFetch(`/api/skills/tenant/${slug}/upload`, {
+  return request(`/api/skills/tenant/${slug}/upload`, {
     method: "POST",
-    headers: { "x-tenant-slug": tenantSlug },
+    extraHeaders: { "x-tenant-slug": tenantSlug },
   });
 }
 
@@ -210,8 +211,8 @@ export function listTenantSkillFiles(
   tenantSlug: string,
   slug: string,
 ): Promise<string[]> {
-  return apiFetch(`/api/skills/tenant/${slug}/files`, {
-    headers: { "x-tenant-slug": tenantSlug },
+  return request(`/api/skills/tenant/${slug}/files`, {
+    extraHeaders: { "x-tenant-slug": tenantSlug },
   });
 }
 
@@ -221,9 +222,9 @@ export function createTenantFile(
   path: string,
   content: string,
 ): Promise<{ success: boolean; path: string }> {
-  return apiFetch(`/api/skills/tenant/${slug}/files/${path}`, {
+  return request(`/api/skills/tenant/${slug}/files/${path}`, {
     method: "POST",
-    headers: { "x-tenant-slug": tenantSlug },
+    extraHeaders: { "x-tenant-slug": tenantSlug },
     body: JSON.stringify({ content }),
   });
 }
@@ -233,9 +234,9 @@ export function deleteTenantFile(
   slug: string,
   path: string,
 ): Promise<{ success: boolean; path: string }> {
-  return apiFetch(`/api/skills/tenant/${slug}/files/${path}`, {
+  return request(`/api/skills/tenant/${slug}/files/${path}`, {
     method: "DELETE",
-    headers: { "x-tenant-slug": tenantSlug },
+    extraHeaders: { "x-tenant-slug": tenantSlug },
   });
 }
 
@@ -251,8 +252,8 @@ export function checkUpgradeable(
   currentVersion: string;
   latestVersion: string;
 }> {
-  return apiFetch(`/api/skills/tenant/${slug}/upgradeable`, {
-    headers: { "x-tenant-slug": tenantSlug },
+  return request(`/api/skills/tenant/${slug}/upgradeable`, {
+    extraHeaders: { "x-tenant-slug": tenantSlug },
   });
 }
 
@@ -270,9 +271,8 @@ export function upgradeSkill(
   newVersion?: string;
 }> {
   const query = force ? "?force=true" : "";
-  return apiFetch(`/api/skills/tenant/${slug}/upgrade${query}`, {
+  return request(`/api/skills/tenant/${slug}/upgrade${query}`, {
     method: "POST",
-    headers: { "x-tenant-slug": tenantSlug },
+    extraHeaders: { "x-tenant-slug": tenantSlug },
   });
 }
-

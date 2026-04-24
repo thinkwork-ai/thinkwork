@@ -15,9 +15,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-
-const API_URL = import.meta.env.VITE_API_URL || "";
-const API_AUTH_SECRET = import.meta.env.VITE_API_AUTH_SECRET || "";
+import { apiFetch } from "@/lib/api-fetch";
 
 type AgentOption = { id: string; name: string };
 type RoutineOption = { id: string; name: string };
@@ -77,23 +75,15 @@ export function WebhookFormDialog({
 
   useEffect(() => {
     if (!open || !tenantId) return;
-    fetch(`${API_URL}/api/agents?tenant_id=${tenantId}`, {
-      headers: {
-        ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-        "x-tenant-id": tenantId,
-      },
+    apiFetch<any[]>(`/api/agents?tenant_id=${tenantId}`, {
+      extraHeaders: { "x-tenant-id": tenantId },
     })
-      .then((r) => r.json())
       .then((data) => setAgents(Array.isArray(data) ? data.map((a: any) => ({ id: a.id, name: a.name })) : []))
       .catch(() => setAgents([]));
 
-    fetch(`${API_URL}/api/routines`, {
-      headers: {
-        ...(API_AUTH_SECRET ? { Authorization: `Bearer ${API_AUTH_SECRET}` } : {}),
-        "x-tenant-id": tenantId,
-      },
+    apiFetch<any[]>("/api/routines", {
+      extraHeaders: { "x-tenant-id": tenantId },
     })
-      .then((r) => r.json())
       .then((data) => setRoutines(Array.isArray(data) ? data.map((r: any) => ({ id: r.id, name: r.name })) : []))
       .catch(() => setRoutines([]));
   }, [open, tenantId]);

@@ -66,16 +66,23 @@ function getVerifier() {
 /**
  * Validate the request and return auth context.
  * Returns null if authentication fails.
+ *
+ * Three acceptance paths, in order:
+ *   1. Cognito JWT in the Authorization header (admin SPA, mobile, `thinkwork login`).
+ *   2. Shared service secret in the `x-api-key` header (canonical service-to-service path).
+ *   3. Shared service secret in the Authorization header as a Bearer token (CLI + Strands
+ *      container back-compat — they historically send `Authorization: Bearer <secret>`
+ *      with no `x-api-key` header).
  */
 export async function authenticate(headers: Record<string, string | undefined>): Promise<AuthResult | null> {
 	const authHeader = headers["authorization"] || headers["Authorization"] || "";
 	const apiKey = headers["x-api-key"] || "";
+	const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
 
-	// Try Cognito JWT first
+	// 1. Cognito JWT in the Authorization header.
 	if (authHeader) {
-		const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
 		try {
-			const payload = await getVerifier().verify(token);
+			const payload = await getVerifier().verify(bearerToken);
 			return {
 				principalId: payload.sub,
 				tenantId: (payload as any)["custom:tenant_id"] || null,
@@ -85,31 +92,47 @@ export async function authenticate(headers: Record<string, string | undefined>):
 			};
 		} catch (err) {
 			console.warn("[cognito-auth] JWT verification failed:", (err as Error).message);
-			// Fall through to API key check
+			// Fall through to apikey checks.
 		}
 	}
 
-	// Try API key
+	// 2. API key in the x-api-key header.
 	if (apiKey) {
 		const accepted = acceptedApiKeys();
 		if (accepted.some((k) => k === apiKey)) {
-			return {
-				principalId: headers["x-principal-id"] || null,
-				tenantId: headers["x-tenant-id"] || null,
-				// Apikey auth has no JWT to pull an email from, but
-				// operator-gated mutations (updateTenantPolicy, sandbox
-				// fixture setup) still need to know which human is driving
-				// the service call. Callers pass `x-principal-email`
-				// alongside the api key; downstream resolvers check it
-				// against their own allowlist (e.g.
-				// THINKWORK_PLATFORM_OPERATOR_EMAILS). No email header ⇒
-				// no operator-gated mutation runs.
-				email: headers["x-principal-email"] || null,
-				authType: "apikey",
-				agentId: headers["x-agent-id"] || null,
-			};
+			return apikeyAuthResult(headers);
+		}
+	}
+
+	// 3. API key sent as Authorization: Bearer <secret> — CLI + Strands container
+	// back-compat. Only matches when the bearer string is an accepted apikey
+	// value; an expired or malformed JWT falls here but will not match any
+	// accepted key and safely returns null.
+	if (bearerToken) {
+		const accepted = acceptedApiKeys();
+		if (accepted.some((k) => k === bearerToken)) {
+			return apikeyAuthResult(headers);
 		}
 	}
 
 	return null;
+}
+
+/**
+ * Shared shape for the two apikey acceptance paths. Apikey auth has no JWT
+ * to pull an email from, but operator-gated mutations (updateTenantPolicy,
+ * sandbox fixture setup) still need to know which human is driving the
+ * service call. Callers pass `x-principal-email` alongside the key;
+ * downstream resolvers check it against their own allowlist (e.g.
+ * THINKWORK_PLATFORM_OPERATOR_EMAILS). No email header ⇒ no operator-gated
+ * mutation runs.
+ */
+function apikeyAuthResult(headers: Record<string, string | undefined>): AuthResult {
+	return {
+		principalId: headers["x-principal-id"] || null,
+		tenantId: headers["x-tenant-id"] || null,
+		email: headers["x-principal-email"] || null,
+		authType: "apikey",
+		agentId: headers["x-agent-id"] || null,
+	};
 }
