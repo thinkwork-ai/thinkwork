@@ -300,17 +300,6 @@ function ThreadDetailPage() {
   const activity: ActivityEvent[] = [];
 
   const childThreads = thread?.children ?? [];
-  const comments = useMemo(
-    () =>
-      (thread?.comments ?? []).map((c) => ({
-        id: c.id,
-        authorType: c.authorType ?? null,
-        authorId: c.authorId ?? null,
-        content: c.content,
-        createdAt: c.createdAt,
-      })),
-    [thread?.comments],
-  );
 
   const threadMessages = useMemo(
     () =>
@@ -501,14 +490,13 @@ function ThreadDetailPage() {
         />
         </div>
 
-        {/* ── Activity (turns + comments merged timeline) ─────────── */}
+        {/* ── Activity (turns + messages merged timeline) ─────────── */}
         <Separator />
         <div className="space-y-2">
           <LiveRunWidget threadId={threadId} tenantId={tenantId} />
           <ExecutionTrace
             threadId={threadId}
             tenantId={tenantId || ""}
-            comments={comments}
             messages={threadMessages}
             agentMap={agentMap}
             onOpenArtifact={openArtifact}

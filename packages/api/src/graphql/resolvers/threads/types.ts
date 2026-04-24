@@ -28,10 +28,6 @@ export const threadTypeResolvers = {
 		const reporterId = thread.reporterId || thread.reporter_id;
 		return reporterId ? ctx.loaders.user.load(reporterId) : null;
 	},
-	commentCount: (thread: any, _args: any, ctx: GraphQLContext) => {
-		if (typeof thread.commentCount === "number") return thread.commentCount;
-		return ctx.loaders.threadCommentCount.load(thread.id);
-	},
 	childCount: (thread: any, _args: any, ctx: GraphQLContext) => {
 		if (typeof thread.childCount === "number") return thread.childCount;
 		return ctx.loaders.threadChildCount.load(thread.id);

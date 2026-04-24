@@ -1,7 +1,7 @@
 import type { GraphQLContext } from "../../context.js";
 import {
 	db, eq,
-	threads, threadComments, agentWakeupRequests, inboxItems,
+	threads, agentWakeupRequests, inboxItems,
 	threadToCamel, assertTransition,
 	checkAndFireUnblockWakeups,
 } from "../../utils.js";
@@ -58,16 +58,6 @@ export const updateThread = async (_parent: any, args: any, ctx: GraphQLContext)
 
 	const [row] = await db.update(threads).set(updates).where(eq(threads.id, args.id)).returning();
 	if (!row) throw new Error("Thread not found");
-
-	// Insert system comment on status change
-	if (i.status !== undefined) {
-		await db.insert(threadComments).values({
-			thread_id: args.id,
-			tenant_id: row.tenant_id,
-			author_type: "system",
-			content: `Status changed to ${i.status.toLowerCase().replace(/_/g, " ")}`,
-		});
-	}
 
 	// On assignment to agent, insert wakeup request
 	if (i.assigneeType === "agent" && i.assigneeId) {
