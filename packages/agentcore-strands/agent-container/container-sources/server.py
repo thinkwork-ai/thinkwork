@@ -444,8 +444,15 @@ def _call_strands_agent(system_prompt: str, messages: list,
                         model: str = "",
                         skills_config: list | None = None,
                         guardrail_config: dict | None = None,
-                        mcp_configs: list | None = None) -> tuple[str, dict]:
+                        mcp_configs: list | None = None,
+                        disabled_builtin_tools: list | None = None,
+                        template_blocked_tools: list | None = None) -> tuple[str, dict]:
     """Invoke Strands Agent SDK.
+
+    ``disabled_builtin_tools`` / ``template_blocked_tools`` implement the
+    U12 tenant kill-switch + template block. Both default to no-op when the
+    caller does not pass them (inert ship — chat-agent-invoke / wakeup
+    Lambda will populate them once the admin path supplies the values).
 
     Returns (response_text, usage_dict).
     """
@@ -1480,6 +1487,21 @@ def _call_strands_agent(system_prompt: str, messages: list,
         logger.info("MCP clients added to tool list: %d servers, %d tools mapped",
                      len(mcp_clients), len(_mcp_tool_to_server))
 
+    # U12 tenant kill-switch + template-block filter. Applies tenant-wide
+    # disables (disabled_builtin_tools) ∪ template-level blocks
+    # (blocked_tools) to the registered built-ins. MCP client tools are
+    # included in the scan — name-based, so an admin can also disable a
+    # misbehaving MCP tool via the same kill-switch list. Tenant wins the
+    # intersection; unknown slugs are runtime no-ops with a WARN log.
+    from builtin_tool_filter import filter_builtin_tools, log_filter_result
+    _filter_result = filter_builtin_tools(
+        tools,
+        disabled_builtin_tools=disabled_builtin_tools or (),
+        template_blocked_tools=template_blocked_tools or (),
+    )
+    log_filter_result("[builtin-tool-filter]", _filter_result)
+    tools = _filter_result.tools
+
     agent = Agent(
         model=bedrock_model,
         system_prompt=system_prompt,
@@ -1871,6 +1893,12 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
         mcp_configs = payload.get("mcp_configs") or []
         thread_metadata = payload.get("thread_metadata") or {}
         workflow_skill = payload.get("workflow_skill")
+        # U12 tenant kill-switch + template-block. Both arrive as plain lists
+        # from the Lambda caller; the filter normalizes internally. Empty /
+        # missing defaults to no-op so the runtime stays backward-compatible
+        # with callers that have not been updated yet.
+        disabled_builtin_tools = payload.get("disabled_builtin_tools") or []
+        template_blocked_tools = payload.get("blocked_tools") or []
         if mcp_configs:
             logger.info("MCP configs received: %d servers (%s)",
                         len(mcp_configs),
@@ -2050,6 +2078,8 @@ class AgentCoreHandler(BaseHTTPRequestHandler):
                     skills_config=skills_config,
                     guardrail_config=guardrail_config,
                     mcp_configs=mcp_configs if mcp_configs else None,
+                    disabled_builtin_tools=disabled_builtin_tools,
+                    template_blocked_tools=template_blocked_tools,
                 )
 
                 duration_ms = int(time.time() * 1000) - start_ms
