@@ -10,7 +10,8 @@
 #
 # This script walks drizzle/*.sql, excludes files registered in the journal,
 # and for each remaining file greps the header for explicit creation markers
-# (`-- creates:` / `-- creates-column:` / `-- creates-extension:`) and probes the target $DATABASE_URL
+# (`-- creates:` / `-- creates-column:` / `-- creates-extension:`) and drop
+# markers (`-- drops-column:`) and probes the target $DATABASE_URL
 # to report APPLIED / MISSING per object.
 #
 # Read-only by default. Does not apply migrations — that stays an operator
@@ -33,6 +34,7 @@
 #   -- creates: public.<table_or_index_name>
 #   -- creates-column: public.<table_name>.<column_name>
 #   -- creates-extension: <ext_name>            # probes pg_catalog.pg_extension
+#   -- drops-column: public.<table_name>.<column_name>     # probes ABSENT
 # Multiple markers per file are fine. A file with zero markers is reported
 # as UNVERIFIED (explicitly flagged, since "no markers" is a header-quality
 # issue that should be fixed at PR time).
@@ -111,6 +113,30 @@ probe_column() {
   fi
 }
 
+probe_column_absent() {
+  # Accepts public.table.column — returns DROPPED when the column is absent,
+  # STILL_PRESENT when it's still there. Mirror of probe_column for the
+  # inverse semantic: a drop migration is "applied" once the column is gone.
+  local qualified="$1"
+  local schema="${qualified%%.*}"
+  local rest="${qualified#*.}"
+  local tbl="${rest%%.*}"
+  local col="${rest#*.}"
+  local found
+  found=$(psql "$DATABASE_URL" -tAc "
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = '$schema'
+       AND table_name   = '$tbl'
+       AND column_name  = '$col'
+     LIMIT 1
+  ")
+  if [[ -z "$found" ]]; then
+    echo "DROPPED"
+  else
+    echo "STILL_PRESENT"
+  fi
+}
+
 probe_extension() {
   # Accepts a bare extension name (e.g. aws_s3). Extensions are not schema-
   # qualified in pg_catalog.pg_extension, so the marker form is simpler than
@@ -156,9 +182,13 @@ for f in "$DRIZZLE_DIR"/*.sql; do
     grep -oE "^--[[:space:]]+creates-extension:[[:space:]]+[A-Za-z0-9_]+" "$f" 2>/dev/null \
       | awk '{print $NF}' || true
   )
+  drop_col_markers=$(
+    grep -oE "^--[[:space:]]+drops-column:[[:space:]]+[A-Za-z0-9_.]+" "$f" 2>/dev/null \
+      | awk '{print $NF}' || true
+  )
 
-  if [[ -z "$obj_markers" && -z "$col_markers" && -z "$ext_markers" ]]; then
-    echo "    UNVERIFIED (no '-- creates:', '-- creates-column:', or '-- creates-extension:' markers in header)"
+  if [[ -z "$obj_markers" && -z "$col_markers" && -z "$ext_markers" && -z "$drop_col_markers" ]]; then
+    echo "    UNVERIFIED (no '-- creates:', '-- creates-column:', '-- creates-extension:', or '-- drops-column:' markers in header)"
     any_unverified=1
     continue
   fi
@@ -172,6 +202,9 @@ for f in "$DRIZZLE_DIR"/*.sql; do
     fi
     if [[ -n "$ext_markers" ]]; then
       while IFS= read -r m; do echo "    creates-extension: $m"; done <<< "$ext_markers"
+    fi
+    if [[ -n "$drop_col_markers" ]]; then
+      while IFS= read -r m; do echo "    drops-column: $m"; done <<< "$drop_col_markers"
     fi
     continue
   fi
@@ -199,6 +232,14 @@ for f in "$DRIZZLE_DIR"/*.sql; do
       echo "    extension $m -> $result"
       [[ "$result" == "MISSING" ]] && any_missing=1
     done <<< "$ext_markers"
+  fi
+  if [[ -n "$drop_col_markers" ]]; then
+    while IFS= read -r m; do
+      [[ -z "$m" ]] && continue
+      result=$(probe_column_absent "$m")
+      echo "    drop $m -> $result"
+      [[ "$result" == "STILL_PRESENT" ]] && any_missing=1
+    done <<< "$drop_col_markers"
   fi
 done
 
