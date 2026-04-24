@@ -1,69 +1,91 @@
 ---
 name: gather
 description: >
-  Parallel fan-out primitive for compositions. Declarative stub — the real
-  semantics live in the composition runner, which executes a step's
-  branches concurrently via asyncio.gather.
+  Authoring guidance for parallel sub-skill invocation inside
+  agent-driven skills. Documents the pattern other SKILL.md bodies
+  reference when they say "gather in parallel" — post-U8, the model
+  fan-outs sub-skill calls itself rather than relying on a runtime
+  primitive.
 license: Proprietary
 metadata:
   author: thinkwork
-  version: "0.1.0"
+  version: "1.0.0"
 ---
 
-# Gather Skill (declarative)
+# Gather — parallel fan-out guidance
 
 ## This is not a runnable skill
 
-`gather` has no script, no prompt, and no MCP. It exists in the catalog
-so that admins and composition authors can see parallel fan-out as a
-first-class primitive. The behavior is baked into the composition runner.
+`gather` has no script, no prompt, and no MCP. It exists in the
+catalog so skill authors + the model share a vocabulary for "fan out
+these sub-skill calls in parallel" when a SKILL.md body describes a
+gather step. Post-U8 there is no runtime primitive called `gather` —
+the model invokes each sub-skill via its own `Skill(slug, inputs)`
+call and the runtime handles concurrency automatically.
 
-## How to use it
+Other SKILL.md bodies reference the pattern from this skill's name so
+both the author and the model have a consistent anchor.
 
-In a composition's `steps:`, declare a step with `mode: parallel` and
-a `branches:` list. Each branch is a sub-skill invocation with its own
-inputs, an optional `critical: true` flag, and an optional
-`timeout_seconds`. The composition runner fans the branches out with
-`asyncio.gather`, enforces per-branch timeouts, and aggregates results.
+## The pattern
 
-```yaml
-steps:
-  - id: gather
-    mode: parallel
-    on_branch_failure: continue_with_footer
-    branches:
-      - id: crm
-        skill: crm_account_summary
-        inputs: { customer: "{customer}" }
-        critical: true
-      - id: ar
-        skill: ar_summary
-        inputs: { customer: "{customer}" }
-      - id: tickets
-        skill: support_incidents_summary
-        inputs: { customer: "{customer}" }
-    output: gathered
-```
+When a SKILL.md body describes a gather step like:
 
-## Branch semantics
+> Gather in parallel: `crm_account_summary`, `ar_summary`,
+> `support_incidents_summary`, `web-search`, `wiki_search` —
+> `crm_account_summary` is critical; others degrade with a footer note.
 
-- **critical: true** — if this branch fails, the whole composition aborts
-  with status `failed`. The composition's `on_branch_failure` policy
-  does not apply to critical branches.
-- **critical: false** (default) — the branch's failure is recorded as a
-  footer note on the step output. The composition continues per
-  `on_branch_failure` (default `continue_with_footer`).
-- **timeout_seconds** (default 120) — `asyncio.wait_for` per branch.
-  Exceeding the timeout is a branch failure; combined with the critical
-  flag it either aborts the run or footers cleanly.
+the model should:
+
+1. Invoke each named sub-skill via `Skill(slug, inputs)` with the
+   inputs the enclosing skill supplied (typically `{customer}`, plus
+   `{period}` or `{meeting_date}` where noted).
+2. Treat the calls as independent — invoke them in whatever order is
+   convenient; don't serialize waits on one before starting another.
+3. For **critical** sub-skills (the enclosing SKILL.md body names
+   which), if the call errors or returns empty, ABORT the enclosing
+   skill with a clear user message. A brief anchored on missing
+   critical context is worse than no brief.
+4. For **optional** sub-skills, catch the error, record
+   `<sub-skill> unavailable: <reason>` as a footer note in the
+   enclosing skill's deliverable, and continue with the remaining
+   context.
+5. Collect successful returns into a single object keyed by sub-skill
+   name. Pass that object to the next step (typically `synthesize`).
 
 ## What this skill does NOT do
 
-- It does not decide what to fetch — the composition author picks the
-  branches.
-- It does not block the composition on any external signal. Branches
-  should be short-running fetches or computations; anything that waits
-  on humans or downstream systems belongs in the reconciler pattern
-  (see plan D7a), not in a gather branch.
+- It does not decide what to fetch — the enclosing skill's SKILL.md
+  author picks the sub-skills.
+- It does not block the enclosing skill on any external signal.
+  Sub-skills should be short-running fetches or computations; anything
+  that waits on humans or downstream systems belongs in the reconciler
+  pattern (see `customer-onboarding-reconciler`), not in a gather
+  step.
 - It does not guarantee ordering inside the aggregated output. Treat
-  `{gather_output}` as a dict keyed by branch id.
+  the gathered object as a dict keyed by sub-skill name.
+
+## Example
+
+From `sales-prep` (v2.0.0):
+
+> 2. **Gather in parallel.** Call these sub-skills with `{customer}`
+>    (and `{meeting_date}` where noted). Collect successful returns
+>    into a single `gathered` object keyed by sub-skill name.
+>    - `crm_account_summary(customer)` — required.
+>    - `ar_summary(customer)` — optional; footer on miss.
+>    - `support_incidents_summary(customer)` — optional.
+>    - `web-search({query: customer, date: meeting_date})` —
+>      optional.
+>    - `wiki_search({query: customer})` — optional.
+
+Each of those sub-skills is its own `Skill("<slug>", inputs)` call.
+The model makes five calls; the runtime runs them concurrently.
+
+## Migration note
+
+This catalog entry was `execution: declarative` through v0.1.0 and
+existed to document `composition_runner`'s special-cased
+`mode: parallel` step. The post-U8 runtime doesn't have a composition
+runner (see U6); v1.0.0 (this version) converts the entry to
+`execution: context` and repurposes it as authoring guidance for the
+same pattern expressed via model-driven `Skill()` calls.
