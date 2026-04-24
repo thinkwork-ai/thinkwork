@@ -677,7 +677,6 @@ export type CreateThreadInput = {
   channel?: InputMaybe<ThreadChannel>;
   createdById?: InputMaybe<Scalars['String']['input']>;
   createdByType?: InputMaybe<Scalars['String']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
   dueAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
   firstMessage?: InputMaybe<Scalars['String']['input']>;
   labels?: InputMaybe<Scalars['AWSJSON']['input']>;
@@ -3373,7 +3372,6 @@ export type Thread = {
   createdAt: Scalars['AWSDateTime']['output'];
   createdById?: Maybe<Scalars['String']['output']>;
   createdByType?: Maybe<Scalars['String']['output']>;
-  description?: Maybe<Scalars['String']['output']>;
   dueAt?: Maybe<Scalars['AWSDateTime']['output']>;
   id: Scalars['ID']['output'];
   identifier?: Maybe<Scalars['String']['output']>;
@@ -3697,7 +3695,6 @@ export type UpdateThreadInput = {
   assigneeType?: InputMaybe<Scalars['String']['input']>;
   billingCode?: InputMaybe<Scalars['String']['input']>;
   channel?: InputMaybe<ThreadChannel>;
-  description?: InputMaybe<Scalars['String']['input']>;
   dueAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
   labels?: InputMaybe<Scalars['AWSJSON']['input']>;
   lastReadAt?: InputMaybe<Scalars['AWSDateTime']['input']>;

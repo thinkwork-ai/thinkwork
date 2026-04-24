@@ -61,7 +61,6 @@ export const createThread = async (_parent: any, args: any, ctx: GraphQLContext)
 				number: nextNumber,
 				identifier,
 				title: effectiveTitle,
-				description: i.description,
 				status: initialStatus,
 				channel,
 				assignee_type: i.assigneeType,

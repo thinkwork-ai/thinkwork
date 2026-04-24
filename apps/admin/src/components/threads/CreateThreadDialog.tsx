@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogBody,
@@ -75,7 +74,6 @@ function statusLabel(s: string): string {
 
 const threadSchema = z.object({
   title: z.string().min(1, "Title is required"),
-  description: z.string(),
   status: z.string(),
   agentId: z.string(),
   dueAt: z.string(),
@@ -89,7 +87,6 @@ type ThreadFormValues = z.infer<typeof threadSchema>;
 
 const INITIAL_FORM: ThreadFormValues = {
   title: "",
-  description: "",
   status: "backlog",
   agentId: "",
   dueAt: "",
@@ -212,7 +209,6 @@ export function ThreadFormDialog({
         input: {
           tenantId,
           title: values.title.trim(),
-          description: values.description.trim() || undefined,
           agentId: values.agentId || undefined,
           assigneeType: values.agentId ? "AGENT" : undefined,
           assigneeId: values.agentId || undefined,
@@ -229,7 +225,6 @@ export function ThreadFormDialog({
         id: initial?.id!,
         input: {
           title: values.title.trim(),
-          description: values.description.trim() || undefined,
           status: values.status.toUpperCase().replace(/ /g, "_") as any,
           assigneeType: values.agentId ? "AGENT" : undefined,
           assigneeId: values.agentId || undefined,
@@ -283,25 +278,6 @@ export function ThreadFormDialog({
                         placeholder="Thread title"
                         autoFocus
                         className="text-sm"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Description */}
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Add description..."
-                        rows={4}
-                        className="text-sm resize-none"
                         {...field}
                       />
                     </FormControl>

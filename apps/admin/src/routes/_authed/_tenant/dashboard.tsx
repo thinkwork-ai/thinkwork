@@ -354,12 +354,6 @@ function ThreadDetailDialog({ item, open, onOpenChange, navigate }: { item: Acti
               {thread.agent && <div><span className="text-muted-foreground text-xs">Agent</span><p>{thread.agent.name}</p></div>}
               {thread.createdAt && <div><span className="text-muted-foreground text-xs">Created</span><p>{new Date(thread.createdAt).toLocaleString()}</p></div>}
             </div>
-            {thread.description && (
-              <>
-                <Separator />
-                <div><span className="text-xs text-muted-foreground">Description</span><p className="mt-1 text-sm whitespace-pre-wrap">{thread.description}</p></div>
-              </>
-            )}
           </div>
         )}
         <Separator />

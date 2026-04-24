@@ -25,7 +25,7 @@ export function registerThreadCommand(program: Command): void {
     .option("--status <status>", "Filter: BACKLOG | TODO | IN_PROGRESS | IN_REVIEW | BLOCKED | DONE | CANCELLED")
     .option("--assignee <id>", "Filter by assignee (user or agent ID). Use `me` to match the caller.")
     .option("--agent <id>", "Filter threads worked on by a specific agent")
-    .option("--search <q>", "Full-text search over title/body")
+    .option("--search <q>", "Full-text search over thread titles")
     .option("--limit <n>", "Max rows (default 50)", "50")
     .option("--archived", "Include archived threads")
     .addHelpText(
@@ -66,7 +66,6 @@ Examples:
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--assignee <id>", "Assign on create (user or agent ID)")
-    .option("--body <text>", "Description body (markdown)")
     .option("--due <iso>", "Due date as ISO-8601")
     .option("--label <name...>", "Attach label(s) by name (repeatable)")
     .addHelpText(
@@ -95,7 +94,6 @@ Examples:
     .option("--status <s>", "Move to a new status")
     .option("--assignee <id>", "Reassign (user or agent ID)")
     .option("--due <iso>", "Due date")
-    .option("--body <text>", "Replace description body")
     .addHelpText(
       "after",
       `

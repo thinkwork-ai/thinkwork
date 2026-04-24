@@ -91,11 +91,11 @@ def _resolve_user_by_email(email: str) -> dict | None:
 # Public API — 10 functions (all use GraphQL)
 # ---------------------------------------------------------------------------
 
-THREAD_FIELDS = "id title status channel agentId assigneeType assigneeId description number identifier dueAt createdAt"
+THREAD_FIELDS = "id title status channel agentId assigneeType assigneeId number identifier dueAt createdAt"
 
 
 @_safe
-def create_sub_thread(title: str, description: str,
+def create_sub_thread(title: str,
                       parent_thread_id: str = "",
                       channel: str = "TASK",
                       assignee_email: str = "",
@@ -104,7 +104,6 @@ def create_sub_thread(title: str, description: str,
 
     Args:
         title: Clear, specific title for the task.
-        description: REQUIRED. 1-2 sentence explanation of what needs to be done.
         parent_thread_id: UUID of the parent thread. Defaults to
             CURRENT_THREAD_ID when omitted.
         channel: Thread channel. Defaults to TASK. Use CHAT for non-task threads.
@@ -134,7 +133,6 @@ def create_sub_thread(title: str, description: str,
         "tenantId": TENANT_ID,
         "agentId": AGENT_ID,
         "title": title,
-        "description": description or None,
         "channel": channel.upper(),
         "assigneeType": assignee_type,
         "assigneeId": assignee_id,
@@ -178,13 +176,12 @@ def update_thread_status(
     status: str,
     channel: str = "",
     title: str = "",
-    description: str = "",
     due_date: str = "",
     assignee_email: str = "",
 ) -> str:
     """Update a thread's status and optionally other fields. To convert a
     chat thread into a task, set channel='TASK' along with the desired
-    status, title, description, and due_date.
+    status, title, and due_date.
 
     Args:
         thread_id: UUID of the thread to update.
@@ -192,7 +189,6 @@ def update_thread_status(
             IN_REVIEW, BLOCKED, DONE, CANCELLED.
         channel: Optional. Set to 'TASK' to promote a chat thread to a task.
         title: Optional new title.
-        description: Optional new description.
         due_date: Optional ISO-8601 due date.
         assignee_email: Optional email to assign as owner.
 
@@ -209,8 +205,6 @@ def update_thread_status(
         input_data["channel"] = channel.upper()
     if title:
         input_data["title"] = title
-    if description:
-        input_data["description"] = description
     if due_date:
         input_data["dueAt"] = due_date
     if assignee_email:
@@ -231,7 +225,6 @@ def update_thread_status(
 def promote_to_task(
     thread_id: str = "",
     title: str = "",
-    description: str = "",
     due_date: str = "",
     assignee_email: str = "",
 ) -> str:
@@ -242,7 +235,6 @@ def promote_to_task(
     Args:
         thread_id: UUID of the thread to promote. Defaults to CURRENT_THREAD_ID.
         title: Optional new title for the task.
-        description: Optional description with task details.
         due_date: Optional ISO-8601 due date.
         assignee_email: Optional email of the user to assign as owner.
 
@@ -256,8 +248,6 @@ def promote_to_task(
     }
     if title:
         input_data["title"] = title
-    if description:
-        input_data["description"] = description
     if due_date:
         input_data["dueAt"] = due_date
     if assignee_email:
@@ -332,7 +322,7 @@ def get_thread_details(thread_id: str) -> str:
         JSON with the thread object and its comments.
     """
     result = _graphql(
-        f"query($id: ID!) {{ thread(id: $id) {{ {THREAD_FIELDS} description comments {{ id content authorType authorId createdAt }} childCount commentCount }} }}",
+        f"query($id: ID!) {{ thread(id: $id) {{ {THREAD_FIELDS} }} }}",
         {"id": thread_id},
     )
     return json.dumps(result)

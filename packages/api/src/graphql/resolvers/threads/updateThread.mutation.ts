@@ -11,7 +11,6 @@ export const updateThread = async (_parent: any, args: any, ctx: GraphQLContext)
 	const i = args.input;
 	const updates: Record<string, unknown> = { updated_at: new Date() };
 	if (i.title !== undefined) updates.title = i.title;
-	if (i.description !== undefined) updates.description = i.description;
 	if (i.status !== undefined) {
 		const newStatus = i.status.toLowerCase();
 		// Fetch current status for transition validation

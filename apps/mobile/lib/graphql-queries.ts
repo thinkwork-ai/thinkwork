@@ -711,7 +711,6 @@ export const ThreadsQuery = graphql(`
       number
       identifier
       title
-      description
       status
       channel
       assigneeType
@@ -742,7 +741,6 @@ export const ThreadQuery = graphql(`
       number
       identifier
       title
-      description
       status
       channel
       assigneeType

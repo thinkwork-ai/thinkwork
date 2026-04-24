@@ -107,7 +107,6 @@ function CreateThreadModal({
   const tenantId = user?.tenantId;
   const createThread = useCreateThread();
   const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [showAgentPicker, setShowAgentPicker] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -138,11 +137,9 @@ function CreateThreadModal({
       await createThread({
         tenantId,
         title: title.trim(),
-        description: description.trim() || undefined,
         agentId: effectiveAgentId,
       });
       setTitle("");
-      setDescription("");
       setSelectedAgentId(null);
       onClose();
     } catch (err) {
@@ -154,7 +151,6 @@ function CreateThreadModal({
 
   const handleClose = () => {
     setTitle("");
-    setDescription("");
     setSelectedAgentId(null);
     setShowAgentPicker(false);
     onClose();
@@ -194,22 +190,6 @@ function CreateThreadModal({
               value={title}
               onChangeText={setTitle}
               autoCapitalize="words"
-            />
-          </View>
-
-          {/* Description */}
-          <View className="mb-4">
-            <Text className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
-              Description (optional)
-            </Text>
-            <TextInput
-              className="h-24 border border-neutral-300 dark:border-neutral-700 rounded-lg px-3 py-2 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100"
-              placeholder="Add more details..."
-              placeholderTextColor="#71717a"
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              textAlignVertical="top"
             />
           </View>
 

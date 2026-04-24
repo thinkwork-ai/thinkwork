@@ -12,7 +12,7 @@ export interface UseThreadsArgs {
   status?: string | null;
   /** `ThreadChannel` enum value (e.g. "CHAT"). */
   channel?: string | null;
-  /** Full-text search across thread title + description. */
+  /** Full-text search across thread titles. */
   search?: string | null;
   limit?: number;
   /** Opaque cursor from a previous page (lexicographic `id` cursor). */

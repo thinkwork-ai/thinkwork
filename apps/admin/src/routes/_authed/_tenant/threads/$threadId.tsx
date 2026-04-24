@@ -149,7 +149,6 @@ function formatAction(
       );
     }
     if (details.title !== undefined) parts.push("updated the title");
-    if (details.description !== undefined) parts.push("updated the description");
 
     if (parts.length > 0) return parts.join(", ");
   }
@@ -452,16 +451,6 @@ function ThreadDetailPage() {
           as="h2"
           className="text-xl font-bold"
         />
-
-        {/* Description */}
-        <InlineEditor
-          value={thread.description ?? ""}
-          onSave={(description) => handleFieldUpdate({ description })}
-          as="p"
-          className="text-[15px] leading-7"
-          placeholder="Add a description..."
-          multiline
-        />
         </div>
 
         {/* ── Activity (turns + messages merged timeline) ─────────── */}
@@ -552,7 +541,6 @@ function ThreadDetailPage() {
         initial={{
           id: threadId,
           title: thread.title,
-          description: thread.description ?? "",
           status: thread.status.toLowerCase().replace(/ /g, "_"),
           agentId: thread.agent?.id ?? "",
           dueAt: thread.dueAt ?? "",

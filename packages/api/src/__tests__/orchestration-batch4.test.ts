@@ -136,10 +136,10 @@ describe("renderPromptTemplate", () => {
 
 	it("leaves null/undefined values as placeholder", () => {
 		const result = renderPromptTemplate(
-			"Desc: {{thread.description}}",
-			{ thread: { description: undefined } },
+			"ID: {{thread.identifier}}",
+			{ thread: { identifier: undefined } },
 		);
-		expect(result).toBe("Desc: {{thread.description}}");
+		expect(result).toBe("ID: {{thread.identifier}}");
 	});
 
 	it("handles complex multi-line templates", () => {

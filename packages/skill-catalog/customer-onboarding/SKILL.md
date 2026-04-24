@@ -53,7 +53,6 @@ After all sub-tasks are created, call `promote_to_task` to convert this chat int
 ```
 promote_to_task(
   title="Customer Onboarding: {customer}",
-  description="Onboarding for {customer}. Customer type: {fuel/non-fuel}. Tax exempt: {yes/no}. Credit line: {yes/no}. Contract owner: {name}.",
   due_date="{deadline if provided}",
   assignee_email=CURRENT_USER_EMAIL
 )

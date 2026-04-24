@@ -29,7 +29,6 @@ type Thread {
   number: Int!
   identifier: String
   title: String!
-  description: String
   status: ThreadStatus!
   channel: ThreadChannel!
   assigneeType: String
@@ -101,7 +100,6 @@ input CreateThreadInput {
   tenantId: ID!
   agentId: ID
   title: String!
-  description: String
   channel: ThreadChannel
   assigneeType: String
   assigneeId: ID
@@ -119,7 +117,6 @@ input CreateThreadInput {
 
 input UpdateThreadInput {
   title: String
-  description: String
   status: ThreadStatus
   channel: ThreadChannel
   assigneeType: String

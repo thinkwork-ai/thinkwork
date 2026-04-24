@@ -20,7 +20,6 @@ export interface PromptTemplateContext {
 		id?: string;
 		identifier?: string;
 		title?: string;
-		description?: string;
 		status?: string;
 		channel?: string;
 	};

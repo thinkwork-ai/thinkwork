@@ -17,7 +17,7 @@ scripts:
     description: "Block a thread until another completes"
   - name: update_thread_status
     path: scripts/threads.py
-    description: "Update thread status, channel, title, description, due date, and assignee. Use channel=TASK to promote a chat to a task."
+    description: "Update thread status, channel, title, due date, and assignee. Use channel=TASK to promote a chat to a task."
   - name: add_comment
     path: scripts/threads.py
     description: "Add a comment to a thread"

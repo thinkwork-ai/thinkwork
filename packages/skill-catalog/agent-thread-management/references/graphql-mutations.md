@@ -23,7 +23,6 @@ curl -s -X POST "${THINKWORK_API_URL}" \
       "tenantId": "${TENANT_ID}",
       "agentId": "${AGENT_ID}",
       "title": "Sub-task title here",
-      "description": "Detailed description",
       "parentId": "${CURRENT_THREAD_ID}",
       "createdByType": "agent",
       "createdById": "${AGENT_ID}"
@@ -122,7 +121,7 @@ curl -s -X POST "${THINKWORK_API_URL}" \
   -H "Content-Type: application/json" \
   -d "$(cat <<EOF
 {
-  "query": "query GetThread(\$id: ID!) { thread(id: \$id) { id number identifier title description status assigneeType assigneeId blockedBy { id blockedByThreadId } blocks { id threadId } isBlocked } }",
+  "query": "query GetThread(\$id: ID!) { thread(id: \$id) { id number identifier title status assigneeType assigneeId blockedBy { id blockedByThreadId } blocks { id threadId } isBlocked } }",
   "variables": {
     "id": "THREAD_ID"
   }

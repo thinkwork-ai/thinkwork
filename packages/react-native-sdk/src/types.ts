@@ -102,7 +102,6 @@ export interface CreateThreadInput {
   tenantId: string;
   title: string;
   agentId?: string;
-  description?: string;
   channel?: string;
   createdByType?: string;
   createdById?: string;
@@ -114,7 +113,6 @@ export interface CreateThreadInput {
 
 export interface UpdateThreadInput {
   title?: string;
-  description?: string;
   status?: string;
   channel?: string;
   assigneeType?: string;
