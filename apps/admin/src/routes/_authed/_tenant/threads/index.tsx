@@ -9,8 +9,6 @@ import {
   User,
   Search,
   Lock,
-  MessageSquare,
-  GitBranch,
   Archive,
 } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
@@ -21,14 +19,12 @@ import { PageHeader } from "@/components/PageHeader";
 import { PageLayout } from "@/components/PageLayout";
 import { EmptyState } from "@/components/EmptyState";
 import { PageSkeleton } from "@/components/PageSkeleton";
-import { StatusBadge } from "@/components/StatusBadge";
 import { StatusIcon } from "@/components/threads/StatusIcon";
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import {
   FilterBarSort,
@@ -36,7 +32,7 @@ import {
   FilterBarPopover,
   FilterBarFacet,
 } from "@/components/ui/data-table-filter-bar";
-import { ThreadsListQuery, ThreadsPagedQuery, AgentsListQuery, UpdateThreadMutation, OnThreadUpdatedSubscription, OnThreadTurnUpdatedSubscription } from "@/lib/graphql-queries";
+import { ThreadsPagedQuery, AgentsListQuery, UpdateThreadMutation, OnThreadUpdatedSubscription, OnThreadTurnUpdatedSubscription } from "@/lib/graphql-queries";
 import { cn, relativeTime } from "@/lib/utils";
 import { useActiveTurnsStore } from "@/stores/active-turns-store";
 
@@ -45,31 +41,22 @@ export const Route = createFileRoute("/_authed/_tenant/threads/")({
 });
 
 /* ------------------------------------------------------------------ */
-/* Helpers                                                            */
-/* ------------------------------------------------------------------ */
-
-const statusOrder = ["in_progress", "todo", "backlog", "in_review", "blocked", "done", "cancelled"];
-
-function statusLabel(s: string): string {
-  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-/* ------------------------------------------------------------------ */
 /* View state (persisted in localStorage)                             */
 /* ------------------------------------------------------------------ */
 
+type SortField = "title" | "created" | "updated";
+type GroupBy = "assignee" | "none";
+
 type ThreadViewState = {
-  statuses: string[];
   assignees: string[];
-  sortField: "status" | "title" | "created" | "updated";
+  sortField: SortField;
   sortDir: "asc" | "desc";
-  groupBy: "status" | "assignee" | "none";
+  groupBy: GroupBy;
   collapsedGroups: string[];
   showArchived: boolean;
 };
 
 const defaultViewState: ThreadViewState = {
-  statuses: [],
   assignees: [],
   sortField: "updated",
   sortDir: "desc",
@@ -78,19 +65,43 @@ const defaultViewState: ThreadViewState = {
   showArchived: false,
 };
 
-const quickFilterPresets = [
-  { label: "All", statuses: [] as string[] },
-  { label: "Active", statuses: ["todo", "in_progress", "in_review", "blocked"] },
-  { label: "Backlog", statuses: ["backlog"] },
-  { label: "Done", statuses: ["done", "cancelled"] },
-];
+// `as const satisfies` pins the arrays to the SortField/GroupBy unions at
+// definition — if the union grows and these tuples don't, TS fails at build.
+const SORT_FIELD_VALUES = ["title", "created", "updated"] as const satisfies readonly SortField[];
+const GROUP_BY_VALUES = ["assignee", "none"] as const satisfies readonly GroupBy[];
 
+function isSortField(v: unknown): v is SortField {
+  return typeof v === "string" && (SORT_FIELD_VALUES as readonly string[]).includes(v);
+}
+
+function isGroupBy(v: unknown): v is GroupBy {
+  return typeof v === "string" && (GROUP_BY_VALUES as readonly string[]).includes(v);
+}
+
+// Defensive rehydrate: U3d/U4/U7 retired the task-era status/priority axis, so
+// any prior session's localStorage may carry `statuses`, `priorities`, `viewMode`,
+// or `sortField: "status" | "priority"` / `groupBy: "status"`. Strip unknown keys
+// and coerce legacy values back to safe defaults rather than crashing or rendering
+// empty. Self-heals on the user's next filter/sort/group change via saveViewState.
 function getViewState(key: string): ThreadViewState {
   try {
     const raw = localStorage.getItem(key);
-    if (raw) return { ...defaultViewState, ...JSON.parse(raw) };
-  } catch { /* ignore */ }
-  return { ...defaultViewState };
+    if (!raw) return { ...defaultViewState };
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return { ...defaultViewState };
+    const p = parsed as Record<string, unknown>;
+    return {
+      assignees: Array.isArray(p.assignees) ? p.assignees.filter((v): v is string => typeof v === "string") : [],
+      sortField: isSortField(p.sortField) ? p.sortField : defaultViewState.sortField,
+      // Any non-'asc' value (including undefined or a future third direction) falls to 'desc'.
+      sortDir: p.sortDir === "asc" ? "asc" : "desc",
+      groupBy: isGroupBy(p.groupBy) ? p.groupBy : defaultViewState.groupBy,
+      collapsedGroups: Array.isArray(p.collapsedGroups) ? p.collapsedGroups.filter((v): v is string => typeof v === "string") : [],
+      showArchived: p.showArchived === true,
+    };
+  } catch {
+    return { ...defaultViewState };
+  }
 }
 
 function saveViewState(key: string, state: ThreadViewState) {
@@ -127,17 +138,6 @@ function InboxIndicator({ status }: { status: "running" | "unread" | "read" }) {
   );
 }
 
-function arraysEqual(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false;
-  const sa = [...a].sort();
-  const sb = [...b].sort();
-  return sa.every((v, i) => v === sb[i]);
-}
-
-function toggleInArray(arr: string[], value: string): string[] {
-  return arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
-}
-
 function groupBy<T>(items: T[], keyFn: (item: T) => string): Record<string, T[]> {
   const groups: Record<string, T[]> = {};
   for (const item of items) {
@@ -171,58 +171,11 @@ type ThreadItem = {
 };
 
 /* ------------------------------------------------------------------ */
-/* Filter / sort logic                                                */
+/* Filter-count helper                                                */
 /* ------------------------------------------------------------------ */
-
-function applyFilters(threads: ThreadItem[], state: ThreadViewState): ThreadItem[] {
-  let result = [...threads];
-  // Show only archived when toggled, hide archived otherwise
-  if (state.showArchived) {
-    result = result.filter((t) => !!t.archivedAt);
-  } else {
-    result = result.filter((t) => !t.archivedAt);
-  }
-  if (state.statuses.length > 0) {
-    result = result.filter((t) => state.statuses.includes(t.status.toLowerCase()));
-  }
-  if (state.assignees.length > 0) {
-    result = result.filter((thread) => {
-      for (const assignee of state.assignees) {
-        if (assignee === "__unassigned" && !thread.agentId && !thread.assigneeId) return true;
-        if (thread.agentId === assignee) return true;
-      }
-      return false;
-    });
-  }
-  return result;
-}
-
-function sortThreads(threads: ThreadItem[], state: ThreadViewState): ThreadItem[] {
-  const sorted = [...threads];
-  const dir = state.sortDir === "asc" ? 1 : -1;
-  sorted.sort((a, b) => {
-    switch (state.sortField) {
-      case "status":
-        return dir * (statusOrder.indexOf(a.status.toLowerCase()) - statusOrder.indexOf(b.status.toLowerCase()));
-      case "title":
-        return dir * a.title.localeCompare(b.title);
-      case "created":
-        return dir * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-      case "updated": {
-        const aTime = new Date(a.lastActivityAt || a.updatedAt).getTime();
-        const bTime = new Date(b.lastActivityAt || b.updatedAt).getTime();
-        return dir * (aTime - bTime);
-      }
-      default:
-        return 0;
-    }
-  });
-  return sorted;
-}
 
 function countActiveFilters(state: ThreadViewState): number {
   let count = 0;
-  if (state.statuses.length > 0) count++;
   if (state.assignees.length > 0) count++;
   if (state.showArchived) count++;
   return count;
@@ -258,12 +211,15 @@ function ThreadsPage() {
     return () => window.clearTimeout(t);
   }, [issueSearch]);
 
-  // Reload view state when tenant changes
+  // Reload view state when tenant changes. Reset pagination too — a stale
+  // `pageIndex=N` against a smaller tenant produces an empty page because
+  // offset=N*PAGE_SIZE overshoots the tenant's totalCount.
   const prevScopedKey = useRef(scopedKey);
   useEffect(() => {
     if (prevScopedKey.current !== scopedKey) {
       prevScopedKey.current = scopedKey;
       setViewState(getViewState(scopedKey));
+      setPageIndex(0);
     }
   }, [scopedKey]);
 
@@ -273,8 +229,16 @@ function ThreadsPage() {
       saveViewState(scopedKey, next);
       return next;
     });
-    // Reset to first page when filters/sort change
-    if (patch.statuses !== undefined || patch.showArchived !== undefined || patch.sortField !== undefined || patch.sortDir !== undefined) {
+    // Reset to first page when filters/sort change.
+    // `assignees` is included because the assignee facet narrows the effective
+    // result set; leaving `pageIndex` stale on a narrowed set shows a blank
+    // page at the previous offset.
+    if (
+      patch.assignees !== undefined ||
+      patch.showArchived !== undefined ||
+      patch.sortField !== undefined ||
+      patch.sortDir !== undefined
+    ) {
       setPageIndex(0);
     }
   }, [scopedKey]);
@@ -285,7 +249,6 @@ function ThreadsPage() {
     variables: {
       tenantId: tenantId!,
       search: debouncedSearch || undefined,
-      statuses: viewState.statuses.length > 0 ? viewState.statuses : undefined,
       showArchived: viewState.showArchived,
       sortField: viewState.sortField,
       sortDir: viewState.sortDir,
@@ -356,12 +319,6 @@ function ThreadsPage() {
     if (viewState.groupBy === "none") {
       return [{ key: "__all", label: null as string | null, items: filtered }];
     }
-    if (viewState.groupBy === "status") {
-      const groups = groupBy(filtered, (i) => i.status);
-      return statusOrder
-        .filter((s) => groups[s]?.length)
-        .map((s) => ({ key: s, label: statusLabel(s), items: groups[s]! }));
-    }
     // assignee
     const groups = groupBy(filtered, (t) => t.agentId ?? "__unassigned");
     return Object.keys(groups).map((key) => ({
@@ -373,11 +330,8 @@ function ThreadsPage() {
 
   const newThreadDefaults = (groupKey?: string) => {
     const defaults: Record<string, string> = {};
-    if (groupKey) {
-      if (viewState.groupBy === "status") defaults.status = groupKey;
-      else if (viewState.groupBy === "assignee" && groupKey !== "__unassigned") {
-        defaults.agentId = groupKey;
-      }
+    if (groupKey && viewState.groupBy === "assignee" && groupKey !== "__unassigned") {
+      defaults.agentId = groupKey;
     }
     return defaults;
   };
@@ -555,54 +509,17 @@ function ThreadsPage() {
         <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
           <FilterBarPopover
             activeCount={activeFilterCount}
-            onClearAll={() => updateView({ statuses: [], assignees: [], showArchived: false })}
+            onClearAll={() => updateView({ assignees: [], showArchived: false })}
           >
-            {/* Quick filters */}
-            <div className="space-y-1.5">
-              <span className="text-xs text-muted-foreground">Quick filters</span>
-              <div className="flex flex-wrap gap-1.5">
-                {quickFilterPresets.map((preset) => {
-                  const isActive = arraysEqual(viewState.statuses, preset.statuses);
-                  return (
-                    <button
-                      key={preset.label}
-                      className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
-                        isActive
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
-                      }`}
-                      onClick={() => updateView({ statuses: isActive ? [] : [...preset.statuses] })}
-                    >
-                      {preset.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="border-t border-border" />
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
-              <FilterBarFacet
-                label="Status"
-                options={statusOrder.map((s) => ({
-                  value: s,
-                  label: statusLabel(s),
-                  icon: <StatusIcon status={s} />,
-                }))}
-                selected={viewState.statuses}
-                onChange={(statuses) => updateView({ statuses })}
-              />
-              <FilterBarFacet
-                label="Assignee"
-                options={[
-                  { value: "__unassigned", label: "No assignee" },
-                  ...agents.map((a: any) => ({ value: a.id, label: a.name })),
-                ]}
-                selected={viewState.assignees}
-                onChange={(assignees) => updateView({ assignees })}
-              />
-            </div>
+            <FilterBarFacet
+              label="Assignee"
+              options={[
+                { value: "__unassigned", label: "No assignee" },
+                ...agents.map((a: any) => ({ value: a.id, label: a.name })),
+              ]}
+              selected={viewState.assignees}
+              onChange={(assignees) => updateView({ assignees })}
+            />
 
             <div className="border-t border-border" />
 
@@ -628,24 +545,22 @@ function ThreadsPage() {
 
           <FilterBarSort
             options={[
-              { value: "status", label: "Status" },
               { value: "title", label: "Title" },
               { value: "created", label: "Created" },
               { value: "updated", label: "Last Activity" },
             ]}
             field={viewState.sortField}
             direction={viewState.sortDir}
-            onChange={(field, dir) => updateView({ sortField: field as any, sortDir: dir })}
+            onChange={(field, dir) => updateView({ sortField: field as SortField, sortDir: dir })}
           />
 
           <FilterBarGroup
             options={[
-              { value: "status", label: "Status" },
               { value: "assignee", label: "Assignee" },
               { value: "none", label: "None" },
             ]}
             value={viewState.groupBy}
-            onChange={(v) => updateView({ groupBy: v as any })}
+            onChange={(v) => updateView({ groupBy: v as GroupBy })}
           />
         </div>
       </div>
