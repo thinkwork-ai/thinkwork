@@ -7,11 +7,16 @@ description: >
 license: Proprietary
 metadata:
   author: thinkwork
-  version: "2.0.0"
+  version: "2.1.0"
 allowed-tools:
-  - Skill
-  - recall
-  - reflect
+  - render_package
+  - hindsight_recall
+  - hindsight_reflect
+  - crm_account_summary
+  - product_usage_summary
+  - ar_summary
+  - support_incidents_summary
+  - engagement_summary
 ---
 
 # Account Health Review
@@ -24,7 +29,7 @@ You are producing a risk-focused health report on `customer` over `period`. The 
 |--------------|----------|--------|-------|
 | `customer`   | Yes      | string | Customer identifier. |
 | `period`     | No       | enum   | `last_30_days` \| `last_quarter` \| `last_year`. Default `last_30_days`. |
-| `agent_name` | No       | string | Passed to the `package` template for attribution. |
+| `agent_name` | No       | string | Passed to the render_package metadata for attribution. |
 
 ## Deliverable shape
 
@@ -35,14 +40,14 @@ Same four-section shape as `sales-prep`, but **always risk-oriented**:
 - **Open questions** — what the CSM should clarify before the next touchpoint.
 - **Talking points** — ordered most-to-least important for the next conversation.
 
-Cite every finding. Never invent facts. Use `Skill("package", {format: "health_report", ...})` for the final render.
+Cite every finding. Never invent facts. Use `render_package(synthesis=..., format="health_report", metadata=...)` for the final render.
 
 ## Method
 
 ### 1. Pull prior learnings
 
 ```
-recall({skill_id: "account-health-review", subject_entity_id: customer})
+hindsight_recall(skill_id="account-health-review", subject_entity_id=customer)
 ```
 
 Health-review learnings tend to be *patterns* (e.g. "Always check AR before talking about renewal"). Weight them into step 4's synthesis.
@@ -53,7 +58,7 @@ Internal scratchpad (≤150 words, not part of output):
 
 - **Goal:** Specific health picture for `customer` over `period`.
 - **Constraints:** Internal audience, no customer-facing tone.
-- **Known unknowns:** What you need gather to answer.
+- **Known unknowns:** What you need to gather to answer.
 - **Decision criteria:** Would a CSM know what to say next?
 
 ### 3. Gather in parallel
@@ -61,19 +66,35 @@ Internal scratchpad (≤150 words, not part of output):
 Fire these concurrently:
 
 **Critical (abort if it fails):**
-- `Skill("crm_account_summary", {customer, period})` — account shape, AE, renewal date, last activity. Without this the review has no anchor.
+- `crm_account_summary(customer=customer, period=period)` — account shape, AE, renewal date, last activity. Without this the review has no anchor.
 
 **Nice-to-have (degrade gracefully — footer note per missing source):**
-- `Skill("product_usage_summary", {customer, period})` — MAU, feature adoption, trend.
-- `Skill("ar_summary", {customer})` — invoice status, DSO, past-due.
-- `Skill("support_incidents_summary", {customer, period})` — ticket volume, NPS, severity mix.
-- `Skill("engagement_summary", {customer, period})` — meeting cadence, email responsiveness, champion activity.
+- `product_usage_summary(customer=customer, period=period)` — MAU, feature adoption, trend.
+- `ar_summary(customer=customer)` — invoice status, DSO, past-due.
+- `support_incidents_summary(customer=customer, period=period)` — ticket volume, NPS, severity mix.
+- `engagement_summary(customer=customer, period=period)` — meeting cadence, email responsiveness, champion activity.
 
 If a nice-to-have tool is missing or errors: continue. Footer line: `> Note: support data unavailable.` (etc.)
 
 ### 4. Synthesize
 
-Focus is **always `risks`** for this skill — even when the customer looks healthy, the CSM wants to see what *could* go wrong. Produce the four sections with these rules:
+Focus is **always `risks`** for this skill — even when the customer looks healthy, the CSM wants to see what *could* go wrong. Produce the four sections as a single Markdown string with `##` headings in this exact order and spelling — `render_package` embeds your synthesis verbatim:
+
+```
+## Risks
+- ...
+
+## Opportunities
+- ...
+
+## Open questions
+- ...
+
+## Talking points
+- ...
+```
+
+Rules:
 
 - **Risks:** Lead. Quantify where possible (e.g. "Open tickets up 3× vs. last period"). Every risk cites its source.
 - **Opportunities:** Short. Expansion or re-engagement levers only; don't pad.
@@ -85,16 +106,11 @@ Cite every finding. 400 words max across the four sections.
 ### 5. Render
 
 ```
-Skill("package", {
-  format: "health_report",
-  synthesis: {
-    risks: [...],
-    opportunities: [...],
-    open_questions: [...],
-    talking_points: [...]
-  },
-  metadata: { customer, period, agent_name }
-})
+render_package(
+  synthesis=<your four-section Markdown string>,
+  format="health_report",
+  metadata={"customer": customer, "period": period, "agent_name": agent_name}
+)
 ```
 
 Return the rendered Markdown verbatim.
@@ -104,11 +120,11 @@ Return the rendered Markdown verbatim.
 If the run surfaced a pattern worth keeping — a new risk indicator, a correction to a prior assumption, a source that paid off — call:
 
 ```
-reflect({
-  skill_id: "account-health-review",
-  subject_entity_id: customer,
-  text: "..."
-})
+hindsight_reflect(
+  skill_id="account-health-review",
+  subject_entity_id=customer,
+  text="..."
+)
 ```
 
 Up to 3 observations per run. Skip if nothing new.
