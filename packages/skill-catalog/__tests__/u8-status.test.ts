@@ -50,7 +50,7 @@ describe("u8-status audit script", () => {
     const donePattern = /\| done \| (\d+) \|/;
     const match = out.match(donePattern);
     expect(match).not.toBeNull();
-    expect(Number(match![1])).toBeGreaterThanOrEqual(19);
+    expect(Number(match![1])).toBeGreaterThanOrEqual(20);
   });
 
   it("has no composition slugs left for the deliverable-shape series", () => {
@@ -58,10 +58,18 @@ describe("u8-status audit script", () => {
     const compositionPattern = /\| composition \| (\d+) \|/;
     const match = out.match(compositionPattern);
     expect(match).not.toBeNull();
-    // Composition bucket is empty post renewal-prep migration. The last
-    // remaining `execution: composition` slug is smoke-package-only,
-    // which is counted in the smoke-probe bucket and migrates last with
-    // U6's composition_runner deletion.
+    // Composition bucket is empty. The last remaining
+    // `execution: composition` slug is smoke-package-only, counted in
+    // the smoke-probe bucket (it migrates last with U6's
+    // composition_runner deletion).
+    expect(Number(match![1])).toBe(0);
+  });
+
+  it("has no declarative slugs left post-gather migration", () => {
+    const out = runAudit();
+    const declarativePattern = /\| declarative \| (\d+) \|/;
+    const match = out.match(declarativePattern);
+    expect(match).not.toBeNull();
     expect(Number(match![1])).toBe(0);
   });
 
