@@ -50,6 +50,21 @@ output "bucket_name" {
   value = module.s3.bucket_name
 }
 
+output "backups_bucket_name" {
+  description = "S3 bucket for operational backups (pre-drop snapshots from destructive migrations, via the aws_s3 Aurora extension)."
+  value       = module.s3_backups.bucket_name
+}
+
+output "backups_bucket_arn" {
+  description = "ARN of the operational backups bucket."
+  value       = module.s3_backups.bucket_arn
+}
+
+output "aurora_aws_s3_iam_role_arn" {
+  description = "IAM role ARN attached to the Aurora cluster for the aws_s3 extension. Null when backups are not wired (e.g. rds-postgres dev mode). Used in post-deploy runbooks to confirm the role association before running CREATE EXTENSION aws_s3."
+  value       = module.database.aws_s3_iam_role_arn
+}
+
 output "kb_service_role_arn" {
   value = module.bedrock_kb.kb_service_role_arn
 }
