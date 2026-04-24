@@ -1,11 +1,21 @@
 /**
- * Shared GraphQL field-selection strings. Match the constants in
- * packages/skill-catalog/thinkwork-admin/scripts/operations/reads.py
- * so the MCP surface returns the same shapes the Python skill did.
+ * Shared GraphQL field-selection strings.
+ *
+ * These originally mirrored
+ * packages/skill-catalog/thinkwork-admin/scripts/operations/reads.py,
+ * but the Python selections had drifted from the live GraphQL schema.
+ * Any further drift surfaces as "Cannot query field X on type Y" at
+ * runtime. When it does, the fix is to check
+ * packages/database-pg/graphql/types/*.graphql and update the constant
+ * here.
  */
 
 export const AGENT_FIELDS =
-	"id name slug role type adapterType status budgetMonthlyCents humanPairId templateId parentAgentId createdAt";
+	// The Agent type doesn't expose budgetMonthlyCents at the top
+	// level — budget is a nested `budgetPolicy: AgentBudgetPolicy`
+	// field. Not included here to keep selections minimal; callers
+	// who need budget info can query it via a dedicated tool.
+	"id name slug role type adapterType status humanPairId templateId parentAgentId createdAt";
 
 export const TEMPLATE_FIELDS =
 	"id name slug description category icon model isPublished createdAt";
