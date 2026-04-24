@@ -1,23 +1,17 @@
 /**
- * Contract tests for Unit 11's never-exposed tier guard.
+ * Contract tests for the never-exposed tier guard.
  *
- * Two invariants:
- *
- * 1. `requireNotFromAdminSkill(ctx)` allows Cognito callers through
- *    unchanged and refuses every other authType — the "allow-list
- *    Cognito-only" posture the plan specifies (stronger than an
- *    `x-skill-id` deny-list because no service principal can reach
- *    catastrophic ops regardless of which skill holds the secret).
- *
- * 2. The `thinkwork-admin` skill manifest never declares an operation
- *    whose name matches a known catastrophic pattern. Prevents a
- *    future contributor from accidentally wiring `deleteTenant` or
- *    `transferTenantOwnership` into the manifest.
+ * `requireNotFromAdminSkill(ctx)` allows Cognito callers through unchanged
+ * and refuses every other authType — the "allow-list Cognito-only" posture
+ * (stronger than an `x-skill-id` deny-list because no service principal
+ * can reach catastrophic ops regardless of which credentials hold the
+ * secret). Kept even after the thinkwork-admin skill directory was
+ * deleted, because the guard applies to ANY service-auth path (agent
+ * broker, peer skills, future integrations) reaching catastrophic
+ * resolvers — the skill was only ever one example.
  */
 
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 
 import { requireNotFromAdminSkill } from "../graphql/resolvers/core/authz.js";
 
@@ -64,63 +58,11 @@ describe("requireNotFromAdminSkill — allow-list Cognito-only", () => {
   });
 });
 
-describe("thinkwork-admin skill.yaml — catastrophic-op exclusion", () => {
-  // Names the plan explicitly marks as never-exposed tier. Adding any
-  // of these to the thinkwork-admin manifest would flip the defense
-  // from "cannot be called" to "cannot be called unless admin opts
-  // an agent in" — a meaningfully weaker posture. Keep the list
-  // exhaustive.
-  const CATASTROPHIC_OP_NAMES = [
-    // Tenant lifecycle.
-    "delete_tenant",
-    "deleteTenant",
-    "transfer_tenant_ownership",
-    "transferTenantOwnership",
-    "transfer_ownership",
-    "transferOwnership",
-    // Billing / spend — none shipped today; future-proofing.
-    "update_billing",
-    "updateBilling",
-    "charge_tenant",
-    "chargeTenant",
-    "refund_tenant",
-    "refundTenant",
-    // Bulk-purge.
-    "bulk_purge",
-    "bulkPurge",
-    "purge_tenant",
-    "purgeTenant",
-    // Cross-tenant moves.
-    "move_tenant",
-    "moveTenant",
-  ];
-
-  it("declares no script with a catastrophic op name", () => {
-    const manifestPath = resolve(
-      __dirname,
-      "../../../skill-catalog/thinkwork-admin/skill.yaml",
-    );
-    const yaml = readFileSync(manifestPath, "utf-8");
-
-    for (const opName of CATASTROPHIC_OP_NAMES) {
-      // Match `- name: op_name` (bare) and `- name: "op_name"` (quoted).
-      const pattern = new RegExp(`^\\s*-\\s*name:\\s*"?${opName}"?\\s*$`, "m");
-      expect(
-        pattern.test(yaml),
-        `skill.yaml must NOT declare catastrophic op '${opName}'`,
-      ).toBe(false);
-    }
-  });
-
-  it("has scripts: declared as an empty list or a list of non-catastrophic ops (Unit 6 shipped an empty list)", () => {
-    const manifestPath = resolve(
-      __dirname,
-      "../../../skill-catalog/thinkwork-admin/skill.yaml",
-    );
-    const yaml = readFileSync(manifestPath, "utf-8");
-    // Accept either `scripts: []` or a populated list (Units 7/8
-    // will populate). The catastrophic-name assertion above is the
-    // real invariant; this one just guards the field exists.
-    expect(yaml).toMatch(/^scripts:/m);
-  });
-});
+// The second describe block — `thinkwork-admin skill.yaml —
+// catastrophic-op exclusion` — was removed when the skill directory was
+// deleted. The catastrophic-op guarantee now rests on the admin-ops MCP
+// tool definitions in packages/lambda/admin-ops-mcp.ts, which are a
+// closed set enumerated in source and guarded by the typecheck + the
+// tools/list must-have test in __tests__/admin-ops-mcp.test.ts. Any new
+// tool has to go through a code review that would catch a catastrophic
+// op name — same gate the yaml-regex test used to provide.
