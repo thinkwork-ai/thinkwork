@@ -1,0 +1,26 @@
+-- aws_s3 Aurora extension bootstrap.
+--
+-- Enables `aws_s3.query_export_to_s3(...)` and its supporting helpers for
+-- destructive-migration pre-drop snapshots (see U5 of the thread-detail
+-- cleanup plan) and any future caller that wants direct SQL → S3 exports.
+--
+-- Requires: Aurora cluster with an IAM role associated that grants s3
+-- PutObject on the target bucket. The role is provisioned by U13 (see
+-- terraform/modules/data/aurora-postgres — aws_rds_cluster_role_association
+-- with feature_name = "s3Export"). Without the role association this
+-- extension installs successfully but calls to query_export_to_s3 fail at
+-- runtime with an AccessDenied-style error.
+--
+-- Apply manually (matches the 0018+ hand-rolled convention):
+--   psql "$DATABASE_URL" -f packages/database-pg/drizzle/0028_aws_s3_extension.sql
+--
+-- Drift detection:
+--   pnpm db:migrate-manual  (reporter now recognizes `-- creates-extension:`)
+--
+-- Pre-migration invariants:
+--   - Caller has rds_superuser on the cluster (required for CREATE EXTENSION).
+--   - Aurora Postgres engine version supports aws_s3 (14.9+ / 15.2+).
+--
+-- creates-extension: aws_s3
+
+CREATE EXTENSION IF NOT EXISTS aws_s3 CASCADE;
