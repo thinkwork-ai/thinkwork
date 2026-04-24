@@ -71,6 +71,58 @@ resource "aws_apigatewayv2_api_mapping" "main" {
 }
 
 ################################################################################
+# MCP Custom Domain (optional) — second domain on the same HTTP API.
+#
+# Two-apply dance because ACM requires DNS validation before a Regional
+# custom domain can bind the cert. `var.mcp_custom_domain_ready = false`
+# (first apply) creates just the cert in pending-validation state and
+# surfaces the validation record via `mcp_custom_domain_validation` output.
+# The operator adds that record to Cloudflare (via `pnpm cf:sync-mcp`),
+# waits ~5 min for ACM validation, then sets `mcp_custom_domain_ready =
+# true` for the second apply, which creates the domain + API mapping.
+# A final `pnpm cf:sync-mcp --finalize` adds the `mcp.thinkwork.ai`
+# CNAME pointing at the regional domain target.
+#
+# See docs/solutions/patterns/mcp-custom-domain-setup-2026-04-23.md.
+################################################################################
+
+resource "aws_acm_certificate" "mcp" {
+  count             = var.mcp_custom_domain != "" ? 1 : 0
+  domain_name       = var.mcp_custom_domain
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name = "thinkwork-${var.stage}-mcp-cert"
+  }
+}
+
+resource "aws_apigatewayv2_domain_name" "mcp" {
+  count       = var.mcp_custom_domain != "" && var.mcp_custom_domain_ready ? 1 : 0
+  domain_name = var.mcp_custom_domain
+
+  domain_name_configuration {
+    certificate_arn = aws_acm_certificate.mcp[0].arn
+    endpoint_type   = "REGIONAL"
+    security_policy = "TLS_1_2"
+  }
+
+  tags = {
+    Name = "thinkwork-${var.stage}-mcp-domain"
+  }
+}
+
+resource "aws_apigatewayv2_api_mapping" "mcp" {
+  count       = var.mcp_custom_domain != "" && var.mcp_custom_domain_ready ? 1 : 0
+  api_id      = aws_apigatewayv2_api.main.id
+  domain_name = aws_apigatewayv2_domain_name.mcp[0].id
+  stage       = aws_apigatewayv2_stage.default.id
+}
+
+################################################################################
 # Shared Lambda Execution Role
 ################################################################################
 
