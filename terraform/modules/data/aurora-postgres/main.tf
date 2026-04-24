@@ -10,9 +10,9 @@
 ################################################################################
 
 locals {
-  create      = var.create_database
-  use_aurora  = local.create && var.database_engine == "aurora-serverless"
-  use_rds     = local.create && var.database_engine == "rds-postgres"
+  create     = var.create_database
+  use_aurora = local.create && var.database_engine == "aurora-serverless"
+  use_rds    = local.create && var.database_engine == "rds-postgres"
 
   cluster_identifier = "thinkwork-${var.stage}-db"
   master_username    = "thinkwork_admin"
@@ -29,6 +29,11 @@ locals {
     local.use_rds ? aws_db_instance.main[0].address : var.existing_db_endpoint
   )
   db_security_group_id = local.create ? aws_security_group.db[0].id : var.existing_db_security_group_id
+
+  # aws_s3 Aurora extension opts in when an Aurora cluster exists AND the
+  # caller supplied a destination bucket. Non-aurora engines short-circuit
+  # before aws_rds_cluster.main[0] is dereferenced.
+  enable_aws_s3 = local.use_aurora && var.backups_bucket_arn != null
 }
 
 data "aws_region" "current" {}
@@ -159,6 +164,97 @@ resource "aws_db_instance" "main" {
   tags = {
     Name = "thinkwork-${var.stage}-db"
   }
+}
+
+################################################################################
+# aws_s3 extension IAM role (Aurora only; opt-in via backups_bucket_arn)
+#
+# Aurora Postgres ships with an `aws_s3` extension (CREATE EXTENSION IF NOT
+# EXISTS aws_s3 CASCADE) that allows `aws_s3.query_export_to_s3(...)` to
+# write query results directly to S3. It requires an IAM role associated
+# with the cluster + trust for `rds.amazonaws.com` + `s3:PutObject`
+# permission on the target bucket.
+#
+# When `backups_bucket_arn` is set, this block provisions the role, the
+# policy, and the cluster association so that U5 of the thread-detail
+# cleanup plan (packages/database-pg/drizzle/0027_thread_cleanup_drops.sql)
+# can `SELECT aws_s3.query_export_to_s3(...)` without embedding any AWS
+# credentials in the hand-rolled SQL.
+#
+# Post-deploy one-shot step (documented in the plan, not automated here):
+#   psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS aws_s3 CASCADE"
+################################################################################
+
+resource "aws_iam_role" "aurora_aws_s3" {
+  count = local.enable_aws_s3 ? 1 : 0
+
+  name = "thinkwork-${var.stage}-aurora-aws-s3"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = { Service = "rds.amazonaws.com" }
+        Action    = "sts:AssumeRole"
+      },
+    ]
+  })
+
+  tags = {
+    Name    = "thinkwork-${var.stage}-aurora-aws-s3"
+    Purpose = "aurora-aws_s3-extension"
+  }
+}
+
+resource "aws_iam_role_policy" "aurora_aws_s3" {
+  count = local.enable_aws_s3 ? 1 : 0
+
+  name = "thinkwork-${var.stage}-aurora-aws-s3"
+  role = aws_iam_role.aurora_aws_s3[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "PutBackupObjects"
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:AbortMultipartUpload",
+          # GetBucketLocation is required by aws_s3.query_export_to_s3 for the
+          # region-matching check; without it exports fail at runtime with an
+          # opaque permission error. AWS Aurora docs:
+          # https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/postgresql-s3-export.html
+          "s3:GetBucketLocation",
+        ]
+        # Object-level actions are scoped to pre-drop/* so this role can only
+        # write snapshots produced by destructive migrations, not read or
+        # overwrite arbitrary bucket content. GetBucketLocation applies to
+        # the bucket ARN itself (it is a bucket-level, not object-level,
+        # operation).
+        Resource = [
+          var.backups_bucket_arn,
+          "${var.backups_bucket_arn}/pre-drop/*",
+        ]
+      },
+    ]
+  })
+}
+
+resource "aws_rds_cluster_role_association" "aurora_aws_s3" {
+  count = local.enable_aws_s3 ? 1 : 0
+
+  db_cluster_identifier = aws_rds_cluster.main[0].id
+  feature_name          = "s3Export"
+  role_arn              = aws_iam_role.aurora_aws_s3[0].arn
+
+  # Force the inline policy to land before RDS validates the role. Terraform's
+  # implicit dependency graph only links this resource to the IAM role itself
+  # (via role_arn). RDS AddRoleToDBCluster verifies the trust policy + any
+  # attached inline policies server-side; applying the association before the
+  # policy has propagated can return AccessDenied on the first apply.
+  depends_on = [aws_iam_role_policy.aurora_aws_s3]
 }
 
 ################################################################################

@@ -112,3 +112,13 @@ variable "deletion_protection" {
   type        = bool
   default     = null
 }
+
+# ---------------------------------------------------------------------------
+# aws_s3 Aurora extension (optional — set backups_bucket_arn to enable)
+# ---------------------------------------------------------------------------
+
+variable "backups_bucket_arn" {
+  description = "ARN of the S3 backups bucket Aurora should be allowed to write to via the aws_s3 extension (aws_s3.query_export_to_s3). When set, attaches an IAM role to the Aurora cluster granting s3:PutObject on that bucket. Null disables the feature. Only effective when database_engine = 'aurora-serverless'."
+  type        = string
+  default     = null
+}

@@ -10,7 +10,8 @@
 ################################################################################
 
 locals {
-  bucket_name = var.bucket_name != "" ? var.bucket_name : "thinkwork-${var.stage}-storage"
+  bucket_name         = var.bucket_name != "" ? var.bucket_name : "thinkwork-${var.stage}-storage"
+  backups_bucket_name = "thinkwork-${var.stage}-backups"
 
   # Hindsight is an optional add-on. Preferred toggle: var.enable_hindsight.
   # For one release we also honor the legacy var.memory_engine == "hindsight"
@@ -107,6 +108,13 @@ module "s3" {
   bucket_name = local.bucket_name
 }
 
+module "s3_backups" {
+  source = "../data/s3-backups-bucket"
+
+  stage       = var.stage
+  bucket_name = local.backups_bucket_name
+}
+
 module "database" {
   source = "../data/aurora-postgres"
 
@@ -124,6 +132,12 @@ module "database" {
 
   database_name   = var.database_name
   database_engine = var.database_engine
+
+  # Enables the `aws_s3` Aurora extension and attaches an IAM role that can
+  # PutObject into the backups bucket's pre-drop/* prefix. Used by
+  # destructive migrations (e.g. U5 of the thread-detail cleanup plan) to
+  # snapshot row data before DROP TABLE.
+  backups_bucket_arn = module.s3_backups.bucket_arn
 }
 
 module "bedrock_kb" {
