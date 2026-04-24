@@ -13,9 +13,8 @@ export const threads_query = async (_parent: any, args: any, ctx: GraphQLContext
 	if (args.channel) {
 		conditions.push(eq(threads.channel, args.channel.toLowerCase()));
 	} else {
-		// When no channel specified (Inbox), exclude task-channel threads and child threads
+		// When no channel specified (Inbox), exclude task-channel threads
 		conditions.push(sql`${threads.channel} != 'task'`);
-		conditions.push(sql`${threads.parent_id} IS NULL`);
 	}
 	if (args.agentId) conditions.push(eq(threads.agent_id, args.agentId));
 	if (args.assigneeId) {
@@ -35,7 +34,6 @@ export const threads_query = async (_parent: any, args: any, ctx: GraphQLContext
 		}
 		conditions.push(eq(threads.assignee_id, effectiveAssigneeId));
 	}
-	if (args.parentId) conditions.push(eq(threads.parent_id, args.parentId));
 	if (args.search) {
 		conditions.push(
 			sql`search_vector @@ plainto_tsquery('english', ${args.search})`,

@@ -6,11 +6,6 @@ import {
 } from "../../utils.js";
 
 export const threadTypeResolvers = {
-	children: async (thread: any) => {
-		if (Array.isArray(thread.children)) return thread.children;
-		const rows = await db.select().from(threads).where(eq(threads.parent_id, thread.id));
-		return rows.map(threadToCamel);
-	},
 	agent: (thread: any, _args: any, ctx: GraphQLContext) => {
 		if (thread.agent && typeof thread.agent === "object") return thread.agent;
 		const agentId = thread.agentId || thread.agent_id;
@@ -27,10 +22,6 @@ export const threadTypeResolvers = {
 		if (thread.reporter && typeof thread.reporter === "object") return thread.reporter;
 		const reporterId = thread.reporterId || thread.reporter_id;
 		return reporterId ? ctx.loaders.user.load(reporterId) : null;
-	},
-	childCount: (thread: any, _args: any, ctx: GraphQLContext) => {
-		if (typeof thread.childCount === "number") return thread.childCount;
-		return ctx.loaders.threadChildCount.load(thread.id);
 	},
 	messages: async (thread: any, args: any, _ctx: GraphQLContext) => {
 		const limit = Math.min(args.limit || 50, 200);

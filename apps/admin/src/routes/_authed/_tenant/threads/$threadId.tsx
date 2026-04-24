@@ -299,8 +299,6 @@ function ThreadDetailPage() {
   // TODO: Wire to a real activity feed query when available
   const activity: ActivityEvent[] = [];
 
-  const childThreads = thread?.children ?? [];
-
   const threadMessages = useMemo(
     () =>
       (thread?.messages?.edges ?? []).map((e: any) => ({
@@ -519,36 +517,6 @@ function ThreadDetailPage() {
         <div className="rounded-lg border border-border bg-accent/30 p-3.5 space-y-3">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Properties</h3>
           <ThreadProperties thread={thread} agents={agents} onUpdate={handleFieldUpdate} inline />
-        </div>
-
-        {/* Sub-tasks */}
-        <div className="rounded-lg border border-border bg-accent/30 p-3.5 space-y-2.5">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Sub-tasks</h3>
-          {childThreads.length > 0 && (
-            <div className="rounded-md border border-border divide-y divide-border bg-background">
-              {childThreads.map((child) => (
-                <Link
-                  key={child.id}
-                  to="/threads/$threadId"
-                  params={{ threadId: child.id }}
-                  className="flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-accent/40 transition-colors"
-                >
-                  <StatusIcon status={child.status.toLowerCase().replace(/ /g, "_")} />
-                  <span className="font-mono text-muted-foreground shrink-0">
-                    {child.identifier ?? child.id.slice(0, 8)}
-                  </span>
-                  <span className="truncate">{child.title}</span>
-                </Link>
-              ))}
-            </div>
-          )}
-          <button
-            onClick={() => openNewThread({ title: "" })}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-          >
-            <Plus className="h-3 w-3" />
-            Add sub-task
-          </button>
         </div>
 
         {/* Attachments */}

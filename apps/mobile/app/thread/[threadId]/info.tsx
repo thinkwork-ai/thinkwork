@@ -143,10 +143,7 @@ export default function ThreadInfoRoute() {
     });
   }, []);
 
-  const childThreads = (thread?.children ?? []) as any[];
-
   const [propertiesExpanded, setPropertiesExpanded] = useState(true);
-  const [subtasksExpanded, setSubtasksExpanded] = useState(true);
 
   if (!threadId) return <View className="flex-1 bg-white dark:bg-black" />;
 
@@ -201,42 +198,6 @@ export default function ThreadInfoRoute() {
           </>
         )}
 
-        {/* Sub-tasks — only show when there are children */}
-        {childThreads.length > 0 && (
-          <>
-            <SectionHeader title={`Sub-tasks (${childThreads.length})`} expanded={subtasksExpanded} onToggle={() => setSubtasksExpanded(!subtasksExpanded)} colors={colors} />
-
-            {subtasksExpanded && childThreads.map((child: any) => {
-              const cDue = child.dueAt ? new Date(child.dueAt) : null;
-              const cDone = (child.status || "").toUpperCase() === "DONE";
-              const cOverdue = cDue && cDue < new Date() && !cDone;
-              return (
-                <Pressable
-                  key={child.id}
-                  onPress={() => {
-                    const headerLabel = getThreadHeaderLabel(child);
-                    router.push({ pathname: `/thread/${child.id}`, params: headerLabel ? { title: headerLabel } : {} });
-                  }}
-                  className="flex-row items-center gap-2.5 px-4 py-3 border-t border-neutral-200 dark:border-neutral-800 active:opacity-70"
-                >
-                  <Circle size={14} color={statusColor((child.status || "").toUpperCase(), isDark)} />
-                  <Text className="text-xs font-mono text-neutral-500 dark:text-neutral-400">
-                    {child.identifier ?? child.id.slice(0, 8)}
-                  </Text>
-                  <Text className={`text-sm flex-1 ${cDone ? "line-through opacity-50" : ""}`} numberOfLines={1}>{child.title}</Text>
-                  {cOverdue && (
-                    <Text className="text-xs text-red-500 font-medium">Overdue</Text>
-                  )}
-                  {cDue && !cOverdue && !cDone && (
-                    <Text className="text-xs text-neutral-400">
-                      {cDue.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                    </Text>
-                  )}
-                </Pressable>
-              );
-            })}
-          </>
-        )}
       </ScrollView>
 
       {/* Status dropdown modal */}

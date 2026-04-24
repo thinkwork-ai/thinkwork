@@ -725,18 +725,6 @@ export function IssueProperties({
           {dueDateContent}
         </PropertyPicker>
 
-        {/* Parent thread */}
-        {thread.parentId && (
-          <PropertyRow label="Parent">
-            <Link
-              to="/threads/$threadId"
-              params={{ threadId: thread.parentId }}
-              className="text-sm hover:underline"
-            >
-              {thread.parentId.slice(0, 8)}
-            </Link>
-          </PropertyRow>
-        )}
       </div>
 
       <Separator />

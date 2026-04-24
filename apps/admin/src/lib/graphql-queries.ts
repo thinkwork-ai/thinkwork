@@ -387,8 +387,8 @@ export const SetAgentKnowledgeBasesMutation = gql`
 // ---------------------------------------------------------------------------
 
 export const ThreadsListQuery = graphql(`
-  query ThreadsList($tenantId: ID!, $status: ThreadStatus, $search: String, $type: ThreadType, $priority: ThreadPriority, $parentId: ID) {
-    threads(tenantId: $tenantId, status: $status, search: $search, type: $type, priority: $priority, parentId: $parentId) {
+  query ThreadsList($tenantId: ID!, $status: ThreadStatus, $search: String, $type: ThreadType, $priority: ThreadPriority) {
+    threads(tenantId: $tenantId, status: $status, search: $search, type: $type, priority: $priority) {
       id
       number
       identifier
@@ -396,7 +396,6 @@ export const ThreadsListQuery = graphql(`
       status
       priority
       type
-      parentId
       assigneeType
       assigneeId
       agentId
@@ -407,7 +406,6 @@ export const ThreadsListQuery = graphql(`
       }
       checkoutRunId
       channel
-      childCount
       costSummary
       lastActivityAt
       lastTurnCompletedAt
@@ -430,7 +428,6 @@ export const ThreadsPagedQuery = gql`
         status
         priority
         type
-        parentId
         assigneeType
         assigneeId
         agentId
@@ -441,7 +438,6 @@ export const ThreadsPagedQuery = gql`
         }
         checkoutRunId
         channel
-        childCount
         costSummary
         lastActivityAt
         lastTurnCompletedAt
@@ -467,14 +463,6 @@ export const ThreadDetailQuery = graphql(`
       status
       priority
       type
-      parentId
-      children {
-        id
-        identifier
-        title
-        status
-        priority
-      }
       assigneeType
       assigneeId
       agentId
@@ -521,7 +509,6 @@ export const ThreadDetailQuery = graphql(`
       closedAt
       createdByType
       createdById
-      childCount
       attachments {
         id
         threadId

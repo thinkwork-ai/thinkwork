@@ -682,7 +682,6 @@ export type CreateThreadInput = {
   firstMessage?: InputMaybe<Scalars['String']['input']>;
   labels?: InputMaybe<Scalars['AWSJSON']['input']>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  parentId?: InputMaybe<Scalars['ID']['input']>;
   priority?: InputMaybe<ThreadPriority>;
   tenantId: Scalars['ID']['input'];
   title: Scalars['String']['input'];
@@ -2802,7 +2801,6 @@ export type QueryThreadsArgs = {
   channel?: InputMaybe<ThreadChannel>;
   cursor?: InputMaybe<Scalars['String']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
-  parentId?: InputMaybe<Scalars['ID']['input']>;
   priority?: InputMaybe<ThreadPriority>;
   search?: InputMaybe<Scalars['String']['input']>;
   status?: InputMaybe<ThreadStatus>;
@@ -3375,8 +3373,6 @@ export type Thread = {
   channel: ThreadChannel;
   checkoutRunId?: Maybe<Scalars['String']['output']>;
   checkoutVersion: Scalars['Int']['output'];
-  childCount: Scalars['Int']['output'];
-  children: Array<Thread>;
   closedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   costSummary?: Maybe<Scalars['Float']['output']>;
@@ -3396,7 +3392,6 @@ export type Thread = {
   messages: MessageConnection;
   metadata?: Maybe<Scalars['AWSJSON']['output']>;
   number: Scalars['Int']['output'];
-  parentId?: Maybe<Scalars['ID']['output']>;
   priority: ThreadPriority;
   reporter?: Maybe<User>;
   reporterId?: Maybe<Scalars['ID']['output']>;
