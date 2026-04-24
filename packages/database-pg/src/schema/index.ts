@@ -34,6 +34,7 @@ export * from "./activity-log";
 export * from "./quick-actions";
 export * from "./workflow-configs";
 export * from "./mcp-servers";
+export * from "./mcp-admin-keys";
 export * from "./builtin-tools";
 export * from "./evaluations";
 export * from "./wiki";
