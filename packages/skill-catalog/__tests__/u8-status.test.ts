@@ -50,7 +50,7 @@ describe("u8-status audit script", () => {
     const donePattern = /\| done \| (\d+) \|/;
     const match = out.match(donePattern);
     expect(match).not.toBeNull();
-    expect(Number(match![1])).toBeGreaterThanOrEqual(17);
+    expect(Number(match![1])).toBeGreaterThanOrEqual(18);
   });
 
   it("still tracks remaining composition slugs for the next PR to pick up", () => {
@@ -58,10 +58,9 @@ describe("u8-status audit script", () => {
     const compositionPattern = /\| composition \| (\d+) \|/;
     const match = out.match(compositionPattern);
     expect(match).not.toBeNull();
-    // Two composition slugs remain: customer-onboarding-reconciler and
-    // renewal-prep. smoke-package-only is a smoke-probe (counted
-    // separately) and migrates last with U6.
-    expect(Number(match![1])).toBe(2);
+    // One composition slug remains: renewal-prep. smoke-package-only is
+    // a smoke-probe (counted separately) and migrates last with U6.
+    expect(Number(match![1])).toBe(1);
   });
 
   it("keeps the smoke-probe bucket honest (smoke-package-only stays there)", () => {
