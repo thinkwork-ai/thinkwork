@@ -576,37 +576,81 @@ def _call_strands_agent(system_prompt: str, messages: list,
 
             def _consume_invoke_stream(stream) -> dict:
                 """Drain InvokeCodeInterpreter's event stream into
-                {stdout, stderr, exit_code}. The API emits a sequence of
-                chunks; we accumulate text and pull structured fields
-                from the terminal event."""
+                {stdout, stderr, exit_code}.
+
+                AgentCore follows the MCP tool-result shape. Each
+                stream event wraps a `result` with:
+                  - content: list of content blocks (type='text' carries
+                    stdout, type='resource' carries file handles, etc.)
+                  - structuredContent: {stdout, stderr, exitCode, ...}
+                  - isError: terminal failure flag
+
+                We prefer structuredContent when present (authoritative
+                single-shot fields), then fall back to concatenating
+                text-type content blocks as stdout. Keeps a debug log of
+                raw event shapes so future SDK tweaks surface in
+                CloudWatch without another grep-and-guess round.
+                """
                 stdout_chunks: list[str] = []
                 stderr_chunks: list[str] = []
                 exit_code = 0
+                is_error = False
+                raw_structured = None
+
                 for event in stream:
-                    # Different event shapes from the stream. We don't
-                    # assume a fixed schema — just pull known keys.
                     if not isinstance(event, dict):
                         continue
+                    # INFO for now so the first post-deploy invocation's
+                    # structure is visible in CloudWatch; downgrade to
+                    # DEBUG in a follow-up once the shape is confirmed.
+                    logger.info("sandbox stream event shape: %s", list(event.keys()))
+                    # Event usually wraps a single top-level key (`result`
+                    # or the chunk type). Walk all values so a new
+                    # top-level key from an SDK update doesn't silently
+                    # drop output.
                     for _k, _v in event.items():
-                        if isinstance(_v, dict):
-                            text = _v.get("text") or _v.get("content") or ""
-                            if _k.lower().startswith("stdout") and text:
-                                stdout_chunks.append(text)
-                            elif _k.lower().startswith("stderr") and text:
-                                stderr_chunks.append(text)
-                            elif "exitCode" in _v:
-                                exit_code = int(_v["exitCode"])
-                        elif isinstance(_v, (bytes, str)) and _k.lower().startswith("stdout"):
-                            stdout_chunks.append(
-                                _v.decode() if isinstance(_v, bytes) else _v,
-                            )
-                        elif isinstance(_v, (bytes, str)) and _k.lower().startswith("stderr"):
-                            stderr_chunks.append(
-                                _v.decode() if isinstance(_v, bytes) else _v,
-                            )
+                        if not isinstance(_v, dict):
+                            # Rare shape — top-level bytes/str stdout.
+                            if isinstance(_v, (bytes, str)):
+                                txt = _v.decode() if isinstance(_v, bytes) else _v
+                                if _k.lower().startswith("stderr"):
+                                    stderr_chunks.append(txt)
+                                elif _k.lower().startswith("stdout"):
+                                    stdout_chunks.append(txt)
+                            continue
+                        # structuredContent is authoritative when the
+                        # API emits it (usually on terminal event).
+                        sc = _v.get("structuredContent")
+                        if isinstance(sc, dict):
+                            raw_structured = sc
+                            if isinstance(sc.get("stdout"), str):
+                                stdout_chunks.append(sc["stdout"])
+                            if isinstance(sc.get("stderr"), str):
+                                stderr_chunks.append(sc["stderr"])
+                            if isinstance(sc.get("exitCode"), (int, float)):
+                                exit_code = int(sc["exitCode"])
+                        # Content blocks — concatenate text-type output.
+                        for block in _v.get("content") or []:
+                            if not isinstance(block, dict):
+                                continue
+                            btype = block.get("type", "")
+                            if btype == "text" and isinstance(block.get("text"), str):
+                                # Don't double-count if structuredContent.stdout
+                                # already has this text. Defensive: if sc
+                                # wasn't present, the text blocks are the
+                                # only stdout source we have.
+                                if raw_structured is None:
+                                    stdout_chunks.append(block["text"])
+                        if _v.get("isError") is True:
+                            is_error = True
+
+                stdout = "".join(stdout_chunks)
+                stderr = "".join(stderr_chunks)
+                if is_error and exit_code == 0:
+                    exit_code = 1
                 return {
-                    "stdout": "".join(stdout_chunks),
-                    "stderr": "".join(stderr_chunks),
+                    "stdout": stdout,
+                    "stderr": stderr,
                     "exit_code": exit_code,
                 }
 
