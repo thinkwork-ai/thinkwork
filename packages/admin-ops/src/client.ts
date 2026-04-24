@@ -32,9 +32,19 @@ export function createClient(config: AdminOpsClientConfig): AdminOpsClient {
 	const base = config.apiUrl.replace(/\/+$/, "");
 
 	const doFetch = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
+		// Send the shared service secret on BOTH Authorization: Bearer (REST
+		// handlers' validateApiSecret + the `/mcp/admin` endpoint accept this)
+		// AND x-api-key (the GraphQL endpoint's authenticate() only reads
+		// apikey auth from x-api-key — Bearer is reserved for Cognito JWT).
+		// Without both, GraphQL-routed operations get HTTP 500 at context
+		// construction because authenticate() returns null.
+		//
+		// See packages/api/src/lib/cognito-auth.ts:authenticate() + the PR
+		// that introduced this (fix/admin-ops-graphql-auth).
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json",
 			Authorization: `Bearer ${config.authSecret}`,
+			"x-api-key": config.authSecret,
 		};
 		if (config.principalId) headers["x-principal-id"] = config.principalId;
 		if (config.principalEmail) headers["x-principal-email"] = config.principalEmail;
