@@ -66,7 +66,6 @@ export const createThread = async (_parent: any, args: any, ctx: GraphQLContext)
 				priority: i.priority?.toLowerCase() ?? "medium",
 				type: i.type?.toLowerCase() ?? "task",
 				channel,
-				parent_id: i.parentId,
 				assignee_type: i.assigneeType,
 				assignee_id: i.assigneeId,
 				billing_code: i.billingCode,
@@ -140,5 +139,5 @@ export const createThread = async (_parent: any, args: any, ctx: GraphQLContext)
 		}
 	}
 
-	return { ...threadToCamel(row), childCount: 0 };
+	return threadToCamel(row);
 };

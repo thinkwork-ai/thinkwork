@@ -49,8 +49,6 @@ type Thread {
   priority: ThreadPriority!
   type: ThreadType!
   channel: ThreadChannel!
-  parentId: ID
-  children: [Thread!]!
   assigneeType: String
   assigneeId: ID
   assignee: User
@@ -73,7 +71,6 @@ type Thread {
   createdByType: String
   createdById: String
   attachments: [ThreadAttachment!]!
-  childCount: Int!
   costSummary: Float
   lastActivityAt: AWSDateTime
   createdAt: AWSDateTime!
@@ -125,7 +122,6 @@ input CreateThreadInput {
   priority: ThreadPriority
   type: ThreadType
   channel: ThreadChannel
-  parentId: ID
   assigneeType: String
   assigneeId: ID
   billingCode: String
@@ -190,7 +186,6 @@ extend type Query {
     channel: ThreadChannel
     agentId: ID
     assigneeId: ID
-    parentId: ID
     search: String
     limit: Int
     cursor: String

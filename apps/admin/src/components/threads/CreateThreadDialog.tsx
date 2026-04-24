@@ -85,7 +85,6 @@ const threadSchema = z.object({
   priority: z.string(),
   type: z.string(),
   agentId: z.string(),
-  parentId: z.string(),
   dueAt: z.string(),
 });
 
@@ -102,7 +101,6 @@ const INITIAL_FORM: ThreadFormValues = {
   priority: "medium",
   type: "task",
   agentId: "",
-  parentId: "",
   dueAt: "",
 };
 
@@ -226,7 +224,6 @@ export function ThreadFormDialog({
           description: values.description.trim() || undefined,
           type: values.type.toUpperCase() as any,
           priority: values.priority.toUpperCase() as any,
-          parentId: values.parentId.trim() || undefined,
           agentId: values.agentId || undefined,
           assigneeType: values.agentId ? "AGENT" : undefined,
           assigneeId: values.agentId || undefined,
@@ -505,28 +502,6 @@ export function ThreadFormDialog({
                 />
               </div>
 
-              {/* Parent thread (create mode only) */}
-              {mode === "create" && (
-                <FormField
-                  control={form.control}
-                  name="parentId"
-                  render={({ field }) => (
-                    <FormItem className="space-y-1.5">
-                      <FormLabel className="text-xs text-muted-foreground">
-                        Parent Thread ID (optional)
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="e.g. MF-42"
-                          className="text-sm"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
             </DialogBody>
 
             <DialogFooter className="mt-4">
