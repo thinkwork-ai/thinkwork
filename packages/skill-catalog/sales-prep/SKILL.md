@@ -8,13 +8,16 @@ description: >
 license: Proprietary
 metadata:
   author: thinkwork
-  version: "2.0.0"
+  version: "2.1.0"
 allowed-tools:
-  - Skill
-  - recall
-  - reflect
+  - render_package
+  - hindsight_recall
+  - hindsight_reflect
   - web_search
-  - wiki_search
+  - search_wiki
+  - crm_account_summary
+  - ar_summary
+  - support_incidents_summary
 ---
 
 # Sales Prep
@@ -40,14 +43,14 @@ The rep gets a Markdown brief with four sections, in this order:
 
 Every finding cites its source (e.g. `CRM: ARR $380k, renewal 2026-Q2`). **Never invent facts.** If you don't have a source, put it in Open questions, not Risks or Opportunities.
 
-The final output is produced by `Skill("package", {format: "sales_brief", synthesis: <your analysis>})` — that tool deterministically renders the four sections into the canonical template.
+The final output is produced by `render_package(synthesis=..., format="sales_brief", metadata=...)` — that tool wraps your Markdown synthesis in the canonical template (header, meeting date, etc.).
 
 ## Method
 
 ### 1. Pull prior learnings (before anything else)
 
 ```
-recall({skill_id: "sales-prep", subject_entity_id: customer})
+hindsight_recall(skill_id="sales-prep", subject_entity_id=customer)
 ```
 
 These are things past runs for this customer taught you — preferences, gotchas, corrections. Weight them heavily in your synthesis.
@@ -68,26 +71,39 @@ Keep this under 150 words. It's internal, not part of the output.
 Fire these tool calls concurrently — don't wait on one before starting the next:
 
 **Critical (abort if it fails):**
-- `Skill("crm_account_summary", {customer})` — ARR, renewal date, AE, last activity. Without this the brief has nothing to anchor on.
+- `crm_account_summary(customer=customer)` — ARR, renewal date, AE, last activity. Without this the brief has nothing to anchor on.
 
 **Nice-to-have (degrade gracefully — note absence in a footer):**
-- `Skill("ar_summary", {customer})` — invoice status, DSO, past-due amounts.
-- `Skill("support_incidents_summary", {customer})` — open tickets, NPS.
-- `web_search({query: "<customer name> news 2026"})` — recent public signals.
-- `wiki_search({query: customer})` — tenant-specific notes.
+- `ar_summary(customer=customer)` — invoice status, DSO, past-due amounts.
+- `support_incidents_summary(customer=customer)` — open tickets, NPS.
+- `web_search(query="<customer name> news 2026")` — recent public signals.
+- `search_wiki(query=customer)` — tenant-specific notes.
 
 If a nice-to-have tool errors, isn't registered, or returns empty: continue. At the end of the deliverable add a footer line per missing source, e.g. `> Note: support data unavailable.`
 
 ### 4. Synthesize
 
-Reading the gathered data alongside the `focus` parameter, produce the four sections:
+Reading the gathered data alongside the `focus` parameter, produce the four sections as a single Markdown string with `##` headings in this exact order and spelling — `render_package` embeds your synthesis verbatim:
 
+```
+## Risks
+- ...
+
+## Opportunities
+- ...
+
+## Open questions
+- ...
+
+## Talking points
+- ...
+```
+
+Rules:
 - **Focus `risks`** → lead with Risks; keep Opportunities short.
 - **Focus `expansion`** → lead with Opportunities; surface usage trends.
 - **Focus `financial`** → put ARR / renewal posture / AR in Risks and Opportunities.
 - **Focus `general`** (default) → balance all four sections.
-
-Rules:
 - Cite every finding.
 - Specific numbers over adjectives.
 - 400 words max across the four sections.
@@ -96,45 +112,40 @@ Rules:
 ### 5. Render
 
 ```
-Skill("package", {
-  format: "sales_brief",
-  synthesis: {
-    risks: [...],
-    opportunities: [...],
-    open_questions: [...],
-    talking_points: [...]
-  },
-  metadata: { customer, meeting_date, focus }
-})
+render_package(
+  synthesis=<your four-section Markdown string>,
+  format="sales_brief",
+  metadata={"customer": customer, "meeting_date": meeting_date, "focus": focus}
+)
 ```
 
-Return the rendered Markdown as your final output. Do not reformat it — `package` produced the canonical shape.
+Return the rendered Markdown as your final output. Do not reformat it — `render_package` produced the canonical shape.
 
 ### 6. Reflect
 
-If you learned something non-obvious about this customer — a preferred source, a correction, a recurring pattern — call `reflect` with up to 3 observations:
+If you learned something non-obvious about this customer — a preferred source, a correction, a recurring pattern — call `hindsight_reflect` with up to 3 observations:
 
 ```
-reflect({
-  skill_id: "sales-prep",
-  subject_entity_id: customer,
-  text: "..."
-})
+hindsight_reflect(
+  skill_id="sales-prep",
+  subject_entity_id=customer,
+  text="..."
+)
 ```
 
 Skip this step if the run didn't surface anything new.
 
 ## Connector dependencies
 
-The gather step calls connector skills that ship in separate PRDs:
+The gather step calls connector tools that ship in separate PRDs:
 
 - `crm_account_summary` — CRM adapter (Salesforce / HubSpot / etc.)
 - `ar_summary` — ERP / billing adapter.
 - `support_incidents_summary` — helpdesk adapter.
 - `web_search` — shipped.
-- `wiki_search` — shipped.
+- `search_wiki` — shipped.
 
-If a connector is not registered in the current session allowlist, the call fails cleanly and step 3's graceful-degradation footer kicks in.
+If a connector isn't registered in the current session's tool set, the tool call fails cleanly and step 3's graceful-degradation footer kicks in.
 
 ## Tenant overrides
 
@@ -150,4 +161,4 @@ Everything else is fixed. Attempting to override an unlisted field is rejected a
 - Doesn't send the brief (email/slack is a separate delivery channel).
 - Doesn't schedule follow-ups (use `schedule_followup` tool separately).
 - Doesn't modify CRM records.
-- Doesn't call retired helper skills (`frame`, `synthesize`, `gather`, `compound`) — the framing + analysis happen inline in steps 2 and 4.
+- Doesn't call retired helper skills (`frame`, `synthesize`, `gather`, `compound`) — framing + synthesis happen inline in steps 2 and 4.

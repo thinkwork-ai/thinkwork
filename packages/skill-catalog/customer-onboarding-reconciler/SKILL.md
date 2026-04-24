@@ -7,11 +7,14 @@ description: >
 license: Proprietary
 metadata:
   author: thinkwork
-  version: "2.0.0"
+  version: "2.1.0"
 allowed-tools:
-  - Skill
-  - recall
-  - reflect
+  - hindsight_recall
+  - hindsight_reflect
+  - crm_account_summary
+  - crm_opportunity_summary
+  - lastmile_tasks_list
+  - lastmile_tasks_create
 ---
 
 # Customer Onboarding Reconciler
@@ -40,7 +43,7 @@ Over many ticks the skill converges. No single invocation holds a session open; 
 ### 1. Pull prior learnings
 
 ```
-recall({skill_id: "customer-onboarding-reconciler", subject_entity_id: customerId})
+hindsight_recall(skill_id="customer-onboarding-reconciler", subject_entity_id=customerId)
 ```
 
 Onboarding learnings tend to be order-preferences ("This tenant wants PO setup before contract signing"). Let them shape step 3's gap analysis.
@@ -50,11 +53,11 @@ Onboarding learnings tend to be order-preferences ("This tenant wants PO setup b
 Fire these concurrently:
 
 **Critical (abort tick if either fails):**
-- `Skill("crm_account_summary", {customer: customerId})` — customer record: industry, size, contract stage, key contacts.
-- `Skill("lastmile_tasks_list", {subject_kind: "customer", subject_id: customerId, trigger: "customer-onboarding-reconciler"})` — **all existing tasks this reconciler has created before, regardless of status.**
+- `crm_account_summary(customer=customerId)` — customer record: industry, size, contract stage, key contacts.
+- `lastmile_tasks_list(subject_kind="customer", subject_id=customerId, trigger="customer-onboarding-reconciler")` — **all existing tasks this reconciler has created before, regardless of status.**
 
 **Nice-to-have:**
-- `Skill("crm_opportunity_summary", {opportunity: opportunityId})` — deal shape, contract amount, close date. Footer note if missing.
+- `crm_opportunity_summary(opportunity=opportunityId)` — deal shape, contract amount, close date. Footer note if missing.
 
 If **either** critical gather errors or returns empty, **ABORT the tick**. Do not proceed to step 3. A tick that acts on partial state will duplicate tasks the next time the real `existing_tasks` comes back.
 
@@ -70,6 +73,7 @@ Given the customer's current state + the opportunity context, determine what tas
 - **Documentation handoff** — onboarding kit, admin guide.
 
 Adjust based on prior-learnings (step 1) and opportunity context (step 2's optional gather). Example adjustments:
+
 - Contract already signed in the opportunity record → skip "contract signature."
 - SMB tier (`crm_account_summary.tier === "SMB"`) → collapse "team assignments" into "CSM only."
 - Prior learnings say "customer prefers PO before contract" → reorder those two.
@@ -85,15 +89,15 @@ Keep the gap list internal — don't render it as output. It feeds step 4 only.
 For each entry in the gap, call:
 
 ```
-Skill("lastmile_tasks_create", {
-  subject_kind: "customer",
-  subject_id: customerId,
-  trigger: "customer-onboarding-reconciler",
-  title: "...",
-  description: "...",
-  assignee_hint: "...",
-  depends_on: [...]  // optional; task ids from existing_tasks that must complete first
-})
+lastmile_tasks_create(
+  subject_kind="customer",
+  subject_id=customerId,
+  trigger="customer-onboarding-reconciler",
+  title="...",
+  description="...",
+  assignee_hint="...",
+  depends_on=[...]  # optional; task ids from existing_tasks that must complete first
+)
 ```
 
 **Do not create a task if an existing task matches `{subject, trigger, title}` — even if the existing one is `done`.** Matching is case-insensitive on title after trimming. This is the idempotency invariant: multiple ticks with the same gap produce zero duplicate creates.
@@ -101,11 +105,11 @@ Skill("lastmile_tasks_create", {
 ### 5. Reflect (if anything worth saving)
 
 ```
-reflect({
-  skill_id: "customer-onboarding-reconciler",
-  subject_entity_id: customerId,
-  text: "..."
-})
+hindsight_reflect(
+  skill_id="customer-onboarding-reconciler",
+  subject_entity_id=customerId,
+  text="..."
+)
 ```
 
 Up to 3 observations. Good patterns: ordering preferences, timing patterns, tier-specific adjustments. Skip if the tick was routine.

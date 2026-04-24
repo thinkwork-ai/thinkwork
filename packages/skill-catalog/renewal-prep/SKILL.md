@@ -7,11 +7,17 @@ description: >
 license: Proprietary
 metadata:
   author: thinkwork
-  version: "2.0.0"
+  version: "2.1.0"
 allowed-tools:
-  - Skill
-  - recall
-  - reflect
+  - render_package
+  - hindsight_recall
+  - hindsight_reflect
+  - contract_summary
+  - product_usage_summary
+  - renewal_history_summary
+  - ar_summary
+  - nps_summary
+  - support_incidents_summary
 ---
 
 # Renewal Prep
@@ -28,7 +34,7 @@ You are producing a renewal-risk brief for a rep heading into a renewal conversa
 
 ## Deliverable shape
 
-Four-section brief via `Skill("package", {format: "renewal_risk", ...})`:
+Four-section brief produced by `render_package(synthesis=..., format="renewal_risk", metadata=...)`:
 
 - **Risks** — ordered by deal-impact likelihood (AR delinquency first, then usage decline, then escalations, etc.).
 - **Opportunities** — re-engagement or expansion levers.
@@ -42,7 +48,7 @@ Cite every finding. Never invent facts.
 ### 1. Pull prior learnings
 
 ```
-recall({skill_id: "renewal-prep", subject_entity_id: customer})
+hindsight_recall(skill_id="renewal-prep", subject_entity_id=customer)
 ```
 
 Renewal learnings are often high-signal ("Last year's renewal slipped because we never surfaced the AR past-due"). Let them shape synthesis.
@@ -61,20 +67,36 @@ Internal scratchpad (≤150 words):
 Fire these concurrently:
 
 **Critical (abort if it fails):**
-- `Skill("contract_summary", {customer})` — renewal date, term, auto-renew clause, price. Without this the brief has nothing to anchor on.
+- `contract_summary(customer=customer)` — renewal date, term, auto-renew clause, price. Without this the brief has nothing to anchor on.
 
 **Nice-to-have (degrade gracefully — footer note per missing source):**
-- `Skill("product_usage_summary", {customer, period: "last_quarter"})` — MAU trend, feature adoption.
-- `Skill("renewal_history_summary", {customer})` — prior renewal outcomes, precedents, discount history.
-- `Skill("ar_summary", {customer})` — invoice status, DSO, past-due. **Call out AR delinquency prominently in the footer if this is unavailable** — it's a near-deterministic churn signal.
-- `Skill("nps_summary", {customer, period: "last_year"})` — NPS trend, detractor themes.
-- `Skill("support_incidents_summary", {customer, period: "last_quarter"})` — ticket volume, escalations.
+- `product_usage_summary(customer=customer, period="last_quarter")` — MAU trend, feature adoption.
+- `renewal_history_summary(customer=customer)` — prior renewal outcomes, precedents, discount history.
+- `ar_summary(customer=customer)` — invoice status, DSO, past-due. **Call out AR delinquency prominently in the footer if this is unavailable** — it's a near-deterministic churn signal.
+- `nps_summary(customer=customer, period="last_year")` — NPS trend, detractor themes.
+- `support_incidents_summary(customer=customer, period="last_quarter")` — ticket volume, escalations.
 
 If a nice-to-have tool errors: continue with a footer note. For the AR case specifically, add a stronger warning: `> WARNING: AR status unavailable — verify delinquency manually before the call.`
 
 ### 4. Synthesize
 
-Focus hardcoded to **risks** for this skill — renewal prep is inherently risk-oriented. Rules:
+Focus hardcoded to **risks** for this skill — renewal prep is inherently risk-oriented. Produce the four sections as a single Markdown string with `##` headings in this exact order and spelling — `render_package` embeds your synthesis verbatim:
+
+```
+## Risks
+- ...
+
+## Opportunities
+- ...
+
+## Open questions
+- ...
+
+## Talking points
+- ...
+```
+
+Rules:
 
 - **Order Risks by deal-impact likelihood.** AR past-due > usage decline > escalations > NPS softening > champion churn. Use the actual gathered data to refine the order.
 - **Opportunities stay short.** Re-engagement tactics only; don't pad.
@@ -86,16 +108,11 @@ Cite every finding. 400 words max across the four sections.
 ### 5. Render
 
 ```
-Skill("package", {
-  format: "renewal_risk",
-  synthesis: {
-    risks: [...],
-    opportunities: [...],
-    open_questions: [...],
-    talking_points: [...]
-  },
-  metadata: { customer, renewal_date, contract_value }
-})
+render_package(
+  synthesis=<your four-section Markdown string>,
+  format="renewal_risk",
+  metadata={"customer": customer, "renewal_date": renewal_date, "contract_value": contract_value}
+)
 ```
 
 Return the rendered Markdown verbatim.
@@ -103,11 +120,11 @@ Return the rendered Markdown verbatim.
 ### 6. Reflect
 
 ```
-reflect({
-  skill_id: "renewal-prep",
-  subject_entity_id: customer,
-  text: "..."
-})
+hindsight_reflect(
+  skill_id="renewal-prep",
+  subject_entity_id=customer,
+  text="..."
+)
 ```
 
 Up to 3 observations. Skip if nothing new.
