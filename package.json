@@ -28,7 +28,8 @@
     "schema:build": "bash scripts/schema-build.sh",
     "build:lambdas": "bash scripts/build-lambdas.sh",
     "db:push": "bash scripts/db-push.sh",
-    "db:migrate-manual": "bash scripts/db-migrate-manual.sh"
+    "db:migrate-manual": "bash scripts/db-migrate-manual.sh",
+    "cf:sync-mcp": "tsx scripts/cloudflare-sync-mcp.ts"
   },
   "devDependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.1028.0",

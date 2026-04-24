@@ -281,3 +281,19 @@ variable "platform_operator_emails" {
   type        = string
   default     = ""
 }
+
+# ---------------------------------------------------------------------------
+# MCP custom domain (optional) — e.g., mcp.thinkwork.ai
+# ---------------------------------------------------------------------------
+
+variable "mcp_custom_domain" {
+  description = "Custom domain for the MCP endpoint (e.g., 'mcp.thinkwork.ai'). Empty disables the custom-domain setup entirely. When set, an ACM cert is created; flip mcp_custom_domain_ready=true on the second apply to attach the domain + API mapping after DNS validation completes. See docs/solutions/patterns/mcp-custom-domain-setup-2026-04-23.md for the workflow."
+  type        = string
+  default     = ""
+}
+
+variable "mcp_custom_domain_ready" {
+  description = "Two-apply gate for the MCP custom domain. Leave false on the first apply (cert-only). After running `pnpm cf:sync-mcp` + waiting for ACM validation, flip to true and re-apply to create the API Gateway domain + mapping."
+  type        = bool
+  default     = false
+}

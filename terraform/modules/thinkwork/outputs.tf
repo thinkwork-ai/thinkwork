@@ -164,3 +164,24 @@ output "ses_inbound_mx_target" {
   description = "MX target host for the email subdomain. Terraform already writes this into the subzone — this output is informational."
   value       = module.ses.mx_target
 }
+
+# MCP custom domain — consumed by `pnpm cf:sync-mcp`.
+output "mcp_custom_domain" {
+  description = "Configured MCP custom domain (e.g., mcp.thinkwork.ai), or empty when disabled."
+  value       = module.api.mcp_custom_domain
+}
+
+output "mcp_custom_domain_cert_arn" {
+  description = "ACM cert ARN for the MCP custom domain. Used by the CF sync script to poll validation status."
+  value       = module.api.mcp_custom_domain_cert_arn
+}
+
+output "mcp_custom_domain_validation" {
+  description = "DNS validation records that must be added to Cloudflare for ACM to issue the cert. Each record: { name, type, value }."
+  value       = module.api.mcp_custom_domain_validation
+}
+
+output "mcp_custom_domain_target" {
+  description = "Regional target for the final mcp CNAME — only populated on the second apply after mcp_custom_domain_ready=true. { target_domain_name, hosted_zone_id } or null."
+  value       = module.api.mcp_custom_domain_target
+}
