@@ -67,11 +67,24 @@ def apply_invocation_env(payload: dict) -> list[str]:
 
     # Sandbox. Dispatcher sets sandbox_* payload fields only when pre-
     # flight returned status=ready; server.py reads SANDBOX_INTERPRETER_ID
-    # to gate execute_code registration. Keys are cleared per-invocation
-    # so a warm container can't leak one tenant's interpreter id into the
-    # next invocation. The retired OAuth preamble path also threaded
-    # SANDBOX_SECRET_PATHS / SANDBOX_TENANT_ID / SANDBOX_USER_ID /
-    # SANDBOX_STAGE — those are gone (see docs/plans/2026-04-23-006).
+    # to gate execute_code registration. Unconditional pop at invocation
+    # entry prevents a warm container from leaking a prior tenant's
+    # interpreter id into this invocation — even if a prior cleanup was
+    # interrupted (SIGTERM during deploy, OOM mid-finally). Also removes
+    # the retired OAuth preamble keys (SANDBOX_SECRET_PATHS /
+    # SANDBOX_TENANT_ID / SANDBOX_USER_ID / SANDBOX_STAGE) left behind
+    # by pre-deploy invocations on a warm container (see docs/plans/
+    # 2026-04-23-006).
+    for stale in (
+        "SANDBOX_INTERPRETER_ID",
+        "SANDBOX_ENVIRONMENT",
+        "SANDBOX_SECRET_PATHS",
+        "SANDBOX_TENANT_ID",
+        "SANDBOX_USER_ID",
+        "SANDBOX_STAGE",
+    ):
+        os.environ.pop(stale, None)
+
     sandbox_interpreter_id = payload.get("sandbox_interpreter_id") or ""
     sandbox_environment = payload.get("sandbox_environment") or ""
 

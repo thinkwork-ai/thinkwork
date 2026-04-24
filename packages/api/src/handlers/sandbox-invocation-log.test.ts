@@ -62,11 +62,18 @@ describe("shapeRow — enum validation", () => {
       "oom",
       "cap_exceeded",
       "provisioning",
-      "connection_revoked",
     ];
     for (const v of values) {
       expect(shapeRow(base({ exit_status: v })).ok).toBe(true);
     }
+  });
+
+  it("rejects the retired connection_revoked exit_status", () => {
+    // Regression guard: the OAuth preamble path was retired
+    // (docs/plans/2026-04-23-006). If it ever comes back, this
+    // allowlist entry has to be a deliberate add, not a silent revert.
+    const r = shapeRow(base({ exit_status: "connection_revoked" }));
+    expect(r.ok).toBe(false);
   });
 
   it("rejects unknown invocation_source", () => {

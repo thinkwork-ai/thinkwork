@@ -22,8 +22,6 @@ check raises a loud error rather than silently running an untrusted
 shape.
 """
 
-from __future__ import annotations
-
 # Current preamble shape. Bump when the contract with sitecustomize
 # changes (e.g. new redactor API). v2 dropped OAuth token injection.
 PREAMBLE_VERSION = 2
@@ -37,11 +35,12 @@ def build_preamble() -> str:
          is a no-op if the wrapper is active, ImportError otherwise).
       2. Confirms ``sitecustomize.installed()`` returns True — the
          stdio redactor is wrapping sys.stdout / sys.stderr before any
-         user code runs.
+         user code runs. Identity compare (``is not True``) so a mock
+         that returns a truthy non-True sentinel fails closed.
       3. Prints a readiness marker so the dispatcher knows call #1
          succeeded before sending call #2.
     """
-    return f"""# thinkwork_preamble_version: {PREAMBLE_VERSION}
+    return """# thinkwork_preamble_version: 2
 #
 # This is executeCode call #1 — it must run to completion before any
 # user code. The stdio redactor wrapping sys.stdout is installed by the
@@ -57,7 +56,7 @@ except ImportError as _tw_err:
         "sitecustomize not importable inside the sandbox; refusing to run"
     ) from _tw_err
 
-if not _tw_sc.installed():
+if _tw_sc.installed() is not True:
     raise RuntimeError(
         "sitecustomize did not install its stdio wrapper; refusing to run"
     )

@@ -64,7 +64,7 @@ The agent should produce one `execute_code` call that:
 
 ## Failure modes to exercise in dev
 
-- **`sandbox_enabled = false`** on the tenant → agent gets `SandboxDisabled` and can't call execute_code.
+- **`sandbox_enabled = false`** on the tenant → the dispatcher does not register `execute_code` for the turn; the agent simply responds that it cannot run code.
 - **`compliance_tier = 'regulated'`** → `updateTenantPolicy` coerces sandbox off; DB CHECK prevents raw-SQL bypass.
 - **Interpreter IDs null** on the tenant → pre-flight returns `provisioning`; agent gets `SandboxProvisioning`.
 - **`SANDBOX_TENANT_DAILY_CAP=1`** → second call returns `SandboxCapExceeded` with `dimension='tenant_daily'`.

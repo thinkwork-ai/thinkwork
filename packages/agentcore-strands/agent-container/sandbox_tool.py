@@ -59,7 +59,7 @@ class SandboxResult:
     peak_memory_mb: int | None = None
     # Structured error name when ok=False. One of:
     #   SandboxProvisioning | SandboxCapExceeded | SandboxTimeout
-    #   | SandboxOOM | SandboxError | ConnectionRevoked
+    #   | SandboxOOM | SandboxError
     error: str | None = None
     # Short human-readable guidance for the agent when ok=False.
     error_message: str | None = None
@@ -131,13 +131,16 @@ def build_execute_code_tool(
 
         Use this tool when you need to:
           * manipulate data with pandas/numpy beyond what typed skills cover
-          * stitch together CLI output or REST responses mid-turn
-          * call a community Python library without waiting for a typed wrapper
+          * compute over data already fetched this turn, or data reachable
+            via the sandbox's per-tenant IAM role (S3, Bedrock, etc.)
           * run quick analytical scripts that produce text, files, or uploads
 
-        The sandbox has the OAuth tokens the template's required_connections
-        declares (GITHUB_ACCESS_TOKEN, SLACK_ACCESS_TOKEN, GCAL_ACCESS_TOKEN,
-        etc.) available via os.environ for the lifetime of this turn only.
+        `execute_code` is a pure-compute primitive. It does NOT carry per-user
+        OAuth credentials in os.environ. For OAuth-ed work (posting to Slack,
+        opening a GitHub issue, calling a Google API), call the relevant
+        composable-skill connector script instead of writing it inside
+        execute_code. S3 access inside execute_code runs under the sandbox
+        session's per-tenant IAM role and is fine to use directly.
 
         The tool returns a structured dict; check `ok` before relying on
         stdout. Common `error` values to handle gracefully:
@@ -145,7 +148,6 @@ def build_execute_code_tool(
           * SandboxCapExceeded — daily or hourly cap was hit; surface the message
           * SandboxTimeout — the 5-minute ceiling tripped; break the work up
           * SandboxOOM — out of memory; reduce data size
-          * ConnectionRevoked — a required OAuth connection expired mid-turn
         """
         # Import-lazy so loading the module without a live interpreter_id
         # doesn't trip the stub path.
