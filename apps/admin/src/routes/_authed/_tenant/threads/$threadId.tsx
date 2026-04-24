@@ -25,12 +25,14 @@ import {
   AgentsListQuery,
   OnThreadUpdatedSubscription,
   OnThreadTurnUpdatedSubscription,
+  ThreadTracesQuery,
 } from "@/lib/graphql-queries";
 import { formatDateTime, relativeTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import {
   ChevronDown,
   ChevronRight,
+  ExternalLink,
   FileText,
   Lock,
   MoreHorizontal,
@@ -41,7 +43,7 @@ import {
 import { ThreadFormDialog } from "@/components/threads/CreateThreadDialog";
 import { ArtifactViewDialog } from "@/components/threads/ArtifactViewDialog";
 import { ExecutionTrace } from "@/components/threads/ExecutionTrace";
-import { ThreadTraces } from "@/components/threads/ThreadTraces";
+import { ThreadTraces, xrayTraceUrl } from "@/components/threads/ThreadTraces";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ArtifactsListQuery, ArtifactDetailQuery } from "@/lib/graphql-queries";
 import { useClient } from "urql";
@@ -733,14 +735,41 @@ function PropRow({
 function TracesSection({ threadId, tenantId }: { threadId: string; tenantId: string }) {
   const [open, setOpen] = useState(false);
 
+  // Fetch traces at the section level so the header can deeplink to the
+  // most-recent trace. The child ThreadTraces component runs the same
+  // ThreadTracesQuery; urql dedupes by (document, variables) so this is a
+  // single network call.
+  const [tracesResult] = useQuery({
+    query: ThreadTracesQuery,
+    variables: { threadId, tenantId },
+    pause: !threadId || !tenantId,
+  });
+  const firstTraceId =
+    (tracesResult.data as any)?.threadTraces?.[0]?.traceId ?? null;
+
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="w-full">
-        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors py-1">
-          {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-          Traces
-        </div>
-      </CollapsibleTrigger>
+      <div className="flex items-center py-1">
+        <CollapsibleTrigger className="flex-1 text-left">
+          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            Traces
+          </div>
+        </CollapsibleTrigger>
+        {firstTraceId && (
+          <a
+            href={xrayTraceUrl(firstTraceId)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            aria-label="Open latest trace in X-Ray"
+          >
+            Open in X-Ray
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        )}
+      </div>
       <CollapsibleContent>
         <ThreadTraces threadId={threadId} tenantId={tenantId} />
       </CollapsibleContent>

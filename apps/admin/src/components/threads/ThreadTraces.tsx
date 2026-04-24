@@ -11,7 +11,13 @@ import { Badge } from "@/components/ui/badge";
 import { ThreadTracesQuery } from "@/lib/graphql-queries";
 import { formatUsd, relativeTime } from "@/lib/utils";
 
-const CW_CONSOLE_BASE = "https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1";
+// NOTE: region is hardcoded to us-east-1. Pre-existing; a regional-constants
+// sweep will replace this with a stage-aware value.
+export const CW_CONSOLE_BASE = "https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1";
+
+export function xrayTraceUrl(traceId: string): string {
+  return `${CW_CONSOLE_BASE}#xray:traces/${traceId}`;
+}
 
 function formatDuration(ms: number | null): string {
   if (!ms) return "--";
@@ -95,7 +101,7 @@ export function ThreadTraces({ threadId, tenantId }: ThreadTracesProps) {
               <TableCell className="text-right">
                 {trace.traceId ? (
                   <a
-                    href={`${CW_CONSOLE_BASE}#xray:traces/${trace.traceId}`}
+                    href={xrayTraceUrl(trace.traceId)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-muted-foreground hover:text-foreground"
