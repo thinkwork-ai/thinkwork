@@ -2275,6 +2275,8 @@ export type Query = {
   routineRun?: Maybe<RoutineRun>;
   routineRuns: Array<RoutineRun>;
   routines: Array<Routine>;
+  runtimeManifestsByAgent: Array<RuntimeManifest>;
+  runtimeManifestsByTemplate: Array<RuntimeManifest>;
   scheduledJob?: Maybe<ScheduledJob>;
   scheduledJobs: Array<ScheduledJob>;
   singleAgentPerformance?: Maybe<AgentPerformance>;
@@ -2669,6 +2671,18 @@ export type QueryRoutinesArgs = {
 };
 
 
+export type QueryRuntimeManifestsByAgentArgs = {
+  agentId: Scalars['ID']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryRuntimeManifestsByTemplateArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  templateId: Scalars['ID']['input'];
+};
+
+
 export type QueryScheduledJobArgs = {
   id: Scalars['ID']['input'];
 };
@@ -3031,6 +3045,18 @@ export type RoutineTriggerInput = {
   triggerType: Scalars['String']['input'];
 };
 
+export type RuntimeManifest = {
+  __typename?: 'RuntimeManifest';
+  agentId?: Maybe<Scalars['ID']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  manifestJson: Scalars['AWSJSON']['output'];
+  sessionId: Scalars['String']['output'];
+  templateId?: Maybe<Scalars['ID']['output']>;
+  tenantId: Scalars['ID']['output'];
+  userId?: Maybe<Scalars['ID']['output']>;
+};
+
 export type ScheduledJob = {
   __typename?: 'ScheduledJob';
   agentId?: Maybe<Scalars['ID']['output']>;
@@ -3352,8 +3378,6 @@ export type Thread = {
   childCount: Scalars['Int']['output'];
   children: Array<Thread>;
   closedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  commentCount: Scalars['Int']['output'];
-  comments: Array<ThreadComment>;
   completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   costSummary?: Maybe<Scalars['Float']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
@@ -3411,19 +3435,6 @@ export enum ThreadChannel {
   Schedule = 'SCHEDULE',
   Webhook = 'WEBHOOK'
 }
-
-export type ThreadComment = {
-  __typename?: 'ThreadComment';
-  authorId?: Maybe<Scalars['ID']['output']>;
-  authorType?: Maybe<Scalars['String']['output']>;
-  content: Scalars['String']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  metadata?: Maybe<Scalars['AWSJSON']['output']>;
-  tenantId: Scalars['ID']['output'];
-  threadId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
 
 export type ThreadDependency = {
   __typename?: 'ThreadDependency';

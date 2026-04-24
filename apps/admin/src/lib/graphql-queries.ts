@@ -407,7 +407,6 @@ export const ThreadsListQuery = graphql(`
       }
       checkoutRunId
       channel
-      commentCount
       childCount
       costSummary
       lastActivityAt
@@ -442,7 +441,6 @@ export const ThreadsPagedQuery = gql`
         }
         checkoutRunId
         channel
-        commentCount
         childCount
         costSummary
         lastActivityAt
@@ -523,15 +521,7 @@ export const ThreadDetailQuery = graphql(`
       closedAt
       createdByType
       createdById
-      commentCount
       childCount
-      comments {
-        id
-        authorType
-        authorId
-        content
-        createdAt
-      }
       attachments {
         id
         threadId

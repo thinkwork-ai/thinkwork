@@ -757,62 +757,11 @@ function TurnRow({ turn }: { turn: any }) {
   );
 }
 
-// ─── Comment Row (inline in timeline) ────────────────────────────────────────
-
-interface ThreadComment {
-  id: string;
-  authorType?: string | null;
-  authorId?: string | null;
-  content: string;
-  createdAt: string;
-}
-
 interface AgentRef {
   id: string;
   name: string;
   avatarUrl?: string | null;
 }
-
-const CommentRow = memo(function CommentRow({
-  comment,
-  agentMap,
-  userName,
-  highlighted,
-}: {
-  comment: ThreadComment;
-  agentMap?: Map<string, AgentRef>;
-  userName?: string;
-  highlighted?: boolean;
-}) {
-  const isAgent = comment.authorType === "agent";
-  const isSystem = comment.authorType === "system";
-  const agent = isAgent && comment.authorId ? agentMap?.get(comment.authorId) : null;
-
-  let authorName = userName || "You";
-  if (isSystem) authorName = "System";
-  else if (isAgent) authorName = agent?.name ?? comment.authorId?.slice(0, 8) ?? "Agent";
-
-  return (
-    <div
-      id={`comment-${comment.id}`}
-      className={`flex gap-3 px-4 py-3 transition-colors duration-1000 ${
-        highlighted ? "bg-primary/5" : ""
-      }`}
-    >
-      <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center bg-muted">
-        <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
-          <span className="text-sm font-medium">{authorName}</span>
-          <span className="ml-auto text-xs text-muted-foreground shrink-0">{relativeTime(comment.createdAt)}</span>
-        </div>
-        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{comment.content}</p>
-      </div>
-    </div>
-  );
-});
-
 
 // ─── Message Row (chat messages in timeline) ────────────────────────────────
 
@@ -920,7 +869,6 @@ interface ChatMessage {
 
 type TimelineItem =
   | { kind: "turn"; turn: any; sortDate: number }
-  | { kind: "comment"; comment: ThreadComment; sortDate: number }
   | { kind: "message"; message: ChatMessage; sortDate: number };
 
 // ─── Main Component ─────────────────────────────────────────────────────────
@@ -928,7 +876,6 @@ type TimelineItem =
 interface ExecutionTraceProps {
   threadId: string;
   tenantId: string;
-  comments?: ThreadComment[];
   messages?: ChatMessage[];
   agentMap?: Map<string, AgentRef>;
   onOpenArtifact?: (artifact: { id: string; title: string; type: string; status: string }) => void;
@@ -937,14 +884,11 @@ interface ExecutionTraceProps {
 export function ExecutionTrace({
   threadId,
   tenantId,
-  comments = [],
   messages = [],
   agentMap,
   onOpenArtifact,
 }: ExecutionTraceProps) {
   const { user } = useAuth();
-  const [highlightCommentId, setHighlightCommentId] = useState<string | null>(null);
-  const hasScrolledRef = useRef(false);
 
   const [result, reexecuteTurns] = useQuery({
     query: ThreadTurnsForThreadQuery,
@@ -963,35 +907,14 @@ export function ExecutionTrace({
     }
   }, [turnSub.data, threadId, reexecuteTurns]);
 
-  // Scroll to comment when URL hash matches #comment-{id}
-  useEffect(() => {
-    const hash = window.location.hash;
-    if (!hash.startsWith("#comment-") || comments.length === 0) return;
-    const commentId = hash.slice("#comment-".length);
-    if (hasScrolledRef.current) return;
-    const el = document.getElementById(`comment-${commentId}`);
-    if (el) {
-      hasScrolledRef.current = true;
-      setHighlightCommentId(commentId);
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      const timer = setTimeout(() => setHighlightCommentId(null), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [comments]);
-
   const turns = (result.data as any)?.threadTurns ?? [];
 
-  // Build merged timeline (turns + comments + messages sorted by date)
+  // Build merged timeline (turns + messages sorted by date)
   const timeline: TimelineItem[] = [
     ...turns.map((t: any) => ({
       kind: "turn" as const,
       turn: t,
       sortDate: new Date(t.startedAt || t.createdAt).getTime(),
-    })),
-    ...comments.map((c) => ({
-      kind: "comment" as const,
-      comment: c,
-      sortDate: new Date(c.createdAt).getTime(),
     })),
     ...messages.map((m) => ({
       kind: "message" as const,
@@ -1061,16 +984,8 @@ export function ExecutionTrace({
           {timeline.map((item) =>
             item.kind === "turn" ? (
               <TurnRow key={item.turn.id} turn={item.turn} />
-            ) : item.kind === "message" ? (
-              <MessageRow key={item.message.id} message={item.message} agentMap={agentMap} onOpenArtifact={onOpenArtifact} />
             ) : (
-              <CommentRow
-                key={item.comment.id}
-                comment={item.comment}
-                agentMap={agentMap}
-                userName={user?.name}
-                highlighted={highlightCommentId === item.comment.id}
-              />
+              <MessageRow key={item.message.id} message={item.message} agentMap={agentMap} onOpenArtifact={onOpenArtifact} />
             ),
           )}
         </div>

@@ -805,14 +805,6 @@ export const ThreadQuery = graphql(`
           }
         }
       }
-      comments {
-        id
-        authorType
-        authorId
-        content
-        createdAt
-        updatedAt
-      }
       attachments {
         id
         name
