@@ -689,7 +689,6 @@ export const UpdateUserProfileMutation = graphql(`
 export const ThreadsQuery = graphql(`
   query Threads(
     $tenantId: ID!
-    $status: ThreadStatus
     $channel: ThreadChannel
     $agentId: ID
     $assigneeId: ID
@@ -698,7 +697,6 @@ export const ThreadsQuery = graphql(`
   ) {
     threads(
       tenantId: $tenantId
-      status: $status
       channel: $channel
       agentId: $agentId
       assigneeId: $assigneeId
@@ -712,6 +710,7 @@ export const ThreadsQuery = graphql(`
       identifier
       title
       status
+      lifecycleStatus
       channel
       assigneeType
       assigneeId
@@ -742,6 +741,7 @@ export const ThreadQuery = graphql(`
       identifier
       title
       status
+      lifecycleStatus
       channel
       assigneeType
       assigneeId

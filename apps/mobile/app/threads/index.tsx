@@ -30,6 +30,22 @@ interface Thread {
   closedAt?: string | null;
 }
 
+// ThreadLifecycleStatus → operator-facing label. Mirrors admin's
+// ThreadLifecycleBadge (apps/admin/src/components/threads/ThreadLifecycleBadge.tsx).
+const LIFECYCLE_LABELS: Record<string, string> = {
+  RUNNING: "Running",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+  FAILED: "Failed",
+  IDLE: "Idle",
+  AWAITING_USER: "Awaiting user",
+};
+
+function lifecycleLabel(status: string | null | undefined): string {
+  if (!status) return "—";
+  return LIFECYCLE_LABELS[status] ?? "Idle";
+}
+
 function formatRelativeTime(timestamp: number | null | undefined): string {
   if (!timestamp) return "\u2014";
   const now = Date.now();
@@ -86,7 +102,7 @@ function ThreadRowItem({
       }
       line2Right={
         <Muted className="text-sm text-neutral-400 dark:text-neutral-500">
-          {thread.status}
+          {lifecycleLabel((thread as any).lifecycleStatus)}
         </Muted>
       }
     />
