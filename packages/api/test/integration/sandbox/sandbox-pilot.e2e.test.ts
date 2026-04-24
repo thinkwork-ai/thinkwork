@@ -79,24 +79,27 @@ describe("sandbox-pilot E2E — flagship demo", () => {
     expect(counter).not.toBeNull();
     expect(counter!.count).toBeGreaterThanOrEqual(1);
 
-    // No token leak in CloudWatch for this turn's session.
-    if (audit.session_id) {
-      await assertNoTokenLeak(env, {
-        sessionId: audit.session_id,
-        startTime: startedAt,
-        endTime: new Date(startedAt.getTime() + 120_000),
-        forbiddenValues: [
-          fixtures.syntheticTokens.github,
-          fixtures.syntheticTokens.slack,
-        ],
-        runId,
-      });
-    } else {
+    // Session started: session_id is the join key for CloudWatch runtime
+    // logs. If null, the StartSession path didn't execute.
+    if (!audit.session_id) {
       throw new Error(
         `[sandbox-e2e run=${runId}] sandbox_invocations.session_id is null — the StartSession path did not execute. ` +
           "Runbook: docs/guides/sandbox-environments.md → SandboxProvisioning.",
       );
     }
+
+    // Structural token-leak check against the session's CloudWatch
+    // stream — validates the stdio redactor catches known OAuth-shaped
+    // prefixes (ghp_/xoxb-/ya29./JWT) regardless of how they got there
+    // (pip-installed library response, agent print, etc.). No
+    // synthetic forbiddenValues since the sandbox no longer injects
+    // any per-user tokens.
+    await assertNoTokenLeak(env, {
+      sessionId: audit.session_id,
+      startTime: startedAt,
+      endTime: new Date(startedAt.getTime() + 120_000),
+      runId,
+    });
   });
 });
 

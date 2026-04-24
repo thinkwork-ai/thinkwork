@@ -1097,14 +1097,11 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       `[wakeup-processor] Invoking AgentCore for agent=${wakeup.agent_id} runtime=${runtimeType} mcp=${mcpServers.join(",")} source=${wakeup.source} traceId=${traceId}`,
     );
 
-    // Sandbox pre-flight (plan Unit 9). Wakeup-side resolution differs from
-    // chat: R15 keeps CURRENT_USER_ID undefined for system/agent triggers to
-    // block admin-skill spoofing, but the sandbox still needs *some* user's
-    // OAuth tokens when the template declared required_connections. Fall back
-    // to agents.human_pair_id — the owning user — when the wakeup is
-    // system-originated. The two env vars (CURRENT_USER_ID vs
-    // SANDBOX_USER_ID) answer different questions: 'who is invoking admin
-    // operations' vs 'whose OAuth tokens is this agent borrowing'.
+    // Sandbox pre-flight (plan Unit 9). Wakeup-side resolves the invoking
+    // user from invokerUserId first, falling back to the agent's owning
+    // human_pair_id for system/agent triggers. CURRENT_USER_ID stays null
+    // for R15 admin-skill-spoofing defense; this is a separate resolution
+    // used only for the tenant/policy check.
     const sandboxUserId = invokerUserId ?? agent.human_pair_id ?? undefined;
     let sandboxPreflight: SandboxPreflightResult | null = null;
     if (sandboxUserId && agent.sandbox) {
@@ -1163,19 +1160,13 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     };
 
     if (sandboxPreflight && sandboxUserId) {
-      applySandboxPayloadFields(agentCorePayload, sandboxPreflight, {
-        tenantId: wakeup.tenant_id,
-        userId: sandboxUserId,
-        stage: STAGE,
-      });
+      applySandboxPayloadFields(agentCorePayload, sandboxPreflight);
       if (sandboxPreflight.status !== "ready") {
         console.log(
           `[wakeup-processor] sandbox not registered for this wakeup: ${sandboxPreflight.status}`,
-          sandboxPreflight.status === "missing-connection"
-            ? { missing: sandboxPreflight.missingConnections }
-            : sandboxPreflight.status === "provisioning"
-              ? { environment: sandboxPreflight.environment }
-              : {},
+          sandboxPreflight.status === "provisioning"
+            ? { environment: sandboxPreflight.environment }
+            : {},
         );
       }
     }

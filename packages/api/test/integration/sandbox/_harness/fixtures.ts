@@ -20,14 +20,6 @@ import {
   DeleteCodeInterpreterCommand,
 } from "@aws-sdk/client-bedrock-agentcore-control";
 import {
-  SecretsManagerClient,
-  CreateSecretCommand,
-  DeleteSecretCommand,
-  PutSecretValueCommand,
-  ResourceExistsException,
-  ResourceNotFoundException,
-} from "@aws-sdk/client-secrets-manager";
-import {
   FIXTURE_NAME_PREFIX,
   nameFixtures,
   type FixtureName,
@@ -63,19 +55,8 @@ export interface Fixtures {
   templateId: string;
   agentId: string;
   names: FixtureName;
-  connectionIds: {
-    github: string;
-    slack: string;
-  };
   interpreterPublicId: string;
   interpreterInternalId: string;
-  /** The synthetic token values written into Secrets Manager. The
-   * token-leak assertion confirms these strings never appear in
-   * CloudWatch events under the run's session id. */
-  syntheticTokens: {
-    github: string;
-    slack: string;
-  };
   teardown(): Promise<void>;
 }
 
@@ -117,23 +98,9 @@ export async function createSandboxFixtures(opts: FixtureOptions): Promise<Fixtu
     (created as any).interpreterPublicId = publicId;
     (created as any).interpreterInternalId = internalId;
 
-    // ---- 4. User + connections + synthetic SM tokens ------------------
+    // ---- 4. User ------------------------------------------------------
     const userId = await createFixtureUser(opts.env, tenantId, names);
     (created as any).userId = userId;
-
-    const syntheticGithub = `ghp_${opts.runId}E2ESyntheticTokenNotARealSecret`;
-    const syntheticSlack = `xoxb-${opts.runId}-e2e-synthetic-token`;
-    const connectionIds = await seedConnections(
-      opts,
-      tenantId,
-      userId,
-      {
-        github: syntheticGithub,
-        slack: syntheticSlack,
-      },
-    );
-    (created as any).connectionIds = connectionIds;
-    (created as any).syntheticTokens = { github: syntheticGithub, slack: syntheticSlack };
 
     // ---- 5. Agent template with sandbox opt-in -------------------------
     const templateGql = await runGql<{ createAgentTemplate: { id: string } }>(
@@ -149,10 +116,7 @@ export async function createSandboxFixtures(opts: FixtureOptions): Promise<Fixtu
             description: "sandbox-e2e harness template",
             category: "reference",
             model: "us.anthropic.claude-sonnet-4-6",
-            sandbox: {
-              environment: "default-public",
-              required_connections: ["github", "slack"],
-            },
+            sandbox: { environment: "default-public" },
           },
         },
       },
@@ -194,7 +158,6 @@ export async function createSandboxFixtures(opts: FixtureOptions): Promise<Fixtu
         templateId,
         interpreterPublicId: publicId,
         interpreterInternalId: internalId,
-        connectionIds,
       });
     };
 
@@ -206,10 +169,8 @@ export async function createSandboxFixtures(opts: FixtureOptions): Promise<Fixtu
       templateId,
       agentId,
       names,
-      connectionIds,
       interpreterPublicId: publicId,
       interpreterInternalId: internalId,
-      syntheticTokens: { github: syntheticGithub, slack: syntheticSlack },
       teardown,
     };
   } catch (err) {
@@ -222,7 +183,6 @@ export async function createSandboxFixtures(opts: FixtureOptions): Promise<Fixtu
         templateId: (created as any).templateId,
         interpreterPublicId: (created as any).interpreterPublicId,
         interpreterInternalId: (created as any).interpreterInternalId,
-        connectionIds: (created as any).connectionIds,
       }).catch((tdErr) => {
         console.warn("sandbox-e2e partial teardown failed:", tdErr);
       });
@@ -379,42 +339,6 @@ async function createFixtureUser(
   }
 }
 
-async function seedConnections(
-  opts: FixtureOptions,
-  tenantId: string,
-  userId: string,
-  tokens: { github: string; slack: string },
-): Promise<{ github: string; slack: string }> {
-  const db = await openDb(opts.env);
-  const sm = new SecretsManagerClient({ region: opts.env.awsRegion });
-  try {
-    const providerIds = await readProviderIds(db);
-    if (!providerIds.github || !providerIds.slack) {
-      throw new Error(
-        "sandbox-e2e: github / slack rows missing from connect_providers. " +
-          "Re-run scripts/seed-dev.sql against the stage's DB.",
-      );
-    }
-    const connectionIds = { github: "", slack: "" };
-    for (const provider of ["github", "slack"] as const) {
-      const result = await db.execute(
-        sql`INSERT INTO connections (tenant_id, user_id, provider_id, status, connected_at)
-            VALUES (${tenantId}::uuid, ${userId}::uuid, ${providerIds[provider]}::uuid, 'active', NOW())
-            RETURNING id`,
-      );
-      const rows = Array.isArray(result) ? result : ((result as any).rows ?? []);
-      const connId = rows[0]?.id as string;
-      connectionIds[provider] = connId;
-
-      const path = `thinkwork/${opts.env.stage}/oauth/${connId}`;
-      await putSecret(sm, path, tokens[provider]);
-    }
-    return connectionIds;
-  } finally {
-    await closeDb(db);
-  }
-}
-
 async function pairAgentToUser(
   env: HarnessEnv,
   agentId: string,
@@ -460,25 +384,9 @@ async function teardownFixtures(
     templateId: string;
     interpreterPublicId: string;
     interpreterInternalId: string;
-    connectionIds: { github: string; slack: string };
   }>,
 ): Promise<void> {
   // Reverse order, swallow ResourceNotFound-class errors.
-  const sm = new SecretsManagerClient({ region: opts.env.awsRegion });
-
-  // Delete SM secrets first (they're the most isolated)
-  for (const connId of Object.values(fx.connectionIds ?? {})) {
-    const path = `thinkwork/${opts.env.stage}/oauth/${connId}`;
-    try {
-      await sm.send(
-        new DeleteSecretCommand({ SecretId: path, ForceDeleteWithoutRecovery: true }),
-      );
-    } catch (err) {
-      if (!(err instanceof ResourceNotFoundException)) {
-        console.warn(`teardown: DeleteSecret ${path} failed:`, err);
-      }
-    }
-  }
 
   // Delete code interpreters (manual fallback path only creates them;
   // when the Lambda path lands, the deprovision handler owns cleanup).
@@ -581,45 +489,6 @@ async function writeTenantInterpreterIds(
   }
 }
 
-async function readProviderIds(
-  db: Awaited<ReturnType<typeof openDb>>,
-): Promise<{ github?: string; slack?: string }> {
-  const result = await db.execute(
-    sql`SELECT name, id FROM connect_providers WHERE name IN ('github', 'slack')`,
-  );
-  const rows = Array.isArray(result) ? result : ((result as any).rows ?? []);
-  const out: { github?: string; slack?: string } = {};
-  for (const row of rows) {
-    if (row.name === "github") out.github = row.id;
-    if (row.name === "slack") out.slack = row.id;
-  }
-  return out;
-}
-
-async function putSecret(
-  sm: SecretsManagerClient,
-  path: string,
-  value: string,
-): Promise<void> {
-  try {
-    await sm.send(new PutSecretValueCommand({ SecretId: path, SecretString: value }));
-    return;
-  } catch (err) {
-    if (!(err instanceof ResourceNotFoundException)) throw err;
-  }
-  try {
-    await sm.send(
-      new CreateSecretCommand({
-        Name: path,
-        SecretString: value,
-        Description: "sandbox-e2e synthetic OAuth token",
-      }),
-    );
-  } catch (err) {
-    if (!(err instanceof ResourceExistsException)) throw err;
-    await sm.send(new PutSecretValueCommand({ SecretId: path, SecretString: value }));
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Thin Drizzle/pg wrapper — one connection per call so the harness doesn't

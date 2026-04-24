@@ -2,9 +2,9 @@ slug: sandbox-pilot
 display_name: Sandbox Pilot (flagship demo)
 description: >
   Reference template exercising the full AgentCore Code Sandbox path —
-  pulls skill_runs from Thinkwork's GraphQL + a GitHub issue body via the
-  sandbox's execute_code tool, joins them in pandas, uploads a chart to
-  S3, and posts the S3 URL to Slack. Use for dogfood validation when
+  pulls skill_runs from Thinkwork's GraphQL, summarises them with
+  pandas via execute_code, and uploads a chart to S3 using the
+  sandbox's per-tenant IAM role. Use for dogfood validation when
   onboarding a new tenant to the sandbox substrate.
 category: reference
 version: "1.0.0"
@@ -21,11 +21,10 @@ triggers:
   - "sandbox smoke test"
   - "sandbox flagship demo"
 # The template that wraps this skill opts into the sandbox via
-# `sandbox: { environment: "default-public", required_connections:
-# ["github", "slack"] }` on AgentTemplate (plan Unit 3). The script
-# itself only needs THINKWORK_API_URL + API_AUTH_SECRET because the
-# per-user OAuth tokens land in os.environ via the sandbox preamble
-# (plan Unit 8) when execute_code runs.
+# `sandbox: { environment: "default-public" }` on AgentTemplate. The
+# sandbox is a pure-compute primitive — no per-user OAuth tokens are
+# injected. S3 access inside execute_code runs under the sandbox
+# session's per-tenant IAM role.
 requires_env:
   - THINKWORK_API_URL
   - THINKWORK_API_SECRET
