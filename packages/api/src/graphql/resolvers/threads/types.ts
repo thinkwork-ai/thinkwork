@@ -122,4 +122,7 @@ export const threadTypeResolvers = {
 		const row = (result.rows || [])[0] as { blocked: boolean } | undefined;
 		return row?.blocked === true;
 	},
+	lifecycleStatus: (thread: any, _args: any, ctx: GraphQLContext) => {
+		return ctx.loaders.threadLifecycleStatus.load(thread.id);
+	},
 };

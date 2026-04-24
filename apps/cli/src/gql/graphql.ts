@@ -3381,6 +3381,7 @@ export type Thread = {
   lastReadAt?: Maybe<Scalars['AWSDateTime']['output']>;
   lastResponsePreview?: Maybe<Scalars['String']['output']>;
   lastTurnCompletedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  lifecycleStatus?: Maybe<ThreadLifecycleStatus>;
   messages: MessageConnection;
   metadata?: Maybe<Scalars['AWSJSON']['output']>;
   number: Scalars['Int']['output'];
@@ -3450,6 +3451,15 @@ export type ThreadLabelAssignment = {
   tenantId: Scalars['ID']['output'];
   threadId: Scalars['ID']['output'];
 };
+
+export enum ThreadLifecycleStatus {
+  AwaitingUser = 'AWAITING_USER',
+  Cancelled = 'CANCELLED',
+  Completed = 'COMPLETED',
+  Failed = 'FAILED',
+  Idle = 'IDLE',
+  Running = 'RUNNING'
+}
 
 export enum ThreadStatus {
   Backlog = 'BACKLOG',
