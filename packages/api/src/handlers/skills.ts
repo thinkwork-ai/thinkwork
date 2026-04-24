@@ -25,6 +25,7 @@ import { agentSkills, skillCatalog, skillRuns, tenantSkills, tenantMcpServers, a
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { parse as parseYaml } from "yaml";
 import { authenticate } from "../lib/cognito-auth.js";
+import { requireTenantMembership } from "../lib/tenant-membership.js";
 import { handleCors, json, error, notFound, unauthorized } from "../lib/response.js";
 import { resolveTenantId } from "../lib/tenants.js";
 import { applyMcpServerFieldUpdate } from "../lib/mcp-server-update.js";
@@ -101,12 +102,24 @@ export async function handler(
 		// GET /api/skills/tenant
 		if (path === "/api/skills/tenant" && method === "GET") {
 			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: (method as string) === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
 			return getTenantSkills(tenantSlug);
 		}
 
 		// POST /api/skills/tenant/create — create a new custom skill from template
 		if (path === "/api/skills/tenant/create" && method === "POST") {
 			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: (method as string) === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
 			return createTenantSkill(tenantSlug, event);
 		}
 
@@ -116,6 +129,12 @@ export async function handler(
 		);
 		if (installMatch && method === "POST") {
 			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: (method as string) === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
 			return installSkill(tenantSlug, installMatch[1]);
 		}
 
@@ -125,6 +144,12 @@ export async function handler(
 		);
 		if (uploadMatch && method === "POST") {
 			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: (method as string) === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
 			return getUploadUrl(tenantSlug, uploadMatch[1]);
 		}
 
@@ -134,6 +159,12 @@ export async function handler(
 		);
 		if (tenantFileListMatch && method === "GET") {
 			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: (method as string) === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
 			return listTenantSkillFiles(tenantSlug, tenantFileListMatch[1]);
 		}
 
@@ -143,6 +174,12 @@ export async function handler(
 		);
 		if (tenantFilesMatch) {
 			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: (method as string) === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
 			const [, slug, filePath] = tenantFilesMatch;
 			if (method === "GET") return getTenantFile(tenantSlug, slug, filePath);
 			if (method === "PUT") return saveTenantFile(tenantSlug, slug, filePath, event);
@@ -157,6 +194,12 @@ export async function handler(
 		);
 		if (upgradeableMatch && method === "GET") {
 			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: (method as string) === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
 			return checkUpgradeable(tenantSlug, upgradeableMatch[1]);
 		}
 
@@ -166,6 +209,12 @@ export async function handler(
 		);
 		if (upgradeMatch && method === "POST") {
 			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: (method as string) === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
 			const force = event.queryStringParameters?.force === "true";
 			return upgradeSkill(tenantSlug, upgradeMatch[1], force);
 		}
@@ -176,6 +225,12 @@ export async function handler(
 		);
 		if (tenantDeleteMatch && method === "DELETE") {
 			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: (method as string) === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
 			const forceDelete = event.queryStringParameters?.force === "true";
 			return uninstallSkill(tenantSlug, tenantDeleteMatch[1], forceDelete);
 		}
@@ -186,6 +241,12 @@ export async function handler(
 		);
 		if (agentInstallMatch && method === "POST") {
 			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: (method as string) === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
 			return installSkillToAgent(tenantSlug, agentInstallMatch[1], agentInstallMatch[2]);
 		}
 
@@ -202,12 +263,24 @@ export async function handler(
 		// GET /api/skills/mcp-servers — list tenant's MCP servers
 		if (path === "/api/skills/mcp-servers" && method === "GET") {
 			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: (method as string) === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
 			return mcpListTenantServers(tenantSlug);
 		}
 
 		// POST /api/skills/mcp-servers — register MCP server
 		if (path === "/api/skills/mcp-servers" && method === "POST") {
 			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: (method as string) === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
 			return mcpRegisterServer(tenantSlug, event);
 		}
 
@@ -215,12 +288,24 @@ export async function handler(
 		const mcpUpdateMatch = path.match(/^\/api\/skills\/mcp-servers\/([^/]+)$/);
 		if (mcpUpdateMatch && method === "PUT") {
 			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: (method as string) === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
 			return mcpUpdateServer(tenantSlug, mcpUpdateMatch[1], event);
 		}
 
 		// DELETE /api/skills/mcp-servers/:id — remove MCP server
 		if (mcpUpdateMatch && method === "DELETE") {
 			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: (method as string) === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
 			return mcpDeleteServer(tenantSlug, mcpUpdateMatch[1]);
 		}
 
@@ -228,6 +313,12 @@ export async function handler(
 		const mcpTestMatch = path.match(/^\/api\/skills\/mcp-servers\/([^/]+)\/test$/);
 		if (mcpTestMatch && method === "POST") {
 			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: (method as string) === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
 			return mcpTestConnection(tenantSlug, mcpTestMatch[1]);
 		}
 
@@ -235,20 +326,44 @@ export async function handler(
 
 		if (path === "/api/skills/builtin-tools" && method === "GET") {
 			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: (method as string) === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
 			return builtinToolsList(tenantSlug);
 		}
 		const builtinToolMatch = path.match(/^\/api\/skills\/builtin-tools\/([^/]+)$/);
 		if (builtinToolMatch && method === "PUT") {
 			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: (method as string) === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
 			return builtinToolsUpsert(tenantSlug, builtinToolMatch[1], event);
 		}
 		if (builtinToolMatch && method === "DELETE") {
 			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: (method as string) === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
 			return builtinToolsDelete(tenantSlug, builtinToolMatch[1]);
 		}
 		const builtinToolTestMatch = path.match(/^\/api\/skills\/builtin-tools\/([^/]+)\/test$/);
 		if (builtinToolTestMatch && method === "POST") {
 			if (!tenantSlug) return error("x-tenant-slug header required", 400);
+			{
+				const _v = await requireTenantMembership(event, tenantSlug, {
+					requiredRoles: (method as string) === "GET" ? ["owner", "admin", "member"] : ["owner", "admin"],
+				});
+				if (!_v.ok) return error(_v.reason, _v.status);
+			}
 			return builtinToolsTest(tenantSlug, builtinToolTestMatch[1], event);
 		}
 
@@ -295,10 +410,14 @@ export async function handler(
 
 		// GET /api/skills/user-mcp-servers — list MCP servers for the current user (for mobile app)
 		if (path === "/api/skills/user-mcp-servers" && method === "GET") {
-			const tenantId = event.headers["x-tenant-id"];
+			const tenantIdHeader = event.headers["x-tenant-id"];
 			const userId = event.headers["x-principal-id"];
-			if (!tenantId || !userId) return error("x-tenant-id and x-principal-id headers required", 400);
-			return mcpListUserServers(tenantId, userId);
+			if (!tenantIdHeader || !userId) return error("x-tenant-id and x-principal-id headers required", 400);
+			const _v = await requireTenantMembership(event, tenantIdHeader, {
+				requiredRoles: ["owner", "admin", "member"],
+			});
+			if (!_v.ok) return error(_v.reason, _v.status);
+			return mcpListUserServers(_v.tenantId, userId);
 		}
 
 		// DELETE /api/skills/user-mcp-tokens/:mcpServerId — clear user's OAuth tokens for an MCP server
@@ -306,9 +425,16 @@ export async function handler(
 		if (clearTokenMatch && method === "DELETE") {
 			const mcpServerId = clearTokenMatch[1];
 			const userId = event.headers["x-principal-id"];
-			const tenantId = event.headers["x-tenant-id"];
-			if (!userId || !tenantId) return error("x-principal-id and x-tenant-id headers required", 400);
-			return mcpClearUserToken(userId, tenantId, mcpServerId);
+			const tenantIdHeader = event.headers["x-tenant-id"];
+			if (!userId || !tenantIdHeader) return error("x-principal-id and x-tenant-id headers required", 400);
+			// User-self-service: a member clearing their own OAuth tokens.
+			// Requires tenant membership but no admin/owner role — the row
+			// is scoped to (user_id, tenant_id, mcp_server_id).
+			const _v = await requireTenantMembership(event, tenantIdHeader, {
+				requiredRoles: ["owner", "admin", "member"],
+			});
+			if (!_v.ok) return error(_v.reason, _v.status);
+			return mcpClearUserToken(userId, _v.tenantId, mcpServerId);
 		}
 
 		// POST /api/skills/start — service-to-service wrapper around startSkillRun.
