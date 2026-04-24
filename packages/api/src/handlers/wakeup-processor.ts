@@ -893,11 +893,16 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         try {
           const { threads } = await import("@thinkwork/database-pg/schema");
           const [t] = await db
-            .select({ title: threads.title })
+            .select({ title: threads.title, metadata: threads.metadata })
             .from(threads)
             .where(eq(threads.id, runThreadId));
           if (t) {
             threadContext = `\n\nThread: ${t.title}`;
+            const instructions = (t.metadata as { processStepInstructions?: string } | null)
+              ?.processStepInstructions;
+            if (instructions) {
+              threadContext += `\n\n${instructions}`;
+            }
           }
         } catch (err) {
           console.warn(
