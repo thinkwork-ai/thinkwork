@@ -150,7 +150,6 @@ function stageTemplateRow(overrides?: Record<string, unknown>) {
       model: "us.anthropic.claude-sonnet-4-6",
       guardrail_id: null,
       blocked_tools: null,
-      config: null,
       sandbox: null,
       browser: null,
       ...overrides,
@@ -257,23 +256,6 @@ describe("resolveAgentRuntimeConfig", () => {
   it("enables Browser Automation from template browser config", async () => {
     stageAgentRow();
     stageTemplateRow({ browser: { enabled: true } });
-    stageTenantSlug();
-    rowsQueue.push([]); // default guardrail
-    rowsQueue.push([]); // skills
-    rowsQueue.push([]); // kbs
-    const cfg = await resolveAgentRuntimeConfig({
-      tenantId: TENANT_ID,
-      agentId: AGENT_ID,
-    });
-    expect(cfg.browserAutomationEnabled).toBe(true);
-  });
-
-  it("enables Browser Automation from legacy template config fallback", async () => {
-    stageAgentRow();
-    stageTemplateRow({
-      config: { browserAutomation: { enabled: true } },
-      browser: null,
-    });
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
     rowsQueue.push([]); // skills
