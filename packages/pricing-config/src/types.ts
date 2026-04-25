@@ -16,7 +16,23 @@
  * *pricing* (Stripe price_id, currency, cadence) stays on the server.
  */
 
-export type PlanId = "starter" | "team" | "enterprise";
+export type PlanId = "open" | "business" | "enterprise";
+
+/**
+ * `kind` is the deployment-model dimension of the three-door pricing ladder:
+ *   - `oss`    → Open tier. Self-host on customer AWS. Apache 2.0. CTA links
+ *                to the GitHub repo / getting-started docs. No Stripe.
+ *   - `stripe` → For Business tier. Operated by us, deployed into customer
+ *                AWS. CTA invokes the Stripe Checkout flow.
+ *   - `sales`  → Enterprise tier. Services + SLA + named support. CTA is a
+ *                mailto anchor (or contact-form route in the future).
+ *
+ * The pricing-config catalog declares the kind; consuming surfaces
+ * (PricingCard.astro, mobile payment screen) branch their CTA shape on it
+ * instead of hard-coding by plan id. This is the contract that prevents the
+ * Open-tier card from ever firing a Stripe Checkout request.
+ */
+export type PlanCtaKind = "oss" | "stripe" | "sales";
 
 export interface Plan {
 	readonly id: PlanId;
@@ -25,5 +41,7 @@ export interface Plan {
 	readonly summary: string;
 	readonly features: readonly string[];
 	readonly cta: string;
+	readonly ctaHref?: string;
+	readonly kind: PlanCtaKind;
 	readonly highlighted: boolean;
 }
