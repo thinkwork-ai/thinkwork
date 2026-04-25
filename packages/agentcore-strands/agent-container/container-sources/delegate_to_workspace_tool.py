@@ -39,6 +39,7 @@ from typing import Any
 
 from agents_md_parser import parse_agents_md
 from skill_resolver import (
+    MAX_FOLDER_DEPTH,
     RESERVED_FOLDER_NAMES,
     ResolvedSkill,
     SkillNotResolvable,
@@ -49,7 +50,10 @@ from workspace_composer_client import fetch_composed_workspace
 logger = logging.getLogger(__name__)
 
 # Depth cap policy (Key Decisions §008, supersedes the U9 unit-body's "3").
-MAX_DEPTH = 5
+# `MAX_FOLDER_DEPTH` is the shared constant in `skill_resolver`; aliased here
+# as `MAX_DEPTH` to keep the existing read sites intact. `WARN_DEPTH` stays
+# delegate-tool-local because `write_memory_tool` doesn't soft-warn on depth.
+MAX_DEPTH = MAX_FOLDER_DEPTH
 WARN_DEPTH = 4
 
 
