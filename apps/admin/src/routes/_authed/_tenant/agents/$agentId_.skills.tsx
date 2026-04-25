@@ -11,7 +11,11 @@ import {
   ExternalLink,
   Shield,
 } from "lucide-react";
-import { AgentDetailQuery, SetAgentSkillsMutation } from "@/lib/graphql-queries";
+import {
+  AgentDetailQuery,
+  SetAgentCapabilitiesMutation,
+  SetAgentSkillsMutation,
+} from "@/lib/graphql-queries";
 import { useAuth } from "@/context/AuthContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useTenant } from "@/context/TenantContext";
@@ -54,7 +58,9 @@ type SkillManifestMeta = {
   }>;
 };
 
-export const Route = createFileRoute("/_authed/_tenant/agents/$agentId_/skills")({
+export const Route = createFileRoute(
+  "/_authed/_tenant/agents/$agentId_/skills",
+)({
   component: AgentSkillsPage,
 });
 
@@ -71,6 +77,23 @@ type SkillRow = {
   needsConfig: boolean;
 };
 
+function parseJsonRecord(value: unknown): Record<string, unknown> {
+  if (!value) return {};
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
+    } catch {
+      return {};
+    }
+  }
+  return typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
 // ---------------------------------------------------------------------------
 // Columns
 // ---------------------------------------------------------------------------
@@ -81,7 +104,9 @@ const skillColumns: ColumnDef<SkillRow>[] = [
     header: "Name",
     size: 200,
     cell: ({ row }) => (
-      <span className="font-medium whitespace-nowrap pl-3">{row.original.name}</span>
+      <span className="font-medium whitespace-nowrap pl-3">
+        {row.original.name}
+      </span>
     ),
   },
   {
@@ -141,6 +166,7 @@ function AgentSkillsPage() {
   });
 
   const [, setSkillsMut] = useMutation(SetAgentSkillsMutation);
+  const [, setCapabilitiesMut] = useMutation(SetAgentCapabilitiesMutation);
   const agent = result.data?.agent;
   const skills = (agent?.skills ?? []) as readonly {
     id: string;
@@ -201,12 +227,14 @@ function AgentSkillsPage() {
     }));
 
   const handleSaveSkills = useCallback(
-    async (s: {
-      skillId: string;
-      enabled: boolean;
-      config?: any;
-      permissions?: any;
-    }[]) => {
+    async (
+      s: {
+        skillId: string;
+        enabled: boolean;
+        config?: any;
+        permissions?: any;
+      }[],
+    ) => {
       const res = await setSkillsMut({
         agentId,
         skills: s.map((sk) => ({
@@ -252,6 +280,54 @@ function AgentSkillsPage() {
       return [];
     }
   })();
+  const templateBrowserEnabled = (() => {
+    const raw = (agent?.agentTemplate as { browser?: unknown })?.browser;
+    const browser = parseJsonRecord(raw);
+    const templateConfig = parseJsonRecord(
+      (agent?.agentTemplate as { config?: unknown })?.config,
+    );
+    const configBrowser = parseJsonRecord(templateConfig.browserAutomation);
+    return browser.enabled === true || configBrowser.enabled === true;
+  })();
+  const browserCapability = (agent?.capabilities ?? []).find(
+    (c) => c.capability === "browser_automation",
+  );
+  const browserOverrideEnabled = browserCapability?.enabled ?? null;
+  const effectiveBrowserEnabled =
+    browserOverrideEnabled === null
+      ? templateBrowserEnabled
+      : browserOverrideEnabled;
+
+  const saveBrowserOverride = useCallback(
+    async (enabled: boolean | null) => {
+      const existing = (agent?.capabilities ?? [])
+        .filter((c) => c.capability !== "browser_automation")
+        .map((c) => ({
+          capability: c.capability,
+          enabled: c.enabled,
+          config:
+            c.config === null || c.config === undefined
+              ? undefined
+              : typeof c.config === "string"
+                ? c.config
+                : JSON.stringify(c.config),
+        }));
+      const capabilities =
+        enabled === null
+          ? existing
+          : [
+              ...existing,
+              {
+                capability: "browser_automation",
+                enabled,
+                config: undefined,
+              },
+            ];
+      const res = await setCapabilitiesMut({ agentId, capabilities });
+      if (!res.error) refresh();
+    },
+    [agent?.capabilities, agentId, refresh, setCapabilitiesMut],
+  );
 
   // Lazily fetch manifest details for any assigned skill we haven't cached.
   useEffect(() => {
@@ -290,7 +366,9 @@ function AgentSkillsPage() {
     listCatalog().then(setCatalog).catch(console.error);
   }, []);
   const catalogMap = new Map(catalog.map((s) => [s.slug, s]));
-  const availableSkills = catalog.filter((s) => !items.some((i) => i.skillId === s.slug));
+  const availableSkills = catalog.filter(
+    (s) => !items.some((i) => i.skillId === s.slug),
+  );
 
   // Add Skill dialog
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -307,7 +385,6 @@ function AgentSkillsPage() {
   // OAuth
   const [oauthConnecting, setOauthConnecting] = useState(false);
   const [oauthConnected, setOauthConnected] = useState(false);
-
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
@@ -357,7 +434,15 @@ function AgentSkillsPage() {
       // agent-level override; until then, null permissions means "use
       // whatever the template has for this skill." Resolver's defensive
       // guard in setAgentSkills preserves any existing jsonb on write.
-      const newItems = [...items, { skillId: slug, enabled: true, config: initialConfig, permissions: undefined }];
+      const newItems = [
+        ...items,
+        {
+          skillId: slug,
+          enabled: true,
+          config: initialConfig,
+          permissions: undefined,
+        },
+      ];
       setItems(newItems);
       await handleSaveSkills(normalizeForSave(newItems));
       setAddDialogOpen(false);
@@ -369,7 +454,9 @@ function AgentSkillsPage() {
       } else if (meta?.requires_env && meta.requires_env.length > 0) {
         const defaults = meta.env_defaults || {};
         setCredValues(
-          Object.fromEntries(meta.requires_env.map((f) => [f, defaults[f] || ""])),
+          Object.fromEntries(
+            meta.requires_env.map((f) => [f, defaults[f] || ""]),
+          ),
         );
         setCredIsEdit(false);
         setCredDialogSkill(slug);
@@ -386,7 +473,9 @@ function AgentSkillsPage() {
     if (!meta?.oauth_provider) {
       const fields = meta?.requires_env || [];
       const defaults = meta?.env_defaults || {};
-      setCredValues(Object.fromEntries(fields.map((f) => [f, defaults[f] || ""])));
+      setCredValues(
+        Object.fromEntries(fields.map((f) => [f, defaults[f] || ""])),
+      );
     }
     setOauthConnecting(false);
     setOauthConnected(false);
@@ -425,14 +514,17 @@ function AgentSkillsPage() {
   };
 
   // Derived dialog state
-  const credDialogMeta = credDialogSkill ? catalogMap.get(credDialogSkill) : null;
+  const credDialogMeta = credDialogSkill
+    ? catalogMap.get(credDialogSkill)
+    : null;
   const isOAuthSkill = !!credDialogMeta?.oauth_provider;
   const credDialogFields =
     credDialogSkill && !isOAuthSkill ? credDialogMeta?.requires_env || [] : [];
   const skillItem = credDialogSkill
     ? items.find((s) => s.skillId === credDialogSkill)
     : null;
-  const hasConnection = !!(skillItem?.config as Record<string, unknown>)?.connectionId;
+  const hasConnection = !!(skillItem?.config as Record<string, unknown>)
+    ?.connectionId;
 
   const oauthUrl = (() => {
     if (!credDialogSkill || !tenant?.id || !user?.sub) return null;
@@ -482,13 +574,64 @@ function AgentSkillsPage() {
           <h1 className="text-2xl font-bold tracking-tight leading-tight text-foreground">
             Skills
           </h1>
-          <Button variant="outline" size="sm" onClick={() => setAddDialogOpen(true)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAddDialogOpen(true)}
+          >
             <Plus className="h-3.5 w-3.5 mr-1.5" />
             Add Skill
           </Button>
         </div>
       }
     >
+      <Card className="mb-4">
+        <CardHeader>
+          <CardTitle className="text-sm">Browser Automation</CardTitle>
+        </CardHeader>
+        <CardContent className="flex items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Badge
+                variant="secondary"
+                className={`text-xs ${
+                  effectiveBrowserEnabled
+                    ? "bg-green-500/15 text-green-600 dark:text-green-400"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {effectiveBrowserEnabled ? "Enabled" : "Disabled"}
+              </Badge>
+              <Badge variant="outline" className="text-xs">
+                {browserOverrideEnabled === null
+                  ? "Template default"
+                  : "Agent override"}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              AgentCore Browser + Nova Act for dynamic website workflows. The
+              template default can be overridden for this agent.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {browserOverrideEnabled !== null ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void saveBrowserOverride(null)}
+              >
+                Inherit
+              </Button>
+            ) : null}
+            <Switch
+              id="browser-agent-override"
+              checked={effectiveBrowserEnabled}
+              onCheckedChange={(checked) => void saveBrowserOverride(checked)}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       {tableData.length === 0 ? (
         <p className="text-sm text-muted-foreground py-4">
           No skills assigned to this agent.
@@ -517,7 +660,11 @@ function AgentSkillsPage() {
       />
       <AgentPermissionsDialog
         slug={permissionsDialogSlug}
-        meta={permissionsDialogSlug ? manifestMetaCache[permissionsDialogSlug] : undefined}
+        meta={
+          permissionsDialogSlug
+            ? manifestMetaCache[permissionsDialogSlug]
+            : undefined
+        }
         ceiling={
           permissionsDialogSlug
             ? resolveTemplatePermissions(templateSkills, permissionsDialogSlug)
@@ -526,7 +673,8 @@ function AgentSkillsPage() {
         initialValue={
           permissionsDialogSlug
             ? parseAgentPermissions(
-                items.find((i) => i.skillId === permissionsDialogSlug)?.permissions,
+                items.find((i) => i.skillId === permissionsDialogSlug)
+                  ?.permissions,
               )
             : null
         }
@@ -615,12 +763,16 @@ function AgentSkillsPage() {
                 {hasConnection ? (
                   <div className="flex items-center gap-2 text-green-500">
                     <CheckCircle2 className="h-5 w-5" />
-                    <span className="text-sm font-medium">Account connected</span>
+                    <span className="text-sm font-medium">
+                      Account connected
+                    </span>
                   </div>
                 ) : oauthConnected ? (
                   <div className="flex items-center gap-2 text-green-500">
                     <CheckCircle2 className="h-5 w-5" />
-                    <span className="text-sm font-medium">Successfully connected!</span>
+                    <span className="text-sm font-medium">
+                      Successfully connected!
+                    </span>
                   </div>
                 ) : oauthConnecting ? (
                   <Button disabled size="lg">
@@ -670,7 +822,10 @@ function AgentSkillsPage() {
                     }
                     value={credValues[field] || ""}
                     onChange={(e) =>
-                      setCredValues((prev) => ({ ...prev, [field]: e.target.value }))
+                      setCredValues((prev) => ({
+                        ...prev,
+                        [field]: e.target.value,
+                      }))
                     }
                     placeholder={field}
                   />
@@ -682,7 +837,9 @@ function AgentSkillsPage() {
                 <div className="flex-1">
                   {confirmDelete ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">Remove skill?</span>
+                      <span className="text-sm text-muted-foreground">
+                        Remove skill?
+                      </span>
                       <Button
                         variant="destructive"
                         size="sm"
@@ -784,10 +941,7 @@ function AgentPermissionsSection({
         {opsSkills.map((i) => {
           const meta = catalogMap.get(i.skillId);
           const explicit = parseAgentPermissions(i.permissions);
-          const ceiling = resolveTemplatePermissions(
-            templateSkills,
-            i.skillId,
-          );
+          const ceiling = resolveTemplatePermissions(templateSkills, i.skillId);
           const isInheriting = explicit === null;
           const effectiveCount = isInheriting
             ? (ceiling?.length ?? 0)
@@ -874,15 +1028,15 @@ function AgentPermissionsDialog({
           <DialogTitle>Agent permissions — {slug}</DialogTitle>
           <DialogDescription>
             Narrow which operations this agent may call. Ops outside the
-            template's ceiling are disabled. Click Reset to return the
-            agent to inheriting the template's full list.
+            template's ceiling are disabled. Click Reset to return the agent to
+            inheriting the template's full list.
           </DialogDescription>
         </DialogHeader>
 
         {ceiling === null ? (
           <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
-            This skill is not authorized at the template level — contact
-            your template administrator to author permissions there first.
+            This skill is not authorized at the template level — contact your
+            template administrator to author permissions there first.
           </div>
         ) : ops.length === 0 ? (
           <div className="text-xs text-muted-foreground py-4">

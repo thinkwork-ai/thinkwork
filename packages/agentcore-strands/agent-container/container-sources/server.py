@@ -57,102 +57,9 @@ _workspace_loaded_key = None
 # everything flows through the composer now. The list lives in
 # @thinkwork/workspace-defaults' CANONICAL_FILE_NAMES on the server side.
 
-# ── Nova Act browser tool ────────────────────────────────────────────────────
-# Loads API key from SSM at startup. The @tool decorated function is passed
-# to the Strands Agent alongside MCP clients.
-
+# ── Built-in tool cost capture ───────────────────────────────────────────────
 _nova_act_api_key: str = ""
 _tool_costs: list[dict] = []  # Accumulated per-invocation tool costs
-
-def _load_nova_act_key() -> str:
-    """Load Nova Act API key. Tries env var, then multiple SSM paths."""
-    key = os.environ.get("NOVA_ACT_API_KEY", "")
-    if key:
-        logger.info("Nova Act API key loaded from env var")
-        return key
-    # Try SSM with both stage names
-    ssm = boto3.client("ssm", region_name=AWS_REGION)
-    for stage in [os.environ.get("STACK_NAME", "dev"), "ericodom", "main"]:
-        param = f"/thinkwork/{stage}/nova-act-api-key"
-        try:
-            resp = ssm.get_parameter(Name=param, WithDecryption=True)
-            key = resp.get("Parameter", {}).get("Value", "")
-            if key:
-                logger.info("Nova Act API key loaded from SSM: %s", param)
-                return key
-        except Exception:
-            continue
-    logger.warning("Nova Act API key not found in env or SSM")
-    return ""
-
-try:
-    from strands import tool as strands_tool
-    from bedrock_agentcore.tools.browser_client import browser_session
-    from nova_act import NovaAct
-
-    @strands_tool
-    def _browse_website(url: str, task: str) -> str:
-        """Navigate to a website and perform a task using an AI-powered browser.
-
-        Use this to check restaurant availability, fill forms, extract data,
-        or interact with any website that requires clicking, typing, or reading
-        dynamic content. The browser handles complex UIs automatically.
-
-        Args:
-            url: The URL to navigate to (e.g., https://resy.com/cities/austin-tx/venues/lenoir)
-            task: What to do on the page (e.g., "Check availability for 2 people on March 26 around 7pm. Return available time slots.")
-
-        Returns:
-            The result of the browser interaction
-        """
-        logger.info("browse_website called: url=%s task=%s", url, task[:100])
-        start_time = time.time()
-        try:
-            with browser_session(AWS_REGION) as client:
-                ws_url, headers = client.generate_ws_headers()
-                logger.info("Browser session started, connecting Nova Act...")
-                with NovaAct(
-                    cdp_endpoint_url=ws_url,
-                    cdp_headers=headers,
-                    nova_act_api_key=_nova_act_api_key,
-                    starting_page=url,
-                ) as nova:
-                    result = nova.act_get(task, schema={"type": "string"})
-                    response = str(result.response) if result.response else ""
-                    duration_sec = time.time() - start_time
-                    # Nova Act: $4.75/agent hour = ~$0.0792/min
-                    # AgentCore Browser: ~$0.001/min
-                    nova_cost = (duration_sec / 60) * 0.0792
-                    browser_cost = (duration_sec / 60) * 0.001
-                    total_cost = nova_cost + browser_cost
-                    _tool_costs.append({
-                        "provider": "nova_act",
-                        "event_type": "nova_act_browse",
-                        "amount_usd": round(total_cost, 6),
-                        "duration_ms": int(duration_sec * 1000),
-                        "metadata": {"url": url, "task": task[:100], "response_len": len(response)},
-                    })
-                    logger.info("Nova Act completed: response_len=%d duration=%.1fs cost=$%.4f",
-                                len(response), duration_sec, total_cost)
-                    if not response or response == "None":
-                        return f"Browser navigated to {url} but could not extract the requested information."
-                    return response
-        except Exception as e:
-            duration_sec = time.time() - start_time
-            _tool_costs.append({
-                "provider": "nova_act",
-                "event_type": "nova_act_browse",
-                "amount_usd": round((duration_sec / 60) * 0.0792, 6),
-                "duration_ms": int(duration_sec * 1000),
-                "metadata": {"url": url, "error": str(e)[:200]},
-            })
-            logger.error("browse_website error: %s: %s", type(e).__name__, e, exc_info=True)
-            return f"Browser automation error: {e}"
-
-    logger.info("Nova Act browse_website tool defined")
-except ImportError as e:
-    logger.warning("Nova Act not available (missing dependency): %s", e)
-    _browse_website = None
 
 
 # ─── Composer-backed workspace fetch (Unit 7) ────────────────────────────────
@@ -429,7 +336,8 @@ def _call_strands_agent(system_prompt: str, messages: list,
                         guardrail_config: dict | None = None,
                         mcp_configs: list | None = None,
                         disabled_builtin_tools: list | None = None,
-                        template_blocked_tools: list | None = None) -> tuple[str, dict]:
+                        template_blocked_tools: list | None = None,
+                        browser_automation_enabled: bool = False) -> tuple[str, dict]:
     """Invoke Strands Agent SDK.
 
     ``disabled_builtin_tools`` / ``template_blocked_tools`` implement the
@@ -489,7 +397,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
     logger.info("Invoking Strands agent: model=%s, history=%d msgs, prompt_len=%d, system_len=%d",
                 effective_model, len(history), len(current_msg), len(system_prompt))
 
-    # 3. Build tool list: memory tools + Nova Act browser + file_read + script skills
+    # 3. Build tool list: memory tools + policy-enabled built-ins + file_read + script skills
     tools = []
 
     # Memory: AgentCore managed memory is ALWAYS registered. Automatic per-turn
@@ -1191,12 +1099,25 @@ def _call_strands_agent(system_prompt: str, messages: list,
     except Exception:
         logger.info("strands_tools.file_read not available")
 
-    # Add Nova Act browser tool (AI-powered browser via AgentCore managed Chrome)
-    if _nova_act_api_key:
-        tools.append(_browse_website)
-        logger.info("Nova Act browse_website tool added (total tools: %d)", len(tools))
-    else:
-        logger.warning("Nova Act API key not available — browse_website tool disabled")
+    # Browser Automation is opt-in per template/agent. When policy enables it,
+    # register the tool even if dependencies/key are missing so the agent gets
+    # a clear provisioning/configuration message instead of silent omission.
+    if browser_automation_enabled:
+        try:
+            from strands import tool as _browser_tool_decorator
+            from browser_automation_tool import build_browser_automation_tool
+
+            tools.append(
+                build_browser_automation_tool(
+                    strands_tool_decorator=_browser_tool_decorator,
+                    nova_act_api_key=_nova_act_api_key,
+                    cost_sink=_tool_costs,
+                    region=AWS_REGION,
+                )
+            )
+            logger.info("Browser Automation tool registered (total tools: %d)", len(tools))
+        except Exception as e:
+            logger.warning("Browser Automation registration failed: %s", e)
 
     # 4. Register skill tools (PRD-38: skills as sub-agents)
     # mode: tool  → scripts registered as direct tools on parent
@@ -1942,6 +1863,7 @@ def _execute_agent_turn(payload: dict) -> dict:
     workflow_skill = payload.get("workflow_skill")
     disabled_builtin_tools = payload.get("disabled_builtin_tools") or []
     template_blocked_tools = payload.get("blocked_tools") or []
+    browser_automation_enabled = bool(payload.get("browser_automation_enabled"))
     tenant_id_for_audit = (
         payload.get("sessionId") or payload.get("tenant_id") or "unknown"
     )
@@ -2067,6 +1989,7 @@ def _execute_agent_turn(payload: dict) -> dict:
             mcp_configs=mcp_configs if mcp_configs else None,
             disabled_builtin_tools=disabled_builtin_tools,
             template_blocked_tools=template_blocked_tools,
+            browser_automation_enabled=browser_automation_enabled,
         )
         duration_ms = int(time.time() * 1000) - start_ms
 
@@ -2322,9 +2245,15 @@ def main():
     except Exception as e:
         logger.warning("Failed to register EvalAttrSpanProcessor: %s", e)
 
-    # Load Nova Act API key from SSM
+    # Load Nova Act API key from SSM. Browser Automation still registers a
+    # structured unavailable tool when this is absent and policy enables it.
     global _nova_act_api_key
-    _nova_act_api_key = _load_nova_act_key()
+    try:
+        from browser_automation_tool import load_nova_act_key
+        _nova_act_api_key = load_nova_act_key(region=AWS_REGION)
+    except Exception as e:
+        logger.warning("Failed to load Nova Act API key: %s", e)
+        _nova_act_api_key = ""
 
     # Download global skill catalog from S3
     install_skills()

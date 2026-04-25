@@ -1,6 +1,7 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, agentTemplates, snakeToCamel, sql } from "../../utils.js";
+import { validateTemplateBrowser } from "../../../lib/templates/browser-config.js";
 import { validateTemplateSandbox } from "../../../lib/templates/sandbox-config.js";
 import { requireTenantAdmin } from "../core/authz.js";
 
@@ -62,6 +63,11 @@ export async function updateAgentTemplate(
     const sandboxResult = validateTemplateSandbox(i.sandbox);
     if (!sandboxResult.ok) throw new Error(sandboxResult.error);
     set.sandbox = sandboxResult.value;
+  }
+  if (i.browser !== undefined) {
+    const browserResult = validateTemplateBrowser(i.browser);
+    if (!browserResult.ok) throw new Error(browserResult.error);
+    set.browser = browserResult.value;
   }
 
   const [row] = await db

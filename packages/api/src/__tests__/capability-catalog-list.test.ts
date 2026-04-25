@@ -80,6 +80,7 @@ beforeEach(() => {
   _selectCall = 0;
   process.env.API_AUTH_SECRET = "secret";
   mockSlugRows.mockReturnValue([
+    { slug: "browser_automation" },
     { slug: "execute_code" },
     { slug: "web_search" },
     { slug: "recall" },
@@ -92,8 +93,13 @@ describe("GET /api/runtime/capability-catalog", () => {
     const res = await handler(ev());
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body as string);
-    expect(body.slugs).toEqual(["execute_code", "recall", "web_search"]);
-    expect(body.count).toBe(3);
+    expect(body.slugs).toEqual([
+      "browser_automation",
+      "execute_code",
+      "recall",
+      "web_search",
+    ]);
+    expect(body.count).toBe(4);
     expect(body.version).toBe(EXAMPLE_DATE.toISOString());
     expect(body.type).toBe("tool");
     expect(body.source).toBe("builtin");

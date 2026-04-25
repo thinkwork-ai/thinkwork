@@ -44,7 +44,9 @@ import {
   type BuiltinTool,
 } from "@/lib/builtin-tools-api";
 
-export const Route = createFileRoute("/_authed/_tenant/capabilities/builtin-tools")({
+export const Route = createFileRoute(
+  "/_authed/_tenant/capabilities/builtin-tools",
+)({
   component: BuiltinToolsPage,
 });
 
@@ -68,6 +70,15 @@ type CatalogEntry = {
 };
 
 const CATALOG: CatalogEntry[] = [
+  {
+    slug: "browser_automation",
+    name: "Browser Automation",
+    description:
+      "Lets agents operate dynamic websites with an AgentCore Browser session controlled by Nova Act. Policy-gated at the tenant level; opt-in per agent template or individual agent capability.",
+    providers: [],
+    kind: "policy-gated",
+    fixedProvider: "agentcore+nova_act",
+  },
   {
     slug: "code-sandbox",
     name: "Code Sandbox",
@@ -138,6 +149,15 @@ const columns: ColumnDef<Row>[] = [
       // from tenant policy + provisioning state, not from the
       // builtin-tools handler's per-provider row.
       if (row.original.kind === "policy-gated") {
+        if (row.original.slug === "browser_automation") {
+          return (
+            <div className="flex justify-center">
+              <Badge variant="secondary" className="text-xs">
+                Template opt-in
+              </Badge>
+            </div>
+          );
+        }
         const sb = row.original.sandbox;
         if (!sb) {
           return (
@@ -268,7 +288,10 @@ function BuiltinToolsPage() {
   const rows: Row[] = CATALOG.map((c) => ({
     ...c,
     state: tools.find((t) => t.toolSlug === c.slug) ?? null,
-    sandbox: c.kind === "policy-gated" ? sandboxState : undefined,
+    sandbox:
+      c.kind === "policy-gated" && c.slug === "code-sandbox"
+        ? sandboxState
+        : undefined,
   }));
 
   return (
@@ -298,7 +321,7 @@ function BuiltinToolsPage() {
       </div>
 
       {activeRow?.kind === "policy-gated" ? (
-        <SandboxInfoDialog
+        <PolicyGatedInfoDialog
           row={activeRow}
           onClose={() => setActiveRow(null)}
         />
@@ -532,10 +555,19 @@ function ConfigureDialog({
                 ))}
             </div>
             <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={onClose} disabled={saving}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClose}
+                disabled={saving}
+              >
                 Cancel
               </Button>
-              <Button size="sm" onClick={handleSave} disabled={!canSave || saving}>
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={!canSave || saving}
+              >
                 {saving ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
                 ) : null}
@@ -550,12 +582,11 @@ function ConfigureDialog({
 }
 
 // ---------------------------------------------------------------------------
-// Sandbox info dialog — read-only view of the tenant-level sandbox policy
-// and AgentCore Code Interpreter provisioning state. Editable toggles land
-// once the updateTenantPolicy allowlist is populated per-stage.
+// Policy-gated info dialog — read-only view for built-ins controlled by
+// template/agent policy instead of provider API keys.
 // ---------------------------------------------------------------------------
 
-function SandboxInfoDialog({
+function PolicyGatedInfoDialog({
   row,
   onClose,
 }: {
@@ -563,6 +594,7 @@ function SandboxInfoDialog({
   onClose: () => void;
 }) {
   const sb = row.sandbox;
+  const isSandbox = row.slug === "code-sandbox";
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg">
@@ -582,64 +614,79 @@ function SandboxInfoDialog({
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground">
-              Bedrock AgentCore Code Interpreter. One public + one
-              internal-only interpreter are provisioned per tenant on first
-              enrollment.
+              {isSandbox
+                ? "Bedrock AgentCore Code Interpreter. One public + one internal-only interpreter are provisioned per tenant on first enrollment."
+                : "Bedrock AgentCore Browser sessions are controlled through Nova Act. Cost is recorded as separate Nova Act and AgentCore Browser events."}
             </p>
           </div>
 
-          <div className="space-y-1">
-            <Label>Status</Label>
-            <div className="flex items-center gap-2 flex-wrap">
-              {!sb ? (
-                <Badge variant="secondary" className="text-xs">
-                  Loading…
-                </Badge>
-              ) : (
-                <>
-                  <Badge
-                    variant="secondary"
-                    className={`text-xs ${
-                      sb.sandboxEnabled && sb.hasInterpreters
-                        ? "bg-green-500/15 text-green-600 dark:text-green-400"
+          {isSandbox ? (
+            <div className="space-y-1">
+              <Label>Status</Label>
+              <div className="flex items-center gap-2 flex-wrap">
+                {!sb ? (
+                  <Badge variant="secondary" className="text-xs">
+                    Loading…
+                  </Badge>
+                ) : (
+                  <>
+                    <Badge
+                      variant="secondary"
+                      className={`text-xs ${
+                        sb.sandboxEnabled && sb.hasInterpreters
+                          ? "bg-green-500/15 text-green-600 dark:text-green-400"
+                          : sb.sandboxEnabled
+                            ? "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400"
+                            : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {sb.sandboxEnabled && !sb.hasInterpreters
+                        ? "Provisioning"
                         : sb.sandboxEnabled
-                          ? "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400"
-                          : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {sb.sandboxEnabled && !sb.hasInterpreters
-                      ? "Provisioning"
-                      : sb.sandboxEnabled
-                        ? "Enabled"
-                        : "Disabled"}
-                  </Badge>
-                  <Badge variant="outline" className="text-xs font-mono">
-                    tier: {sb.complianceTier ?? "standard"}
-                  </Badge>
-                </>
-              )}
+                          ? "Enabled"
+                          : "Disabled"}
+                    </Badge>
+                    <Badge variant="outline" className="text-xs font-mono">
+                      tier: {sb.complianceTier ?? "standard"}
+                    </Badge>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
+          ) : null}
 
           <div className="space-y-1">
             <Label>Agent template opt-in</Label>
             <p className="text-xs text-muted-foreground">
-              Enrollment is per-template. Open any <b>Agent Template →
-              Configuration</b> and toggle the <code>execute_code</code>{" "}
-              switch in the Code Sandbox card to opt in.
+              {isSandbox ? (
+                <>
+                  Enrollment is per-template. Open any{" "}
+                  <b>Agent Template → Configuration</b> and toggle the{" "}
+                  <code>execute_code</code> switch in the Code Sandbox card to
+                  opt in.
+                </>
+              ) : (
+                <>
+                  Open any <b>Agent Template → Configuration</b> and toggle{" "}
+                  <code>browser_automation</code>. Individual agent capability
+                  rows can override the template default.
+                </>
+              )}
             </p>
           </div>
 
-          <div className="space-y-1">
-            <Label>Tenant policy toggle</Label>
-            <p className="text-xs text-muted-foreground">
-              The tenant-level kill switch (
-              <code>sandbox_enabled</code>) and compliance tier are
-              managed through the <code>updateTenantPolicy</code>{" "}
-              mutation. A first-class admin toggle lands once the
-              platform-operator email allowlist is live on your stage.
-            </p>
-          </div>
+          {isSandbox ? (
+            <div className="space-y-1">
+              <Label>Tenant policy toggle</Label>
+              <p className="text-xs text-muted-foreground">
+                The tenant-level kill switch (<code>sandbox_enabled</code>) and
+                compliance tier are managed through the{" "}
+                <code>updateTenantPolicy</code> mutation. A first-class admin
+                toggle lands once the platform-operator email allowlist is live
+                on your stage.
+              </p>
+            </div>
+          ) : null}
         </div>
         <div className="flex justify-end pt-2">
           <Button variant="ghost" size="sm" onClick={onClose}>
@@ -650,4 +697,3 @@ function SandboxInfoDialog({
     </Dialog>
   );
 }
-
