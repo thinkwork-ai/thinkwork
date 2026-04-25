@@ -91,7 +91,33 @@ thinkwork me                       # identity + tenant sanity check
 pnpm --filter @thinkwork/admin dev     # port 5174 by default
 ```
 
+When running the admin dev server from a worktree, first copy the ignored env file from the main checkout:
+
+```bash
+cp /Users/ericodom/Projects/thinkwork/apps/admin/.env apps/admin/.env
+```
+
+Do this before opening the browser for local verification; without it the admin shell may load but tenant/API-backed pages such as Threads will sit on loading placeholders.
+
 Concurrent admin vite instances (worktrees) must bind to 5175+. **Each port must be listed in the Cognito `ThinkworkAdmin` CallbackURLs** or Google OAuth fails with a generic-looking `redirect_mismatch` page — add the new port in Terraform/Cognito before starting the second server.
+
+### Mobile dev server
+
+When running the mobile app from a worktree, first copy the ignored env file from the main checkout:
+
+```bash
+cp /Users/ericodom/Projects/thinkwork/apps/mobile/.env apps/mobile/.env
+```
+
+Do this before starting Expo or mobile web verification; otherwise API/auth-backed mobile screens may load with missing deployed-stage configuration.
+
+Expo resolves the workspace `@thinkwork/react-native-sdk` package through `apps/mobile/node_modules`, whose `package.json` points at `dist/index.js`. In a fresh worktree, build it before mobile verification:
+
+```bash
+pnpm --filter @thinkwork/react-native-sdk build
+```
+
+If Expo reports that `@thinkwork/react-native-sdk/dist/index.js` is missing, this is the fix.
 
 ## Architecture: the end-to-end data flow
 
