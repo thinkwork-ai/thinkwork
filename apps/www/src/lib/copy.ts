@@ -30,30 +30,32 @@ export const nav = [
 export const meta = {
   title: "ThinkWork — Agent Harness for Business",
   description:
-    "Production-grade AI work, on the AWS account you own. The open Agent Harness — self-host, run it with us, or wrap it with services.",
+    "Production AI work under your control. The open Agent Harness — self-host it, run it with us, or wrap it with services.",
 };
 
 export const hero = {
   eyebrow: "Agent Harness for Business",
-  headlinePart1: "Production-grade AI work,",
-  headlineAccent: "on AWS you own.",
-  // Per the 2026-04-25 messaging-feedback memo: every time "Agent Harness"
-  // is introduced early, follow it with a teaching line so readers don't
-  // have to know the category coming in. The lede explains *what the
-  // harness is* concretely (threads, memory, sandboxing, tools, controls,
-  // cost, audit), then names the operating model.
-  lede: "The harness is the runtime around the model — threads, memory, sandboxing, tools, controls, cost, and audit, built in from day one. Self-host on your AWS, run it with us, or wrap it with services. The harness stays yours.",
+  headlinePart1: "Production",
+  headlinePart2: "AI work,",
+  headlineAccentPart1: "under your",
+  headlineAccentPart2: "control.",
+  // Per the 2026-04-25 messaging-feedback memo: when "Agent Harness" is
+  // introduced early, follow it with a teaching line so readers do not have
+  // to know the category coming in. The lede names the runtime pieces first,
+  // then explains the operating model.
+  lede: "Models need more than prompts. ThinkWork adds the runtime: threads, memory, sandboxing, tools, controls, cost, and audit. Self-host it, run it with us, or add services.",
   primaryCta: { label: "Read the docs", href: external.docs },
   secondaryCta: { label: "View on GitHub", href: external.github },
   headlineCandidates: [
     // Locked: first entry is the winner; runner-ups kept for future copy iteration.
-    "Production-grade AI work, on AWS you own.",
+    "Production AI work, under your control.",
     "The open Agent Harness, for Business.",
     "Agent Harness for Business — open or operated.",
     "Production agents, on the AWS account you own.",
   ],
   ledeCandidates: [
     // Locked: first entry is the winner; runner-ups kept for future copy iteration.
+    "Models need more than prompts. ThinkWork adds the runtime: threads, memory, sandboxing, tools, controls, cost, and audit. Self-host it, run it with us, or add services.",
     "ThinkWork is the open Agent Harness — Reliability, Efficiency, Security, and Traceability built into the runtime, not bolted on. Self-host on your AWS, run it with us, or wrap it with services.",
     "An Agent Harness for Business: threads, memory, agents, connectors, automations, and control wired into one production-grade system, deployable into the AWS account your team already runs.",
     "The open Agent Harness for Business — production AI work that stays inside your AWS boundary, with the option to have us operate it or wrap it with services.",
