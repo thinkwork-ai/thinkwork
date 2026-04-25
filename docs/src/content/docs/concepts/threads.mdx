@@ -5,7 +5,7 @@ description: The universal work container in ThinkWork. Every conversation, auto
 
 import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
 
-A thread is the fundamental unit of work in ThinkWork. A chat message from a user, a Slack event from a connector, a scheduled automation turn, an inbound email — every one of them lands in a thread. Same shape, same lifecycle, same audit trail.
+A thread is the harness's perception and history layer — and the fundamental unit of work in ThinkWork. A chat message from a user, a Slack event from a connector, a scheduled automation turn, an inbound email — every one of them lands in a thread. Same shape, same lifecycle, same audit trail. Threads are the substrate the agent reads on every turn (Perception in [PPAF](/architecture/#the-ppaf-agent-loop)) and the durable record an operator audits afterward — the load-bearing implementation of the **Traceability** R.E.S.T. anchor.
 
 That choice is load-bearing. Most agent systems split "chat" from "workflows" from "integrations" into three code paths, three sets of UI affordances, and three state machines. ThinkWork deliberately doesn't. There is one container, and it carries enough metadata — channel, prefix, routing context — to specialize behavior per source without splitting the container itself.
 
@@ -136,6 +136,66 @@ Status answers "what workflow phase?" Priority answers "how urgent?" They're ort
 | `LOW` | Eventually |
 
 The two together let operators group threads usefully — `IN_PROGRESS + CRITICAL` is a meaningfully different bucket than `IN_PROGRESS + LOW`. See [Admin: Threads](/applications/admin/threads/) for how the grouping surfaces in the operator UI.
+
+## How to configure it
+
+Threads have a small, deliberate configuration surface. Most of the day-to-day knobs are tenant-scoped and live in the admin web; a few cross-tenant defaults are deployment-scoped and configured in Terraform.
+
+### What's tenant-scoped (admin web)
+
+Per-tenant configuration lives at [Admin: Threads](/applications/admin/threads/) and the surrounding tenant settings:
+
+- **Default channel routing.** Which connectors create threads under which channel prefixes. Defaults to one prefix per connector; override only when you split a connector across multiple business contexts (e.g., two Slack workspaces routed to the same tenant).
+- **Status auto-transitions.** Off by default. Status is written only by explicit mutations — agent activity, operator action, or connector event (see "The status lifecycle" above). If you want `IN_PROGRESS → DONE` on agent reply, that's a per-agent template setting, not a thread setting.
+- **Default priority on inbound.** Defaults to `MEDIUM`. Per-channel overrides are configured at the connector level (e.g., "PagerDuty webhooks default to `URGENT`").
+- **Retention defaults.** Threads themselves are durable indefinitely (see "Retention and archival"); retention windows on the audit log are configured separately at the deployment level.
+- **Review queues.** Which statuses route into which operator queues. `IN_REVIEW` and `BLOCKED` ship as queues by default; the admin Threads route lets you add more.
+
+### What's deployment-scoped (Terraform / CLI)
+
+Cross-tenant defaults set when ThinkWork is deployed:
+
+- **Audit-log retention.** Set in the foundation module's S3 lifecycle policy. Default is "keep indefinitely"; compliance-heavy deployments commonly set 7-year retention with cold-storage transitions. See [Architecture](/architecture/#three-tier-deployment-model).
+- **Channel set.** New channel kinds (`CHAT`, `AUTO`, `SLACK`, `GITHUB`, `EMAIL`, `TASK`) ship in the schema. Adding a new channel requires the three-seam pattern in "Adding a new channel" above and lives in code, not configuration.
+- **Concurrency invariants.** "One running turn per thread" is a hard architectural rule, not a knob. Don't try to relax it — the alternative is races and corrupted thread state.
+
+### When the defaults are wrong
+
+The default tenant-scoped configuration is calibrated for a single ops-team pilot — one tenant, a handful of agents, a handful of connectors. It deviates as you scale:
+
+- A multi-tenant deployment where each tenant has its own Slack workspace needs explicit channel routing per tenant.
+- A high-frequency automations workload (hundreds of `AUTO`-prefixed threads per hour) benefits from a tighter `BACKLOG` retention default to keep the operator UI's default view focused.
+- An incident-response use case wants a non-default priority handler that flips inbound `CRITICAL` threads to a paging queue. That's a connector-side rule today, not a thread-side one.
+
+For all three, the configuration knobs above are sufficient — none of them require a code change.
+
+## Common patterns
+
+### Reopen a Slack thread on a follow-up
+
+The canonical thread-system pattern: a customer asks a question on Slack, ThinkWork answers, the thread closes. A week later the customer follows up in the same Slack thread. ThinkWork should reopen the existing thread — not start a new one — so the agent sees its earlier answer and continues the conversation.
+
+This is automatic. The Slack connector watches `thread_ts` (Slack's thread timestamp) on every inbound event:
+
+1. **Inbound event.** Slack POSTs the new message to the connector's webhook with the original `thread_ts`.
+2. **Reopen lookup.** The connector queries the thread store for an open or closed thread matching `(tenant_id, channel='SLACK', metadata->>'slack_thread_ts')`.
+3. **Reopen.** If found, the thread's status flips from `DONE` (or wherever it was) back to `IN_PROGRESS`, the new message is appended, and the agent assigned to the thread fires a turn — which sees the entire prior conversation.
+4. **Create.** If no match, a new `SLACK-<ULID>` thread is created.
+
+The pattern matters because it makes ThinkWork stateful from the user's perspective without you writing any state-management code. For the deeper lifecycle, see [Lifecycle and Types](/concepts/threads/lifecycle-and-types/).
+
+### Route an inbound email into an automation thread
+
+A different pattern: an inbound email shouldn't always land in a chat thread for an operator to respond to. Sometimes the right destination is an automation — for example, a vendor invoice email that should kick off an "extract amount, file in finance system" workflow.
+
+The Email connector handles this by reading the `To:` address:
+
+1. **Inbound email.** SES delivers the email to the inbound bucket; the connector Lambda reads the new object.
+2. **Route by recipient.** If `To:` matches a configured `AUTO` channel mapping (e.g., `invoices@agents.thinkwork.ai`), the connector creates an `AUTO-<ULID>` thread instead of an `EMAIL-<ULID>` thread, attaches the email body as the first message, and tags the thread with the target [automation](/concepts/automations/) recipe.
+3. **Automation runs.** Step Functions picks up the `AUTO` thread and executes the recipe — extract data, call downstream tool, write back the result.
+4. **Status closes.** The automation marks the thread `DONE`. Inbound emails that follow up are matched on `Message-Id` chain and reopen the same thread, just like Slack.
+
+The point: the same thread container carries the work whether a human is the audience or an automation is. Operators who want visibility into automation runs read them from the same admin Threads view they use for chat.
 
 ## Concurrency and ordering
 
