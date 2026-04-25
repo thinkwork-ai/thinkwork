@@ -5,7 +5,7 @@ description: Use MCP-based external tool connectors under the Connectors model.
 
 import { Aside } from '@astrojs/starlight/components';
 
-MCP (Model Context Protocol) is ThinkWork's connector path for external tool systems. It lives under **Connectors**, not as a separate platform pillar.
+MCP (Model Context Protocol) is the harness's connector path for external tool systems — the tool/capability half of the harness's I/O surface, peer to [Integrations](/concepts/connectors/integrations/) which handles app and channel events. MCP lives under **Connectors**, not as a separate platform pillar, because the same trust boundary applies to both: the **Security** operating guarantee gates which MCP tools an agent's template allows it to call (capability grants), routes the call through a tenant-scoped MCP client (no shared sessions), and traces every MCP invocation in the same turn record as every other tool call.
 
 Use MCP tools when agents need to call remote capabilities during work, such as CRM actions, ticket updates, internal API operations, search, or database queries exposed by an MCP server.
 
