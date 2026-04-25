@@ -406,6 +406,16 @@ function isAgentsMdPath(path: string): boolean {
   return path === "AGENTS.md" || path.endsWith("/AGENTS.md");
 }
 
+function isProtectedOrchestrationWritePath(path: string): boolean {
+  return (
+    path.startsWith("work/inbox/") ||
+    path.startsWith("review/") ||
+    /^work\/runs\/[^/]+\/events\//.test(path) ||
+    path.startsWith("events/intents/") ||
+    path.startsWith("events/audit/")
+  );
+}
+
 async function handlePut(
   deps: HandlerDeps,
   path: string,
@@ -420,6 +430,13 @@ async function handlePut(
     return json(400, {
       ok: false,
       error: err instanceof Error ? err.message : "Invalid workspace path",
+    });
+  }
+
+  if (target.kind === "agent" && isProtectedOrchestrationWritePath(cleanPath)) {
+    return json(403, {
+      ok: false,
+      error: "use orchestration writer",
     });
   }
 

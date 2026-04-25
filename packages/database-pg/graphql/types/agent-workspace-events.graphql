@@ -1,0 +1,80 @@
+enum AgentWorkspaceRunStatus {
+  PENDING
+  CLAIMED
+  PROCESSING
+  COMPLETED
+  FAILED
+  AWAITING_REVIEW
+  AWAITING_SUBRUN
+  CANCELLED
+  EXPIRED
+}
+
+enum AgentWorkspaceEventType {
+  WORK_REQUESTED
+  RUN_STARTED
+  RUN_BLOCKED
+  RUN_COMPLETED
+  RUN_FAILED
+  REVIEW_REQUESTED
+  MEMORY_CHANGED
+  EVENT_REJECTED
+}
+
+type AgentWorkspaceRun {
+  id: ID!
+  tenantId: ID!
+  agentId: ID!
+  targetPath: String!
+  status: String!
+  sourceObjectKey: String
+  requestObjectKey: String
+  currentWakeupRequestId: ID
+  currentThreadTurnId: ID
+  parentRunId: ID
+  depth: Int!
+  inboxWriteCount: Int!
+  wakeupRetryCount: Int!
+  lastEventAt: AWSDateTime!
+  completedAt: AWSDateTime
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type AgentWorkspaceEvent {
+  id: ID!
+  tenantId: ID!
+  agentId: ID
+  runId: ID
+  eventType: String!
+  bucket: String!
+  sourceObjectKey: String!
+  auditObjectKey: String
+  objectEtag: String
+  objectVersionId: String
+  sequencer: String!
+  mirrorStatus: String!
+  reason: String
+  payload: AWSJSON
+  actorType: String
+  actorId: String
+  parentEventId: ID
+  createdAt: AWSDateTime!
+}
+
+type AgentWorkspaceWait {
+  id: ID!
+  tenantId: ID!
+  waitingRunId: ID!
+  waitForRunId: ID
+  waitForTargetPath: String
+  status: String!
+  createdAt: AWSDateTime!
+  satisfiedAt: AWSDateTime
+}
+
+extend type Query {
+  agentWorkspaceRuns(agentId: ID, targetPath: String, status: String, limit: Int = 50): [AgentWorkspaceRun!]!
+  agentWorkspaceEvents(runId: ID!, limit: Int = 100): [AgentWorkspaceEvent!]!
+}
+

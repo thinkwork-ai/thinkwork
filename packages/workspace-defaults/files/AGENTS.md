@@ -28,6 +28,11 @@ and template defaults through the workspace overlay.
 sub-agent writes memory, paths are relative to the agent root, for example
 `expenses/memory/lessons.md`.
 
+Async work is folder-native too. Use `wake_workspace(target, request_md, ...)`
+when a specialist can run later, wait for human review, or resume this agent
+after completion. The platform turns eventful file writes into canonical events;
+agents should not write orchestration files directly.
+
 ## Routing
 
 | Task                                       | Go to                | Read                              | Skills                       |
