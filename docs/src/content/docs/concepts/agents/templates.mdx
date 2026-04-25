@@ -5,7 +5,7 @@ description: Agent templates are the configuration reuse layer — one named tem
 
 import { Aside } from '@astrojs/starlight/components';
 
-An agent template is a named bundle of configuration that multiple agents share. Model selection, guardrail assignment, inference parameters, tool surface, memory behavior, budget caps — everything that shapes *how* an agent behaves — lives on the template. Agents *reference* templates; they don't copy values.
+An agent template is a named bundle of configuration that multiple agents share — and the harness's mechanism for **fleet coherence**. Model selection, guardrail assignment, inference parameters, tool surface, memory behavior, budget caps — everything that shapes *how* an agent behaves — lives on the template. Agents *reference* templates; they don't copy values. The whole layer exists to implement the **Reliability** REST anchor at fleet scale (two agents on the same template behave identically because they read identical config) and the **Security** anchor (capability grants and guardrail attachments are template-pinned, so a malicious skill-pack upload can't widen what an agent reaches).
 
 That reference is the single most important property of the model: **edit the template once, and every agent using it picks up the change on the next invocation.** Rotating Claude versions across 100 agents is one write. Tightening guardrails across a tenant is one write. Cutting a budget cap in half is one write.
 
@@ -176,6 +176,36 @@ Forks are templates created by duplicating another. ThinkWork tracks the parent 
 Lineage is informational — the fork doesn't stay in sync with its parent automatically. But the admin app surfaces "your parent template has changed since this fork was created" so operators can decide whether to re-sync specific fields manually.
 
 Tenants that do frequent model rotations often maintain a two-template pattern: a *-Standard* and a *-Canary*. The canary is always a fork of Standard; rollouts are "promote canary values up to Standard."
+
+## How to configure it
+
+Templates are configured exclusively through the admin web — there is no Terraform-side or CLI-side template configuration, by design. The configuration surface is operator-facing because it's where day-to-day fleet decisions land (rotate a model, tighten a guardrail, cap a budget); putting it behind a deploy step would defeat the whole point of templates.
+
+### Where it lives
+
+Every template-side configuration knob is reachable from [Admin: Agent Templates](/applications/admin/agent-templates/). Three sub-views:
+
+- **Template editor** — model, guardrail, inference parameters, tool config, memory behavior, budget cap, default skill/KB seeds, workspace files. Each field is documented inline in the editor with the field's runtime impact.
+- **Linked agents view** — every agent currently referencing the template, with a quick filter for status (active/suspended) and a click-through to per-agent overrides on the seeded fields.
+- **Sync flow** — the explicit propagation step for default skill/KB assignments (see [Sync vs. live](#sync-vs-live)). Surfaces a diff of what would change and which agents to apply it to.
+
+### Tenant-scoped vs deployment-scoped
+
+Everything in the template editor is tenant-scoped — each tenant manages its own templates, and templates don't cross tenant boundaries. The deployment-scoped settings that matter for templates aren't on the template itself, they're on the runtime that consumes it:
+
+- **Available models.** Which Bedrock models the deployment has access to (a Bedrock account-setting + Terraform `bedrock_model_access` list). Templates can only reference models the deployment has enabled — the editor's model dropdown is a join against this list.
+- **Available guardrail ids.** Bedrock Guardrails are deployment-scoped resources; templates reference them by id. Onboarding a new guardrail is a Bedrock-side step before it appears in template editor.
+- **Memory adapter availability.** `enable_hindsight = true` in Terraform makes Hindsight available as a memory-adapter choice; otherwise, AgentCore Memory is the only option.
+
+### When the defaults are wrong
+
+The factory templates ThinkWork ships (`Support — Standard`, `Research — Extended Thinking`, `Eval — Sandbox`) are calibrated for a single-tenant pilot. They deviate as you scale:
+
+- A multi-tenant deployment with strict-PII customers and lax-PII customers needs separate templates with different guardrail attachments — not one template with a "depends on tenant" rule (templates don't have those, and shouldn't).
+- A high-volume cost-sensitive workload (Haiku-tier inference on millions of turns) benefits from a tighter `maxOutputTokens` than the defaults; the savings compound.
+- An eval-heavy workflow benefits from a dedicated *Eval — Sandbox* template with no connectors, no MCP tools, and a low budget cap; tool-surface isolation is the cheapest way to keep eval runs reproducible.
+
+For all three, the template editor is sufficient — no code changes, no deploys.
 
 ## Known limits
 
