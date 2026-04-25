@@ -5,16 +5,16 @@ description: Guardrails, budgets, usage tracking, and audit — how ThinkWork en
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-Control is the harness's governance layer — the component that turns ThinkWork from a demo into a production system, and the load-bearing implementation of the four R.E.S.T. anchors ([Reliability, Efficiency, Security, Traceability](/architecture/#the-four-rest-anchors)). It answers two questions that every real deployment has to answer:
+Control is the harness's governance layer — the component that turns ThinkWork from a demo into a production system, and the load-bearing implementation of the four REST anchors ([Reliability, Efficiency, Security, Traceability](/architecture/#the-four-rest-anchors)). It answers two questions that every real deployment has to answer:
 
 1. **What are agents allowed to do?** Model-level safety, spend limits, tool access, role boundaries.
 2. **What actually happened when they did it?** Turn-level audit, cost tracking, incident reconstruction.
 
 Both matter equally. A system that only enforces boundaries is a black box; a system that only logs is a landmine waiting for a safety question. ThinkWork treats Control as one first-class concept instead of scattering it across three unrelated surfaces.
 
-## R.E.S.T. anchors implemented
+## REST anchors implemented
 
-The five governance controls below map 1:N to the four R.E.S.T. anchors. The anchors are the *language* a buyer or operator can grab onto; the controls are the *implementation* that ships in the admin web. Every anchor has at least one shipping control behind it.
+The five governance controls below map 1:N to the four REST anchors. The anchors are the *language* a buyer or operator can grab onto; the controls are the *implementation* that ships in the admin web. Every anchor has at least one shipping control behind it.
 
 | Anchor | What it commits to | Shipping controls |
 |---|---|---|

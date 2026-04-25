@@ -5,7 +5,7 @@ description: The universal work container in ThinkWork. Every conversation, auto
 
 import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
 
-A thread is the harness's perception and history layer — and the fundamental unit of work in ThinkWork. A chat message from a user, a Slack event from a connector, a scheduled automation turn, an inbound email — every one of them lands in a thread. Same shape, same lifecycle, same audit trail. Threads are the substrate the agent reads on every turn (Perception in [PPAF](/architecture/#the-ppaf-agent-loop)) and the durable record an operator audits afterward — the load-bearing implementation of the **Traceability** R.E.S.T. anchor.
+A thread is the harness's perception and history layer — and the fundamental unit of work in ThinkWork. A chat message from a user, a Slack event from a connector, a scheduled automation turn, an inbound email — every one of them lands in a thread. Same shape, same lifecycle, same audit trail. Threads are the substrate the agent reads on every turn (Perception in [PPAF](/architecture/#the-ppaf-agent-loop)) and the durable record an operator audits afterward — the load-bearing implementation of the **Traceability** REST anchor.
 
 That choice is load-bearing. Most agent systems split "chat" from "workflows" from "integrations" into three code paths, three sets of UI affordances, and three state machines. ThinkWork deliberately doesn't. There is one container, and it carries enough metadata — channel, prefix, routing context — to specialize behavior per source without splitting the container itself.
 

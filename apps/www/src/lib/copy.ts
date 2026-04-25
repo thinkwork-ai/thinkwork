@@ -151,14 +151,14 @@ export const howItWorks = {
   ],
 };
 
-// The five governance controls below map 1:N to the four R.E.S.T. anchors
+// The five governance controls below map 1:N to the four REST anchors
 // (Reliability · Efficiency · Security · Traceability). The chip-label on
 // each card carries the anchor(s) the control implements; FiveControls.astro
 // renders these as small uppercase tags. Mapping is locked in plan U1
 // pre-flight and consumed verbatim by docs/concepts/control.mdx (U8).
 export const controls = {
   eyebrow: "Reliability · Efficiency · Security · Traceability",
-  headline: "The four R.E.S.T. anchors, enforced in code.",
+  headline: "The four REST anchors, enforced in code.",
   lede: "Reliability, Efficiency, Security, and Traceability are not aspirations. The harness implements each one as concrete, shipping controls — five of them, all live in the admin web, all part of every plan.",
   items: [
     {
@@ -517,7 +517,7 @@ export const services = {
         detail: "Identity isolation enforced at the AWS layer, not in application glue.",
       },
       {
-        label: "Full audit + R.E.S.T. evaluations",
+        label: "Full audit + REST evaluations",
         detail: "Every turn traced; Reliability, Efficiency, Security, and Traceability evaluators run on the same trace.",
       },
     ] as Array<{ label: string; detail?: string }>,
@@ -550,7 +550,7 @@ export const services = {
     eyebrow: "Services",
     headline: "Practical help from first workflow to ongoing operations.",
     lede:
-      "Every package scoped up front — no billable hours, no open meter, no drift from the engagement shape we agreed to. Each one maps to a phase of the harness's adoption arc and names the components, controls, and R.E.S.T. anchors it touches.",
+      "Every package scoped up front — no billable hours, no open meter, no drift from the engagement shape we agreed to. Each one maps to a phase of the harness's adoption arc and names the components, controls, and REST anchors it touches.",
     items: [
       {
         id: "strategy-sprint",
@@ -617,7 +617,7 @@ export const services = {
         timeline: "Ongoing",
         oneLiner: "The next wave of workflows, shipped on a cadence.",
         body:
-          "Recurring delivery of new agents, workflows, connectors, and templates as the organization earns trust in earlier ones. Each cadence ships new agent templates calibrated against the same R.E.S.T. anchors as the pilot, new connectors wired with the same credential-vault discipline, and new evaluation suites that prove each addition before it touches production traffic. The control model stays constant; the surface area grows beneath it.",
+          "Recurring delivery of new agents, workflows, connectors, and templates as the organization earns trust in earlier ones. Each cadence ships new agent templates calibrated against the same REST anchors as the pilot, new connectors wired with the same credential-vault discipline, and new evaluation suites that prove each addition before it touches production traffic. The control model stays constant; the surface area grows beneath it.",
         includes: [
           "New agent templates per cadence — capability grants + guardrails",
           "Connector rollout (Slack / GitHub / Google / MCP / Email)",
@@ -642,7 +642,7 @@ export const services = {
           "No AWS / Terraform setup on your side",
           "Managed updates, upgrades, and incident response",
           "Plan tiers that scale with usage",
-          "Same admin web, same audit log, same R.E.S.T. anchors",
+          "Same admin web, same audit log, same REST anchors",
         ],
         outcome:
           "ThinkWork running as a managed product — deployed, updated, audited, and governed by us inside your AWS boundary, with the operator-facing surfaces unchanged from the open path.",
@@ -662,7 +662,7 @@ export const services = {
         n: "01",
         title: "Scope (week 1–2)",
         body:
-          "An AI Adoption Strategy Sprint, or the discovery phase of a Pilot Launch. We pick one workflow that pays back fastest, agree on the templates that bound the agent's capability, choose the success metric that proves it worked, and write down the risks. No code yet — the output is the contract between you and the harness: which components are involved, which R.E.S.T. anchors matter most, and what 'done' looks like for the pilot.",
+          "An AI Adoption Strategy Sprint, or the discovery phase of a Pilot Launch. We pick one workflow that pays back fastest, agree on the templates that bound the agent's capability, choose the success metric that proves it worked, and write down the risks. No code yet — the output is the contract between you and the harness: which components are involved, which REST anchors matter most, and what 'done' looks like for the pilot.",
       },
       {
         n: "02",
@@ -674,7 +674,7 @@ export const services = {
         n: "03",
         title: "Operate (steady state)",
         body:
-          "Managed ThinkWork Operations — weekly triage, guardrail tuning, evaluation refresh, harness upgrades. Quarterly we review cost trends, evaluation drift, and the operating model itself. The R.E.S.T. anchors that mattered at scope time are now measured in production: Reliability shows up as agent-paused-on-failure events, Efficiency as cost per turn, Security as guardrail activation rate, Traceability as audit query latency.",
+          "Managed ThinkWork Operations — weekly triage, guardrail tuning, evaluation refresh, harness upgrades. Quarterly we review cost trends, evaluation drift, and the operating model itself. The REST anchors that mattered at scope time are now measured in production: Reliability shows up as agent-paused-on-failure events, Efficiency as cost per turn, Security as guardrail activation rate, Traceability as audit query latency.",
       },
       {
         n: "04",

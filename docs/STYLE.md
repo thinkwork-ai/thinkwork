@@ -404,7 +404,7 @@ The canonical structure has five sections, in this order:
 
 ### 1. Why this component exists in the harness *(1 paragraph)*
 
-Lead with the problem the component solves under the harness frame. Name which R.E.S.T. anchor(s) it implements (Reliability · Efficiency · Security · Traceability). One paragraph — enough to give a reader the reason this component is worth their attention before they decide whether to keep reading.
+Lead with the problem the component solves under the harness frame. Name which REST anchor(s) it implements (Reliability · Efficiency · Security · Traceability). One paragraph — enough to give a reader the reason this component is worth their attention before they decide whether to keep reading.
 
 ### 2. What it does *(2–3 paragraphs + bullets)*
 

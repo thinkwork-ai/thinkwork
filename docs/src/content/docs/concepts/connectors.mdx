@@ -5,7 +5,7 @@ description: Connect ThinkWork to external channels, event sources, and tool sys
 
 import { Aside } from '@astrojs/starlight/components';
 
-Connectors are the harness's I/O surface — how ThinkWork interfaces with the outside world. They bring external systems into the thread model so agents can perceive them, and let agents act back on those systems in a controlled way as part of the [Action phase of PPAF](/architecture/#the-ppaf-agent-loop). The Security R.E.S.T. anchor lives at the connector boundary: outbound tool calls go through Bedrock guardrails, inbound events are normalized into the thread model under your IAM, and the connector credential vault keeps third-party tokens off the agent runtime path.
+Connectors are the harness's I/O surface — how ThinkWork interfaces with the outside world. They bring external systems into the thread model so agents can perceive them, and let agents act back on those systems in a controlled way as part of the [Action phase of PPAF](/architecture/#the-ppaf-agent-loop). The Security REST anchor lives at the connector boundary: outbound tool calls go through Bedrock guardrails, inbound events are normalized into the thread model under your IAM, and the connector credential vault keeps third-party tokens off the agent runtime path.
 
 ThinkWork uses connectors in three broad ways:
 
