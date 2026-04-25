@@ -251,3 +251,10 @@ playwright/.cache/
 # Local claude worktrees (embedded git repos) and per-machine config
 .claude/worktrees/
 .compound-engineering/
+
+# Codex CLI per-machine state (worktrees + sandbox config)
+.Codex/worktrees/
+.Codex/config.toml
+
+# Review scratch — large screenshots; keep .md feedback tracked
+.review/*.png
