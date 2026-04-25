@@ -37,14 +37,14 @@ from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from typing import Any
 
-from agents_md_parser import RoutingRow, parse_agents_md
+from agents_md_parser import parse_agents_md
 from skill_resolver import (
     RESERVED_FOLDER_NAMES,
     ResolvedSkill,
     SkillNotResolvable,
     resolve_skill,
 )
-from workspace_composer_client import fetch_composed_workspace as _default_composer_fetch
+from workspace_composer_client import fetch_composed_workspace
 
 logger = logging.getLogger(__name__)
 
@@ -157,20 +157,6 @@ def _find_agents_md_content(
     )
 
 
-def _routing_row_to_dict(row: RoutingRow) -> dict[str, Any]:
-    """Serialize a ``RoutingRow`` into a plain dict for the resolved-context payload."""
-    return {
-        "task": row.task,
-        "go_to": row.go_to,
-        "reads": list(row.reads),
-        "skills": list(row.skills),
-    }
-
-
-def _resolved_skill_to_dict(rs: ResolvedSkill) -> dict[str, Any]:
-    return dataclasses.asdict(rs)
-
-
 # ────────────────────────────────────────────────────────────────────────────
 # Spawn seam — INERT in this PR
 # ────────────────────────────────────────────────────────────────────────────
@@ -209,7 +195,7 @@ def make_delegate_to_workspace_fn(
     platform_catalog_manifest: Mapping[str, Mapping[str, Any]] | None,
     cfg_model: str,
     usage_acc: list,
-    composer_fetch: Callable[..., list[dict]] = _default_composer_fetch,
+    composer_fetch: Callable[..., list[dict]] = fetch_composed_workspace,
     spawn_fn: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> Callable[..., dict[str, Any]]:
     """Build the ``delegate_to_workspace`` callable.
@@ -241,9 +227,13 @@ def make_delegate_to_workspace_fn(
     snapshot_api_url = api_url
     snapshot_api_secret = api_secret
     snapshot_cfg_model = cfg_model  # captured for the spawn-PR follow-up
-    snapshot_usage_acc = usage_acc  # captured for the spawn-PR follow-up
     snapshot_composer = composer_fetch
     snapshot_spawn = spawn_fn or _spawn_sub_agent_inert
+    # `usage_acc` is intentionally not captured here — the spawn-PR follow-up
+    # is what writes to it from inside the live spawn body. Keeping the
+    # parameter on the factory signature lets the spawn-PR consume it without
+    # changing the registration call site.
+    del usage_acc
 
     def delegate_to_workspace(path: str, task: str) -> dict[str, Any]:
         """Delegate a task to a sub-agent rooted at the workspace folder ``path``.
@@ -297,9 +287,9 @@ def make_delegate_to_workspace_fn(
 
         resolved_context: dict[str, Any] = {
             "composed_tree": list(files),
-            "routing": [_routing_row_to_dict(row) for row in ctx.routing],
+            "routing": [dataclasses.asdict(row) for row in ctx.routing],
             "resolved_skills": {
-                slug: _resolved_skill_to_dict(rs)
+                slug: dataclasses.asdict(rs)
                 for slug, rs in resolved_skills.items()
             },
             "parent_agent_id": snapshot_agent_id,
@@ -307,15 +297,10 @@ def make_delegate_to_workspace_fn(
             "depth": depth,
             "task": task,
             "normalized_path": normalized_path,
-            # The spawn-PR follow-up reads these to build the sub-agent.
+            # The spawn-PR follow-up reads this to build the sub-agent.
             "cfg_model": snapshot_cfg_model,
         }
 
-        result = snapshot_spawn(resolved_context)
-        # Per-call usage accumulation happens inside the (live) spawn body,
-        # not here — leave usage_acc untouched on the inert path so tests
-        # can assert "spawn-PR is what writes usage."
-        _ = snapshot_usage_acc  # silence linters; reserved for spawn-PR
-        return result
+        return snapshot_spawn(resolved_context)
 
     return delegate_to_workspace
