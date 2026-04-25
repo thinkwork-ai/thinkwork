@@ -286,7 +286,9 @@ function TreeItem({
           <Button
             variant="ghost"
             size="sm"
-            className="ml-auto h-5 w-5 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+            className={`ml-auto h-5 w-5 p-0 text-muted-foreground hover:text-destructive ${
+              isDeleting ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            }`}
             disabled={isDeleting}
             onClick={(e) => {
               e.stopPropagation();
@@ -305,7 +307,9 @@ function TreeItem({
           <Button
             variant="ghost"
             size="sm"
-            className="ml-auto h-5 w-5 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+            className={`ml-auto h-5 w-5 p-0 text-muted-foreground hover:text-destructive ${
+              isDeleting ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            }`}
             disabled={isDeleting}
             onClick={(e) => {
               e.stopPropagation();
@@ -448,6 +452,7 @@ function AgentWorkspacePage() {
   const [files, setFiles] = useState<string[]>([]);
   const [fileSources, setFileSources] = useState<Record<string, ComposeSource>>({});
   const [loadingFiles, setLoadingFiles] = useState(true);
+  const [loadedFilesOnce, setLoadedFilesOnce] = useState(false);
   const [generating, setGenerating] = useState(false);
 
   const fetchFiles = useCallback(async (options: { showLoading?: boolean } = {}) => {
@@ -462,6 +467,7 @@ function AgentWorkspacePage() {
     } catch (err) {
       console.error("Failed to list workspace files:", err);
     } finally {
+      setLoadedFilesOnce(true);
       if (showLoading) setLoadingFiles(false);
     }
   }, [target]);
@@ -903,7 +909,7 @@ function AgentWorkspacePage() {
         </div>
       }
     >
-      {loadingFiles && files.length === 0 ? (
+      {loadingFiles && !loadedFilesOnce ? (
         <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading...
         </div>
