@@ -1,0 +1,33 @@
+---
+title: Inheritance Rules
+description: How ThinkWork resolves root, sub-agent, template, and default files.
+---
+
+The workspace overlay resolves a requested file by walking from the most
+specific folder back to broader layers.
+
+For `expenses/escalation/GUARDRAILS.md`, ThinkWork checks:
+
+1. Agent override at `expenses/escalation/GUARDRAILS.md`
+2. Agent override at `expenses/GUARDRAILS.md`
+3. Agent override at `GUARDRAILS.md`
+4. Template file at `expenses/escalation/GUARDRAILS.md`
+5. Template file at `expenses/GUARDRAILS.md`
+6. Template root file at `GUARDRAILS.md`
+7. Default workspace file at `GUARDRAILS.md`
+
+Pinned files use path-qualified keys:
+
+```text
+GUARDRAILS.md
+expenses/GUARDRAILS.md
+expenses/escalation/GUARDRAILS.md
+```
+
+Root keys stay short because the path is unambiguous. Nested keys include the
+folder path so a template update badge can appear on the exact file that needs
+review.
+
+When `AGENTS.md` changes, ThinkWork invalidates the composer cache. The running
+container picks up the new map on the next turn; no restart is needed.
+

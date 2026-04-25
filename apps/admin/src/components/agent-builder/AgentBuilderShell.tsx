@@ -91,20 +91,16 @@ const DEFAULT_ROUTER = `# Workspace Router
 
 ## default
 - load: SOUL.md, IDENTITY.md, USER.md
-- skills: all
 
 ## chat
 - load: docs/tone.md, memory/preferences.md
-- skills: all
 
 ## email
 - load: docs/procedures/
-- skills: agent-email-send
 
 ## heartbeat
 - load: docs/procedures/
 - skip: IDENTITY.md, USER.md
-- skills: ticket-management
 `;
 
 const DEFAULT_AGENTS = `# Agent Map
