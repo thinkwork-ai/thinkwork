@@ -412,9 +412,10 @@ def _call_strands_agent(system_prompt: str, messages: list,
     except Exception as e:
         logger.warning("Managed memory tools registration failed: %s", e)
 
-    # Unit 7: write_memory — agent appends to its own memory/*.md working
-    # notes via the composer. Basename enum (lessons.md | preferences.md |
-    # contacts.md) so there's no path string to escape.
+    # Unit 7 + Plan §008 U12: write_memory — agent (parent or sub-agent)
+    # writes memory/*.md notes via the composer. Path is `(folder/)?memory/
+    # (lessons|preferences|contacts).md` from the agent root, validated by
+    # `_validate_memory_path` (NFKC + regex + reserved-segment + depth-5).
     try:
         from write_memory_tool import write_memory
         tools.append(write_memory)
