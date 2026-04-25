@@ -11,11 +11,29 @@ import logging
 
 import pytest
 from skill_resolver import (
+    MAX_FOLDER_DEPTH,
     RESERVED_FOLDER_NAMES,
     ResolvedSkill,
     SkillNotResolvable,
     resolve_skill,
 )
+
+
+def test_max_folder_depth_is_5_per_key_decisions_008():
+    """Single source of truth for the depth cap; future cap changes are single-file."""
+    assert MAX_FOLDER_DEPTH == 5
+
+
+def test_delegate_tool_imports_shared_max_folder_depth():
+    """U9's MAX_DEPTH alias must point at the shared constant."""
+    import delegate_to_workspace_tool as dtw
+    assert dtw.MAX_DEPTH == MAX_FOLDER_DEPTH
+
+
+def test_write_memory_tool_imports_shared_max_folder_depth():
+    """U12's _MAX_FOLDER_DEPTH alias must point at the shared constant."""
+    import write_memory_tool as wmt
+    assert wmt._MAX_FOLDER_DEPTH == MAX_FOLDER_DEPTH
 
 # A minimal SKILL.md body with frontmatter the parser will accept.
 LOCAL_SKILL_MD = """---

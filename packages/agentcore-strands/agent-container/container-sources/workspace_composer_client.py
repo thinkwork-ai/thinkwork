@@ -14,10 +14,35 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
+import time
 import urllib.request
 
-
 logger = logging.getLogger(__name__)
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# In-process short-TTL cache (Plan §004 U3)
+# ────────────────────────────────────────────────────────────────────────────
+#
+# `delegate_to_workspace` calls `fetch_composed_workspace` on every spawn.
+# At enterprise scale (4 enterprises × 100+ agents) the same parent agent
+# can fan out N delegations in rapid succession; without a cache that's N
+# round-trips through HTTP API + Lambda + S3.
+#
+# Mirror shape of the TS-side composer cache in
+# `packages/api/src/lib/workspace-overlay.ts` (60s LRU): module-level dict
+# keyed by `(tenant_id, agent_id)` with monotonic-clock timestamps and a
+# threading.Lock for cross-thread safety. Values are returned by reference
+# (callers MUST treat the result as read-only — `delegate_to_workspace`
+# already does so via `list(files)` when building `resolved_context`).
+#
+# Snapshot pattern (per `feedback_completion_callback_snapshot_pattern`):
+# this wrapper takes all config as positional arguments — no `os.environ`
+# reads — so the caller controls invalidation by changing the cache key.
+
+_COMPOSED_CACHE: dict[tuple[str, str], tuple[float, list[dict]]] = {}
+_COMPOSED_CACHE_LOCK = threading.Lock()
 
 
 def fetch_composed_workspace(
@@ -61,6 +86,66 @@ def fetch_composed_workspace(
     if not payload.get("ok"):
         raise RuntimeError(f"composer returned error: {payload.get('error')!r}")
     return payload.get("files") or []
+
+
+def fetch_composed_workspace_cached(
+    tenant_id: str,
+    agent_id: str,
+    api_url: str,
+    api_secret: str,
+    ttl_seconds: float = 30.0,
+    timeout_seconds: float = 15.0,
+) -> list[dict]:
+    """Cached wrapper around :func:`fetch_composed_workspace`.
+
+    Returns the cached value when ``(tenant_id, agent_id)`` was fetched
+    within the last ``ttl_seconds`` seconds; otherwise calls through and
+    stores the result. ``ttl_seconds=0`` disables the cache entirely
+    (pass-through to :func:`fetch_composed_workspace`).
+
+    The cache key intentionally excludes ``api_url`` / ``api_secret``
+    because both are stage-scoped — the runtime never talks to two
+    different composers in the same process. Callers in tests that
+    do want strict isolation should call :func:`_reset_composed_cache`
+    in their setUp.
+
+    Time source is :func:`time.monotonic` so wall-clock skews don't
+    leak through. Thread-safe via a module-level lock.
+    """
+    if ttl_seconds <= 0:
+        return fetch_composed_workspace(
+            tenant_id=tenant_id,
+            agent_id=agent_id,
+            api_url=api_url,
+            api_secret=api_secret,
+            timeout_seconds=timeout_seconds,
+        )
+
+    key = (tenant_id, agent_id)
+    now = time.monotonic()
+    with _COMPOSED_CACHE_LOCK:
+        cached = _COMPOSED_CACHE.get(key)
+        if cached is not None:
+            cached_at, cached_files = cached
+            if now - cached_at < ttl_seconds:
+                return cached_files
+
+    files = fetch_composed_workspace(
+        tenant_id=tenant_id,
+        agent_id=agent_id,
+        api_url=api_url,
+        api_secret=api_secret,
+        timeout_seconds=timeout_seconds,
+    )
+    with _COMPOSED_CACHE_LOCK:
+        _COMPOSED_CACHE[key] = (time.monotonic(), files)
+    return files
+
+
+def _reset_composed_cache() -> None:
+    """Clear the in-process cache. Test-only — production has no caller."""
+    with _COMPOSED_CACHE_LOCK:
+        _COMPOSED_CACHE.clear()
 
 
 def write_composed_to_dir(files: list[dict], workspace_dir: str) -> int:
