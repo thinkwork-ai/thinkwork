@@ -267,6 +267,13 @@ may be outdated or when the question requires real-time data.
 ## Calendar
 If calendar tools are available, use them to check availability and schedule meetings.
 Always confirm time zones when scheduling across regions.
+
+## Folder-Native Orchestration
+Workspace folders can coordinate async work through files and canonical events.
+Use \`wake_workspace\` for long-running specialists, work that may need human
+review, or fan-out that should resume this agent later. The runtime is
+stateless between wakes: read \`work/runs/{runId}/\`, continue from durable
+files, write results or lifecycle intents through tools, and exit.
 `;
 
 /**
@@ -405,6 +412,11 @@ and template defaults through the workspace overlay.
 sub-agent writes memory, paths are relative to the agent root, for example
 \`expenses/memory/lessons.md\`.
 
+Async work is folder-native too. Use \`wake_workspace(target, request_md, ...)\`
+when a specialist can run later, wait for human review, or resume this agent
+after completion. The platform turns eventful file writes into canonical events;
+agents should not write orchestration files directly.
+
 ## Routing
 
 | Task                                       | Go to                | Read                              | Skills                       |
@@ -419,7 +431,7 @@ Add one row per sub-agent. For example, an \`expenses/\` sub-agent would point
 - Reserved folder names — \`memory/\` and \`skills/\` — are never sub-agents at any depth.
 - Skill slugs reference platform skills or local skills under \`<folder>/skills/<slug>/SKILL.md\`.
 - Local skills resolve nearest-folder-first; the platform catalog is the fallback.
-- Recursion depth is capped at 5 levels of sub-agents (soft warning at depth 4).
+- Recursion depth is capped at 4 levels of sub-agents.
 `;
 
 /**
