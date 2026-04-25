@@ -54,6 +54,7 @@ import {
 } from "./src/lib/workspace-overlay.js";
 import { classifyFile, PINNED_FILES } from "@thinkwork/workspace-defaults";
 import { regenerateManifest } from "./src/lib/workspace-manifest.js";
+import { deriveAgentSkills } from "./src/lib/derive-agent-skills.js";
 import {
 	agents,
 	agentTemplates,
@@ -384,6 +385,10 @@ async function handleList(
 	});
 }
 
+function isAgentsMdPath(path: string): boolean {
+	return path === "AGENTS.md" || path.endsWith("/AGENTS.md");
+}
+
 async function handlePut(
 	deps: HandlerDeps,
 	path: string,
@@ -415,6 +420,42 @@ async function handlePut(
 		);
 		await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
 		invalidateComposerCache({ tenantId, agentId: target.agentId });
+
+		// U11: AGENTS.md is the canonical authoring surface for routing
+		// and skills. After a successful put we re-derive the agent_skills
+		// table from the composed tree. The S3 put has already landed by
+		// this point — if derive fails we return 500 so the caller knows
+		// the DB is stale; the next AGENTS.md save retries the derive.
+		if (isAgentsMdPath(path)) {
+			try {
+				const result = await deriveAgentSkills(
+					{ tenantId },
+					target.agentId,
+				);
+				const summary =
+					`agent=${target.agentId} agents_md_paths=${result.agentsMdPathsScanned.length} ` +
+					`changed=${result.changed} added=${result.addedSlugs.join(",") || "-"} ` +
+					`removed=${result.removedSlugs.join(",") || "-"}`;
+				console.log(`[derive-agent-skills] ${summary}`);
+				if (result.warnings.length > 0) {
+					return json(200, {
+						ok: true,
+						deriveWarnings: result.warnings,
+					});
+				}
+				return json(200, { ok: true });
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				console.error(`[derive-agent-skills] failed: ${message}`);
+				return json(500, {
+					ok: false,
+					error:
+						"AGENTS.md persisted but agent_skills derive failed: " +
+						message,
+				});
+			}
+		}
+
 		return json(200, { ok: true });
 	}
 
