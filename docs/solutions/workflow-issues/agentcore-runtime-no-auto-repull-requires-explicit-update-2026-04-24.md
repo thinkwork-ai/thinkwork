@@ -23,7 +23,7 @@ tags:
   - ci-gap
   - runtime-pinning
   - silent-failure
-last_updated: 2026-04-24
+last_updated: 2026-04-25
 ---
 
 # Bedrock AgentCore runtime doesn't auto-repull; ECR push alone is invisible
@@ -61,12 +61,16 @@ Implemented in PR #489. See `.github/workflows/deploy.yml` — the `Update Agent
 
 Guard the step to skip cleanly on greenfield stages where the SSM param hasn't been written yet (first terraform-apply creates the runtime + publishes the id; the deploy that ran *before* that runs a no-op `exit 0`).
 
+2026-04-25 follow-up: explicit `UpdateAgentRuntime` is necessary but not sufficient when a deploy that should have built the image is cancelled. PR #585 added a source-aware freshness check: compute the latest source commit touching `packages/agentcore-strands`, `packages/agentcore`, or `.github/workflows/deploy.yml`, compare it with the SHA embedded in the active runtime image tag, and force `build-container` when the active image does not include that source SHA. `scripts/post-deploy.sh --min-source-sha <sha> --strict` now fails source-image drift even when runtime and endpoint versions agree.
+
 ## Prevention
 
 1. **CI assertion**: after `UpdateAgentRuntime` returns, compare the response's `agentRuntimeVersion` to the previous version. A version bump confirms the runtime moved. No bump → surface a loud warning so an operator can investigate.
-2. **Post-deploy smoke**: a lightweight CloudWatch query (or a dedicated health endpoint) that greps the runtime's most recent log stream for a version marker injected at build time. If the deployed commit SHA doesn't match the marker, fail the deploy.
-3. **ECR lifecycle policy vs. runtime pinning**: the April 17 pin being pruned from ECR is a cold-restart footgun. Either bump the ECR retention or have the `UpdateAgentRuntime` step use immutable SHA-tagged URIs (already implemented in #489 — `${github.sha}-arm64` not `:latest`) so a pruned tag fails the deploy loud rather than waiting for a runtime recycle.
+2. **Source-image drift check**: compare the active runtime image tag's source SHA against the latest AgentCore container source commit. Runtime `READY`, endpoint live version, and a successful `UpdateAgentRuntime` are not enough if the image was built before the required source change.
+3. **Post-deploy smoke**: a lightweight CloudWatch query (or a dedicated health endpoint) that greps the runtime's most recent log stream for a version marker injected at build time. If the deployed commit SHA doesn't match the marker, fail the deploy.
+4. **ECR lifecycle policy vs. runtime pinning**: the April 17 pin being pruned from ECR is a cold-restart footgun. Either bump the ECR retention or have the `UpdateAgentRuntime` step use immutable SHA-tagged URIs (already implemented in #489 — `${github.sha}-arm64` not `:latest`) so a pruned tag fails the deploy loud rather than waiting for a runtime recycle.
 
 ## Related Learnings
 
 - `docs/solutions/build-errors/multi-arch-image-lambda-vs-agentcore-split-tags-2026-04-24.md` — the arch mismatch that kept `UpdateAgentRuntime` *failing silently* when we did start calling it, before the split-tag fix.
+- `docs/solutions/runtime-errors/stale-agentcore-runtime-image-entrypoint-not-found-2026-04-25.md` — the recurrence where `UpdateAgentRuntime` existed, but the build/update path skipped after a cancelled deploy and the drift check needed source-SHA verification.

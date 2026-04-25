@@ -23,7 +23,7 @@ tags:
   - arch-mismatch
   - arm64
   - meta-learning
-last_updated: 2026-04-24
+last_updated: 2026-04-25
 ---
 
 # Silent arch mismatch between CI builds and AgentCore runtime kept every Python-side sandbox PR dark on dev for a week
@@ -43,6 +43,8 @@ There were **two** deployment gaps compounding:
 Both gaps were invisible from CI. Both were invisible from "does terraform apply cleanly?". Both were invisible from "does the Lambda work?" — the Lambda ran on amd64 and was happy. The runtime was on a cached arm64 image from a week ago. The two paths looked identical from every vantage point the pipeline surfaces.
 
 The fact that **a full feature's worth of PRs could land without exercising any path that would fail loud** is the learning here, more than the specific bugs. Every PR in the chain was individually correct. The collective state was broken.
+
+2026-04-25 recurrence: PR #585 exposed a second-order version of the same failure shape. The runtime update step existed by then, but an earlier deploy with the entrypoint fix was cancelled; a later deploy skipped `build-container` because no container paths changed, leaving the active runtime on an image that predated the fix. The deploy summary still looked clean because it checked runtime/endpoint version agreement, not whether the active image contained the latest AgentCore container source SHA.
 
 ## Symptoms
 
@@ -72,6 +74,7 @@ Five PRs to unclog the path end-to-end:
 | #493 | Runtime role missing `bedrock-agentcore:StartCodeInterpreterSession` perms |
 | #495 | Replace SDK wrapper with raw boto3 client — stop guessing at version-dependent method names |
 | #496 | Stream consumer for MCP-shaped tool results (`result.content[]` + `result.structuredContent`) |
+| #585 | Add source-SHA runtime image drift detection; force container rebuild when the active AgentCore image is stale |
 
 Each of those has its own solutions doc in this directory.
 
@@ -83,13 +86,15 @@ Candidates:
 
 1. **Post-deploy smoke invocation.** After `Terraform Apply` + runtime update, run an actual chat-agent-invoke against a canary thread and assert a known response shape. Runs ~30 seconds. Fails loud if the runtime is stale, the code is broken, IAM is wrong, or the container doesn't boot.
 2. **Container-level commit-SHA marker.** Container boot logs its own commit SHA. Post-deploy CI compares the runtime log's most-recent marker against `github.sha`. A mismatch means the runtime didn't pick up the new code.
-3. **Regular image-age audit.** Weekly CI cron that calls `get-agent-runtime`, compares `lastUpdatedAt` against the most recent main merge that touched `packages/agentcore-strands/**`, and surfaces a warning if they diverge by more than a day. Catches the silent-pin scenario *before* a feature PR is written on top of it.
+3. **Source-SHA image audit.** Deploy CI compares the active runtime image tag's source SHA with the latest commit touching `packages/agentcore-strands/**`, `packages/agentcore/**`, or `.github/workflows/deploy.yml`. A stale image should force `build-container`, even when the current push did not touch those paths.
+4. **Regular image-age audit.** Weekly CI cron that calls `get-agent-runtime`, compares `lastUpdatedAt` against the most recent main merge that touched `packages/agentcore-strands/**`, and surfaces a warning if they diverge by more than a day. Catches the silent-pin scenario *before* a feature PR is written on top of it.
 
-#489 + #490 made the happy path possible. The meta-fix — making the happy path *verified* — is still future work.
+#489 + #490 made the happy path possible. #585 made one core invariant verified: the active runtime image must include the required AgentCore source SHA. A full product-path canary is still future work.
 
 ## Related Learnings
 
 - `docs/solutions/workflow-issues/agentcore-runtime-no-auto-repull-requires-explicit-update-2026-04-24.md`
+- `docs/solutions/runtime-errors/stale-agentcore-runtime-image-entrypoint-not-found-2026-04-25.md`
 - `docs/solutions/build-errors/multi-arch-image-lambda-vs-agentcore-split-tags-2026-04-24.md`
 - `docs/solutions/integration-issues/agentcore-runtime-role-missing-code-interpreter-perms-2026-04-24.md`
 - `docs/solutions/patterns/apply-invocation-env-field-passthrough-2026-04-24.md`
