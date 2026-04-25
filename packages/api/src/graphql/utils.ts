@@ -51,7 +51,6 @@ import {
   threadTurnEvents,
   // Threads
   threads,
-  threadComments,
   threadLabels,
   threadAttachments,
   threadLabelAssignments,
@@ -133,7 +132,6 @@ export {
   threadTurns,
   threadTurnEvents,
   threads,
-  threadComments,
   threadLabels,
   threadAttachments,
   threadLabelAssignments,
