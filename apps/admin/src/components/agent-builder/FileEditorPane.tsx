@@ -1,0 +1,164 @@
+import CodeMirror from "@uiw/react-codemirror";
+import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { languages } from "@codemirror/language-data";
+import { vscodeDark } from "@uiw/codemirror-theme-vscode";
+import { EditorView } from "@codemirror/view";
+import { File, Loader2, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { RoutingTableEditor } from "./RoutingTableEditor";
+import { SnippetLibrary } from "./SnippetLibrary";
+import type { SnippetDefinition } from "./snippets";
+import { parseRoutingTable } from "./routing-table";
+
+export interface FileEditorPaneProps {
+  openFile: string | null;
+  content: string;
+  value: string;
+  loading: boolean;
+  saving: boolean;
+  deleting: boolean;
+  confirmingDelete: boolean;
+  onChange: (value: string) => void;
+  onSave: () => void;
+  onDiscard: () => void;
+  onDelete: () => void;
+  onConfirmDelete: () => void;
+  onCancelDeleteConfirm: () => void;
+}
+
+export function FileEditorPane({
+  openFile,
+  content,
+  value,
+  loading,
+  saving,
+  deleting,
+  confirmingDelete,
+  onChange,
+  onSave,
+  onDiscard,
+  onDelete,
+  onConfirmDelete,
+  onCancelDeleteConfirm,
+}: FileEditorPaneProps) {
+  if (!openFile) {
+    return (
+      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+        Select a file
+      </div>
+    );
+  }
+
+  const fileName = openFile.split("/").pop() ?? openFile;
+  const isAgentsMd = openFile.endsWith("AGENTS.md");
+  const routingState = isAgentsMd ? parseRoutingTable(value) : null;
+
+  const insertSnippet = (snippet: SnippetDefinition) => {
+    onChange(`${value}${value.endsWith("\n") ? "" : "\n"}${snippet.content}`);
+  };
+
+  const applyStarter = (snippet: SnippetDefinition) => {
+    if (
+      value.trim().length > 0 &&
+      !confirm(`Replace the current editor buffer with "${snippet.name}"?`)
+    ) {
+      return;
+    }
+    onChange(snippet.content);
+  };
+
+  return (
+    <>
+      <div className="flex h-9 items-center justify-between border-b bg-muted/50 px-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <File className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="truncate text-xs font-medium">{fileName}</span>
+          {openFile.includes("/") && (
+            <span className="truncate text-[10px] text-muted-foreground">
+              {openFile}
+            </span>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {!loading && (
+            <>
+              <SnippetLibrary
+                onInsert={insertSnippet}
+                onApplyStarter={applyStarter}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-[11px] text-muted-foreground"
+                onClick={onDiscard}
+                disabled={saving || value === content}
+              >
+                Discard
+              </Button>
+              <Button
+                size="sm"
+                className="h-6 px-2 text-[11px]"
+                onClick={onSave}
+                disabled={saving || value === content}
+              >
+                {saving ? (
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                ) : null}
+                Save
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`h-6 p-0 text-muted-foreground ${
+                  confirmingDelete
+                    ? "w-16 px-2 text-[11px] text-destructive"
+                    : "w-6"
+                }`}
+                disabled={deleting}
+                onMouseLeave={onCancelDeleteConfirm}
+                onClick={confirmingDelete ? onDelete : onConfirmDelete}
+              >
+                {deleting ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : confirmingDelete ? (
+                  "Confirm"
+                ) : (
+                  <Trash2 className="h-3 w-3" />
+                )}
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+      {isAgentsMd && !loading && (
+        <RoutingTableEditor value={value} onChange={onChange} />
+      )}
+      <div className="min-h-0 flex-1 overflow-hidden bg-black [&>div]:h-full">
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+          </div>
+        ) : (
+          <CodeMirror
+            value={value}
+            onChange={onChange}
+            height="100%"
+            theme={vscodeDark}
+            extensions={[
+              markdown({ base: markdownLanguage, codeLanguages: languages }),
+              EditorView.lineWrapping,
+            ]}
+            style={{ fontSize: "12px", backgroundColor: "black" }}
+            className="[&_.cm-editor]:!bg-black [&_.cm-gutters]:!bg-black [&_.cm-activeLine]:!bg-transparent [&_.cm-activeLineGutter]:!bg-transparent"
+            basicSetup={{
+              lineNumbers: true,
+              foldGutter: true,
+              highlightActiveLine: false,
+              bracketMatching: true,
+            }}
+          />
+        )}
+      </div>
+    </>
+  );
+}

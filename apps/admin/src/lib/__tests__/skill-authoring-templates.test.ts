@@ -1,5 +1,4 @@
-import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, expect, it } from "vitest";
 import {
   buildLocalSkillPath,
   renderSkillExtraFiles,
@@ -9,16 +8,15 @@ import {
 
 describe("skill authoring templates", () => {
   it("slugifies skill names for workspace-safe paths", () => {
-    assert.equal(slugifySkillName("Approve Receipt!"), "approve-receipt");
-    assert.equal(slugifySkillName("../Approve   Receipt"), "approve-receipt");
+    expect(slugifySkillName("Approve Receipt!")).toBe("approve-receipt");
+    expect(slugifySkillName("../Approve   Receipt")).toBe("approve-receipt");
   });
 
   it("builds local skill paths under the reserved skills folder", () => {
-    assert.equal(
+    expect(
       buildLocalSkillPath("Approve Receipt!", "references/guide.md"),
-      "skills/approve-receipt/references/guide.md",
-    );
-    assert.equal(buildLocalSkillPath("../Approve Receipt!"), "skills/approve-receipt/SKILL.md");
+    ).toBe("skills/approve-receipt/references/guide.md");
+    expect(buildLocalSkillPath("../Approve Receipt!")).toBe("skills/approve-receipt/SKILL.md");
   });
 
   it("renders knowledge SKILL.md frontmatter with context execution", () => {
@@ -30,13 +28,13 @@ describe("skill authoring templates", () => {
       tags: "receipts, approval",
     });
 
-    assert.match(source, /^name: approve-receipt$/m);
-    assert.match(source, /^display_name: "Approve Receipt"$/m);
-    assert.match(source, /^execution: context$/m);
-    assert.match(source, /^mode: tool$/m);
-    assert.match(source, /^category: "finance"$/m);
-    assert.match(source, /^  - "receipts"$/m);
-    assert.match(source, /^  - "approval"$/m);
+    expect(source).toMatch(/^name: approve-receipt$/m);
+    expect(source).toMatch(/^display_name: "Approve Receipt"$/m);
+    expect(source).toMatch(/^execution: context$/m);
+    expect(source).toMatch(/^mode: tool$/m);
+    expect(source).toMatch(/^category: "finance"$/m);
+    expect(source).toMatch(/^  - "receipts"$/m);
+    expect(source).toMatch(/^  - "approval"$/m);
   });
 
   it("renders script SKILL.md and support files with matching script names", () => {
@@ -51,9 +49,9 @@ describe("skill authoring templates", () => {
     const source = renderSkillTemplate(options);
     const files = renderSkillExtraFiles(options);
 
-    assert.match(source, /^execution: script$/m);
-    assert.match(source, /^    path: scripts\/tool.py$/m);
-    assert.match(source, /^    default_enabled: true$/m);
-    assert.ok(files["scripts/tool.py"]?.includes("def approve_receipt_action"));
+    expect(source).toMatch(/^execution: script$/m);
+    expect(source).toMatch(/^    path: scripts\/tool.py$/m);
+    expect(source).toMatch(/^    default_enabled: true$/m);
+    expect(files["scripts/tool.py"]).toContain("def approve_receipt_action");
   });
 });

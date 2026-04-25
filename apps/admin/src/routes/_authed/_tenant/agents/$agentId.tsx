@@ -27,7 +27,7 @@ import { AgentHeaderBadges } from "@/components/agents/AgentHeaderBadges";
 import { AgentFormDialog } from "@/components/agents/AgentFormDialog";
 import { AgentRollbackButton } from "@/components/agents/AgentRollbackButton";
 import { Badge } from "@/components/ui/badge";
-import { Puzzle, CalendarDays, Brain, FolderOpen, Shield } from "lucide-react";
+import { CalendarDays, Brain, FolderOpen, Shield } from "lucide-react";
 import { listGuardrails, type Guardrail } from "@/lib/guardrails-api";
 import { apiFetch } from "@/lib/api-fetch";
 
@@ -95,7 +95,7 @@ function AgentDetailPage() {
       ? [
           { label: "Agents", href: "/agents" },
           { label: parentAgent.name, href: `/agents/${parentAgent.id}` },
-          { label: "Workspaces", href: `/agents/${parentAgent.id}/workspaces` },
+          { label: "Builder", href: `/agents/${parentAgent.id}/workspace` },
           { label: agent?.name ?? "..." },
         ]
       : [
@@ -184,8 +184,6 @@ function AgentDetailPage() {
     fetchTriggerCount();
   }, [fetchTriggerCount]);
 
-  const skillCount =
-    (agent?.skills as any[])?.filter((s: any) => s.enabled).length ?? 0;
   const kbCount = (kbResult.data as any)?.agent?.knowledgeBases?.length ?? 0;
   const isSubAgent = !!(agent as any)?.parentAgentId;
 
@@ -336,15 +334,6 @@ function AgentDetailPage() {
                 >
                   <FolderOpen className="h-3 w-3" />
                   Workspace
-                </Badge>
-              </Link>
-              <Link to="/agents/$agentId/skills" params={{ agentId }}>
-                <Badge
-                  variant="outline"
-                  className={`gap-1 cursor-pointer hover:bg-accent ${skillCount === 0 ? "text-muted-foreground" : ""}`}
-                >
-                  <Puzzle className="h-3 w-3" />
-                  {skillCount > 0 && <>{skillCount} </>}Skills
                 </Badge>
               </Link>
               <Link to="/agents/$agentId/memory" params={{ agentId }}>
