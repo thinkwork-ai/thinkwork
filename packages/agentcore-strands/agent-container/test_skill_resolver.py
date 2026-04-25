@@ -243,3 +243,260 @@ def test_composed_tree_entries_with_missing_content_are_skipped():
     ]
     result = resolve_skill("approve-receipt", "expenses", composed)
     assert result.composed_tree_path == "skills/approve-receipt/SKILL.md"
+
+
+# ---------------------------------------------------------------------------
+# Followup fixes (PR #574 review residuals)
+# ---------------------------------------------------------------------------
+
+
+# --- Fix 1: double-slash collapse in _normalize_folder_path ----------------
+
+
+def test_double_slash_in_folder_path_is_tolerated():
+    """`parent + '/' + child` operator typos must not hard-abort delegation.
+    Trailing-slash tolerance already set the expectation that internal
+    doubles are also tolerated."""
+    composed = [_entry("expenses/skills/approve-receipt/SKILL.md", LOCAL_SKILL_MD)]
+    result = resolve_skill("approve-receipt", "//expenses//", composed)
+    assert result.folder_segment == "expenses"
+
+
+def test_triple_slash_in_folder_path_is_tolerated():
+    composed = [
+        _entry("expenses/escalation/skills/approve-receipt/SKILL.md", LOCAL_SKILL_MD)
+    ]
+    result = resolve_skill(
+        "approve-receipt", "expenses///escalation", composed
+    )
+    assert result.folder_segment == "expenses/escalation"
+
+
+def test_only_slashes_normalises_to_root():
+    """A folder_path of '///' collapses to root without raising."""
+    composed = [_entry("skills/approve-receipt/SKILL.md", LOCAL_SKILL_MD)]
+    result = resolve_skill("approve-receipt", "///", composed)
+    assert result.folder_segment == ""
+
+
+def test_dot_segment_still_rejected_after_collapse():
+    """The collapse only touches `/+` runs; `.` and `..` still raise."""
+    for path in ("expenses/.", "./expenses", "expenses/./foo", "expenses/../foo"):
+        with pytest.raises(ValueError):
+            resolve_skill("approve-receipt", path, [])
+
+
+# --- Fix 2: isinstance guards in _build_path_index -------------------------
+
+
+def test_non_string_content_falls_through_to_platform(caplog):
+    """Bytes content (e.g. raw S3 read) used to raise TypeError that
+    escaped the SkillMdParseError catch and aborted delegation. Now it
+    skips with a warning and the platform copy wins."""
+    composed = [
+        {
+            "path": "expenses/skills/approve-receipt/SKILL.md",
+            "content": LOCAL_SKILL_MD.encode("utf-8"),
+        }
+    ]
+    catalog = {"approve-receipt": {"skill_md_content": PLATFORM_SKILL_MD}}
+    with caplog.at_level(logging.WARNING, logger="skill_resolver"):
+        result = resolve_skill(
+            "approve-receipt", "expenses", composed, platform_catalog_manifest=catalog
+        )
+    assert result.source == "platform"
+    assert any(
+        "non-string path/content" in rec.getMessage() for rec in caplog.records
+    )
+
+
+def test_non_string_path_in_composed_tree_is_skipped(caplog):
+    composed = [
+        {"path": 123, "content": LOCAL_SKILL_MD},
+        _entry("skills/approve-receipt/SKILL.md", ROOT_LOCAL_SKILL_MD),
+    ]
+    with caplog.at_level(logging.WARNING, logger="skill_resolver"):
+        result = resolve_skill("approve-receipt", "expenses", composed)
+    assert result.composed_tree_path == "skills/approve-receipt/SKILL.md"
+    assert any(
+        "non-string path/content" in rec.getMessage() for rec in caplog.records
+    )
+
+
+def test_non_mapping_entry_in_composed_tree_is_skipped(caplog):
+    """A bare string (or any non-Mapping) in the composed tree must not
+    crash the index builder."""
+    composed: list = ["unexpected", _entry("skills/approve-receipt/SKILL.md", ROOT_LOCAL_SKILL_MD)]
+    with caplog.at_level(logging.WARNING, logger="skill_resolver"):
+        result = resolve_skill("approve-receipt", "expenses", composed)
+    assert result.source == "local"
+    assert any(
+        "not a mapping" in rec.getMessage() for rec in caplog.records
+    )
+
+
+def test_dict_as_composed_tree_raises_type_error():
+    """Sequence[Mapping] in the type annotation can't catch this at runtime;
+    a Mapping passed where a Sequence is expected iterates keys (strings)
+    and crashes inside `_build_path_index`. We surface the misuse as a
+    TypeError with an actionable message instead."""
+    composed_tree_dict = {"expenses/skills/approve-receipt/SKILL.md": LOCAL_SKILL_MD}
+    with pytest.raises(TypeError) as exc:
+        resolve_skill("approve-receipt", "expenses", composed_tree_dict)  # type: ignore[arg-type]
+    assert "Sequence" in str(exc.value)
+
+
+# --- Fix 3: platform manifest precedence -----------------------------------
+
+
+def test_canonical_skill_md_content_wins_when_both_set():
+    """`skill_md_content` is canonical; `content` is a tolerated alias.
+    When both are set the canonical wins. Pin this so a future refactor
+    can't silently flip it."""
+    composed: list[dict] = []
+    catalog = {
+        "approve-receipt": {
+            "skill_md_content": PLATFORM_SKILL_MD,
+            "content": "stale alias body",
+        }
+    }
+    result = resolve_skill(
+        "approve-receipt", "expenses", composed, platform_catalog_manifest=catalog
+    )
+    assert result.skill_md_content == PLATFORM_SKILL_MD
+
+
+def test_empty_canonical_raises_rather_than_falling_through_to_alias():
+    """An empty `skill_md_content` is an explicit tombstone; we surface it
+    as ValueError instead of silently using `content` (which would mask
+    the tombstone). Pre-fix `or` short-circuit collapsed empty string to
+    falsy and let `content` win."""
+    composed: list[dict] = []
+    catalog = {
+        "approve-receipt": {
+            "skill_md_content": "",
+            "content": "alias body that should not win",
+        }
+    }
+    with pytest.raises(ValueError) as exc:
+        resolve_skill(
+            "approve-receipt", "expenses", composed, platform_catalog_manifest=catalog
+        )
+    assert "empty" in str(exc.value)
+
+
+def test_alias_content_wins_only_when_canonical_absent():
+    composed: list[dict] = []
+    catalog = {"approve-receipt": {"content": PLATFORM_SKILL_MD}}
+    result = resolve_skill(
+        "approve-receipt", "expenses", composed, platform_catalog_manifest=catalog
+    )
+    assert result.skill_md_content == PLATFORM_SKILL_MD
+
+
+def test_non_string_canonical_raises_value_error():
+    composed: list[dict] = []
+    catalog = {"approve-receipt": {"skill_md_content": 123}}
+    with pytest.raises(ValueError):
+        resolve_skill(
+            "approve-receipt", "expenses", composed, platform_catalog_manifest=catalog
+        )
+
+
+# --- Fix 4: tighten _is_usable_local cascade gate --------------------------
+
+
+_NO_NAME_SKILL_MD = """---
+description: Has description but no name
+execution: script
+---
+Body.
+"""
+
+_NO_DESCRIPTION_SKILL_MD = """---
+name: approve-receipt
+execution: script
+---
+Body.
+"""
+
+_EMPTY_NAME_SKILL_MD = """---
+name: ""
+description: Has description, empty name
+execution: script
+---
+"""
+
+_EMPTY_FRONTMATTER_SKILL_MD = """---
+---
+Body.
+"""
+
+
+def test_local_missing_name_falls_through_to_platform(caplog):
+    """A near-correct local SKILL.md with no `name` would silently shadow
+    the platform copy across every descendant agent under the original
+    `frontmatter_present and bool(data)` gate. Tightened to require non-
+    empty name + description fields."""
+    composed = [_entry("expenses/skills/approve-receipt/SKILL.md", _NO_NAME_SKILL_MD)]
+    catalog = {"approve-receipt": {"skill_md_content": PLATFORM_SKILL_MD}}
+    with caplog.at_level(logging.INFO, logger="skill_resolver"):
+        result = resolve_skill(
+            "approve-receipt", "expenses", composed, platform_catalog_manifest=catalog
+        )
+    assert result.source == "platform"
+    assert any(
+        "non-empty 'name'" in rec.getMessage() for rec in caplog.records
+    )
+
+
+def test_local_missing_description_falls_through_to_platform(caplog):
+    composed = [_entry("expenses/skills/approve-receipt/SKILL.md", _NO_DESCRIPTION_SKILL_MD)]
+    catalog = {"approve-receipt": {"skill_md_content": PLATFORM_SKILL_MD}}
+    with caplog.at_level(logging.INFO, logger="skill_resolver"):
+        result = resolve_skill(
+            "approve-receipt", "expenses", composed, platform_catalog_manifest=catalog
+        )
+    assert result.source == "platform"
+    assert any(
+        "non-empty 'description'" in rec.getMessage() for rec in caplog.records
+    )
+
+
+def test_local_empty_name_falls_through_to_platform():
+    composed = [_entry("expenses/skills/approve-receipt/SKILL.md", _EMPTY_NAME_SKILL_MD)]
+    catalog = {"approve-receipt": {"skill_md_content": PLATFORM_SKILL_MD}}
+    result = resolve_skill(
+        "approve-receipt", "expenses", composed, platform_catalog_manifest=catalog
+    )
+    assert result.source == "platform"
+
+
+def test_local_empty_frontmatter_falls_through(caplog):
+    """`---/---` (present but empty) — second clause of `_is_usable_local`
+    that was uncovered before."""
+    composed = [
+        _entry("expenses/skills/approve-receipt/SKILL.md", _EMPTY_FRONTMATTER_SKILL_MD)
+    ]
+    catalog = {"approve-receipt": {"skill_md_content": PLATFORM_SKILL_MD}}
+    with caplog.at_level(logging.INFO, logger="skill_resolver"):
+        result = resolve_skill(
+            "approve-receipt", "expenses", composed, platform_catalog_manifest=catalog
+        )
+    assert result.source == "platform"
+    assert any(
+        "frontmatter is present but empty" in rec.getMessage()
+        for rec in caplog.records
+    )
+
+
+def test_local_with_full_frontmatter_still_wins():
+    """Regression guard: tightening the cascade gate must not break the
+    happy path."""
+    composed = [_entry("expenses/skills/approve-receipt/SKILL.md", LOCAL_SKILL_MD)]
+    catalog = {"approve-receipt": {"skill_md_content": PLATFORM_SKILL_MD}}
+    result = resolve_skill(
+        "approve-receipt", "expenses", composed, platform_catalog_manifest=catalog
+    )
+    assert result.source == "local"
+    assert result.skill_md_content == LOCAL_SKILL_MD
