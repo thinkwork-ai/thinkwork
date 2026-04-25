@@ -5,7 +5,7 @@ description: How raw memories become a navigable wiki — step by step, in plain
 
 import { Aside } from '@astrojs/starlight/components';
 
-This doc is a walking tour of how raw memories become wiki pages. It's written to be read top to bottom; each step covers one thing the pipeline does, why it does it, and what can go wrong.
+This doc is a walking tour of how raw memories become wiki pages — the harness's distillation layer that turns scattered observations into structured, queryable pages. It's written to be read top to bottom; each step covers one thing the pipeline does, why it does it, and what can go wrong. The pipeline is the load-bearing implementation of compounding memory's product promise: reproducible page outputs from the same input set (Reliability) and a complete provenance trail from every page back to the source memories that wrote it (Traceability).
 
 The first half is plain-language narrative. The second half (["Under the hood"](#under-the-hood)) has the code paths, SQL, and prompt contracts for anyone who needs to modify or debug the pipeline itself.
 
