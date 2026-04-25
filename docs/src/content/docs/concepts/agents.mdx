@@ -5,7 +5,7 @@ description: Managed agents run by ThinkWork inside your AWS account, connected 
 
 import { Aside } from '@astrojs/starlight/components';
 
-An agent in ThinkWork is the harness's decision-making layer — a named entity that receives messages in a thread and produces responses. Agents read assembled context (the harness's [Perception phase](/architecture/#the-ppaf-agent-loop)), decide what to do (Planning), call tools (Action), and write back into the thread, where the turn's outcome becomes the Feedback the next turn perceives. Reliability and Security R.E.S.T. anchors land here: templates pin model + guardrail behavior so two agents on the same template produce reproducible work, and capability grants determine which tools a given agent can ever fire.
+An agent in ThinkWork is the harness's decision-making layer — a named entity that receives messages in a thread and produces responses. Agents read assembled context (the harness's [Perception phase](/architecture/#the-ppaf-agent-loop)), decide what to do (Planning), call tools (Action), and write back into the thread, where the turn's outcome becomes the Feedback the next turn perceives. Reliability and Security REST anchors land here: templates pin model + guardrail behavior so two agents on the same template produce reproducible work, and capability grants determine which tools a given agent can ever fire.
 
 ThinkWork supports two kinds of agents — **managed** and **connected** — and the difference is about *where the inference runtime lives*, not about what capabilities the agent has.
 

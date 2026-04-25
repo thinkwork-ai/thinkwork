@@ -1,6 +1,6 @@
 ---
 title: Architecture
-description: How the ThinkWork Agent Harness fits together — the PPAF agent loop, the four R.E.S.T. anchors, the components, and the AWS deployment topology.
+description: How the ThinkWork Agent Harness fits together — the PPAF agent loop, the four REST anchors, the components, and the AWS deployment topology.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -42,16 +42,16 @@ flowchart LR
 
 The four phases are why the docs structure the components the way it does: Threads + Memory + Connectors are the perception substrate; Agents are the planning + action layer; Control is the feedback layer (audit, cost, evaluation). Automations time the loop's entry from the outside.
 
-### The four R.E.S.T. anchors
+### The four REST anchors
 
-Beyond the loop, the harness has four operational properties it commits to delivering on every turn — the **R.E.S.T. anchors**. These are the four anchors a buyer or operator can grab onto and the four dimensions an evaluator can measure:
+Beyond the loop, the harness has four operational properties it commits to delivering on every turn — the **REST anchors**. These are the four anchors a buyer or operator can grab onto and the four dimensions an evaluator can measure:
 
 - **Reliability.** Fault recovery from checkpoints, idempotent writes, behavior consistent under the same inputs. Implemented in: thread durability + RLS, AgentCore retry semantics, Step Functions for automations.
 - **Efficiency.** Token budgets and per-agent spend caps, low-latency interactive paths, throughput that scales with usage. Implemented in: Control's budget enforcement, AppSync for streaming, the cost ledger.
 - **Security.** Per-agent capability grants, sandboxed execution, I/O filtering for prompt injection and PII. Implemented in: Templates, AgentCore code sandbox, Bedrock Guardrails (`content_filters`), Strands `safety.py`.
 - **Traceability.** End-to-end traces per turn, explainable decisions, auditable state. Implemented in: the turn record, the append-only audit log on S3, evaluator scores per turn.
 
-The five governance controls in [Control](/concepts/control/) map 1:N to these four anchors — for example, "Runs in your AWS" implements Security and Traceability; "Cost control and analysis" implements Efficiency. The R.E.S.T. anchors are the *language*; the controls are the *implementation*.
+The five governance controls in [Control](/concepts/control/) map 1:N to these four anchors — for example, "Runs in your AWS" implements Security and Traceability; "Cost control and analysis" implements Efficiency. The REST anchors are the *language*; the controls are the *implementation*.
 
 ### The conceptual model maps onto the harness
 
