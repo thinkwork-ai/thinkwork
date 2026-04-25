@@ -73,42 +73,25 @@ export const threads = pgTable(
 			table.tenant_id,
 			table.number,
 		),
-		index("idx_threads_tenant_status").on(table.tenant_id, table.status),
+		// idx_threads_tenant_status + idx_threads_parent_id were retired by U5
+		// (drizzle/0031_thread_cleanup_drops.sql) — admin U7 dropped the only
+		// list-view filter that used the status index, and parent/child thread
+		// queries are gone too. The columns themselves remain (status is still
+		// used by the Strands `update_thread_status` skill); only the indices
+		// went away.
 		index("idx_threads_assignee").on(
 			table.assignee_type,
 			table.assignee_id,
 		),
-		index("idx_threads_parent_id").on(table.parent_id),
 		index("idx_threads_checkout_run_id").on(table.checkout_run_id),
 		index("idx_threads_tenant_channel").on(table.tenant_id, table.channel),
 	],
 );
 
-// ---------------------------------------------------------------------------
-// 6.2 — thread_comments
-// ---------------------------------------------------------------------------
-
-export const threadComments = pgTable("thread_comments", {
-	id: uuid("id")
-		.primaryKey()
-		.default(sql`gen_random_uuid()`),
-	thread_id: uuid("thread_id")
-		.references(() => threads.id)
-		.notNull(),
-	tenant_id: uuid("tenant_id")
-		.references(() => tenants.id)
-		.notNull(),
-	author_type: text("author_type"),
-	author_id: uuid("author_id"),
-	content: text("content").notNull(),
-	metadata: jsonb("metadata"),
-	created_at: timestamp("created_at", { withTimezone: true })
-		.notNull()
-		.default(sql`now()`),
-	updated_at: timestamp("updated_at", { withTimezone: true })
-		.notNull()
-		.default(sql`now()`),
-});
+// thread_comments was retired by U2 (escalateThread / delegateThread refactored
+// onto thread_turns kind=system_event) and dropped by U5
+// (drizzle/0031_thread_cleanup_drops.sql). No live writes remain; the
+// timeline renders system-event turns directly.
 
 // ---------------------------------------------------------------------------
 // 6.3 — thread_labels
@@ -217,27 +200,12 @@ export const threadsRelations = relations(threads, ({ one, many }) => ({
 	}),
 	children: many(threads, { relationName: "parentChild" }),
 	messages: many(messages),
-	comments: many(threadComments),
 	attachments: many(threadAttachments),
 	labelAssignments: many(threadLabelAssignments),
 	// PRD-09: Dependency relations
 	dependencies: many(threadDependencies, { relationName: "dependencyBlockedBy" }),
 	blocks: many(threadDependencies, { relationName: "dependencyBlocks" }),
 }));
-
-export const threadCommentsRelations = relations(
-	threadComments,
-	({ one }) => ({
-		thread: one(threads, {
-			fields: [threadComments.thread_id],
-			references: [threads.id],
-		}),
-		tenant: one(tenants, {
-			fields: [threadComments.tenant_id],
-			references: [tenants.id],
-		}),
-	}),
-);
 
 export const threadLabelsRelations = relations(threadLabels, ({ one, many }) => ({
 	tenant: one(tenants, {
