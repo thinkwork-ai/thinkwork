@@ -509,6 +509,21 @@ jobs:
           DB_URL="postgresql://thinkwork_admin:${DB_PASS}@${{ steps.outputs.outputs.db_endpoint }}:5432/thinkwork?sslmode=no-verify"
           bash scripts/bootstrap-workspace.sh ${{ env.STAGE }} ${{ steps.outputs.outputs.bucket }} "$DB_URL"
 
+      # Plan §008 U4 — version-aware reseed of every existing tenant's
+      # _catalog/defaults/workspace/ prefix. The bootstrap script's per-tenant
+      # block above only seeds tenants whose prefix is sparse (<11 files); it
+      # has no concept of DEFAULTS_VERSION, so a content-only update (e.g.
+      # U3's bump to v4 for the new AGENTS.md / CONTEXT.md) would never reach
+      # tenants that already have a populated prefix. The handler below diffs
+      # each tenant's stored `_defaults_version` marker against the constant
+      # and rewrites only when stale — idempotent on subsequent deploys.
+      - name: Reseed workspace-defaults to existing tenants (version-aware)
+        run: |
+          DB_PASS=$(aws secretsmanager get-secret-value --secret-id "${{ steps.outputs.outputs.db_secret_arn }}" --query SecretString --output text | jq -r .password)
+          export DATABASE_URL="postgresql://thinkwork_admin:${DB_PASS}@${{ steps.outputs.outputs.db_endpoint }}:5432/thinkwork?sslmode=no-verify"
+          export WORKSPACE_BUCKET="${{ steps.outputs.outputs.bucket }}"
+          npx tsx packages/api/src/handlers/seed-workspace-defaults.ts
+
   # ── Deploy summary ──────────────────────────────────────────────
   summary:
     name: Deploy Summary
