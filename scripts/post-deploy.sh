@@ -21,6 +21,7 @@
 #   bash scripts/post-deploy.sh --stage <name>          # warn-only (default)
 #   bash scripts/post-deploy.sh --stage dev --strict    # exit 1 on drift
 #   bash scripts/post-deploy.sh --stage dev --region us-east-1 --json
+#   bash scripts/post-deploy.sh --stage dev --min-source-sha <commit>
 
 set -euo pipefail
 
@@ -28,6 +29,7 @@ STAGE=""
 STRICT=0
 JSON=0
 REGION="${AWS_REGION:-us-east-1}"
+MIN_SOURCE_SHA=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -35,6 +37,7 @@ while [[ $# -gt 0 ]]; do
     --strict)   STRICT=1; shift ;;
     --json)     JSON=1; shift ;;
     --region)   REGION="${2:?}"; shift 2 ;;
+    --min-source-sha) MIN_SOURCE_SHA="${2:?}"; shift 2 ;;
     --help|-h)
       sed -n '3,30p' "$0"
       exit 0
@@ -71,6 +74,24 @@ log() {
   fi
 }
 
+image_sha_from_uri() {
+  local image_uri="$1"
+  local tag="${image_uri##*:}"
+  if [[ "$tag" =~ ([0-9a-f]{40})(-arm64)?$ ]]; then
+    echo "${BASH_REMATCH[1]}"
+  fi
+}
+
+image_contains_source_sha() {
+  local image_sha="$1"
+  local source_sha="$2"
+  [[ -z "$source_sha" ]] && return 0
+  [[ -z "$image_sha" ]] && return 1
+  git cat-file -e "${image_sha}^{commit}" 2>/dev/null || return 1
+  git cat-file -e "${source_sha}^{commit}" 2>/dev/null || return 1
+  git merge-base --is-ancestor "$source_sha" "$image_sha"
+}
+
 log "[post-deploy] stage=$STAGE region=$REGION matching runtimes: ${NAME_PREFIX}*"
 
 runtimes_json=$(aws bedrock-agentcore-control list-agent-runtimes \
@@ -84,6 +105,14 @@ runtimes_json=$(aws bedrock-agentcore-control list-agent-runtimes \
 matched=$(echo "$runtimes_json" \
   | jq --arg p "$NAME_PREFIX" \
        '[.agentRuntimes[] | select(.agentRuntimeName | startswith($p))]')
+
+ACTIVE_RUNTIME_ID=""
+if [[ -n "$MIN_SOURCE_SHA" ]]; then
+  ACTIVE_RUNTIME_ID=$(aws ssm get-parameter \
+    --name "/thinkwork/${STAGE}/agentcore/runtime-id-strands" \
+    --region "$REGION" \
+    --query Parameter.Value --output text 2>/dev/null || true)
+fi
 
 count=$(echo "$matched" | jq 'length')
 if [[ "$count" -eq 0 ]]; then
@@ -106,6 +135,8 @@ while read -r rt_id rt_name rt_status; do
   }
 
   rt_version=$(echo "$rt_detail" | jq -r '.agentRuntimeVersion // "null"')
+  rt_image=$(echo "$rt_detail" | jq -r '.agentRuntimeArtifact.containerConfiguration.containerUri // ""')
+  rt_image_sha=$(image_sha_from_uri "$rt_image")
 
   # DEFAULT endpoint is the one Terraform manages for us
   eps=$(aws bedrock-agentcore-control list-agent-runtime-endpoints \
@@ -150,9 +181,13 @@ while read -r rt_id rt_name rt_status; do
     is_clean=0
     reasons+=("endpoint liveVersion=$ep_live != runtime version=$rt_version")
   fi
+  if [[ -n "$MIN_SOURCE_SHA" && ( -z "$ACTIVE_RUNTIME_ID" || "$rt_id" == "$ACTIVE_RUNTIME_ID" ) ]] && ! image_contains_source_sha "$rt_image_sha" "$MIN_SOURCE_SHA"; then
+    is_clean=0
+    reasons+=("runtime image sha=${rt_image_sha:-unknown} does not include required source sha=$MIN_SOURCE_SHA")
+  fi
 
   if [[ "$is_clean" -eq 1 ]]; then
-    log "  ok   $rt_name (v$rt_version, endpoint DEFAULT live=$ep_live)"
+    log "  ok   $rt_name (v$rt_version, endpoint DEFAULT live=$ep_live, image=${rt_image_sha:-unknown})"
   else
     drift=$((drift + 1))
     reason_str=$(IFS='; '; echo "${reasons[*]}")
@@ -163,8 +198,10 @@ while read -r rt_id rt_name rt_status; do
     --arg id "$rt_id" --arg name "$rt_name" --arg status "$rt_status" \
     --arg version "$rt_version" --arg ep_status "$ep_status" \
     --arg ep_live "$ep_live" --arg ep_target "$ep_target" \
+    --arg image "$rt_image" --arg image_sha "$rt_image_sha" \
+    --arg min_source_sha "$MIN_SOURCE_SHA" \
     --argjson clean "$is_clean" \
-    '{agentRuntimeId:$id, agentRuntimeName:$name, runtimeStatus:$status, version:$version, endpointStatus:$ep_status, endpointLiveVersion:$ep_live, endpointTargetVersion:$ep_target, clean:($clean == 1)}')")
+    '{agentRuntimeId:$id, agentRuntimeName:$name, runtimeStatus:$status, version:$version, endpointStatus:$ep_status, endpointLiveVersion:$ep_live, endpointTargetVersion:$ep_target, image:$image, imageSourceSha:$image_sha, minSourceSha:$min_source_sha, clean:($clean == 1)}')")
 done < <(echo "$matched" | jq -r '.[] | "\(.agentRuntimeId)\t\(.agentRuntimeName)\t\(.status)"')
 
 if [[ "$JSON" -eq 1 ]]; then
@@ -175,8 +212,8 @@ else
     log "[post-deploy] ok — $count runtime(s) READY, endpoints caught up"
   else
     log "[post-deploy] $drift runtime(s) show drift. The 15-minute AgentCore"
-    log "              reconciler will catch these automatically; if the drift"
-    log "              persists past that window, investigate the endpoint."
+    log "              reconciler may clear version/endpoint drift. Source-image"
+    log "              drift requires a fresh container build and UpdateAgentRuntime."
   fi
 fi
 

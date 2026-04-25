@@ -26,6 +26,8 @@ jobs:
     outputs:
       lambdas: ${{ steps.filter.outputs.lambdas }}
       container: ${{ steps.filter.outputs.container }}
+      container_source_sha: ${{ steps.container-source.outputs.sha }}
+      runtime_container_stale: ${{ steps.runtime-image.outputs.stale }}
       terraform: ${{ steps.filter.outputs.terraform }}
       skills: ${{ steps.filter.outputs.skills }}
       admin: ${{ steps.filter.outputs.admin }}
@@ -33,6 +35,8 @@ jobs:
       www: ${{ steps.filter.outputs.www }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -58,6 +62,55 @@ jobs:
               - 'docs/**'
             www:
               - 'apps/www/**'
+
+      - name: Latest AgentCore container source commit
+        id: container-source
+        run: |
+          set -euo pipefail
+          SHA=$(git log -1 --format=%H -- \
+            packages/agentcore-strands \
+            packages/agentcore \
+            .github/workflows/deploy.yml)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Detect stale deployed AgentCore image
+        id: runtime-image
+        run: |
+          set -euo pipefail
+          RUNTIME_ID=$(aws ssm get-parameter \
+            --name /thinkwork/${{ env.STAGE }}/agentcore/runtime-id-strands \
+            --region ${{ env.AWS_REGION }} \
+            --query Parameter.Value --output text 2>/dev/null || echo "")
+          if [ -z "$RUNTIME_ID" ] || [ "$RUNTIME_ID" = "None" ]; then
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+            echo "No Strands runtime ID in SSM yet."
+            exit 0
+          fi
+          IMAGE=$(aws bedrock-agentcore-control get-agent-runtime \
+            --region ${{ env.AWS_REGION }} \
+            --agent-runtime-id "$RUNTIME_ID" \
+            --query 'agentRuntimeArtifact.containerConfiguration.containerUri' \
+            --output text 2>/dev/null || echo "")
+          TAG="${IMAGE##*:}"
+          if [[ "$TAG" =~ ([0-9a-f]{40})(-arm64)?$ ]]; then
+            IMAGE_SHA="${BASH_REMATCH[1]}"
+          else
+            IMAGE_SHA=""
+          fi
+          SOURCE_SHA="${{ steps.container-source.outputs.sha }}"
+          if [ -n "$IMAGE_SHA" ] && git cat-file -e "${IMAGE_SHA}^{commit}" 2>/dev/null && git merge-base --is-ancestor "$SOURCE_SHA" "$IMAGE_SHA"; then
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+            echo "AgentCore runtime image $IMAGE_SHA includes latest container source $SOURCE_SHA."
+          else
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            echo "AgentCore runtime image ${IMAGE_SHA:-unknown} is stale; latest container source is $SOURCE_SHA."
+          fi
 
   # ── Build Lambda zips ────────────────────────────────────────────
   # Always build — TF needs the zips to keep API Gateway routes intact.
@@ -87,6 +140,7 @@ jobs:
     needs: detect-changes
     if: >-
       needs.detect-changes.outputs.container == 'true' ||
+      needs.detect-changes.outputs.runtime_container_stale == 'true' ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     # Multi-arch QEMU builds are 3-5x slower than single-arch native.
@@ -529,6 +583,8 @@ jobs:
     name: Deploy Summary
     needs:
       [
+        detect-changes,
+        build-container,
         terraform-apply,
         migration-drift-check,
         build-admin,
@@ -556,6 +612,14 @@ jobs:
         run: |
           terraform init
           terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
+
+      - name: Verify AgentCore runtime image
+        run: |
+          bash scripts/post-deploy.sh \
+            --stage ${{ env.STAGE }} \
+            --region ${{ env.AWS_REGION }} \
+            --min-source-sha ${{ needs.detect-changes.outputs.container_source_sha }} \
+            --strict
 
       - name: Show deployment URLs
         working-directory: terraform/examples/greenfield
