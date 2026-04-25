@@ -1,13 +1,13 @@
 /**
  * Parity tests for workspace-defaults.
  *
- * The 11 canonical files are exported as inline TypeScript string constants
+ * The 13 canonical files are exported as inline TypeScript string constants
  * from `src/index.ts` (so the Lambda bundle is self-contained). The
  * authoritative content lives as source-controlled `.md` files under this
  * package's own `files/` subdirectory. Plan §008 U2 consolidated the
  * previously-split `packages/system-workspace/` and `packages/memory-templates/`
- * content here; both retired packages are stubbed READMEs in this PR and
- * deleted entirely in U28.
+ * content here (both retired packages are stubbed READMEs awaiting U28
+ * deletion); U3 added `AGENTS.md` + `CONTEXT.md` to the canonical set.
  *
  * This test asserts byte-for-byte equality between the inline constants and
  * the `.md` authoring sources, so a change in one without the other is
@@ -30,6 +30,8 @@ const AUTHORITATIVE_SOURCES: Record<string, string> = {
 	"SOUL.md": join(LOCAL_FILES_DIR, "SOUL.md"),
 	"IDENTITY.md": join(LOCAL_FILES_DIR, "IDENTITY.md"),
 	"USER.md": join(LOCAL_FILES_DIR, "USER.md"),
+	"AGENTS.md": join(LOCAL_FILES_DIR, "AGENTS.md"),
+	"CONTEXT.md": join(LOCAL_FILES_DIR, "CONTEXT.md"),
 	"GUARDRAILS.md": join(LOCAL_FILES_DIR, "GUARDRAILS.md"),
 	"MEMORY_GUIDE.md": join(LOCAL_FILES_DIR, "MEMORY_GUIDE.md"),
 	"CAPABILITIES.md": join(LOCAL_FILES_DIR, "CAPABILITIES.md"),
@@ -41,13 +43,13 @@ const AUTHORITATIVE_SOURCES: Record<string, string> = {
 };
 
 describe("workspace-defaults parity", () => {
-	it("exports exactly the 11 canonical file names", () => {
+	it("exports exactly the 13 canonical file names", () => {
 		expect([...CANONICAL_FILE_NAMES].sort()).toEqual(
 			Object.keys(AUTHORITATIVE_SOURCES).sort(),
 		);
 	});
 
-	it("loadDefaults() returns all 11 canonical files", () => {
+	it("loadDefaults() returns all 13 canonical files", () => {
 		const loaded = loadDefaults();
 		expect(Object.keys(loaded).sort()).toEqual(
 			[...CANONICAL_FILE_NAMES].sort(),

@@ -1,7 +1,7 @@
 /**
  * Unit 5: agent-snapshot readWorkspaceFiles now flows through the composer.
  *
- * Verifies the composed 11-file view is captured — not just the sparse set
+ * Verifies the composed 13-file view is captured — not just the sparse set
  * of files sitting at the agent's own S3 prefix. This is what makes
  * rollback safe for a fresh-off-template agent that has no overrides yet.
  */
@@ -125,18 +125,21 @@ beforeEach(() => {
 });
 
 describe("readWorkspaceFiles (composer-backed)", () => {
-	it("captures the composed 11-file view even when the agent's own prefix is empty", async () => {
+	it("captures the composed 13-file view even when the agent's own prefix is empty", async () => {
 		// composer.loadAgentContext + composeList
 		pushDbRows([agentRow()]);
 		pushDbRows([tenantRow()]);
 		pushDbRows([templateRow()]);
 
 		// Agent's own prefix has nothing. Template has an IDENTITY.md
-		// override. Defaults has the rest of the canonical set.
+		// override. Defaults has the rest of the canonical set (13 files
+		// after plan §008 U3 added AGENTS.md + CONTEXT.md).
 		const CANONICAL = [
 			"SOUL.md",
 			"IDENTITY.md",
 			"USER.md",
+			"AGENTS.md",
+			"CONTEXT.md",
 			"GUARDRAILS.md",
 			"MEMORY_GUIDE.md",
 			"CAPABILITIES.md",
@@ -205,7 +208,7 @@ describe("readWorkspaceFiles (composer-backed)", () => {
 
 		const snapshot = await readWorkspaceFiles(TENANT_ID, AGENT_ID);
 
-		// All 11 canonical paths appear in the snapshot.
+		// All 13 canonical paths appear in the snapshot.
 		for (const path of CANONICAL) {
 			expect(snapshot).toHaveProperty(path);
 		}
