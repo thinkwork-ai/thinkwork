@@ -119,6 +119,56 @@ class BootAssertTests(unittest.TestCase):
             f"container-sources/: {sorted(extra_in_list)}",
         )
 
+    def test_expected_shared_covers_every_module_in_agentcore_container(self):
+        """Integration guard mirroring the container-sources check, but for
+        the shared agentcore modules that the Dockerfile now wildcard-COPYs
+        from packages/agentcore/agent-container/ (plan §008 U1). Adding a new
+        runtime module there without registering it in EXPECTED_SHARED would
+        ship the file but skip the boot-time presence check — exactly the
+        drift class this assertion is meant to catch.
+
+        `hindsight_client.py` is renamed to `hs_urllib_client.py` at COPY
+        time; the on-disk set is translated through that rename so the
+        comparison stays apples-to-apples with the runtime name.
+        """
+        # Walk from container-sources/ up to packages/agentcore/agent-container/
+        # (sibling-of-sibling). Anchor on _boot_assert.__file__ so the path stays
+        # honest if the test layout moves later.
+        container_sources = os.path.dirname(os.path.abspath(ba.__file__))
+        agent_container = os.path.dirname(container_sources)
+        agentcore_strands = os.path.dirname(agent_container)
+        packages = os.path.dirname(agentcore_strands)
+        shared_dir = os.path.join(packages, "agentcore", "agent-container")
+
+        on_disk = {
+            fn[:-3]
+            for fn in os.listdir(shared_dir)
+            if fn.endswith(".py") and not fn.startswith("_") and not fn.startswith("test_")
+        }
+        # Translate the COPY-time rename so the comparison matches the runtime
+        # name the boot-assert checks for.
+        if "hindsight_client" in on_disk:
+            on_disk.remove("hindsight_client")
+            on_disk.add("hs_urllib_client")
+
+        declared = set(ba.EXPECTED_SHARED)
+        missing_from_list = on_disk - declared
+        extra_in_list = declared - on_disk
+        self.assertEqual(
+            missing_from_list,
+            set(),
+            f"Modules present in packages/agentcore/agent-container/ but "
+            f"missing from EXPECTED_SHARED: {sorted(missing_from_list)}. "
+            f"Add them to _boot_assert.EXPECTED_SHARED so the boot-time "
+            f"check covers them.",
+        )
+        self.assertEqual(
+            extra_in_list,
+            set(),
+            f"Modules listed in EXPECTED_SHARED but absent from "
+            f"packages/agentcore/agent-container/: {sorted(extra_in_list)}",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
