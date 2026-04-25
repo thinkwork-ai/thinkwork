@@ -55,6 +55,12 @@ logger = logging.getLogger(__name__)
 # `inline-helpers-vs-shared-package-for-cross-surface-code` learning.
 RESERVED_FOLDER_NAMES: frozenset[str] = frozenset({"memory", "skills"})
 
+# Maximum sub-agent recursion / folder depth — Plan §008 Key Decision (line 155):
+# "Recursion depth cap = 5 with soft warn at 4". Single source of truth shared by
+# `delegate_to_workspace_tool.py` (delegation depth) and `write_memory_tool.py`
+# (memory-path folder-prefix depth) so a future cap change is single-file.
+MAX_FOLDER_DEPTH: int = 5
+
 
 class SkillNotResolvable(LookupError):
     """Raised when a slug resolves neither locally nor in the platform catalog.
