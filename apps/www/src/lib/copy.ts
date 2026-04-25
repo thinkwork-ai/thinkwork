@@ -414,19 +414,26 @@ export const finalCta = {
 
 // Cloud-variant FinalCTA. Same shape as `finalCta` so the component can swap
 // between them via a prop. The homepage keeps the self-managed framing
-// (customer's AWS); /cloud uses this one to match the fully-hosted
-// positioning.
+// (customer's AWS); /cloud uses this one to match the For Business framing.
+//
+// Important: this used to read "Skip the infrastructure / Use ThinkWork
+// without running the platform" — language that quietly reintroduced SaaS
+// ambiguity (it sounded like the customer wouldn't have the infrastructure,
+// when in fact ThinkWork for Business still deploys into the customer's
+// AWS). Per 2026-04-25 review feedback, the closing block now makes the
+// "we operate IT in YOUR AWS" pattern explicit. Keep that distinction
+// load-bearing.
 export const finalCtaCloud: typeof finalCta = {
-  eyebrow: "Fully managed",
+  eyebrow: "Operated in your AWS",
   headlinePart1: "Adopt AI.",
-  headlineAccent: "Skip the infrastructure.",
-  lede: "Use ThinkWork without running the platform. We operate the runtime end-to-end — governance, evaluations, and audit log included — so your team focuses on the work, not the ops.",
+  headlineAccent: "We operate the harness in your AWS.",
+  lede: "ThinkWork for Business lets your team use the platform without running it. We operate the runtime end-to-end inside your AWS boundary — governance, evaluations, memory, and audit included. Managed does not mean vendor-hosted.",
   points: [
-    { title: "Runtime", desc: "Operated by us." },
+    { title: "Runtime", desc: "Operated by us, in your AWS." },
     { title: "Governance", desc: "Built in." },
-    { title: "Audit trail", desc: "Always on." },
-    { title: "Memory", desc: "Durable." },
-    { title: "Setup", desc: "None required." },
+    { title: "Evaluations", desc: "Run for you on every turn." },
+    { title: "Memory", desc: "Durable, in your account." },
+    { title: "Audit log", desc: "Always on, in your S3." },
   ],
   primaryCta: { label: "Read the docs", href: external.docs },
   secondaryCta: { label: "View on GitHub", href: external.github },
