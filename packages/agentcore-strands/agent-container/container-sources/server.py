@@ -330,6 +330,17 @@ def _ensure_workspace_ready(workspace_tenant_id: str, assistant_id: str,
     )
 
 
+# Structured-log event_type vocabulary for the delegate_to_workspace
+# registration helper. Operator dashboards filter on these values; rename
+# any of them and the alert wiring breaks. Tests assert on the constants
+# (not the literals) so a future rename is forced through this single
+# source. Per `project_agentcore_deploy_race_env` the WARN-level skipped
+# event is what surfaces partial-fleet env drift.
+EVENT_TOOL_REGISTERED = "tool_registered"
+EVENT_TOOL_REGISTRATION_SKIPPED = "tool_registration_skipped"
+EVENT_TOOL_REGISTRATION_FAILED = "tool_registration_failed"
+
+
 def _register_delegate_to_workspace_tool(
     *,
     tools: list,
@@ -363,7 +374,7 @@ def _register_delegate_to_workspace_tool(
             "delegate_to_workspace_tool import failed (%s); skipping registration",
             exc,
             extra={
-                "event_type": "tool_registration_failed",
+                "event_type": EVENT_TOOL_REGISTRATION_FAILED,
                 "tool": "delegate_to_workspace",
             },
         )
@@ -397,7 +408,7 @@ def _register_delegate_to_workspace_tool(
             "delegate_to_workspace tool not registered — missing env: %s",
             ",".join(missing),
             extra={
-                "event_type": "tool_registration_skipped",
+                "event_type": EVENT_TOOL_REGISTRATION_SKIPPED,
                 "tool": "delegate_to_workspace",
                 "missing": missing,
             },
@@ -453,7 +464,7 @@ def _register_delegate_to_workspace_tool(
         effective_model,
         len(_dw_platform_manifest),
         extra={
-            "event_type": "tool_registered",
+            "event_type": EVENT_TOOL_REGISTERED,
             "tool": "delegate_to_workspace",
             "platform_manifest_entries": len(_dw_platform_manifest),
         },
@@ -1453,15 +1464,13 @@ def _call_strands_agent(system_prompt: str, messages: list,
     tools.append(_tool_dec(_delegate_fn))
     logger.info("Delegate tool registered (model=%s)", effective_model)
 
-    # Plan §008 U9: path-addressed delegation. Spawns a sub-agent rooted at
-    # a workspace folder (e.g. "expenses", "support/escalation") with the
-    # parent's composed overlay + the folder's local skills. Coexists with
-    # the generic `delegate` above — different purposes.
-    #
-    # The Bedrock spawn body itself is INERT in this PR (returns
-    # ok=False, reason="spawn not yet wired"). The follow-up plan-008
-    # unit replaces only the spawn body — registration and validation
-    # surfaces stay stable.
+    # Plan §008 U9 (live since plan 2026-04-25-004 U5): path-addressed
+    # delegation. Spawns a Bedrock sub-agent rooted at a workspace folder
+    # (e.g. "expenses", "support/escalation") with the parent's composed
+    # overlay + the folder's local skills. Coexists with the generic
+    # `delegate` above — different purposes. The factory's `spawn_fn=None`
+    # default resolves to the live Bedrock spawn; tests inject explicit
+    # spawn_fn= to keep the seam stub-able.
     _register_delegate_to_workspace_tool(
         tools=tools,
         tool_decorator=_tool_dec,

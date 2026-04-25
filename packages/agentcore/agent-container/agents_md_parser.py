@@ -23,8 +23,10 @@ Public surface (must stay in sync, both sides):
         AgentsMdContext {
             routing: list[RoutingRow],
             raw_markdown: str,
-            warnings: list[str],
-            skipped_rows: list[dict[str, str]],
+            warnings: list[str],          # human-readable skip lines
+            skipped_rows: list[dict[str, object]],
+            # Each record: {"row_index": int, "go_to": str, "reason": str}.
+            # TS mirror's SkippedRow interface is the precise shape.
         }
         RoutingRow {
             task:    str         # human-readable label, decoration-stripped
@@ -94,7 +96,11 @@ class AgentsMdContext:
     routing: list[RoutingRow] = field(default_factory=list)
     raw_markdown: str = ""
     warnings: list[str] = field(default_factory=list)
-    skipped_rows: list[dict[str, str]] = field(default_factory=list)
+    # Each record is `{"row_index": int, "go_to": str, "reason": str}`.
+    # Typed as `dict[str, object]` because `row_index` is an int while the
+    # other fields are strings; the TS mirror's `SkippedRow` interface is
+    # the precise shape (rowIndex: number, goTo: string, reason: ...).
+    skipped_rows: list[dict[str, object]] = field(default_factory=list)
 
 
 def parse_agents_md(markdown: str) -> AgentsMdContext:

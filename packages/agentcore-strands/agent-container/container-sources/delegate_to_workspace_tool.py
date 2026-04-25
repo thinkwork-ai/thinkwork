@@ -188,20 +188,27 @@ _TOKEN_EFFICIENCY_RULES = """## Token Efficiency Rules
 - Prefer concise, direct answers over verbose explanations."""
 
 
-def _spawn_sub_agent_inert(resolved_context: dict[str, Any]) -> dict[str, Any]:
-    """No-op fallback retained for tests that explicitly inject
-    ``spawn_fn=_spawn_sub_agent_inert``.
+# Sub-agent path-composition rule. The parent agent loads MEMORY_GUIDE.md
+# from a container-local path and so reads this rule via its workspace
+# overlay, but the SUB-agent's prompt builder only sources composed-tree
+# files (PLATFORM, GUARDRAILS, the sub-folder's CONTEXT/AGENTS) — so
+# without inlining, the sub-agent never sees the rule and would clobber
+# the parent's root memory on its first write_memory call. This is the
+# exact bug U12 was written to make fixable; agent-native review for
+# Plan §008 U9-spawn-live caught the gap before it shipped.
+_SUB_AGENT_PATH_COMPOSITION_RULES = """## How to scope your memory writes
 
-    The production default since Plan 2026-04-25-004 U5 is the live spawn
-    built by :func:`_make_live_spawn_fn`. Tests that want to assert the
-    pipeline's pre-spawn shape (composer + parser + resolver) without
-    booting Bedrock use this directly via ``spawn_fn=``.
-    """
-    return {
-        "ok": False,
-        "reason": "spawn not yet wired",
-        "resolved_context": resolved_context,
-    }
+You are a sub-agent. When you call `write_memory`, prefix the path with
+your own folder so writes land at your scope, not the parent agent's:
+
+- Sub-agent at `{folder}/` → `write_memory("{folder}/memory/lessons.md", ...)`
+- Nested sub-agent at `{parent}/{folder}/` → `write_memory("{parent}/{folder}/memory/lessons.md", ...)`
+
+The path is **from the agent root, not from your sub-folder**. Passing
+just `"memory/lessons.md"` would write to the parent agent's notes —
+overwriting work that isn't yours. The basename allowlist is unchanged
+(`lessons.md`, `preferences.md`, `contacts.md`); only the folder prefix
+is yours to compose."""
 
 
 def _build_sub_agent_system_prompt(
@@ -216,7 +223,10 @@ def _build_sub_agent_system_prompt(
     2. The sub-agent's own ``CONTEXT.md`` (the behavioral context).
     3. The sub-agent's own ``AGENTS.md`` (routing context the sub-agent
        sees and the parent LLM does not).
-    4. Token-efficiency rules (verbatim from
+    4. Sub-agent path-composition rules (inlined; parent reads these via
+       MEMORY_GUIDE.md but that file isn't on the sub-agent's prompt
+       allowlist).
+    5. Token-efficiency rules (verbatim from
        ``server.py:_build_skill_agent_prompt``).
 
     Missing files are skipped silently — this matches the parent prompt's
@@ -253,7 +263,11 @@ def _build_sub_agent_system_prompt(
     if agents_body and agents_body.strip():
         parts.append(agents_body.strip())
 
-    # 4. Token-efficiency rules.
+    # 4. Path-composition rules — inlined so the sub-agent sees them
+    #    even though MEMORY_GUIDE.md is loaded by the parent only.
+    parts.append(_SUB_AGENT_PATH_COMPOSITION_RULES)
+
+    # 5. Token-efficiency rules.
     parts.append(_TOKEN_EFFICIENCY_RULES)
 
     return "\n\n---\n\n".join(parts)

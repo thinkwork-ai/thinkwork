@@ -628,9 +628,13 @@ def _make_strands_stubs(
     """
     captured = captured if captured is not None else {}
 
+    captured.setdefault("model_calls", 0)
+    captured.setdefault("agent_calls", 0)
+
     class _ModelStub:
         def __init__(self, **kwargs):
             captured["model_kwargs"] = kwargs
+            captured["model_calls"] += 1
 
     class _AgentStub:
         def __init__(self, *, model, system_prompt, tools, callback_handler):
@@ -640,6 +644,7 @@ def _make_strands_stubs(
                 "tools": list(tools),
                 "callback_handler": callback_handler,
             }
+            captured["agent_calls"] += 1
 
         def __call__(self, task):
             captured["task"] = task
@@ -825,6 +830,20 @@ class TestLiveSpawnBodySwapSafety:
             "the production code path has reverted to inert"
         )
         assert result["sub_agent_response"] == "ok"
+
+        # Per ce-code-review adversarial finding: assert the model + agent
+        # constructors actually fired so a future hardcoded `{ok: True}`
+        # replacement of `_make_live_spawn_fn` (that bypasses BedrockModel
+        # entirely) still fails this test. The strand stubs capture call
+        # counts in `captured`.
+        assert captured["model_calls"] >= 1, (
+            "live spawn must invoke the (stubbed) BedrockModel constructor; "
+            "if this fails, the live default isn't actually exercising the spawn body"
+        )
+        assert captured["agent_calls"] >= 1, (
+            "live spawn must invoke the (stubbed) Agent constructor; "
+            "if this fails, the live default isn't actually exercising the spawn body"
+        )
 
 
 class TestLiveSpawnWarningsPropagation:
@@ -1040,3 +1059,156 @@ class TestLiveSpawnSnapshotPattern:
         with patch.dict(_os.environ, {"AWS_REGION": "DRIFTED"}):
             tool_fn(path="expenses", task="t")
         assert captured["model_kwargs"]["region_name"] == "env-region-at-factory"
+
+
+class TestAwsRegionFallbackChain:
+    """Per ce-code-review reliability finding TG-005: pin the documented
+    fallback chain (`aws_region` kwarg → `AWS_REGION` → `AWS_DEFAULT_REGION`
+    → `"us-east-1"`) so a future regression that re-orders or drops a step
+    fails loudly.
+    """
+
+    def test_explicit_kwarg_wins_over_env(self):
+        import os as _os
+        from unittest.mock import patch
+
+        from delegate_to_workspace_tool import make_delegate_to_workspace_fn
+        model_factory, agent_factory, tool_dec, captured = _make_strands_stubs(text="ok")
+        composer_mock = MagicMock(return_value=_expenses_tree())
+        with patch.dict(
+            _os.environ,
+            {"AWS_REGION": "should-be-ignored", "AWS_DEFAULT_REGION": "should-be-ignored"},
+        ):
+            tool_fn = make_delegate_to_workspace_fn(
+                parent_tenant_id="t", parent_agent_id="a",
+                api_url="https://x", api_secret="s",
+                platform_catalog_manifest=None,
+                cfg_model="m", usage_acc=[],
+                composer_fetch=composer_mock,
+                aws_region="explicit-region",
+                model_factory=model_factory, agent_factory=agent_factory,
+                tool_decorator=tool_dec,
+            )
+        tool_fn(path="expenses", task="t")
+        assert captured["model_kwargs"]["region_name"] == "explicit-region"
+
+    def test_aws_region_env_wins_over_aws_default_region(self):
+        import os as _os
+        from unittest.mock import patch
+
+        from delegate_to_workspace_tool import make_delegate_to_workspace_fn
+        model_factory, agent_factory, tool_dec, captured = _make_strands_stubs(text="ok")
+        composer_mock = MagicMock(return_value=_expenses_tree())
+        with patch.dict(
+            _os.environ,
+            {"AWS_REGION": "from-aws-region", "AWS_DEFAULT_REGION": "from-default"},
+            clear=False,
+        ):
+            tool_fn = make_delegate_to_workspace_fn(
+                parent_tenant_id="t", parent_agent_id="a",
+                api_url="https://x", api_secret="s",
+                platform_catalog_manifest=None,
+                cfg_model="m", usage_acc=[],
+                composer_fetch=composer_mock,
+                aws_region=None,
+                model_factory=model_factory, agent_factory=agent_factory,
+                tool_decorator=tool_dec,
+            )
+        tool_fn(path="expenses", task="t")
+        assert captured["model_kwargs"]["region_name"] == "from-aws-region"
+
+    def test_aws_default_region_used_when_aws_region_unset(self):
+        import os as _os
+        from unittest.mock import patch
+
+        from delegate_to_workspace_tool import make_delegate_to_workspace_fn
+        model_factory, agent_factory, tool_dec, captured = _make_strands_stubs(text="ok")
+        composer_mock = MagicMock(return_value=_expenses_tree())
+        env = {k: v for k, v in _os.environ.items() if k != "AWS_REGION"}
+        env["AWS_DEFAULT_REGION"] = "from-default"
+        with patch.dict(_os.environ, env, clear=True):
+            tool_fn = make_delegate_to_workspace_fn(
+                parent_tenant_id="t", parent_agent_id="a",
+                api_url="https://x", api_secret="s",
+                platform_catalog_manifest=None,
+                cfg_model="m", usage_acc=[],
+                composer_fetch=composer_mock,
+                aws_region=None,
+                model_factory=model_factory, agent_factory=agent_factory,
+                tool_decorator=tool_dec,
+            )
+        tool_fn(path="expenses", task="t")
+        assert captured["model_kwargs"]["region_name"] == "from-default"
+
+    def test_us_east_1_used_when_no_env_at_all(self):
+        import os as _os
+        from unittest.mock import patch
+
+        from delegate_to_workspace_tool import make_delegate_to_workspace_fn
+        model_factory, agent_factory, tool_dec, captured = _make_strands_stubs(text="ok")
+        composer_mock = MagicMock(return_value=_expenses_tree())
+        env = {
+            k: v for k, v in _os.environ.items()
+            if k not in ("AWS_REGION", "AWS_DEFAULT_REGION")
+        }
+        with patch.dict(_os.environ, env, clear=True):
+            tool_fn = make_delegate_to_workspace_fn(
+                parent_tenant_id="t", parent_agent_id="a",
+                api_url="https://x", api_secret="s",
+                platform_catalog_manifest=None,
+                cfg_model="m", usage_acc=[],
+                composer_fetch=composer_mock,
+                aws_region=None,
+                model_factory=model_factory, agent_factory=agent_factory,
+                tool_decorator=tool_dec,
+            )
+        tool_fn(path="expenses", task="t")
+        assert captured["model_kwargs"]["region_name"] == "us-east-1"
+
+
+class TestMultiSkillClosureBinding:
+    """Per ce-code-review testing/adversarial finding: `_make_skill_tool`
+    was extracted to dodge the Python loop-variable closure bug, but no
+    existing test exercises the multi-skill iteration path. Two skills →
+    each callable returns its own SKILL.md body, not the last one captured.
+    """
+
+    def test_two_skills_each_return_own_body(self):
+        from delegate_to_workspace_tool import _build_sub_agent_tools
+        from skill_resolver import ResolvedSkill
+
+        skill_a_body = "---\nname: skill-a\n---\nbody-A"
+        skill_b_body = "---\nname: skill-b\n---\nbody-B"
+        resolved_skills = {
+            "skill-a": ResolvedSkill(
+                slug="skill-a",
+                source="platform",
+                skill_md_content=skill_a_body,
+            ),
+            "skill-b": ResolvedSkill(
+                slug="skill-b",
+                source="local",
+                skill_md_content=skill_b_body,
+                composed_tree_path="expenses/skills/skill-b/SKILL.md",
+                folder_segment="expenses",
+            ),
+        }
+
+        def _no_decorator(fn):
+            return fn
+
+        tools = _build_sub_agent_tools(
+            resolved_skills=resolved_skills, tool_decorator=_no_decorator
+        )
+
+        # Two callables, each bound to its own slug's body — not whichever
+        # slug was iterated last (that's the closure bug `_make_skill_tool`
+        # was extracted to prevent).
+        assert len(tools) == 2
+        results = [fn() for fn in tools]
+        assert skill_a_body in results
+        assert skill_b_body in results
+        assert len({results[0], results[1]}) == 2, (
+            "two distinct skill bodies — if both equal, the closure captured "
+            "the loop variable by reference (the bug `_make_skill_tool` prevents)"
+        )
