@@ -49,10 +49,11 @@ export const plans: readonly Plan[] = Object.freeze([
 		summary:
 			"Apache 2.0. Self-host the harness on your AWS account. The full product, no operating partner — community-supported.",
 		features: Object.freeze([
-			"Self-host on your AWS",
-			"Apache 2.0 license",
+			"Apache 2.0 — fork it, audit it, extend it",
+			"Deploys into your AWS — no shared control plane",
 			"All product capabilities — Threads, Memory, Agents, Connectors, Automations, Control",
-			"operating guarantees built into the runtime",
+			"Portable memory contract — Hindsight or AgentCore Memory swappable underneath",
+			"Same harness as For Business and Enterprise — no feature gates",
 			"Community support (GitHub issues + discussions)",
 		]),
 		cta: "Self-host on GitHub",
@@ -65,13 +66,13 @@ export const plans: readonly Plan[] = Object.freeze([
 		name: "ThinkWork for Business",
 		tagline: "Agent Harness, operated.",
 		summary:
-			"The same harness, run by us — deployed into your AWS account, with managed updates, priority support, and the operating discipline so your team focuses on the workflows, not the runtime.",
+			"The same harness, run by us — deployed into your AWS account, with managed updates, priority support, and the operating discipline so your team focuses on the workflows, not the runtime. Managed does not mean vendor-hosted: data, IAM, and runtime all stay in your account.",
 		features: Object.freeze([
-			"Run by us, deployed into your AWS",
-			"Managed updates and upgrades",
+			"Run by us — deployed into your AWS, not ours",
+			"Managed updates and upgrades; we operate the runtime",
 			"Priority email + Slack support",
-			"All product capabilities — Threads, Memory, Agents, Connectors, Automations, Control",
-			"operating guarantees enforced + monitored",
+			"Same harness as the open tier — every component, every guarantee",
+			"Operating guarantees enforced and monitored on every turn",
 		]),
 		cta: "Choose For Business",
 		kind: "stripe",

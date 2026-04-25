@@ -37,7 +37,12 @@ export const hero = {
   eyebrow: "Agent Harness for Business",
   headlinePart1: "Production-grade AI work,",
   headlineAccent: "on AWS you own.",
-  lede: "ThinkWork is the open Agent Harness — Reliability, Efficiency, Security, and Traceability built into the runtime, not bolted on. Self-host on your AWS, run it with us, or wrap it with services.",
+  // Per the 2026-04-25 messaging-feedback memo: every time "Agent Harness"
+  // is introduced early, follow it with a teaching line so readers don't
+  // have to know the category coming in. The lede explains *what the
+  // harness is* concretely (threads, memory, sandboxing, tools, controls,
+  // cost, audit), then names the operating model.
+  lede: "The harness is the runtime around the model — threads, memory, sandboxing, tools, controls, cost, and audit, built in from day one. Self-host on your AWS, run it with us, or wrap it with services. The harness stays yours.",
   primaryCta: { label: "Read the docs", href: external.docs },
   secondaryCta: { label: "View on GitHub", href: external.github },
   headlineCandidates: [
@@ -124,7 +129,14 @@ export const journey = {
 export const howItWorks = {
   eyebrow: "Inside the harness",
   headline: "Four primitives. One agent harness.",
-  lede: "Threads, memory, sandbox, and controls — the engineered mechanisms that turn raw model output into reliable, traceable, auditable agent work.",
+  // The 4-primitive view (Threads / Memory / Sandbox / Controls) is the
+  // homepage mental model — what makes the harness understandable in one
+  // glance. The 6-component view (adding Agents + Connectors + Automations)
+  // is the docs system model. Per the 2026-04-25 messaging-feedback memo,
+  // bridge the two so readers know they can move between views without
+  // surprise: "Four primitives explain the harness. Six components
+  // implement it."
+  lede: "Four primitives explain the harness; six components implement it. Threads, memory, sandbox, and controls are the engineered mechanisms that turn raw model output into reliable, traceable, auditable agent work — and Agents, Connectors, and Automations are the surfaces that wire them together. Same harness either way.",
   primitives: [
     {
       title: "Threads",
@@ -380,17 +392,21 @@ export const quickStart = {
   ],
 };
 
+// North-star copy block per the 2026-04-25 messaging-feedback memo. The
+// closing section earns the page's whole argument in three lines: what
+// ThinkWork is, what the harness gives you, and the three doors. Every
+// other section is in service of this block.
 export const finalCta = {
   eyebrow: "Open · Operated · Enterprise",
   headlinePart1: "One harness,",
-  headlineAccent: "three deployment models.",
-  lede: "ThinkWork is the open Agent Harness — Apache 2.0 and self-hosted on your AWS. ThinkWork for Business is the same harness operated by us. ThinkWork Enterprise wraps either with strategy, launch, and ongoing operations services. Pick the door that fits your team.",
+  headlineAccent: "three ways to run it.",
+  lede: "ThinkWork is the open Agent Harness for Business. It deploys into your AWS account and gives agents the runtime they need to do production work: durable threads, portable memory, sandboxed execution, approved tools, budgets, evaluations, and audit trails. Self-host it, have us operate it, or wrap it with enterprise services — the operating model can change, but the harness stays yours.",
   points: [
-    { title: "ThinkWork", desc: "Open. Self-host on your AWS." },
-    { title: "for Business", desc: "Operated by us, in your AWS." },
-    { title: "Enterprise", desc: "Services + SLA + named support." },
-    { title: "Runtime", desc: "Always inside your AWS boundary." },
-    { title: "Harness", desc: "Always yours." },
+    { title: "Open", desc: "Self-host the Apache 2.0 harness in your AWS." },
+    { title: "For Business", desc: "Same harness, operated by us in your AWS — managed does not mean vendor-hosted." },
+    { title: "Enterprise", desc: "Strategy, launch, managed operations, and support around either path." },
+    { title: "Runtime boundary", desc: "Does not change between tiers." },
+    { title: "The harness", desc: "Stays yours." },
   ],
   primaryCta: { label: "Read the docs", href: external.docs },
   secondaryCta: { label: "View on GitHub", href: external.github },
@@ -436,14 +452,19 @@ export const pricing = {
   },
   eyebrow: "Open · Operated · Enterprise",
   headline: "One harness,",
-  headlineAccent: "three deployment models.",
+  headlineAccent: "three ways to run it.",
+  // Per the 2026-04-25 messaging-feedback memo: every deployment-model
+  // page should make explicit that "managed does not mean vendor-hosted"
+  // — the For Business operating model deploys into the customer's AWS,
+  // we just run it for them. Embed that distinction here so visitors
+  // arriving on /cloud read it before scanning the plan grid.
   lede:
-    "ThinkWork is the open Agent Harness — self-host on your AWS for free, run it with us as ThinkWork for Business, or wrap either with ThinkWork Enterprise services. The product is identical across tiers; only who operates it differs.",
+    "ThinkWork is the open Agent Harness for Business. Self-host on your AWS for free, run it with us as ThinkWork for Business (managed does not mean vendor-hosted — the runtime still lives in your AWS), or wrap either with ThinkWork Enterprise services. The product is identical across tiers; only who operates it differs. The harness stays yours.",
   plans: sharedPlans,
   smallPrint: [
-    "Open — Apache 2.0, self-hosted on your AWS, community-supported. No Stripe.",
-    "For Business — operated by us, deployed into your AWS account. Charged in USD, billed monthly.",
-    "Enterprise — services tier. Sales-led; annual contracts available.",
+    "Open — Apache 2.0, self-hosted on your AWS, community-supported. No Stripe. The full harness, no operating partner.",
+    "For Business — operated by us, deployed into your AWS account. Charged in USD, billed monthly. Managed does not mean vendor-hosted: data, IAM, and runtime stay in your account.",
+    "Enterprise — services tier on top of either path. Sales-led; annual contracts available.",
   ],
   finePrint:
     "For Business pricing confirmed during checkout. Contact us for procurement, security review, or annual billing.",
