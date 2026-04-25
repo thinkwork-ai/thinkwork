@@ -58,7 +58,7 @@ function NavItems({ items }: { items: NavItem[] }) {
   const { isMobile, setOpenMobile } = useSidebar();
 
   return (
-    <SidebarMenu>
+    <SidebarMenu className="gap-0.5">
       {items.map((item) => {
         const isActive =
           item.to === "/dashboard"
