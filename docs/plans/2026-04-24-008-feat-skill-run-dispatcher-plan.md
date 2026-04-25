@@ -1,8 +1,12 @@
 ---
 title: "feat: Out-of-band kind=run_skill dispatcher"
 type: feat
-status: active
+status: shipped
 date: 2026-04-24
+shipped: 2026-04-25
+prs:
+  - "#552 — U1-U5 + 3 P0 review fixes (agentId thread, tenant-scope users lookup, async-retry idempotency)"
+  - "#563 — env-snapshot in post_skill_run_complete (P1 reliability-05 follow-up after dev incident)"
 ---
 
 # feat: Out-of-band kind=run_skill dispatcher
@@ -148,7 +152,7 @@ sequenceDiagram
 
 ## Implementation Units
 
-- [ ] U1. **Extract `resolveAgentRuntimeConfig` helper + new `GET /api/agents/runtime-config` endpoint**
+- [x] U1. **Extract `resolveAgentRuntimeConfig` helper + new `GET /api/agents/runtime-config` endpoint**
 
 **Goal:** Produce a service-auth REST endpoint that the Python dispatcher can call to fetch the same runtime config `chat-agent-invoke.ts` builds internally, backed by a shared helper so the two paths cannot drift.
 
@@ -191,7 +195,7 @@ sequenceDiagram
 
 ---
 
-- [ ] U2. **Extract `_execute_agent_turn` helper in `server.py`**
+- [x] U2. **Extract `_execute_agent_turn` helper in `server.py`**
 
 **Goal:** Factor the ~170-line chat-loop prologue (env apply, workspace ready, skills + MCP + guardrail unpack, system prompt build, `_call_strands_agent` call, usage + quota logging, env cleanup) into a reusable helper so `dispatch_run_skill` can hit the same path.
 
@@ -234,7 +238,7 @@ sequenceDiagram
 
 ---
 
-- [ ] U3. **Python `api_runtime_config` client + rewire `dispatch_run_skill`**
+- [x] U3. **Python `api_runtime_config` client + rewire `dispatch_run_skill`**
 
 **Goal:** Fetch the runtime config from U1's endpoint, build a synthetic user message from the `kind=run_skill` envelope, call U2's helper, POST `/api/skills/complete`. Replace the U6 rejector entirely.
 
@@ -294,7 +298,7 @@ sequenceDiagram
 
 ---
 
-- [ ] U4. **Flip TS emitters to `InvocationType: "Event"`**
+- [x] U4. **Flip TS emitters to `InvocationType: "Event"`**
 
 **Goal:** Let the dispatcher use the full 900s AgentCore Lambda budget. All four emit sites switch to AWS SDK `InvocationType: "Event"` so the TS caller gets a synchronous enqueue ack without waiting for the skill run to complete.
 
@@ -329,7 +333,7 @@ sequenceDiagram
 
 ---
 
-- [ ] U5. **Smoke scripts + CHECKS.md update for the new passing contract**
+- [x] U5. **Smoke scripts + CHECKS.md update for the new passing contract**
 
 **Goal:** Move the smoke scripts' passing condition off "row reaches failed with U6 unsupported-runtime" back to "row reaches complete, or fails with a specific connector reason." Prose in `CHECKS.md` + `README.md` reflects the post-dispatcher reality.
 
