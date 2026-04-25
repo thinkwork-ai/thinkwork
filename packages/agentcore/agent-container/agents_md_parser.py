@@ -55,8 +55,14 @@ from dataclasses import dataclass, field
 logger = logging.getLogger(__name__)
 
 # Reserved folder names — never sub-agents at any depth.
-# Mirrors the TS parser's RESERVED_FOLDER_NAMES set; U8 will extract this
-# constant into a single source of truth on each side.
+#
+# Mirrors `RESERVED_FOLDER_NAMES` exported from
+# `packages/api/src/lib/reserved-folder-names.ts` (Plan §008 U8 single source
+# of truth on the TS side). The Strands runtime is offline from npm, so we
+# inline the constant here per the
+# `inline-helpers-vs-shared-package-for-cross-surface-code` learning.
+# Add to both sides + refresh the shared
+# `fixtures/agents-md-sample.md` if you change the set.
 RESERVED_FOLDER_NAMES: frozenset[str] = frozenset({"memory", "skills"})
 
 _HEADING_RE = re.compile(r"^##\s+Routing(\s+Table)?\s*$", re.IGNORECASE)
