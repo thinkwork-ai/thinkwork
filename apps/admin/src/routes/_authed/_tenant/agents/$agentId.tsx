@@ -27,8 +27,7 @@ import { AgentHeaderBadges } from "@/components/agents/AgentHeaderBadges";
 import { AgentFormDialog } from "@/components/agents/AgentFormDialog";
 import { AgentRollbackButton } from "@/components/agents/AgentRollbackButton";
 import { Badge } from "@/components/ui/badge";
-import { CalendarDays, Brain, FolderOpen, Shield } from "lucide-react";
-import { listGuardrails, type Guardrail } from "@/lib/guardrails-api";
+import { CalendarDays, FolderOpen } from "lucide-react";
 import { apiFetch } from "@/lib/api-fetch";
 
 export const Route = createFileRoute("/_authed/_tenant/agents/$agentId")({
@@ -154,18 +153,6 @@ function AgentDetailPage() {
   const agentCosts = useCostStore((s) => s.byAgent);
   const agentCost = agentCosts.find((c) => c.agentId === agentId);
 
-  // --- Guardrail badge ---
-  const [agentGuardrail, setAgentGuardrail] = useState<Guardrail | null>(null);
-  useEffect(() => {
-    if (!tenantId) return;
-    listGuardrails(tenantId)
-      .then((items) => {
-        const defaultGr = items.find((g) => g.is_default);
-        setAgentGuardrail(defaultGr || null);
-      })
-      .catch(() => {});
-  }, [tenantId]);
-
   // --- Config counts for summary ---
   const [triggerCount, setTriggerCount] = useState<number>(0);
   const fetchTriggerCount = useCallback(async () => {
@@ -228,14 +215,6 @@ function AgentDetailPage() {
     reexecute({ requestPolicy: "network-only" });
     reexecuteKbs({ requestPolicy: "network-only" });
   }, [reexecute, reexecuteKbs]);
-
-  const handleSaveConfig = useCallback(
-    async (input: Record<string, any>) => {
-      const res = await updateAgent({ id: agentId, input });
-      if (!res.error) refresh();
-    },
-    [agentId, updateAgent, refresh],
-  );
 
   const handleDelete = useCallback(async () => {
     const res = await deleteAgent({ id: agentId });
@@ -318,7 +297,6 @@ function AgentDetailPage() {
             <AgentHeaderBadges
               agent={agent}
               tenantId={tenantId!}
-              onSaveConfig={handleSaveConfig}
               onSaveHumanPair={handleSaveHumanPair}
               onSaveBudget={handleSaveBudget}
               onDeleteBudget={handleDeleteBudget}
@@ -336,15 +314,6 @@ function AgentDetailPage() {
                   Workspace
                 </Badge>
               </Link>
-              <Link to="/agents/$agentId/memory" params={{ agentId }}>
-                <Badge
-                  variant="outline"
-                  className="gap-1 cursor-pointer hover:bg-accent"
-                >
-                  <Brain className="h-3 w-3" />
-                  Memory
-                </Badge>
-              </Link>
               <Link to="/scheduled-jobs" search={{ type: "agent", agentId }}>
                 <Badge
                   variant="outline"
@@ -352,15 +321,6 @@ function AgentDetailPage() {
                 >
                   <CalendarDays className="h-3 w-3" />
                   {triggerCount > 0 && <>{triggerCount} </>}Automations
-                </Badge>
-              </Link>
-              <Link to="/security">
-                <Badge
-                  variant="outline"
-                  className={`gap-1 cursor-pointer hover:bg-accent ${!agentGuardrail ? "text-muted-foreground" : ""}`}
-                >
-                  <Shield className="h-3 w-3" />
-                  {agentGuardrail ? agentGuardrail.name : "No Guardrail"}
                 </Badge>
               </Link>
               <AgentRollbackButton agentId={agentId} onRollback={refresh} />
