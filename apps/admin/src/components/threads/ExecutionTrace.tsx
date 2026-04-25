@@ -24,10 +24,10 @@ import {
   DollarSign,
   FileText,
   Loader2,
-  MessageSquare,
   SkipForward,
   User,
   Bot,
+  Brain,
   Zap,
   Maximize2,
 } from "lucide-react";
@@ -424,7 +424,17 @@ function getBranchForEvent(eventIdx: number, branches: BranchSpan[]): BranchSpan
   return branches.find(b => b.eventIndices.includes(eventIdx)) ?? null;
 }
 
-function ExecutionTimeline({ turnId, toolInvocations, model, inputTokens, outputTokens, totalCostFromTurn, responseText, onViewDetail }: {
+function ExecutionTimeline({
+  turnId,
+  toolInvocations,
+  model,
+  inputTokens,
+  outputTokens,
+  totalCostFromTurn,
+  responseText,
+  agentName,
+  onViewDetail,
+}: {
   turnId: string;
   toolInvocations: any[];
   model?: string;
@@ -432,6 +442,7 @@ function ExecutionTimeline({ turnId, toolInvocations, model, inputTokens, output
   outputTokens?: number;
   totalCostFromTurn?: number;
   responseText: string;
+  agentName?: string | null;
   onViewDetail: (title: string, content: string) => void;
 }) {
   const { tenantId } = useTenant();
@@ -599,14 +610,14 @@ function ExecutionTimeline({ turnId, toolInvocations, model, inputTokens, output
             clickTitle = `${ev.toolName}${isSub ? " (sub-agent)" : ""}`;
             clickContent = parts.join("\n\n");
           } else if (ev.type === "response") {
-            icon = <MessageSquare className="h-3.5 w-3.5" style={{ color: RESPONSE_COLOR }} />;
-            label = "Response";
+            icon = <Bot className="h-3.5 w-3.5" style={{ color: RESPONSE_COLOR }} />;
+            label = agentName || "Agent";
             rightDetail = (
               <span className="text-[11px] text-muted-foreground truncate max-w-[250px]">
                 {(ev.responseText || "").slice(0, 60)}...
               </span>
             );
-            clickTitle = "Response";
+            clickTitle = agentName || "Agent";
             clickContent = ev.responseText || "";
           }
 
@@ -644,21 +655,21 @@ function TurnRow({ turn, agentName }: { turn: any; agentName?: string | null }) 
   const inputTokens = usage?.input_tokens;
   const outputTokens = usage?.output_tokens;
   const cachedTokens = usage?.cached_read_tokens;
-  const title = agentName || "Agent work";
+  const title = "Thinking";
   const sourceLabel = formatInvocationSource(turn.triggerName || turn.invocationSource);
-  const statusColorClass = `${cfg.color} ${turn.status === "running" ? "animate-spin" : ""}`;
+  const statusColorClass = cfg.color;
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger className="w-full">
         <div className="flex items-start gap-3 px-4 py-3 hover:bg-accent/20 transition-colors rounded-md text-sm group">
           <div className="mt-0.5 flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center bg-muted">
-            <Bot className={`h-3.5 w-3.5 shrink-0 ${statusColorClass}`} />
+            <Brain className={`h-3.5 w-3.5 shrink-0 ${statusColorClass}`} />
           </div>
 
           {/* Source label */}
-          <div className="min-w-0 text-left">
-            <span className="block font-medium truncate">{title}</span>
+          <div className="shrink-0 text-left">
+            <span className="block font-medium">{title}</span>
             {sourceLabel && (
               <span className="block text-[11px] text-muted-foreground truncate">
                 {sourceLabel}
@@ -677,31 +688,28 @@ function TurnRow({ turn, agentName }: { turn: any; agentName?: string | null }) 
             <Badge variant="secondary" className="text-[10px]">retry #{turn.retryAttempt}</Badge>
           )}
 
-          {/* Spacer */}
-          <div className="flex-1" />
-
           {/* Metrics row */}
-          <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground shrink-0">
+          <div className="mt-1 flex min-w-0 flex-1 items-center justify-end gap-3 overflow-hidden text-xs text-muted-foreground">
             {inputTokens != null && (
-              <span className="flex items-center gap-0.5" title="Input / Output tokens">
+              <span className="flex min-w-0 items-center gap-0.5 truncate" title="Input / Output tokens">
                 <Zap className="h-3 w-3" />
                 {formatTokens(inputTokens)} → {formatTokens(outputTokens)}
                 {cachedTokens ? ` (${formatTokens(cachedTokens)} cached)` : ""}
               </span>
             )}
             {durationMs != null && (
-              <span className="flex items-center gap-0.5" title="Duration">
+              <span className="flex min-w-0 items-center gap-0.5 truncate" title="Duration">
                 <Clock className="h-3 w-3" />
                 {formatDuration(durationMs)}
               </span>
             )}
             {turn.totalCost != null && turn.totalCost > 0 && (
-              <span className="flex items-center gap-0.5 font-medium" title="Cost">
+              <span className="flex min-w-0 items-center gap-0.5 truncate font-medium" title="Cost">
                 <DollarSign className="h-3 w-3" />
                 {formatCost(turn.totalCost)}
               </span>
             )}
-            <span className="w-16 text-right">{relativeTime(turn.startedAt || turn.createdAt)}</span>
+            <span className="w-16 shrink-0 text-right">{relativeTime(turn.startedAt || turn.createdAt)}</span>
           </div>
         </div>
       </CollapsibleTrigger>
@@ -738,6 +746,7 @@ function TurnRow({ turn, agentName }: { turn: any; agentName?: string | null }) 
               outputTokens={usage?.output_tokens || 0}
               totalCostFromTurn={turn.totalCost || 0}
               responseText={result?.response ? String(result.response) : ""}
+              agentName={agentName}
               onViewDetail={(t, c) => setDetailDialog({ title: t, content: c })}
             />
           )}
@@ -796,17 +805,21 @@ interface AgentRef {
 const MessageRow = memo(function MessageRow({
   message,
   agentMap,
+  defaultAgentName,
   onOpenArtifact,
 }: {
   message: ChatMessage;
   agentMap?: Map<string, AgentRef>;
+  defaultAgentName?: string | null;
   onOpenArtifact?: (artifact: { id: string; title: string; type: string; status: string }) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const isUser = message.role.toLowerCase() === "user";
-  const Icon = isUser ? User : MessageSquare;
-  const label = isUser ? "User" : "Response";
+  const Icon = isUser ? User : Bot;
+  const label = isUser
+    ? "User"
+    : (message.senderId ? agentMap?.get(message.senderId)?.name : null) || defaultAgentName || "Agent";
   const content = (message.content || "").trim();
   const firstLine = content.split("\n")[0].slice(0, 120);
   const hasContent = content.length > 0;
@@ -908,6 +921,7 @@ interface ExecutionTraceProps {
   tenantId: string;
   messages?: ChatMessage[];
   agentMap?: Map<string, AgentRef>;
+  defaultAgentName?: string | null;
   onOpenArtifact?: (artifact: { id: string; title: string; type: string; status: string }) => void;
 }
 
@@ -916,6 +930,7 @@ export function ExecutionTrace({
   tenantId,
   messages = [],
   agentMap,
+  defaultAgentName,
   onOpenArtifact,
 }: ExecutionTraceProps) {
   const { user } = useAuth();
@@ -1019,7 +1034,13 @@ export function ExecutionTrace({
                 agentName={item.turn.agentId ? agentMap?.get(item.turn.agentId)?.name : null}
               />
             ) : (
-              <MessageRow key={item.message.id} message={item.message} agentMap={agentMap} onOpenArtifact={onOpenArtifact} />
+              <MessageRow
+                key={item.message.id}
+                message={item.message}
+                agentMap={agentMap}
+                defaultAgentName={defaultAgentName}
+                onOpenArtifact={onOpenArtifact}
+              />
             ),
           )}
         </div>

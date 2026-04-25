@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { View, Pressable, FlatList, Animated, Easing, RefreshControl } from "react-native";
 import { useColorScheme } from "nativewind";
 import { useRouter } from "expo-router";
-import { User, Bot, Check, AlertCircle, ChevronDown, ChevronRight, Copy, FileText, MapPin, DollarSign, UserPlus, CheckSquare, Building2, RefreshCw, MoreHorizontal, Bookmark, ClipboardList, MessageSquare } from "lucide-react-native";
+import { User, Bot, Brain, Check, AlertCircle, ChevronDown, ChevronRight, Copy, FileText, MapPin, DollarSign, UserPlus, CheckSquare, Building2, RefreshCw, MoreHorizontal, Bookmark, ClipboardList } from "lucide-react-native";
 import * as Clipboard from "expo-clipboard";
 import { useMutation } from "urql";
 import { Text, Muted } from "@/components/ui/typography";
@@ -355,7 +355,7 @@ function AgentMessageContent({ item, agentName, colors, defaultExpanded, onLinkP
   const header = (
     <View className="flex-row items-center justify-between">
       <View className="flex-row items-center gap-1">
-        <Text className="text-base font-medium">Response</Text>
+        <Text className="text-base font-medium">{agentName || "Agent"}</Text>
         {expanded
           ? <ChevronDown size={14} color={colors.mutedForeground} />
           : <ChevronRight size={14} color={colors.mutedForeground} />}
@@ -429,7 +429,7 @@ function TurnContent({
   const usage = parseUsage(item.usageJson);
   const cost = item.totalCost ? `$${item.totalCost.toFixed(2)}` : "";
   const sourceLabel = formatInvocationSource(item.triggerName || item.invocationSource);
-  const title = agentName || "Agent work";
+  const title = "Thinking";
 
   const header = (
     <View className="flex-row items-center justify-between">
@@ -470,6 +470,7 @@ function TurnContent({
               expanded={expanded}
               isDark={isDark}
               colors={colors}
+              agentName={agentName}
             />
           )}
           {item.status === "failed" && item.error && (
@@ -774,7 +775,7 @@ export function ActivityTimeline({
 
       if (item.kind === "turn") {
         const { color } = getTurnStatusStyle(item.data.status, isDark);
-        icon = <Bot size={16} color={color} />;
+        icon = <Brain size={16} color={color} />;
         iconBorder = color;
       } else if (item.kind === "genui") {
         const genuiType = String(item.data.toolResult._type || "");
@@ -790,7 +791,7 @@ export function ActivityTimeline({
           icon = <User size={16} color={userColor} />;
           iconBorder = userColor;
         } else {
-          icon = <MessageSquare size={16} color={RESPONSE_COLOR} />;
+          icon = <Bot size={16} color={RESPONSE_COLOR} />;
           iconBorder = RESPONSE_COLOR;
         }
       }
