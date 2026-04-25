@@ -5,9 +5,9 @@ description: How an agent's workspace files compose from agent overrides, the te
 
 import { Aside } from '@astrojs/starlight/components';
 
-Every managed agent in ThinkWork reads a set of workspace files at invocation time — `SOUL.md`, `IDENTITY.md`, `USER.md`, `GUARDRAILS.md`, and others. These files describe the agent's personality, its human partner, platform rules, and guardrail policy.
+Every managed agent in ThinkWork reads a set of workspace files at invocation time — `SOUL.md`, `IDENTITY.md`, `USER.md`, `GUARDRAILS.md`, and others. These files describe the agent's personality, its human partner, platform rules, and guardrail policy. They are the harness's per-agent personality + policy layer — what shapes an agent's voice in a way the template's structural config cannot, and what carries policy that must travel with the agent rather than the connector or thread.
 
-The **workspace overlay** is the composition model that resolves those files at read time. Instead of each agent holding its own forked copy of every file, the overlay walks a three-layer inheritance chain and returns the first hit — with per-file substitution and per-file class rules layered on top.
+The **workspace overlay** is the composition model that resolves those files at read time. Instead of each agent holding its own forked copy of every file, the overlay walks a three-layer inheritance chain (agent → template → tenant) and returns the first hit — with per-file substitution and per-file class rules layered on top. Two REST anchors land here: **Reliability** (every agent on the same template inherits identical defaults, so personality stays consistent across the fleet unless an agent explicitly overrides) and **Security** (the three guardrail-class files — `GUARDRAILS.md`, `PLATFORM.md`, `CAPABILITIES.md` — are *pinned*: a template-side change requires per-agent **Accept update** review before propagating, so no template editor can quietly widen what an agent is allowed to do without per-agent operator sign-off).
 
 This page explains the operator-facing mental model. An [implementation appendix](#implementation) at the end covers the composer, S3 key layout, and resolver shapes for contributors.
 

@@ -5,11 +5,11 @@ description: A skill pack is a self-contained bundle of tools, instructions, and
 
 import { Aside } from '@astrojs/starlight/components';
 
-A skill pack is the other reuse layer for agents — the one orthogonal to templates. Where a template controls *how* an agent behaves (model, guardrail, budget, memory), a skill pack controls *what an agent can do* (tools, instructions, context). Several different templates — a support agent, a research agent, a sales-ops agent — might all share the same "CRM lookup" skill pack while differing wildly in everything else.
+A skill pack is the harness's capability surface — and the other reuse layer for agents, orthogonal to templates. Where a template controls *how* an agent behaves (model, guardrail, budget, memory), a skill pack controls *what an agent can do* (tools, instructions, context). Skills participate in the **Action phase** of [PPAF](/architecture/#the-ppaf-agent-loop) — the moment a model's plan becomes an actual outbound call — and the **Security** REST anchor enforces capability gating: a skill pack's tools enter an agent's runtime registry only if the agent's template has the matching tool category enabled. Upload a malicious pack and the template's `toolConfig` is still the gate; the pack's tools are absent from the registry until the template flag turns on.
 
 ThinkWork implements the [**Agent Skills specification**](https://agentskills.io/specification), an open standard for portable, agent-readable skill definitions. A skill you write for ThinkWork is the same skill that runs on Claude Desktop, AWS AgentCore, or any other compliant runtime. That portability is a deliberate design choice, not an implementation detail.
 
-This page is the conceptual deep dive: what a skill is, when to reach for one, the `SKILL.md` format (which is the canonical spec, not implementation), and how skills compose with agents at runtime. For the operator surface that uploads and installs skills, see [Admin: Skills Catalog](/applications/admin/skills-catalog/). For the end-to-end authoring walkthrough, see [Authoring Guide: Skill Packs](/guides/skill-packs/).
+This page is the conceptual deep dive: what a skill is, when to reach for one, the `SKILL.md` format (which is the canonical spec, not implementation), how skills compose with agents at runtime, and how to configure them — uploading, versioning, and assigning are covered in dedicated sections below. For the operator surface that uploads and installs skills, see [Admin: Skills Catalog](/applications/admin/skills-catalog/). For the end-to-end authoring walkthrough, see [Authoring Guide: Skill Packs](/guides/skill-packs/).
 
 ## The core idea
 
