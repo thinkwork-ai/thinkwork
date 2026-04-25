@@ -1,14 +1,16 @@
 /**
  * Default workspace file content for Thinkwork agents.
  *
- * This package is the canonical source of the 11 workspace files that every
+ * This package is the canonical source of the 13 workspace files that every
  * agent template inherits from. The live overlay composer (Unit 4) resolves
  * the `_catalog/defaults/workspace/*` S3 layer from this content at tenant
  * creation / re-seed time.
  *
- * Canonical file set (R1 in the agent-workspace-files plan):
- *   SOUL.md, IDENTITY.md, USER.md, GUARDRAILS.md, MEMORY_GUIDE.md,
- *   CAPABILITIES.md, PLATFORM.md, ROUTER.md,
+ * Canonical file set (R1, extended by plan §008 U3 with `AGENTS.md` +
+ * `CONTEXT.md` so the runtime's already-existing loaders for those two
+ * filenames find seeded content on day one):
+ *   SOUL.md, IDENTITY.md, USER.md, AGENTS.md, CONTEXT.md, GUARDRAILS.md,
+ *   MEMORY_GUIDE.md, CAPABILITIES.md, PLATFORM.md, ROUTER.md,
  *   memory/lessons.md, memory/preferences.md, memory/contacts.md
  *
  * Content is inlined as TypeScript constants so the Lambda bundle doesn't
@@ -356,6 +358,69 @@ You have narrow tools to update structured facts about yourself and the human yo
 `;
 
 /**
+ * Mirror of `packages/workspace-defaults/files/AGENTS.md`.
+ *
+ * Layer-1 Map authored at the root of every Fat-folder agent: who I am,
+ * how the folder is organized, the structured routing table that
+ * `delegate_to_workspace` (U9) and the agent builder (U17–U19) drive
+ * from, and the naming-convention guardrails the parser (U6/U7)
+ * enforces. Default is empty/placeholder; template authors and the
+ * builder's drag-to-organize / routing-table editor populate it.
+ */
+const AGENTS_MD = `# AGENTS.md
+
+The Layer-1 Map for this agent. Edit me when you add or rename sub-agents,
+when you reshape the file layout, or when you change which skills which
+specialist owns. Everything else flows from here — \`delegate_to_workspace\`
+reads the routing table; the agent builder reads it for the tree view; the
+runtime reads it to compose the system prompt at boot and on the next turn
+after an edit.
+
+## Who I am
+
+_(One sentence: who this agent is, what it's for. Edit me.)_
+
+## How this folder is organized
+
+\`\`\`
+.                   ← root identity, guardrails, routing
+memory/             ← durable lessons, preferences, contacts (write_memory tool)
+skills/             ← local skills authored alongside this agent (optional)
+<sub-agent>/        ← specialist sub-agent — its own CONTEXT, optional skills/
+\`\`\`
+
+## Routing
+
+| Task                                       | Go to                | Read                              | Skills                       |
+| ------------------------------------------ | -------------------- | --------------------------------- | ---------------------------- |
+| _add a row when you create a sub-agent_    | _e.g. \`expenses/\`_   | _e.g. \`expenses/CONTEXT.md\`_      | _comma-separated slugs_      |
+
+## Naming conventions
+
+- Sub-agent folders are short, lowercase, hyphenated — \`expenses/\`, \`customer-support/\`, \`legal/\`.
+- Reserved folder names — \`memory/\` and \`skills/\` — are never sub-agents at any depth.
+- Skill slugs reference platform skills in \`packages/skill-catalog/<slug>/\` or local skills under \`<folder>/skills/<slug>/SKILL.md\`. Local skills resolve nearest-folder-first; platform catalog is the fallback.
+- Recursion depth is capped at 5 levels of sub-agents (soft warning at depth 4).
+`;
+
+/**
+ * Mirror of `packages/workspace-defaults/files/CONTEXT.md`.
+ *
+ * Root-folder scope statement. Sub-agent folders ship their own
+ * `CONTEXT.md` to narrow scope; the composer's recursive overlay (U5)
+ * resolves the closest-ancestor `CONTEXT.md` per folder depth.
+ */
+const CONTEXT_MD = `# CONTEXT.md
+
+The agent's top-level scope. This file describes the role this agent plays
+at the highest level — sub-agent folders override with their own
+\`CONTEXT.md\` for narrower scope.
+
+_(Edit me with: what this agent does, who it serves, what kinds of tasks
+fall to it before delegation, and what's explicitly out of scope.)_
+`;
+
+/**
  * Mirror of `packages/workspace-defaults/files/ROUTER.md`.
  */
 const ROUTER_MD = `# Router
@@ -447,9 +512,9 @@ _(empty — add entries as you encounter them)_
  * The seed handler (Unit 3) writes this number to a `_defaults_version` S3
  * object in each tenant's `_catalog/defaults/workspace/` prefix. On each
  * invocation it reads the stored version and, if different from `DEFAULTS_VERSION`,
- * rewrites all 11 files and bumps the stored version. Matching version → no-op.
+ * rewrites all 13 files and bumps the stored version. Matching version → no-op.
  *
- * **Bump this whenever any of the 11 canonical files changes.**
+ * **Bump this whenever any of the 13 canonical files changes.**
  *
  * What the version bump DOES:
  *   - Newly created tenants get the new content at `seed-workspace-defaults`
@@ -465,20 +530,25 @@ _(empty — add entries as you encounter them)_
  *     `backfill-identity-md.ts` / `backfill-user-md.ts` (or a targeted
  *     accept-template-update flow) to refresh them.
  */
-export const DEFAULTS_VERSION = 3;
+export const DEFAULTS_VERSION = 4;
 
 // ---------------------------------------------------------------------------
 // Aggregator
 // ---------------------------------------------------------------------------
 
 /**
- * Canonical 11-file set. Ordering is not load-bearing but matches the plan's
- * R1 requirement order for readability.
+ * Canonical 13-file set. Plan §008 U3 added `AGENTS.md` and `CONTEXT.md`
+ * (the runtime already loaded both but defaults didn't ship them) — every
+ * Fat-folder agent now seeds with the Layer-1 Map and a root scope file.
+ * Ordering is not load-bearing but matches the plan's R1 requirement order
+ * for readability.
  */
 export const CANONICAL_FILE_NAMES = [
 	"SOUL.md",
 	"IDENTITY.md",
 	"USER.md",
+	"AGENTS.md",
+	"CONTEXT.md",
 	"GUARDRAILS.md",
 	"MEMORY_GUIDE.md",
 	"CAPABILITIES.md",
@@ -495,6 +565,8 @@ const CONTENT: Record<CanonicalFileName, string> = {
 	"SOUL.md": SOUL_MD,
 	"IDENTITY.md": IDENTITY_MD,
 	"USER.md": USER_MD,
+	"AGENTS.md": AGENTS_MD,
+	"CONTEXT.md": CONTEXT_MD,
 	"GUARDRAILS.md": GUARDRAILS_MD,
 	"MEMORY_GUIDE.md": MEMORY_GUIDE_MD,
 	"CAPABILITIES.md": CAPABILITIES_MD,
