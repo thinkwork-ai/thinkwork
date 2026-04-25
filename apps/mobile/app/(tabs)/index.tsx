@@ -381,7 +381,6 @@ export default function ThreadsScreen() {
         tenantId,
         agentId: activeAgent.id,
         title: text.length > 60 ? text.slice(0, 60) + "..." : text,
-        type: "TASK",
         channel: "CHAT",
         createdByType: "user",
         createdById: currentUser?.id || user?.sub,
