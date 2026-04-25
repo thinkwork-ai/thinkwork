@@ -5,7 +5,7 @@ description: A walking tour of what happens when a managed agent runs — cold s
 
 import { Aside } from '@astrojs/starlight/components';
 
-Managed agents are the default ThinkWork runtime. ThinkWork runs the agent loop for you inside your AWS account on **AgentCore**, a Python Lambda container built on the [Strands](https://strandsagents.com) framework. You get a consistent execution model, thread integration, streaming, and auditability without having to build any of that yourself.
+Managed agents are the default ThinkWork runtime — the harness's Planning + Action layer in [PPAF](/architecture/#the-ppaf-agent-loop). ThinkWork runs the agent loop for you inside your AWS account on **AgentCore**, a Python Lambda container built on the [Strands](https://strandsagents.com) framework. The runtime gives you consistent execution model, thread integration, streaming, and auditability without you building any of that yourself, and it's the load-bearing implementation of two REST anchors: **Reliability** (every turn resolves agent + template state freshly, so behavior is reproducible and a config rotation propagates without a deploy) and **Security** (Bedrock guardrails attach at model-invocation time so the boundary is non-bypassable, and tool capability grants are template-pinned so a compromised skill pack can't widen the agent's reach).
 
 The important distinction is that **managed does not mean vendor-hosted**. ThinkWork makes running an agent easy, but the Lambda container is in your account, the thread state is in your Aurora cluster, the model invocation goes to your Bedrock endpoint, and the audit log lives in your S3 bucket. Nothing phones home; nothing depends on a ThinkWork SaaS control plane.
 
@@ -122,6 +122,50 @@ Managed agents are the best fit when you want:
 - The operational benefits — guardrail integration, per-turn cost, fleet rotation, audit — that the managed path bakes in.
 
 Use [connected agents](/concepts/agents/) instead when you already have an external runtime you want ThinkWork to orchestrate around rather than replace.
+
+## How to configure it
+
+Managed agents are configured at three layers — the agent record, the template the agent references, and the deployment-level Lambda settings. The split matters: most operator-side knobs live on the template (so they propagate fleet-wide), only a few are agent-scoped, and a small set of cross-cutting infrastructure dials are deployment-scoped (Terraform).
+
+### Agent-scoped (admin web)
+
+Per-agent settings at [Admin: Agents](/applications/admin/agents/):
+
+- **System prompt.** The agent-specific instructions, written into the `system` block on every Bedrock call. This is the most-touched per-agent dial; templates seed it but agents typically diverge over time.
+- **Skill packs assigned.** Which capability bundles this specific agent can call. Seeded from the template at agent creation; editable per-agent thereafter (see [Templates: Inheritance and overrides](/concepts/agents/templates/#inheritance-and-overrides)).
+- **Knowledge bases assigned.** Same shape — seeded, then per-agent editable.
+- **Status.** `created / active / suspended / archived`. Suspension is usually automatic (budget reconciler hits a cap), but operators can flip status manually.
+- **Compounding-memory wiki.** Whether this specific agent participates in the wiki pipeline. Off by default; turn on per-agent for assistants whose memory benefits from cross-thread pages.
+
+### Template-scoped (admin web, propagates fleet-wide)
+
+The configuration layer where most production work happens. See [Templates](/concepts/agents/templates/) for the full surface; the dials that matter for the managed runtime:
+
+- **Model id.** Which Bedrock model the runtime calls. Changing this rotates the model on every agent that references the template — no deploy.
+- **Guardrail id + version.** The Bedrock Guardrail attached at the model invocation. Non-bypassable.
+- **Inference parameters.** Max output tokens, temperature, top-p, and any other Bedrock `converse` params.
+- **Tool config.** Which tool categories the agent's runtime registry should include — SQL, S3, web search, MCP-connected tools, built-in tools. Disabled categories are absent from the registry, not gated by prompt.
+- **Memory adapter + recall config.** Hindsight or AgentCore Memory; how many recalls per turn; which memory strategies run.
+- **Per-turn tool-call cap.** The safety valve against runaway tool loops.
+- **Budget cap.** Monthly spend limit; whether hitting it auto-suspends agents on the template.
+
+### Deployment-scoped (Terraform / CLI)
+
+- **Lambda memory.** 3GB by default (≈ 2 vCPUs); raise via the AgentCore Lambda config when consistently CPU-bound.
+- **Provisioned concurrency.** Off by default; set per-stage if cold-start latency on the first turn after a quiet period is unacceptable for your interactive paths.
+- **VPC config.** AgentCore runs in your VPC by default. Subnets, security groups, NAT egress all configured in the foundation Terraform module.
+- **Environment variables.** Bedrock endpoint, Aurora connection params, KMS keys, audit S3 bucket — all wired via Terraform; the runtime resolves them at boot.
+- **Container image version.** ThinkWork ships AgentCore as a versioned container image; deployments pin to a specific tag. Upgrading is a `thinkwork deploy` step, not an admin-web setting.
+
+### When the defaults are wrong
+
+The defaults — 3GB Lambda, no provisioned concurrency, no VPC overrides — are calibrated for a single-tenant pilot with bursty traffic. They deviate as you scale:
+
+- A high-RPS production agent benefits from provisioned concurrency on the AgentCore Lambda; cold-start cost amortizes badly when every minute has multiple cold starts.
+- A long-running tool-heavy agent (think research routines that fan out 30+ tool calls) benefits from larger Lambda memory; the 15-minute Lambda max execution time is a hard ceiling either way.
+- A regulated tenant may want VPC subnets without NAT egress, with a Bedrock VPC endpoint instead — keeps inference traffic inside the VPC boundary.
+
+For all three, the configuration knobs above are sufficient — none of them require a code change.
 
 ## Known limits
 
