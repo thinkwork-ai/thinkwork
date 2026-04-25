@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { gql, useQuery } from "urql";
+import { toast } from "sonner";
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
@@ -18,6 +19,10 @@ import {
   Trash2,
   FolderPlus,
   FilePlus,
+  Code,
+  FileText,
+  Check,
+  Zap,
 } from "lucide-react";
 import { AgentDetailQuery } from "@/lib/graphql-queries";
 import {
@@ -35,7 +40,26 @@ import { WorkspaceFileBadge } from "@/components/WorkspaceFileBadge";
 import { AcceptTemplateUpdateDialog } from "@/components/AcceptTemplateUpdateDialog";
 
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  SKILL_AUTHORING_TEMPLATES,
+  SKILL_CATEGORIES,
+  buildLocalSkillPath,
+  renderSkillExtraFiles,
+  renderSkillTemplate,
+  slugifySkillName,
+  type SkillTemplateIcon,
+  type SkillTemplateKey,
+} from "@/lib/skill-authoring-templates";
 
 const AgentPinStatusQuery = gql`
   query AgentPinStatus($agentId: ID!) {
@@ -333,6 +357,13 @@ const FOLDER_TEMPLATES: Record<string, { files: Record<string, string> }> = {
   },
 };
 
+const TEMPLATE_ICONS: Record<SkillTemplateIcon, typeof Wand2> = {
+  Code,
+  FileText,
+  Wand2,
+  Zap,
+};
+
 // ---------------------------------------------------------------------------
 // Page component
 // ---------------------------------------------------------------------------
@@ -506,6 +537,15 @@ function AgentWorkspacePage() {
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
   const [newFilePath, setNewFilePath] = useState("");
   const [creatingFile, setCreatingFile] = useState(false);
+  const [showNewSkillDialog, setShowNewSkillDialog] = useState(false);
+  const [creatingSkill, setCreatingSkill] = useState(false);
+  const [newSkillTemplate, setNewSkillTemplate] = useState<SkillTemplateKey>("knowledge");
+  const [newSkillName, setNewSkillName] = useState("");
+  const [newSkillDescription, setNewSkillDescription] = useState("");
+  const [newSkillCategory, setNewSkillCategory] = useState("custom");
+  const [newSkillTags, setNewSkillTags] = useState("");
+
+  const newSkillSlug = slugifySkillName(newSkillName);
 
   const handleCreateFile = async () => {
     if (!newFilePath.trim()) return;
@@ -523,6 +563,72 @@ function AgentWorkspacePage() {
       console.error("Failed to create file:", err);
     } finally {
       setCreatingFile(false);
+    }
+  };
+
+  const resetNewSkillDialog = () => {
+    setNewSkillTemplate("knowledge");
+    setNewSkillName("");
+    setNewSkillDescription("");
+    setNewSkillCategory("custom");
+    setNewSkillTags("");
+  };
+
+  const handleCreateLocalSkill = async () => {
+    if (!newSkillSlug) return;
+    setCreatingSkill(true);
+    const options = {
+      template: newSkillTemplate,
+      name: newSkillName,
+      description: newSkillDescription,
+      category: newSkillCategory,
+      tags: newSkillTags,
+    };
+    const skillPath = buildLocalSkillPath(newSkillSlug);
+    const skillContent = renderSkillTemplate(options);
+    const failedExtraFiles: string[] = [];
+
+    try {
+      if (files.includes(skillPath)) {
+        toast.error(`${skillPath} already exists`);
+        return;
+      }
+
+      await putWorkspaceFile(target, skillPath, skillContent);
+
+      for (const [extraPath, content] of Object.entries(renderSkillExtraFiles(options))) {
+        const localPath = buildLocalSkillPath(newSkillSlug, extraPath);
+        try {
+          await putWorkspaceFile(target, localPath, content);
+        } catch (err) {
+          console.error(`Failed to create local skill support file ${localPath}:`, err);
+          failedExtraFiles.push(localPath);
+        }
+      }
+
+      setOpenFile(skillPath);
+      setContent(skillContent);
+      setEditValue(skillContent);
+      setExpandedFolders((prev) => {
+        const next = new Set(prev);
+        next.add("skills");
+        next.add(`skills/${newSkillSlug}`);
+        return next;
+      });
+      await fetchFiles();
+      setShowNewSkillDialog(false);
+      resetNewSkillDialog();
+
+      if (failedExtraFiles.length > 0) {
+        toast.warning(`Created SKILL.md, but ${failedExtraFiles.length} support file failed.`);
+      } else {
+        toast.success(`Created local skill ${newSkillSlug}`);
+      }
+    } catch (err) {
+      console.error("Failed to create local skill:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to create local skill");
+    } finally {
+      setCreatingSkill(false);
     }
   };
 
@@ -613,6 +719,11 @@ function AgentWorkspacePage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setShowNewSkillDialog(true)}>
+                  <Code className="h-4 w-4 mr-2" />
+                  New Skill
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setShowNewFileDialog(true)}>
                   <FilePlus className="h-4 w-4 mr-2" />
                   New File
@@ -786,6 +897,125 @@ function AgentWorkspacePage() {
               <Button size="sm" onClick={handleCreateFile} disabled={!newFilePath.trim() || creatingFile}>
                 {creatingFile && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
                 Create
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* New local skill dialog */}
+      <Dialog
+        open={showNewSkillDialog}
+        onOpenChange={(open) => {
+          setShowNewSkillDialog(open);
+          if (!open && !creatingSkill) resetNewSkillDialog();
+        }}
+      >
+        <DialogContent style={{ maxWidth: 680 }}>
+          <DialogHeader>
+            <DialogTitle>New Local Skill</DialogTitle>
+            <DialogDescription>
+              Create a SKILL.md under this agent's workspace.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid grid-cols-2 gap-3">
+              {(Object.entries(SKILL_AUTHORING_TEMPLATES) as [
+                SkillTemplateKey,
+                typeof SKILL_AUTHORING_TEMPLATES[SkillTemplateKey],
+              ][]).map(([key, template]) => {
+                const Icon = TEMPLATE_ICONS[template.icon];
+                const selected = newSkillTemplate === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`rounded-md border p-3 text-left transition-colors ${
+                      selected ? "border-primary bg-primary/5" : "hover:border-muted-foreground/30"
+                    }`}
+                    onClick={() => setNewSkillTemplate(key)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`flex h-8 w-8 items-center justify-center rounded-md ${
+                          selected ? "bg-primary text-primary-foreground" : "bg-accent"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span className="text-sm font-medium">{template.label}</span>
+                      {selected && <Check className="ml-auto h-4 w-4 text-primary" />}
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">{template.description}</p>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="local-skill-name">Name</Label>
+                <Input
+                  id="local-skill-name"
+                  value={newSkillName}
+                  onChange={(event) => setNewSkillName(event.target.value)}
+                  placeholder="Approve Receipt"
+                />
+                {newSkillSlug && (
+                  <p className="text-xs text-muted-foreground">
+                    Path: <code className="text-primary">{buildLocalSkillPath(newSkillSlug)}</code>
+                  </p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label>Category</Label>
+                <Select value={newSkillCategory} onValueChange={setNewSkillCategory}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SKILL_CATEGORIES.map((category) => (
+                      <SelectItem key={category.value} value={category.value}>
+                        {category.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="local-skill-description">Description</Label>
+              <Textarea
+                id="local-skill-description"
+                value={newSkillDescription}
+                onChange={(event) => setNewSkillDescription(event.target.value)}
+                placeholder="Use when the agent needs to review and approve a receipt."
+                rows={3}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="local-skill-tags">Tags</Label>
+              <Input
+                id="local-skill-tags"
+                value={newSkillTags}
+                onChange={(event) => setNewSkillTags(event.target.value)}
+                placeholder="finance, receipts"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowNewSkillDialog(false)}
+                disabled={creatingSkill}
+              >
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleCreateLocalSkill} disabled={!newSkillSlug || creatingSkill}>
+                {creatingSkill && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
+                Create Skill
               </Button>
             </div>
           </div>
