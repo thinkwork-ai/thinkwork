@@ -105,7 +105,19 @@ export default function PaymentScreen() {
                 isWide ? "flex-row gap-4 items-stretch" : "gap-4"
               }
             >
-              {plans.map((plan) => {
+              {/*
+                The Open tier (`plan.kind === "oss"`) is intentionally
+                filtered out of the mobile pricing screen. The OSS path is
+                self-host on customer AWS and routes to GitHub on web; an
+                in-app pricing grid that links a "Free" tier to an external
+                URL would be flagged by Apple App Store review under the
+                external-purchase-link guidance. Per the U1 pre-flight
+                decision in plan 2026-04-24-009, mobile shows only the
+                Stripe-billed (For Business) and sales-led (Enterprise)
+                tiers; users seeking the open Agent Harness are directed
+                to thinkwork.ai / GitHub on the web.
+              */}
+              {plans.filter((plan) => plan.kind !== "oss").map((plan) => {
                 const isPending = pendingPlanId === plan.id;
                 const isDisabled =
                   pendingPlanId !== null && pendingPlanId !== plan.id;

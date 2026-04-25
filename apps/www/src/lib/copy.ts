@@ -423,25 +423,26 @@ import { plans as sharedPlans } from "@thinkwork/pricing-config";
 // transient breakage while the earlier rename settles.
 export const pricing = {
   meta: {
-    title: "ThinkWork Cloud — Fully hosted AI agent platform.",
+    title: "ThinkWork Pricing — Three doors into the Agent Harness for Business.",
     description:
-      "ThinkWork Cloud is the fully-hosted option — we operate the agent platform end-to-end so your team can use it without running the Enterprise Agent Harness. Governed AI work on subscription plans that scale with usage.",
+      "Self-host the open Agent Harness on your AWS, run it with us as ThinkWork for Business, or wrap either with ThinkWork Enterprise services. One harness, three deployment models.",
   },
-  eyebrow: "ThinkWork Cloud",
-  headline: "Fully managed AI agents,",
-  headlineAccent: "no infrastructure to run.",
+  eyebrow: "Open · Operated · Enterprise",
+  headline: "One harness,",
+  headlineAccent: "three deployment models.",
   lede:
-    "Subscribe to ThinkWork Cloud and use a governed AI agent platform operated end-to-end by us. For teams that want the product, not the Enterprise Agent Harness to deploy and manage themselves.",
+    "ThinkWork is the open Agent Harness — self-host on your AWS for free, run it with us as ThinkWork for Business, or wrap either with ThinkWork Enterprise services. The product is identical across tiers; only who operates it differs.",
   plans: sharedPlans,
   smallPrint: [
-    "Fully managed — ThinkWork operates the platform and all underlying AWS infrastructure.",
-    "Charged in USD, billed monthly. Annual contracts available on Enterprise.",
+    "Open — Apache 2.0, self-hosted on your AWS, community-supported. No Stripe.",
+    "For Business — operated by us, deployed into your AWS account. Charged in USD, billed monthly.",
+    "Enterprise — services tier. Sales-led; annual contracts available.",
   ],
   finePrint:
-    "Final pricing confirmed during checkout. Contact us for procurement, security review, or annual billing.",
+    "For Business pricing confirmed during checkout. Contact us for procurement, security review, or annual billing.",
   servicesCrossLink: {
-    prompt: "Need help launching workflows, governance, or rollout?",
-    linkLabel: "See Services",
+    prompt: "Need help scoping a pilot or operating the harness?",
+    linkLabel: "See Enterprise services",
     href: "/services",
   },
 };
