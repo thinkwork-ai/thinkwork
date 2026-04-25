@@ -26,13 +26,18 @@ import {
 
 // ─── Hoisted DB mock ─────────────────────────────────────────────────────────
 
-const { dbQueue, pushDbRows, resetDbQueue } = vi.hoisted(() => {
+const { dbQueue, pushDbRows, resetDbQueue, eqCalls, resetEqCalls } = vi.hoisted(() => {
 	const queue: unknown[][] = [];
+	const calls: { col: unknown; value: unknown }[] = [];
 	return {
 		dbQueue: queue,
 		pushDbRows: (rows: unknown[]) => queue.push(rows),
 		resetDbQueue: () => {
 			queue.length = 0;
+		},
+		eqCalls: calls,
+		resetEqCalls: () => {
+			calls.length = 0;
 		},
 	};
 });
@@ -56,7 +61,10 @@ vi.mock("../graphql/utils.js", () => {
 	});
 	return {
 		db: { select: vi.fn().mockImplementation(() => chain()) },
-		eq: (a: unknown, b: unknown) => ({ __eq: [a, b] }),
+		eq: (a: unknown, b: unknown) => {
+			eqCalls.push({ col: a, value: b });
+			return { __eq: [a, b] };
+		},
 		and: (...args: unknown[]) => ({ __and: args }),
 		sql: (strings: unknown, ...args: unknown[]) => ({ __sql: [strings, args] }),
 		agents: {
@@ -199,6 +207,7 @@ async function parse(result: { statusCode: number; body: string }) {
 beforeEach(() => {
 	s3Mock.reset();
 	resetDbQueue();
+	resetEqCalls();
 	clearComposerCacheForTests();
 	authMockImpl.mockReset();
 });
@@ -492,6 +501,51 @@ describe("pinned-file write guard", () => {
 		);
 
 		expect(res.statusCode).toBe(200);
+	});
+
+	it("PUT for a Google-federated admin queries tenantMembers by users.id, not Cognito sub", async () => {
+		// Regression: PR #565's U31 admin gate passed `auth.principalId`
+		// (the Cognito sub) into `callerIsTenantAdmin`, but
+		// `tenantMembers.principal_id` holds `users.id`. For Google-federated
+		// users `users.id` is a fresh UUID linked by email — sub ≠ users.id —
+		// so the role lookup matched zero rows and every save 403'd.
+		const COGNITO_SUB = "google-oauth-cognito-sub-not-equal-to-users-id";
+		authMockImpl.mockResolvedValue({
+			principalId: COGNITO_SUB,
+			tenantId: null, // Google JWTs carry no custom:tenant_id
+			email: EMAIL,
+			authType: "cognito",
+		});
+		pushDbRows([]); // resolveCallerFromAuth byId — no row for federated sub
+		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]); // byEmail fallback
+		pushDbRows([agentRow()]); // resolveAgentTarget: agents
+		pushDbRows([tenantRow()]); // resolveAgentTarget: tenants
+		pushDbRows([{ role: "admin" }]); // U31 role gate
+		s3Mock.on(PutObjectCommand).resolves({});
+
+		const res = await parse(
+			await handler(
+				event({
+					action: "put",
+					agentId: AGENT_ID,
+					path: "IDENTITY.md",
+					content: "override",
+				}),
+			),
+		);
+
+		expect(res.statusCode).toBe(200);
+
+		// The role-gate query MUST bind tenant_members.principal_id to
+		// USER_ID (the resolved users.id row), not to the Cognito sub.
+		const principalIdEqCalls = eqCalls.filter(
+			(c) => (c.col as { __col?: string })?.__col === "tenant_members.principal_id",
+		);
+		expect(principalIdEqCalls.length).toBeGreaterThan(0);
+		for (const call of principalIdEqCalls) {
+			expect(call.value).toBe(USER_ID);
+			expect(call.value).not.toBe(COGNITO_SUB);
+		}
 	});
 });
 
