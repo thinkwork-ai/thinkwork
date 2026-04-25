@@ -66,6 +66,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 
 import { authenticate } from "../lib/cognito-auth.js";
+import { resolveCallerFromAuth } from "../graphql/resolvers/core/resolve-auth-user.js";
 import {
   error,
   forbidden,
@@ -119,29 +120,29 @@ export async function handler(
   );
   if (!auth) return unauthorized();
 
-  const tenantId = auth.tenantId;
+  // Resolve via the email fallback for Google-federated users — their
+  // Cognito JWT doesn't carry custom:tenant_id, and `users.id` is a
+  // fresh UUID (not the Cognito sub), so `auth.tenantId` is null and
+  // `auth.principalId` won't match `tenantMembers.principal_id`.
+  const { userId, tenantId } = await resolveCallerFromAuth(auth);
   if (!tenantId) {
-    // Cognito-federated users whose pre-token trigger hasn't fired
-    // yet fall through with a null tenantId. Admin-role operations
-    // MUST carry a resolved tenant — force the client to reauth
-    // rather than guess.
     return error("authentication carried no tenant_id", 401);
   }
 
   // Admin-role check. The tenantMembers query also answers the
   // membership question, so a caller who isn't a member at all still
   // gets 403 (not 404) — not leaking membership shape to a stranger.
-  const isAdmin = await callerIsTenantAdmin(tenantId, auth.principalId);
+  const isAdmin = await callerIsTenantAdmin(tenantId, userId);
   if (!isAdmin) {
     return forbidden("caller is not a tenant admin or owner");
   }
 
   try {
     if (path === "/api/plugins/presign" && method === "POST") {
-      return await handlePresign(tenantId, auth.principalId, event);
+      return await handlePresign(tenantId, userId, event);
     }
     if (path === "/api/plugins/upload" && method === "POST") {
-      return await handleUpload(tenantId, auth.principalId, event);
+      return await handleUpload(tenantId, userId, event);
     }
     if (path === "/api/plugins" && method === "GET") {
       return await handleListUploads(tenantId);
