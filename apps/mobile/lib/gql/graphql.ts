@@ -2178,8 +2178,10 @@ export type PerformanceTimeSeries = {
 export type PinStatusFile = {
   __typename?: 'PinStatusFile';
   filename: Scalars['String']['output'];
+  folderPath?: Maybe<Scalars['String']['output']>;
   latestContent?: Maybe<Scalars['String']['output']>;
   latestSha?: Maybe<Scalars['String']['output']>;
+  path: Scalars['String']['output'];
   pinnedContent?: Maybe<Scalars['String']['output']>;
   pinnedSha?: Maybe<Scalars['String']['output']>;
   updateAvailable: Scalars['Boolean']['output'];
@@ -2397,6 +2399,7 @@ export type QueryAgentPerformanceArgs = {
 
 export type QueryAgentPinStatusArgs = {
   agentId: Scalars['ID']['input'];
+  includeNested?: InputMaybe<Scalars['Boolean']['input']>;
 };
 
 
