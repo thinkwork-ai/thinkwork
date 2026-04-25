@@ -64,6 +64,7 @@ EXPECTED_CONTAINER_SOURCES: tuple[str, ...] = (
 # their COPY lines explicit rather than folding them into container-sources/.
 # `hindsight_client.py` is renamed to `hs_urllib_client.py` at COPY time.
 EXPECTED_SHARED: tuple[str, ...] = (
+    "agents_md_parser",
     "bedrock_request_tracker",
     "context_parser",
     "hs_urllib_client",
