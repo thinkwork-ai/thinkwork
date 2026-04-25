@@ -682,3 +682,338 @@ describe("composeFileCached + invalidateComposerCache", () => {
 		expect(s3Mock.commandCalls(GetObjectCommand).length).toBeGreaterThanOrEqual(2);
 	});
 });
+
+// ─── 8. Recursive overlay (Plan §008 U5) ─────────────────────────────────────
+//
+// Sub-agent folders inherit through agent ancestors → template ancestors →
+// defaults. The composer walks ancestor folder paths within each layer
+// (deepest first) before stepping to the next layer. Reserved folder
+// segments (`memory/`, `skills/`) terminate the walk so sub-agent memory
+// and local skills don't fall through to root.
+
+describe("composeFile — recursive sub-agent paths", () => {
+	it("resolves sub-agent CONTEXT.md from agent override at full sub-agent path (AE2 thin sub-agent)", async () => {
+		queueBaseContext();
+		const k = keys();
+		const subContext = "# Expenses sub-agent\nHandles receipt approvals.";
+		s3Mock
+			.on(GetObjectCommand, { Key: k.agent("expenses/CONTEXT.md") })
+			.resolves(body(subContext));
+
+		const result = await composeFile(ctx(), AGENT_MARCO, "expenses/CONTEXT.md");
+
+		expect(result.path).toBe("expenses/CONTEXT.md");
+		expect(result.source).toBe("agent-override");
+		expect(result.content).toBe(subContext);
+	});
+
+	it("falls through ancestor IDENTITY.md at agent layer when sub-agent has no override (AE2)", async () => {
+		queueBaseContext();
+		const k = keys();
+		const rootIdentity = "# Identity\nI am {{AGENT_NAME}}, a sub-specialist.";
+		// Agent has root IDENTITY.md but no sub-agent override.
+		s3Mock.on(GetObjectCommand, { Key: k.agent("expenses/IDENTITY.md") }).rejects(noSuchKey());
+		s3Mock.on(GetObjectCommand, { Key: k.agent("IDENTITY.md") }).resolves(body(rootIdentity));
+
+		const result = await composeFile(ctx(), AGENT_MARCO, "expenses/IDENTITY.md");
+
+		expect(result.source).toBe("agent-override");
+		expect(result.content).toBe("# Identity\nI am Marco, a sub-specialist.");
+	});
+
+	it("sub-agent override wins over root override at the same layer (AE3)", async () => {
+		queueBaseContext();
+		const k = keys();
+		const rootGuard = "# Root guardrails";
+		const subGuard = "# Expenses-specific guardrails";
+		s3Mock
+			.on(GetObjectCommand, { Key: k.agent("expenses/GUARDRAILS.md") })
+			.resolves(body(subGuard));
+		s3Mock.on(GetObjectCommand, { Key: k.agent("GUARDRAILS.md") }).resolves(body(rootGuard));
+
+		const result = await composeFile(ctx(), AGENT_MARCO, "expenses/GUARDRAILS.md");
+
+		// Pinned-class file at sub-agent depth: override at full sub-agent path
+		// wins. Until U24 ships path-qualified pin keys, source labels as the
+		// pinned-aware override variant since the basename is in PINNED_FILES.
+		expect(result.source).toBe("agent-override-pinned");
+		expect(result.content).toBe(subGuard);
+	});
+
+	it("3-level nested sub-agent resolves through three ancestors to template root", async () => {
+		queueBaseContext();
+		const k = keys();
+		const templateRoot = "# Guardrails (template root)";
+		// Agent has nothing at any depth.
+		s3Mock
+			.on(GetObjectCommand, { Key: k.agent("expenses/escalation/legal/GUARDRAILS.md") })
+			.rejects(noSuchKey());
+		s3Mock
+			.on(GetObjectCommand, { Key: k.agent("expenses/escalation/GUARDRAILS.md") })
+			.rejects(noSuchKey());
+		s3Mock
+			.on(GetObjectCommand, { Key: k.agent("expenses/GUARDRAILS.md") })
+			.rejects(noSuchKey());
+		s3Mock.on(GetObjectCommand, { Key: k.agent("GUARDRAILS.md") }).rejects(noSuchKey());
+		s3Mock
+			.on(GetObjectCommand, { Key: k.template("expenses/escalation/legal/GUARDRAILS.md") })
+			.rejects(noSuchKey());
+		s3Mock
+			.on(GetObjectCommand, { Key: k.template("expenses/escalation/GUARDRAILS.md") })
+			.rejects(noSuchKey());
+		s3Mock
+			.on(GetObjectCommand, { Key: k.template("expenses/GUARDRAILS.md") })
+			.rejects(noSuchKey());
+		s3Mock
+			.on(GetObjectCommand, { Key: k.template("GUARDRAILS.md") })
+			.resolves(body(templateRoot));
+
+		const result = await composeFile(
+			ctx(),
+			AGENT_MARCO,
+			"expenses/escalation/legal/GUARDRAILS.md",
+		);
+
+		expect(result.path).toBe("expenses/escalation/legal/GUARDRAILS.md");
+		expect(result.source).toBe("template");
+		expect(result.content).toBe(templateRoot);
+	});
+
+	it("agent ancestor at depth 2 wins over template at requested depth", async () => {
+		queueBaseContext();
+		const k = keys();
+		// Agent has IDENTITY at root only. Template has it at the
+		// requested sub-agent path. Agent ancestor wins.
+		s3Mock
+			.on(GetObjectCommand, { Key: k.agent("expenses/escalation/IDENTITY.md") })
+			.rejects(noSuchKey());
+		s3Mock
+			.on(GetObjectCommand, { Key: k.agent("expenses/IDENTITY.md") })
+			.rejects(noSuchKey());
+		s3Mock.on(GetObjectCommand, { Key: k.agent("IDENTITY.md") }).resolves(body("agent root"));
+		s3Mock
+			.on(GetObjectCommand, { Key: k.template("expenses/escalation/IDENTITY.md") })
+			.resolves(body("template deep"));
+
+		const result = await composeFile(ctx(), AGENT_MARCO, "expenses/escalation/IDENTITY.md");
+
+		expect(result.source).toBe("agent-override");
+		expect(result.content).toBe("agent root");
+	});
+
+	it("falls through to defaults at root when nothing is set anywhere", async () => {
+		queueBaseContext();
+		const k = keys();
+		s3Mock.onAnyCommand().rejects(noSuchKey());
+		s3Mock.on(GetObjectCommand, { Key: k.defaults("IDENTITY.md") }).resolves(body("defaults root"));
+
+		const result = await composeFile(ctx(), AGENT_MARCO, "expenses/IDENTITY.md");
+
+		expect(result.source).toBe("defaults");
+		expect(result.content).toBe("defaults root");
+	});
+
+	it("throws FileNotFoundError when no ancestor resolves at any layer", async () => {
+		queueBaseContext();
+		s3Mock.onAnyCommand().rejects(noSuchKey());
+		await expect(
+			composeFile(ctx(), AGENT_MARCO, "expenses/escalation/ghost.md"),
+		).rejects.toBeInstanceOf(FileNotFoundError);
+	});
+
+	it("rejects path traversal segments", async () => {
+		// Validation runs before any DB or S3 work, so no rows queued.
+		await expect(
+			composeFile(ctx(), AGENT_MARCO, "../escape.md"),
+		).rejects.toThrow(/invalid path/i);
+	});
+
+	it("rejects embedded .. segments inside the path", async () => {
+		await expect(
+			composeFile(ctx(), AGENT_MARCO, "expenses/../GUARDRAILS.md"),
+		).rejects.toThrow(/invalid path/i);
+	});
+
+	it("does not walk past reserved folder segments — memory/lessons.md stays scoped", async () => {
+		queueBaseContext();
+		const k = keys();
+		// Reserved-folder file at sub-agent depth must not fall through to
+		// root memory/lessons.md ancestor (which doesn't exist as
+		// "lessons.md") nor strip "memory/" to land somewhere unrelated.
+		s3Mock
+			.on(GetObjectCommand, { Key: k.agent("expenses/memory/lessons.md") })
+			.rejects(noSuchKey());
+		// Provide root memory/lessons.md as a tempting but wrong fall-through.
+		s3Mock
+			.on(GetObjectCommand, { Key: k.agent("memory/lessons.md") })
+			.resolves(body("ROOT MEMORY — should not be returned"));
+		s3Mock
+			.on(GetObjectCommand, { Key: k.template("expenses/memory/lessons.md") })
+			.rejects(noSuchKey());
+		s3Mock
+			.on(GetObjectCommand, { Key: k.defaults("expenses/memory/lessons.md") })
+			.rejects(noSuchKey());
+
+		await expect(
+			composeFile(ctx(), AGENT_MARCO, "expenses/memory/lessons.md"),
+		).rejects.toBeInstanceOf(FileNotFoundError);
+	});
+
+	it("does not walk past skills/ reserved folder for nested SKILL.md", async () => {
+		queueBaseContext();
+		const k = keys();
+		s3Mock
+			.on(GetObjectCommand, { Key: k.agent("expenses/skills/approve-receipt/SKILL.md") })
+			.rejects(noSuchKey());
+		s3Mock
+			.on(GetObjectCommand, { Key: k.template("expenses/skills/approve-receipt/SKILL.md") })
+			.rejects(noSuchKey());
+		s3Mock
+			.on(GetObjectCommand, { Key: k.defaults("expenses/skills/approve-receipt/SKILL.md") })
+			.rejects(noSuchKey());
+		// Tempting but wrong: SKILL.md at root should not be hit via
+		// reserved-folder traversal.
+		s3Mock
+			.on(GetObjectCommand, { Key: k.agent("SKILL.md") })
+			.resolves(body("WRONG"));
+
+		await expect(
+			composeFile(ctx(), AGENT_MARCO, "expenses/skills/approve-receipt/SKILL.md"),
+		).rejects.toBeInstanceOf(FileNotFoundError);
+	});
+
+	it("substitutes placeholders during recursive resolution at template ancestor", async () => {
+		queueBaseContext();
+		const k = keys();
+		s3Mock.on(GetObjectCommand, { Key: k.agent("expenses/IDENTITY.md") }).rejects(noSuchKey());
+		s3Mock.on(GetObjectCommand, { Key: k.agent("IDENTITY.md") }).rejects(noSuchKey());
+		s3Mock.on(GetObjectCommand, { Key: k.template("expenses/IDENTITY.md") }).rejects(noSuchKey());
+		s3Mock
+			.on(GetObjectCommand, { Key: k.template("IDENTITY.md") })
+			.resolves(body("Hi {{AGENT_NAME}}"));
+
+		const result = await composeFile(ctx(), AGENT_MARCO, "expenses/IDENTITY.md");
+
+		expect(result.source).toBe("template");
+		expect(result.content).toBe("Hi Marco");
+	});
+
+	it("preserves root-only fast path: 1-segment paths only check exact key in each layer", async () => {
+		queueBaseContext();
+		const k = keys();
+		s3Mock.on(GetObjectCommand, { Key: k.agent("IDENTITY.md") }).rejects(noSuchKey());
+		s3Mock.on(GetObjectCommand, { Key: k.template("IDENTITY.md") }).rejects(noSuchKey());
+		s3Mock.on(GetObjectCommand, { Key: k.defaults("IDENTITY.md") }).resolves(body("X"));
+
+		await composeFile(ctx(), AGENT_MARCO, "IDENTITY.md");
+
+		// Root path → exactly 3 GET calls, no ancestor probing.
+		expect(s3Mock.commandCalls(GetObjectCommand).length).toBe(3);
+	});
+});
+
+describe("composeList — recursive enumeration", () => {
+	it("includes sub-agent files in the union and labels them by source layer", async () => {
+		queueBaseContext();
+		const k = keys();
+
+		s3Mock
+			.on(ListObjectsV2Command, { Prefix: `tenants/acme/agents/marco/workspace/` })
+			.resolves({
+				Contents: [
+					{ Key: k.agent("expenses/CONTEXT.md") },
+					{ Key: k.agent("expenses/escalation/CONTEXT.md") },
+				],
+			});
+		s3Mock
+			.on(ListObjectsV2Command, {
+				Prefix: `tenants/acme/agents/_catalog/exec-assistant/workspace/`,
+			})
+			.resolves({ Contents: [] });
+		s3Mock
+			.on(ListObjectsV2Command, {
+				Prefix: `tenants/acme/agents/_catalog/defaults/workspace/`,
+			})
+			.resolves({
+				Contents: [
+					{ Key: k.defaults("IDENTITY.md") },
+					{ Key: k.defaults("SOUL.md") },
+					{ Key: k.defaults("AGENTS.md") },
+					{ Key: k.defaults("CONTEXT.md") },
+					{ Key: k.defaults("USER.md") },
+					{ Key: k.defaults("GUARDRAILS.md") },
+					{ Key: k.defaults("MEMORY_GUIDE.md") },
+					{ Key: k.defaults("CAPABILITIES.md") },
+					{ Key: k.defaults("PLATFORM.md") },
+					{ Key: k.defaults("ROUTER.md") },
+					{ Key: k.defaults("memory/lessons.md") },
+					{ Key: k.defaults("memory/preferences.md") },
+					{ Key: k.defaults("memory/contacts.md") },
+				],
+			});
+
+		// Provide content for every path the listing yields. Sub-agent
+		// CONTEXT.md goes to agent layer; everything else → defaults via the
+		// live chain.
+		s3Mock
+			.on(GetObjectCommand, { Key: k.agent("expenses/CONTEXT.md") })
+			.resolves(body("# expenses ctx"));
+		s3Mock
+			.on(GetObjectCommand, { Key: k.agent("expenses/escalation/CONTEXT.md") })
+			.resolves(body("# escalation ctx"));
+		const CANONICAL = [
+			"IDENTITY.md",
+			"SOUL.md",
+			"AGENTS.md",
+			"CONTEXT.md",
+			"USER.md",
+			"GUARDRAILS.md",
+			"MEMORY_GUIDE.md",
+			"CAPABILITIES.md",
+			"PLATFORM.md",
+			"ROUTER.md",
+			"memory/lessons.md",
+			"memory/preferences.md",
+			"memory/contacts.md",
+		];
+		for (const path of CANONICAL) {
+			s3Mock.on(GetObjectCommand, { Key: k.agent(path) }).rejects(noSuchKey());
+			s3Mock.on(GetObjectCommand, { Key: k.template(path) }).rejects(noSuchKey());
+			s3Mock
+				.on(GetObjectCommand, { Key: k.defaults(path) })
+				.resolves(body(`# defaults ${path}`));
+		}
+
+		const listing = (await composeList(ctx(), AGENT_MARCO, {
+			includeContent: true,
+		})) as Array<{ path: string; source: string; content: string }>;
+
+		const byPath = new Map(listing.map((f) => [f.path, f]));
+		expect(byPath.get("expenses/CONTEXT.md")?.source).toBe("agent-override");
+		expect(byPath.get("expenses/escalation/CONTEXT.md")?.source).toBe("agent-override");
+		// Canonical defaults still surface alongside sub-agent paths.
+		expect(byPath.get("IDENTITY.md")?.source).toBe("defaults");
+	});
+});
+
+// ─── 9. Cache key includes full path ─────────────────────────────────────────
+
+describe("composeFileCached — recursive paths", () => {
+	it("cache keys for root vs sub-agent paths do not collide", async () => {
+		queueBaseContext();
+		const k = keys();
+		s3Mock.on(GetObjectCommand, { Key: k.agent("IDENTITY.md") }).resolves(body("ROOT"));
+		s3Mock
+			.on(GetObjectCommand, { Key: k.agent("expenses/IDENTITY.md") })
+			.resolves(body("SUB"));
+
+		const root = await composeFileCached(ctx(), AGENT_MARCO, "IDENTITY.md");
+		// Second compose for sub-agent path needs DB rows again — the cache
+		// for the sub-agent path entry is empty at this point.
+		queueBaseContext();
+		const sub = await composeFileCached(ctx(), AGENT_MARCO, "expenses/IDENTITY.md");
+
+		expect(root.content).toBe("ROOT");
+		expect(sub.content).toBe("SUB");
+	});
+});
