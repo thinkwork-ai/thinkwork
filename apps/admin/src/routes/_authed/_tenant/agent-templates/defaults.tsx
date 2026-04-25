@@ -110,18 +110,28 @@ function buildTree(files: string[]): TreeNode[] {
 function TreeItem({
   node,
   selectedFile,
+  deletingPath,
+  confirmingDeletePath,
   onSelect,
   onDelete,
+  onConfirmDelete,
+  onCancelDeleteConfirm,
   depth = 0,
 }: {
   node: TreeNode;
   selectedFile: string | null;
+  deletingPath: string | null;
+  confirmingDeletePath: string | null;
   onSelect: (path: string) => void;
   onDelete: (path: string) => void;
+  onConfirmDelete: (path: string) => void;
+  onCancelDeleteConfirm: (path: string) => void;
   depth?: number;
 }) {
   const [expanded, setExpanded] = useState(true);
   const isActive = selectedFile === node.path;
+  const isDeleting = deletingPath === node.path;
+  const isConfirmingDelete = confirmingDeletePath === node.path;
 
   if (node.isFolder) {
     return (
@@ -136,7 +146,18 @@ function TreeItem({
           <span>{node.name}</span>
         </button>
         {expanded && node.children.map((child) => (
-          <TreeItem key={child.path} node={child} selectedFile={selectedFile} onSelect={onSelect} onDelete={onDelete} depth={depth + 1} />
+          <TreeItem
+            key={child.path}
+            node={child}
+            selectedFile={selectedFile}
+            deletingPath={deletingPath}
+            confirmingDeletePath={confirmingDeletePath}
+            onSelect={onSelect}
+            onDelete={onDelete}
+            onConfirmDelete={onConfirmDelete}
+            onCancelDeleteConfirm={onCancelDeleteConfirm}
+            depth={depth + 1}
+          />
         ))}
       </div>
     );
@@ -147,6 +168,7 @@ function TreeItem({
       className={`flex items-center justify-between group rounded cursor-pointer text-sm hover:bg-accent ${isActive ? "bg-accent" : ""}`}
       style={{ paddingLeft: `${depth * 12 + 8}px` }}
       onClick={() => onSelect(node.path)}
+      onMouseLeave={() => onCancelDeleteConfirm(node.path)}
     >
       <div className="flex items-center gap-1.5 py-1 truncate">
         <File className="h-3 w-3 shrink-0 text-muted-foreground" />
@@ -155,13 +177,25 @@ function TreeItem({
       <Button
         variant="ghost"
         size="icon"
-        className="h-5 w-5 mr-1 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+        className={`h-5 mr-1 text-muted-foreground hover:text-destructive ${
+          isConfirmingDelete ? "w-14 px-1.5 text-[11px] text-destructive opacity-100" : "w-5"
+        } ${
+          isDeleting || isConfirmingDelete ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+        }`}
+        disabled={isDeleting}
         onClick={(e) => {
           e.stopPropagation();
-          onDelete(node.path);
+          if (isConfirmingDelete) onDelete(node.path);
+          else onConfirmDelete(node.path);
         }}
       >
-        <Trash2 className="h-3 w-3" />
+        {isDeleting ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : isConfirmingDelete ? (
+          "Confirm"
+        ) : (
+          <Trash2 className="h-3 w-3" />
+        )}
       </Button>
     </div>
   );
@@ -183,6 +217,8 @@ function DefaultWorkspacePage() {
   const [originalContent, setOriginalContent] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deletingPath, setDeletingPath] = useState<string | null>(null);
+  const [confirmingDeletePath, setConfirmingDeletePath] = useState<string | null>(null);
   const [newFileName, setNewFileName] = useState("");
   const [newFileDialogOpen, setNewFileDialogOpen] = useState(false);
   const [bootstrapping, setBootstrapping] = useState(false);
@@ -268,8 +304,11 @@ function DefaultWorkspacePage() {
   };
 
   const deleteFile = async (path: string) => {
+    setConfirmingDeletePath(null);
+    setDeletingPath(path);
     try {
       await deleteWorkspaceFile(target, path);
+      setFiles((current) => current.filter((file) => file !== path));
       if (selectedFile === path) {
         setSelectedFile(null);
         setContent("");
@@ -278,7 +317,17 @@ function DefaultWorkspacePage() {
       await fetchFiles();
     } catch (err) {
       console.error("Failed to delete file:", err);
+    } finally {
+      setDeletingPath(null);
     }
+  };
+
+  const confirmDelete = (path: string) => {
+    setConfirmingDeletePath(path);
+  };
+
+  const cancelDeleteConfirm = (path: string) => {
+    setConfirmingDeletePath((current) => (current === path ? null : current));
   };
 
   const handleRebootstrap = async () => {
@@ -354,8 +403,12 @@ function DefaultWorkspacePage() {
                 key={node.path}
                 node={node}
                 selectedFile={selectedFile}
+                deletingPath={deletingPath}
+                confirmingDeletePath={confirmingDeletePath}
                 onSelect={loadFile}
                 onDelete={deleteFile}
+                onConfirmDelete={confirmDelete}
+                onCancelDeleteConfirm={cancelDeleteConfirm}
               />
             ))}
           </div>
@@ -390,8 +443,28 @@ function DefaultWorkspacePage() {
                     {saving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
                     Save
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground" onClick={() => deleteFile(selectedFile)}>
-                    <Trash2 className="h-3 w-3" />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={`h-6 p-0 text-muted-foreground ${
+                      confirmingDeletePath === selectedFile
+                        ? "w-16 px-2 text-[11px] text-destructive"
+                        : "w-6"
+                    }`}
+                    disabled={deletingPath === selectedFile}
+                    onMouseLeave={() => cancelDeleteConfirm(selectedFile)}
+                    onClick={() => {
+                      if (confirmingDeletePath === selectedFile) deleteFile(selectedFile);
+                      else confirmDelete(selectedFile);
+                    }}
+                  >
+                    {deletingPath === selectedFile ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : confirmingDeletePath === selectedFile ? (
+                      "Confirm"
+                    ) : (
+                      <Trash2 className="h-3 w-3" />
+                    )}
                   </Button>
                 </div>
               </div>

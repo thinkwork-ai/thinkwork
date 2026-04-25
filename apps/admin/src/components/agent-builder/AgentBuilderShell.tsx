@@ -9,6 +9,7 @@ import {
   Plus,
   Wand2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { AcceptTemplateUpdateDialog } from "@/components/AcceptTemplateUpdateDialog";
 import { PageLayout } from "@/components/PageLayout";
 import { Button } from "@/components/ui/button";
@@ -32,12 +33,30 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { AgentDetailQuery } from "@/lib/graphql-queries";
 import {
   agentBuilderApi,
   type ComposeSource,
   type Target,
 } from "@/lib/agent-builder-api";
+import {
+  SKILL_AUTHORING_TEMPLATES,
+  SKILL_CATEGORIES,
+  buildLocalSkillPath,
+  renderSkillExtraFiles,
+  renderSkillTemplate,
+  slugifySkillName,
+  type SkillTemplateKey,
+} from "@/lib/skill-authoring-templates";
 import { FileEditorPane } from "./FileEditorPane";
 import { FolderTree, buildWorkspaceTree } from "./FolderTree";
 import { ImportDropzone } from "./ImportDropzone";
@@ -156,6 +175,7 @@ export function AgentBuilderShell({
     {},
   );
   const [loadingFiles, setLoadingFiles] = useState(true);
+  const [loadedFilesOnce, setLoadedFilesOnce] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
     new Set(),
@@ -165,9 +185,21 @@ export function AgentBuilderShell({
   const [editValue, setEditValue] = useState("");
   const [loadingContent, setLoadingContent] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deletingPath, setDeletingPath] = useState<string | null>(null);
+  const [confirmingDeletePath, setConfirmingDeletePath] = useState<
+    string | null
+  >(null);
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
   const [newFilePath, setNewFilePath] = useState("");
   const [creatingFile, setCreatingFile] = useState(false);
+  const [showNewSkillDialog, setShowNewSkillDialog] = useState(false);
+  const [creatingSkill, setCreatingSkill] = useState(false);
+  const [newSkillTemplate, setNewSkillTemplate] =
+    useState<SkillTemplateKey>("knowledge");
+  const [newSkillName, setNewSkillName] = useState("");
+  const [newSkillDescription, setNewSkillDescription] = useState("");
+  const [newSkillCategory, setNewSkillCategory] = useState("custom");
+  const [newSkillTags, setNewSkillTags] = useState("");
   const [acceptDialogPath, setAcceptDialogPath] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const loadRequestId = useRef(0);
@@ -179,26 +211,35 @@ export function AgentBuilderShell({
     openFileRef.current = openFile;
   }, [openFile]);
 
-  const fetchFiles = useCallback(async () => {
-    const requestId = fileListRequestId.current + 1;
-    fileListRequestId.current = requestId;
-    setLoadingFiles(true);
-    try {
-      const data = await agentBuilderApi.listFiles(target);
-      if (fileListRequestId.current !== requestId) return;
-      setFiles(data.files.map((file) => file.path));
-      const sources: Record<string, ComposeSource> = {};
-      for (const file of data.files) sources[file.path] = file.source;
-      setFileSources(sources);
-    } catch (err) {
-      if (fileListRequestId.current !== requestId) return;
-      console.error("Failed to list workspace files:", err);
-    } finally {
-      if (fileListRequestId.current === requestId) {
-        setLoadingFiles(false);
+  const fetchFiles = useCallback(
+    async (options: { showLoading?: boolean } = {}) => {
+      const showLoading = options.showLoading ?? false;
+      const requestId = fileListRequestId.current + 1;
+      fileListRequestId.current = requestId;
+      if (showLoading) setLoadingFiles(true);
+      try {
+        const data = await agentBuilderApi.listFiles(target);
+        if (fileListRequestId.current !== requestId) return;
+        setFiles(data.files.map((file) => file.path));
+        const sources: Record<string, ComposeSource> = {};
+        for (const file of data.files) sources[file.path] = file.source;
+        setFileSources(sources);
+      } catch (err) {
+        if (fileListRequestId.current !== requestId) return;
+        console.error("Failed to list workspace files:", err);
+      } finally {
+        if (fileListRequestId.current === requestId) {
+          setLoadedFilesOnce(true);
+          if (showLoading) setLoadingFiles(false);
+        }
       }
-    }
-  }, [target]);
+    },
+    [target],
+  );
+
+  const refreshFilesInBackground = useCallback(() => {
+    void fetchFiles({ showLoading: false });
+  }, [fetchFiles]);
 
   useEffect(() => {
     loadRequestId.current += 1;
@@ -212,10 +253,11 @@ export function AgentBuilderShell({
     setEditValue("");
     setLoadingContent(false);
     setLoadingFiles(true);
+    setLoadedFilesOnce(false);
   }, [agentId]);
 
   useEffect(() => {
-    fetchFiles();
+    fetchFiles({ showLoading: true });
   }, [fetchFiles]);
 
   const tree = useMemo(() => buildWorkspaceTree(files), [files]);
@@ -356,6 +398,82 @@ export function AgentBuilderShell({
     }
   };
 
+  const resetNewSkillDialog = () => {
+    setNewSkillTemplate("knowledge");
+    setNewSkillName("");
+    setNewSkillDescription("");
+    setNewSkillCategory("custom");
+    setNewSkillTags("");
+  };
+
+  const newSkillSlug = slugifySkillName(newSkillName);
+
+  const handleCreateLocalSkill = async () => {
+    if (!newSkillSlug) return;
+    setCreatingSkill(true);
+    const options = {
+      template: newSkillTemplate,
+      name: newSkillName,
+      description: newSkillDescription,
+      category: newSkillCategory,
+      tags: newSkillTags,
+    };
+    const skillPath = buildLocalSkillPath(newSkillSlug);
+    const skillContent = renderSkillTemplate(options);
+    const failedExtraFiles: string[] = [];
+
+    try {
+      if (files.includes(skillPath)) {
+        toast.error(`${skillPath} already exists`);
+        return;
+      }
+
+      await agentBuilderApi.putFile(target, skillPath, skillContent);
+      for (const [extraPath, extraContent] of Object.entries(
+        renderSkillExtraFiles(options),
+      )) {
+        const localPath = buildLocalSkillPath(newSkillSlug, extraPath);
+        try {
+          await agentBuilderApi.putFile(target, localPath, extraContent);
+        } catch (err) {
+          console.error(
+            `Failed to create local skill support file ${localPath}:`,
+            err,
+          );
+          failedExtraFiles.push(localPath);
+        }
+      }
+
+      setOpenFile(skillPath);
+      setContent(skillContent);
+      setEditValue(skillContent);
+      setExpandedFolders((prev) => {
+        const next = new Set(prev);
+        next.add("skills");
+        next.add(`skills/${newSkillSlug}`);
+        return next;
+      });
+      await fetchFiles();
+      setShowNewSkillDialog(false);
+      resetNewSkillDialog();
+
+      if (failedExtraFiles.length > 0) {
+        toast.warning(
+          `Created SKILL.md, but ${failedExtraFiles.length} support file failed.`,
+        );
+      } else {
+        toast.success(`Created local skill ${newSkillSlug}`);
+      }
+    } catch (err) {
+      console.error("Failed to create local skill:", err);
+      toast.error(
+        err instanceof Error ? err.message : "Failed to create local skill",
+      );
+    } finally {
+      setCreatingSkill(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!openFile) return;
     const savedPath = openFile;
@@ -390,35 +508,51 @@ export function AgentBuilderShell({
 
     if (paths.length < allPaths.length) {
       const inheritedCount = allPaths.length - paths.length;
-      const message = isFolder
-        ? `${inheritedCount} inherited file${inheritedCount === 1 ? "" : "s"} will remain visible because this agent can only delete its own overrides. Continue deleting ${paths.length} override file${paths.length === 1 ? "" : "s"}?`
-        : "This file is inherited from a template or defaults. Delete is only available for agent overrides.";
       if (!isFolder) {
-        alert(message);
+        toast.info(
+          "Inherited files stay visible until overridden; only agent overrides can be deleted.",
+        );
         return;
       }
-      if (!confirm(message)) return;
+      if (paths.length > 0) {
+        toast.info(
+          `${inheritedCount} inherited file${inheritedCount === 1 ? "" : "s"} will remain visible.`,
+        );
+      }
     }
     if (paths.length === 0) return;
 
-    const label = isFolder
-      ? `${path}/ and ${paths.length} file${paths.length === 1 ? "" : "s"}`
-      : path;
-    if (!confirm(`Delete ${label}?`)) return;
-
+    setConfirmingDeletePath(null);
+    setDeletingPath(path);
     try {
       for (const filePath of paths) {
         await agentBuilderApi.deleteFile(target, filePath);
       }
+      setFiles((current) => current.filter((file) => !paths.includes(file)));
+      setFileSources((current) => {
+        const next = { ...current };
+        for (const file of paths) delete next[file];
+        return next;
+      });
       if (openFile && paths.includes(openFile)) {
         setOpenFile(null);
         setContent("");
         setEditValue("");
       }
-      await fetchFiles();
+      refreshFilesInBackground();
     } catch (err) {
       console.error("Failed to delete workspace path:", err);
+    } finally {
+      setDeletingPath(null);
     }
+  };
+
+  const handleConfirmDelete = (path: string) => {
+    setConfirmingDeletePath(path);
+  };
+
+  const handleCancelDeleteConfirm = (path: string) => {
+    setConfirmingDeletePath((current) => (current === path ? null : current));
   };
 
   const handleAccepted = useCallback(async () => {
@@ -465,6 +599,14 @@ export function AgentBuilderShell({
               <DropdownMenuContent align="end" className="min-w-56">
                 <DropdownMenuItem
                   className="whitespace-nowrap"
+                  onClick={() => setShowNewSkillDialog(true)}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Skill
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="whitespace-nowrap"
                   onClick={() => setShowNewFileDialog(true)}
                 >
                   <FilePlus className="mr-2 h-4 w-4" />
@@ -505,7 +647,7 @@ export function AgentBuilderShell({
         </div>
       }
     >
-      {loadingFiles ? (
+      {loadingFiles && !loadedFilesOnce ? (
         <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading...
         </div>
@@ -561,10 +703,14 @@ export function AgentBuilderShell({
                 expandedFolders={expandedFolders}
                 sourceFor={sourceFor}
                 updateAvailableFor={updateAvailableFor}
+                deletingPath={deletingPath}
+                confirmingDeletePath={confirmingDeletePath}
                 onSelect={openWorkspaceFile}
                 onToggle={toggleFolder}
                 onAcceptUpdate={setAcceptDialogPath}
                 onDelete={handleDeletePath}
+                onConfirmDelete={handleConfirmDelete}
+                onCancelDeleteConfirm={handleCancelDeleteConfirm}
               />
             </div>
           </div>
@@ -575,10 +721,16 @@ export function AgentBuilderShell({
               value={editValue}
               loading={loadingContent}
               saving={saving}
+              deleting={deletingPath === openFile}
+              confirmingDelete={confirmingDeletePath === openFile}
               onChange={setEditValue}
               onSave={handleSave}
               onDiscard={() => setEditValue(content)}
               onDelete={handleDelete}
+              onConfirmDelete={() => openFile && handleConfirmDelete(openFile)}
+              onCancelDeleteConfirm={() =>
+                openFile && handleCancelDeleteConfirm(openFile)
+              }
             />
           </div>
         </div>
@@ -616,6 +768,109 @@ export function AgentBuilderShell({
                   <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                 )}
                 Create
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showNewSkillDialog} onOpenChange={setShowNewSkillDialog}>
+        <DialogContent style={{ maxWidth: 520 }}>
+          <DialogHeader>
+            <DialogTitle>New Local Skill</DialogTitle>
+            <DialogDescription>
+              Create a local skill under{" "}
+              <code>skills/{newSkillSlug || "skill-slug"}/</code>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-1.5">
+              <Label>Template</Label>
+              <Select
+                value={newSkillTemplate}
+                onValueChange={(value) =>
+                  setNewSkillTemplate(value as SkillTemplateKey)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(SKILL_AUTHORING_TEMPLATES).map(
+                    ([key, template]) => (
+                      <SelectItem key={key} value={key}>
+                        {template.label}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {SKILL_AUTHORING_TEMPLATES[newSkillTemplate].description}
+              </p>
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Name</Label>
+              <Input
+                value={newSkillName}
+                onChange={(event) => setNewSkillName(event.target.value)}
+                placeholder="Approve Receipt"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Description</Label>
+              <Textarea
+                value={newSkillDescription}
+                onChange={(event) => setNewSkillDescription(event.target.value)}
+                placeholder="What should this skill help the agent do?"
+                rows={3}
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label>Category</Label>
+                <Select
+                  value={newSkillCategory}
+                  onValueChange={setNewSkillCategory}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SKILL_CATEGORIES.map((category) => (
+                      <SelectItem key={category.value} value={category.value}>
+                        {category.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-1.5">
+                <Label>Tags</Label>
+                <Input
+                  value={newSkillTags}
+                  onChange={(event) => setNewSkillTags(event.target.value)}
+                  placeholder="receipts, approval"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowNewSkillDialog(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleCreateLocalSkill}
+                disabled={!newSkillSlug || creatingSkill}
+              >
+                {creatingSkill && (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                )}
+                Create Skill
               </Button>
             </div>
           </div>

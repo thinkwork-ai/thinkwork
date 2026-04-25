@@ -4,6 +4,7 @@ import {
   File,
   Folder,
   FolderOpen,
+  Loader2,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -67,10 +68,14 @@ export interface FolderTreeProps {
   expandedFolders: Set<string>;
   sourceFor: (path: string) => ComposeSource | undefined;
   updateAvailableFor: (path: string) => boolean;
+  deletingPath: string | null;
+  confirmingDeletePath: string | null;
   onSelect: (path: string) => void;
   onToggle: (path: string) => void;
   onAcceptUpdate: (path: string) => void;
   onDelete: (path: string, isFolder: boolean) => void;
+  onConfirmDelete: (path: string) => void;
+  onCancelDeleteConfirm: (path: string) => void;
 }
 
 export function FolderTree(props: FolderTreeProps) {
@@ -98,13 +103,19 @@ function FolderTreeItem({
   expandedFolders,
   sourceFor,
   updateAvailableFor,
+  deletingPath,
+  confirmingDeletePath,
   onSelect,
   onToggle,
   onAcceptUpdate,
   onDelete,
+  onConfirmDelete,
+  onCancelDeleteConfirm,
 }: FolderTreeProps & { node: TreeNode; depth: number }) {
   const isExpanded = expandedFolders.has(node.path);
   const isSelected = selectedPath === node.path;
+  const isDeleting = deletingPath === node.path;
+  const isConfirmingDelete = confirmingDeletePath === node.path;
 
   return (
     <>
@@ -117,6 +128,7 @@ function FolderTreeItem({
           if (node.isFolder) onToggle(node.path);
           else onSelect(node.path);
         }}
+        onMouseLeave={() => onCancelDeleteConfirm(node.path)}
       >
         {node.isFolder ? (
           <>
@@ -142,7 +154,7 @@ function FolderTreeItem({
           className="ml-auto flex items-center gap-1"
           onClick={(event) => event.stopPropagation()}
         >
-          {!node.isFolder && sourceFor(node.path) && (
+          {!node.isFolder && updateAvailableFor(node.path) && (
             <>
               <InheritanceIndicator
                 source={sourceFor(node.path)}
@@ -164,20 +176,35 @@ function FolderTreeItem({
             </>
           )}
           <span
-            className={`opacity-0 transition-opacity group-hover/tree-row:opacity-100 ${
-              isSelected ? "opacity-100" : ""
+            className={`transition-opacity ${
+              isSelected || isDeleting || isConfirmingDelete
+                ? "opacity-100"
+                : "opacity-0 group-hover/tree-row:opacity-100"
             }`}
           >
             <Button
               variant="ghost"
-              size="icon-xs"
+              size={isConfirmingDelete ? "sm" : "icon-xs"}
+              className={
+                isConfirmingDelete
+                  ? "h-6 px-2 text-[11px] text-destructive"
+                  : undefined
+              }
               aria-label={`Delete ${node.name}`}
+              disabled={isDeleting}
               onClick={(event) => {
                 event.stopPropagation();
-                onDelete(node.path, node.isFolder);
+                if (isConfirmingDelete) onDelete(node.path, node.isFolder);
+                else onConfirmDelete(node.path);
               }}
             >
-              <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+              {isDeleting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+              ) : isConfirmingDelete ? (
+                "Confirm"
+              ) : (
+                <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+              )}
             </Button>
           </span>
         </span>
@@ -193,10 +220,14 @@ function FolderTreeItem({
               expandedFolders={expandedFolders}
               sourceFor={sourceFor}
               updateAvailableFor={updateAvailableFor}
+              deletingPath={deletingPath}
+              confirmingDeletePath={confirmingDeletePath}
               onSelect={onSelect}
               onToggle={onToggle}
               onAcceptUpdate={onAcceptUpdate}
               onDelete={onDelete}
+              onConfirmDelete={onConfirmDelete}
+              onCancelDeleteConfirm={onCancelDeleteConfirm}
               nodes={[]}
             />
           ))}

@@ -16,10 +16,14 @@ export interface FileEditorPaneProps {
   value: string;
   loading: boolean;
   saving: boolean;
+  deleting: boolean;
+  confirmingDelete: boolean;
   onChange: (value: string) => void;
   onSave: () => void;
   onDiscard: () => void;
   onDelete: () => void;
+  onConfirmDelete: () => void;
+  onCancelDeleteConfirm: () => void;
 }
 
 export function FileEditorPane({
@@ -28,10 +32,14 @@ export function FileEditorPane({
   value,
   loading,
   saving,
+  deleting,
+  confirmingDelete,
   onChange,
   onSave,
   onDiscard,
   onDelete,
+  onConfirmDelete,
+  onCancelDeleteConfirm,
 }: FileEditorPaneProps) {
   if (!openFile) {
     return (
@@ -101,10 +109,22 @@ export function FileEditorPane({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 w-6 p-0 text-muted-foreground"
-                onClick={onDelete}
+                className={`h-6 p-0 text-muted-foreground ${
+                  confirmingDelete
+                    ? "w-16 px-2 text-[11px] text-destructive"
+                    : "w-6"
+                }`}
+                disabled={deleting}
+                onMouseLeave={onCancelDeleteConfirm}
+                onClick={confirmingDelete ? onDelete : onConfirmDelete}
               >
-                <Trash2 className="h-3 w-3" />
+                {deleting ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : confirmingDelete ? (
+                  "Confirm"
+                ) : (
+                  <Trash2 className="h-3 w-3" />
+                )}
               </Button>
             </>
           )}

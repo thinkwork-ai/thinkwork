@@ -151,18 +151,28 @@ function buildTree(files: string[]): TreeNode[] {
 function WsTreeItem({
   node,
   selectedFile,
+  deletingPath,
+  confirmingDeletePath,
   onSelect,
   onDelete,
+  onConfirmDelete,
+  onCancelDeleteConfirm,
   depth = 0,
 }: {
   node: TreeNode;
   selectedFile: string | null;
+  deletingPath: string | null;
+  confirmingDeletePath: string | null;
   onSelect: (path: string) => void;
   onDelete: (path: string) => void;
+  onConfirmDelete: (path: string) => void;
+  onCancelDeleteConfirm: (path: string) => void;
   depth?: number;
 }) {
   const [expanded, setExpanded] = useState(true);
   const isActive = selectedFile === node.path;
+  const isDeleting = deletingPath === node.path;
+  const isConfirmingDelete = confirmingDeletePath === node.path;
 
   if (node.isFolder) {
     return (
@@ -190,8 +200,12 @@ function WsTreeItem({
               key={child.path}
               node={child}
               selectedFile={selectedFile}
+              deletingPath={deletingPath}
+              confirmingDeletePath={confirmingDeletePath}
               onSelect={onSelect}
               onDelete={onDelete}
+              onConfirmDelete={onConfirmDelete}
+              onCancelDeleteConfirm={onCancelDeleteConfirm}
               depth={depth + 1}
             />
           ))}
@@ -204,6 +218,7 @@ function WsTreeItem({
       className={`flex items-center justify-between group rounded cursor-pointer text-sm hover:bg-accent ${isActive ? "bg-accent" : ""}`}
       style={{ paddingLeft: `${depth * 12 + 8}px` }}
       onClick={() => onSelect(node.path)}
+      onMouseLeave={() => onCancelDeleteConfirm(node.path)}
     >
       <div className="flex items-center gap-1.5 py-1 truncate">
         <File className="h-3 w-3 shrink-0 text-muted-foreground" />
@@ -212,13 +227,25 @@ function WsTreeItem({
       <Button
         variant="ghost"
         size="icon"
-        className="h-5 w-5 mr-1 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+        className={`h-5 mr-1 text-muted-foreground hover:text-destructive ${
+          isConfirmingDelete ? "w-14 px-1.5 text-[11px] text-destructive opacity-100" : "w-5"
+        } ${
+          isDeleting || isConfirmingDelete ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+        }`}
+        disabled={isDeleting}
         onClick={(e) => {
           e.stopPropagation();
-          onDelete(node.path);
+          if (isConfirmingDelete) onDelete(node.path);
+          else onConfirmDelete(node.path);
         }}
       >
-        <Trash2 className="h-3 w-3" />
+        {isDeleting ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : isConfirmingDelete ? (
+          "Confirm"
+        ) : (
+          <Trash2 className="h-3 w-3" />
+        )}
       </Button>
     </div>
   );
@@ -357,6 +384,8 @@ function TemplateEditorPage() {
   const [wsOriginalContent, setWsOriginalContent] = useState("");
   const [wsLoadingFiles, setWsLoadingFiles] = useState(false);
   const [wsSavingFile, setWsSavingFile] = useState(false);
+  const [wsDeletingPath, setWsDeletingPath] = useState<string | null>(null);
+  const [wsConfirmingDeletePath, setWsConfirmingDeletePath] = useState<string | null>(null);
   const [wsNewFileName, setWsNewFileName] = useState("");
   const [wsNewFileDialogOpen, setWsNewFileDialogOpen] = useState(false);
 
@@ -665,8 +694,11 @@ function TemplateEditorPage() {
 
   const deleteFile = async (path: string) => {
     if (!templateId) return;
+    setWsConfirmingDeletePath(null);
+    setWsDeletingPath(path);
     try {
       await deleteWorkspaceFile({ templateId }, path);
+      setWsFiles((current) => current.filter((file) => file !== path));
       if (wsSelectedFile === path) {
         setWsSelectedFile(null);
         setWsContent("");
@@ -674,7 +706,17 @@ function TemplateEditorPage() {
       await loadWorkspaceFiles();
     } catch (err) {
       console.error("Failed to delete file:", err);
+    } finally {
+      setWsDeletingPath(null);
     }
+  };
+
+  const confirmWorkspaceDelete = (path: string) => {
+    setWsConfirmingDeletePath(path);
+  };
+
+  const cancelWorkspaceDeleteConfirm = (path: string) => {
+    setWsConfirmingDeletePath((current) => (current === path ? null : current));
   };
 
   const refreshTemplateMcp = useCallback(() => {
@@ -1364,7 +1406,7 @@ function TemplateEditorPage() {
                         <FilePlus className="h-3.5 w-3.5" />
                       </Button>
                     </div>
-                    {wsLoadingFiles ? (
+                    {wsLoadingFiles && wsFiles.length === 0 ? (
                       <div className="flex justify-center py-8">
                         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                       </div>
@@ -1375,8 +1417,12 @@ function TemplateEditorPage() {
                             key={node.path}
                             node={node}
                             selectedFile={wsSelectedFile}
+                            deletingPath={wsDeletingPath}
+                            confirmingDeletePath={wsConfirmingDeletePath}
                             onSelect={loadFileContent}
                             onDelete={deleteFile}
+                            onConfirmDelete={confirmWorkspaceDelete}
+                            onCancelDeleteConfirm={cancelWorkspaceDeleteConfirm}
                           />
                         ))}
                       </div>
@@ -1419,10 +1465,25 @@ function TemplateEditorPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-6 w-6 p-0 text-muted-foreground"
-                              onClick={() => deleteFile(wsSelectedFile)}
+                              className={`h-6 p-0 text-muted-foreground ${
+                                wsConfirmingDeletePath === wsSelectedFile
+                                  ? "w-16 px-2 text-[11px] text-destructive"
+                                  : "w-6"
+                              }`}
+                              disabled={wsDeletingPath === wsSelectedFile}
+                              onMouseLeave={() => cancelWorkspaceDeleteConfirm(wsSelectedFile)}
+                              onClick={() => {
+                                if (wsConfirmingDeletePath === wsSelectedFile) deleteFile(wsSelectedFile);
+                                else confirmWorkspaceDelete(wsSelectedFile);
+                              }}
                             >
-                              <Trash2 className="h-3 w-3" />
+                              {wsDeletingPath === wsSelectedFile ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : wsConfirmingDeletePath === wsSelectedFile ? (
+                                "Confirm"
+                              ) : (
+                                <Trash2 className="h-3 w-3" />
+                              )}
                             </Button>
                           </div>
                         </div>
