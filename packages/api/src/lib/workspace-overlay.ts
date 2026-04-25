@@ -396,6 +396,78 @@ function shaTag(hex: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Path helpers (Plan §008 U5 — recursive overlay)
+// ---------------------------------------------------------------------------
+
+/**
+ * Reserved folder names per Plan §008 U8. Files inside `memory/` or `skills/`
+ * (at any depth) do NOT fall through to ancestors — sub-agent memory is
+ * scoped per-sub-agent, and local skill packages are scoped per-folder.
+ *
+ * Inlined here for U5; U8 will extract this constant into its own module
+ * with TS+Python mirrors. Keep the names in sync if you change them.
+ */
+const RESERVED_FOLDER_NAMES = ["memory", "skills"] as const;
+
+/**
+ * Return the ancestor-walk paths for a given workspace path, deepest first.
+ *
+ *   "GUARDRAILS.md"                          → ["GUARDRAILS.md"]
+ *   "expenses/GUARDRAILS.md"                 → ["expenses/GUARDRAILS.md", "GUARDRAILS.md"]
+ *   "expenses/escalation/GUARDRAILS.md"      → 3 entries, deepest → root
+ *   "memory/lessons.md"                      → ["memory/lessons.md"]   (reserved scope)
+ *   "expenses/memory/lessons.md"             → ["expenses/memory/lessons.md"] (reserved scope)
+ *   "expenses/skills/approve-receipt/SKILL.md" → ["expenses/skills/approve-receipt/SKILL.md"]
+ *
+ * Files that contain a reserved folder segment do not produce ancestors —
+ * memory/skills are bounded so they never collapse to a different file at
+ * an outer scope.
+ */
+function buildAncestorPaths(path: string): string[] {
+	const segments = path.split("/");
+	if (segments.some((s) => (RESERVED_FOLDER_NAMES as readonly string[]).includes(s))) {
+		return [path];
+	}
+	if (segments.length === 1) return [path];
+	const basename = segments[segments.length - 1];
+	let folders = segments.slice(0, -1);
+	const out = [path];
+	while (folders.length > 0) {
+		folders = folders.slice(0, -1);
+		const ancestor =
+			folders.length > 0 ? `${folders.join("/")}/${basename}` : basename;
+		out.push(ancestor);
+	}
+	return out;
+}
+
+function validateComposePath(path: string): void {
+	const segments = path.split("/");
+	for (const seg of segments) {
+		if (seg === ".." || seg === ".") {
+			throw new Error(
+				`Invalid path: ${path} (contains traversal segment '${seg}')`,
+			);
+		}
+	}
+}
+
+/**
+ * classifyFile from @thinkwork/workspace-defaults uses exact-path matching
+ * (root-level filenames only). For sub-agent paths we classify by basename
+ * so e.g. `expenses/GUARDRAILS.md` is treated as the pinned guardrail class.
+ *
+ * Path-qualified pinned-version key shape (`expenses/GUARDRAILS.md` →
+ * pinnedVersions key) is U24's job; U5 only extends classify-by-basename
+ * for source labeling and override-write gates.
+ */
+function classifyFileByBasename(path: string) {
+	if (!path.includes("/")) return classifyFile(path);
+	const basename = path.split("/").pop() ?? path;
+	return classifyFile(basename);
+}
+
+// ---------------------------------------------------------------------------
 // Compose
 // ---------------------------------------------------------------------------
 
@@ -404,12 +476,17 @@ function shaTag(hex: string): string {
  * post-substitution bytes for live files, or raw base bytes for managed /
  * pinned files (which either already have baked-in values or belong to a
  * guardrail class that is not substituted).
+ *
+ * Sub-agent paths (e.g. `expenses/IDENTITY.md`) walk ancestor folders within
+ * each layer (deepest first) before stepping to the next layer — see
+ * Plan §008 U5 illustration. Reserved folder segments terminate the walk.
  */
 export async function composeFile(
 	ctx: ComposeContext,
 	agentId: string,
 	path: string,
 ): Promise<ComposeResult> {
+	validateComposePath(path);
 	const bucket = assertBucket();
 	const agentCtx = await loadAgentContext(ctx.tenantId, agentId);
 	return composeFileForAgent(ctx, agentCtx, bucket, path);
@@ -422,19 +499,21 @@ async function composeFileForAgent(
 	path: string,
 ): Promise<ComposeResult> {
 	const cleanPath = path.replace(/^\/+/, "");
-	const fileClass = classifyFile(cleanPath);
+	const fileClass = classifyFileByBasename(cleanPath);
+	const ancestorPaths = buildAncestorPaths(cleanPath);
 
-	const agentKey = agentPrefix(agentCtx.tenantSlug, agentCtx.agentSlug) + cleanPath;
-	const templateKey =
-		templatePrefix(agentCtx.tenantSlug, agentCtx.templateSlug) + cleanPath;
-	const defaultsKey = defaultsPrefix(agentCtx.tenantSlug) + cleanPath;
+	const agentP = agentPrefix(agentCtx.tenantSlug, agentCtx.agentSlug);
+	const templateP = templatePrefix(agentCtx.tenantSlug, agentCtx.templateSlug);
+	const defaultsP = defaultsPrefix(agentCtx.tenantSlug);
 
-	if (fileClass === "pinned") {
-		// Agent override always wins for pinned files too, but surfaces a
-		// distinct source label so the admin UI can render
-		// "[overridden, pinned]".
-		const agentObj = await s3Get(bucket, agentKey);
-		if (agentObj) {
+	// Step 1: Agent overrides — walk ancestor paths (deepest → root).
+	// An override at any ancestor depth wins over template / defaults at
+	// the originally-requested depth.
+	for (const ancestor of ancestorPaths) {
+		const agentObj = await s3Get(bucket, agentP + ancestor);
+		if (!agentObj) continue;
+
+		if (fileClass === "pinned") {
 			return {
 				path: cleanPath,
 				source: "agent-override-pinned",
@@ -442,80 +521,10 @@ async function composeFileForAgent(
 				sha256: sha256Hex(agentObj.content),
 			};
 		}
-
-		const pinned = agentCtx.pinnedVersions[cleanPath];
-		if (!pinned) {
-			// Pre-Unit 8 agent with no pin recorded: fall through to the
-			// live template base. This matches Unit 4 test scenario
-			// "agent has no pinned entry and no override → falls back to
-			// the current defaults hash, recording it." The recording
-			// happens in Unit 8 / Unit 10; this path keeps the composer
-			// working in the transition period.
-			return composeLiveFile(ctx, agentCtx, bucket, cleanPath, {
-				agentKey,
-				templateKey,
-				defaultsKey,
-			});
-		}
-
-		const pinnedHash = extractHash(pinned);
-		const versionKey = templateVersionKey(
-			agentCtx.tenantSlug,
-			agentCtx.templateSlug,
-			cleanPath,
-			pinnedHash,
-		);
-		const versionObj = await s3Get(bucket, versionKey);
-		if (versionObj) {
-			return {
-				path: cleanPath,
-				source: "template-pinned",
-				content: versionObj.content,
-				sha256: pinnedHash,
-			};
-		}
-
-		// Fallback: the current template base may still hash to the pin
-		// (no template edits since the pin was recorded). This avoids
-		// requiring the version store to be populated before any template
-		// edits happen.
-		const templateObj = await s3Get(bucket, templateKey);
-		if (templateObj) {
-			const templateHash = sha256Hex(templateObj.content);
-			if (templateHash === pinnedHash) {
-				return {
-					path: cleanPath,
-					source: "template-pinned",
-					content: templateObj.content,
-					sha256: pinnedHash,
-				};
-			}
-		}
-		const defaultsObj = await s3Get(bucket, defaultsKey);
-		if (defaultsObj) {
-			const defaultsHash = sha256Hex(defaultsObj.content);
-			if (defaultsHash === pinnedHash) {
-				return {
-					path: cleanPath,
-					source: "template-pinned",
-					content: defaultsObj.content,
-					sha256: pinnedHash,
-				};
-			}
-		}
-
-		// Fail closed: pinned content has disappeared and no base matches.
-		// Safety-critical files (guardrails) must not silently drift.
-		throw new PinnedVersionNotFoundError(cleanPath, pinnedHash);
-	}
-
-	if (fileClass === "managed") {
-		// USER.md: agent override verbatim (already substituted at write
-		// time in Unit 6). Pre-assignment → fall through to template /
-		// defaults as if it were a live file so admin UI shows the
-		// em-dashed preview rather than raw placeholders.
-		const agentObj = await s3Get(bucket, agentKey);
-		if (agentObj) {
+		if (fileClass === "managed") {
+			// USER.md: served verbatim (already substituted at write time
+			// in Unit 6). At sub-agent depth, operator-authored override
+			// is allowed.
 			return {
 				path: cleanPath,
 				source: "agent-override",
@@ -523,58 +532,100 @@ async function composeFileForAgent(
 				sha256: sha256Hex(agentObj.content),
 			};
 		}
-		// Pre-assignment: run the same live chain + substitute so
-		// {{HUMAN_*}} renders as `—`.
-		return composeLiveFile(ctx, agentCtx, bucket, cleanPath, {
-			agentKey,
-			templateKey,
-			defaultsKey,
+		// live
+		const rendered = substitute(agentCtx.placeholderValues, agentObj.content, {
+			onViolation: ctx.onViolation,
 		});
+		return {
+			path: cleanPath,
+			source: "agent-override",
+			content: rendered,
+			sha256: sha256Hex(agentObj.content),
+		};
 	}
 
-	// live
-	return composeLiveFile(ctx, agentCtx, bucket, cleanPath, {
-		agentKey,
-		templateKey,
-		defaultsKey,
-	});
-}
+	// Step 2: Pinned-version-store resolution at the requested path.
+	// Pin keys are path-qualified per Plan §008 U24. Until U24 ships, only
+	// root-level pin keys exist; sub-agent paths fall through to the live
+	// ancestor walk below. When a pin is set at the requested path, fail
+	// closed if it can't be resolved (safety-critical guardrails must not
+	// silently drift).
+	if (fileClass === "pinned") {
+		const pinned = agentCtx.pinnedVersions[cleanPath];
+		if (pinned) {
+			const pinnedHash = extractHash(pinned);
+			const versionKey = templateVersionKey(
+				agentCtx.tenantSlug,
+				agentCtx.templateSlug,
+				cleanPath,
+				pinnedHash,
+			);
+			const versionObj = await s3Get(bucket, versionKey);
+			if (versionObj) {
+				return {
+					path: cleanPath,
+					source: "template-pinned",
+					content: versionObj.content,
+					sha256: pinnedHash,
+				};
+			}
+			// Fallback: current template/defaults at the requested path may
+			// still hash to the pin (no edits since the pin was recorded).
+			const templateObj = await s3Get(bucket, templateP + cleanPath);
+			if (templateObj && sha256Hex(templateObj.content) === pinnedHash) {
+				return {
+					path: cleanPath,
+					source: "template-pinned",
+					content: templateObj.content,
+					sha256: pinnedHash,
+				};
+			}
+			const defaultsObj = await s3Get(bucket, defaultsP + cleanPath);
+			if (defaultsObj && sha256Hex(defaultsObj.content) === pinnedHash) {
+				return {
+					path: cleanPath,
+					source: "template-pinned",
+					content: defaultsObj.content,
+					sha256: pinnedHash,
+				};
+			}
+			throw new PinnedVersionNotFoundError(cleanPath, pinnedHash);
+		}
+		// No pin at this path — fall through to live ancestor walk
+		// (transition-period semantics; matches Unit 4 fallback).
+	}
 
-interface LivePrefixKeys {
-	agentKey: string;
-	templateKey: string;
-	defaultsKey: string;
-}
-
-async function composeLiveFile(
-	ctx: ComposeContext,
-	agentCtx: AgentContext,
-	bucket: string,
-	path: string,
-	keys: LivePrefixKeys,
-): Promise<ComposeResult> {
-	// First-hit-wins chain.
-	const candidates: Array<{ key: string; source: ComposeSource }> = [
-		{ key: keys.agentKey, source: "agent-override" },
-		{ key: keys.templateKey, source: "template" },
-		{ key: keys.defaultsKey, source: "defaults" },
-	];
-
-	for (const candidate of candidates) {
-		const obj = await s3Get(bucket, candidate.key);
-		if (obj === null) continue;
+	// Step 3: Template ancestor walk.
+	for (const ancestor of ancestorPaths) {
+		const obj = await s3Get(bucket, templateP + ancestor);
+		if (!obj) continue;
 		const rendered = substitute(agentCtx.placeholderValues, obj.content, {
 			onViolation: ctx.onViolation,
 		});
 		return {
-			path,
-			source: candidate.source,
+			path: cleanPath,
+			source: "template",
 			content: rendered,
 			sha256: sha256Hex(obj.content),
 		};
 	}
 
-	throw new FileNotFoundError(path);
+	// Step 4: Defaults ancestor walk.
+	for (const ancestor of ancestorPaths) {
+		const obj = await s3Get(bucket, defaultsP + ancestor);
+		if (!obj) continue;
+		const rendered = substitute(agentCtx.placeholderValues, obj.content, {
+			onViolation: ctx.onViolation,
+		});
+		return {
+			path: cleanPath,
+			source: "defaults",
+			content: rendered,
+			sha256: sha256Hex(obj.content),
+		};
+	}
+
+	throw new FileNotFoundError(cleanPath);
 }
 
 /**

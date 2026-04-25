@@ -4,6 +4,11 @@
  * Rebuilds manifest.json for an agent's workspace so the runtime's
  * per-turn ETag check detects file changes and re-syncs.
  *
+ * The S3 ListObjectsV2 call below enumerates the entire workspace prefix
+ * recursively. `relPath = key.slice(prefix.length)` therefore yields full
+ * sub-paths like `expenses/CONTEXT.md` for sub-agent folders introduced by
+ * Plan §008 U5+ — no special-casing needed for the recursive overlay tree.
+ *
  * Imported by:
  *   - workspace-files.ts (after put/delete)
  *   - workspace-map-generator.ts (after AGENTS.md/CONTEXT.md regen)
