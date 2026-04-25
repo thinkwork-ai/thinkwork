@@ -7,7 +7,6 @@ author: thinkwork
 icon: user-plus
 tags: [onboarding, tasks, operations, customers]
 execution: context
-mode: tool
 triggers:
   - "onboard a customer"
   - "new customer onboarding"
