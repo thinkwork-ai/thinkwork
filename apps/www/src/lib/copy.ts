@@ -28,58 +28,58 @@ export const nav = [
 ];
 
 export const meta = {
-  title: "ThinkWork — Start small. Build trust. Scale AI safely.",
+  title: "ThinkWork — Agent Harness for Business",
   description:
-    "The path from AI experiments to trusted AI work. Visible work, governed expansion, and infrastructure you own.",
+    "Production-grade AI work, on the AWS account you own. The open Agent Harness — self-host, run it with us, or wrap it with services.",
 };
 
 export const hero = {
-  eyebrow: "The AI adoption journey",
-  headlinePart1: "Start small. Build trust.",
-  headlineAccent: "Scale AI safely.",
-  lede: "The path from AI experiments to trusted AI work — visible work, governed expansion, and an AWS environment you own.",
+  eyebrow: "Agent Harness for Business",
+  headlinePart1: "Production-grade AI work,",
+  headlineAccent: "on AWS you own.",
+  lede: "ThinkWork is the open Agent Harness — Reliability, Efficiency, Security, and Traceability built into the runtime, not bolted on. Self-host on your AWS, run it with us, or wrap it with services.",
   primaryCta: { label: "Read the docs", href: external.docs },
   secondaryCta: { label: "View on GitHub", href: external.github },
   headlineCandidates: [
     // Locked: first entry is the winner; runner-ups kept for future copy iteration.
-    "Start small. Build trust. Scale AI safely.",
-    "From AI experiments to trusted AI work.",
-    "A controlled path to real AI work.",
-    "Adopt AI. Keep control.",
+    "Production-grade AI work, on AWS you own.",
+    "The open Agent Harness, for Business.",
+    "Agent Harness for Business — open or operated.",
+    "Production agents, on the AWS account you own.",
   ],
   ledeCandidates: [
     // Locked: first entry is the winner; runner-ups kept for future copy iteration.
-    "The path from AI experiments to trusted AI work — visible work, governed expansion, and an AWS deployment boundary you own.",
-    "ThinkWork helps organizations move from AI experiments to trusted AI work through visible workflows, governed expansion, and an AWS deployment boundary they own.",
-    "ThinkWork helps organizations adopt AI through small wins, visible work, governed expansion, and a deployment boundary they own.",
-    "ThinkWork is the path from AI experiments to trusted AI work — visible threads, durable memory, capability-granted templates, and a deployment boundary that stays inside the AWS account your team already operates.",
+    "ThinkWork is the open Agent Harness — Reliability, Efficiency, Security, and Traceability built into the runtime, not bolted on. Self-host on your AWS, run it with us, or wrap it with services.",
+    "An Agent Harness for Business: threads, memory, agents, connectors, automations, and control wired into one production-grade system, deployable into the AWS account your team already runs.",
+    "The open Agent Harness for Business — production AI work that stays inside your AWS boundary, with the option to have us operate it or wrap it with services.",
   ],
 };
 
 export const proofStrip = [
   {
-    label: "Start small",
+    label: "Reliability",
     detail:
-      "One assistant, one workflow, one team. Pilot without a platform bet.",
+      "Fault recovery from checkpoints, idempotent writes, behavior consistent under the same inputs.",
   },
   {
-    label: "Visible work",
+    label: "Efficiency",
     detail:
-      "Every request, action, and outcome lives inside a durable, inspectable thread.",
+      "Token budgets and per-agent spend caps; low-latency interactive paths; throughput that scales with usage.",
   },
   {
-    label: "Governed expansion",
+    label: "Security",
     detail:
-      "Approved capabilities per agent, budgets that cap spend, and evaluations that scale with usage.",
+      "Per-agent capability grants, sandboxed execution on AgentCore, I/O filtering for prompt injection and PII.",
   },
   {
-    label: "Your boundary",
-    detail: "Runtime, data, audit trail, and memory stay inside your boundary.",
+    label: "Traceability",
+    detail:
+      "End-to-end traces per turn, explainable decisions, auditable state — every action recoverable.",
   },
   {
-    label: "One system at every scale",
+    label: "Open or operated",
     detail:
-      "The runtime a developer spins up in five commands is the runtime production runs on.",
+      "Self-host on your AWS, run it with us as ThinkWork for Business, or wrap it with Enterprise services.",
   },
 ];
 
@@ -360,16 +360,16 @@ export const quickStart = {
 };
 
 export const finalCta = {
-  eyebrow: "Your AWS · Your rules",
-  headlinePart1: "Adopt AI.",
-  headlineAccent: "Keep control.",
-  lede: "Deploy into the account your ops team already runs. Every agent, thread, cost event, and memory stays inside the IAM and governance your ops team already enforces.",
+  eyebrow: "Open · Operated · Enterprise",
+  headlinePart1: "One harness,",
+  headlineAccent: "three deployment models.",
+  lede: "ThinkWork is the open Agent Harness — Apache 2.0 and self-hosted on your AWS. ThinkWork for Business is the same harness operated by us. ThinkWork Enterprise wraps either with strategy, launch, and ongoing operations services. Pick the door that fits your team.",
   points: [
-    { title: "Runtime", desc: "Stays in your AWS." },
-    { title: "Data", desc: "Stays in your account." },
-    { title: "Audit trail", desc: "Stays inspectable." },
-    { title: "Memory", desc: "Stays portable." },
-    { title: "Harness", desc: "Stays yours." },
+    { title: "ThinkWork", desc: "Open. Self-host on your AWS." },
+    { title: "for Business", desc: "Operated by us, in your AWS." },
+    { title: "Enterprise", desc: "Services + SLA + named support." },
+    { title: "Runtime", desc: "Always inside your AWS boundary." },
+    { title: "Harness", desc: "Always yours." },
   ],
   primaryCta: { label: "Read the docs", href: external.docs },
   secondaryCta: { label: "View on GitHub", href: external.github },
