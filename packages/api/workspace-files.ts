@@ -54,7 +54,15 @@ import {
 } from "./src/lib/workspace-overlay.js";
 import { classifyFile, PINNED_FILES } from "@thinkwork/workspace-defaults";
 import { regenerateManifest } from "./src/lib/workspace-manifest.js";
-import { agents, agentTemplates, db, eq, tenants } from "./src/graphql/utils.js";
+import {
+	agents,
+	agentTemplates,
+	and,
+	db,
+	eq,
+	tenantMembers,
+	tenants,
+} from "./src/graphql/utils.js";
 
 // ---------------------------------------------------------------------------
 // API Gateway shims
@@ -247,6 +255,36 @@ async function resolveDefaultsTarget(tenantId: string): Promise<DefaultsTarget |
 		prefix: defaultsPrefix(tSlug),
 		key: (path) => defaultsKey(tSlug, path),
 	};
+}
+
+// ---------------------------------------------------------------------------
+// Authz — REST analogue of requireTenantAdmin (mirrors plugin-upload.ts)
+// ---------------------------------------------------------------------------
+
+const WRITE_ACTIONS = new Set([
+	"put",
+	"delete",
+	"regenerate-map",
+	"update-identity-field",
+]);
+
+async function callerIsTenantAdmin(
+	tenantId: string,
+	principalId: string | null,
+): Promise<boolean> {
+	if (!principalId) return false;
+	const rows = await db
+		.select({ role: tenantMembers.role })
+		.from(tenantMembers)
+		.where(
+			and(
+				eq(tenantMembers.tenant_id, tenantId),
+				eq(tenantMembers.principal_id, principalId),
+			),
+		)
+		.limit(1);
+	const role = rows[0]?.role;
+	return role === "owner" || role === "admin";
 }
 
 // ---------------------------------------------------------------------------
@@ -627,6 +665,20 @@ export async function handler(
 		// 404 rather than 403 so the response doesn't leak whether a row
 		// exists in another tenant.
 		return json(404, { ok: false, error: "Target not found in your tenant" });
+	}
+
+	// Write actions require admin/owner role (U31). Reads stay open to any
+	// tenant member. The apikey path bypasses the role check — it's the
+	// platform-credential trust boundary used by the Strands container and
+	// CI/ops bootstrap; per-tenant role doesn't apply.
+	if (WRITE_ACTIONS.has(action) && auth.authType !== "apikey") {
+		const isAdmin = await callerIsTenantAdmin(tenantId, auth.principalId);
+		if (!isAdmin) {
+			return json(403, {
+				ok: false,
+				error: "Caller is not a tenant admin or owner",
+			});
+		}
 	}
 
 	const deps: HandlerDeps = { auth, tenantId, target };
