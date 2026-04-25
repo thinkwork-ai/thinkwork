@@ -17,8 +17,11 @@ _(One sentence: who this agent is, what it's for. Edit me.)_
 .                   ← root identity, guardrails, routing
 memory/             ← durable lessons, preferences, contacts (write_memory tool)
 skills/             ← local skills authored alongside this agent (optional)
-<sub-agent>/        ← specialist sub-agent — its own CONTEXT, optional skills/
+<sub-agent>/        ← specialist sub-agent — its own CONTEXT, optional skills/,
+                      and its own memory/ (write_memory at sub-agent scope)
 ```
+
+Each sub-agent folder also gets its own `memory/`. When a sub-agent calls `write_memory`, it must prefix the path with its folder (e.g. `expenses/memory/lessons.md`) — the path is from the agent root, not from the sub-agent's own folder. See `MEMORY_GUIDE.md` "Sub-agent path composition" for details.
 
 ## Routing
 
