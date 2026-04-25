@@ -38,12 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -139,7 +134,12 @@ function buildTree(files: string[]): TreeNode[] {
       const pathSoFar = parts.slice(0, i + 1).join("/");
       let node = current.find((n) => n.name === part && n.isFolder === !isLast);
       if (!node) {
-        node = { name: part, path: isLast ? pathSoFar : pathSoFar + "/", isFolder: !isLast, children: [] };
+        node = {
+          name: part,
+          path: isLast ? pathSoFar : pathSoFar + "/",
+          isFolder: !isLast,
+          children: [],
+        };
         current.push(node);
       }
       current = node.children;
@@ -172,13 +172,29 @@ function WsTreeItem({
           style={{ paddingLeft: `${depth * 12 + 8}px` }}
           onClick={() => setExpanded(!expanded)}
         >
-          {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-          {expanded ? <FolderOpen className="h-3 w-3 text-muted-foreground" /> : <Folder className="h-3 w-3 text-muted-foreground" />}
+          {expanded ? (
+            <ChevronDown className="h-3 w-3" />
+          ) : (
+            <ChevronRight className="h-3 w-3" />
+          )}
+          {expanded ? (
+            <FolderOpen className="h-3 w-3 text-muted-foreground" />
+          ) : (
+            <Folder className="h-3 w-3 text-muted-foreground" />
+          )}
           <span>{node.name}</span>
         </button>
-        {expanded && node.children.map((child) => (
-          <WsTreeItem key={child.path} node={child} selectedFile={selectedFile} onSelect={onSelect} onDelete={onDelete} depth={depth + 1} />
-        ))}
+        {expanded &&
+          node.children.map((child) => (
+            <WsTreeItem
+              key={child.path}
+              node={child}
+              selectedFile={selectedFile}
+              onSelect={onSelect}
+              onDelete={onDelete}
+              depth={depth + 1}
+            />
+          ))}
       </div>
     );
   }
@@ -219,6 +235,41 @@ type TemplateSkill = {
   permissions?: { operations: string[] } | null;
 };
 
+type JsonRecord = Record<string, unknown>;
+
+function parseJsonRecord(value: unknown): JsonRecord {
+  if (!value) return {};
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed
+        : {};
+    } catch {
+      return {};
+    }
+  }
+  return typeof value === "object" && !Array.isArray(value)
+    ? (value as JsonRecord)
+    : {};
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableJson(item)).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value as JsonRecord)
+      .sort()
+      .map(
+        (key) =>
+          `${JSON.stringify(key)}:${stableJson((value as JsonRecord)[key])}`,
+      )
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
 type SkillManifestMeta = {
   permissions_model?: "operations";
   scripts?: Array<{
@@ -252,9 +303,11 @@ function TemplateEditorPage() {
   const [category, setCategory] = useState<string>("");
   const [icon, setIcon] = useState("");
   const [model, setModel] = useState("");
+  const [templateConfig, setTemplateConfig] = useState<JsonRecord>({});
   const [blockedTools, setBlockedTools] = useState<string[]>([]);
   const [guardrailId, setGuardrailId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
 
   // State -- sandbox (null persisted ⇒ template does not use the sandbox).
   // required_connections is intentionally not surfaced: OAuth token
@@ -264,6 +317,8 @@ function TemplateEditorPage() {
   type SandboxEnv = "default-public" | "internal-only";
   const [sandboxEnabled, setSandboxEnabled] = useState(false);
   const [sandboxEnv, setSandboxEnv] = useState<SandboxEnv>("default-public");
+  const [browserEnabled, setBrowserEnabled] = useState(false);
+  const [browserSaveEnabled, setBrowserSaveEnabled] = useState(false);
 
   // State -- skills
   const [templateSkills, setTemplateSkills] = useState<TemplateSkill[]>([]);
@@ -280,14 +335,21 @@ function TemplateEditorPage() {
   >(null);
 
   // State -- MCP servers
-  const [templateMcpServers, setTemplateMcpServers] = useState<Array<{ mcp_server_id: string; enabled: boolean }>>([]);
-  const [availableMcpServers, setAvailableMcpServers] = useState<McpServer[]>([]);
+  const [templateMcpServers, setTemplateMcpServers] = useState<
+    Array<{ mcp_server_id: string; enabled: boolean }>
+  >([]);
+  const [availableMcpServers, setAvailableMcpServers] = useState<McpServer[]>(
+    [],
+  );
   const [addMcpDialogOpen, setAddMcpDialogOpen] = useState(false);
   // tenant_api_key servers: id → {hasKey, lastFour}. Used to decide
   // whether enabling the toggle needs to open the ApiKeyDialog first
   // and to render the last-4 preview badge.
-  const [mcpKeyStatus, setMcpKeyStatus] = useState<Record<string, McpKeyStatus>>({});
-  const [apiKeyDialogServer, setApiKeyDialogServer] = useState<McpServer | null>(null);
+  const [mcpKeyStatus, setMcpKeyStatus] = useState<
+    Record<string, McpKeyStatus>
+  >({});
+  const [apiKeyDialogServer, setApiKeyDialogServer] =
+    useState<McpServer | null>(null);
 
   // State -- workspace
   const [wsFiles, setWsFiles] = useState<string[]>([]);
@@ -317,7 +379,8 @@ function TemplateEditorPage() {
     variables: { templateId },
     pause: isNew,
   });
-  const linkedAgentCount = linkedAgentsData?.linkedAgentsForTemplate?.length ?? 0;
+  const linkedAgentCount =
+    linkedAgentsData?.linkedAgentsForTemplate?.length ?? 0;
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -328,6 +391,39 @@ function TemplateEditorPage() {
 
   const catalogMap = new Map(catalog.map((s) => [s.slug, s]));
 
+  useEffect(() => {
+    let canceled = false;
+    fetch(
+      import.meta.env.VITE_GRAPHQL_HTTP_URL ||
+        `${import.meta.env.VITE_API_URL}/graphql`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": import.meta.env.VITE_GRAPHQL_API_KEY || "",
+        },
+        body: JSON.stringify({
+          query:
+            'query { __type(name: "UpdateAgentTemplateInput") { inputFields { name } } }',
+        }),
+      },
+    )
+      .then((res) => res.json())
+      .then((body) => {
+        if (canceled) return;
+        const fields = body?.data?.__type?.inputFields ?? [];
+        setBrowserSaveEnabled(
+          fields.some((f: { name: string }) => f.name === "browser"),
+        );
+      })
+      .catch(() => {
+        if (!canceled) setBrowserSaveEnabled(false);
+      });
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
   const sortedCatalog = useMemo(
     () =>
       [...catalog].sort((a, b) =>
@@ -335,6 +431,40 @@ function TemplateEditorPage() {
       ),
     [catalog],
   );
+
+  const currentSnapshot = useMemo(
+    () =>
+      stableJson({
+        name,
+        slug,
+        description,
+        category,
+        icon,
+        model,
+        blockedTools: [...blockedTools].sort(),
+        guardrailId,
+        sandboxEnabled,
+        sandboxEnv,
+        browserEnabled,
+        templateSkills,
+      }),
+    [
+      name,
+      slug,
+      description,
+      category,
+      icon,
+      model,
+      blockedTools,
+      guardrailId,
+      sandboxEnabled,
+      sandboxEnv,
+      browserEnabled,
+      templateSkills,
+    ],
+  );
+  const isDirty = isNew || initialSnapshot !== currentSnapshot;
+  const canSave = Boolean(name && slug && model && isDirty && !saving);
 
   // Lazily fetch manifest details (scripts, permissions_model) for any
   // templateSkill whose details we don't yet have. listCatalog's payload
@@ -375,48 +505,82 @@ function TemplateEditorPage() {
   useEffect(() => {
     if (result.data?.agentTemplate) {
       const t = result.data.agentTemplate;
+      const parsedConfig = parseJsonRecord(t.config);
       setName(t.name);
       setSlug(t.slug);
       setDescription(t.description || "");
       setCategory(t.category || "");
       setIcon(t.icon || "");
       setModel(t.model || "");
+      setTemplateConfig(parsedConfig);
 
       // blocked tools
+      let parsedBlockedTools: string[] = [];
       if (t.blockedTools) {
         const parsed =
           typeof t.blockedTools === "string"
             ? JSON.parse(t.blockedTools)
             : t.blockedTools;
-        setBlockedTools(Array.isArray(parsed) ? parsed : []);
-      } else {
-        setBlockedTools([]);
+        parsedBlockedTools = Array.isArray(parsed) ? parsed : [];
       }
+      setBlockedTools(parsedBlockedTools);
 
       // guardrail
       setGuardrailId(t.guardrailId || null);
 
       const skills =
         typeof t.skills === "string" ? JSON.parse(t.skills) : t.skills;
+      const parsedSkills = Array.isArray(skills) ? skills : [];
       if (Array.isArray(skills)) {
         setTemplateSkills(skills);
+      } else {
+        setTemplateSkills([]);
       }
 
       // Sandbox opt-in hydration. AWSJSON may arrive as string or object;
       // null means the template doesn't use the sandbox. required_connections
       // from older rows is read but no longer editable from the UI.
       const sbRaw = (t as any).sandbox;
-      const sb =
-        typeof sbRaw === "string" && sbRaw ? JSON.parse(sbRaw) : sbRaw;
+      const sb = typeof sbRaw === "string" && sbRaw ? JSON.parse(sbRaw) : sbRaw;
+      let nextSandboxEnabled = false;
+      let nextSandboxEnv: SandboxEnv = "default-public";
       if (sb && typeof sb === "object") {
-        setSandboxEnabled(true);
-        setSandboxEnv(
-          sb.environment === "internal-only" ? "internal-only" : "default-public",
-        );
-      } else {
-        setSandboxEnabled(false);
-        setSandboxEnv("default-public");
+        nextSandboxEnabled = true;
+        nextSandboxEnv =
+          sb.environment === "internal-only"
+            ? "internal-only"
+            : "default-public";
       }
+      setSandboxEnabled(nextSandboxEnabled);
+      setSandboxEnv(nextSandboxEnv);
+
+      const browserRaw = (t as any).browser;
+      const browser =
+        typeof browserRaw === "string" && browserRaw
+          ? JSON.parse(browserRaw)
+          : browserRaw;
+      const configBrowser = parseJsonRecord(parsedConfig.browserAutomation);
+      const nextBrowserEnabled = !!(
+        (browser && browser.enabled === true) ||
+        configBrowser.enabled === true
+      );
+      setBrowserEnabled(nextBrowserEnabled);
+      setInitialSnapshot(
+        stableJson({
+          name: t.name,
+          slug: t.slug,
+          description: t.description || "",
+          category: t.category || "",
+          icon: t.icon || "",
+          model: t.model || "",
+          blockedTools: [...parsedBlockedTools].sort(),
+          guardrailId: t.guardrailId || null,
+          sandboxEnabled: nextSandboxEnabled,
+          sandboxEnv: nextSandboxEnv,
+          browserEnabled: nextBrowserEnabled,
+          templateSkills: parsedSkills,
+        }),
+      );
     }
   }, [result.data]);
 
@@ -430,7 +594,9 @@ function TemplateEditorPage() {
       .then(async (r) => {
         const servers = r.servers || [];
         setAvailableMcpServers(servers);
-        const apiKeyServers = servers.filter((s) => s.authType === "tenant_api_key");
+        const apiKeyServers = servers.filter(
+          (s) => s.authType === "tenant_api_key",
+        );
         const statusEntries = await Promise.all(
           apiKeyServers.map(async (s) => {
             try {
@@ -438,7 +604,14 @@ function TemplateEditorPage() {
               return [s.id, status] as const;
             } catch (err) {
               console.error("key-status probe failed for", s.id, err);
-              return [s.id, { authType: s.authType, hasKey: false, lastFour: null } satisfies McpKeyStatus] as const;
+              return [
+                s.id,
+                {
+                  authType: s.authType,
+                  hasKey: false,
+                  lastFour: null,
+                } satisfies McpKeyStatus,
+              ] as const;
             }
           }),
         );
@@ -452,7 +625,12 @@ function TemplateEditorPage() {
       getTemplateMcpServers(templateId)
         .then((r) => {
           if (r.mcpServers?.length) {
-            setTemplateMcpServers(r.mcpServers.map((m) => ({ mcp_server_id: m.mcp_server_id, enabled: m.enabled })));
+            setTemplateMcpServers(
+              r.mcpServers.map((m) => ({
+                mcp_server_id: m.mcp_server_id,
+                enabled: m.enabled,
+              })),
+            );
           }
         })
         .catch(console.error);
@@ -539,7 +717,12 @@ function TemplateEditorPage() {
     if (!isNew && templateId) {
       getTemplateMcpServers(templateId)
         .then((r) => {
-          setTemplateMcpServers((r.mcpServers || []).map((m) => ({ mcp_server_id: m.mcp_server_id, enabled: m.enabled })));
+          setTemplateMcpServers(
+            (r.mcpServers || []).map((m) => ({
+              mcp_server_id: m.mcp_server_id,
+              enabled: m.enabled,
+            })),
+          );
         })
         .catch(console.error);
     }
@@ -631,8 +814,6 @@ function TemplateEditorPage() {
     if (!tenantId || !name || !slug) return;
     setSaving(true);
 
-    const config = JSON.stringify({});
-
     const skillsJson = JSON.stringify(templateSkills);
 
     // null persisted ⇒ template does not use the sandbox. Shape validated
@@ -643,6 +824,18 @@ function TemplateEditorPage() {
     const sandboxJson = sandboxEnabled
       ? JSON.stringify({ environment: sandboxEnv })
       : JSON.stringify(null);
+    const browserJson = browserEnabled
+      ? JSON.stringify({ enabled: true })
+      : JSON.stringify(null);
+    const nextConfig = { ...templateConfig };
+    if (browserSaveEnabled) {
+      delete nextConfig.browserAutomation;
+    } else if (browserEnabled) {
+      nextConfig.browserAutomation = { enabled: true };
+    } else {
+      delete nextConfig.browserAutomation;
+    }
+    const config = JSON.stringify(nextConfig);
 
     try {
       if (isNew) {
@@ -657,10 +850,13 @@ function TemplateEditorPage() {
             config,
             skills: skillsJson,
             sandbox: sandboxJson,
+            ...(browserSaveEnabled ? { browser: browserJson } : {}),
 
             model: model || undefined,
             guardrailId: guardrailId || undefined,
-            blockedTools: JSON.stringify(blockedTools.length > 0 ? blockedTools : []),
+            blockedTools: JSON.stringify(
+              blockedTools.length > 0 ? blockedTools : [],
+            ),
           },
         });
         if (res.data?.createAgentTemplate?.id) {
@@ -685,15 +881,20 @@ function TemplateEditorPage() {
             config,
             skills: skillsJson,
             sandbox: sandboxJson,
+            ...(browserSaveEnabled ? { browser: browserJson } : {}),
 
             model: model || undefined,
             guardrailId: guardrailId || undefined,
-            blockedTools: JSON.stringify(blockedTools.length > 0 ? blockedTools : []),
+            blockedTools: JSON.stringify(
+              blockedTools.length > 0 ? blockedTools : [],
+            ),
           },
         });
         reexecute({ requestPolicy: "network-only" });
         // Prompt sync-to-linked-agents if the template has linked agents
         if (!res.error) {
+          setTemplateConfig(nextConfig);
+          setInitialSnapshot(currentSnapshot);
           await refetchLinkedAgents({ requestPolicy: "network-only" });
           if (linkedAgentCount > 0) {
             setSyncDialogOpen(true);
@@ -785,13 +986,13 @@ function TemplateEditorPage() {
             </TabsList>
           </Tabs>
           <div className="flex items-center gap-2">
-            <Button onClick={handleSave} disabled={saving || !name || !slug || !model}>
+            <Button onClick={handleSave} disabled={!canSave}>
               {saving ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Save className="h-4 w-4" />
               )}
-              {isNew ? "Create Template" : "Save Changes"}
+              {isNew ? "Create Template" : "Save"}
             </Button>
             {!isNew && (
               <Button
@@ -885,10 +1086,13 @@ function TemplateEditorPage() {
                 <div className="flex items-center gap-4">
                   <div className="flex-1 space-y-1">
                     <Label htmlFor="sandbox-enabled" className="font-normal">
-                      Enable <code>execute_code</code> for agents in this template
+                      Enable <code>execute_code</code> for agents in this
+                      template
                     </Label>
                     <p className="text-xs text-muted-foreground">
-                      Opts this template into the AgentCore Code Interpreter sandbox. The tool only registers on a turn if the tenant also has <code>sandbox_enabled</code> set.
+                      Opts this template into the AgentCore Code Interpreter
+                      sandbox. The tool only registers on a turn if the tenant
+                      also has <code>sandbox_enabled</code> set.
                     </p>
                   </div>
                   {sandboxEnabled && (
@@ -920,6 +1124,35 @@ function TemplateEditorPage() {
                 </div>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Browser Automation</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-4">
+                  <div className="flex-1 space-y-1">
+                    <Label htmlFor="browser-enabled" className="font-normal">
+                      Enable <code>browser_automation</code> for agents in this
+                      template
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Registers an AgentCore Browser + Nova Act tool for dynamic
+                      website workflows. Agent-level capability overrides can
+                      still enable or disable it for individual agents.
+                      {!browserSaveEnabled
+                        ? " This dev API stores the setting in template config until the backend deploy exposes the first-class field."
+                        : ""}
+                    </p>
+                  </div>
+                  <Switch
+                    id="browser-enabled"
+                    checked={browserEnabled}
+                    onCheckedChange={setBrowserEnabled}
+                  />
+                </div>
+              </CardContent>
+            </Card>
           </div>
         )}
 
@@ -931,7 +1164,9 @@ function TemplateEditorPage() {
                 accessorKey: "name",
                 header: "Name",
                 size: 180,
-                cell: ({ row }: any) => <span className="font-medium">{row.original.name}</span>,
+                cell: ({ row }: any) => (
+                  <span className="font-medium">{row.original.name}</span>
+                ),
               },
               {
                 accessorKey: "description",
@@ -947,7 +1182,9 @@ function TemplateEditorPage() {
                 header: "Category",
                 size: 120,
                 cell: ({ row }: any) => (
-                  <Badge variant="outline" className="text-[10px]">{row.original.category || "—"}</Badge>
+                  <Badge variant="outline" className="text-[10px]">
+                    {row.original.category || "—"}
+                  </Badge>
                 ),
               },
               {
@@ -956,13 +1193,21 @@ function TemplateEditorPage() {
                 size: 110,
                 cell: ({ row }: any) => {
                   const slug = row.original.slug;
-                  const isEnabled = templateSkills.some((s) => s.skill_id === slug);
+                  const isEnabled = templateSkills.some(
+                    (s) => s.skill_id === slug,
+                  );
                   const meta = manifestMetaCache[slug];
                   const usesOps = meta?.permissions_model === "operations";
                   if (!isEnabled || !usesOps) {
-                    return <div className="text-center text-xs text-muted-foreground">—</div>;
+                    return (
+                      <div className="text-center text-xs text-muted-foreground">
+                        —
+                      </div>
+                    );
                   }
-                  const assigned = templateSkills.find((s) => s.skill_id === slug);
+                  const assigned = templateSkills.find(
+                    (s) => s.skill_id === slug,
+                  );
                   const count = assigned?.permissions?.operations?.length;
                   return (
                     <div className="flex justify-center">
@@ -973,7 +1218,9 @@ function TemplateEditorPage() {
                         onClick={() => setPermissionsDialogSlug(slug)}
                       >
                         <Shield className="h-3 w-3" />
-                        {count === undefined ? "Defaults" : `${count} op${count === 1 ? "" : "s"}`}
+                        {count === undefined
+                          ? "Defaults"
+                          : `${count} op${count === 1 ? "" : "s"}`}
                       </Button>
                     </div>
                   );
@@ -984,7 +1231,9 @@ function TemplateEditorPage() {
                 header: () => <div className="text-right">Enabled</div>,
                 size: 80,
                 cell: ({ row }: any) => {
-                  const isEnabled = templateSkills.some((s) => s.skill_id === row.original.slug);
+                  const isEnabled = templateSkills.some(
+                    (s) => s.skill_id === row.original.slug,
+                  );
                   return (
                     <div className="flex justify-end">
                       <Switch
@@ -1016,9 +1265,7 @@ function TemplateEditorPage() {
           }
           assigned={
             permissionsDialogSlug
-              ? templateSkills.find(
-                  (s) => s.skill_id === permissionsDialogSlug,
-                )
+              ? templateSkills.find((s) => s.skill_id === permissionsDialogSlug)
               : undefined
           }
           onClose={() => setPermissionsDialogSlug(null)}
@@ -1036,7 +1283,9 @@ function TemplateEditorPage() {
                 accessorKey: "name",
                 header: "Name",
                 size: 180,
-                cell: ({ row }: any) => <span className="font-medium">{row.original.name}</span>,
+                cell: ({ row }: any) => (
+                  <span className="font-medium">{row.original.name}</span>
+                ),
               },
               {
                 accessorKey: "authType",
@@ -1044,17 +1293,26 @@ function TemplateEditorPage() {
                 size: 180,
                 cell: ({ row }: any) => {
                   const authType = row.original.authType;
-                  const label = authType === "oauth" ? "OAuth" : authType === "tenant_api_key" ? "API Key" : "None";
+                  const label =
+                    authType === "oauth"
+                      ? "OAuth"
+                      : authType === "tenant_api_key"
+                        ? "API Key"
+                        : "None";
                   const status = mcpKeyStatus[row.original.id];
                   return (
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-[10px]">{label}</Badge>
+                      <Badge variant="outline" className="text-[10px]">
+                        {label}
+                      </Badge>
                       {authType === "tenant_api_key" && (
                         <>
                           {status?.hasKey ? (
                             <button
                               type="button"
-                              onClick={() => setApiKeyDialogServer(row.original)}
+                              onClick={() =>
+                                setApiKeyDialogServer(row.original)
+                              }
                               className="font-mono text-[10px] text-muted-foreground hover:text-foreground hover:underline"
                               title="Click to rotate"
                             >
@@ -1063,7 +1321,9 @@ function TemplateEditorPage() {
                           ) : (
                             <button
                               type="button"
-                              onClick={() => setApiKeyDialogServer(row.original)}
+                              onClick={() =>
+                                setApiKeyDialogServer(row.original)
+                              }
                               className="text-[10px] text-amber-500 hover:text-amber-400 hover:underline"
                             >
                               no key — configure
@@ -1080,7 +1340,9 @@ function TemplateEditorPage() {
                 header: "Tools",
                 size: 80,
                 cell: ({ row }: any) => (
-                  <span className="text-xs text-muted-foreground">{row.original.tools?.length || 0} tools</span>
+                  <span className="text-xs text-muted-foreground">
+                    {row.original.tools?.length || 0} tools
+                  </span>
                 ),
               },
               {
@@ -1088,10 +1350,13 @@ function TemplateEditorPage() {
                 header: () => <div className="text-right">Enabled</div>,
                 size: 80,
                 cell: ({ row }: any) => {
-                  const isEnabled = templateMcpServers.some((ts) => ts.mcp_server_id === row.original.id);
+                  const isEnabled = templateMcpServers.some(
+                    (ts) => ts.mcp_server_id === row.original.id,
+                  );
                   const authType = row.original.authType;
                   const status = mcpKeyStatus[row.original.id];
-                  const needsKey = authType === "tenant_api_key" && !status?.hasKey;
+                  const needsKey =
+                    authType === "tenant_api_key" && !status?.hasKey;
                   return (
                     <div className="flex justify-end">
                       <Switch
@@ -1121,132 +1386,158 @@ function TemplateEditorPage() {
         )}
 
         {/* Workspace Tab */}
-        {tab === "workspace" && !isNew && (() => {
-          const wsTree = buildTree(wsFiles);
-          const wsIsDirty = wsContent !== wsOriginalContent;
-          return (
-            <div className="h-full flex flex-col min-h-0">
-              <div className="flex flex-1 min-h-0 border rounded-md overflow-hidden">
-                {/* File Tree */}
-                <div className="w-[250px] shrink-0 border-r bg-background flex flex-col">
-                  <div className="flex items-center justify-between px-3 py-2 border-b shrink-0">
-                    <span className="text-sm text-muted-foreground">
-                      {wsFiles.length} file{wsFiles.length !== 1 ? "s" : ""}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={() => {
-                        setWsNewFileName("");
-                        setWsNewFileDialogOpen(true);
-                      }}
-                    >
-                      <FilePlus className="h-3.5 w-3.5" />
-                    </Button>
+        {tab === "workspace" &&
+          !isNew &&
+          (() => {
+            const wsTree = buildTree(wsFiles);
+            const wsIsDirty = wsContent !== wsOriginalContent;
+            return (
+              <div className="h-full flex flex-col min-h-0">
+                <div className="flex flex-1 min-h-0 border rounded-md overflow-hidden">
+                  {/* File Tree */}
+                  <div className="w-[250px] shrink-0 border-r bg-background flex flex-col">
+                    <div className="flex items-center justify-between px-3 py-2 border-b shrink-0">
+                      <span className="text-sm text-muted-foreground">
+                        {wsFiles.length} file{wsFiles.length !== 1 ? "s" : ""}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => {
+                          setWsNewFileName("");
+                          setWsNewFileDialogOpen(true);
+                        }}
+                      >
+                        <FilePlus className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    {wsLoadingFiles ? (
+                      <div className="flex justify-center py-8">
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : (
+                      <div className="flex-1 overflow-y-auto py-1">
+                        {wsTree.map((node) => (
+                          <WsTreeItem
+                            key={node.path}
+                            node={node}
+                            selectedFile={wsSelectedFile}
+                            onSelect={loadFileContent}
+                            onDelete={deleteFile}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  {wsLoadingFiles ? (
-                    <div className="flex justify-center py-8">
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : (
-                    <div className="flex-1 overflow-y-auto py-1">
-                      {wsTree.map((node) => (
-                        <WsTreeItem
-                          key={node.path}
-                          node={node}
-                          selectedFile={wsSelectedFile}
-                          onSelect={loadFileContent}
-                          onDelete={deleteFile}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
 
-                {/* Editor */}
-                <div className="flex-1 flex flex-col min-w-0 bg-background">
-                  {wsSelectedFile ? (
-                    <>
-                      <div className="flex items-center justify-between px-3 py-1.5 border-b">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <File className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                          <span className="text-xs font-medium truncate">{wsSelectedFile}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {wsIsDirty && (
+                  {/* Editor */}
+                  <div className="flex-1 flex flex-col min-w-0 bg-background">
+                    {wsSelectedFile ? (
+                      <>
+                        <div className="flex items-center justify-between px-3 py-1.5 border-b">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <File className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            <span className="text-xs font-medium truncate">
+                              {wsSelectedFile}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {wsIsDirty && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 text-[11px] px-2 text-muted-foreground"
+                                onClick={() => setWsContent(wsOriginalContent)}
+                              >
+                                Discard
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              className="h-6 text-[11px] px-2"
+                              onClick={saveFileContent}
+                              disabled={wsSavingFile || !wsIsDirty}
+                            >
+                              {wsSavingFile ? (
+                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                              ) : null}
+                              Save
+                            </Button>
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-6 text-[11px] px-2 text-muted-foreground"
-                              onClick={() => setWsContent(wsOriginalContent)}
+                              className="h-6 w-6 p-0 text-muted-foreground"
+                              onClick={() => deleteFile(wsSelectedFile)}
                             >
-                              Discard
+                              <Trash2 className="h-3 w-3" />
                             </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            className="h-6 text-[11px] px-2"
-                            onClick={saveFileContent}
-                            disabled={wsSavingFile || !wsIsDirty}
-                          >
-                            {wsSavingFile ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                            Save
-                          </Button>
-                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground" onClick={() => deleteFile(wsSelectedFile)}>
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
+                          </div>
                         </div>
+                        <div className="flex-1 min-h-0 overflow-hidden bg-black [&>div]:h-full">
+                          <CodeMirror
+                            value={wsContent}
+                            onChange={setWsContent}
+                            theme={vscodeDark}
+                            extensions={[
+                              markdown({
+                                base: markdownLanguage,
+                                codeLanguages: languages,
+                              }),
+                              EditorView.lineWrapping,
+                            ]}
+                            height="100%"
+                            style={{
+                              fontSize: "12px",
+                              backgroundColor: "black",
+                            }}
+                            className="[&_.cm-editor]:!bg-black [&_.cm-gutters]:!bg-black [&_.cm-activeLine]:!bg-transparent [&_.cm-activeLineGutter]:!bg-transparent"
+                            basicSetup={{ highlightActiveLine: false }}
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                        Select a file to edit
                       </div>
-                      <div className="flex-1 min-h-0 overflow-hidden bg-black [&>div]:h-full">
-                        <CodeMirror
-                          value={wsContent}
-                          onChange={setWsContent}
-                          theme={vscodeDark}
-                          extensions={[
-                            markdown({ base: markdownLanguage, codeLanguages: languages }),
-                            EditorView.lineWrapping,
-                          ]}
-                          height="100%"
-                          style={{ fontSize: "12px", backgroundColor: "black" }}
-                        className="[&_.cm-editor]:!bg-black [&_.cm-gutters]:!bg-black [&_.cm-activeLine]:!bg-transparent [&_.cm-activeLineGutter]:!bg-transparent"
-                          basicSetup={{ highlightActiveLine: false }}
+                    )}
+                  </div>
+                </div>
+
+                {/* New File Dialog */}
+                <Dialog
+                  open={wsNewFileDialogOpen}
+                  onOpenChange={setWsNewFileDialogOpen}
+                >
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Create File</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                      <div className="space-y-2">
+                        <Label>File Path</Label>
+                        <Input
+                          value={wsNewFileName}
+                          onChange={(e) => setWsNewFileName(e.target.value)}
+                          placeholder="SOUL.md"
+                          onKeyDown={(e) =>
+                            e.key === "Enter" && createNewFile()
+                          }
                         />
                       </div>
-                    </>
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-                      Select a file to edit
+                      <Button
+                        onClick={createNewFile}
+                        disabled={!wsNewFileName}
+                        className="w-full"
+                      >
+                        Create
+                      </Button>
                     </div>
-                  )}
-                </div>
+                  </DialogContent>
+                </Dialog>
               </div>
-
-              {/* New File Dialog */}
-              <Dialog open={wsNewFileDialogOpen} onOpenChange={setWsNewFileDialogOpen}>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Create File</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 py-2">
-                    <div className="space-y-2">
-                      <Label>File Path</Label>
-                      <Input
-                        value={wsNewFileName}
-                        onChange={(e) => setWsNewFileName(e.target.value)}
-                        placeholder="SOUL.md"
-                        onKeyDown={(e) => e.key === "Enter" && createNewFile()}
-                      />
-                    </div>
-                    <Button onClick={createNewFile} disabled={!wsNewFileName} className="w-full">
-                      Create
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-          );
-        })()}
+            );
+          })()}
       </div>
 
       {/* Template → Agent sync prompt (shown after Save when agents are linked) */}
@@ -1290,10 +1581,14 @@ function TemplateEditorPage() {
             <DialogTitle>Delete Template</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground py-2">
-            Are you sure you want to delete "{name}"? This action cannot be undone.
+            Are you sure you want to delete "{name}"? This action cannot be
+            undone.
           </p>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+            >
               Cancel
             </Button>
             <Button
@@ -1346,13 +1641,11 @@ function TemplatePermissionsDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            Template permissions — {slug}
-          </DialogTitle>
+          <DialogTitle>Template permissions — {slug}</DialogTitle>
           <DialogDescription>
             Authored here, these ops are the ceiling for every agent
-            instantiated from this template. Agents may narrow further
-            on the per-agent Skills tab; they cannot widen.
+            instantiated from this template. Agents may narrow further on the
+            per-agent Skills tab; they cannot widen.
           </DialogDescription>
         </DialogHeader>
 

@@ -62,6 +62,16 @@ def test_covers_ae5_tenant_disables_execute_code():
     assert ("execute_code", "tenant-disabled") in result.removed
 
 
+def test_template_can_block_browser_automation():
+    tools = [_tool("browser_automation"), _tool("recall")]
+    result = filter_builtin_tools(
+        tools,
+        template_blocked_tools=["browser_automation"],
+    )
+    assert _slugs(result) == ["recall"]
+    assert ("browser_automation", "template-blocked") in result.removed
+
+
 def test_tenant_wins_over_template_intersection():
     """Same slug in both lists — still removed, and accounted to tenant."""
     tools = [_tool("execute_code"), _tool("recall")]

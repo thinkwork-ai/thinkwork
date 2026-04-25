@@ -15,6 +15,7 @@ import { eq, and, sql, asc, desc } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   agentWakeupRequests,
+  agentCapabilities,
   threadTurns,
   threadTurnEvents,
   threads,
@@ -49,6 +50,7 @@ import {
   type SandboxPreflightResult,
   type TemplateSandboxConfig,
 } from "../lib/sandbox-preflight.js";
+import { validateTemplateBrowser } from "../lib/templates/browser-config.js";
 import { ensureThreadForWork } from "../lib/thread-helpers.js";
 import {
   isThreadBlocked,
@@ -76,6 +78,7 @@ const HINDSIGHT_ENDPOINT = process.env.HINDSIGHT_ENDPOINT || "";
 // Stage namespace for the sandbox Secrets Manager paths.
 const STAGE = process.env.STAGE || process.env.STACK_NAME || "dev";
 const BATCH_SIZE = 10;
+const BROWSER_AUTOMATION_CAPABILITY = "browser_automation";
 
 /**
  * Invoke AgentCore via Lambda SDK (direct invoke) or HTTP fetch (Function URL).
@@ -85,8 +88,9 @@ async function invokeAgentCore(
   payload: Record<string, unknown>,
 ): Promise<{ ok: boolean; status: number; result: Record<string, unknown> }> {
   if (AGENTCORE_FUNCTION_NAME) {
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({
       region: process.env.AWS_REGION || "us-east-1",
     });
@@ -254,6 +258,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       guardrail_id: agentTemplates.guardrail_id,
       blocked_tools: agentTemplates.blocked_tools,
       sandbox: agentTemplates.sandbox,
+      browser: agentTemplates.browser,
     })
     .from(agents)
     .leftJoin(agentTemplates, eq(agents.template_id, agentTemplates.id))
@@ -332,6 +337,15 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   }
 
   const blockedTools: string[] = (agent.blocked_tools as string[] | null) || [];
+  const templateBrowserResult = validateTemplateBrowser(agent.browser);
+  const templateBrowserEnabled = templateBrowserResult.ok
+    ? templateBrowserResult.value?.enabled === true
+    : false;
+  if (!templateBrowserResult.ok) {
+    console.warn(
+      `[wakeup-processor] Invalid template browser config ignored for agent ${wakeup.agent_id}: ${templateBrowserResult.error}`,
+    );
+  }
 
   // Look up agent's installed skills → build S3 keys for runtime
   // JOIN tenant_skills to determine source: catalog/builtin → skills/catalog/, tenant-custom → tenants/{slug}/skills/
@@ -385,7 +399,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
   // PRD-14: Auto-inject agent-email-send skill for email_received wakeups
   if (wakeup.source === "email_received") {
-    const { agentCapabilities } = await import("@thinkwork/database-pg/schema");
     const [emailCap] = await db
       .select({ config: agentCapabilities.config })
       .from(agentCapabilities)
@@ -558,6 +571,27 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           searchConfig: kb.search_config,
         }))
       : undefined;
+
+  const capabilityRows = await db
+    .select({
+      capability: agentCapabilities.capability,
+      enabled: agentCapabilities.enabled,
+    })
+    .from(agentCapabilities)
+    .where(
+      and(
+        eq(agentCapabilities.agent_id, wakeup.agent_id),
+        eq(agentCapabilities.tenant_id, wakeup.tenant_id),
+      ),
+    );
+  const browserCapability = capabilityRows.find(
+    (row) => row.capability === BROWSER_AUTOMATION_CAPABILITY,
+  );
+  const browserAutomationEnabled =
+    !blockedTools.includes(BROWSER_AUTOMATION_CAPABILITY) &&
+    (browserCapability
+      ? browserCapability.enabled === true
+      : templateBrowserEnabled);
 
   const runtimeType = "strands"; // All agents use Strands (SDK deprecated)
 
@@ -744,12 +778,15 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
       if ((childCount?.count || 0) === 0) {
         try {
-          const { parseProcessTemplate } =
-            await import("../lib/orchestration/process-parser.js");
-          const { materializeProcess } =
-            await import("../lib/orchestration/process-materializer.js");
-          const { S3Client, GetObjectCommand } =
-            await import("@aws-sdk/client-s3");
+          const { parseProcessTemplate } = await import(
+            "../lib/orchestration/process-parser.js"
+          );
+          const { materializeProcess } = await import(
+            "../lib/orchestration/process-materializer.js"
+          );
+          const { S3Client, GetObjectCommand } = await import(
+            "@aws-sdk/client-s3"
+          );
 
           const s3 = new S3Client({});
           const skillCfg = skillRows.find(
@@ -898,8 +935,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             .where(eq(threads.id, runThreadId));
           if (t) {
             threadContext = `\n\nThread: ${t.title}`;
-            const instructions = (t.metadata as { processStepInstructions?: string } | null)
-              ?.processStepInstructions;
+            const instructions = (
+              t.metadata as { processStepInstructions?: string } | null
+            )?.processStepInstructions;
             if (instructions) {
               threadContext += `\n\n${instructions}`;
             }
@@ -1157,6 +1195,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       mcp_configs: mcpConfigs.length > 0 ? mcpConfigs : undefined,
       session_key: triggerId || `wakeup-${wakeup.source}`,
       trigger_channel: triggerChannel || undefined,
+      blocked_tools: blockedTools.length > 0 ? blockedTools : undefined,
+      browser_automation_enabled: browserAutomationEnabled || undefined,
     };
 
     if (sandboxPreflight && sandboxUserId) {
@@ -1760,8 +1800,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     // Send push notification to user devices
     if (runThreadId) {
       try {
-        const { sendTurnCompletedPush } =
-          await import("../lib/push-notifications.js");
+        const { sendTurnCompletedPush } = await import(
+          "../lib/push-notifications.js"
+        );
         await sendTurnCompletedPush({
           threadId: runThreadId,
           tenantId: wakeup.tenant_id,

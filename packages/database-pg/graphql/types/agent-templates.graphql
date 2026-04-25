@@ -22,11 +22,19 @@ type AgentTemplate {
   Sandbox opt-in metadata for the AgentCore Code Interpreter sandbox
   (plan Unit 3). Shape validated at create/update time by
   packages/api/src/lib/templates/sandbox-config.ts:
-    { environment: "default-public" | "internal-only",
-      required_connections: ["google" | "github" | "slack", ...] }
+    { environment: "default-public" | "internal-only" }
   Null means the template does not use the sandbox.
   """
   sandbox: AWSJSON
+  """
+  Browser Automation opt-in metadata for the AgentCore Browser + Nova Act
+  built-in tool. Shape validated at create/update time by
+  packages/api/src/lib/templates/browser-config.ts:
+    { enabled: true }
+  Null means the template does not use Browser Automation unless an agent-level
+  capability override enables it.
+  """
+  browser: AWSJSON
 
   isPublished: Boolean!
   createdAt: AWSDateTime!
@@ -112,6 +120,11 @@ input CreateAgentTemplateInput {
   opt into the sandbox.
   """
   sandbox: AWSJSON
+  """
+  Browser Automation opt-in metadata; see AgentTemplate.browser. Omit
+  (or pass null) for templates that do not opt into Browser Automation.
+  """
+  browser: AWSJSON
 
   isPublished: Boolean
   """
@@ -138,6 +151,11 @@ input UpdateAgentTemplateInput {
   clear; omit to leave unchanged.
   """
   sandbox: AWSJSON
+  """
+  Browser Automation opt-in metadata; see AgentTemplate.browser. Pass
+  null to clear; omit to leave unchanged.
+  """
+  browser: AWSJSON
 
   isPublished: Boolean
 }
