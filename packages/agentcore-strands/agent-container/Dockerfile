@@ -25,20 +25,22 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 # runtime module goes under container-sources/ and ships automatically.
 COPY packages/agentcore-strands/agent-container/container-sources/ /app/
 
-# Shared Agent Container modules from packages/agentcore/agent-container/. These
-# live in a different package with a different review workflow, so we keep
-# their COPY lines explicit here — the wildcard is scoped to agentcore-strands.
-COPY packages/agentcore/agent-container/permissions.py .
-COPY packages/agentcore/agent-container/identity.py .
-COPY packages/agentcore/agent-container/memory.py .
-COPY packages/agentcore/agent-container/observability.py .
-COPY packages/agentcore/agent-container/safety.py .
-COPY packages/agentcore/agent-container/bedrock_request_tracker.py .
-COPY packages/agentcore/agent-container/install_skills.py .
-COPY packages/agentcore/agent-container/router_parser.py .
-COPY packages/agentcore/agent-container/context_parser.py .
-COPY packages/agentcore/agent-container/kb_search_server.py .
-COPY packages/agentcore/agent-container/hindsight_client.py ./hs_urllib_client.py
+# Shared Agent Container modules from packages/agentcore/agent-container/.
+# Wildcarded for the same reason as the container-sources/ COPY above (see
+# docs/solutions/build-errors/dockerfile-explicit-copy-list-drops-new-tool-modules-2026-04-22.md):
+# the predecessor was a hand-maintained list of 11 explicit COPYs that would
+# silently drop any new shared module. Plan §008 adds at least one
+# (agents_md_parser.py for U7); the wildcard ships it without an edit here,
+# and test_boot_assert.py guards EXPECTED_SHARED against the directory's
+# actual file set so the boot-time list can't drift either. test_*.py files
+# are pulled in too — harmless under /app since the runtime imports specific
+# module names; pruning them would relitter the explicit-list problem.
+COPY packages/agentcore/agent-container/*.py ./
+# hindsight_client.py is renamed to hs_urllib_client.py at copy-time so the
+# call sites that switched names don't have to flip back. The wildcard COPY
+# above lands hindsight_client.py at /app/hindsight_client.py first; rename
+# (not copy) so only the new name remains under /app.
+RUN mv /app/hindsight_client.py /app/hs_urllib_client.py
 
 # Auth-agent module (lives under /app/auth-agent/, not flat)
 RUN mkdir -p /app/auth-agent
