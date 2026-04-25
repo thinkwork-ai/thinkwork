@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 Most of what agents do well is conversational — open-ended turns where the agent reasons, picks a tool, replies, and iterates. But a large slice of real work is the opposite: a known sequence of steps that needs to run the same way every single time, with the same inputs producing the same outputs, a hard budget ceiling, and an audit row you can point at. Prepping a sales rep for their 2pm meeting. Reconciling a customer-onboarding checklist after a deal closes. Generating the weekly renewal-risk report. Those aren't conversations. They're workflows.
 
-A **composable skill** is ThinkWork's primitive for that second category. It's a YAML file that declares steps, each step references a smaller sub-skill, and the runtime executes them to completion — sequentially, in parallel, or both — writing a single audit row to `skill_runs` that captures inputs, outputs, status, and timing.
+A **composable skill** is the harness's primitive for that second category — the deterministic-execution layer that sits beside the model's non-deterministic reasoning. It's a YAML file that declares steps, each step references a smaller sub-skill, and the runtime executes them to completion — sequentially, in parallel, or both — writing a single audit row to `skill_runs` that captures inputs, outputs, status, and timing. Two operating guarantees land here: **Reliability** (compositions are reproducible — same inputs produce the same step graph, the same retries on the same failure classes, the same outputs) and **Traceability** (one row in `skill_runs` per invocation, queryable by composition id and tenant — every multi-step workflow has a single durable record).
 
 ## The core idea
 
