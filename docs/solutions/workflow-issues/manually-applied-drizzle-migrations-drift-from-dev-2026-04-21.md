@@ -1,6 +1,7 @@
 ---
 module: packages/database-pg/drizzle
 date: 2026-04-21
+last_updated: 2026-04-25
 category: workflow-issues
 problem_type: workflow_issue
 component: database
@@ -136,6 +137,28 @@ different feature, a Lambda deploy) never hits a `relation does not exist`
 error traced to an unapplied PR. Apply-after-merge means the window between
 merge and apply is a production-shaped risk. (session history: incidents
 0008, 0018/0019 both showed post-merge discovery.)
+
+#### 2026-04-25 update: post-merge drift gate behavior
+
+PR #594 added `0033_agent_operation_leases.sql` for Phase D folder-bundle
+imports. The code, Lambda route, and Terraform changes merged cleanly, and
+Terraform Apply succeeded. The deploy still finished red the first time because
+`migration-drift-check` correctly reported the new hand-rolled migration as
+missing from dev.
+
+The recovery sequence was:
+
+```bash
+psql "$DATABASE_URL" -f packages/database-pg/drizzle/0033_agent_operation_leases.sql
+DATABASE_URL="$DATABASE_URL" bash scripts/db-migrate-manual.sh
+gh run rerun <deploy-run-id> --failed
+```
+
+The rerun passed once the migration created `agent_operation_leases`,
+`folder_bundle_import_rate_limits`, and the declared indexes. This is the
+intended fail-closed behavior: the gate caught that the database had not caught
+up to `main`, but it also means the best operator flow is still apply manual
+migrations to dev before merging when the PR introduces unindexed SQL.
 
 ### 3. Ship a drift reporter: `scripts/db-migrate-manual.sh`
 
