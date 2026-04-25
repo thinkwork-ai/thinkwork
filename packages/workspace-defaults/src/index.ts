@@ -12,13 +12,12 @@
  *   memory/lessons.md, memory/preferences.md, memory/contacts.md
  *
  * Content is inlined as TypeScript constants so the Lambda bundle doesn't
- * need to ship an accompanying `files/` directory. The `.md` sources under
- * `files/` (for the 4 files authored in this package — ROUTER.md plus the
- * three `memory/` stubs) are the human-editable mirrors; a parity test
- * verifies they stay in sync with the constants below. The other 7 files
- * mirror content in `packages/system-workspace/` and `packages/memory-templates/`
- * (the long-standing content-only packages consumed by bash scripts and the
- * deploy workflow); a parity test verifies those stay in sync too.
+ * need to ship an accompanying `files/` directory. All `.md` authoring
+ * sources now live under this package's `files/` subdirectory — plan §008
+ * U2 consolidated the previously-split `packages/system-workspace/` and
+ * `packages/memory-templates/` content here (both are README stubs awaiting
+ * U28 deletion). A parity test verifies the inline constants stay byte-for-
+ * byte equal to the `files/` sources.
  *
  * Placeholder tokens (`{{AGENT_NAME}}`, `{{HUMAN_NAME}}`, etc.) are NOT
  * substituted here — substitution happens at read time in the overlay
@@ -77,7 +76,7 @@ export function classifyFile(path: string): FileClass {
 // ---------------------------------------------------------------------------
 
 /**
- * Mirror of `packages/memory-templates/SOUL.md`.
+ * Mirror of `packages/workspace-defaults/files/SOUL.md`.
  */
 const SOUL_MD = `# SOUL.md - Who You Are
 
@@ -124,7 +123,7 @@ _This file is yours to evolve. Welcome to having a personality._
 `;
 
 /**
- * Mirror of \`packages/memory-templates/IDENTITY.md\`.
+ * Mirror of \`packages/workspace-defaults/files/IDENTITY.md\`.
  *
  * Only the Name line carries a placeholder. Creature / Vibe / Emoji /
  * Avatar and anything below are prose the agent owns via its
@@ -146,7 +145,7 @@ _This file is yours to evolve. Update the lines above as your personality takes 
 `;
 
 /**
- * Mirror of \`packages/memory-templates/USER.md\`.
+ * Mirror of \`packages/workspace-defaults/files/USER.md\`.
  *
  * Every line is backed by a DB column on \`user_profiles\` (or \`users\`
  * for Name). Null columns render as em-dash. Agents maintain call_by /
@@ -173,7 +172,7 @@ const USER_MD = `# USER.md - About Your Human
 `;
 
 /**
- * Mirror of `packages/system-workspace/GUARDRAILS.md`.
+ * Mirror of `packages/workspace-defaults/files/GUARDRAILS.md`.
  */
 const GUARDRAILS_MD = `# Safety Guardrails
 
@@ -202,7 +201,7 @@ const GUARDRAILS_MD = `# Safety Guardrails
 `;
 
 /**
- * Mirror of `packages/system-workspace/PLATFORM.md`.
+ * Mirror of `packages/workspace-defaults/files/PLATFORM.md`.
  */
 const PLATFORM_MD = `# Thinkwork Platform Rules
 
@@ -243,7 +242,7 @@ You have two memory systems:
 `;
 
 /**
- * Mirror of `packages/system-workspace/CAPABILITIES.md`.
+ * Mirror of `packages/workspace-defaults/files/CAPABILITIES.md`.
  */
 const CAPABILITIES_MD = `# Platform Capabilities
 
@@ -270,7 +269,7 @@ Always confirm time zones when scheduling across regions.
 `;
 
 /**
- * Mirror of `packages/system-workspace/MEMORY_GUIDE.md`.
+ * Mirror of `packages/workspace-defaults/files/MEMORY_GUIDE.md`.
  */
 const MEMORY_GUIDE_MD = `# Memory System
 
