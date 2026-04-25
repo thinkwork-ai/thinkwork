@@ -550,7 +550,7 @@ export const services = {
     eyebrow: "Services",
     headline: "Practical help from first workflow to ongoing operations.",
     lede:
-      "Every package scoped up front — no billable hours, no open meter, no drift from the engagement shape we agreed to.",
+      "Every package scoped up front — no billable hours, no open meter, no drift from the engagement shape we agreed to. Each one maps to a phase of the harness's adoption arc and names the components, controls, and R.E.S.T. anchors it touches.",
     items: [
       {
         id: "strategy-sprint",
@@ -559,16 +559,17 @@ export const services = {
         timeline: "2 weeks",
         oneLiner: "The first workflow, the first metric, the first rollout plan.",
         body:
-          "A focused strategy engagement that ends with a chosen starting point, a governance model, and a 30/60/90 rollout plan.",
+          "A two-week engagement that ends with three concrete artifacts — a named first workflow, a governance model expressed against the harness's five controls, and a 30/60/90 rollout plan. We pick the workflow that pays back fastest, agree on the templates that bound the agent's capability, and choose the success metric that proves it worked. No deck; the output is decisions you can hand to engineering on Monday.",
         includes: [
-          "Use case and workflow selection",
-          "Governance and controls model",
-          "Pilot success metrics",
-          "30/60/90 rollout plan",
+          "Use case and workflow selection (with discard pile)",
+          "Templates + capability grants — Reliability + Security anchors",
+          "Pilot success metric + the dashboard it lands on",
+          "30/60/90 rollout plan with explicit gates",
+          "Risk register: what fails, how we'd notice, who handles it",
         ],
         outcome:
-          "A named first workflow, a governance model, and a rollout plan — decisions made, not a deck.",
-        bestFor: "Teams at the beginning.",
+          "A named first workflow, a governance model expressed against the FiveControls, a rollout plan with concrete gates, and a one-page risk register — decisions made, not a deck.",
+        bestFor: "Teams at the beginning who'd rather decide than discover.",
       },
       {
         id: "pilot-launch",
@@ -577,15 +578,17 @@ export const services = {
         timeline: "4–6 weeks",
         oneLiner: "The first governed workflow, live in production.",
         body:
-          "Environment setup, first workflow, templates, connectors, and evaluations — shipped on Cloud or self-hosted.",
+          "Four to six weeks from kickoff to a governed workflow running in production. We stand up the deployment (in your AWS or on ThinkWork for Business), configure templates with model + guardrail pinning, wire the first connector, define the agent system prompt, build evaluations against real expected outcomes, and ship. By week four the agent is doing real work; by week six the audit, cost, and evaluation surfaces are tuned for steady-state operations.",
         includes: [
-          "Environment setup (Cloud or self-hosted)",
-          "First assistant or workflow",
-          "Templates, controls, and connectors",
-          "Launch and handoff",
+          "Environment setup — open self-host or ThinkWork for Business",
+          "First agent: template + capability grants + system prompt",
+          "First connector wired (Slack / GitHub / Google / MCP / Email)",
+          "Evaluation suite seeded against real expected outcomes",
+          "Cost ledger + per-agent budget tuned to your guardrails",
+          "Launch + handoff with operator runbook",
         ],
         outcome:
-          "One governed workflow in production, with its first success metrics tracked.",
+          "One governed workflow live in production with its evaluation pass-rate tracked, its cost attributed per turn, and an operator runbook your team can drive without us.",
         bestFor: "Teams ready to move from planning to execution.",
       },
       {
@@ -595,16 +598,17 @@ export const services = {
         timeline: "Ongoing",
         oneLiner: "Ongoing operations for a production ThinkWork deployment.",
         body:
-          "Recurring support that keeps the platform healthy, governed, and evaluated — without building an in-house platform team on day one.",
+          "Recurring operations support that keeps the harness healthy, governed, and evaluated without you hiring a platform team on day one. Weekly we triage incidents, tune guardrails against real traffic, refresh evaluations as the workflow's expected outcomes evolve, and apply harness upgrades. Quarterly we review cost trends, spend efficiency, and evaluation drift against the original Reliability + Efficiency targets — and adjust the operating model when the data says we should.",
         includes: [
-          "Environment health and issue triage",
-          "Admin, configuration, and upgrade support",
-          "Evaluation tuning and guardrail review",
-          "Operations review on a regular cadence",
+          "Environment health and incident triage (weekly cadence)",
+          "Guardrail tuning + evaluation refresh — Reliability + Security anchors",
+          "Harness upgrades + admin / configuration support",
+          "Per-agent cost reviews against budget — Efficiency anchor",
+          "Quarterly operations review with explicit recalibration",
         ],
         outcome:
-          "A production deployment that stays current, audited, and operational.",
-        bestFor: "Teams without dedicated platform ops.",
+          "A production deployment that stays current, audited, evaluated, and operational — without a dedicated platform team and without ops drift between releases.",
+        bestFor: "Teams running ThinkWork in production without dedicated platform ops.",
       },
       {
         id: "workflow-expansion",
@@ -613,37 +617,72 @@ export const services = {
         timeline: "Ongoing",
         oneLiner: "The next wave of workflows, shipped on a cadence.",
         body:
-          "Recurring delivery of new assistants, workflows, connectors, and templates as the organization earns trust in earlier ones.",
+          "Recurring delivery of new agents, workflows, connectors, and templates as the organization earns trust in earlier ones. Each cadence ships new agent templates calibrated against the same R.E.S.T. anchors as the pilot, new connectors wired with the same credential-vault discipline, and new evaluation suites that prove each addition before it touches production traffic. The control model stays constant; the surface area grows beneath it.",
         includes: [
-          "New workflows on a regular cadence",
-          "Connector rollout and template updates",
-          "Backlog prioritization and cross-team rollout",
+          "New agent templates per cadence — capability grants + guardrails",
+          "Connector rollout (Slack / GitHub / Google / MCP / Email)",
+          "Template updates + skill-pack additions for fleet reuse",
+          "Evaluation suites for each new workflow before launch",
+          "Backlog prioritization + cross-team rollout coordination",
         ],
         outcome:
-          "A steady cadence of new governed workflows shipping on top of your existing deployment.",
-        bestFor: "Teams with early traction that want to keep shipping.",
+          "A steady cadence of new governed workflows shipping on top of your existing deployment — each one launched against evaluations, audited end-to-end, and traced back to the original control model.",
+        bestFor: "Teams with early traction that want to keep shipping without reinventing governance per workflow.",
       },
       {
         id: "cloud-hosting",
-        name: "ThinkWork Cloud",
+        name: "ThinkWork for Business",
         type: "Ongoing operations",
         timeline: "Per plan tier",
-        oneLiner: "Fully managed ThinkWork — no Agent Harness to run.",
+        oneLiner: "Same Agent Harness, operated by us — deployed in your AWS.",
         body:
-          "The hosted option when you want to use ThinkWork without deploying and operating the Enterprise Agent Harness yourself. Same platform, operated end-to-end by us.",
+          "The middle door of the three-tier ladder: same harness, same controls, same six components — but you don't operate it. We run the runtime end-to-end inside your AWS account, take ownership of upgrades and incident response, and surface the same admin web your team would have run themselves. The product is identical to the open self-host path; only the operator changes.",
         includes: [
-          "Runtime operated by ThinkWork",
-          "No AWS setup on your side",
+          "Runtime operated by ThinkWork, deployed in your AWS",
+          "No AWS / Terraform setup on your side",
+          "Managed updates, upgrades, and incident response",
           "Plan tiers that scale with usage",
-          "No self-hosted ops burden",
+          "Same admin web, same audit log, same R.E.S.T. anchors",
         ],
         outcome:
-          "ThinkWork running as a managed plan — deployed, updated, and governed by us on your behalf.",
-        bestFor: "Teams that want the product, not the Agent Harness to operate.",
+          "ThinkWork running as a managed product — deployed, updated, audited, and governed by us inside your AWS boundary, with the operator-facing surfaces unchanged from the open path.",
+        bestFor: "Teams that want the harness, not the operating burden.",
         ctaHref: "/cloud",
         ctaLabel: "View plans",
       },
     ] satisfies ServicePackage[],
+  },
+  engagementArc: {
+    eyebrow: "How an engagement looks",
+    headline: "Scope. Launch. Operate. Expand.",
+    lede:
+      "Most ThinkWork Enterprise engagements run through the same arc — even the ones that start mid-stream. The arc is what keeps the governance model constant while the surface area grows.",
+    phases: [
+      {
+        n: "01",
+        title: "Scope (week 1–2)",
+        body:
+          "An AI Adoption Strategy Sprint, or the discovery phase of a Pilot Launch. We pick one workflow that pays back fastest, agree on the templates that bound the agent's capability, choose the success metric that proves it worked, and write down the risks. No code yet — the output is the contract between you and the harness: which components are involved, which R.E.S.T. anchors matter most, and what 'done' looks like for the pilot.",
+      },
+      {
+        n: "02",
+        title: "Launch (week 3–6)",
+        body:
+          "A ThinkWork Pilot Launch executes the contract. Environment stands up (open self-host or ThinkWork for Business), the first template is configured with model + guardrail pinning, the first connector wires up, the agent's system prompt is written, evaluations seed against real expected outcomes, and the workflow ships. At handoff your operator can read the audit trail, watch cost per turn, and explain a guardrail decision without us in the room.",
+      },
+      {
+        n: "03",
+        title: "Operate (steady state)",
+        body:
+          "Managed ThinkWork Operations — weekly triage, guardrail tuning, evaluation refresh, harness upgrades. Quarterly we review cost trends, evaluation drift, and the operating model itself. The R.E.S.T. anchors that mattered at scope time are now measured in production: Reliability shows up as agent-paused-on-failure events, Efficiency as cost per turn, Security as guardrail activation rate, Traceability as audit query latency.",
+      },
+      {
+        n: "04",
+        title: "Expand (as trust earns it)",
+        body:
+          "Workflow Expansion Support delivers the second, third, and fourth workflows on a cadence — new templates, new connectors, new evaluation suites — without re-litigating governance per workflow. The control model from phase 1 holds; new agents inherit the same template-level discipline. The harness's job is to make this growth boring; ours is to keep the cadence steady.",
+      },
+    ],
   },
   faq: {
     eyebrow: "FAQ",
