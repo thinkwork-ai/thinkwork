@@ -177,23 +177,6 @@ const DEFAULT_SKILLS: ReadonlyArray<{ skillId: string; s3Key: string }> = [
 
 const BROWSER_AUTOMATION_CAPABILITY = "browser_automation";
 
-function parseRecord(value: unknown): Record<string, unknown> {
-  if (!value) return {};
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : {};
-    } catch {
-      return {};
-    }
-  }
-  return typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
 export async function resolveAgentRuntimeConfig(
   opts: ResolveAgentRuntimeConfigOptions,
 ): Promise<AgentRuntimeConfig> {
@@ -224,7 +207,6 @@ export async function resolveAgentRuntimeConfig(
       model: agentTemplates.model,
       guardrail_id: agentTemplates.guardrail_id,
       blocked_tools: agentTemplates.blocked_tools,
-      config: agentTemplates.config,
       sandbox: agentTemplates.sandbox,
       browser: agentTemplates.browser,
     })
@@ -338,11 +320,8 @@ export async function resolveAgentRuntimeConfig(
   const blockedTools: string[] =
     (agentTemplate.blocked_tools as string[] | null) ?? [];
   const templateBrowserResult = validateTemplateBrowser(agentTemplate.browser);
-  const templateConfig = parseRecord(agentTemplate.config);
-  const configBrowser = parseRecord(templateConfig.browserAutomation);
   const templateBrowserEnabled = templateBrowserResult.ok
-    ? templateBrowserResult.value?.enabled === true ||
-      configBrowser.enabled === true
+    ? templateBrowserResult.value?.enabled === true
     : false;
   if (!templateBrowserResult.ok) {
     console.warn(

@@ -318,7 +318,6 @@ function TemplateEditorPage() {
   const [sandboxEnabled, setSandboxEnabled] = useState(false);
   const [sandboxEnv, setSandboxEnv] = useState<SandboxEnv>("default-public");
   const [browserEnabled, setBrowserEnabled] = useState(false);
-  const [browserSaveEnabled, setBrowserSaveEnabled] = useState(false);
 
   // State -- skills
   const [templateSkills, setTemplateSkills] = useState<TemplateSkill[]>([]);
@@ -390,39 +389,6 @@ function TemplateEditorPage() {
   }, []);
 
   const catalogMap = new Map(catalog.map((s) => [s.slug, s]));
-
-  useEffect(() => {
-    let canceled = false;
-    fetch(
-      import.meta.env.VITE_GRAPHQL_HTTP_URL ||
-        `${import.meta.env.VITE_API_URL}/graphql`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": import.meta.env.VITE_GRAPHQL_API_KEY || "",
-        },
-        body: JSON.stringify({
-          query:
-            'query { __type(name: "UpdateAgentTemplateInput") { inputFields { name } } }',
-        }),
-      },
-    )
-      .then((res) => res.json())
-      .then((body) => {
-        if (canceled) return;
-        const fields = body?.data?.__type?.inputFields ?? [];
-        setBrowserSaveEnabled(
-          fields.some((f: { name: string }) => f.name === "browser"),
-        );
-      })
-      .catch(() => {
-        if (!canceled) setBrowserSaveEnabled(false);
-      });
-    return () => {
-      canceled = true;
-    };
-  }, []);
 
   const sortedCatalog = useMemo(
     () =>
@@ -559,10 +525,8 @@ function TemplateEditorPage() {
         typeof browserRaw === "string" && browserRaw
           ? JSON.parse(browserRaw)
           : browserRaw;
-      const configBrowser = parseJsonRecord(parsedConfig.browserAutomation);
       const nextBrowserEnabled = !!(
-        (browser && browser.enabled === true) ||
-        configBrowser.enabled === true
+        browser && browser.enabled === true
       );
       setBrowserEnabled(nextBrowserEnabled);
       setInitialSnapshot(
@@ -827,15 +791,7 @@ function TemplateEditorPage() {
     const browserJson = browserEnabled
       ? JSON.stringify({ enabled: true })
       : JSON.stringify(null);
-    const nextConfig = { ...templateConfig };
-    if (browserSaveEnabled) {
-      delete nextConfig.browserAutomation;
-    } else if (browserEnabled) {
-      nextConfig.browserAutomation = { enabled: true };
-    } else {
-      delete nextConfig.browserAutomation;
-    }
-    const config = JSON.stringify(nextConfig);
+    const config = JSON.stringify(templateConfig);
 
     try {
       if (isNew) {
@@ -850,7 +806,7 @@ function TemplateEditorPage() {
             config,
             skills: skillsJson,
             sandbox: sandboxJson,
-            ...(browserSaveEnabled ? { browser: browserJson } : {}),
+            browser: browserJson,
 
             model: model || undefined,
             guardrailId: guardrailId || undefined,
@@ -881,7 +837,7 @@ function TemplateEditorPage() {
             config,
             skills: skillsJson,
             sandbox: sandboxJson,
-            ...(browserSaveEnabled ? { browser: browserJson } : {}),
+            browser: browserJson,
 
             model: model || undefined,
             guardrailId: guardrailId || undefined,
@@ -893,7 +849,6 @@ function TemplateEditorPage() {
         reexecute({ requestPolicy: "network-only" });
         // Prompt sync-to-linked-agents if the template has linked agents
         if (!res.error) {
-          setTemplateConfig(nextConfig);
           setInitialSnapshot(currentSnapshot);
           await refetchLinkedAgents({ requestPolicy: "network-only" });
           if (linkedAgentCount > 0) {
@@ -1140,9 +1095,6 @@ function TemplateEditorPage() {
                       Registers an AgentCore Browser + Nova Act tool for dynamic
                       website workflows. Agent-level capability overrides can
                       still enable or disable it for individual agents.
-                      {!browserSaveEnabled
-                        ? " This dev API stores the setting in template config until the backend deploy exposes the first-class field."
-                        : ""}
                     </p>
                   </div>
                   <Switch
