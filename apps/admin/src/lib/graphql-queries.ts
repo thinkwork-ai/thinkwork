@@ -62,8 +62,8 @@ export const AgentDetailQuery = gql`
         model
         guardrailId
         blockedTools
-        config
         skills
+        browser
       }
       systemPrompt
       avatarUrl
@@ -1553,6 +1553,7 @@ export const AgentTemplateDetailQuery = graphql(`
       config
       skills
       sandbox
+      browser
       knowledgeBaseIds
       isPublished
       createdAt
@@ -1583,6 +1584,7 @@ export const UpdateAgentTemplateMutation = graphql(`
       config
       skills
       sandbox
+      browser
       knowledgeBaseIds
       updatedAt
     }

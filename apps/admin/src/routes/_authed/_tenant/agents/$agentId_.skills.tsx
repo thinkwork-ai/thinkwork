@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -77,22 +78,11 @@ type SkillRow = {
   needsConfig: boolean;
 };
 
-function parseJsonRecord(value: unknown): Record<string, unknown> {
-  if (!value) return {};
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : {};
-    } catch {
-      return {};
-    }
-  }
-  return typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
+type AgentCapabilityRow = {
+  capability: string;
+  enabled: boolean;
+  config?: unknown;
+};
 
 // ---------------------------------------------------------------------------
 // Columns
@@ -282,14 +272,21 @@ function AgentSkillsPage() {
   })();
   const templateBrowserEnabled = (() => {
     const raw = (agent?.agentTemplate as { browser?: unknown })?.browser;
-    const browser = parseJsonRecord(raw);
-    const templateConfig = parseJsonRecord(
-      (agent?.agentTemplate as { config?: unknown })?.config,
-    );
-    const configBrowser = parseJsonRecord(templateConfig.browserAutomation);
-    return browser.enabled === true || configBrowser.enabled === true;
+    if (!raw) return false;
+    try {
+      const browser = typeof raw === "string" ? JSON.parse(raw) : raw;
+      return !!(
+        browser &&
+        typeof browser === "object" &&
+        !Array.isArray(browser) &&
+        (browser as { enabled?: unknown }).enabled === true
+      );
+    } catch {
+      return false;
+    }
   })();
-  const browserCapability = (agent?.capabilities ?? []).find(
+  const agentCapabilities = (agent?.capabilities ?? []) as AgentCapabilityRow[];
+  const browserCapability = agentCapabilities.find(
     (c) => c.capability === "browser_automation",
   );
   const browserOverrideEnabled = browserCapability?.enabled ?? null;
@@ -300,7 +297,7 @@ function AgentSkillsPage() {
 
   const saveBrowserOverride = useCallback(
     async (enabled: boolean | null) => {
-      const existing = (agent?.capabilities ?? [])
+      const existing = agentCapabilities
         .filter((c) => c.capability !== "browser_automation")
         .map((c) => ({
           capability: c.capability,
