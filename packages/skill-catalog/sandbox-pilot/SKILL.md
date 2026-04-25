@@ -1,3 +1,31 @@
+---
+name: sandbox-pilot
+display_name: Sandbox Pilot (flagship demo)
+description: >
+  Reference template exercising the full AgentCore Code Sandbox path —
+  pulls skill_runs from Thinkwork's GraphQL, summarises them with
+  pandas via execute_code, and uploads a chart to S3 using the
+  sandbox's per-tenant IAM role. Use for dogfood validation when
+  onboarding a new tenant to the sandbox substrate.
+category: reference
+version: "1.0.0"
+author: thinkwork
+icon: beaker
+tags: [sandbox, pilot, reference, dogfood]
+execution: script
+scripts:
+  - name: run_pilot
+    path: scripts/pilot.py
+    description: "Runs the sandbox-pilot flagship demo end-to-end."
+triggers:
+  - "run the sandbox pilot"
+  - "sandbox smoke test"
+  - "sandbox flagship demo"
+requires_env:
+  - THINKWORK_API_URL
+  - THINKWORK_API_SECRET
+---
+
 # sandbox-pilot
 
 Reference template exercising the full AgentCore Code Sandbox path

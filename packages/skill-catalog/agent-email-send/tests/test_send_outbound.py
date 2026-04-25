@@ -2,10 +2,13 @@
 
 Two concerns:
 
-  1. The skill.yaml declares the mode_variant correctly and the reply-mode
-     back-compat contract is unchanged.
+  1. The SKILL.md frontmatter declares the mode_variant correctly and the
+     reply-mode back-compat contract is unchanged.
   2. The Python send_email function rejects threading fields in outbound
      mode and tolerates the absence of INBOUND_* env vars.
+
+Plan 2026-04-24-009 §U3 — frontmatter is the canonical metadata source;
+the parallel `skill.yaml` was retired.
 
 No network calls — the tests inject fake env + monkeypatch urlopen.
 """
@@ -23,13 +26,23 @@ import pytest
 import yaml
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
-SKILL_YAML = SKILL_DIR / "skill.yaml"
+SKILL_MD = SKILL_DIR / "SKILL.md"
 SEND_SCRIPT = SKILL_DIR / "scripts" / "send.py"
 
 
 def _load_yaml() -> dict:
-    with open(SKILL_YAML) as fh:
-        return yaml.safe_load(fh)
+    """Parse the SKILL.md frontmatter block (between the two ``---`` markers)."""
+    text = SKILL_MD.read_text(encoding="utf-8")
+    if not text.startswith("---"):
+        raise AssertionError("SKILL.md is missing leading frontmatter marker")
+    rest = text.split("\n", 1)[1]
+    end = rest.find("\n---")
+    if end < 0:
+        raise AssertionError("SKILL.md is missing closing frontmatter marker")
+    parsed = yaml.safe_load(rest[:end])
+    if not isinstance(parsed, dict):
+        raise AssertionError("SKILL.md frontmatter is not a mapping")
+    return parsed
 
 
 def _load_send_module():

@@ -9,8 +9,9 @@ The user fills out the form in the UI and clicks Submit. The frontend then
 sends a normal user message containing a ```form_response fenced block
 with the submitted values, which the agent reads on its next turn.
 
-This script is registered in agent-thread-management/skill.yaml so any
-task-recipe skill can call it without bundling its own copy.
+This script is registered in agent-thread-management/SKILL.md
+frontmatter so any task-recipe skill can call it without bundling its
+own copy.
 """
 
 import functools

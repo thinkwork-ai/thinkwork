@@ -1,5 +1,6 @@
 ---
 name: sales-prep
+display_name: "Prep for Meeting"
 description: >
   Produce a pre-meeting brief for a sales rep covering account context,
   financials, open incidents, external signals, and talking points.
@@ -18,6 +19,44 @@ allowed-tools:
   - crm_account_summary
   - ar_summary
   - support_incidents_summary
+version: 2
+execution: context
+inputs:
+  customer:
+    type: string
+    required: true
+    resolver: resolve_customer
+    on_missing_input: ask
+  meeting_date:
+    type: date
+    required: true
+    on_missing_input: ask
+  focus:
+    type: enum
+    values: [financial, expansion, risks, general]
+    default: general
+tenant_overridable:
+  - inputs.focus.default
+  - triggers.schedule.expression
+triggers:
+  chat_intent:
+    examples:
+      - "prep me for {customer}"
+      - "brief me on {customer}"
+      - "sales prep for {customer}"
+      - "get me ready for the {customer} meeting"
+    disambiguation: ask
+  schedule:
+    type: cron
+    expression: "0 14 ? * MON-FRI *"
+    bindings:
+      customer:
+        from_tenant_config: default_customer
+      meeting_date:
+        today_plus_N: 1
+requires_skills:
+  - package
+  - web-search
 ---
 
 # Sales Prep
@@ -149,7 +188,7 @@ If a connector isn't registered in the current session's tool set, the tool call
 
 ## Tenant overrides
 
-Tenants can change these via the `tenant_overridable` allowlist (see `skill.yaml`):
+Tenants can change these via the `tenant_overridable` allowlist declared in this SKILL.md frontmatter:
 
 - `inputs.focus.default` — a renewals-heavy tenant might flip to `risks`.
 - `triggers.schedule.expression` — afternoon brief → morning brief, etc.

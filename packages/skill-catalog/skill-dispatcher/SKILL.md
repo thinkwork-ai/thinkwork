@@ -1,5 +1,6 @@
 ---
 name: skill-dispatcher
+display_name: Skill Dispatcher
 description: >
   Chat intent router for deliverable-shape skills. Converts
   natural-language requests into `start_skill_run` calls. Reads the
@@ -9,6 +10,32 @@ license: Proprietary
 metadata:
   author: thinkwork
   version: "0.2.0"
+category: workflow
+version: "0.2.0"
+author: thinkwork
+icon: git-branch
+tags: [dispatcher, routing]
+execution: script
+mode: tool
+is_default: true
+scripts:
+  - name: start_skill_run
+    path: scripts/dispatch.py
+    description: "Start a skill run for the current user with resolved inputs. Returns runId + status."
+  - name: skill_run_status
+    path: scripts/dispatch.py
+    description: "Fetch the status of a previously-started skill run by runId. Returns status, started_at, finished_at, delivered_artifact_ref."
+triggers:
+  - "prep me for"
+  - "review the account"
+  - "check renewal"
+  - "kick off"
+  - "start"
+requires_env:
+  - THINKWORK_API_URL
+  - THINKWORK_API_SECRET
+  - TENANT_ID
+  - CURRENT_USER_ID
 ---
 
 # Skill Dispatcher

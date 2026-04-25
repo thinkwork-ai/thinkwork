@@ -11,13 +11,18 @@
  * removed execution type the census surfaces it under `regressed`
  * rather than silently shipping a broken catalog entry.
  *
+ * Source of truth (post plan 2026-04-24-009 §U2): SKILL.md frontmatter.
+ * The `skill.yaml` files were retired; this script now reads through
+ * U1's `parseSkillMdInternal` for the `execution` / `mode` / `steps`
+ * signals.
+ *
  * Migration states:
  *   - done              — execution is `script` or `context`.
- *   - regressed         — skill.yaml declares an execution value the
+ *   - regressed         — frontmatter declares an execution value the
  *                         runtime no longer handles (anything outside
  *                         `script` | `context`). Post-U6 this must
  *                         stay at zero.
- *   - unknown           — skill.yaml missing or malformed.
+ *   - unknown           — SKILL.md missing or frontmatter malformed.
  *
  * Usage:
  *   tsx packages/skill-catalog/scripts/u8-status.ts
@@ -28,7 +33,8 @@
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { parse as parseYaml } from "yaml";
+
+import { parseSkillMdInternal } from "../../api/src/lib/skill-md-parser.js";
 
 const SUPPORTED_EXECUTIONS = new Set<string>(["script", "context"]);
 
@@ -64,14 +70,13 @@ function listSlugDirs(catalog: string): string[] {
 
 function inspect(slug: string, catalog: string): SlugStatus {
   const dir = join(catalog, slug);
-  const yamlPath = join(dir, "skill.yaml");
   const skillMdPath = join(dir, "SKILL.md");
   const scriptsDir = join(dir, "scripts");
   const hasScriptsDir =
     existsSync(scriptsDir) && statSync(scriptsDir).isDirectory();
   const hasSkillMd = existsSync(skillMdPath);
 
-  if (!existsSync(yamlPath)) {
+  if (!hasSkillMd) {
     return {
       slug,
       state: "unknown",
@@ -80,14 +85,12 @@ function inspect(slug: string, catalog: string): SlugStatus {
       hasScriptsDir,
       hasSkillMd,
       stepCount: 0,
-      note: "no skill.yaml",
+      note: "no SKILL.md",
     };
   }
 
-  let parsed: unknown;
-  try {
-    parsed = parseYaml(readFileSync(yamlPath, "utf8"));
-  } catch (err) {
+  const result = parseSkillMdInternal(readFileSync(skillMdPath, "utf8"), skillMdPath);
+  if (!result.valid) {
     return {
       slug,
       state: "unknown",
@@ -96,14 +99,14 @@ function inspect(slug: string, catalog: string): SlugStatus {
       hasScriptsDir,
       hasSkillMd,
       stepCount: 0,
-      note: `parse failed: ${(err as Error).message}`,
+      note: `parse failed: ${result.errors.map((e) => e.message).join("; ")}`,
     };
   }
 
-  const y = (parsed ?? {}) as Record<string, unknown>;
-  const execution = typeof y.execution === "string" ? y.execution : "";
-  const mode = typeof y.mode === "string" ? y.mode : "";
-  const steps = Array.isArray(y.steps) ? (y.steps as unknown[]) : [];
+  const fm = result.parsed.data;
+  const execution = typeof fm.execution === "string" ? fm.execution : "";
+  const mode = typeof fm.mode === "string" ? fm.mode : "";
+  const steps = Array.isArray(fm.steps) ? (fm.steps as unknown[]) : [];
 
   let state: MigrationState;
   if (!execution) {
@@ -164,7 +167,7 @@ function render(statuses: SlugStatus[]): string {
       "treat a non-empty bucket as a failure.",
   );
   lines.push(
-    "- **unknown** → skill.yaml missing or malformed; fix the file.",
+    "- **unknown** → SKILL.md missing or frontmatter malformed; fix the file.",
   );
   lines.push(
     "- **done** → no action needed; the runtime knows how to dispatch.",

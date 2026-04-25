@@ -1,8 +1,12 @@
-"""Structural tests for the `package` primitive's skill.yaml + templates.
+"""Structural tests for the `package` primitive's SKILL.md + templates.
 
 Deterministic template rendering is the whole point of this primitive —
-keep the YAML, the script entry point, and the supported-format enum in
-lockstep. Python-side rendering behavior is tested in test_render.py.
+keep the frontmatter, the script entry point, and the supported-format
+enum in lockstep. Python-side rendering behavior is tested in
+test_render.py.
+
+Plan 2026-04-24-009 §U3 — frontmatter on SKILL.md is the canonical
+metadata source; the parallel `skill.yaml` was retired.
 """
 
 from __future__ import annotations
@@ -12,7 +16,6 @@ from pathlib import Path
 import yaml
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
-SKILL_YAML = SKILL_DIR / "skill.yaml"
 SKILL_MD = SKILL_DIR / "SKILL.md"
 SCRIPT_FILE = SKILL_DIR / "scripts" / "render.py"
 TEMPLATE_DIR = SKILL_DIR / "templates"
@@ -21,8 +24,18 @@ EXPECTED_FORMATS = ("sales_brief", "health_report", "renewal_risk")
 
 
 def _load() -> dict:
-    with open(SKILL_YAML) as fh:
-        return yaml.safe_load(fh)
+    """Parse the SKILL.md frontmatter block (between the two ``---`` markers)."""
+    text = SKILL_MD.read_text(encoding="utf-8")
+    if not text.startswith("---"):
+        raise AssertionError("SKILL.md is missing leading frontmatter marker")
+    rest = text.split("\n", 1)[1]
+    end = rest.find("\n---")
+    if end < 0:
+        raise AssertionError("SKILL.md is missing closing frontmatter marker")
+    parsed = yaml.safe_load(rest[:end])
+    if not isinstance(parsed, dict):
+        raise AssertionError("SKILL.md frontmatter is not a mapping")
+    return parsed
 
 
 def test_yaml_parses_as_mapping() -> None:
@@ -31,9 +44,10 @@ def test_yaml_parses_as_mapping() -> None:
 
 def test_required_metadata_present() -> None:
     data = _load()
-    for key in ("slug", "display_name", "description", "version", "execution", "scripts"):
+    # Post-U2: `name` is the canonical slug field.
+    for key in ("name", "display_name", "description", "version", "execution", "scripts"):
         assert key in data
-    assert data["slug"] == "package"
+    assert data["name"] == "package"
     assert data["execution"] == "script"
 
 
@@ -48,9 +62,9 @@ def test_script_entry_is_render_package() -> None:
 
 
 def test_format_enum_matches_templates() -> None:
-    """The enum in skill.yaml and the templates on disk must stay in
-    lockstep — adding a format means adding the template file, and
-    vice versa. If this test fails, the contract drifted."""
+    """The enum in SKILL.md frontmatter and the templates on disk must
+    stay in lockstep — adding a format means adding the template file,
+    and vice versa. If this test fails, the contract drifted."""
     data = _load()
     inputs = data["inputs"]
     fmt = inputs["format"]

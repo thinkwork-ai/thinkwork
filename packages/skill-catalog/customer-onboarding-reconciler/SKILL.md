@@ -1,5 +1,6 @@
 ---
 name: customer-onboarding-reconciler
+display_name: "Customer Onboarding (Reconciler)"
 description: >
   Reconciler-shaped skill that drives a new customer from opportunity-won
   to fully onboarded. Every invocation reads current state, creates only
@@ -15,6 +16,31 @@ allowed-tools:
   - crm_opportunity_summary
   - lastmile_tasks_list
   - lastmile_tasks_create
+version: 2
+execution: context
+inputs:
+  customerId:
+    type: string
+    required: true
+  opportunityId:
+    type: string
+    required: true
+tenant_overridable: []
+triggers:
+  chat_intent:
+    examples:
+      - "reconcile onboarding for {customer}"
+      - "kick onboarding for {customer}"
+    disambiguation: ask
+  webhook:
+    examples:
+      - source: crm
+        event: opportunity.won
+        when: "Opportunity stage transitions to Closed Won"
+      - source: task-system
+        event: task.completed
+        when: "A task spawned by a prior tick gets marked done"
+requires_skills: []
 ---
 
 # Customer Onboarding Reconciler

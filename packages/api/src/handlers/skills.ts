@@ -23,7 +23,7 @@ import { eq, and, sql, inArray, isNull } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { agentSkills, skillCatalog, skillRuns, tenantSkills, tenantMcpServers, tenantMcpAdminKeys, agentMcpServers, agentTemplateMcpServers, tenantBuiltinTools, connections, connectProviders, users } from "@thinkwork/database-pg/schema";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { parse as parseYaml } from "yaml";
+import { parseSkillMdInternal } from "../lib/skill-md-parser.js";
 import { authenticate } from "../lib/cognito-auth.js";
 import { requireTenantMembership } from "../lib/tenant-membership.js";
 import { handleCors, json, error, notFound, unauthorized } from "../lib/response.js";
@@ -809,12 +809,45 @@ async function getCatalogIndex(): Promise<APIGatewayProxyStructuredResultV2> {
 async function getCatalogSkill(
 	slug: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	const yamlText = await getS3Text(`${CATALOG_PREFIX}/${slug}/skill.yaml`);
-	if (!yamlText) return notFound("Skill not found");
-	const parsed = parseYaml(yamlText) as Record<string, unknown>;
-	// Normalize display_name → name for API consumers
-	if (parsed.display_name && !parsed.name) {
+	// Plan 2026-04-24-009 §U3: SKILL.md frontmatter is the canonical
+	// metadata source — `skill.yaml` was retired. The admin SPA's
+	// CatalogSkill type expects fields like name, description, category,
+	// version, author, icon, tags, requires_env, oauth_provider,
+	// oauth_scopes, mcp_server, mcp_tools, dependencies, triggers,
+	// execution, is_default, scripts, permissions_model — every one of
+	// those lives on the parsed frontmatter dict, so we forward `data`
+	// verbatim with one back-compat shim: when the catalog uses
+	// `display_name` for the human label and the SPA wants a `name`
+	// fallback, surface display_name as name. The slug itself comes from
+	// the URL path; the `name` field on the response is the SPA-facing
+	// human label.
+	const mdKey = `${CATALOG_PREFIX}/${slug}/SKILL.md`;
+	const mdText = await getS3Text(mdKey);
+	if (!mdText) return notFound("Skill not found");
+	const result = parseSkillMdInternal(mdText, mdKey);
+	if (!result.valid) {
+		return error(
+			`Skill metadata could not be parsed: ${result.errors
+				.map((e) => e.message)
+				.join("; ")}`,
+			500,
+		);
+	}
+	const parsed: Record<string, unknown> = { ...result.parsed.data };
+	// Pre-U2 the SPA's `name` field carried the human label (skill.yaml
+	// `name: "Display Title"`). Post-U2 the frontmatter `name` is the
+	// canonical slug and the human label moved to `display_name`. Mirror
+	// the legacy contract by surfacing `display_name` as `name` for the
+	// SPA — but only when display_name is set; otherwise the slug-shaped
+	// `name` is still better than empty.
+	if (typeof parsed.display_name === "string" && parsed.display_name) {
 		parsed.name = parsed.display_name;
+	}
+	// Always echo the URL slug so the SPA can correlate the response
+	// with the skill_catalog.slug column even when the frontmatter omits
+	// a `slug:` key (post-U2 canonical shape uses `name:` for the slug).
+	if (typeof parsed.slug !== "string" || !parsed.slug) {
+		parsed.slug = slug;
 	}
 	return json(parsed);
 }
@@ -909,9 +942,12 @@ async function installSkill(
 	const tenantId = await resolveTenantId(tenantSlug);
 	if (!tenantId) return error("Tenant not found", 404);
 
-	// Verify skill exists in catalog
-	const yamlText = await getS3Text(`${CATALOG_PREFIX}/${slug}/skill.yaml`);
-	if (!yamlText) return notFound("Skill not found in catalog");
+	// Verify skill exists in catalog. Plan §U3: read SKILL.md frontmatter
+	// (the post-U2 canonical metadata location) instead of the retired
+	// skill.yaml.
+	const mdKey = `${CATALOG_PREFIX}/${slug}/SKILL.md`;
+	const mdText = await getS3Text(mdKey);
+	if (!mdText) return notFound("Skill not found in catalog");
 
 	// List all catalog files for this skill
 	const catalogPrefix = `${CATALOG_PREFIX}/${slug}/`;
@@ -938,7 +974,15 @@ async function installSkill(
 		.limit(1);
 	const catalogVersion = catalogEntry?.version;
 
-	const meta = parseYaml(yamlText);
+	const parsed = parseSkillMdInternal(mdText, mdKey);
+	const meta: Record<string, unknown> = parsed.valid ? parsed.parsed.data : {};
+	// `version:` may be a YAML int or string in frontmatter — coerce to a
+	// text value the DB column accepts. Falls back to "1.0.0" for skills
+	// that omit the field.
+	const metaVersion =
+		typeof meta.version === "string" || typeof meta.version === "number"
+			? String(meta.version)
+			: "1.0.0";
 
 	// Upsert into tenant_skills DB (PRD-31)
 	await db
@@ -947,8 +991,8 @@ async function installSkill(
 			tenant_id: tenantId,
 			skill_id: slug,
 			source: "catalog",
-			version: meta.version || "1.0.0",
-			catalog_version: catalogVersion || meta.version || "1.0.0",
+			version: metaVersion,
+			catalog_version: catalogVersion || metaVersion,
 			enabled: true,
 			updated_at: new Date(),
 		})
@@ -956,14 +1000,17 @@ async function installSkill(
 			target: [tenantSkills.tenant_id, tenantSkills.skill_id],
 			set: {
 				source: "catalog",
-				version: meta.version || "1.0.0",
-				catalog_version: catalogVersion || meta.version || "1.0.0",
+				version: metaVersion,
+				catalog_version: catalogVersion || metaVersion,
 				enabled: true,
 				updated_at: new Date(),
 			},
 		});
 
-	// Also update S3 installed.json (backward compat during migration)
+	// Also update S3 installed.json (backward compat during migration).
+	// Post-U2 frontmatter has `name: <slug>` and `display_name: "Title"`
+	// — the installed.json shape predates that split, so we surface the
+	// human label as `name` (when present) for legacy SPA consumers.
 	const installedRaw = await getS3Text(
 		`${tenantSkillsPrefix(tenantSlug)}/installed.json`,
 	);
@@ -971,12 +1018,18 @@ async function installSkill(
 		? JSON.parse(installedRaw)
 		: [];
 	const filtered = installed.filter((s) => s.slug !== slug);
+	const displayName =
+		typeof meta.display_name === "string" && meta.display_name
+			? meta.display_name
+			: typeof meta.name === "string"
+				? meta.name
+				: slug;
 	filtered.push({
-		slug: meta.slug,
-		name: meta.name,
+		slug,
+		name: displayName,
 		description: meta.description,
 		category: meta.category,
-		version: meta.version,
+		version: metaVersion,
 		icon: meta.icon,
 		installedAt: new Date().toISOString(),
 	});
@@ -1031,9 +1084,11 @@ async function resolveDependencies(
 			.limit(1);
 
 		if (!existing) {
-			// Auto-install the dependency
-			const depYaml = await getS3Text(`${CATALOG_PREFIX}/${depSlug}/skill.yaml`);
-			if (!depYaml) continue; // skip if not in catalog
+			// Auto-install the dependency. Plan §U3: SKILL.md frontmatter
+			// is the canonical metadata — `skill.yaml` was retired.
+			const depMdKey = `${CATALOG_PREFIX}/${depSlug}/SKILL.md`;
+			const depMdText = await getS3Text(depMdKey);
+			if (!depMdText) continue; // skip if not in catalog
 
 			const depCatalogPrefix = `${CATALOG_PREFIX}/${depSlug}/`;
 			const depFiles = await listS3Keys(depCatalogPrefix);
@@ -1050,7 +1105,15 @@ async function resolveDependencies(
 				);
 			}
 
-			const depMeta = parseYaml(depYaml);
+			const depParsed = parseSkillMdInternal(depMdText, depMdKey);
+			const depMeta: Record<string, unknown> = depParsed.valid
+				? depParsed.parsed.data
+				: {};
+			const depMetaVersion =
+				typeof depMeta.version === "string" ||
+				typeof depMeta.version === "number"
+					? String(depMeta.version)
+					: "1.0.0";
 			const [depCatalogEntry] = await db
 				.select({ version: skillCatalog.version })
 				.from(skillCatalog)
@@ -1063,8 +1126,8 @@ async function resolveDependencies(
 					tenant_id: tenantId,
 					skill_id: depSlug,
 					source: "catalog",
-					version: depMeta.version || "1.0.0",
-					catalog_version: depCatalogEntry?.version || depMeta.version || "1.0.0",
+					version: depMetaVersion,
+					catalog_version: depCatalogEntry?.version || depMetaVersion,
 					enabled: true,
 					updated_at: new Date(),
 				})
@@ -1072,8 +1135,8 @@ async function resolveDependencies(
 					target: [tenantSkills.tenant_id, tenantSkills.skill_id],
 					set: {
 						source: "catalog",
-						version: depMeta.version || "1.0.0",
-						catalog_version: depCatalogEntry?.version || depMeta.version || "1.0.0",
+						version: depMetaVersion,
+						catalog_version: depCatalogEntry?.version || depMetaVersion,
 						enabled: true,
 						updated_at: new Date(),
 					},
@@ -1128,9 +1191,19 @@ async function saveTenantFile(
 // PRD-31 Phase 3: Tenant-uploadable custom skills
 // ---------------------------------------------------------------------------
 
-const SKILL_YAML_TEMPLATE = `slug: {{slug}}
+// Plan 2026-04-24-009 §U3 + R6: tenant skill creation now writes SKILL.md
+// only — the parallel `skill.yaml` template was retired. Frontmatter on
+// SKILL.md carries the catalog-shape metadata (display_name, category,
+// execution, etc.) that previously duplicated into skill.yaml.
+const SKILL_MD_TEMPLATE = `---
+name: {{slug}}
 display_name: {{name}}
-description: {{description}}
+description: >
+  {{description}}
+license: Proprietary
+metadata:
+  author: tenant
+  version: "1.0.0"
 category: custom
 version: "1.0.0"
 author: tenant
@@ -1138,16 +1211,6 @@ icon: zap
 tags: []
 execution: context
 triggers: []
-`;
-
-const SKILL_MD_TEMPLATE = `---
-name: {{slug}}
-description: >
-  {{description}}
-license: Proprietary
-metadata:
-  author: tenant
-  version: "1.0.0"
 ---
 
 # {{name}}
@@ -1196,14 +1259,8 @@ async function createTenantSkill(
 	const desc = description || `Custom skill: ${name}`;
 	const prefix = `${tenantSkillsPrefix(tenantSlug)}/${slug}`;
 
-	// Create skill.yaml from template
-	const yamlContent = SKILL_YAML_TEMPLATE
-		.replace(/\{\{slug\}\}/g, slug)
-		.replace(/\{\{name\}\}/g, name)
-		.replace(/\{\{description\}\}/g, desc);
-	await putS3Text(`${prefix}/skill.yaml`, yamlContent);
-
-	// Create SKILL.md from template
+	// Create SKILL.md from template — the canonical metadata file.
+	// Plan §U3 + R6 retired the parallel skill.yaml writer.
 	const mdContent = SKILL_MD_TEMPLATE
 		.replace(/\{\{slug\}\}/g, slug)
 		.replace(/\{\{name\}\}/g, name)
@@ -1219,7 +1276,7 @@ async function createTenantSkill(
 		enabled: true,
 	}).onConflictDoNothing();
 
-	return json({ success: true, slug, files: ["skill.yaml", "SKILL.md"] });
+	return json({ success: true, slug, files: ["SKILL.md"] });
 }
 
 async function getUploadUrl(
@@ -1282,11 +1339,11 @@ async function deleteTenantFile(
 	slug: string,
 	filePath: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	// Don't allow deleting skill.yaml — it's required
-	if (filePath === "skill.yaml") {
-		return error("Cannot delete skill.yaml — it is required", 400);
-	}
-
+	// Plan §U3: the legacy "refuses to delete skill.yaml" gate is gone —
+	// skill.yaml was retired and the file no longer exists. SKILL.md
+	// itself stays guarded against deletion via the admin UI's own
+	// affordances (no Delete button rendered for the canonical metadata
+	// file); the API endpoint here doesn't enforce that — UI controls do.
 	const key = `${tenantSkillsPrefix(tenantSlug)}/${slug}/${filePath}`;
 	await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
 	return json({ success: true, path: filePath, deleted: true });
@@ -1377,9 +1434,10 @@ async function installSkillToAgent(
 	agentSlug: string,
 	skillSlug: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-	// Verify skill exists in catalog
-	const yamlText = await getS3Text(`${CATALOG_PREFIX}/${skillSlug}/skill.yaml`);
-	if (!yamlText) return notFound("Skill not found in catalog");
+	// Verify skill exists in catalog. Plan §U3: read SKILL.md frontmatter
+	// instead of the retired skill.yaml.
+	const mdText = await getS3Text(`${CATALOG_PREFIX}/${skillSlug}/SKILL.md`);
+	if (!mdText) return notFound("Skill not found in catalog");
 
 	// List all catalog files for this skill
 	const catalogPrefix = `${CATALOG_PREFIX}/${skillSlug}/`;

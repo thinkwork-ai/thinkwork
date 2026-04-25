@@ -1,19 +1,22 @@
 """PRD-38: Dynamic skill script registration for the parent chat agent.
 
-Reads skill.yaml for skills with execution: script, imports the Python
-functions from their scripts/ folder, and wraps them as Strands @tool
-functions. Two modes:
+Reads SKILL.md frontmatter for skills with execution: script, imports
+the Python functions from their scripts/ folder, and wraps them as
+Strands @tool functions. Two modes:
 
   - mode: tool (default) — scripts registered as direct tools on the parent
     agent
   - mode: agent — scripts held back for a sub-agent with its own reasoning
     loop
 
-U6 removed the parallel orchestrator modules plus ``load_composition_skills``.
-Every skill whose behavior used to be a declarative sequence of
-sub-skill invocations is now a context skill and runs inside the chat
-loop via the ``Skill`` meta-tool — so the loader below only needs one
-code path.
+Plan 2026-04-24-009 §U3 — the canonical metadata source flipped from
+``skill.yaml`` to SKILL.md frontmatter; the hand-rolled
+``_parse_skill_yaml`` helper that lived here was retired in favour of
+:mod:`skill_md_parser`. U6 (PR #547) had already removed the parallel
+orchestrator modules plus ``load_composition_skills``; every skill
+whose behavior used to be a declarative sequence of sub-skill
+invocations is a context skill that runs inside the chat loop via the
+``Skill`` meta-tool — so the loader below only needs one code path.
 
 Usage:
     from skill_runner import register_skill_tools
@@ -23,104 +26,12 @@ Usage:
 import importlib.util
 import logging
 import os
-from typing import Any
+
+from skill_md_parser import SkillMdParseError, parse_skill_md_file
 
 logger = logging.getLogger(__name__)
 
 SKILLS_DIR = "/tmp/skills"
-
-
-def _coerce_scalar(raw: str) -> Any:
-    """Coerce a bare YAML scalar to a Python value.
-
-    Covers the shapes the hand-rolled parser actually emits: quoted and
-    unquoted strings, `true` / `false`, and integers. Anything else
-    passes through as a stripped string. Matches the top-level coercion
-    in _parse_skill_yaml so list-item dict values and dict-continuation
-    values get the same treatment — without it, `default_enabled: true`
-    in a `scripts:` list item lands as the literal string `"true"` and
-    every `is True` / `== True` check silently fails.
-    """
-    v = raw.strip().strip('"')
-    if v == "true":
-        return True
-    if v == "false":
-        return False
-    if v.lstrip("-").isdigit():
-        try:
-            return int(v)
-        except ValueError:
-            pass
-    return v
-
-
-def _parse_skill_yaml(filepath: str) -> dict | None:
-    """Parse a simple skill.yaml file into a dict."""
-    if not os.path.isfile(filepath):
-        return None
-    try:
-        with open(filepath) as f:
-            lines = f.readlines()
-    except Exception:
-        return None
-
-    result: dict[str, Any] = {}
-    current_key = ""
-    current_list: list | None = None
-
-    for line in lines:
-        stripped = line.rstrip()
-        if not stripped or stripped.startswith("#"):
-            continue
-
-        # Indented list item (e.g., "  - name: foo")
-        if stripped.startswith("  - ") and current_key:
-            val = stripped[4:].strip()
-            if current_list is not None:
-                # Check if it's a dict item (has colon)
-                if ": " in val and not val.startswith('"'):
-                    k, _, v = val.partition(": ")
-                    # Always start a new dict for each "- key: value" entry
-                    current_list.append({k.strip(): _coerce_scalar(v)})
-                else:
-                    current_list.append(val.strip('"'))
-            continue
-
-        # Indented dict continuation (e.g., "    path: scripts/foo.py")
-        if stripped.startswith("    ") and current_list and isinstance(current_list[-1], dict):
-            parts = stripped.strip().split(": ", 1)
-            if len(parts) == 2:
-                current_list[-1][parts[0].strip()] = _coerce_scalar(parts[1])
-            continue
-
-        # Top-level key: value
-        if ":" in stripped and not stripped.startswith(" "):
-            key, _, val = stripped.partition(":")
-            key = key.strip()
-            val = val.strip()
-
-            if val.startswith("[") and val.endswith("]"):
-                result[key] = [v.strip().strip('"') for v in val[1:-1].split(",") if v.strip()]
-                current_key = key
-                current_list = None
-                continue
-
-            if val in ("", "|"):
-                result[key] = []
-                current_key = key
-                current_list = result[key]
-                continue
-
-            if val == "true":
-                result[key] = True
-            elif val == "false":
-                result[key] = False
-            else:
-                result[key] = val.strip('"')
-            current_key = key
-            current_list = None
-
-    return result
 
 
 def _load_function(script_path: str, func_name: str):
@@ -174,11 +85,23 @@ def register_skill_tools(
             continue
 
         skill_dir = os.path.join(SKILLS_DIR, skill_id)
-        yaml_path = os.path.join(skill_dir, "skill.yaml")
-        meta = _parse_skill_yaml(yaml_path)
-
-        if not meta:
+        skill_md_path = os.path.join(skill_dir, "SKILL.md")
+        try:
+            parsed = parse_skill_md_file(skill_md_path)
+        except SkillMdParseError as exc:
+            logger.warning(
+                "Skipping %s: SKILL.md frontmatter parse failed: %s",
+                skill_id, exc,
+            )
             continue
+
+        if parsed is None:
+            # No SKILL.md on disk — matches legacy `_parse_skill_yaml`
+            # short-circuit semantics so callers can keep skipping
+            # unregistered skills silently.
+            continue
+        meta = parsed.data
+
         if meta.get("execution") != "script":
             continue
 
@@ -186,7 +109,7 @@ def register_skill_tools(
         if not scripts:
             continue
 
-        # Extract mode and model from skill.yaml (PRD-38)
+        # Extract mode and model from frontmatter (PRD-38)
         mode = meta.get("mode", "tool")  # default: tool
         model = meta.get("model", "")
 
@@ -245,5 +168,3 @@ def register_skill_tools(
                 len(tool_mode_tools), agent_count,
                 sum(len(t) for t in agent_mode_tools.values()), total)
     return tool_mode_tools, agent_mode_tools, skill_metadata
-
-

@@ -1,3 +1,21 @@
+---
+name: customer-onboarding
+display_name: Customer Onboarding
+description: Onboard a new customer by gathering information and creating tasks for the team. Handles intake questions, conditional task creation, user assignment, and deadline tracking.
+category: operations
+version: "1.1.0"
+author: thinkwork
+icon: user-plus
+tags: [onboarding, tasks, operations, customers]
+execution: context
+triggers:
+  - "onboard a customer"
+  - "new customer onboarding"
+  - "start onboarding"
+  - "onboard"
+  - "new customer"
+---
+
 # Customer Onboarding
 
 You help onboard new customers by gathering information and creating tasks for the team.

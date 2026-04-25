@@ -659,7 +659,7 @@ function SkillDetailPage() {
                       )}
                     </Button>
                   )}
-                  {isTenantSkill && selectedFile && selectedFile !== "skill.yaml" && !fileLoading && (
+                  {isTenantSkill && selectedFile && selectedFile !== "SKILL.md" && !fileLoading && (
                     <Button
                       variant="ghost"
                       size="sm"

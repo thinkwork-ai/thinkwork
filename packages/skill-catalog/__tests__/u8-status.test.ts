@@ -21,6 +21,8 @@ import { execSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { parse as parseYaml } from "yaml";
 
+import { parseSkillMdInternal } from "../../api/src/lib/skill-md-parser.js";
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const catalogRoot = resolve(__dirname, "..");
 const auditScript = join(catalogRoot, "scripts", "u8-status.ts");
@@ -32,9 +34,23 @@ function runAudit(): string {
   });
 }
 
+/**
+ * Read a skill's frontmatter as a plain mapping. Post plan 2026-04-24-009
+ * §U2 the canonical source is SKILL.md frontmatter — this helper goes
+ * through U1's lenient parser so the test reads exactly what the catalog
+ * loaders read. The function name stays historical (formerly read
+ * `skill.yaml`) to keep the call sites compact.
+ */
 function readYaml(slug: string): Record<string, unknown> {
-  const path = join(catalogRoot, slug, "skill.yaml");
-  return parseYaml(readFileSync(path, "utf8")) as Record<string, unknown>;
+  const path = join(catalogRoot, slug, "SKILL.md");
+  const result = parseSkillMdInternal(readFileSync(path, "utf8"), path);
+  if (!result.valid) {
+    throw new Error(
+      `SKILL.md frontmatter for ${slug} did not parse: ` +
+        result.errors.map((e) => e.message).join("; "),
+    );
+  }
+  return result.parsed.data;
 }
 
 describe("u8-status audit script", () => {
@@ -65,7 +81,7 @@ describe("u8-status audit script", () => {
     expect(Number(match![1])).toBe(0);
   });
 
-  it("has no unknown slugs — every skill.yaml parses + declares execution", () => {
+  it("has no unknown slugs — every SKILL.md parses + declares execution", () => {
     const out = runAudit();
     const unknownPattern = /\| unknown \| (\d+) \|/;
     const match = out.match(unknownPattern);
@@ -76,8 +92,18 @@ describe("u8-status audit script", () => {
 
 describe("sales-prep (U8 first migration exemplar)", () => {
   it("declares execution: context on the post-U8 shape", () => {
-    const yml = readYaml("sales-prep");
-    expect(yml.execution).toBe("context");
+    // Post plan 2026-04-24-009 §U2 the per-slug skill.yaml is gone and
+    // the canonical metadata lives on SKILL.md frontmatter. We read it
+    // through U1's lenient parser so this assertion stays aligned with
+    // how the catalog loaders see the field.
+    const skillMdPath = join(catalogRoot, "sales-prep", "SKILL.md");
+    const result = parseSkillMdInternal(
+      readFileSync(skillMdPath, "utf8"),
+      skillMdPath,
+    );
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(result.parsed.execution).toBe("context");
   });
 
   it("has no steps: block (the composition runner is the retired path)", () => {

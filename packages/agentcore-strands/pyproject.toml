@@ -1,0 +1,14 @@
+[project]
+name = "thinkwork-agentcore-strands"
+version = "0.0.0"
+description = "Strands runtime for the Thinkwork agent harness"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+# The container's runtime dependencies are pinned in
+# `agent-container/requirements.txt` for the Docker image build. We
+# mirror the dev-time subset here so `uv run pytest` can resolve the
+# parser tests without needing the full Bedrock/Strands stack.
+dependencies = [
+  "PyYAML>=6.0",
+  "pytest>=8.0",
+]

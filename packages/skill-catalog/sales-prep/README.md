@@ -1,7 +1,8 @@
 # sales-prep
 
-Pre-meeting brief for a sales rep. See `SKILL.md` for the contract and
-invocation paths, `skill.yaml` for the typed inputs and triggers.
+Pre-meeting brief for a sales rep. See `SKILL.md` for the contract,
+invocation paths, and the typed inputs / triggers (in the
+frontmatter).
 
 This skill is the **chat / scheduled / admin-catalog anchor** for the
 deliverable-shape skill pattern: every invocation path that doesn't
