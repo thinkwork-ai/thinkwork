@@ -7,18 +7,22 @@
  * @thinkwork/workspace-defaults). Per-tenant behavior:
  *
  *   • Stored `_defaults_version` === DEFAULTS_VERSION → no-op.
- *   • Stored version < DEFAULTS_VERSION (or missing) → rewrite all 11 files
- *     + bump the version key.
+ *   • Stored version < DEFAULTS_VERSION (or missing) → rewrite all 13 files
+ *     + bump the version key. (Plan §008 U3 added AGENTS.md + CONTEXT.md to
+ *     the canonical set, lifting the count from 11 → 13.)
  *
  * The seeding logic itself lives in `ensureDefaultsExist()` in
  * packages/api/src/lib/workspace-copy.ts — this handler just iterates tenants
  * and delegates per-tenant work.
  *
  * Run via:
- *   • Lambda invoke (post-deploy or scheduled)
- *   • `npx tsx packages/api/src/handlers/seed-workspace-defaults.ts`
+ *   • `npx tsx packages/api/src/handlers/seed-workspace-defaults.ts` — the
+ *     deploy pipeline runs this from the bootstrap job (plan §008 U4 wired
+ *     it into .github/workflows/deploy.yml after `bash bootstrap-workspace.sh`).
+ *   • Lambda invoke (manual / scheduled).
  *
- * Unit 3 of docs/plans/2026-04-21-006-feat-agent-workspace-overlay-and-seeding-plan.md.
+ * Unit 3 of docs/plans/2026-04-21-006-feat-agent-workspace-overlay-and-seeding-plan.md;
+ * deploy-pipeline wiring lands in plan §008 U4.
  */
 
 import { isNotNull } from "drizzle-orm";
