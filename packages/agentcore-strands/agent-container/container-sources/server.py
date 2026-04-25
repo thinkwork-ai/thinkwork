@@ -1401,6 +1401,56 @@ def _call_strands_agent(system_prompt: str, messages: list,
     tools.append(_tool_dec(_delegate_fn))
     logger.info("Delegate tool registered (model=%s)", effective_model)
 
+    # Plan §008 U9: path-addressed delegation. Spawns a sub-agent rooted at
+    # a workspace folder (e.g. "expenses", "support/escalation") with the
+    # parent's composed overlay + the folder's local skills. Coexists with
+    # the generic `delegate` above — different purposes.
+    #
+    # The Bedrock spawn body itself is INERT in this PR (returns
+    # ok=False, reason="spawn not yet wired"). The follow-up plan-008
+    # unit replaces only the spawn body — registration and validation
+    # surfaces stay stable.
+    try:
+        from delegate_to_workspace_tool import make_delegate_to_workspace_fn
+        _dw_api_url = (
+            os.environ.get("THINKWORK_API_URL")
+            or os.environ.get("API_URL")
+            or ""
+        )
+        _dw_api_secret = (
+            os.environ.get("API_AUTH_SECRET")
+            or os.environ.get("INTERNAL_API_SECRET")
+            or ""
+        )
+        _dw_tenant = os.environ.get("TENANT_ID", "")
+        _dw_agent = os.environ.get("AGENT_ID", "") or os.environ.get("_ASSISTANT_ID", "")
+        if _dw_api_url and _dw_api_secret and _dw_tenant and _dw_agent:
+            _dw_fn = make_delegate_to_workspace_fn(
+                parent_tenant_id=_dw_tenant,
+                parent_agent_id=_dw_agent,
+                api_url=_dw_api_url,
+                api_secret=_dw_api_secret,
+                platform_catalog_manifest=None,  # spawn-PR follow-up wires this
+                cfg_model=effective_model,
+                usage_acc=sub_agent_usage,
+            )
+            tools.append(_tool_dec(_dw_fn))
+            logger.info(
+                "delegate_to_workspace tool registered (model=%s, spawn=inert)",
+                effective_model,
+            )
+        else:
+            logger.info(
+                "delegate_to_workspace tool not registered — "
+                "missing api_url/api_secret/tenant/agent in env"
+            )
+    except ImportError as exc:
+        logger.warning(
+            "delegate_to_workspace_tool import failed (%s); "
+            "skipping registration",
+            exc,
+        )
+
     # PRD-31: AgentSkills plugin for progressive skill disclosure.
     # Discovery: injects <available_skills> XML into system prompt
     # Activation: built-in `skills` tool loads SKILL.md on demand
