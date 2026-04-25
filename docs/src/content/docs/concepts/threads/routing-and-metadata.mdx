@@ -5,7 +5,7 @@ description: How inbound connector events become threads — the normalization p
 
 import { Aside } from '@astrojs/starlight/components';
 
-When a Slack message, a GitHub issue comment, or an inbound email arrives, ThinkWork has to do two things: figure out which thread it belongs to (new? existing? reopen a closed one?), and preserve enough context that an agent can reply back through the same channel it came from. This page is how that works. Routing is the seam between the harness's I/O surface ([Connectors](/concepts/connectors/)) and its perception layer ([Threads](/concepts/threads/)) — the moment an outside event becomes a structured thread an agent can reason over. The metadata that carries through is what makes the **Security** REST anchor work at the connector boundary: outbound replies route via channel-scoped tools that never need raw provider tokens, because the channel handler already holds them.
+When a Slack message, a GitHub issue comment, or an inbound email arrives, ThinkWork has to do two things: figure out which thread it belongs to (new? existing? reopen a closed one?), and preserve enough context that an agent can reply back through the same channel it came from. This page is how that works. Routing is the seam between the harness's I/O surface ([Connectors](/concepts/connectors/)) and its perception layer ([Threads](/concepts/threads/)) — the moment an outside event becomes a structured thread an agent can reason over. The metadata that carries through is what makes the **Security** operating guarantee work at the connector boundary: outbound replies route via channel-scoped tools that never need raw provider tokens, because the channel handler already holds them.
 
 ## The routing question
 

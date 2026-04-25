@@ -55,31 +55,37 @@ export const hero = {
   ],
 };
 
+// Outcome-speak labels per the 2026-04-25 messaging-feedback steering memo.
+// The four pillars are still Reliability, Efficiency, Security, Traceability,
+// but the homepage strip leads with what those mean for the reader (recovery,
+// cost visibility, capability gating, end-to-end traces) rather than the
+// framework-speak labels. Docs may still reference the four guarantees by
+// name; marketing surfaces lead with the consequence.
 export const proofStrip = [
   {
-    label: "Reliability",
+    label: "Recoverable by design",
     detail:
-      "Fault recovery from checkpoints, idempotent writes, behavior consistent under the same inputs.",
+      "Checkpoints, idempotent writes, retries — the harness recovers a turn from where it stopped, not where it started over.",
   },
   {
-    label: "Efficiency",
+    label: "Cost stays visible",
     detail:
-      "Token budgets and per-agent spend caps; low-latency interactive paths; throughput that scales with usage.",
+      "Token budgets, per-agent spend caps, and cost attached to the turn that produced it — no monthly invoice surprises.",
   },
   {
-    label: "Security",
+    label: "Capability-gated",
     detail:
-      "Per-agent capability grants, sandboxed execution on AgentCore, I/O filtering for prompt injection and PII.",
+      "Approved tools per template, sandboxed execution on AgentCore, prompt-injection and PII filtering at the I/O boundary.",
   },
   {
-    label: "Traceability",
+    label: "Traceable every turn",
     detail:
-      "End-to-end traces per turn, explainable decisions, auditable state — every action recoverable.",
+      "Every model call, every tool call, every guardrail decision — recorded against the thread that triggered it.",
   },
   {
-    label: "Open or operated",
+    label: "The harness stays yours",
     detail:
-      "Self-host on your AWS, run it with us as ThinkWork for Business, or wrap it with Enterprise services.",
+      "Self-host on your AWS, run it with us as ThinkWork for Business, or wrap it with Enterprise services. Managed does not mean vendor-hosted.",
   },
 ];
 
@@ -151,45 +157,46 @@ export const howItWorks = {
   ],
 };
 
-// The five governance controls below map 1:N to the four REST anchors
-// (Reliability · Efficiency · Security · Traceability). The chip-label on
-// each card carries the anchor(s) the control implements; FiveControls.astro
-// renders these as small uppercase tags. Mapping is locked in plan U1
-// pre-flight and consumed verbatim by docs/concepts/control.mdx (U8).
+// The five governance controls below map 1:N to the four operating
+// guarantees (Reliability · Efficiency · Security · Traceability). The
+// chip-label on each card carries the guarantee(s) the control implements;
+// FiveControls.astro renders these as small uppercase tags. Mapping is
+// locked in plan U1 pre-flight and consumed verbatim by
+// docs/concepts/control.mdx (U8).
 export const controls = {
-  eyebrow: "Reliability · Efficiency · Security · Traceability",
-  headline: "The four REST anchors, enforced in code.",
-  lede: "Reliability, Efficiency, Security, and Traceability are not aspirations. The harness implements each one as concrete, shipping controls — five of them, all live in the admin web, all part of every plan.",
+  eyebrow: "Four operating guarantees",
+  headline: "Reliability, efficiency, security, and traceability — enforced in code.",
+  lede: "These four guarantees are not aspirations. The harness implements each one as concrete, shipping controls — five of them, all live in the admin web, all part of every plan, all observable on every turn.",
   items: [
     {
       title: "Runs in your AWS",
       desc: "The runtime deploys into your account. Your data, IAM, and network stay yours.",
       icon: "aws",
-      anchor: "Security · Traceability",
+      guarantee: "Security · Traceability",
     },
     {
       title: "Approved agent capabilities",
       desc: "Each agent inherits an approved set of tools, models, and knowledge from its template — policy becomes code, not paperwork.",
       icon: "templates",
-      anchor: "Security · Reliability",
+      guarantee: "Security · Reliability",
     },
     {
       title: "Centralized management",
       desc: "One admin console for agents, templates, budgets, evaluations, memory, and audit — no fragmented toolchain.",
       icon: "admin",
-      anchor: "Traceability",
+      guarantee: "Traceability",
     },
     {
       title: "Cost control and analysis",
       desc: "Real-time cost events per agent and model. Budgets cap spend before a runaway loop becomes an invoice.",
       icon: "cost",
-      anchor: "Efficiency",
+      guarantee: "Efficiency",
     },
     {
       title: "Security + accuracy evaluations",
       desc: "Evaluation suite for every template — AWS Bedrock AgentCore evaluators plus custom assertions.",
       icon: "evals",
-      anchor: "Reliability · Security",
+      guarantee: "Reliability · Security",
     },
   ],
 };
@@ -517,7 +524,7 @@ export const services = {
         detail: "Identity isolation enforced at the AWS layer, not in application glue.",
       },
       {
-        label: "Full audit + REST evaluations",
+        label: "Full audit + per-turn evaluations",
         detail: "Every turn traced; Reliability, Efficiency, Security, and Traceability evaluators run on the same trace.",
       },
     ] as Array<{ label: string; detail?: string }>,
@@ -550,7 +557,7 @@ export const services = {
     eyebrow: "Services",
     headline: "Practical help from first workflow to ongoing operations.",
     lede:
-      "Every package scoped up front — no billable hours, no open meter, no drift from the engagement shape we agreed to. Each one maps to a phase of the harness's adoption arc and names the components, controls, and REST anchors it touches.",
+      "Every package scoped up front — no billable hours, no open meter, no drift from the engagement shape we agreed to. Each one maps to a phase of the harness's adoption arc and names the components, controls, and operating guarantees it touches.",
     items: [
       {
         id: "strategy-sprint",
@@ -562,7 +569,7 @@ export const services = {
           "A two-week engagement that ends with three concrete artifacts — a named first workflow, a governance model expressed against the harness's five controls, and a 30/60/90 rollout plan. We pick the workflow that pays back fastest, agree on the templates that bound the agent's capability, and choose the success metric that proves it worked. No deck; the output is decisions you can hand to engineering on Monday.",
         includes: [
           "Use case and workflow selection (with discard pile)",
-          "Templates + capability grants — Reliability + Security anchors",
+          "Templates + capability grants — Reliability + Security guarantees",
           "Pilot success metric + the dashboard it lands on",
           "30/60/90 rollout plan with explicit gates",
           "Risk register: what fails, how we'd notice, who handles it",
@@ -601,9 +608,9 @@ export const services = {
           "Recurring operations support that keeps the harness healthy, governed, and evaluated without you hiring a platform team on day one. Weekly we triage incidents, tune guardrails against real traffic, refresh evaluations as the workflow's expected outcomes evolve, and apply harness upgrades. Quarterly we review cost trends, spend efficiency, and evaluation drift against the original Reliability + Efficiency targets — and adjust the operating model when the data says we should.",
         includes: [
           "Environment health and incident triage (weekly cadence)",
-          "Guardrail tuning + evaluation refresh — Reliability + Security anchors",
+          "Guardrail tuning + evaluation refresh — Reliability + Security guarantees",
           "Harness upgrades + admin / configuration support",
-          "Per-agent cost reviews against budget — Efficiency anchor",
+          "Per-agent cost reviews against budget — Efficiency guarantee",
           "Quarterly operations review with explicit recalibration",
         ],
         outcome:
@@ -617,7 +624,7 @@ export const services = {
         timeline: "Ongoing",
         oneLiner: "The next wave of workflows, shipped on a cadence.",
         body:
-          "Recurring delivery of new agents, workflows, connectors, and templates as the organization earns trust in earlier ones. Each cadence ships new agent templates calibrated against the same REST anchors as the pilot, new connectors wired with the same credential-vault discipline, and new evaluation suites that prove each addition before it touches production traffic. The control model stays constant; the surface area grows beneath it.",
+          "Recurring delivery of new agents, workflows, connectors, and templates as the organization earns trust in earlier ones. Each cadence ships new agent templates calibrated against the same operating guarantees as the pilot, new connectors wired with the same credential-vault discipline, and new evaluation suites that prove each addition before it touches production traffic. The control model stays constant; the surface area grows beneath it.",
         includes: [
           "New agent templates per cadence — capability grants + guardrails",
           "Connector rollout (Slack / GitHub / Google / MCP / Email)",
@@ -642,7 +649,7 @@ export const services = {
           "No AWS / Terraform setup on your side",
           "Managed updates, upgrades, and incident response",
           "Plan tiers that scale with usage",
-          "Same admin web, same audit log, same REST anchors",
+          "Same admin web, same audit log, same operating guarantees",
         ],
         outcome:
           "ThinkWork running as a managed product — deployed, updated, audited, and governed by us inside your AWS boundary, with the operator-facing surfaces unchanged from the open path.",
@@ -662,7 +669,7 @@ export const services = {
         n: "01",
         title: "Scope (week 1–2)",
         body:
-          "An AI Adoption Strategy Sprint, or the discovery phase of a Pilot Launch. We pick one workflow that pays back fastest, agree on the templates that bound the agent's capability, choose the success metric that proves it worked, and write down the risks. No code yet — the output is the contract between you and the harness: which components are involved, which REST anchors matter most, and what 'done' looks like for the pilot.",
+          "An AI Adoption Strategy Sprint, or the discovery phase of a Pilot Launch. We pick one workflow that pays back fastest, agree on the templates that bound the agent's capability, choose the success metric that proves it worked, and write down the risks. No code yet — the output is the contract between you and the harness: which components are involved, which operating guarantees matter most, and what 'done' looks like for the pilot.",
       },
       {
         n: "02",
@@ -674,7 +681,7 @@ export const services = {
         n: "03",
         title: "Operate (steady state)",
         body:
-          "Managed ThinkWork Operations — weekly triage, guardrail tuning, evaluation refresh, harness upgrades. Quarterly we review cost trends, evaluation drift, and the operating model itself. The REST anchors that mattered at scope time are now measured in production: Reliability shows up as agent-paused-on-failure events, Efficiency as cost per turn, Security as guardrail activation rate, Traceability as audit query latency.",
+          "Managed ThinkWork Operations — weekly triage, guardrail tuning, evaluation refresh, harness upgrades. Quarterly we review cost trends, evaluation drift, and the operating model itself. The operating guarantees that mattered at scope time are now measured in production: Reliability shows up as agent-paused-on-failure events, Efficiency as cost per turn, Security as guardrail activation rate, Traceability as audit query latency.",
       },
       {
         n: "04",
