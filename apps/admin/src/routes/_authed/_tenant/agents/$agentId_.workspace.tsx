@@ -187,6 +187,7 @@ function TreeItem({
   sourceFor,
   updateAvailableFor,
   filesFor,
+  deletingPath,
   onSelect,
   onToggle,
   onAcceptUpdate,
@@ -201,6 +202,7 @@ function TreeItem({
   sourceFor: (path: string) => ComposeSource | undefined;
   updateAvailableFor: (path: string) => boolean;
   filesFor: (folderPath: string) => string[];
+  deletingPath: string | null;
   onSelect: (path: string) => void;
   onToggle: (path: string) => void;
   onAcceptUpdate: (filename: string) => void;
@@ -210,6 +212,7 @@ function TreeItem({
   const isExpanded = expandedFolders.has(node.path);
   const isSelected = selectedPath === node.path;
   const folderFiles = node.isFolder ? filesFor(node.path) : [];
+  const isDeleting = deletingPath === node.path;
   const isProfileFile =
     profileFiles !== null &&
     (profileFiles.has(node.path) ||
@@ -284,13 +287,18 @@ function TreeItem({
             variant="ghost"
             size="sm"
             className="ml-auto h-5 w-5 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+            disabled={isDeleting}
             onClick={(e) => {
               e.stopPropagation();
               onDeleteFolder(node.path);
             }}
             title={`Delete ${folderFiles.length} files under ${node.path}`}
           >
-            <Trash2 className="h-3 w-3" />
+            {isDeleting ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Trash2 className="h-3 w-3" />
+            )}
           </Button>
         )}
         {!node.isFolder && (
@@ -298,13 +306,18 @@ function TreeItem({
             variant="ghost"
             size="sm"
             className="ml-auto h-5 w-5 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+            disabled={isDeleting}
             onClick={(e) => {
               e.stopPropagation();
               onDeleteFile(node.path);
             }}
             title={`Delete ${node.path}`}
           >
-            <Trash2 className="h-3 w-3" />
+            {isDeleting ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Trash2 className="h-3 w-3" />
+            )}
           </Button>
         )}
       </div>
@@ -321,6 +334,7 @@ function TreeItem({
               sourceFor={sourceFor}
               updateAvailableFor={updateAvailableFor}
               filesFor={filesFor}
+              deletingPath={deletingPath}
               onSelect={onSelect}
               onToggle={onToggle}
               onAcceptUpdate={onAcceptUpdate}
@@ -436,8 +450,9 @@ function AgentWorkspacePage() {
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [generating, setGenerating] = useState(false);
 
-  const fetchFiles = useCallback(async () => {
-    setLoadingFiles(true);
+  const fetchFiles = useCallback(async (options: { showLoading?: boolean } = {}) => {
+    const showLoading = options.showLoading ?? true;
+    if (showLoading) setLoadingFiles(true);
     try {
       const data = await listWorkspaceFiles(target);
       setFiles(data.files.map((f) => f.path));
@@ -447,7 +462,7 @@ function AgentWorkspacePage() {
     } catch (err) {
       console.error("Failed to list workspace files:", err);
     } finally {
-      setLoadingFiles(false);
+      if (showLoading) setLoadingFiles(false);
     }
   }, [target]);
 
@@ -694,6 +709,7 @@ function AgentWorkspacePage() {
   // Always in edit mode — no view/edit toggle
   const [editValue, setEditValue] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deletingPath, setDeletingPath] = useState<string | null>(null);
 
   const handleOpen = async (filePath: string) => {
     setOpenFile(filePath);
@@ -732,16 +748,39 @@ function AgentWorkspacePage() {
     setEditValue("");
   };
 
+  const chooseFallbackFile = (deletedFiles: string[]) => {
+    if (!openFile || !deletedFiles.includes(openFile)) return null;
+
+    const deleted = new Set(deletedFiles);
+    const openIndex = files.indexOf(openFile);
+    const nextFile = files.find((file, index) => index > openIndex && !deleted.has(file));
+    if (nextFile) return nextFile;
+
+    for (let index = Math.min(openIndex - 1, files.length - 1); index >= 0; index--) {
+      const file = files[index];
+      if (file && !deleted.has(file)) return file;
+    }
+
+    return null;
+  };
+
   const handleDeleteFile = async (path: string) => {
     if (!confirm(`Delete ${path}?`)) return;
+    const fallbackFile = chooseFallbackFile([path]);
+    setDeletingPath(path);
     try {
       await deleteWorkspaceFile(target, path);
-      if (openFile === path) clearEditor();
-      await fetchFiles();
+      await fetchFiles({ showLoading: false });
+      if (openFile === path) {
+        if (fallbackFile) await handleOpen(fallbackFile);
+        else clearEditor();
+      }
       toast.success(`Deleted ${path}`);
     } catch (err) {
       console.error(`Failed to delete ${path}:`, err);
       toast.error(err instanceof Error ? err.message : `Failed to delete ${path}`);
+    } finally {
+      setDeletingPath(null);
     }
   };
 
@@ -753,25 +792,32 @@ function AgentWorkspacePage() {
     }
     if (!confirm(`Delete ${concreteFiles.length} files under ${folderPath}?`)) return;
 
-    const failed: string[] = [];
-    for (const path of concreteFiles) {
-      try {
-        await deleteWorkspaceFile(target, path);
-      } catch (err) {
-        console.error(`Failed to delete ${path}:`, err);
-        failed.push(path);
+    try {
+      const failed: string[] = [];
+      const fallbackFile = chooseFallbackFile(concreteFiles);
+      setDeletingPath(folderPath);
+      for (const path of concreteFiles) {
+        try {
+          await deleteWorkspaceFile(target, path);
+        } catch (err) {
+          console.error(`Failed to delete ${path}:`, err);
+          failed.push(path);
+        }
       }
-    }
 
-    if (openFile && pathIsWithinFolder(openFile, folderPath) && !failed.includes(openFile)) {
-      clearEditor();
-    }
-    await fetchFiles();
+      if (openFile && pathIsWithinFolder(openFile, folderPath) && !failed.includes(openFile)) {
+        if (fallbackFile) await handleOpen(fallbackFile);
+        else clearEditor();
+      }
+      await fetchFiles({ showLoading: false });
 
-    if (failed.length > 0) {
-      toast.error(`Deleted ${concreteFiles.length - failed.length} files; ${failed.length} failed.`);
-    } else {
-      toast.success(`Deleted ${concreteFiles.length} files under ${folderPath}`);
+      if (failed.length > 0) {
+        toast.error(`Deleted ${concreteFiles.length - failed.length} files; ${failed.length} failed.`);
+      } else {
+        toast.success(`Deleted ${concreteFiles.length} files under ${folderPath}`);
+      }
+    } finally {
+      setDeletingPath(null);
     }
   };
 
@@ -870,6 +916,7 @@ function AgentWorkspacePage() {
                   sourceFor={sourceFor}
                   updateAvailableFor={updateAvailableFor}
                   filesFor={filesFor}
+                  deletingPath={deletingPath}
                   onSelect={handleOpen}
                   onToggle={toggleFolder}
                   onAcceptUpdate={handleAcceptUpdate}
@@ -918,9 +965,14 @@ function AgentWorkspacePage() {
                           variant="ghost"
                           size="sm"
                           className="h-6 w-6 p-0 text-muted-foreground"
+                          disabled={deletingPath === openFile}
                           onClick={() => openFile && handleDeleteFile(openFile)}
                         >
-                          <Trash2 className="h-3 w-3" />
+                          {deletingPath === openFile ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3 w-3" />
+                          )}
                         </Button>
                       </>
                     )}
