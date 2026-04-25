@@ -188,7 +188,7 @@ If a connector isn't registered in the current session's tool set, the tool call
 
 ## Tenant overrides
 
-Tenants can change these via the `tenant_overridable` allowlist (see `skill.yaml`):
+Tenants can change these via the `tenant_overridable` allowlist declared in this SKILL.md frontmatter:
 
 - `inputs.focus.default` — a renewals-heavy tenant might flip to `risks`.
 - `triggers.schedule.expression` — afternoon brief → morning brief, etc.

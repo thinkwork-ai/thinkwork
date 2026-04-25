@@ -2,11 +2,13 @@
 /**
  * U1 — Pre-migration census of the bundled skill catalog.
  *
- * Walks every packages/skill-catalog/<slug>/skill.yaml and records the
- * signals the V1 agent-architecture plan needs to decide how to migrate
- * each skill: YAML shape, script entry points, git-history age, and
- * production usage from agent_skills. Emits a markdown report plus a
- * companion SQL probe for stages the runner cannot reach directly.
+ * Walks every packages/skill-catalog/<slug>/SKILL.md (post plan
+ * 2026-04-24-009 §U2 the canonical metadata source — `skill.yaml` was
+ * retired) and records the signals the V1 agent-architecture plan needs
+ * to decide how to migrate each skill: frontmatter shape, script entry
+ * points, git-history age, and production usage from agent_skills.
+ * Emits a markdown report plus a companion SQL probe for stages the
+ * runner cannot reach directly.
  *
  * The plan defines four buckets per slug:
  *   - zero-rows-safe-swap            — no prod rows, safe to rewrite in place
@@ -37,7 +39,8 @@ import {
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parse as parseYaml } from "yaml";
+
+import { parseSkillMdInternal } from "../../api/src/lib/skill-md-parser.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -55,10 +58,15 @@ export interface SkillScriptEntry {
   description?: string;
 }
 
-/** Metadata parsed from a single skill.yaml, independent of git/DB signals. */
+/** Metadata parsed from a single SKILL.md, independent of git/DB signals. */
 export interface SkillMetadata {
   dir: string;
   slug: string;
+  /**
+   * Path to the SKILL.md whose frontmatter sourced this metadata. Named
+   * `yamlPath` for backward-compat with downstream consumers; the file
+   * extension on disk is `.md`, the field name is historical.
+   */
   yamlPath: string;
   execution: YamlExecution;
   mode?: string;
@@ -110,7 +118,7 @@ export interface SkillVerdict {
 export interface SkillRow extends SkillMetadata, SkillSignals, SkillVerdict {}
 
 // ---------------------------------------------------------------------------
-// skill.yaml parsing
+// SKILL.md frontmatter parsing
 // ---------------------------------------------------------------------------
 
 const EXECUTION_TYPES: readonly YamlExecution[] = [
@@ -158,16 +166,28 @@ function parseScriptEntries(raw: unknown): SkillScriptEntry[] {
 }
 
 /**
- * Read a single skill.yaml into structured metadata. Accepts either `slug:`
- * or `id:` as the identifier (both appear in the current corpus).
+ * Read a single SKILL.md (frontmatter + prose) into structured metadata.
+ * Accepts `name:` (canonical, post-U2), `slug:`, or `id:` as the
+ * identifier — the legacy keys are tolerated so a stray pre-U2 file
+ * still surfaces in the census instead of silently disappearing.
+ *
+ * The function name + `yamlPath` field stay historical (formerly read
+ * from `skill.yaml`) to avoid churning every downstream consumer; the
+ * on-disk source is now `SKILL.md` frontmatter parsed via
+ * `parseSkillMdInternal`.
  */
-export function parseSkillYaml(
-  yamlText: string,
-  yamlPath: string,
+export function parseSkillFrontmatter(
+  source: string,
+  skillMdPath: string,
 ): SkillMetadata {
-  const y = (parseYaml(yamlText) as Record<string, unknown>) ?? {};
-  const slug = coerceString(y.slug) ?? coerceString(y.id) ?? "";
-  const dir = dirname(yamlPath);
+  const result = parseSkillMdInternal(source, skillMdPath);
+  const fm: Record<string, unknown> = result.valid ? result.parsed.data : {};
+  const slug =
+    coerceString(fm.name) ??
+    coerceString(fm.slug) ??
+    coerceString(fm.id) ??
+    "";
+  const dir = dirname(skillMdPath);
   const hasScriptsDir =
     existsSync(join(dir, "scripts")) &&
     statSync(join(dir, "scripts")).isDirectory();
@@ -178,22 +198,30 @@ export function parseSkillYaml(
   return {
     dir,
     slug,
-    yamlPath,
-    execution: coerceExecution(y.execution),
-    mode: coerceString(y.mode),
-    description: coerceString(y.description),
-    isDefault: y.is_default === true || y.is_default === "true",
-    scripts: parseScriptEntries(y.scripts),
+    yamlPath: skillMdPath,
+    execution: coerceExecution(fm.execution),
+    mode: coerceString(fm.mode),
+    description: coerceString(fm.description),
+    isDefault: fm.is_default === true || fm.is_default === "true",
+    scripts: parseScriptEntries(fm.scripts),
     hasScriptsDir,
     hasReferencesDir,
-    requiresEnv: coerceStringArray(y.requires_env),
-    oauthProvider: coerceString(y.oauth_provider),
-    mcpServer: coerceString(y.mcp_server),
+    requiresEnv: coerceStringArray(fm.requires_env),
+    oauthProvider: coerceString(fm.oauth_provider),
+    mcpServer: coerceString(fm.mcp_server),
   };
 }
 
 /**
- * Walk a catalog root and return one SkillMetadata per skill.yaml found.
+ * @deprecated Use `parseSkillFrontmatter` — `skill.yaml` was retired in
+ * plan 2026-04-24-009 §U2. This alias stays for one PR cycle so
+ * out-of-tree callers get a soft warning rather than a hard import
+ * failure.
+ */
+export const parseSkillYaml = parseSkillFrontmatter;
+
+/**
+ * Walk a catalog root and return one SkillMetadata per SKILL.md found.
  * Sorted by slug for deterministic output.
  */
 export function collectSkillMetadata(catalogRoot: string): SkillMetadata[] {
@@ -205,13 +233,14 @@ export function collectSkillMetadata(catalogRoot: string): SkillMetadata[] {
     if (
       entry.name === "scripts" ||
       entry.name === "templates" ||
-      entry.name === "tests"
+      entry.name === "tests" ||
+      entry.name === "__tests__"
     )
       continue;
-    const yamlPath = join(catalogRoot, entry.name, "skill.yaml");
-    if (!existsSync(yamlPath)) continue;
-    const yamlText = readFileSync(yamlPath, "utf-8");
-    const meta = parseSkillYaml(yamlText, yamlPath);
+    const skillMdPath = join(catalogRoot, entry.name, "SKILL.md");
+    if (!existsSync(skillMdPath)) continue;
+    const source = readFileSync(skillMdPath, "utf-8");
+    const meta = parseSkillFrontmatter(source, skillMdPath);
     if (!meta.slug) continue;
     skills.push(meta);
   }

@@ -29,7 +29,7 @@ export const tenantBuiltinTools = pgTable(
 		tenant_id: uuid("tenant_id")
 			.references(() => tenants.id)
 			.notNull(),
-		/** Matches the skill slug in packages/skill-catalog/<slug>/skill.yaml */
+		/** Matches the skill slug in packages/skill-catalog/<slug>/SKILL.md frontmatter (`name:`). */
 		tool_slug: text("tool_slug").notNull(),
 		/** Provider identifier, e.g. "exa", "serpapi". Null for single-provider tools. */
 		provider: text("provider"),

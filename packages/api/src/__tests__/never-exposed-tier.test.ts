@@ -58,11 +58,11 @@ describe("requireNotFromAdminSkill — allow-list Cognito-only", () => {
   });
 });
 
-// The second describe block — `thinkwork-admin skill.yaml —
+// The second describe block — `thinkwork-admin SKILL.md —
 // catastrophic-op exclusion` — was removed when the skill directory was
 // deleted. The catastrophic-op guarantee now rests on the admin-ops MCP
 // tool definitions in packages/lambda/admin-ops-mcp.ts, which are a
 // closed set enumerated in source and guarded by the typecheck + the
 // tools/list must-have test in __tests__/admin-ops-mcp.test.ts. Any new
 // tool has to go through a code review that would catch a catastrophic
-// op name — same gate the yaml-regex test used to provide.
+// op name — same gate the frontmatter-regex test used to provide.

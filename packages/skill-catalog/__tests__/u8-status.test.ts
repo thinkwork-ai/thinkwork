@@ -34,9 +34,23 @@ function runAudit(): string {
   });
 }
 
+/**
+ * Read a skill's frontmatter as a plain mapping. Post plan 2026-04-24-009
+ * §U2 the canonical source is SKILL.md frontmatter — this helper goes
+ * through U1's lenient parser so the test reads exactly what the catalog
+ * loaders read. The function name stays historical (formerly read
+ * `skill.yaml`) to keep the call sites compact.
+ */
 function readYaml(slug: string): Record<string, unknown> {
-  const path = join(catalogRoot, slug, "skill.yaml");
-  return parseYaml(readFileSync(path, "utf8")) as Record<string, unknown>;
+  const path = join(catalogRoot, slug, "SKILL.md");
+  const result = parseSkillMdInternal(readFileSync(path, "utf8"), path);
+  if (!result.valid) {
+    throw new Error(
+      `SKILL.md frontmatter for ${slug} did not parse: ` +
+        result.errors.map((e) => e.message).join("; "),
+    );
+  }
+  return result.parsed.data;
 }
 
 describe("u8-status audit script", () => {
@@ -67,7 +81,7 @@ describe("u8-status audit script", () => {
     expect(Number(match![1])).toBe(0);
   });
 
-  it("has no unknown slugs — every skill.yaml parses + declares execution", () => {
+  it("has no unknown slugs — every SKILL.md parses + declares execution", () => {
     const out = runAudit();
     const unknownPattern = /\| unknown \| (\d+) \|/;
     const match = out.match(unknownPattern);

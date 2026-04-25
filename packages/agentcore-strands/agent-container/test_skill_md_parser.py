@@ -176,7 +176,8 @@ class ParseSkillMdStringMissingFrontmatterTests(unittest.TestCase):
     def test_lenient_does_not_enforce_required_fields(self) -> None:
         # Lenient by design — the strict equivalent (SI-4 plugin upload)
         # lives in the TS parser. Catalog readers may temporarily ship
-        # SKILL.md with partial frontmatter while migrating off skill.yaml.
+        # SKILL.md with partial frontmatter (e.g. when authors iterate on
+        # the metadata block in a PR before the full union is filled in).
         parsed = parse_skill_md_string(
             _md("category: productivity\nexecution: script"),
             "skills/loose/SKILL.md",
@@ -375,12 +376,15 @@ class SkillCatalogIntegrationTests(unittest.TestCase):
             else:
                 bare_files.append(os.path.basename(os.path.dirname(path)))
 
-        # We expect exactly the two known bare-body files. If new ones
-        # appear, that's worth surfacing — failing the test with the
-        # actual list lets the migration plan track them.
+        # Post plan 2026-04-24-009 §U2 every catalog SKILL.md carries
+        # frontmatter — `customer-onboarding` and `sandbox-pilot` were
+        # the only bare-body holdouts before U2 and got merged
+        # frontmatter as part of that unit. The expected bare-list is
+        # now empty; if a new bare-body SKILL.md appears, the test
+        # surfaces it with the actual list so the catalog stays clean.
         self.assertEqual(
             sorted(bare_files),
-            ["customer-onboarding", "sandbox-pilot"],
+            [],
             f"frontmatter-less SKILL.md set drifted: {bare_files!r}",
         )
         # Sanity — every framed file has a non-empty data dict.

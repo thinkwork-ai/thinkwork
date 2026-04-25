@@ -67,8 +67,8 @@ declared output key (conventionally `deliverable`).
 ## Adding a format
 
 1. Add a `.md.tmpl` file under `templates/`.
-2. Add its key to the `format` enum and the `templates:` map in
-   `skill.yaml`.
+2. Add its key to the `format` enum and the `templates:` map in this
+   SKILL.md's frontmatter.
 3. Extend `tests/test_render.py` with a round-trip snapshot for the new
    format.
 

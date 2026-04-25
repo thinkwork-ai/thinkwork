@@ -1209,7 +1209,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
 
     # 5. Register mode:agent skills as sub-agent @tool functions.
     # Each mode:agent skill becomes a Strands sub-agent with its own prompt (SKILL.md),
-    # tools (its scripts), and model (from skill.yaml). The orchestrator sees these as
+    # tools (its scripts), and model (from SKILL.md frontmatter). The orchestrator sees these as
     # callable tools and delegates complex tasks to them.
     sub_agent_usage = []  # Accumulate sub-agent token usage for cost tracking
 

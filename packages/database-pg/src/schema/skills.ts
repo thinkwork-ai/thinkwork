@@ -27,7 +27,7 @@ export const skillCatalog = pgTable(
       .primaryKey()
       .default(sql`gen_random_uuid()`),
     slug: text("slug").notNull().unique(),
-    /** Human-readable display name (from skill.yaml display_name) */
+    /** Human-readable display name (from SKILL.md frontmatter `display_name`) */
     display_name: text("display_name").notNull(),
     description: text("description"),
     category: text("category"),
@@ -76,7 +76,7 @@ export const tenantSkills = pgTable(
     tenant_id: uuid("tenant_id")
       .references(() => tenants.id)
       .notNull(),
-    /** Skill slug from skill.yaml */
+    /** Skill slug from SKILL.md frontmatter `name:` */
     skill_id: text("skill_id").notNull(),
     /** 'builtin' | 'catalog' | 'tenant' */
     source: text("source").notNull().default("catalog"),

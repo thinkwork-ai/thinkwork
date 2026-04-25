@@ -276,7 +276,8 @@ function SkillBuilderPage() {
     }
     setCreating(true);
     try {
-      // 1. Create the skill (generates skill.yaml + SKILL.md from template)
+      // 1. Create the skill (generates SKILL.md from template — plan
+      //    2026-04-24-009 §U3 retired the parallel skill.yaml writer).
       const result = await createTenantSkill(tenantSlug, {
         name: name.trim(),
         slug,

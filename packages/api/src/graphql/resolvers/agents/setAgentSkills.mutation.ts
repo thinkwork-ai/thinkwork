@@ -77,10 +77,11 @@ export async function setAgentSkills(
   // non-UI caller (CLI, direct GraphQL, the thinkwork-admin skill's
   // own set_agent_skills wrapper) hits this same resolver.
   //
-  // Lookup: parse skill_catalog.tier1_metadata (full parsed YAML,
-  // stored as JSON-stringified jsonb by sync-catalog-db.ts) for every
-  // distinct skill_id in the payload. Template permissions come from
-  // agent_templates.skills (already notNull on agent.template_id).
+  // Lookup: parse skill_catalog.tier1_metadata (full parsed SKILL.md
+  // frontmatter, stored as JSON-stringified jsonb by sync-catalog-db.ts)
+  // for every distinct skill_id in the payload. Template permissions
+  // come from agent_templates.skills (already notNull on
+  // agent.template_id).
   const permissionsModelMap = new Map<
     string,
     { permissionsModel: "operations" | null; manifestOps: string[] }
@@ -244,11 +245,14 @@ export async function setAgentSkills(
 }
 
 /**
- * `skill_catalog.tier1_metadata` stores the full parsed skill.yaml as a
- * JSON-stringified blob in a jsonb column (see
- * `packages/skill-catalog/scripts/sync-catalog-db.ts`). Postgres + Drizzle
- * may hand us either the already-parsed object or the string form
- * depending on the Data API driver path.
+ * `skill_catalog.tier1_metadata` stores the full parsed SKILL.md
+ * frontmatter as a JSON-stringified blob in a jsonb column (see
+ * `packages/skill-catalog/scripts/sync-catalog-db.ts`). Plan
+ * 2026-04-24-009 §U3 flipped the producer's source from `skill.yaml` to
+ * SKILL.md frontmatter; the JSONB shape is preserved verbatim so this
+ * reader and `extractDefaultEnabledOps` stay drop-in compatible. Postgres
+ * + Drizzle may hand us either the already-parsed object or the string
+ * form depending on the Data API driver path.
  */
 function parseTier1Metadata(raw: unknown): Record<string, unknown> | null {
   if (raw === null || raw === undefined) return null;
@@ -285,9 +289,12 @@ function extractDefaultEnabledOps(
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
     const s = entry as Record<string, unknown>;
     if (typeof s.name !== "string") continue;
-    // default_enabled must be the Python-coerced boolean `true` — the
-    // Strands _parse_skill_yaml helper coerces "true" → True before
-    // sync-catalog-db stringifies it into tier1_metadata.
+    // default_enabled must be the JSON-coerced boolean `true`. Both
+    // sources of tier1_metadata — TS sync-catalog-db.ts (yaml-package
+    // safeLoad) and Python skill_md_parser (yaml.safe_load) — produce a
+    // real boolean for `default_enabled: true` in YAML, so this check
+    // succeeds only for genuine YAML booleans, never for the literal
+    // string "true".
     if (s.default_enabled === true) ops.push(s.name);
   }
   return ops;

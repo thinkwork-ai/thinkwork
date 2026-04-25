@@ -1,7 +1,7 @@
 # renewal-prep
 
-Renewal prep deliverable. See `SKILL.md` for the contract, `skill.yaml`
-for the composition DSL.
+Renewal prep deliverable. See `SKILL.md` for the contract; the
+composition DSL lives in the same file's frontmatter.
 
 Third deliverable-shaped anchor alongside sales-prep and
 account-health-review. Exercises the DSL's deepest gather set (6

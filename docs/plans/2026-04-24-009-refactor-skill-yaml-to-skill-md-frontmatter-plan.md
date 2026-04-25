@@ -162,7 +162,7 @@ None. This is a pure internal refactor of a thinkwork-owned format.
 
 ---
 
-- [ ] **U2. Migrate every SKILL.md to carry full frontmatter; delete skill.yaml**
+- [x] **U2. Migrate every SKILL.md to carry full frontmatter; delete skill.yaml** — shipped, 16 skills (plan said 21; 4 retired in earlier work, count was stale), 23 new tests, body content byte-identical
 
 **Goal:** Every `packages/skill-catalog/*/SKILL.md` carries one merged frontmatter with all metadata. Every `packages/skill-catalog/*/skill.yaml` is deleted. SKILL.md body content is unchanged (mechanical merge, not rewrite).
 
