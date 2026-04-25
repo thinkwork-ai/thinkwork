@@ -36,7 +36,6 @@ import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { PageLayout } from "@/components/PageLayout";
 import { Button } from "@/components/ui/button";
-import { WorkspaceFileBadge } from "@/components/WorkspaceFileBadge";
 import { AcceptTemplateUpdateDialog } from "@/components/AcceptTemplateUpdateDialog";
 
 import { Input } from "@/components/ui/input";
@@ -261,28 +260,22 @@ function TreeItem({
           </>
         )}
         <span className="truncate">{node.name}</span>
-        {!node.isFolder && sourceFor(node.path) && (
+        {!node.isFolder && updateAvailableFor(node.path) && (
           <span
             className="ml-auto flex items-center gap-1"
             onClick={(e) => e.stopPropagation()}
           >
-            <WorkspaceFileBadge
-              source={sourceFor(node.path) as ComposeSource}
-              updateAvailable={updateAvailableFor(node.path)}
-            />
-            {updateAvailableFor(node.path) && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-5 text-[10px] px-1.5 text-amber-500"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAcceptUpdate(node.path);
-                }}
-              >
-                Review
-              </Button>
-            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-5 text-[10px] px-1.5 text-amber-500"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAcceptUpdate(node.path);
+              }}
+            >
+              Review
+            </Button>
           </span>
         )}
         {isProfileFile && !sourceFor(node.path) && (
