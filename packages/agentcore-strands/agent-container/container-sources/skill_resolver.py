@@ -182,8 +182,8 @@ def resolve_skill(
     is the in-memory map the dispatcher already maintains; pass ``None``
     when the caller wants to test local-only resolution.
 
-    Raises :class:`SkillNotResolvable` if the slug matches nowhere.
-    Raises :class:`ValueError` if ``slug`` or ``folder_path`` are
+    Raises ``SkillNotResolvable`` if the slug matches nowhere.
+    Raises ``ValueError`` if ``slug`` or ``folder_path`` are
     structurally invalid (empty slug, reserved folder, traversal).
     """
     if not slug or "/" in slug or slug.strip() != slug:

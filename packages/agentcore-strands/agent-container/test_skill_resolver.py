@@ -140,9 +140,14 @@ def test_malformed_local_falls_through_to_platform(caplog):
             "approve-receipt", "expenses", composed, platform_catalog_manifest=catalog
         )
     assert result.source == "platform"
+    candidate = "expenses/skills/approve-receipt/SKILL.md"
+    fallthrough = [
+        rec for rec in caplog.records if "no frontmatter" in rec.getMessage()
+    ]
+    assert fallthrough, "expected an info log noting the fall-through"
     assert any(
-        "no frontmatter" in rec.getMessage() for rec in caplog.records
-    ), "expected an info log noting the fall-through"
+        candidate in rec.getMessage() for rec in fallthrough
+    ), "fall-through log should name the candidate path so operators can find the offending file"
 
 
 def test_unparseable_local_logs_and_falls_through(caplog):
@@ -161,9 +166,14 @@ execution: composition
             "approve-receipt", "expenses", composed, platform_catalog_manifest=catalog
         )
     assert result.source == "platform"
+    candidate = "expenses/skills/approve-receipt/SKILL.md"
+    parse_warns = [
+        rec for rec in caplog.records if "failed to parse" in rec.getMessage()
+    ]
+    assert parse_warns, "expected a warning that the local SKILL.md failed to parse"
     assert any(
-        "failed to parse" in rec.getMessage() for rec in caplog.records
-    ), "expected a warning that the local SKILL.md failed to parse"
+        candidate in rec.getMessage() for rec in parse_warns
+    ), "parse-failure log should name the candidate path so operators can find the offending file"
 
 
 def test_rejects_reserved_folder_path():
