@@ -2,10 +2,16 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": ".",
     "noEmit": true,
     "types": ["node"]
   },
+  // `rootDir` deliberately omitted — `__tests__/skill-md-frontmatter.test.ts`
+  // imports `parseSkillMdInternal` from packages/api/src/lib/skill-md-parser
+  // (the canonical U1 parser the catalog and runtime share). With
+  // `noEmit: true` we don't ship the compile output anyway, so the
+  // wider rootDir is harmless. The api parser is brought into the
+  // program via the relative import; we don't need to add it to
+  // `include` explicitly.
   "include": ["scripts/**/*.ts", "__tests__/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
