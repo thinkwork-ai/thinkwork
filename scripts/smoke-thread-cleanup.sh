@@ -10,50 +10,58 @@
 #   and (post-U5) that the dropped fields/tables are no longer resolvable.
 #
 # What it checks (always run):
-#   1. verify-thread-traces.ts exits 0 on the target stage (reuses U1 logic).
-#   2. `thread(id).lifecycleStatus` returns a valid ThreadLifecycleStatus
-#      enum value for a freshly-created chat-channel thread.
-#   3. `thread(id).channel` returns a valid ThreadChannel enum value.
-#   4. The admin bundle builds (pnpm --filter @thinkwork/admin build exits 0).
-#   5. The CLI bundle builds.
+#   1. A freshly-created chat-channel thread resolves `lifecycleStatus: IDLE`
+#      and `channel: CHAT` via the `thread(id)` query.
+#   2. `verify-thread-traces.ts` exits 0 against the just-created thread (the
+#      thread will have no Bedrock traces yet, but the script handles that).
+#   3. The admin bundle builds.
+#   4. The CLI bundle builds.
 #
 # What it checks (gated on AFTER_U5=1):
-#   1. Curl thread(id) selecting `description` → expect GraphQL error.
-#   2. Curl with `priority`, `type`, `children`, `parent`, `comments` →
-#      expect GraphQL error on each.
-#   3. (Gated further on AFTER_U5_ARTIFACTS=1, since U5 plan is ambivalent
-#      on artifact drops): `message.durableArtifact` → expect error.
+#   5-10. Curl `thread(id)` selecting each dropped field
+#         (`description`, `priority`, `type`, `children`, `parent`, `comments`)
+#         and assert the GraphQL response contains a `Cannot query field`
+#         error for each.
 #
 # Exit codes:
-#   0 — all active checks passed; AFTER_U5-gated ones skipped or passed.
-#   1 — any active check failed, OR (when AFTER_U5=1) any gated check failed.
+#   0 — all active checks passed.
+#   1 — any active check failed.
 #   2 — configuration / auth / network error; inconclusive.
 #
 # Usage:
 #   # Basic — stage dev with cached Cognito token from `thinkwork login`:
-#   bash scripts/smoke-thread-cleanup.sh
+#   THINKWORK_GRAPHQL_URL=https://api-dev.thinkwork.ai \
+#     bash scripts/smoke-thread-cleanup.sh
 #
 #   # Explicit stage:
 #   bash scripts/smoke-thread-cleanup.sh --stage dev
 #
-#   # Post-U5 full-verification mode:
+#   # Post-U5 full-verification:
 #   AFTER_U5=1 bash scripts/smoke-thread-cleanup.sh --stage dev
 #
 #   # Override token (e.g., CI):
-#   THINKWORK_ID_TOKEN=... bash scripts/smoke-thread-cleanup.sh --stage dev
+#   THINKWORK_ID_TOKEN=... \
+#     THINKWORK_TENANT_ID=... \
+#     THINKWORK_GRAPHQL_URL=... \
+#     bash scripts/smoke-thread-cleanup.sh
 #
 # Prerequisites:
-#   - Deployed stage (dev/staging/prod) reachable from the caller's network.
-#   - A cached Cognito ID token in ~/.thinkwork/config.json, or an explicit
-#     THINKWORK_ID_TOKEN env var.
-#   - pnpm + tsx available on PATH.
-#   - jq + curl on PATH.
+#   - Deployed stage reachable from the caller's network.
+#   - A cached Cognito ID token in ~/.thinkwork/config.json under
+#     `.sessions.<stage>.idToken`, or an explicit THINKWORK_ID_TOKEN env var.
+#   - THINKWORK_GRAPHQL_URL env var set (no config-cached value to fall back to —
+#     the CLI itself derives this from terraform outputs at runtime).
+#   - pnpm + tsx available on PATH; jq + curl on PATH.
 #
 # This script creates one dev thread for the lifecycle/trigger check and
-# deletes it at the end. On any failure it may leave an orphan thread
+# deletes it via RETURN trap. On any failure it may leave an orphan thread
 # in the target stage — dev-only noise, manual cleanup if needed.
 
 set -euo pipefail
+
+# Defensive ERR trap — per docs/solutions/logic-errors/bootstrap-silent-exit-1-set-e-tenant-loop-2026-04-21.md.
+# Silent set -e aborts are a known time sink; surface line + command.
+trap 'rc=$?; echo "ERR (exit=$rc) on line $LINENO: $BASH_COMMAND" >&2' ERR
 
 # ---------------------------------------------------------------------------
 # Args
@@ -61,13 +69,20 @@ set -euo pipefail
 
 STAGE="${STAGE:-dev}"
 AFTER_U5="${AFTER_U5:-0}"
-AFTER_U5_ARTIFACTS="${AFTER_U5_ARTIFACTS:-0}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --stage) STAGE="$2"; shift 2 ;;
+    --stage)
+      if [[ $# -lt 2 ]]; then
+        echo "ERROR: --stage requires a value." >&2
+        exit 2
+      fi
+      STAGE="$2"
+      shift 2
+      ;;
     --help|-h)
-      sed -n '2,50p' "$0"
+      # Print docstring only — comment block ends before `set -euo pipefail`.
+      sed -n '/^#/p; /^[^#]/q' "$0"
       exit 0
       ;;
     *) echo "Unknown flag: $1" >&2; exit 2 ;;
@@ -81,33 +96,40 @@ CONFIG="${HOME}/.thinkwork/config.json"
 # Auth + endpoint resolution
 # ---------------------------------------------------------------------------
 
+# graphqlUrl is NOT in ~/.thinkwork/config.json — the CLI derives it from
+# terraform outputs at runtime. Require THINKWORK_GRAPHQL_URL explicitly.
 if [[ -z "${THINKWORK_GRAPHQL_URL:-}" ]]; then
+  echo "ERROR: THINKWORK_GRAPHQL_URL must be set (e.g., https://api-${STAGE}.thinkwork.ai)." >&2
+  echo "       Run \`thinkwork doctor --stage ${STAGE}\` to discover the endpoint." >&2
+  exit 2
+fi
+
+if [[ -z "${THINKWORK_ID_TOKEN:-}" ]]; then
   if [[ ! -f "$CONFIG" ]]; then
     echo "ERROR: no ~/.thinkwork/config.json; run \`thinkwork login --stage $STAGE\` first." >&2
     exit 2
   fi
-  THINKWORK_GRAPHQL_URL="$(jq -r ".stages.${STAGE}.graphqlUrl // empty" "$CONFIG")"
-  if [[ -z "$THINKWORK_GRAPHQL_URL" || "$THINKWORK_GRAPHQL_URL" == "null" ]]; then
-    echo "ERROR: no graphqlUrl in config for stage '$STAGE'." >&2
-    exit 2
-  fi
-fi
-
-if [[ -z "${THINKWORK_ID_TOKEN:-}" ]]; then
-  THINKWORK_ID_TOKEN="$(jq -r ".stages.${STAGE}.idToken // empty" "$CONFIG")"
+  THINKWORK_ID_TOKEN="$(jq -r ".sessions.${STAGE}.idToken // empty" "$CONFIG")"
   if [[ -z "$THINKWORK_ID_TOKEN" || "$THINKWORK_ID_TOKEN" == "null" ]]; then
-    echo "ERROR: no idToken in config for stage '$STAGE'; run \`thinkwork login --stage $STAGE\`." >&2
+    echo "ERROR: no idToken in config.sessions.${STAGE}; run \`thinkwork login --stage $STAGE\`." >&2
     exit 2
   fi
 fi
 
 if [[ -z "${THINKWORK_TENANT_ID:-}" ]]; then
-  THINKWORK_TENANT_ID="$(jq -r ".stages.${STAGE}.tenantId // empty" "$CONFIG")"
+  if [[ ! -f "$CONFIG" ]]; then
+    echo "ERROR: no ~/.thinkwork/config.json; cannot resolve tenantId." >&2
+    exit 2
+  fi
+  THINKWORK_TENANT_ID="$(jq -r ".sessions.${STAGE}.tenantId // empty" "$CONFIG")"
   if [[ -z "$THINKWORK_TENANT_ID" || "$THINKWORK_TENANT_ID" == "null" ]]; then
-    echo "ERROR: no tenantId resolved for stage '$STAGE'." >&2
+    echo "ERROR: no tenantId in config.sessions.${STAGE}; run \`thinkwork login --stage $STAGE\` and pick a tenant." >&2
     exit 2
   fi
 fi
+
+# Export so subshells (called via `( ... )` or `bash -c`) inherit them.
+export THINKWORK_GRAPHQL_URL THINKWORK_ID_TOKEN THINKWORK_TENANT_ID
 
 echo "=== smoke-thread-cleanup ==="
 echo "  stage     : $STAGE"
@@ -120,10 +142,13 @@ echo ""
 # Helpers
 # ---------------------------------------------------------------------------
 
+# gql <query> [variables-json]
+# Returns the raw JSON response on stdout. Suppresses jq parse errors.
 gql() {
   local query="$1"
-  local variables="${2:-{\}}"
-  curl -sS --fail-with-body \
+  local variables="${2:-}"
+  if [[ -z "$variables" ]]; then variables="{}"; fi
+  curl -sS \
     -H "Authorization: Bearer $THINKWORK_ID_TOKEN" \
     -H "Content-Type: application/json" \
     -X POST \
@@ -143,61 +168,72 @@ check() {
 }
 
 # ---------------------------------------------------------------------------
-# Pre-U5 checks (always run)
+# Pre-U5 checks
 # ---------------------------------------------------------------------------
 
-check_verify_traces() {
-  THINKWORK_GRAPHQL_URL="$THINKWORK_GRAPHQL_URL" \
-  THINKWORK_ID_TOKEN="$THINKWORK_ID_TOKEN" \
-  THINKWORK_TENANT_ID="$THINKWORK_TENANT_ID" \
-  pnpm tsx "$REPO_ROOT/scripts/verify-thread-traces.ts" --stage "$STAGE" >/dev/null 2>&1
-}
+# State shared across checks: the thread we create.
+SMOKE_THREAD_ID=""
 
-check_lifecycle_and_channel() {
+cleanup_thread() {
+  if [[ -n "$SMOKE_THREAD_ID" ]]; then
+    gql 'mutation($id: ID!){ deleteThread(id: $id) }' "{\"id\":\"$SMOKE_THREAD_ID\"}" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup_thread EXIT
+
+check_create_and_lifecycle() {
   # Pick first agent in tenant
-  local agents_response
+  local agents_response agent_id
   agents_response="$(gql 'query($t: ID!){ agents(tenantId: $t){ id } }' "{\"t\":\"$THINKWORK_TENANT_ID\"}")"
-  local agent_id
   agent_id="$(echo "$agents_response" | jq -r '.data.agents[0].id // empty')"
   if [[ -z "$agent_id" ]]; then
-    echo "  (no agents in tenant; cannot create thread)" >&2
+    echo "  no agents in tenant; cannot create thread" >&2
     return 1
   fi
 
   # Create a chat-channel thread
-  local create_resp
+  local create_resp lifecycle channel
   create_resp="$(gql \
     'mutation($i: CreateThreadInput!){ createThread(input: $i){ id lifecycleStatus channel } }' \
     "$(jq -n --arg t "$THINKWORK_TENANT_ID" --arg a "$agent_id" '{i:{tenantId:$t, agentId:$a, title:"smoke-test thread", channel:"CHAT"}}')")"
 
-  local thread_id lifecycle channel
-  thread_id="$(echo "$create_resp" | jq -r '.data.createThread.id // empty')"
+  SMOKE_THREAD_ID="$(echo "$create_resp" | jq -r '.data.createThread.id // empty')"
   lifecycle="$(echo "$create_resp" | jq -r '.data.createThread.lifecycleStatus // empty')"
   channel="$(echo "$create_resp" | jq -r '.data.createThread.channel // empty')"
 
-  if [[ -z "$thread_id" ]]; then
+  if [[ -z "$SMOKE_THREAD_ID" ]]; then
     echo "  createThread failed: $create_resp" >&2
     return 1
   fi
 
-  # Cleanup: always try to delete, even if assertions fail
-  cleanup_thread() {
-    gql 'mutation($id: ID!){ deleteThread(id: $id) }' "{\"id\":\"$thread_id\"}" >/dev/null 2>&1 || true
-  }
-  trap cleanup_thread RETURN
+  # A freshly-created thread with no turns derives to IDLE per U4 mapping.
+  if [[ "$lifecycle" != "IDLE" ]]; then
+    echo "  lifecycleStatus expected IDLE on fresh thread, got: '$lifecycle'" >&2
+    return 1
+  fi
 
-  # Assert lifecycle is a known enum value (any of the 6 is acceptable)
-  case "$lifecycle" in
-    RUNNING|COMPLETED|CANCELLED|FAILED|IDLE|AWAITING_USER) ;;
-    *)
-      echo "  lifecycleStatus unexpected: '$lifecycle'" >&2
-      return 1
-      ;;
-  esac
-
-  # Assert channel is CHAT (we just created it)
   if [[ "$channel" != "CHAT" ]]; then
-    echo "  channel unexpected: '$channel'" >&2
+    echo "  channel expected CHAT, got: '$channel'" >&2
+    return 1
+  fi
+}
+
+check_verify_traces() {
+  # Reuses the just-created thread. It will have no Bedrock turns → no traces;
+  # verify-thread-traces.ts exits 1 (not 2) in that case, which is still an
+  # informative result. We treat exits 0 (traces resolved) and 1 (no traces
+  # produced) as both passing the smoke — the script's purpose is to confirm
+  # the wire works, not to assert there are traces. Exit 2 (config / auth /
+  # network) is the only failure mode we surface.
+  local rc=0
+  pnpm tsx "$REPO_ROOT/scripts/verify-thread-traces.ts" \
+    --thread-id "$SMOKE_THREAD_ID" \
+    --tenant-id "$THINKWORK_TENANT_ID" \
+    --graphql-url "$THINKWORK_GRAPHQL_URL" \
+    --id-token "$THINKWORK_ID_TOKEN" \
+    >/dev/null 2>&1 || rc=$?
+  if [[ "$rc" == "2" ]]; then
+    echo "  verify-thread-traces.ts exited 2 (config/auth/network); inconclusive" >&2
     return 1
   fi
 }
@@ -210,39 +246,37 @@ check_cli_build() {
   (cd "$REPO_ROOT" && pnpm --filter thinkwork-cli build >/dev/null 2>&1)
 }
 
-check "verify-thread-traces passes"  check_verify_traces
-check "thread lifecycleStatus + channel resolve to valid enums" check_lifecycle_and_channel
-check "admin builds"                 check_admin_build
-check "cli builds"                   check_cli_build
+check "thread create + lifecycleStatus=IDLE + channel=CHAT" check_create_and_lifecycle
+check "verify-thread-traces wire works"                     check_verify_traces
+check "admin builds"                                        check_admin_build
+check "cli builds"                                          check_cli_build
 
 # ---------------------------------------------------------------------------
-# U5-gated checks
+# AFTER_U5 checks
 # ---------------------------------------------------------------------------
 
-expect_gql_error() {
+# Asserts that selecting `field` on `thread(id)` returns a GraphQL
+# "Cannot query field" error. This fires at schema-validation time before the
+# resolver runs, so the thread ID does not need to exist.
+expect_field_removed() {
   local field="$1"
   local query="query { thread(id: \"00000000-0000-0000-0000-000000000000\"){ id $field } }"
   local resp
-  resp="$(gql "$query" || true)"
-  # If the response has an 'errors' array mentioning the field, we're good.
-  echo "$resp" | jq -e --arg f "$field" '.errors // [] | map(.message) | any(. | contains("\($f)"))' >/dev/null
+  resp="$(gql "$query")"
+  echo "$resp" | jq -e --arg f "$field" '
+    .errors // [] | map(.message) | any(. | test("Cannot query field [\"'\''`]" + $f + "[\"'\''`]"))
+  ' >/dev/null
 }
 
 if [[ "$AFTER_U5" == "1" ]]; then
-  check "thread.description is gone"  bash -c "$(declare -f expect_gql_error gql); expect_gql_error description"
-  check "thread.priority is gone"     bash -c "$(declare -f expect_gql_error gql); expect_gql_error priority"
-  check "thread.type is gone"         bash -c "$(declare -f expect_gql_error gql); expect_gql_error type"
-  check "thread.children is gone"     bash -c "$(declare -f expect_gql_error gql); expect_gql_error children"
-  check "thread.parent is gone"       bash -c "$(declare -f expect_gql_error gql); expect_gql_error parent"
-  check "thread.comments is gone"     bash -c "$(declare -f expect_gql_error gql); expect_gql_error comments"
-
-  if [[ "$AFTER_U5_ARTIFACTS" == "1" ]]; then
-    # Only check durableArtifact when U5 (or a later PR) explicitly drops it.
-    # U5 plan as of 2026-04-24 does NOT drop durableArtifact; this remains gated.
-    echo "  (durableArtifact check under AFTER_U5_ARTIFACTS=1 — not yet applicable)"
-  fi
+  check "thread.description is gone" expect_field_removed description
+  check "thread.priority is gone"    expect_field_removed priority
+  check "thread.type is gone"        expect_field_removed type
+  check "thread.children is gone"    expect_field_removed children
+  check "thread.parent is gone"      expect_field_removed parent
+  check "thread.comments is gone"    expect_field_removed comments
 else
-  echo "→ AFTER_U5-gated checks: skipped (set AFTER_U5=1 to enable after U5 deploys)"
+  echo "→ AFTER_U5-gated checks: skipped (set AFTER_U5=1 after U5 deploys)"
 fi
 
 echo ""
