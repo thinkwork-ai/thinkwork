@@ -62,6 +62,7 @@ import {
 	substitute,
 	type SanitizationViolation,
 } from "./placeholder-substitution.js";
+import { isReservedFolderSegment } from "./reserved-folder-names.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -400,16 +401,6 @@ function shaTag(hex: string): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Reserved folder names per Plan §008 U8. Files inside `memory/` or `skills/`
- * (at any depth) do NOT fall through to ancestors — sub-agent memory is
- * scoped per-sub-agent, and local skill packages are scoped per-folder.
- *
- * Inlined here for U5; U8 will extract this constant into its own module
- * with TS+Python mirrors. Keep the names in sync if you change them.
- */
-const RESERVED_FOLDER_NAMES = ["memory", "skills"] as const;
-
-/**
  * Return the ancestor-walk paths for a given workspace path, deepest first.
  *
  *   "GUARDRAILS.md"                          → ["GUARDRAILS.md"]
@@ -421,11 +412,11 @@ const RESERVED_FOLDER_NAMES = ["memory", "skills"] as const;
  *
  * Files that contain a reserved folder segment do not produce ancestors —
  * memory/skills are bounded so they never collapse to a different file at
- * an outer scope.
+ * an outer scope. The reserved set lives in `./reserved-folder-names.ts`.
  */
 function buildAncestorPaths(path: string): string[] {
 	const segments = path.split("/");
-	if (segments.some((s) => (RESERVED_FOLDER_NAMES as readonly string[]).includes(s))) {
+	if (segments.some(isReservedFolderSegment)) {
 		return [path];
 	}
 	if (segments.length === 1) return [path];
