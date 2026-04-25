@@ -5,9 +5,9 @@ description: The adapter-agnostic memory contract ThinkWork owns — why the har
 
 import { Aside } from '@astrojs/starlight/components';
 
-Long-term memory is how ThinkWork carries learned context forward across work. Unlike document knowledge — which starts from material you authored — long-term memory starts from what the agent has observed during interactions: a user preference the agent noticed, a decision made in an earlier thread, a fact the agent confirmed and needs again.
+Long-term memory is how the harness's context-management layer carries learned context forward across work. Unlike document knowledge — which starts from material you authored — long-term memory starts from what the agent has observed during interactions: a user preference the agent noticed, a decision made in an earlier thread, a fact the agent confirmed and needs again.
 
-The design decision that matters most: **ThinkWork owns the memory contract; the engine underneath is pluggable.** Agents, tools, and the compounding-memory wiki all read from the same interface regardless of whether the backing engine is Hindsight or AgentCore Memory.
+The design decision that matters most — and the load-bearing implementation of the **Reliability** operating guarantee at the memory layer — is this: **ThinkWork owns the memory contract; the engine underneath is pluggable.** Agents, tools, and the compounding-memory wiki all read from the same interface regardless of whether the backing engine is Hindsight or AgentCore Memory. Swap the engine; the agents that consume memory don't change. That's the harness keeping its promise that "the operating model can change, the harness stays yours" all the way down to the memory tier.
 
 ## What long-term memory is for
 

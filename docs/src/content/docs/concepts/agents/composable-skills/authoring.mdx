@@ -5,7 +5,7 @@ description: A line-by-line walkthrough of the sales-prep composition YAML, from
 
 import { Aside } from '@astrojs/starlight/components';
 
-This page assumes you've read the [Composable Skills overview](/concepts/agents/composable-skills/) and want to write one. It walks through `sales-prep` — the canonical example — field by field, then covers the patterns for adding your own.
+This page assumes you've read the [Composable Skills overview](/concepts/agents/composable-skills/) and want to write one. It walks through `sales-prep` — the canonical example — field by field, then covers the patterns for adding your own. Authoring a composition is how you turn a known workflow into a harness-managed deterministic-execution unit: the YAML is the contract, the runtime is what makes the contract durable. Every field on this page maps to a concrete behavior the runtime enforces (budget caps cut runs short; tenant overrides change inputs without forking the composition; trigger predicates decide when the composition fires automatically).
 
 ## The skill directory
 

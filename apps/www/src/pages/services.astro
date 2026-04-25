@@ -123,6 +123,35 @@ const packageItems = services.packages.items;
       </div>
     </SectionShell>
 
+    {/* 2b. Engagement arc — the worked-through narrative showing how the four
+         packages compose into one engagement. Sits between Positioning and
+         Packages so a buyer reads "what we believe" → "how an engagement
+         flows" → "which package fits where I am." */}
+    <SectionShell tone="default">
+      <SectionHeader
+        eyebrow={services.engagementArc.eyebrow}
+        headline={services.engagementArc.headline}
+        lede={services.engagementArc.lede}
+        align="center"
+        width="wide"
+      />
+      <ol class="mx-auto mt-14 grid max-w-6xl gap-6 md:grid-cols-2 lg:grid-cols-4">
+        {services.engagementArc.phases.map((phase) => (
+          <li class="relative flex h-full flex-col rounded-2xl border border-white/8 bg-white/[0.025] p-6 transition hover:border-brand/25 hover:bg-white/[0.04]">
+            <span class="font-mono text-[11px] font-semibold tracking-[0.18em] text-brand/70">
+              {phase.n}
+            </span>
+            <h3 class="mt-4 text-lg font-semibold leading-snug tracking-tight text-slate-50">
+              {phase.title}
+            </h3>
+            <p class="mt-3 text-[13.5px] leading-relaxed text-slate-400">
+              {phase.body}
+            </p>
+          </li>
+        ))}
+      </ol>
+    </SectionShell>
+
     {/* 3. Services packages (single consolidated list incl. Cloud Hosting handoff) */}
     <SectionShell id="packages" tone="raised" glow="center">
       <SectionHeader

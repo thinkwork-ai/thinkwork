@@ -21,19 +21,24 @@ describe("stripe-plans", () => {
 	});
 
 	it("parses a configured map and round-trips lookups", () => {
+		// Only the For Business tier hits Stripe under the three-door
+		// pricing ladder. The Open tier is OSS / no-Stripe; Enterprise is
+		// sales-led / mailto. The map below mirrors the post-U4b
+		// STRIPE_PRICE_IDS_JSON shape (business + an extra fixture key for
+		// round-trip coverage).
 		process.env.STRIPE_PRICE_IDS_JSON = JSON.stringify({
-			starter: "price_starter_abc",
-			team: "price_team_def",
+			business: "price_business_abc",
+			"business-annual": "price_business_annual_def",
 		});
 		__resetStripePlansCacheForTest();
 
 		expect(listPlans()).toEqual([
-			{ internalPlan: "starter", priceId: "price_starter_abc" },
-			{ internalPlan: "team", priceId: "price_team_def" },
+			{ internalPlan: "business", priceId: "price_business_abc" },
+			{ internalPlan: "business-annual", priceId: "price_business_annual_def" },
 		]);
-		expect(internalPlanToPriceId("starter")).toBe("price_starter_abc");
-		expect(priceIdToInternalPlan("price_team_def")).toBe("team");
-		expect(isConfiguredPriceId("price_starter_abc")).toBe(true);
+		expect(internalPlanToPriceId("business")).toBe("price_business_abc");
+		expect(priceIdToInternalPlan("price_business_annual_def")).toBe("business-annual");
+		expect(isConfiguredPriceId("price_business_abc")).toBe(true);
 		expect(isConfiguredPriceId("price_not_configured")).toBe(false);
 	});
 
@@ -48,9 +53,9 @@ describe("stripe-plans", () => {
 		// Hand-constructed string so the TS-narrow shape at JSON.stringify time
 		// doesn't reject the deliberately-invalid entries we want to exercise.
 		process.env.STRIPE_PRICE_IDS_JSON =
-			'{"starter":"price_starter","team":"","pro":42}';
+			'{"business":"price_business","empty":"","invalid":42}';
 		__resetStripePlansCacheForTest();
 		const plans = listPlans();
-		expect(plans.map((p) => p.internalPlan)).toEqual(["starter"]);
+		expect(plans.map((p) => p.internalPlan)).toEqual(["business"]);
 	});
 });

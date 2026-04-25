@@ -1,25 +1,69 @@
 ---
 title: Architecture
-description: How ThinkWork fits together across threads, memory, agents, and connectors, and where that maps onto the AWS deployment tiers.
+description: How the ThinkWork Agent Harness fits together — the PPAF agent loop, the four operating guarantees, the components, and the AWS deployment topology.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-ThinkWork has two useful views of the system:
+ThinkWork is **the open Agent Harness for Business**. The harness is the engineered structure around the model that turns raw, non-deterministic agent output into reliable, traceable, auditable work. This page is the architecture of that harness — first the mechanics that make it a harness, then the components, then the AWS deployment topology.
 
-1. a **conceptual model** for reasoning about how work flows through the product
-2. an **infrastructure model** for understanding what gets deployed in AWS
+There are three useful views of the system:
 
-The conceptual model is:
+1. The **harness mechanics** — the agent loop, the four operating guarantees the runtime enforces, the metaphor that ties it together
+2. The **conceptual model** — how the six components fit together to do work
+3. The **infrastructure model** — what gets deployed in your AWS
 
-- **Threads** are the record of work
-- **Memory** surfaces useful context into a turn, including document retrieval and long-term memory
-- **Agents** are the execution layer that decide and act
-- **Connectors** connect ThinkWork to outside systems, including MCP-based tool connectors
+Every resource lives in your AWS account. There is no shared infrastructure, no callbacks to external control planes, and no telemetry sent outside your account. That matters because ThinkWork is not just trying to run agents — it is trying to give customers an open, customer-owned harness for AI work.
 
-Those concepts map onto a three-tier AWS deployment. Every resource lives in your AWS account. There is no shared infrastructure, no callbacks to external control planes, and no telemetry sent outside your account.
+## The harness mechanics
 
-That matters because ThinkWork is not just trying to run agents. It is trying to give customers an open, customer-owned harness for AI work.
+A model alone is a wild horse. The harness is what turns its motion into useful work — direction, control, recovery, accountability. Every concept in the rest of this page (Threads, Memory, Agents, Connectors, Automations, Control) earns its place by implementing one or more pieces of that harness. This section names the mechanics directly.
+
+<Aside type="tip">
+  The "harness" framing comes from the [Definitive Guide to Harness Engineering](https://www.harnessengineering.com/) (Mitchell Hashimoto, 2026). The metaphor: a state-of-the-art model is a powerful but directionless wild horse; the harness is the reins, bit, and bridle that make its power useful. ThinkWork's job is the harness — the engineered structure between your inputs and the model's output that turns potential into reliable, governable work. The rest of this page assumes that frame.
+</Aside>
+
+### The PPAF agent loop
+
+Every agent turn in ThinkWork follows the same four-phase cycle: **Perception, Planning, Action, Feedback** (PPAF). The harness implements each phase as a distinct, observable surface — that's what makes turns reproducible and auditable instead of opaque.
+
+```mermaid
+flowchart LR
+  P[Perception<br/><span style="font-size:11px">Thread + Memory + tool catalog</span>] --> Pl[Planning<br/><span style="font-size:11px">Model invocation in AgentCore</span>]
+  Pl --> A[Action<br/><span style="font-size:11px">Tool calls, sandbox execution, replies</span>]
+  A --> F[Feedback<br/><span style="font-size:11px">Turn record, cost, evals, audit</span>]
+  F -.->|next turn| P
+```
+
+- **Perception.** The harness assembles the agent's view of the world: the thread's prior messages, retrieved memory, the tool catalog, the current channel context. This is what Threads + Memory + Connectors produce together — a structured snapshot the model reasons over.
+- **Planning.** The model (via AgentCore on Bedrock) decides what to do next. ThinkWork doesn't replace the model's reasoning; it bounds the inputs and channels the outputs.
+- **Action.** Tool calls fire (with capability gating), sandbox code executes (with isolation), replies emit (through connectors). Every action is captured as it happens.
+- **Feedback.** The turn closes with a durable record: tokens, cost, tool outcomes, guardrail decisions, evaluator scores. That feedback is what the *next* turn perceives — and what an operator reads after the fact.
+
+The four phases are why the docs structure the components the way it does: Threads + Memory + Connectors are the perception substrate; Agents are the planning + action layer; Control is the feedback layer (audit, cost, evaluation). Automations time the loop's entry from the outside.
+
+### The four operating guarantees
+
+Beyond the loop, the harness has four operational properties it commits to delivering on every turn — the **operating guarantees**. These are the four promises a buyer or operator can grab onto and the four dimensions an evaluator can measure:
+
+- **Reliability.** Fault recovery from checkpoints, idempotent writes, behavior consistent under the same inputs. Implemented in: thread durability + RLS, AgentCore retry semantics, Step Functions for automations.
+- **Efficiency.** Token budgets and per-agent spend caps, low-latency interactive paths, throughput that scales with usage. Implemented in: Control's budget enforcement, AppSync for streaming, the cost ledger.
+- **Security.** Per-agent capability grants, sandboxed execution, I/O filtering for prompt injection and PII. Implemented in: Templates, AgentCore code sandbox, Bedrock Guardrails (`content_filters`), Strands `safety.py`.
+- **Traceability.** End-to-end traces per turn, explainable decisions, auditable state. Implemented in: the turn record, the append-only audit log on S3, evaluator scores per turn.
+
+The five governance controls in [Control](/concepts/control/) map 1:N to these four operating guarantees — for example, "Runs in your AWS" implements Security and Traceability; "Cost control and analysis" implements Efficiency. The operating guarantees are the *language*; the controls are the *implementation*.
+
+### State separation: model as compute, harness as state
+
+A single principle underlies everything below: **ThinkWork treats the model as stateless compute. Durable state lives in the harness — threads, memory, audit, cost, policies, and execution records.**
+
+This is the cleanest way to explain why the product exists. A model returns a response and forgets. The harness remembers everything that surrounded the response: which thread it ran inside, what memory was assembled, which tools fired, what the guardrail decided, what the cost was, what the evaluator scored. None of that lives in the model. All of it lives in the harness.
+
+That separation is what makes turns reproducible (re-run a turn against a different model, the harness state is still intact), auditable (every turn has a durable record independent of what the model returned), and recoverable (a failed turn is a thread state, not a lost conversation). It also makes the model swappable — rotating from Sonnet to Opus is a template-id change because the harness owns everything *around* the model.
+
+### The conceptual model maps onto the harness
+
+The conceptual model below — Threads, Memory, Agents, Connectors, Automations, Control — is what most of the rest of this site documents. Reading the components against the harness mechanics keeps the picture coherent: every component is solving a piece of the harness problem (state, perception, planning, action, feedback, governance), not floating in isolation.
 
 ## System model
 

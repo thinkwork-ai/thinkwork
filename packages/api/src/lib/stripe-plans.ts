@@ -13,7 +13,7 @@
  */
 
 export interface StripePlanConfig {
-	/** Internal plan name stored on tenants.plan (e.g. "starter", "team"). */
+	/** Internal plan name stored on tenants.plan (e.g. "business" — only the For Business tier hits Stripe; "open" and "enterprise" do not). */
 	internalPlan: string;
 	/** Stripe recurring price ID (e.g. "price_1A2B3C…"). */
 	priceId: string;

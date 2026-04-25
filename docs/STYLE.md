@@ -396,6 +396,41 @@ A page is ready for review when:
 
 If all of those are true, ship it. If not, revise first.
 
+## Concept page skeleton (the harness lens)
+
+Every concept page — the six top-level concept hubs (Threads, Agents, Memory, Connectors, Automations, Control) and their leaf pages — ships product-grade docs treatment under the harness frame. The page is a component of the Agent Harness for Business; the docs is the product surface that explains why the component exists, what it does, how to operate it, and how to use it.
+
+The canonical structure has five sections, in this order:
+
+### 1. Why this component exists in the harness *(1 paragraph)*
+
+Lead with the problem the component solves under the harness frame. Name which operating guarantee(s) it implements (Reliability · Efficiency · Security · Traceability). One paragraph — enough to give a reader the reason this component is worth their attention before they decide whether to keep reading.
+
+### 2. What it does *(2–3 paragraphs + bullets)*
+
+The canonical behavior, expressed in product terms. Use the canonical names exactly: Threads, Agents, Memory, Connectors, Automations, Control. No implementation detail — that's reference docs' job. The reader should be able to reason about what the component is responsible for without reading any code.
+
+### 3. How to configure it *(1–2 paragraphs + concrete steps)*
+
+Map the component to its admin surface (`/applications/admin/<route>/`) or CLI flag. Name the production-grade dimensions that matter: which knobs change what, what's tenant-scoped vs deployment-scoped, what the default is and when to deviate. If the component has no first-class configuration (rare), say so explicitly and link the upstream control that does (e.g., a memory backend may be configured at the deployment level via Terraform).
+
+When a concept page has no admin counterpart yet (`composable-skills/*`, `code-sandbox`, `compounding-memory-pipeline`, etc.), substitute the closest existing surface — a CLI command, a Terraform variable, a connector setup — rather than inventing a configure section.
+
+### 4. Common patterns *(at least 1 worked-through scenario)*
+
+A real workflow, not abstract description. "When you want X, do Y" — name the inputs, the components involved, the expected outcome. Cross-link `/guides/<topic>/` runbooks where the pattern is deeper than a single page can cover. The pattern is what turns the page from "documentation of a thing" into "documentation that helps you do work."
+
+### 5. Cross-links *(footer)*
+
+Always include this section. Link the page back into the harness:
+
+- **Architecture** — the relevant section in `/architecture/`
+- **Admin route** — `/applications/admin/<route>/` when one exists
+- **Reference** — `/api/<endpoint>/` or `/sdks/<name>/<symbol>/` when applicable
+- **Related concepts** — at least 2 sibling concept pages
+
+`docs/src/content/docs/concepts/threads.mdx` is the gold-standard implementation of this skeleton. New concept pages should mirror its shape. Existing concept pages adopt the skeleton incrementally during scope-applicable edits — it is not a one-shot rewrite of every page in the corpus.
+
 ## What this guide doesn't cover
 
 - **Design, layout, and theming** — those live in Starlight config and `custom.css`, not in writing guidance.

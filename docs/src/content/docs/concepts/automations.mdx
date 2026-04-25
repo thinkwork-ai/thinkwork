@@ -5,7 +5,7 @@ description: Scheduled jobs and event-driven triggers that start agent work on y
 
 import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
 
-Automations are how ThinkWork runs agent work without a human sending each message by hand. A daily digest, a webhook-triggered triage flow, a weekly cleanup routine — they all fit the same shape: ThinkWork starts work on a schedule or in response to an event, creates an `AUTO-` thread to hold the run, invokes the configured agent, and records what happened.
+Automations are the harness's scheduled-trigger surface — how ThinkWork runs agent work without a human sending each message by hand. A daily digest, a webhook-triggered triage flow, a weekly cleanup routine — they all fit the same shape: ThinkWork starts work on a schedule or in response to an event, creates an `AUTO-` thread to hold the run, invokes the configured agent, and records what happened. Automations are how the [PPAF loop](/architecture/#the-ppaf-agent-loop) starts from outside the conversation; everything downstream of that — Perception, Planning, Action, Feedback — is identical to a chat-initiated turn. Reliability lives here: AWS Scheduler + Step Functions provide fault recovery, idempotent retries, and a checkpointed run history every operator can audit.
 
 The important design choice: an automation *run* and a chat *conversation* are the same kind of thing from the system's point of view. Both are threads. Both have the same audit surface, the same cost accounting, the same memory access. That's why automations don't need their own parallel universe of dashboards, logs, and debuggers — they reuse everything the chat path already has.
 

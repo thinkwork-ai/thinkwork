@@ -5,7 +5,7 @@ description: The per-tenant execute_code substrate — how an agent template opt
 
 import { Aside } from '@astrojs/starlight/components';
 
-The Code Sandbox is the `execute_code` tool surface an agent can use to run Python against real data inside your AWS account. It's peer-class with [Managed Agents](/concepts/agents/managed-agents/) — ThinkWork handles provisioning, the per-turn lifecycle, and the audit trail; you assign it to a template and the agent picks it up on the next invocation.
+The Code Sandbox is the harness's deterministic-execution surface for non-deterministic plans — the `execute_code` tool an agent uses to run Python against real data inside your AWS account. It's peer-class with [Managed Agents](/concepts/agents/managed-agents/): ThinkWork handles provisioning, the per-turn lifecycle, and the audit trail; you assign it to a template and the agent picks it up on the next invocation. Two operating guarantees converge here: **Security** (per-tenant Bedrock AgentCore Code Interpreter instance — IAM isolation is structural, not application-enforced; the sandbox runs as a pure-compute primitive that never carries per-user OAuth credentials) and **Reliability** (every invocation is captured in `sandbox_invocations` with full stdout, exit status, and session id, so a failed run is debuggable without re-running it).
 
 The sandbox runs on **Bedrock AgentCore Code Interpreter**, one instance per tenant. That per-tenant fanout is load-bearing: it's what makes the IAM boundary between tenants a structural property of AWS itself, not a thing ThinkWork has to enforce in application code.
 
