@@ -30,9 +30,16 @@ export default defineConfig({
         },
       ],
       sidebar: [
-        { label: "Getting Started", slug: "getting-started" },
         {
-          label: "Concepts",
+          label: "Architecture",
+          items: [
+            { label: "Getting Started", slug: "getting-started" },
+            { label: "Architecture", slug: "architecture" },
+            { label: "Roadmap", slug: "roadmap" },
+          ],
+        },
+        {
+          label: "Components",
           collapsed: true,
           items: [
             {
@@ -159,196 +166,221 @@ export default defineConfig({
           ],
         },
         {
-          label: "Applications",
+          label: "Configure",
           collapsed: true,
           items: [
             {
-              label: "Admin",
+              label: "Deploy",
               collapsed: true,
               items: [
-                { label: "Overview", slug: "applications/admin" },
+                { label: "Greenfield AWS", slug: "deploy/greenfield" },
+                { label: "BYO Infrastructure", slug: "deploy/byo" },
                 {
-                  label: "Authentication & Tenancy",
-                  slug: "applications/admin/authentication-and-tenancy",
+                  label: "Configuration Reference",
+                  slug: "deploy/configuration",
                 },
+              ],
+            },
+            {
+              label: "Authoring Guides",
+              collapsed: true,
+              items: [
+                { label: "Skill Packs", slug: "guides/skill-packs" },
+                { label: "Connectors", slug: "guides/connectors" },
+                { label: "Evaluations", slug: "guides/evaluations" },
                 {
-                  label: "Work",
+                  label: "Operating Compounding Memory",
+                  slug: "guides/compounding-memory-operations",
+                },
+              ],
+            },
+          ],
+        },
+        {
+          label: "Reference",
+          collapsed: true,
+          items: [
+            {
+              label: "API Reference",
+              collapsed: true,
+              items: [
+                { label: "GraphQL Schema", slug: "api/graphql" },
+                { label: "Compounding Memory", slug: "api/compounding-memory" },
+              ],
+            },
+            {
+              label: "SDKs",
+              collapsed: true,
+              items: [
+                {
+                  label: "React Native",
                   collapsed: true,
                   items: [
+                    { label: "Overview", slug: "sdks/react-native" },
                     {
-                      label: "Dashboard",
-                      slug: "applications/admin/dashboard",
-                    },
-                    { label: "Threads", slug: "applications/admin/threads" },
-                    { label: "Inbox", slug: "applications/admin/inbox" },
-                  ],
-                },
-                {
-                  label: "Agents",
-                  collapsed: true,
-                  items: [
-                    { label: "Agents", slug: "applications/admin/agents" },
-                    {
-                      label: "Agent Templates",
-                      slug: "applications/admin/agent-templates",
+                      label: "Install & Setup",
+                      slug: "sdks/react-native/install-and-setup",
                     },
                     {
-                      label: "Agent Invites",
-                      slug: "applications/admin/agent-invites",
+                      label: "Hook Guide",
+                      slug: "sdks/react-native/hook-reference",
                     },
                     {
-                      label: "Skills Catalog",
-                      slug: "applications/admin/skills-catalog",
+                      label: "How Threads & Agents Work",
+                      slug: "sdks/react-native/thread-agent-model",
                     },
                     {
-                      label: "Tenant MCP Servers",
-                      slug: "applications/admin/mcp-servers",
+                      label: "Integration Recipes",
+                      slug: "sdks/react-native/integration-recipes",
                     },
                     {
-                      label: "Built-in Tools",
-                      slug: "applications/admin/builtin-tools",
+                      label: "Upgrading from 0.1",
+                      slug: "sdks/react-native/migration",
                     },
-                    {
-                      label: "Security Center",
-                      slug: "applications/admin/security-center",
-                    },
-                  ],
-                },
-                {
-                  label: "Manage",
-                  collapsed: true,
-                  items: [
-                    { label: "Memory", slug: "applications/admin/memory" },
-                    {
-                      label: "Knowledge Bases",
-                      slug: "applications/admin/knowledge-bases",
-                    },
-                    {
-                      label: "Analytics",
-                      slug: "applications/admin/analytics",
-                    },
-                    {
-                      label: "Scheduled Jobs",
-                      slug: "applications/admin/scheduled-jobs",
-                    },
-                    {
-                      label: "Evaluations",
-                      slug: "applications/admin/evaluations",
-                    },
-                    { label: "Routines", slug: "applications/admin/routines" },
-                    { label: "Webhooks", slug: "applications/admin/webhooks" },
-                    {
-                      label: "Artifacts",
-                      slug: "applications/admin/artifacts",
-                    },
-                    { label: "Humans", slug: "applications/admin/humans" },
-                    { label: "Settings", slug: "applications/admin/settings" },
                   ],
                 },
               ],
             },
             {
-              label: "Mobile",
+              label: "Applications",
               collapsed: true,
               items: [
-                { label: "Overview", slug: "applications/mobile" },
                 {
-                  label: "Authentication",
-                  slug: "applications/mobile/authentication",
+                  label: "Admin",
+                  collapsed: true,
+                  items: [
+                    { label: "Overview", slug: "applications/admin" },
+                    {
+                      label: "Authentication & Tenancy",
+                      slug: "applications/admin/authentication-and-tenancy",
+                    },
+                    {
+                      label: "Work",
+                      collapsed: true,
+                      items: [
+                        {
+                          label: "Dashboard",
+                          slug: "applications/admin/dashboard",
+                        },
+                        {
+                          label: "Threads",
+                          slug: "applications/admin/threads",
+                        },
+                        { label: "Inbox", slug: "applications/admin/inbox" },
+                      ],
+                    },
+                    {
+                      label: "Agents",
+                      collapsed: true,
+                      items: [
+                        { label: "Agents", slug: "applications/admin/agents" },
+                        {
+                          label: "Agent Templates",
+                          slug: "applications/admin/agent-templates",
+                        },
+                        {
+                          label: "Agent Invites",
+                          slug: "applications/admin/agent-invites",
+                        },
+                        {
+                          label: "Skills Catalog",
+                          slug: "applications/admin/skills-catalog",
+                        },
+                        {
+                          label: "Tenant MCP Servers",
+                          slug: "applications/admin/mcp-servers",
+                        },
+                        {
+                          label: "Built-in Tools",
+                          slug: "applications/admin/builtin-tools",
+                        },
+                        {
+                          label: "Security Center",
+                          slug: "applications/admin/security-center",
+                        },
+                      ],
+                    },
+                    {
+                      label: "Manage",
+                      collapsed: true,
+                      items: [
+                        { label: "Memory", slug: "applications/admin/memory" },
+                        {
+                          label: "Knowledge Bases",
+                          slug: "applications/admin/knowledge-bases",
+                        },
+                        {
+                          label: "Analytics",
+                          slug: "applications/admin/analytics",
+                        },
+                        {
+                          label: "Scheduled Jobs",
+                          slug: "applications/admin/scheduled-jobs",
+                        },
+                        {
+                          label: "Evaluations",
+                          slug: "applications/admin/evaluations",
+                        },
+                        {
+                          label: "Routines",
+                          slug: "applications/admin/routines",
+                        },
+                        {
+                          label: "Webhooks",
+                          slug: "applications/admin/webhooks",
+                        },
+                        {
+                          label: "Artifacts",
+                          slug: "applications/admin/artifacts",
+                        },
+                        { label: "Humans", slug: "applications/admin/humans" },
+                        {
+                          label: "Settings",
+                          slug: "applications/admin/settings",
+                        },
+                      ],
+                    },
+                  ],
                 },
                 {
-                  label: "Threads & Chat",
-                  slug: "applications/mobile/threads-and-chat",
+                  label: "Mobile",
+                  collapsed: true,
+                  items: [
+                    { label: "Overview", slug: "applications/mobile" },
+                    {
+                      label: "Authentication",
+                      slug: "applications/mobile/authentication",
+                    },
+                    {
+                      label: "Threads & Chat",
+                      slug: "applications/mobile/threads-and-chat",
+                    },
+                    {
+                      label: "Integrations & MCP Connect",
+                      slug: "applications/mobile/integrations-and-mcp-connect",
+                    },
+                    {
+                      label: "Push Notifications",
+                      slug: "applications/mobile/push-notifications",
+                    },
+                    {
+                      label: "Distribution",
+                      slug: "applications/mobile/distribution",
+                    },
+                  ],
                 },
                 {
-                  label: "Integrations & MCP Connect",
-                  slug: "applications/mobile/integrations-and-mcp-connect",
-                },
-                {
-                  label: "Push Notifications",
-                  slug: "applications/mobile/push-notifications",
-                },
-                {
-                  label: "Distribution",
-                  slug: "applications/mobile/distribution",
+                  label: "CLI",
+                  collapsed: true,
+                  items: [
+                    { label: "Overview", slug: "applications/cli" },
+                    { label: "Commands", slug: "applications/cli/commands" },
+                  ],
                 },
               ],
             },
-            {
-              label: "CLI",
-              collapsed: true,
-              items: [
-                { label: "Overview", slug: "applications/cli" },
-                { label: "Commands", slug: "applications/cli/commands" },
-              ],
-            },
           ],
         },
-        {
-          label: "Deploy",
-          collapsed: true,
-          items: [
-            { label: "Greenfield AWS", slug: "deploy/greenfield" },
-            { label: "BYO Infrastructure", slug: "deploy/byo" },
-            { label: "Configuration Reference", slug: "deploy/configuration" },
-          ],
-        },
-        {
-          label: "API Reference",
-          collapsed: true,
-          items: [
-            { label: "GraphQL Schema", slug: "api/graphql" },
-            { label: "Compounding Memory", slug: "api/compounding-memory" },
-          ],
-        },
-        {
-          label: "SDKs",
-          collapsed: true,
-          items: [
-            {
-              label: "React Native",
-              collapsed: true,
-              items: [
-                { label: "Overview", slug: "sdks/react-native" },
-                {
-                  label: "Install & Setup",
-                  slug: "sdks/react-native/install-and-setup",
-                },
-                {
-                  label: "Hook Guide",
-                  slug: "sdks/react-native/hook-reference",
-                },
-                {
-                  label: "How Threads & Agents Work",
-                  slug: "sdks/react-native/thread-agent-model",
-                },
-                {
-                  label: "Integration Recipes",
-                  slug: "sdks/react-native/integration-recipes",
-                },
-                {
-                  label: "Upgrading from 0.1",
-                  slug: "sdks/react-native/migration",
-                },
-              ],
-            },
-          ],
-        },
-        {
-          label: "Authoring Guides",
-          collapsed: true,
-          items: [
-            { label: "Skill Packs", slug: "guides/skill-packs" },
-            { label: "Connectors", slug: "guides/connectors" },
-            { label: "Evaluations", slug: "guides/evaluations" },
-            {
-              label: "Operating Compounding Memory",
-              slug: "guides/compounding-memory-operations",
-            },
-          ],
-        },
-        { label: "Architecture", slug: "architecture" },
-        { label: "Roadmap", slug: "roadmap" },
       ],
     }),
   ],

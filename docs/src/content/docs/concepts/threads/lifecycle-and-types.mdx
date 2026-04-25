@@ -5,7 +5,7 @@ description: How a thread moves through its lifecycle, what the channel prefixes
 
 import { Aside } from '@astrojs/starlight/components';
 
-A thread is never just "a row in a table." It's a row plus a lifecycle, plus a channel that classifies how the work arrived, plus a priority that's independent of status. This page walks all three.
+A thread is never just "a row in a table." It's a row plus a lifecycle, plus a channel that classifies how the work arrived, plus a priority that's independent of status. This page walks all three. Together they shape how the harness's perception layer ([Threads](/concepts/threads/)) presents work to operators and agents — the lifecycle is what makes a thread *findable* months after the fact, and the channel + priority axes are what let an operator triage a thousand-thread queue without re-reading every one. Both are concrete implementations of the **Traceability** operating guarantee: every status transition, every channel choice, every priority bump is a durable signal an agent or auditor can read later.
 
 ## The status lifecycle
 
@@ -69,6 +69,46 @@ The prefix is part of the thread id — a thread id is `<CHANNEL>-<ULID>`, e.g. 
 When a user sends a new message into a `DONE` or `CANCELLED` thread — say, someone replies to a Slack thread ThinkWork had archived — the system reopens the existing thread rather than starting a new one. The key for that reopen is the channel-specific metadata (Slack's `messageTs`, GitHub's `issueNumber`, Email's `messageId` + `inReplyTo`), not the thread id directly, because the external system doesn't know our ids.
 
 That reopen guarantees conversation continuity: an agent that answered a Slack question in March can see its own earlier answer when someone follows up in April.
+
+## How to configure it
+
+The lifecycle, channel, and priority axes all surface in [Admin: Threads](/applications/admin/threads/). Most knobs are tenant-scoped and live on a single page; a few cross-tenant defaults are deployment-scoped (Terraform).
+
+### What's tenant-scoped (admin web)
+
+- **Status auto-transitions.** Off by default. Status writes only on explicit mutations — agent activity, operator action, connector event. To enable agent-driven `IN_PROGRESS → DONE` on reply, set the per-template "auto-close on assistant turn" toggle (a template-level setting, not a thread setting). Most pilots leave this off and let operators mark `DONE` deliberately.
+- **Default priority on inbound.** Defaults to `MEDIUM`. Per-connector overrides set this when an external system already encodes urgency — e.g., a PagerDuty webhook that should always create a `CRITICAL` thread. Configure on the connector, not the thread.
+- **Inbox status filters.** The admin Threads view ships with `running / unread / read` as default filter chips. Add tenant-specific filters (e.g., "all `CRITICAL` priority") via the saved-views API. The computed `inbox status` is not a column you write to.
+- **Channel routing rules.** When a connector creates a thread, which agent gets it? Configured under each connector's Routing settings — by `@-mention`, by source channel, by default fallback. See [Routing and Metadata](/concepts/threads/routing-and-metadata/).
+
+### What's deployment-scoped (Terraform)
+
+- **The channel set itself.** `CHAT / AUTO / SLACK / GITHUB / EMAIL / TASK` is a Postgres enum. New channels require code changes in the API schema, the connector Lambda, and the outbound reply handler — they're not a configuration knob.
+- **Status set + priority set.** Same — Postgres enums, application-coupled. The seven statuses and five priorities are deliberately fixed; expanding them creates UX cliffs in the admin app.
+- **Concurrency invariant.** "One running turn per thread" is hard-coded as a thread-level lock at the AgentCore invocation boundary; not a knob. Don't try to relax it — the alternative is races and corrupted thread state.
+
+## Common patterns
+
+### Reopen a Slack thread on a follow-up (`SLACK` channel)
+
+A customer asks a question on Slack, your agent answers, the thread closes. A week later they reply in the same Slack thread. ThinkWork should reopen the existing thread — not start a new one — so the agent sees its earlier answer and continues the conversation.
+
+This is automatic. The Slack connector watches `threadTs` (Slack's thread timestamp) on every inbound event:
+
+1. **Inbound event.** Slack POSTs the new message to the connector's webhook with the original `threadTs`.
+2. **Reopen lookup.** The connector queries `threads` for `channel = 'SLACK' AND metadata->>'threadTs' = $1`.
+3. **Reopen.** If found, the thread's status flips from `DONE` (or wherever it sat) back to `IN_PROGRESS`, the new message is appended, and the agent assigned to the thread fires a turn — which sees the entire prior conversation.
+4. **Create.** If no match, a new `SLACK-<ULID>` thread is minted.
+
+For email and GitHub, the same pattern uses `inReplyTo` chains and `(repoFullName, issueNumber)` pairs respectively. See [Routing and Metadata](/concepts/threads/routing-and-metadata/) for the full per-channel keying.
+
+### Promote a `BLOCKED` thread on dependency clear
+
+When a tool call fails non-retryably (a connector hits an external auth failure, a knowledge-base query times out), the agent flips the thread to `BLOCKED` and writes the failure context as a turn. The operator inbox surfaces `BLOCKED` threads in a distinct queue.
+
+To resume: an operator clicks "Resume" in the admin thread detail. The status flips `BLOCKED → IN_PROGRESS` and a new turn fires against the same thread. Memory and prior turns are visible to the new turn — the agent doesn't repeat the failed approach unless it has reason to.
+
+For pilots, the `BLOCKED → IN_PROGRESS` transition is the most common operator-side action. Watch the rate; a high `BLOCKED` rate is a tuning signal that connector credentials, guardrails, or template capability grants need a refresh.
 
 ## Known limits
 

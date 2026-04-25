@@ -5,7 +5,7 @@ description: How thread history, document retrieval, long-term memory recall, an
 
 import { Aside } from '@astrojs/starlight/components';
 
-A ThinkWork turn is not just "user message goes to the model." Before the model sees anything, the harness assembles context from up to four sources, budgets them against the model's context window, and decides what to include vs. truncate. This page is about that assembly.
+A ThinkWork turn is not just "user message goes to the model." Before the model sees anything, the harness assembles context from up to four sources, budgets them against the model's context window, and decides what to include vs. truncate. This page is about that assembly. Context assembly is the **Perception phase** of [PPAF](/architecture/#the-ppaf-agent-loop) — the moment the harness decides what the model gets to see — and the **Efficiency** operating guarantee lives here in concrete form: every assembled context is bounded by an explicit token budget, ranked for relevance, and trimmed before the call. The model never sees unbudgeted context; the operator never sees a turn whose cost was hidden by lazy assembly.
 
 ## The four sources
 

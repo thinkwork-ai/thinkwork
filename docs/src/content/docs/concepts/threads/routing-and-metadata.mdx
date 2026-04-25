@@ -5,7 +5,7 @@ description: How inbound connector events become threads — the normalization p
 
 import { Aside } from '@astrojs/starlight/components';
 
-When a Slack message, a GitHub issue comment, or an inbound email arrives, ThinkWork has to do two things: figure out which thread it belongs to (new? existing? reopen a closed one?), and preserve enough context that an agent can reply back through the same channel it came from. This page is how that works.
+When a Slack message, a GitHub issue comment, or an inbound email arrives, ThinkWork has to do two things: figure out which thread it belongs to (new? existing? reopen a closed one?), and preserve enough context that an agent can reply back through the same channel it came from. This page is how that works. Routing is the seam between the harness's I/O surface ([Connectors](/concepts/connectors/)) and its perception layer ([Threads](/concepts/threads/)) — the moment an outside event becomes a structured thread an agent can reason over. The metadata that carries through is what makes the **Security** operating guarantee work at the connector boundary: outbound replies route via channel-scoped tools that never need raw provider tokens, because the channel handler already holds them.
 
 ## The routing question
 
@@ -81,6 +81,22 @@ Internal channels have simpler metadata:
 
 - `AUTO` carries the `scheduleId` or `triggerId` that fired, plus the Step Functions execution ARN for the run.
 - `CHAT` carries `createdByUserId` and, for threads started from the mobile app, any workspace id.
+
+## How to configure it
+
+Routing is configured per connector in [Admin: Connectors](/applications/admin/connectors/) (and per-connector subroutes — Slack settings, GitHub settings, etc.). The thread side of routing — which agent owns a new thread, what channel a thread starts in — is downstream of the connector configuration.
+
+### What's tenant-scoped (admin web)
+
+- **Default agent per connector.** Every connector ships with a "default agent for new threads" setting. When inbound routing finds no more-specific match (no `@-mention`, no channel binding, no per-recipient rule), the new thread routes here. Required to ship a connector to production; defaults to unset.
+- **Routing rules per connector.** A list of (predicate → agent) pairs evaluated in order. Predicates can be: `@-mention` of a specific agent, `channel = #engineering`, `from-domain = customer.com`, `label = bug`. Define the rules at [Admin: Connectors → \<provider\> → Routing](/applications/admin/connectors/). The first matching rule wins; if none match, the default agent runs.
+- **Reopen behavior.** Whether a closed thread should reopen on a new inbound event in the same external conversation is on by default and channel-aware (Slack `threadTs`, GitHub issue id, Email `inReplyTo` chain). To disable per-channel — e.g., to force a new thread on every email even if `inReplyTo` matches — set the connector's reopen mode to `disabled`.
+- **Signing secret rotation.** Each connector's webhook signing secret lives in the credential vault (SSM + KMS). Rotate from [Admin: Connectors → \<provider\> → Credentials → Rotate](/applications/admin/connectors/); active connector Lambdas pick up the new value within 60 seconds (Lambda env-var cache TTL). See [Connectors → credential vault](/concepts/connectors/#credential-vault).
+
+### What's deployment-scoped (Terraform)
+
+- **The metadata schema per channel.** Each channel's `metadata` JSON shape is enforced at the application layer by TypeScript types in the connector + outbound handler. Adding a field to existing channel metadata is a code change, not configuration. New channels require the three-seam pattern in [Lifecycle and Types → Channel set](/concepts/threads/lifecycle-and-types/#known-limits).
+- **Webhook ingress paths.** The API Gateway route per connector (e.g., `/connectors/slack/webhook`) is wired in Terraform. Adding a new connector means a new route + Lambda; not a knob.
 
 ## A worked example: Slack → thread
 

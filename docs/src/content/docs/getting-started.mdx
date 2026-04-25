@@ -5,9 +5,9 @@ description: Install the CLI, deploy ThinkWork into your AWS account, and send y
 
 import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
-ThinkWork deploys entirely into your AWS account. There is no SaaS control plane, no shared infrastructure, and no black-box hosted harness. You own everything, the code runs in your VPC, data lives in your Aurora database, and models run through your Bedrock endpoint.
+This guide is for self-hosting **the open Agent Harness** in your own AWS account — the leftmost door of the [three-tier deployment ladder](/#one-harness-three-deployment-models) (ThinkWork open / ThinkWork for Business / ThinkWork Enterprise). Everything deploys entirely into your AWS account. No SaaS control plane, no shared infrastructure, no black-box hosted harness. The code runs in your VPC, data lives in your Aurora database, and models run through your Bedrock endpoint.
 
-This guide walks you from zero to a running agent invoke. The point is not just that ThinkWork is powerful. It is that production-grade agent infrastructure can be straightforward to deploy without surrendering ownership of the runtime.
+This guide walks you from zero to a running agent invoke. The point is not that ThinkWork is powerful — it is that a production-grade Agent Harness can be straightforward to deploy without surrendering ownership of the runtime. If you'd rather not run the runtime yourself, the same harness is operated by us as [ThinkWork for Business](https://thinkwork.ai/cloud); start there instead.
 
 ## Prerequisites
 

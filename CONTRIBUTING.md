@@ -1,12 +1,12 @@
-# Contributing to Thinkwork
+# Contributing to ThinkWork
 
-Thanks for your interest in Thinkwork. A few things to know before you open an issue or PR.
+Thanks for your interest in ThinkWork. A few things to know before you open an issue or PR.
 
 ## Scope
 
-Thinkwork is **AWS-native by design**. It uses Cognito, AppSync, Aurora Postgres, Bedrock/AgentCore, Lambda, Step Functions, S3, and Terraform. We deliberately do not support non-AWS substrates, and we will politely decline feature requests, issues, and PRs that assume Kubernetes, Docker Compose, GCP, Azure, or other non-AWS deployment targets.
+ThinkWork is **the open Agent Harness for Business** — Apache 2.0, **AWS-native by design**, and the leftmost door of the three-tier deployment ladder (the operated tier, ThinkWork for Business, and the services tier, ThinkWork Enterprise, are separate offerings on top of this same harness). The runtime uses Cognito, AppSync, Aurora Postgres, Bedrock/AgentCore, Lambda, Step Functions, S3, and Terraform. We deliberately do not support non-AWS substrates, and we will politely decline feature requests, issues, and PRs that assume Kubernetes, Docker Compose, GCP, Azure, or other non-AWS deployment targets.
 
-If you want a generic self-hosted agent framework, there are several great projects that target that audience. Thinkwork is the one for the AWS-shop niche.
+If you want a generic self-hosted agent framework, there are several great projects that target that audience. ThinkWork is the open Agent Harness for the AWS-shop niche — and the harness stays yours either way.
 
 ## Before opening an issue
 

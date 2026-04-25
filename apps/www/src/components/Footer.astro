@@ -5,9 +5,14 @@ import { external } from "../lib/copy";
 
 <footer class="border-t border-white/5 bg-[#05080c]">
   <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 px-6 py-10 md:flex-row">
-    <div class="flex items-center gap-2.5">
-      <BrainMark class="text-brand" size={32} title="ThinkWork" />
-      <span class="text-sm font-semibold tracking-tight text-slate-300">ThinkWork</span>
+    <div class="flex flex-col items-center gap-1 md:flex-row md:items-baseline md:gap-3">
+      <div class="flex items-center gap-2.5">
+        <BrainMark class="text-brand" size={32} title="ThinkWork" />
+        <span class="text-sm font-semibold tracking-tight text-slate-300">ThinkWork</span>
+      </div>
+      <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+        Agent Harness for Business
+      </span>
     </div>
     <div class="flex items-center gap-6 text-sm text-slate-500">
       <a href={external.docs} class="transition hover:text-slate-200">Docs</a>

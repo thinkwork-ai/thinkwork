@@ -5,11 +5,11 @@ description: Per-turn cost capture via OTel spans, tenant budget enforcement tha
 
 import { Aside } from '@astrojs/starlight/components';
 
-The second half of Control is about knowing what happened and bounding how much it cost. Three intertwined concerns:
+The second half of Control is about knowing what happened and bounding how much it cost — the **Efficiency** and **Traceability** operating guarantees in concrete shipping form. Three intertwined concerns:
 
-- **Usage tracking** — per-turn cost, broken down by input tokens, output tokens, and tool call overhead.
-- **Budgets** — tenant and per-agent spend limits that actually *suspend* agents when hit, not just warn.
-- **Audit** — the durable, append-only record of every invocation that makes "what did the agent see, decide, and do?" answerable months later.
+- **Usage tracking** — per-turn cost, broken down by input tokens, output tokens, and tool call overhead. Efficiency at the per-decision level: every model dollar is attached to the turn that produced it, not aggregated into an opaque monthly invoice.
+- **Budgets** — tenant and per-agent spend limits that actually *suspend* agents when hit, not just warn. Efficiency as enforcement: the harness pauses execution before a runaway loop compounds into real money.
+- **Audit** — the durable, append-only record of every invocation that makes "what did the agent see, decide, and do?" answerable months later. Traceability at full fidelity: stored in the customer's S3 bucket with no delete permission on the Lambda role, partitioned by tenant + date, queryable for a single operation.
 
 They share one spine: every turn has an id, and every cost record, budget check, and audit entry references that same id.
 

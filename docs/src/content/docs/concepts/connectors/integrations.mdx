@@ -5,7 +5,7 @@ description: App and system integrations for Slack, GitHub, Google Workspace, an
 
 import { Aside } from '@astrojs/starlight/components';
 
-ThinkWork integrations connect external apps and systems to the thread model. They ingest messages, webhooks, and events into threads, then let agents respond back through the same integration boundary.
+ThinkWork integrations connect external apps and systems to the thread model — the app/channel half of the harness's I/O surface. They ingest messages, webhooks, and events into threads, then let agents respond back through the same integration boundary. The **Security** operating guarantee lives at this seam: every integration verifies inbound signatures against credentials in the vault, every outbound reply runs through a tenant-scoped handler that never lets the agent touch raw provider tokens, and every credential rotation propagates through the connector Lambda within 60 seconds without a redeploy.
 
 This is the app and system side of Connectors: Slack, GitHub, Google Workspace, webhook-style inbound flows, outbound actions, and the auth and routing needed to make them work safely.
 

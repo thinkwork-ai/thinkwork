@@ -5,7 +5,7 @@ description: How ThinkWork uses uploaded documents — product docs, runbooks, p
 
 import { Aside } from '@astrojs/starlight/components';
 
-Document knowledge is the part of Memory that starts from material you already wrote. A policy document, a product FAQ, a runbook, an API reference — something authoritative that should be a source of truth when the agent answers a question, not a hallucinated guess.
+Document knowledge is the part of the harness's context-management layer that starts from material you already wrote. A policy document, a product FAQ, a runbook, an API reference — something authoritative that should be a source of truth when the agent answers a question, not a hallucinated guess. The **Reliability** operating guarantee lives here in a specific form: grounding the agent on a corpus you control means responses are reproducible against a known source, not synthesized from training-set memory the operator can't audit.
 
 An agent with document knowledge attached will, on every turn, retrieve the most relevant chunks from its assigned knowledge base and include them in context before the model generates a response. The agent doesn't memorize the documents; it grounds on them.
 

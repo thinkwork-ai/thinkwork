@@ -5,7 +5,7 @@ description: What graph-shaped memory ThinkWork already ships (entity edges, co-
 
 import { Aside } from '@astrojs/starlight/components';
 
-When people talk about "agent knowledge graphs," they usually mean a typed-relationship graph: entities connected by named edges with semantics — *Person* `worksAt` *Company*, *Dish* `servedAt` *Restaurant*. ThinkWork doesn't have that *yet*. But it's worth being honest about what **is** already graph-shaped in the product today — because it's more than the original docs suggested — and where the typed layer is headed next.
+When people talk about "agent knowledge graphs," they usually mean a typed-relationship graph: entities connected by named edges with semantics — *Person* `worksAt` *Company*, *Dish* `servedAt` *Restaurant*. ThinkWork doesn't have that *yet*. But it's worth being honest about what **is** already graph-shaped in the product today — because it's more than the original docs suggested — and where the typed layer is headed next. Graph-shaped memory matters for the harness because it's how the **Traceability** operating guarantee scales beyond single-thread audit: a graph lets an operator follow what the agent learned across threads, not just within one.
 
 ## What ThinkWork already builds
 
