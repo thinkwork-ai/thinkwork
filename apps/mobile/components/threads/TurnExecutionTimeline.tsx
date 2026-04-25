@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, View } from "react-native";
 import Svg, { Circle, Line, Path } from "react-native-svg";
-import { Bot, ChevronRight, Cpu, MessageSquare, X, Zap } from "lucide-react-native";
+import { Bot, ChevronRight, Cpu, X, Zap } from "lucide-react-native";
 import { useQuery } from "urql";
 import { Text, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
@@ -272,7 +272,7 @@ function getBranchForEvent(eventIdx: number, branches: BranchSpan[]): BranchSpan
 
 function EventIcon({ event, color }: { event: TimelineEvent; color: string }) {
   if (event.type === "llm") return <Cpu size={15} color={color} />;
-  if (event.type === "response") return <MessageSquare size={15} color={RESPONSE_COLOR} />;
+  if (event.type === "response") return <Bot size={15} color={RESPONSE_COLOR} />;
   if (event.toolType === "sub_agent") return <Bot size={15} color={color} />;
   return <Zap size={15} color="#facc15" />;
 }
@@ -283,6 +283,7 @@ export function TurnExecutionTimeline({
   expanded,
   isDark,
   colors,
+  agentName,
 }: {
   tenantId?: string | null;
   turn: {
@@ -294,6 +295,7 @@ export function TurnExecutionTimeline({
   expanded: boolean;
   isDark: boolean;
   colors: (typeof COLORS)["dark"];
+  agentName?: string | null;
 }) {
   const [detail, setDetail] = useState<{ title: string; content: string } | null>(null);
   const usage = useMemo(() => parseJsonField(turn.usageJson), [turn.usageJson]);
@@ -404,7 +406,7 @@ export function TurnExecutionTimeline({
           const label = event.type === "llm"
             ? event.modelId || "LLM"
             : event.type === "response"
-              ? "Response"
+              ? agentName || "Agent"
               : event.toolName || "tool";
           const right = event.type === "llm"
             ? `${formatTokens(event.inputTokens || 0)}→${formatTokens(event.outputTokens || 0)} ${formatCost(event.costUsd || 0)}`

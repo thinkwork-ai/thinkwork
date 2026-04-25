@@ -479,6 +479,7 @@ function ThreadDetailPage() {
             tenantId={tenantId || ""}
             messages={threadMessages}
             agentMap={agentMap}
+            defaultAgentName={thread.agent?.name}
             onOpenArtifact={openArtifact}
           />
         </div>
