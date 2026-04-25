@@ -451,7 +451,7 @@ function AgentWorkspacePage() {
   const [generating, setGenerating] = useState(false);
 
   const fetchFiles = useCallback(async (options: { showLoading?: boolean } = {}) => {
-    const showLoading = options.showLoading ?? true;
+    const showLoading = options.showLoading ?? false;
     if (showLoading) setLoadingFiles(true);
     try {
       const data = await listWorkspaceFiles(target);
@@ -471,7 +471,7 @@ function AgentWorkspacePage() {
   }, [fetchFiles]);
 
   useEffect(() => {
-    fetchFiles();
+    fetchFiles({ showLoading: true });
   }, [fetchFiles]);
 
   const tree = useMemo(() => buildTree(files), [files]);
