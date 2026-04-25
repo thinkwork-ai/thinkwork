@@ -409,7 +409,9 @@ sub-agent writes memory, paths are relative to the agent root, for example
 
 | Task                                       | Go to                | Read                              | Skills                       |
 | ------------------------------------------ | -------------------- | --------------------------------- | ---------------------------- |
-| _add a row when you create a sub-agent_    | _e.g. \`expenses/\`_   | _e.g. \`expenses/CONTEXT.md\`_      | _comma-separated slugs_      |
+
+Add one row per sub-agent. For example, an \`expenses/\` sub-agent would point
+\`Go to\` at \`expenses/\` and usually read \`expenses/CONTEXT.md\`.
 
 ## Naming conventions
 
@@ -547,7 +549,7 @@ _(empty — add entries as you encounter them)_
  *     `backfill-identity-md.ts` / `backfill-user-md.ts` (or a targeted
  *     accept-template-update flow) to refresh them.
  */
-export const DEFAULTS_VERSION = 4;
+export const DEFAULTS_VERSION = 5;
 
 // ---------------------------------------------------------------------------
 // Aggregator

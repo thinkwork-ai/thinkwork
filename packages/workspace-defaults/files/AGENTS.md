@@ -32,7 +32,9 @@ sub-agent writes memory, paths are relative to the agent root, for example
 
 | Task                                       | Go to                | Read                              | Skills                       |
 | ------------------------------------------ | -------------------- | --------------------------------- | ---------------------------- |
-| _add a row when you create a sub-agent_    | _e.g. `expenses/`_   | _e.g. `expenses/CONTEXT.md`_      | _comma-separated slugs_      |
+
+Add one row per sub-agent. For example, an `expenses/` sub-agent would point
+`Go to` at `expenses/` and usually read `expenses/CONTEXT.md`.
 
 ## Naming conventions
 
