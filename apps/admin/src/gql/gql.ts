@@ -15,6 +15,7 @@ import { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-node/
  */
 type Documents = {
     "\n\tmutation AcceptTemplateUpdate($agentId: ID!, $filename: String!) {\n\t\tacceptTemplateUpdate(agentId: $agentId, filename: $filename) {\n\t\t\tid\n\t\t\tname\n\t\t\tslug\n\t\t}\n\t}\n": typeof types.AcceptTemplateUpdateDocument,
+    "\n  query AgentPinStatus($agentId: ID!) {\n    agentPinStatus(agentId: $agentId) {\n      filename\n      pinnedSha\n      latestSha\n      updateAvailable\n      pinnedContent\n      latestContent\n    }\n  }\n": typeof types.AgentPinStatusDocument,
     "\n  mutation CreateSubAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      slug\n    }\n  }\n": typeof types.CreateSubAgentDocument,
     "\n  mutation DeleteSubAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n": typeof types.DeleteSubAgentDocument,
     "\n  mutation CreateThread($input: CreateThreadInput!) {\n    createThread(input: $input) {\n      id\n      number\n      title\n      status\n      createdAt\n    }\n  }\n": typeof types.CreateThreadDocument,
@@ -30,7 +31,6 @@ type Documents = {
     "\n  mutation DeleteAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n": typeof types.DeleteAgentDocument,
     "\n  mutation UpdateAgentStatus($id: ID!, $status: AgentStatus!) {\n    updateAgentStatus(id: $id, status: $status) {\n      id\n      status\n      updatedAt\n    }\n  }\n": typeof types.UpdateAgentStatusDocument,
     "\n  mutation SetAgentCapabilities(\n    $agentId: ID!\n    $capabilities: [AgentCapabilityInput!]!\n  ) {\n    setAgentCapabilities(agentId: $agentId, capabilities: $capabilities) {\n      id\n      capability\n      enabled\n    }\n  }\n": typeof types.SetAgentCapabilitiesDocument,
-    "\n  mutation SetAgentSkills($agentId: ID!, $skills: [AgentSkillInput!]!) {\n    setAgentSkills(agentId: $agentId, skills: $skills) {\n      id\n      skillId\n      enabled\n      config\n      permissions\n    }\n  }\n": typeof types.SetAgentSkillsDocument,
     "\n  mutation SetAgentBudgetPolicy(\n    $agentId: ID!\n    $input: AgentBudgetPolicyInput!\n  ) {\n    setAgentBudgetPolicy(agentId: $agentId, input: $input) {\n      id\n      limitUsd\n      actionOnExceed\n      enabled\n    }\n  }\n": typeof types.SetAgentBudgetPolicyDocument,
     "\n  mutation DeleteAgentBudgetPolicy($agentId: ID!) {\n    deleteAgentBudgetPolicy(agentId: $agentId)\n  }\n": typeof types.DeleteAgentBudgetPolicyDocument,
     "\n  query ModelCatalog {\n    modelCatalog {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n    }\n  }\n": typeof types.ModelCatalogDocument,
@@ -143,10 +143,10 @@ type Documents = {
     "\n  mutation CancelSkillRun($runId: ID!) {\n    cancelSkillRun(runId: $runId) {\n      id\n      status\n      finishedAt\n    }\n  }\n": typeof types.CancelSkillRunDocument,
     "\n  mutation SubmitRunFeedback($input: SubmitRunFeedbackInput!) {\n    submitRunFeedback(input: $input) {\n      id\n      feedbackSignal\n      feedbackNote\n    }\n  }\n": typeof types.SubmitRunFeedbackDocument,
     "\n  mutation DeleteRun($runId: ID!) {\n    deleteRun(runId: $runId)\n  }\n": typeof types.DeleteRunDocument,
-    "\n  query AgentPinStatus($agentId: ID!) {\n    agentPinStatus(agentId: $agentId) {\n      filename\n      pinnedSha\n      latestSha\n      updateAvailable\n      pinnedContent\n      latestContent\n    }\n  }\n": typeof types.AgentPinStatusDocument,
 };
 const documents: Documents = {
     "\n\tmutation AcceptTemplateUpdate($agentId: ID!, $filename: String!) {\n\t\tacceptTemplateUpdate(agentId: $agentId, filename: $filename) {\n\t\t\tid\n\t\t\tname\n\t\t\tslug\n\t\t}\n\t}\n": types.AcceptTemplateUpdateDocument,
+    "\n  query AgentPinStatus($agentId: ID!) {\n    agentPinStatus(agentId: $agentId) {\n      filename\n      pinnedSha\n      latestSha\n      updateAvailable\n      pinnedContent\n      latestContent\n    }\n  }\n": types.AgentPinStatusDocument,
     "\n  mutation CreateSubAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      slug\n    }\n  }\n": types.CreateSubAgentDocument,
     "\n  mutation DeleteSubAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n": types.DeleteSubAgentDocument,
     "\n  mutation CreateThread($input: CreateThreadInput!) {\n    createThread(input: $input) {\n      id\n      number\n      title\n      status\n      createdAt\n    }\n  }\n": types.CreateThreadDocument,
@@ -162,7 +162,6 @@ const documents: Documents = {
     "\n  mutation DeleteAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n": types.DeleteAgentDocument,
     "\n  mutation UpdateAgentStatus($id: ID!, $status: AgentStatus!) {\n    updateAgentStatus(id: $id, status: $status) {\n      id\n      status\n      updatedAt\n    }\n  }\n": types.UpdateAgentStatusDocument,
     "\n  mutation SetAgentCapabilities(\n    $agentId: ID!\n    $capabilities: [AgentCapabilityInput!]!\n  ) {\n    setAgentCapabilities(agentId: $agentId, capabilities: $capabilities) {\n      id\n      capability\n      enabled\n    }\n  }\n": types.SetAgentCapabilitiesDocument,
-    "\n  mutation SetAgentSkills($agentId: ID!, $skills: [AgentSkillInput!]!) {\n    setAgentSkills(agentId: $agentId, skills: $skills) {\n      id\n      skillId\n      enabled\n      config\n      permissions\n    }\n  }\n": types.SetAgentSkillsDocument,
     "\n  mutation SetAgentBudgetPolicy(\n    $agentId: ID!\n    $input: AgentBudgetPolicyInput!\n  ) {\n    setAgentBudgetPolicy(agentId: $agentId, input: $input) {\n      id\n      limitUsd\n      actionOnExceed\n      enabled\n    }\n  }\n": types.SetAgentBudgetPolicyDocument,
     "\n  mutation DeleteAgentBudgetPolicy($agentId: ID!) {\n    deleteAgentBudgetPolicy(agentId: $agentId)\n  }\n": types.DeleteAgentBudgetPolicyDocument,
     "\n  query ModelCatalog {\n    modelCatalog {\n      id\n      modelId\n      displayName\n      provider\n      inputCostPerMillion\n      outputCostPerMillion\n    }\n  }\n": types.ModelCatalogDocument,
@@ -275,7 +274,6 @@ const documents: Documents = {
     "\n  mutation CancelSkillRun($runId: ID!) {\n    cancelSkillRun(runId: $runId) {\n      id\n      status\n      finishedAt\n    }\n  }\n": types.CancelSkillRunDocument,
     "\n  mutation SubmitRunFeedback($input: SubmitRunFeedbackInput!) {\n    submitRunFeedback(input: $input) {\n      id\n      feedbackSignal\n      feedbackNote\n    }\n  }\n": types.SubmitRunFeedbackDocument,
     "\n  mutation DeleteRun($runId: ID!) {\n    deleteRun(runId: $runId)\n  }\n": types.DeleteRunDocument,
-    "\n  query AgentPinStatus($agentId: ID!) {\n    agentPinStatus(agentId: $agentId) {\n      filename\n      pinnedSha\n      latestSha\n      updateAvailable\n      pinnedContent\n      latestContent\n    }\n  }\n": types.AgentPinStatusDocument,
 };
 
 /**
@@ -296,6 +294,10 @@ export function graphql(source: string): unknown;
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n\tmutation AcceptTemplateUpdate($agentId: ID!, $filename: String!) {\n\t\tacceptTemplateUpdate(agentId: $agentId, filename: $filename) {\n\t\t\tid\n\t\t\tname\n\t\t\tslug\n\t\t}\n\t}\n"): (typeof documents)["\n\tmutation AcceptTemplateUpdate($agentId: ID!, $filename: String!) {\n\t\tacceptTemplateUpdate(agentId: $agentId, filename: $filename) {\n\t\t\tid\n\t\t\tname\n\t\t\tslug\n\t\t}\n\t}\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AgentPinStatus($agentId: ID!) {\n    agentPinStatus(agentId: $agentId) {\n      filename\n      pinnedSha\n      latestSha\n      updateAvailable\n      pinnedContent\n      latestContent\n    }\n  }\n"): (typeof documents)["\n  query AgentPinStatus($agentId: ID!) {\n    agentPinStatus(agentId: $agentId) {\n      filename\n      pinnedSha\n      latestSha\n      updateAvailable\n      pinnedContent\n      latestContent\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -356,10 +358,6 @@ export function graphql(source: "\n  mutation UpdateAgentStatus($id: ID!, $statu
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation SetAgentCapabilities(\n    $agentId: ID!\n    $capabilities: [AgentCapabilityInput!]!\n  ) {\n    setAgentCapabilities(agentId: $agentId, capabilities: $capabilities) {\n      id\n      capability\n      enabled\n    }\n  }\n"): (typeof documents)["\n  mutation SetAgentCapabilities(\n    $agentId: ID!\n    $capabilities: [AgentCapabilityInput!]!\n  ) {\n    setAgentCapabilities(agentId: $agentId, capabilities: $capabilities) {\n      id\n      capability\n      enabled\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  mutation SetAgentSkills($agentId: ID!, $skills: [AgentSkillInput!]!) {\n    setAgentSkills(agentId: $agentId, skills: $skills) {\n      id\n      skillId\n      enabled\n      config\n      permissions\n    }\n  }\n"): (typeof documents)["\n  mutation SetAgentSkills($agentId: ID!, $skills: [AgentSkillInput!]!) {\n    setAgentSkills(agentId: $agentId, skills: $skills) {\n      id\n      skillId\n      enabled\n      config\n      permissions\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -808,10 +806,6 @@ export function graphql(source: "\n  mutation SubmitRunFeedback($input: SubmitRu
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation DeleteRun($runId: ID!) {\n    deleteRun(runId: $runId)\n  }\n"): (typeof documents)["\n  mutation DeleteRun($runId: ID!) {\n    deleteRun(runId: $runId)\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "\n  query AgentPinStatus($agentId: ID!) {\n    agentPinStatus(agentId: $agentId) {\n      filename\n      pinnedSha\n      latestSha\n      updateAvailable\n      pinnedContent\n      latestContent\n    }\n  }\n"): (typeof documents)["\n  query AgentPinStatus($agentId: ID!) {\n    agentPinStatus(agentId: $agentId) {\n      filename\n      pinnedSha\n      latestSha\n      updateAvailable\n      pinnedContent\n      latestContent\n    }\n  }\n"];
 
 export function graphql(source: string) {
   return (documents as any)[source] ?? {};

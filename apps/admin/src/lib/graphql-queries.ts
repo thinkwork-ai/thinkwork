@@ -188,18 +188,6 @@ export const SetAgentCapabilitiesMutation = graphql(`
   }
 `);
 
-export const SetAgentSkillsMutation = graphql(`
-  mutation SetAgentSkills($agentId: ID!, $skills: [AgentSkillInput!]!) {
-    setAgentSkills(agentId: $agentId, skills: $skills) {
-      id
-      skillId
-      enabled
-      config
-      permissions
-    }
-  }
-`);
-
 export const SetAgentBudgetPolicyMutation = graphql(`
   mutation SetAgentBudgetPolicy(
     $agentId: ID!

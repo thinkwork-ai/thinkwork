@@ -22,6 +22,7 @@ import workspace_composer_client as wcc
 from workspace_composer_client import (
     _reset_composed_cache,
     fetch_composed_workspace_cached,
+    invalidate_composed_workspace_cache,
 )
 
 
@@ -160,6 +161,38 @@ class TestFetchComposedWorkspaceCached(unittest.TestCase):
 
         sig = inspect.signature(fetch_composed_workspace_cached)
         self.assertEqual(sig.parameters["ttl_seconds"].default, 30.0)
+
+    def test_invalidate_drops_only_matching_entry(self):
+        captured: list = []
+        response = {"ok": True, "files": []}
+        with patch("urllib.request.urlopen", _fake_urlopen_factory(response, captured)):
+            fetch_composed_workspace_cached(
+                tenant_id="t1",
+                agent_id="a1",
+                api_url="https://api.example.test",
+                api_secret="secret",
+            )
+            fetch_composed_workspace_cached(
+                tenant_id="t1",
+                agent_id="a2",
+                api_url="https://api.example.test",
+                api_secret="secret",
+            )
+            invalidate_composed_workspace_cache("t1", "a1")
+            fetch_composed_workspace_cached(
+                tenant_id="t1",
+                agent_id="a1",
+                api_url="https://api.example.test",
+                api_secret="secret",
+            )
+            fetch_composed_workspace_cached(
+                tenant_id="t1",
+                agent_id="a2",
+                api_url="https://api.example.test",
+                api_secret="secret",
+            )
+
+        self.assertEqual(len(captured), 3)
 
 
 if __name__ == "__main__":

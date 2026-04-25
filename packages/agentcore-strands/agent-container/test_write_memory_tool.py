@@ -320,6 +320,19 @@ class TestWriteMemoryTool(unittest.TestCase):
         self.assertEqual(hdrs.get("x-api-key"), "test-secret")
         self.assertEqual(hdrs.get("x-tenant-id"), "tenant-a")
 
+    def test_successful_write_invalidates_composer_cache(self):
+        from write_memory_tool import write_memory
+        captured = []
+        with patch("urllib.request.urlopen", self._fake_urlopen({"ok": True}, captured)):
+            with patch(
+                "write_memory_tool.invalidate_composed_workspace_cache"
+            ) as invalidate:
+                fn = _unwrap(write_memory)
+                result = fn(path="memory/lessons.md", content="# Lessons")
+
+        self.assertIn("saved", result)
+        invalidate.assert_called_once_with("tenant-a", "agent-marco")
+
     def test_sub_agent_path_posts_verbatim(self):
         """Sub-agent: write_memory("expenses/memory/lessons.md", ...) lands at sub scope."""
         from write_memory_tool import write_memory
