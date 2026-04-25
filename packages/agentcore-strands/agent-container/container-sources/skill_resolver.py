@@ -35,6 +35,7 @@ not an operator typo.
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -101,22 +102,28 @@ class ResolvedSkill:
 
 
 def _normalize_folder_path(folder_path: str) -> str:
-    """Strip leading/trailing slashes and reject reserved-name segments.
+    """Strip leading/trailing slashes, collapse runs of ``/``, and reject
+    reserved-name or dot segments.
 
     The resolver's caller passes either ``""`` (root agent), ``"expenses"``,
     or ``"expenses/escalation"``. We tolerate stray slashes the caller may
-    have inherited from a routing-table cell but reject path traversal
-    and reserved-name reuse — those are precondition violations, not
-    operator-facing errors.
+    have inherited from a routing-table cell — including internal runs
+    like ``"foo//bar"`` from a naive ``parent + "/" + child`` concat — and
+    reject path traversal and reserved-name reuse. Those rejections are
+    precondition violations, not operator-facing errors.
     """
     cleaned = folder_path.strip().strip("/")
+    # Collapse internal runs of '/' so an operator typo like "foo//bar"
+    # doesn't hard-abort delegation — trailing-slash tolerance already
+    # set the expectation that internal doubles are also tolerated.
+    cleaned = re.sub(r"/+", "/", cleaned)
     if not cleaned:
         return ""
     segments = cleaned.split("/")
     for seg in segments:
-        if seg in ("", ".", ".."):
+        if seg in (".", ".."):
             raise ValueError(
-                f"folder_path {folder_path!r} contains an empty or dot segment"
+                f"folder_path {folder_path!r} contains a dot segment"
             )
         if seg in RESERVED_FOLDER_NAMES:
             raise ValueError(
@@ -145,28 +152,102 @@ def _ancestor_segments(folder_path: str) -> list[str]:
 
 
 def _build_path_index(composed_tree: Sequence[Mapping[str, Any]]) -> dict[str, str]:
-    """Index the composed tree by path → content. Skips entries with
-    missing path or absent content (the composer omits `content` when
-    `includeContent=false`, which is never this caller's path)."""
+    """Index the composed tree by ``path`` → ``content``.
+
+    Skips entries with missing path or absent content (the composer omits
+    ``content`` when ``includeContent=false``, which is never this caller's
+    path). Also skips entries whose ``path`` or ``content`` is non-string
+    — defends against upstream drift (e.g. raw ``bytes`` from S3) so a
+    schema regression falls through to the platform copy with a warning
+    rather than escaping uncaught from ``parse_skill_md_string``.
+
+    Raises :class:`TypeError` when ``composed_tree`` is itself a
+    :class:`Mapping` — a dict iterates its keys (strings) and crashes
+    with ``AttributeError`` on the first ``entry.get(...)``. The
+    ``Sequence[Mapping]`` annotation does not catch this at runtime.
+    """
+    if isinstance(composed_tree, Mapping):
+        raise TypeError(
+            "composed_tree must be a Sequence of Mapping records, not a Mapping; "
+            "iterating a dict yields its keys (strings) which break entry.get(...)."
+        )
     index: dict[str, str] = {}
     for entry in composed_tree:
-        path = entry.get("path") or ""
+        if not isinstance(entry, Mapping):
+            logger.warning(
+                "[skill_resolver] composed_tree entry is not a mapping (got %s) — skipping",
+                type(entry).__name__,
+            )
+            continue
+        path = entry.get("path")
         content = entry.get("content")
-        if not path or content is None:
+        if content is None or not path:
+            continue
+        if not isinstance(path, str) or not isinstance(content, str):
+            logger.warning(
+                "[skill_resolver] composed_tree entry has non-string path/content "
+                "(path=%s, content=%s) — skipping",
+                type(path).__name__,
+                type(content).__name__,
+            )
             continue
         index[path.lstrip("/")] = content
     return index
 
 
-def _is_usable_local(parsed: ParsedSkillMd) -> bool:
-    """Local SKILL.md is usable when its frontmatter loaded.
+def _is_usable_local(parsed: ParsedSkillMd) -> tuple[bool, str | None]:
+    """Decide whether a local ``SKILL.md`` is authoritative for resolution.
 
-    A file with no frontmatter (or with frontmatter that parsed but is
-    empty) is treated as not-present so the walk falls through to the
-    platform catalog. This matches the plan's "malformed local SKILL.md
-    (missing frontmatter) → treated as not-present" test scenario.
+    Returns ``(usable, reason)`` so the caller can emit an actionable log
+    line when falling through. ``reason`` is ``None`` on success.
+
+    A local file is usable only when its frontmatter is present **and**
+    declares both ``name`` and ``description`` as non-empty strings —
+    matching the SI-4 plugin shape ``skill_md_parser`` documents. This is
+    intentionally tighter than "any non-empty frontmatter": a near-correct
+    file (frontmatter present, missing required fields) silently shadowed
+    the platform copy across every descendant agent under the looser gate.
     """
-    return parsed.frontmatter_present and bool(parsed.data)
+    if not parsed.frontmatter_present:
+        return False, "no frontmatter"
+    if not parsed.data:
+        return False, "frontmatter is present but empty"
+    name = parsed.data.get("name")
+    description = parsed.data.get("description")
+    if not isinstance(name, str) or not name.strip():
+        return False, "frontmatter is missing a non-empty 'name' field"
+    if not isinstance(description, str) or not description.strip():
+        return False, "frontmatter is missing a non-empty 'description' field"
+    return True, None
+
+
+def _read_platform_content(slug: str, platform: Mapping[str, Any]) -> str:
+    """Read ``skill_md_content`` from a platform-catalog manifest entry.
+
+    ``skill_md_content`` is the canonical key. ``content`` is accepted as
+    a tolerated alias only when the canonical key is *absent* — empty
+    string on the canonical key wins (so an explicit tombstone surfaces
+    as ``ValueError`` rather than silently falling through to ``content``).
+
+    Raises :class:`ValueError` when neither key is present, when the
+    canonical key is present but empty, or when the resolved value is
+    not a non-empty string.
+    """
+    if "skill_md_content" in platform:
+        canonical = platform["skill_md_content"]
+        if not isinstance(canonical, str) or not canonical:
+            raise ValueError(
+                f"platform_catalog_manifest entry for {slug!r} has empty or "
+                "non-string 'skill_md_content'"
+            )
+        return canonical
+    alias = platform.get("content")
+    if isinstance(alias, str) and alias:
+        return alias
+    raise ValueError(
+        f"platform_catalog_manifest entry for {slug!r} has no "
+        "'skill_md_content' (canonical) or non-empty 'content' (alias)"
+    )
 
 
 def resolve_skill(
@@ -213,10 +294,12 @@ def resolve_skill(
                 exc,
             )
             continue
-        if not _is_usable_local(parsed):
+        usable, reason = _is_usable_local(parsed)
+        if not usable:
             logger.info(
-                "[skill_resolver] local SKILL.md at %s has no frontmatter — falling through",
+                "[skill_resolver] local SKILL.md at %s falling through — %s",
                 candidate,
+                reason,
             )
             continue
         return ResolvedSkill(
@@ -230,12 +313,7 @@ def resolve_skill(
     if platform_catalog_manifest is not None:
         platform = platform_catalog_manifest.get(slug)
         if platform is not None:
-            content = platform.get("skill_md_content") or platform.get("content")
-            if not content:
-                raise ValueError(
-                    f"platform_catalog_manifest entry for {slug!r} has no "
-                    "skill_md_content / content field"
-                )
+            content = _read_platform_content(slug, platform)
             return ResolvedSkill(
                 slug=slug,
                 source="platform",
