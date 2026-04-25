@@ -53,9 +53,17 @@ Beyond the loop, the harness has four operational properties it commits to deliv
 
 The five governance controls in [Control](/concepts/control/) map 1:N to these four operating guarantees — for example, "Runs in your AWS" implements Security and Traceability; "Cost control and analysis" implements Efficiency. The operating guarantees are the *language*; the controls are the *implementation*.
 
+### State separation: model as compute, harness as state
+
+A single principle underlies everything below: **ThinkWork treats the model as stateless compute. Durable state lives in the harness — threads, memory, audit, cost, policies, and execution records.**
+
+This is the cleanest way to explain why the product exists. A model returns a response and forgets. The harness remembers everything that surrounded the response: which thread it ran inside, what memory was assembled, which tools fired, what the guardrail decided, what the cost was, what the evaluator scored. None of that lives in the model. All of it lives in the harness.
+
+That separation is what makes turns reproducible (re-run a turn against a different model, the harness state is still intact), auditable (every turn has a durable record independent of what the model returned), and recoverable (a failed turn is a thread state, not a lost conversation). It also makes the model swappable — rotating from Sonnet to Opus is a template-id change because the harness owns everything *around* the model.
+
 ### The conceptual model maps onto the harness
 
-The conceptual model below — Threads, Memory, Agents, Connectors, Automations, Control — is what most of the rest of this site documents. Reading the components against the harness mechanics keeps the picture coherent: every component is solving a piece of the harness problem, not floating in isolation.
+The conceptual model below — Threads, Memory, Agents, Connectors, Automations, Control — is what most of the rest of this site documents. Reading the components against the harness mechanics keeps the picture coherent: every component is solving a piece of the harness problem (state, perception, planning, action, feedback, governance), not floating in isolation.
 
 ## System model
 
