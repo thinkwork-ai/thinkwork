@@ -19,3 +19,82 @@ jobs:
       - run: pnpm lint
       - name: Lint AgentCore IAM grants vs boto3 calls
         run: pnpm lint:agentcore-iam
+
+      # ─────────────────────────────────────────────────────────────────────
+      # Harness messaging compliance — guards against drift on the
+      # Agent Harness for Business positioning per docs/STYLE.md and
+      # plan docs/plans/2026-04-24-009. Two checks:
+      #
+      #   1. Horse/reins file-scope rule. The horse/reins metaphor is
+      #      acceptable only in docs/src/content/docs/architecture.mdx
+      #      (one section's body intro + a single sidebar Aside, both
+      #      mentioning the metaphor). Any hit outside that file —
+      #      including marketing pages, README, other concept docs —
+      #      fails the build. Word-boundary regex avoids tripping on
+      #      substrings like "reinstalling" / "horse_power_id".
+      #
+      #   2. Banned-word grep on .mdx / .md content files. Per
+      #      docs/STYLE.md the strict banned set is "journey",
+      #      "seamlessly", "empower" (verb), "leverage" (verb form).
+      #      "transform" and "unlock" are deliberately NOT in the CI
+      #      check — both have legitimate technical uses ("data
+      #      transform", "biometric unlock") that human review catches
+      #      contextually but a grep cannot. Scoped to content files
+      #      (docs/src/content/docs/**/*.mdx + README.md +
+      #      CONTRIBUTING.md) so identifiers and code samples don't
+      #      trip the check.
+      #
+      # docs/STYLE.md is excluded — it's the rule-reference doc itself
+      # and contains the banned words inside its own ban-list.
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Harness messaging — horse/reins file-scope rule
+        run: |
+          set -u
+          # Word-boundary patterns: \b(horse|horses|rein|reins)\b. The brace
+          # alternation matches singular + plural; the boundaries prevent
+          # "reinstalling", "horsepower_id", or similar substring hits.
+          #
+          # Scope: published surfaces only. docs/plans/, docs/brainstorms/,
+          # and docs/solutions/ are pipeline artifacts (decision records,
+          # brainstorm transcripts, post-mortems) where the metaphor
+          # legitimately appears in rationale prose; only published Starlight
+          # content (docs/src/content/docs/), marketing/admin/mobile/cli
+          # source under apps/, and the OSS-face files (README, CONTRIBUTING)
+          # are subject to the single-use rule.
+          PATTERN='\b(horse|horses|rein|reins)\b'
+          ALLOWED_FILE='docs/src/content/docs/architecture.mdx'
+          OUTSIDE=$(grep -rEi --include='*.mdx' --include='*.md' --include='*.astro' --include='*.ts' --include='*.tsx' \
+            --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.astro \
+            "$PATTERN" apps/ docs/src/content/ README.md CONTRIBUTING.md 2>/dev/null \
+            | grep -v "^${ALLOWED_FILE}:" || true)
+          if [ -z "$OUTSIDE" ]; then
+            echo "✓ horse/reins: 0 hits outside ${ALLOWED_FILE} on published surfaces"
+            exit 0
+          fi
+          echo "✗ horse/reins: hits outside ${ALLOWED_FILE} (only architecture.mdx may use the metaphor on published surfaces):"
+          printf '%s\n' "$OUTSIDE"
+          exit 1
+
+      - name: Harness messaging — banned words in .mdx / .md content
+        run: |
+          set -u
+          # Narrow set: words with very low legitimate-use rates in
+          # technical content. "leverage" is verb-only — "leverage X"
+          # patterns trip; "the leverage of" (noun) does not.
+          PATTERN='\b(journey|seamlessly|empower)\b|\bleverage\s+[a-z]'
+          HITS=$(grep -rEin --include='*.mdx' --include='*.md' \
+            --exclude='STYLE.md' --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.astro \
+            "$PATTERN" docs/src/content/ README.md CONTRIBUTING.md 2>/dev/null || true)
+          if [ -z "$HITS" ]; then
+            echo "✓ banned words: 0 hits in .mdx / .md content"
+            exit 0
+          fi
+          echo "✗ banned words found in .mdx / .md content:"
+          printf '%s\n' "$HITS"
+          echo ""
+          echo "Per docs/STYLE.md: 'journey', 'seamlessly', 'empower' (verb),"
+          echo "'leverage' (verb form) are banned in published content."
+          echo "If a hit is genuinely OK (e.g. 'leverage' as a noun, or a code-block"
+          echo "citation), rephrase rather than excluding — the rule is about the"
+          echo "rendered prose, not the structural markup."
+          exit 1
