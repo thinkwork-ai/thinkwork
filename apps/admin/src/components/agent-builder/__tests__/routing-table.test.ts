@@ -30,10 +30,10 @@ describe("routing-table", () => {
       "utf8",
     );
 
-    const result = parseRoutingTable(canonical);
+	const result = parseRoutingTable(canonical);
 
-    expect(result.warning).toBeUndefined();
-    expect(result.rows.length).toBeGreaterThan(0);
+	expect(result.warning).toBeUndefined();
+	expect(result.rows).toEqual([]);
   });
 
   it("parses routing rows under the Routing heading", () => {

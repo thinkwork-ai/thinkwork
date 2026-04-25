@@ -282,8 +282,9 @@ describe("parseAgentsMd — error paths", () => {
 
 describe("parseAgentsMd — fixture parity", () => {
 	it("parses the seeded packages/workspace-defaults/files/AGENTS.md fixture without errors", () => {
-		// The seeded AGENTS.md (U3) has only the placeholder row; expect
-		// zero parsed rows after skip.
+		// The seeded AGENTS.md starts with an empty routing table. Operators add
+		// real rows when they create sub-agents; example text must stay outside
+		// the table so deploy smoke treats parser warnings as real failures.
 		const fixture = resolve(
 			__dirname,
 			"..",
@@ -297,6 +298,9 @@ describe("parseAgentsMd — fixture parity", () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const result = parseAgentsMd(md);
 		expect(result.routing).toEqual([]);
+		expect(result.warnings).toEqual([]);
+		expect(result.skippedRows).toEqual([]);
+		expect(warn).not.toHaveBeenCalled();
 		warn.mockRestore();
 	});
 
