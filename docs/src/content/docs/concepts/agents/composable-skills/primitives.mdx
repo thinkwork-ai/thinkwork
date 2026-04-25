@@ -5,7 +5,7 @@ description: The reusable sub-skills most compositions chain together — frame,
 
 import { Aside } from '@astrojs/starlight/components';
 
-A composition is only as cheap to author as its primitive library. `sales-prep`, `renewal-prep`, `account-health-review`, and `customer-onboarding-reconciler` all chain the same four primitives with different inputs and a few different branches inside `gather`. That's the leverage — the first composition justifies building the primitives; the next N compositions are nearly free.
+A composition is only as cheap to author as its primitive library. `sales-prep`, `renewal-prep`, `account-health-review`, and `customer-onboarding-reconciler` all chain the same four primitives with different inputs and a few different branches inside `gather`. That's the leverage — the first composition justifies building the primitives; the next N compositions are nearly free. Primitives are the harness's reusable sub-step library: each one is a single contract (typed inputs, typed outputs, fixed cost shape) the composition runtime can dispatch deterministically. The primitive library is what turns the composable-skill layer from "another way to write Python" into a fleet-wide reuse story.
 
 This page is the catalog: what each primitive does, its contract, when to reach for it, and what to do if the one you need doesn't exist yet.
 
