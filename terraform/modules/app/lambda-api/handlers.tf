@@ -12,24 +12,24 @@ locals {
 
   # Common environment variables shared by all API handlers
   common_env = {
-    STAGE                   = var.stage
-    DATABASE_URL            = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
-    DATABASE_SECRET_ARN     = var.graphql_db_secret_arn
-    DATABASE_HOST           = var.db_cluster_endpoint
-    DATABASE_NAME           = var.database_name
-    BUCKET_NAME             = var.bucket_name
-    USER_POOL_ID            = var.user_pool_id
-    COGNITO_USER_POOL_ID    = var.user_pool_id
-    ADMIN_CLIENT_ID         = var.admin_client_id
-    MOBILE_CLIENT_ID        = var.mobile_client_id
-    COGNITO_APP_CLIENT_IDS  = "${var.admin_client_id},${var.mobile_client_id}"
-    APPSYNC_ENDPOINT        = var.appsync_api_url
-    APPSYNC_API_KEY         = var.appsync_api_key
-    GRAPHQL_API_KEY         = var.appsync_api_key
-    API_AUTH_SECRET         = var.api_auth_secret
-    THINKWORK_API_SECRET    = var.api_auth_secret
-    EMAIL_HMAC_SECRET       = var.api_auth_secret
-    THINKWORK_API_URL       = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com"
+    STAGE                  = var.stage
+    DATABASE_URL           = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
+    DATABASE_SECRET_ARN    = var.graphql_db_secret_arn
+    DATABASE_HOST          = var.db_cluster_endpoint
+    DATABASE_NAME          = var.database_name
+    BUCKET_NAME            = var.bucket_name
+    USER_POOL_ID           = var.user_pool_id
+    COGNITO_USER_POOL_ID   = var.user_pool_id
+    ADMIN_CLIENT_ID        = var.admin_client_id
+    MOBILE_CLIENT_ID       = var.mobile_client_id
+    COGNITO_APP_CLIENT_IDS = "${var.admin_client_id},${var.mobile_client_id}"
+    APPSYNC_ENDPOINT       = var.appsync_api_url
+    APPSYNC_API_KEY        = var.appsync_api_key
+    GRAPHQL_API_KEY        = var.appsync_api_key
+    API_AUTH_SECRET        = var.api_auth_secret
+    THINKWORK_API_SECRET   = var.api_auth_secret
+    EMAIL_HMAC_SECRET      = var.api_auth_secret
+    THINKWORK_API_URL      = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com"
     # Comma-separated allowlist of caller emails permitted to invoke
     # operator-gated mutations (updateTenantPolicy, sandbox fixture
     # setup, etc.). Resolved against ctx.auth.email, which is pulled
@@ -38,11 +38,11 @@ locals {
     # packages/api/src/lib/cognito-auth.ts). Empty ⇒ the gate
     # rejects every call, which is the safe default pre-rollout.
     THINKWORK_PLATFORM_OPERATOR_EMAILS = var.platform_operator_emails
-    AGENTCORE_FUNCTION_NAME = var.agentcore_function_name
-    WORKSPACE_BUCKET        = var.bucket_name
-    HINDSIGHT_ENDPOINT      = var.hindsight_endpoint
-    AGENTCORE_MEMORY_ID     = var.agentcore_memory_id
-    MEMORY_ENGINE           = var.memory_engine
+    AGENTCORE_FUNCTION_NAME            = var.agentcore_function_name
+    WORKSPACE_BUCKET                   = var.bucket_name
+    HINDSIGHT_ENDPOINT                 = var.hindsight_endpoint
+    AGENTCORE_MEMORY_ID                = var.agentcore_memory_id
+    MEMORY_ENGINE                      = var.memory_engine
     # Skip the SSM indirection for cross-function ARN lookup. Terraform
     # already knows this ARN at apply time and the Lambda role's SSM
     # permission has been a recurring source of silent failures where
@@ -211,6 +211,10 @@ resource "aws_lambda_function" "handler" {
     # POST /api/plugins/presign + /upload, GET /api/plugins (+ /:uploadId).
     # Cognito JWT; admin-role gated. Needs WORKSPACE_BUCKET env for S3.
     "plugin-upload",
+    # Folder bundle import (fat-folder plan Phase D). Admin uploads a zip
+    # or GitHub ref and the handler normalizes vendor folder layouts into
+    # the agent workspace.
+    "folder-bundle-import",
     # Hourly sweeper: reaps orphan S3 staging from failed / interrupted
     # plugin install sagas + marks matching plugin_uploads rows 'failed'.
     "plugin-staging-sweeper",
@@ -236,8 +240,8 @@ resource "aws_lambda_function" "handler" {
   # wiki-bootstrap-import runs a full Hindsight ingest for ~3,000 records;
   # the LLM-backed retain path makes it the longest-running Lambda in the
   # set. 900 s is Lambda's per-invocation max and matches eval-runner's ceiling.
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "eval-runner" ? 900 : each.key == "wiki-compile" ? 480 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : 30
-  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "eval-runner" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : 256
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 300 : each.key == "eval-runner" ? 900 : each.key == "wiki-compile" ? 480 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : 30
+  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "eval-runner" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "wiki-export" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = "${var.lambda_zips_dir}/${each.key}.zip"
   source_code_hash = filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip")
@@ -403,9 +407,9 @@ locals {
     # sha256 hash only. These specific routes take precedence over the
     # existing `ANY /api/tenants/{proxy+}` route (tenants handler) per
     # API Gateway v2's most-specific-match rule.
-    "POST /api/tenants/{tenantId}/mcp-admin-keys"               = "mcp-admin-keys"
-    "GET /api/tenants/{tenantId}/mcp-admin-keys"                = "mcp-admin-keys"
-    "DELETE /api/tenants/{tenantId}/mcp-admin-keys/{keyId}"     = "mcp-admin-keys"
+    "POST /api/tenants/{tenantId}/mcp-admin-keys"           = "mcp-admin-keys"
+    "GET /api/tenants/{tenantId}/mcp-admin-keys"            = "mcp-admin-keys"
+    "DELETE /api/tenants/{tenantId}/mcp-admin-keys/{keyId}" = "mcp-admin-keys"
 
     # One-shot tenant provisioning for the admin-ops MCP. Mints a fresh
     # tkm_ key + stores it in Secrets Manager at
@@ -428,14 +432,18 @@ locals {
     # (validator + three-phase install saga). GET routes back the admin's
     # plugin history view. handleCors() short-circuits OPTIONS before auth
     # — required for the browser to preflight successfully.
-    "POST /api/plugins/presign"                = "plugin-upload"
-    "OPTIONS /api/plugins/presign"             = "plugin-upload"
-    "POST /api/plugins/upload"                 = "plugin-upload"
-    "OPTIONS /api/plugins/upload"              = "plugin-upload"
-    "GET /api/plugins"                         = "plugin-upload"
-    "OPTIONS /api/plugins"                     = "plugin-upload"
-    "GET /api/plugins/{uploadId}"              = "plugin-upload"
-    "OPTIONS /api/plugins/{uploadId}"          = "plugin-upload"
+    "POST /api/plugins/presign"       = "plugin-upload"
+    "OPTIONS /api/plugins/presign"    = "plugin-upload"
+    "POST /api/plugins/upload"        = "plugin-upload"
+    "OPTIONS /api/plugins/upload"     = "plugin-upload"
+    "GET /api/plugins"                = "plugin-upload"
+    "OPTIONS /api/plugins"            = "plugin-upload"
+    "GET /api/plugins/{uploadId}"     = "plugin-upload"
+    "OPTIONS /api/plugins/{uploadId}" = "plugin-upload"
+
+    # Fat-folder bundle import. OPTIONS is handled inside the Lambda before auth.
+    "POST /api/agents/{agentId}/import-bundle"    = "folder-bundle-import"
+    "OPTIONS /api/agents/{agentId}/import-bundle" = "folder-bundle-import"
 
     # Resolved Capability Manifest write endpoint (plan §U15). Strands
     # container posts one row per agent-session-start. Shared
