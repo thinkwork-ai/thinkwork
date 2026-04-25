@@ -188,11 +188,14 @@ function TreeItem({
   updateAvailableFor,
   filesFor,
   deletingPath,
+  confirmingDeletePath,
   onSelect,
   onToggle,
   onAcceptUpdate,
   onDeleteFile,
   onDeleteFolder,
+  onConfirmDelete,
+  onCancelDeleteConfirm,
 }: {
   node: TreeNode;
   depth: number;
@@ -203,16 +206,20 @@ function TreeItem({
   updateAvailableFor: (path: string) => boolean;
   filesFor: (folderPath: string) => string[];
   deletingPath: string | null;
+  confirmingDeletePath: string | null;
   onSelect: (path: string) => void;
   onToggle: (path: string) => void;
   onAcceptUpdate: (filename: string) => void;
   onDeleteFile: (path: string) => void;
   onDeleteFolder: (path: string) => void;
+  onConfirmDelete: (path: string) => void;
+  onCancelDeleteConfirm: (path: string) => void;
 }) {
   const isExpanded = expandedFolders.has(node.path);
   const isSelected = selectedPath === node.path;
   const folderFiles = node.isFolder ? filesFor(node.path) : [];
   const isDeleting = deletingPath === node.path;
+  const isConfirmingDelete = confirmingDeletePath === node.path;
   const isProfileFile =
     profileFiles !== null &&
     (profileFiles.has(node.path) ||
@@ -232,6 +239,7 @@ function TreeItem({
             onSelect(node.path);
           }
         }}
+        onMouseLeave={() => onCancelDeleteConfirm(node.path)}
       >
         {node.isFolder ? (
           <>
@@ -286,18 +294,23 @@ function TreeItem({
           <Button
             variant="ghost"
             size="sm"
-            className={`ml-auto h-5 w-5 p-0 text-muted-foreground hover:text-destructive ${
-              isDeleting ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            className={`ml-auto h-5 p-0 text-muted-foreground hover:text-destructive ${
+              isConfirmingDelete ? "w-14 px-1.5 text-[11px] text-destructive opacity-100" : "w-5"
+            } ${
+              isDeleting || isConfirmingDelete ? "opacity-100" : "opacity-0 group-hover:opacity-100"
             }`}
             disabled={isDeleting}
             onClick={(e) => {
               e.stopPropagation();
-              onDeleteFolder(node.path);
+              if (isConfirmingDelete) onDeleteFolder(node.path);
+              else onConfirmDelete(node.path);
             }}
             title={`Delete ${folderFiles.length} files under ${node.path}`}
           >
             {isDeleting ? (
               <Loader2 className="h-3 w-3 animate-spin" />
+            ) : isConfirmingDelete ? (
+              "Confirm"
             ) : (
               <Trash2 className="h-3 w-3" />
             )}
@@ -307,18 +320,23 @@ function TreeItem({
           <Button
             variant="ghost"
             size="sm"
-            className={`ml-auto h-5 w-5 p-0 text-muted-foreground hover:text-destructive ${
-              isDeleting ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            className={`ml-auto h-5 p-0 text-muted-foreground hover:text-destructive ${
+              isConfirmingDelete ? "w-14 px-1.5 text-[11px] text-destructive opacity-100" : "w-5"
+            } ${
+              isDeleting || isConfirmingDelete ? "opacity-100" : "opacity-0 group-hover:opacity-100"
             }`}
             disabled={isDeleting}
             onClick={(e) => {
               e.stopPropagation();
-              onDeleteFile(node.path);
+              if (isConfirmingDelete) onDeleteFile(node.path);
+              else onConfirmDelete(node.path);
             }}
             title={`Delete ${node.path}`}
           >
             {isDeleting ? (
               <Loader2 className="h-3 w-3 animate-spin" />
+            ) : isConfirmingDelete ? (
+              "Confirm"
             ) : (
               <Trash2 className="h-3 w-3" />
             )}
@@ -339,11 +357,14 @@ function TreeItem({
               updateAvailableFor={updateAvailableFor}
               filesFor={filesFor}
               deletingPath={deletingPath}
+              confirmingDeletePath={confirmingDeletePath}
               onSelect={onSelect}
               onToggle={onToggle}
               onAcceptUpdate={onAcceptUpdate}
               onDeleteFile={onDeleteFile}
               onDeleteFolder={onDeleteFolder}
+              onConfirmDelete={onConfirmDelete}
+              onCancelDeleteConfirm={onCancelDeleteConfirm}
             />
           ))}
           {node.children.length === 0 && (
@@ -720,6 +741,7 @@ function AgentWorkspacePage() {
   const [editValue, setEditValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [deletingPath, setDeletingPath] = useState<string | null>(null);
+  const [confirmingDeletePath, setConfirmingDeletePath] = useState<string | null>(null);
 
   const handleOpen = async (filePath: string) => {
     setOpenFile(filePath);
@@ -785,8 +807,8 @@ function AgentWorkspacePage() {
   };
 
   const handleDeleteFile = async (path: string) => {
-    if (!confirm(`Delete ${path}?`)) return;
     const fallbackFile = chooseFallbackFile([path]);
+    setConfirmingDeletePath(null);
     setDeletingPath(path);
     try {
       await deleteWorkspaceFile(target, path);
@@ -811,10 +833,10 @@ function AgentWorkspacePage() {
       toast.info(`No files under ${folderPath}`);
       return;
     }
-    if (!confirm(`Delete ${concreteFiles.length} files under ${folderPath}?`)) return;
 
     try {
       const failed: string[] = [];
+      setConfirmingDeletePath(null);
       setDeletingPath(folderPath);
       for (const path of concreteFiles) {
         try {
@@ -843,6 +865,14 @@ function AgentWorkspacePage() {
     } finally {
       setDeletingPath(null);
     }
+  };
+
+  const handleConfirmDelete = (path: string) => {
+    setConfirmingDeletePath(path);
+  };
+
+  const handleCancelDeleteConfirm = (path: string) => {
+    setConfirmingDeletePath((current) => (current === path ? null : current));
   };
 
   // ---------------------------------------------------------------------------
@@ -941,11 +971,14 @@ function AgentWorkspacePage() {
                   updateAvailableFor={updateAvailableFor}
                   filesFor={filesFor}
                   deletingPath={deletingPath}
+                  confirmingDeletePath={confirmingDeletePath}
                   onSelect={handleOpen}
                   onToggle={toggleFolder}
                   onAcceptUpdate={handleAcceptUpdate}
                   onDeleteFile={handleDeleteFile}
                   onDeleteFolder={handleDeleteFolder}
+                  onConfirmDelete={handleConfirmDelete}
+                  onCancelDeleteConfirm={handleCancelDeleteConfirm}
                 />
               ))}
             </div>
@@ -988,12 +1021,23 @@ function AgentWorkspacePage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 w-6 p-0 text-muted-foreground"
+                          className={`h-6 p-0 text-muted-foreground ${
+                            confirmingDeletePath === openFile
+                              ? "w-16 px-2 text-[11px] text-destructive"
+                              : "w-6"
+                          }`}
                           disabled={deletingPath === openFile}
-                          onClick={() => openFile && handleDeleteFile(openFile)}
+                          onMouseLeave={() => openFile && handleCancelDeleteConfirm(openFile)}
+                          onClick={() => {
+                            if (!openFile) return;
+                            if (confirmingDeletePath === openFile) handleDeleteFile(openFile);
+                            else handleConfirmDelete(openFile);
+                          }}
                         >
                           {deletingPath === openFile ? (
                             <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : confirmingDeletePath === openFile ? (
+                            "Confirm"
                           ) : (
                             <Trash2 className="h-3 w-3" />
                           )}
