@@ -47,9 +47,13 @@
  * Per `inline-helpers-vs-shared-package` learning: this parser is inlined
  * (TS+Py mirrors) rather than extracted to a shared package. Total parser
  * is < 80 lines per side; the fixture-parity test is the drift detector.
+ *
+ * The reserved-folder name list lives in `./reserved-folder-names.ts`
+ * (Plan §008 U8) so the composer, the parser, and the bundle importer all
+ * agree on the same set without redeclaration drift.
  */
 
-const RESERVED_FOLDER_NAMES: ReadonlySet<string> = new Set(["memory", "skills"]);
+import { RESERVED_FOLDER_NAMES } from "./reserved-folder-names.js";
 
 export interface RoutingRow {
 	task: string;
