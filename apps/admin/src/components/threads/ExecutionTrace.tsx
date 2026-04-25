@@ -67,6 +67,24 @@ function formatTokens(n: unknown): string {
   return String(num);
 }
 
+function formatInvocationSource(source: unknown): string | null {
+  const raw = String(source || "").trim();
+  if (!raw) return null;
+  const key = raw.toLowerCase().replace(/[\s-]+/g, "_");
+  const labels: Record<string, string> = {
+    chat: "Manual chat",
+    chat_message: "Manual chat",
+    manual: "Manual chat",
+    manual_chat: "Manual chat",
+    schedule: "Schedule",
+    scheduled: "Schedule",
+    webhook: "Webhook",
+    api: "Automation",
+    email: "Email",
+  };
+  return labels[key] ?? raw.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 // ─── Turn Events ────────────────────────────────────────────────────────────
 
 function TurnEvents({ runId }: { runId: string }) {
@@ -339,6 +357,7 @@ function reparentSubAgentEvents(events: TimelineEvent[]): void {
 }
 
 const MAIN_COLOR = "rgb(234, 179, 8)";
+const RESPONSE_COLOR = "rgb(6, 182, 212)";
 const BRANCH_COLORS = [
   "rgb(168, 85, 247)",
   "rgb(59, 130, 246)",
@@ -580,7 +599,7 @@ function ExecutionTimeline({ turnId, toolInvocations, model, inputTokens, output
             clickTitle = `${ev.toolName}${isSub ? " (sub-agent)" : ""}`;
             clickContent = parts.join("\n\n");
           } else if (ev.type === "response") {
-            icon = <MessageSquare className="h-3.5 w-3.5 text-green-400" />;
+            icon = <MessageSquare className="h-3.5 w-3.5" style={{ color: RESPONSE_COLOR }} />;
             label = "Response";
             rightDetail = (
               <span className="text-[11px] text-muted-foreground truncate max-w-[250px]">
@@ -614,32 +633,41 @@ function ExecutionTimeline({ turnId, toolInvocations, model, inputTokens, output
 
 // ─── Single Turn Row ────────────────────────────────────────────────────────
 
-function TurnRow({ turn }: { turn: any }) {
+function TurnRow({ turn, agentName }: { turn: any; agentName?: string | null }) {
   const [open, setOpen] = useState(false);
   const [detailDialog, setDetailDialog] = useState<{ title: string; content: string } | null>(null);
   const usage = parseJsonField(turn.usageJson);
   const result = parseJsonField(turn.resultJson);
   const cfg = statusConfig[turn.status] || statusConfig.failed;
-  const StatusIcon = cfg.icon;
 
   const durationMs = usage?.duration_ms as number | undefined;
   const inputTokens = usage?.input_tokens;
   const outputTokens = usage?.output_tokens;
   const cachedTokens = usage?.cached_read_tokens;
+  const title = agentName || "Agent work";
+  const sourceLabel = formatInvocationSource(turn.triggerName || turn.invocationSource);
+  const statusColorClass = `${cfg.color} ${turn.status === "running" ? "animate-spin" : ""}`;
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger className="w-full">
-        <div className="flex items-center gap-3 px-4 py-3 hover:bg-accent/20 transition-colors rounded-md text-sm group">
-          <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center bg-muted">
-            <StatusIcon className={`h-3.5 w-3.5 shrink-0 ${cfg.color} ${turn.status === "running" ? "animate-spin" : ""}`} />
+        <div className="flex items-start gap-3 px-4 py-3 hover:bg-accent/20 transition-colors rounded-md text-sm group">
+          <div className="mt-0.5 flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center bg-muted">
+            <Bot className={`h-3.5 w-3.5 shrink-0 ${statusColorClass}`} />
           </div>
 
           {/* Source label */}
-          <span className="font-medium truncate">
-            {turn.triggerName || turn.invocationSource?.replace(/_/g, " ") || "invocation"}
-          </span>
-          {open ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+          <div className="min-w-0 text-left">
+            <span className="block font-medium truncate">{title}</span>
+            {sourceLabel && (
+              <span className="block text-[11px] text-muted-foreground truncate">
+                {sourceLabel}
+              </span>
+            )}
+          </div>
+          {open
+            ? <ChevronDown className="mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            : <ChevronRight className="mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
 
           {turn.turnNumber && (
             <span className="text-xs text-muted-foreground">Turn #{turn.turnNumber}</span>
@@ -653,7 +681,7 @@ function TurnRow({ turn }: { turn: any }) {
           <div className="flex-1" />
 
           {/* Metrics row */}
-          <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
+          <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground shrink-0">
             {inputTokens != null && (
               <span className="flex items-center gap-0.5" title="Input / Output tokens">
                 <Zap className="h-3 w-3" />
@@ -777,8 +805,8 @@ const MessageRow = memo(function MessageRow({
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const isUser = message.role.toLowerCase() === "user";
-  const Icon = isUser ? User : Bot;
-  const label = isUser ? "User" : (message.senderId && agentMap?.get(message.senderId)?.name) || "Agent";
+  const Icon = isUser ? User : MessageSquare;
+  const label = isUser ? "User" : "Response";
   const content = (message.content || "").trim();
   const firstLine = content.split("\n")[0].slice(0, 120);
   const hasContent = content.length > 0;
@@ -793,7 +821,9 @@ const MessageRow = memo(function MessageRow({
 
   return (
     <div className="flex gap-3 px-4 py-3">
-      <div className={`mt-0.5 flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${isUser ? "bg-blue-500/10 text-blue-500" : "bg-primary/10 text-primary"}`}>
+      <div
+        className={`mt-0.5 flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${isUser ? "bg-blue-500/10 text-blue-500" : "bg-cyan-500/10 text-cyan-400"}`}
+      >
         <Icon className="h-3.5 w-3.5" />
       </div>
       <div className="flex-1 min-w-0 overflow-hidden">
@@ -983,7 +1013,11 @@ export function ExecutionTrace({
         <div className="border border-border rounded-lg divide-y divide-border">
           {timeline.map((item) =>
             item.kind === "turn" ? (
-              <TurnRow key={item.turn.id} turn={item.turn} />
+              <TurnRow
+                key={item.turn.id}
+                turn={item.turn}
+                agentName={item.turn.agentId ? agentMap?.get(item.turn.agentId)?.name : null}
+              />
             ) : (
               <MessageRow key={item.message.id} message={item.message} agentMap={agentMap} onOpenArtifact={onOpenArtifact} />
             ),

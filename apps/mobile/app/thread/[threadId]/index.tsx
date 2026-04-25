@@ -408,6 +408,7 @@ export default function ThreadDetailRoute() {
             turns={visibleTurns}
             agentName={agentName}
             isAdmin={isAdmin}
+            tenantId={tenantId}
             isAgentRunning={!!threadId && isThreadActive(threadId)}
             onLinkPress={handleLinkPress}
             onSaveRecipe={handleSaveRecipe}
