@@ -5,25 +5,25 @@ description: Guardrails, budgets, usage tracking, and audit — how ThinkWork en
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-Control is the harness's governance layer — the component that turns ThinkWork from a demo into a production system, and the load-bearing implementation of the four REST anchors ([Reliability, Efficiency, Security, Traceability](/architecture/#the-four-rest-anchors)). It answers two questions that every real deployment has to answer:
+Control is the harness's governance layer — the component that turns ThinkWork from a demo into a production system, and the load-bearing implementation of the four operating guarantees ([Reliability, Efficiency, Security, Traceability](/architecture/#the-four-operating-guarantees)). It answers two questions that every real deployment has to answer:
 
 1. **What are agents allowed to do?** Model-level safety, spend limits, tool access, role boundaries.
 2. **What actually happened when they did it?** Turn-level audit, cost tracking, incident reconstruction.
 
 Both matter equally. A system that only enforces boundaries is a black box; a system that only logs is a landmine waiting for a safety question. ThinkWork treats Control as one first-class concept instead of scattering it across three unrelated surfaces.
 
-## REST anchors implemented
+## Operating guarantees implemented
 
-The five governance controls below map 1:N to the four REST anchors. The anchors are the *language* a buyer or operator can grab onto; the controls are the *implementation* that ships in the admin web. Every anchor has at least one shipping control behind it.
+The five governance controls below map 1:N to the four operating guarantees. The guarantees are the *language* a buyer or operator can grab onto; the controls are the *implementation* that ships in the admin web. Every guarantee has at least one shipping control behind it.
 
-| Anchor | What it commits to | Shipping controls |
+| Guarantee | What it commits to | Shipping controls |
 |---|---|---|
 | **Reliability** | Fault recovery, idempotent writes, behavior consistent under the same inputs. | Approved agent capabilities (templates pin model + guardrails so behavior is reproducible); Security + accuracy evaluations (regression detection per template version). |
 | **Efficiency** | Token budgets, per-agent spend caps, low-latency interactive paths. | Cost control and analysis (per-turn cost capture, per-agent budget enforcement that pauses at threshold). |
 | **Security** | Per-agent capability grants, sandboxed execution, I/O filtering for prompt injection and PII. | Runs in your AWS (the harness deploys into customer VPC; data, IAM, and network stay in the customer's account); Approved agent capabilities (Bedrock Guardrails attached at the template level — content filters, topic filters, PII redaction, prompt-injection detection via Strands `safety.py`); Security + accuracy evaluations. |
 | **Traceability** | End-to-end traces per turn, explainable decisions, auditable state. | Runs in your AWS (audit log lives in customer's S3, partitioned by tenant, no delete permission on the Lambda role); Centralized management (one admin console aggregates threads, turns, cost, guardrail activations, and audit events under the same `threadId`/`turnId` keys so incident reconstruction is one query). |
 
-The mapping is 1:N — most controls implement more than one anchor — because the anchors are *qualities* the harness commits to, and the controls are *mechanisms* that often serve multiple qualities at once. "Runs in your AWS" is simultaneously a Security boundary (your IAM, not ours) and a Traceability anchor (your audit log, your retention policy). That's intentional.
+The mapping is 1:N — most controls implement more than one guarantee — because the guarantees are *qualities* the harness commits to, and the controls are *mechanisms* that often serve multiple qualities at once. "Runs in your AWS" is simultaneously a Security boundary (your IAM, not ours) and a Traceability mechanism (your audit log, your retention policy). That's intentional.
 
 ## Why Control scales differently than demos
 
