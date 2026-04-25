@@ -30,20 +30,20 @@ export const nav = [
 export const meta = {
   title: "ThinkWork — Agent Harness for Business",
   description:
-    "Production AI work under your control. The open Agent Harness — self-host it, run it with us, or wrap it with services.",
+    "Infrastructure to run AI agents in production: threads, memory, tools, sandboxes, cost controls, and audit trails. Use the open-source platform yourself or run on ThinkWork Cloud.",
 };
 
 export const hero = {
   eyebrow: "Agent Harness for Business",
-  headlinePart1: "Production",
-  headlinePart2: "AI work,",
-  headlineAccentPart1: "under your",
-  headlineAccentPart2: "control.",
+  headlinePart1: "The runtime",
+  headlinePart2: "for",
+  headlineAccentPart1: "AI agents",
+  headlineAccentPart2: "at work.",
   // Per the 2026-04-25 messaging-feedback memo: when "Agent Harness" is
   // introduced early, follow it with a teaching line so readers do not have
   // to know the category coming in. The lede names the runtime pieces first,
   // then explains the operating model.
-  lede: "Models need more than prompts. ThinkWork adds the runtime: threads, memory, sandboxing, tools, controls, cost, and audit. Self-host it, run it with us, or add services.",
+  lede: "ThinkWork gives teams the infrastructure to run AI agents in production: threads, memory, tools, sandboxes, cost controls, and audit trails. Use the open-source platform yourself or run on ThinkWork Cloud.",
   primaryCta: { label: "Read the docs", href: external.docs },
   secondaryCta: { label: "View on GitHub", href: external.github },
   headlineCandidates: [
@@ -89,11 +89,6 @@ export const proofStrip = [
     detail:
       "Every model call, every tool call, every guardrail decision — recorded against the thread that triggered it.",
   },
-  {
-    label: "The harness stays yours",
-    detail:
-      "Self-host on your AWS, run it with us as ThinkWork for Business, or wrap it with Enterprise services. Managed does not mean vendor-hosted.",
-  },
 ];
 
 // The four-step rollout-path component (rendered by AdoptionJourney.astro
@@ -102,28 +97,28 @@ export const proofStrip = [
 // docs/STYLE.md (banned: "journey").
 export const journey = {
   eyebrow: "The rollout path",
-  headline: "Pilot. Visible work. Expansion. Operate.",
-  lede: "The harness ships every governance control on day one. The rollout is about which workflows you trust it with — not about which controls are in place yet.",
+  headline: "Deploy. Prove. Expand. Operate.",
+  lede: "ThinkWork ships the production controls first. Start with one workflow, prove the agent's work in threads and evaluations, then expand without changing the runtime underneath.",
   steps: [
     {
       n: "01",
-      title: "Pilot",
-      lede: "One agent, one workflow, one team. The harness is already production-grade; the pilot proves the workflow.",
+      title: "Deploy",
+      lede: "Self-host the open platform or start in ThinkWork Cloud.",
     },
     {
       n: "02",
-      title: "Visible work",
-      lede: "Every turn lands in a thread — attributed, traced, evaluated. Trust is built from the audit trail, not from claims.",
+      title: "Prove",
+      lede: "Every turn carries its thread, cost, tools, outputs, and evaluations.",
     },
     {
       n: "03",
-      title: "Expansion",
-      lede: "More agents, more workflows, more connectors. The control model holds; the surface area grows beneath it.",
+      title: "Expand",
+      lede: "Add agents, workflows, connectors, and memory as confidence grows.",
     },
     {
       n: "04",
       title: "Operate",
-      lede: "Self-host, hand operations to us as ThinkWork for Business, or wrap with Enterprise services. The harness stays the same.",
+      lede: "Keep running on the same platform: open source, Cloud, or Enterprise.",
     },
   ],
 };
@@ -179,12 +174,12 @@ export const howItWorks = {
 // docs/concepts/control.mdx (U8).
 export const controls = {
   eyebrow: "Four operating guarantees",
-  headline: "Reliability, efficiency, security, and traceability — enforced in code.",
-  lede: "These four guarantees are not aspirations. The harness implements each one as concrete, shipping controls — five of them, all live in the admin web, all part of every plan, all observable on every turn.",
+  headline: "Reliability, efficiency, security, and traceability — built into every agent run.",
+  lede: "These guarantees are not aspirations. ThinkWork implements them as concrete controls across the runtime: deployment boundary, approved capabilities, management surface, cost controls, and evaluations.",
   items: [
     {
-      title: "Runs in your AWS",
-      desc: "The runtime deploys into your account. Your data, IAM, and network stay yours.",
+      title: "Open or hosted",
+      desc: "Self-host the open-source platform in your AWS or run on ThinkWork Cloud. The operating model changes; the controls stay recognizable.",
       icon: "aws",
       guarantee: "Security · Traceability",
     },
@@ -312,9 +307,9 @@ export const evals = {
 };
 
 export const systemModel = {
-  eyebrow: "One admin console",
-  headline: "Where the harness becomes one operating surface.",
-  lede: "Threads, memory, agents, and connectors meet in one admin web. The harness's controls — budgets, approvals, guardrails, audit — travel with every turn. No fragmented toolchain, no per-tool control plane.",
+  eyebrow: "Admin web",
+  headline: "One place to operate agents.",
+  lede: "Agents, threads, memory, cost, and audit live in one operator surface. The screenshot is the claim.",
   nodes: [
     {
       title: "Threads",
@@ -400,42 +395,32 @@ export const quickStart = {
 // other section is in service of this block.
 export const finalCta = {
   eyebrow: "Open · Operated · Enterprise",
-  headlinePart1: "One harness,",
-  headlineAccent: "three ways to run it.",
-  lede: "ThinkWork is the open Agent Harness for Business. It deploys into your AWS account and gives agents the runtime they need to do production work: durable threads, portable memory, sandboxed execution, approved tools, budgets, evaluations, and audit trails. Self-host it, have us operate it, or wrap it with enterprise services — the operating model can change, but the harness stays yours.",
+  headlinePart1: "Run it yourself,",
+  headlineAccent: "or run it with us.",
+  lede: "Start with the open harness, use hosted ThinkWork, or add services when a workflow needs launch help.",
   points: [
-    { title: "Open", desc: "Self-host the Apache 2.0 harness in your AWS." },
-    { title: "For Business", desc: "Same harness, operated by us in your AWS — managed does not mean vendor-hosted." },
-    { title: "Enterprise", desc: "Strategy, launch, managed operations, and support around either path." },
-    { title: "Runtime boundary", desc: "Does not change between tiers." },
-    { title: "The harness", desc: "Stays yours." },
+    { title: "Open", desc: "Self-host in your AWS." },
+    { title: "Cloud", desc: "Hosted and operated by us." },
+    { title: "Enterprise", desc: "Strategy, launch, and ongoing operations." },
   ],
   primaryCta: { label: "Read the docs", href: external.docs },
   secondaryCta: { label: "View on GitHub", href: external.github },
 };
 
 // Cloud-variant FinalCTA. Same shape as `finalCta` so the component can swap
-// between them via a prop. The homepage keeps the self-managed framing
-// (customer's AWS); /cloud uses this one to match the For Business framing.
-//
-// Important: this used to read "Skip the infrastructure / Use ThinkWork
-// without running the platform" — language that quietly reintroduced SaaS
-// ambiguity (it sounded like the customer wouldn't have the infrastructure,
-// when in fact ThinkWork for Business still deploys into the customer's
-// AWS). Per 2026-04-25 review feedback, the closing block now makes the
-// "we operate IT in YOUR AWS" pattern explicit. Keep that distinction
-// load-bearing.
+// between them via a prop. /cloud is the hosted/operated path for teams that
+// want ThinkWork without running the harness themselves.
 export const finalCtaCloud: typeof finalCta = {
-  eyebrow: "Operated in your AWS",
+  eyebrow: "Hosted · Operated",
   headlinePart1: "Adopt AI.",
-  headlineAccent: "We operate the harness in your AWS.",
-  lede: "ThinkWork for Business lets your team use the platform without running it. We operate the runtime end-to-end inside your AWS boundary — governance, evaluations, memory, and audit included. Managed does not mean vendor-hosted.",
+  headlineAccent: "We operate the harness for you.",
+  lede: "ThinkWork Cloud lets your team use the platform without running it. We operate the runtime end-to-end — governance, evaluations, memory, and audit included.",
   points: [
-    { title: "Runtime", desc: "Operated by us, in your AWS." },
+    { title: "Runtime", desc: "Hosted and operated by us." },
     { title: "Governance", desc: "Built in." },
     { title: "Evaluations", desc: "Run for you on every turn." },
-    { title: "Memory", desc: "Durable, in your account." },
-    { title: "Audit log", desc: "Always on, in your S3." },
+    { title: "Memory", desc: "Durable and exportable." },
+    { title: "Audit log", desc: "Always on." },
   ],
   primaryCta: { label: "Read the docs", href: external.docs },
   secondaryCta: { label: "View on GitHub", href: external.github },
@@ -527,8 +512,6 @@ export const services = {
     headlineAccent: "for the Agent Harness.",
     headlineOutcome:
       "We help teams scope, launch, operate, and expand governed agent workflows on the Agent Harness — whether you self-host or run it with us.",
-    lede:
-      "Productized services on top of the Agent Harness for Business — not open-ended consulting. Fixed-fee engagements and named ongoing operations, scoped up front.",
     primaryCta: {
       label: "Scope a pilot",
       mailtoSubject: "ThinkWork Enterprise — scope a pilot",

@@ -87,9 +87,13 @@ type TemplateSyncDiff {
 
 type SkillPermissionsDelta {
   skillId: String!
-  """Ops the agent will gain after sync (typically empty — intersection narrows)."""
+  """
+  Ops the agent will gain after sync (typically empty — intersection narrows).
+  """
   added: [String!]!
-  """Ops the agent currently has but will lose after sync."""
+  """
+  Ops the agent currently has but will lose after sync.
+  """
   removed: [String!]!
 }
 
@@ -172,6 +176,8 @@ input CreateAgentFromTemplateInput {
 # --- Pin status + accept-update (overlay Unit 9) ---
 
 type PinStatusFile {
+  path: String!
+  folderPath: String
   filename: String!
   pinnedSha: String
   latestSha: String
@@ -200,7 +206,10 @@ extend type Query {
   agentVersions(agentId: ID!, limit: Int): [AgentVersion!]!
   linkedAgentsForTemplate(templateId: ID!): [Agent!]!
   templateSyncDiff(templateId: ID!, agentId: ID!): TemplateSyncDiff!
-  agentPinStatus(agentId: ID!): [PinStatusFile!]!
+  agentPinStatus(
+    agentId: ID!
+    includeNested: Boolean = false
+  ): [PinStatusFile!]!
 }
 
 extend type Mutation {

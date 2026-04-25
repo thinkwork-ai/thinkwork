@@ -63,7 +63,9 @@ import { ImportDropzone } from "./ImportDropzone";
 
 const AgentPinStatusQuery = gql`
   query AgentPinStatus($agentId: ID!) {
-    agentPinStatus(agentId: $agentId) {
+    agentPinStatus(agentId: $agentId, includeNested: true) {
+      path
+      folderPath
       filename
       pinnedSha
       latestSha
@@ -75,6 +77,8 @@ const AgentPinStatusQuery = gql`
 `;
 
 type PinStatusEntry = {
+  path: string;
+  folderPath: string | null;
   filename: string;
   pinnedSha: string | null;
   latestSha: string | null;
@@ -196,9 +200,7 @@ export function AgentBuilderShell({
   const [newSkillDescription, setNewSkillDescription] = useState("");
   const [newSkillCategory, setNewSkillCategory] = useState("custom");
   const [newSkillTags, setNewSkillTags] = useState("");
-  const [acceptDialogFilename, setAcceptDialogFilename] = useState<
-    string | null
-  >(null);
+  const [acceptDialogPath, setAcceptDialogPath] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const loadRequestId = useRef(0);
   const fileListRequestId = useRef(0);
@@ -283,7 +285,7 @@ export function AgentBuilderShell({
       pinStatusResult.data as { agentPinStatus?: PinStatusEntry[] } | undefined
     )?.agentPinStatus;
     if (list) {
-      for (const entry of list) out[entry.filename] = entry;
+      for (const entry of list) out[entry.path] = entry;
     }
     return out;
   }, [pinStatusResult.data]);
@@ -499,7 +501,9 @@ export function AgentBuilderShell({
     const allPaths = isFolder
       ? files.filter((file) => file === path || file.startsWith(`${path}/`))
       : [path];
-    const paths = allPaths.filter((filePath) => isAgentOverride(fileSources[filePath]));
+    const paths = allPaths.filter((filePath) =>
+      isAgentOverride(fileSources[filePath]),
+    );
     if (allPaths.length === 0) return;
 
     if (paths.length < allPaths.length) {
@@ -552,19 +556,14 @@ export function AgentBuilderShell({
   };
 
   const handleAccepted = useCallback(async () => {
-    const acceptedFilename = acceptDialogFilename;
-    setAcceptDialogFilename(null);
+    const acceptedPath = acceptDialogPath;
+    setAcceptDialogPath(null);
     refetchPinStatus({ requestPolicy: "network-only" });
     await fetchFiles();
-    if (acceptedFilename && openFileRef.current === acceptedFilename) {
-      await openWorkspaceFile(acceptedFilename);
+    if (acceptedPath && openFileRef.current === acceptedPath) {
+      await openWorkspaceFile(acceptedPath);
     }
-  }, [
-    acceptDialogFilename,
-    fetchFiles,
-    openWorkspaceFile,
-    refetchPinStatus,
-  ]);
+  }, [acceptDialogPath, fetchFiles, openWorkspaceFile, refetchPinStatus]);
 
   const sourceFor = useCallback(
     (path: string) => fileSources[path],
@@ -708,7 +707,7 @@ export function AgentBuilderShell({
                 confirmingDeletePath={confirmingDeletePath}
                 onSelect={openWorkspaceFile}
                 onToggle={toggleFolder}
-                onAcceptUpdate={setAcceptDialogFilename}
+                onAcceptUpdate={setAcceptDialogPath}
                 onDelete={handleDeletePath}
                 onConfirmDelete={handleConfirmDelete}
                 onCancelDeleteConfirm={handleCancelDeleteConfirm}
@@ -878,16 +877,17 @@ export function AgentBuilderShell({
         </DialogContent>
       </Dialog>
 
-      {acceptDialogFilename && (
+      {acceptDialogPath && (
         <AcceptTemplateUpdateDialog
-          open={Boolean(acceptDialogFilename)}
+          open={Boolean(acceptDialogPath)}
           onOpenChange={(open) => {
-            if (!open) setAcceptDialogFilename(null);
+            if (!open) setAcceptDialogPath(null);
           }}
           agentId={agentId}
-          filename={acceptDialogFilename}
-          pinnedContent={pinStatus[acceptDialogFilename]?.pinnedContent ?? null}
-          latestContent={pinStatus[acceptDialogFilename]?.latestContent ?? null}
+          filename={acceptDialogPath}
+          folderPath={pinStatus[acceptDialogPath]?.folderPath ?? null}
+          pinnedContent={pinStatus[acceptDialogPath]?.pinnedContent ?? null}
+          latestContent={pinStatus[acceptDialogPath]?.latestContent ?? null}
           onAccepted={handleAccepted}
         />
       )}
