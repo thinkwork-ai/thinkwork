@@ -24,116 +24,168 @@
 
 import { createHash } from "node:crypto";
 import {
-	GetObjectCommand,
-	HeadObjectCommand,
-	NoSuchKey,
-	PutObjectCommand,
-	S3Client,
+  GetObjectCommand,
+  HeadObjectCommand,
+  NoSuchKey,
+  PutObjectCommand,
+  S3Client,
 } from "@aws-sdk/client-s3";
 import { PINNED_FILES } from "@thinkwork/workspace-defaults";
 
 const REGION =
-	process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
+  process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
 const s3 = new S3Client({ region: REGION });
 
 function bucket(): string {
-	return process.env.WORKSPACE_BUCKET || "";
+  return process.env.WORKSPACE_BUCKET || "";
 }
 
 function templateKey(
-	tenantSlug: string,
-	templateSlug: string,
-	path: string,
+  tenantSlug: string,
+  templateSlug: string,
+  path: string,
 ): string {
-	return `tenants/${tenantSlug}/agents/_catalog/${templateSlug}/workspace/${path}`;
+  return `tenants/${tenantSlug}/agents/_catalog/${templateSlug}/workspace/${path}`;
 }
 
 function defaultsKey(tenantSlug: string, path: string): string {
-	return `tenants/${tenantSlug}/agents/_catalog/defaults/workspace/${path}`;
+  return `tenants/${tenantSlug}/agents/_catalog/defaults/workspace/${path}`;
 }
 
 function versionKey(
-	tenantSlug: string,
-	templateSlug: string,
-	path: string,
-	sha256: string,
+  tenantSlug: string,
+  templateSlug: string,
+  path: string,
+  sha256: string,
 ): string {
-	return `tenants/${tenantSlug}/agents/_catalog/${templateSlug}/workspace-versions/${path}@sha256:${sha256}`;
+  return `tenants/${tenantSlug}/agents/_catalog/${templateSlug}/workspace-versions/${path}@sha256:${sha256}`;
 }
 
 function isNotFound(err: unknown): boolean {
-	if (err instanceof NoSuchKey) return true;
-	const name = (err as { name?: string } | null)?.name;
-	if (name === "NoSuchKey" || name === "NotFound") return true;
-	const status = (err as { $metadata?: { httpStatusCode?: number } } | null)
-		?.$metadata?.httpStatusCode;
-	return status === 404;
+  if (err instanceof NoSuchKey) return true;
+  const name = (err as { name?: string } | null)?.name;
+  if (name === "NoSuchKey" || name === "NotFound") return true;
+  const status = (err as { $metadata?: { httpStatusCode?: number } } | null)
+    ?.$metadata?.httpStatusCode;
+  return status === 404;
 }
 
 async function readWithFallback(
-	bkt: string,
-	tenantSlug: string,
-	templateSlug: string,
-	path: string,
+  bkt: string,
+  tenantSlug: string,
+  templateSlug: string,
+  path: string,
 ): Promise<string | null> {
-	try {
-		const resp = await s3.send(
-			new GetObjectCommand({
-				Bucket: bkt,
-				Key: templateKey(tenantSlug, templateSlug, path),
-			}),
-		);
-		return (await resp.Body?.transformToString("utf-8")) ?? "";
-	} catch (err) {
-		if (!isNotFound(err)) throw err;
-	}
-	try {
-		const resp = await s3.send(
-			new GetObjectCommand({
-				Bucket: bkt,
-				Key: defaultsKey(tenantSlug, path),
-			}),
-		);
-		return (await resp.Body?.transformToString("utf-8")) ?? "";
-	} catch (err) {
-		if (!isNotFound(err)) throw err;
-	}
-	return null;
+  try {
+    const resp = await s3.send(
+      new GetObjectCommand({
+        Bucket: bkt,
+        Key: templateKey(tenantSlug, templateSlug, path),
+      }),
+    );
+    return (await resp.Body?.transformToString("utf-8")) ?? "";
+  } catch (err) {
+    if (!isNotFound(err)) throw err;
+  }
+  try {
+    const resp = await s3.send(
+      new GetObjectCommand({
+        Bucket: bkt,
+        Key: defaultsKey(tenantSlug, path),
+      }),
+    );
+    return (await resp.Body?.transformToString("utf-8")) ?? "";
+  } catch (err) {
+    if (!isNotFound(err)) throw err;
+  }
+  return null;
 }
 
 async function ensureVersionStored(
-	bkt: string,
-	key: string,
-	content: string,
+  bkt: string,
+  key: string,
+  content: string,
 ): Promise<void> {
-	// Idempotent write — HEAD first so we don't pay PUT costs on re-init
-	// (Unit 10's migration may re-invoke initializePinnedVersions for
-	// existing agents). On HEAD miss we PUT.
-	try {
-		await s3.send(new HeadObjectCommand({ Bucket: bkt, Key: key }));
-		return;
-	} catch (err) {
-		if (!isNotFound(err)) throw err;
-	}
-	await s3.send(
-		new PutObjectCommand({
-			Bucket: bkt,
-			Key: key,
-			Body: content,
-			ContentType: "text/markdown",
-		}),
-	);
+  // Idempotent write — HEAD first so we don't pay PUT costs on re-init
+  // (Unit 10's migration may re-invoke initializePinnedVersions for
+  // existing agents). On HEAD miss we PUT.
+  try {
+    await s3.send(new HeadObjectCommand({ Bucket: bkt, Key: key }));
+    return;
+  } catch (err) {
+    if (!isNotFound(err)) throw err;
+  }
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bkt,
+      Key: key,
+      Body: content,
+      ContentType: "text/markdown",
+    }),
+  );
 }
 
 function sha256Hex(content: string): string {
-	return createHash("sha256").update(content).digest("hex");
+  return createHash("sha256").update(content).digest("hex");
 }
 
 /**
  * Public: compute sha256 of a string (stable hex digest, 64 chars).
  */
 export function computeSha256(content: string): string {
-	return sha256Hex(content);
+  return sha256Hex(content);
+}
+
+export interface WorkspacePinPath {
+  path: string;
+  filename: string;
+  folderPath: string | null;
+}
+
+export function normalizeWorkspacePath(path: string): string {
+  const trimmed = path.trim();
+  if (!trimmed || trimmed.startsWith("/")) {
+    throw new Error(`Invalid workspace path: ${path}`);
+  }
+  if (trimmed.includes("\\")) {
+    throw new Error(`Invalid workspace path: ${path}`);
+  }
+  const segments = trimmed.split("/");
+  for (const segment of segments) {
+    if (!segment || segment === "." || segment === "..") {
+      throw new Error(`Invalid workspace path: ${path}`);
+    }
+  }
+  return segments.join("/");
+}
+
+export function parseWorkspacePinPath(path: string): WorkspacePinPath | null {
+  let cleanPath: string;
+  try {
+    cleanPath = normalizeWorkspacePath(path);
+  } catch {
+    return null;
+  }
+  const segments = cleanPath.split("/");
+  const filename = segments[segments.length - 1];
+  if (!(PINNED_FILES as readonly string[]).includes(filename)) {
+    return null;
+  }
+  const folderPath =
+    segments.length > 1 ? segments.slice(0, -1).join("/") : null;
+  return { path: cleanPath, filename, folderPath };
+}
+
+export function assertWorkspacePinPath(path: string): WorkspacePinPath {
+  const parsed = parseWorkspacePinPath(path);
+  if (!parsed) {
+    throw new Error(`'${path}' is not a pinned-class workspace path`);
+  }
+  return parsed;
+}
+
+export function isPinnedWorkspacePath(path: string): boolean {
+  return parseWorkspacePinPath(path) !== null;
 }
 
 /**
@@ -142,13 +194,13 @@ export function computeSha256(content: string): string {
  * against an agent's pinned hash.
  */
 export async function readTemplateBaseWithFallback(
-	tenantSlug: string,
-	templateSlug: string,
-	path: string,
+  tenantSlug: string,
+  templateSlug: string,
+  path: string,
 ): Promise<string | null> {
-	const bkt = bucket();
-	if (!bkt) throw new Error("WORKSPACE_BUCKET not configured");
-	return readWithFallback(bkt, tenantSlug, templateSlug, path);
+  const bkt = bucket();
+  if (!bkt) throw new Error("WORKSPACE_BUCKET not configured");
+  return readWithFallback(bkt, tenantSlug, templateSlug, path);
 }
 
 /**
@@ -157,24 +209,24 @@ export async function readTemplateBaseWithFallback(
  * (HEAD-before-PUT). Used by Unit 9 when advancing a pin to a new hash.
  */
 export async function persistTemplateVersion(
-	tenantSlug: string,
-	templateSlug: string,
-	path: string,
-	sha256: string,
-	content: string,
+  tenantSlug: string,
+  templateSlug: string,
+  path: string,
+  sha256: string,
+  content: string,
 ): Promise<void> {
-	const bkt = bucket();
-	if (!bkt) throw new Error("WORKSPACE_BUCKET not configured");
-	await ensureVersionStored(
-		bkt,
-		versionKey(tenantSlug, templateSlug, path, sha256),
-		content,
-	);
+  const bkt = bucket();
+  if (!bkt) throw new Error("WORKSPACE_BUCKET not configured");
+  await ensureVersionStored(
+    bkt,
+    versionKey(tenantSlug, templateSlug, path, sha256),
+    content,
+  );
 }
 
 export interface InitializePinnedVersionsInput {
-	tenantSlug: string;
-	templateSlug: string;
+  tenantSlug: string;
+  templateSlug: string;
 }
 
 /**
@@ -188,30 +240,30 @@ export interface InitializePinnedVersionsInput {
  * this).
  */
 export async function initializePinnedVersions(
-	opts: InitializePinnedVersionsInput,
+  opts: InitializePinnedVersionsInput,
 ): Promise<Record<string, string>> {
-	const bkt = bucket();
-	if (!bkt) {
-		throw new Error("WORKSPACE_BUCKET not configured");
-	}
+  const bkt = bucket();
+  if (!bkt) {
+    throw new Error("WORKSPACE_BUCKET not configured");
+  }
 
-	const out: Record<string, string> = {};
-	for (const path of PINNED_FILES) {
-		const content = await readWithFallback(
-			bkt,
-			opts.tenantSlug,
-			opts.templateSlug,
-			path,
-		);
-		if (content === null) continue;
+  const out: Record<string, string> = {};
+  for (const path of PINNED_FILES) {
+    const content = await readWithFallback(
+      bkt,
+      opts.tenantSlug,
+      opts.templateSlug,
+      path,
+    );
+    if (content === null) continue;
 
-		const hex = sha256Hex(content);
-		await ensureVersionStored(
-			bkt,
-			versionKey(opts.tenantSlug, opts.templateSlug, path, hex),
-			content,
-		);
-		out[path] = `sha256:${hex}`;
-	}
-	return out;
+    const hex = sha256Hex(content);
+    await ensureVersionStored(
+      bkt,
+      versionKey(opts.tenantSlug, opts.templateSlug, path, hex),
+      content,
+    );
+    out[path] = `sha256:${hex}`;
+  }
+  return out;
 }

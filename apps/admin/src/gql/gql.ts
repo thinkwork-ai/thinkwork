@@ -15,7 +15,7 @@ import { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-node/
  */
 type Documents = {
     "\n\tmutation AcceptTemplateUpdate($agentId: ID!, $filename: String!) {\n\t\tacceptTemplateUpdate(agentId: $agentId, filename: $filename) {\n\t\t\tid\n\t\t\tname\n\t\t\tslug\n\t\t}\n\t}\n": typeof types.AcceptTemplateUpdateDocument,
-    "\n  query AgentPinStatus($agentId: ID!) {\n    agentPinStatus(agentId: $agentId) {\n      filename\n      pinnedSha\n      latestSha\n      updateAvailable\n      pinnedContent\n      latestContent\n    }\n  }\n": typeof types.AgentPinStatusDocument,
+    "\n  query AgentPinStatus($agentId: ID!) {\n    agentPinStatus(agentId: $agentId, includeNested: true) {\n      path\n      folderPath\n      filename\n      pinnedSha\n      latestSha\n      updateAvailable\n      pinnedContent\n      latestContent\n    }\n  }\n": typeof types.AgentPinStatusDocument,
     "\n  mutation CreateSubAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      slug\n    }\n  }\n": typeof types.CreateSubAgentDocument,
     "\n  mutation DeleteSubAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n": typeof types.DeleteSubAgentDocument,
     "\n  mutation CreateThread($input: CreateThreadInput!) {\n    createThread(input: $input) {\n      id\n      number\n      title\n      status\n      createdAt\n    }\n  }\n": typeof types.CreateThreadDocument,
@@ -146,7 +146,7 @@ type Documents = {
 };
 const documents: Documents = {
     "\n\tmutation AcceptTemplateUpdate($agentId: ID!, $filename: String!) {\n\t\tacceptTemplateUpdate(agentId: $agentId, filename: $filename) {\n\t\t\tid\n\t\t\tname\n\t\t\tslug\n\t\t}\n\t}\n": types.AcceptTemplateUpdateDocument,
-    "\n  query AgentPinStatus($agentId: ID!) {\n    agentPinStatus(agentId: $agentId) {\n      filename\n      pinnedSha\n      latestSha\n      updateAvailable\n      pinnedContent\n      latestContent\n    }\n  }\n": types.AgentPinStatusDocument,
+    "\n  query AgentPinStatus($agentId: ID!) {\n    agentPinStatus(agentId: $agentId, includeNested: true) {\n      path\n      folderPath\n      filename\n      pinnedSha\n      latestSha\n      updateAvailable\n      pinnedContent\n      latestContent\n    }\n  }\n": types.AgentPinStatusDocument,
     "\n  mutation CreateSubAgent($input: CreateAgentInput!) {\n    createAgent(input: $input) {\n      id\n      name\n      slug\n    }\n  }\n": types.CreateSubAgentDocument,
     "\n  mutation DeleteSubAgent($id: ID!) {\n    deleteAgent(id: $id)\n  }\n": types.DeleteSubAgentDocument,
     "\n  mutation CreateThread($input: CreateThreadInput!) {\n    createThread(input: $input) {\n      id\n      number\n      title\n      status\n      createdAt\n    }\n  }\n": types.CreateThreadDocument,
@@ -297,7 +297,7 @@ export function graphql(source: "\n\tmutation AcceptTemplateUpdate($agentId: ID!
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query AgentPinStatus($agentId: ID!) {\n    agentPinStatus(agentId: $agentId) {\n      filename\n      pinnedSha\n      latestSha\n      updateAvailable\n      pinnedContent\n      latestContent\n    }\n  }\n"): (typeof documents)["\n  query AgentPinStatus($agentId: ID!) {\n    agentPinStatus(agentId: $agentId) {\n      filename\n      pinnedSha\n      latestSha\n      updateAvailable\n      pinnedContent\n      latestContent\n    }\n  }\n"];
+export function graphql(source: "\n  query AgentPinStatus($agentId: ID!) {\n    agentPinStatus(agentId: $agentId, includeNested: true) {\n      path\n      folderPath\n      filename\n      pinnedSha\n      latestSha\n      updateAvailable\n      pinnedContent\n      latestContent\n    }\n  }\n"): (typeof documents)["\n  query AgentPinStatus($agentId: ID!) {\n    agentPinStatus(agentId: $agentId, includeNested: true) {\n      path\n      folderPath\n      filename\n      pinnedSha\n      latestSha\n      updateAvailable\n      pinnedContent\n      latestContent\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

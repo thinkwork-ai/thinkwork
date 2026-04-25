@@ -33,56 +33,60 @@
 
 import { createHash } from "node:crypto";
 import {
-	GetObjectCommand,
-	HeadObjectCommand,
-	ListObjectsV2Command,
-	NoSuchKey,
-	S3Client,
-	type _Object,
+  GetObjectCommand,
+  HeadObjectCommand,
+  ListObjectsV2Command,
+  NoSuchKey,
+  S3Client,
+  type _Object,
 } from "@aws-sdk/client-s3";
 import {
-	CANONICAL_FILE_NAMES,
-	type CanonicalFileName,
-	classifyFile,
-	MANAGED_FILES,
-	PINNED_FILES,
+  CANONICAL_FILE_NAMES,
+  type CanonicalFileName,
+  classifyFile,
+  MANAGED_FILES,
+  PINNED_FILES,
 } from "@thinkwork/workspace-defaults";
 import {
-	agents,
-	agentTemplates,
-	db,
-	eq,
-	and,
-	tenants,
-	userProfiles,
-	users,
+  agents,
+  agentTemplates,
+  db,
+  eq,
+  and,
+  tenants,
+  userProfiles,
+  users,
 } from "../graphql/utils.js";
 import {
-	type PlaceholderValues,
-	substitute,
-	type SanitizationViolation,
+  type PlaceholderValues,
+  substitute,
+  type SanitizationViolation,
 } from "./placeholder-substitution.js";
 import { isReservedFolderSegment } from "./reserved-folder-names.js";
+import {
+  normalizeWorkspacePath,
+  parseWorkspacePinPath,
+} from "./pinned-versions.js";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export type ComposeSource =
-	| "agent-override"
-	| "agent-override-pinned"
-	| "template"
-	| "template-pinned"
-	| "defaults";
+  | "agent-override"
+  | "agent-override-pinned"
+  | "template"
+  | "template-pinned"
+  | "defaults";
 
 export interface ComposeResultBase {
-	path: string;
-	source: ComposeSource;
-	sha256: string;
+  path: string;
+  source: ComposeSource;
+  sha256: string;
 }
 
 export interface ComposeResult extends ComposeResultBase {
-	content: string;
+  content: string;
 }
 
 /**
@@ -91,36 +95,36 @@ export interface ComposeResult extends ComposeResultBase {
  * content; a mismatch surfaces as AgentNotFound.
  */
 export interface ComposeContext {
-	tenantId: string;
-	onViolation?: (v: SanitizationViolation) => void;
+  tenantId: string;
+  onViolation?: (v: SanitizationViolation) => void;
 }
 
 export interface ComposeListOptions {
-	includeContent?: boolean;
+  includeContent?: boolean;
 }
 
 export class AgentNotFoundError extends Error {
-	readonly code = "AGENT_NOT_FOUND";
-	constructor(agentId: string) {
-		super(`Agent ${agentId} not found in the caller's tenant`);
-		this.name = "AgentNotFoundError";
-	}
+  readonly code = "AGENT_NOT_FOUND";
+  constructor(agentId: string) {
+    super(`Agent ${agentId} not found in the caller's tenant`);
+    this.name = "AgentNotFoundError";
+  }
 }
 
 export class FileNotFoundError extends Error {
-	readonly code = "FILE_NOT_FOUND";
-	constructor(path: string) {
-		super(`Workspace file not found: ${path}`);
-		this.name = "FileNotFoundError";
-	}
+  readonly code = "FILE_NOT_FOUND";
+  constructor(path: string) {
+    super(`Workspace file not found: ${path}`);
+    this.name = "FileNotFoundError";
+  }
 }
 
 export class PinnedVersionNotFoundError extends Error {
-	readonly code = "PINNED_VERSION_NOT_FOUND";
-	constructor(path: string, hash: string) {
-		super(`Pinned content ${hash} for ${path} not found in the version store`);
-		this.name = "PinnedVersionNotFoundError";
-	}
+  readonly code = "PINNED_VERSION_NOT_FOUND";
+  constructor(path: string, hash: string) {
+    super(`Pinned content ${hash} for ${path} not found in the version store`);
+    this.name = "PinnedVersionNotFoundError";
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -128,7 +132,7 @@ export class PinnedVersionNotFoundError extends Error {
 // ---------------------------------------------------------------------------
 
 const REGION =
-	process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
+  process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
 
 // Kept module-level so a single warm Lambda reuses the connection pool.
 // Tests replace sends via aws-sdk-client-mock which patches the
@@ -136,12 +140,12 @@ const REGION =
 const s3 = new S3Client({ region: REGION });
 
 function assertBucket(): string {
-	// Read lazily: tests set WORKSPACE_BUCKET after module load.
-	const bucket = process.env.WORKSPACE_BUCKET || "";
-	if (!bucket) {
-		throw new Error("WORKSPACE_BUCKET not configured");
-	}
-	return bucket;
+  // Read lazily: tests set WORKSPACE_BUCKET after module load.
+  const bucket = process.env.WORKSPACE_BUCKET || "";
+  if (!bucket) {
+    throw new Error("WORKSPACE_BUCKET not configured");
+  }
+  return bucket;
 }
 
 // ---------------------------------------------------------------------------
@@ -149,24 +153,24 @@ function assertBucket(): string {
 // ---------------------------------------------------------------------------
 
 function agentPrefix(tenantSlug: string, agentSlug: string): string {
-	return `tenants/${tenantSlug}/agents/${agentSlug}/workspace/`;
+  return `tenants/${tenantSlug}/agents/${agentSlug}/workspace/`;
 }
 
 function templatePrefix(tenantSlug: string, templateSlug: string): string {
-	return `tenants/${tenantSlug}/agents/_catalog/${templateSlug}/workspace/`;
+  return `tenants/${tenantSlug}/agents/_catalog/${templateSlug}/workspace/`;
 }
 
 function defaultsPrefix(tenantSlug: string): string {
-	return `tenants/${tenantSlug}/agents/_catalog/defaults/workspace/`;
+  return `tenants/${tenantSlug}/agents/_catalog/defaults/workspace/`;
 }
 
 function templateVersionKey(
-	tenantSlug: string,
-	templateSlug: string,
-	path: string,
-	sha256: string,
+  tenantSlug: string,
+  templateSlug: string,
+  path: string,
+  sha256: string,
 ): string {
-	return `tenants/${tenantSlug}/agents/_catalog/${templateSlug}/workspace-versions/${path}@${sha256}`;
+  return `tenants/${tenantSlug}/agents/_catalog/${templateSlug}/workspace-versions/${path}@${sha256}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -174,155 +178,160 @@ function templateVersionKey(
 // ---------------------------------------------------------------------------
 
 interface AgentContext {
-	tenantId: string;
-	tenantSlug: string;
-	tenantName: string;
-	agentId: string;
-	agentSlug: string;
-	agentName: string;
-	templateId: string;
-	templateSlug: string;
-	humanPairId: string | null;
-	pinnedVersions: Record<string, string>;
-	placeholderValues: PlaceholderValues;
+  tenantId: string;
+  tenantSlug: string;
+  tenantName: string;
+  agentId: string;
+  agentSlug: string;
+  agentName: string;
+  templateId: string;
+  templateSlug: string;
+  humanPairId: string | null;
+  pinnedVersions: Record<string, string>;
+  placeholderValues: PlaceholderValues;
 }
 
 type AgentRow = {
-	id: string;
-	slug: string | null;
-	name: string;
-	tenant_id: string;
-	template_id: string;
-	human_pair_id: string | null;
-	agent_pinned_versions: unknown;
+  id: string;
+  slug: string | null;
+  name: string;
+  tenant_id: string;
+  template_id: string;
+  human_pair_id: string | null;
+  agent_pinned_versions: unknown;
 };
 
 type TenantRow = { id: string; slug: string; name: string };
 type TemplateRow = { id: string; slug: string };
 type HumanRow = {
-	user_id: string;
-	user_email: string | null;
-	user_name: string | null;
-	profile_title: string | null;
-	profile_timezone: string | null;
-	profile_pronouns: string | null;
+  user_id: string;
+  user_email: string | null;
+  user_name: string | null;
+  profile_title: string | null;
+  profile_timezone: string | null;
+  profile_pronouns: string | null;
 };
 
 async function loadAgentContext(
-	tenantId: string,
-	agentId: string,
+  tenantId: string,
+  agentId: string,
 ): Promise<AgentContext> {
-	// 1) Agent, bound to the caller's tenant — this is the cross-tenant
-	//    isolation enforcement point.
-	const agentRows = (await db
-		.select({
-			id: agents.id,
-			slug: agents.slug,
-			name: agents.name,
-			tenant_id: agents.tenant_id,
-			template_id: agents.template_id,
-			human_pair_id: agents.human_pair_id,
-			agent_pinned_versions: agents.agent_pinned_versions,
-		})
-		.from(agents)
-		.where(and(eq(agents.id, agentId), eq(agents.tenant_id, tenantId)))
-		.limit(1)) as AgentRow[];
+  // 1) Agent, bound to the caller's tenant — this is the cross-tenant
+  //    isolation enforcement point.
+  const agentRows = (await db
+    .select({
+      id: agents.id,
+      slug: agents.slug,
+      name: agents.name,
+      tenant_id: agents.tenant_id,
+      template_id: agents.template_id,
+      human_pair_id: agents.human_pair_id,
+      agent_pinned_versions: agents.agent_pinned_versions,
+    })
+    .from(agents)
+    .where(and(eq(agents.id, agentId), eq(agents.tenant_id, tenantId)))
+    .limit(1)) as AgentRow[];
 
-	const agent = agentRows[0];
-	if (!agent || !agent.slug) {
-		throw new AgentNotFoundError(agentId);
-	}
+  const agent = agentRows[0];
+  if (!agent || !agent.slug) {
+    throw new AgentNotFoundError(agentId);
+  }
 
-	// 2) Tenant (for slug + placeholder value).
-	const tenantRows = (await db
-		.select({ id: tenants.id, slug: tenants.slug, name: tenants.name })
-		.from(tenants)
-		.where(eq(tenants.id, agent.tenant_id))
-		.limit(1)) as TenantRow[];
-	const tenant = tenantRows[0];
-	if (!tenant || !tenant.slug) {
-		throw new Error(`Tenant ${agent.tenant_id} has no slug`);
-	}
+  // 2) Tenant (for slug + placeholder value).
+  const tenantRows = (await db
+    .select({ id: tenants.id, slug: tenants.slug, name: tenants.name })
+    .from(tenants)
+    .where(eq(tenants.id, agent.tenant_id))
+    .limit(1)) as TenantRow[];
+  const tenant = tenantRows[0];
+  if (!tenant || !tenant.slug) {
+    throw new Error(`Tenant ${agent.tenant_id} has no slug`);
+  }
 
-	// 3) Template.
-	const templateRows = (await db
-		.select({ id: agentTemplates.id, slug: agentTemplates.slug })
-		.from(agentTemplates)
-		.where(eq(agentTemplates.id, agent.template_id))
-		.limit(1)) as TemplateRow[];
-	const template = templateRows[0];
-	if (!template || !template.slug) {
-		throw new Error(`Template ${agent.template_id} has no slug`);
-	}
+  // 3) Template.
+  const templateRows = (await db
+    .select({ id: agentTemplates.id, slug: agentTemplates.slug })
+    .from(agentTemplates)
+    .where(eq(agentTemplates.id, agent.template_id))
+    .limit(1)) as TemplateRow[];
+  const template = templateRows[0];
+  if (!template || !template.slug) {
+    throw new Error(`Template ${agent.template_id} has no slug`);
+  }
 
-	// 4) Human + profile (only when assigned).
-	let human: HumanRow | null = null;
-	if (agent.human_pair_id) {
-		const userRows = (await db
-			.select({
-				user_id: users.id,
-				user_email: users.email,
-				user_name: users.name,
-			})
-			.from(users)
-			.where(eq(users.id, agent.human_pair_id))
-			.limit(1)) as Array<Omit<HumanRow, "profile_title" | "profile_timezone" | "profile_pronouns">>;
-		const user = userRows[0];
-		if (user) {
-			const profileRows = (await db
-				.select({
-					profile_title: userProfiles.title,
-					profile_timezone: userProfiles.timezone,
-					profile_pronouns: userProfiles.pronouns,
-				})
-				.from(userProfiles)
-				.where(eq(userProfiles.user_id, user.user_id))
-				.limit(1)) as Array<
-					Pick<HumanRow, "profile_title" | "profile_timezone" | "profile_pronouns">
-				>;
-			const profile = profileRows[0] ?? {
-				profile_title: null,
-				profile_timezone: null,
-				profile_pronouns: null,
-			};
-			human = { ...user, ...profile };
-		}
-	}
+  // 4) Human + profile (only when assigned).
+  let human: HumanRow | null = null;
+  if (agent.human_pair_id) {
+    const userRows = (await db
+      .select({
+        user_id: users.id,
+        user_email: users.email,
+        user_name: users.name,
+      })
+      .from(users)
+      .where(eq(users.id, agent.human_pair_id))
+      .limit(1)) as Array<
+      Omit<HumanRow, "profile_title" | "profile_timezone" | "profile_pronouns">
+    >;
+    const user = userRows[0];
+    if (user) {
+      const profileRows = (await db
+        .select({
+          profile_title: userProfiles.title,
+          profile_timezone: userProfiles.timezone,
+          profile_pronouns: userProfiles.pronouns,
+        })
+        .from(userProfiles)
+        .where(eq(userProfiles.user_id, user.user_id))
+        .limit(1)) as Array<
+        Pick<
+          HumanRow,
+          "profile_title" | "profile_timezone" | "profile_pronouns"
+        >
+      >;
+      const profile = profileRows[0] ?? {
+        profile_title: null,
+        profile_timezone: null,
+        profile_pronouns: null,
+      };
+      human = { ...user, ...profile };
+    }
+  }
 
-	const pinnedVersions = normalizePinnedVersions(agent.agent_pinned_versions);
+  const pinnedVersions = normalizePinnedVersions(agent.agent_pinned_versions);
 
-	const placeholderValues: PlaceholderValues = {
-		AGENT_NAME: agent.name,
-		TENANT_NAME: tenant.name,
-		HUMAN_NAME: human?.user_name ?? null,
-		HUMAN_EMAIL: human?.user_email ?? null,
-		HUMAN_TITLE: human?.profile_title ?? null,
-		HUMAN_TIMEZONE: human?.profile_timezone ?? null,
-		HUMAN_PRONOUNS: human?.profile_pronouns ?? null,
-	};
+  const placeholderValues: PlaceholderValues = {
+    AGENT_NAME: agent.name,
+    TENANT_NAME: tenant.name,
+    HUMAN_NAME: human?.user_name ?? null,
+    HUMAN_EMAIL: human?.user_email ?? null,
+    HUMAN_TITLE: human?.profile_title ?? null,
+    HUMAN_TIMEZONE: human?.profile_timezone ?? null,
+    HUMAN_PRONOUNS: human?.profile_pronouns ?? null,
+  };
 
-	return {
-		tenantId: agent.tenant_id,
-		tenantSlug: tenant.slug,
-		tenantName: tenant.name,
-		agentId: agent.id,
-		agentSlug: agent.slug,
-		agentName: agent.name,
-		templateId: template.id,
-		templateSlug: template.slug,
-		humanPairId: agent.human_pair_id,
-		pinnedVersions,
-		placeholderValues,
-	};
+  return {
+    tenantId: agent.tenant_id,
+    tenantSlug: tenant.slug,
+    tenantName: tenant.name,
+    agentId: agent.id,
+    agentSlug: agent.slug,
+    agentName: agent.name,
+    templateId: template.id,
+    templateSlug: template.slug,
+    humanPairId: agent.human_pair_id,
+    pinnedVersions,
+    placeholderValues,
+  };
 }
 
 function normalizePinnedVersions(raw: unknown): Record<string, string> {
-	if (!raw || typeof raw !== "object") return {};
-	const out: Record<string, string> = {};
-	for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-		if (typeof v === "string" && v.length > 0) out[k] = v;
-	}
-	return out;
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "string" && v.length > 0) out[k] = v;
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -330,70 +339,77 @@ function normalizePinnedVersions(raw: unknown): Record<string, string> {
 // ---------------------------------------------------------------------------
 
 interface S3Object {
-	content: string;
-	etag: string | null;
+  content: string;
+  etag: string | null;
 }
 
 async function s3Get(bucket: string, key: string): Promise<S3Object | null> {
-	try {
-		const resp = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-		const content = (await resp.Body?.transformToString("utf-8")) ?? "";
-		return { content, etag: resp.ETag ?? null };
-	} catch (err) {
-		if (isNoSuchKey(err)) return null;
-		throw err;
-	}
+  try {
+    const resp = await s3.send(
+      new GetObjectCommand({ Bucket: bucket, Key: key }),
+    );
+    const content = (await resp.Body?.transformToString("utf-8")) ?? "";
+    return { content, etag: resp.ETag ?? null };
+  } catch (err) {
+    if (isNoSuchKey(err)) return null;
+    throw err;
+  }
 }
 
-async function s3Head(bucket: string, key: string): Promise<{ etag: string | null } | null> {
-	try {
-		const resp = await s3.send(
-			new HeadObjectCommand({ Bucket: bucket, Key: key }),
-		);
-		return { etag: resp.ETag ?? null };
-	} catch (err) {
-		if (isNoSuchKey(err) || isNotFoundStatus(err)) return null;
-		throw err;
-	}
+async function s3Head(
+  bucket: string,
+  key: string,
+): Promise<{ etag: string | null } | null> {
+  try {
+    const resp = await s3.send(
+      new HeadObjectCommand({ Bucket: bucket, Key: key }),
+    );
+    return { etag: resp.ETag ?? null };
+  } catch (err) {
+    if (isNoSuchKey(err) || isNotFoundStatus(err)) return null;
+    throw err;
+  }
 }
 
 async function s3List(bucket: string, prefix: string): Promise<_Object[]> {
-	const out: _Object[] = [];
-	let continuationToken: string | undefined;
-	do {
-		const resp = await s3.send(
-			new ListObjectsV2Command({
-				Bucket: bucket,
-				Prefix: prefix,
-				ContinuationToken: continuationToken,
-			}),
-		);
-		for (const obj of resp.Contents ?? []) {
-			if (obj.Key) out.push(obj);
-		}
-		continuationToken = resp.IsTruncated ? resp.NextContinuationToken : undefined;
-	} while (continuationToken);
-	return out;
+  const out: _Object[] = [];
+  let continuationToken: string | undefined;
+  do {
+    const resp = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }),
+    );
+    for (const obj of resp.Contents ?? []) {
+      if (obj.Key) out.push(obj);
+    }
+    continuationToken = resp.IsTruncated
+      ? resp.NextContinuationToken
+      : undefined;
+  } while (continuationToken);
+  return out;
 }
 
 function isNoSuchKey(err: unknown): boolean {
-	if (err instanceof NoSuchKey) return true;
-	const name = (err as { name?: string } | null)?.name;
-	return name === "NoSuchKey";
+  if (err instanceof NoSuchKey) return true;
+  const name = (err as { name?: string } | null)?.name;
+  return name === "NoSuchKey";
 }
 
 function isNotFoundStatus(err: unknown): boolean {
-	const status = (err as { $metadata?: { httpStatusCode?: number } } | null)
-		?.$metadata?.httpStatusCode;
-	return status === 404;
+  const status = (err as { $metadata?: { httpStatusCode?: number } } | null)
+    ?.$metadata?.httpStatusCode;
+  return status === 404;
 }
 
 function sha256Hex(content: string): string {
-	return createHash("sha256").update(content).digest("hex");
+  return createHash("sha256").update(content).digest("hex");
 }
 
 function shaTag(hex: string): string {
-	return `sha256:${hex}`;
+  return `sha256:${hex}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -414,33 +430,30 @@ function shaTag(hex: string): string {
  * memory/skills are bounded so they never collapse to a different file at
  * an outer scope. The reserved set lives in `./reserved-folder-names.ts`.
  */
-function buildAncestorPaths(path: string): string[] {
-	const segments = path.split("/");
-	if (segments.some(isReservedFolderSegment)) {
-		return [path];
-	}
-	if (segments.length === 1) return [path];
-	const basename = segments[segments.length - 1];
-	let folders = segments.slice(0, -1);
-	const out = [path];
-	while (folders.length > 0) {
-		folders = folders.slice(0, -1);
-		const ancestor =
-			folders.length > 0 ? `${folders.join("/")}/${basename}` : basename;
-		out.push(ancestor);
-	}
-	return out;
+export function buildWorkspaceAncestorPaths(path: string): string[] {
+  const cleanPath = normalizeWorkspacePath(path);
+  const segments = cleanPath.split("/");
+  if (segments.some(isReservedFolderSegment)) {
+    return [cleanPath];
+  }
+  if (segments.length === 1) return [cleanPath];
+  const basename = segments[segments.length - 1];
+  let folders = segments.slice(0, -1);
+  const out = [cleanPath];
+  while (folders.length > 0) {
+    folders = folders.slice(0, -1);
+    const ancestor =
+      folders.length > 0 ? `${folders.join("/")}/${basename}` : basename;
+    out.push(ancestor);
+  }
+  return out;
 }
 
-function validateComposePath(path: string): void {
-	const segments = path.split("/");
-	for (const seg of segments) {
-		if (seg === ".." || seg === ".") {
-			throw new Error(
-				`Invalid path: ${path} (contains traversal segment '${seg}')`,
-			);
-		}
-	}
+export function pinLookupPaths(path: string): string[] {
+  if (!parseWorkspacePinPath(path)) return [];
+  return buildWorkspaceAncestorPaths(path).filter((candidate) =>
+    Boolean(parseWorkspacePinPath(candidate)),
+  );
 }
 
 /**
@@ -453,9 +466,9 @@ function validateComposePath(path: string): void {
  * for source labeling and override-write gates.
  */
 function classifyFileByBasename(path: string) {
-	if (!path.includes("/")) return classifyFile(path);
-	const basename = path.split("/").pop() ?? path;
-	return classifyFile(basename);
+  if (!path.includes("/")) return classifyFile(path);
+  const basename = path.split("/").pop() ?? path;
+  return classifyFile(basename);
 }
 
 // ---------------------------------------------------------------------------
@@ -473,150 +486,156 @@ function classifyFileByBasename(path: string) {
  * Plan §008 U5 illustration. Reserved folder segments terminate the walk.
  */
 export async function composeFile(
-	ctx: ComposeContext,
-	agentId: string,
-	path: string,
+  ctx: ComposeContext,
+  agentId: string,
+  path: string,
 ): Promise<ComposeResult> {
-	validateComposePath(path);
-	const bucket = assertBucket();
-	const agentCtx = await loadAgentContext(ctx.tenantId, agentId);
-	return composeFileForAgent(ctx, agentCtx, bucket, path);
+  const cleanPath = normalizeWorkspacePath(path);
+  const bucket = assertBucket();
+  const agentCtx = await loadAgentContext(ctx.tenantId, agentId);
+  return composeFileForAgent(ctx, agentCtx, bucket, cleanPath);
 }
 
 async function composeFileForAgent(
-	ctx: ComposeContext,
-	agentCtx: AgentContext,
-	bucket: string,
-	path: string,
+  ctx: ComposeContext,
+  agentCtx: AgentContext,
+  bucket: string,
+  path: string,
 ): Promise<ComposeResult> {
-	const cleanPath = path.replace(/^\/+/, "");
-	const fileClass = classifyFileByBasename(cleanPath);
-	const ancestorPaths = buildAncestorPaths(cleanPath);
+  const cleanPath = normalizeWorkspacePath(path);
+  const fileClass = classifyFileByBasename(cleanPath);
+  const ancestorPaths = buildWorkspaceAncestorPaths(cleanPath);
 
-	const agentP = agentPrefix(agentCtx.tenantSlug, agentCtx.agentSlug);
-	const templateP = templatePrefix(agentCtx.tenantSlug, agentCtx.templateSlug);
-	const defaultsP = defaultsPrefix(agentCtx.tenantSlug);
+  const agentP = agentPrefix(agentCtx.tenantSlug, agentCtx.agentSlug);
+  const templateP = templatePrefix(agentCtx.tenantSlug, agentCtx.templateSlug);
+  const defaultsP = defaultsPrefix(agentCtx.tenantSlug);
 
-	// Step 1: Agent overrides — walk ancestor paths (deepest → root).
-	// An override at any ancestor depth wins over template / defaults at
-	// the originally-requested depth.
-	for (const ancestor of ancestorPaths) {
-		const agentObj = await s3Get(bucket, agentP + ancestor);
-		if (!agentObj) continue;
+  // Step 1: Agent overrides — walk ancestor paths (deepest → root).
+  // An override at any ancestor depth wins over template / defaults at
+  // the originally-requested depth.
+  for (const ancestor of ancestorPaths) {
+    const agentObj = await s3Get(bucket, agentP + ancestor);
+    if (!agentObj) continue;
 
-		if (fileClass === "pinned") {
-			return {
-				path: cleanPath,
-				source: "agent-override-pinned",
-				content: agentObj.content,
-				sha256: sha256Hex(agentObj.content),
-			};
-		}
-		if (fileClass === "managed") {
-			// USER.md: served verbatim (already substituted at write time
-			// in Unit 6). At sub-agent depth, operator-authored override
-			// is allowed.
-			return {
-				path: cleanPath,
-				source: "agent-override",
-				content: agentObj.content,
-				sha256: sha256Hex(agentObj.content),
-			};
-		}
-		// live
-		const rendered = substitute(agentCtx.placeholderValues, agentObj.content, {
-			onViolation: ctx.onViolation,
-		});
-		return {
-			path: cleanPath,
-			source: "agent-override",
-			content: rendered,
-			sha256: sha256Hex(agentObj.content),
-		};
-	}
+    if (fileClass === "pinned") {
+      return {
+        path: cleanPath,
+        source: "agent-override-pinned",
+        content: agentObj.content,
+        sha256: sha256Hex(agentObj.content),
+      };
+    }
+    if (fileClass === "managed") {
+      // USER.md: served verbatim (already substituted at write time
+      // in Unit 6). At sub-agent depth, operator-authored override
+      // is allowed.
+      return {
+        path: cleanPath,
+        source: "agent-override",
+        content: agentObj.content,
+        sha256: sha256Hex(agentObj.content),
+      };
+    }
+    // live
+    const rendered = substitute(agentCtx.placeholderValues, agentObj.content, {
+      onViolation: ctx.onViolation,
+    });
+    return {
+      path: cleanPath,
+      source: "agent-override",
+      content: rendered,
+      sha256: sha256Hex(agentObj.content),
+    };
+  }
 
-	// Step 2: Pinned-version-store resolution at the requested path.
-	// Pin keys are path-qualified per Plan §008 U24. Until U24 ships, only
-	// root-level pin keys exist; sub-agent paths fall through to the live
-	// ancestor walk below. When a pin is set at the requested path, fail
-	// closed if it can't be resolved (safety-critical guardrails must not
-	// silently drift).
-	if (fileClass === "pinned") {
-		const pinned = agentCtx.pinnedVersions[cleanPath];
-		if (pinned) {
-			const pinnedHash = extractHash(pinned);
-			const versionKey = templateVersionKey(
-				agentCtx.tenantSlug,
-				agentCtx.templateSlug,
-				cleanPath,
-				pinnedHash,
-			);
-			const versionObj = await s3Get(bucket, versionKey);
-			if (versionObj) {
-				return {
-					path: cleanPath,
-					source: "template-pinned",
-					content: versionObj.content,
-					sha256: pinnedHash,
-				};
-			}
-			// Fallback: current template/defaults at the requested path may
-			// still hash to the pin (no edits since the pin was recorded).
-			const templateObj = await s3Get(bucket, templateP + cleanPath);
-			if (templateObj && sha256Hex(templateObj.content) === pinnedHash) {
-				return {
-					path: cleanPath,
-					source: "template-pinned",
-					content: templateObj.content,
-					sha256: pinnedHash,
-				};
-			}
-			const defaultsObj = await s3Get(bucket, defaultsP + cleanPath);
-			if (defaultsObj && sha256Hex(defaultsObj.content) === pinnedHash) {
-				return {
-					path: cleanPath,
-					source: "template-pinned",
-					content: defaultsObj.content,
-					sha256: pinnedHash,
-				};
-			}
-			throw new PinnedVersionNotFoundError(cleanPath, pinnedHash);
-		}
-		// No pin at this path — fall through to live ancestor walk
-		// (transition-period semantics; matches Unit 4 fallback).
-	}
+  // Step 2: Pinned-version-store resolution at the requested path.
+  // Pin keys are path-qualified per Plan §008 U24. Until U24 ships, only
+  // root-level pin keys exist; sub-agent paths fall through to the live
+  // ancestor walk below. When a pin is set at the requested path, fail
+  // closed if it can't be resolved (safety-critical guardrails must not
+  // silently drift).
+  if (fileClass === "pinned") {
+    for (const pinPath of pinLookupPaths(cleanPath)) {
+      const pinned = agentCtx.pinnedVersions[pinPath];
+      if (!pinned) continue;
+      if (pinPath !== cleanPath) {
+        console.warn(
+          `[workspace-overlay] using inherited pinned-version key ${pinPath} for ${cleanPath}`,
+        );
+      }
+      const pinnedHash = extractHash(pinned);
+      const versionKey = templateVersionKey(
+        agentCtx.tenantSlug,
+        agentCtx.templateSlug,
+        pinPath,
+        pinnedHash,
+      );
+      const versionObj = await s3Get(bucket, versionKey);
+      if (versionObj) {
+        return {
+          path: cleanPath,
+          source: "template-pinned",
+          content: versionObj.content,
+          sha256: pinnedHash,
+        };
+      }
+      // Fallback: current template/defaults at the requested path may
+      // still hash to the pin (no edits since the pin was recorded).
+      const templateObj = await s3Get(bucket, templateP + pinPath);
+      if (templateObj && sha256Hex(templateObj.content) === pinnedHash) {
+        return {
+          path: cleanPath,
+          source: "template-pinned",
+          content: templateObj.content,
+          sha256: pinnedHash,
+        };
+      }
+      const defaultsObj = await s3Get(bucket, defaultsP + pinPath);
+      if (defaultsObj && sha256Hex(defaultsObj.content) === pinnedHash) {
+        return {
+          path: cleanPath,
+          source: "template-pinned",
+          content: defaultsObj.content,
+          sha256: pinnedHash,
+        };
+      }
+      throw new PinnedVersionNotFoundError(pinPath, pinnedHash);
+    }
+    // No pin at this path — fall through to live ancestor walk
+    // (transition-period semantics; matches Unit 4 fallback).
+  }
 
-	// Step 3: Template ancestor walk.
-	for (const ancestor of ancestorPaths) {
-		const obj = await s3Get(bucket, templateP + ancestor);
-		if (!obj) continue;
-		const rendered = substitute(agentCtx.placeholderValues, obj.content, {
-			onViolation: ctx.onViolation,
-		});
-		return {
-			path: cleanPath,
-			source: "template",
-			content: rendered,
-			sha256: sha256Hex(obj.content),
-		};
-	}
+  // Step 3: Template ancestor walk.
+  for (const ancestor of ancestorPaths) {
+    const obj = await s3Get(bucket, templateP + ancestor);
+    if (!obj) continue;
+    const rendered = substitute(agentCtx.placeholderValues, obj.content, {
+      onViolation: ctx.onViolation,
+    });
+    return {
+      path: cleanPath,
+      source: "template",
+      content: rendered,
+      sha256: sha256Hex(obj.content),
+    };
+  }
 
-	// Step 4: Defaults ancestor walk.
-	for (const ancestor of ancestorPaths) {
-		const obj = await s3Get(bucket, defaultsP + ancestor);
-		if (!obj) continue;
-		const rendered = substitute(agentCtx.placeholderValues, obj.content, {
-			onViolation: ctx.onViolation,
-		});
-		return {
-			path: cleanPath,
-			source: "defaults",
-			content: rendered,
-			sha256: sha256Hex(obj.content),
-		};
-	}
+  // Step 4: Defaults ancestor walk.
+  for (const ancestor of ancestorPaths) {
+    const obj = await s3Get(bucket, defaultsP + ancestor);
+    if (!obj) continue;
+    const rendered = substitute(agentCtx.placeholderValues, obj.content, {
+      onViolation: ctx.onViolation,
+    });
+    return {
+      path: cleanPath,
+      source: "defaults",
+      content: rendered,
+      sha256: sha256Hex(obj.content),
+    };
+  }
 
-	throw new FileNotFoundError(cleanPath);
+  throw new FileNotFoundError(cleanPath);
 }
 
 /**
@@ -626,128 +645,137 @@ async function composeFileForAgent(
  * round-trips per agent.
  */
 export async function composeList(
-	ctx: ComposeContext,
-	agentId: string,
-	opts: ComposeListOptions = {},
+  ctx: ComposeContext,
+  agentId: string,
+  opts: ComposeListOptions = {},
 ): Promise<ComposeResult[] | ComposeResultBase[]> {
-	const bucket = assertBucket();
-	const agentCtx = await loadAgentContext(ctx.tenantId, agentId);
+  const bucket = assertBucket();
+  const agentCtx = await loadAgentContext(ctx.tenantId, agentId);
 
-	// Union of paths across agent-override / template / defaults plus the
-	// canonical 11 (so a brand-new agent still returns the full expected
-	// set even if only defaults exists in S3).
-	const paths = await collectUnionPaths(bucket, agentCtx);
+  // Union of paths across agent-override / template / defaults plus the
+  // canonical 11 (so a brand-new agent still returns the full expected
+  // set even if only defaults exists in S3).
+  const paths = await collectUnionPaths(bucket, agentCtx);
 
-	const results: Array<ComposeResult | ComposeResultBase> = [];
-	for (const path of paths) {
-		const fileClass = classifyFile(path);
-		try {
-			if (opts.includeContent) {
-				const composed = await composeFileForAgent(ctx, agentCtx, bucket, path);
-				results.push(composed);
-			} else {
-				// Peek at source labeling without reading / substituting
-				// the whole object. For pinned / managed we still return
-				// the full path + a best-effort source label. For the
-				// metadata-only path we HEAD the layers in order.
-				const label = await peekSource(agentCtx, bucket, path, fileClass);
-				results.push(label);
-			}
-		} catch (err) {
-			if (err instanceof FileNotFoundError) {
-				// Shouldn't happen — `paths` was sourced from S3 list —
-				// but if it does we skip rather than erroring the list.
-				continue;
-			}
-			throw err;
-		}
-	}
-	return results;
+  const results: Array<ComposeResult | ComposeResultBase> = [];
+  for (const path of paths) {
+    const fileClass = classifyFileByBasename(path);
+    try {
+      if (opts.includeContent) {
+        const composed = await composeFileForAgent(ctx, agentCtx, bucket, path);
+        results.push(composed);
+      } else {
+        // Peek at source labeling without reading / substituting
+        // the whole object. For pinned / managed we still return
+        // the full path + a best-effort source label. For the
+        // metadata-only path we HEAD the layers in order.
+        const label = await peekSource(agentCtx, bucket, path, fileClass);
+        results.push(label);
+      }
+    } catch (err) {
+      if (err instanceof FileNotFoundError) {
+        // Shouldn't happen — `paths` was sourced from S3 list —
+        // but if it does we skip rather than erroring the list.
+        continue;
+      }
+      throw err;
+    }
+  }
+  return results;
 }
 
 async function collectUnionPaths(
-	bucket: string,
-	agentCtx: AgentContext,
+  bucket: string,
+  agentCtx: AgentContext,
 ): Promise<string[]> {
-	const prefixes: Array<{ prefix: string }> = [
-		{ prefix: agentPrefix(agentCtx.tenantSlug, agentCtx.agentSlug) },
-		{ prefix: templatePrefix(agentCtx.tenantSlug, agentCtx.templateSlug) },
-		{ prefix: defaultsPrefix(agentCtx.tenantSlug) },
-	];
+  const prefixes: Array<{ prefix: string }> = [
+    { prefix: agentPrefix(agentCtx.tenantSlug, agentCtx.agentSlug) },
+    { prefix: templatePrefix(agentCtx.tenantSlug, agentCtx.templateSlug) },
+    { prefix: defaultsPrefix(agentCtx.tenantSlug) },
+  ];
 
-	const seen = new Set<string>();
-	for (const { prefix } of prefixes) {
-		const listed = await s3List(bucket, prefix);
-		for (const obj of listed) {
-			if (!obj.Key) continue;
-			const rel = obj.Key.slice(prefix.length);
-			if (!rel) continue;
-			if (rel === "manifest.json") continue;
-			if (rel === "_defaults_version") continue;
-			seen.add(rel);
-		}
-	}
-	// Always surface the canonical 11 even if a particular layer lost
-	// one (defensive: the composer's contract is "every known workspace
-	// path resolves").
-	for (const canonical of CANONICAL_FILE_NAMES) {
-		seen.add(canonical);
-	}
-	return Array.from(seen).sort();
+  const seen = new Set<string>();
+  for (const { prefix } of prefixes) {
+    const listed = await s3List(bucket, prefix);
+    for (const obj of listed) {
+      if (!obj.Key) continue;
+      const rel = obj.Key.slice(prefix.length);
+      if (!rel) continue;
+      if (rel === "manifest.json") continue;
+      if (rel === "_defaults_version") continue;
+      seen.add(rel);
+    }
+  }
+  // Always surface the canonical 11 even if a particular layer lost
+  // one (defensive: the composer's contract is "every known workspace
+  // path resolves").
+  for (const canonical of CANONICAL_FILE_NAMES) {
+    seen.add(canonical);
+  }
+  return Array.from(seen).sort();
 }
 
 async function peekSource(
-	agentCtx: AgentContext,
-	bucket: string,
-	path: string,
-	fileClass: ReturnType<typeof classifyFile>,
+  agentCtx: AgentContext,
+  bucket: string,
+  path: string,
+  fileClass: ReturnType<typeof classifyFile>,
 ): Promise<ComposeResultBase> {
-	const agentKey = agentPrefix(agentCtx.tenantSlug, agentCtx.agentSlug) + path;
-	const templateKey =
-		templatePrefix(agentCtx.tenantSlug, agentCtx.templateSlug) + path;
-	const defaultsKey = defaultsPrefix(agentCtx.tenantSlug) + path;
+  const agentKey = agentPrefix(agentCtx.tenantSlug, agentCtx.agentSlug) + path;
+  const templateKey =
+    templatePrefix(agentCtx.tenantSlug, agentCtx.templateSlug) + path;
+  const defaultsKey = defaultsPrefix(agentCtx.tenantSlug) + path;
 
-	if (fileClass === "pinned") {
-		const agentHead = await s3Head(bucket, agentKey);
-		if (agentHead) {
-			return {
-				path,
-				source: "agent-override-pinned",
-				sha256: etagToSha(agentHead.etag),
-			};
-		}
-		const pinned = agentCtx.pinnedVersions[path];
-		if (pinned) {
-			return { path, source: "template-pinned", sha256: extractHash(pinned) };
-		}
-	}
+  if (fileClass === "pinned") {
+    const agentHead = await s3Head(bucket, agentKey);
+    if (agentHead) {
+      return {
+        path,
+        source: "agent-override-pinned",
+        sha256: etagToSha(agentHead.etag),
+      };
+    }
+    for (const pinPath of pinLookupPaths(path)) {
+      const pinned = agentCtx.pinnedVersions[pinPath];
+      if (pinned) {
+        return { path, source: "template-pinned", sha256: extractHash(pinned) };
+      }
+    }
+  }
 
-	// live + managed (pre-assignment managed) + pinned-without-pin
-	// share a HEAD-chain for source labeling.
-	for (const [key, source] of [
-		[agentKey, fileClass === "pinned" ? "agent-override-pinned" : "agent-override"] as const,
-		[templateKey, "template"] as const,
-		[defaultsKey, "defaults"] as const,
-	]) {
-		const head = await s3Head(bucket, key);
-		if (head) {
-			return { path, source: source as ComposeSource, sha256: etagToSha(head.etag) };
-		}
-	}
-	return { path, source: "defaults", sha256: "" };
+  // live + managed (pre-assignment managed) + pinned-without-pin
+  // share a HEAD-chain for source labeling.
+  for (const [key, source] of [
+    [
+      agentKey,
+      fileClass === "pinned" ? "agent-override-pinned" : "agent-override",
+    ] as const,
+    [templateKey, "template"] as const,
+    [defaultsKey, "defaults"] as const,
+  ]) {
+    const head = await s3Head(bucket, key);
+    if (head) {
+      return {
+        path,
+        source: source as ComposeSource,
+        sha256: etagToSha(head.etag),
+      };
+    }
+  }
+  return { path, source: "defaults", sha256: "" };
 }
 
 function etagToSha(etag: string | null): string {
-	// ETag isn't a SHA-256 but keeps the field non-empty for admin UI
-	// integrity hints. The authoritative sha256 comes back on
-	// includeContent: true.
-	if (!etag) return "";
-	return etag.replace(/^"|"$/g, "");
+  // ETag isn't a SHA-256 but keeps the field non-empty for admin UI
+  // integrity hints. The authoritative sha256 comes back on
+  // includeContent: true.
+  if (!etag) return "";
+  return etag.replace(/^"|"$/g, "");
 }
 
 function extractHash(pinned: string): string {
-	if (pinned.startsWith("sha256:")) return pinned.slice("sha256:".length);
-	return pinned;
+  if (pinned.startsWith("sha256:")) return pinned.slice("sha256:".length);
+  return pinned;
 }
 
 // ---------------------------------------------------------------------------
@@ -766,11 +794,11 @@ function extractHash(pinned: string): string {
 // consistency; invalidation provides a ceiling within a replica.
 
 interface CacheEntry {
-	cachedAt: number;
-	result: ComposeResult;
-	// etagChain is captured so a handler running on stale-after-write
-	// state can force a recompute by bumping any layer's ETag.
-	etagChain: string;
+  cachedAt: number;
+  result: ComposeResult;
+  // etagChain is captured so a handler running on stale-after-write
+  // state can force a recompute by bumping any layer's ETag.
+  etagChain: string;
 }
 
 const TTL_MS = 60_000;
@@ -779,7 +807,7 @@ const MAX_ENTRIES = 500;
 const composerCache = new Map<string, CacheEntry>();
 
 function cacheKey(tenantId: string, agentId: string, path: string): string {
-	return `${tenantId}|${agentId}|${path}`;
+  return `${tenantId}|${agentId}|${path}`;
 }
 
 /**
@@ -788,32 +816,32 @@ function cacheKey(tenantId: string, agentId: string, path: string): string {
  * handler after any S3 write.
  */
 export function invalidateComposerCache(scope: {
-	tenantId: string;
-	agentId?: string;
-	templateScope?: boolean;
+  tenantId: string;
+  agentId?: string;
+  templateScope?: boolean;
 }): void {
-	const prefix = scope.agentId
-		? `${scope.tenantId}|${scope.agentId}|`
-		: `${scope.tenantId}|`;
-	for (const key of composerCache.keys()) {
-		if (key.startsWith(prefix)) composerCache.delete(key);
-		else if (scope.templateScope && key.startsWith(`${scope.tenantId}|`))
-			composerCache.delete(key);
-	}
+  const prefix = scope.agentId
+    ? `${scope.tenantId}|${scope.agentId}|`
+    : `${scope.tenantId}|`;
+  for (const key of composerCache.keys()) {
+    if (key.startsWith(prefix)) composerCache.delete(key);
+    else if (scope.templateScope && key.startsWith(`${scope.tenantId}|`))
+      composerCache.delete(key);
+  }
 }
 
 export function clearComposerCacheForTests(): void {
-	composerCache.clear();
+  composerCache.clear();
 }
 
 function pruneCache(): void {
-	if (composerCache.size <= MAX_ENTRIES) return;
-	// Cheap LRU-ish eviction: drop the oldest half.
-	const entries = Array.from(composerCache.entries()).sort(
-		(a, b) => a[1].cachedAt - b[1].cachedAt,
-	);
-	const drop = Math.ceil(entries.length / 2);
-	for (let i = 0; i < drop; i++) composerCache.delete(entries[i][0]);
+  if (composerCache.size <= MAX_ENTRIES) return;
+  // Cheap LRU-ish eviction: drop the oldest half.
+  const entries = Array.from(composerCache.entries()).sort(
+    (a, b) => a[1].cachedAt - b[1].cachedAt,
+  );
+  const drop = Math.ceil(entries.length / 2);
+  for (let i = 0; i < drop; i++) composerCache.delete(entries[i][0]);
 }
 
 /**
@@ -822,24 +850,24 @@ function pruneCache(): void {
  * the common case.
  */
 export async function composeFileCached(
-	ctx: ComposeContext,
-	agentId: string,
-	path: string,
+  ctx: ComposeContext,
+  agentId: string,
+  path: string,
 ): Promise<ComposeResult> {
-	const key = cacheKey(ctx.tenantId, agentId, path);
-	const now = Date.now();
-	const existing = composerCache.get(key);
-	if (existing && now - existing.cachedAt < TTL_MS) {
-		return existing.result;
-	}
-	const result = await composeFile(ctx, agentId, path);
-	composerCache.set(key, {
-		cachedAt: now,
-		result,
-		etagChain: "", // reserved for future ETag-based validation
-	});
-	pruneCache();
-	return result;
+  const key = cacheKey(ctx.tenantId, agentId, path);
+  const now = Date.now();
+  const existing = composerCache.get(key);
+  if (existing && now - existing.cachedAt < TTL_MS) {
+    return existing.result;
+  }
+  const result = await composeFile(ctx, agentId, path);
+  composerCache.set(key, {
+    cachedAt: now,
+    result,
+    etagChain: "", // reserved for future ETag-based validation
+  });
+  pruneCache();
+  return result;
 }
 
 // ---------------------------------------------------------------------------
