@@ -226,7 +226,7 @@ beforeEach(() => {
 		changed: false,
 		addedSlugs: [],
 		removedSlugs: [],
-		foldersScanned: [],
+		agentsMdPathsScanned: [],
 		warnings: [],
 	});
 });
@@ -977,7 +977,7 @@ describe("AGENTS.md → derive-agent-skills wiring (U11)", () => {
 			changed: true,
 			addedSlugs: ["approve-receipt"],
 			removedSlugs: [],
-			foldersScanned: ["AGENTS.md"],
+			agentsMdPathsScanned: ["AGENTS.md"],
 			warnings: [],
 		});
 
@@ -1132,7 +1132,7 @@ describe("AGENTS.md → derive-agent-skills wiring (U11)", () => {
 			changed: false,
 			addedSlugs: [],
 			removedSlugs: [],
-			foldersScanned: ["AGENTS.md"],
+			agentsMdPathsScanned: ["AGENTS.md"],
 			warnings: ["AGENTS.md: row 0 skipped — go_to 'memory/' is reserved"],
 		});
 

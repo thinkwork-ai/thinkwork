@@ -27,12 +27,14 @@ const {
 		insertCalls: { values: unknown[]; conflictTarget?: unknown }[];
 		deleteCalls: { where: unknown }[];
 		transactionInvocations: number;
+		failNextInsert: Error | null;
 	};
 	const dbState: DbState = {
 		selectQueue: [],
 		insertCalls: [],
 		deleteCalls: [],
 		transactionInvocations: 0,
+		failNextInsert: null,
 	};
 	return {
 		composeListMock: vi.fn(),
@@ -42,6 +44,7 @@ const {
 			dbState.insertCalls = [];
 			dbState.deleteCalls = [];
 			dbState.transactionInvocations = 0;
+			dbState.failNextInsert = null;
 		},
 	};
 });
@@ -64,6 +67,11 @@ vi.mock("../graphql/utils.js", () => {
 		values: (rows: unknown[]) => ({
 			onConflictDoNothing: (opts?: unknown) => {
 				dbState.insertCalls.push({ values: rows, conflictTarget: opts });
+				if (dbState.failNextInsert) {
+					const err = dbState.failNextInsert;
+					dbState.failNextInsert = null;
+					return Promise.reject(err);
+				}
 				return Promise.resolve();
 			},
 		}),
@@ -192,7 +200,7 @@ describe("deriveAgentSkills — happy paths", () => {
 			"tag-vendor",
 		]);
 		expect(result.removedSlugs).toEqual([]);
-		expect(result.foldersScanned).toEqual([
+		expect(result.agentsMdPathsScanned).toEqual([
 			"AGENTS.md",
 			"expenses/AGENTS.md",
 			"recruiting/AGENTS.md",
@@ -256,7 +264,19 @@ describe("deriveAgentSkills — happy paths", () => {
 				skill_id: "score-candidate",
 			},
 		]);
-		expect(dbState.insertCalls[0].conflictTarget).toBeDefined();
+		// Verify the conflict target is the composite (agent_id, skill_id)
+		// unique index — not just "some target". A swap to one column or a
+		// different combination would silently break metadata-preservation.
+		const conflictOpts = dbState.insertCalls[0].conflictTarget as
+			| { target?: { __col?: string }[] }
+			| undefined;
+		expect(conflictOpts).toBeDefined();
+		expect(conflictOpts?.target).toBeDefined();
+		const targetCols = (conflictOpts?.target ?? []).map((c) => c?.__col);
+		expect(targetCols).toEqual([
+			"agent_skills.agent_id",
+			"agent_skills.skill_id",
+		]);
 		expect(dbState.deleteCalls).toHaveLength(0);
 	});
 });
@@ -401,5 +421,24 @@ describe("deriveAgentSkills — error and edge paths", () => {
 			/Agent missing-agent not found/,
 		);
 		expect(dbState.transactionInvocations).toBe(0);
+	});
+
+	it("propagates a transaction failure (insert rejects) up to the caller without swallowing", async () => {
+		composeListMock.mockResolvedValue([
+			composedEntry("AGENTS.md", ROOT_AGENTS_MD),
+		]);
+		// Existing rows empty so the derive enters the transaction path.
+		pushSelect([]);
+		pushSelect([{ tenant_id: TENANT }]);
+		dbState.failNextInsert = new Error("simulated drizzle insert failure");
+
+		await expect(deriveAgentSkills(ctx(), AGENT_ID)).rejects.toThrow(
+			/simulated drizzle insert failure/,
+		);
+		// The transaction was opened (callback fired) and the insert was
+		// attempted, but the failure propagates — caller sees no false
+		// `changed: true` return.
+		expect(dbState.transactionInvocations).toBe(1);
+		expect(dbState.insertCalls).toHaveLength(1);
 	});
 });

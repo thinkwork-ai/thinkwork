@@ -433,7 +433,7 @@ async function handlePut(
 					target.agentId,
 				);
 				const summary =
-					`agent=${target.agentId} folders=${result.foldersScanned.length} ` +
+					`agent=${target.agentId} agents_md_paths=${result.agentsMdPathsScanned.length} ` +
 					`changed=${result.changed} added=${result.addedSlugs.join(",") || "-"} ` +
 					`removed=${result.removedSlugs.join(",") || "-"}`;
 				console.log(`[derive-agent-skills] ${summary}`);

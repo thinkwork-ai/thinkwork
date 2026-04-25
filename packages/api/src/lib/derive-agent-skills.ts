@@ -57,14 +57,20 @@ import {
 } from "./workspace-overlay.js";
 
 export interface DeriveResult {
-	/** True iff the derived set differed from the existing set and the DB was written. */
+	/**
+	 * True iff the derived skill *set membership* differed from the existing
+	 * set and the DB was written. `addedSlugs` reflects set-membership
+	 * changes — not row creation count: derive uses `onConflictDoNothing`,
+	 * so a slug that already had a row keeps its existing metadata and is
+	 * NOT counted as added on subsequent calls.
+	 */
 	changed: boolean;
-	/** Slugs newly inserted into agent_skills (sorted alphabetically). */
+	/** Slugs newly added to the membership set (sorted alphabetically). */
 	addedSlugs: string[];
-	/** Slugs removed from agent_skills (sorted alphabetically). */
+	/** Slugs removed from the membership set (sorted alphabetically). */
 	removedSlugs: string[];
 	/** AGENTS.md paths the composer surfaced, in the order they were scanned. */
-	foldersScanned: string[];
+	agentsMdPathsScanned: string[];
 	/** Per-file parser warnings (skipped reserved/invalid rows). */
 	warnings: string[];
 }
@@ -83,14 +89,11 @@ export async function deriveAgentSkills(
 		.filter((entry) => AGENTS_MD_PATH_RE.test(entry.path))
 		.sort((a, b) => a.path.localeCompare(b.path));
 
-	const foldersScanned = agentsMdEntries.map((e) => e.path);
+	const agentsMdPathsScanned = agentsMdEntries.map((e) => e.path);
 	const warnings: string[] = [];
 	const seen = new Set<string>();
-	const insertionOrder: string[] = [];
 
 	for (const entry of agentsMdEntries) {
-		// Re-throw parser errors with the path prefixed so handler 500s
-		// surface a human-readable "where did this fail" message.
 		let parsed;
 		try {
 			parsed = parseAgentsMd(entry.content);
@@ -106,10 +109,7 @@ export async function deriveAgentSkills(
 		for (const row of parsed.routing) {
 			for (const slug of row.skills) {
 				if (slug.length === 0) continue;
-				if (!seen.has(slug)) {
-					seen.add(slug);
-					insertionOrder.push(slug);
-				}
+				seen.add(slug);
 			}
 		}
 	}
@@ -134,7 +134,7 @@ export async function deriveAgentSkills(
 			changed: false,
 			addedSlugs: [],
 			removedSlugs: [],
-			foldersScanned,
+			agentsMdPathsScanned,
 			warnings,
 		};
 	}
@@ -179,16 +179,11 @@ export async function deriveAgentSkills(
 		}
 	});
 
-	// insertionOrder is captured for diagnosis/log enrichment at the
-	// caller layer; it is intentionally not surfaced through DeriveResult
-	// today — addedSlugs are sorted for stable test assertions.
-	void insertionOrder;
-
 	return {
 		changed: true,
 		addedSlugs,
 		removedSlugs,
-		foldersScanned,
+		agentsMdPathsScanned,
 		warnings,
 	};
 }

@@ -325,6 +325,36 @@ describe("agent mutations — role gate + tenant pin", () => {
           warnSpy.mockRestore();
         }
       });
+
+      // The empty-skills early-return path (skills:[]) is downstream of
+      // the admin gate; the U11 beacon should still fire so we can spot
+      // callers that hit it.
+      it("logs DEPRECATED on the empty-skills early-return path", async () => {
+        mockAgentRows.mockReturnValue([{ tenant_id: "tenant-A" }]);
+        mockAdminAllowed();
+        mockSkillsRows.mockReturnValue([]);
+        const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+        try {
+          await setAgentSkills(
+            null,
+            { ...skillsInput, skills: [] },
+            cognitoCtx(),
+          );
+          const deprecationCalls = warnSpy.mock.calls.filter((args) =>
+            String(args[0] ?? "").includes(
+              "[setAgentSkills] DEPRECATED",
+            ),
+          );
+          expect(deprecationCalls.length).toBe(1);
+          // The existing "Ignoring empty skills list" warning must also still fire.
+          const emptyListCalls = warnSpy.mock.calls.filter((args) =>
+            String(args[0] ?? "").includes("Ignoring empty skills list"),
+          );
+          expect(emptyListCalls.length).toBe(1);
+        } finally {
+          warnSpy.mockRestore();
+        }
+      });
     });
   });
 
