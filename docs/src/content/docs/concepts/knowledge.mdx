@@ -5,7 +5,7 @@ description: The harness-owned context layer for ThinkWork agents — document r
 
 import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
 
-Memory is how ThinkWork carries useful context forward without treating any one backend as the product. It's the layer that decides — on every turn — what an agent should see *beyond* the latest user message: which documents to pull, which prior facts to recall, which entity pages from the agent's own wiki to surface, and how to weave all of that into the model's context window.
+Memory is the harness's context-management layer — how ThinkWork carries useful context forward without treating any one backend as the product. On every turn (the [Perception phase of PPAF](/architecture/#the-ppaf-agent-loop)), Memory decides what an agent should see *beyond* the latest user message: which documents to pull, which prior facts to recall, which entity pages from the agent's own wiki to surface, and how to weave all of that into the model's context window. Reliability lives here too — the contract above pluggable engines is what lets you swap from AgentCore managed memory to Hindsight without rewriting the agents that consume it.
 
 The clean model is:
 

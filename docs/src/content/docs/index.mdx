@@ -1,9 +1,9 @@
 ---
 title: ThinkWork
-description: Production-grade open agent harness for teams that already live on AWS.
+description: The open Agent Harness for Business — production-grade AI work, on the AWS account you own.
 template: splash
 hero:
-  tagline: ThinkWork makes agent infrastructure easy without giving up ownership. Threads run the work, memory carries context forward, controls keep it safe, agents plug into the same system, and connectors bring in external channels and tools, all inside your existing AWS account via Terraform.
+  tagline: ThinkWork is the open Agent Harness for Business — Reliability, Efficiency, Security, and Traceability built into the runtime, not bolted on. Self-host on your AWS, run it with us, or wrap either with services. Threads carry the work, memory carries the context, agents do the work, connectors bring in the world, automations time the work, and controls keep it accountable — all inside the AWS account your team already runs.
   actions:
     - text: Getting Started
       link: /getting-started/
@@ -19,36 +19,54 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 
 ## What ThinkWork is
 
-ThinkWork is an open agent harness you deploy into your own AWS account. Not a hosted service with a control plane you don't own, not a SaaS product with your data in somebody else's multi-tenant database — a Terraform module that stands up the whole system inside your VPC, keyed to your Cognito, running on your Bedrock endpoint, with your agent state in your Aurora cluster.
+ThinkWork is **the open Agent Harness for Business** — a Terraform module that stands up a production-grade agent runtime inside your VPC, keyed to your Cognito, running on your Bedrock endpoint, with agent state in your Aurora cluster. The harness — Threads, Memory, Agents, Connectors, Automations, Control — is what's opinionated; the infrastructure is yours. Reliability, Efficiency, Security, and Traceability are built into the runtime, not bolted on as an afterthought.
 
-The harness is what's opinionated; the infrastructure is yours. That means you get a production-grade system — threads, memory, agents, connectors, automations, controls — wired together correctly, with AgentCore as the managed runtime. And you keep every byte of data, every audit log, and every IAM boundary in your own account. If ThinkWork the company disappears tomorrow, your deployment keeps working.
+If ThinkWork the company disappears tomorrow, your deployment keeps working.
 
-This is designed for teams who've already picked AWS, who want more than a demo, and who aren't willing to trade control for convenience. If that's you, the next 15 minutes (see [Getting Started](/getting-started/)) goes from zero to a running agent invocation.
+## One harness, three deployment models
 
-## Six core concepts, one deploy
+<CardGrid>
+  <Card title="ThinkWork (open)" icon="seti:lock">
+    Self-host the open Agent Harness on your AWS. Apache 2.0, community-supported. The full product, no operating partner. Five commands and you own a production-grade agent runtime. The rest of this site is the manual for it.
+  </Card>
+  <Card title="ThinkWork for Business" icon="rocket">
+    Same harness, operated by us — deployed into your AWS account, with managed updates, priority support, and the operating discipline so your team focuses on the workflows, not the runtime. [See plans →](https://thinkwork.ai/cloud)
+  </Card>
+  <Card title="ThinkWork Enterprise" icon="approve-check">
+    Strategy, pilot launch, managed operations, and workflow expansion services on top of either ThinkWork (open) or ThinkWork for Business. Sales-led; scoped up front. [See services →](https://thinkwork.ai/services)
+  </Card>
+</CardGrid>
+
+These docs cover the full product across all three tiers. The runtime is identical between them — only who operates it differs.
+
+## Six components of the harness
+
+Every concept page in these docs follows the same skeleton: **why** the component exists in the harness, **what** it does, **how to configure** it, **common patterns**, and **cross-links** into the rest of the system.
 
 <CardGrid>
   <Card title="Agents" icon="rocket">
-    Managed agents on AgentCore, connected agents that bring their own runtime, plus templates and skill packs for fleet-wide reuse.
+    The decision-making layer. Managed agents on AgentCore, connected agents that bring their own runtime, plus templates and skill packs for fleet-wide reuse. [Read more →](/concepts/agents/)
   </Card>
   <Card title="Threads" icon="document">
-    The universal work container. Every conversation, task, automation, and connector event lands in a thread with history and audit trail.
+    The harness's perception and history layer. Every conversation, task, automation, and connector event lands in a thread with history and audit trail. [Read more →](/concepts/threads/)
   </Card>
   <Card title="Memory" icon="open-book">
-    The umbrella for document knowledge, long-term memory, retrieval context, and portable memory contracts above any one backend.
+    The harness's context-management layer. Document knowledge, long-term memory, retrieval context, and portable memory contracts above any one backend. [Read more →](/concepts/knowledge/)
   </Card>
   <Card title="Connectors" icon="puzzle">
-    Bring in external channels, events, and tool systems. Integrations cover Slack, GitHub, and Google Workspace, while MCP tools cover remote external capabilities and custom recipes.
+    The harness's I/O surface. External channels, events, and tools — Slack, GitHub, Google Workspace integrations plus MCP tools for remote capabilities. [Read more →](/concepts/connectors/)
   </Card>
   <Card title="Automations" icon="setting">
-    Scheduled jobs, event-driven triggers, and routines that run on your schedule. Step Functions under the hood.
+    The harness's scheduled-trigger surface. Scheduled jobs, event-driven triggers, and routines on your schedule. Step Functions under the hood. [Read more →](/concepts/automations/)
   </Card>
   <Card title="Control" icon="approve-check">
-    Guardrails, budgets, and usage tracking. Know what your agents are doing, how much they cost, and where the boundaries are.
+    The harness's governance layer — the four R.E.S.T. anchors enforced in code. Guardrails, budgets, evaluations, and audit. [Read more →](/concepts/control/)
   </Card>
 </CardGrid>
 
 ## Quick start
+
+The fastest path is self-hosting the open Agent Harness in your own AWS:
 
 ```bash
 npm install -g thinkwork-cli
@@ -58,6 +76,8 @@ thinkwork deploy -s dev
 thinkwork doctor -s dev
 ```
 
-That's it. Five commands, one AWS account, and you own a production-grade agent harness instead of renting a black box.
+Five commands, one AWS account, and you own a production-grade Agent Harness — open and yours, not rented from a black box. Full walkthrough in [Getting Started](/getting-started/); the harness mechanics — PPAF agent loop, R.E.S.T. anchors, deployment topology — live in [Architecture](/architecture/).
+
+If you'd rather not run the runtime yourself, [ThinkWork for Business](https://thinkwork.ai/cloud) is the same harness operated by us, and [ThinkWork Enterprise](https://thinkwork.ai/services) wraps either with services.
 
 If you're new to ThinkWork, read the Concepts section in this order: [Threads](/concepts/threads/), [Agents](/concepts/agents/), [Memory](/concepts/knowledge/), then [Connectors](/concepts/connectors/).
