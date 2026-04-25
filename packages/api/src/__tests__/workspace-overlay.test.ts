@@ -596,6 +596,8 @@ describe("composeList", () => {
 		// hit, so we 404 the first two layers and succeed at defaults.
 		const CANONICAL_FALLBACKS = [
 			"USER.md",
+			"AGENTS.md",
+			"CONTEXT.md",
 			"GUARDRAILS.md",
 			"MEMORY_GUIDE.md",
 			"CAPABILITIES.md",
