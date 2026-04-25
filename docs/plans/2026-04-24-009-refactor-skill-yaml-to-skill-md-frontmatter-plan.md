@@ -204,7 +204,7 @@ None. This is a pure internal refactor of a thinkwork-owned format.
 
 ---
 
-- [ ] **U3. Update every reader (TS + Python + admin UI) to use frontmatter**
+- [x] **U3. Update every reader (TS + Python + admin UI) to use frontmatter** — shipped, 31 files touched, tier1_metadata shape preserved + pinned with new test, `_parse_skill_yaml` deleted
 
 **Goal:** Every consumer of skill metadata reads SKILL.md frontmatter via the U1 parsers. No code path opens a `skill.yaml` file. The admin UI no longer references skill.yaml.
 
@@ -267,7 +267,7 @@ None. This is a pure internal refactor of a thinkwork-owned format.
 
 ---
 
-- [ ] **U4. Update bootstrap, lint, and one-shot S3 purge**
+- [x] **U4. Update bootstrap, lint, and one-shot S3 purge** — shipped (reduced scope; bootstrap `--delete` was already added in PR #547, so existing sync auto-purges stale objects). validate-skill-catalog.sh now walks SKILL.md frontmatter
 
 **Goal:** The deploy pipeline reliably purges stale S3 objects when files disappear from disk; the existing `validate-skill-catalog.sh` lint validates frontmatter shape; existing stale skill.yaml objects in S3 are removed in a one-shot.
 
