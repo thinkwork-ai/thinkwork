@@ -90,6 +90,13 @@ vi.mock("../graphql/utils.js", () => {
 			timezone: tableCol("user_profiles.timezone"),
 			pronouns: tableCol("user_profiles.pronouns"),
 		},
+		tenantMembers: {
+			tenant_id: tableCol("tenant_members.tenant_id"),
+			principal_id: tableCol("tenant_members.principal_id"),
+			principal_type: tableCol("tenant_members.principal_type"),
+			role: tableCol("tenant_members.role"),
+			status: tableCol("tenant_members.status"),
+		},
 	};
 });
 
@@ -422,6 +429,7 @@ describe("pinned-file write guard", () => {
 		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]); // resolveCallerFromAuth
 		pushDbRows([agentRow()]); // resolveAgentTarget: agents
 		pushDbRows([tenantRow()]); // resolveAgentTarget: tenants
+		pushDbRows([{ role: "admin" }]); // callerIsTenantAdmin (U31)
 
 		const res = await parse(
 			await handler(
@@ -445,6 +453,7 @@ describe("pinned-file write guard", () => {
 		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
 		pushDbRows([agentRow()]);
 		pushDbRows([tenantRow()]);
+		pushDbRows([{ role: "admin" }]); // U31 role gate
 		s3Mock.on(PutObjectCommand).resolves({});
 
 		const res = await parse(
@@ -468,6 +477,7 @@ describe("pinned-file write guard", () => {
 		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
 		pushDbRows([agentRow()]);
 		pushDbRows([tenantRow()]);
+		pushDbRows([{ role: "admin" }]); // U31 role gate
 		s3Mock.on(PutObjectCommand).resolves({});
 
 		const res = await parse(
@@ -493,6 +503,7 @@ describe("agent DELETE", () => {
 		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
 		pushDbRows([agentRow()]);
 		pushDbRows([tenantRow()]);
+		pushDbRows([{ role: "admin" }]); // U31 role gate
 		s3Mock.on(DeleteObjectCommand).resolves({});
 
 		const res = await parse(
@@ -668,5 +679,213 @@ describe("action validation", () => {
 		);
 		expect(res.statusCode).toBe(400);
 		expect(res.body.error).toMatch(/Unknown action/);
+	});
+});
+
+// ─── 10. U31: tenant admin/owner role gate on writes ────────────────────────
+
+describe("U31 role gate (tenant admin/owner required for writes)", () => {
+	it("PUT by a member-role caller (not admin/owner) → 403, no S3 write", async () => {
+		authMockImpl.mockResolvedValue(authOk());
+		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]); // resolveCallerFromAuth
+		pushDbRows([agentRow()]); // resolveAgentTarget: agents
+		pushDbRows([tenantRow()]); // resolveAgentTarget: tenants
+		pushDbRows([{ role: "member" }]); // callerIsTenantAdmin: not admin
+
+		const res = await parse(
+			await handler(
+				event({
+					action: "put",
+					agentId: AGENT_ID,
+					path: "IDENTITY.md",
+					content: "override-attempt",
+				}),
+			),
+		);
+
+		expect(res.statusCode).toBe(403);
+		expect(res.body.error).toMatch(/admin or owner/i);
+		expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+	});
+
+	it("PUT by a caller with no membership row → 403", async () => {
+		authMockImpl.mockResolvedValue(authOk());
+		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+		pushDbRows([agentRow()]);
+		pushDbRows([tenantRow()]);
+		pushDbRows([]); // callerIsTenantAdmin: no membership row
+
+		const res = await parse(
+			await handler(
+				event({
+					action: "put",
+					agentId: AGENT_ID,
+					path: "IDENTITY.md",
+					content: "override-attempt",
+				}),
+			),
+		);
+
+		expect(res.statusCode).toBe(403);
+		expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+	});
+
+	it("DELETE by a member-role caller → 403", async () => {
+		authMockImpl.mockResolvedValue(authOk());
+		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+		pushDbRows([agentRow()]);
+		pushDbRows([tenantRow()]);
+		pushDbRows([{ role: "member" }]);
+
+		const res = await parse(
+			await handler(
+				event({ action: "delete", agentId: AGENT_ID, path: "IDENTITY.md" }),
+			),
+		);
+
+		expect(res.statusCode).toBe(403);
+		expect(s3Mock.commandCalls(DeleteObjectCommand).length).toBe(0);
+	});
+
+	it("regenerate-map by a member-role caller → 403", async () => {
+		authMockImpl.mockResolvedValue(authOk());
+		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+		pushDbRows([agentRow()]);
+		pushDbRows([tenantRow()]);
+		pushDbRows([{ role: "member" }]);
+
+		const res = await parse(
+			await handler(event({ action: "regenerate-map", agentId: AGENT_ID })),
+		);
+
+		expect(res.statusCode).toBe(403);
+	});
+
+	it("update-identity-field by a member-role caller → 403", async () => {
+		authMockImpl.mockResolvedValue(authOk());
+		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+		pushDbRows([agentRow()]);
+		pushDbRows([tenantRow()]);
+		pushDbRows([{ role: "member" }]);
+
+		const res = await parse(
+			await handler(
+				event({
+					action: "update-identity-field",
+					agentId: AGENT_ID,
+					field: "creature",
+					value: "axolotl",
+				}),
+			),
+		);
+
+		expect(res.statusCode).toBe(403);
+		expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+	});
+
+	it("GET by a member-role caller still succeeds (reads stay open)", async () => {
+		authMockImpl.mockResolvedValue(authOk());
+		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]); // resolveCallerFromAuth
+		pushDbRows([agentRow()]); // resolveAgentTarget: agents
+		pushDbRows([tenantRow()]); // resolveAgentTarget: tenants
+		// NOTE: no tenantMembers row queued — read path must not query it.
+		pushDbRows([agentRow()]); // composer.loadAgentContext: agents
+		pushDbRows([tenantRow()]); // composer.loadAgentContext: tenants
+		pushDbRows([templateRowTenantA()]); // composer.loadAgentContext: templates
+
+		s3Mock
+			.on(GetObjectCommand, {
+				Key: "tenants/acme/agents/marco/workspace/IDENTITY.md",
+			})
+			.rejects(noSuchKey());
+		s3Mock
+			.on(GetObjectCommand, {
+				Key: "tenants/acme/agents/_catalog/exec-assistant/workspace/IDENTITY.md",
+			})
+			.rejects(noSuchKey());
+		s3Mock
+			.on(GetObjectCommand, {
+				Key: "tenants/acme/agents/_catalog/defaults/workspace/IDENTITY.md",
+			})
+			.resolves(body("Your name is {{AGENT_NAME}}."));
+
+		const res = await parse(
+			await handler(event({ action: "get", agentId: AGENT_ID, path: "IDENTITY.md" })),
+		);
+		expect(res.statusCode).toBe(200);
+	});
+
+	it("LIST by a member-role caller still succeeds (reads stay open)", async () => {
+		authMockImpl.mockResolvedValue(authOk());
+		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+		pushDbRows([templateRowTenantA()]);
+		pushDbRows([tenantRow()]);
+		s3Mock.on(ListObjectsV2Command).resolves({ Contents: [] });
+
+		const res = await parse(
+			await handler(event({ action: "list", templateId: TEMPLATE_ID })),
+		);
+		expect(res.statusCode).toBe(200);
+	});
+
+	it("apikey caller bypasses the role check on writes (platform-credential trust)", async () => {
+		// Strands container path: shared service secret is the trust
+		// boundary; per-tenant role doesn't apply.
+		authMockImpl.mockResolvedValue({
+			principalId: null,
+			tenantId: TENANT_A,
+			email: null,
+			authType: "apikey",
+		});
+		pushDbRows([agentRow()]); // resolveAgentTarget: agents
+		pushDbRows([tenantRow()]); // resolveAgentTarget: tenants
+		// NO tenantMembers row queued — apikey path must short-circuit
+		// before calling callerIsTenantAdmin.
+		s3Mock.on(PutObjectCommand).resolves({});
+
+		const res = await parse(
+			await handler(
+				event({
+					action: "put",
+					agentId: AGENT_ID,
+					path: "IDENTITY.md",
+					content: "service-write",
+				}),
+			),
+		);
+		expect(res.statusCode).toBe(200);
+		expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(1);
+	});
+
+	it("admin role passes the gate", async () => {
+		authMockImpl.mockResolvedValue(authOk());
+		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+		pushDbRows([agentRow()]);
+		pushDbRows([tenantRow()]);
+		pushDbRows([{ role: "admin" }]);
+		s3Mock.on(DeleteObjectCommand).resolves({});
+
+		const res = await parse(
+			await handler(
+				event({ action: "delete", agentId: AGENT_ID, path: "IDENTITY.md" }),
+			),
+		);
+		expect(res.statusCode).toBe(200);
+	});
+
+	it("owner role passes the gate", async () => {
+		authMockImpl.mockResolvedValue(authOk());
+		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+		pushDbRows([agentRow()]);
+		pushDbRows([tenantRow()]);
+		pushDbRows([{ role: "owner" }]);
+		s3Mock.on(DeleteObjectCommand).resolves({});
+
+		const res = await parse(
+			await handler(
+				event({ action: "delete", agentId: AGENT_ID, path: "IDENTITY.md" }),
+			),
+		);
+		expect(res.statusCode).toBe(200);
 	});
 });
