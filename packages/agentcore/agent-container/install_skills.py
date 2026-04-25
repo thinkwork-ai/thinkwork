@@ -159,7 +159,7 @@ def install_workspace(tenant_id: str, assistant_id: str,
                     count, bucket, prefix, target_dir)
 
 
-SYSTEM_WORKSPACE_DIR = "/tmp/system-workspace"
+SYSTEM_WORKSPACE_DIR = "/tmp/workspace-defaults"
 _system_workspace_loaded = False
 
 

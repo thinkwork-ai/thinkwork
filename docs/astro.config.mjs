@@ -67,6 +67,29 @@ export default defineConfig({
                   slug: "concepts/agents/managed-agents",
                 },
                 { label: "Templates", slug: "concepts/agents/templates" },
+                {
+                  label: "Agent Design",
+                  collapsed: true,
+                  items: [
+                    { label: "Overview", slug: "agent-design" },
+                    {
+                      label: "Folder Is the Agent",
+                      slug: "agent-design/folder-is-the-agent",
+                    },
+                    {
+                      label: "Inheritance Rules",
+                      slug: "agent-design/inheritance-rules",
+                    },
+                    {
+                      label: "Authoring Templates",
+                      slug: "agent-design/authoring-templates",
+                    },
+                    {
+                      label: "Import FOG/FITA Bundles",
+                      slug: "agent-design/import-fog-fita",
+                    },
+                  ],
+                },
                 { label: "Skills", slug: "concepts/agents/skills" },
                 { label: "Code Sandbox", slug: "concepts/agents/code-sandbox" },
                 {

@@ -1,0 +1,29 @@
+---
+title: Authoring Templates
+description: Design reusable Fat-folder agent templates.
+---
+
+Start with the smallest folder tree that explains the work.
+
+1. Write the root `CONTEXT.md` for the generalist.
+2. Add one `AGENTS.md` routing row for each specialist the generalist should delegate to.
+3. Create each specialist folder with a focused `CONTEXT.md`.
+4. Add folder-level `GUARDRAILS.md`, `CAPABILITIES.md`, or `PLATFORM.md` only when the specialist truly differs.
+5. Attach skills in the `Skills` column of the routing table.
+
+Example:
+
+```md
+| Task | Go to | Read | Skills |
+| --- | --- | --- | --- |
+| Expense receipts | expenses/ | expenses/CONTEXT.md | approve-receipt, tag-vendor |
+| Recruiting screens | recruiting/ | recruiting/CONTEXT.md | score-candidate |
+```
+
+Template authors should prefer shallow trees. Depth four triggers a warning;
+depth six is rejected. The cap prevents runaway delegation while leaving room
+for realistic enterprise structures such as legal to privacy to GDPR.
+
+Local skills can be imported under `skills/<slug>/SKILL.md`, but inline
+`SKILL.md` authoring in the builder is not part of the v1 surface.
+

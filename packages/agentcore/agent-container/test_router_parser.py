@@ -2,7 +2,7 @@
 import os
 import tempfile
 import pytest
-from router_parser import parse_router, resolve_profile, expand_file_list, filter_skills, ContextProfile
+from router_parser import parse_router, resolve_profile, expand_file_list, ContextProfile
 
 
 SAMPLE_ROUTER = """# Workspace Router
@@ -76,20 +76,21 @@ class TestParseRouter:
         profiles = parse_router(router_path)
         default = profiles["default"]
         assert default.load == ["SOUL.md", "IDENTITY.md", "USER.md"]
-        assert default.skills == ["all"]
         assert default.skip == []
 
     def test_email_profile(self, router_path):
         profiles = parse_router(router_path)
         email = profiles["email"]
         assert email.load == ["docs/procedures/email-triage.md", "templates/email/"]
-        assert email.skills == ["agent-email-send", "google-email"]
 
     def test_heartbeat_has_skip(self, router_path):
         profiles = parse_router(router_path)
         hb = profiles["heartbeat"]
         assert hb.skip == ["IDENTITY.md", "USER.md"]
-        assert hb.skills == ["ticket-management"]
+
+    def test_ignores_legacy_skills_directives(self, router_path):
+        profiles = parse_router(router_path)
+        assert not hasattr(profiles["email"], "skills")
 
     def test_missing_file_returns_empty(self, tmp_path):
         profiles = parse_router(str(tmp_path / "nonexistent.md"))
@@ -105,7 +106,6 @@ class TestResolveProfile:
         assert "USER.md" in profile.load
         assert "docs/tone.md" in profile.load
         assert "memory/preferences.md" in profile.load
-        assert profile.skills == ["all"]
 
     def test_channel_match_email(self, router_path):
         profile = resolve_profile(router_path, channel="email")
@@ -114,7 +114,6 @@ class TestResolveProfile:
         assert "IDENTITY.md" in profile.load
         assert "docs/procedures/email-triage.md" in profile.load
         assert "templates/email/" in profile.load
-        assert profile.skills == ["agent-email-send", "google-email"]
 
     def test_heartbeat_skip(self, router_path):
         profile = resolve_profile(router_path, channel="heartbeat")
@@ -122,7 +121,6 @@ class TestResolveProfile:
         assert "IDENTITY.md" not in profile.load
         assert "USER.md" not in profile.load
         assert "docs/procedures/" in profile.load
-        assert profile.skills == ["ticket-management"]
 
     def test_process_step_match(self, router_path):
         profile = resolve_profile(router_path, channel="chat",
@@ -131,17 +129,14 @@ class TestResolveProfile:
         assert "SOUL.md" in profile.load
         assert "docs/tone.md" in profile.load
         assert "templates/email/welcome.md" in profile.load
-        assert profile.skills == ["agent-email-send"]
 
     def test_unknown_channel_falls_to_default(self, router_path):
         profile = resolve_profile(router_path, channel="unknown_channel")
         assert profile.load == ["SOUL.md", "IDENTITY.md", "USER.md"]
-        assert profile.skills == ["all"]
 
     def test_no_channel_falls_to_default(self, router_path):
         profile = resolve_profile(router_path, channel="")
         assert profile.load == ["SOUL.md", "IDENTITY.md", "USER.md"]
-        assert profile.skills == ["all"]
 
     def test_no_router_returns_none(self, tmp_path):
         profile = resolve_profile(str(tmp_path / "nonexistent.md"), channel="chat")
@@ -151,7 +146,6 @@ class TestResolveProfile:
         profile = resolve_profile(router_path, channel="email",
                                   context_profile="process:onboarding:step-1")
         # Should match process step, not email
-        assert profile.skills == ["agent-email-send"]
         assert "templates/email/welcome.md" in profile.load
 
 
@@ -178,24 +172,3 @@ class TestExpandFileList:
     def test_deduplication(self, workspace):
         result = expand_file_list(str(workspace), ["SOUL.md", "SOUL.md"])
         assert result.count("SOUL.md") == 1
-
-
-class TestFilterSkills:
-    def test_all_returns_everything(self):
-        skills = [{"skillId": "a"}, {"skillId": "b"}]
-        assert filter_skills(skills, ["all"]) == skills
-
-    def test_per_job_returns_everything(self):
-        skills = [{"skillId": "a"}, {"skillId": "b"}]
-        assert filter_skills(skills, ["per-job"]) == skills
-
-    def test_specific_slugs_filter(self):
-        skills = [{"skillId": "a"}, {"skillId": "b"}, {"skillId": "c"}]
-        result = filter_skills(skills, ["a", "c"])
-        assert len(result) == 2
-        assert result[0]["skillId"] == "a"
-        assert result[1]["skillId"] == "c"
-
-    def test_empty_profile_returns_all(self):
-        skills = [{"skillId": "a"}]
-        assert filter_skills(skills, []) == skills

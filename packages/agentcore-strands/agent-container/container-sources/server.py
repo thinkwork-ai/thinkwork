@@ -2100,17 +2100,15 @@ def _execute_agent_turn(payload: dict) -> dict:
         effective_skills = skills_config
         if harness_files and isinstance(harness_files, list):
             from router_parser import ContextProfile
-            profile = ContextProfile(load=harness_files, skills=["all"])
+            profile = ContextProfile(load=harness_files)
         else:
-            from router_parser import resolve_profile, filter_skills
+            from router_parser import resolve_profile
             router_path = os.path.join(WORKSPACE_DIR, "ROUTER.md")
             profile = resolve_profile(
                 router_path,
                 channel=trigger_channel,
                 context_profile=context_profile_name or None,
             )
-            if profile and skills_config:
-                effective_skills = filter_skills(skills_config, profile.skills)
 
         has_workspace_map = os.path.isfile(os.path.join(WORKSPACE_DIR, "AGENTS.md"))
         parent_kb_config = (

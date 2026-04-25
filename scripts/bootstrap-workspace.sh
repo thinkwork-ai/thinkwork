@@ -48,11 +48,9 @@ echo ""
 
 echo "── Uploading workspace defaults to S3 ──"
 
-# Single loop over the consolidated source dir. Plan §008 U2 moved the
-# previously-split `packages/{system-workspace,memory-templates}/` content
-# into `packages/workspace-defaults/files/`; both old packages are README
-# stubs until U28 deletes them. The S3 key shape (`workspace-defaults/<basename>`)
-# is unchanged so consumers (composer, install_skills) keep working.
+# Single loop over the consolidated source dir. Plan §008 U2 moved every
+# canonical seed into `packages/workspace-defaults/files/`; the S3 key shape
+# (`workspace-defaults/<basename>`) is unchanged so consumers keep working.
 for f in "$REPO_ROOT/packages/workspace-defaults/files/"*.md; do
   fname=$(basename "$f")
   aws s3 cp "$f" "s3://$BUCKET/workspace-defaults/$fname" --quiet
@@ -217,8 +215,7 @@ bootstrap_status=0
     COUNT=${COUNT:-0}
 
     # Expect at least 11 files (8 consolidated workspace-defaults/files/ +
-    # ROUTER.md + 3 memory stubs). Plan §008 U2 unified the previously-split
-    # packages/{memory-templates,system-workspace}/ content under
+    # ROUTER.md + 3 memory stubs). Plan §008 U2 unified all seed content under
     # packages/workspace-defaults/files/; the S3 layout is unchanged.
     if [ "$COUNT" -ge "11" ]; then
       echo "  ✓ $slug — defaults exist ($COUNT files)"
