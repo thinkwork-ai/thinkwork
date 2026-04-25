@@ -5,7 +5,7 @@ description: Two entry points into ThinkWork automations — cron-like schedules
 
 import { Aside } from '@astrojs/starlight/components';
 
-Automations start from one of two entry points: a schedule fires at a predetermined time, or an event arrives and triggers a run. Both end up in the same Step Functions state machine and the same `AUTO-` thread. The difference is all at the front.
+Automations start from one of two entry points into the harness's scheduled-trigger surface: a schedule fires at a predetermined time, or an event arrives and triggers a run. Both end up in the same Step Functions state machine and the same `AUTO-` thread. The difference is all at the front. Routing both entry points through the same downstream pipeline is what gives the **Traceability** operating guarantee its consistency at the automation tier — a scheduled monthly digest and an event-triggered triage flow look identical in the audit log, identical in the cost ledger, identical in the operator's queue.
 
 ## The two entry points
 

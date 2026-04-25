@@ -5,7 +5,7 @@ description: How ThinkWork applies Bedrock Guardrails to managed agents — wher
 
 import { Aside } from '@astrojs/starlight/components';
 
-Guardrails are the safety boundary around model invocation. They run inside the Strands invocation path every time an agent calls Bedrock, and they enforce rules that shouldn't depend on a prompt being written correctly: disallowed topics, content filters, PII handling, grounding checks.
+Guardrails are the harness's safety boundary around model invocation — the load-bearing implementation of the **Security** operating guarantee at the model tier. They run *inside* the Strands invocation path every time an agent calls Bedrock, and they enforce rules that shouldn't depend on a prompt being written correctly: disallowed topics, content filters, PII handling, grounding checks. Inside-the-call enforcement is what makes the boundary non-bypassable — a skill pack that tries to call Bedrock directly still gets the guardrail applied, because the runtime passes the guardrail id through every invocation configured for the template.
 
 ThinkWork uses Amazon Bedrock Guardrails as the primary enforcement layer for managed agents, because it plugs into the same Bedrock Converse API path the agent is already using. There's no separate policy engine to run, no extra service to keep in sync.
 

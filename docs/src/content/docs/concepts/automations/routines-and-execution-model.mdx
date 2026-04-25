@@ -5,7 +5,7 @@ description: Multi-step automations backed by AWS Step Functions — how agent i
 
 import { Aside } from '@astrojs/starlight/components';
 
-A single "invoke the agent with this prompt" is the simplest automation. Many useful automations are multi-step: fetch data, classify it, draft responses, wait for human approval, act on the results. ThinkWork calls these **routines**, and they're backed by AWS Step Functions state machines.
+A single "invoke the agent with this prompt" is the simplest automation. Many useful automations are multi-step: fetch data, classify it, draft responses, wait for human approval, act on the results. ThinkWork calls these **routines**, and they're backed by AWS Step Functions state machines. Routines are how the harness's scheduled-trigger surface scales beyond single-turn work — and where the **Reliability** operating guarantee lives in concrete form: each step is independently observable, retriable, and auditable, with Step Functions providing the durable execution substrate that survives Lambda timeouts, intermediate failures, and human-in-the-loop pauses.
 
 The design goal for routines is that each step is independently observable, retriable, and auditable — while still belonging to one coherent run that lands in one `AUTO-` thread.
 
