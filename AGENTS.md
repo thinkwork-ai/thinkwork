@@ -2,6 +2,41 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
+## Mandatory Worktree Isolation
+
+For any task that may edit files, create a new git worktree before making changes.
+
+The main checkout at `/Users/ericodom/Projects/thinkwork` is a coordination checkout only. Do not edit files there for implementation work.
+
+Required workflow:
+
+1. Start from `/Users/ericodom/Projects/thinkwork`.
+2. Run `git fetch origin`.
+3. Create a task worktree under `.Codex/worktrees/<short-task-name>`.
+4. Create a new branch named `codex/<short-task-name>` from `origin/main`.
+5. `cd` into that worktree before reading or editing task files.
+6. Do not edit files in the main checkout.
+7. Do not reuse another agent's worktree unless the user explicitly asks you to continue that exact branch.
+8. If you are already in the main checkout, on `main`, or on a branch/worktree owned by another session, stop and create a new worktree first.
+
+Prefer the helper:
+
+```bash
+scripts/new-worktree <short-task-name>
+cd .Codex/worktrees/<short-task-name>
+```
+
+Manual equivalent:
+
+```bash
+git fetch origin
+git worktree add .Codex/worktrees/<short-task-name> \
+  -b codex/<short-task-name> origin/main
+cd .Codex/worktrees/<short-task-name>
+```
+
+After a worktree's PR merges, remove the worktree and delete its branch without being asked.
+
 ## Repository at a glance
 
 Thinkwork is an AWS-native agent harness: a TypeScript monorepo plus a Python agent runtime, deployed by the repo's own CLI via Terraform. There is **no local-only mode** — end-to-end work requires a deployed AWS stack. "Thinkwork supersedes maniflow" — ignore the old `maniflow*` names you may see on stale resources.
