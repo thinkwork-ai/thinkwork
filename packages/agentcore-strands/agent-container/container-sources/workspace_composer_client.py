@@ -148,6 +148,12 @@ def _reset_composed_cache() -> None:
         _COMPOSED_CACHE.clear()
 
 
+def invalidate_composed_workspace_cache(tenant_id: str, agent_id: str) -> None:
+    """Drop a composed-workspace cache entry after a workspace mutation."""
+    with _COMPOSED_CACHE_LOCK:
+        _COMPOSED_CACHE.pop((tenant_id, agent_id), None)
+
+
 def write_composed_to_dir(files: list[dict], workspace_dir: str) -> int:
     """Write each composed file to workspace_dir/{path}. Returns count written.
 

@@ -44,6 +44,7 @@ import urllib.request
 
 from skill_resolver import MAX_FOLDER_DEPTH, RESERVED_FOLDER_NAMES
 from strands import tool
+from workspace_composer_client import invalidate_composed_workspace_cache
 
 logger = logging.getLogger(__name__)
 
@@ -222,6 +223,7 @@ def write_memory(path: str, content: str) -> str:
 
     try:
         _post_put(tenant_id, agent_id, rel_path, content, api_url, api_secret)
+        invalidate_composed_workspace_cache(tenant_id, agent_id)
     except urllib.error.HTTPError as e:
         try:
             detail = json.loads(e.read().decode("utf-8")).get("error") or str(e)
