@@ -10,7 +10,7 @@ export function InheritanceIndicator({
   source,
   updateAvailable,
 }: InheritanceIndicatorProps) {
-  if (!source) return null;
+  if (!source || !updateAvailable) return null;
 
   return (
     <span

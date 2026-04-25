@@ -32,185 +32,26 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createTenantSkill, saveTenantFile } from "@/lib/skills-api";
+import {
+  SKILL_AUTHORING_TEMPLATES,
+  SKILL_CATEGORIES,
+  renderSkillExtraFiles,
+  renderSkillTemplate,
+  slugifySkillName,
+  type SkillTemplateIcon,
+  type SkillTemplateKey,
+} from "@/lib/skill-authoring-templates";
 
 export const Route = createFileRoute("/_authed/_tenant/capabilities/skills/builder")({
   component: SkillBuilderPage,
 });
 
-// ---------------------------------------------------------------------------
-// Templates
-// ---------------------------------------------------------------------------
-
-type TemplateKey = "script-tool" | "knowledge" | "process" | "blank";
-
-const TEMPLATES: Record<TemplateKey, {
-  label: string;
-  description: string;
-  icon: typeof Zap;
-  skillMd: string;
-  extraFiles?: Record<string, string>;
-}> = {
-  "script-tool": {
-    label: "Script Tool",
-    description: "Skill with embedded Python scripts the agent executes directly",
-    icon: Code,
-    skillMd: `---
-name: {{slug}}
-description: >
-  {{description}}
-license: Proprietary
-metadata:
-  author: tenant
-  version: "1.0.0"
----
-
-# {{name}}
-
-## Tools
-
-Describe the tools this skill provides.
-
-## Usage
-
-Explain when and how to use this skill.
-`,
-    extraFiles: {
-      "scripts/tool.py": `"""{{name}} — custom skill script."""
-
-import json
-import os
-
-
-def {{slug_underscore}}_action(query: str) -> str:
-    """Execute the main action for this skill.
-
-    Args:
-        query: The user's request.
-
-    Returns:
-        JSON result.
-    """
-    # TODO: Implement your skill logic here
-    return json.dumps({"result": f"Processed: {query}"})
-`,
-    },
-  },
-  knowledge: {
-    label: "Knowledge Skill",
-    description: "Domain-specific instructions with no tools — pure context",
-    icon: FileText,
-    skillMd: `---
-name: {{slug}}
-description: >
-  {{description}}
-license: Proprietary
-metadata:
-  author: tenant
-  version: "1.0.0"
----
-
-# {{name}}
-
-## Overview
-
-Describe the domain knowledge this skill provides.
-
-## Key Principles
-
-List the most important rules and guidelines.
-
-## References
-
-- Read \`references/guide.md\` when you need the detailed reference for this domain.
-`,
-    extraFiles: {
-      "references/guide.md": `# {{name}} — Reference Guide
-
-Add detailed reference material here that the agent can load on demand.
-`,
-    },
-  },
-  process: {
-    label: "Process / Workflow",
-    description: "Multi-step business process with structured steps",
-    icon: Wand2,
-    skillMd: `---
-name: {{slug}}
-description: >
-  {{description}}
-license: Proprietary
-metadata:
-  author: tenant
-  version: "1.0.0"
----
-
-# {{name}}
-
-## Overview
-
-Describe what this process achieves.
-
-## Steps Summary
-
-1. **Step 1** — Brief description
-2. **Step 2** — Brief description
-3. **Step 3** — Brief description
-
-## References
-
-- Read \`references/steps.md\` when you need the detailed step-by-step instructions.
-
-## Guardrails
-
-- What NOT to do during this process.
-`,
-    extraFiles: {
-      "references/steps.md": `# {{name}} — Detailed Steps
-
-## Step 1: [Name]
-
-Detailed instructions for step 1.
-
-## Step 2: [Name]
-
-Detailed instructions for step 2.
-
-## Step 3: [Name]
-
-Detailed instructions for step 3.
-`,
-    },
-  },
-  blank: {
-    label: "Blank",
-    description: "Empty template with required structure only",
-    icon: Zap,
-    skillMd: `---
-name: {{slug}}
-description: >
-  {{description}}
-license: Proprietary
-metadata:
-  author: tenant
-  version: "1.0.0"
----
-
-# {{name}}
-
-Add your skill instructions here.
-`,
-  },
+const TEMPLATE_ICONS: Record<SkillTemplateIcon, typeof Zap> = {
+  Code,
+  FileText,
+  Wand2,
+  Zap,
 };
-
-const CATEGORIES = [
-  { value: "productivity", label: "Productivity" },
-  { value: "integrations", label: "Integrations" },
-  { value: "processes", label: "Processes" },
-  { value: "knowledge", label: "Knowledge" },
-  { value: "communication", label: "Communication" },
-  { value: "research", label: "Research" },
-  { value: "custom", label: "Custom" },
-];
 
 // ---------------------------------------------------------------------------
 // Page component
@@ -231,7 +72,7 @@ function SkillBuilderPage() {
   const [creating, setCreating] = useState(false);
 
   // Step 1: Template
-  const [template, setTemplate] = useState<TemplateKey | null>(null);
+  const [template, setTemplate] = useState<SkillTemplateKey | null>(null);
 
   // Step 2: Metadata
   const [name, setName] = useState("");
@@ -243,8 +84,7 @@ function SkillBuilderPage() {
   const [skillMdContent, setSkillMdContent] = useState("");
 
   // Derived
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-  const slugUnderscore = slug.replace(/-/g, "_");
+  const slug = slugifySkillName(name);
 
   const canNext = (() => {
     if (step === 1) return template !== null;
@@ -255,14 +95,9 @@ function SkillBuilderPage() {
 
   const goNext = () => {
     if (step === 2 && template) {
-      // Generate SKILL.md content from template
-      const tmpl = TEMPLATES[template];
-      const content = tmpl.skillMd
-        .replace(/\{\{name\}\}/g, name)
-        .replace(/\{\{slug\}\}/g, slug)
-        .replace(/\{\{slug_underscore\}\}/g, slugUnderscore)
-        .replace(/\{\{description\}\}/g, description || `Custom skill: ${name}`);
-      setSkillMdContent(content);
+      setSkillMdContent(
+        renderSkillTemplate({ template, name, description, category, tags }),
+      );
     }
     setStep((s) => Math.min(s + 1, 4));
   };
@@ -289,14 +124,9 @@ function SkillBuilderPage() {
 
       // 3. Create extra files from template
       if (template) {
-        const tmpl = TEMPLATES[template];
-        if (tmpl.extraFiles) {
-          for (const [path, content] of Object.entries(tmpl.extraFiles)) {
-            const rendered = content
-              .replace(/\{\{name\}\}/g, name)
-              .replace(/\{\{slug\}\}/g, slug)
-              .replace(/\{\{slug_underscore\}\}/g, slugUnderscore)
-              .replace(/\{\{description\}\}/g, description || `Custom skill: ${name}`);
+        const extraFiles = renderSkillExtraFiles({ template, name, description, category, tags });
+        if (Object.keys(extraFiles).length > 0) {
+          for (const [path, rendered] of Object.entries(extraFiles)) {
             try {
               const { createTenantFile } = await import("@/lib/skills-api");
               await createTenantFile(tenantSlug, result.slug, path, rendered);
@@ -324,9 +154,12 @@ function SkillBuilderPage() {
 
   const renderStep1 = () => (
     <div className="grid grid-cols-2 gap-4">
-      {(Object.entries(TEMPLATES) as [TemplateKey, typeof TEMPLATES[TemplateKey]][]).map(
+      {(Object.entries(SKILL_AUTHORING_TEMPLATES) as [
+        SkillTemplateKey,
+        typeof SKILL_AUTHORING_TEMPLATES[SkillTemplateKey],
+      ][]).map(
         ([key, tmpl]) => {
-          const Icon = tmpl.icon;
+          const Icon = TEMPLATE_ICONS[tmpl.icon];
           const selected = template === key;
           return (
             <Card
@@ -396,7 +229,7 @@ function SkillBuilderPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {CATEGORIES.map((c) => (
+            {SKILL_CATEGORIES.map((c) => (
               <SelectItem key={c.value} value={c.value}>
                 {c.label}
               </SelectItem>
@@ -466,7 +299,7 @@ function SkillBuilderPage() {
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Template</span>
-            <span>{template ? TEMPLATES[template].label : "—"}</span>
+            <span>{template ? SKILL_AUTHORING_TEMPLATES[template].label : "—"}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Category</span>
@@ -476,10 +309,10 @@ function SkillBuilderPage() {
             <span className="text-muted-foreground">SKILL.md</span>
             <span>{skillMdContent.split("\n").length} lines</span>
           </div>
-          {template && TEMPLATES[template].extraFiles && (
+          {template && SKILL_AUTHORING_TEMPLATES[template].extraFiles && (
             <div className="flex justify-between">
               <span className="text-muted-foreground">Extra files</span>
-              <span>{Object.keys(TEMPLATES[template].extraFiles!).join(", ")}</span>
+              <span>{Object.keys(SKILL_AUTHORING_TEMPLATES[template].extraFiles!).join(", ")}</span>
             </div>
           )}
         </CardContent>
