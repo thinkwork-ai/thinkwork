@@ -587,3 +587,456 @@ def test_boot_assert_lists_delegate_to_workspace_tool():
     import _boot_assert as ba
 
     assert "delegate_to_workspace_tool" in ba.EXPECTED_CONTAINER_SOURCES
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Live Bedrock spawn (Plan 2026-04-25-004 U5)
+# ────────────────────────────────────────────────────────────────────────────
+
+
+class _StubResult:
+    """Mimics the shape Strands' ``Agent`` call returns: stringifies +
+    exposes ``result.metrics.accumulated_usage`` as the spawn body reads.
+    """
+
+    def __init__(self, *, text: str, accumulated_usage: dict[str, int] | None):
+        self._text = text
+
+        class _Metrics:
+            pass
+
+        self.metrics = _Metrics()
+        self.metrics.accumulated_usage = accumulated_usage
+
+    def __str__(self) -> str:  # noqa: D401
+        return self._text
+
+
+def _make_strands_stubs(
+    *,
+    captured: dict | None = None,
+    text: str = "sub-agent reply",
+    accumulated_usage: dict[str, int] | None = None,
+    raise_on_call: Exception | None = None,
+):
+    """Build (model_factory, agent_factory, tool_decorator) stubs that
+    mimic Strands' surface enough for the spawn body, and capture each
+    constructor's args into ``captured`` so tests can assert them.
+
+    ``raise_on_call`` makes ``Agent(...)(task)`` raise — used by the
+    error-path test.
+    """
+    captured = captured if captured is not None else {}
+
+    class _ModelStub:
+        def __init__(self, **kwargs):
+            captured["model_kwargs"] = kwargs
+
+    class _AgentStub:
+        def __init__(self, *, model, system_prompt, tools, callback_handler):
+            captured["agent_kwargs"] = {
+                "model": model,
+                "system_prompt": system_prompt,
+                "tools": list(tools),
+                "callback_handler": callback_handler,
+            }
+
+        def __call__(self, task):
+            captured["task"] = task
+            if raise_on_call is not None:
+                raise raise_on_call
+            return _StubResult(
+                text=text,
+                accumulated_usage=accumulated_usage,
+            )
+
+    # No-op tool decorator (returns the function unchanged) so we can
+    # introspect tool identity without Strands' real wrapping.
+    def _tool_dec(fn):
+        return fn
+
+    return _ModelStub, _AgentStub, _tool_dec, captured
+
+
+def _build_live_factory(
+    *,
+    composer_files: list[dict[str, Any]] | None = None,
+    platform_catalog: dict[str, dict[str, Any]] | None = None,
+    cfg_model: str = "anthropic.claude-sonnet-4-v1:0",
+    aws_region: str = "us-east-1",
+    text: str = "sub-agent reply",
+    accumulated_usage: dict[str, int] | None = None,
+    raise_on_call: Exception | None = None,
+    usage_acc: list | None = None,
+):
+    """Helper: build a factory with Strands stubs in place of the real
+    BedrockModel + Agent so the *live* default spawn path runs end-to-end
+    without booting Bedrock.
+
+    Returns ``(tool_fn, captured)``. ``captured`` exposes the model
+    kwargs, agent kwargs, task, and ``usage_acc`` for assertions.
+    """
+    from delegate_to_workspace_tool import make_delegate_to_workspace_fn
+
+    model_factory, agent_factory, tool_decorator, captured = _make_strands_stubs(
+        text=text,
+        accumulated_usage=accumulated_usage,
+        raise_on_call=raise_on_call,
+    )
+
+    composer_mock = MagicMock()
+    composer_mock.return_value = composer_files or []
+
+    usage_acc = usage_acc if usage_acc is not None else []
+    captured["usage_acc"] = usage_acc
+
+    tool_fn = make_delegate_to_workspace_fn(
+        parent_tenant_id="tenant-abc",
+        parent_agent_id="agent-xyz",
+        api_url="https://api.example.test",
+        api_secret="secret",
+        platform_catalog_manifest=platform_catalog,
+        cfg_model=cfg_model,
+        usage_acc=usage_acc,
+        composer_fetch=composer_mock,
+        aws_region=aws_region,
+        model_factory=model_factory,
+        agent_factory=agent_factory,
+        tool_decorator=tool_decorator,
+        # spawn_fn deliberately omitted → live default engages.
+    )
+    captured["composer_mock"] = composer_mock
+    return tool_fn, captured
+
+
+class TestLiveSpawnHappyPath:
+    """AE2: thin sub-agent (`expenses/` with only CONTEXT.md + AGENTS.md +
+    one platform skill in routing) → ``ok: True`` + sub-agent reply +
+    usage tokens.
+    """
+
+    def test_thin_sub_agent_with_platform_skill_returns_ok_true(self):
+        """AE2 happy path: live default engages (no spawn_fn injected)
+        and Bedrock is stubbed so the test runs offline.
+        """
+        tree = [
+            _entry("expenses/AGENTS.md", EXPENSES_AGENTS_MD),
+            _entry("expenses/CONTEXT.md", "Expenses sub-agent context.\n"),
+            # No local skill — must fall through to platform.
+        ]
+        platform_manifest = {
+            "approve-receipt": {"skill_md_content": PLATFORM_SKILL_MD},
+        }
+        tool_fn, captured = _build_live_factory(
+            composer_files=tree,
+            platform_catalog=platform_manifest,
+            text="approved",
+            accumulated_usage={"inputTokens": 42, "outputTokens": 17},
+        )
+
+        result = tool_fn(path="expenses", task="approve a receipt")
+
+        assert result["ok"] is True
+        assert result["sub_agent_response"] == "approved"
+        assert result["sub_agent_usage"] == {
+            "input_tokens": 42,
+            "output_tokens": 17,
+        }
+        # The factory's `usage_acc` accumulator captured the same shape.
+        assert captured["usage_acc"][-1] == {
+            "input_tokens": 42,
+            "output_tokens": 17,
+        }
+        # Task forwarded verbatim to Strands' Agent(...)(task) call.
+        assert captured["task"] == "approve a receipt"
+
+
+class TestLiveSpawnLocalSkill:
+    """AE6: sub-agent with a local skill in
+    ``expenses/skills/approve-receipt/SKILL.md`` → sub-agent's tool
+    list includes a callable for the skill.
+    """
+
+    def test_local_skill_appears_in_sub_agent_tool_list(self):
+        tool_fn, captured = _build_live_factory(
+            composer_files=_expenses_tree(),
+        )
+        result = tool_fn(path="expenses", task="approve")
+
+        assert result["ok"] is True
+        # The Agent's tool list contains exactly one tool — the local
+        # skill, exposed as a callable that returns the SKILL.md body.
+        tools = captured["agent_kwargs"]["tools"]
+        assert len(tools) == 1
+        # Tool name is slug with `-` → `_` (matches server.py pattern).
+        assert tools[0].__name__ == "approve_receipt"
+        # The tool returns the SKILL.md body so the LLM can read it.
+        assert tools[0]() == LOCAL_SKILL_MD
+
+
+class TestLiveSpawnBodySwapSafety:
+    """**Body-swap safety integration test.**
+
+    Production registers the tool with ``spawn_fn=None`` (zero-arg —
+    factory falls back to the live default). A future change that
+    re-introduces an inert default fails this test loudly.
+    """
+
+    def test_zero_arg_spawn_fn_uses_live_default_and_returns_ok_true(self):
+        """Mirrors the production registration call shape: build the
+        factory WITHOUT ``spawn_fn=`` and assert the live default path
+        produces ``ok: True``. If a future change reverts the production
+        default to inert, this test fails.
+        """
+        from delegate_to_workspace_tool import make_delegate_to_workspace_fn
+
+        # Stubs replace BedrockModel + Agent so the live spawn body
+        # runs end-to-end without booting Bedrock.
+        model_factory, agent_factory, tool_dec, captured = _make_strands_stubs(
+            text="ok",
+            accumulated_usage={"inputTokens": 1, "outputTokens": 2},
+        )
+        composer_mock = MagicMock(return_value=_expenses_tree())
+
+        tool_fn = make_delegate_to_workspace_fn(
+            parent_tenant_id="tenant-abc",
+            parent_agent_id="agent-xyz",
+            api_url="https://api.example.test",
+            api_secret="secret",
+            platform_catalog_manifest=None,
+            cfg_model="anthropic.claude-sonnet-4-v1:0",
+            usage_acc=[],
+            composer_fetch=composer_mock,
+            aws_region="us-east-1",
+            model_factory=model_factory,
+            agent_factory=agent_factory,
+            tool_decorator=tool_dec,
+            # NO spawn_fn → must hit the live default. This is the
+            # production-mirror code path.
+        )
+
+        result = tool_fn(path="expenses", task="t")
+
+        # The contract: production registration produces a live spawn
+        # whose result has `ok: True`. If `spawn_fn=None` ever falls
+        # back to inert again, this fails.
+        assert result["ok"] is True, (
+            "spawn_fn=None must hit the live spawn default; if this fails, "
+            "the production code path has reverted to inert"
+        )
+        assert result["sub_agent_response"] == "ok"
+
+
+class TestLiveSpawnWarningsPropagation:
+    """Edge case: parser-skipped routing rows surface in the
+    tool-result envelope so the parent LLM can recover.
+    """
+
+    def test_warnings_appear_in_top_level_result(self):
+        tree = [
+            _entry("expenses/AGENTS.md", EXPENSES_AGENTS_MD_WITH_SKIPS),
+            _entry("expenses/CONTEXT.md", "Sub.\n"),
+            _entry(
+                "expenses/skills/approve-receipt/SKILL.md",
+                LOCAL_SKILL_MD,
+            ),
+        ]
+        tool_fn, captured = _build_live_factory(
+            composer_files=tree,
+            text="ok",
+            accumulated_usage={"inputTokens": 0, "outputTokens": 0},
+        )
+        result = tool_fn(path="expenses", task="t")
+
+        assert result["ok"] is True
+        # Top-level `warnings` field carries the parser's human-readable
+        # warnings so the parent LLM sees them in the tool-result envelope.
+        assert len(result["warnings"]) == 2
+        assert "memory/" in result["warnings"][0]
+        # Top-level `skipped_rows` carries the structured shape too.
+        assert result["skipped_rows"] == [
+            {"row_index": 0, "go_to": "memory/", "reason": "reserved"},
+            {"row_index": 1, "go_to": "Not A Path", "reason": "invalid_path"},
+        ]
+        # The skipped row's slug does NOT appear in the sub-agent's
+        # **tool list** because the parser dropped the row before
+        # resolution. (It's still in the raw AGENTS.md text embedded in
+        # the system prompt, but the LLM has no callable for it.)
+        tools = captured["agent_kwargs"]["tools"]
+        tool_names = {t.__name__ for t in tools}
+        assert "leak_private" not in tool_names
+        assert "bogus" not in tool_names
+        # Only the surviving row's skill (approve-receipt) is callable.
+        assert "approve_receipt" in tool_names
+
+
+class TestLiveSpawnUsageAccumulator:
+    """The factory-snapshotted ``usage_acc`` captures sub-agent token
+    counts on every successful spawn.
+    """
+
+    def test_usage_acc_captures_input_output_tokens(self):
+        usage_acc: list = []
+        tool_fn, captured = _build_live_factory(
+            composer_files=_expenses_tree(),
+            accumulated_usage={"inputTokens": 100, "outputTokens": 50},
+            usage_acc=usage_acc,
+        )
+        tool_fn(path="expenses", task="t")
+        assert usage_acc[-1] == {"input_tokens": 100, "output_tokens": 50}
+
+    def test_usage_acc_default_when_metrics_missing(self):
+        """If Strands returns a result with no metrics, usage defaults
+        to zeros so downstream cost dashboards never see a None.
+        """
+        usage_acc: list = []
+        tool_fn, captured = _build_live_factory(
+            composer_files=_expenses_tree(),
+            accumulated_usage=None,
+            usage_acc=usage_acc,
+        )
+        result = tool_fn(path="expenses", task="t")
+        assert result["sub_agent_usage"] == {
+            "input_tokens": 0,
+            "output_tokens": 0,
+        }
+        assert usage_acc[-1] == {"input_tokens": 0, "output_tokens": 0}
+
+
+class TestLiveSpawnErrorPath:
+    """Sub-agent spawn raising → wrapped in ``DelegateToWorkspaceError``;
+    ``usage_acc`` is unchanged for the failed call.
+    """
+
+    def test_agent_raises_is_wrapped_and_usage_unchanged(self):
+        from delegate_to_workspace_tool import DelegateToWorkspaceError
+
+        usage_acc: list = []
+        tool_fn, captured = _build_live_factory(
+            composer_files=_expenses_tree(),
+            raise_on_call=RuntimeError("bedrock 500"),
+            usage_acc=usage_acc,
+        )
+
+        with pytest.raises(DelegateToWorkspaceError) as exc:
+            tool_fn(path="expenses", task="t")
+        assert "sub-agent spawn raised" in str(exc.value)
+        assert isinstance(exc.value.__cause__, RuntimeError)
+        # `usage_acc` is not appended to on the failed call.
+        assert usage_acc == []
+
+
+class TestLiveSpawnSystemPromptComposition:
+    """The sub-agent system prompt is sourced from
+    ``resolved_context["composed_tree"]`` — not a hardcoded string.
+    """
+
+    def test_system_prompt_contains_sub_agent_agents_md(self):
+        """Snapshot-style assertion: the sub-agent's AGENTS.md content
+        appears in the system prompt the Agent constructor sees.
+        """
+        tool_fn, captured = _build_live_factory(
+            composer_files=_expenses_tree(),
+        )
+        tool_fn(path="expenses", task="t")
+        sys_prompt = captured["agent_kwargs"]["system_prompt"]
+        # The sub-agent's AGENTS.md content is present.
+        assert "# Expenses sub-agent" in sys_prompt
+        # The sub-agent's CONTEXT.md content is present.
+        assert "Expenses sub-agent." in sys_prompt
+        # Token-efficiency rules are appended verbatim.
+        assert "Token Efficiency Rules" in sys_prompt
+        # The ROOT AGENTS.md content (`# root`) is NOT in the prompt —
+        # the sub-agent reads its OWN AGENTS.md, not the parent's.
+        assert "# root" not in sys_prompt
+
+    def test_system_prompt_includes_inherited_guardrails_when_present(self):
+        """If the composed tree includes root-level PLATFORM.md /
+        GUARDRAILS.md, both surface in the sub-agent's system prompt.
+        """
+        tree = [
+            _entry("PLATFORM.md", "PLATFORM rules: never leak secrets.\n"),
+            _entry("GUARDRAILS.md", "GUARDRAILS: refuse harmful requests.\n"),
+            _entry("expenses/AGENTS.md", EXPENSES_AGENTS_MD),
+            _entry("expenses/CONTEXT.md", "Expenses ctx.\n"),
+            _entry(
+                "expenses/skills/approve-receipt/SKILL.md",
+                LOCAL_SKILL_MD,
+            ),
+        ]
+        tool_fn, captured = _build_live_factory(composer_files=tree)
+        tool_fn(path="expenses", task="t")
+        sys_prompt = captured["agent_kwargs"]["system_prompt"]
+        assert "PLATFORM rules" in sys_prompt
+        assert "GUARDRAILS" in sys_prompt
+
+
+class TestLiveSpawnSnapshotPattern:
+    """``feedback_completion_callback_snapshot_pattern``: the spawn body
+    must NOT re-read ``os.environ`` on dispatch. Patch the env mid-call
+    and assert the factory-snapshotted ``cfg_model`` and ``aws_region``
+    are what BedrockModel sees.
+    """
+
+    def test_cfg_model_and_region_snapshotted_at_factory_time(self):
+        from unittest.mock import patch
+
+        tool_fn, captured = _build_live_factory(
+            composer_files=_expenses_tree(),
+            cfg_model="snapshotted-model-id",
+            aws_region="snapshotted-region",
+        )
+
+        # Mutating env after factory built must NOT change what
+        # BedrockModel sees — the values are factory-snapshotted.
+        with patch.dict(
+            "os.environ",
+            {
+                "AWS_REGION": "DRIFTED-REGION",
+                "AWS_DEFAULT_REGION": "DRIFTED-DEFAULT",
+            },
+        ):
+            tool_fn(path="expenses", task="t")
+
+        kwargs = captured["model_kwargs"]
+        assert kwargs["model_id"] == "snapshotted-model-id"
+        assert kwargs["region_name"] == "snapshotted-region"
+        # Streaming is on (matches make_skill_agent_fn).
+        assert kwargs["streaming"] is True
+
+    def test_aws_region_falls_back_to_env_when_unset(self):
+        """When the factory caller passes ``aws_region=None`` the
+        snapshot reads from env at factory time (one read, no per-call
+        re-read).
+        """
+        import os as _os
+        from unittest.mock import patch
+
+        from delegate_to_workspace_tool import make_delegate_to_workspace_fn
+
+        model_factory, agent_factory, tool_dec, captured = _make_strands_stubs(
+            text="ok", accumulated_usage={"inputTokens": 0, "outputTokens": 0},
+        )
+        composer_mock = MagicMock(return_value=_expenses_tree())
+
+        with patch.dict(_os.environ, {"AWS_REGION": "env-region-at-factory"}):
+            tool_fn = make_delegate_to_workspace_fn(
+                parent_tenant_id="tenant-abc",
+                parent_agent_id="agent-xyz",
+                api_url="https://api.example.test",
+                api_secret="secret",
+                platform_catalog_manifest=None,
+                cfg_model="m",
+                usage_acc=[],
+                composer_fetch=composer_mock,
+                aws_region=None,  # → factory reads env once.
+                model_factory=model_factory,
+                agent_factory=agent_factory,
+                tool_decorator=tool_dec,
+            )
+
+        # Factory built; mutate env; the per-call BedrockModel must
+        # still see the factory-time region.
+        with patch.dict(_os.environ, {"AWS_REGION": "DRIFTED"}):
+            tool_fn(path="expenses", task="t")
+        assert captured["model_kwargs"]["region_name"] == "env-region-at-factory"

@@ -449,7 +449,7 @@ def _register_delegate_to_workspace_tool(
     tools.append(tool_decorator(_dw_fn))
     logger.info(
         "delegate_to_workspace tool registered "
-        "(model=%s, spawn=inert, platform_manifest_entries=%d)",
+        "(model=%s, spawn=live, platform_manifest_entries=%d)",
         effective_model,
         len(_dw_platform_manifest),
         extra={
