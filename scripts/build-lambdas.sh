@@ -190,6 +190,16 @@ build_handler "invites" \
 build_handler "skills" \
   "$REPO_ROOT/packages/api/src/handlers/skills.ts"
 
+# Service-auth REST endpoint the Strands agent container calls during
+# kind=run_skill dispatch to fetch the agent's runtime config (template,
+# skills, MCP, memory, guardrail). Plan 2026-04-24-008 §U1 added the
+# handler + Terraform route but missed this build entry, so the Lambda
+# zip wasn't produced and terraform-apply failed with
+# "filebase64sha256: no such file" on agents-runtime-config.zip,
+# blocking every deploy after PR #552 merged.
+build_handler "agents-runtime-config" \
+  "$REPO_ROOT/packages/api/src/handlers/agents-runtime-config.ts"
+
 # Plugin upload handler (V1 agent-architecture plan §U10). Four routes:
 #   POST /api/plugins/presign    → presigned PUT URL for the zip
 #   POST /api/plugins/upload     → validator + three-phase install saga

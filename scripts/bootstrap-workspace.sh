@@ -87,32 +87,93 @@ pnpm -C packages/api exec tsx "$REPO_ROOT/packages/api/scripts/regen-all-workspa
 echo ""
 
 # ── 2b. Upload skill catalog files to S3 ────────────────────────────────────
-# Each skill directory (SKILL.md, skill.yaml, scripts/, etc.) is uploaded to
+# Each skill directory (SKILL.md, scripts/, README.md, etc.) is uploaded to
 # skills/catalog/<slug>/ so the admin UI can display and edit them, and
 # AgentCore can download them at invoke time.
+#
+# Two exclusion layers:
+#
+#   1. NON_SKILL_DIRS — top-level directories under packages/skill-catalog/
+#      that aren't skills (vitest tests, characterization fixtures, the
+#      shared scripts/ dir, node_modules, dev-time tests/). Without these,
+#      `aws s3 sync` blindly uploads node_modules (5900+ objects) and
+#      dev-only tests into the catalog prefix and the admin UI surfaces
+#      them as if they were skills.
+#
+#   2. PER_SKILL_EXCLUDES — patterns excluded from each per-skill sync,
+#      via aws s3 sync --exclude. Drops Python tests/, __tests__, dist,
+#      node_modules at the skill level.
+#
+# The existing --delete flag handles intra-skill cleanup (removing
+# files from S3 that no longer exist on disk for a given skill).
+
+NON_SKILL_DIRS=(scripts __tests__ characterization node_modules tests dist)
 
 echo "── Uploading skill catalog files to S3 ──"
 for skill_dir in "$REPO_ROOT/packages/skill-catalog"/*/; do
   [ -d "$skill_dir" ] || continue
   slug=$(basename "$skill_dir")
-  if [ "$slug" = "scripts" ]; then
-    continue  # the sync scripts dir is not a skill
+
+  # Skip top-level non-skill directories (vitest tests, dev-only,
+  # workspace artifacts) so they don't get synced as fake skills.
+  skip=0
+  for non_skill in "${NON_SKILL_DIRS[@]}"; do
+    if [ "$slug" = "$non_skill" ]; then
+      skip=1
+      break
+    fi
+  done
+  if [ "$skip" = "1" ]; then
+    continue
   fi
+
   # --delete so a rewritten SKILL.md doesn't stack stale files on top of the
   # new tree (old prompts/ directories, retired scripts, etc.). The target
   # prefix is slug-scoped, so --delete only affects this slug's objects.
-  aws s3 sync "$skill_dir" "s3://$BUCKET/skills/catalog/$slug/" --delete --quiet
-  file_count=$(find "$skill_dir" -type f | wc -l | tr -d ' ')
+  # --exclude drops dev-only artifacts (Python tests/, vitest __tests__,
+  # node_modules) from the per-skill upload so the admin UI doesn't surface
+  # them as if they were part of the skill's user-facing surface.
+  aws s3 sync "$skill_dir" "s3://$BUCKET/skills/catalog/$slug/" \
+    --delete \
+    --exclude '*/tests/*' \
+    --exclude 'tests/*' \
+    --exclude '*/__tests__/*' \
+    --exclude '__tests__/*' \
+    --exclude '*/__pycache__/*' \
+    --exclude '__pycache__/*' \
+    --exclude '*/node_modules/*' \
+    --exclude 'node_modules/*' \
+    --exclude '*/dist/*' \
+    --exclude 'dist/*' \
+    --exclude '*.pyc' \
+    --exclude '.DS_Store' \
+    --quiet
+  file_count=$(find "$skill_dir" -type f \
+    -not -path '*/tests/*' \
+    -not -path '*/__tests__/*' \
+    -not -path '*/__pycache__/*' \
+    -not -path '*/node_modules/*' \
+    -not -path '*/dist/*' \
+    | wc -l | tr -d ' ')
   echo "  ✓ $slug ($file_count files)"
 done
 
 # ── 2c. Remove retired slugs from S3 ────────────────────────────────────────
 # Belt + suspenders: slugs that USED to live in the catalog but were retired
-# (composition-era primitives — frame, synthesize, gather, compound) need
+# (composition-era primitives — frame, synthesize, gather, compound;
+# thinkwork-admin retired in PR #488; smoke-package-only post-U6) need
 # their S3 artifacts cleaned up so the container's install_skill_from_s3
-# can't accidentally resurrect them on a warm start. The sync-catalog-db.ts
-# script also deletes the matching builtin rows from skill_catalog.
-RETIRED_SLUGS=(frame synthesize gather compound)
+# can't accidentally resurrect them on a warm start, AND so the admin UI
+# stops listing them in catalog views. The sync-catalog-db.ts script also
+# deletes the matching builtin rows from skill_catalog.
+#
+# Also purges top-level non-skill prefixes that pre-date the
+# NON_SKILL_DIRS exclusion above (one-shot cleanup; idempotent).
+RETIRED_SLUGS=(
+  frame synthesize gather compound
+  thinkwork-admin smoke-package-only
+  __tests__ characterization node_modules tests
+)
 for retired in "${RETIRED_SLUGS[@]}"; do
   aws s3 rm --recursive "s3://$BUCKET/skills/catalog/$retired/" --quiet || true
   echo "  ✗ ${retired} (retired — S3 prefix cleared)"
