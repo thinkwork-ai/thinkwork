@@ -33,7 +33,11 @@ const {
   mockMemberRows: vi.fn(),
   mockResolveCallerUserId: vi.fn(),
   mockUpdateReturning: vi.fn(),
-  capturedInserts: { threadTurns: [] as any[], agentWakeupRequests: [] as any[], threadComments: [] as any[] },
+  // threadComments was retired by U2 (escalate/delegate refactored to
+  // thread_turns kind=system_event) and the table itself was dropped by
+  // U5 (drizzle/0031_thread_cleanup_drops.sql). No regression-guard
+  // assertion needed since the table no longer exists.
+  capturedInserts: { threadTurns: [] as any[], agentWakeupRequests: [] as any[] },
 }));
 
 vi.mock("../graphql/utils.js", async (importOriginal) => {
@@ -73,7 +77,6 @@ vi.mock("../graphql/utils.js", async (importOriginal) => {
         values: (vals: any) => {
           if (table === actual.threadTurns) capturedInserts.threadTurns.push(vals);
           else if (table === actual.agentWakeupRequests) capturedInserts.agentWakeupRequests.push(vals);
-          else if (table === actual.threadComments) capturedInserts.threadComments.push(vals);
           return Promise.resolve();
         },
       })),
@@ -153,7 +156,6 @@ function resetAll() {
   mockUpdateReturning.mockReset();
   capturedInserts.threadTurns.length = 0;
   capturedInserts.agentWakeupRequests.length = 0;
-  capturedInserts.threadComments.length = 0;
 }
 
 describe("escalateThread — U2 refactor off thread_comments", () => {
@@ -172,7 +174,6 @@ describe("escalateThread — U2 refactor off thread_comments", () => {
       input: { threadId: "thread-1", reason: "needs supervisor", agentId: "agent-original" },
     }, cognitoCtx());
 
-    expect(capturedInserts.threadComments).toEqual([]);
     expect(capturedInserts.threadTurns).toHaveLength(1);
     const turn = capturedInserts.threadTurns[0];
     expect(turn.kind).toBe("system_event");
@@ -235,7 +236,6 @@ describe("escalateThread — U2 refactor off thread_comments", () => {
       }, cognitoCtx()),
     ).rejects.toThrow(/Thread not found/);
     expect(capturedInserts.threadTurns).toEqual([]);
-    expect(capturedInserts.threadComments).toEqual([]);
   });
 
   it("non-admin caller → FORBIDDEN, no writes to threadTurns or threadComments", async () => {
@@ -248,7 +248,6 @@ describe("escalateThread — U2 refactor off thread_comments", () => {
       }, cognitoCtx()),
     ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
     expect(capturedInserts.threadTurns).toEqual([]);
-    expect(capturedInserts.threadComments).toEqual([]);
   });
 
   it("cross-tenant caller (no membership row) → FORBIDDEN before supervisor lookup", async () => {
@@ -309,7 +308,6 @@ describe("delegateThread — U2 refactor off thread_comments", () => {
       },
     }, cognitoCtx());
 
-    expect(capturedInserts.threadComments).toEqual([]);
     expect(capturedInserts.threadTurns).toHaveLength(1);
     const turn = capturedInserts.threadTurns[0];
     expect(turn.kind).toBe("system_event");
@@ -346,7 +344,6 @@ describe("delegateThread — U2 refactor off thread_comments", () => {
       }, cognitoCtx()),
     ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
     expect(capturedInserts.threadTurns).toEqual([]);
-    expect(capturedInserts.threadComments).toEqual([]);
   });
 
   it("assignee in different tenant → 'Thread not found' (cross-tenant handoff blocked)", async () => {
