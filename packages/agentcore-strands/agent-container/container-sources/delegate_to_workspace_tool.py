@@ -45,7 +45,7 @@ from skill_resolver import (
     SkillNotResolvable,
     resolve_skill,
 )
-from workspace_composer_client import fetch_composed_workspace
+from workspace_composer_client import fetch_composed_workspace_cached
 
 logger = logging.getLogger(__name__)
 
@@ -199,7 +199,7 @@ def make_delegate_to_workspace_fn(
     platform_catalog_manifest: Mapping[str, Mapping[str, Any]] | None,
     cfg_model: str,
     usage_acc: list,
-    composer_fetch: Callable[..., list[dict]] = fetch_composed_workspace,
+    composer_fetch: Callable[..., list[dict]] = fetch_composed_workspace_cached,
     spawn_fn: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> Callable[..., dict[str, Any]]:
     """Build the ``delegate_to_workspace`` callable.

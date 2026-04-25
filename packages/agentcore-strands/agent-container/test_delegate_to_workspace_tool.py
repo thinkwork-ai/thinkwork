@@ -392,6 +392,138 @@ class TestDelegateUsageAcc:
         assert mocks["usage_acc"] == []
 
 
+PLATFORM_SKILL_MD = """---
+name: approve-receipt
+description: Platform-catalog approve-receipt skill
+execution: script
+---
+Platform body.
+"""
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Platform-catalog manifest plumbing (Plan §004 U3)
+# ────────────────────────────────────────────────────────────────────────────
+
+
+class TestDelegatePlatformManifestPlumbing:
+    """Manifest plumbing pinned at the delegate factory layer.
+
+    The server.py registration site adapts ``skill_meta`` into the
+    resolver-shaped ``Mapping[str, Mapping[str, Any]]``; here we verify
+    the factory honors that mapping when no local skill exists.
+    """
+
+    def test_platform_slug_resolves_when_no_local_shadow(self):
+        """Routing row references a platform slug → resolves via platform branch."""
+        platform_manifest = {
+            "approve-receipt": {"skill_md_content": PLATFORM_SKILL_MD},
+        }
+        # Composed tree has AGENTS.md but no local skills/approve-receipt/.
+        tree = [
+            _entry("expenses/AGENTS.md", EXPENSES_AGENTS_MD),
+            _entry("expenses/CONTEXT.md", "Expenses sub-agent.\n"),
+        ]
+        tool_fn, mocks = _build_factory(
+            composer_files=tree,
+            platform_catalog=platform_manifest,
+        )
+        result = tool_fn(path="expenses", task="t")
+        rs = result["resolved_context"]["resolved_skills"]["approve-receipt"]
+        assert rs["source"] == "platform"
+        assert rs["skill_md_content"] == PLATFORM_SKILL_MD
+
+    def test_empty_but_non_none_manifest_is_reachable_but_resolves_nothing(self):
+        """An empty manifest is the registration default when no skills are
+        installed. The platform-fallback branch is reachable but no slug
+        lands → resolver raises SkillNotResolvable, which the factory
+        wraps in DelegateToWorkspaceError. This is the contract the
+        registration site relies on: passing ``{}`` rather than ``None``
+        does NOT smuggle silent resolutions, but it DOES preserve the
+        platform-fallback code path so future catalog reloads work
+        without a registration restart.
+        """
+        from delegate_to_workspace_tool import DelegateToWorkspaceError
+
+        tree = [
+            _entry("expenses/AGENTS.md", EXPENSES_AGENTS_MD),
+            _entry("expenses/CONTEXT.md", "Expenses sub-agent.\n"),
+        ]
+        tool_fn, mocks = _build_factory(
+            composer_files=tree,
+            platform_catalog={},  # empty but non-None
+        )
+        with pytest.raises(DelegateToWorkspaceError, match="approve-receipt"):
+            tool_fn(path="expenses", task="t")
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Composer cache integration (Plan §004 U3)
+# ────────────────────────────────────────────────────────────────────────────
+
+
+class TestDelegateUsesCachedComposerByDefault:
+    """Two consecutive same-key calls hit the in-process cache → urlopen
+    is called exactly once. Pins the wiring of
+    ``fetch_composed_workspace_cached`` as the factory's default
+    ``composer_fetch``.
+    """
+
+    def test_two_sequential_calls_share_one_urlopen(self):
+        import io
+        import json
+        from unittest.mock import patch
+
+        from delegate_to_workspace_tool import make_delegate_to_workspace_fn
+        from workspace_composer_client import _reset_composed_cache
+
+        _reset_composed_cache()
+
+        captured: list = []
+
+        def fake_opener(req, timeout=None):
+            captured.append(req.full_url)
+            data = json.dumps({
+                "ok": True,
+                "files": _expenses_tree(),
+            }).encode("utf-8")
+            ctx = MagicMock()
+            ctx.__enter__ = MagicMock(return_value=io.BytesIO(data))
+            ctx.__exit__ = MagicMock(return_value=False)
+            return ctx
+
+        spawn_capture: list = []
+
+        def spawn_fn(resolved_context):
+            spawn_capture.append(resolved_context)
+            return {"ok": False, "reason": "spawn not yet wired",
+                    "resolved_context": resolved_context}
+
+        # Default `composer_fetch` is `fetch_composed_workspace_cached` —
+        # do NOT inject a mock; we want the real cache to engage.
+        tool_fn = make_delegate_to_workspace_fn(
+            parent_tenant_id="tenant-abc",
+            parent_agent_id="agent-xyz",
+            api_url="https://api.example.test",
+            api_secret="secret",
+            platform_catalog_manifest=None,
+            cfg_model="anthropic.claude-sonnet-4-v1:0",
+            usage_acc=[],
+            spawn_fn=spawn_fn,
+        )
+
+        with patch("urllib.request.urlopen", side_effect=fake_opener):
+            tool_fn(path="expenses", task="t1")
+            tool_fn(path="expenses", task="t2")
+
+        # Two delegations, but the underlying urlopen is only invoked once
+        # because both calls share the same (tenant, agent) cache key.
+        assert len(captured) == 1
+        assert len(spawn_capture) == 2
+
+        _reset_composed_cache()
+
+
 # ────────────────────────────────────────────────────────────────────────────
 # Boot-assert integration
 # ────────────────────────────────────────────────────────────────────────────

@@ -1347,19 +1347,56 @@ def _call_strands_agent(system_prompt: str, messages: list,
         _dw_tenant = os.environ.get("TENANT_ID", "")
         _dw_agent = os.environ.get("AGENT_ID", "") or os.environ.get("_ASSISTANT_ID", "")
         if _dw_api_url and _dw_api_secret and _dw_tenant and _dw_agent:
+            # Build the platform-catalog manifest expected by `skill_resolver`
+            # from the registered skills. Shape required:
+            #   Mapping[str, Mapping[str, Any]] with `skill_md_content` per entry.
+            #
+            # `skill_meta` from `register_skill_tools` is keyed by skill_id but
+            # only contains {mode, model, description, display_name, execution}
+            # — NOT the SKILL.md body. We adapt by re-reading SKILL.md from the
+            # on-disk skills root (`/tmp/skills/<slug>/SKILL.md`), which the
+            # bootstrap step has already populated for every registered skill.
+            # An empty-but-non-None manifest is still useful: it makes the
+            # resolver's platform-fallback branch reachable, which the
+            # resolver's local→platform precedence depends on.
+            _dw_platform_manifest = {}
+            for _slug in skill_meta.keys():
+                _skill_md = os.path.join("/tmp/skills", _slug, "SKILL.md")
+                try:
+                    with open(_skill_md) as _fh:
+                        _content = _fh.read()
+                except OSError as _exc:
+                    logger.warning(
+                        "platform_catalog_manifest: failed to read %s (%s); "
+                        "skipping entry",
+                        _skill_md,
+                        _exc,
+                    )
+                    continue
+                if not _content:
+                    logger.warning(
+                        "platform_catalog_manifest: SKILL.md at %s is empty; "
+                        "skipping entry",
+                        _skill_md,
+                    )
+                    continue
+                _dw_platform_manifest[_slug] = {"skill_md_content": _content}
+
             _dw_fn = make_delegate_to_workspace_fn(
                 parent_tenant_id=_dw_tenant,
                 parent_agent_id=_dw_agent,
                 api_url=_dw_api_url,
                 api_secret=_dw_api_secret,
-                platform_catalog_manifest=None,  # spawn-PR follow-up wires this
+                platform_catalog_manifest=_dw_platform_manifest,
                 cfg_model=effective_model,
                 usage_acc=sub_agent_usage,
             )
             tools.append(_tool_dec(_dw_fn))
             logger.info(
-                "delegate_to_workspace tool registered (model=%s, spawn=inert)",
+                "delegate_to_workspace tool registered "
+                "(model=%s, spawn=inert, platform_manifest_entries=%d)",
                 effective_model,
+                len(_dw_platform_manifest),
             )
         else:
             logger.info(
