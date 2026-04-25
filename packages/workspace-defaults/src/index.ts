@@ -16,10 +16,9 @@
  * Content is inlined as TypeScript constants so the Lambda bundle doesn't
  * need to ship an accompanying `files/` directory. All `.md` authoring
  * sources now live under this package's `files/` subdirectory — plan §008
- * U2 consolidated the previously-split `packages/system-workspace/` and
- * `packages/memory-templates/` content here (both are README stubs awaiting
- * U28 deletion). A parity test verifies the inline constants stay byte-for-
- * byte equal to the `files/` sources.
+ * U2 consolidated the old split seed packages here, and U28 retired those
+ * packages entirely. A parity test verifies the inline constants stay
+ * byte-for-byte equal to the `files/` sources.
  *
  * Placeholder tokens (`{{AGENT_NAME}}`, `{{HUMAN_NAME}}`, etc.) are NOT
  * substituted here — substitution happens at read time in the overlay
@@ -378,28 +377,33 @@ The path is **from the agent root, not from your sub-folder**. Passing just \`"m
  */
 const AGENTS_MD = `# AGENTS.md
 
-The Layer-1 Map for this agent. Edit me when you add or rename sub-agents,
-when you reshape the file layout, or when you change which skills which
-specialist owns. Everything else flows from here — \`delegate_to_workspace\`
-reads the routing table; the agent builder reads it for the tree view; the
-runtime reads it to compose the system prompt at boot and on the next turn
-after an edit.
+This is the Layer-1 Map for the agent. It explains the root folder, names the
+sub-agents, and assigns specialist skills. Edit this file when you add, rename,
+or reorganize sub-agents. The runtime, \`delegate_to_workspace\`, and the agent
+builder all read the routing table below.
 
 ## Who I am
 
-_(One sentence: who this agent is, what it's for. Edit me.)_
+_(One sentence: who this agent is and what work it owns.)_
 
-## How this folder is organized
+## Folder model
 
 \`\`\`
-.                   ← root identity, guardrails, routing
-memory/             ← durable lessons, preferences, contacts (write_memory tool)
-skills/             ← local skills authored alongside this agent (optional)
-<sub-agent>/        ← specialist sub-agent — its own CONTEXT, optional skills/,
-                      and its own memory/ (write_memory at sub-agent scope)
+.                    root identity, guardrails, platform rules, and routing
+memory/              durable lessons, preferences, contacts
+skills/              optional local skills available to this agent
+<sub-agent>/         specialist folder with its own CONTEXT.md, optional
+                     skills/, and optional memory/
 \`\`\`
 
-Each sub-agent folder also gets its own \`memory/\`. When a sub-agent calls \`write_memory\`, it must prefix the path with its folder (e.g. \`expenses/memory/lessons.md\`) — the path is from the agent root, not from the sub-agent's own folder. See \`MEMORY_GUIDE.md\` "Sub-agent path composition" for details.
+The folder is the agent: specialization comes from the files under the folder,
+not from a separate agent registry. A thin sub-agent can be just
+\`expenses/CONTEXT.md\`; it inherits root identity, guardrails, platform rules,
+and template defaults through the workspace overlay.
+
+\`memory/\` and \`skills/\` are reserved folder names at every depth. When a
+sub-agent writes memory, paths are relative to the agent root, for example
+\`expenses/memory/lessons.md\`.
 
 ## Routing
 
@@ -411,7 +415,8 @@ Each sub-agent folder also gets its own \`memory/\`. When a sub-agent calls \`wr
 
 - Sub-agent folders are short, lowercase, hyphenated — \`expenses/\`, \`customer-support/\`, \`legal/\`.
 - Reserved folder names — \`memory/\` and \`skills/\` — are never sub-agents at any depth.
-- Skill slugs reference platform skills in \`packages/skill-catalog/<slug>/\` or local skills under \`<folder>/skills/<slug>/SKILL.md\`. Local skills resolve nearest-folder-first; platform catalog is the fallback.
+- Skill slugs reference platform skills or local skills under \`<folder>/skills/<slug>/SKILL.md\`.
+- Local skills resolve nearest-folder-first; the platform catalog is the fallback.
 - Recursion depth is capped at 5 levels of sub-agents (soft warning at depth 4).
 `;
 

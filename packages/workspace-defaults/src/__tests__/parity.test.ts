@@ -4,10 +4,9 @@
  * The 13 canonical files are exported as inline TypeScript string constants
  * from `src/index.ts` (so the Lambda bundle is self-contained). The
  * authoritative content lives as source-controlled `.md` files under this
- * package's own `files/` subdirectory. Plan §008 U2 consolidated the
- * previously-split `packages/system-workspace/` and `packages/memory-templates/`
- * content here (both retired packages are stubbed READMEs awaiting U28
- * deletion); U3 added `AGENTS.md` + `CONTEXT.md` to the canonical set.
+ * package's own `files/` subdirectory. Plan §008 U2 consolidated the old split
+ * seed packages here; U28 removed those packages; U3 added `AGENTS.md` +
+ * `CONTEXT.md` to the canonical set.
  *
  * This test asserts byte-for-byte equality between the inline constants and
  * the `.md` authoring sources, so a change in one without the other is

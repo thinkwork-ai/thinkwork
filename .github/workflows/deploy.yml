@@ -371,6 +371,15 @@ jobs:
         with:
           terraform_wrapper: false
 
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
       - name: Get DB endpoint + secret
         id: outputs
         working-directory: terraform/examples/greenfield
@@ -629,6 +638,13 @@ jobs:
             --region ${{ env.AWS_REGION }} \
             --min-source-sha ${{ needs.detect-changes.outputs.container_source_sha }} \
             --strict
+
+      - name: Fat-folder composed-tree smoke
+        timeout-minutes: 5
+        run: |
+          bash scripts/post-deploy-smoke-fat-folder.sh \
+            --stage ${{ env.STAGE }} \
+            --region ${{ env.AWS_REGION }}
 
       - name: Show deployment URLs
         working-directory: terraform/examples/greenfield

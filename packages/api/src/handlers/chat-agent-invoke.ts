@@ -356,7 +356,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
       // `workspace_tenant_id` is empty. chat-agent-invoke was never updated
       // to send it — so the container skipped the composer fetch entirely,
       // `/tmp/workspace` stayed empty, IDENTITY.md/USER.md never loaded, and
-      // the agent answered from system-workspace + a hallucinated identity.
+      // the agent answered from stale default workspace content + a hallucinated identity.
       // Matches agentcore-invoke.ts:237 and eval-runner.ts:276.
       workspace_tenant_id: tenantId,
       assistant_id: agentId,

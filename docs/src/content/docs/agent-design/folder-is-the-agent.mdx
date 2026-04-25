@@ -1,0 +1,38 @@
+---
+title: Folder Is the Agent
+description: Understand the Fat-folder model for ThinkWork sub-agents.
+---
+
+A ThinkWork agent is not only a database row or a runtime process. It is a
+folder of files the runtime composes into behavior. This follows the same core
+idea as FOG and FITA: specialization comes from memory and instructions stored
+near the work.
+
+The root folder owns the general identity:
+
+| File | Purpose |
+| --- | --- |
+| `AGENTS.md` | Layer-1 map, routing table, sub-agent names, skill ownership |
+| `CONTEXT.md` | Root scope and responsibilities |
+| `IDENTITY.md` / `SOUL.md` | Personality and continuity |
+| `GUARDRAILS.md` / `PLATFORM.md` / `CAPABILITIES.md` | Policy and platform behavior |
+| `ROUTER.md` | Channel-profile file loading only |
+| `memory/` | Durable lessons, preferences, and contacts |
+| `skills/` | Optional local skills |
+
+A sub-agent is a plain folder named from an `AGENTS.md` routing row:
+
+```text
+expenses/
+  CONTEXT.md
+  memory/
+  skills/
+```
+
+That folder can be thin. If it only contains `CONTEXT.md`, it still inherits the
+root identity, template guardrails, platform defaults, and any applicable pinned
+versions. Add local files only where the specialist truly differs.
+
+`memory/` and `skills/` are reserved at every depth. They are resources inside
+an agent folder, not sub-agents themselves.
+

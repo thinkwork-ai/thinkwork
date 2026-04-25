@@ -3,9 +3,9 @@ from __future__ import annotations
 """Parse ROUTER.md into context profiles for selective workspace loading.
 
 ROUTER.md defines named context profiles that control which workspace files
-and skills load for a given invocation. The default profile provides base
-files that always load. Named profiles add files on top (additive inheritance)
-and can optionally skip specific default files.
+load for a given invocation. The default profile provides base files that
+always load. Named profiles add files on top (additive inheritance) and can
+optionally skip specific default files.
 
 Resolution order:
 1. context_profile from ticket metadata (process step)
@@ -23,9 +23,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ContextProfile:
-    """Resolved context profile with merged file paths and skill list."""
+    """Resolved context profile with merged file paths."""
     load: list[str] = field(default_factory=list)
-    skills: list[str] = field(default_factory=lambda: ["all"])
 
 
 @dataclass
@@ -34,7 +33,6 @@ class RawProfile:
     name: str
     load: list[str] = field(default_factory=list)
     skip: list[str] = field(default_factory=list)
-    skills: list[str] = field(default_factory=lambda: ["all"])
 
 
 def parse_router(router_path: str) -> dict[str, RawProfile]:
@@ -66,8 +64,11 @@ def parse_router(router_path: str) -> dict[str, RawProfile]:
         if current_profile is None:
             continue
 
-        # Parse directives: - load: ..., - skip: ..., - skills: ...
-        directive_match = re.match(r"^- (load|skip|skills):\s*(.+)$", line.strip())
+        # Parse directives: - load: ..., - skip: ...
+        # Skills now live in AGENTS.md routing rows. Legacy "- skills:"
+        # directives intentionally parse as prose so they cannot narrow the
+        # runtime skill set behind the agent builder's back.
+        directive_match = re.match(r"^- (load|skip):\s*(.+)$", line.strip())
         if directive_match:
             key = directive_match.group(1)
             values = [v.strip() for v in directive_match.group(2).split(",") if v.strip()]
@@ -75,8 +76,6 @@ def parse_router(router_path: str) -> dict[str, RawProfile]:
                 current_profile.load.extend(values)
             elif key == "skip":
                 current_profile.skip.extend(values)
-            elif key == "skills":
-                current_profile.skills = values
 
     # Don't forget the last profile
     if current_name and current_profile:
@@ -136,15 +135,11 @@ def resolve_profile(router_path: str, channel: str = "",
         # Merge: base + profile additions, deduplicated preserving order
         all_files = base_files + [f for f in matched.load if f not in base_files]
 
-        # Skills: profile replaces default
-        skills = matched.skills
     else:
         all_files = base_files
-        skills = default.skills
 
-    resolved = ContextProfile(load=all_files, skills=skills)
-    logger.info("Resolved profile [%s]: %d files, skills=%s",
-                match_source, len(resolved.load), resolved.skills)
+    resolved = ContextProfile(load=all_files)
+    logger.info("Resolved profile [%s]: %d files", match_source, len(resolved.load))
     return resolved
 
 
@@ -179,20 +174,3 @@ def expand_file_list(workspace_dir: str, file_patterns: list[str]) -> list[str]:
                 result.append(pattern)
 
     return result
-
-
-def filter_skills(skills_config: list, profile_skills: list[str]) -> list:
-    """Filter skills_config to only include skills matching the profile.
-
-    - ["all"] → return all skills (no filtering)
-    - ["per-job"] → return all skills (job-level filtering done elsewhere)
-    - ["slug1", "slug2"] → return only matching skills
-    """
-    if not profile_skills or "all" in profile_skills or "per-job" in profile_skills:
-        return skills_config
-
-    allowed = set(profile_skills)
-    filtered = [s for s in skills_config if s.get("skillId", "") in allowed]
-    logger.info("Skill filtering: %d/%d skills match profile (%s)",
-                len(filtered), len(skills_config), ", ".join(allowed))
-    return filtered

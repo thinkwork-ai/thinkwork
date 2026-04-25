@@ -1,0 +1,26 @@
+---
+title: Import FOG/FITA Bundles
+description: Normalize external folder-agent bundles into ThinkWork.
+---
+
+ThinkWork imports zip bundles atomically. A bundle either lands completely or
+fails with a report that names the unsafe entry, reserved path, or collision.
+
+Vendor prefixes normalize into ThinkWork's FOG-pure layout:
+
+| External path | ThinkWork path |
+| --- | --- |
+| `.claude/agents/expenses/` | `expenses/` |
+| `.claude/skills/reconcile/` | `skills/reconcile/` |
+| `.codex/agents/legal/` | `legal/` |
+| `.gemini/agents/support/` | `support/` |
+
+If both a vendor-prefixed path and a plain path target the same logical folder,
+the vendor-prefixed path wins. The plain path is preserved at its literal
+location so legitimate mixed bundles do not fail.
+
+Root-level `USER.md`, `IDENTITY.md`, `SOUL.md`, and `GUARDRAILS.md` are
+server-managed during import and rejected by default. Sub-agent-level overrides
+of those files are allowed because they describe specialist behavior, not the
+root assignment or tenant safety baseline.
+
