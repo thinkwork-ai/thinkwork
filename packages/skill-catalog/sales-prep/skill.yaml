@@ -1,21 +1,15 @@
 id: sales-prep
 version: 2
 execution: context
-mode: tool
 name: "Prep for Meeting"
 description: >
   Gather account context, financials, activity, and external signals for a
   sales meeting. Produces a packaged brief the rep can read in 60 seconds.
 
-# Agent-driven deliverable: the model drives the frame → gather →
-# synthesize → package sequence itself via the Skill() meta-tool (U5
-# session allowlist). Pattern:
-#   Skill("frame", ...)          — restate goal
-#   Skill("web-search", ...) etc — parallel gather, model judges failures
-#   Skill("synthesize", ...)     — four-section analysis
-#   Skill("package", ...)        — deterministic template render
-# The SKILL.md body describes the sequencing rules + graceful-degradation
-# policy the model must follow. See U4 skill dispatcher + U5 Skill tool.
+# Context skill — the model reads SKILL.md and drives the four phases
+# (frame → gather → synthesize → package) inline, calling real registered
+# tools (web-search, render_package, connector scripts). SKILL.md
+# governs sequencing and graceful-degradation policy.
 
 # Typed inputs — the dispatcher / scheduled job / admin catalog resolves
 # values into these shapes before calling startSkillRun.
@@ -58,12 +52,11 @@ triggers:
       meeting_date:
         today_plus_N: 1
 
-# Real tool-call dependencies the model invokes via Skill(). Listed so
-# the template session_allowlist (U5) auto-includes them when sales-prep
-# is assigned. Framing + synthesis happen inline per SKILL.md; no helper
-# skills are needed for those.
+# Real registered tools this skill depends on at runtime. Listed so the
+# template session_allowlist auto-includes them when sales-prep is
+# assigned. Framing + synthesis happen inline per SKILL.md; CRM / AR /
+# support-incidents / wiki connectors ship in separate PRDs and degrade
+# gracefully per SKILL.md's policy when absent.
 requires_skills:
   - package
   - web-search
-  # CRM / AR / support-incidents / wiki connectors ship in separate PRDs;
-  # missing connectors degrade gracefully per SKILL.md body's policy.

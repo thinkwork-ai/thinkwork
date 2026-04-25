@@ -1,19 +1,16 @@
 id: renewal-prep
 version: 2
 execution: context
-mode: tool
 name: "Renewal Prep"
 description: >
   Prep a customer renewal conversation. Pulls contract terms, recent
   usage, support posture, renewal history, and win/loss signals, then
   renders a renewal_risk brief ordered by deal-impact likelihood.
 
-# Agent-driven deliverable: the model drives the frame → gather →
-# synthesize → package sequence itself via the Skill() meta-tool (U5
-# session allowlist). Pattern mirrors sales-prep + account-health-
-# review — same four phases with a risk-steered synthesize and a
-# renewal-specific gather set (contract + usage + renewal history +
-# AR + NPS + tickets). Focus hard-coded at "risks".
+# Context skill — the model reads SKILL.md and drives the four phases
+# (frame → gather → synthesize → package) inline with a risk-steered
+# synthesize and renewal-specific gather (contract + usage + renewal
+# history + AR + NPS + tickets). Focus hard-coded at "risks".
 
 inputs:
   customer:
@@ -50,10 +47,9 @@ triggers:
       renewal_date:
         from_tenant_config: upcoming_renewal_date
 
-# Sub-skills the model invokes via Skill(). Template-scoped
-# session_allowlist (U5) auto-includes these when renewal-prep is
-# assigned to a template. Connector skills (contract, product-usage,
-# renewal-history, AR, NPS, support-incidents) ship in separate PRDs;
-# missing sub-skills degrade gracefully per SKILL.md body's policy.
+# Real registered tools this skill depends on at runtime. Connector
+# skills (contract, product-usage, renewal-history, AR, NPS,
+# support-incidents) ship in separate PRDs; missing connectors degrade
+# gracefully per SKILL.md.
 requires_skills:
   - package

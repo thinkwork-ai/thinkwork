@@ -1,7 +1,6 @@
 id: customer-onboarding-reconciler
 version: 2
 execution: context
-mode: tool
 name: "Customer Onboarding (Reconciler)"
 description: >
   Drive a new customer from deal-close to onboarded by continuously
@@ -11,11 +10,9 @@ description: >
   are still missing, and exits. HITL happens between ticks, not inside a
   single invocation.
 
-# Agent-driven reconciler: the model drives the three-phase
-# gather → synthesize → act tick itself via the Skill() meta-tool (U5
-# session allowlist). The reconciler semantics are preserved —
-# fail-fast on missing critical gather, no delivery fan-out, no
-# one-shot package step.
+# Context skill with reconciler semantics — the model reads SKILL.md and
+# drives the gather → synthesize → act tick inline, failing fast on
+# missing critical gather. No delivery fan-out, no one-shot package step.
 
 # Typed inputs — the resolver converts slugs to ids; the reconciler only
 # needs the stable customer / opportunity identifiers.
@@ -28,7 +25,7 @@ inputs:
     required: true
 
 # v1 tenants cannot override the reconciler body without touching the
-# canonical YAML. Future units may open up the checklist sub-skill.
+# canonical YAML. Future units may open this up via the checklist.
 tenant_overridable: []
 
 # The reconciler shape's triggers are primarily webhook-driven. chat_intent
@@ -49,13 +46,7 @@ triggers:
         event: task.completed
         when: "A task spawned by a prior tick gets marked done"
 
-# Sub-skills the model invokes via Skill(). Template-scoped
-# session_allowlist (U5) auto-includes these when the reconciler is
-# assigned to a template. CRM + lastmile_tasks_* connectors ship in
-# separate PRDs; the critical-fail policy in SKILL.md governs their
-# availability requirements.
-# Real tool-call dependencies the model invokes via Skill(). Gap analysis
-# happens inline in SKILL.md; no helper sub-skills needed. The CRM +
-# lastmile_tasks_* connectors ship in separate PRDs; the critical-fail
-# policy in SKILL.md governs availability requirements.
+# No hard runtime dependencies — gap analysis happens inline per
+# SKILL.md. The CRM + lastmile_tasks_* connectors ship in separate PRDs;
+# the critical-fail policy in SKILL.md governs availability requirements.
 requires_skills: []
