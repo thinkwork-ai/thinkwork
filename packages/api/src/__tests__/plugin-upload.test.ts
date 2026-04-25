@@ -17,6 +17,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   mockAuthenticate,
+  mockResolveCaller,
   mockMemberRows,
   mockValidatePluginZip,
   mockRunInstallSaga,
@@ -24,6 +25,7 @@ const {
   mockGetSignedUrl,
 } = vi.hoisted(() => ({
   mockAuthenticate: vi.fn(),
+  mockResolveCaller: vi.fn(),
   mockMemberRows: vi.fn(),
   mockValidatePluginZip: vi.fn(),
   mockRunInstallSaga: vi.fn(),
@@ -33,6 +35,10 @@ const {
 
 vi.mock("../lib/cognito-auth.js", () => ({
   authenticate: mockAuthenticate,
+}));
+
+vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
+  resolveCallerFromAuth: mockResolveCaller,
 }));
 
 vi.mock("@thinkwork/database-pg", () => ({
@@ -162,11 +168,22 @@ function makeEvent(overrides: {
 beforeEach(() => {
   process.env.WORKSPACE_BUCKET = "test-bucket";
   mockAuthenticate.mockReset();
+  mockResolveCaller.mockReset();
   mockMemberRows.mockReset();
   mockValidatePluginZip.mockReset();
   mockRunInstallSaga.mockReset();
   mockDownloadS3Object.mockReset();
   mockGetSignedUrl.mockReset();
+
+  // Default: mirror what resolveCallerFromAuth returns for native Cognito
+  // users (users.id == Cognito sub). Tests for the Google-federated path
+  // override this with mockResolvedValueOnce so userId differs from sub.
+  mockResolveCaller.mockImplementation(
+    async (auth: { principalId: string | null; tenantId: string | null } | null) => ({
+      userId: auth?.principalId ?? null,
+      tenantId: auth?.tenantId ?? null,
+    }),
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -222,6 +239,41 @@ describe("plugin-upload handler — auth gate", () => {
     mockMemberRows.mockReturnValueOnce([{ role: "member" }]);
     const res = await handler(makeEvent({}));
     expect(res.statusCode).toBe(403);
+  });
+
+  it("Google-federated admin: tenant resolved by email, role lookup uses users.id", async () => {
+    // Regression coverage: Google-federated callers carry no
+    // custom:tenant_id and have users.id != Cognito sub. The handler
+    // must use the resolved (userId, tenantId) for the admin gate, not
+    // auth.tenantId / auth.principalId.
+    const COGNITO_SUB = "google-oauth-sub-not-equal-to-users-id";
+    const USER_ID = "user-eric-id";
+    mockAuthenticate.mockResolvedValueOnce({
+      principalId: COGNITO_SUB,
+      tenantId: null,
+      email: "eric@acme.com",
+      authType: "cognito",
+      agentId: null,
+    });
+    mockResolveCaller.mockResolvedValueOnce({
+      userId: USER_ID,
+      tenantId: "tenant-a",
+    });
+    mockMemberRows.mockReturnValueOnce([{ role: "owner" }]);
+    mockGetSignedUrl.mockResolvedValueOnce("https://presigned.example/put");
+
+    const res = await handler(
+      makeEvent({
+        path: "/api/plugins/presign",
+        body: JSON.stringify({ fileName: "p.zip" }),
+      }),
+    );
+    expect(res.statusCode).toBe(200);
+    // The admin check ran with the resolved users.id, not the Cognito
+    // sub: assert by inspecting the resolveCaller invocation.
+    expect(mockResolveCaller).toHaveBeenCalledWith(
+      expect.objectContaining({ principalId: COGNITO_SUB }),
+    );
   });
 
   it("returns 403 when the caller is not a member of the tenant at all", async () => {

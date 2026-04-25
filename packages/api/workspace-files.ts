@@ -634,7 +634,7 @@ export async function handler(
 		});
 	}
 
-	const { tenantId } = await resolveCallerFromAuth(auth);
+	const { userId, tenantId } = await resolveCallerFromAuth(auth);
 	if (!tenantId) {
 		return json(401, { ok: false, error: "Could not resolve caller tenant" });
 	}
@@ -671,8 +671,11 @@ export async function handler(
 	// tenant member. The apikey path bypasses the role check — it's the
 	// platform-credential trust boundary used by the Strands container and
 	// CI/ops bootstrap; per-tenant role doesn't apply.
+	//
+	// Use the resolved users.id, NOT auth.principalId. tenantMembers.principal_id
+	// holds users.id, and Google-federated users have users.id ≠ Cognito sub.
 	if (WRITE_ACTIONS.has(action) && auth.authType !== "apikey") {
-		const isAdmin = await callerIsTenantAdmin(tenantId, auth.principalId);
+		const isAdmin = await callerIsTenantAdmin(tenantId, userId);
 		if (!isAdmin) {
 			return json(403, {
 				ok: false,

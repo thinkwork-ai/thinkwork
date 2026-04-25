@@ -10,16 +10,26 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockAuthenticate, mockMemberRows, mockListRows, mockDetailRow } =
-  vi.hoisted(() => ({
-    mockAuthenticate: vi.fn(),
-    mockMemberRows: vi.fn(),
-    mockListRows: vi.fn(),
-    mockDetailRow: vi.fn(),
-  }));
+const {
+  mockAuthenticate,
+  mockResolveCaller,
+  mockMemberRows,
+  mockListRows,
+  mockDetailRow,
+} = vi.hoisted(() => ({
+  mockAuthenticate: vi.fn(),
+  mockResolveCaller: vi.fn(),
+  mockMemberRows: vi.fn(),
+  mockListRows: vi.fn(),
+  mockDetailRow: vi.fn(),
+}));
 
 vi.mock("../lib/cognito-auth.js", () => ({
   authenticate: mockAuthenticate,
+}));
+
+vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
+  resolveCallerFromAuth: mockResolveCaller,
 }));
 
 // db.select is called twice per request on the detail path (admin check
@@ -129,6 +139,14 @@ beforeEach(() => {
     email: null,
     agentId: null,
   });
+  // Default: mirror what resolveCallerFromAuth returns for native Cognito
+  // users (users.id == Cognito sub).
+  mockResolveCaller.mockImplementation(
+    async (auth: { principalId: string | null; tenantId: string | null } | null) => ({
+      userId: auth?.principalId ?? null,
+      tenantId: auth?.tenantId ?? null,
+    }),
+  );
   mockMemberRows.mockReturnValue([{ role: "admin" }]);
   mockListRows.mockReturnValue([]);
   mockDetailRow.mockReturnValue(undefined);
