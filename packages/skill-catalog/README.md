@@ -1,10 +1,15 @@
 # skill-catalog
 
 Canonical source of truth for ThinkWork's skill catalog. Every directory
-here is one skill — a `skill.yaml` manifest plus a `SKILL.md`, optional
-`scripts/`, `prompts/`, or `references/`. The deploy's
+here is one skill — a `SKILL.md` (frontmatter metadata + prose body),
+optional `scripts/`, `prompts/`, or `references/`. The deploy's
 `bootstrap-workspaces` step syncs all of them into the `skill_catalog`
 database table and uploads the file contents to S3.
+
+Plan 2026-04-24-009 §U2 retired the parallel `skill.yaml` manifest;
+SKILL.md frontmatter is the single canonical source for both the
+catalog metadata (category, tags, requires_env, etc.) and the
+behavioral contract (execution, mode, scripts, inputs, triggers).
 
 ## Supported skill shapes
 
@@ -31,9 +36,9 @@ Any other `execution:` value is treated as a catalog regression —
    ship a `scripts/` folder with an `entrypoint.py` and set
    `execution: script`. If it's model-driven reasoning, write a
    `SKILL.md` and set `execution: context`.
-2. Declare typed `inputs` in `skill.yaml`. The dispatcher / scheduled
-   job / admin catalog resolves values into these shapes before
-   calling `startSkillRun`.
+2. Declare typed `inputs` in the SKILL.md frontmatter. The dispatcher /
+   scheduled job / admin catalog resolves values into these shapes
+   before calling `startSkillRun`.
 3. If the skill references other skills, list them under
    `requires_skills:` so the template session allowlist includes
    them. Nested `Skill(...)` calls rely on this for authorization.

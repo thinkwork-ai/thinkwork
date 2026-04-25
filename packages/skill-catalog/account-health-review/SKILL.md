@@ -1,5 +1,6 @@
 ---
 name: account-health-review
+display_name: "Account Health Review"
 description: >
   Periodic risk-focused review of a customer's health signals. Aggregates
   CRM, product usage, AR posture, support load, and engagement over a
@@ -17,6 +18,42 @@ allowed-tools:
   - ar_summary
   - support_incidents_summary
   - engagement_summary
+version: 2
+execution: context
+inputs:
+  customer:
+    type: string
+    required: true
+    resolver: resolve_customer
+    on_missing_input: ask
+  period:
+    type: enum
+    values: [last_30_days, last_quarter, last_year]
+    default: last_30_days
+  agent_name:
+    type: string
+    required: false
+tenant_overridable:
+  - inputs.period.default
+  - triggers.schedule.expression
+triggers:
+  chat_intent:
+    examples:
+      - "review {customer}"
+      - "account health for {customer}"
+      - "how is {customer} doing"
+      - "check on {customer}"
+    disambiguation: ask
+  schedule:
+    type: cron
+    expression: "0 9 ? * MON *"
+    bindings:
+      customer:
+        from_tenant_config: default_customer
+      period:
+        literal: last_30_days
+requires_skills:
+  - package
 ---
 
 # Account Health Review

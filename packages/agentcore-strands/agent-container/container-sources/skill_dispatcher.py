@@ -10,7 +10,7 @@ an AgentCore Code Interpreter session, parse the JSON it prints.
 Every skill-with-scripts ships this shape on disk:
 
     packages/skill-catalog/<slug>/
-      SKILL.md           # or skill.yaml pre-migration
+      SKILL.md           # canonical metadata + prose body
       scripts/
         entrypoint.py    # module-level `def run(**kwargs) -> dict:`
       references/        # optional, copied alongside

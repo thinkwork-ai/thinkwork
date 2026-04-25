@@ -1,5 +1,6 @@
 ---
 name: lastmile-tasks
+display_name: LastMile Tasks
 description: >
   Collect task intake via a Question Card form, then create the task in
   LastMile via the MCP's workflow_task_create tool. Runs automatically on
@@ -8,6 +9,18 @@ license: Proprietary
 metadata:
   author: thinkwork
   version: "5.0.0"
+category: task-management
+version: "3.0.0"
+author: thinkwork
+icon: clipboard-list
+tags: [tasks, lastmile, intake, forms]
+execution: context
+is_default: true
+triggers:
+  - "create a lastmile task"
+  - "new lastmile task"
+  - "file a task"
+  - "make a ticket"
 ---
 
 # LastMile Task Intake

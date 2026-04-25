@@ -113,8 +113,8 @@ def test_free_form_metadata_string_routes_to_raw() -> None:
 
 
 def test_supported_formats_list_matches_yaml() -> None:
-    """Cross-check against the YAML-side test so the renderer and the
-    skill.yaml enum can't drift independently."""
+    """Cross-check against the frontmatter-side test so the renderer and
+    the SKILL.md frontmatter enum can't drift independently."""
     assert render_mod.SUPPORTED_FORMATS == ("sales_brief", "health_report", "renewal_risk")
 
 

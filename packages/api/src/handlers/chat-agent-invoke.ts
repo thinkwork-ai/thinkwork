@@ -216,9 +216,11 @@ export async function handler(event: InvokeEvent): Promise<void> {
       );
     }
 
-    // PRD-38: Sub-agents are now skill-based (mode: agent in skill.yaml).
-    // The runtime reads mode/model from skill.yaml at /app/skills/{id}/skill.yaml.
-    // No sub_agents payload needed — removed DB-based sub-agent query.
+    // PRD-38: Sub-agents are now skill-based (mode: agent in SKILL.md
+    // frontmatter). The runtime reads mode/model from SKILL.md
+    // frontmatter at /app/skills/{id}/SKILL.md (plan 2026-04-24-009 §U3
+    // retired the parallel skill.yaml). No sub_agents payload needed —
+    // removed DB-based sub-agent query.
 
     // 2a. Create a thread_turn record so the UI shows this invocation
     try {

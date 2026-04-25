@@ -21,15 +21,32 @@
  *   - `allowed-tools` optional. Captured informationally — the harness's
  *     intersect-narrow at registration (plan §Key Technical Decisions)
  *     enforces the actual gate.
- *   - Frontmatter block required. A SKILL.md without frontmatter is
- *     treated as malformed — this is how the parser tells a plugin
- *     bundle's intent-bearing file from a stray README.
+ *   - Frontmatter block required (strict mode). A SKILL.md without
+ *     frontmatter is treated as malformed — this is how the parser tells
+ *     a plugin bundle's intent-bearing file from a stray README. The
+ *     lenient parser (`parseSkillMdInternal`) tolerates missing
+ *     frontmatter for the thinkwork-internal catalog loaders that
+ *     migrate skills off `skill.yaml` onto SKILL.md frontmatter (plan
+ *     2026-04-24-009 §U1).
  *
  * The parser is defensive against every YAML-nasty I could anticipate:
  * aliases, anchors, custom tags, non-string values where strings are
  * required. `yaml`'s default load options already reject the wildest
  * shapes, but we re-check types explicitly rather than trusting inferred
  * unknowns.
+ *
+ * Internal field union (plan 2026-04-24-009 §U1):
+ *   The thinkwork-internal catalog (skill-catalog/<slug>/SKILL.md) uses
+ *   the same frontmatter block to carry the fields that previously lived
+ *   in `skill.yaml` — `execution`, `mode`, `scripts`, `inputs`,
+ *   `triggers`, `tenant_overridable`, `requires_skills`,
+ *   `permissions_model`, plus catalog metadata (`category`, `icon`,
+ *   `tags`, `requires_env`, `oauth_provider`, `oauth_scopes`,
+ *   `mcp_server`, `mcp_tools`, `dependencies`, `is_default`,
+ *   `compatibility`). The parser preserves these verbatim on
+ *   `parsed.internal` and validates the one tripwire field we cannot
+ *   tolerate drifting on: `execution`. Anything else passes through
+ *   un-typed for downstream callers to coerce.
  */
 
 import { parse as parseYaml } from "yaml";
@@ -41,6 +58,11 @@ export const NAME_PATTERN = /^[a-z0-9-]+$/;
 // a name that collides with the vendor. Case-insensitive substring match
 // so no creative capitalisation slips through.
 const RESERVED_NAME_SUBSTRINGS = ["anthropic", "claude"];
+// U6 retired composition skills — every skill is now either `script` or
+// `context`. Empty/missing defaults to `context`. Anything else (notably
+// the legacy `composition`) is the audit drift we're trying to catch.
+export const ALLOWED_EXECUTION_VALUES = ["script", "context"] as const;
+export type SkillExecution = (typeof ALLOWED_EXECUTION_VALUES)[number];
 
 export type SkillMdErrorKind =
   | "SkillMdMissingFrontmatter"
@@ -49,7 +71,8 @@ export type SkillMdErrorKind =
   | "SkillMdFieldType"
   | "SkillMdFieldTooLong"
   | "SkillMdFieldShape"
-  | "SkillMdNameReserved";
+  | "SkillMdNameReserved"
+  | "SkillMdUnsupportedExecution";
 
 export interface SkillMdError {
   kind: SkillMdErrorKind;
@@ -71,10 +94,62 @@ export interface SkillMdParsed {
   allowedToolsDeclared: string[];
   /** Prose body (everything after the second `---` line). */
   body: string;
+  /**
+   * Resolved execution mode. `null` when the frontmatter doesn't
+   * declare one — callers default to `"context"`. `"composition"` is
+   * rejected at parse time so an audit drift surfaces here, not in a
+   * downstream caller.
+   *
+   * Optional in the type so legacy test fixtures that pre-date the U1
+   * extension continue to compile. The real `parseSkillMd` always
+   * populates this field (use `null` for "absent in frontmatter").
+   */
+  execution?: SkillExecution | null;
+  /**
+   * Raw frontmatter mapping with `name`/`description`/`allowed-tools`
+   * stripped. Carries every thinkwork-internal field the parser
+   * preserves verbatim — `mode`, `scripts`, `inputs`, `triggers`,
+   * `tenant_overridable`, `requires_skills`, `permissions_model`,
+   * `category`, `icon`, `tags`, `requires_env`, `oauth_provider`,
+   * `oauth_scopes`, `mcp_server`, `mcp_tools`, `dependencies`,
+   * `is_default`, `compatibility`, `version`, `license`, `metadata`,
+   * `display_name`, `model`, plus anything else the author put on the
+   * frontmatter. Downstream callers coerce/validate as needed.
+   *
+   * Optional for the same legacy-fixture reason as `execution`.
+   */
+  internal?: Record<string, unknown>;
+}
+
+/**
+ * Lenient parser result — `frontmatterPresent` lets a caller distinguish
+ * "no frontmatter at all" (empty dict, no error) from "frontmatter
+ * present and parsed". Both still surface execution rejection.
+ */
+export interface SkillMdInternalParsed {
+  path: string;
+  /** True when the file had a `---` frontmatter block. */
+  frontmatterPresent: boolean;
+  /**
+   * Raw mapping (full frontmatter including name/description). Empty
+   * when no frontmatter is present.
+   */
+  data: Record<string, unknown>;
+  /** Prose body. The whole source when no frontmatter is present. */
+  body: string;
+  /**
+   * Resolved execution mode. `null` for missing/empty values — caller
+   * defaults to `"context"`.
+   */
+  execution: SkillExecution | null;
 }
 
 export type SkillMdResult =
   | { valid: true; parsed: SkillMdParsed }
+  | { valid: false; errors: SkillMdError[] };
+
+export type SkillMdInternalResult =
+  | { valid: true; parsed: SkillMdInternalParsed }
   | { valid: false; errors: SkillMdError[] };
 
 /**
@@ -174,6 +249,7 @@ export function parseSkillMd(source: string, path: string): SkillMdResult {
     path,
     errors,
   );
+  const execution = validateExecution(record.execution, path, errors);
 
   if (errors.length > 0 || name === null || description === null) {
     return { valid: false, errors };
@@ -187,6 +263,110 @@ export function parseSkillMd(source: string, path: string): SkillMdResult {
       description,
       allowedToolsDeclared,
       body: split.body,
+      execution,
+      internal: extractInternal(record),
+    },
+  };
+}
+
+/**
+ * Lenient counterpart to `parseSkillMd` for thinkwork-internal callers
+ * (catalog loaders, agentcore-strands skill registration). Tolerates
+ * SKILL.md files with no frontmatter (returns `data: {}`,
+ * `frontmatterPresent: false`) but still rejects malformed YAML and
+ * `execution: composition`. Does NOT enforce `name`/`description` —
+ * those checks belong to the SI-4 plugin upload boundary, not to the
+ * thinkwork-shipped catalog where authors may iterate freely on
+ * frontmatter completeness.
+ *
+ * The `path` argument doubles as the source identifier in error
+ * messages — pass the on-disk filepath, the S3 key, or the zip-relative
+ * path as the situation demands.
+ */
+export function parseSkillMdInternal(
+  source: string,
+  path: string,
+): SkillMdInternalResult {
+  const split = splitFrontmatter(source);
+  if (split === null) {
+    // Lenient mode — a SKILL.md with no frontmatter is treated as a
+    // body-only document. Callers that need a name/description ask for
+    // it from `data` and decide whether absence is fatal in their own
+    // domain (e.g. dispatcher index needs `name`, plain prose body
+    // doesn't).
+    return {
+      valid: true,
+      parsed: {
+        path,
+        frontmatterPresent: false,
+        data: {},
+        body: source,
+        execution: null,
+      },
+    };
+  }
+
+  let fm: unknown;
+  try {
+    fm = parseYaml(split.yaml);
+  } catch (e) {
+    return {
+      valid: false,
+      errors: [
+        {
+          kind: "SkillMdMalformedFrontmatter",
+          message: `SKILL.md at ${path} has malformed YAML frontmatter`,
+          details: { path, cause: (e as Error).message },
+        },
+      ],
+    };
+  }
+
+  // An empty frontmatter (`---\n---`) yields `null`, which we treat as
+  // "frontmatter present but empty" — distinguishable from "no
+  // frontmatter at all" via `frontmatterPresent: true`.
+  if (fm === null) {
+    return {
+      valid: true,
+      parsed: {
+        path,
+        frontmatterPresent: true,
+        data: {},
+        body: split.body,
+        execution: null,
+      },
+    };
+  }
+
+  if (typeof fm !== "object" || Array.isArray(fm)) {
+    return {
+      valid: false,
+      errors: [
+        {
+          kind: "SkillMdMalformedFrontmatter",
+          message: `SKILL.md at ${path} frontmatter is not a mapping`,
+          details: { path, got: describeType(fm) },
+        },
+      ],
+    };
+  }
+
+  const record = fm as Record<string, unknown>;
+  const errors: SkillMdError[] = [];
+  const execution = validateExecution(record.execution, path, errors);
+
+  if (errors.length > 0) {
+    return { valid: false, errors };
+  }
+
+  return {
+    valid: true,
+    parsed: {
+      path,
+      frontmatterPresent: true,
+      data: record,
+      body: split.body,
+      execution,
     },
   };
 }
@@ -321,6 +501,60 @@ function validateAllowedTools(
     tools.push(item);
   }
   return tools;
+}
+
+function validateExecution(
+  raw: unknown,
+  path: string,
+  errors: SkillMdError[],
+): SkillExecution | null {
+  // Missing / explicit-null / empty-string all mean "default to context".
+  // The skill-registration loader applies the default; the parser just
+  // signals absence here.
+  if (raw === undefined || raw === null || raw === "") return null;
+  if (typeof raw !== "string") {
+    errors.push({
+      kind: "SkillMdFieldType",
+      message: `SKILL.md at ${path} field 'execution' must be a string, got ${describeType(raw)}`,
+      details: { path, field: "execution", got: describeType(raw) },
+    });
+    return null;
+  }
+  if (
+    !(ALLOWED_EXECUTION_VALUES as readonly string[]).includes(raw)
+  ) {
+    errors.push({
+      kind: "SkillMdUnsupportedExecution",
+      message:
+        `SKILL.md at ${path} field 'execution' must be one of ` +
+        `[${ALLOWED_EXECUTION_VALUES.join(", ")}] (got "${raw}"); ` +
+        `'composition' was retired in U6 of plan 2026-04-22-005`,
+      details: {
+        path,
+        field: "execution",
+        value: raw,
+        allowed: ALLOWED_EXECUTION_VALUES,
+      },
+    });
+    return null;
+  }
+  return raw as SkillExecution;
+}
+
+/**
+ * Strip the SI-4 surface fields (`name`, `description`,
+ * `allowed-tools`) from the raw frontmatter mapping. Everything else —
+ * thinkwork-internal behavioral fields, catalog metadata, and any
+ * unknown-but-tolerated keys — is preserved verbatim for downstream
+ * callers.
+ */
+function extractInternal(record: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(record)) {
+    if (k === "name" || k === "description" || k === "allowed-tools") continue;
+    out[k] = v;
+  }
+  return out;
 }
 
 function describeType(value: unknown): string {

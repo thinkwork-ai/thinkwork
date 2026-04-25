@@ -1,5 +1,6 @@
 ---
 name: renewal-prep
+display_name: "Renewal Prep"
 description: >
   Renewal conversation prep — contract terms, usage trends, AR posture,
   renewal history, NPS, support load. Produces a renewal_risk brief
@@ -18,6 +19,40 @@ allowed-tools:
   - ar_summary
   - nps_summary
   - support_incidents_summary
+version: 2
+execution: context
+inputs:
+  customer:
+    type: string
+    required: true
+    resolver: resolve_customer
+    on_missing_input: ask
+  renewal_date:
+    type: date
+    required: true
+    on_missing_input: ask
+  contract_value:
+    type: string
+    required: false
+tenant_overridable:
+  - triggers.schedule.expression
+triggers:
+  chat_intent:
+    examples:
+      - "prep for {customer} renewal"
+      - "renewal brief for {customer}"
+      - "{customer} renewal risk"
+    disambiguation: ask
+  schedule:
+    type: cron
+    expression: "0 7 * * ? *"
+    bindings:
+      customer:
+        from_tenant_config: upcoming_renewal_customer
+      renewal_date:
+        from_tenant_config: upcoming_renewal_date
+requires_skills:
+  - package
 ---
 
 # Renewal Prep

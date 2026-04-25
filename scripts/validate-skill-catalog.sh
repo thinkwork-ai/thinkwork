@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 # validate-skill-catalog.sh — CI validator for skill catalog entries.
 #
-# Walks packages/skill-catalog/*/skill.yaml and applies the post-U6 catalog
-# contract:
+# Walks packages/skill-catalog/*/SKILL.md and applies the post-2026-04-24-009
+# catalog contract:
 #
 #   * every skill declares execution as one of the supported runtime shapes
-#     (currently `script` or `context`). Anything else is rejected as a
-#     catalog regression.
+#     (currently `script` or `context`) in its SKILL.md frontmatter, OR omits
+#     the field (defaults to context per the parser contract). Anything else
+#     is rejected as a catalog regression.
 #   * tenant-string grep: rejects prompt/template files that contain literal
 #     tenant-specific domains or slugs (extend the _TENANT_SIGNALS pattern as
 #     the corpus grows).
+#
+# Plan 2026-04-24-009 retired the parallel skill.yaml metadata file —
+# SKILL.md frontmatter is now the canonical source. This validator was
+# updated in §U4 to walk frontmatter instead of YAML.
 #
 # Intended to run in CI on any PR that touches packages/skill-catalog/*. Safe
 # to run locally: requires only Python 3.11+ plus PyYAML.
@@ -30,28 +35,40 @@ errors=0
 # Post U6 the runtime supports exactly `script` and `context`. Any other
 # execution value is a regression the runtime cannot dispatch.
 
-echo "Checking execution values..."
+echo "Checking execution values in SKILL.md frontmatter..."
 regressed=()
-while IFS= read -r -d '' yaml; do
+while IFS= read -r -d '' md; do
   exec_value="$(python3 -c '
 import sys, yaml
 with open(sys.argv[1]) as f:
-    data = yaml.safe_load(f) or {}
+    text = f.read()
+# Frontmatter shape: leading ---\n...\n---\n. Tolerate files with no
+# frontmatter (returns empty dict → execution defaults to context).
+if not text.startswith("---\n"):
+    print("")
+    sys.exit(0)
+end = text.find("\n---", 4)
+if end == -1:
+    print("")
+    sys.exit(0)
+frontmatter = text[4:end]
+data = yaml.safe_load(frontmatter) or {}
 print(data.get("execution", ""))
-' "$yaml")"
+' "$md")"
+  # Empty value is OK — defaults to context per the parser contract. We
+  # only flag explicit non-{script,context} values as regressions.
   case "$exec_value" in
-    script|context) ;;
-    "") regressed+=("$yaml (execution field missing)") ;;
-    *)  regressed+=("$yaml (execution=$exec_value)") ;;
+    script|context|"") ;;
+    *)  regressed+=("$md (execution=$exec_value)") ;;
   esac
-done < <(find "$CATALOG_DIR" -maxdepth 2 -name skill.yaml -print0)
+done < <(find "$CATALOG_DIR" -maxdepth 2 -name SKILL.md -print0)
 
 if [[ ${#regressed[@]} -gt 0 ]]; then
-  echo "ERROR: skill.yaml entries declare an unsupported execution type:" >&2
+  echo "ERROR: SKILL.md frontmatter declares an unsupported execution type:" >&2
   for entry in "${regressed[@]}"; do
     echo "  $entry" >&2
   done
-  echo "Post plan §U6 the runtime supports only execution=script or execution=context." >&2
+  echo "The runtime supports only execution=script or execution=context (or omitted, defaults to context)." >&2
   errors=1
 fi
 
@@ -67,7 +84,6 @@ if tenant_hits=$(
     "$CATALOG_DIR" \
     --include='*.md' \
     --include='*.tmpl' \
-    --include='*.yaml' \
     2>/dev/null || true
 ); then
   if [[ -n "$tenant_hits" ]]; then

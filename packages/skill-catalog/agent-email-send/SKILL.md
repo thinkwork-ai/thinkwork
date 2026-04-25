@@ -1,5 +1,6 @@
 ---
 name: agent-email-send
+display_name: Agent Email Send
 description: >
   Send emails from your agent email address with reply tracking.
   Use when the agent needs to send an email, reply to a message, or follow up with someone.
@@ -7,6 +8,49 @@ license: Proprietary
 metadata:
   author: thinkwork
   version: "1.1.0"
+category: communication
+version: "1.1.0"
+author: thinkwork
+icon: send
+tags: [email, send, outbound, communication]
+execution: script
+is_default: true
+mode: reply
+scripts:
+  - name: send_email
+    path: scripts/send.py
+    description: "Send an email from the agent email address"
+triggers:
+  - "send email"
+  - "reply to email"
+  - "follow up"
+  - "email them"
+requires_env:
+  - THINKWORK_API_URL
+  - THINKWORK_API_SECRET
+  - AGENT_ID
+  - AGENT_EMAIL_ADDRESS
+  - INBOUND_MESSAGE_ID
+  - INBOUND_SUBJECT
+  - INBOUND_FROM
+  - INBOUND_BODY
+mode_variants:
+  outbound:
+    description: >
+      Send an email without an inbound reply context. Used by scheduled jobs,
+      webhook-triggered compositions, and composition steps that produce a
+      deliverable (e.g., sales-prep) — anywhere there's no inbound message to
+      thread against.
+    requires_env:
+      - THINKWORK_API_URL
+      - THINKWORK_API_SECRET
+      - AGENT_ID
+      - AGENT_EMAIL_ADDRESS
+    triggers: []
+    forbidden_fields:
+      - in_reply_to
+      - quoted_from
+      - quoted_body
 ---
 
 # Agent Email Send Skill

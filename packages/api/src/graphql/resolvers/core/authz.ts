@@ -156,7 +156,7 @@ export async function requireAgentAllowsOperation(
  *
  * The `operationName` argument IS load-bearing — it gates the
  * per-agent allowlist check and must match the canonical snake_case
- * operation name the skill.yaml manifest declares.
+ * operation name the skill's SKILL.md frontmatter declares.
  */
 export async function requireAdminOrApiKeyCaller(
   ctx: GraphQLContext,
@@ -206,7 +206,7 @@ export async function requireAdminOrApiKeyCaller(
  * exist today; the thinkwork-admin plan (Unit 11) ships this helper
  * as a primitive ready for when they land. The thinkwork-admin
  * manifest also enforces a name-exclusion invariant — see
- * `packages/skill-catalog/thinkwork-admin/skill.yaml` lint test.
+ * `packages/skill-catalog/thinkwork-admin/SKILL.md` lint test.
  */
 export function requireNotFromAdminSkill(ctx: GraphQLContext): void {
   if (ctx.auth.authType !== "cognito") {

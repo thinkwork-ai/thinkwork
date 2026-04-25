@@ -1,13 +1,23 @@
 #!/usr/bin/env tsx
 /**
- * PRD-31: Sync skill catalog YAML files to the skill_catalog DB table.
+ * PRD-31: Sync skill catalog metadata to the skill_catalog DB table.
  *
- * Reads all skill.yaml files from the catalog directory and upserts into
- * the skill_catalog table. After upserts, deletes built-in rows whose slug
- * is not in the current catalog — ensures retired slugs (e.g. the
- * composition primitives deleted in the pure-skill-spec cleanup) are
- * physically removed from the table on every deploy, not just in the
- * YAML tree.
+ * Reads each skill's SKILL.md frontmatter (post plan 2026-04-24-009 §U2 the
+ * canonical source — `skill.yaml` was retired) and upserts into the
+ * skill_catalog table. After upserts, deletes built-in rows whose slug is
+ * not in the current catalog — ensures retired slugs (e.g. the composition
+ * primitives deleted in the pure-skill-spec cleanup) are physically
+ * removed from the table on every deploy, not just in the on-disk tree.
+ *
+ * tier1_metadata JSONB shape contract: this script writes the full parsed
+ * frontmatter (the dict returned by parseSkillMdInternal) into
+ * skill_catalog.tier1_metadata. Downstream consumers — notably
+ * setAgentSkills.mutation.ts::parseTier1Metadata and
+ * extractDefaultEnabledOps — read `permissions_model` and
+ * `scripts[].{name, default_enabled}` directly off this blob. The U2
+ * frontmatter merge preserved every field that lived in skill.yaml, so
+ * the JSONB shape is a drop-in replacement for the prior YAML-parse
+ * output.
  *
  * Usage: npx tsx packages/skill-catalog/scripts/sync-catalog-db.ts
  */
@@ -15,17 +25,13 @@
 import { readdirSync, readFileSync, statSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { parse as parseYaml } from "yaml";
 import { getDb } from "@thinkwork/database-pg";
 import { skillCatalog } from "@thinkwork/database-pg/schema";
-import { and, eq, inArray, not, sql } from "drizzle-orm";
+import { and, eq, inArray, not } from "drizzle-orm";
+import { parseSkillMdInternal } from "../../api/src/lib/skill-md-parser.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const catalogRoot = join(__dirname, "..");
-
-function parseSkillYaml(content: string): Record<string, unknown> {
-	return (parseYaml(content) as Record<string, unknown>) ?? {};
-}
 
 // Defensive array coercion. YAML can produce scalars, maps, or omitted keys
 // where a text[] column expects a string list — coercing here keeps one
@@ -44,6 +50,7 @@ const entries = readdirSync(catalogRoot).filter((name) => {
 		name === "scripts" ||
 		name === "templates" ||
 		name === "node_modules" ||
+		name === "__tests__" ||
 		name.startsWith(".")
 	)
 		return false;
@@ -51,7 +58,7 @@ const entries = readdirSync(catalogRoot).filter((name) => {
 	try {
 		return (
 			statSync(fullPath).isDirectory() &&
-			statSync(join(fullPath, "skill.yaml")).isFile()
+			statSync(join(fullPath, "SKILL.md")).isFile()
 		);
 	} catch {
 		return false;
@@ -68,18 +75,29 @@ async function main() {
 	let synced = 0;
 
 	for (const dir of entries) {
-		const yamlContent = readFileSync(
-			join(catalogRoot, dir, "skill.yaml"),
-			"utf-8",
-		);
-		const y = parseSkillYaml(yamlContent);
+		const mdPath = join(catalogRoot, dir, "SKILL.md");
+		const mdContent = readFileSync(mdPath, "utf-8");
+		const result = parseSkillMdInternal(mdContent, mdPath);
+		if (!result.valid) {
+			console.warn(
+				`⚠ Skipping ${dir}: SKILL.md frontmatter parse failed — ${result.errors
+					.map((e) => e.message)
+					.join("; ")}`,
+			);
+			continue;
+		}
+		const y = result.parsed.data;
 
-		// Accept `slug:` or `id:` as the catalog key — the U8 deliverable
-		// skills (sales-prep, account-health-review, renewal-prep,
-		// customer-onboarding-reconciler) use `id:` per the census convention.
-		const slug = (y.slug as string) || (y.id as string);
+		// Frontmatter `name` is the canonical slug (post-U2). For belt-and-
+		// braces tolerance during the migration window, fall back to
+		// legacy `slug:` / `id:` keys if a stray pre-U2 file slips through.
+		const slug =
+			(typeof y.name === "string" && y.name) ||
+			(typeof y.slug === "string" && (y.slug as string)) ||
+			(typeof y.id === "string" && (y.id as string)) ||
+			"";
 		if (!slug) {
-			console.warn(`⚠ Skipping ${dir}: no slug or id in skill.yaml`);
+			console.warn(`⚠ Skipping ${dir}: no name/slug/id in SKILL.md frontmatter`);
 			continue;
 		}
 
@@ -92,8 +110,11 @@ async function main() {
 			display_name: (y.display_name as string) || slug,
 			description: desc,
 			category: y.category as string | undefined,
-			version: (y.version as string) || "1.0.0",
-			author: (y.author as string) || "thinkwork",
+			version: stringifyVersion(y.version) || "1.0.0",
+			author:
+				(y.author as string) ||
+				(((y.metadata as Record<string, unknown>) || {}).author as string) ||
+				"thinkwork",
 			icon: y.icon as string | undefined,
 			tags: toStringArray(y.tags),
 			source: "builtin" as const,
@@ -105,7 +126,10 @@ async function main() {
 			mcp_tools: toStringArray(y.mcp_tools),
 			dependencies: toStringArray(y.dependencies),
 			triggers: toStringArray(y.triggers),
-			// RDS Data API needs JSONB serialized as a string
+			// RDS Data API needs JSONB serialized as a string. Store the full
+			// parsed frontmatter so consumers like
+			// setAgentSkills.mutation.ts::parseTier1Metadata can read
+			// permissions_model and scripts[] off the blob.
 			tier1_metadata: JSON.stringify(y) as any,
 			updated_at: new Date(),
 		};
@@ -152,6 +176,16 @@ async function main() {
 
 	console.log(`\nSynced ${synced} skills to skill_catalog table.`);
 	process.exit(0);
+}
+
+/**
+ * `version:` is sometimes a YAML int (e.g. `version: 2`) and sometimes a
+ * quoted string (`version: "1.0.0"`). The DB column is text — coerce both.
+ */
+function stringifyVersion(value: unknown): string | undefined {
+	if (typeof value === "string") return value;
+	if (typeof value === "number") return String(value);
+	return undefined;
 }
 
 main().catch((err) => {

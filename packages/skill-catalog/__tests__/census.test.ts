@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   classifySkill,
   collectSkillMetadata,
-  parseSkillYaml,
+  parseSkillFrontmatter,
   proposeMultiEntryDecision,
   renderUsageSql,
   type SkillSignals,
@@ -16,10 +16,15 @@ import {
 // Fixture helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Write a SKILL.md fixture from a YAML-shaped frontmatter body. The
+ * test assertions are about the parsed metadata shape, so the prose
+ * body is empty — this keeps the existing fixture strings concise.
+ */
 function writeSkill(
   root: string,
   slug: string,
-  yaml: string,
+  frontmatter: string,
   {
     scriptsDir = false,
     referencesDir = false,
@@ -27,7 +32,7 @@ function writeSkill(
 ): void {
   const dir = join(root, slug);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "skill.yaml"), yaml);
+  writeFileSync(join(dir, "SKILL.md"), `---\n${frontmatter}\n---\n`);
   if (scriptsDir) mkdirSync(join(dir, "scripts"), { recursive: true });
   if (referencesDir) mkdirSync(join(dir, "references"), { recursive: true });
 }
@@ -314,32 +319,43 @@ describe("census — multi-entry decisions", () => {
 // Parsing edge cases: `id:` vs `slug:`, execution coercion.
 // ---------------------------------------------------------------------------
 
-describe("parseSkillYaml", () => {
-  it("accepts id: as a slug alias", () => {
-    const meta = parseSkillYaml(
-      ["id: legacy-id-form", "execution: context"].join("\n"),
-      "/tmp/legacy-id-form/skill.yaml",
+describe("parseSkillFrontmatter", () => {
+  // The frontmatter parser is fed a SKILL.md document; the helper here
+  // wraps the bare-key fixtures the original tests authored so the
+  // assertions stay focused on metadata shape, not delimiter ceremony.
+  const fm = (body: string): string => `---\n${body}\n---\n`;
+
+  it("accepts id: as a name/slug alias", () => {
+    const meta = parseSkillFrontmatter(
+      fm(["id: legacy-id-form", "execution: context"].join("\n")),
+      "/tmp/legacy-id-form/SKILL.md",
     );
     expect(meta.slug).toBe("legacy-id-form");
     expect(meta.execution).toBe("context");
   });
 
   it("coerces unknown execution values to `unknown` instead of silently passing through", () => {
-    const meta = parseSkillYaml(
-      ["slug: weird", "execution: moonshot"].join("\n"),
-      "/tmp/weird/skill.yaml",
+    // Post-U1 the parser rejects anything outside {script, context}; the
+    // census's lenient downgrade still surfaces it as `unknown` so the
+    // audit script can flag the row rather than crashing the report.
+    const meta = parseSkillFrontmatter(
+      fm(["name: weird", "description: x", "execution: moonshot"].join("\n")),
+      "/tmp/weird/SKILL.md",
     );
     expect(meta.execution).toBe("unknown");
   });
 
   it("treats malformed YAML values gracefully and produces a null-ish metadata struct", () => {
-    const meta = parseSkillYaml(
-      [
-        "slug: no-scripts-array",
-        "execution: script",
-        "scripts: not-a-list",
-      ].join("\n"),
-      "/tmp/no-scripts-array/skill.yaml",
+    const meta = parseSkillFrontmatter(
+      fm(
+        [
+          "name: no-scripts-array",
+          "description: x",
+          "execution: script",
+          "scripts: not-a-list",
+        ].join("\n"),
+      ),
+      "/tmp/no-scripts-array/SKILL.md",
     );
     expect(meta.slug).toBe("no-scripts-array");
     expect(meta.scripts).toEqual([]);
@@ -368,16 +384,24 @@ describe("renderUsageSql", () => {
 
 // ---------------------------------------------------------------------------
 // Integration-ish: full walk of the real repo fixture layout emits one row
-// per skill.yaml and the rows are deterministic across runs.
+// per SKILL.md and the rows are deterministic across runs.
 // ---------------------------------------------------------------------------
 
 describe("collectSkillMetadata", () => {
   it("produces the same ordered output across repeated runs", () => {
-    writeSkill(fixtureRoot, "b-slug", "slug: b-slug\nexecution: context\n");
-    writeSkill(fixtureRoot, "a-slug", "slug: a-slug\nexecution: script\n", {
-      scriptsDir: true,
-    });
-    writeSkill(fixtureRoot, "c-slug", "slug: c-slug\nexecution: mcp\n");
+    writeSkill(fixtureRoot, "b-slug", "name: b-slug\nexecution: context\ndescription: B");
+    writeSkill(
+      fixtureRoot,
+      "a-slug",
+      "name: a-slug\nexecution: script\ndescription: A",
+      {
+        scriptsDir: true,
+      },
+    );
+    // No `execution:` field — frontmatter without one parses cleanly and
+    // collectSkillMetadata still returns a row (slug-from-`name` survives
+    // even when `execution` is omitted).
+    writeSkill(fixtureRoot, "c-slug", "name: c-slug\ndescription: C");
 
     const first = collectSkillMetadata(fixtureRoot).map((m) => m.slug);
     const second = collectSkillMetadata(fixtureRoot).map((m) => m.slug);
