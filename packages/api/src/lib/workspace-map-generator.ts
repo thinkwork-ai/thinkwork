@@ -75,12 +75,64 @@ interface WorkspaceSummary {
   skills: string[];
 }
 
+export interface RoutingRowInsert {
+  task: string;
+  goTo: string;
+  read: string;
+  skills: string[];
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 function workspacePrefix(tenantSlug: string, agentSlug: string): string {
   return `tenants/${tenantSlug}/agents/${agentSlug}/workspace/`;
+}
+
+export function appendRoutingRowIfMissing(
+  markdown: string,
+  row: RoutingRowInsert,
+): string {
+  const normalizedGoTo = row.goTo.endsWith("/") ? row.goTo : `${row.goTo}/`;
+  if (routingTableContainsGoTo(markdown, normalizedGoTo)) return markdown;
+
+  const renderedRow = `| ${row.task} | ${normalizedGoTo} | ${row.read} | ${row.skills.join(",")} |`;
+  const lines = markdown.split("\n");
+  const routingHeadingIndex = lines.findIndex((line) =>
+    /^##\s+Routing(\s+Table)?\s*$/i.test(line.trim()),
+  );
+
+  const tableStart =
+    routingHeadingIndex === -1
+      ? lines.findIndex((line) => line.trim().startsWith("|"))
+      : lines.findIndex(
+          (line, index) =>
+            index > routingHeadingIndex && line.trim().startsWith("|"),
+        );
+
+  if (tableStart === -1 || tableStart + 1 >= lines.length) {
+    const suffix = markdown.endsWith("\n") ? "" : "\n";
+    return `${markdown}${suffix}
+## Routing
+
+| Task | Go to | Read | Skills |
+| --- | --- | --- | --- |
+${renderedRow}
+`;
+  }
+
+  let insertAt = tableStart + 2;
+  while (insertAt < lines.length && lines[insertAt]?.trim().startsWith("|")) {
+    insertAt++;
+  }
+  lines.splice(insertAt, 0, renderedRow);
+  return lines.join("\n");
+}
+
+function routingTableContainsGoTo(markdown: string, goTo: string): boolean {
+  const escaped = goTo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\|[^\\n]*\\|\\s*${escaped}\\s*\\|`, "i").test(markdown);
 }
 
 async function readS3Text(bucket: string, key: string): Promise<string | null> {

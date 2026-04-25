@@ -159,7 +159,7 @@ From `docs/solutions/` — all load-bearing for this plan:
 - **Skill-not-resolvable retries then aborts delegation** (origin F3-G3, revised per review): if a sub-agent's composed `AGENTS.md` references a skill slug that resolves neither locally nor in the platform catalog, the runtime retries the platform-catalog lookup once (5-second backoff) to absorb skill-catalog sync transients, then aborts delegation with explicit error. The operator's authored intent is not silently ignored, but transient catalog states don't cause spurious failures. Contrast with the existing skill-catalog skip-and-log for DB-row-attached skills (unchanged).
 - **ETag-based optimistic concurrency for memory writes** (origin F3-G4, revised per review): concurrent `write_memory` calls to the same file use ETag-guarded PUT. On conflict, the tool returns a `{conflict: true, current_etag, current_content}` response and the agent is instructed (via tool docstring + runtime retry logic) to re-read and re-write. Prevents silent overwrite at enterprise scale where concurrent sub-agent memory writes are structurally likely.
 - **Template swap preserves non-template-declared sub-agent folders with port-forward affordance** (origin F4-G2, revised per review): R15's destructive deletion applies to files that *override* a template-declared path. Sub-agent folders the operator created via F2 (import) or U19 (drag-create) survive the swap as orphans. Admin UI surfaces "N orphaned sub-agent folders" after swap with three actions per folder: **Port forward** (adds the sub-agent to the new template's root AGENTS.md routing table, preserving content), **Delete**, or **Keep as-is** (leave unreferenced).
-- **In-flight-invocation lock for swap and import** (origin F4-G1, X-G1, revised per review): template swap and import both acquire an **agent-level DynamoDB conditional-write lock with TTL heartbeat** (not Postgres advisory lock — that was architecturally wrong: `pg_advisory_xact_lock` is transaction-scoped but Lambda invokes call Bedrock for minutes and the pg pool is `max: 2`, which would either not hold across invoke or starve the pool). Invoke start writes `agent_locks.{agent_id}` with `shared: true, expires_at: now+15min`; swap/import writes `exclusive: true` with conditional-write-if-no-shared-entries-exist. Invoke heartbeats refresh TTL every 60s; on Lambda SIGKILL the TTL expires naturally without leaving a zombie lock. Swap/import blocks up to 30s for shared locks to drain.
+- **In-flight-invocation lock for swap and import** (origin F4-G1, X-G1, revised per review): template swap and import both acquire an **agent-level Postgres durable lease** in the existing Aurora database. This is not `pg_advisory_xact_lock`: advisory transaction locks are wrong for multi-minute Bedrock invokes because they either release at commit or pin scarce pg connections. The durable lease table stores short-lived shared/exclusive rows with `expires_at`, `last_heartbeat_at`, and `owner_token`. Each acquisition uses a short transaction that locks the target `agents` row with `SELECT FOR UPDATE`, deletes expired leases for that agent, and then inserts either a shared invoke lease or one exclusive import/swap lease if compatible. Invoke heartbeats refresh their lease every 60s; on Lambda SIGKILL the lease expires naturally without leaving a permanent blocker. Swap/import retries for up to 30s for shared leases to drain. This avoids introducing any new AWS resource while keeping correctness in Aurora.
 - **AGENTS.md hot-reload = next-turn reload** (origin X-G2): a routing-row edit invalidates the composer cache for the agent and forces the next invocation's `_sync_workspace_at_request` to fetch fresh content. The running container picks up the edit on its next turn without restart. No mid-turn mutation.
 - **`delegate_to_workspace` is a new tool, not a modification of `delegate`**: the generic `delegate(task, context)` (server.py:1383) stays — different purpose (analytical sub-agent, empty toolset). `delegate_to_workspace(path)` spawns a sub-agent composed from the target folder with its composed skills, KBs, and full canonical file set.
 - **`write_memory` path parameter is relative from the agent root**: v1 tool signature `write_memory(path: str, content: str)` where `path` must match `(sub/agent/path/)?memory/(lessons|preferences|contacts).md`. Validated against reserved-name + depth cap. Rejects path traversal, absolute paths, basename enum violations.
@@ -185,7 +185,7 @@ From `docs/solutions/` — all load-bearing for this plan:
 
 ### Deferred to Implementation
 
-- **Exact advisory-lock implementation** (Key Decision: in-flight-invocation lock). Postgres advisory locks vs. Redis vs. DynamoDB conditional write — pick based on existing infra usage when U13 starts.
+- **Exact lease cleanup cadence** (Key Decision: in-flight-invocation lock). Expired leases are cleaned opportunistically on every acquire; U13 implementer decides whether a periodic cleanup job is also worthwhile after observing row volume in dev. Correctness must not depend on a scheduled sweeper.
 - **Exact parser shape for the structured routing-table extraction** — whether the TS parser emits `RoutingRow[]` or a richer `AgentsMdContext` struct; decide once the builder's UI needs land in U18.
 - **Whether U11 recomputes `agent_skills` synchronously on `AGENTS.md` save vs. via an outbox job** — sync is simpler; outbox insulates save latency from composer. Pick based on observed save latency in dev after U17 renders the builder.
 - **Git-ref import pipeline details** (deferred to follow-up): library choice (`isomorphic-git` vs. shell out to `git`), auth path, submodule policy. Left entirely out of v1.
@@ -240,6 +240,7 @@ packages/
 ├── memory-templates/                        # RETIRED (U28)
 └── database-pg/
     └── drizzle/
+        ├── 00XX_agent_operation_leases.sql      # NEW (U13 — hand-rolled, with -- creates: marker)
         └── 00XX_fat_folder_pinned_versions.sql  # NEW (U24 — hand-rolled, with -- creates: markers)
 
 apps/admin/
@@ -284,7 +285,7 @@ The per-unit `**Files:**` sections below are authoritative; the tree is a scope 
 graph TD
   A[Phase A: Foundation<br/>U31 authz gap / U1 Dockerfile / U2 Seeds / U3 Canonical files / U4 Reseed]
   B[Phase B: Composer + Parser<br/>U5 recursive overlay / U6 TS parser / U7 Py parser / U8 reserved names]
-  C[Phase C: Runtime<br/>U9 delegate_to_workspace / U10 skill resolver / U11 skills_config derivative / U12 write_memory path / U13 advisory lock]
+  C[Phase C: Runtime<br/>U9 delegate_to_workspace / U10 skill resolver / U11 skills_config derivative / U12 write_memory path / U13 Postgres lease]
   D[Phase D: Import<br/>U14 vendor path normalizer / U15 bundle importer / U16 AGENTS.md row auto-gen]
   E[Phase E: Agent Builder<br/>U17 builder shell / U18 routing editor / U19 drag-sync / U20 import UI / U21 retire skills page / U22 snippets+templates / U23 swap-with-snapshot]
   F[Phase F: Pinned<br/>U24 schema ext / U25 per-folder badges]
@@ -775,46 +776,54 @@ Parser extracts rows into a typed `RoutingRow { task, goTo, reads[], skills[] }`
 
 ---
 
-- U13. **Agent-level DynamoDB advisory lock for in-flight operations**
+- U13. **Agent-level Postgres lease for in-flight operations**
 
-**Goal:** Template swap and import acquire an agent-level exclusive lock that blocks while `invoke()` or `wakeup-processor` is running. Invocations starting after the exclusive lock is held see post-op state. Uses DynamoDB conditional writes with TTL heartbeat — **not** Postgres advisory locks, which are transaction-scoped and incompatible with Lambda invoke lifetimes that span multi-minute Bedrock calls.
+**Goal:** Template swap and import acquire an agent-level exclusive lease that blocks while `invoke()` or `wakeup-processor` is running. Invocations starting after the exclusive lease is held see post-op state. Uses a durable Postgres lease table in existing Aurora with heartbeat expiry — **not** Postgres advisory locks, which are transaction-scoped and incompatible with Lambda invoke lifetimes that span multi-minute Bedrock calls.
 
 **Requirements:** F2 (import), F4 (swap).
 
 **Dependencies:** None.
 
 **Files:**
-- Create: `packages/api/src/lib/agent-builder-lock.ts` — DynamoDB lock wrapper with `acquireShared(agentId)`, `acquireExclusive(agentId, timeoutMs)`, `heartbeat(agentId, lockId)`, `release(agentId, lockId)`.
-- Create: `terraform/modules/data/dynamodb-agent-locks.tf` — new table `thinkwork-agent-locks-{stage}` with PK=`agent_id`, SK=`lock_id` (UUID), attrs `{kind: "shared"|"exclusive", acquired_at, expires_at}`, TTL attribute `expires_at`. On-demand billing.
-- Modify: `packages/api/src/handlers/chat-agent-invoke.ts` — acquire shared lock on invoke start; heartbeat every 60s; release on completion or error; TTL auto-expires on Lambda SIGKILL.
+- Create: `packages/api/src/lib/agent-builder-lock.ts` — Postgres lease wrapper with `acquireShared(agentId)`, `acquireExclusive(agentId, timeoutMs)`, `heartbeat(agentId, leaseId)`, `release(agentId, leaseId)`.
+- Modify: `packages/database-pg/src/schema/agents.ts` — add `agentOperationLeases` table export.
+- Create: `packages/database-pg/drizzle/00XX_agent_operation_leases.sql` — hand-rolled migration with `-- creates: public.agent_operation_leases` marker.
+- Modify: `packages/api/src/handlers/chat-agent-invoke.ts` — acquire shared lease on invoke start; heartbeat every 60s; release on completion or error; lease expiry handles Lambda SIGKILL.
 - Modify: `packages/api/src/handlers/wakeup-processor.ts` — same.
 - Modify: `packages/api/src/handlers/folder-bundle-import.ts` (U15) — acquire exclusive lock (conditional-write-if-no-shared-entries) with 30s timeout.
 - Modify: `packages/api/src/graphql/resolvers/agents/changeTemplate.mutation.ts` (U23) — same exclusive acquisition.
-- Test: `packages/api/src/__tests__/agent-builder-lock.test.ts` — lock semantics, TTL expiry, heartbeat.
+- Test: `packages/api/src/__tests__/agent-builder-lock.test.ts` — lease semantics, expiry, heartbeat, row-lock serialization.
+- Test: `packages/database-pg/__tests__/migration-00XX-agent-operation-leases.test.ts` — migration shape and drift marker.
 
 **Approach:**
-- Shared lock: PutItem with `kind: "shared"`, `expires_at: now+15min`, random `lock_id` UUID. Multiple shared locks coexist. Heartbeat updates `expires_at`.
-- Exclusive lock: conditional PutItem `attribute_not_exists(lock_id) AND size(<query for shared entries>) = 0` — if any shared entry with `expires_at > now` exists, the condition fails. Retry with backoff until 30s timeout.
-- Release: DeleteItem by `{agent_id, lock_id}`.
-- TTL: DynamoDB's built-in TTL attribute `expires_at` sweeps expired entries within 48 hours (background process) — but conditional-write logic treats entries past `expires_at` as released even before TTL sweep, so correctness doesn't depend on TTL timing.
-- Heartbeat cadence: every 60s during invoke; if a Lambda dies without releasing, the 15-minute expiry ensures the lock doesn't block swap/import indefinitely.
+- Table shape: `agent_operation_leases(agent_id uuid, lease_id uuid, lease_kind text check in ('shared','exclusive'), owner_kind text, owner_id text, acquired_at timestamptz, last_heartbeat_at timestamptz, expires_at timestamptz)`, composite PK `(agent_id, lease_id)`, plus partial unique index allowing only one non-expired exclusive lease per agent where practical. Because Postgres partial indexes cannot use `now()`, compatibility is enforced in the short acquisition transaction, not by index alone.
+- Shared lease acquire: in one short transaction, `SELECT ... FOR UPDATE` the target `agents` row, delete expired leases for that agent, verify no unexpired exclusive lease exists, insert a shared lease with `expires_at = now() + interval '15 minutes'`, then commit. Multiple shared leases coexist.
+- Exclusive lease acquire: retry until 30s timeout. Each attempt uses the same short `agents` row lock, deletes expired leases, verifies no unexpired leases of any kind remain, inserts one exclusive lease, then commits. New invokes cannot sneak in between the compatibility check and insert because they acquire through the same agent-row lock discipline.
+- Heartbeat: update only the caller's `{agent_id, lease_id}` row, extending `expires_at` by 15 minutes and touching `last_heartbeat_at`. Heartbeat failure logs loudly; repeated failure releases locally and causes the operation to fail closed rather than run without a lease.
+- Release: delete the caller's `{agent_id, lease_id}` row in a `finally` block. Expired rows are also cleaned opportunistically on future acquires so correctness does not depend on a scheduled cleanup job.
+- Deadlock / serialization failure: retry a bounded number of times for acquire; fail closed with a clear operator-facing timeout if contention does not resolve.
 
 **Patterns to follow:**
-- Standard DynamoDB conditional-write lock (the "aws-dynamodb-lock-client" pattern, reimplemented minimally — no need for full client library).
+- `packages/api/src/lib/sandbox-quota.ts` — short transactional guard, server-side time boundaries, fail-closed deadlock discipline.
+- `packages/api/src/graphql/resolvers/core/updateTenantMember.mutation.ts` and `removeTenantMember.mutation.ts` — Drizzle `.for("update")` row-locking pattern.
+- `docs/plans/2026-04-22-006-feat-agentcore-code-sandbox-plan.md` — precedent for choosing Postgres atomic guards over a new AWS resource when write volume is low and Aurora already exists.
 
 **Test scenarios:**
-- Happy path: import acquires exclusive lock while no shared locks present → proceeds.
-- Concurrency: import starts while invoke holds shared lock → blocks until invoke releases or TTL expires.
-- Timeout: import waits 30s for shared locks to drain → returns timeout error.
-- Happy path: two invokes against the same agent take shared locks in parallel.
-- Recovery: invoke Lambda SIGKILL leaves shared lock with `expires_at`; next exclusive acquisition after expiry succeeds without manual cleanup.
+- Happy path: import acquires exclusive lease while no shared leases are present → proceeds.
+- Concurrency: import starts while invoke holds shared lease → retries until invoke releases or lease expires.
+- Timeout: import waits 30s for shared leases to drain → returns timeout error.
+- Happy path: two invokes against the same agent take shared leases in parallel.
+- Race prevention: exclusive acquisition and a new shared acquisition starting simultaneously serialize on the `agents` row; exactly one compatible outcome wins and no mixed shared/exclusive active leases exist.
+- Recovery: invoke Lambda SIGKILL leaves shared lease with `expires_at`; next exclusive acquisition after expiry succeeds without manual cleanup.
 - Heartbeat: long-running invoke (10min) refreshes `expires_at` every 60s; exclusive acquisition blocks the full duration.
-- Edge case: clock skew between Lambda instances — conditional-write compares `expires_at` against `now()` in the DynamoDB request, avoiding client-side skew.
+- Edge case: Lambda clock skew — lease compatibility uses database `now()` inside SQL, not client-computed timestamps.
+- Failure path: heartbeat update affects zero rows because lease expired → caller fails closed and surfaces lease-lost error.
 
 **Verification:**
 - Import never observes a partial invoke state; invoke never observes a partial import state.
-- TTL expiry prevents zombie locks on Lambda crash.
-- pg pool is never held by a lock-related transaction across a Bedrock call.
+- Expiry prevents zombie leases on Lambda crash.
+- pg pool is never held by a lease-related transaction across a Bedrock call.
+- No new AWS resources are introduced for the lock path.
 
 ---
 
@@ -879,7 +888,7 @@ Parser extracts rows into a typed `RoutingRow { task, goTo, reads[], skills[] }`
 **Approach:**
 - Handler: `POST /api/agents/{agentId}/import-bundle`. Auth: Cognito JWT + `requireTenantAdmin` with **row-derived tenant** — lookup `agents.{agentId}`, verify `row.tenant_id` matches caller's tenant via `resolveCallerFromAuth`, throw NOT_FOUND if missing, THEN requireTenantAdmin(row.tenant_id). Never use args.tenantId. OPTIONS short-circuits before auth.
 - Request body shape: `{source: "zip", body: base64-encoded-bytes}` or `{source: "git", url, ref?, pat?}`. Handler dispatches to zip parser or git-ref-fetcher.
-- Flow: obtain file tree (from zip or shallow git clone) → SI-4 validation (whole-bundle reject on any error) → **file-level reserved-list check** (reject root-level USER.md, IDENTITY.md, SOUL.md, GUARDRAILS.md unless `allow_root_override` flag per file with explicit operator confirmation) → vendor-path normalize (collision = vendor wins, per Key Decisions) → folder-level reserved-name check (surfaces rename prompt candidate for `memory/`/`skills/` not matching reserved schema) → slug-collision check → **depth-cap check (reject > 5 levels)** → atomic S3 write under DynamoDB advisory lock (U13).
+- Flow: obtain file tree (from zip or shallow git clone) → SI-4 validation (whole-bundle reject on any error) → **file-level reserved-list check** (reject root-level USER.md, IDENTITY.md, SOUL.md, GUARDRAILS.md unless `allow_root_override` flag per file with explicit operator confirmation) → vendor-path normalize (collision = vendor wins, per Key Decisions) → folder-level reserved-name check (surfaces rename prompt candidate for `memory/`/`skills/` not matching reserved schema) → slug-collision check → **depth-cap check (reject > 5 levels)** → atomic S3 write under Postgres exclusive lease (U13).
 - On rename prompt or collision: return 409 Conflict with structured response; client prompts operator (replace / rename / abort).
 - After commit: auto-add `AGENTS.md` routing row (U16); invalidate composer cache.
 - Rate limit: per-tenant 10 imports/hour, surfaced as 429 with retry-after.
@@ -905,7 +914,7 @@ Parser extracts rows into a typed `RoutingRow { task, goTo, reads[], skills[] }`
 - Edge case: git-ref exceeding size cap (>50MB clone) → reject with clear error.
 - Error path: row-derived tenant check — caller authenticated in tenant B attempts import against an agent in tenant A → 404 (not 200, not a partial import).
 - Rate limit: 11th import in an hour from the same tenant → 429 with retry-after.
-- Integration: import during active invoke blocks on DynamoDB advisory lock; completes after invoke done.
+- Integration: import during active invoke blocks on Postgres exclusive lease acquisition; completes after invoke done.
 - Integration: after successful import, parent's `AGENTS.md` has a new routing row for the sub-agent.
 
 **Verification:**
@@ -1174,7 +1183,7 @@ Parser extracts rows into a typed `RoutingRow { task, goTo, reads[], skills[] }`
 
 **Requirements:** R15.
 
-**Dependencies:** U13 (advisory lock), U5 (recursive composer for snapshot).
+**Dependencies:** U13 (Postgres lease), U5 (recursive composer for snapshot).
 
 **Files:**
 - Modify: `packages/api/src/lib/agent-snapshot.ts` — ensure snapshot captures the full composed tree (U5 path) for recovery.
@@ -1186,19 +1195,20 @@ Parser extracts rows into a typed `RoutingRow { task, goTo, reads[], skills[] }`
 - Test: `packages/api/src/__tests__/change-template.test.ts`, `restoreFromSnapshot.test.ts`, `agent-snapshot-overlay.test.ts` — extend for recursive snapshot.
 
 **Approach:**
-- Server: on swap request, (1) acquire exclusive advisory lock (U13), (2) snapshot current composed tree into `agent_versions.workspace_snapshot`, (3) enumerate agent-scoped override paths that the new template would replace (paths that exist at template-declared locations), (4) return list to client for confirmation, (5) on confirm, delete those paths and reset `agent_pinned_versions` to new template's pinned hashes, (6) release lock.
+- Server: on swap request, (1) acquire exclusive Postgres lease (U13), (2) snapshot current composed tree into `agent_versions.workspace_snapshot`, (3) enumerate agent-scoped override paths that the new template would replace (paths that exist at template-declared locations), (4) return list to client for confirmation, (5) on confirm, delete those paths and reset `agent_pinned_versions` to new template's pinned hashes, (6) release lease.
 - Orphaned sub-agents: folders not enumerated by the new template's root AGENTS.md are preserved but surfaced to the operator post-swap ("Your agent has folders that the new template doesn't know about — add them to AGENTS.md or remove them").
 - Recovery: admin action "Restore last version" reads `agent_versions.workspace_snapshot` and re-writes. UI deferred (see Deferred to Follow-Up Work) — v1 is CLI or operator-support action.
 
 **Patterns to follow:**
-- Existing `acceptTemplateUpdate` mutation for advisory-lock + S3-write pattern.
+- Existing `acceptTemplateUpdate` mutation for S3-write and pinned-version update ordering.
+- U13's Postgres lease wrapper for exclusive operation serialization.
 
 **Test scenarios:**
 - Covers AE4. Happy path: swap with 3 overrides → dialog lists 3 paths; confirm → all 3 deleted; composed tree resolves through new template.
 - Covers F4-G2. Edge case: agent has sub-agent `expenses/` from import; new template doesn't declare `expenses/` → dialog does NOT list `expenses/*` as replace-candidates; after swap, `expenses/` survives + orphan surface.
-- Edge case: swap during invoke → advisory lock blocks; invoke completes; swap proceeds.
+- Edge case: swap during invoke → exclusive lease acquisition blocks; invoke completes; swap proceeds.
 - Covers F4-T1. Edge case: USER.md after swap → re-written via assignment-event path.
-- Error path: mid-swap S3 failure → rollback via snapshot; advisory lock releases; operator sees partial-fail with snapshot-restore hint.
+- Error path: mid-swap S3 failure → rollback via snapshot; lease releases; operator sees partial-fail with snapshot-restore hint.
 
 **Verification:**
 - Swap confirmed list matches exactly the to-be-replaced paths.
@@ -1443,7 +1453,7 @@ Parser extracts rows into a typed `RoutingRow { task, goTo, reads[], skills[] }`
 
 - U30. **Post-deploy composed-tree smoke (broad coverage)**
 
-**Goal:** Post-deploy smoke that exercises the full runtime+admin-builder surface — not just runtime-image-pin-behind. Asserts multiple failure modes at once: delegation composition, AGENTS.md hot-reload, sub-agent memory paths, advisory-lock serialization, pinned-versions grace behavior.
+**Goal:** Post-deploy smoke that exercises the full runtime+admin-builder surface — not just runtime-image-pin-behind. Asserts multiple failure modes at once: delegation composition, AGENTS.md hot-reload, sub-agent memory paths, Postgres lease serialization, pinned-versions grace behavior.
 
 **Requirements:** Indirect — all runtime requirements.
 
@@ -1451,7 +1461,7 @@ Parser extracts rows into a typed `RoutingRow { task, goTo, reads[], skills[] }`
 
 **Files:**
 - Create: `scripts/post-deploy-smoke-fat-folder.sh` — orchestrator.
-- Create: `packages/api/src/__smoke__/fat-folder-smoke.ts` — individual scenario functions (delegate-cold, hot-reload, memory-write, advisory-lock-overlap, pinned-grace).
+- Create: `packages/api/src/__smoke__/fat-folder-smoke.ts` — individual scenario functions (delegate-cold, hot-reload, memory-write, lease-overlap, pinned-grace).
 - Modify: `.github/workflows/deploy.yml` — add post-apply smoke step with 5-minute timeout and rollback-on-failure.
 
 **Approach:**
@@ -1550,7 +1560,7 @@ Parser extracts rows into a typed `RoutingRow { task, goTo, reads[], skills[] }`
 | Composer recursive walk regresses root-only performance | Preserve root-only fast path; cache keys include full path; benchmark before/after U5. |
 | `setAgentSkills` legacy callers during U11 rollout silently write a set that U11 immediately overwrites on next save | Deprecation log + audit grep; retire mutation in U21 immediately after builder ships. |
 | Template swap snapshot/restore reintroduces old pinned hashes incorrectly | Snapshot captures full composed tree + pinned map; restore path replays with same ordering as create-from-template. |
-| Advisory-lock deadlock under unusual operator concurrency | Shared-invoke + exclusive-import/swap pattern; 30s timeout on all exclusive acquisitions with clear operator error. |
+| Lease-acquisition contention under unusual operator concurrency | Shared-invoke + exclusive-import/swap pattern; short row-lock transactions, bounded retry, and 30s timeout on all exclusive acquisitions with clear operator error. |
 | Import path normalization table drifts between TS and Python | Single-source table in TS; Python mirrors with pinned-shape comment and fixture-parity test on both sides. |
 | Retirement PR (U28) breaks deploy because an overlooked reference lingers | Pre-retire grep gate + one-deploy-cycle burn-in with U2 stubbed directories. |
 | Migration of 4 existing agents corrupts an agent's state mid-destruction | Dry-run report attached to PR; destructive step flag-gated; snapshot written before destructive step. |
@@ -1594,7 +1604,7 @@ Structured findings from a 7-persona document review (coherence, feasibility, pr
 
 **Key plan-level changes from the review:**
 - **Git-ref import moved into v1 scope** (was deferred) — reflected in R10, U15, U20.
-- **Advisory lock redesigned** from Postgres `pg_advisory_xact_lock` to DynamoDB conditional-write with TTL heartbeat — U13 fully rewritten.
+- **Advisory lock redesigned** from Postgres `pg_advisory_xact_lock` to a durable Postgres lease table with heartbeat expiry — U13 fully rewritten without adding a new AWS resource.
 - **Last-write-wins memory → ETag-guarded concurrency** — U12 rewritten.
 - **File-level reserved list** (USER/IDENTITY/SOUL/GUARDRAILS at root) added to import — U15, Key Technical Decisions.
 - **Path-normalization collision** changed from "reject both" to "vendor-prefix wins" — Key Technical Decisions.
@@ -1608,7 +1618,7 @@ Structured findings from a 7-persona document review (coherence, feasibility, pr
 - **U31 added** — workspace-files admin/owner role check (closes pre-existing authz gap).
 - **U32 added** — pinned-versions flat-key cleanup scheduled ≥2 deploy cycles post-U24 with telemetry gate.
 - **Snapshot-restore UI** moved into U23 scope (not deferred) — minimum-viable restoreFromSnapshot mutation + visible post-swap banner.
-- **Agent-level lock on drag rename** (U19) — will add dep on U13 when U19 is authored.
+- **Agent-level lease on drag rename** (U19) — will add dep on U13 when U19 is authored.
 
 ### Findings accepted but requiring implementer judgment at unit time (not pre-resolved)
 
@@ -1628,7 +1638,7 @@ The following findings were acknowledged but left to the implementer to resolve 
 
 ### P1 — architectural / security
 
-- **[feasibility + coherence + scope-guardian + adversarial, 4 personas] Advisory-lock mechanism wrong for Lambda invoke lifetime.** `pg_advisory_xact_lock` is transaction-scoped; Lambda invokes call Bedrock for minutes and pg pool is `max: 2`. Either lock doesn't hold across invoke, or pg pool starves. U13 needs architectural redesign — likely DynamoDB conditional write with TTL heartbeat, or session-scoped Postgres lock with explicit release.
+- **[feasibility + coherence + scope-guardian + adversarial, 4 personas] Advisory-lock mechanism wrong for Lambda invoke lifetime.** `pg_advisory_xact_lock` is transaction-scoped; Lambda invokes call Bedrock for minutes and pg pool is `max: 2`. Either lock doesn't hold across invoke, or pg pool starves. U13 needs architectural redesign; this plan now uses a durable Postgres lease row with heartbeat expiry and short acquisition transactions.
 - **[security-lens] workspace-files REST handler has no admin/owner role check.** Any authenticated tenant member can write/delete/rename sub-agent folders. Plugin-upload has the check; workspace-files does not. All new builder mutations inherit this gap. Add `tenantMembers` role check (owner/admin) before any write path.
 - **[security-lens] Imported USER.md is a prompt-injection surface.** Reserved-name taxonomy covers folders (`memory/`, `skills/`) but not files. Imported USER.md would be written verbatim, bypassing the server-managed invariant. Add file-level reserved list: USER.md, likely also IDENTITY.md / SOUL.md / GUARDRAILS.md at root of an imported bundle.
 - **[product-lens] Last-write-wins memory at 400+ agent scale risks silent data loss.** Memory loss is irrecoverable. Ship ETag with U12; incremental cost small vs. collision discovery in production.
@@ -1654,10 +1664,10 @@ The following findings were acknowledged but left to the implementer to resolve 
 
 - **[feasibility + design-lens + scope-guardian, 3 personas] U19 S3 COPY+DELETE atomicity with rollback.** Advisory lock not listed as U19 dep. Add rollback path for half-moved state.
 - **[coherence + feasibility + adversarial, 3 personas] U11 synchronous recompute 500ms budget unvalidated at scale.** Define "typical agent sizes"; measure at 4 enterprises × 100+ agents before sync/outbox lock-in.
-- **[scope-guardian + adversarial] U30 post-deploy smoke too narrow.** Tests one fresh-canary happy path; doesn't cover migrated-from-pre-Fat agent, AGENTS.md hot-reload, skill-catalog transient, advisory-lock overlapping import+invoke, pinned-versions grace behavior, sub-agent memory paths.
+- **[scope-guardian + adversarial] U30 post-deploy smoke too narrow.** Tests one fresh-canary happy path; doesn't cover migrated-from-pre-Fat agent, AGENTS.md hot-reload, skill-catalog transient, lease-overlap import+invoke serialization, pinned-versions grace behavior, sub-agent memory paths.
 - **[coherence + product-lens] Orphaned sub-agent UX cliff post-swap.** Warning surface with no workflow. Add "port folders forward to new template's routing table" affordance.
 - **[product-lens] Depth cap 3 brittle against realistic enterprise org trees.** Consider soft warning at depth 4, hard cap at 5, telemetry on actual depth distribution.
-- **[security-lens] Advisory-lock zombie-hold on Lambda SIGKILL.** Aurora idle-session timeout could block import/swap minutes; compounds advisory-lock P1 above.
+- **[security-lens] Advisory-lock zombie-hold on Lambda SIGKILL.** Aurora idle-session timeout could block import/swap minutes if a session-scoped lock were used; U13's durable lease rows expire without holding a database session.
 - **[security-lens] Tar typeflag enumeration incomplete.** Currently only symlink (typeflag 2); need hardlink (1), device files (3-6), FIFO.
 - **[security-lens] No rate limiting on `POST /api/agents/{agentId}/import-bundle`.** Tenant admin can flood endpoint; consider presign-then-upload model.
 - **[security-lens] AGENTS.md parser tolerates malformed rows as prose.** Injection surface — crafted rows land in system prompt unchanged. Sanitize or reject.
