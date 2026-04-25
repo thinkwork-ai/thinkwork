@@ -307,12 +307,96 @@ class PostCompletionTests(unittest.TestCase):
         os.environ["API_AUTH_SECRET"] = "smoke-secret"
 
     def test_missing_env_logs_and_returns(self):
+        # When env is empty AND no snapshot params are passed, the
+        # callback logs ERROR and returns without raising. The row
+        # then lands on the 15-min reconciler.
         os.environ.pop("THINKWORK_API_URL", None)
         os.environ.pop("API_AUTH_SECRET", None)
         os.environ.pop("THINKWORK_API_SECRET", None)
-        run_skill_dispatch.post_skill_run_complete(
-            "run-x", "tenant-x", "failed", failure_reason="x",
-        )
+        with patch("urllib.request.urlopen") as mock_open:
+            run_skill_dispatch.post_skill_run_complete(
+                "run-x", "tenant-x", "failed", failure_reason="x",
+            )
+        # No HTTP request fired because we bailed early.
+        mock_open.assert_not_called()
+
+    def test_snapshot_params_override_empty_env(self):
+        """Regression for the dev-2026-04-25 incident: env can be
+        empty at callback time even though it was populated at
+        dispatcher entry. The dispatcher snapshots api_url + api_secret
+        and passes them as parameters, which must take precedence over
+        os.environ — including when os.environ is empty.
+        """
+        os.environ.pop("THINKWORK_API_URL", None)
+        os.environ.pop("API_AUTH_SECRET", None)
+        os.environ.pop("THINKWORK_API_SECRET", None)
+
+        class FakeResp:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        captured: dict = {}
+
+        def _fake_urlopen(req, timeout=None):
+            captured["url"] = req.full_url
+            captured["auth"] = req.headers.get("Authorization")
+            return FakeResp()
+
+        with patch("urllib.request.urlopen", side_effect=_fake_urlopen):
+            run_skill_dispatch.post_skill_run_complete(
+                "run-y",
+                "tenant-y",
+                "complete",
+                completion_hmac_secret="hmac-secret",
+                api_url="https://snapshot.example",
+                api_secret="snapshot-secret",
+            )
+
+        self.assertIn("snapshot.example", captured["url"])
+        self.assertEqual(captured["auth"], "Bearer snapshot-secret")
+
+    def test_snapshot_params_take_precedence_over_env(self):
+        """When BOTH env and snapshot are present, snapshot wins.
+        Env can drift mid-invocation (per the dev-2026-04-25 incident),
+        and the dispatcher's at-entry snapshot is the source of truth.
+        """
+        os.environ["THINKWORK_API_URL"] = "https://stale-env.example"
+        os.environ["API_AUTH_SECRET"] = "stale-env-secret"
+
+        class FakeResp:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        captured: dict = {}
+
+        def _fake_urlopen(req, timeout=None):
+            captured["url"] = req.full_url
+            captured["auth"] = req.headers.get("Authorization")
+            return FakeResp()
+
+        with patch("urllib.request.urlopen", side_effect=_fake_urlopen):
+            run_skill_dispatch.post_skill_run_complete(
+                "run-z",
+                "tenant-z",
+                "complete",
+                completion_hmac_secret="hmac-secret",
+                api_url="https://snapshot.example",
+                api_secret="snapshot-secret",
+            )
+
+        self.assertIn("snapshot.example", captured["url"])
+        self.assertNotIn("stale-env", captured["url"])
+        self.assertEqual(captured["auth"], "Bearer snapshot-secret")
 
 
 class UrlopenWithRetryTests(unittest.TestCase):
