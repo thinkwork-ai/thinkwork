@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage: scripts/new-worktree <task-name> [--tool codex|claude] [--prefix branch-prefix]
+
+Creates an isolated git worktree from origin/main for an agent task.
+
+Examples:
+  scripts/new-worktree fix-agentcore-entrypoint
+  scripts/new-worktree browser-template-save --tool claude
+  scripts/new-worktree api-cleanup --prefix feat
+USAGE
+}
+
+if [[ $# -eq 1 && ( "$1" == "-h" || "$1" == "--help" ) ]]; then
+  usage
+  exit 0
+fi
+
+if [[ $# -lt 1 ]]; then
+  usage >&2
+  exit 2
+fi
+
+task_name="$1"
+shift
+
+tool="codex"
+branch_prefix=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --tool)
+      if [[ $# -lt 2 ]]; then
+        echo "Missing value for --tool" >&2
+        exit 2
+      fi
+      tool="$2"
+      shift 2
+      ;;
+    --prefix)
+      if [[ $# -lt 2 ]]; then
+        echo "Missing value for --prefix" >&2
+        exit 2
+      fi
+      branch_prefix="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+case "$tool" in
+  codex)
+    worktree_root=".Codex/worktrees"
+    default_branch_prefix="codex"
+    ;;
+  claude)
+    worktree_root=".claude/worktrees"
+    default_branch_prefix="claude"
+    ;;
+  *)
+    echo "--tool must be either 'codex' or 'claude'" >&2
+    exit 2
+    ;;
+esac
+
+if [[ -z "$branch_prefix" ]]; then
+  branch_prefix="$default_branch_prefix"
+fi
+
+current_root="$(git rev-parse --show-toplevel)"
+repo_root="$(git worktree list --porcelain | awk 'NR == 1 { print $2 }')"
+
+if [[ -z "$repo_root" ]]; then
+  repo_root="$current_root"
+fi
+
+cd "$repo_root"
+
+slug="$(printf '%s' "$task_name" \
+  | tr '[:upper:]' '[:lower:]' \
+  | sed -E 's/[^a-z0-9._-]+/-/g; s/^-+//; s/-+$//')"
+
+if [[ -z "$slug" ]]; then
+  echo "Task name must contain at least one letter or number" >&2
+  exit 2
+fi
+
+branch="${branch_prefix}/${slug}"
+path="${worktree_root}/${slug}"
+
+if [[ -e "$path" ]]; then
+  echo "Worktree path already exists: $path" >&2
+  exit 1
+fi
+
+if git show-ref --verify --quiet "refs/heads/${branch}"; then
+  echo "Branch already exists: $branch" >&2
+  exit 1
+fi
+
+if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+  echo "Remote branch already exists: $branch" >&2
+  exit 1
+fi
+
+git fetch origin
+mkdir -p "$worktree_root"
+git worktree add "$path" -b "$branch" origin/main
+
+cat <<EOF
+Created worktree:
+  path:   $repo_root/$path
+  branch: $branch
+
+Next:
+  cd $path
+EOF

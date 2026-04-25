@@ -2,6 +2,32 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Mandatory worktree isolation
+
+For any task that may edit files, create a new git worktree before making changes.
+
+The main checkout at `/Users/ericodom/Projects/thinkwork` is a coordination checkout only. Do not edit files there for implementation work.
+
+Required workflow:
+
+1. Start from `/Users/ericodom/Projects/thinkwork`.
+2. Run `git fetch origin`.
+3. Create a task worktree under `.claude/worktrees/<short-task-name>` for Claude sessions or `.Codex/worktrees/<short-task-name>` for Codex sessions.
+4. Create a new branch from fresh `origin/main`.
+5. `cd` into that worktree before reading or editing task files.
+6. Do not edit files in the main checkout.
+7. Do not reuse another agent's worktree unless the user explicitly asks you to continue that exact branch.
+8. If you are already in the main checkout, on `main`, or on a branch/worktree owned by another session, stop and create a new worktree first.
+
+Prefer the helper:
+
+```bash
+scripts/new-worktree <short-task-name> --tool claude
+cd .claude/worktrees/<short-task-name>
+```
+
+The helper can be run from the main checkout or from an existing worktree; it resolves back to the primary checkout before creating the new worktree.
+
 ## Repository at a glance
 
 Thinkwork is an AWS-native agent harness: a TypeScript monorepo plus a Python agent runtime, deployed by the repo's own CLI via Terraform. There is **no local-only mode** — end-to-end work requires a deployed AWS stack. "Thinkwork supersedes maniflow" — ignore the old `maniflow*` names you may see on stale resources.
@@ -108,7 +134,7 @@ Concurrent admin vite instances (worktrees) must bind to 5175+. **Each port must
 ## PR / branch workflow
 
 - **PRs target `main`, never another PR's branch.** Squash-merge + branch deletion orphans stacked PRs — rebase onto main instead.
-- **Use worktrees for parallel work** — never branch/stash in the main checkout when other sessions may have in-flight work. Create under `.claude/worktrees/<name>` off `origin/main`. After a worktree's PR merges, remove the worktree **and** delete the branch without being asked.
+- **Use worktrees for parallel work** — never branch/stash in the main checkout when other sessions may have in-flight work. Create under `.claude/worktrees/<name>` or `.Codex/worktrees/<name>` off `origin/main`. After a worktree's PR merges, remove the worktree **and** delete the branch without being asked.
 - Before patching uncommitted main-tree changes forward, **`git fetch` then diff each file against `origin/main`** — another session may have already merged it.
 - Pre-commit checks run `pnpm lint && pnpm typecheck && pnpm test && pnpm format:check`; fix real failures rather than bypassing hooks.
 
