@@ -466,6 +466,10 @@ function AgentWorkspacePage() {
     }
   }, [target]);
 
+  const refreshFilesInBackground = useCallback(() => {
+    void fetchFiles({ showLoading: false });
+  }, [fetchFiles]);
+
   useEffect(() => {
     fetchFiles();
   }, [fetchFiles]);
@@ -748,6 +752,16 @@ function AgentWorkspacePage() {
     setEditValue("");
   };
 
+  const removeFilesFromTree = (deletedFiles: string[]) => {
+    const deleted = new Set(deletedFiles);
+    setFiles((current) => current.filter((file) => !deleted.has(file)));
+    setFileSources((current) => {
+      const next = { ...current };
+      for (const file of deleted) delete next[file];
+      return next;
+    });
+  };
+
   const chooseFallbackFile = (deletedFiles: string[]) => {
     if (!openFile || !deletedFiles.includes(openFile)) return null;
 
@@ -770,11 +784,12 @@ function AgentWorkspacePage() {
     setDeletingPath(path);
     try {
       await deleteWorkspaceFile(target, path);
-      await fetchFiles({ showLoading: false });
+      removeFilesFromTree([path]);
       if (openFile === path) {
         if (fallbackFile) await handleOpen(fallbackFile);
         else clearEditor();
       }
+      refreshFilesInBackground();
       toast.success(`Deleted ${path}`);
     } catch (err) {
       console.error(`Failed to delete ${path}:`, err);
@@ -794,7 +809,6 @@ function AgentWorkspacePage() {
 
     try {
       const failed: string[] = [];
-      const fallbackFile = chooseFallbackFile(concreteFiles);
       setDeletingPath(folderPath);
       for (const path of concreteFiles) {
         try {
@@ -805,11 +819,15 @@ function AgentWorkspacePage() {
         }
       }
 
+      const deletedFiles = concreteFiles.filter((path) => !failed.includes(path));
+      const fallbackFile = chooseFallbackFile(deletedFiles);
+
+      removeFilesFromTree(deletedFiles);
       if (openFile && pathIsWithinFolder(openFile, folderPath) && !failed.includes(openFile)) {
         if (fallbackFile) await handleOpen(fallbackFile);
         else clearEditor();
       }
-      await fetchFiles({ showLoading: false });
+      refreshFilesInBackground();
 
       if (failed.length > 0) {
         toast.error(`Deleted ${concreteFiles.length - failed.length} files; ${failed.length} failed.`);
