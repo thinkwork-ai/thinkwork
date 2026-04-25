@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import _boot_assert as ba  # conftest.py puts container-sources/ on sys.path
 
@@ -30,6 +31,14 @@ def _seed(app_dir: str, modules: tuple[str, ...], shared: tuple[str, ...], auth_
                 f.write("# placeholder\n")
 
 
+def _entrypoint_available():
+    return patch.object(
+        ba.shutil,
+        "which",
+        return_value="/usr/local/bin/opentelemetry-instrument",
+    )
+
+
 class BootAssertTests(unittest.TestCase):
     def test_passes_when_every_expected_module_is_present(self):
         with tempfile.TemporaryDirectory() as app_dir:
@@ -40,7 +49,8 @@ class BootAssertTests(unittest.TestCase):
                 ba.EXPECTED_AUTH_AGENT,
             )
             # Should not raise.
-            ba.check(app_dir)
+            with _entrypoint_available():
+                ba.check(app_dir)
 
     def test_raises_with_missing_module_name_when_container_source_is_dropped(self):
         with tempfile.TemporaryDirectory() as app_dir:
@@ -55,8 +65,9 @@ class BootAssertTests(unittest.TestCase):
             dropped = ba.EXPECTED_CONTAINER_SOURCES[0]
             os.remove(os.path.join(app_dir, f"{dropped}.py"))
 
-            with self.assertRaises(RuntimeError) as cm:
-                ba.check(app_dir)
+            with _entrypoint_available():
+                with self.assertRaises(RuntimeError) as cm:
+                    ba.check(app_dir)
             # The whole point of the assertion is that it names the missing file
             # so `docker build` output tells you exactly what to fix.
             self.assertIn(f"{dropped}.py", str(cm.exception))
@@ -72,8 +83,9 @@ class BootAssertTests(unittest.TestCase):
             dropped = ba.EXPECTED_SHARED[0]
             os.remove(os.path.join(app_dir, f"{dropped}.py"))
 
-            with self.assertRaises(RuntimeError) as cm:
-                ba.check(app_dir)
+            with _entrypoint_available():
+                with self.assertRaises(RuntimeError) as cm:
+                    ba.check(app_dir)
             self.assertIn(f"{dropped}.py", str(cm.exception))
 
     def test_raises_when_auth_agent_init_is_missing(self):
@@ -87,9 +99,24 @@ class BootAssertTests(unittest.TestCase):
             # auth-agent lives under its own directory, exercise that code path.
             os.remove(os.path.join(app_dir, "auth-agent", "__init__.py"))
 
-            with self.assertRaises(RuntimeError) as cm:
-                ba.check(app_dir)
+            with _entrypoint_available():
+                with self.assertRaises(RuntimeError) as cm:
+                    ba.check(app_dir)
             self.assertIn("auth-agent/__init__.py", str(cm.exception))
+
+    def test_raises_when_required_entrypoint_executable_is_missing(self):
+        with tempfile.TemporaryDirectory() as app_dir:
+            _seed(
+                app_dir,
+                ba.EXPECTED_CONTAINER_SOURCES,
+                ba.EXPECTED_SHARED,
+                ba.EXPECTED_AUTH_AGENT,
+            )
+
+            with patch.object(ba.shutil, "which", return_value=None):
+                with self.assertRaises(RuntimeError) as cm:
+                    ba.check(app_dir)
+            self.assertIn("opentelemetry-instrument", str(cm.exception))
 
     def test_expected_container_sources_covers_every_sibling_module_file(self):
         """Integration guard: EXPECTED_CONTAINER_SOURCES must list every .py

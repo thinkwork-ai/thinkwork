@@ -25,6 +25,7 @@ module set from packages/agentcore/agent-container/.
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 
 # container-sources/ modules — these travel into /app via the wildcard COPY.
@@ -87,6 +88,10 @@ EXPECTED_AUTH_AGENT: tuple[str, ...] = (
     "auth-agent/permission_request.py",
 )
 
+REQUIRED_EXECUTABLES: tuple[str, ...] = (
+    "opentelemetry-instrument",
+)
+
 
 def _missing(app_dir: str) -> list[str]:
     out: list[str] = []
@@ -97,6 +102,10 @@ def _missing(app_dir: str) -> list[str]:
         if not os.path.isfile(os.path.join(app_dir, rel)):
             out.append(rel)
     return out
+
+
+def _missing_executables() -> list[str]:
+    return [name for name in REQUIRED_EXECUTABLES if shutil.which(name) is None]
 
 
 def check(app_dir: str = "/app") -> None:
@@ -113,6 +122,13 @@ def check(app_dir: str = "/app") -> None:
             f"[_boot_assert] missing {len(missing)} expected module(s) under {app_dir}:\n  "
             + "\n  ".join(missing)
             + "\nSee _boot_assert.py for the expected module list."
+        )
+    missing_executables = _missing_executables()
+    if missing_executables:
+        raise RuntimeError(
+            "[_boot_assert] missing required runtime executable(s) on PATH:\n  "
+            + "\n  ".join(missing_executables)
+            + "\nCheck requirements.txt and the Dockerfile dependency install step."
         )
     total = len(EXPECTED_CONTAINER_SOURCES) + len(EXPECTED_SHARED) + len(EXPECTED_AUTH_AGENT)
     print(
