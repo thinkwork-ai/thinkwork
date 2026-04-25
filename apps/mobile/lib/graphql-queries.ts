@@ -518,6 +518,26 @@ export const ThreadTurnEventsQuery = graphql(`
   }
 `);
 
+export const TurnInvocationLogsQuery = graphql(`
+  query TurnInvocationLogs($tenantId: ID!, $turnId: ID!) {
+    turnInvocationLogs(tenantId: $tenantId, turnId: $turnId) {
+      requestId
+      modelId
+      timestamp
+      inputTokenCount
+      outputTokenCount
+      cacheReadTokenCount
+      inputPreview
+      outputPreview
+      toolCount
+      costUsd
+      toolUses
+      hasToolResult
+      branch
+    }
+  }
+`);
+
 export const CancelThreadTurnMutation = graphql(`
   mutation CancelThreadTurn($id: ID!) {
     cancelThreadTurn(id: $id) { id status finishedAt }
