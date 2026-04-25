@@ -37,17 +37,22 @@ export function useGraphCamera(
   const startTx = useSharedValue(0);
   const startTy = useSharedValue(0);
   const startScale = useSharedValue(1);
-  // Centroid at pinch start — anchors the world-point the user grabbed.
-  // The *current* centroid is read from `e.focalX/Y` every `onUpdate` so the
-  // zoom tracks finger drift instead of staying pinned to the initial touch.
-  const startFocalX = useSharedValue(0);
-  const startFocalY = useSharedValue(0);
+  const pinchScreenX = useSharedValue(0);
+  const pinchScreenY = useSharedValue(0);
+  const pinchWorldX = useSharedValue(0);
+  const pinchWorldY = useSharedValue(0);
+  const hasPinchAnchor = useSharedValue(false);
   // Guards pan against concurrent pinch updates. `Gesture.Simultaneous`
   // fires both handlers per frame; on real devices the pan handler can
   // stomp pinch's focal-preserving tx/ty even when pinch reads the live
-  // centroid. While pinching, pan.onUpdate is a no-op; on pinch end we
-  // re-snapshot startTx/Ty so pan resumes cleanly if a finger lingers.
+  // centroid. While pinching, pan.onUpdate records but doesn't apply
+  // translation; on pinch end we rebase pan to that recorded translation
+  // so a lingering finger resumes without replaying the full pinch-time drag.
   const isPinching = useSharedValue(false);
+  const panOffsetX = useSharedValue(0);
+  const panOffsetY = useSharedValue(0);
+  const lastPanTranslationX = useSharedValue(0);
+  const lastPanTranslationY = useSharedValue(0);
 
   const transform = useDerivedValue(() => [
     { translateX: tx.value },
@@ -64,15 +69,21 @@ export function useGraphCamera(
         if (onUserGesture) runOnJS(onUserGesture)();
         startTx.value = tx.value;
         startTy.value = ty.value;
+        panOffsetX.value = 0;
+        panOffsetY.value = 0;
+        lastPanTranslationX.value = 0;
+        lastPanTranslationY.value = 0;
       })
       .onUpdate((e) => {
+        lastPanTranslationX.value = e.translationX;
+        lastPanTranslationY.value = e.translationY;
         // Skip pan writes during an active pinch — pinch owns tx/ty while
         // two fingers are down. Without this early-return a concurrent
         // pan.onUpdate can overwrite pinch's focal-preserving tx/ty and
         // the user sees the viewport "jump" away from where they zoomed.
         if (isPinching.value) return;
-        tx.value = startTx.value + e.translationX;
-        ty.value = startTy.value + e.translationY;
+        tx.value = startTx.value + e.translationX - panOffsetX.value;
+        ty.value = startTy.value + e.translationY - panOffsetY.value;
       });
 
     const pinch = Gesture.Pinch()
@@ -84,37 +95,59 @@ export function useGraphCamera(
         startScale.value = scale.value;
         startTx.value = tx.value;
         startTy.value = ty.value;
-        startFocalX.value = e.focalX;
-        startFocalY.value = e.focalY;
+        // Wait for the first valid two-finger update before choosing the
+        // pinch anchor. RNGH can report transient focal samples while
+        // the recognizer activates.
+        hasPinchAnchor.value = false;
         isPinching.value = true;
       })
       .onUpdate((e) => {
+        const pointerCount = (
+          e as typeof e & { numberOfPointers?: number }
+        ).numberOfPointers;
+        if (typeof pointerCount === "number" && pointerCount < 2) return;
+        if (!Number.isFinite(e.focalX) || !Number.isFinite(e.focalY)) return;
         const next = Math.min(
           SCALE_MAX,
           Math.max(SCALE_MIN, startScale.value * e.scale),
         );
-        const ratio = next / startScale.value;
-        // Anchor the world-point that was under `startFocal` at onStart to
-        // the *current* centroid (`e.focalX/Y`). Reading the live centroid
-        // each frame makes zoom track finger drift — without this, a pinch
-        // whose centroid wanders (common near the graph edges where grip is
-        // awkward) "jumps" as the anchor and the user's fingers diverge.
-        tx.value = e.focalX - (startFocalX.value - startTx.value) * ratio;
-        ty.value = e.focalY - (startFocalY.value - startTy.value) * ratio;
+        if (!hasPinchAnchor.value) {
+          const currentScale = scale.value;
+          if (currentScale <= 0) return;
+          pinchScreenX.value = e.focalX;
+          pinchScreenY.value = e.focalY;
+          pinchWorldX.value = (e.focalX - tx.value) / currentScale;
+          pinchWorldY.value = (e.focalY - ty.value) / currentScale;
+          hasPinchAnchor.value = true;
+        }
+        // Pinch invariant: the graph coordinate that starts under the
+        // two-finger midpoint stays at that same screen coordinate for
+        // the whole pinch. Native focal points can drift or collapse
+        // toward one finger near edges; using them as a live screen
+        // target makes the camera appear to jump.
+        tx.value = pinchScreenX.value - pinchWorldX.value * next;
+        ty.value = pinchScreenY.value - pinchWorldY.value * next;
         scale.value = next;
       })
       .onEnd(() => {
-        // Re-snapshot pan's baseline so if the user keeps a finger down,
-        // the transition from pinch → pan doesn't jump by the full
-        // accumulated translation since pan.onStart fired.
+        // Rebase pan's baseline so if the user keeps a finger down, the
+        // transition from pinch -> pan doesn't jump by the full accumulated
+        // translation since pan.onStart fired.
         startTx.value = tx.value;
         startTy.value = ty.value;
+        panOffsetX.value = lastPanTranslationX.value;
+        panOffsetY.value = lastPanTranslationY.value;
         isPinching.value = false;
       })
       .onFinalize(() => {
         // Defensive — covers gesture termination paths (cancel, system
         // interrupt) that may not fire onEnd.
+        startTx.value = tx.value;
+        startTy.value = ty.value;
+        panOffsetX.value = lastPanTranslationX.value;
+        panOffsetY.value = lastPanTranslationY.value;
         isPinching.value = false;
+        hasPinchAnchor.value = false;
       });
 
     return Gesture.Simultaneous(pan, pinch);
@@ -125,9 +158,16 @@ export function useGraphCamera(
     startTx,
     startTy,
     startScale,
-    startFocalX,
-    startFocalY,
+    pinchScreenX,
+    pinchScreenY,
+    pinchWorldX,
+    pinchWorldY,
+    hasPinchAnchor,
     isPinching,
+    panOffsetX,
+    panOffsetY,
+    lastPanTranslationX,
+    lastPanTranslationY,
     onUserGesture,
   ]);
 
