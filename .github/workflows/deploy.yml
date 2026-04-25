@@ -625,6 +625,15 @@ jobs:
         with:
           terraform_wrapper: false
 
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
       - name: Terraform init
         working-directory: terraform/examples/greenfield
         run: |
