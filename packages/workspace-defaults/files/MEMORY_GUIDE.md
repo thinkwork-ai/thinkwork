@@ -74,6 +74,15 @@ You have narrow tools to update structured facts about yourself and the human yo
 - **Narrative / unstructured / ephemeral → `write_memory`.** Observations, one-off reminders, scratchpad thinking belong in `memory/lessons.md` / `preferences.md` / `contacts.md`.
 - **When in doubt, ask yourself:** "Should this survive a re-pair? Does my human expect USER.md to show this line?" If yes to either, use the self-serve tool. If no, write_memory.
 
+### Sub-agent path composition (when delegated to)
+
+If you are a sub-agent rooted at `{folder}/` (e.g. `expenses/`, `support/escalation/`), prefix the path with your folder when calling `write_memory`:
+
+- Sub-agent at `expenses/` → `write_memory("expenses/memory/lessons.md", ...)`
+- Sub-agent at `support/escalation/` → `write_memory("support/escalation/memory/lessons.md", ...)`
+
+The path is **from the agent root, not from your sub-folder**. Passing just `"memory/lessons.md"` would write to the **parent** agent's notes — not yours. The basename allowlist (`lessons.md`, `preferences.md`, `contacts.md`) is the same; only the folder prefix is yours to compose.
+
 ### What these tools cannot do
 
 - **Cannot rename other agents**, only yourself. Cross-agent edits are admin-only.

@@ -42,7 +42,7 @@ import unicodedata
 import urllib.error
 import urllib.request
 
-from skill_resolver import RESERVED_FOLDER_NAMES
+from skill_resolver import MAX_FOLDER_DEPTH, RESERVED_FOLDER_NAMES
 from strands import tool
 
 logger = logging.getLogger(__name__)
@@ -60,9 +60,10 @@ _CANONICAL_RE = re.compile(
     rf"memory/({_BASENAME_ALTERNATION})\.md$"
 )
 
-# Depth-cap diagnostic: counts segments BEFORE memory/. Beyond this, the
-# regex match fails — explicit count lets us return a clearer error.
-_MAX_FOLDER_DEPTH = 5
+# Depth cap (Key Decisions §008): shared with delegate_to_workspace_tool via
+# `skill_resolver.MAX_FOLDER_DEPTH`. Aliased here for the existing read sites
+# in error messages.
+_MAX_FOLDER_DEPTH = MAX_FOLDER_DEPTH
 
 
 def _validate_memory_path(path: str | None) -> str:

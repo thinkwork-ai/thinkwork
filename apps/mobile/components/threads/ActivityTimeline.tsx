@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { View, Pressable, FlatList, Animated, Easing, RefreshControl } from "react-native";
 import { useColorScheme } from "nativewind";
 import { useRouter } from "expo-router";
-import { User, Bot, Check, X, AlertCircle, Clock, ChevronDown, ChevronRight, Copy, FileText, MapPin, DollarSign, UserPlus, CheckSquare, Building2, RefreshCw, MoreHorizontal, Bookmark, ClipboardList } from "lucide-react-native";
+import { User, Bot, Check, AlertCircle, ChevronDown, ChevronRight, Copy, FileText, MapPin, DollarSign, UserPlus, CheckSquare, Building2, RefreshCw, MoreHorizontal, Bookmark, ClipboardList, MessageSquare } from "lucide-react-native";
 import * as Clipboard from "expo-clipboard";
 import { useMutation } from "urql";
 import { Text, Muted } from "@/components/ui/typography";
@@ -12,6 +12,9 @@ import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { COLORS } from "@/lib/theme";
 import { getGenUIComponent } from "@/lib/genui-registry";
 import { RefreshGenUIMutation } from "@/lib/graphql-queries";
+import { TurnExecutionTimeline } from "@/components/threads/TurnExecutionTimeline";
+
+const RESPONSE_COLOR = "#06b6d4";
 
 // ---------------------------------------------------------------------------
 // Spinning refresh icon
@@ -91,6 +94,7 @@ export interface ActivityTimelineProps {
   turns: any[];
   agentName?: string;
   isAdmin?: boolean;
+  tenantId?: string | null;
   isAgentRunning?: boolean;
   onScrollToEnd?: () => void;
   onLinkPress?: (url: string) => void;
@@ -144,6 +148,24 @@ function parseUsage(usageJson: any): { inp: number; out: number } | null {
     const out = u.outputTokens ?? u.output_tokens ?? 0;
     return { inp, out };
   } catch { return null; }
+}
+
+function formatInvocationSource(source: unknown): string | null {
+  const raw = String(source || "").trim();
+  if (!raw) return null;
+  const key = raw.toLowerCase().replace(/[\s-]+/g, "_");
+  const labels: Record<string, string> = {
+    chat: "Manual chat",
+    chat_message: "Manual chat",
+    manual: "Manual chat",
+    manual_chat: "Manual chat",
+    schedule: "Schedule",
+    scheduled: "Schedule",
+    webhook: "Webhook",
+    api: "Automation",
+    email: "Email",
+  };
+  return labels[key] ?? raw.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 
@@ -209,7 +231,7 @@ function mergeTimeline(messages: Message[], turns: Turn[], agentName: string): T
 // Sub-components
 // ---------------------------------------------------------------------------
 
-/** Resolve turn status → color + icon */
+/** Resolve turn status → color */
 function getTurnStatusStyle(status: string, isDark: boolean) {
   const isSucceeded = status === "succeeded";
   const isFailed = status === "failed";
@@ -218,8 +240,7 @@ function getTurnStatusStyle(status: string, isDark: boolean) {
     : isFailed
       ? isDark ? "#f87171" : "#dc2626"
       : isDark ? "#60a5fa" : "#3b82f6";
-  const Icon = isSucceeded ? Check : isFailed ? X : Clock;
-  return { color, Icon };
+  return { color };
 }
 
 /** Timeline row wrapper — owns the icon column + vertical connector lines */
@@ -334,7 +355,7 @@ function AgentMessageContent({ item, agentName, colors, defaultExpanded, onLinkP
   const header = (
     <View className="flex-row items-center justify-between">
       <View className="flex-row items-center gap-1">
-        <Text className="text-base font-medium">{agentName}</Text>
+        <Text className="text-base font-medium">Response</Text>
         {expanded
           ? <ChevronDown size={14} color={colors.mutedForeground} />
           : <ChevronRight size={14} color={colors.mutedForeground} />}
@@ -392,23 +413,29 @@ function TurnContent({
   isDark,
   colors,
   isAdmin,
+  agentName,
+  tenantId,
 }: {
   item: Turn;
   isDark: boolean;
   colors: (typeof COLORS)["dark"];
   isAdmin?: boolean;
+  agentName: string;
+  tenantId?: string | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const { color: stColor } = getTurnStatusStyle(item.status, isDark);
   const hasDuration = item.startedAt && item.finishedAt;
   const usage = parseUsage(item.usageJson);
   const cost = item.totalCost ? `$${item.totalCost.toFixed(2)}` : "";
+  const sourceLabel = formatInvocationSource(item.triggerName || item.invocationSource);
+  const title = agentName || "Agent work";
 
   const header = (
     <View className="flex-row items-center justify-between">
-      <View className="flex-row items-center gap-1">
-        <Text className="text-base font-medium capitalize">
-          {item.triggerName || item.invocationSource?.replace(/_/g, " ") || (item.turnNumber ? `Turn #${item.turnNumber}` : "Agent Turn")}
+      <View className="flex-1 flex-row items-center gap-1 pr-2">
+        <Text className="text-base font-medium" numberOfLines={1}>
+          {title}
         </Text>
         {expanded
           ? <ChevronDown size={14} color={colors.mutedForeground} />
@@ -431,18 +458,19 @@ function TurnContent({
     <>
       <Pressable onPress={() => setExpanded(expanded ? false : true)}>
         {header}
+        {sourceLabel ? <Muted className="text-xs">{sourceLabel}</Muted> : null}
         {statusLine}
       </Pressable>
       {expanded && (
         <View className="gap-2">
-          {(isAdmin || cost) && usage && (
-            <View className="p-2 rounded-md" style={{ backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "#f9fafb" }}>
-              <Muted className="text-[10px] uppercase tracking-wider mb-1">Details</Muted>
-              <Text className="text-xs">Input: {usage.inp.toLocaleString()} tokens</Text>
-              <Text className="text-xs">Output: {usage.out.toLocaleString()} tokens</Text>
-              {cost ? <Text className="text-xs">Cost: {cost}</Text> : null}
-              {hasDuration ? <Text className="text-xs">Duration: {formatDuration(item.startedAt, item.finishedAt!)}</Text> : null}
-            </View>
+          {item.status !== "queued" && item.status !== "running" && (
+            <TurnExecutionTimeline
+              tenantId={tenantId}
+              turn={item}
+              expanded={expanded}
+              isDark={isDark}
+              colors={colors}
+            />
           )}
           {item.status === "failed" && item.error && (
             <View className="p-2 rounded-md" style={{ backgroundColor: isDark ? "rgba(239,68,68,0.1)" : "#fef2f2" }}>
@@ -666,6 +694,7 @@ export function ActivityTimeline({
   turns,
   agentName = "Agent",
   isAdmin,
+  tenantId,
   isAgentRunning,
   onScrollToEnd,
   onLinkPress,
@@ -744,8 +773,8 @@ export function ActivityTimeline({
       let iconBorder: string | undefined;
 
       if (item.kind === "turn") {
-        const { color, Icon: StatusIcon } = getTurnStatusStyle(item.data.status, isDark);
-        icon = <StatusIcon size={16} color={color} />;
+        const { color } = getTurnStatusStyle(item.data.status, isDark);
+        icon = <Bot size={16} color={color} />;
         iconBorder = color;
       } else if (item.kind === "genui") {
         const genuiType = String(item.data.toolResult._type || "");
@@ -761,8 +790,8 @@ export function ActivityTimeline({
           icon = <User size={16} color={userColor} />;
           iconBorder = userColor;
         } else {
-          icon = <Bot size={16} color={colors.primary} />;
-          iconBorder = colors.primary;
+          icon = <MessageSquare size={16} color={RESPONSE_COLOR} />;
+          iconBorder = RESPONSE_COLOR;
         }
       }
 
@@ -781,7 +810,7 @@ export function ActivityTimeline({
       } else if (item.kind === "fallback-response") {
         content = <AgentMessageContent item={{ id: item.data.turnId, role: "assistant", content: item.data.content, senderType: "agent", senderId: "", createdAt: item.data.createdAt }} agentName={item.data.agentName} colors={colors} defaultExpanded={isLastAgent} onLinkPress={onLinkPress} />;
       } else {
-        content = <TurnContent item={item.data} isDark={isDark} colors={colors} isAdmin={isAdmin} />;
+        content = <TurnContent item={item.data} isDark={isDark} colors={colors} isAdmin={isAdmin} agentName={agentName} tenantId={tenantId} />;
       }
 
       return (
@@ -797,7 +826,7 @@ export function ActivityTimeline({
         </TimelineRow>
       );
     },
-    [agentName, colors, isDark, isAdmin, lastAgentIndex, onLinkPress, timeline.length, onSaveRecipe, currentUserId],
+    [agentName, colors, isDark, isAdmin, lastAgentIndex, onLinkPress, timeline.length, onSaveRecipe, currentUserId, tenantId],
   );
 
   const keyExtractor = useCallback(

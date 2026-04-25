@@ -20,12 +20,24 @@ Both parsers run a fixture-parity test that fails when either side drifts.
 
 Public surface (must stay in sync, both sides):
     parse_agents_md(md) -> AgentsMdContext
-        AgentsMdContext { routing: list[RoutingRow], raw_markdown: str }
+        AgentsMdContext {
+            routing: list[RoutingRow],
+            raw_markdown: str,
+            warnings: list[str],          # human-readable skip lines
+            skipped_rows: list[dict[str, object]],
+            # Each record: {"row_index": int, "go_to": str, "reason": str}.
+            # TS mirror's SkippedRow interface is the precise shape.
+        }
         RoutingRow {
             task:    str         # human-readable label, decoration-stripped
             go_to:   str         # sub-agent folder path, e.g. "expenses/"
             reads:   list[str]   # file paths the operator referenced (verbatim)
             skills:  list[str]   # skill slugs (verbatim, dedup is U11's job)
+        }
+        Skipped-row record {
+            row_index: int       # 0-based index into the routing block's data rows
+            go_to:     str       # raw goTo value (decoration-stripped where possible)
+            reason:    str       # "reserved" or "invalid_path"
         }
 
 Tolerances (both sides):
@@ -83,18 +95,34 @@ class RoutingRow:
 class AgentsMdContext:
     routing: list[RoutingRow] = field(default_factory=list)
     raw_markdown: str = ""
+    warnings: list[str] = field(default_factory=list)
+    # Each record is `{"row_index": int, "go_to": str, "reason": str}`.
+    # Typed as `dict[str, object]` because `row_index` is an int while the
+    # other fields are strings; the TS mirror's `SkippedRow` interface is
+    # the precise shape (rowIndex: number, goTo: string, reason: ...).
+    skipped_rows: list[dict[str, object]] = field(default_factory=list)
 
 
 def parse_agents_md(markdown: str) -> AgentsMdContext:
     """Parse AGENTS.md content. Never raises on a row-level malformation;
     raises ValueError on document-level ambiguity (missing Go to column or
     multiple top-level tables with no Routing heading).
+
+    Row-level skips (reserved go_to, invalid folder path) are recorded
+    on ``warnings`` (human-readable strings) and ``skipped_rows``
+    (structured records) so callers can surface them to the LLM rather
+    than silently dropping the row's skills.
     """
     table = _locate_routing_table(markdown)
     if table is None:
         return AgentsMdContext(routing=[], raw_markdown=markdown)
-    routing = _parse_routing_block(table)
-    return AgentsMdContext(routing=routing, raw_markdown=markdown)
+    routing, warnings, skipped_rows = _parse_routing_block(table)
+    return AgentsMdContext(
+        routing=routing,
+        raw_markdown=markdown,
+        warnings=warnings,
+        skipped_rows=skipped_rows,
+    )
 
 
 def _locate_routing_table(markdown: str) -> tuple[str, list[str]] | None:
@@ -193,7 +221,9 @@ def _index_columns(header_cells: list[str]) -> dict[str, int]:
     return idx
 
 
-def _parse_routing_block(block: tuple[str, list[str]]) -> list[RoutingRow]:
+def _parse_routing_block(
+    block: tuple[str, list[str]],
+) -> tuple[list[RoutingRow], list[str], list[dict[str, str]]]:
     header_line, data_lines = block
     header_cells = _parse_row_cells(header_line)
     cols = _index_columns(header_cells)
@@ -204,6 +234,11 @@ def _parse_routing_block(block: tuple[str, list[str]]) -> list[RoutingRow]:
         )
 
     out: list[RoutingRow] = []
+    warnings: list[str] = []
+    skipped_rows: list[dict[str, str]] = []
+    # ``row_index`` counts data rows the parser actually considered (i.e.
+    # non-blank). It mirrors the index a routing-row editor would surface.
+    row_index = 0
     for line in data_lines:
         cells = _parse_row_cells(line)
         if not cells or all(c == "" for c in cells):
@@ -212,6 +247,7 @@ def _parse_routing_block(block: tuple[str, list[str]]) -> list[RoutingRow]:
         raw_go_to = cells[cols["go_to"]] if cols["go_to"] < len(cells) else ""
         go_to = _strip_decorations(raw_go_to)
         if not go_to:
+            row_index += 1
             continue
 
         go_to_folder = go_to[:-1] if go_to.endswith("/") else go_to
@@ -221,12 +257,26 @@ def _parse_routing_block(block: tuple[str, list[str]]) -> list[RoutingRow]:
                 "(memory/skills).",
                 go_to,
             )
+            warnings.append(
+                f"row {row_index} skipped — go_to {go_to!r} is reserved"
+            )
+            skipped_rows.append(
+                {"row_index": row_index, "go_to": go_to, "reason": "reserved"}
+            )
+            row_index += 1
             continue
         if not _is_valid_folder_path(go_to):
             logger.warning(
                 "[agents_md_parser] Skipping row — go_to %r is not a valid folder path.",
                 raw_go_to,
             )
+            warnings.append(
+                f"row {row_index} skipped — go_to {go_to!r} is not a valid folder path"
+            )
+            skipped_rows.append(
+                {"row_index": row_index, "go_to": go_to, "reason": "invalid_path"}
+            )
+            row_index += 1
             continue
 
         task = (
@@ -253,7 +303,8 @@ def _parse_routing_block(block: tuple[str, list[str]]) -> list[RoutingRow]:
                 skills=[s for s in skills if s],
             )
         )
-    return out
+        row_index += 1
+    return out, warnings, skipped_rows
 
 
 def _strip_decorations(s: str) -> str:

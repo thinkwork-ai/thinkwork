@@ -53,6 +53,16 @@ export async function setAgentSkills(
   if (!agent) throw new Error("Agent not found");
   await requireTenantAdmin(ctx, agent.tenant_id);
 
+  // U11: AGENTS.md is now the canonical authoring surface for skill set
+  // membership; derive-agent-skills.ts is the single writer. This mutation
+  // continues to work during the U17–U21 transition (per-row metadata —
+  // permissions, rate_limit_rpm, model_override, config — still needs a
+  // surface). The warning is a beacon: when this stops firing in CloudWatch
+  // logs, U21 can retire the mutation entirely.
+  console.warn(
+    `[setAgentSkills] DEPRECATED — derive-agent-skills (U11) is now the canonical writer. agent=${args.agentId} caller_authType=${ctx.auth.authType}`,
+  );
+
   // Safety: never delete all skills if the incoming list is empty.
   if (args.skills.length === 0) {
     console.warn(

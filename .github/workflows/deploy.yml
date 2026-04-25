@@ -596,6 +596,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        # post-deploy.sh's image_contains_source_sha() needs `git cat-file
+        # -e <sha>^{commit}` to succeed on both the active runtime image's
+        # source sha and the required source sha. With the default depth=1
+        # only HEAD is fetched, so any prior-commit sha (the typical case
+        # when the merge that triggered the deploy didn't touch the
+        # container) fails the existence check and the verifier reports a
+        # false-negative drift even when image and source are identical.
+        with:
+          fetch-depth: 0
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
