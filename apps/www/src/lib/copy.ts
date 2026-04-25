@@ -83,99 +83,113 @@ export const proofStrip = [
   },
 ];
 
+// The four-step rollout-path component (rendered by AdoptionJourney.astro
+// pending a future RolloutPath.astro rename — internal-only naming, no
+// product impact). Replaces the prior "AI adoption journey" framing per
+// docs/STYLE.md (banned: "journey").
 export const journey = {
-  eyebrow: "The AI adoption journey",
-  headline: "A practical path to AI adoption.",
-  lede: "Start small, keep every action visible, expand as trust grows — without changing the governance model underneath.",
+  eyebrow: "The rollout path",
+  headline: "Pilot. Visible work. Expansion. Operate.",
+  lede: "The harness ships every governance control on day one. The rollout is about which workflows you trust it with — not about which controls are in place yet.",
   steps: [
     {
       n: "01",
-      title: "Start with small wins",
-      lede: "One assistant, one workflow, one team. Pilot without a platform bet.",
+      title: "Pilot",
+      lede: "One agent, one workflow, one team. The harness is already production-grade; the pilot proves the workflow.",
     },
     {
       n: "02",
-      title: "Build trust through visible work",
-      lede: "Every action lives in a thread — attributed, audited, inspectable.",
+      title: "Visible work",
+      lede: "Every turn lands in a thread — attributed, traced, evaluated. Trust is built from the audit trail, not from claims.",
     },
     {
       n: "03",
-      title: "Expand as confidence grows",
-      lede: "Assistants take on more scope as reliable results earn it.",
+      title: "Expansion",
+      lede: "More agents, more workflows, more connectors. The control model holds; the surface area grows beneath it.",
     },
     {
       n: "04",
-      title: "Keep the harness yours",
-      lede: "Runtime, data, audit trail, and memory stay inside your boundary.",
+      title: "Operate",
+      lede: "Self-host, hand operations to us as ThinkWork for Business, or wrap with Enterprise services. The harness stays the same.",
     },
   ],
 };
 
 export const howItWorks = {
-  eyebrow: "How ThinkWork works",
-  headline: "Four primitives, one system harness.",
-  lede: "Threads, memory, templates, and controls — built into the runtime, not bolted on later.",
+  eyebrow: "Inside the harness",
+  headline: "Four primitives. One agent harness.",
+  lede: "Threads, memory, sandbox, and controls — the engineered mechanisms that turn raw model output into reliable, traceable, auditable agent work.",
   primitives: [
     {
       title: "Threads",
-      oneLiner: "Threads keep work visible.",
+      oneLiner: "The harness's perception and history layer.",
       detail:
-        "Every request, action, and outcome lives in one system of record — durable, attributed, and inspectable per thread, per agent, per tenant.",
+        "Every request, every tool call, every outcome lands in one durable record. Per-thread, per-agent, per-tenant — the trace the harness reasons over and the audit a reviewer reads.",
       href: "#audit",
     },
     {
       title: "Memory",
-      oneLiner: "Memory carries context forward.",
+      oneLiner: "The harness's context-management layer.",
       detail:
-        "Agents do not start from zero every time. Useful context, decisions, and knowledge stay available across threads, across teams, across time.",
+        "Agents stop starting from zero. The harness carries useful context, decisions, and knowledge across threads, teams, and time — under your IAM, in your account, on a contract you can swap engines under.",
       href: "#memory",
     },
     {
       title: "Sandbox",
-      oneLiner: "Sandbox runs code at reasoning time.",
+      oneLiner: "Deterministic execution for non-deterministic plans.",
       detail:
-        "A per-turn execution surface on AWS Bedrock AgentCore for ad-hoc transforms, API stitching, and one-off CLI calls — isolated, tenant-scoped, and audited alongside every other turn in the thread.",
+        "Per-turn isolated execution on AWS Bedrock AgentCore for code, transforms, API stitching, and CLI calls — tenant-scoped, capability-gated, and traced alongside every other turn.",
       href: "",
     },
     {
       title: "Controls",
-      oneLiner: "Controls make adoption governable.",
+      oneLiner: "Governance enforced in code, not policy documents.",
       detail:
-        "Templates contract each agent to an approved set of tools, models, and knowledge. Budgets, guardrails, evaluations, and audit trails keep AI accountable as usage grows.",
+        "Templates contract each agent to an approved tool set, models, and knowledge. Budgets, guardrails, evaluations, and audit travel with every turn — Reliability, Efficiency, Security, and Traceability built in, not bolted on.",
       href: "#controls",
     },
   ],
 };
 
+// The five governance controls below map 1:N to the four R.E.S.T. anchors
+// (Reliability · Efficiency · Security · Traceability). The chip-label on
+// each card carries the anchor(s) the control implements; FiveControls.astro
+// renders these as small uppercase tags. Mapping is locked in plan U1
+// pre-flight and consumed verbatim by docs/concepts/control.mdx (U8).
 export const controls = {
-  eyebrow: "Governance that grows with usage",
-  headline: "Governance, enforced in code, not in policy documents.",
-  lede: "As agents multiply, spend climbs, and scope expands, the governance surface scales with usage — not an architecture rewrite. Five first-class controls keep AI accountable at every stage of adoption.",
+  eyebrow: "Reliability · Efficiency · Security · Traceability",
+  headline: "The four R.E.S.T. anchors, enforced in code.",
+  lede: "Reliability, Efficiency, Security, and Traceability are not aspirations. The harness implements each one as concrete, shipping controls — five of them, all live in the admin web, all part of every plan.",
   items: [
     {
       title: "Runs in your AWS",
       desc: "The runtime deploys into your account. Your data, IAM, and network stay yours.",
       icon: "aws",
+      anchor: "Security · Traceability",
     },
     {
       title: "Approved agent capabilities",
       desc: "Each agent inherits an approved set of tools, models, and knowledge from its template — policy becomes code, not paperwork.",
       icon: "templates",
+      anchor: "Security · Reliability",
     },
     {
       title: "Centralized management",
       desc: "One admin console for agents, templates, budgets, evaluations, memory, and audit — no fragmented toolchain.",
       icon: "admin",
+      anchor: "Traceability",
     },
     {
       title: "Cost control and analysis",
       desc: "Real-time cost events per agent and model. Budgets cap spend before a runaway loop becomes an invoice.",
       icon: "cost",
+      anchor: "Efficiency",
     },
     {
       title: "Security + accuracy evaluations",
       desc: "Evaluation suite for every template — AWS Bedrock AgentCore evaluators plus custom assertions.",
       icon: "evals",
+      anchor: "Reliability · Security",
     },
   ],
 };
@@ -278,24 +292,24 @@ export const evals = {
 
 export const systemModel = {
   eyebrow: "One admin console",
-  headline: "One surface where the primitives connect.",
-  lede: "Threads, memory, agents, and connectors meet in one admin surface. Governance, audit, and spend travel with them — no fragmented toolchain, no per-tool control plane.",
+  headline: "Where the harness becomes one operating surface.",
+  lede: "Threads, memory, agents, and connectors meet in one admin web. The harness's controls — budgets, approvals, guardrails, audit — travel with every turn. No fragmented toolchain, no per-tool control plane.",
   nodes: [
     {
       title: "Threads",
-      desc: "The system of record for AI work. Every request, action, and outcome lives here.",
+      desc: "The harness's system of record. Every request, action, and outcome lives here.",
     },
     {
       title: "Memory",
-      desc: "A portable, harness-owned context layer that carries work forward between threads and agents.",
+      desc: "A portable, harness-owned context layer carrying work forward between threads and agents.",
     },
     {
       title: "Agents",
-      desc: "Managed or self-hosted. They operate inside the same thread and control model.",
+      desc: "Managed or self-hosted. Both operate inside the same thread, the same controls, the same trace.",
     },
     {
       title: "Connectors",
-      desc: "Approved system access — without the connector becoming the product contract.",
+      desc: "Approved system access — Slack, GitHub, Google Workspace — without the connector becoming the product contract.",
     },
   ],
   controlLabel: "Control",
@@ -304,26 +318,26 @@ export const systemModel = {
 };
 
 export const memory = {
-  eyebrow: "The durable benefit",
-  headline: "A memory asset you own, not a vendor's API.",
-  lede: "Once the controls are in place, the thing your organization actually gets is a memory layer you own. Every artifact your agents produce is inspectable, exportable, and portable.",
+  eyebrow: "The durable asset",
+  headline: "A memory layer you own, not a vendor's API.",
+  lede: "The harness's context layer is the asset that compounds. Every artifact your agents produce is inspectable, exportable, and portable — under your IAM, in your account, on a contract you can swap engines under.",
   memoryPoints: [
     "A harness-owned context layer, not a backend vendor's API.",
-    "Portable and inspectable — read it, export it, move it.",
+    "Portable and inspectable — read it, export it, move it between deployment models.",
     "A stable memory contract above pluggable engines. Hindsight and AgentCore are adapters, not the product.",
   ],
   wikiPoints: [
-    "Wiki Memories compile conversations into durable, browsable knowledge pages.",
-    "Inspect the graph that connects entities, pages, and sources.",
-    "Ship the same view to the mobile app so end users see what the org has learned.",
+    "Compounding Memory pages distill conversations into durable, browsable Entity / Topic / Decision pages.",
+    "Inspect the graph that links entities, pages, and source threads.",
+    "Ship the same view to mobile so end users see what the org has learned.",
   ],
   caption: "Admin web · browse, search, and inspect every memory",
 };
 
 export const mobile = {
   eyebrow: "End-user surface",
-  headline: "End users get a real work surface too.",
-  lede: "Governed AI is not just an admin surface. The operator story lives in the admin web; the user story is a native iOS app on the same threads, agents, and connectors — live on TestFlight today.",
+  headline: "The harness reaches end users, not just operators.",
+  lede: "The admin web is the operator surface. The end-user surface is a native iOS app on the same threads, agents, and connectors — live on TestFlight today.",
   highlights: [
     {
       title: "Assigned work, one place",
@@ -345,9 +359,9 @@ export const mobile = {
 };
 
 export const quickStart = {
-  eyebrow: "Quick start",
+  eyebrow: "Self-host the harness",
   headline: "Five commands. One AWS account.",
-  lede: "Real infrastructure, not a hand-wave. Clone, configure, deploy — in your account. Full setup steps and backend options live in the docs.",
+  lede: "The open Agent Harness installs into your AWS as Terraform modules. Clone, configure, deploy. If you'd rather we operate it, that's ThinkWork for Business.",
   ctaLabel: "Full getting started",
   ctaHref: external.quickStartDocs,
   commands: [
@@ -465,21 +479,21 @@ export type ServicePackage = {
 
 export const services = {
   meta: {
-    title: "ThinkWork Services — Pilot to production, governed.",
+    title: "ThinkWork Enterprise — Services for the Agent Harness for Business",
     description:
-      "Productized services for AI adoption: strategy, pilot launch, managed operations, and workflow expansion. Delivered on ThinkWork Cloud or into your own deployment.",
+      "Strategy, pilot launch, managed operations, and workflow expansion services on top of the Agent Harness — for teams running ThinkWork (open) or ThinkWork for Business (operated).",
   },
   hero: {
-    eyebrow: "Services",
-    headlinePart1: "First pilot. Full rollout.",
-    headlineAccent: "One operating model.",
+    eyebrow: "ThinkWork Enterprise · Services",
+    headlinePart1: "Strategy, launch, and operations,",
+    headlineAccent: "for the Agent Harness.",
     headlineOutcome:
-      "We help teams scope, launch, operate, and expand governed AI workflows.",
+      "We help teams scope, launch, operate, and expand governed agent workflows on the Agent Harness — whether you self-host or run it with us.",
     lede:
-      "Strategy, launch, and ongoing operations for teams adopting AI — productized services, not open-ended consulting.",
+      "Productized services on top of the Agent Harness for Business — not open-ended consulting. Fixed-fee engagements and named ongoing operations, scoped up front.",
     primaryCta: {
       label: "Scope a pilot",
-      mailtoSubject: "ThinkWork Services — scope a pilot",
+      mailtoSubject: "ThinkWork Enterprise — scope a pilot",
     } satisfies ServicesMailto,
     secondaryCta: {
       label: "See service packages",
@@ -487,30 +501,30 @@ export const services = {
     },
   },
   proof: {
-    eyebrow: "Platform and posture",
+    eyebrow: "What you get with the harness",
     items: [
       {
-        label: "AWS Bedrock AgentCore",
-        detail: "Native agent execution with Bedrock's governance primitives — not hand-rolled orchestration.",
+        label: "Production-grade Agent Harness",
+        detail: "Threads, memory, agents, connectors, automations, and control — wired together, not assembled from parts.",
+      },
+      {
+        label: "AWS Bedrock AgentCore runtime",
+        detail: "Sandboxed execution with Bedrock guardrails — not hand-rolled orchestration.",
       },
       {
         label: "Per-tenant Cognito + IAM",
         detail: "Identity isolation enforced at the AWS layer, not in application glue.",
       },
       {
-        label: "Full audit + evaluation log",
-        detail: "Every agent run, tool call, and evaluation result retained for QA and compliance review.",
-      },
-      {
-        label: "Cloud or self-hosted",
-        detail: "Same platform either way — hosted by us or inside your own AWS account.",
+        label: "Full audit + R.E.S.T. evaluations",
+        detail: "Every turn traced; Reliability, Efficiency, Security, and Traceability evaluators run on the same trace.",
       },
     ] as Array<{ label: string; detail?: string }>,
   },
   positioning: {
-    headline: "One partner from first workflow to ongoing operations.",
+    headline: "One partner across the harness — open, operated, or services-led.",
     body:
-      "Scoping, launch, managed operations, and workflow expansion — packaged as fixed-fee engagements and ongoing operational support rather than billable hours. The shape of the engagement is named up front; the scope doesn't drift.",
+      "ThinkWork Enterprise is the services tier of the three-tier ladder. Whether you self-host the open Agent Harness on your AWS or run it with us as ThinkWork for Business, Enterprise wraps either model with strategy, launch, and ongoing operations — packaged as fixed-fee engagements, not billable hours. The shape of the engagement is named up front; the scope doesn't drift.",
     startingPointsLabel: "Common starting points",
     startingPoints: [
       {
@@ -645,9 +659,14 @@ export const services = {
           "Either an AI Adoption Strategy Sprint (for teams still choosing where to start) or a ThinkWork Pilot Launch (for teams ready to ship a first workflow). Both are fixed-fee and time-boxed.",
       },
       {
-        q: "Do services cover hosted and self-hosted deployments?",
+        q: "How does Enterprise relate to ThinkWork (open) and ThinkWork for Business?",
         a:
-          "Both. ThinkWork is open-source; the hosted option is the same platform, just operated by us. Services cover launch, operations, and expansion on either path, and teams can move between them without rewriting workflows.",
+          "Three doors into the same Agent Harness. ThinkWork is the open Agent Harness — Apache 2.0, self-hosted on your AWS, community-supported. ThinkWork for Business is the same harness operated by us — managed updates, priority support, still deployed inside your AWS. ThinkWork Enterprise (this page) wraps either with strategy, pilot launch, managed operations, and workflow expansion services. Teams move between tiers without rewriting workflows; only the operating model changes.",
+      },
+      {
+        q: "Do services cover both open self-host and ThinkWork for Business?",
+        a:
+          "Yes. Enterprise services run on top of either deployment model. The harness, threads, memory, agents, connectors, automations, and controls are identical between them — only who operates the runtime differs.",
       },
       {
         q: "Can we start small?",
@@ -663,13 +682,13 @@ export const services = {
   },
   closingCta: {
     eyebrow: "Start with one workflow",
-    headlinePart1: "One workflow, governed.",
+    headlinePart1: "One harness. One workflow.",
     headlineAccent: "Running in production.",
     body:
-      "Whether you need help scoping the first pilot or operating ThinkWork as adoption grows, the starting point is an email. Tell us where you are and we'll come back with a shape.",
+      "ThinkWork Enterprise is the services tier of the Agent Harness for Business. Whether you self-host the open Agent Harness, run it with us as ThinkWork for Business, or want both wrapped with strategy, launch, and operations — the starting point is an email. Tell us where you are and we'll come back with a shape.",
     primaryCta: {
       label: "Scope a pilot",
-      mailtoSubject: "ThinkWork Services — scope a pilot",
+      mailtoSubject: "ThinkWork Enterprise — scope a pilot",
     } satisfies ServicesMailto,
   },
 };
