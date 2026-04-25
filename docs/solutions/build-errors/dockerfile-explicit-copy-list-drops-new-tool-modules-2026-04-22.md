@@ -169,6 +169,8 @@ Four occurrences in seven days make this a recurring class, not a one-off. The d
 - **PR #140** — `fix(agentcore): bundle workflow_skill_context.py into container` — second recurrence (2026-04-17).
 - **PR #401** — `feat(agentcore): plumb CURRENT_USER_ID through every agent invocation path` — introduced `invocation_env.py` without updating the Dockerfile; caused the 4th occurrence two hours after this doc was written.
 - **PR #417** — `fix(agentcore): add invocation_env + wiki_tools to Dockerfile COPY list` — resolution for the 4th occurrence. Also caught `wiki_tools.py` (imported lazily from #199, dormant but missing) while the hood was up.
+- **PR #581** — `fix(agentcore): guard container entrypoint dependencies` — adjacent boot-content failure: the container tried to exec `opentelemetry-instrument` before Python startup, so `_boot_assert`/entrypoint dependency checks needed to fail loud before runtime deploy.
+- **PR #585** — `fix(agentcore): rebuild stale runtime images` — recurrence where the boot-content fix existed in source, but the active runtime image was stale and deploy verification needed source-SHA drift detection.
 - **Follow-up**: promote registration-failure log level + add startup assertion (PR #391 review items REL-005 and KP-006). These do not replace the structural fix above; they reduce damage when the structural fix is skipped.
 
 ## Sibling silent-failure learnings
@@ -178,5 +180,6 @@ This bug joins the codebase's silent-failure family — different mechanisms, sa
 - [`docs/solutions/logic-errors/bootstrap-silent-exit-1-set-e-tenant-loop-2026-04-21.md`](../logic-errors/bootstrap-silent-exit-1-set-e-tenant-loop-2026-04-21.md) — bash `set -e` inside a tenant loop kills the script silently when one tenant's S3 prefix is empty.
 - [`docs/solutions/logic-errors/compile-continuation-dedupe-bucket-2026-04-20.md`](../logic-errors/compile-continuation-dedupe-bucket-2026-04-20.md) — `ON CONFLICT DO NOTHING` returns 0 rows touched without signaling the continuation chain is dead.
 - [`docs/solutions/logic-errors/oauth-authorize-wrong-user-id-binding-2026-04-21.md`](../logic-errors/oauth-authorize-wrong-user-id-binding-2026-04-21.md) — `SELECT ... WHERE tenant_id = ? LIMIT 1` returns an arbitrary row; wrong owner assigned silently.
+- [`docs/solutions/runtime-errors/stale-agentcore-runtime-image-entrypoint-not-found-2026-04-25.md`](../runtime-errors/stale-agentcore-runtime-image-entrypoint-not-found-2026-04-25.md) — missing entrypoint executable plus stale active runtime image; the deploy looked healthy until source-SHA image verification and GraphQL E2E exposed the gap.
 
 The common methodology lesson: **instrument the silent-failure case first, hypothesize second**. Every doc in the family was solvable in minutes once the right log line was read; each one burned hours on hypothesis-debugging before someone grepped the right keyword.
