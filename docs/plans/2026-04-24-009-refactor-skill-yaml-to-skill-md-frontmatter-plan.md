@@ -305,7 +305,7 @@ None. This is a pure internal refactor of a thinkwork-owned format.
 
 ---
 
-- [ ] **U5. Mandatory grep-for-zero + retired-skill orphan cleanup**
+- [x] **U5. Mandatory grep-for-zero + retired-skill orphan cleanup** — shipped, deleted test_skill_yaml_coercion.py orphan, verified retired-skill dirs absent, active-code skill.yaml refs = 0
 
 **Goal:** Final hygiene pass. No `skill.yaml` references remain in source. Orphan test files for deleted skills are removed.
 
