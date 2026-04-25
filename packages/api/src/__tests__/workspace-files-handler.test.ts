@@ -124,6 +124,17 @@ vi.mock("../lib/workspace-manifest.js", () => ({
 	regenerateManifest: vi.fn().mockResolvedValue(undefined),
 }));
 
+// ─── Mock deriveAgentSkills (U11) so handler tests don't need full composer
+// playback. Targeted derive-vs-no-derive tests below override the impl.
+
+const { deriveMockImpl } = vi.hoisted(() => ({
+	deriveMockImpl: vi.fn(),
+}));
+
+vi.mock("../lib/derive-agent-skills.js", () => ({
+	deriveAgentSkills: deriveMockImpl,
+}));
+
 // ─── S3 mock ─────────────────────────────────────────────────────────────────
 
 const s3Mock = mockClient(S3Client);
@@ -210,6 +221,14 @@ beforeEach(() => {
 	resetEqCalls();
 	clearComposerCacheForTests();
 	authMockImpl.mockReset();
+	deriveMockImpl.mockReset();
+	deriveMockImpl.mockResolvedValue({
+		changed: false,
+		addedSlugs: [],
+		removedSlugs: [],
+		foldersScanned: [],
+		warnings: [],
+	});
 });
 
 afterEach(() => {
@@ -941,5 +960,195 @@ describe("U31 role gate (tenant admin/owner required for writes)", () => {
 			),
 		);
 		expect(res.statusCode).toBe(200);
+	});
+});
+
+// ─── 9. AGENTS.md derive wiring (U11) ────────────────────────────────────────
+
+describe("AGENTS.md → derive-agent-skills wiring (U11)", () => {
+	it("PUT on root AGENTS.md triggers deriveAgentSkills", async () => {
+		authMockImpl.mockResolvedValue(authOk());
+		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+		pushDbRows([agentRow()]);
+		pushDbRows([tenantRow()]);
+		pushDbRows([{ role: "admin" }]);
+		s3Mock.on(PutObjectCommand).resolves({});
+		deriveMockImpl.mockResolvedValue({
+			changed: true,
+			addedSlugs: ["approve-receipt"],
+			removedSlugs: [],
+			foldersScanned: ["AGENTS.md"],
+			warnings: [],
+		});
+
+		const res = await parse(
+			await handler(
+				event({
+					action: "put",
+					agentId: AGENT_ID,
+					path: "AGENTS.md",
+					content: "## Routing\n",
+				}),
+			),
+		);
+
+		expect(res.statusCode).toBe(200);
+		expect(res.body.ok).toBe(true);
+		expect(deriveMockImpl).toHaveBeenCalledTimes(1);
+		expect(deriveMockImpl).toHaveBeenCalledWith(
+			{ tenantId: TENANT_A },
+			AGENT_ID,
+		);
+	});
+
+	it("PUT on a sub-agent folder AGENTS.md (expenses/AGENTS.md) triggers derive", async () => {
+		authMockImpl.mockResolvedValue(authOk());
+		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+		pushDbRows([agentRow()]);
+		pushDbRows([tenantRow()]);
+		pushDbRows([{ role: "admin" }]);
+		s3Mock.on(PutObjectCommand).resolves({});
+
+		const res = await parse(
+			await handler(
+				event({
+					action: "put",
+					agentId: AGENT_ID,
+					path: "expenses/AGENTS.md",
+					content: "## Routing\n",
+				}),
+			),
+		);
+
+		expect(res.statusCode).toBe(200);
+		expect(deriveMockImpl).toHaveBeenCalledTimes(1);
+	});
+
+	it("PUT on CONTEXT.md does NOT trigger derive (path filter)", async () => {
+		authMockImpl.mockResolvedValue(authOk());
+		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+		pushDbRows([agentRow()]);
+		pushDbRows([tenantRow()]);
+		pushDbRows([{ role: "admin" }]);
+		s3Mock.on(PutObjectCommand).resolves({});
+
+		const res = await parse(
+			await handler(
+				event({
+					action: "put",
+					agentId: AGENT_ID,
+					path: "CONTEXT.md",
+					content: "ignored",
+				}),
+			),
+		);
+
+		expect(res.statusCode).toBe(200);
+		expect(deriveMockImpl).not.toHaveBeenCalled();
+	});
+
+	it("PUT on expenses/CONTEXT.md does NOT trigger derive", async () => {
+		authMockImpl.mockResolvedValue(authOk());
+		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+		pushDbRows([agentRow()]);
+		pushDbRows([tenantRow()]);
+		pushDbRows([{ role: "admin" }]);
+		s3Mock.on(PutObjectCommand).resolves({});
+
+		const res = await parse(
+			await handler(
+				event({
+					action: "put",
+					agentId: AGENT_ID,
+					path: "expenses/CONTEXT.md",
+					content: "ignored",
+				}),
+			),
+		);
+
+		expect(res.statusCode).toBe(200);
+		expect(deriveMockImpl).not.toHaveBeenCalled();
+	});
+
+	it("derive failure → 500 with error message; S3 put already happened", async () => {
+		authMockImpl.mockResolvedValue(authOk());
+		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+		pushDbRows([agentRow()]);
+		pushDbRows([tenantRow()]);
+		pushDbRows([{ role: "admin" }]);
+		s3Mock.on(PutObjectCommand).resolves({});
+		deriveMockImpl.mockRejectedValue(
+			new Error("AGENTS.md parse failed at AGENTS.md: bad table"),
+		);
+
+		const res = await parse(
+			await handler(
+				event({
+					action: "put",
+					agentId: AGENT_ID,
+					path: "AGENTS.md",
+					content: "garbage",
+				}),
+			),
+		);
+
+		expect(res.statusCode).toBe(500);
+		expect(res.body.error).toMatch(/agent_skills derive failed/);
+		expect(res.body.error).toMatch(/parse failed/);
+		expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(1);
+	});
+
+	it("PUT on template AGENTS.md does NOT trigger derive (template branch only invalidates tenantScope)", async () => {
+		authMockImpl.mockResolvedValue(authOk());
+		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+		pushDbRows([templateRowTenantA()]);
+		pushDbRows([tenantRow()]);
+		pushDbRows([{ role: "admin" }]);
+		s3Mock.on(PutObjectCommand).resolves({});
+
+		const res = await parse(
+			await handler(
+				event({
+					action: "put",
+					templateId: TEMPLATE_ID,
+					path: "AGENTS.md",
+					content: "ignored",
+				}),
+			),
+		);
+
+		expect(res.statusCode).toBe(200);
+		expect(deriveMockImpl).not.toHaveBeenCalled();
+	});
+
+	it("forwards parser warnings to the success response when derive emits them", async () => {
+		authMockImpl.mockResolvedValue(authOk());
+		pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+		pushDbRows([agentRow()]);
+		pushDbRows([tenantRow()]);
+		pushDbRows([{ role: "admin" }]);
+		s3Mock.on(PutObjectCommand).resolves({});
+		deriveMockImpl.mockResolvedValue({
+			changed: false,
+			addedSlugs: [],
+			removedSlugs: [],
+			foldersScanned: ["AGENTS.md"],
+			warnings: ["AGENTS.md: row 0 skipped — go_to 'memory/' is reserved"],
+		});
+
+		const res = await parse(
+			await handler(
+				event({
+					action: "put",
+					agentId: AGENT_ID,
+					path: "AGENTS.md",
+					content: "## Routing\n",
+				}),
+			),
+		);
+
+		expect(res.statusCode).toBe(200);
+		expect(res.body.deriveWarnings).toBeDefined();
+		expect(res.body.deriveWarnings.length).toBe(1);
 	});
 });
