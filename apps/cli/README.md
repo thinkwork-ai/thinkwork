@@ -1,6 +1,6 @@
 # thinkwork-cli
 
-Deploy and manage Thinkwork AI agent stacks on AWS.
+Deploy and manage ThinkWork — the open Agent Harness for Business — into your AWS account. The CLI is the operator tool for the open self-host tier; for the operated tier, see [ThinkWork for Business](https://www.thinkwork.ai/cloud).
 
 ## Install
 

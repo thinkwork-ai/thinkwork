@@ -2,9 +2,9 @@
   <img src="./docs/src/assets/logo.png" alt="Thinkwork" width="240" />
 </p>
 
-<h1 align="center">Thinkwork</h1>
+<h1 align="center">ThinkWork</h1>
 
-<p align="center"><strong>Production-grade open agent harness for teams that already live on AWS.</strong></p>
+<p align="center"><strong>The open Agent Harness for Business — production-grade AI work, on the AWS account you own.</strong></p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/thinkwork-cli"><img src="https://img.shields.io/npm/v/thinkwork-cli.svg?color=0ea5e9&label=thinkwork-cli" alt="npm version" /></a>
@@ -14,12 +14,23 @@
 
 ---
 
+ThinkWork is the open Agent Harness for Business. The harness is the runtime around the model — threads, memory, sandboxing, tools, controls, cost, evaluations, and audit, built in from day one. It deploys into your AWS account via Terraform and gives agents the runtime they need to do production work, not just demos.
 
-Thinkwork makes agent infrastructure easy without handing the harness to a black-box vendor. Threads run the work, memory carries context forward, controls keep it safe, agents and connectors plug into the same system, and the whole thing drops into your existing AWS account via Terraform.
+Eight commands, one AWS account, and you own a production-grade agent runtime that stays open, portable, and under your control. **If ThinkWork the company disappears tomorrow, your deployment keeps working.**
 
-Eight commands, one AWS account, and you own a production-quality agent runtime that stays open, portable, and under your control.
+If you're not on AWS, this isn't the right tool for you — and that's the point. No Kubernetes, no shared SaaS control plane, no tire-kicker mode.
 
-If you're not on AWS, this isn't the right tool for you — and that's the point. No Kubernetes, no third-party SaaS control plane, no tire-kicker mode.
+## One harness, three ways to run it
+
+ThinkWork is a three-tier deployment ladder. The runtime is identical across tiers; only who operates it differs.
+
+| Tier | What you get | Who operates it |
+| --- | --- | --- |
+| **ThinkWork** _(this repo)_ | Apache 2.0. Self-host the harness in your AWS. Full product, no operating partner. Community-supported. | You |
+| **ThinkWork for Business** | Same harness, deployed in your AWS, operated by us. Managed updates, priority support, SLA. **Managed does not mean vendor-hosted.** | Us, in your AWS |
+| **ThinkWork Enterprise** | Strategy, pilot launch, managed operations, and workflow expansion services on top of either path. | Us, with you |
+
+The harness stays yours regardless of tier. See [thinkwork.ai](https://www.thinkwork.ai) for the operated and services tiers; the rest of this README is the open self-host path.
 
 ## Status
 
@@ -81,7 +92,7 @@ thinkwork login --stage dev        # 7. Sign in to the Cognito pool (OAuth)
 thinkwork me                       # 8. Confirm identity + tenant
 ```
 
-Eight commands, one AWS account, and you own a production-grade agent harness instead of renting a black box. Full walkthrough in the [Getting Started guide](https://docs.thinkwork.ai/getting-started/) and per-command reference in [`apps/cli/README.md`](./apps/cli/README.md).
+Eight commands, one AWS account, and you own a production-grade Agent Harness — open and yours, not rented from a black box. The harness stays yours. Full walkthrough in the [Getting Started guide](https://docs.thinkwork.ai/getting-started/) and per-command reference in [`apps/cli/README.md`](./apps/cli/README.md).
 
 ## Repo layout
 
