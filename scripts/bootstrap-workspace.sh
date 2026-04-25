@@ -48,15 +48,12 @@ echo ""
 
 echo "── Uploading workspace defaults to S3 ──"
 
-# Memory templates
-for f in "$REPO_ROOT/packages/memory-templates/"*.md; do
-  fname=$(basename "$f")
-  aws s3 cp "$f" "s3://$BUCKET/workspace-defaults/$fname" --quiet
-  echo "  ✓ $fname"
-done
-
-# System workspace
-for f in "$REPO_ROOT/packages/system-workspace/"*.md; do
+# Single loop over the consolidated source dir. Plan §008 U2 moved the
+# previously-split `packages/{system-workspace,memory-templates}/` content
+# into `packages/workspace-defaults/files/`; both old packages are README
+# stubs until U28 deletes them. The S3 key shape (`workspace-defaults/<basename>`)
+# is unchanged so consumers (composer, install_skills) keep working.
+for f in "$REPO_ROOT/packages/workspace-defaults/files/"*.md; do
   fname=$(basename "$f")
   aws s3 cp "$f" "s3://$BUCKET/workspace-defaults/$fname" --quiet
   echo "  ✓ $fname"
@@ -219,18 +216,17 @@ bootstrap_status=0
     rm -f /tmp/.bs_count
     COUNT=${COUNT:-0}
 
-    # Expect 11 files (4 memory-templates + 4 system-workspace + 3 memory stubs)
+    # Expect at least 11 files (8 consolidated workspace-defaults/files/ +
+    # ROUTER.md + 3 memory stubs). Plan §008 U2 unified the previously-split
+    # packages/{memory-templates,system-workspace}/ content under
+    # packages/workspace-defaults/files/; the S3 layout is unchanged.
     if [ "$COUNT" -ge "11" ]; then
       echo "  ✓ $slug — defaults exist ($COUNT files)"
     else
       echo "  → Seeding defaults for $slug..."
       upload_ok=1
-      # Memory templates
-      for f in "$REPO_ROOT/packages/memory-templates/"*.md; do
-        aws s3 cp "$f" "s3://$BUCKET/${DEFAULTS_PREFIX}$(basename "$f")" --quiet || upload_ok=0
-      done
-      # System workspace
-      for f in "$REPO_ROOT/packages/system-workspace/"*.md; do
+      # Consolidated workspace defaults
+      for f in "$REPO_ROOT/packages/workspace-defaults/files/"*.md; do
         aws s3 cp "$f" "s3://$BUCKET/${DEFAULTS_PREFIX}$(basename "$f")" --quiet || upload_ok=0
       done
       # Memory stubs

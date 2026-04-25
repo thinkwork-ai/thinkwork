@@ -51,8 +51,7 @@ jobs:
               - 'terraform/**'
             skills:
               - 'packages/skill-catalog/**'
-              - 'packages/memory-templates/**'
-              - 'packages/system-workspace/**'
+              - 'packages/workspace-defaults/files/**'
             admin:
               - 'apps/admin/**'
             docs:
