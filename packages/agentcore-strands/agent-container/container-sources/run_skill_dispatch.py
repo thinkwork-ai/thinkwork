@@ -129,7 +129,9 @@ def _urlopen_with_retry(req, timeout: int, run_id: str):
 def post_skill_run_complete(run_id: str, tenant_id: str, status: str,
                              failure_reason: str | None = None,
                              delivered_artifact_ref: dict | None = None,
-                             completion_hmac_secret: str | None = None) -> None:
+                             completion_hmac_secret: str | None = None,
+                             api_url: str | None = None,
+                             api_secret: str | None = None) -> None:
     """POST terminal state to the TS /api/skills/complete endpoint.
 
     Service-auth via API_AUTH_SECRET (or THINKWORK_API_SECRET alias)
@@ -141,20 +143,31 @@ def post_skill_run_complete(run_id: str, tenant_id: str, status: str,
     blips; the 15-minute skill-runs-reconciler is the backstop. Failures
     log loudly but do NOT raise — a dispatch coroutine should never
     throw because of a writeback failure.
+
+    ``api_url`` + ``api_secret`` may be passed in by the caller as a
+    snapshot taken at dispatcher entry. This avoids re-reading
+    ``os.environ`` after a long-running agent turn, where (per real
+    incidents on dev 2026-04-25) the env can appear empty even though
+    runtime-config fetch succeeded earlier in the same coroutine. When
+    not provided, falls back to env reads as a backstop for callers
+    that don't snapshot.
     """
     import hmac as _hmac
     import hashlib as _hashlib
     import urllib.request
 
-    api_url = os.environ.get("THINKWORK_API_URL") or ""
-    api_secret = (
+    api_url = api_url or os.environ.get("THINKWORK_API_URL") or ""
+    api_secret = api_secret or (
         os.environ.get("API_AUTH_SECRET")
         or os.environ.get("THINKWORK_API_SECRET")
         or ""
     )
     if not api_url or not api_secret:
         logger.error(
-            "run_skill: cannot post completion — missing THINKWORK_API_URL / API_AUTH_SECRET"
+            "run_skill: cannot post completion — missing THINKWORK_API_URL / API_AUTH_SECRET "
+            "(neither parameter passed nor env var present); runId=%s status=%s — "
+            "row will land on the 15-min reconciler",
+            run_id, status,
         )
         return
 
@@ -314,6 +327,39 @@ async def dispatch_run_skill(payload: dict) -> dict:
         payload.get("invokerUserId") or scope.get("invokerUserId") or ""
     )
 
+    # Snapshot the completion-callback env at dispatcher entry. Real
+    # incidents on dev (2026-04-25, run c886c82e + 6d143ead) showed that
+    # ``os.environ.get("THINKWORK_API_URL")`` could come back empty after
+    # ``_execute_agent_turn`` finished, even though the same env was
+    # populated 30 seconds earlier when ``_fetch_runtime_config`` and
+    # ``workspace_sync action=composer_fetch`` both succeeded. Cause is
+    # not fully diagnosed (something inside the long agent turn appears
+    # to clear or shadow these vars), but the fix is structural: capture
+    # them now and pass them through. ``post_skill_run_complete`` falls
+    # back to ``os.environ`` when these are not provided, preserving
+    # backward compatibility for the few internal callers that don't
+    # snapshot.
+    api_url_snapshot = os.environ.get("THINKWORK_API_URL") or ""
+    api_secret_snapshot = (
+        os.environ.get("API_AUTH_SECRET")
+        or os.environ.get("THINKWORK_API_SECRET")
+        or ""
+    )
+    if not api_url_snapshot or not api_secret_snapshot:
+        # Container env is genuinely empty at dispatcher entry — most
+        # likely the boot-pre-env-injection race documented in
+        # ``project_agentcore_deploy_race_env``. We can't post the
+        # completion at all from here; let the row hit the 15-min
+        # reconciler. Loud log so operators see the cause in CloudWatch
+        # Insights.
+        logger.error(
+            "run_skill: container env unset at dispatcher entry "
+            "(THINKWORK_API_URL / API_AUTH_SECRET both empty); "
+            "cannot post completion callback. runId=%s skillId=%s — "
+            "row will hit the 15-min reconciler",
+            run_id, skill_id,
+        )
+
     if not (run_id and tenant_id and skill_id):
         return {
             "runId": run_id,
@@ -330,6 +376,8 @@ async def dispatch_run_skill(payload: dict) -> dict:
             run_id, tenant_id, "failed",
             failure_reason=_MISSING_AGENT_REASON,
             completion_hmac_secret=completion_hmac_secret,
+            api_url=api_url_snapshot,
+            api_secret=api_secret_snapshot,
         )
         return {
             "runId": run_id,
@@ -355,6 +403,8 @@ async def dispatch_run_skill(payload: dict) -> dict:
             run_id, tenant_id, "failed",
             failure_reason=exc.reason,
             completion_hmac_secret=completion_hmac_secret,
+            api_url=api_url_snapshot,
+            api_secret=api_secret_snapshot,
         )
         return {
             "runId": run_id,
@@ -368,6 +418,8 @@ async def dispatch_run_skill(payload: dict) -> dict:
             run_id, tenant_id, "failed",
             failure_reason=reason,
             completion_hmac_secret=completion_hmac_secret,
+            api_url=api_url_snapshot,
+            api_secret=api_secret_snapshot,
         )
         return {
             "runId": run_id,
@@ -389,6 +441,8 @@ async def dispatch_run_skill(payload: dict) -> dict:
             run_id, tenant_id, "failed",
             failure_reason=reason,
             completion_hmac_secret=completion_hmac_secret,
+            api_url=api_url_snapshot,
+            api_secret=api_secret_snapshot,
         )
         return {
             "runId": run_id,
@@ -406,6 +460,8 @@ async def dispatch_run_skill(payload: dict) -> dict:
             run_id, tenant_id, "failed",
             failure_reason=reason,
             completion_hmac_secret=completion_hmac_secret,
+            api_url=api_url_snapshot,
+            api_secret=api_secret_snapshot,
         )
         return {
             "runId": run_id,
@@ -420,6 +476,8 @@ async def dispatch_run_skill(payload: dict) -> dict:
             run_id, tenant_id, "failed",
             failure_reason=reason,
             completion_hmac_secret=completion_hmac_secret,
+            api_url=api_url_snapshot,
+            api_secret=api_secret_snapshot,
         )
         return {
             "runId": run_id,
@@ -432,6 +490,8 @@ async def dispatch_run_skill(payload: dict) -> dict:
         run_id, tenant_id, "complete",
         delivered_artifact_ref=delivered_artifact_ref,
         completion_hmac_secret=completion_hmac_secret,
+        api_url=api_url_snapshot,
+        api_secret=api_secret_snapshot,
     )
     return {
         "runId": run_id,
