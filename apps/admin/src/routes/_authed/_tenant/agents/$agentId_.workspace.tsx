@@ -60,6 +60,7 @@ import {
   type SkillTemplateIcon,
   type SkillTemplateKey,
 } from "@/lib/skill-authoring-templates";
+import { filesForFolderDelete, pathIsWithinFolder } from "@/lib/workspace-tree-actions";
 
 const AgentPinStatusQuery = gql`
   query AgentPinStatus($agentId: ID!) {
@@ -185,9 +186,12 @@ function TreeItem({
   profileFiles,
   sourceFor,
   updateAvailableFor,
+  filesFor,
   onSelect,
   onToggle,
   onAcceptUpdate,
+  onDeleteFile,
+  onDeleteFolder,
 }: {
   node: TreeNode;
   depth: number;
@@ -196,12 +200,16 @@ function TreeItem({
   profileFiles: Set<string> | null;
   sourceFor: (path: string) => ComposeSource | undefined;
   updateAvailableFor: (path: string) => boolean;
+  filesFor: (folderPath: string) => string[];
   onSelect: (path: string) => void;
   onToggle: (path: string) => void;
   onAcceptUpdate: (filename: string) => void;
+  onDeleteFile: (path: string) => void;
+  onDeleteFolder: (path: string) => void;
 }) {
   const isExpanded = expandedFolders.has(node.path);
   const isSelected = selectedPath === node.path;
+  const folderFiles = node.isFolder ? filesFor(node.path) : [];
   const isProfileFile =
     profileFiles !== null &&
     (profileFiles.has(node.path) ||
@@ -210,7 +218,7 @@ function TreeItem({
   return (
     <>
       <div
-        className={`flex items-center gap-1 px-2 py-1 text-sm cursor-pointer hover:bg-accent ${
+        className={`group flex items-center gap-1 px-2 py-1 text-sm cursor-pointer hover:bg-accent ${
           isSelected ? "bg-accent" : ""
         }`}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
@@ -271,6 +279,34 @@ function TreeItem({
             active
           </Badge>
         )}
+        {node.isFolder && folderFiles.length > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto h-5 w-5 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteFolder(node.path);
+            }}
+            title={`Delete ${folderFiles.length} files under ${node.path}`}
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        )}
+        {!node.isFolder && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto h-5 w-5 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteFile(node.path);
+            }}
+            title={`Delete ${node.path}`}
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        )}
       </div>
       {node.isFolder && isExpanded && (
         <>
@@ -284,9 +320,12 @@ function TreeItem({
               profileFiles={profileFiles}
               sourceFor={sourceFor}
               updateAvailableFor={updateAvailableFor}
+              filesFor={filesFor}
               onSelect={onSelect}
               onToggle={onToggle}
               onAcceptUpdate={onAcceptUpdate}
+              onDeleteFile={onDeleteFile}
+              onDeleteFolder={onDeleteFolder}
             />
           ))}
           {node.children.length === 0 && (
@@ -442,6 +481,10 @@ function AgentWorkspacePage() {
   const updateAvailableFor = useCallback(
     (path: string) => Boolean(pinStatus[path]?.updateAvailable),
     [pinStatus],
+  );
+  const filesFor = useCallback(
+    (folderPath: string) => filesForFolderDelete(files, folderPath),
+    [files],
   );
 
   // Accept-update dialog
@@ -683,15 +726,52 @@ function AgentWorkspacePage() {
     }
   };
 
-  const handleDelete = async () => {
-    if (!openFile) return;
-    if (!confirm(`Delete ${openFile}?`)) return;
+  const clearEditor = () => {
+    setOpenFile(null);
+    setContent("");
+    setEditValue("");
+  };
+
+  const handleDeleteFile = async (path: string) => {
+    if (!confirm(`Delete ${path}?`)) return;
     try {
-      await deleteWorkspaceFile(target, openFile);
-      setOpenFile(null);
+      await deleteWorkspaceFile(target, path);
+      if (openFile === path) clearEditor();
       await fetchFiles();
+      toast.success(`Deleted ${path}`);
     } catch (err) {
-      console.error("Failed to delete file:", err);
+      console.error(`Failed to delete ${path}:`, err);
+      toast.error(err instanceof Error ? err.message : `Failed to delete ${path}`);
+    }
+  };
+
+  const handleDeleteFolder = async (folderPath: string) => {
+    const concreteFiles = filesForFolderDelete(files, folderPath);
+    if (concreteFiles.length === 0) {
+      toast.info(`No files under ${folderPath}`);
+      return;
+    }
+    if (!confirm(`Delete ${concreteFiles.length} files under ${folderPath}?`)) return;
+
+    const failed: string[] = [];
+    for (const path of concreteFiles) {
+      try {
+        await deleteWorkspaceFile(target, path);
+      } catch (err) {
+        console.error(`Failed to delete ${path}:`, err);
+        failed.push(path);
+      }
+    }
+
+    if (openFile && pathIsWithinFolder(openFile, folderPath) && !failed.includes(openFile)) {
+      clearEditor();
+    }
+    await fetchFiles();
+
+    if (failed.length > 0) {
+      toast.error(`Deleted ${concreteFiles.length - failed.length} files; ${failed.length} failed.`);
+    } else {
+      toast.success(`Deleted ${concreteFiles.length} files under ${folderPath}`);
     }
   };
 
@@ -789,9 +869,12 @@ function AgentWorkspacePage() {
                   profileFiles={profileFiles}
                   sourceFor={sourceFor}
                   updateAvailableFor={updateAvailableFor}
+                  filesFor={filesFor}
                   onSelect={handleOpen}
                   onToggle={toggleFolder}
                   onAcceptUpdate={handleAcceptUpdate}
+                  onDeleteFile={handleDeleteFile}
+                  onDeleteFolder={handleDeleteFolder}
                 />
               ))}
             </div>
@@ -831,7 +914,12 @@ function AgentWorkspacePage() {
                           {saving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
                           Save
                         </Button>
-                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground" onClick={handleDelete}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 text-muted-foreground"
+                          onClick={() => openFile && handleDeleteFile(openFile)}
+                        >
                           <Trash2 className="h-3 w-3" />
                         </Button>
                       </>
