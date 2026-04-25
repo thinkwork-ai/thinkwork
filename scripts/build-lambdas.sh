@@ -208,6 +208,9 @@ build_handler "agents-runtime-config" \
 build_handler "plugin-upload" \
   "$REPO_ROOT/packages/api/src/handlers/plugin-upload.ts"
 
+build_handler "folder-bundle-import" \
+  "$REPO_ROOT/packages/api/src/handlers/folder-bundle-import.ts"
+
 # Hourly sweeper — reaps orphan S3 staging (> 1h) from failed or interrupted
 # plugin upload sagas (plan §U10). Triggered by EventBridge.
 build_handler "plugin-staging-sweeper" \

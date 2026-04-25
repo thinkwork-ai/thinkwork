@@ -14,6 +14,7 @@ import {
 	numeric,
 	uniqueIndex,
 	index,
+	primaryKey,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { tenants, users } from "./core";
@@ -153,6 +154,60 @@ export const agentSkills = pgTable(
 			table.agent_id,
 			table.skill_id,
 		),
+	],
+);
+
+// ---------------------------------------------------------------------------
+// 1.4b — agent_operation_leases
+// ---------------------------------------------------------------------------
+
+export const agentOperationLeases = pgTable(
+	"agent_operation_leases",
+	{
+		agent_id: uuid("agent_id")
+			.references(() => agents.id, { onDelete: "cascade" })
+			.notNull(),
+		lease_id: uuid("lease_id")
+			.default(sql`gen_random_uuid()`)
+			.notNull(),
+		lease_kind: text("lease_kind").notNull(),
+		owner_kind: text("owner_kind").notNull(),
+		owner_id: text("owner_id"),
+		acquired_at: timestamp("acquired_at", { withTimezone: true })
+			.notNull()
+			.default(sql`now()`),
+		last_heartbeat_at: timestamp("last_heartbeat_at", { withTimezone: true })
+			.notNull()
+			.default(sql`now()`),
+		expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
+	},
+	(table) => [
+		primaryKey({ columns: [table.agent_id, table.lease_id] }),
+		index("idx_agent_operation_leases_agent_expires").on(
+			table.agent_id,
+			table.expires_at,
+		),
+		index("idx_agent_operation_leases_kind").on(
+			table.agent_id,
+			table.lease_kind,
+		),
+	],
+);
+
+export const folderBundleImportRateLimits = pgTable(
+	"folder_bundle_import_rate_limits",
+	{
+		tenant_id: uuid("tenant_id")
+			.references(() => tenants.id, { onDelete: "cascade" })
+			.notNull(),
+		utc_hour: timestamp("utc_hour", { withTimezone: true }).notNull(),
+		import_count: integer("import_count").notNull().default(0),
+		updated_at: timestamp("updated_at", { withTimezone: true })
+			.notNull()
+			.default(sql`now()`),
+	},
+	(table) => [
+		primaryKey({ columns: [table.tenant_id, table.utc_hour] }),
 	],
 );
 
@@ -377,6 +432,26 @@ export const agentSkillsRelations = relations(
 		}),
 		tenant: one(tenants, {
 			fields: [agentSkills.tenant_id],
+			references: [tenants.id],
+		}),
+	}),
+);
+
+export const agentOperationLeasesRelations = relations(
+	agentOperationLeases,
+	({ one }) => ({
+		agent: one(agents, {
+			fields: [agentOperationLeases.agent_id],
+			references: [agents.id],
+		}),
+	}),
+);
+
+export const folderBundleImportRateLimitsRelations = relations(
+	folderBundleImportRateLimits,
+	({ one }) => ({
+		tenant: one(tenants, {
+			fields: [folderBundleImportRateLimits.tenant_id],
 			references: [tenants.id],
 		}),
 	}),
