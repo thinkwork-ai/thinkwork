@@ -1,17 +1,35 @@
 """
-write_memory Strands tool (Unit 7).
+write_memory Strands tool — Plan §008 U12 (path parameter).
 
-Lets the agent append to its own memory/*.md working notes from inside a
-tool call. Parameter is a basename *enum* — not a path — so there is no
-string the model could escape via ``..``, an absolute path, or a
-newline-injected second path segment. Strands' type system enforces the
-Literal at the tool boundary; the server-side handler (Unit 5) also
-validates `agentId` against the caller's tenant, so a cross-tenant write
-is not reachable even if someone bypassed the enum.
+Lets the agent (parent or sub-agent) write to its agent-writable memory
+notes from inside a tool call. The parameter is a **path string** validated
+against a strict allowlist; sub-agents at ``{folder}/`` must compose
+``{folder}/memory/{basename}.md`` themselves so the call lands at sub scope.
 
-Writes go through the same /api/workspaces/files endpoint as everything
-else — the composer handles cache invalidation so the next
-_ensure_workspace_ready pulls the updated bytes.
+The path is **relative from the agent root** per Key Decisions §008
+(line 165). Sub-agents do not get folder-context magic — pass the full
+path. Master plan U12's unit-body language about "relative paths bind to
+the sub-agent's folder" is overruled by the Key Decision.
+
+Allowed paths match::
+
+    ^([a-z0-9][a-z0-9-]*(?:/[a-z0-9][a-z0-9-]*){0,4}/)?memory/(lessons|preferences|contacts)\\.md$
+
+Examples::
+
+    memory/lessons.md                            (parent agent)
+    expenses/memory/preferences.md               (depth-1 sub-agent)
+    support/escalation/legal/case/memory/contacts.md   (depth-4 sub-agent)
+    a/b/c/d/e/memory/lessons.md                  (depth-5 hard cap)
+
+Validation runs **before** any network call, so adversarial inputs return
+an operator-readable error in O(string-parse) time. Writes go through the
+same /api/workspaces/files endpoint as everything else; the composer
+handles cache invalidation so the next ``_ensure_workspace_ready`` pulls
+the updated bytes.
+
+ETag-guarded optimistic concurrency for memory writes is a separate
+plan-008 follow-up (see Scope Boundaries in the U12 narrowed plan).
 """
 
 from __future__ import annotations
@@ -19,17 +37,111 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
+import unicodedata
 import urllib.error
 import urllib.request
-from typing import Literal
 
+from skill_resolver import RESERVED_FOLDER_NAMES
 from strands import tool
 
 logger = logging.getLogger(__name__)
 
-# The enum; also the only paths `write_memory` will ever target. Kept in
-# sync with @thinkwork/workspace-defaults' AGENT_WRITABLE_MEMORY_BASENAMES.
-MemoryBasename = Literal["lessons.md", "preferences.md", "contacts.md"]
+# Three writable basenames — kept in sync with @thinkwork/workspace-defaults'
+# AGENT_WRITABLE_MEMORY_BASENAMES. Enforced via regex alternation below.
+_BASENAME_ALTERNATION = "lessons|preferences|contacts"
+
+# Canonical-path regex. Anchors on both ends so suffix-extension attacks
+# like "memory/lessons.md/foo" fail the match. The optional folder-prefix
+# group allows up to 5 segments before the trailing memory/ directory,
+# matching the U9 depth-5 cap from Key Decisions §008.
+_CANONICAL_RE = re.compile(
+    r"^([a-z0-9][a-z0-9-]*(?:/[a-z0-9][a-z0-9-]*){0,4}/)?"
+    rf"memory/({_BASENAME_ALTERNATION})\.md$"
+)
+
+# Depth-cap diagnostic: counts segments BEFORE memory/. Beyond this, the
+# regex match fails — explicit count lets us return a clearer error.
+_MAX_FOLDER_DEPTH = 5
+
+
+def _validate_memory_path(path: str) -> str:
+    """Validate and NFKC-normalize a write_memory path.
+
+    Returns the normalized path on success; raises :class:`ValueError`
+    with an operator-readable message on any rejection. The validator is
+    pure (no I/O) so adversarial inputs are rejected in O(string-parse)
+    time and tests can exercise it without mocks.
+
+    Rejection order (cheap → expensive):
+        1. ``None`` / empty / whitespace-only
+        2. Absolute (leading ``/``)
+        3. Windows-style separator (``\\``)
+        4. NFKC normalize, then check for ``..``, ``.``, ``//`` segments
+        5. Regex match against the canonical pattern
+        6. Folder-prefix segment-walk: reject any segment in
+           ``RESERVED_FOLDER_NAMES`` (memory / skills as a *prefix* — the
+           trailing ``memory/`` is consumed by the regex so it never
+           enters this check)
+        7. Explicit depth-cap diagnostic (5 segments before memory/)
+    """
+    if path is None:
+        raise ValueError("write_memory path is empty")
+    stripped = path.strip()
+    if not stripped:
+        raise ValueError("write_memory path is empty")
+    if stripped.startswith("/"):
+        raise ValueError(
+            f"write_memory path {path!r}: absolute paths not allowed"
+        )
+    if "\\" in stripped:
+        raise ValueError(
+            f"write_memory path {path!r}: invalid OS separator (backslash)"
+        )
+
+    normalized = unicodedata.normalize("NFKC", stripped)
+
+    # Traversal / dot-segment / double-slash checks operate on the
+    # normalized form so a fullwidth dot doesn't slip past.
+    segments = normalized.split("/")
+    if ".." in segments:
+        raise ValueError(
+            f"write_memory path {path!r}: path traversal not allowed"
+        )
+    if "." in segments:
+        raise ValueError(
+            f"write_memory path {path!r}: path traversal segment '.'"
+        )
+    if "//" in normalized:
+        raise ValueError(
+            f"write_memory path {path!r}: invalid double slash (empty segment)"
+        )
+
+    match = _CANONICAL_RE.match(normalized)
+    if not match:
+        raise ValueError(
+            f"write_memory path {path!r}: invalid path — must match "
+            f"`(folder/)?memory/(lessons|preferences|contacts).md` from "
+            f"the agent root, max depth {_MAX_FOLDER_DEPTH} folder "
+            f"segments before memory/"
+        )
+
+    folder_prefix = match.group(1)  # e.g. "expenses/" or None
+    if folder_prefix:
+        prefix_segments = folder_prefix.rstrip("/").split("/")
+        if len(prefix_segments) > _MAX_FOLDER_DEPTH:
+            raise ValueError(
+                f"write_memory path {path!r}: depth "
+                f"{len(prefix_segments)} exceeds cap of {_MAX_FOLDER_DEPTH}"
+            )
+        for seg in prefix_segments:
+            if seg in RESERVED_FOLDER_NAMES:
+                raise ValueError(
+                    f"write_memory path {path!r}: reserved folder name "
+                    f"{seg!r} — only the trailing memory/ is allowed"
+                )
+
+    return normalized
 
 
 def _post_put(tenant_id: str, agent_id: str, rel_path: str,
@@ -57,31 +169,42 @@ def _post_put(tenant_id: str, agent_id: str, rel_path: str,
 
 
 @tool
-def write_memory(name: MemoryBasename, content: str) -> str:
+def write_memory(path: str, content: str) -> str:
     """Append or replace an agent-writable memory note.
 
-    Only three basenames are accepted: ``lessons.md``, ``preferences.md``,
-    ``contacts.md``. There is no way to target any other file — the
-    Literal type is enforced at the tool boundary, so attempts to pass an
-    absolute path or a path with ``/`` are rejected before any network
-    call.
+    The ``path`` is **relative from the agent root** — sub-agents must
+    compose ``{folder}/memory/{basename}.md`` themselves. Allowed shapes::
+
+        memory/lessons.md                  (parent / root)
+        memory/preferences.md              (parent / root)
+        memory/contacts.md                 (parent / root)
+        expenses/memory/lessons.md         (sub-agent)
+        support/escalation/memory/lessons.md   (nested sub-agent)
+
+    The basename must be one of ``lessons.md``, ``preferences.md``,
+    ``contacts.md``. There is at most a 5-segment folder prefix before
+    the trailing ``memory/`` directory. Path traversal, absolute paths,
+    Windows separators, dot-segments, double slashes, and reserved-name
+    folder prefixes (``memory``, ``skills`` as folders, not as the
+    canonical trailing memory/) are rejected before any network call.
 
     Args:
-        name: One of ``"lessons.md"``, ``"preferences.md"``,
-            ``"contacts.md"``. These files live under
-            ``memory/`` in the agent's workspace.
+        path: Path from the agent root, e.g. ``"memory/lessons.md"`` for
+            the parent agent or ``"expenses/memory/lessons.md"`` for a
+            sub-agent rooted at ``expenses/``.
         content: The full new content for the file. This is a write, not
             an append — read the file first if you want to preserve prior
             entries.
 
     Returns:
-        A short confirmation string the agent can relay back to the user.
+        A short confirmation string the agent can relay back to the user
+        on success, or an operator-readable rejection message on path
+        validation failure.
     """
-    # Defensive second check — the Literal already rejects this, but a
-    # caller using the tool dynamically (without Strands' validation)
-    # shouldn't be able to bypass it.
-    if name not in ("lessons.md", "preferences.md", "contacts.md"):
-        return f"write_memory: '{name}' is not an accepted basename."
+    try:
+        rel_path = _validate_memory_path(path)
+    except ValueError as exc:
+        return f"write_memory: {exc}"
 
     tenant_id = os.environ.get("TENANT_ID") or os.environ.get("_MCP_TENANT_ID") or ""
     agent_id = os.environ.get("AGENT_ID") or os.environ.get("_MCP_AGENT_ID") or ""
@@ -94,7 +217,6 @@ def write_memory(name: MemoryBasename, content: str) -> str:
     if not (tenant_id and agent_id and api_url and api_secret):
         return "write_memory: runtime is missing tenant / agent / API config."
 
-    rel_path = f"memory/{name}"
     try:
         _post_put(tenant_id, agent_id, rel_path, content, api_url, api_secret)
     except urllib.error.HTTPError as e:
