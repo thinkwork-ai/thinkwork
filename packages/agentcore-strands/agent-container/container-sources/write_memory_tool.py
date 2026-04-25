@@ -65,7 +65,7 @@ _CANONICAL_RE = re.compile(
 _MAX_FOLDER_DEPTH = 5
 
 
-def _validate_memory_path(path: str) -> str:
+def _validate_memory_path(path: str | None) -> str:
     """Validate and NFKC-normalize a write_memory path.
 
     Returns the normalized path on success; raises :class:`ValueError`
@@ -74,19 +74,24 @@ def _validate_memory_path(path: str) -> str:
     time and tests can exercise it without mocks.
 
     Rejection order (cheap → expensive):
-        1. ``None`` / empty / whitespace-only
+        1. ``None`` / non-string / empty / whitespace-only
         2. Absolute (leading ``/``)
         3. Windows-style separator (``\\``)
         4. NFKC normalize, then check for ``..``, ``.``, ``//`` segments
-        5. Regex match against the canonical pattern
+        5. Regex match against the canonical pattern (depth bounded by
+           the regex's ``{0,4}`` quantifier — at most 5 folder segments
+           before ``memory/``)
         6. Folder-prefix segment-walk: reject any segment in
            ``RESERVED_FOLDER_NAMES`` (memory / skills as a *prefix* — the
            trailing ``memory/`` is consumed by the regex so it never
            enters this check)
-        7. Explicit depth-cap diagnostic (5 segments before memory/)
     """
     if path is None:
         raise ValueError("write_memory path is empty")
+    if not isinstance(path, str):
+        raise ValueError(
+            f"write_memory path must be a string, got {type(path).__name__}"
+        )
     stripped = path.strip()
     if not stripped:
         raise ValueError("write_memory path is empty")
@@ -128,13 +133,10 @@ def _validate_memory_path(path: str) -> str:
 
     folder_prefix = match.group(1)  # e.g. "expenses/" or None
     if folder_prefix:
-        prefix_segments = folder_prefix.rstrip("/").split("/")
-        if len(prefix_segments) > _MAX_FOLDER_DEPTH:
-            raise ValueError(
-                f"write_memory path {path!r}: depth "
-                f"{len(prefix_segments)} exceeds cap of {_MAX_FOLDER_DEPTH}"
-            )
-        for seg in prefix_segments:
+        # Depth is bounded by the regex's `{0,4}` quantifier — no need for
+        # an explicit cap check here. Only reserved-name segment-walk runs
+        # post-match; depth-6+ inputs already failed the regex above.
+        for seg in folder_prefix.rstrip("/").split("/"):
             if seg in RESERVED_FOLDER_NAMES:
                 raise ValueError(
                     f"write_memory path {path!r}: reserved folder name "

@@ -226,8 +226,48 @@ class TestValidateMemoryPath(unittest.TestCase):
 
     def test_none_rejects(self):
         from write_memory_tool import _validate_memory_path
-        with self.assertRaises((ValueError, TypeError)):
+        with self.assertRaisesRegex(ValueError, "empty"):
             _validate_memory_path(None)
+
+    def test_int_rejects_with_type_message(self):
+        """Per correctness review: non-str must not leak AttributeError."""
+        from write_memory_tool import _validate_memory_path
+        with self.assertRaisesRegex(ValueError, "must be a string"):
+            _validate_memory_path(42)
+
+    def test_bytes_rejects_with_type_message(self):
+        from write_memory_tool import _validate_memory_path
+        with self.assertRaisesRegex(ValueError, "must be a string"):
+            _validate_memory_path(b"memory/lessons.md")
+
+    def test_list_rejects_with_type_message(self):
+        from write_memory_tool import _validate_memory_path
+        with self.assertRaisesRegex(ValueError, "must be a string"):
+            _validate_memory_path(["memory", "lessons.md"])
+
+    # --- NFKC fullwidth-separator behavior ---------------------------------
+
+    def test_fullwidth_slash_normalizes_to_separator(self):
+        """U+FF0F NFKC-normalizes to '/'; document this as accepted behavior.
+
+        Catches a refactor that swaps "NFKC, then segment-check" → "segment-
+        check, then NFKC" — that swap silently re-opens traversal bypasses.
+        """
+        from write_memory_tool import _validate_memory_path
+        # `expenses／memory/lessons.md` (U+FF0F mid-path) NFKC →
+        # `expenses/memory/lessons.md` and is accepted.
+        self.assertEqual(
+            _validate_memory_path("expenses／memory/lessons.md"),
+            "expenses/memory/lessons.md",
+        )
+
+    def test_fullwidth_dot_in_segment_rejects(self):
+        """U+FF0E NFKC-normalizes to '.'. After NFKC the regex rejects the bare-dot segment."""
+        from write_memory_tool import _validate_memory_path
+        # `．/memory/lessons.md` (U+FF0E) NFKC → `./memory/lessons.md` →
+        # rejected by the dot-segment check.
+        with self.assertRaisesRegex(ValueError, "traversal"):
+            _validate_memory_path("．/memory/lessons.md")
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -337,6 +377,102 @@ class TestWriteMemoryTool(unittest.TestCase):
         fn = _unwrap(write_memory)
         result = fn(path="memory/lessons.md", content="x")
         self.assertIn("missing tenant / agent / API config", result)
+
+    def test_non_string_path_returns_operator_error(self):
+        """Per correctness review: non-str path must not leak through @tool.
+
+        Asserts the integration boundary swallows the validator's typed
+        ValueError into the standard `write_memory: ...` error string,
+        rather than escaping as AttributeError/TypeError.
+        """
+        from write_memory_tool import write_memory
+        fn = _unwrap(write_memory)
+        result = fn(path=42, content="x")
+        self.assertTrue(
+            result.startswith("write_memory: "),
+            f"unexpected error envelope: {result!r}",
+        )
+        self.assertIn("must be a string", result)
+
+    def test_http_error_returns_save_failed(self):
+        """Per testing review: HTTPError catch in tool body has no test."""
+        from write_memory_tool import write_memory
+        fn = _unwrap(write_memory)
+        # urlopen raises HTTPError directly to exercise the
+        # `except urllib.error.HTTPError` branch.
+        import urllib.error
+        err = urllib.error.HTTPError(
+            url="https://api.example.test/api/workspaces/files",
+            code=500,
+            msg="Server Error",
+            hdrs=None,  # type: ignore[arg-type]
+            fp=io.BytesIO(b'{"error": "boom"}'),
+        )
+        with patch("urllib.request.urlopen", side_effect=err):
+            result = fn(path="memory/lessons.md", content="x")
+        self.assertIn("save failed", result)
+
+    def test_composer_not_ok_returns_save_failed(self):
+        """Per testing review: `_post_put` `payload.get('ok') is False` is untested."""
+        from write_memory_tool import write_memory
+        fn = _unwrap(write_memory)
+        captured: list = []
+        with patch(
+            "urllib.request.urlopen",
+            self._fake_urlopen({"ok": False, "error": "denied"}, captured),
+        ):
+            result = fn(path="memory/lessons.md", content="x")
+        self.assertIn("save failed", result)
+        self.assertIn("denied", result)
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# @tool schema — pin the path/content rename to lock in the U12 contract
+# ────────────────────────────────────────────────────────────────────────────
+
+
+class TestWriteMemoryToolSchema(unittest.TestCase):
+    """Per testing review: `_unwrap` bypasses the @tool surface, so the
+    schema rename `name` → `path` is never asserted by integration tests.
+    Pin it here so a silent regression on the LLM-facing parameter name
+    fails this test file rather than reaching production.
+    """
+
+    def test_tool_schema_uses_path_not_name(self):
+        # Force re-import so the @tool decorator runs against the current source.
+        for mod in ("write_memory_tool",):
+            if mod in sys.modules:
+                del sys.modules[mod]
+        from write_memory_tool import write_memory
+        spec = getattr(write_memory, "tool_spec", None) or getattr(
+            write_memory, "spec", None
+        )
+        if spec is None:
+            self.skipTest(
+                "Strands @tool exposes no inspectable spec on this version; "
+                "the docstring contract is the public surface here."
+            )
+        # Walk to the JSON-Schema input properties regardless of which
+        # version of strands-agents shaped the spec.
+        properties: dict = {}
+        if isinstance(spec, dict):
+            schema = (
+                spec.get("inputSchema")
+                or spec.get("input_schema")
+                or {}
+            )
+            if isinstance(schema, dict):
+                payload = schema.get("json") or schema
+                if isinstance(payload, dict):
+                    properties = payload.get("properties") or {}
+        self.assertIn(
+            "path", properties,
+            f"@tool schema is missing the U12 `path` parameter — got {sorted(properties)}",
+        )
+        self.assertNotIn(
+            "name", properties,
+            "@tool schema still has the old `name` parameter — schema rename did not land",
+        )
 
 
 if __name__ == "__main__":
