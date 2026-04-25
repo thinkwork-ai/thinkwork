@@ -48,6 +48,7 @@ EXPECTED_CONTAINER_SOURCES: tuple[str, ...] = (
     "skill_dispatcher",
     "skill_md_parser",
     "skill_meta_tool",
+    "skill_resolver",
     "skill_runner",
     "skill_session_pool",
     "update_agent_name_tool",
