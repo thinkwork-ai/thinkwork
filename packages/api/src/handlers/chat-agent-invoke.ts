@@ -389,6 +389,12 @@ export async function handler(event: InvokeEvent): Promise<void> {
       guardrail_config: guardrailPayload || undefined,
       mcp_configs: mcpConfigs.length > 0 ? mcpConfigs : undefined,
       workflow_skill: workflowSkill,
+      blocked_tools:
+        runtimeConfig.blockedTools.length > 0
+          ? runtimeConfig.blockedTools
+          : undefined,
+      browser_automation_enabled:
+        runtimeConfig.browserAutomationEnabled || undefined,
     } as Record<string, unknown>;
 
     if (sandboxPreflight && currentUserId) {
@@ -619,8 +625,9 @@ export async function handler(event: InvokeEvent): Promise<void> {
     }>;
     if (hindsightUsage.length > 0) {
       try {
-        const { recordHindsightCost } =
-          await import("../lib/hindsight-cost.js");
+        const { recordHindsightCost } = await import(
+          "../lib/hindsight-cost.js"
+        );
         for (const entry of hindsightUsage) {
           await recordHindsightCost({
             tenantId,
@@ -827,8 +834,9 @@ export async function handler(event: InvokeEvent): Promise<void> {
 
     // 4c. Send push notification to user devices
     try {
-      const { sendTurnCompletedPush } =
-        await import("../lib/push-notifications.js");
+      const { sendTurnCompletedPush } = await import(
+        "../lib/push-notifications.js"
+      );
       await sendTurnCompletedPush({
         threadId,
         tenantId,

@@ -271,6 +271,15 @@ export type AgentStatusEvent = {
 export type AgentTemplate = {
   __typename?: 'AgentTemplate';
   blockedTools?: Maybe<Scalars['AWSJSON']['output']>;
+  /**
+   * Browser Automation opt-in metadata for the AgentCore Browser + Nova Act
+   * built-in tool. Shape validated at create/update time by
+   * packages/api/src/lib/templates/browser-config.ts:
+   *   { enabled: true }
+   * Null means the template does not use Browser Automation unless an agent-level
+   * capability override enables it.
+   */
+  browser?: Maybe<Scalars['AWSJSON']['output']>;
   category?: Maybe<Scalars['String']['output']>;
   config?: Maybe<Scalars['AWSJSON']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
@@ -286,8 +295,7 @@ export type AgentTemplate = {
    * Sandbox opt-in metadata for the AgentCore Code Interpreter sandbox
    * (plan Unit 3). Shape validated at create/update time by
    * packages/api/src/lib/templates/sandbox-config.ts:
-   *   { environment: "default-public" | "internal-only",
-   *     required_connections: ["google" | "github" | "slack", ...] }
+   *   { environment: "default-public" | "internal-only" }
    * Null means the template does not use the sandbox.
    */
   sandbox?: Maybe<Scalars['AWSJSON']['output']>;
@@ -523,6 +531,11 @@ export type CreateAgentInput = {
 
 export type CreateAgentTemplateInput = {
   blockedTools?: InputMaybe<Scalars['AWSJSON']['input']>;
+  /**
+   * Browser Automation opt-in metadata; see AgentTemplate.browser. Omit
+   * (or pass null) for templates that do not opt into Browser Automation.
+   */
+  browser?: InputMaybe<Scalars['AWSJSON']['input']>;
   category?: InputMaybe<Scalars['String']['input']>;
   config?: InputMaybe<Scalars['AWSJSON']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;
@@ -3577,6 +3590,11 @@ export type UpdateAgentInput = {
 
 export type UpdateAgentTemplateInput = {
   blockedTools?: InputMaybe<Scalars['AWSJSON']['input']>;
+  /**
+   * Browser Automation opt-in metadata; see AgentTemplate.browser. Pass
+   * null to clear; omit to leave unchanged.
+   */
+  browser?: InputMaybe<Scalars['AWSJSON']['input']>;
   category?: InputMaybe<Scalars['String']['input']>;
   config?: InputMaybe<Scalars['AWSJSON']['input']>;
   description?: InputMaybe<Scalars['String']['input']>;

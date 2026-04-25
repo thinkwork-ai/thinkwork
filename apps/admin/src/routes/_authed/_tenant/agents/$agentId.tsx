@@ -85,7 +85,9 @@ function AgentDetailPage() {
   // Build breadcrumbs — sub-agents show parent in the trail
   const parentAgentId = (agent as any)?.parentAgentId;
   const parentAgent = parentAgentId
-    ? (agentsResult.data?.agents as any[] ?? []).find((a: any) => a.id === parentAgentId)
+    ? ((agentsResult.data?.agents as any[]) ?? []).find(
+        (a: any) => a.id === parentAgentId,
+      )
     : null;
 
   useBreadcrumbs(
@@ -98,7 +100,10 @@ function AgentDetailPage() {
         ]
       : [
           { label: "Agents", href: "/agents" },
-          { label: agent?.name ?? "Loading...", popoverItems: agentPopoverItems },
+          {
+            label: agent?.name ?? "Loading...",
+            popoverItems: agentPopoverItems,
+          },
         ],
   );
 
@@ -153,10 +158,12 @@ function AgentDetailPage() {
   const [agentGuardrail, setAgentGuardrail] = useState<Guardrail | null>(null);
   useEffect(() => {
     if (!tenantId) return;
-    listGuardrails(tenantId).then((items) => {
-      const defaultGr = items.find((g) => g.is_default);
-      setAgentGuardrail(defaultGr || null);
-    }).catch(() => {});
+    listGuardrails(tenantId)
+      .then((items) => {
+        const defaultGr = items.find((g) => g.is_default);
+        setAgentGuardrail(defaultGr || null);
+      })
+      .catch(() => {});
   }, [tenantId]);
 
   // --- Config counts for summary ---
@@ -173,9 +180,12 @@ function AgentDetailPage() {
       // non-critical (NotReadyError and transient failures both swallowed)
     }
   }, [tenantId, agentId]);
-  useEffect(() => { fetchTriggerCount(); }, [fetchTriggerCount]);
+  useEffect(() => {
+    fetchTriggerCount();
+  }, [fetchTriggerCount]);
 
-  const skillCount = (agent?.skills as any[])?.filter((s: any) => s.enabled).length ?? 0;
+  const skillCount =
+    (agent?.skills as any[])?.filter((s: any) => s.enabled).length ?? 0;
   const kbCount = (kbResult.data as any)?.agent?.knowledgeBases?.length ?? 0;
   const isSubAgent = !!(agent as any)?.parentAgentId;
 
@@ -192,9 +202,9 @@ function AgentDetailPage() {
     const threads = ((threadsResult.data?.threads ?? []) as any[]).filter(
       (t: any) => t.agentId === agentId,
     );
-    const threadTurns = (((runsResult.data as any)?.threadTurns ?? []) as any[]).filter(
-      (r: any) => r.agentId === agentId,
-    );
+    const threadTurns = (
+      ((runsResult.data as any)?.threadTurns ?? []) as any[]
+    ).filter((r: any) => r.agentId === agentId);
     const combined = [
       ...mapRuns(threadTurns, agentMap),
       ...mapThreads(threads, agentMap),
@@ -208,7 +218,10 @@ function AgentDetailPage() {
     [agentActivityItems],
   );
   const agentChats = useMemo(
-    () => agentActivityItems.filter((i) => i.sourceType === "thread" && i.type === "chat"),
+    () =>
+      agentActivityItems.filter(
+        (i) => i.sourceType === "thread" && i.type === "chat",
+      ),
     [agentActivityItems],
   );
 
@@ -218,38 +231,71 @@ function AgentDetailPage() {
     reexecuteKbs({ requestPolicy: "network-only" });
   }, [reexecute, reexecuteKbs]);
 
-  const handleSaveConfig = useCallback(async (input: Record<string, any>) => {
-    const res = await updateAgent({ id: agentId, input });
-    if (!res.error) refresh();
-  }, [agentId, updateAgent, refresh]);
+  const handleSaveConfig = useCallback(
+    async (input: Record<string, any>) => {
+      const res = await updateAgent({ id: agentId, input });
+      if (!res.error) refresh();
+    },
+    [agentId, updateAgent, refresh],
+  );
 
   const handleDelete = useCallback(async () => {
     const res = await deleteAgent({ id: agentId });
     if (!res.error) {
-      notifyAgentStatus({ agentId, tenantId: tenantId!, status: "ARCHIVED", name: agent!.name });
+      notifyAgentStatus({
+        agentId,
+        tenantId: tenantId!,
+        status: "ARCHIVED",
+        name: agent!.name,
+      });
       navigate({ to: "/agents" });
     }
   }, [agentId, deleteAgent, notifyAgentStatus, tenantId, agent, navigate]);
 
-  const handleSaveBudget = useCallback(async (input: { period: string; limitUsd: number; actionOnExceed: string }) => {
-    const res = await setBudgetPolicy({ agentId, input });
-    if (!res.error) refresh();
-  }, [agentId, setBudgetPolicy, refresh]);
+  const handleSaveBudget = useCallback(
+    async (input: {
+      period: string;
+      limitUsd: number;
+      actionOnExceed: string;
+    }) => {
+      const res = await setBudgetPolicy({ agentId, input });
+      if (!res.error) refresh();
+    },
+    [agentId, setBudgetPolicy, refresh],
+  );
 
   const handleDeleteBudget = useCallback(async () => {
     const res = await deleteBudgetPolicy({ agentId });
     if (!res.error) refresh();
   }, [agentId, deleteBudgetPolicy, refresh]);
 
-  const handleSaveHumanPair = useCallback(async (humanPairId: string | null) => {
-    const res = await updateAgent({ id: agentId, input: { humanPairId } });
-    if (!res.error) refresh();
-  }, [agentId, updateAgent, refresh]);
+  const handleSaveHumanPair = useCallback(
+    async (humanPairId: string | null) => {
+      const res = await updateAgent({ id: agentId, input: { humanPairId } });
+      if (!res.error) refresh();
+    },
+    [agentId, updateAgent, refresh],
+  );
 
   // --- Edit dialog ---
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   // --- Loading ---
+  if (result.error && !agent) {
+    return (
+      <PageLayout
+        header={
+          <h1 className="text-2xl font-bold tracking-tight leading-tight text-foreground">
+            Agent
+          </h1>
+        }
+      >
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+          Failed to load agent: {result.error.message}
+        </div>
+      </PageLayout>
+    );
+  }
   if ((result.fetching && !result.data) || !agent) return <PageSkeleton />;
 
   return (
@@ -284,31 +330,46 @@ function AgentDetailPage() {
                 params={{ agentId }}
                 search={{ folder: undefined }}
               >
-                <Badge variant="outline" className="gap-1 cursor-pointer hover:bg-accent">
+                <Badge
+                  variant="outline"
+                  className="gap-1 cursor-pointer hover:bg-accent"
+                >
                   <FolderOpen className="h-3 w-3" />
                   Workspace
                 </Badge>
               </Link>
               <Link to="/agents/$agentId/skills" params={{ agentId }}>
-                <Badge variant="outline" className={`gap-1 cursor-pointer hover:bg-accent ${skillCount === 0 ? "text-muted-foreground" : ""}`}>
+                <Badge
+                  variant="outline"
+                  className={`gap-1 cursor-pointer hover:bg-accent ${skillCount === 0 ? "text-muted-foreground" : ""}`}
+                >
                   <Puzzle className="h-3 w-3" />
                   {skillCount > 0 && <>{skillCount} </>}Skills
                 </Badge>
               </Link>
               <Link to="/agents/$agentId/memory" params={{ agentId }}>
-                <Badge variant="outline" className="gap-1 cursor-pointer hover:bg-accent">
+                <Badge
+                  variant="outline"
+                  className="gap-1 cursor-pointer hover:bg-accent"
+                >
                   <Brain className="h-3 w-3" />
                   Memory
                 </Badge>
               </Link>
               <Link to="/scheduled-jobs" search={{ type: "agent", agentId }}>
-                <Badge variant="outline" className={`gap-1 cursor-pointer hover:bg-accent ${triggerCount === 0 ? "text-muted-foreground" : ""}`}>
+                <Badge
+                  variant="outline"
+                  className={`gap-1 cursor-pointer hover:bg-accent ${triggerCount === 0 ? "text-muted-foreground" : ""}`}
+                >
                   <CalendarDays className="h-3 w-3" />
                   {triggerCount > 0 && <>{triggerCount} </>}Automations
                 </Badge>
               </Link>
               <Link to="/security">
-                <Badge variant="outline" className={`gap-1 cursor-pointer hover:bg-accent ${!agentGuardrail ? "text-muted-foreground" : ""}`}>
+                <Badge
+                  variant="outline"
+                  className={`gap-1 cursor-pointer hover:bg-accent ${!agentGuardrail ? "text-muted-foreground" : ""}`}
+                >
                   <Shield className="h-3 w-3" />
                   {agentGuardrail ? agentGuardrail.name : "No Guardrail"}
                 </Badge>
@@ -330,7 +391,12 @@ function AgentDetailPage() {
         />
 
         {/* Activity */}
-        <AgentActivity items={agentActivityItems} onRefresh={refreshActivity} agentId={agentId} agentName={agent?.name} />
+        <AgentActivity
+          items={agentActivityItems}
+          onRefresh={refreshActivity}
+          agentId={agentId}
+          agentName={agent?.name}
+        />
       </div>
 
       <AgentFormDialog

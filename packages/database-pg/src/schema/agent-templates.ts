@@ -55,8 +55,8 @@ export const agentTemplates = pgTable(
     knowledge_base_ids: jsonb("knowledge_base_ids"),
     /**
      * Sandbox opt-in metadata for the AgentCore Code Interpreter sandbox
-     * (plan Unit 3). Shape: { environment: 'default-public' | 'internal-only',
-     * required_connections: string[] } | null. Null = template does not use
+     * (plan Unit 3). Shape: { environment: 'default-public' | 'internal-only' }
+     * | null. Null = template does not use
      * the sandbox; `execute_code` is not registered for its agents.
      *
      * Shape is validated at create/update mutation time by
@@ -65,6 +65,16 @@ export const agentTemplates = pgTable(
      * validator is the gate.
      */
     sandbox: jsonb("sandbox"),
+    /**
+     * Browser Automation opt-in metadata for the AgentCore Browser + Nova Act
+     * built-in tool. Shape: { enabled: true } | null. Null = template does not
+     * register browser_automation unless an agent-level capability override
+     * enables it.
+     *
+     * Shape is validated at create/update mutation time by
+     * packages/api/src/lib/templates/browser-config.ts.
+     */
+    browser: jsonb("browser"),
     is_published: boolean("is_published").notNull().default(true),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()

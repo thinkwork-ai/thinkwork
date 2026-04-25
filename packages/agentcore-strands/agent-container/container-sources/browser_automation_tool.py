@@ -1,0 +1,206 @@
+"""AgentCore Browser + Nova Act tool registration.
+
+The server owns policy: it calls this factory only when the resolved
+template/agent policy enables Browser Automation. This module owns mechanics:
+dependency probing, managed browser session lifecycle, Nova Act execution, and
+separate cost records for Nova Act and AgentCore Browser.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import time
+from collections.abc import Callable
+from typing import Any
+
+logger = logging.getLogger(__name__)
+
+NOVA_ACT_AGENT_HOUR_USD = 4.75
+AGENTCORE_BROWSER_VCPU_HOUR_USD = 0.0895
+AGENTCORE_BROWSER_GB_HOUR_USD = 0.00945
+
+
+def load_nova_act_key(*, region: str, stage_names: list[str] | None = None) -> str:
+    """Load Nova Act API key from env or SSM."""
+
+    key = os.environ.get("NOVA_ACT_API_KEY", "")
+    if key:
+        logger.info("Nova Act API key loaded from env var")
+        return key
+
+    import boto3
+
+    ssm = boto3.client("ssm", region_name=region)
+    stages = stage_names or [os.environ.get("STACK_NAME", "dev"), "ericodom", "main"]
+    for stage in stages:
+        if not stage:
+            continue
+        param = f"/thinkwork/{stage}/nova-act-api-key"
+        try:
+            resp = ssm.get_parameter(Name=param, WithDecryption=True)
+            key = resp.get("Parameter", {}).get("Value", "")
+            if key:
+                logger.info("Nova Act API key loaded from SSM: %s", param)
+                return key
+        except Exception:
+            continue
+    logger.warning("Nova Act API key not found in env or SSM")
+    return ""
+
+
+def _append_costs(
+    cost_sink: list[dict],
+    *,
+    duration_sec: float,
+    url: str,
+    task: str,
+    response_len: int | None = None,
+    error: str | None = None,
+) -> None:
+    duration_ms = int(duration_sec * 1000)
+    nova_cost = (duration_sec / 3600) * NOVA_ACT_AGENT_HOUR_USD
+
+    estimated_vcpu = float(os.environ.get("BROWSER_AUTOMATION_ESTIMATED_VCPU", "1"))
+    estimated_gb = float(os.environ.get("BROWSER_AUTOMATION_ESTIMATED_MEMORY_GB", "2"))
+    browser_cost = (duration_sec / 3600) * (
+        (estimated_vcpu * AGENTCORE_BROWSER_VCPU_HOUR_USD)
+        + (estimated_gb * AGENTCORE_BROWSER_GB_HOUR_USD)
+    )
+
+    base_metadata: dict[str, Any] = {
+        "url": url,
+        "task": task[:100],
+        "pricing_source": "aws-agentcore-pricing-2026-04-25",
+    }
+    if response_len is not None:
+        base_metadata["response_len"] = response_len
+    if error:
+        base_metadata["error"] = error[:200]
+
+    cost_sink.append(
+        {
+            "provider": "nova_act",
+            "event_type": "nova_act_browser_automation",
+            "amount_usd": round(nova_cost, 6),
+            "duration_ms": duration_ms,
+            "metadata": base_metadata,
+        },
+    )
+    cost_sink.append(
+        {
+            "provider": "agentcore_browser",
+            "event_type": "agentcore_browser_session",
+            "amount_usd": round(browser_cost, 6),
+            "duration_ms": duration_ms,
+            "metadata": {
+                **base_metadata,
+                "estimated": True,
+                "estimated_vcpu": estimated_vcpu,
+                "estimated_memory_gb": estimated_gb,
+            },
+        },
+    )
+
+
+def build_browser_automation_tool(
+    *,
+    strands_tool_decorator: Callable[..., Any],
+    nova_act_api_key: str,
+    cost_sink: list[dict],
+    region: str,
+    browser_session_factory: Callable[..., Any] | None = None,
+    nova_act_cls: type | None = None,
+) -> Any:
+    """Return the `browser_automation` Strands tool.
+
+    Missing dependency/API-key cases still return a registered tool so enabled
+    agents get an actionable result instead of an invisible capability gap.
+    """
+
+    dependency_error = ""
+    if browser_session_factory is None or nova_act_cls is None:
+        try:
+            from bedrock_agentcore.tools.browser_client import browser_session
+            from nova_act import NovaAct
+
+            browser_session_factory = browser_session
+            nova_act_cls = NovaAct
+        except ImportError as err:
+            dependency_error = str(err)
+
+    @strands_tool_decorator
+    def browser_automation(url: str, task: str) -> str:
+        """Use a managed browser to perform a website task.
+
+        Use this for dynamic websites that require clicking, typing, reading
+        rendered UI, checking availability, filling forms, or extracting data
+        that ordinary HTTP requests cannot see.
+
+        Args:
+            url: The starting URL.
+            task: The browser task to complete and summarize.
+        """
+
+        if dependency_error:
+            return (
+                "Browser Automation is enabled for this agent, but the runtime "
+                f"is missing required dependencies: {dependency_error}"
+            )
+        if not nova_act_api_key:
+            return (
+                "Browser Automation is enabled for this agent, but the Nova Act "
+                "API key is not configured for this deployment yet."
+            )
+
+        start_time = time.time()
+        logger.info("browser_automation called: url=%s task=%s", url, task[:100])
+        try:
+            with browser_session_factory(region) as client:
+                ws_url, headers = client.generate_ws_headers()
+                logger.info("AgentCore Browser session started; connecting Nova Act")
+                with nova_act_cls(
+                    cdp_endpoint_url=ws_url,
+                    cdp_headers=headers,
+                    nova_act_api_key=nova_act_api_key,
+                    starting_page=url,
+                ) as nova:
+                    result = nova.act_get(task, schema={"type": "string"})
+                    response = str(result.response) if result.response else ""
+                    duration_sec = time.time() - start_time
+                    _append_costs(
+                        cost_sink,
+                        duration_sec=duration_sec,
+                        url=url,
+                        task=task,
+                        response_len=len(response),
+                    )
+                    logger.info(
+                        "browser_automation completed: response_len=%d duration=%.1fs",
+                        len(response),
+                        duration_sec,
+                    )
+                    if not response or response == "None":
+                        return (
+                            f"Browser navigated to {url} but could not extract "
+                            "the requested information."
+                        )
+                    return response
+        except Exception as err:  # noqa: BLE001
+            duration_sec = time.time() - start_time
+            _append_costs(
+                cost_sink,
+                duration_sec=duration_sec,
+                url=url,
+                task=task,
+                error=str(err),
+            )
+            logger.error(
+                "browser_automation error: %s: %s",
+                type(err).__name__,
+                err,
+                exc_info=True,
+            )
+            return f"Browser Automation error: {err}"
+
+    return browser_automation

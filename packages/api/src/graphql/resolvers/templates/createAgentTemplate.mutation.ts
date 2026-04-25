@@ -3,6 +3,7 @@ import { db, agentTemplates, snakeToCamel } from "../../utils.js";
 import { requireTenantAdmin } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { runWithIdempotency } from "../../../lib/idempotency.js";
+import { validateTemplateBrowser } from "../../../lib/templates/browser-config.js";
 import { validateTemplateSandbox } from "../../../lib/templates/sandbox-config.js";
 
 export async function createAgentTemplate(
@@ -52,6 +53,8 @@ async function createAgentTemplateCore(i: any) {
 
   const sandboxResult = validateTemplateSandbox(i.sandbox);
   if (!sandboxResult.ok) throw new Error(sandboxResult.error);
+  const browserResult = validateTemplateBrowser(i.browser);
+  if (!browserResult.ok) throw new Error(browserResult.error);
 
   const [row] = await db
     .insert(agentTemplates)
@@ -69,14 +72,16 @@ async function createAgentTemplateCore(i: any) {
       skills,
       knowledge_base_ids: knowledgeBaseIds,
       sandbox: sandboxResult.value,
+      browser: browserResult.value,
       is_published: i.isPublished ?? true,
     })
     .returning();
 
   // Copy default workspace files to the new template
   try {
-    const { copyDefaultsToTemplate } =
-      await import("../../../lib/workspace-copy.js");
+    const { copyDefaultsToTemplate } = await import(
+      "../../../lib/workspace-copy.js"
+    );
     await copyDefaultsToTemplate(i.tenantId, i.slug);
   } catch (err) {
     console.warn(

@@ -62,6 +62,7 @@ export const AgentDetailQuery = gql`
         model
         guardrailId
         blockedTools
+        config
         skills
       }
       systemPrompt
@@ -80,6 +81,7 @@ export const AgentDetailQuery = gql`
       capabilities {
         id
         capability
+        config
         enabled
       }
       skills {
@@ -174,7 +176,10 @@ export const UpdateAgentStatusMutation = graphql(`
 `);
 
 export const SetAgentCapabilitiesMutation = graphql(`
-  mutation SetAgentCapabilities($agentId: ID!, $capabilities: [AgentCapabilityInput!]!) {
+  mutation SetAgentCapabilities(
+    $agentId: ID!
+    $capabilities: [AgentCapabilityInput!]!
+  ) {
     setAgentCapabilities(agentId: $agentId, capabilities: $capabilities) {
       id
       capability
@@ -196,7 +201,10 @@ export const SetAgentSkillsMutation = graphql(`
 `);
 
 export const SetAgentBudgetPolicyMutation = graphql(`
-  mutation SetAgentBudgetPolicy($agentId: ID!, $input: AgentBudgetPolicyInput!) {
+  mutation SetAgentBudgetPolicy(
+    $agentId: ID!
+    $input: AgentBudgetPolicyInput!
+  ) {
     setAgentBudgetPolicy(agentId: $agentId, input: $input) {
       id
       limitUsd
@@ -243,8 +251,14 @@ export const AgentEmailCapabilityQuery = gql`
 `;
 
 export const UpdateAgentEmailAllowlistMutation = gql`
-  mutation UpdateAgentEmailAllowlist($agentId: ID!, $allowedSenders: [String!]!) {
-    updateAgentEmailAllowlist(agentId: $agentId, allowedSenders: $allowedSenders) {
+  mutation UpdateAgentEmailAllowlist(
+    $agentId: ID!
+    $allowedSenders: [String!]!
+  ) {
+    updateAgentEmailAllowlist(
+      agentId: $agentId
+      allowedSenders: $allowedSenders
+    ) {
       id
       config
       enabled
@@ -367,7 +381,10 @@ export const SyncKnowledgeBaseMutation = gql`
 `;
 
 export const SetAgentKnowledgeBasesMutation = gql`
-  mutation SetAgentKnowledgeBases($agentId: ID!, $knowledgeBases: [AgentKnowledgeBaseInput!]!) {
+  mutation SetAgentKnowledgeBases(
+    $agentId: ID!
+    $knowledgeBases: [AgentKnowledgeBaseInput!]!
+  ) {
     setAgentKnowledgeBases(agentId: $agentId, knowledgeBases: $knowledgeBases) {
       id
       knowledgeBaseId
@@ -416,8 +433,24 @@ export const ThreadsListQuery = graphql(`
 `);
 
 export const ThreadsPagedQuery = gql`
-  query ThreadsPaged($tenantId: ID!, $search: String, $showArchived: Boolean, $sortField: String, $sortDir: String, $limit: Int, $offset: Int) {
-    threadsPaged(tenantId: $tenantId, search: $search, showArchived: $showArchived, sortField: $sortField, sortDir: $sortDir, limit: $limit, offset: $offset) {
+  query ThreadsPaged(
+    $tenantId: ID!
+    $search: String
+    $showArchived: Boolean
+    $sortField: String
+    $sortDir: String
+    $limit: Int
+    $offset: Int
+  ) {
+    threadsPaged(
+      tenantId: $tenantId
+      search: $search
+      showArchived: $showArchived
+      sortField: $sortField
+      sortDir: $sortDir
+      limit: $limit
+      offset: $offset
+    ) {
       items {
         id
         number
@@ -831,8 +864,18 @@ export const AddInboxItemCommentMutation = graphql(`
 `);
 
 export const ActivityLogQuery = graphql(`
-  query ActivityLog($tenantId: ID!, $entityType: String, $entityId: ID, $limit: Int) {
-    activityLog(tenantId: $tenantId, entityType: $entityType, entityId: $entityId, limit: $limit) {
+  query ActivityLog(
+    $tenantId: ID!
+    $entityType: String
+    $entityId: ID
+    $limit: Int
+  ) {
+    activityLog(
+      tenantId: $tenantId
+      entityType: $entityType
+      entityId: $entityId
+      limit: $limit
+    ) {
       id
       actorType
       actorId
@@ -1116,7 +1159,10 @@ export const BudgetStatusQuery = gql`
 `;
 
 export const UpsertBudgetPolicyMutation = gql`
-  mutation UpsertBudgetPolicy($tenantId: ID!, $input: UpsertBudgetPolicyInput!) {
+  mutation UpsertBudgetPolicy(
+    $tenantId: ID!
+    $input: UpsertBudgetPolicyInput!
+  ) {
     upsertBudgetPolicy(tenantId: $tenantId, input: $input) {
       id
       scope
@@ -1147,8 +1193,18 @@ export const UnpauseAgentMutation = gql`
 // ---------------------------------------------------------------------------
 
 export const NotifyAgentStatusMutation = graphql(`
-  mutation NotifyAgentStatus($agentId: ID!, $tenantId: ID!, $status: String!, $name: String!) {
-    notifyAgentStatus(agentId: $agentId, tenantId: $tenantId, status: $status, name: $name) {
+  mutation NotifyAgentStatus(
+    $agentId: ID!
+    $tenantId: ID!
+    $status: String!
+    $name: String!
+  ) {
+    notifyAgentStatus(
+      agentId: $agentId
+      tenantId: $tenantId
+      status: $status
+      name: $name
+    ) {
       agentId
       tenantId
       status
@@ -1323,8 +1379,22 @@ export const OnNewMessageSubscription = graphql(`
 // ---------------------------------------------------------------------------
 
 export const ArtifactsListQuery = gql`
-  query ArtifactsList($tenantId: ID!, $threadId: ID, $agentId: ID, $type: ArtifactType, $status: ArtifactStatus, $limit: Int) {
-    artifacts(tenantId: $tenantId, threadId: $threadId, agentId: $agentId, type: $type, status: $status, limit: $limit) {
+  query ArtifactsList(
+    $tenantId: ID!
+    $threadId: ID
+    $agentId: ID
+    $type: ArtifactType
+    $status: ArtifactStatus
+    $limit: Int
+  ) {
+    artifacts(
+      tenantId: $tenantId
+      threadId: $threadId
+      agentId: $agentId
+      type: $type
+      status: $status
+      limit: $limit
+    ) {
       id
       tenantId
       agentId
@@ -1364,12 +1434,26 @@ export const MemoryRecordsQuery = graphql(`
   query MemoryRecords($assistantId: ID!, $namespace: String!) {
     memoryRecords(assistantId: $assistantId, namespace: $namespace) {
       memoryRecordId
-      content { text }
-      createdAt updatedAt
-      namespace strategyId strategy
-      agentSlug factType confidence
-      eventDate occurredStart occurredEnd mentionedAt
-      tags accessCount proofCount context threadId
+      content {
+        text
+      }
+      createdAt
+      updatedAt
+      namespace
+      strategyId
+      strategy
+      agentSlug
+      factType
+      confidence
+      eventDate
+      occurredStart
+      occurredEnd
+      mentionedAt
+      tags
+      accessCount
+      proofCount
+      context
+      threadId
     }
   }
 `);
@@ -1387,11 +1471,23 @@ export const UpdateMemoryRecordMutation = graphql(`
 `);
 
 export const MemorySearchQuery = graphql(`
-  query MemorySearch($assistantId: ID!, $query: String!, $strategy: MemoryStrategy, $limit: Int) {
-    memorySearch(assistantId: $assistantId, query: $query, strategy: $strategy, limit: $limit) {
+  query MemorySearch(
+    $assistantId: ID!
+    $query: String!
+    $strategy: MemoryStrategy
+    $limit: Int
+  ) {
+    memorySearch(
+      assistantId: $assistantId
+      query: $query
+      strategy: $strategy
+      limit: $limit
+    ) {
       records {
         memoryRecordId
-        content { text }
+        content {
+          text
+        }
         score
         namespace
         strategy
@@ -1544,11 +1640,18 @@ export const LinkedAgentsForTemplateQuery = graphql(`
 export const TemplateSyncDiffQuery = graphql(`
   query TemplateSyncDiff($templateId: ID!, $agentId: ID!) {
     templateSyncDiff(templateId: $templateId, agentId: $agentId) {
-      roleChange { current target }
+      roleChange {
+        current
+        target
+      }
       skillsAdded
       skillsRemoved
       skillsChanged
-      permissionsChanges { skillId added removed }
+      permissionsChanges {
+        skillId
+        added
+        removed
+      }
       kbsAdded
       kbsRemoved
       filesAdded
@@ -1606,8 +1709,22 @@ export const RollbackAgentVersionMutation = graphql(`
 export const MemoryGraphQuery = graphql(`
   query MemoryGraph($assistantId: ID!) {
     memoryGraph(assistantId: $assistantId) {
-      nodes { id label type strategy entityType edgeCount latestThreadId }
-      edges { source target type label weight }
+      nodes {
+        id
+        label
+        type
+        strategy
+        entityType
+        edgeCount
+        latestThreadId
+      }
+      edges {
+        source
+        target
+        type
+        label
+        weight
+      }
     }
   }
 `);
@@ -1615,14 +1732,33 @@ export const MemoryGraphQuery = graphql(`
 export const WikiGraphQuery = graphql(`
   query WikiGraph($tenantId: ID!, $ownerId: ID!) {
     wikiGraph(tenantId: $tenantId, ownerId: $ownerId) {
-      nodes { id label type entityType slug strategy edgeCount latestThreadId }
-      edges { source target label weight }
+      nodes {
+        id
+        label
+        type
+        entityType
+        slug
+        strategy
+        edgeCount
+        latestThreadId
+      }
+      edges {
+        source
+        target
+        label
+        weight
+      }
     }
   }
 `);
 
 export const WikiPageQuery = graphql(`
-  query AdminWikiPage($tenantId: ID!, $ownerId: ID!, $type: WikiPageType!, $slug: String!) {
+  query AdminWikiPage(
+    $tenantId: ID!
+    $ownerId: ID!
+    $type: WikiPageType!
+    $slug: String!
+  ) {
     wikiPage(tenantId: $tenantId, ownerId: $ownerId, type: $type, slug: $slug) {
       id
       type
@@ -1673,8 +1809,18 @@ export const RecentWikiPagesQuery = graphql(`
 `);
 
 export const WikiSearchQuery = graphql(`
-  query AdminWikiSearch($tenantId: ID!, $ownerId: ID!, $query: String!, $limit: Int) {
-    wikiSearch(tenantId: $tenantId, ownerId: $ownerId, query: $query, limit: $limit) {
+  query AdminWikiSearch(
+    $tenantId: ID!
+    $ownerId: ID!
+    $query: String!
+    $limit: Int
+  ) {
+    wikiSearch(
+      tenantId: $tenantId
+      ownerId: $ownerId
+      query: $query
+      limit: $limit
+    ) {
       score
       matchedAlias
       page {
@@ -1745,7 +1891,12 @@ export const EvalSummaryQuery = gql`
 
 export const EvalRunsQuery = gql`
   query EvalRuns($tenantId: ID!, $limit: Int, $offset: Int, $agentId: ID) {
-    evalRuns(tenantId: $tenantId, limit: $limit, offset: $offset, agentId: $agentId) {
+    evalRuns(
+      tenantId: $tenantId
+      limit: $limit
+      offset: $offset
+      agentId: $agentId
+    ) {
       items {
         id
         status
@@ -1880,7 +2031,10 @@ export const StartEvalRunMutation = gql`
 `;
 
 export const CreateEvalTestCaseMutation = gql`
-  mutation CreateEvalTestCase($tenantId: ID!, $input: CreateEvalTestCaseInput!) {
+  mutation CreateEvalTestCase(
+    $tenantId: ID!
+    $input: CreateEvalTestCaseInput!
+  ) {
     createEvalTestCase(tenantId: $tenantId, input: $input) {
       id
       name
