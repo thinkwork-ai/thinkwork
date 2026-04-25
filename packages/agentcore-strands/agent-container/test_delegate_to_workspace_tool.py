@@ -60,6 +60,18 @@ EXPENSES_AGENTS_MD_BOGUS_SLUG = """\
 | Approve | escalation/ | bogus-slug |
 """
 
+EXPENSES_AGENTS_MD_WITH_SKIPS = """\
+# Expenses sub-agent
+
+## Routing
+
+| Task | Go to | Read | Skills |
+|------|-------|------|--------|
+| Hidden mem | memory/ | memory/CONTEXT.md | leak-private |
+| Bad path | Not A Path | bad/CONTEXT.md | bogus |
+| Real | escalation/ | CONTEXT.md | approve-receipt |
+"""
+
 
 def _entry(path: str, content: str) -> dict[str, Any]:
     """Composer record shape: {path, source, sha256, content}."""
@@ -381,6 +393,47 @@ class TestDelegateFactorySnapshots:
         result = tool_fn(path="expenses", task="t")
         rs = result["resolved_context"]["resolved_skills"]["approve-receipt"]
         assert rs["source"] == "platform"
+
+
+class TestDelegateParserWarningPropagation:
+    """Plan 2026-04-25-004 U4. Parser-skipped routing rows (reserved-name
+    go_to, invalid path) must surface in ``resolved_context`` so the U5
+    spawn body can include them in the sub-agent's tool-result envelope.
+    Tests use explicit ``spawn_fn=`` injection to capture the dict.
+    """
+
+    def test_reserved_and_invalid_skips_propagate_to_resolved_context(self):
+        tree = [
+            _entry("expenses/AGENTS.md", EXPENSES_AGENTS_MD_WITH_SKIPS),
+            _entry("expenses/CONTEXT.md", "Sub.\n"),
+            _entry(
+                "expenses/skills/approve-receipt/SKILL.md",
+                LOCAL_SKILL_MD,
+            ),
+        ]
+        tool_fn, mocks = _build_factory(composer_files=tree)
+        result = tool_fn(path="expenses", task="t")
+
+        ctx = result["resolved_context"]
+        # Only the valid row survives in routing.
+        assert [r["go_to"] for r in ctx["routing"]] == ["escalation/"]
+        # Both the human-readable warnings list and the structured
+        # skipped_rows record are propagated.
+        assert ctx["skipped_rows"] == [
+            {"row_index": 0, "go_to": "memory/", "reason": "reserved"},
+            {"row_index": 1, "go_to": "Not A Path", "reason": "invalid_path"},
+        ]
+        assert len(ctx["warnings"]) == 2
+        assert "memory/" in ctx["warnings"][0]
+        assert "reserved" in ctx["warnings"][0]
+        assert "Not A Path" in ctx["warnings"][1]
+
+    def test_clean_routing_yields_empty_warnings_and_skipped_rows(self):
+        tool_fn, mocks = _build_factory(composer_files=_expenses_tree())
+        result = tool_fn(path="expenses", task="t")
+        ctx = result["resolved_context"]
+        assert ctx["warnings"] == []
+        assert ctx["skipped_rows"] == []
 
 
 class TestDelegateUsageAcc:

@@ -303,6 +303,14 @@ def make_delegate_to_workspace_fn(
             "normalized_path": normalized_path,
             # The spawn-PR follow-up reads this to build the sub-agent.
             "cfg_model": snapshot_cfg_model,
+            # Parser-skipped routing rows (reserved-name go_to, malformed
+            # path) — the spawn body surfaces these in the sub-agent's
+            # tool-result envelope so the parent LLM can recover from a
+            # silent skill drop. ``warnings`` is the human-readable list;
+            # ``skipped_rows`` is the structured shape for programmatic
+            # consumers. (Plan 2026-04-25-004 U4.)
+            "warnings": list(ctx.warnings),
+            "skipped_rows": [dict(r) for r in ctx.skipped_rows],
         }
 
         return snapshot_spawn(resolved_context)

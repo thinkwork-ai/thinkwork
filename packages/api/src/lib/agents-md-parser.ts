@@ -22,7 +22,12 @@
  * Both parsers run a fixture-parity test that fails when either drifts.
  *
  * Public surface (must stay in sync, both sides):
- *   parseAgentsMd(md) → { routing: RoutingRow[], rawMarkdown }
+ *   parseAgentsMd(md) → {
+ *     routing: RoutingRow[],
+ *     rawMarkdown: string,
+ *     warnings: string[],
+ *     skippedRows: SkippedRow[],
+ *   }
  *
  * RoutingRow:
  *   {
@@ -30,6 +35,13 @@
  *     goTo:   string         // sub-agent folder path, e.g. "expenses/"
  *     reads:  string[]       // file paths the operator referenced (verbatim)
  *     skills: string[]       // skill slugs (verbatim, dedup is U11's job)
+ *   }
+ *
+ * SkippedRow:
+ *   {
+ *     rowIndex: number       // 0-based index into the routing block's data rows
+ *     goTo:     string       // raw goTo value (decoration-stripped)
+ *     reason:   "reserved" | "invalid_path"
  *   }
  *
  * Tolerances (both sides):
@@ -62,9 +74,17 @@ export interface RoutingRow {
 	skills: string[];
 }
 
+export interface SkippedRow {
+	rowIndex: number;
+	goTo: string;
+	reason: "reserved" | "invalid_path";
+}
+
 export interface ParsedAgentsMd {
 	routing: RoutingRow[];
 	rawMarkdown: string;
+	warnings: string[];
+	skippedRows: SkippedRow[];
 }
 
 interface TableBlock {
@@ -75,10 +95,15 @@ interface TableBlock {
 export function parseAgentsMd(markdown: string): ParsedAgentsMd {
 	const block = locateRoutingTable(markdown);
 	if (!block) {
-		return { routing: [], rawMarkdown: markdown };
+		return {
+			routing: [],
+			rawMarkdown: markdown,
+			warnings: [],
+			skippedRows: [],
+		};
 	}
-	const routing = parseRoutingBlock(block);
-	return { routing, rawMarkdown: markdown };
+	const { routing, warnings, skippedRows } = parseRoutingBlock(block);
+	return { routing, rawMarkdown: markdown, warnings, skippedRows };
 }
 
 function locateRoutingTable(markdown: string): TableBlock | null {
@@ -180,7 +205,13 @@ function indexColumns(headerCells: string[]): ColumnIndex {
 	return idx;
 }
 
-function parseRoutingBlock(block: TableBlock): RoutingRow[] {
+interface ParsedRoutingBlock {
+	routing: RoutingRow[];
+	warnings: string[];
+	skippedRows: SkippedRow[];
+}
+
+function parseRoutingBlock(block: TableBlock): ParsedRoutingBlock {
 	const headerCells = parseRowCells(block.headerLine);
 	const cols = indexColumns(headerCells);
 	if (cols.goTo === -1) {
@@ -191,6 +222,11 @@ function parseRoutingBlock(block: TableBlock): RoutingRow[] {
 	}
 
 	const out: RoutingRow[] = [];
+	const warnings: string[] = [];
+	const skippedRows: SkippedRow[] = [];
+	// `rowIndex` counts data rows the parser actually considered (i.e.
+	// non-blank). It mirrors the index a routing-row editor would surface.
+	let rowIndex = 0;
 	for (const line of block.dataLines) {
 		const cells = parseRowCells(line);
 		if (cells.length === 0) continue;
@@ -198,19 +234,32 @@ function parseRoutingBlock(block: TableBlock): RoutingRow[] {
 
 		const rawGoTo = cells[cols.goTo] ?? "";
 		const goTo = stripDecorations(rawGoTo);
-		if (!goTo) continue;
+		if (!goTo) {
+			rowIndex++;
+			continue;
+		}
 
 		const goToFolder = goTo.replace(/\/$/, "");
 		if (RESERVED_FOLDER_NAMES.has(goToFolder)) {
 			console.warn(
 				`[agents-md-parser] Skipping row — goTo "${goTo}" is a reserved folder name (memory/skills).`,
 			);
+			warnings.push(
+				`row ${rowIndex} skipped — go_to '${goTo}' is reserved`,
+			);
+			skippedRows.push({ rowIndex, goTo, reason: "reserved" });
+			rowIndex++;
 			continue;
 		}
 		if (!isValidFolderPath(goTo)) {
 			console.warn(
 				`[agents-md-parser] Skipping row — goTo "${rawGoTo}" is not a valid folder path.`,
 			);
+			warnings.push(
+				`row ${rowIndex} skipped — go_to '${goTo}' is not a valid folder path`,
+			);
+			skippedRows.push({ rowIndex, goTo, reason: "invalid_path" });
+			rowIndex++;
 			continue;
 		}
 
@@ -230,8 +279,9 @@ function parseRoutingBlock(block: TableBlock): RoutingRow[] {
 				: [];
 
 		out.push({ task, goTo, reads, skills });
+		rowIndex++;
 	}
-	return out;
+	return { routing: out, warnings, skippedRows };
 }
 
 function stripDecorations(s: string): string {

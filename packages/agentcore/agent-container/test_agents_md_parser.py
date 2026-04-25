@@ -134,6 +134,89 @@ def test_rejects_reserved_go_to_names(caplog: pytest.LogCaptureFixture) -> None:
     assert len(reserved_warns) == 2
 
 
+# ─── Skipped-row surfacing (Plan 2026-04-25-004 U4) ───────────────────
+
+
+def test_reserved_go_to_populates_warnings_and_skipped_rows() -> None:
+    """A reserved-name skip records both a human-readable ``warnings`` entry
+    and a structured ``skipped_rows`` record so callers can surface the
+    drop to the LLM rather than losing the row's skills silently.
+    """
+    md = """## Routing
+
+| Task | Go to | Read | Skills |
+| --- | --- | --- | --- |
+| Hidden mem | memory/ | memory/CONTEXT.md | x |
+| Real | expenses/ | expenses/CONTEXT.md | y |
+"""
+    result = parse_agents_md(md)
+    assert len(result.routing) == 1
+    assert result.routing[0].go_to == "expenses/"
+    assert result.warnings == [
+        "row 0 skipped — go_to 'memory/' is reserved",
+    ]
+    assert result.skipped_rows == [
+        {"row_index": 0, "go_to": "memory/", "reason": "reserved"},
+    ]
+
+
+def test_invalid_path_go_to_populates_warnings_and_skipped_rows() -> None:
+    """A malformed-path skip records both surfaces with reason=invalid_path."""
+    md = """## Routing
+
+| Task | Go to | Read | Skills |
+| --- | --- | --- | --- |
+| Bad path | Not A Path | x | y |
+| Real | expenses/ | expenses/CONTEXT.md | y |
+"""
+    result = parse_agents_md(md)
+    assert len(result.routing) == 1
+    assert result.routing[0].go_to == "expenses/"
+    assert len(result.warnings) == 1
+    assert "not a valid folder path" in result.warnings[0]
+    assert result.skipped_rows == [
+        {"row_index": 0, "go_to": "Not A Path", "reason": "invalid_path"},
+    ]
+
+
+def test_mixed_skips_record_per_row_indices() -> None:
+    """row_index counts each non-blank data row, including those skipped, so
+    a downstream editor can map a record back to its source row.
+    """
+    md = """## Routing
+
+| Task | Go to | Read | Skills |
+| --- | --- | --- | --- |
+| Hidden mem | memory/ | x | y |
+| Real | expenses/ | expenses/CONTEXT.md | y |
+| Bad | NOPE | x | y |
+"""
+    result = parse_agents_md(md)
+    assert len(result.routing) == 1
+    assert [r["row_index"] for r in result.skipped_rows] == [0, 2]
+    assert [r["reason"] for r in result.skipped_rows] == ["reserved", "invalid_path"]
+
+
+def test_warnings_and_skipped_rows_default_to_empty() -> None:
+    """A clean parse leaves both surfaces empty (no false positives)."""
+    md = """## Routing
+
+| Task | Go to | Read | Skills |
+| --- | --- | --- | --- |
+| Real | expenses/ | expenses/CONTEXT.md | y |
+"""
+    result = parse_agents_md(md)
+    assert result.warnings == []
+    assert result.skipped_rows == []
+
+
+def test_no_table_returns_empty_warnings_and_skipped_rows() -> None:
+    """Markdown without a routing table still exposes the new fields as []."""
+    result = parse_agents_md("# Just prose, no table.")
+    assert result.warnings == []
+    assert result.skipped_rows == []
+
+
 def test_ignores_trailing_empty_rows() -> None:
     md = """## Routing
 
@@ -236,6 +319,25 @@ def test_shared_fixture_parses_to_expected_shape() -> None:
     ]
     assert result.routing[0].skills == ["approve-receipt", "tag-vendor"]
     assert result.routing[1].task == "Recruiting"
+
+
+def test_shared_skipped_rows_fixture_emits_warnings_and_skipped_rows() -> None:
+    """Plan 2026-04-25-004 U4 fixture parity. The shared skipped-rows
+    fixture has one reserved row, one invalid-path row, and one valid
+    row. Both parsers must emit the same shape.
+    """
+    fixture = (FIXTURE_DIR / "agents-md-skipped-rows.md").read_text()
+    result = parse_agents_md(fixture)
+    assert [r.go_to for r in result.routing] == ["expenses/"]
+    assert result.skipped_rows == [
+        {"row_index": 0, "go_to": "memory/", "reason": "reserved"},
+        {"row_index": 1, "go_to": "Not A Path", "reason": "invalid_path"},
+    ]
+    assert len(result.warnings) == 2
+    assert "memory/" in result.warnings[0]
+    assert "reserved" in result.warnings[0]
+    assert "Not A Path" in result.warnings[1]
+    assert "valid folder path" in result.warnings[1]
 
 
 def test_seeded_workspace_defaults_AGENTS_md_parses_cleanly() -> None:
