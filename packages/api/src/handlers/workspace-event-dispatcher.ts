@@ -5,6 +5,10 @@ import {
   workspaceEventIdempotencyKey,
 } from "../lib/workspace-events/canonicalize.js";
 import { parseWorkspaceEventKey } from "../lib/workspace-events/key-parser.js";
+import {
+  persistWorkspaceEvent,
+  type WorkspaceEventProcessResult,
+} from "../lib/workspace-events/processor.js";
 
 interface SqsEvent {
   Records?: Array<{ messageId: string; body: string }>;
@@ -68,7 +72,7 @@ export async function handler(event: SqsEvent): Promise<BatchResponse> {
 
 export async function processRecord(
   body: string,
-): Promise<CanonicalWorkspaceEventDraft | null> {
+): Promise<WorkspaceEventProcessResult | null> {
   const parsedBody = JSON.parse(body) as EventBridgeS3Event;
   const bucket = parsedBody.detail?.bucket?.name;
   const key = parsedBody.detail?.object?.key;
@@ -87,6 +91,8 @@ export async function processRecord(
     return null;
   }
 
+  let objectEtag = parsedBody.detail?.object?.etag;
+  let objectVersionId = parsedBody.detail?.object?.["version-id"];
   if (parsedBody["detail-type"] !== "Object Deleted") {
     const head = await s3.send(
       new HeadObjectCommand({
@@ -94,6 +100,8 @@ export async function processRecord(
         Key: decodedKey,
       }),
     );
+    objectEtag = head.ETag ?? objectEtag;
+    objectVersionId = head.VersionId ?? objectVersionId;
     const suppress = head.Metadata?.["thinkwork-suppress-event"];
     if (suppress === "true") {
       console.log("[workspace-event-dispatcher] suppressed_event", {
@@ -121,7 +129,19 @@ export async function processRecord(
       key: decodedKey,
       reason: draft.reason,
     });
-    return draft;
+    return persistWorkspaceEvent(
+      parsedKey,
+      draft,
+      {
+        bucket,
+        sourceObjectKey: decodedKey,
+        sequencer,
+        detailType: parsedBody["detail-type"] ?? "Object Deleted",
+        objectEtag,
+        objectVersionId,
+      },
+      { s3 },
+    );
   }
 
   const draft = canonicalizeWorkspaceEvent(parsedKey, decodedKey, sequencer);
@@ -130,5 +150,17 @@ export async function processRecord(
     key: decodedKey,
     targetPath: parsedKey.targetPath,
   });
-  return draft;
+  return persistWorkspaceEvent(
+    parsedKey,
+    draft,
+    {
+      bucket,
+      sourceObjectKey: decodedKey,
+      sequencer,
+      detailType: parsedBody["detail-type"] ?? "Object Created",
+      objectEtag,
+      objectVersionId,
+    },
+    { s3 },
+  );
 }

@@ -8,6 +8,7 @@ export type CanonicalWorkspaceEventType =
   | "run.completed"
   | "run.failed"
   | "review.requested"
+  | "review.responded"
   | "memory.changed"
   | "event.rejected";
 
@@ -33,7 +34,10 @@ export function canonicalizeWorkspaceEvent(
   sourceObjectKey: string,
   sequencer: string,
 ): CanonicalWorkspaceEventDraft {
-  const idempotencyKey = workspaceEventIdempotencyKey(sourceObjectKey, sequencer);
+  const idempotencyKey = workspaceEventIdempotencyKey(
+    sourceObjectKey,
+    sequencer,
+  );
   const basePayload = {
     targetPath: parsed.targetPath,
     workspaceRelativePath: parsed.workspaceRelativePath,
@@ -105,4 +109,3 @@ function parseRunIdFromReviewFile(fileName: string): string | undefined {
   const match = /^(run_[^.]+|[0-9a-f-]{36})/.exec(fileName);
   return match?.[1];
 }
-

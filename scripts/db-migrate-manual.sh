@@ -10,8 +10,9 @@
 #
 # This script walks drizzle/*.sql, excludes files registered in the journal,
 # and for each remaining file greps the header for explicit creation markers
-# (`-- creates:` / `-- creates-column:` / `-- creates-extension:`) and drop
-# markers (`-- drops:` / `-- drops-column:`) and probes the target
+# (`-- creates:` / `-- creates-column:` / `-- creates-extension:` /
+# `-- creates-constraint:`) and drop markers (`-- drops:` /
+# `-- drops-column:`) and probes the target
 # $DATABASE_URL to report APPLIED / MISSING (creates) or DROPPED /
 # STILL_PRESENT (drops) per object.
 #
@@ -35,6 +36,7 @@
 #   -- creates: public.<table_or_index_name>
 #   -- creates-column: public.<table_name>.<column_name>
 #   -- creates-extension: <ext_name>            # probes pg_catalog.pg_extension
+#   -- creates-constraint: public.<table_name>.<constraint_name>
 #   -- drops: public.<table_or_index_name>      # probes ABSENT (DROPPED/STILL_PRESENT)
 #   -- drops-column: public.<table_name>.<column_name>     # probes ABSENT
 # Multiple markers per file are fine. A file with zero markers is reported
@@ -173,6 +175,32 @@ probe_extension() {
   fi
 }
 
+probe_constraint() {
+  # Accepts public.table.constraint. Constraints are schema-qualified through
+  # the owning table's namespace rather than being standalone relations.
+  local qualified="$1"
+  local schema="${qualified%%.*}"
+  local rest="${qualified#*.}"
+  local tbl="${rest%%.*}"
+  local constraint="${rest#*.}"
+  local found
+  found=$(psql "$DATABASE_URL" -tAc "
+    SELECT 1
+      FROM pg_catalog.pg_constraint c
+      JOIN pg_catalog.pg_class r ON r.oid = c.conrelid
+      JOIN pg_catalog.pg_namespace n ON n.oid = r.relnamespace
+     WHERE n.nspname = '$schema'
+       AND r.relname = '$tbl'
+       AND c.conname = '$constraint'
+     LIMIT 1
+  ")
+  if [[ -z "$found" ]]; then
+    echo MISSING
+  else
+    echo "$schema.$tbl.$constraint"
+  fi
+}
+
 any_missing=0
 any_unverified=0
 
@@ -200,6 +228,10 @@ for f in "$DRIZZLE_DIR"/*.sql; do
     grep -oE "^--[[:space:]]+creates-extension:[[:space:]]+[A-Za-z0-9_]+" "$f" 2>/dev/null \
       | awk '{print $NF}' || true
   )
+  constraint_markers=$(
+    grep -oE "^--[[:space:]]+creates-constraint:[[:space:]]+[A-Za-z0-9_.]+" "$f" 2>/dev/null \
+      | awk '{print $NF}' || true
+  )
   drop_col_markers=$(
     grep -oE "^--[[:space:]]+drops-column:[[:space:]]+[A-Za-z0-9_.]+" "$f" 2>/dev/null \
       | awk '{print $NF}' || true
@@ -209,8 +241,8 @@ for f in "$DRIZZLE_DIR"/*.sql; do
       | awk '{print $NF}' || true
   )
 
-  if [[ -z "$obj_markers" && -z "$col_markers" && -z "$ext_markers" && -z "$drop_col_markers" && -z "$drop_obj_markers" ]]; then
-    echo "    UNVERIFIED (no '-- creates:', '-- creates-column:', '-- creates-extension:', '-- drops:', or '-- drops-column:' markers in header)"
+  if [[ -z "$obj_markers" && -z "$col_markers" && -z "$ext_markers" && -z "$constraint_markers" && -z "$drop_col_markers" && -z "$drop_obj_markers" ]]; then
+    echo "    UNVERIFIED (no '-- creates:', '-- creates-column:', '-- creates-extension:', '-- creates-constraint:', '-- drops:', or '-- drops-column:' markers in header)"
     any_unverified=1
     continue
   fi
@@ -224,6 +256,9 @@ for f in "$DRIZZLE_DIR"/*.sql; do
     fi
     if [[ -n "$ext_markers" ]]; then
       while IFS= read -r m; do echo "    creates-extension: $m"; done <<< "$ext_markers"
+    fi
+    if [[ -n "$constraint_markers" ]]; then
+      while IFS= read -r m; do echo "    creates-constraint: $m"; done <<< "$constraint_markers"
     fi
     if [[ -n "$drop_col_markers" ]]; then
       while IFS= read -r m; do echo "    drops-column: $m"; done <<< "$drop_col_markers"
@@ -257,6 +292,14 @@ for f in "$DRIZZLE_DIR"/*.sql; do
       echo "    extension $m -> $result"
       [[ "$result" == "MISSING" ]] && any_missing=1
     done <<< "$ext_markers"
+  fi
+  if [[ -n "$constraint_markers" ]]; then
+    while IFS= read -r m; do
+      [[ -z "$m" ]] && continue
+      result=$(probe_constraint "$m")
+      echo "    constraint $m -> $result"
+      [[ "$result" == "MISSING" ]] && any_missing=1
+    done <<< "$constraint_markers"
   fi
   if [[ -n "$drop_col_markers" ]]; then
     while IFS= read -r m; do

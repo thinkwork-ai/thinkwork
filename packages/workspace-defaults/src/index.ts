@@ -36,9 +36,9 @@
  * and require explicit per-agent (or tenant-bulk) accept.
  */
 export const PINNED_FILES = [
-	"GUARDRAILS.md",
-	"PLATFORM.md",
-	"CAPABILITIES.md",
+  "GUARDRAILS.md",
+  "PLATFORM.md",
+  "CAPABILITIES.md",
 ] as const;
 
 export type PinnedFile = (typeof PINNED_FILES)[number];
@@ -48,9 +48,9 @@ export type PinnedFile = (typeof PINNED_FILES)[number];
  * Parameter is a basename enum, not a path — callers never construct paths.
  */
 export const AGENT_WRITABLE_MEMORY_BASENAMES = [
-	"lessons.md",
-	"preferences.md",
-	"contacts.md",
+  "lessons.md",
+  "preferences.md",
+  "contacts.md",
 ] as const;
 
 export type MemoryBasename = (typeof AGENT_WRITABLE_MEMORY_BASENAMES)[number];
@@ -67,9 +67,9 @@ export type ManagedFile = (typeof MANAGED_FILES)[number];
 export type FileClass = "pinned" | "managed" | "live";
 
 export function classifyFile(path: string): FileClass {
-	if ((PINNED_FILES as readonly string[]).includes(path)) return "pinned";
-	if ((MANAGED_FILES as readonly string[]).includes(path)) return "managed";
-	return "live";
+  if ((PINNED_FILES as readonly string[]).includes(path)) return "pinned";
+  if ((MANAGED_FILES as readonly string[]).includes(path)) return "managed";
+  return "live";
 }
 
 // ---------------------------------------------------------------------------
@@ -431,7 +431,7 @@ Add one row per sub-agent. For example, an \`expenses/\` sub-agent would point
 - Reserved folder names — \`memory/\` and \`skills/\` — are never sub-agents at any depth.
 - Skill slugs reference platform skills or local skills under \`<folder>/skills/<slug>/SKILL.md\`.
 - Local skills resolve nearest-folder-first; the platform catalog is the fallback.
-- Recursion depth is capped at 4 levels of sub-agents.
+- Recursion depth is capped at 5 levels of sub-agents.
 `;
 
 /**
@@ -561,7 +561,7 @@ _(empty — add entries as you encounter them)_
  *     `backfill-identity-md.ts` / `backfill-user-md.ts` (or a targeted
  *     accept-template-update flow) to refresh them.
  */
-export const DEFAULTS_VERSION = 5;
+export const DEFAULTS_VERSION = 6;
 
 // ---------------------------------------------------------------------------
 // Aggregator
@@ -575,37 +575,37 @@ export const DEFAULTS_VERSION = 5;
  * for readability.
  */
 export const CANONICAL_FILE_NAMES = [
-	"SOUL.md",
-	"IDENTITY.md",
-	"USER.md",
-	"AGENTS.md",
-	"CONTEXT.md",
-	"GUARDRAILS.md",
-	"MEMORY_GUIDE.md",
-	"CAPABILITIES.md",
-	"PLATFORM.md",
-	"ROUTER.md",
-	"memory/lessons.md",
-	"memory/preferences.md",
-	"memory/contacts.md",
+  "SOUL.md",
+  "IDENTITY.md",
+  "USER.md",
+  "AGENTS.md",
+  "CONTEXT.md",
+  "GUARDRAILS.md",
+  "MEMORY_GUIDE.md",
+  "CAPABILITIES.md",
+  "PLATFORM.md",
+  "ROUTER.md",
+  "memory/lessons.md",
+  "memory/preferences.md",
+  "memory/contacts.md",
 ] as const;
 
 export type CanonicalFileName = (typeof CANONICAL_FILE_NAMES)[number];
 
 const CONTENT: Record<CanonicalFileName, string> = {
-	"SOUL.md": SOUL_MD,
-	"IDENTITY.md": IDENTITY_MD,
-	"USER.md": USER_MD,
-	"AGENTS.md": AGENTS_MD,
-	"CONTEXT.md": CONTEXT_MD,
-	"GUARDRAILS.md": GUARDRAILS_MD,
-	"MEMORY_GUIDE.md": MEMORY_GUIDE_MD,
-	"CAPABILITIES.md": CAPABILITIES_MD,
-	"PLATFORM.md": PLATFORM_MD,
-	"ROUTER.md": ROUTER_MD,
-	"memory/lessons.md": MEMORY_LESSONS_MD,
-	"memory/preferences.md": MEMORY_PREFERENCES_MD,
-	"memory/contacts.md": MEMORY_CONTACTS_MD,
+  "SOUL.md": SOUL_MD,
+  "IDENTITY.md": IDENTITY_MD,
+  "USER.md": USER_MD,
+  "AGENTS.md": AGENTS_MD,
+  "CONTEXT.md": CONTEXT_MD,
+  "GUARDRAILS.md": GUARDRAILS_MD,
+  "MEMORY_GUIDE.md": MEMORY_GUIDE_MD,
+  "CAPABILITIES.md": CAPABILITIES_MD,
+  "PLATFORM.md": PLATFORM_MD,
+  "ROUTER.md": ROUTER_MD,
+  "memory/lessons.md": MEMORY_LESSONS_MD,
+  "memory/preferences.md": MEMORY_PREFERENCES_MD,
+  "memory/contacts.md": MEMORY_CONTACTS_MD,
 };
 
 /**
@@ -617,16 +617,16 @@ const CONTENT: Record<CanonicalFileName, string> = {
  * freely mutate the returned Record without affecting other callers.
  */
 export function loadDefaults(): Record<CanonicalFileName, string> {
-	return { ...CONTENT };
+  return { ...CONTENT };
 }
 
 /**
  * Read a single canonical file by name. Throws for unknown names.
  */
 export function loadFile(name: CanonicalFileName): string {
-	const content = CONTENT[name];
-	if (content === undefined) {
-		throw new Error(`Unknown workspace default file: ${name}`);
-	}
-	return content;
+  const content = CONTENT[name];
+  if (content === undefined) {
+    throw new Error(`Unknown workspace default file: ${name}`);
+  }
+  return content;
 }

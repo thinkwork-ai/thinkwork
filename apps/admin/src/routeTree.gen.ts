@@ -23,6 +23,7 @@ import { Route as AuthedTenantDashboardRouteImport } from './routes/_authed/_ten
 import { Route as AuthedTenantCapabilitiesRouteImport } from './routes/_authed/_tenant/capabilities'
 import { Route as AuthedTenantBillingRouteImport } from './routes/_authed/_tenant/billing'
 import { Route as AuthedTenantAnalyticsRouteImport } from './routes/_authed/_tenant/analytics'
+import { Route as AuthedTenantWorkspaceReviewsIndexRouteImport } from './routes/_authed/_tenant/workspace-reviews/index'
 import { Route as AuthedTenantWikiIndexRouteImport } from './routes/_authed/_tenant/wiki/index'
 import { Route as AuthedTenantWebhooksIndexRouteImport } from './routes/_authed/_tenant/webhooks/index'
 import { Route as AuthedTenantThreadsIndexRouteImport } from './routes/_authed/_tenant/threads/index'
@@ -150,6 +151,12 @@ const AuthedTenantAnalyticsRoute = AuthedTenantAnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => AuthedTenantRoute,
 } as any)
+const AuthedTenantWorkspaceReviewsIndexRoute =
+  AuthedTenantWorkspaceReviewsIndexRouteImport.update({
+    id: '/workspace-reviews/',
+    path: '/workspace-reviews/',
+    getParentRoute: () => AuthedTenantRoute,
+  } as any)
 const AuthedTenantWikiIndexRoute = AuthedTenantWikiIndexRouteImport.update({
   id: '/wiki/',
   path: '/wiki/',
@@ -535,6 +542,7 @@ export interface FileRoutesByFullPath {
   '/threads/': typeof AuthedTenantThreadsIndexRoute
   '/webhooks/': typeof AuthedTenantWebhooksIndexRoute
   '/wiki/': typeof AuthedTenantWikiIndexRoute
+  '/workspace-reviews/': typeof AuthedTenantWorkspaceReviewsIndexRoute
   '/agent-templates/$templateId/$tab': typeof AuthedTenantAgentTemplatesTemplateIdTabRoute
   '/agent-templates/$templateId/sync': typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute
   '/agents/$agentId/knowledge': typeof AuthedTenantAgentsAgentIdKnowledgeRoute
@@ -604,6 +612,7 @@ export interface FileRoutesByTo {
   '/threads': typeof AuthedTenantThreadsIndexRoute
   '/webhooks': typeof AuthedTenantWebhooksIndexRoute
   '/wiki': typeof AuthedTenantWikiIndexRoute
+  '/workspace-reviews': typeof AuthedTenantWorkspaceReviewsIndexRoute
   '/agent-templates/$templateId/$tab': typeof AuthedTenantAgentTemplatesTemplateIdTabRoute
   '/agent-templates/$templateId/sync': typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute
   '/agents/$agentId/knowledge': typeof AuthedTenantAgentsAgentIdKnowledgeRoute
@@ -678,6 +687,7 @@ export interface FileRoutesById {
   '/_authed/_tenant/threads/': typeof AuthedTenantThreadsIndexRoute
   '/_authed/_tenant/webhooks/': typeof AuthedTenantWebhooksIndexRoute
   '/_authed/_tenant/wiki/': typeof AuthedTenantWikiIndexRoute
+  '/_authed/_tenant/workspace-reviews/': typeof AuthedTenantWorkspaceReviewsIndexRoute
   '/_authed/_tenant/agent-templates/$templateId/$tab': typeof AuthedTenantAgentTemplatesTemplateIdTabRoute
   '/_authed/_tenant/agent-templates/$templateId_/sync': typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute
   '/_authed/_tenant/agents/$agentId_/knowledge': typeof AuthedTenantAgentsAgentIdKnowledgeRoute
@@ -751,6 +761,7 @@ export interface FileRouteTypes {
     | '/threads/'
     | '/webhooks/'
     | '/wiki/'
+    | '/workspace-reviews/'
     | '/agent-templates/$templateId/$tab'
     | '/agent-templates/$templateId/sync'
     | '/agents/$agentId/knowledge'
@@ -820,6 +831,7 @@ export interface FileRouteTypes {
     | '/threads'
     | '/webhooks'
     | '/wiki'
+    | '/workspace-reviews'
     | '/agent-templates/$templateId/$tab'
     | '/agent-templates/$templateId/sync'
     | '/agents/$agentId/knowledge'
@@ -893,6 +905,7 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/threads/'
     | '/_authed/_tenant/webhooks/'
     | '/_authed/_tenant/wiki/'
+    | '/_authed/_tenant/workspace-reviews/'
     | '/_authed/_tenant/agent-templates/$templateId/$tab'
     | '/_authed/_tenant/agent-templates/$templateId_/sync'
     | '/_authed/_tenant/agents/$agentId_/knowledge'
@@ -1025,6 +1038,13 @@ declare module '@tanstack/react-router' {
       path: '/analytics'
       fullPath: '/analytics'
       preLoaderRoute: typeof AuthedTenantAnalyticsRouteImport
+      parentRoute: typeof AuthedTenantRoute
+    }
+    '/_authed/_tenant/workspace-reviews/': {
+      id: '/_authed/_tenant/workspace-reviews/'
+      path: '/workspace-reviews'
+      fullPath: '/workspace-reviews/'
+      preLoaderRoute: typeof AuthedTenantWorkspaceReviewsIndexRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
     '/_authed/_tenant/wiki/': {
@@ -1524,6 +1544,7 @@ interface AuthedTenantRouteChildren {
   AuthedTenantThreadsIndexRoute: typeof AuthedTenantThreadsIndexRoute
   AuthedTenantWebhooksIndexRoute: typeof AuthedTenantWebhooksIndexRoute
   AuthedTenantWikiIndexRoute: typeof AuthedTenantWikiIndexRoute
+  AuthedTenantWorkspaceReviewsIndexRoute: typeof AuthedTenantWorkspaceReviewsIndexRoute
   AuthedTenantAgentTemplatesTemplateIdTabRoute: typeof AuthedTenantAgentTemplatesTemplateIdTabRoute
   AuthedTenantAgentTemplatesTemplateIdSyncRoute: typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute
   AuthedTenantAgentsAgentIdKnowledgeRoute: typeof AuthedTenantAgentsAgentIdKnowledgeRoute
@@ -1578,6 +1599,8 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantThreadsIndexRoute: AuthedTenantThreadsIndexRoute,
   AuthedTenantWebhooksIndexRoute: AuthedTenantWebhooksIndexRoute,
   AuthedTenantWikiIndexRoute: AuthedTenantWikiIndexRoute,
+  AuthedTenantWorkspaceReviewsIndexRoute:
+    AuthedTenantWorkspaceReviewsIndexRoute,
   AuthedTenantAgentTemplatesTemplateIdTabRoute:
     AuthedTenantAgentTemplatesTemplateIdTabRoute,
   AuthedTenantAgentTemplatesTemplateIdSyncRoute:
