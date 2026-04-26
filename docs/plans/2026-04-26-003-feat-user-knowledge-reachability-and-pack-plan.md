@@ -3,6 +3,7 @@ title: "feat: User-Knowledge Reachability + Per-User Knowledge Pack"
 type: feat
 status: active
 date: 2026-04-26
+updated: 2026-04-26
 deepened: 2026-04-26
 origin: docs/brainstorms/2026-04-26-user-knowledge-reachability-and-knowledge-pack-requirements.md
 ---
@@ -11,13 +12,20 @@ origin: docs/brainstorms/2026-04-26-user-knowledge-reachability-and-knowledge-pa
 
 ## Overview
 
-Three sequenced changes that make user knowledge reach every agent context:
+Two sequenced changes that make user knowledge reach every agent context:
 
 1. **Reachability fix (Phase A).** Extend `delegate_to_workspace_tool._build_sub_agent_tools` so spawned sub-agents register Hindsight + wiki + managed-memory tools — currently they only see their resolved skills. Refactor today's inline Hindsight tool wrappers (`server.py:979-1199`) into a reusable `hindsight_tools.py` module first, mirroring the existing `wiki_tools.py` factory pattern. Sub-agent tools snapshot scope at factory construction (per `feedback_completion_callback_snapshot_pattern`), so propagation is leak-safe. **Independent of plan 2026-04-24-001** — ships first.
 
-2. **Agent-scoped pack bridge (Phase A.5).** A pack renderer that operates against the *current* agent-scoped wiki ownership (`tenants/{T}/agents/{A}/knowledge-pack.md`). Lets users see baseline-context behavior immediately, before plan 2026-04-24-001 ships. When that prereq merges, the scope key flips from `agentId` to `userId` in a single follow-up PR. Most users today have one primary agent so the bridge experience matches the eventual user-scoped target closely.
+2. **User-scoped knowledge pack (Phase B, now unblocked).** A pack renderer and runtime loader operating against the merged user-scoped wiki ownership (`tenants/{T}/users/{U}/knowledge-pack.md`). PR #615 merged plan 2026-04-24-001 on 2026-04-26, so the former agent-scoped bridge is no longer needed.
 
-3. **User-scoped pack (Phase B).** Same pipeline as Phase A.5 but flipped to user-scope (`tenants/{T}/users/{U}/knowledge-pack.md`). Aggregates knowledge across all of the user's agents. Hard-depends on plan 2026-04-24-001 merging.
+### Execution Update — 2026-04-26
+
+The user-scope prerequisite landed in [PR #615](https://github.com/thinkwork-ai/thinkwork/pull/615), commit `4d94573`. Execute the remaining work directly in user scope:
+
+- Keep Phase A (U1-U3) as written, but the Hindsight/wiki scope source is now `USER_ID` / `CURRENT_USER_ID`, producing Hindsight bank `user_<uuid>` and wiki `owner_id = userId`.
+- Skip the former agent-scoped Phase A.5 bridge. Do not write `tenants/{T}/agents/{A}/knowledge-pack.md`.
+- Treat U13, U14, U15, U8, U9, and U10 as the active pack path, with S3 key `tenants/{T}/users/{U}/knowledge-pack.md`.
+- Treat U16 as retired/complete by prerequisite merge; no separate one-line scope flip PR is needed.
 
 The pack is fetched once per warm-container bootstrap inside `_ensure_workspace_ready` (not per turn), cached, and spliced into both root and sub-agent system prompts. Pack content is wrapped in `<user_distilled_knowledge>` and scrubbed at compile time to mitigate prompt injection from user-derived retain content.
 
@@ -44,16 +52,13 @@ The product wants every agent context — root chat, delegated sub-agent, extern
 **Reachability — every agent context can call the same memory + wiki tools (Phase A)**
 
 - R1. Hindsight tools (`hindsight_recall`, `hindsight_reflect`, vendor `retain`) and wiki tools (`search_wiki`, `read_wiki_page`) are registered in every agent invocation path that does LLM work: root agent (already done at `server.py:1202,1220`), and delegated sub-agents.
-- R2. `_build_sub_agent_tools` extends the sub-agent tool list to include the same Hindsight + wiki + managed-memory toolset the root agent gets, scoped to the same `(tenantId, userId)` snapshotted at delegate-factory construction time. (Today's `wiki_pages.owner_id` column refers to a user post-2026-04-24-001; pre-refactor it currently refers to an agent — Phase A's tool-factory scope follows whatever the root agent uses at the time. See KTD §6.)
-- R3. All memory + wiki tool registrations key scope on the same identity the root agent uses (today: `_ASSISTANT_ID` / `_INSTANCE_ID`; post-2026-04-24-001: `userId`). Phase A does not pivot the scope — it propagates whatever the root agent already uses, so Phase A ships independent of the user-scope refactor. **Follow-up:** when 2026-04-24-001 merges, the `tool_context` dict's scope key flips from `_ASSISTANT_ID` to `userId` in a single one-line change in `_register_delegate_to_workspace_tool`.
+- R2. `_build_sub_agent_tools` extends the sub-agent tool list to include the same Hindsight + wiki + managed-memory toolset the root agent gets, scoped to the same `(tenantId, userId)` snapshotted at delegate-factory construction time.
+- R3. All memory + wiki tool registrations key scope on the same user identity the root agent uses after PR #615: Hindsight bank `user_<USER_ID>` and wiki `owner_id = userId`. Phase A propagates that root-agent scope into delegated sub-agents.
 - R4. Cross-tenant and cross-user-within-tenant isolation must hold across all agent invocation paths (root chat, delegated sub-agent, eval-runner, wakeup-processor, run-skill dispatcher). Sub-agent tool factories cannot resolve to a different scope than the parent agent's snapshot.
 
-**Per-user knowledge pack — baseline context without a tool call (Phase A.5 + Phase B)**
+**Per-user knowledge pack — baseline context without a tool call (Phase B, unblocked)**
 
-- R5. The wiki compile pipeline produces a knowledge pack rendered as markdown at the appropriate scope-keyed S3 path:
-  - **Phase A.5 (bridge):** `tenants/{T}/agents/{A}/knowledge-pack.md` — keyed on the agent (current `wiki_pages.owner_id` semantics)
-  - **Phase B (target):** `tenants/{T}/users/{U}/knowledge-pack.md` — keyed on the user (post-2026-04-24-001 semantics)
-  Same renderer + writer code; only the scope key differs. Phase B's flip happens in a single sweep PR after the prereq merges.
+- R5. The wiki compile pipeline produces a user-scoped knowledge pack rendered as markdown at `tenants/{T}/users/{U}/knowledge-pack.md`. The former agent-scoped bridge path is retired because PR #615 merged the user-scope memory/wiki conversion before this work continued.
 - R6. **Every agent invocation path** that calls `_execute_agent_turn` reads the pack via a user-tier S3 helper and splices it into the system prompt. This includes root chat, delegated sub-agent (via `_build_sub_agent_system_prompt`), eval-runner, wakeup-processor, and run-skill-dispatcher invocations. When `userId` is unresolvable in the invocation payload (e.g., eval-runner today omits it; system-actor wakeups have null `invokerUserId`), the loader logs a structured `pack_skipped reason=no_user_id` event and renders the prompt without the pack — graceful skip, not silent failure. **Audit task in U6:** decide whose pack each non-chat invocation should load (eval may want the agent's owner; system wakeups may want the schedule-creator); document the resolution in the unit.
 - R7. The pack respects a fixed token budget (default 2000 tokens, env-tunable via `WORKSPACE_PACK_TOKEN_BUDGET`). When exceeded, the renderer ranks pages (`last_compiled_at` recency × backlink count) and truncates rather than emitting an oversized pack.
 - R8. Pack content is wrapped in a `<user_distilled_knowledge>` boundary block AND scrubbed at compile time before write. Scrubbing includes:
@@ -72,7 +77,7 @@ The product wants every agent context — root chat, delegated sub-agent, extern
 **Observability — measure whether the pack actually shifts behavior**
 
 - R12. The runtime emits structured per-turn events that let us measure pack effectiveness without a separate eval harness:
-  - `pack_injected` (per turn, when pack is non-empty in the prompt) — fields: `tenantId`, `userId`, `scope` (`agent` for Phase A.5, `user` for Phase B), `token_count`
+  - `pack_injected` (per turn, when pack is non-empty in the prompt) — fields: `tenantId`, `userId`, `scope: "user"`, `token_count`
   - `recall_tool_called` (per turn, when model invokes `hindsight_recall` or `search_wiki`) — fields: `tenantId`, `userId`, `tool_name`
   - `pack_age_at_load_seconds` (per turn, histogram) — surfaces inactive-user pack staleness even without a daily cron
   - Existing failure-mode metrics: `pack_render_failed`, `pack_s3_put_failed`, `pack_s3_read_failed`
@@ -149,10 +154,10 @@ The product wants every agent context — root chat, delegated sub-agent, extern
 3. **Pack renders on the existing event-driven wiki compile, not a new daily cron.** Wiki compile already runs per `(tenantId, ownerId)` after every successful retain via `enqueue.maybeEnqueuePostTurnCompile`. Pack rendering is a final step inside `runCompileJob`. Active users get fresh packs within minutes; inactive users get last-active packs. **Pivot from brainstorm R9** ("daily by default") was driven by avoiding per-user cron operational surface — observability via `pack_age_at_load_seconds` histogram (R12) lets us detect inactive-user staleness and add a daily cron later if it becomes a real problem.
 4. **Both prompt builders extend separately, not via shared loader call.** Refactoring `_build_sub_agent_system_prompt` to call `_build_system_prompt` would be a larger structural change with unrelated risk. Each builder gets a small targeted "if pack present, splice with `<user_distilled_knowledge>` wrapper" branch. **Long-term coherence cost acknowledged**: when a third must-appear-in-both feature lands (e.g., next user-scoped artifact), unify before adding it. Tracked in Deferred to Follow-Up Work.
 5. **Pack content wrapped in `<user_distilled_knowledge_<8-hex>>` AND scrubbed at compile time.** The wrapper alone is a hint, not a barrier — a retain containing the literal closing-tag string would escape it. Two complementary defenses: (a) randomize wrapper suffix per render so the closing string is unguessable; (b) scrub the page-body content for closing-tag variants, page titles for markdown-header escapes, and credential patterns at compile time. Defense-in-depth, not foolproof — but raises the cost of successful injection significantly.
-6. **Phase A ships independent of plan 2026-04-24-001; Phase A.5 ships agent-scoped pack as bridge value; Phase B flips to user-scope when prereq merges.** Sub-agent tool reach is a real regression today; fixing it (Phase A) doesn't require user-scoped Hindsight banks. Pack rendering against current agent-scope (Phase A.5) lets users see baseline-context behavior immediately for users with one primary agent — most users today. Phase B's user-scope flip is a single-PR scope-key change after the prereq lands. **Follow-up rework scope**: the `tool_context` dict's scope key (`_ASSISTANT_ID` → `userId`) is a one-line change in `_register_delegate_to_workspace_tool`; tracked in the Risks table.
+6. **Phase A ships first; pack work now ships directly in user scope.** Sub-agent tool reach is a real regression today and still starts the implementation. Because PR #615 already merged user-scoped Hindsight/wiki ownership, pack rendering should use `userId` from the first pack PR. The former agent-scoped bridge and follow-up scope-flip PR are retired.
 7. **Hindsight tool wrappers extracted to a shared module before sub-agent reuse.** Today the wrappers are inline closures in `_call_strands_agent` (server.py:979-1199). Keeping them inline and duplicating into the sub-agent path would diverge over time. Extract once (U1), reuse via factory (U2), single source of truth.
 8. **`WORKSPACE_BUCKET` is the canonical bucket env; `user_storage.py` lives under `container-sources/`.** Resolved here to prevent code-time conflict with prereq plan 2026-04-24-001 U8. `WORKSPACE_BUCKET` matches existing `packages/skill-catalog/workspace-memory/scripts/memory.py`. Container-sources placement is covered by Dockerfile wildcard COPY (per `dockerfile-explicit-copy-list-drops-new-tool-modules-2026-04-22`). If prereq plan disagrees when it ships, reconcile then — but having a stake in the ground is better than two soft "TBD" stances.
-9. **Lambda IAM addition is part of U14 scope.** wiki-compile Lambda's role needs `s3:PutObject` on `tenants/*/agents/*/knowledge-pack.md` (Phase A.5) and `tenants/*/users/*/knowledge-pack.md` (Phase B, after U16 flip). Without this the PUT 403s silently inside U14's catch-and-log. Explicit Terraform addition required.
+9. **Lambda IAM addition is part of U14 scope.** wiki-compile Lambda's role needs `s3:PutObject` on `tenants/*/users/*/knowledge-pack.md`. Without this the PUT 403s silently inside U14's catch-and-log. Explicit Terraform addition required.
 10. **Capability-segments-info-aggregates is a v1 stance with named follow-up.** Per `project_multi_agent_product_commitment`, all of a user's agents share one pack. Real failure mode: admin-MCP agents see personal-life retains. Named explicitly in Scope Boundaries; not addressed here. If enterprise rollout exposes this as friction, the follow-up is rendering per-template pack variants — bigger scope.
 
 ---
@@ -176,8 +181,8 @@ The product wants every agent context — root chat, delegated sub-agent, extern
 - **Pack content strategy.** Top-N wiki pages by rank? Wiki landing page + recent decisions? LLM-distilled meta-summary? Implementation should start with "top-N pages by `last_compiled_at` recency × backlink count" as a tractable v1, validate empirically, iterate.
 - **Token budget value.** Default 2000 tokens proposed; needs empirical validation. Tunable via env (`WORKSPACE_PACK_TOKEN_BUDGET`).
 - **Empty-pack rendering.** When a user has no wiki content, the renderer skips writing the file (no S3 PUT). Loader's missing-file branch (R10) handles cleanly. Alternative — write a stub — is implementation-deferred; current default is "skip." Empty-pack E2E test in U14 enforces the four-layer contract end-to-end.
-- **Pack key co-existence with daily memory.** Plan 2026-04-24-001 U8 introduces `tenants/{T}/users/{U}/daily/YYYY-MM-DD.md` and `latest.txt`. The pack at `tenants/{T}/users/{U}/knowledge-pack.md` (Phase B, after U16) is a sibling. Confirm no collision and that the `user_storage` helper handles both file kinds.
-- **User-id resolution in non-chat invocation paths.** Eval-runner today omits `user_id`; system-actor wakeups have null `invokerUserId`. Phase A.5/B units must audit each invocation site (U14 audit task) and decide whose pack to load — eval may want the agent's owner, system wakeups may want the schedule-creator. Until decided, R6's `pack_skipped reason=no_user_id` log surfaces the gap.
+- **Pack key co-existence with daily memory.** Plan 2026-04-24-001 introduced `tenants/{T}/users/{U}/daily/YYYY-MM-DD.md` and `latest.txt`. The pack at `tenants/{T}/users/{U}/knowledge-pack.md` is a sibling. Confirm no collision and that the `user_storage` helper handles both file kinds.
+- **User-id resolution in non-chat invocation paths.** Eval-runner today omits `user_id`; system-actor wakeups have null `invokerUserId`. Pack units must audit each invocation site (U14 audit task) and decide whose pack to load — eval may want the agent's owner, system wakeups may want the schedule-creator. Until decided, R6's `pack_skipped reason=no_user_id` log surfaces the gap.
 
 ---
 
@@ -211,7 +216,6 @@ This plan creates new files but does not introduce a new directory hierarchy. Ne
 
     terraform/modules/app/lambda-api/
       handlers.tf                           # MODIFY (U14) — wiki-compile role gains s3:PutObject on pack prefix
-                                            # MODIFY (U16) — IAM ARN flips from agents/ to users/ at Phase B
 
 ---
 
@@ -316,7 +320,7 @@ Key invariants:
 
 - U2. **Plumb Hindsight + wiki tool snapshots through `make_delegate_to_workspace_fn`**
 
-**Goal:** Extend the delegate factory to accept and snapshot the env reads needed for sub-agent tool registration: `hs_endpoint`, `hs_bank`, `hs_tags`, `hs_tenant`, `hs_owner_id`, plus any wiki/api credentials the wiki tools need. All snapshots happen at factory construction time per `feedback_completion_callback_snapshot_pattern`.
+**Goal:** Extend the delegate factory to accept and snapshot the env reads needed for sub-agent tool registration: `hs_endpoint`, `hs_bank`, `hs_tags`, `hs_tenant`, `hs_owner_id`, plus any wiki/api credentials the wiki tools need. All snapshots happen at factory construction time per `feedback_completion_callback_snapshot_pattern`. Post-PR #615, `hs_bank` is `user_<USER_ID>` and `hs_owner_id` / `wiki_owner_id` are the resolved user id, not the agent id.
 
 **Requirements:** R2, R4 (scope snapshot prevents leakage).
 
@@ -397,24 +401,24 @@ The previously-separate "Sub-agent reachability E2E test" unit was folded into U
 
 ---
 
-### Phase A.5 — Agent-scoped knowledge pack bridge (independent of plan 2026-04-24-001)
+### Phase B — User-scoped knowledge pack (prerequisite merged)
 
-> **Why this phase exists:** Phase B's user-scoped pack hard-depends on the user-scope refactor merging. That plan is currently U1–U11 unstarted. Phase A.5 ships a pack against the *current* `(tenantId, agentId)` wiki ownership so users see baseline-context behavior immediately. When 2026-04-24-001 merges, Phase B flips the scope key from `agentId` to `userId` in a single sweep PR. For users with one primary agent (most users today), the bridge experience matches the eventual user-scoped target closely.
+> **Current sequencing:** The user-scope refactor has merged via PR #615. Implement the pack directly against `(tenantId, userId)` wiki ownership and write only the user-tier S3 key.
 
 - U13. **Pack renderer module (scope-agnostic)**
 
-**Goal:** Pure function that, given an owner identity and a list of wiki pages, produces a markdown pack body within a configurable token budget. Scope-agnostic: takes `ownerId` (`agentId` for Phase A.5, `userId` for Phase B). No I/O — pure data transform for testability.
+**Goal:** Pure function that, given a user owner identity and a list of wiki pages, produces a markdown pack body within a configurable token budget. No I/O — pure data transform for testability.
 
 **Requirements:** R5, R7, R8 (scrubbing + boundary wrapping), R11 (lexical FTS limit acknowledged).
 
-**Dependencies:** None for Phase A.5; Phase B requires plan 2026-04-24-001 U2/U3/U4 merged for the user-scoped flip in U16 to reference the renamed schema.
+**Dependencies:** PR #615's user-scope memory/wiki conversion is merged.
 
 **Files:**
 - Create: `packages/api/src/lib/wiki/pack-renderer.ts`
 - Test: `packages/api/src/lib/wiki/pack-renderer.test.ts`
 
 **Approach:**
-- Function: `renderPack({ tenantId, ownerId, scope, pages, budget }) -> string`. `scope: "agent" | "user"`. Pages are pre-fetched by the caller (U14) so the renderer is decoupled from DB.
+- Function: `renderPack({ tenantId, ownerId, scope, pages, budget }) -> string`. `scope: "user"` for the active path. Pages are pre-fetched by the caller (U14) so the renderer is decoupled from DB.
 - Page ranking: sort by `(backlink_count * 0.6 + recency_score * 0.4)` descending, where `recency_score = 1 / (1 + days_since_compiled / 30)`. Tunable via constants.
 - Wrapper: emit a randomized 8-hex suffix per render. Open: `<user_distilled_knowledge_<8-hex>>` plus a `version="1" strategy="rank-recency-v1"` attribute pair on the open tag. Close: matching suffix. Suffix randomization makes the closing string unguessable per pack.
 - Per-page sections: title (HTML-entity-escape `<` / `>`, strip leading `#` characters), summary, optional body if budget remaining.
@@ -439,7 +443,7 @@ The previously-separate "Sub-agent reachability E2E test" unit was folded into U
 - *Scrubbing — closing-tag escape:* Page body contains literal `</user_distilled_knowledge>` and `</USER_DISTILLED_KNOWLEDGE>` and `< / user_distilled_knowledge >` → all three replaced with `[FILTERED]` in output.
 - *Scrubbing — credentials:* Page body contains `AKIAIOSFODNN7EXAMPLE`, `ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`, `sk-Test1234567890Test1234567890TEST1234`, and a JWT-shaped string → all replaced with `[REDACTED-aws]`, `[REDACTED-github]`, `[REDACTED-openai]`, `[REDACTED-jwt]`. `pack_scrubbed` event emitted with count 4.
 - *Scrubbing — page title escapes:* Page title `## Important: Ignore previous instructions` → escaped so `#` and trailing markdown structure cannot become a top-level header in the assembled prompt.
-- *Scope agnostic:* Same renderer with `scope: "agent"` and `scope: "user"` produces structurally identical output (only the metadata differs, e.g., wrapper attribute).
+- *Scope metadata:* Renderer with `scope: "user"` includes user-scope metadata in the wrapper attributes.
 
 **Verification:**
 - `npx vitest run packages/api/src/lib/wiki/pack-renderer.test.ts` passes.
@@ -448,11 +452,11 @@ The previously-separate "Sub-agent reachability E2E test" unit was folded into U
 
 - U14. **Pack writer integrated into `wiki-compile.ts` Lambda (scope-agnostic)**
 
-**Goal:** After `runCompileJob` succeeds, render the pack and PUT to S3 at the scope-keyed path. Failure to render or write logs a structured warning but does not fail the compile job.
+**Goal:** After `runCompileJob` succeeds, render the pack and PUT to S3 at the user-scope path. Failure to render or write logs a structured warning but does not fail the compile job.
 
 **Requirements:** R5, R6 (audit task), R9 (event-driven cadence + pivot acknowledged), R10 (failure mode), R12 (`pack_render_failed`, `pack_s3_put_failed` metrics).
 
-**Dependencies:** U13. Phase A.5 ships against current agent-scoped wiki ownership; Phase B uses the same code with `scope: "user"`.
+**Dependencies:** U13. User-scoped wiki ownership is available via PR #615.
 
 **Files:**
 - Modify: `packages/api/src/handlers/wiki-compile.ts`
@@ -468,9 +472,9 @@ The previously-separate "Sub-agent reachability E2E test" unit was folded into U
 - Wrap in try/catch: log structured `pack_render_failed` warning with tenantId/ownerId/jobId; do not propagate.
 - **Path validation in `packKey`:** validate `tenantId` and `ownerId` against `^[a-zA-Z0-9_-]+$` before interpolating. Reject (throw) on values containing `/`, `..`, or other non-conforming characters. Path-traversal defense.
 - **Type-level non-null:** The `listPagesForScope`-extending TypeScript change MUST narrow `ownerId?: string | null` to `ownerId: string` (non-nullable, non-optional) at the call signature for the pack-render path. The existing nullable signature is the bypass risk identified in security review (drop to tenant-only filter when null). Add a runtime assertion as belt-and-suspenders.
-- **IAM:** Add Terraform statement granting `s3:PutObject` on `arn:aws:s3:::${WORKSPACE_BUCKET}/tenants/*/agents/*/knowledge-pack.md` (Phase A.5) and `tenants/*/users/*/knowledge-pack.md` (Phase B). Cross-link in PR description with prereq plan 2026-04-24-001 U8 so the IAM additions land coherently.
+- **IAM:** Add Terraform statement granting `s3:PutObject` on `arn:aws:s3:::${WORKSPACE_BUCKET}/tenants/*/users/*/knowledge-pack.md`.
 - **Audit task — non-chat invocation paths.** Eval-runner (`packages/api/src/handlers/eval-runner.ts:272-279`) and wakeup-processor (`packages/api/src/handlers/wakeup-processor.ts:1163-1200`) invoke the Strands runtime without always populating a userId. Decide and document in this unit's PR description: (a) eval-runner — load the agent's owner's pack, or skip pack entirely; (b) wakeup-processor — for system-actor wakeups (null `invokerUserId`), load the schedule-creator's pack, or skip. Until these decisions are made, R6's `pack_skipped reason=no_user_id` log surfaces the gap.
-- **Phase A.5 → Phase B migration:** Phase A.5 ships with `scope: "agent"`. The Phase B sweep PR changes the constant `PACK_SCOPE = "user"` and updates the IAM ARN pattern. Single-file change, no other code touches.
+- **Scope constant:** If a `PACK_SCOPE` constant is introduced, set it to `"user"` from the start. Do not add an agent-scope transition path.
 - S3 client: reuse the pattern from `packages/api/src/handlers/wiki-export.ts:27,62`.
 - Bucket env: `WORKSPACE_BUCKET` per KTD §8.
 
@@ -480,14 +484,13 @@ The previously-separate "Sub-agent reachability E2E test" unit was folded into U
 - Scope-discovery query precedent: `wiki-export.ts` already iterates per-scope.
 
 **Test scenarios:**
-- *Happy path:* Compile job for `(T1, A1)` finishes (Phase A.5) → `listPagesForScope` returns 3 pages → `renderPack` returns body → `PutObjectCommand` called once with `Key: "tenants/T1/agents/A1/knowledge-pack.md"` and the rendered body.
-- *Happy path (Phase B sweep):* With `PACK_SCOPE = "user"`, key becomes `tenants/T1/users/U1/knowledge-pack.md`.
+- *Happy path:* Compile job for `(T1, U1)` finishes → `listPagesForScope` returns 3 pages → `renderPack` returns body → `PutObjectCommand` called once with `Key: "tenants/T1/users/U1/knowledge-pack.md"` and the rendered body.
 - *Empty user (full-stack contract):* Pages list empty → renderer returns empty → no PUT call → no error → integration test asserts `aws-sdk-client-mock` recorded zero `PutObjectCommand` calls.
 - *Error path:* `renderPack` throws → warning logged with `pack_render_failed`; compile job result still `ok: true`.
 - *Error path:* S3 PUT throws (mocked rejection) → warning logged with `pack_s3_put_failed`; compile job result still `ok: true`.
-- *Path validation:* `packKey("T1/../T2", "A1", "agent")` throws; `packKey("T1", "..", "agent")` throws; `packKey("T1", "A1\nfoo", "agent")` throws.
+- *Path validation:* `packKey("T1/../T2", "U1", "user")` throws; `packKey("T1", "..", "user")` throws; `packKey("T1", "U1\nfoo", "user")` throws.
 - *Type-level non-null:* TypeScript build fails if `ownerId` is `null` or `undefined` at the pack-render call site (compile-time check; assert via `tsc --noEmit` in CI on a fixture file).
-- *Key shape:* `packKey(T1, A1, "agent")` returns the exact string `tenants/T1/agents/A1/knowledge-pack.md` and matches the Python helper's prefix-builder character-for-character.
+- *Key shape:* `packKey(T1, U1, "user")` returns the exact string `tenants/T1/users/U1/knowledge-pack.md` and matches the Python helper's prefix-builder character-for-character.
 - *Integration:* `aws-sdk-client-mock` stubs S3; assert the actual `PutObjectCommand.input` matches expected shape including correct ContentType.
 - *Compiler SQL safety:* Page-selection query in pack rendering binds both `tenant_id = $tenantId` AND `owner_id = $ownerId`; never tenant alone (asserted via mock-DB query inspection).
 - *Cross-user (Phase B):* Compile job for (T1, U1) → pack body contains 0 strings unique to U2's content (fixture-based string-presence check, not just count check).
@@ -548,9 +551,9 @@ The previously-separate "Sub-agent reachability E2E test" unit was folded into U
 
 ---
 
-### Phase A.5 (continued) — Runtime workspace bootstrap and prompt assembly
+### Phase B (continued) — Runtime workspace bootstrap and prompt assembly
 
-The remaining Phase A.5 units fold the pack into the existing workspace bootstrap, splice it into both root and sub-agent prompts, and ensure warm-container fingerprint invalidation. These ship together with U13/U14/U15 — same independence-from-prereq guarantee.
+The remaining pack units fold the user-scoped pack into the existing workspace bootstrap, splice it into both root and sub-agent prompts, and ensure warm-container fingerprint invalidation. These ship together with U13/U14/U15.
 
 - U8. **Workspace-file loader extension — root agent path**
 
@@ -648,7 +651,7 @@ The remaining Phase A.5 units fold the pack into the existing workspace bootstra
 - Modify: `packages/agentcore-strands/agent-container/container-sources/server.py` (`_ensure_workspace_ready` and `_composed_fingerprint` around lines 255-330)
 
 **Approach:**
-- Inside `_ensure_workspace_ready`, after the existing `fetch_composed_workspace(tenant_id, agent_id)` call, also call `get_user_knowledge_pack(tenant_id, owner_id, scope)` (from U15). `owner_id` and `scope` are derived from current env: Phase A.5 uses `_ASSISTANT_ID` + `"agent"`, Phase B uses `_USER_ID` + `"user"` (the flip is the entire content of U16).
+- Inside `_ensure_workspace_ready`, after the existing `fetch_composed_workspace(tenant_id, agent_id)` call, also call `get_user_knowledge_pack(tenant_id, user_id, "user")` (from U15). `user_id` is derived from current invocation env (`USER_ID` / `CURRENT_USER_ID`) after `apply_invocation_env` runs.
 - Store the result in a module-level `_PACK_CACHE: Optional[PackResult]`.
 - Extend `_composed_fingerprint` to compute a hash of `(existing_workspace_state, pack_etag_or_sentinel)` where `pack_etag_or_sentinel = _PACK_CACHE.etag if _PACK_CACHE else "pack:none"`.
 - One S3 GET per warm-container bootstrap. Subsequent turns within the same warm cycle read `_PACK_CACHE` from memory (zero S3 cost).
@@ -681,46 +684,9 @@ The remaining Phase A.5 units fold the pack into the existing workspace bootstra
 
 ---
 
-### Phase B — User-scoped pack flip (depends on plan 2026-04-24-001 merge)
+### U16 — Retired by prerequisite merge
 
-> **Sequencing prerequisite:** Phase B's single unit ships only after `docs/plans/2026-04-24-001-refactor-user-scope-memory-and-hindsight-ingest-plan.md` merges and at least U1 (Postgres migration), U2 (memory adapters), U3 (handler + compiler + journal-import), U4 (GraphQL + resolvers), and U8 (user-level S3 storage tier) are complete. Phase A and Phase A.5 do not depend on the prereq and ship before this gate.
-
-- U16. **Scope-flip sweep — agent-scope → user-scope across the pack pipeline**
-
-**Goal:** Single coordinated PR that flips the pack's scope key from `agentId` to `userId` across the renderer, writer, S3 read helper, bootstrap fetch, and IAM. Phase A.5 ships agent-scoped; this PR delivers the originally-intended user-scoped target.
-
-**Requirements:** R5, R6 (scope flip is the only behavioral difference between Phase A.5 and Phase B). Coordinates with prereq plan 2026-04-24-001 R1 (memory + wiki user-scope), R2 (composite auth check), R4 (Strands `api_memory_client.py` payload flip).
-
-**Dependencies:** All units of plan 2026-04-24-001 referenced above; U13, U14, U15, U10 of this plan.
-
-**Files:**
-- Modify: `packages/api/src/handlers/wiki-compile.ts` (constant `PACK_SCOPE = "user"` flipped from `"agent"`; `ownerId` source flips from `job.owner_id` referring to agentId to referring to userId — semantic, not syntactic, post-prereq schema)
-- Modify: `terraform/modules/app/lambda-api/handlers.tf` — IAM ARN pattern updates from `tenants/*/agents/*/knowledge-pack.md` to `tenants/*/users/*/knowledge-pack.md` (or includes both during transition window if a one-week soak is desired)
-- Modify: `packages/agentcore-strands/agent-container/container-sources/server.py` (`_ensure_workspace_ready` calls `get_user_knowledge_pack(tenant_id, user_id, "user")` instead of `(tenant_id, agent_id, "agent")`)
-- Test: `packages/api/src/handlers/wiki-compile.test.ts` (Phase B happy-path test asserts user-scoped key shape)
-- Test: `packages/agentcore-strands/agent-container/test_user_storage.py` + `test_knowledge_pack_loader.py` (extend with user-scope assertions)
-
-**Approach:**
-- Pre-flip cleanup: enumerate orphan agent-scoped packs in S3 (one-time; can run as Lambda one-shot OR document as expected debris). Decide whether to delete agent-scoped pack files post-flip.
-- The `PACK_SCOPE` constant is the single change point. All downstream code reads from this constant; flipping it from `"agent"` to `"user"` propagates through the renderer's wrapper attribute, the writer's S3 key, the IAM ARN check, and the runtime's bootstrap fetch.
-- Coordinate with prereq plan's deploy: the user-scope migration (prereq U1-U4) must be live before this PR's bootstrap fetch starts using `_USER_ID`.
-- Add a deprecation warning in CloudWatch on any `pack_render_failed` or `pack_s3_read_failed` event whose key matches the agent-scoped pattern (helps catch cleanup misses).
-
-**Patterns to follow:**
-- Single-constant-flip pattern from plan 2026-04-24-001's own dual-payload-compat strategy.
-- Coordinated rollout from `agentcore-runtime-no-auto-repull-requires-explicit-update-2026-04-24`.
-
-**Test scenarios:**
-- *Covers AE1+AE2 under user scope.* Compile job for `(T1, U1)` → pack key is `tenants/T1/users/U1/knowledge-pack.md`. Bootstrap fetch reads from same key. Sub-agent for parent owned by U1 reads the user-scoped pack.
-- *Cross-user (Phase B):* Compile for U1 vs U2 produces distinct packs at distinct S3 keys; cross-leak test passes.
-- *Multi-agent aggregation:* User U1 has two agents (A1, A2). Both invocations resolve to U1's same pack. Bootstrap fetch reads identical cache regardless of which agent is invoked.
-- *Key shape:* `packKey(T1, U1, "user")` returns `tenants/T1/users/U1/knowledge-pack.md`.
-- *Path validation still holds:* Same path-traversal defenses from U14 still apply.
-- *IAM:* Lambda role has `s3:PutObject` on user-tier prefix after Terraform apply; the agent-tier permission can be removed (or kept transiently for cleanup grace period).
-
-**Verification:**
-- Vitest + pytest test suites green.
-- After deploy: trigger a wiki-compile for (T1, U1); verify S3 file exists at the user-scoped key; verify a chat turn from any of U1's agents references the same pack content.
+The former scope-flip sweep is no longer a separate unit. PR #615 merged the user-scope memory/wiki conversion before this plan resumed, so U13/U14/U15/U10/U8/U9 implement `scope: "user"` directly.
 
 ---
 ---
@@ -730,8 +696,8 @@ The remaining Phase A.5 units fold the pack into the existing workspace bootstra
 - **Interaction graph:** New compile-job → pack-render (U13) → S3 PUT (U14) → runtime workspace-bootstrap fetch (U10) → prompt-assembly splice (U8 root, U9 sub-agent) → model context. Sub-agent factory (U2/U3) gates on snapshotted Hindsight/wiki context being present.
 - **Error propagation:** Pack render or write failures (U14) are isolated — compile job still succeeds, agent turn still happens (no pack injected). S3 read failures (U15) return None; bootstrap (U10) sets `_PACK_CACHE = None`; prompt builders (U8/U9) skip pack splice. Sub-agent tool-registration failures (U3) are isolated — sub-agent runs with whatever subset is available.
 - **State lifecycle risks:** Stale pack in warm containers (mitigated by U10's bootstrap-time fetch + fingerprint inclusion); race between concurrent compile jobs for same scope (mitigated by S3's atomic PUT); empty pack on new users (single-source-of-truth contract: U13 returns empty → U14 skips PUT → U15 returns None → U8/U9 skip splice — tested end-to-end in U14).
-- **API surface parity:** No GraphQL or REST surface changes in this plan. The MCP delivery path (R8) lands in the unpaused MCP plan, reusing the same pack S3 key established by U14/U16.
-- **Integration coverage:** U3 (sub-agent E2E with body-swap safety), U14 (compile → S3 PUT, cross-user fixture, SQL safety), U8/U9 (S3 → prompt with cross-user isolation), U10 (warm-container fingerprint invalidation), U16 (Phase B scope-flip end-to-end).
+- **API surface parity:** No GraphQL or REST surface changes in this plan. The MCP delivery path (R8) lands in the unpaused MCP plan, reusing the same pack S3 key established by U14.
+- **Integration coverage:** U3 (sub-agent E2E with body-swap safety), U14 (compile → S3 PUT, cross-user fixture, SQL safety), U8/U9 (S3 → prompt with cross-user isolation), U10 (warm-container fingerprint invalidation).
 - **Unchanged invariants:** Root-agent tool registration is unchanged in behavior (U1 is a refactor — same tools, same scope, same docstrings, same async lifecycle). USER.md and other workspace files load identically. The wiki compile pipeline's existing per-page write logic is unchanged. The composer client remains agent-keyed (KTD §1).
 
 ---
@@ -747,12 +713,12 @@ The remaining Phase A.5 units fold the pack into the existing workspace bootstra
 | Path-traversal via tenantId/userId injected into S3 key | U14 `packKey` and U15 `get_user_knowledge_pack` validate both inputs against `^[a-zA-Z0-9_-]+$` regex before interpolating; reject on mismatch |
 | Nullable-userId bypass at repository layer (existing `listPagesForScope` accepts `ownerId?: string \| null` and silently drops to tenant-only filter when null) | U14 narrows the call signature for the pack-render path to `userId: string` (non-nullable) at the type level; runtime assertion as belt-and-suspenders |
 | Pack disappears for non-chat invocation paths (eval-runner, system-actor wakeups) when `userId` is unresolvable | R6 + U6 audit task: structured `pack_skipped reason=no_user_id` log surfaces the gap; U14 audit task names the explicit decision (load agent's owner / load schedule-creator / skip) per invocation site |
-| Phase B (scope flip, U16) blocks indefinitely on prereq plan 2026-04-24-001 | Phase A.5 ships agent-scoped pack as bridge value before prereq merges; Phase B's U16 is a single-PR scope-flip when prereq lands. User-perceived value lands Day 1 of Phase A.5 |
-| Phase A scope-wiring (`_ASSISTANT_ID`) needs follow-up update after prereq lands | KTD §6 + R3: the `tool_context` dict's scope key flips from `_ASSISTANT_ID` to `userId` in a single one-line change in `_register_delegate_to_workspace_tool`; follow-up rework scope is bounded |
+| Phase B blocked on prereq plan 2026-04-24-001 | Resolved by PR #615. Pack implementation proceeds directly in user scope. |
+| Phase A scope-wiring accidentally keeps `_ASSISTANT_ID` after prereq lands | R3 requires Hindsight bank `user_<USER_ID>` and wiki `owner_id = userId`; tests assert sub-agent factories use the snapshotted user scope. |
 | New container-sources Python files ship missing in container image (4th occurrence pattern from `dockerfile-explicit-copy-list-drops...`) | All new files (`hindsight_tools.py` for U1, `user_storage.py` for U15) live under `container-sources/` covered by wildcard COPY (KTD §8); verify via post-deploy assertion that imports succeed at boot |
-| AgentCore runtime doesn't repull image after deploy | Run `bash scripts/post-deploy.sh --stage dev --min-source-sha <commit> --strict` after each Phase A / Phase A.5 / Phase B merge per `agentcore-runtime-no-auto-repull...` |
+| AgentCore runtime doesn't repull image after deploy | Run `bash scripts/post-deploy.sh --stage dev --min-source-sha <commit> --strict` after each Phase A / Phase B merge per `agentcore-runtime-no-auto-repull...` |
 | Bucket env var or `user_storage.py` path conflicts with prereq plan 2026-04-24-001 U8 | KTD §8 pins `WORKSPACE_BUCKET` + `container-sources/user_storage.py` as canonical here; cross-link in U15 PR description so prereq plan can align |
-| Lambda IAM gap — `wiki-compile` lacks `s3:PutObject` on pack key prefix | KTD §9 + U14 explicitly add Terraform statement to `terraform/modules/app/lambda-api/handlers.tf` for both Phase A.5 (`agents/`) and Phase B (`users/`) prefix |
+| Lambda IAM gap — `wiki-compile` lacks `s3:PutObject` on pack key prefix | KTD §9 + U14 explicitly add Terraform statement to `terraform/modules/app/lambda-api/handlers.tf` for the user prefix (`tenants/*/users/*/knowledge-pack.md`) |
 | MEMORY_GUIDE.md TS-inlined constants drift from `.md` source | U8 (which folds the doc-update from former U11) runs `pnpm --filter @thinkwork/workspace-defaults test` before push; CI parity test catches if missed |
 | Pack measurement absent — cost-vs-value question can't be answered | R12 + U8 emit `pack_injected` and `recall_tool_called` per-turn events; `pack_age_at_load_seconds` histogram observes inactive-user staleness without needing a daily cron |
 | Capability-segmentation v1 limit (admin-MCP agent sees personal-life retains) | KTD §10 acknowledges as v1 stance; named follow-up if enterprise rollout exposes friction |
@@ -761,7 +727,7 @@ The remaining Phase A.5 units fold the pack into the existing workspace bootstra
 
 ## Documentation / Operational Notes
 
-- **Post-deploy verification:** After each phase merges, run `bash scripts/post-deploy.sh --stage dev --min-source-sha <commit> --strict` to confirm AgentCore runtime image SHA contains the change. Phase A: trigger a delegated sub-agent in a real chat and verify `hindsight_recall` is in its tool list (CloudWatch). Phase A.5: enqueue a wiki-compile job; verify pack file appears at `tenants/{T}/agents/{A}/knowledge-pack.md`; chat turn references pack content. Phase B (U16): same checks at user-scoped key.
+- **Post-deploy verification:** After each phase merges, run `bash scripts/post-deploy.sh --stage dev --min-source-sha <commit> --strict` to confirm AgentCore runtime image SHA contains the change. Phase A: trigger a delegated sub-agent in a real chat and verify `hindsight_recall` is in its tool list (CloudWatch). Phase B: enqueue a wiki-compile job; verify pack file appears at `tenants/{T}/users/{U}/knowledge-pack.md`; chat turn references pack content.
 - **CloudWatch dashboards:** Add metrics:
   - `pack_injected` (per turn, when non-empty) — fields tenantId/userId/scope/token_count
   - `recall_tool_called` (per turn, on hindsight_recall or search_wiki call) — fields tenantId/userId/tool_name
@@ -771,8 +737,8 @@ The remaining Phase A.5 units fold the pack into the existing workspace bootstra
   - `pack_s3_put_failed` (count) — surfaces S3 write failures
   - `pack_s3_read_failed` (count, per tenant) — surfaces runtime read failures (transient errors only)
   - `pack_scrubbed` (count, per tenant, with `kind` label: `closing_tag` / `aws_credential` / `github_credential` / `openai_credential` / `jwt`) — surfaces compile-time content scrubbing activity
-- **Rollout:** Phase A first (independent, low-risk refactor + extension): U1 → U2 → U3. Phase A.5 second (independent of prereq, delivers bridge value): U13 → U14 → U15 → U10 → U8 → U9. Phase B third (gated on prereq merge + 1 week regression monitoring): U16 single sweep PR.
-- **Coordination with prereq plan:** U15's `user_storage.py` path/bucket choice (KTD §8) and U16's scope flip both depend on prereq plan 2026-04-24-001 U8. Cross-link PR descriptions to ensure alignment. If prereq makes a different choice, reconcile pre-merge of either side.
+- **Rollout:** Phase A first (low-risk refactor + extension): U1 → U2 → U3. Phase B second: U13 → U14 → U15 → U10 → U8 → U9.
+- **Coordination with prereq plan:** U15's `user_storage.py` path/bucket choice (KTD §8) now aligns with merged PR #615. Cross-link PR descriptions to the prerequisite so deployment order remains clear.
 
 ---
 

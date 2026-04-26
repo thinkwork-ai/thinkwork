@@ -212,7 +212,10 @@ is yours to compose."""
 
 
 def _build_sub_agent_system_prompt(
-    *, normalized_path: str, composed_tree: Sequence[Mapping[str, Any]]
+    *,
+    normalized_path: str,
+    composed_tree: Sequence[Mapping[str, Any]],
+    knowledge_pack_body: str = "",
 ) -> str:
     """Compose the sub-agent's system prompt from the composed tree.
 
@@ -253,6 +256,12 @@ def _build_sub_agent_system_prompt(
         if body and body.strip():
             parts.append(body.strip())
 
+    # 1b. User-scoped distilled knowledge. The parent runtime snapshots this
+    # from S3 at registration time; sub-agents receive the same pack as the
+    # parent so delegated work is not memory-blind.
+    if knowledge_pack_body and knowledge_pack_body.strip():
+        parts.append(knowledge_pack_body.strip())
+
     # 2. Sub-agent's CONTEXT.md (behavioral context).
     ctx_body = by_path.get(f"{normalized_path}/CONTEXT.md")
     if ctx_body and ctx_body.strip():
@@ -277,8 +286,9 @@ def _build_sub_agent_tools(
     resolved_skills: Mapping[str, ResolvedSkill],
     *,
     tool_decorator: Callable[..., Any] | None = None,
+    tool_context: Mapping[str, Any] | None = None,
 ) -> list[Any]:
-    """Build the sub-agent's tool list from resolved skills.
+    """Build the sub-agent's tool list from resolved skills plus shared memory.
 
     For v1 (Plan 2026-04-25-004 U5) every resolved skill — local or
     platform — is exposed to the sub-agent as a minimal in-memory @tool
@@ -311,6 +321,59 @@ def _build_sub_agent_tools(
             )
         )
         out.append(decorated)
+
+    # General-purpose memory tools mirror the root agent's baseline toolset.
+    # They stay after skill tools so the sub-agent's folder-specific purpose is
+    # still the first thing the model sees.
+    try:
+        from memory_tools import remember, recall, forget
+
+        out.extend([remember, recall, forget])
+    except Exception as exc:
+        logger.warning("sub-agent managed memory tools unavailable: %s", exc)
+
+    try:
+        from write_memory_tool import write_memory
+
+        out.append(write_memory)
+    except Exception as exc:
+        logger.warning("sub-agent write_memory tool unavailable: %s", exc)
+
+    ctx = dict(tool_context or {})
+    if ctx:
+        try:
+            hindsight_factory = ctx.get("hindsight_tool_factory")
+            if hindsight_factory is None:
+                from hindsight_tools import make_hindsight_tools as hindsight_factory
+
+            out.extend(
+                hindsight_factory(
+                    tool_decorator,
+                    hs_endpoint=ctx.get("hs_endpoint", ""),
+                    hs_bank=ctx.get("hs_bank", ""),
+                    hs_tags=ctx.get("hs_tags") or [],
+                )
+            )
+        except Exception as exc:
+            logger.warning("sub-agent Hindsight tools unavailable: %s", exc)
+
+        wiki_tenant = ctx.get("wiki_tenant_id") or ctx.get("hs_tenant") or ""
+        wiki_owner = ctx.get("wiki_owner_id") or ctx.get("hs_owner_id") or ""
+        if wiki_tenant and wiki_owner:
+            try:
+                wiki_factory = ctx.get("wiki_tool_factory")
+                if wiki_factory is None:
+                    from wiki_tools import make_wiki_tools as wiki_factory
+
+                search_wiki, read_wiki_page = wiki_factory(
+                    tool_decorator,
+                    tenant_id=wiki_tenant,
+                    owner_id=wiki_owner,
+                )
+                out.append(search_wiki)
+                out.append(read_wiki_page)
+            except Exception as exc:
+                logger.warning("sub-agent wiki tools unavailable: %s", exc)
     return out
 
 
@@ -344,6 +407,7 @@ def _make_live_spawn_fn(
     cfg_model: str,
     aws_region: str,
     usage_acc: list,
+    tool_context: Mapping[str, Any] | None = None,
     model_factory: Callable[..., Any] | None = None,
     agent_factory: Callable[..., Any] | None = None,
     tool_decorator: Callable[..., Any] | None = None,
@@ -367,6 +431,7 @@ def _make_live_spawn_fn(
     snap_model_factory = model_factory
     snap_agent_factory = agent_factory
     snap_tool_decorator = tool_decorator
+    snap_tool_context = dict(tool_context or {})
 
     def _spawn_sub_agent(resolved_context: dict[str, Any]) -> dict[str, Any]:
         # Lazy-import Strands so importing this module never requires
@@ -418,9 +483,12 @@ def _make_live_spawn_fn(
         system_prompt = _build_sub_agent_system_prompt(
             normalized_path=normalized_path,
             composed_tree=composed_tree,
+            knowledge_pack_body=str(snap_tool_context.get("knowledge_pack_body") or ""),
         )
         sub_agent_tools = _build_sub_agent_tools(
-            resolved_skills, tool_decorator=snap_tool_decorator
+            resolved_skills,
+            tool_decorator=snap_tool_decorator,
+            tool_context=snap_tool_context,
         )
 
         try:
@@ -491,6 +559,7 @@ def make_delegate_to_workspace_fn(
     model_factory: Callable[..., Any] | None = None,
     agent_factory: Callable[..., Any] | None = None,
     tool_decorator: Callable[..., Any] | None = None,
+    tool_context: Mapping[str, Any] | None = None,
 ) -> Callable[..., dict[str, Any]]:
     """Build the ``delegate_to_workspace`` callable.
 
@@ -530,6 +599,7 @@ def make_delegate_to_workspace_fn(
     snapshot_api_secret = api_secret
     snapshot_cfg_model = cfg_model
     snapshot_composer = composer_fetch
+    snapshot_tool_context = deepcopy(dict(tool_context or {}))
     # Snapshot AWS_REGION here so a per-call os.environ.get(...) inside
     # the spawn body cannot drift (feedback_completion_callback_snapshot_pattern).
     snapshot_aws_region = aws_region or (
@@ -543,6 +613,7 @@ def make_delegate_to_workspace_fn(
             cfg_model=snapshot_cfg_model,
             aws_region=snapshot_aws_region,
             usage_acc=usage_acc,
+            tool_context=snapshot_tool_context,
             model_factory=model_factory,
             agent_factory=agent_factory,
             tool_decorator=tool_decorator,
@@ -618,6 +689,7 @@ def make_delegate_to_workspace_fn(
             "normalized_path": normalized_path,
             # The spawn-PR follow-up reads this to build the sub-agent.
             "cfg_model": snapshot_cfg_model,
+            "tool_context": dict(snapshot_tool_context),
             # Parser-skipped routing rows (reserved-name go_to, malformed
             # path) — the spawn body surfaces these in the sub-agent's
             # tool-result envelope so the parent LLM can recover from a
