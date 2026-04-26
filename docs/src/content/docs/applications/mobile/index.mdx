@@ -5,7 +5,7 @@ description: The ThinkWork mobile app — an Expo + React Native client for end 
 
 import { Aside } from '@astrojs/starlight/components';
 
-The mobile app is the end-user client for ThinkWork. Where the [Admin Web App](/applications/admin/) is for operators configuring a tenant, the mobile app is for the people actually doing work inside the tenant — chatting with agents, reviewing threads, acting on external tasks, and connecting their own integrations.
+The mobile app is the end-user client for ThinkWork. Where the [Admin Web App](/applications/admin/) is for operators configuring a tenant, the mobile app is for the people actually doing work inside the tenant — chatting with agents, reviewing threads, answering agent confirmation requests, acting on external tasks, and connecting their own integrations.
 
 It's an [Expo](https://expo.dev) application built on React Native, Expo Router, and the same GraphQL + REST endpoints the admin app uses. It is currently shipping on **iOS via TestFlight**.
 
@@ -19,6 +19,7 @@ End users inside a tenant. That can mean:
 
 - A knowledge worker chatting with an agent for research or drafting
 - A frontline operator working through a Tasks tab of external tasks routed from a task system
+- A human reviewer approving, continuing, or rejecting an agent run that paused for confirmation
 - A specialist connecting their personal Google account so an agent can read their calendar or email
 - An on-call engineer receiving a push notification when a task is assigned to them
 
@@ -30,7 +31,7 @@ The root layout is a three-tab structure with deep-link support for additional s
 
 | Tab | Purpose |
 |---|---|
-| **Threads** | Thread list, filtering, message input. Doubles as the entry point for starting new work |
+| **Threads** | Thread list, filtering, message input, and agent confirmation requests. Doubles as the entry point for starting new work |
 | **Tasks** | External task list — only visible when a task connector (e.g. LastMile) is connected |
 | **Settings** | Account, integrations, MCP servers, push notifications, theme, biometric lock |
 
@@ -41,7 +42,7 @@ From any tab, the user can drill into a **thread detail** screen (`/thread/[thre
 This section splits the mobile app into five sub-pages:
 
 - [Authentication](/applications/mobile/authentication/) — Google OAuth, biometric lock, session restore, the pre-signup Lambda
-- [Threads & Chat](/applications/mobile/threads-and-chat/) — Threads tab, thread detail, streaming render, message input, quick actions
+- [Threads & Chat](/applications/mobile/threads-and-chat/) — Threads tab, thread detail, HITL review cards, streaming render, message input, quick actions
 - [Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/) — self-serve OAuth for connectors and MCP servers
 - [Push Notifications](/applications/mobile/push-notifications/) — registration, payload handling, deep linking
 - [Distribution](/applications/mobile/distribution/) — EAS channels, TestFlight, iOS build setup
