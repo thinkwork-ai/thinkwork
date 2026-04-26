@@ -17,6 +17,19 @@ const LAYERS = [
   "friction",
 ];
 
+const LAYER_PROMPTS: Record<string, string> = {
+  rhythms:
+    "Let's map your rhythms. What tends to repeat, matter, or slow you down here?",
+  decisions:
+    "Let's map your decisions. Where do you need judgment, escalation, or clear defaults?",
+  dependencies:
+    "Let's map your dependencies. Which people, systems, or signals shape your work?",
+  knowledge:
+    "Let's map your knowledge. What context should your agents remember and reuse?",
+  friction:
+    "Let's map your friction. Where do repeated blockers or costly handoffs slow you down?",
+};
+
 export default function ActivationInterviewLayer() {
   const router = useRouter();
   const { layerId = "rhythms", sessionId } = useLocalSearchParams<{
@@ -87,7 +100,9 @@ export default function ActivationInterviewLayer() {
       <InterviewTurn
         layer={String(layerId)}
         mode={mode}
-        agentMessage={session?.lastAgentMessage}
+        agentMessage={
+          LAYER_PROMPTS[String(layerId)] ?? session?.lastAgentMessage
+        }
         value={reply}
         onChangeText={setReply}
         onSubmit={submit}
