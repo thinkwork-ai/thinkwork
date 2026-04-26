@@ -1,6 +1,6 @@
 import { Tabs } from "expo-router";
 import { View } from "react-native";
-import { ListTodo, CheckSquare, Settings } from "lucide-react-native";
+import { ListTodo, Settings } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { Sidebar } from "@/components/layout/sidebar";
@@ -40,7 +40,7 @@ export default function TabsLayout() {
         headerShadowVisible: false,
       }}
     >
-      {/* ── Main 2 tabs ─────────────────────────────────────────────── */}
+      {/* ── Main tabs ───────────────────────────────────────────────── */}
       <Tabs.Screen
         name="index"
         options={{
@@ -49,20 +49,6 @@ export default function TabsLayout() {
             ? undefined
             : ({ focused }) => (
                 <ListTodo
-                  size={22}
-                  color={focused ? colors.primary : colors.mutedForeground}
-                />
-              ),
-        }}
-      />
-      <Tabs.Screen
-        name="tasks/index"
-        options={{
-          title: "Tasks",
-          tabBarIcon: isWide
-            ? undefined
-            : ({ focused }) => (
-                <CheckSquare
                   size={22}
                   color={focused ? colors.primary : colors.mutedForeground}
                 />

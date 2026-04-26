@@ -122,7 +122,10 @@ export const UpdateAgentStatusMutation = graphql(`
 `);
 
 export const SetAgentCapabilitiesMutation = graphql(`
-  mutation SetAgentCapabilities($agentId: ID!, $capabilities: [AgentCapabilityInput!]!) {
+  mutation SetAgentCapabilities(
+    $agentId: ID!
+    $capabilities: [AgentCapabilityInput!]!
+  ) {
     setAgentCapabilities(agentId: $agentId, capabilities: $capabilities) {
       id
       capability
@@ -144,7 +147,10 @@ export const SetAgentSkillsMutation = graphql(`
 `);
 
 export const SetAgentBudgetPolicyMutation = graphql(`
-  mutation SetAgentBudgetPolicy($agentId: ID!, $input: AgentBudgetPolicyInput!) {
+  mutation SetAgentBudgetPolicy(
+    $agentId: ID!
+    $input: AgentBudgetPolicyInput!
+  ) {
     setAgentBudgetPolicy(agentId: $agentId, input: $input) {
       id
       period
@@ -284,23 +290,44 @@ export const TeamQuery = graphql(`
 
 export const CreateTeamMutation = graphql(`
   mutation CreateTeam($input: CreateTeamInput!) {
-    createTeam(input: $input) { id tenantId name type status createdAt }
+    createTeam(input: $input) {
+      id
+      tenantId
+      name
+      type
+      status
+      createdAt
+    }
   }
 `);
 
 export const UpdateTeamMutation = graphql(`
   mutation UpdateTeam($id: ID!, $input: UpdateTeamInput!) {
-    updateTeam(id: $id, input: $input) { id name description status updatedAt }
+    updateTeam(id: $id, input: $input) {
+      id
+      name
+      description
+      status
+      updatedAt
+    }
   }
 `);
 
 export const DeleteTeamMutation = graphql(`
-  mutation DeleteTeam($id: ID!) { deleteTeam(id: $id) }
+  mutation DeleteTeam($id: ID!) {
+    deleteTeam(id: $id)
+  }
 `);
 
 export const AddTeamAgentMutation = graphql(`
   mutation AddTeamAgent($teamId: ID!, $input: AddTeamAgentInput!) {
-    addTeamAgent(teamId: $teamId, input: $input) { id teamId agentId role joinedAt }
+    addTeamAgent(teamId: $teamId, input: $input) {
+      id
+      teamId
+      agentId
+      role
+      joinedAt
+    }
   }
 `);
 
@@ -312,7 +339,13 @@ export const RemoveTeamAgentMutation = graphql(`
 
 export const AddTeamUserMutation = graphql(`
   mutation AddTeamUser($teamId: ID!, $input: AddTeamUserInput!) {
-    addTeamUser(teamId: $teamId, input: $input) { id teamId userId role joinedAt }
+    addTeamUser(teamId: $teamId, input: $input) {
+      id
+      teamId
+      userId
+      role
+      joinedAt
+    }
   }
 `);
 
@@ -327,8 +360,18 @@ export const RemoveTeamUserMutation = graphql(`
 // ---------------------------------------------------------------------------
 
 export const RoutinesQuery = graphql(`
-  query Routines($tenantId: ID!, $teamId: ID, $agentId: ID, $status: RoutineStatus) {
-    routines(tenantId: $tenantId, teamId: $teamId, agentId: $agentId, status: $status) {
+  query Routines(
+    $tenantId: ID!
+    $teamId: ID
+    $agentId: ID
+    $status: RoutineStatus
+  ) {
+    routines(
+      tenantId: $tenantId
+      teamId: $teamId
+      agentId: $agentId
+      status: $status
+    ) {
       id
       tenantId
       teamId
@@ -417,34 +460,62 @@ export const RoutineRunDetailQuery = graphql(`
 
 export const CreateRoutineMutation = graphql(`
   mutation CreateRoutine($input: CreateRoutineInput!) {
-    createRoutine(input: $input) { id tenantId name type status createdAt }
+    createRoutine(input: $input) {
+      id
+      tenantId
+      name
+      type
+      status
+      createdAt
+    }
   }
 `);
 
 export const UpdateRoutineMutation = graphql(`
   mutation UpdateRoutine($id: ID!, $input: UpdateRoutineInput!) {
-    updateRoutine(id: $id, input: $input) { id name description status schedule updatedAt }
+    updateRoutine(id: $id, input: $input) {
+      id
+      name
+      description
+      status
+      schedule
+      updatedAt
+    }
   }
 `);
 
 export const DeleteRoutineMutation = graphql(`
-  mutation DeleteRoutine($id: ID!) { deleteRoutine(id: $id) }
+  mutation DeleteRoutine($id: ID!) {
+    deleteRoutine(id: $id)
+  }
 `);
 
 export const TriggerRoutineRunMutation = graphql(`
   mutation TriggerRoutineRun($routineId: ID!) {
-    triggerRoutineRun(routineId: $routineId) { id routineId status createdAt }
+    triggerRoutineRun(routineId: $routineId) {
+      id
+      routineId
+      status
+      createdAt
+    }
   }
 `);
 
 export const SetRoutineTriggerMutation = graphql(`
   mutation SetRoutineTrigger($routineId: ID!, $input: RoutineTriggerInput!) {
-    setRoutineTrigger(routineId: $routineId, input: $input) { id triggerType config enabled }
+    setRoutineTrigger(routineId: $routineId, input: $input) {
+      id
+      triggerType
+      config
+      enabled
+    }
   }
 `);
 
 export const DeleteRoutineTriggerMutation = graphql(`
-  mutation DeleteRoutineTrigger($id: ID!) { deleteRoutineTrigger(id: $id) }
+  mutation DeleteRoutineTrigger($id: ID!) {
+    deleteRoutineTrigger(id: $id)
+  }
 `);
 
 // ---------------------------------------------------------------------------
@@ -452,8 +523,18 @@ export const DeleteRoutineTriggerMutation = graphql(`
 // ---------------------------------------------------------------------------
 
 export const ThreadTurnsQuery = graphql(`
-  query ThreadTurns($tenantId: ID!, $agentId: ID, $status: String, $limit: Int) {
-    threadTurns(tenantId: $tenantId, agentId: $agentId, status: $status, limit: $limit) {
+  query ThreadTurns(
+    $tenantId: ID!
+    $agentId: ID
+    $status: String
+    $limit: Int
+  ) {
+    threadTurns(
+      tenantId: $tenantId
+      agentId: $agentId
+      status: $status
+      limit: $limit
+    ) {
       id
       tenantId
       triggerId
@@ -540,13 +621,24 @@ export const TurnInvocationLogsQuery = graphql(`
 
 export const CancelThreadTurnMutation = graphql(`
   mutation CancelThreadTurn($id: ID!) {
-    cancelThreadTurn(id: $id) { id status finishedAt }
+    cancelThreadTurn(id: $id) {
+      id
+      status
+      finishedAt
+    }
   }
 `);
 
 export const CreateWakeupRequestMutation = graphql(`
   mutation CreateWakeupRequest($input: CreateWakeupRequestInput!) {
-    createWakeupRequest(input: $input) { id tenantId agentId source status createdAt }
+    createWakeupRequest(input: $input) {
+      id
+      tenantId
+      agentId
+      source
+      status
+      createdAt
+    }
   }
 `);
 
@@ -555,8 +647,22 @@ export const CreateWakeupRequestMutation = graphql(`
 // ---------------------------------------------------------------------------
 
 export const ScheduledJobsQuery = graphql(`
-  query ScheduledJobs($tenantId: ID!, $agentId: ID, $routineId: ID, $triggerType: String, $enabled: Boolean, $limit: Int) {
-    scheduledJobs(tenantId: $tenantId, agentId: $agentId, routineId: $routineId, triggerType: $triggerType, enabled: $enabled, limit: $limit) {
+  query ScheduledJobs(
+    $tenantId: ID!
+    $agentId: ID
+    $routineId: ID
+    $triggerType: String
+    $enabled: Boolean
+    $limit: Int
+  ) {
+    scheduledJobs(
+      tenantId: $tenantId
+      agentId: $agentId
+      routineId: $routineId
+      triggerType: $triggerType
+      enabled: $enabled
+      limit: $limit
+    ) {
       id
       tenantId
       triggerType
@@ -628,12 +734,21 @@ export const TenantMembersQuery = graphql(`
 
 export const UpdateTenantMutation = graphql(`
   mutation UpdateTenant($id: ID!, $input: UpdateTenantInput!) {
-    updateTenant(id: $id, input: $input) { id name plan issuePrefix updatedAt }
+    updateTenant(id: $id, input: $input) {
+      id
+      name
+      plan
+      issuePrefix
+      updatedAt
+    }
   }
 `);
 
 export const UpdateTenantSettingsMutation = graphql(`
-  mutation UpdateTenantSettings($tenantId: ID!, $input: UpdateTenantSettingsInput!) {
+  mutation UpdateTenantSettings(
+    $tenantId: ID!
+    $input: UpdateTenantSettingsInput!
+  ) {
     updateTenantSettings(tenantId: $tenantId, input: $input) {
       id
       defaultModel
@@ -648,12 +763,20 @@ export const UpdateTenantSettingsMutation = graphql(`
 
 export const AddTenantMemberMutation = graphql(`
   mutation AddTenantMember($tenantId: ID!, $input: AddTenantMemberInput!) {
-    addTenantMember(tenantId: $tenantId, input: $input) { id principalType principalId role status }
+    addTenantMember(tenantId: $tenantId, input: $input) {
+      id
+      principalType
+      principalId
+      role
+      status
+    }
   }
 `);
 
 export const RemoveTenantMemberMutation = graphql(`
-  mutation RemoveTenantMember($id: ID!) { removeTenantMember(id: $id) }
+  mutation RemoveTenantMember($id: ID!) {
+    removeTenantMember(id: $id)
+  }
 `);
 
 // ---------------------------------------------------------------------------
@@ -692,13 +815,25 @@ export const UserQuery = graphql(`
 
 export const UpdateUserMutation = graphql(`
   mutation UpdateUser($id: ID!, $input: UpdateUserInput!) {
-    updateUser(id: $id, input: $input) { id name image phone updatedAt }
+    updateUser(id: $id, input: $input) {
+      id
+      name
+      image
+      phone
+      updatedAt
+    }
   }
 `);
 
 export const UpdateUserProfileMutation = graphql(`
   mutation UpdateUserProfile($userId: ID!, $input: UpdateUserProfileInput!) {
-    updateUserProfile(userId: $userId, input: $input) { id displayName theme notificationPreferences updatedAt }
+    updateUserProfile(userId: $userId, input: $input) {
+      id
+      displayName
+      theme
+      notificationPreferences
+      updatedAt
+    }
   }
 `);
 
@@ -734,7 +869,10 @@ export const ThreadsQuery = graphql(`
       channel
       assigneeType
       assigneeId
-      assignee { id name }
+      assignee {
+        id
+        name
+      }
       reporterId
       labels
       metadata
@@ -804,13 +942,24 @@ export const ThreadQuery = graphql(`
 
 export const CreateThreadMutation = graphql(`
   mutation CreateThread($input: CreateThreadInput!) {
-    createThread(input: $input) { id number title status createdAt }
+    createThread(input: $input) {
+      id
+      number
+      title
+      status
+      createdAt
+    }
   }
 `);
 
 export const UpdateThreadMutation = graphql(`
   mutation UpdateThread($id: ID!, $input: UpdateThreadInput!) {
-    updateThread(id: $id, input: $input) { id title status updatedAt }
+    updateThread(id: $id, input: $input) {
+      id
+      title
+      status
+      updatedAt
+    }
   }
 `);
 
@@ -900,8 +1049,18 @@ export const OnInboxItemStatusChangedSubscription = graphql(`
 // ---------------------------------------------------------------------------
 
 export const InboxItemsQuery = graphql(`
-  query InboxItems($tenantId: ID!, $status: InboxItemStatus, $entityType: String, $entityId: ID) {
-    inboxItems(tenantId: $tenantId, status: $status, entityType: $entityType, entityId: $entityId) {
+  query InboxItems(
+    $tenantId: ID!
+    $status: InboxItemStatus
+    $entityType: String
+    $entityId: ID
+  ) {
+    inboxItems(
+      tenantId: $tenantId
+      status: $status
+      entityType: $entityType
+      entityId: $entityId
+    ) {
       id
       tenantId
       requesterType
@@ -1127,6 +1286,147 @@ export const DeleteMemoryRecordMutation = graphql(`
 export const UpdateMemoryRecordMutation = graphql(`
   mutation UpdateMemoryRecord($memoryRecordId: ID!, $content: String!) {
     updateMemoryRecord(memoryRecordId: $memoryRecordId, content: $content)
+  }
+`);
+
+// ---------------------------------------------------------------------------
+// Workspace HITL Reviews
+// ---------------------------------------------------------------------------
+
+export const AgentWorkspaceReviewsQuery = graphql(`
+  query AgentWorkspaceReviews(
+    $tenantId: ID!
+    $agentId: ID
+    $status: String
+    $limit: Int
+  ) {
+    agentWorkspaceReviews(
+      tenantId: $tenantId
+      agentId: $agentId
+      status: $status
+      limit: $limit
+    ) {
+      threadId
+      reviewObjectKey
+      targetPath
+      requestedAt
+      reason
+      payload
+      reviewEtag
+      run {
+        id
+        agentId
+        targetPath
+        status
+        currentWakeupRequestId
+        currentThreadTurnId
+        lastEventAt
+        createdAt
+        updatedAt
+      }
+      latestEvent {
+        id
+        eventType
+        reason
+        sourceObjectKey
+        payload
+        createdAt
+      }
+    }
+  }
+`);
+
+export const AgentWorkspaceReviewQuery = graphql(`
+  query AgentWorkspaceReview($runId: ID!) {
+    agentWorkspaceReview(runId: $runId) {
+      threadId
+      reviewObjectKey
+      targetPath
+      requestedAt
+      reason
+      payload
+      reviewBody
+      reviewEtag
+      reviewMissing
+      proposedChanges {
+        path
+        kind
+        summary
+        diff
+        before
+        after
+      }
+      run {
+        id
+        tenantId
+        agentId
+        targetPath
+        status
+        currentWakeupRequestId
+        currentThreadTurnId
+        lastEventAt
+        createdAt
+        updatedAt
+      }
+      events {
+        id
+        eventType
+        reason
+        sourceObjectKey
+        payload
+        createdAt
+      }
+      decisionEvents {
+        id
+        eventType
+        reason
+        actorType
+        actorId
+        payload
+        createdAt
+      }
+    }
+  }
+`);
+
+export const AcceptAgentWorkspaceReviewMutation = graphql(`
+  mutation AcceptAgentWorkspaceReview(
+    $runId: ID!
+    $input: AgentWorkspaceReviewDecisionInput
+  ) {
+    acceptAgentWorkspaceReview(runId: $runId, input: $input) {
+      id
+      status
+      currentWakeupRequestId
+      updatedAt
+    }
+  }
+`);
+
+export const CancelAgentWorkspaceReviewMutation = graphql(`
+  mutation CancelAgentWorkspaceReview(
+    $runId: ID!
+    $input: AgentWorkspaceReviewDecisionInput
+  ) {
+    cancelAgentWorkspaceReview(runId: $runId, input: $input) {
+      id
+      status
+      updatedAt
+    }
+  }
+`);
+
+export const ResumeAgentWorkspaceRunMutation = graphql(`
+  mutation ResumeAgentWorkspaceRun(
+    $runId: ID!
+    $input: AgentWorkspaceReviewDecisionInput
+  ) {
+    resumeAgentWorkspaceRun(runId: $runId, input: $input) {
+      id
+      status
+      currentWakeupRequestId
+      updatedAt
+    }
   }
 `);
 
