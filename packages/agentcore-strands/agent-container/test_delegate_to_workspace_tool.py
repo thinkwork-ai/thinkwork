@@ -24,7 +24,10 @@ Run with::
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import sys
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -771,14 +774,13 @@ class TestLiveSpawnLocalSkill:
         result = tool_fn(path="expenses", task="approve")
 
         assert result["ok"] is True
-        # The Agent's tool list contains exactly one tool — the local
-        # skill, exposed as a callable that returns the SKILL.md body.
+        # The Agent's tool list contains the local skill, exposed as a
+        # callable that returns the SKILL.md body. Shared memory tools may
+        # also be present when the Strands package is installed.
         tools = captured["agent_kwargs"]["tools"]
-        assert len(tools) == 1
-        # Tool name is slug with `-` → `_` (matches server.py pattern).
-        assert tools[0].__name__ == "approve_receipt"
+        skill_tool = next(tool for tool in tools if tool.__name__ == "approve_receipt")
         # The tool returns the SKILL.md body so the LLM can read it.
-        assert tools[0]() == LOCAL_SKILL_MD
+        assert skill_tool() == LOCAL_SKILL_MD
 
 
 def _fake_hindsight_factory(tool_decorator, *, hs_endpoint, hs_bank, hs_tags):
@@ -815,10 +817,10 @@ class TestLiveSpawnMemoryReachability:
             composer_files=_expenses_tree(),
             tool_context={
                 "hs_endpoint": "https://hindsight.example.test",
-                "hs_bank": "agent-xyz",
-                "hs_tags": ["tenant_id:tenant-abc"],
+                "hs_bank": "user-user-123",
+                "hs_tags": ["tenant_id:tenant-abc", "user_id:user-123"],
                 "wiki_tenant_id": "tenant-abc",
-                "wiki_owner_id": "agent-xyz",
+                "wiki_owner_id": "user-123",
                 "hindsight_tool_factory": _fake_hindsight_factory,
                 "wiki_tool_factory": _fake_wiki_factory,
             },
@@ -834,14 +836,13 @@ class TestLiveSpawnMemoryReachability:
         assert "search_wiki" in names
         assert "read_wiki_page" in names
 
-    @pytest.mark.asyncio
-    async def test_sub_agent_tools_use_snapshotted_scope(self):
+    def test_sub_agent_tools_use_snapshotted_scope(self):
         tool_context = {
             "hs_endpoint": "https://hindsight.example.test",
-            "hs_bank": "agent-before",
+            "hs_bank": "user-before",
             "hs_tags": ["tenant_id:tenant-before"],
             "wiki_tenant_id": "tenant-before",
-            "wiki_owner_id": "agent-before",
+            "wiki_owner_id": "user-before",
             "hindsight_tool_factory": _fake_hindsight_factory,
             "wiki_tool_factory": _fake_wiki_factory,
         }
@@ -849,14 +850,17 @@ class TestLiveSpawnMemoryReachability:
             composer_files=_expenses_tree(),
             tool_context=tool_context,
         )
-        tool_context["hs_bank"] = "agent-after"
-        tool_context["wiki_owner_id"] = "agent-after"
+        tool_context["hs_bank"] = "user-after"
+        tool_context["wiki_owner_id"] = "user-after"
 
         tool_fn(path="expenses", task="approve")
 
         tools = {tool.__name__: tool for tool in captured["agent_kwargs"]["tools"]}
-        assert await tools["hindsight_recall"]("where") == "agent-before:where"
-        assert await tools["search_wiki"]("topic") == "tenant-before:agent-before:topic:10"
+        assert asyncio.run(tools["hindsight_recall"]("where")) == "user-before:where"
+        assert (
+            asyncio.run(tools["search_wiki"]("topic"))
+            == "tenant-before:user-before:topic:10"
+        )
 
     def test_sub_agent_tool_list_gracefully_skips_optional_context(self):
         tool_fn, captured = _build_live_factory(
@@ -870,6 +874,37 @@ class TestLiveSpawnMemoryReachability:
         assert "approve_receipt" in names
         assert "hindsight_recall" not in names
         assert "search_wiki" not in names
+
+    def test_sub_agent_tool_list_includes_managed_memory_tools(self, monkeypatch):
+        from delegate_to_workspace_tool import _build_sub_agent_tools
+
+        def remember(fact: str) -> str:
+            return fact
+
+        def recall(query: str) -> str:
+            return query
+
+        def forget(query: str) -> str:
+            return query
+
+        def write_memory(path: str, content: str) -> str:
+            return f"{path}:{content}"
+
+        monkeypatch.setitem(
+            sys.modules,
+            "memory_tools",
+            SimpleNamespace(remember=remember, recall=recall, forget=forget),
+        )
+        monkeypatch.setitem(
+            sys.modules,
+            "write_memory_tool",
+            SimpleNamespace(write_memory=write_memory),
+        )
+
+        tools = _build_sub_agent_tools({}, tool_decorator=lambda fn: fn)
+
+        names = {tool.__name__ for tool in tools}
+        assert {"remember", "recall", "forget", "write_memory"} <= names
 
 
 class TestLiveSpawnBodySwapSafety:
@@ -1313,11 +1348,17 @@ class TestMultiSkillClosureBinding:
             resolved_skills=resolved_skills, tool_decorator=_no_decorator
         )
 
-        # Two callables, each bound to its own slug's body — not whichever
-        # slug was iterated last (that's the closure bug `_make_skill_tool`
-        # was extracted to prevent).
-        assert len(tools) == 2
-        results = [fn() for fn in tools]
+        # Two skill callables, each bound to its own slug's body — not
+        # whichever slug was iterated last (that's the closure bug
+        # `_make_skill_tool` was extracted to prevent). Shared memory tools
+        # may also be appended when the Strands package is installed.
+        skill_tools = [
+            fn
+            for fn in tools
+            if getattr(fn, "__name__", "") in {"skill_a", "skill_b"}
+        ]
+        assert len(skill_tools) == 2
+        results = [fn() for fn in skill_tools]
         assert skill_a_body in results
         assert skill_b_body in results
         assert len({results[0], results[1]}) == 2, (

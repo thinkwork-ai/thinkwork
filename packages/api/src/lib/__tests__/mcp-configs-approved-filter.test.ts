@@ -14,9 +14,11 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockWhereSelector, mockRowsForJoin } = vi.hoisted(() => ({
+const { mockWhereSelector, mockRowsForJoin, mockRowsForUserToken, mockSecretString } = vi.hoisted(() => ({
   mockWhereSelector: vi.fn(),
   mockRowsForJoin: vi.fn(),
+  mockRowsForUserToken: vi.fn(),
+  mockSecretString: vi.fn(),
 }));
 
 vi.mock("@thinkwork/database-pg", () => ({
@@ -29,6 +31,12 @@ vi.mock("@thinkwork/database-pg", () => ({
             return Promise.resolve(mockRowsForJoin());
           },
         }),
+        where: (pred: unknown) => {
+          mockWhereSelector(pred);
+          return {
+            limit: () => Promise.resolve(mockRowsForUserToken()),
+          };
+        },
       }),
     }),
     update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
@@ -72,7 +80,7 @@ vi.mock("drizzle-orm", () => ({
 vi.mock("@aws-sdk/client-secrets-manager", () => {
   class Stub {
     async send() {
-      return {};
+      return { SecretString: mockSecretString() };
     }
   }
   return {
@@ -107,6 +115,8 @@ function baseRow(over: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockRowsForUserToken.mockReturnValue([]);
+  mockSecretString.mockReturnValue("");
 });
 
 describe("buildMcpConfigs — approval + hash-pin filtering", () => {
@@ -184,5 +194,41 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
     const configs = await buildMcpConfigs("agent-1", null);
     expect(configs).toHaveLength(0);
     warn.mockRestore();
+  });
+
+  it("per-user OAuth looks up the active token by user_id and returns bearer auth", async () => {
+    const userId = "user-current-1";
+    const agentId = "agent-assigned-1";
+    mockRowsForJoin.mockReturnValue([
+      baseRow({
+        mcp_server_id: "srv-user-memory",
+        slug: "user-memory",
+        auth_type: "per_user_oauth",
+      }),
+    ]);
+    mockRowsForUserToken.mockReturnValue([
+      {
+        id: "tok-1",
+        secret_ref: "arn:aws:secretsmanager:us-east-1:123:secret:user-memory",
+        status: "active",
+        expires_at: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    ]);
+    mockSecretString.mockReturnValue(JSON.stringify({ access_token: "user-scoped-token" }));
+
+    const configs = await buildMcpConfigs(agentId, userId);
+
+    expect(configs).toEqual([
+      {
+        name: "user-memory",
+        url: "https://mcp.example/a",
+        transport: "streamable-http",
+        auth: { type: "bearer", token: "user-scoped-token" },
+      },
+    ]);
+    const tokenLookupPredicate = mockWhereSelector.mock.calls[1]?.[0] as { _and: unknown[] };
+    expect(JSON.stringify(tokenLookupPredicate)).toContain(`"userMcpTokens.user_id","${userId}"`);
+    expect(JSON.stringify(tokenLookupPredicate)).not.toContain(`"userMcpTokens.user_id","${agentId}"`);
+    expect(JSON.stringify(tokenLookupPredicate)).toContain('"userMcpTokens.status","active"');
   });
 });
