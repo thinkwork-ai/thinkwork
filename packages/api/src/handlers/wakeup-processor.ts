@@ -396,6 +396,11 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   );
 
   const payload = wakeup.payload as Record<string, unknown> | null;
+  if (wakeup.source === "workspace_event" && !payload?.workspaceRunId) {
+    throw new Error(
+      "workspace_event wakeup payload missing required workspaceRunId",
+    );
+  }
 
   // PRD-14: Auto-inject agent-email-send skill for email_received wakeups
   if (wakeup.source === "email_received") {
@@ -1013,6 +1018,25 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       ].join("\n");
       break;
     }
+    case "workspace_event": {
+      const workspaceRunId = String(payload?.workspaceRunId || "");
+      const targetPath = String(payload?.workspaceTargetPath || ".");
+      const requestObjectKey = String(payload?.workspaceRequestObjectKey || "");
+      const causeType = String(payload?.causeType || "workspace_event");
+      agentMessage = [
+        "You were woken by a workspace file event.",
+        "",
+        `Workspace run: ${workspaceRunId}`,
+        `Target: ${targetPath || "."}`,
+        `Cause: ${causeType}`,
+        requestObjectKey ? `Request object: ${requestObjectKey}` : "",
+        "",
+        "Read the run folder from workspace storage, continue from the durable files, write any result or lifecycle intent through the workspace tools, then exit.",
+      ]
+        .filter(Boolean)
+        .join("\n");
+      break;
+    }
     default: {
       agentMessage = `Wakeup triggered: ${reason || wakeup.source}`;
     }
@@ -1198,6 +1222,20 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       blocked_tools: blockedTools.length > 0 ? blockedTools : undefined,
       browser_automation_enabled: browserAutomationEnabled || undefined,
     };
+
+    if (wakeup.source === "workspace_event" && payload) {
+      Object.assign(agentCorePayload, {
+        workspace_run_id: payload.workspaceRunId,
+        workspace_target_path: payload.workspaceTargetPath,
+        workspace_source_object_key: payload.workspaceSourceObjectKey,
+        workspace_event_id: payload.workspaceEventId,
+        workspace_request_object_key: payload.workspaceRequestObjectKey,
+        cause_event_id: payload.causeEventId,
+        cause_type: payload.causeType,
+        workspace_depth: payload.depth,
+        workspace_resume_reason: payload.workspaceResumeReason,
+      });
+    }
 
     if (sandboxPreflight && sandboxUserId) {
       applySandboxPayloadFields(agentCorePayload, sandboxPreflight);

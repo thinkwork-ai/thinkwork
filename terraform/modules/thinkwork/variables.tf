@@ -179,6 +179,12 @@ variable "agentcore_memory_id" {
   default     = ""
 }
 
+variable "enable_workspace_orchestration" {
+  description = "Enable S3 EventBridge/SQS routing for folder-native workspace orchestration. Also requires the per-tenant workspace_orchestration_enabled database flag before tenant events wake agents."
+  type        = bool
+  default     = false
+}
+
 # ---------------------------------------------------------------------------
 # Naming / Buckets
 # ---------------------------------------------------------------------------

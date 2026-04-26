@@ -39,6 +39,7 @@ These must be set in every deployment. There are no defaults.
 | `database_engine` | string | `"aurora-serverless"` | `aurora-serverless` (Aurora Serverless v2) or `rds-postgres` (provisioned RDS). Use `aurora-serverless` for dev/staging and variable workloads. |
 | `enable_hindsight` | bool | `false` | Optional Hindsight memory add-on (ECS Fargate + ALB for semantic + entity-graph retrieval). AgentCore managed memory with automatic per-turn retention is always on regardless of this setting — this flag only controls whether Hindsight is *also* deployed alongside it. |
 | `memory_engine` | string | `""` | **Deprecated.** Use `enable_hindsight` instead. For backwards compatibility, setting this to `"hindsight"` is equivalent to `enable_hindsight = true`. |
+| `enable_workspace_orchestration` | bool | `false` | Deploy S3 EventBridge/SQS routing and the workspace event dispatcher for async folder-native agent work. Also enable `tenants.workspace_orchestration_enabled` per tenant after migration. |
 | `default_model_id` | string | `"anthropic.claude-3-5-sonnet-20241022-v2:0"` | Bedrock model ID for the default Agent Template created on first deploy. |
 | `log_retention_days` | number | `30` | CloudWatch log group retention in days. Set to `0` for never expire (not recommended for production). |
 
@@ -148,6 +149,24 @@ Knowledge Base configuration (chunking strategy, data source wiring, sync schedu
 | `agentcore_timeout_seconds` | number | `900` | Lambda timeout (max 900 = 15 min). |
 | `agentcore_reserved_concurrency` | number | `-1` | Reserved concurrency for AgentCore Lambda. `-1` means unreserved (uses account limit). Set a value to cap concurrent invocations. |
 | `agentcore_container_tag` | string | `"latest"` | ECR image tag for the AgentCore container. Override to pin to a specific version. |
+
+## Workspace orchestration
+
+Workspace orchestration is the S3-backed event layer that turns files like `work/inbox/*.md`, `review/*`, and `work/runs/*/events/*.json` into canonical agent-work events. It is disabled by default so operators can roll it out tenant by tenant.
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `enable_workspace_orchestration` | bool | `false` | Enables workspace bucket EventBridge notifications, EventBridge rules, SQS queues, DLQs, and the `workspace-event-dispatcher` Lambda event source mapping. |
+
+After Terraform apply, enable the tenant row:
+
+```sql
+UPDATE tenants
+SET workspace_orchestration_enabled = true
+WHERE slug = 'acme';
+```
+
+See [Workspace Orchestration](/concepts/agents/workspace-orchestration/) for target routing, protected prefixes, runtime environment variables, and operational troubleshooting.
 
 ## Tags
 

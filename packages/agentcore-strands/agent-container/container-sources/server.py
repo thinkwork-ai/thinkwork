@@ -564,6 +564,13 @@ def _call_strands_agent(system_prompt: str, messages: list,
     except Exception as e:
         logger.warning("write_memory registration failed: %s", e)
 
+    try:
+        from wake_workspace_tool import make_wake_workspace_from_env
+        tools.append(make_wake_workspace_from_env())
+        logger.info("workspace tool registered: wake_workspace")
+    except Exception as e:
+        logger.warning("wake_workspace registration failed: %s", e)
+
     # Self-serve agent tools (docs/plans/2026-04-22-003-...-plan.md):
     #   - update_agent_name: agent renames itself
     #   - update_identity: agent edits its own IDENTITY.md personality fields

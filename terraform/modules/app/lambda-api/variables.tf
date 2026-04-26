@@ -60,6 +60,12 @@ variable "bucket_arn" {
   type        = string
 }
 
+variable "enable_workspace_orchestration" {
+  description = "Enable S3 EventBridge/SQS routing for workspace file orchestration."
+  type        = bool
+  default     = false
+}
+
 variable "user_pool_id" {
   description = "Cognito user pool ID"
   type        = string

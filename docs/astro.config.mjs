@@ -68,6 +68,14 @@ export default defineConfig({
                 },
                 { label: "Templates", slug: "concepts/agents/templates" },
                 {
+                  label: "Workspace Overlay",
+                  slug: "concepts/agents/workspace-overlay",
+                },
+                {
+                  label: "Workspace Orchestration",
+                  slug: "concepts/agents/workspace-orchestration",
+                },
+                {
                   label: "Agent Design",
                   collapsed: true,
                   items: [

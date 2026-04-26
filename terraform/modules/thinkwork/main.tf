@@ -218,6 +218,7 @@ module "api" {
   wiki_aggregation_pass_enabled      = var.wiki_aggregation_pass_enabled
   wiki_deterministic_linking_enabled = var.wiki_deterministic_linking_enabled
   google_places_api_key              = var.google_places_api_key
+  enable_workspace_orchestration     = var.enable_workspace_orchestration
 
   # Per-user OAuth client credentials — fed to Secrets Manager in
   # app/lambda-api/oauth-secrets.tf. Reuses the same google_oauth_client_*
