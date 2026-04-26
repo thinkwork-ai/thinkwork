@@ -24,11 +24,26 @@ def _get_memory_config():
     import boto3
     memory_id = os.environ.get("AGENTCORE_MEMORY_ID", "")
     region = os.environ.get("AWS_REGION", "us-east-1")
-    actor_id = os.environ.get("_ASSISTANT_ID", "")
+    actor_id = _get_user_actor_id()
     if not memory_id or not actor_id:
         return None, None, None
     client = boto3.client("bedrock-agentcore", region_name=region)
     return client, memory_id, actor_id
+
+
+def _get_user_actor_id() -> str:
+    """Return the current user id used as the managed-memory actor.
+
+    AgentCore memory, Hindsight, and wiki tools are intentionally scoped to
+    the user, not the agent/template. Do not fall back to `_ASSISTANT_ID`;
+    doing so would let delegated sub-agents write to agent-specific memory
+    while the rest of the runtime reads user-scoped memory.
+    """
+    return (
+        os.environ.get("USER_ID", "")
+        or os.environ.get("CURRENT_USER_ID", "")
+        or os.environ.get("_MCP_USER_ID", "")
+    )
 
 
 @tool
@@ -58,7 +73,7 @@ def remember(fact: str, category: str = "general") -> str:
             records=[{
                 "requestIdentifier": request_id,
                 "content": {"text": f"[{category}] {fact}"},
-                "namespaces": [f"assistant_{actor_id}"],
+                "namespaces": [f"user_{actor_id}"],
                 "timestamp": now,
             }],
         )
@@ -69,7 +84,7 @@ def remember(fact: str, category: str = "general") -> str:
 
         # 2. Also fire a CreateEvent so conversation-based strategies
         #    (summary, preference, episodic) can process it over time.
-        session_id = os.environ.get("CURRENT_THREAD_ID", f"memory_{actor_id}")
+        session_id = os.environ.get("CURRENT_THREAD_ID", f"memory_user_{actor_id}")
         client.create_event(
             memoryId=memory_id,
             actorId=actor_id,
@@ -90,7 +105,7 @@ def remember(fact: str, category: str = "general") -> str:
         import hs_urllib_client as hindsight_client
         if hindsight_client.is_available():
             try:
-                hs_bank = os.environ.get("_INSTANCE_ID", "") or actor_id
+                hs_bank = f"user_{actor_id}"
                 hindsight_client.retain(
                     bank_id=hs_bank,
                     content=f"[{category}] {fact}",
@@ -123,7 +138,9 @@ def recall(query: str, scope: str = "memory", strategy: str = "") -> str:
     """
     from memory import search_memories
 
-    actor_id = os.environ.get("_ASSISTANT_ID", "")
+    actor_id = _get_user_actor_id()
+    if not actor_id:
+        return "Memory system not configured — unable to search."
     session_id = os.environ.get("CURRENT_THREAD_ID", "")
     results = []
 
@@ -170,7 +187,7 @@ def recall(query: str, scope: str = "memory", strategy: str = "") -> str:
     import hs_urllib_client as hindsight_client
     if hindsight_client.is_available() and scope in ("all", "graph", "memory"):
         try:
-            hs_bank = os.environ.get("_INSTANCE_ID", "") or actor_id
+            hs_bank = f"user_{actor_id}"
             hs_results = hindsight_client.recall(bank_id=hs_bank, query=query, max_tokens=2000)
             if hs_results.get("results"):
                 for fact in hs_results["results"]:
@@ -237,7 +254,7 @@ def forget(query: str) -> str:
             memoryId=memory_id,
             memoryRecords=[{
                 "memoryRecordId": record_id,
-                "namespace": f"/archived/actors/{actor_id}/",
+                "namespace": f"/archived/users/{actor_id}/",
             }],
         )
         logger.info("memory_tools.forget actor=%s record=%s archived", actor_id, record_id)

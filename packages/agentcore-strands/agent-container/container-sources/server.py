@@ -259,11 +259,62 @@ def _build_system_prompt(skills_config: list | None = None, kb_config: list | No
     if _PACK_CACHE and _PACK_CACHE.body.strip():
         insert_at = 1 + len(system_parts)
         parts.insert(insert_at, _PACK_CACHE.body.strip())
+        user_id = (
+            os.environ.get("USER_ID", "")
+            or os.environ.get("CURRENT_USER_ID", "")
+        )
+        tenant_id = (
+            os.environ.get("TENANT_ID", "")
+            or os.environ.get("_MCP_TENANT_ID", "")
+        )
+        token_count = max(1, len(_PACK_CACHE.body) // 4)
         logger.info(
-            "user_knowledge_pack injected chars=%d etag=%s",
+            "pack_injected tenant_id=%s user_id=%s scope=user "
+            "token_count=%d chars=%d etag=%s",
+            tenant_id,
+            user_id,
+            token_count,
             len(_PACK_CACHE.body),
             (_PACK_CACHE.etag or "")[:12],
+            extra={
+                "event_type": "pack_injected",
+                "tenant_id": tenant_id,
+                "user_id": user_id,
+                "scope": "user",
+                "token_count": token_count,
+            },
         )
+        if _PACK_CACHE.last_modified is not None:
+            try:
+                from datetime import datetime, timezone
+
+                last_modified = _PACK_CACHE.last_modified
+                if last_modified.tzinfo is None:
+                    last_modified = last_modified.replace(tzinfo=timezone.utc)
+                age_seconds = max(
+                    0,
+                    int(
+                        (
+                            datetime.now(timezone.utc) - last_modified
+                        ).total_seconds()
+                    ),
+                )
+                logger.info(
+                    "pack_age_at_load_seconds tenant_id=%s user_id=%s "
+                    "scope=user age_seconds=%d",
+                    tenant_id,
+                    user_id,
+                    age_seconds,
+                    extra={
+                        "event_type": "pack_age_at_load_seconds",
+                        "tenant_id": tenant_id,
+                        "user_id": user_id,
+                        "scope": "user",
+                        "age_seconds": age_seconds,
+                    },
+                )
+            except Exception as exc:
+                logger.debug("pack age calculation skipped: %s", exc)
 
     if len(parts) > 0:
         logger.info("System prompt built from %d parts, total chars=%d", len(parts), sum(len(p) for p in parts))
@@ -333,11 +384,29 @@ def _ensure_workspace_ready(workspace_tenant_id: str, assistant_id: str,
         return
 
     user_id = os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", "")
-    _PACK_CACHE = get_user_knowledge_pack(
-        workspace_tenant_id,
-        user_id,
-        bucket=os.environ.get("WORKSPACE_BUCKET") or os.environ.get("AGENTCORE_FILES_BUCKET"),
-    )
+    if user_id:
+        _PACK_CACHE = get_user_knowledge_pack(
+            workspace_tenant_id,
+            user_id,
+            bucket=(
+                os.environ.get("WORKSPACE_BUCKET")
+                or os.environ.get("AGENTCORE_FILES_BUCKET")
+            ),
+        )
+    else:
+        _PACK_CACHE = None
+        logger.info(
+            "pack_skipped reason=no_user_id tenant_id=%s agent_id=%s",
+            workspace_tenant_id,
+            assistant_id,
+            extra={
+                "event_type": "pack_skipped",
+                "reason": "no_user_id",
+                "tenant_id": workspace_tenant_id,
+                "agent_id": assistant_id,
+                "scope": "user",
+            },
+        )
     pack_etag = _PACK_CACHE.etag if _PACK_CACHE else "none"
 
     # Client-side fingerprint skip: if composer returns the same set of

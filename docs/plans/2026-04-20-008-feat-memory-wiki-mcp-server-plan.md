@@ -26,7 +26,7 @@ External agents (Claude Code et al.) have rich contextual awareness of a user's 
 - **R4.** External-origin retains render only in a new "External memories" panel on mobile — never as user messages in the conversation view — tagged with the connected client's name (origin: Mobile display rule).
 - **R5.** `retain` passes content through a credential-redaction pass (common API key regex bank) before invoking `memory-retain`. Redactions are counted for observability; content is never logged (origin: Content safety).
 - **R6.** Caller-supplied `threadId` is validated against the connected `(userId, agentId)`; unowned → 403. When unsupplied, the server mints a server-minted synthetic thread per `(userId, agentId, clientId)` — never caller-controlled (origin: `retain` surface detail).
-- **R7.** Tenant scoping is defense-in-depth: MCP edge enforces bound context, adapter + GraphQL resolvers independently re-enforce `(tenantId, agentId)` (origin: All tools scope…).
+- **R7.** Tenant scoping is defense-in-depth: MCP edge enforces bound context, memory adapters independently re-enforce `(tenantId, agentId)`, and wiki resolvers independently re-enforce `(tenantId, userId)` (origin: All tools scope…).
 - **R8.** Rate limiting is enforced at the edge: retain 30/min, recall/search 60/min per `(userId, agentId)`, 429 with `Retry-After` on breach (origin: Inbound OAuth).
 - **R9.** `memory-retain` is invoked **RequestResponse** (not fire-and-forget) so tool-call errors surface to the caller (origin: `retain` surface detail; aligns with the repo's "avoid fire-and-forget for user-driven writes" rule).
 - **R10.** `memory_recall` calls `recall` only — never `reflect` — given adapter capability disparity. Per-result size capped at 2 KB (origin: `memory_recall` surface detail).
@@ -511,8 +511,8 @@ Lambda authorizer -> MCP handler
 **Approach:**
 - Import `wikiSearch` resolver from `packages/api/src/graphql/resolvers/wiki/wikiSearch.query.ts`.
 - Synthesize `ctx` with `auth: { authType: "cognito", principalId: <Cognito sub from connection context>, tenantId, email: null }` — matches the `AuthResult` interface in `packages/api/src/lib/cognito-auth.ts` verbatim. `principalId` MUST be the Cognito sub (not AgentCore Identity's subject) so `resolveCallerTenantId(ctx)` fallback resolves for Google-federated users.
-- `ownerId` = `agentId` from connection context (matches existing agent-scoped wiki convention).
-- Pass `{ tenantId, ownerId: agentId, query, limit: min(limit ?? 10, 20) }`.
+- `ownerId` = `userId` (`user_id`) from connection context. Wiki ownership is now user-scoped, not agent-scoped.
+- Pass `{ tenantId, ownerId: userId, query, limit: min(limit ?? 10, 20) }`.
 - Response shape passes through from resolver untouched (matches R11).
 
 **Patterns to follow:** `packages/api/src/graphql/context.ts` for `ctx.auth` shape.
@@ -520,6 +520,7 @@ Lambda authorizer -> MCP handler
 **Test scenarios:**
 - Happy path: query with matches → resolver's hit list passed through verbatim.
 - Edge case: no matches → empty array.
+- Scope regression: connection context has `userId=U1` and `agentId=A1`; resolver is called with `ownerId=U1`, never `A1`.
 - Error path: resolver throws `AuthorizationError` → MCP error; should not happen given synthesized ctx, but defensive.
 - Integration: resolver-layer test with tampered synthesized tenantId → `assertCanReadWikiScope` rejects; MCP layer returns authorization error.
 
