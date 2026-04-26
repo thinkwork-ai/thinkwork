@@ -11,7 +11,7 @@
  */
 
 import { randomBytes } from "crypto";
-import { eq, and, sql, asc, desc } from "drizzle-orm";
+import { eq, and, sql, asc, desc, inArray } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   agentWakeupRequests,
@@ -62,6 +62,13 @@ import {
   resolveWorkflowConfig,
   renderPromptTemplate,
 } from "../lib/orchestration/index.js";
+import {
+  normalizeWorkspaceWakeupPayload,
+  type NormalizedWorkspaceWakeupPayload,
+} from "../lib/workspace-events/wakeup-payload.js";
+import {
+  WORKSPACE_TURN_IN_FLIGHT_STATUSES,
+} from "../lib/workspace-events/run-lifecycle.js";
 import type { PromptTemplateContext } from "../lib/orchestration/index.js";
 
 const AGENTCORE_INVOKE_URL = process.env.AGENTCORE_INVOKE_URL || "";
@@ -397,7 +404,11 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   );
 
   const payload = wakeup.payload as Record<string, unknown> | null;
-  if (wakeup.source === "workspace_event" && !payload?.workspaceRunId) {
+  const workspacePayload =
+    wakeup.source === "workspace_event"
+      ? normalizeWorkspaceWakeupPayload(payload)
+      : null;
+  if (wakeup.source === "workspace_event" && !workspacePayload?.workspaceRunId) {
     throw new Error(
       "workspace_event wakeup payload missing required workspaceRunId",
     );
@@ -893,15 +904,22 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     .set({ run_id: run.id })
     .where(eq(agentWakeupRequests.id, wakeup.id));
 
-  if (wakeup.source === "workspace_event" && payload?.workspaceRunId) {
+  if (wakeup.source === "workspace_event" && workspacePayload?.workspaceRunId) {
     await db
       .update(agentWorkspaceRuns)
-      .set({ current_thread_turn_id: run.id, updated_at: now })
+      .set({
+        status: "processing",
+        current_wakeup_request_id: wakeup.id,
+        current_thread_turn_id: run.id,
+        last_event_at: now,
+        updated_at: now,
+      })
       .where(
         and(
-          eq(agentWorkspaceRuns.id, String(payload.workspaceRunId)),
+          eq(agentWorkspaceRuns.id, workspacePayload.workspaceRunId),
           eq(agentWorkspaceRuns.tenant_id, wakeup.tenant_id),
           eq(agentWorkspaceRuns.agent_id, wakeup.agent_id),
+          inArray(agentWorkspaceRuns.status, ["pending", "claimed"]),
         ),
       );
   }
@@ -1033,10 +1051,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       break;
     }
     case "workspace_event": {
-      const workspaceRunId = String(payload?.workspaceRunId || "");
-      const targetPath = String(payload?.workspaceTargetPath || ".");
-      const requestObjectKey = String(payload?.workspaceRequestObjectKey || "");
-      const causeType = String(payload?.causeType || "workspace_event");
+      const workspaceRunId = workspacePayload?.workspaceRunId ?? "";
+      const targetPath = workspacePayload?.targetPath ?? ".";
+      const requestObjectKey = workspacePayload?.requestObjectKey ?? "";
+      const causeType = workspacePayload?.causeType ?? "workspace_event";
       agentMessage = [
         "You were woken by a workspace file event.",
         "",
@@ -1237,17 +1255,17 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       browser_automation_enabled: browserAutomationEnabled || undefined,
     };
 
-    if (wakeup.source === "workspace_event" && payload) {
+    if (wakeup.source === "workspace_event" && workspacePayload) {
       Object.assign(agentCorePayload, {
-        workspace_run_id: payload.workspaceRunId,
-        workspace_target_path: payload.workspaceTargetPath,
-        workspace_source_object_key: payload.workspaceSourceObjectKey,
-        workspace_event_id: payload.workspaceEventId,
-        workspace_request_object_key: payload.workspaceRequestObjectKey,
-        cause_event_id: payload.causeEventId,
-        cause_type: payload.causeType,
-        workspace_depth: payload.depth,
-        workspace_resume_reason: payload.workspaceResumeReason,
+        workspace_run_id: workspacePayload.workspaceRunId,
+        workspace_target_path: workspacePayload.targetPath,
+        workspace_source_object_key: workspacePayload.sourceObjectKey,
+        workspace_event_id: workspacePayload.workspaceEventId,
+        workspace_request_object_key: workspacePayload.requestObjectKey,
+        cause_event_id: workspacePayload.causeEventId,
+        cause_type: workspacePayload.causeType,
+        workspace_depth: workspacePayload.depth,
+        workspace_resume_reason: workspacePayload.resumeReason,
       });
     }
 
@@ -1803,6 +1821,13 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       })
       .where(eq(threadTurns.id, run.id));
 
+    await updateWorkspaceRunAfterTurn(
+      workspacePayload,
+      wakeup,
+      run.id,
+      "completed",
+    );
+
     // Log completion event
     await insertRunEvent(
       run.id,
@@ -1904,6 +1929,13 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       })
       .where(eq(threadTurns.id, run.id));
 
+    await updateWorkspaceRunAfterTurn(
+      workspacePayload,
+      wakeup,
+      run.id,
+      "failed",
+    );
+
     // Log error event
     await insertRunEvent(
       run.id,
@@ -2000,6 +2032,36 @@ async function failWakeup(wakeupId: string, error: string): Promise<void> {
     .update(agentWakeupRequests)
     .set({ status: "failed", finished_at: new Date() })
     .where(eq(agentWakeupRequests.id, wakeupId));
+}
+
+async function updateWorkspaceRunAfterTurn(
+  workspacePayload: NormalizedWorkspaceWakeupPayload | null,
+  wakeup: WakeupRow,
+  threadTurnId: string,
+  status: "completed" | "failed",
+): Promise<void> {
+  if (!workspacePayload?.workspaceRunId) return;
+  const finishedAt = new Date();
+  await db
+    .update(agentWorkspaceRuns)
+    .set({
+      status,
+      completed_at: finishedAt,
+      last_event_at: finishedAt,
+      updated_at: finishedAt,
+    })
+    .where(
+      and(
+        eq(agentWorkspaceRuns.id, workspacePayload.workspaceRunId),
+        eq(agentWorkspaceRuns.tenant_id, wakeup.tenant_id),
+        eq(agentWorkspaceRuns.agent_id, wakeup.agent_id),
+        eq(agentWorkspaceRuns.current_wakeup_request_id, wakeup.id),
+        eq(agentWorkspaceRuns.current_thread_turn_id, threadTurnId),
+        inArray(agentWorkspaceRuns.status, [
+          ...WORKSPACE_TURN_IN_FLIGHT_STATUSES,
+        ]),
+      ),
+    );
 }
 
 async function insertRunEvent(
