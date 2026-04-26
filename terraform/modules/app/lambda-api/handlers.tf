@@ -22,6 +22,9 @@ locals {
     COGNITO_USER_POOL_ID   = var.user_pool_id
     ADMIN_CLIENT_ID        = var.admin_client_id
     MOBILE_CLIENT_ID       = var.mobile_client_id
+    COGNITO_MCP_CLIENT_ID  = aws_cognito_user_pool_client.mcp_oauth.id
+    COGNITO_AUTH_BASE_URL  = local.mcp_oauth_cognito_base_url
+    MCP_OAUTH_CALLBACK_URL = "${local.mcp_oauth_api_base_url}/mcp/oauth/callback"
     COGNITO_APP_CLIENT_IDS = "${var.admin_client_id},${var.mobile_client_id}"
     APPSYNC_ENDPOINT       = var.appsync_api_url
     APPSYNC_API_KEY        = var.appsync_api_key
@@ -145,6 +148,8 @@ resource "aws_lambda_function" "handler" {
     "users",
     "invites",
     "skills",
+    "mcp-oauth",
+    "mcp-user-memory",
     "activity",
     "routines",
     "budgets",
@@ -309,6 +314,21 @@ locals {
     "ANY /api/skills/{proxy+}" = "skills"
     "ANY /api/skills"          = "skills"
 
+    # User Memory MCP OAuth/resource-server unblocker. These endpoints are
+    # enough for `codex mcp login thinkwork-user-memory-dev` to discover OAuth,
+    # register as a public PKCE client, sign the user in through Cognito, and
+    # receive a bearer token for the User Memory MCP resource.
+    "GET /.well-known/oauth-protected-resource"          = "mcp-oauth"
+    "GET /.well-known/oauth-protected-resource/{proxy+}" = "mcp-oauth"
+    "GET /.well-known/oauth-authorization-server"        = "mcp-oauth"
+    "GET /.well-known/openid-configuration"              = "mcp-oauth"
+    "GET /mcp/oauth/jwks"                                = "mcp-oauth"
+    "POST /mcp/oauth/register"                           = "mcp-oauth"
+    "GET /mcp/oauth/authorize"                           = "mcp-oauth"
+    "GET /mcp/oauth/callback"                            = "mcp-oauth"
+    "POST /mcp/oauth/token"                              = "mcp-oauth"
+    "ANY /mcp/user-memory"                               = "mcp-user-memory"
+
     # Activity
     "ANY /api/activity/{proxy+}" = "activity"
     "ANY /api/activity"          = "activity"
@@ -351,12 +371,12 @@ locals {
 
     # Activation Agent runtime writeback. Shared API_AUTH_SECRET; OPTIONS
     # short-circuits in the handler before auth.
-    "POST /api/activation/notify"      = "activation"
-    "OPTIONS /api/activation/notify"   = "activation"
-    "POST /api/activation/checkpoint"  = "activation"
+    "POST /api/activation/notify"        = "activation"
+    "OPTIONS /api/activation/notify"     = "activation"
+    "POST /api/activation/checkpoint"    = "activation"
     "OPTIONS /api/activation/checkpoint" = "activation"
-    "POST /api/activation/complete"    = "activation"
-    "OPTIONS /api/activation/complete" = "activation"
+    "POST /api/activation/complete"      = "activation"
+    "OPTIONS /api/activation/complete"   = "activation"
 
     # Job Schedule Manager (EventBridge CRUD)
     "ANY /api/job-schedules/{proxy+}" = "job-schedule-manager"
