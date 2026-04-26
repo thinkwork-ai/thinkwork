@@ -51,7 +51,6 @@ export const WORKSPACE_EVENT_PREFIX_PATTERNS = [
   "tenants/*/agents/*/workspace/*/errors/*",
   "tenants/*/agents/*/workspace/events/intents/*.json",
   "tenants/*/agents/*/workspace/*/events/intents/*.json",
-  "tenants/*/agents/*/workspace/events/audit/*",
 ] as const;
 
 export async function handler(event: SqsEvent): Promise<BatchResponse> {
@@ -83,6 +82,13 @@ export async function processRecord(
   }
 
   const decodedKey = decodeURIComponent(key.replace(/\+/g, " "));
+  if (isWorkspaceAuditObjectKey(decodedKey)) {
+    console.log("[workspace-event-dispatcher] ignored_audit_key", {
+      key: decodedKey,
+    });
+    return null;
+  }
+
   const parsedKey = parseWorkspaceEventKey(decodedKey);
   if (!parsedKey) {
     console.warn("[workspace-event-dispatcher] ignored_non_eventful_key", {
@@ -163,4 +169,8 @@ export async function processRecord(
     },
     { s3 },
   );
+}
+
+function isWorkspaceAuditObjectKey(key: string): boolean {
+  return /\/workspace(?:\/[^/]+)*\/events\/audit(?:\/|$)/.test(key);
 }

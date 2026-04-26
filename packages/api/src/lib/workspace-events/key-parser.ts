@@ -5,7 +5,6 @@ export type WorkspaceEventfulKind =
   | "memory"
   | "review"
   | "errors"
-  | "audit"
   | "intent";
 
 export interface ParsedWorkspaceEventKey {
@@ -119,17 +118,6 @@ export function parseWorkspaceEventKey(
     };
   }
 
-  if (eventful[0] === "events" && eventful[1] === "audit" && fileName) {
-    return {
-      tenantSlug,
-      agentSlug,
-      workspaceRelativePath,
-      targetPath,
-      eventfulKind: "audit",
-      fileName,
-    };
-  }
-
   if (eventful[0] === "events" && eventful[1] === "intents" && fileName) {
     return {
       tenantSlug,
@@ -143,4 +131,3 @@ export function parseWorkspaceEventKey(
 
   return null;
 }
-
