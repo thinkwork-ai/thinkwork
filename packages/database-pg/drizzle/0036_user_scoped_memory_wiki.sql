@@ -15,12 +15,12 @@
 -- creates-column: public.threads.user_id
 -- creates-column: public.users.wiki_compile_external_enabled
 -- creates: public.idx_threads_tenant_user
--- creates: public.threads_user_id_users_id_fk
--- creates: public.wiki_pages_owner_id_users_id_fk
--- creates: public.wiki_unresolved_mentions_owner_id_users_id_fk
--- creates: public.wiki_compile_jobs_owner_id_users_id_fk
--- creates: public.wiki_compile_cursors_owner_id_users_id_fk
--- creates: public.wiki_places_owner_id_users_id_fk
+-- creates-constraint: public.threads.threads_user_id_users_id_fk
+-- creates-constraint: public.wiki_pages.wiki_pages_owner_id_users_id_fk
+-- creates-constraint: public.wiki_unresolved_mentions.wiki_unresolved_mentions_owner_id_users_id_fk
+-- creates-constraint: public.wiki_compile_jobs.wiki_compile_jobs_owner_id_users_id_fk
+-- creates-constraint: public.wiki_compile_cursors.wiki_compile_cursors_owner_id_users_id_fk
+-- creates-constraint: public.wiki_places.wiki_places_owner_id_users_id_fk
 
 \set ON_ERROR_STOP on
 
