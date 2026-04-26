@@ -52,6 +52,22 @@ describe("mcp-oauth handler", () => {
 		expect(JSON.parse(response.body || "{}").error).toBe("invalid_redirect_uri");
 	});
 
+	it("accepts Codex registration requests that include refresh_token grant metadata", async () => {
+		const response = await handler(
+			event("POST", "/mcp/oauth/register", {
+				client_name: "Codex",
+				redirect_uris: ["http://127.0.0.1:43210/callback"],
+				grant_types: ["authorization_code", "refresh_token"],
+				response_types: ["code"],
+				token_endpoint_auth_method: "none",
+			}),
+		);
+		expect(response.statusCode).toBe(201);
+		const body = JSON.parse(response.body || "{}");
+		expect(body.grant_types).toEqual(["authorization_code"]);
+		expect(body.client_id).toEqual(expect.any(String));
+	});
+
 	it("registers Codex loopback redirect URIs and redirects authorize requests to Cognito", async () => {
 		const registration = await handler(
 			event("POST", "/mcp/oauth/register", {
