@@ -24,6 +24,7 @@ Run with::
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from unittest.mock import MagicMock
 
@@ -99,6 +100,22 @@ def _capture_factory(monkeypatch):
         delegate_to_workspace_tool, "make_delegate_to_workspace_fn", spy
     )
     return spy
+
+
+class TestWorkspaceBucketEnvAlias:
+    def test_payload_workspace_bucket_sets_both_runtime_env_names(self, monkeypatch):
+        monkeypatch.delenv("AGENTCORE_FILES_BUCKET", raising=False)
+        monkeypatch.delenv("WORKSPACE_BUCKET", raising=False)
+
+        server._apply_workspace_bucket_env("workspace-bucket-a")
+
+        assert os.environ["AGENTCORE_FILES_BUCKET"] == "workspace-bucket-a"
+        assert os.environ["WORKSPACE_BUCKET"] == "workspace-bucket-a"
+
+        server._apply_workspace_bucket_env("workspace-bucket-b")
+
+        assert os.environ["AGENTCORE_FILES_BUCKET"] == "workspace-bucket-b"
+        assert os.environ["WORKSPACE_BUCKET"] == "workspace-bucket-b"
 
 
 # ────────────────────────────────────────────────────────────────────────────

@@ -245,6 +245,9 @@ export async function decideWorkspaceReview(
     payload: {
       workspaceRunId: run.id,
       workspaceEventId: event.id,
+      workspaceTargetPath: run.target_path,
+      workspaceSourceObjectKey: latestReviewEvent?.source_object_key ?? null,
+      workspaceRequestObjectKey: latestReviewEvent?.source_object_key ?? null,
       targetPath: run.target_path,
       decision: input.decision,
       notes: input.values?.notes ?? null,
