@@ -52,6 +52,16 @@ DEFAULT_MODEL = "us.anthropic.claude-sonnet-4-6"
 
 _workspace_loaded_key = None
 
+
+def _apply_workspace_bucket_env(bucket: str) -> None:
+    if not bucket:
+        return
+    os.environ["AGENTCORE_FILES_BUCKET"] = bucket
+    os.environ["WORKSPACE_BUCKET"] = bucket
+
+
+_apply_workspace_bucket_env(os.environ.get("AGENTCORE_FILES_BUCKET", ""))
+
 # The personality-template constant used to drive _fetch_memory_templates
 # / _bootstrap_personality_files. Those functions are gone (Unit 7) —
 # everything flows through the composer now. The list lives in
@@ -2036,8 +2046,7 @@ def _execute_agent_turn(payload: dict) -> dict:
     # Set per-payload env (caller already ran apply_invocation_env for
     # identity; these are orthogonal — workspace / composer / hindsight).
     workspace_bucket = payload.get("workspace_bucket") or ""
-    if workspace_bucket:
-        os.environ["AGENTCORE_FILES_BUCKET"] = workspace_bucket
+    _apply_workspace_bucket_env(workspace_bucket)
     thinkwork_api_url = payload.get("thinkwork_api_url") or ""
     if thinkwork_api_url:
         os.environ["THINKWORK_API_URL"] = thinkwork_api_url

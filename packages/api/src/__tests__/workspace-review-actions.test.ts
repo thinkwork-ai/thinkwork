@@ -140,6 +140,12 @@ describe("workspace review actions", () => {
     expect(wakeups[0].payload).toMatchObject({
       workspaceRunId: RUN_ID,
       workspaceEventId: 42,
+      workspaceTargetPath: "customers/acme",
+      workspaceSourceObjectKey:
+        "tenants/acme/agents/marco/workspace/review/run.needs-human.md",
+      workspaceRequestObjectKey:
+        "tenants/acme/agents/marco/workspace/review/run.needs-human.md",
+      targetPath: "customers/acme",
       threadId: THREAD_ID,
       causeType: "review.responded",
     });

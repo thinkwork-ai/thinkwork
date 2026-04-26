@@ -180,6 +180,11 @@ describe("workspace event processor", () => {
     expect(wakeups[0].payload).toMatchObject({
       workspaceRunId: RUN_ID,
       workspaceEventId: 42,
+      workspaceTargetPath: "customers/acme",
+      workspaceSourceObjectKey:
+        "tenants/acme/agents/marco/workspace/customers/acme/work/inbox/request.md",
+      workspaceRequestObjectKey:
+        "tenants/acme/agents/marco/workspace/customers/acme/work/inbox/request.md",
       targetPath: "customers/acme",
       causeType: "work.requested",
     });

@@ -405,6 +405,9 @@ async function maybeEnqueueWakeup(
     payload: {
       workspaceRunId: run.id,
       workspaceEventId: eventId,
+      workspaceTargetPath: parsedKey.targetPath,
+      workspaceSourceObjectKey: metadata.sourceObjectKey,
+      workspaceRequestObjectKey: metadata.sourceObjectKey,
       targetPath: parsedKey.targetPath,
       workspaceRelativePath: parsedKey.workspaceRelativePath,
       sourceObjectKey: metadata.sourceObjectKey,
