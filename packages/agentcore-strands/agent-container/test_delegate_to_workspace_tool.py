@@ -1082,6 +1082,25 @@ class TestLiveSpawnSystemPromptComposition:
         assert "PLATFORM rules" in sys_prompt
         assert "GUARDRAILS" in sys_prompt
 
+    def test_system_prompt_includes_user_knowledge_pack_when_present(self):
+        """Sub-agents inherit the same user-scoped distilled knowledge pack
+        as the parent runtime through the factory-snapshotted tool context.
+        """
+        tool_fn, captured = _build_live_factory(
+            composer_files=_expenses_tree(),
+            tool_context={
+                "knowledge_pack_body": (
+                    '<user_distilled_knowledge_test scope="user">'
+                    "User likes concise plans."
+                    "</user_distilled_knowledge_test>"
+                )
+            },
+        )
+        tool_fn(path="expenses", task="t")
+        sys_prompt = captured["agent_kwargs"]["system_prompt"]
+        assert "<user_distilled_knowledge_test" in sys_prompt
+        assert "User likes concise plans." in sys_prompt
+
 
 class TestLiveSpawnSnapshotPattern:
     """``feedback_completion_callback_snapshot_pattern``: the spawn body

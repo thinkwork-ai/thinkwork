@@ -212,7 +212,10 @@ is yours to compose."""
 
 
 def _build_sub_agent_system_prompt(
-    *, normalized_path: str, composed_tree: Sequence[Mapping[str, Any]]
+    *,
+    normalized_path: str,
+    composed_tree: Sequence[Mapping[str, Any]],
+    knowledge_pack_body: str = "",
 ) -> str:
     """Compose the sub-agent's system prompt from the composed tree.
 
@@ -252,6 +255,12 @@ def _build_sub_agent_system_prompt(
         body = by_path.get(sysfile)
         if body and body.strip():
             parts.append(body.strip())
+
+    # 1b. User-scoped distilled knowledge. The parent runtime snapshots this
+    # from S3 at registration time; sub-agents receive the same pack as the
+    # parent so delegated work is not memory-blind.
+    if knowledge_pack_body and knowledge_pack_body.strip():
+        parts.append(knowledge_pack_body.strip())
 
     # 2. Sub-agent's CONTEXT.md (behavioral context).
     ctx_body = by_path.get(f"{normalized_path}/CONTEXT.md")
@@ -474,6 +483,7 @@ def _make_live_spawn_fn(
         system_prompt = _build_sub_agent_system_prompt(
             normalized_path=normalized_path,
             composed_tree=composed_tree,
+            knowledge_pack_body=str(snap_tool_context.get("knowledge_pack_body") or ""),
         )
         sub_agent_tools = _build_sub_agent_tools(
             resolved_skills,

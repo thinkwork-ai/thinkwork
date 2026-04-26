@@ -10,12 +10,21 @@
  * the retry queue can decide what to do without a CloudWatch alarm storm.
  */
 
+import { S3Client } from "@aws-sdk/client-s3";
+
 import { runCompileJob, runJobById } from "../lib/wiki/compiler.js";
-import { claimNextCompileJob } from "../lib/wiki/repository.js";
+import {
+	claimNextCompileJob,
+	getCompileJob,
+	type WikiCompileJobRow,
+} from "../lib/wiki/repository.js";
+import { writeUserKnowledgePack } from "../lib/wiki/pack-renderer.js";
 import {
 	loadGooglePlacesClientFromSsm,
 	type GooglePlacesClient,
 } from "../lib/wiki/google-places-client.js";
+
+const s3 = new S3Client({});
 
 // Pre-warm the Google Places client on cold start so the "initialized" vs
 // "key missing" log line lands immediately instead of at first compile.
@@ -64,10 +73,15 @@ export async function handler(
 			googlePlacesClient,
 		};
 		if (event?.jobId) {
+			const job = await getCompileJob(event.jobId);
+			if (!job || job.status === "succeeded" || job.status === "skipped") {
+				return { ok: true, jobId: event.jobId, status: "already_done" };
+			}
 			const result = await runJobById(event.jobId, opts);
 			if (!result) {
 				return { ok: true, jobId: event.jobId, status: "already_done" };
 			}
+			await writePackIfSucceeded(job, result.status);
 			return {
 				ok: result.status === "succeeded",
 				jobId: result.jobId,
@@ -82,6 +96,7 @@ export async function handler(
 			return { ok: true, status: "no_job" };
 		}
 		const result = await runCompileJob(claimed, opts);
+		await writePackIfSucceeded(claimed, result.status);
 		return {
 			ok: result.status === "succeeded",
 			jobId: result.jobId,
@@ -93,5 +108,25 @@ export async function handler(
 		const msg = (err as Error)?.message || String(err);
 		console.error(`[wiki-compile] unexpected error: ${msg}`);
 		return { ok: false, error: msg };
+	}
+}
+
+async function writePackIfSucceeded(
+	job: WikiCompileJobRow,
+	status: "succeeded" | "failed",
+): Promise<void> {
+	if (status !== "succeeded") return;
+	try {
+		await writeUserKnowledgePack({
+			tenantId: job.tenant_id,
+			userId: job.owner_id,
+			s3Client: s3,
+		});
+	} catch (err) {
+		console.warn("[wiki-pack] pack_s3_put_failed", {
+			tenantId: job.tenant_id,
+			userId: job.owner_id,
+			error: (err as Error)?.message ?? String(err),
+		});
 	}
 }

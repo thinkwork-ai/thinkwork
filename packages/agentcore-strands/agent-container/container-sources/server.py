@@ -92,6 +92,7 @@ from workspace_composer_client import (
     fetch_composed_workspace,
     write_composed_to_dir,
 )
+from user_storage import PackResult, get_user_knowledge_pack
 
 
 # Cache the hash of the last composed-list result so we skip rewriting
@@ -99,6 +100,7 @@ from workspace_composer_client import (
 # this client-side short-circuit keep mass-wakeup bootstrap cost bounded
 # (see plan's project_enterprise_onboarding_scale memory).
 _composed_fingerprint: str | None = None
+_PACK_CACHE: PackResult | None = None
 
 
 def _retrieve_kb_context(kb_config: list, query: str, max_results: int = 5) -> str:
@@ -254,6 +256,15 @@ def _build_system_prompt(skills_config: list | None = None, kb_config: list | No
             parts.insert(1 + i, sp)
         logger.info("Loaded %d system workspace files", len(system_parts))
 
+    if _PACK_CACHE and _PACK_CACHE.body.strip():
+        insert_at = 1 + len(system_parts)
+        parts.insert(insert_at, _PACK_CACHE.body.strip())
+        logger.info(
+            "user_knowledge_pack injected chars=%d etag=%s",
+            len(_PACK_CACHE.body),
+            (_PACK_CACHE.etag or "")[:12],
+        )
+
     if len(parts) > 0:
         logger.info("System prompt built from %d parts, total chars=%d", len(parts), sum(len(p) for p in parts))
         return "\n\n---\n\n".join(parts)
@@ -274,7 +285,7 @@ def _ensure_workspace_ready(workspace_tenant_id: str, assistant_id: str,
     normal operation every file comes from the composer — that's what
     closes the "first boot forks every agent's S3 state" regression.
     """
-    global _workspace_loaded_key, _composed_fingerprint
+    global _workspace_loaded_key, _composed_fingerprint, _PACK_CACHE
 
     # tenant_slug / instance_id are the legacy fallback fields; the composer
     # itself only needs tenant UUID + agent UUID.
@@ -321,9 +332,19 @@ def _ensure_workspace_ready(workspace_tenant_id: str, assistant_id: str,
         logger.warning("workspace_sync composer fetch failed: %s", e)
         return
 
+    user_id = os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", "")
+    _PACK_CACHE = get_user_knowledge_pack(
+        workspace_tenant_id,
+        user_id,
+        bucket=os.environ.get("WORKSPACE_BUCKET") or os.environ.get("AGENTCORE_FILES_BUCKET"),
+    )
+    pack_etag = _PACK_CACHE.etag if _PACK_CACHE else "none"
+
     # Client-side fingerprint skip: if composer returns the same set of
-    # {path, sha256} as last time, don't rewrite /tmp/workspace.
-    fingerprint = compute_fingerprint(files)
+    # {path, sha256} and the user knowledge pack ETag has not changed, don't
+    # rewrite /tmp/workspace. The pack is prompt-only, but sharing one
+    # fingerprint keeps warm-container invalidation easy to reason about.
+    fingerprint = f"{compute_fingerprint(files)}:pack:{pack_etag}"
     if fingerprint == _composed_fingerprint and _workspace_loaded_key:
         logger.info("workspace_sync action=skip reason=fingerprint_match files=%d",
                      len(files))
@@ -421,6 +442,8 @@ def _register_delegate_to_workspace_tool(
         ],
         "wiki_tenant_id": _hs_tenant,
         "wiki_owner_id": _hs_owner_id,
+        "knowledge_pack_body": _PACK_CACHE.body if _PACK_CACHE else "",
+        "knowledge_pack_etag": _PACK_CACHE.etag if _PACK_CACHE else "",
     }
 
     missing: list[str] = []

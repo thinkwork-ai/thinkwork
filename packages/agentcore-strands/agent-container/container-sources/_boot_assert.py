@@ -58,6 +58,7 @@ EXPECTED_CONTAINER_SOURCES: tuple[str, ...] = (
     "update_agent_name_tool",
     "update_identity_tool",
     "update_user_profile_tool",
+    "user_storage",
     "wiki_tools",
     "workflow_skill_context",
     "workspace_composer_client",
