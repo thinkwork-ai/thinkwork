@@ -56,6 +56,9 @@ describe("workspace event dispatcher candidate handling", () => {
     expect(WORKSPACE_EVENT_PREFIX_PATTERNS).toContain(
       "tenants/*/agents/*/workspace/review/*",
     );
+    expect(WORKSPACE_EVENT_PREFIX_PATTERNS).not.toContain(
+      "tenants/*/agents/*/workspace/events/audit/*",
+    );
   });
 
   it("processes valid candidates without batch failures", async () => {
@@ -114,5 +117,22 @@ describe("workspace event dispatcher candidate handling", () => {
       expect.anything(),
       expect.anything(),
     );
+  });
+
+  it("ignores audit mirror creates and deletes before persistence", async () => {
+    for (const detailType of ["Object Created", "Object Deleted"]) {
+      const result = await handler(
+        sqsEvent(
+          "tenants/acme/agents/marco/workspace/events/audit/2026-04-26/42.json",
+          `msg-${detailType}`,
+          detailType,
+        ),
+      );
+
+      expect(result.batchItemFailures).toEqual([]);
+    }
+
+    expect(s3Mock.commandCalls(HeadObjectCommand)).toHaveLength(0);
+    expect(persistWorkspaceEventMock).not.toHaveBeenCalled();
   });
 });
