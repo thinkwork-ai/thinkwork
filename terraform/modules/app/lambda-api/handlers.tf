@@ -150,6 +150,8 @@ resource "aws_lambda_function" "handler" {
     "budgets",
     "guardrails",
     "scheduled-jobs",
+    "activation",
+    "activation-apply-worker",
     "job-schedule-manager",
     "job-trigger",
     "webhooks",
@@ -346,6 +348,15 @@ locals {
     "ANY /api/scheduled-jobs"          = "scheduled-jobs"
     "ANY /api/thread-turns/{proxy+}"   = "scheduled-jobs"
     "ANY /api/thread-turns"            = "scheduled-jobs"
+
+    # Activation Agent runtime writeback. Shared API_AUTH_SECRET; OPTIONS
+    # short-circuits in the handler before auth.
+    "POST /api/activation/notify"      = "activation"
+    "OPTIONS /api/activation/notify"   = "activation"
+    "POST /api/activation/checkpoint"  = "activation"
+    "OPTIONS /api/activation/checkpoint" = "activation"
+    "POST /api/activation/complete"    = "activation"
+    "OPTIONS /api/activation/complete" = "activation"
 
     # Job Schedule Manager (EventBridge CRUD)
     "ANY /api/job-schedules/{proxy+}" = "job-schedule-manager"

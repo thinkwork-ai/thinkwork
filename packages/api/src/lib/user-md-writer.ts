@@ -20,32 +20,33 @@
  */
 
 import {
-	GetObjectCommand,
-	NoSuchKey,
-	PutObjectCommand,
-	S3Client,
+  GetObjectCommand,
+  NoSuchKey,
+  PutObjectCommand,
+  S3Client,
 } from "@aws-sdk/client-s3";
 import { eq } from "drizzle-orm";
 import {
-	agents,
-	agentTemplates,
-	tenants,
-	users,
-	userProfiles,
+  agents,
+  agentTemplates,
+  tenants,
+  users,
+  userProfiles,
 } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "../graphql/utils.js";
 import {
-	type PlaceholderValues,
-	substitute,
-	type SanitizationViolation,
+  type PlaceholderValues,
+  substituteStructured,
+  type StructuredPlaceholderValues,
+  type SanitizationViolation,
 } from "./placeholder-substitution.js";
 
 const REGION =
-	process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
+  process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
 const s3 = new S3Client({ region: REGION });
 
 function bucket(): string {
-	return process.env.WORKSPACE_BUCKET || "";
+  return process.env.WORKSPACE_BUCKET || "";
 }
 
 // Accept either the root `db` handle or a transaction tx — the structural
@@ -56,222 +57,289 @@ export type DbOrTx = { select: typeof defaultDb.select };
 // ─── Key builders ────────────────────────────────────────────────────────────
 
 function agentKey(tenantSlug: string, agentSlug: string, path: string): string {
-	return `tenants/${tenantSlug}/agents/${agentSlug}/workspace/${path}`;
+  return `tenants/${tenantSlug}/agents/${agentSlug}/workspace/${path}`;
 }
 
 function templateKey(
-	tenantSlug: string,
-	templateSlug: string,
-	path: string,
+  tenantSlug: string,
+  templateSlug: string,
+  path: string,
 ): string {
-	return `tenants/${tenantSlug}/agents/_catalog/${templateSlug}/workspace/${path}`;
+  return `tenants/${tenantSlug}/agents/_catalog/${templateSlug}/workspace/${path}`;
 }
 
 function defaultsKey(tenantSlug: string, path: string): string {
-	return `tenants/${tenantSlug}/agents/_catalog/defaults/workspace/${path}`;
+  return `tenants/${tenantSlug}/agents/_catalog/defaults/workspace/${path}`;
 }
 
 // ─── S3 helpers ──────────────────────────────────────────────────────────────
 
 function isNotFound(err: unknown): boolean {
-	if (err instanceof NoSuchKey) return true;
-	const name = (err as { name?: string } | null)?.name;
-	if (name === "NoSuchKey" || name === "NotFound") return true;
-	const status = (err as { $metadata?: { httpStatusCode?: number } } | null)
-		?.$metadata?.httpStatusCode;
-	return status === 404;
+  if (err instanceof NoSuchKey) return true;
+  const name = (err as { name?: string } | null)?.name;
+  if (name === "NoSuchKey" || name === "NotFound") return true;
+  const status = (err as { $metadata?: { httpStatusCode?: number } } | null)
+    ?.$metadata?.httpStatusCode;
+  return status === 404;
 }
 
 async function readTemplateBase(
-	bkt: string,
-	tenantSlug: string,
-	templateSlug: string,
-	path: string,
+  bkt: string,
+  tenantSlug: string,
+  templateSlug: string,
+  path: string,
 ): Promise<string | null> {
-	try {
-		const resp = await s3.send(
-			new GetObjectCommand({
-				Bucket: bkt,
-				Key: templateKey(tenantSlug, templateSlug, path),
-			}),
-		);
-		return (await resp.Body?.transformToString("utf-8")) ?? "";
-	} catch (err) {
-		if (!isNotFound(err)) throw err;
-	}
-	try {
-		const resp = await s3.send(
-			new GetObjectCommand({
-				Bucket: bkt,
-				Key: defaultsKey(tenantSlug, path),
-			}),
-		);
-		return (await resp.Body?.transformToString("utf-8")) ?? "";
-	} catch (err) {
-		if (!isNotFound(err)) throw err;
-	}
-	return null;
+  try {
+    const resp = await s3.send(
+      new GetObjectCommand({
+        Bucket: bkt,
+        Key: templateKey(tenantSlug, templateSlug, path),
+      }),
+    );
+    return (await resp.Body?.transformToString("utf-8")) ?? "";
+  } catch (err) {
+    if (!isNotFound(err)) throw err;
+  }
+  try {
+    const resp = await s3.send(
+      new GetObjectCommand({
+        Bucket: bkt,
+        Key: defaultsKey(tenantSlug, path),
+      }),
+    );
+    return (await resp.Body?.transformToString("utf-8")) ?? "";
+  } catch (err) {
+    if (!isNotFound(err)) throw err;
+  }
+  return null;
 }
 
 function isTransientS3(err: unknown): boolean {
-	const code = (err as { $metadata?: { httpStatusCode?: number } } | null)
-		?.$metadata?.httpStatusCode;
-	if (code && code >= 500 && code < 600) return true;
-	const name = (err as { name?: string } | null)?.name;
-	return (
-		name === "RequestTimeout" ||
-		name === "SlowDown" ||
-		name === "ServiceUnavailable" ||
-		name === "InternalError"
-	);
+  const code = (err as { $metadata?: { httpStatusCode?: number } } | null)
+    ?.$metadata?.httpStatusCode;
+  if (code && code >= 500 && code < 600) return true;
+  const name = (err as { name?: string } | null)?.name;
+  return (
+    name === "RequestTimeout" ||
+    name === "SlowDown" ||
+    name === "ServiceUnavailable" ||
+    name === "InternalError"
+  );
 }
 
 async function putWithOneRetry(key: string, body: string): Promise<void> {
-	try {
-		await s3.send(
-			new PutObjectCommand({
-				Bucket: bucket(),
-				Key: key,
-				Body: body,
-				ContentType: "text/markdown",
-			}),
-		);
-		return;
-	} catch (err) {
-		if (!isTransientS3(err)) throw err;
-	}
-	// Single retry on transient S3. If this also fails we let the caller
-	// surface the error so the DB transaction rolls back.
-	await s3.send(
-		new PutObjectCommand({
-			Bucket: bucket(),
-			Key: key,
-			Body: body,
-			ContentType: "text/markdown",
-		}),
-	);
+  try {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket(),
+        Key: key,
+        Body: body,
+        ContentType: "text/markdown",
+      }),
+    );
+    return;
+  } catch (err) {
+    if (!isTransientS3(err)) throw err;
+  }
+  // Single retry on transient S3. If this also fails we let the caller
+  // surface the error so the DB transaction rolls back.
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucket(),
+      Key: key,
+      Body: body,
+      ContentType: "text/markdown",
+    }),
+  );
 }
 
 // ─── DB lookups ──────────────────────────────────────────────────────────────
 
 interface ResolvedAssignment {
-	tenantId: string;
-	tenantSlug: string;
-	tenantName: string;
-	agentSlug: string;
-	agentName: string;
-	templateSlug: string;
-	values: PlaceholderValues;
+  tenantId: string;
+  tenantSlug: string;
+  tenantName: string;
+  agentSlug: string;
+  agentName: string;
+  templateSlug: string;
+  values: PlaceholderValues;
+  structuredValues: StructuredPlaceholderValues;
 }
 
+const OPERATING_MODEL_LAYER_PLACEHOLDERS = {
+  rhythms: "OPERATING_MODEL_RHYTHMS",
+  decisions: "OPERATING_MODEL_DECISIONS",
+  dependencies: "OPERATING_MODEL_DEPENDENCIES",
+  knowledge: "OPERATING_MODEL_KNOWLEDGE",
+} as const;
+
+const EMPTY_OPERATING_MODEL =
+  "_Activation hasn't been completed yet; use generic context until the human shares more._";
+
 async function resolveAssignment(
-	tx: DbOrTx,
-	agentId: string,
-	humanPairId: string | null,
+  tx: DbOrTx,
+  agentId: string,
+  humanPairId: string | null,
 ): Promise<ResolvedAssignment | null> {
-	const [agent] = await tx
-		.select({
-			id: agents.id,
-			slug: agents.slug,
-			name: agents.name,
-			tenant_id: agents.tenant_id,
-			template_id: agents.template_id,
-		})
-		.from(agents)
-		.where(eq(agents.id, agentId));
-	if (!agent || !agent.slug || !agent.template_id) return null;
+  const [agent] = await tx
+    .select({
+      id: agents.id,
+      slug: agents.slug,
+      name: agents.name,
+      tenant_id: agents.tenant_id,
+      template_id: agents.template_id,
+    })
+    .from(agents)
+    .where(eq(agents.id, agentId));
+  if (!agent || !agent.slug || !agent.template_id) return null;
 
-	const [tenant] = await tx
-		.select({ id: tenants.id, slug: tenants.slug, name: tenants.name })
-		.from(tenants)
-		.where(eq(tenants.id, agent.tenant_id));
-	if (!tenant?.slug) return null;
+  const [tenant] = await tx
+    .select({ id: tenants.id, slug: tenants.slug, name: tenants.name })
+    .from(tenants)
+    .where(eq(tenants.id, agent.tenant_id));
+  if (!tenant?.slug) return null;
 
-	const [template] = await tx
-		.select({ slug: agentTemplates.slug })
-		.from(agentTemplates)
-		.where(eq(agentTemplates.id, agent.template_id));
-	if (!template?.slug) return null;
+  const [template] = await tx
+    .select({ slug: agentTemplates.slug })
+    .from(agentTemplates)
+    .where(eq(agentTemplates.id, agent.template_id));
+  if (!template?.slug) return null;
 
-	const values: PlaceholderValues = {
-		AGENT_NAME: agent.name,
-		TENANT_NAME: tenant.name,
-		HUMAN_NAME: null,
-		HUMAN_EMAIL: null,
-		HUMAN_TITLE: null,
-		HUMAN_TIMEZONE: null,
-		HUMAN_PRONOUNS: null,
-		HUMAN_CALL_BY: null,
-		HUMAN_PHONE: null,
-		HUMAN_NOTES: null,
-		HUMAN_FAMILY: null,
-		HUMAN_CONTEXT: null,
-	};
+  const values: PlaceholderValues = {
+    AGENT_NAME: agent.name,
+    TENANT_NAME: tenant.name,
+    HUMAN_NAME: null,
+    HUMAN_EMAIL: null,
+    HUMAN_TITLE: null,
+    HUMAN_TIMEZONE: null,
+    HUMAN_PRONOUNS: null,
+    HUMAN_CALL_BY: null,
+    HUMAN_PHONE: null,
+    HUMAN_NOTES: null,
+    HUMAN_FAMILY: null,
+    HUMAN_CONTEXT: null,
+  };
+  const structuredValues: StructuredPlaceholderValues = {
+    OPERATING_MODEL_RHYTHMS: EMPTY_OPERATING_MODEL,
+    OPERATING_MODEL_DECISIONS: EMPTY_OPERATING_MODEL,
+    OPERATING_MODEL_DEPENDENCIES: EMPTY_OPERATING_MODEL,
+    OPERATING_MODEL_KNOWLEDGE: EMPTY_OPERATING_MODEL,
+  };
 
-	if (humanPairId) {
-		const [user] = await tx
-			.select({
-				id: users.id,
-				name: users.name,
-				email: users.email,
-				phone: users.phone,
-			})
-			.from(users)
-			.where(eq(users.id, humanPairId));
-		if (user) {
-			values.HUMAN_NAME = user.name;
-			values.HUMAN_EMAIL = user.email;
-			// HUMAN_PHONE reads from users.phone (account-level contact info)
-			// rather than user_profiles — we don't duplicate it across tables.
-			values.HUMAN_PHONE = user.phone;
-			const [profile] = await tx
-				.select({
-					title: userProfiles.title,
-					timezone: userProfiles.timezone,
-					pronouns: userProfiles.pronouns,
-					call_by: userProfiles.call_by,
-					notes: userProfiles.notes,
-					family: userProfiles.family,
-					context: userProfiles.context,
-				})
-				.from(userProfiles)
-				.where(eq(userProfiles.user_id, user.id));
-			if (profile) {
-				values.HUMAN_TITLE = profile.title;
-				values.HUMAN_TIMEZONE = profile.timezone;
-				values.HUMAN_PRONOUNS = profile.pronouns;
-				values.HUMAN_CALL_BY = profile.call_by;
-				values.HUMAN_NOTES = profile.notes;
-				values.HUMAN_FAMILY = profile.family;
-				values.HUMAN_CONTEXT = profile.context;
-			}
-		}
-	}
+  if (humanPairId) {
+    const [user] = await tx
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        phone: users.phone,
+      })
+      .from(users)
+      .where(eq(users.id, humanPairId));
+    if (user) {
+      values.HUMAN_NAME = user.name;
+      values.HUMAN_EMAIL = user.email;
+      // HUMAN_PHONE reads from users.phone (account-level contact info)
+      // rather than user_profiles — we don't duplicate it across tables.
+      values.HUMAN_PHONE = user.phone;
+      const [profile] = await tx
+        .select({
+          title: userProfiles.title,
+          timezone: userProfiles.timezone,
+          pronouns: userProfiles.pronouns,
+          call_by: userProfiles.call_by,
+          notes: userProfiles.notes,
+          family: userProfiles.family,
+          context: userProfiles.context,
+          operating_model: userProfiles.operating_model,
+        })
+        .from(userProfiles)
+        .where(eq(userProfiles.user_id, user.id));
+      if (profile) {
+        values.HUMAN_TITLE = profile.title;
+        values.HUMAN_TIMEZONE = profile.timezone;
+        values.HUMAN_PRONOUNS = profile.pronouns;
+        values.HUMAN_CALL_BY = profile.call_by;
+        values.HUMAN_NOTES = profile.notes;
+        values.HUMAN_FAMILY = profile.family;
+        values.HUMAN_CONTEXT = profile.context;
+        Object.assign(
+          structuredValues,
+          renderOperatingModelPlaceholders(profile.operating_model),
+        );
+      }
+    }
+  }
 
-	return {
-		tenantId: agent.tenant_id,
-		tenantSlug: tenant.slug,
-		tenantName: tenant.name,
-		agentSlug: agent.slug,
-		agentName: agent.name,
-		templateSlug: template.slug,
-		values,
-	};
+  return {
+    tenantId: agent.tenant_id,
+    tenantSlug: tenant.slug,
+    tenantName: tenant.name,
+    agentSlug: agent.slug,
+    agentName: agent.name,
+    templateSlug: template.slug,
+    values,
+    structuredValues,
+  };
+}
+
+function renderOperatingModelPlaceholders(
+  operatingModel: unknown,
+): StructuredPlaceholderValues {
+  const model =
+    typeof operatingModel === "object" && operatingModel !== null
+      ? (operatingModel as Record<string, any>)
+      : {};
+  const layers =
+    typeof model.layers === "object" && model.layers !== null
+      ? (model.layers as Record<string, any>)
+      : {};
+  const rendered: StructuredPlaceholderValues = {};
+  for (const [layer, placeholder] of Object.entries(
+    OPERATING_MODEL_LAYER_PLACEHOLDERS,
+  )) {
+    rendered[placeholder as keyof StructuredPlaceholderValues] =
+      renderOperatingModelLayer(layers[layer]);
+  }
+  return rendered;
+}
+
+function renderOperatingModelLayer(layerState: unknown): string {
+  const entries = Array.isArray((layerState as { entries?: unknown })?.entries)
+    ? (layerState as { entries: Array<Record<string, unknown>> }).entries
+    : [];
+  const visible = entries.filter((entry) => {
+    const state = String(
+      entry.epistemicState ?? entry.epistemic_state ?? "confirmed",
+    );
+    return state === "confirmed" || state === "synthesized";
+  });
+  if (visible.length === 0) return EMPTY_OPERATING_MODEL;
+  return visible
+    .map((entry) => {
+      const title = String(entry.title ?? "Operating-model note");
+      const cadence = entry.cadence ? ` (${String(entry.cadence)})` : "";
+      const summary = String(entry.summary ?? entry.content ?? "");
+      const state = String(entry.epistemicState ?? entry.epistemic_state ?? "");
+      const pattern = state === "synthesized" ? " *(pattern)*" : "";
+      return `- **${title}**${cadence}: ${summary}${pattern}`;
+    })
+    .join("\n");
 }
 
 // ─── Public entry point ──────────────────────────────────────────────────────
 
 export interface WriteUserMdOptions {
-	onViolation?: (v: SanitizationViolation) => void;
+  onViolation?: (v: SanitizationViolation) => void;
 }
 
 export class UserMdWriterError extends Error {
-	readonly code: string;
-	constructor(code: string, message: string) {
-		super(message);
-		this.code = code;
-		this.name = "UserMdWriterError";
-	}
+  readonly code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.code = code;
+    this.name = "UserMdWriterError";
+  }
 }
 
 /**
@@ -289,52 +357,57 @@ export class UserMdWriterError extends Error {
  * miss seeing fresh S3 state that contradicts the rolled-back DB row.
  */
 export async function writeUserMdForAssignment(
-	tx: DbOrTx,
-	agentId: string,
-	humanPairId: string | null,
-	opts: WriteUserMdOptions = {},
+  tx: DbOrTx,
+  agentId: string,
+  humanPairId: string | null,
+  opts: WriteUserMdOptions = {},
 ): Promise<void> {
-	const bkt = bucket();
-	if (!bkt) {
-		throw new UserMdWriterError(
-			"BUCKET_UNCONFIGURED",
-			"WORKSPACE_BUCKET not configured",
-		);
-	}
+  const bkt = bucket();
+  if (!bkt) {
+    throw new UserMdWriterError(
+      "BUCKET_UNCONFIGURED",
+      "WORKSPACE_BUCKET not configured",
+    );
+  }
 
-	const resolved = await resolveAssignment(tx, agentId, humanPairId);
-	if (!resolved) {
-		throw new UserMdWriterError(
-			"ASSIGNMENT_UNRESOLVABLE",
-			"Could not resolve agent, tenant, or template for USER.md write",
-		);
-	}
+  const resolved = await resolveAssignment(tx, agentId, humanPairId);
+  if (!resolved) {
+    throw new UserMdWriterError(
+      "ASSIGNMENT_UNRESOLVABLE",
+      "Could not resolve agent, tenant, or template for USER.md write",
+    );
+  }
 
-	const templateBytes = await readTemplateBase(
-		bkt,
-		resolved.tenantSlug,
-		resolved.templateSlug,
-		"USER.md",
-	);
-	if (templateBytes === null) {
-		// No USER.md in template or defaults — nothing to substitute. Skip
-		// the PUT rather than writing an empty file; the composer's managed
-		// fallback will render em-dashes if any downstream reader needs
-		// USER.md.
-		return;
-	}
+  const templateBytes = await readTemplateBase(
+    bkt,
+    resolved.tenantSlug,
+    resolved.templateSlug,
+    "USER.md",
+  );
+  if (templateBytes === null) {
+    // No USER.md in template or defaults — nothing to substitute. Skip
+    // the PUT rather than writing an empty file; the composer's managed
+    // fallback will render em-dashes if any downstream reader needs
+    // USER.md.
+    return;
+  }
 
-	const rendered = substitute(resolved.values, templateBytes, {
-		onViolation: opts.onViolation,
-	});
+  const rendered = substituteStructured(
+    resolved.values,
+    resolved.structuredValues,
+    templateBytes,
+    {
+      onViolation: opts.onViolation,
+    },
+  );
 
-	await putWithOneRetry(
-		agentKey(resolved.tenantSlug, resolved.agentSlug, "USER.md"),
-		rendered,
-	);
+  await putWithOneRetry(
+    agentKey(resolved.tenantSlug, resolved.agentSlug, "USER.md"),
+    rendered,
+  );
 
-	// NOTE: Composer cache invalidation is the caller's responsibility,
-	// AFTER the DB transaction commits. Invalidating here would clear the
-	// cache inside the txn — if a subsequent operation rolls back, the
-	// composer would read stale S3 state that no longer matches the DB.
+  // NOTE: Composer cache invalidation is the caller's responsibility,
+  // AFTER the DB transaction commits. Invalidating here would clear the
+  // cache inside the txn — if a subsequent operation rolls back, the
+  // composer would read stale S3 state that no longer matches the DB.
 }

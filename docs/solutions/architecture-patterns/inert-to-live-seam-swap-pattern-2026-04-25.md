@@ -11,7 +11,15 @@ applies_when:
   - The integration is large enough that doing it in one PR would dwarf the module's own surface area
   - You want PR-1 to ship structurally (path validation, type contracts, registration, unit tests) without booting the live integration target
   - You want PR-2 to be a focused diff that swaps in the live behavior with no contract churn
-tags: [architecture-pattern, multi-pr, ship-inert, factory-closure, plan-008, strands-runtime]
+tags:
+  [
+    architecture-pattern,
+    multi-pr,
+    ship-inert,
+    factory-closure,
+    plan-008,
+    strands-runtime,
+  ]
 ---
 
 # Inert→live seam swap pattern for multi-PR module rollouts
@@ -31,6 +39,7 @@ The pattern this doc captures **is** how Plan §008 actually shipped — used at
 Ship the module across two PRs against a **stable seam** that production and tests share:
 
 **PR-1 (inert):**
+
 - New module exports a factory that takes a `seam_fn: Callable | None = None` kwarg.
 - Module also exports a `_seam_fn_inert(...)` no-op function with the canonical return shape.
 - Factory body: `snapshot_seam = seam_fn or _seam_fn_inert`. Production registration does NOT pass `seam_fn=`, so it falls back to inert.
@@ -40,6 +49,7 @@ Ship the module across two PRs against a **stable seam** that production and tes
 - Ship.
 
 **PR-2 (live):**
+
 - Replace ONLY `_seam_fn_inert`'s body with the live integration. Keep the function (under either the same name or a parallel `_seam_fn_live`) so explicit test injection still works.
 - Production registration still passes `seam_fn=None` — the factory's fallback now resolves to the live default.
 - Add a **body-swap safety integration test** that builds the factory WITHOUT `seam_fn=` and asserts the live default is actually exercised. The assertion must check downstream effects (e.g., `BedrockModel constructor called`, `S3 PutObject called`) — not just the return shape — so a future hardcoded-success replacement can't pass the test.
@@ -78,6 +88,7 @@ PR #574 shipped `skill_resolver.py` with `resolve_skill(slug, folder_path, compo
 **Plan §008 U9 inert → U9 spawn-live (#578 → #589):**
 
 PR #578 shipped `delegate_to_workspace_tool.py`:
+
 - `make_delegate_to_workspace_fn(... spawn_fn: Callable | None = None ...)` factory
 - `_spawn_sub_agent_inert(resolved_context: dict) -> dict` returning `{"ok": False, "reason": "spawn not yet wired", "resolved_context": resolved_context}`
 - Factory closure: `snapshot_spawn = spawn_fn or _spawn_sub_agent_inert`
@@ -86,6 +97,7 @@ PR #578 shipped `delegate_to_workspace_tool.py`:
 - 33 tests covering path validation, composer fetch, AGENTS.md parse, skill resolution, error wrapping, factory snapshots — all live, all tested, no Bedrock involved
 
 PR #589 (this PR):
+
 - Deleted `_spawn_sub_agent_inert` (dead code per maintainability review — tests had moved to inline `spawn_fn` closures so the named inert fallback wasn't needed)
 - Added `_make_live_spawn_fn(...)` building the real Bedrock `BedrockModel` + `Agent` spawn with usage accumulation
 - Factory's `spawn_fn=None` now falls through to `_make_live_spawn_fn`'s closure
@@ -95,6 +107,20 @@ PR #589 (this PR):
 The `delegate_to_workspace(path: str, task: str) -> dict` external contract did not change between PRs. The `seam_fn` kwarg's contract (`(resolved_context: dict) -> dict`) did not change. Tests' explicit `spawn_fn=` injection continued to work — the existing 33 PR #578 tests passed unchanged in PR #589.
 
 **Both PRs landed clean.** PR #578 was a focused review of the structural pipeline (validate → fetch → parse → resolve); PR #589 was a focused review of the Bedrock integration (BedrockModel construction, usage accumulation, sub-agent prompt composition).
+
+**Activation Agent runtime scaffold (#613 follow-up):**
+
+The Activation Agent applies the same pattern at a whole-runtime boundary. The new `packages/agentcore-activation/agent-container/container-sources/interview_runtime.py` exports `interview_fn = _interview_inert` behind a stable `/invocations` HTTP contract. The inert body returns a canonical `{message, currentLayer, status}` payload and can push through the same `/api/activation/notify` writeback route the live body will use later.
+
+The live swap should change the `interview_fn` assignment/body only, leaving:
+
+- `/ping` and `/invocations`
+- the activation API writeback client
+- `snapshot_at_entry()`
+- the five-tool registration assertion
+- the GraphQL/mobile session contract
+
+The body-swap safety test for the live PR should build the server/runtime without injecting a seam, assert a Bedrock/Strands call actually occurs, and assert the response still satisfies the same inert payload shape.
 
 ## Related
 

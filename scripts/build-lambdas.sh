@@ -136,6 +136,12 @@ build_handler "job-schedule-manager" \
 build_handler "scheduled-jobs" \
   "$REPO_ROOT/packages/api/src/handlers/scheduled-jobs.ts"
 
+build_handler "activation" \
+  "$REPO_ROOT/packages/api/src/handlers/activation.ts"
+
+build_handler "activation-apply-worker" \
+  "$REPO_ROOT/packages/api/src/handlers/activation-apply-worker.ts"
+
 # ---------------------------------------------------------------------------
 # P1: REST handlers (agents, messages, connections, oauth)
 # ---------------------------------------------------------------------------

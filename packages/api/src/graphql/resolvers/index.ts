@@ -33,6 +33,7 @@ import { wikiQueries, wikiMutations } from "./wiki/index.js";
 import { skillRunsQueries, skillRunsMutations } from "./skill-runs/index.js";
 import { runtimeQueries } from "./runtime/index.js";
 import { workspaceQueries, workspaceMutations } from "./workspace/index.js";
+import { activationQueries, activationMutations } from "./activation/index.js";
 
 export const queryResolvers: Record<string, any> = {
   _empty: () => null,
@@ -56,6 +57,7 @@ export const queryResolvers: Record<string, any> = {
   ...skillRunsQueries,
   ...runtimeQueries,
   ...workspaceQueries,
+  ...activationQueries,
 };
 
 export const mutationResolvers: Record<string, any> = {
@@ -79,6 +81,7 @@ export const mutationResolvers: Record<string, any> = {
   ...wikiMutations,
   ...skillRunsMutations,
   ...workspaceMutations,
+  ...activationMutations,
 };
 
 import { agentTypeResolvers } from "./agents/types.js";
