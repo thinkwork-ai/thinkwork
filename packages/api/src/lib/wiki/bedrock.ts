@@ -136,7 +136,7 @@ export async function invokeClaude(
 			stopReason: resp.stopReason ?? null,
 		};
 	} catch (err) {
-		if (timeout?.signal.aborted) {
+		if (timeout?.signal.aborted && isAbortLikeError(err)) {
 			const timeoutErr = new Error(
 				`Bedrock converse timed out after ${DEFAULT_CALL_TIMEOUT_MS}ms`,
 			);
@@ -206,6 +206,15 @@ function truncate(s: string, n: number): string {
 function positiveIntEnv(name: string, fallback: number): number {
 	const value = Number(process.env[name]);
 	return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+function isAbortLikeError(err: unknown): boolean {
+	if (!(err instanceof Error)) return false;
+	return (
+		err.name === "AbortError" ||
+		err.name === "TimeoutError" ||
+		err.name === "RequestAbortedError"
+	);
 }
 
 // ---------------------------------------------------------------------------
