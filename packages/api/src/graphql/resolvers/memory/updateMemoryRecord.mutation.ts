@@ -6,16 +6,15 @@
 
 import type { GraphQLContext } from "../../context.js";
 import { getMemoryServices } from "../../../lib/memory/index.js";
+import { requireMemoryUserScope } from "../core/require-user-scope.js";
 
 export const updateMemoryRecord = async (
 	_parent: any,
 	args: any,
-	_ctx: GraphQLContext,
+	ctx: GraphQLContext,
 ) => {
-	const { memoryRecordId, content } = args as {
-		memoryRecordId: string;
-		content: string;
-	};
+	const { memoryRecordId, content } = args as { memoryRecordId: string; content: string };
+	await requireMemoryUserScope(ctx, args);
 
 	const { adapter, config } = getMemoryServices();
 	if (!adapter.update) {

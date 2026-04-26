@@ -14,7 +14,7 @@ import { runJournalImport } from "../lib/wiki/journal-import.js";
 type WikiBootstrapEvent = {
 	accountId?: string;
 	tenantId?: string;
-	agentId?: string;
+	userId?: string;
 	limit?: number | null;
 };
 
@@ -30,22 +30,22 @@ type WikiBootstrapResult = {
 export async function handler(
 	event: WikiBootstrapEvent = {},
 ): Promise<WikiBootstrapResult> {
-	if (!event.accountId || !event.tenantId || !event.agentId) {
-		const msg = "wiki-bootstrap-import: missing accountId/tenantId/agentId";
+	if (!event.accountId || !event.tenantId || !event.userId) {
+		const msg = "wiki-bootstrap-import: missing accountId/tenantId/userId";
 		console.error(`[wiki-bootstrap-import] ${msg}`);
 		return { ok: false, error: msg };
 	}
 
 	const started = Date.now();
 	console.log(
-		`[wiki-bootstrap-import] starting account=${event.accountId} tenant=${event.tenantId} agent=${event.agentId} limit=${event.limit ?? "none"}`,
+		`[wiki-bootstrap-import] starting account=${event.accountId} tenant=${event.tenantId} user=${event.userId} limit=${event.limit ?? "none"}`,
 	);
 
 	try {
 		const result = await runJournalImport({
 			accountId: event.accountId,
 			tenantId: event.tenantId,
-			agentId: event.agentId,
+			userId: event.userId,
 			limit: event.limit ?? undefined,
 		});
 		const seconds = ((Date.now() - started) / 1000).toFixed(1);

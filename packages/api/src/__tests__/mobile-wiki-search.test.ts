@@ -2,8 +2,8 @@
  * Unit tests for the mobileWikiSearch resolver (Postgres FTS path).
  *
  * The resolver runs:
- *   1. A drizzle `db.select(...).from(agents).where(eq(agents.id, id))` to
- *      auth-check the agent against the caller's tenant.
+ *   1. A user-scope auth check, with legacy agent-id compatibility covered
+ *      by the auth tests.
  *   2. A raw `db.execute(sql`…`)` FTS query over `wiki_pages`.
  *
  * We mock both paths so we can exercise argument handling, auth failures,
@@ -13,11 +13,18 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockExecute, mockAgentRow, mockResolveTenant, mockGetMemoryServices } =
+const {
+	mockExecute,
+	mockAgentRow,
+	mockResolveTenant,
+	mockResolveCaller,
+	mockGetMemoryServices,
+} =
 	vi.hoisted(() => ({
 		mockExecute: vi.fn(),
 		mockAgentRow: vi.fn(),
 		mockResolveTenant: vi.fn(),
+		mockResolveCaller: vi.fn(),
 		mockGetMemoryServices: vi.fn(),
 	}));
 
@@ -32,6 +39,7 @@ vi.mock("../graphql/utils.js", () => {
 			select: vi.fn(() => chain(mockAgentRow() as unknown[])),
 			execute: mockExecute,
 		},
+		sql: (...xs: unknown[]) => xs,
 		agents: {
 			id: "agents.id",
 			tenant_id: "agents.tenant_id",
@@ -42,6 +50,7 @@ vi.mock("../graphql/utils.js", () => {
 
 vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
 	resolveCallerTenantId: mockResolveTenant,
+	resolveCaller: mockResolveCaller,
 }));
 
 vi.mock("../lib/memory/index.js", () => ({
@@ -76,7 +85,7 @@ function makeRow(overrides: Record<string, unknown> = {}) {
 	return {
 		id: "page-1",
 		tenant_id: "t1",
-		owner_id: "agent-1",
+		owner_id: "user-1",
 		type: "entity",
 		slug: "austin",
 		title: "Austin",
@@ -93,9 +102,15 @@ function makeRow(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	mockExecute.mockReset();
+	mockAgentRow.mockReset();
+	mockResolveTenant.mockReset();
+	mockResolveCaller.mockReset();
+	mockGetMemoryServices.mockReset();
 	mockAgentRow.mockReturnValue([
-		{ id: "agent-1", tenant_id: "t1", slug: "marco" },
+		{ id: "agent-1", tenant_id: "t1", human_pair_id: "user-1", slug: "marco" },
 	]);
+	mockResolveCaller.mockResolvedValue({ userId: "user-1", tenantId: "t1" });
 	mockResolveTenant.mockResolvedValue(null);
 });
 
@@ -103,7 +118,7 @@ describe("mobileWikiSearch — empty input", () => {
 	it("returns [] for empty query without hitting the db", async () => {
 		const out = await mobileWikiSearch(
 			{},
-			{ agentId: "agent-1", query: "" },
+			{ tenantId: "t1", userId: "user-1", query: "" },
 			makeCtx(),
 		);
 		expect(out).toEqual([]);
@@ -113,7 +128,7 @@ describe("mobileWikiSearch — empty input", () => {
 	it("returns [] for whitespace-only query", async () => {
 		const out = await mobileWikiSearch(
 			{},
-			{ agentId: "agent-1", query: "   " },
+			{ tenantId: "t1", userId: "user-1", query: "   " },
 			makeCtx(),
 		);
 		expect(out).toEqual([]);
@@ -123,49 +138,49 @@ describe("mobileWikiSearch — empty input", () => {
 
 describe("mobileWikiSearch — auth", () => {
 	it("throws when tenant context is missing", async () => {
-		mockResolveTenant.mockResolvedValueOnce(null);
+		mockResolveCaller.mockResolvedValueOnce({ userId: "user-1", tenantId: null });
 		await expect(
 			mobileWikiSearch(
 				{},
-				{ agentId: "agent-1", query: "austin" },
+				{ userId: "user-1", query: "austin" },
 				makeCtx({ tenantId: null }),
 			),
 		).rejects.toThrow(/Tenant context required/);
 	});
 
-	it("throws when agent is missing", async () => {
-		mockAgentRow.mockReturnValueOnce([]);
+	it("throws when legacy agent is missing or unpaired", async () => {
+		mockExecute.mockResolvedValueOnce({ rows: [] });
 		await expect(
 			mobileWikiSearch(
 				{},
-				{ agentId: "agent-1", query: "austin" },
+				{ tenantId: "t1", agentId: "agent-1", query: "austin" },
 				makeCtx(),
 			),
-		).rejects.toThrow(/Agent not found/);
+		).rejects.toThrow(/Agent is not paired to a user/);
 	});
 
-	it("throws when agent belongs to a different tenant", async () => {
-		mockAgentRow.mockReturnValueOnce([
-			{ id: "agent-1", tenant_id: "t-other", slug: "marco" },
-		]);
+	it("throws when legacy agent resolves to a different user", async () => {
+		mockExecute.mockResolvedValueOnce({
+			rows: [{ id: "agent-1", tenant_id: "t1", human_pair_id: "user-other" }],
+		});
 		await expect(
 			mobileWikiSearch(
 				{},
-				{ agentId: "agent-1", query: "austin" },
+				{ tenantId: "t1", agentId: "agent-1", query: "austin" },
 				makeCtx(),
 			),
-		).rejects.toThrow(/Agent not found|access denied/);
+		).rejects.toThrow(/user mismatch/);
 	});
 
-	it("falls back to resolveCallerTenantId when ctx.auth.tenantId is null", async () => {
-		mockResolveTenant.mockResolvedValueOnce("t1");
+	it("uses resolveCaller tenant when ctx.auth.tenantId is null", async () => {
+		mockResolveCaller.mockResolvedValueOnce({ userId: "user-1", tenantId: "t1" });
 		mockExecute.mockResolvedValueOnce({ rows: [] });
 		const out = await mobileWikiSearch(
 			{},
-			{ agentId: "agent-1", query: "austin" },
+			{ userId: "user-1", query: "austin" },
 			makeCtx({ tenantId: null }),
 		);
-		expect(mockResolveTenant).toHaveBeenCalled();
+		expect(mockResolveTenant).not.toHaveBeenCalled();
 		expect(out).toEqual([]);
 	});
 });
@@ -175,7 +190,7 @@ describe("mobileWikiSearch — FTS path", () => {
 		mockExecute.mockResolvedValueOnce({ rows: [makeRow()] });
 		const out = await mobileWikiSearch(
 			{},
-			{ agentId: "agent-1", query: "austin" },
+			{ tenantId: "t1", userId: "user-1", query: "austin" },
 			makeCtx(),
 		);
 		expect(out).toHaveLength(1);
@@ -186,7 +201,8 @@ describe("mobileWikiSearch — FTS path", () => {
 		expect(out[0].page).toMatchObject({
 			id: "page-1",
 			tenantId: "t1",
-			ownerId: "agent-1",
+			userId: "user-1",
+			ownerId: "user-1",
 			type: "ENTITY",
 			slug: "austin",
 			title: "Austin",
@@ -221,7 +237,7 @@ describe("mobileWikiSearch — FTS path", () => {
 		});
 		const out = await mobileWikiSearch(
 			{},
-			{ agentId: "agent-1", query: "austin" },
+			{ tenantId: "t1", userId: "user-1", query: "austin" },
 			makeCtx(),
 		);
 		expect(out.map((r) => r.page.id)).toEqual(["p-top", "p-mid", "p-low"]);
@@ -231,7 +247,7 @@ describe("mobileWikiSearch — FTS path", () => {
 		mockExecute.mockResolvedValueOnce({ rows: [] });
 		const out = await mobileWikiSearch(
 			{},
-			{ agentId: "agent-1", query: "zzzznothing" },
+			{ tenantId: "t1", userId: "user-1", query: "zzzznothing" },
 			makeCtx(),
 		);
 		expect(out).toEqual([]);
@@ -241,7 +257,7 @@ describe("mobileWikiSearch — FTS path", () => {
 		mockExecute.mockResolvedValueOnce({});
 		const out = await mobileWikiSearch(
 			{},
-			{ agentId: "agent-1", query: "austin" },
+			{ tenantId: "t1", userId: "user-1", query: "austin" },
 			makeCtx(),
 		);
 		expect(out).toEqual([]);
@@ -252,12 +268,12 @@ describe("mobileWikiSearch — FTS path", () => {
 
 		await mobileWikiSearch(
 			{},
-			{ agentId: "agent-1", query: "austin", limit: 9999 },
+			{ tenantId: "t1", userId: "user-1", query: "austin", limit: 9999 },
 			makeCtx(),
 		);
 		await mobileWikiSearch(
 			{},
-			{ agentId: "agent-1", query: "austin", limit: 0 },
+			{ tenantId: "t1", userId: "user-1", query: "austin", limit: 0 },
 			makeCtx(),
 		);
 
@@ -273,7 +289,7 @@ describe("mobileWikiSearch — FTS path", () => {
 		mockExecute.mockResolvedValueOnce({ rows: [] });
 		await mobileWikiSearch(
 			{},
-			{ agentId: "agent-1", query: "  Dake's Shoppe  " },
+			{ tenantId: "t1", userId: "user-1", query: "  Dake's Shoppe  " },
 			makeCtx(),
 		);
 		// The sql tag is mocked to pass its template chunks + interpolations
@@ -306,7 +322,7 @@ describe("mobileWikiSearch — FTS path", () => {
 		});
 		const out = await mobileWikiSearch(
 			{},
-			{ agentId: "agent-1", query: "austin" },
+			{ tenantId: "t1", userId: "user-1", query: "austin" },
 			makeCtx(),
 		);
 		expect(out).toHaveLength(1);
@@ -321,7 +337,7 @@ describe("mobileWikiSearch — FTS path", () => {
 		mockGetMemoryServices.mockReturnValue({ recall: { recall } });
 		await mobileWikiSearch(
 			{},
-			{ agentId: "agent-1", query: "austin" },
+			{ tenantId: "t1", userId: "user-1", query: "austin" },
 			makeCtx(),
 		);
 		expect(mockGetMemoryServices).not.toHaveBeenCalled();

@@ -14,7 +14,7 @@ export type MemoryEngineType = "hindsight" | "agentcore";
 
 export type MemoryOwnerRef = {
 	tenantId: string;
-	ownerType: "agent";
+	ownerType: "user" | "agent";
 	ownerId: string;
 	threadId?: string;
 };
@@ -46,7 +46,7 @@ export type MemoryBackendRef = {
 export type ThinkWorkMemoryRecord = {
 	id: string;
 	tenantId: string;
-	ownerType: "agent";
+	ownerType: "user" | "agent";
 	ownerId: string;
 	threadId?: string;
 	kind: MemoryRecordKind;
@@ -108,7 +108,24 @@ export type RetainTurnRequest = MemoryOwnerRef & {
 	messages: Array<{
 		role: "user" | "assistant" | "system";
 		content: string;
+		timestamp?: string;
 	}>;
+	metadata?: Record<string, unknown>;
+};
+
+export type RetainConversationRequest = MemoryOwnerRef & {
+	threadId: string;
+	messages: Array<{
+		role: "user" | "assistant" | "system" | string;
+		content: string;
+		timestamp: string;
+	}>;
+	metadata?: Record<string, unknown>;
+};
+
+export type RetainDailyMemoryRequest = MemoryOwnerRef & {
+	date: string;
+	content: string;
 	metadata?: Record<string, unknown>;
 };
 

@@ -21,16 +21,14 @@ export const wikiPage = async (
 	_parent: unknown,
 	args: {
 		tenantId: string;
-		ownerId: string;
+		userId?: string | null;
+		ownerId?: string | null;
 		type: "ENTITY" | "TOPIC" | "DECISION";
 		slug: string;
 	},
 	ctx: GraphQLContext,
 ) => {
-	await assertCanReadWikiScope(ctx, {
-		tenantId: args.tenantId,
-		ownerId: args.ownerId,
-	});
+	const { tenantId, userId } = await assertCanReadWikiScope(ctx, args);
 
 	const lowerType = args.type.toLowerCase() as "entity" | "topic" | "decision";
 
@@ -40,7 +38,7 @@ export const wikiPage = async (
 		.where(
 			and(
 				eq(wikiPages.tenant_id, args.tenantId),
-				eq(wikiPages.owner_id, args.ownerId),
+				eq(wikiPages.owner_id, userId),
 				eq(wikiPages.type, lowerType),
 				eq(wikiPages.slug, args.slug),
 				eq(wikiPages.status, "active"),

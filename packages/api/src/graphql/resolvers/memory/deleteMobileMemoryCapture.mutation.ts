@@ -9,8 +9,8 @@
  */
 
 import type { GraphQLContext } from "../../context.js";
-import { db, eq, agents } from "../../utils.js";
 import { getMemoryServices } from "../../../lib/memory/index.js";
+import { requireMemoryUserScope } from "../core/require-user-scope.js";
 
 const CAPTURE_SOURCE = "mobile_quick_capture";
 const SCAN_LIMIT = 1000;
@@ -20,17 +20,13 @@ export const deleteMobileMemoryCapture = async (
 	args: any,
 	ctx: GraphQLContext,
 ) => {
-	const { agentId, captureId } = args as { agentId: string; captureId: string };
-
-	if (!ctx.auth.tenantId) throw new Error("Tenant context required");
-
-	const [agent] = await db
-		.select({ id: agents.id, tenant_id: agents.tenant_id })
-		.from(agents)
-		.where(eq(agents.id, agentId));
-	if (!agent || agent.tenant_id !== ctx.auth.tenantId) {
-		throw new Error("Agent not found or access denied");
-	}
+	const { captureId } = args as {
+		tenantId?: string;
+		userId?: string;
+		agentId?: string;
+		captureId: string;
+	};
+	const { tenantId, userId } = await requireMemoryUserScope(ctx, args);
 
 	const { adapter } = getMemoryServices();
 	if (!adapter.inspect) {
@@ -41,9 +37,9 @@ export const deleteMobileMemoryCapture = async (
 	}
 
 	const records = await adapter.inspect({
-		tenantId: ctx.auth.tenantId,
-		ownerType: "agent",
-		ownerId: agent.id as string,
+		tenantId,
+		ownerType: "user",
+		ownerId: userId as string,
 		limit: SCAN_LIMIT,
 	});
 

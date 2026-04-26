@@ -56,7 +56,7 @@ function makeCtx(): GraphQLContext {
 
 beforeEach(() => {
 	vi.clearAllMocks();
-	mockAssertReadScope.mockResolvedValue(undefined);
+	mockAssertReadScope.mockResolvedValue({ tenantId: "t1", userId: "a1" });
 });
 
 describe("wikiGraph", () => {
@@ -96,7 +96,7 @@ describe("wikiGraph", () => {
 
 		const graph = await wikiGraph(
 			null,
-			{ tenantId: "t1", ownerId: "a1" },
+			{ tenantId: "t1", userId: "a1" },
 			makeCtx(),
 		);
 
@@ -145,7 +145,7 @@ describe("wikiGraph", () => {
 
 		const graph = await wikiGraph(
 			null,
-			{ tenantId: "t1", ownerId: "a-empty" },
+			{ tenantId: "t1", userId: "a-empty" },
 			makeCtx(),
 		);
 
@@ -169,7 +169,7 @@ describe("wikiGraph", () => {
 
 		const graph = await wikiGraph(
 			null,
-			{ tenantId: "t1", ownerId: "a1" },
+			{ tenantId: "t1", userId: "a1" },
 			makeCtx(),
 		);
 
@@ -195,7 +195,7 @@ describe("wikiGraph", () => {
 
 		const graph = await wikiGraph(
 			null,
-			{ tenantId: "t1", ownerId: "a1" },
+			{ tenantId: "t1", userId: "a1" },
 			makeCtx(),
 		);
 
@@ -210,7 +210,7 @@ describe("wikiGraph", () => {
 		await expect(
 			wikiGraph(
 				null,
-				{ tenantId: "t-other", ownerId: "a1" },
+				{ tenantId: "t-other", userId: "a1" },
 				makeCtx(),
 			),
 		).rejects.toThrow(WikiAuthError);

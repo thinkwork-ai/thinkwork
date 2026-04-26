@@ -1,8 +1,8 @@
 """
 Compounding Memory (wiki) read path.
 
-v1 is strictly agent-scoped: every read requires both `tenantId` and
-`ownerId`. See .prds/compounding-memory-scoping.md.
+v1 is strictly user-scoped: every read requires both `tenantId` and
+`userId`. See .prds/compounding-memory-scoping.md.
 """
 
 enum WikiPageType {
@@ -23,7 +23,8 @@ type WikiPageSection {
 type WikiPage {
   id: ID!
   tenantId: ID!
-  ownerId: ID!
+  userId: ID!
+  ownerId: ID! @deprecated(reason: "Use userId")
   type: WikiPageType!
   slug: String!
   title: String!
@@ -93,7 +94,8 @@ type WikiSearchResult {
 type WikiCompileJob {
   id: ID!
   tenantId: ID!
-  ownerId: ID!
+  userId: ID!
+  ownerId: ID! @deprecated(reason: "Use userId")
   status: String!
   trigger: String!
   dedupeKey: String!
@@ -107,8 +109,8 @@ type WikiCompileJob {
 }
 
 """
-Agent-scoped force-graph payload: all active pages and their [[...]] links
-for one `(tenant, owner)` scope. Shaped to match the legacy `memoryGraph`
+User-scoped force-graph payload: all active pages and their [[...]] links
+  for one `(tenant, user)` scope. Shaped to match the legacy `memoryGraph`
 wire contract so the admin force-graph component can swap data sources
 with minimal client changes. `type` is always `"page"` on nodes; the
 Wiki page type (`ENTITY`/`TOPIC`/`DECISION`) lives in `entityType`.
@@ -138,15 +140,15 @@ type WikiGraph {
 
 extend type Query {
   """
-  Read one compiled page by slug. `ownerId` is required.
+  Read one compiled page by slug. `userId` is required.
   """
-  wikiPage(tenantId: ID!, ownerId: ID!, type: WikiPageType!, slug: String!): WikiPage
+  wikiPage(tenantId: ID!, userId: ID, ownerId: ID, type: WikiPageType!, slug: String!): WikiPage
 
   """
-  Postgres full-text search over compiled pages in a single (tenant, owner)
+  Postgres full-text search over compiled pages in a single (tenant, user)
   scope. Also matches exact aliases. Ranked by ts_rank + alias-hit boost.
   """
-  wikiSearch(tenantId: ID!, ownerId: ID!, query: String!, limit: Int = 20): [WikiSearchResult!]!
+  wikiSearch(tenantId: ID!, userId: ID, ownerId: ID, query: String!, limit: Int = 20): [WikiSearchResult!]!
 
   """
   Pages that link to the given page. Visibility is derived from the target
@@ -163,24 +165,25 @@ extend type Query {
   wikiConnectedPages(pageId: ID!): [WikiPage!]!
 
   """
-  Admin-only: list recent compile jobs for a tenant. When `ownerId` is
-  provided, restricts to that agent's jobs; when null/absent, returns
-  jobs across every agent in the tenant. Ordered newest-first.
+  Admin-only: list recent compile jobs for a tenant. When `userId` is
+  provided, restricts to that user's jobs; when null/absent, returns
+  jobs across every user in the tenant. Ordered newest-first.
 
   Powers the `thinkwork wiki status` CLI command.
   """
   wikiCompileJobs(
     tenantId: ID!
+    userId: ID
     ownerId: ID
     limit: Int = 10
   ): [WikiCompileJob!]!
 
   """
-  Agent-scoped force-graph: every active wiki page + every page-to-page
-  link whose endpoints are both active in the same `(tenant, owner)`
+  User-scoped force-graph: every active wiki page + every page-to-page
+  link whose endpoints are both active in the same `(tenant, user)`
   scope. Links that reference archived pages are excluded. One round-trip.
   """
-  wikiGraph(tenantId: ID!, ownerId: ID!): WikiGraph!
+  wikiGraph(tenantId: ID!, userId: ID, ownerId: ID): WikiGraph!
 }
 
 """
@@ -193,7 +196,8 @@ for the terminal compile the ingest enqueues.
 type WikiJournalImportDispatch {
   accountId: ID!
   tenantId: ID!
-  agentId: ID!
+  userId: ID!
+  agentId: ID @deprecated(reason: "Use userId")
   dispatched: Boolean!
   error: String
   dispatchedAt: AWSDateTime!
@@ -201,14 +205,15 @@ type WikiJournalImportDispatch {
 
 type WikiResetCursorResult {
   tenantId: ID!
-  ownerId: ID!
+  userId: ID!
+  ownerId: ID! @deprecated(reason: "Use userId")
   cursorCleared: Boolean!
   pagesArchived: Int!
 }
 
 extend type Mutation {
   """
-  Admin-only: enqueue an ad-hoc compile job for a specific (tenant, agent).
+  Admin-only: enqueue an ad-hoc compile job for a specific (tenant, user).
   Returns the job row (newly inserted or the in-flight dedupe hit).
 
   When `modelId` is supplied, it is forwarded to the compile Lambda event
@@ -217,7 +222,7 @@ extend type Mutation {
   path; if the invoke fails and a polling worker claims the job later, the
   compile falls back to the env-default model.
   """
-  compileWikiNow(tenantId: ID!, ownerId: ID!, modelId: String): WikiCompileJob!
+  compileWikiNow(tenantId: ID!, userId: ID, ownerId: ID, modelId: String): WikiCompileJob!
 
   """
   Admin-only fire-and-forget dispatch of a journal-schema bulk ingest onto
@@ -229,18 +234,20 @@ extend type Mutation {
   bootstrapJournalImport(
     accountId: ID!
     tenantId: ID!
-    agentId: ID!
+    userId: ID
+    agentId: ID
     limit: Int
   ): WikiJournalImportDispatch!
 
   """
-  Admin-only replay: clear the compile cursor for (tenant, owner). If
+  Admin-only replay: clear the compile cursor for (tenant, user). If
   `force` is true, also archives every active page in the scope so the
   next compile rebuilds from scratch. Destructive when force=true.
   """
   resetWikiCursor(
     tenantId: ID!
-    ownerId: ID!
+    userId: ID
+    ownerId: ID
     force: Boolean = false
   ): WikiResetCursorResult!
 }
