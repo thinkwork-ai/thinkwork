@@ -1,11 +1,11 @@
 ---
 title: Mobile — Threads & Chat
-description: The Threads tab, thread detail, streaming message render, message input with workspace picker, quick actions, and voice dictation in the ThinkWork mobile app.
+description: The Threads tab, thread detail, HITL confirmation cards, streaming message render, message input with workspace picker, quick actions, and voice dictation in the ThinkWork mobile app.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Threads are the heart of the mobile app. The **Threads** tab shows the user's threads, each thread opens into a chat view with a streaming message timeline, and the message input supports workspace selection, voice dictation, and quick actions.
+Threads are the heart of the mobile app. The **Threads** tab shows the user's threads, each thread opens into a chat view with a streaming message timeline, and the message input supports workspace selection, voice dictation, and quick actions. When an agent pauses for human confirmation, that request appears in the same Threads surface instead of moving the user to a separate queue.
 
 ## The Threads tab
 
@@ -21,6 +21,19 @@ The Threads tab supports:
 - **Pull-to-refresh** — a backup path for when the subscription is warming up
 
 Rows are rendered by two components: `ThreadRow` for chat threads and `TaskRow` for external-task threads. The user doesn't have to care about the difference; the list is unified.
+
+### Human-in-the-loop priority
+
+Workspace orchestration can pause an agent run when the agent needs a human decision before continuing. The mobile app treats that as a thread state, not as a separate task system.
+
+When a thread has a pending review request:
+
+- The thread sorts above ordinary non-HITL threads, even if another thread has newer activity.
+- The row shows a `Needs answer` badge.
+- The preview changes to explain that the agent is waiting for confirmation.
+- The Threads tab badge switches to the count of visible HITL threads before showing ordinary unread counts.
+
+This makes the user's next required decision visible without splitting the conversation across different tabs.
 
 ## Thread detail
 
@@ -48,6 +61,42 @@ Subscriptions drive all three. `useThreadUpdatedSubscription` watches for thread
 When an agent calls a tool during a turn, the tool call renders inline in the timeline as a collapsible row: tool name, input preview, output preview. This is the mobile mirror of the [Admin app's thread detail turn-level audit view](/applications/admin/threads/#thread-detail), scoped to what's relevant to an end user.
 
 Tool calls with rich output — for example, a tool returning an external task envelope — use the GenUI registry to render a custom block inline, instead of just plain text. The GenUI registry is how the mobile app stays extensible without shipping a new build for every new tool.
+
+## Human-in-the-loop confirmations
+
+When the user opens a thread that is waiting for review, the thread detail screen shows a confirmation card near the top of the timeline. The card is the handoff point between the agent and the user.
+
+The card shows:
+
+- The workspace target path the agent is waiting on.
+- The review text written by the orchestration layer.
+- A compact summary of proposed changes when the review includes them.
+- An optional note field for context the user wants to send back to the agent.
+- Actions for the decision the user wants to take.
+
+The available actions match the state of the workspace run:
+
+| Action | Meaning |
+|---|---|
+| `Approve` | Accept the review, include the optional note if present, and clear the agent to continue. |
+| `Continue` | Resume a pending workspace run without recording a fresh approval decision. This is used when the run is already queued or only needs a nudge to continue. |
+| `Reject` | Cancel the workspace run. The agent is not resumed from that review request. |
+
+After a successful action, the app confirms the decision. For `Approve` and `Continue`, the thread is marked active while the agent resumes in the same conversation. If the review changed after the user opened it, the app asks the user to refresh before deciding so they do not answer stale review text.
+
+### Under the hood
+
+The mobile HITL surface is backed by the workspace review GraphQL contract:
+
+- `agentWorkspaceReviews` lists pending reviews, filtered by `status: "awaiting_review"` for the Threads tab.
+- `agentWorkspaceReview` loads the review body, ETag, event history, and proposed-change summary for the thread detail card.
+- `acceptAgentWorkspaceReview`, `resumeAgentWorkspaceRun`, and `cancelAgentWorkspaceReview` record the user's decision.
+
+Those decisions are auditable workspace events. Approval and resume decisions queue a `workspace_event` wakeup so the agent continues the same thread with the review response in context. Cancellation settles the run without waking the agent.
+
+The mobile app does not hide HITL state locally as a workaround. The list and detail screens derive visibility from `agentWorkspaceReviews(status: "awaiting_review")`; once the backend run leaves that state, the amber row treatment and Threads tab HITL count clear naturally.
+
+Protected orchestration paths are still protected. Review decisions should go through the GraphQL mutations above, not through generic workspace file writes.
 
 ## Message input
 
