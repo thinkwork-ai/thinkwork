@@ -594,6 +594,50 @@ def _register_delegate_to_workspace_tool(
     )
 
 
+def _build_mcp_clients(mcp_configs: list | None) -> list:
+    """Build Strands MCP clients from runtime config.
+
+    Kept as a helper so tests can verify auth-header propagation without
+    constructing a Bedrock-backed Agent.
+    """
+    mcp_clients = []
+    logger.info("MCP configs received: %d servers, raw=%s",
+                len(mcp_configs or []),
+                json.dumps([{k: ("***" if k == "auth" else v)
+                             for k, v in cfg.items()} for cfg in (mcp_configs or [])], default=str))
+    for cfg in (mcp_configs or []):
+        url = cfg.get("url", "")
+        if not url:
+            logger.warning("MCP config has no url, skipping: %s", cfg)
+            continue
+        server_name = cfg.get("name", url)
+        headers = {}
+        auth = cfg.get("auth") or {}
+        has_token = bool(auth.get("token"))
+        logger.info("MCP connecting: name=%s url=%s has_auth=%s auth_type=%s",
+                    server_name, url, has_token, auth.get("type", "none"))
+        if auth.get("token"):
+            auth_type = auth.get("type", "bearer")
+            if auth_type == "bearer":
+                headers["Authorization"] = f"Bearer {auth['token']}"
+            elif auth_type == "api-key":
+                headers["x-api-key"] = auth["token"]
+        try:
+            from strands.tools.mcp import MCPClient
+            from mcp.client.streamable_http import streamablehttp_client
+            logger.info("MCP creating client for %s with %d headers", server_name, len(headers))
+            client = MCPClient(lambda u=url, h=headers: streamablehttp_client(url=u, headers=h))
+            # Don't call start() — the Agent will start the client and load tools automatically.
+            # Just register the client as a tool provider.
+            mcp_clients.append(client)
+            logger.info("MCP client registered: %s url=%s (tools will be discovered by Agent)", server_name, url)
+        except Exception as e:
+            import traceback
+            logger.error("MCP connection FAILED for %s (%s): %s\n%s", server_name, url, e, traceback.format_exc())
+
+    return mcp_clients
+
+
 def _call_strands_agent(system_prompt: str, messages: list,
                         model: str = "",
                         skills_config: list | None = None,
@@ -1354,46 +1398,12 @@ def _call_strands_agent(system_prompt: str, messages: list,
     # Connect to HTTP streaming MCP servers passed in the invocation payload.
     # Each config: {name, url, transport?, auth?: {type, token}, tools?: [...]}
     # Clients are context-managed: __enter__ discovers tools, __exit__ cleans up.
-    mcp_clients = []
     _mcp_tool_to_server: dict[str, str] = {}  # tool_name → server name (for tracking)
-    logger.info("MCP configs received: %d servers, raw=%s",
-                len(mcp_configs or []),
-                json.dumps([{k: ("***" if k == "auth" else v)
-                             for k, v in cfg.items()} for cfg in (mcp_configs or [])], default=str))
-    for cfg in (mcp_configs or []):
-        url = cfg.get("url", "")
-        if not url:
-            logger.warning("MCP config has no url, skipping: %s", cfg)
-            continue
-        server_name = cfg.get("name", url)
-        headers = {}
-        auth = cfg.get("auth") or {}
-        has_token = bool(auth.get("token"))
-        logger.info("MCP connecting: name=%s url=%s has_auth=%s auth_type=%s",
-                     server_name, url, has_token, auth.get("type", "none"))
-        if auth.get("token"):
-            auth_type = auth.get("type", "bearer")
-            if auth_type == "bearer":
-                headers["Authorization"] = f"Bearer {auth['token']}"
-            elif auth_type == "api-key":
-                headers["x-api-key"] = auth["token"]
-        try:
-            from strands.tools.mcp import MCPClient
-            from mcp.client.streamable_http import streamablehttp_client
-            logger.info("MCP creating client for %s with %d headers", server_name, len(headers))
-            client = MCPClient(lambda u=url, h=headers: streamablehttp_client(url=u, headers=h))
-            # Don't call start() — the Agent will start the client and load tools automatically.
-            # Just register the client as a tool provider.
-            mcp_clients.append(client)
-            logger.info("MCP client registered: %s url=%s (tools will be discovered by Agent)", server_name, url)
-        except Exception as e:
-            import traceback
-            logger.error("MCP connection FAILED for %s (%s): %s\n%s", server_name, url, e, traceback.format_exc())
+    mcp_clients = _build_mcp_clients(mcp_configs)
 
     if mcp_clients:
         tools.extend(mcp_clients)
-        logger.info("MCP clients added to tool list: %d servers, %d tools mapped",
-                     len(mcp_clients), len(_mcp_tool_to_server))
+        logger.info("MCP clients added to tool list: %d servers", len(mcp_clients))
 
     # U12 tenant kill-switch + template-block filter. Applies tenant-wide
     # disables (disabled_builtin_tools) ∪ template-level blocks
