@@ -1,0 +1,20 @@
+import { agentWorkspaceEvents_ as agentWorkspaceEvents } from "./agentWorkspaceEvents.query.js";
+import { agentWorkspaceReviews } from "./agentWorkspaceReviews.query.js";
+import { agentWorkspaceRuns_ as agentWorkspaceRuns } from "./agentWorkspaceRuns.query.js";
+import {
+  acceptAgentWorkspaceReview,
+  cancelAgentWorkspaceReview,
+  resumeAgentWorkspaceRun,
+} from "./reviewDecision.mutation.js";
+
+export const workspaceQueries = {
+  agentWorkspaceEvents,
+  agentWorkspaceReviews,
+  agentWorkspaceRuns,
+};
+
+export const workspaceMutations = {
+  acceptAgentWorkspaceReview,
+  cancelAgentWorkspaceReview,
+  resumeAgentWorkspaceRun,
+};

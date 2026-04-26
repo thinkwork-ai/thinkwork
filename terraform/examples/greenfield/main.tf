@@ -111,6 +111,12 @@ variable "lambda_zips_dir" {
   default     = ""
 }
 
+variable "enable_workspace_orchestration" {
+  description = "Enable S3 EventBridge/SQS routing and the workspace event dispatcher for folder-native workspace orchestration."
+  type        = bool
+  default     = false
+}
+
 variable "api_auth_secret" {
   description = "Shared secret for inter-service API authentication"
   type        = string
@@ -259,14 +265,15 @@ module "thinkwork" {
   region     = var.region
   account_id = var.account_id
 
-  db_password                = var.db_password
-  database_engine            = var.database_engine
-  enable_hindsight           = var.enable_hindsight
-  google_oauth_client_id     = var.google_oauth_client_id
-  google_oauth_client_secret = var.google_oauth_client_secret
-  pre_signup_lambda_zip      = var.pre_signup_lambda_zip
-  lambda_zips_dir            = var.lambda_zips_dir
-  api_auth_secret            = var.api_auth_secret
+  db_password                    = var.db_password
+  database_engine                = var.database_engine
+  enable_hindsight               = var.enable_hindsight
+  google_oauth_client_id         = var.google_oauth_client_id
+  google_oauth_client_secret     = var.google_oauth_client_secret
+  pre_signup_lambda_zip          = var.pre_signup_lambda_zip
+  lambda_zips_dir                = var.lambda_zips_dir
+  enable_workspace_orchestration = var.enable_workspace_orchestration
+  api_auth_secret                = var.api_auth_secret
 
   # Public website custom domain (optional — wired only when www_domain is set)
   www_domain          = var.www_domain

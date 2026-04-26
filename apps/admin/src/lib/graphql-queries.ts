@@ -208,6 +208,85 @@ export const DeleteAgentBudgetPolicyMutation = graphql(`
   }
 `);
 
+// ---------------------------------------------------------------------------
+// Workspace orchestration reviews
+// ---------------------------------------------------------------------------
+
+export const AgentWorkspaceReviewsQuery = gql`
+  query AgentWorkspaceReviews($tenantId: ID!, $status: String, $limit: Int) {
+    agentWorkspaceReviews(tenantId: $tenantId, status: $status, limit: $limit) {
+      reviewObjectKey
+      targetPath
+      requestedAt
+      reason
+      payload
+      run {
+        id
+        tenantId
+        agentId
+        targetPath
+        status
+        sourceObjectKey
+        requestObjectKey
+        currentWakeupRequestId
+        lastEventAt
+        createdAt
+        updatedAt
+      }
+      latestEvent {
+        id
+        eventType
+        reason
+        sourceObjectKey
+        payload
+        createdAt
+      }
+    }
+  }
+`;
+
+export const AcceptAgentWorkspaceReviewMutation = gql`
+  mutation AcceptAgentWorkspaceReview(
+    $runId: ID!
+    $input: AgentWorkspaceReviewDecisionInput
+  ) {
+    acceptAgentWorkspaceReview(runId: $runId, input: $input) {
+      id
+      status
+      currentWakeupRequestId
+      updatedAt
+    }
+  }
+`;
+
+export const CancelAgentWorkspaceReviewMutation = gql`
+  mutation CancelAgentWorkspaceReview(
+    $runId: ID!
+    $input: AgentWorkspaceReviewDecisionInput
+  ) {
+    cancelAgentWorkspaceReview(runId: $runId, input: $input) {
+      id
+      status
+      completedAt
+      updatedAt
+    }
+  }
+`;
+
+export const ResumeAgentWorkspaceRunMutation = gql`
+  mutation ResumeAgentWorkspaceRun(
+    $runId: ID!
+    $input: AgentWorkspaceReviewDecisionInput
+  ) {
+    resumeAgentWorkspaceRun(runId: $runId, input: $input) {
+      id
+      status
+      currentWakeupRequestId
+      updatedAt
+    }
+  }
+`;
+
 export const ModelCatalogQuery = graphql(`
   query ModelCatalog {
     modelCatalog {

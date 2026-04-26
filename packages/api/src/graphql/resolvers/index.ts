@@ -25,54 +25,60 @@ import { knowledgeMutations } from "./knowledge/index.js";
 import { artifactMutations } from "./artifacts/index.js";
 import { orchestrationMutations } from "./orchestration/index.js";
 import { webhookMutations } from "./webhooks/index.js";
-import { evaluationsQueries, evaluationsMutations } from "./evaluations/index.js";
+import {
+  evaluationsQueries,
+  evaluationsMutations,
+} from "./evaluations/index.js";
 import { wikiQueries, wikiMutations } from "./wiki/index.js";
 import { skillRunsQueries, skillRunsMutations } from "./skill-runs/index.js";
 import { runtimeQueries } from "./runtime/index.js";
+import { workspaceQueries, workspaceMutations } from "./workspace/index.js";
 
 export const queryResolvers: Record<string, any> = {
-	_empty: () => null,
-	...agentQueries,
-	...coreQueries,
-	...teamQueries,
-	...threadQueries,
-	...inboxQueries,
-	...triggerQueries,
-	...costQueries,
-	...knowledgeQueries,
-	...artifactQueries,
-	...orchestrationQueries,
-	...messageQueries,
-	...webhookQueries,
-	...memoryQueries,
-	...recipeQueries,
-	...templateQueries,
-	...evaluationsQueries,
-	...wikiQueries,
-	...skillRunsQueries,
-	...runtimeQueries,
+  _empty: () => null,
+  ...agentQueries,
+  ...coreQueries,
+  ...teamQueries,
+  ...threadQueries,
+  ...inboxQueries,
+  ...triggerQueries,
+  ...costQueries,
+  ...knowledgeQueries,
+  ...artifactQueries,
+  ...orchestrationQueries,
+  ...messageQueries,
+  ...webhookQueries,
+  ...memoryQueries,
+  ...recipeQueries,
+  ...templateQueries,
+  ...evaluationsQueries,
+  ...wikiQueries,
+  ...skillRunsQueries,
+  ...runtimeQueries,
+  ...workspaceQueries,
 };
 
 export const mutationResolvers: Record<string, any> = {
-	_empty: () => null,
-	...agentMutations,
-	...coreMutations,
-	...messageMutations,
-	...teamMutations,
-	...triggerMutations,
-	...threadMutations,
-	...inboxMutations,
-	...costMutations,
-	...knowledgeMutations,
-	...artifactMutations,
-	...orchestrationMutations,
-	...webhookMutations,
-	...memoryMutations,
-	...recipeMutations,
-	...templateMutations,
-	...evaluationsMutations,
-	...wikiMutations,
-	...skillRunsMutations,
+  _empty: () => null,
+  ...agentMutations,
+  ...coreMutations,
+  ...messageMutations,
+  ...teamMutations,
+  ...triggerMutations,
+  ...threadMutations,
+  ...inboxMutations,
+  ...costMutations,
+  ...knowledgeMutations,
+  ...artifactMutations,
+  ...orchestrationMutations,
+  ...webhookMutations,
+  ...memoryMutations,
+  ...recipeMutations,
+  ...templateMutations,
+  ...evaluationsMutations,
+  ...wikiMutations,
+  ...skillRunsMutations,
+  ...workspaceMutations,
 };
 
 import { agentTypeResolvers } from "./agents/types.js";
@@ -81,8 +87,8 @@ import { memoryRecordTypeResolvers } from "./memory/types.js";
 import { wikiPageTypeResolvers } from "./wiki/index.js";
 
 export const typeResolvers: Record<string, Record<string, any>> = {
-	Agent: agentTypeResolvers,
-	Thread: threadTypeResolvers,
-	MemoryRecord: memoryRecordTypeResolvers,
-	WikiPage: wikiPageTypeResolvers,
+  Agent: agentTypeResolvers,
+  Thread: threadTypeResolvers,
+  MemoryRecord: memoryRecordTypeResolvers,
+  WikiPage: wikiPageTypeResolvers,
 };

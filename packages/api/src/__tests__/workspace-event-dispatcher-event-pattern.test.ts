@@ -1,6 +1,13 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { mockClient } from "aws-sdk-client-mock";
 import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
+
+const persistWorkspaceEventMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../lib/workspace-events/processor.js", () => ({
+  persistWorkspaceEvent: persistWorkspaceEventMock,
+}));
+
 import {
   handler,
   WORKSPACE_EVENT_PREFIX_PATTERNS,
@@ -8,7 +15,11 @@ import {
 
 const s3Mock = mockClient(S3Client);
 
-function sqsEvent(key: string, messageId = "msg-1", detailType = "Object Created") {
+function sqsEvent(
+  key: string,
+  messageId = "msg-1",
+  detailType = "Object Created",
+) {
   return {
     Records: [
       {
@@ -27,6 +38,10 @@ function sqsEvent(key: string, messageId = "msg-1", detailType = "Object Created
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  persistWorkspaceEventMock.mockResolvedValue({
+    status: "processed",
+    eventId: 1,
+  });
   s3Mock.reset();
 });
 
@@ -49,6 +64,17 @@ describe("workspace event dispatcher candidate handling", () => {
       sqsEvent("tenants/acme/agents/marco/workspace/work/inbox/request.md"),
     );
     expect(result.batchItemFailures).toEqual([]);
+    expect(persistWorkspaceEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantSlug: "acme", agentSlug: "marco" }),
+      expect.objectContaining({ eventType: "work.requested" }),
+      expect.objectContaining({
+        bucket: "bucket",
+        sourceObjectKey:
+          "tenants/acme/agents/marco/workspace/work/inbox/request.md",
+        sequencer: "001",
+      }),
+      expect.anything(),
+    );
   });
 
   it("suppresses objects marked with thinkwork-suppress-event", async () => {
@@ -79,5 +105,14 @@ describe("workspace event dispatcher candidate handling", () => {
     );
     expect(result.batchItemFailures).toEqual([]);
     expect(s3Mock.commandCalls(HeadObjectCommand)).toHaveLength(0);
+    expect(persistWorkspaceEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ eventfulKind: "review" }),
+      expect.objectContaining({
+        eventType: "event.rejected",
+        reason: "review_deleted_directly",
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 });

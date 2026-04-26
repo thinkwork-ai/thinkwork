@@ -17,6 +17,7 @@ enum AgentWorkspaceEventType {
   RUN_COMPLETED
   RUN_FAILED
   REVIEW_REQUESTED
+  REVIEW_RESPONDED
   MEMORY_CHANGED
   EVENT_REJECTED
 }
@@ -73,8 +74,48 @@ type AgentWorkspaceWait {
   satisfiedAt: AWSDateTime
 }
 
-extend type Query {
-  agentWorkspaceRuns(agentId: ID, targetPath: String, status: String, limit: Int = 50): [AgentWorkspaceRun!]!
-  agentWorkspaceEvents(runId: ID!, limit: Int = 100): [AgentWorkspaceEvent!]!
+type AgentWorkspaceReview {
+  run: AgentWorkspaceRun!
+  latestEvent: AgentWorkspaceEvent
+  reviewObjectKey: String
+  targetPath: String!
+  requestedAt: AWSDateTime!
+  reason: String
+  payload: AWSJSON
 }
 
+input AgentWorkspaceReviewDecisionInput {
+  notes: String
+  idempotencyKey: String
+}
+
+extend type Query {
+  agentWorkspaceRuns(
+    agentId: ID
+    targetPath: String
+    status: String
+    limit: Int = 50
+  ): [AgentWorkspaceRun!]!
+  agentWorkspaceEvents(runId: ID!, limit: Int = 100): [AgentWorkspaceEvent!]!
+  agentWorkspaceReviews(
+    tenantId: ID!
+    agentId: ID
+    status: String = "awaiting_review"
+    limit: Int = 50
+  ): [AgentWorkspaceReview!]!
+}
+
+extend type Mutation {
+  acceptAgentWorkspaceReview(
+    runId: ID!
+    input: AgentWorkspaceReviewDecisionInput
+  ): AgentWorkspaceRun!
+  cancelAgentWorkspaceReview(
+    runId: ID!
+    input: AgentWorkspaceReviewDecisionInput
+  ): AgentWorkspaceRun!
+  resumeAgentWorkspaceRun(
+    runId: ID!
+    input: AgentWorkspaceReviewDecisionInput
+  ): AgentWorkspaceRun!
+}
