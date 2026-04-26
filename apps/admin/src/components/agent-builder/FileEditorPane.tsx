@@ -109,11 +109,14 @@ export function FileEditorPane({
               <Button
                 variant="ghost"
                 size="sm"
-                className={`h-6 p-0 text-muted-foreground ${
+                className={`h-6 p-0 ${
                   confirmingDelete
-                    ? "w-16 px-2 text-[11px] text-destructive"
-                    : "w-6"
+                    ? "w-auto rounded-full border border-destructive/45 bg-transparent px-1.5 text-[11px] font-semibold leading-none text-destructive shadow-none transition-none hover:border-destructive/65 hover:bg-destructive/10 hover:text-destructive focus-visible:ring-destructive/25"
+                    : "w-6 text-muted-foreground/65 transition-none hover:text-foreground"
                 }`}
+                aria-label={
+                  confirmingDelete ? "Confirm delete file" : "Delete file"
+                }
                 disabled={deleting}
                 onMouseLeave={onCancelDeleteConfirm}
                 onClick={confirmingDelete ? onDelete : onConfirmDelete}

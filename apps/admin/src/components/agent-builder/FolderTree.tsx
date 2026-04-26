@@ -8,6 +8,12 @@ import {
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { InheritanceIndicator } from "./InheritanceIndicator";
 import type { ComposeSource } from "@/lib/agent-builder-api";
 
@@ -88,11 +94,13 @@ export function FolderTree(props: FolderTreeProps) {
   }
 
   return (
-    <div className="py-1">
-      {props.nodes.map((node) => (
-        <FolderTreeItem key={node.path} node={node} depth={0} {...props} />
-      ))}
-    </div>
+    <TooltipProvider delayDuration={2000} skipDelayDuration={0}>
+      <div className="py-1">
+        {props.nodes.map((node) => (
+          <FolderTreeItem key={node.path} node={node} depth={0} {...props} />
+        ))}
+      </div>
+    </TooltipProvider>
   );
 }
 
@@ -120,7 +128,7 @@ function FolderTreeItem({
   return (
     <>
       <div
-        className={`group/tree-row flex cursor-pointer items-center gap-1 px-2 py-1 text-sm hover:bg-accent ${
+        className={`group/tree-row mx-1 flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-sm hover:bg-accent ${
           isSelected ? "bg-accent" : ""
         }`}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
@@ -182,30 +190,43 @@ function FolderTreeItem({
                 : "opacity-0 group-hover/tree-row:opacity-100"
             }`}
           >
-            <Button
-              variant="ghost"
-              size={isConfirmingDelete ? "sm" : "icon-xs"}
-              className={
-                isConfirmingDelete
-                  ? "h-6 px-2 text-[11px] text-destructive"
-                  : undefined
-              }
-              aria-label={`Delete ${node.name}`}
-              disabled={isDeleting}
-              onClick={(event) => {
-                event.stopPropagation();
-                if (isConfirmingDelete) onDelete(node.path, node.isFolder);
-                else onConfirmDelete(node.path);
-              }}
-            >
-              {isDeleting ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-              ) : isConfirmingDelete ? (
-                "Confirm"
-              ) : (
-                <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size={isConfirmingDelete ? "sm" : "icon-xs"}
+                  className={
+                    isConfirmingDelete
+                      ? "h-6 rounded-full border border-destructive/45 bg-transparent px-1.5 text-[11px] font-semibold leading-none text-destructive shadow-none transition-none hover:border-destructive/65 hover:bg-destructive/10 hover:text-destructive focus-visible:ring-destructive/25"
+                      : "text-muted-foreground/65 transition-none hover:text-foreground"
+                  }
+                  aria-label={
+                    isConfirmingDelete
+                      ? `Confirm delete ${node.name}`
+                      : `Delete ${node.name}`
+                  }
+                  disabled={isDeleting}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (isConfirmingDelete) onDelete(node.path, node.isFolder);
+                    else onConfirmDelete(node.path);
+                  }}
+                >
+                  {isDeleting ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                  ) : isConfirmingDelete ? (
+                    "Confirm"
+                  ) : (
+                    <Trash2 className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              {!isConfirmingDelete && !isDeleting && (
+                <TooltipContent side="right" sideOffset={6}>
+                  Delete
+                </TooltipContent>
               )}
-            </Button>
+            </Tooltip>
           </span>
         </span>
       </div>
