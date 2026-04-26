@@ -245,6 +245,68 @@ export const AgentWorkspaceReviewsQuery = gql`
   }
 `;
 
+export const AgentWorkspaceReviewQuery = gql`
+  query AgentWorkspaceReview($runId: ID!) {
+    agentWorkspaceReview(runId: $runId) {
+      reviewObjectKey
+      targetPath
+      requestedAt
+      reason
+      payload
+      reviewBody
+      reviewEtag
+      reviewMissing
+      proposedChanges {
+        path
+        kind
+        summary
+        diff
+        before
+        after
+      }
+      run {
+        id
+        tenantId
+        agentId
+        targetPath
+        status
+        sourceObjectKey
+        requestObjectKey
+        currentWakeupRequestId
+        currentThreadTurnId
+        lastEventAt
+        createdAt
+        updatedAt
+      }
+      latestEvent {
+        id
+        eventType
+        reason
+        sourceObjectKey
+        payload
+        createdAt
+      }
+      events {
+        id
+        eventType
+        reason
+        sourceObjectKey
+        payload
+        createdAt
+      }
+      decisionEvents {
+        id
+        eventType
+        reason
+        actorType
+        actorId
+        payload
+        createdAt
+      }
+    }
+  }
+`;
+
 export const AcceptAgentWorkspaceReviewMutation = gql`
   mutation AcceptAgentWorkspaceReview(
     $runId: ID!

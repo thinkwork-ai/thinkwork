@@ -77,16 +77,34 @@ type AgentWorkspaceWait {
 type AgentWorkspaceReview {
   run: AgentWorkspaceRun!
   latestEvent: AgentWorkspaceEvent
+  threadId: ID
   reviewObjectKey: String
   targetPath: String!
   requestedAt: AWSDateTime!
   reason: String
   payload: AWSJSON
+  reviewBody: String
+  reviewEtag: String
+  reviewMissing: Boolean
+  proposedChanges: [AgentWorkspaceProposedChange!]!
+  events: [AgentWorkspaceEvent!]!
+  decisionEvents: [AgentWorkspaceEvent!]!
+}
+
+type AgentWorkspaceProposedChange {
+  path: String
+  kind: String!
+  summary: String!
+  diff: String
+  before: String
+  after: String
 }
 
 input AgentWorkspaceReviewDecisionInput {
   notes: String
   idempotencyKey: String
+  expectedReviewEtag: String
+  responseMarkdown: String
 }
 
 extend type Query {
@@ -103,6 +121,7 @@ extend type Query {
     status: String = "awaiting_review"
     limit: Int = 50
   ): [AgentWorkspaceReview!]!
+  agentWorkspaceReview(runId: ID!): AgentWorkspaceReview
 }
 
 extend type Mutation {

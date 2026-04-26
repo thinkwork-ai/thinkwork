@@ -1,6 +1,17 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { InteractionManager } from "react-native";
-import { View, FlatList, Pressable, Keyboard, KeyboardAvoidingView, Platform, Alert, RefreshControl } from "react-native";
+import {
+  ActivityIndicator,
+  View,
+  FlatList,
+  Pressable,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+  RefreshControl,
+  TextInput,
+} from "react-native";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -10,7 +21,7 @@ import { ShimmerText } from "@/components/ui/ShimmerText";
 import { getExternalProviderLabel, getThreadHeaderLabel } from "@/lib/thread-display";
 import { MessageInputFooter } from "@/components/input/MessageInputFooter";
 import { QuickActionsSheet, type QuickActionsSheetRef } from "@/components/chat/QuickActionsSheet";
-import { useQuickActions, useDeleteQuickAction, type QuickAction } from "@/lib/hooks/use-quick-actions";
+import { useQuickActions, type QuickAction } from "@/lib/hooks/use-quick-actions";
 import { WebViewSheet, type WebViewSheetRef } from "@/components/chat/WebViewSheet";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -35,7 +46,175 @@ import {
   SendMessageMutation,
   MessagesQuery,
   UpdateThreadMutation,
+  AgentWorkspaceReviewsQuery,
+  AgentWorkspaceReviewQuery,
+  AcceptAgentWorkspaceReviewMutation,
+  CancelAgentWorkspaceReviewMutation,
+  ResumeAgentWorkspaceRunMutation,
 } from "@/lib/graphql-queries";
+import {
+  type WorkspaceReviewDecision,
+  workspaceReviewActionsForStatus,
+  workspaceReviewDecisionLabel,
+  workspaceReviewDecisionToast,
+  workspaceReviewErrorMessage,
+} from "@/lib/workspace-review-state";
+
+function ThreadHitlPrompt({
+  review,
+  fetching,
+  response,
+  onChangeResponse,
+  onDecide,
+  pendingDecision,
+  colors,
+  isDark,
+}: {
+  review: any;
+  fetching?: boolean;
+  response: string;
+  onChangeResponse: (value: string) => void;
+  onDecide: (decision: WorkspaceReviewDecision) => void;
+  pendingDecision: WorkspaceReviewDecision | null;
+  colors: (typeof COLORS)["dark"];
+  isDark: boolean;
+}) {
+  const actions = workspaceReviewActionsForStatus(review?.run?.status);
+  const proposedChanges = (review?.proposedChanges ?? []) as any[];
+  const body = String(review?.reviewBody ?? "").trim();
+
+  return (
+    <View
+      className="mx-4 mb-3 rounded-xl border p-3"
+      style={{
+        backgroundColor: isDark ? "rgba(245,158,11,0.10)" : "#fffbeb",
+        borderColor: isDark ? "rgba(245,158,11,0.38)" : "#f59e0b",
+      }}
+    >
+      <View className="flex-row items-center justify-between gap-3">
+        <View className="flex-1">
+          <Text className="text-sm font-semibold" style={{ color: colors.foreground }}>
+            Agent waiting for confirmation
+          </Text>
+          <Muted className="text-xs" numberOfLines={1}>
+            {review?.targetPath || review?.run?.targetPath || "Workspace review"}
+          </Muted>
+        </View>
+        {fetching ? <ActivityIndicator size="small" color="#f59e0b" /> : null}
+      </View>
+
+      {body ? (
+        <Text className="mt-2 text-sm" numberOfLines={5} style={{ color: colors.foreground }}>
+          {body.replace(/^#+\s*/gm, "").trim()}
+        </Text>
+      ) : review?.reason ? (
+        <Muted className="mt-2 text-sm">
+          {String(review.reason).replace(/[_-]+/g, " ")}
+        </Muted>
+      ) : null}
+
+      {proposedChanges.length > 0 ? (
+        <View className="mt-3 gap-1.5">
+          {proposedChanges.slice(0, 3).map((change, index) => (
+            <View key={`${change.path ?? "change"}-${index}`} className="rounded-lg px-2.5 py-2" style={{ backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.72)" }}>
+              <Text className="text-xs font-semibold" style={{ color: colors.foreground }} numberOfLines={1}>
+                {change.path || change.kind || "Proposed change"}
+              </Text>
+              <Muted className="text-xs" numberOfLines={2}>
+                {change.summary || "Review includes proposed workspace changes"}
+              </Muted>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      <TextInput
+        value={response}
+        onChangeText={onChangeResponse}
+        placeholder="Optional note for the agent"
+        placeholderTextColor={colors.mutedForeground}
+        multiline
+        className="mt-3 rounded-lg px-3 py-2 text-sm"
+        style={{
+          minHeight: 42,
+          maxHeight: 96,
+          color: colors.foreground,
+          backgroundColor: isDark ? "rgba(23,23,23,0.78)" : "#ffffff",
+          borderWidth: 1,
+          borderColor: colors.border,
+        }}
+      />
+
+      <View className="mt-3 flex-row gap-2">
+        {actions.accept ? (
+          <ReviewActionButton
+            label={workspaceReviewDecisionLabel("accept")}
+            decision="accept"
+            pendingDecision={pendingDecision}
+            onPress={onDecide}
+            tone="primary"
+          />
+        ) : null}
+        {actions.resume ? (
+          <ReviewActionButton
+            label={workspaceReviewDecisionLabel("resume")}
+            decision="resume"
+            pendingDecision={pendingDecision}
+            onPress={onDecide}
+            tone="neutral"
+          />
+        ) : null}
+        {actions.cancel ? (
+          <ReviewActionButton
+            label={workspaceReviewDecisionLabel("cancel")}
+            decision="cancel"
+            pendingDecision={pendingDecision}
+            onPress={onDecide}
+            tone="danger"
+          />
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function ReviewActionButton({
+  label,
+  decision,
+  pendingDecision,
+  onPress,
+  tone,
+}: {
+  label: string;
+  decision: WorkspaceReviewDecision;
+  pendingDecision: WorkspaceReviewDecision | null;
+  onPress: (decision: WorkspaceReviewDecision) => void;
+  tone: "primary" | "neutral" | "danger";
+}) {
+  const disabled = pendingDecision !== null;
+  const backgroundColor =
+    tone === "primary" ? "#f59e0b" : tone === "danger" ? "#dc2626" : "transparent";
+  const borderColor =
+    tone === "primary" ? "#f59e0b" : tone === "danger" ? "#dc2626" : "#a3a3a3";
+  const color = tone === "neutral" ? "#737373" : "#ffffff";
+
+  return (
+    <Pressable
+      onPress={() => onPress(decision)}
+      disabled={disabled}
+      className="min-h-[36px] flex-1 items-center justify-center rounded-lg border px-2"
+      style={{ backgroundColor, borderColor, opacity: disabled ? 0.65 : 1 }}
+    >
+      {pendingDecision === decision ? (
+        <ActivityIndicator color={color} size="small" />
+      ) : (
+        <Text className="text-xs font-semibold" style={{ color }} numberOfLines={1}>
+          {label}
+        </Text>
+      )}
+    </Pressable>
+  );
+}
 
 function LoadingTitle() {
   const [dots, setDots] = useState("");
@@ -153,6 +332,36 @@ export default function ThreadDetailRoute() {
   });
   const turns = (turnsData?.threadTurns ?? []) as any[];
   const hasRunningTurn = turns.some((t: any) => t.status === "running");
+  const [{ data: reviewListData, fetching: fetchingReviews }, reexecuteReviews] =
+    useQuery({
+      query: AgentWorkspaceReviewsQuery,
+      variables: { tenantId: tenantId!, status: "awaiting_review", limit: 50 },
+      pause: !threadId || !tenantId,
+    });
+  const pendingReview = useMemo(() => {
+    return ((reviewListData?.agentWorkspaceReviews ?? []) as any[]).find(
+      (review) => review.threadId === threadId,
+    );
+  }, [reviewListData?.agentWorkspaceReviews, threadId]);
+  const pendingReviewRunId = pendingReview?.run?.id as string | undefined;
+  const [{ data: reviewDetailData, fetching: fetchingReviewDetail }, reexecuteReviewDetail] =
+    useQuery({
+      query: AgentWorkspaceReviewQuery,
+      variables: { runId: pendingReviewRunId! },
+      pause: !pendingReviewRunId,
+    });
+  const refreshReviewDetail = useCallback(() => {
+    if (!pendingReviewRunId) return;
+    reexecuteReviewDetail({ requestPolicy: "network-only" });
+  }, [pendingReviewRunId, reexecuteReviewDetail]);
+  const reviewDetail = (reviewDetailData?.agentWorkspaceReview ??
+    pendingReview) as any | null;
+  const [reviewResponse, setReviewResponse] = useState("");
+  const [pendingDecision, setPendingDecision] =
+    useState<WorkspaceReviewDecision | null>(null);
+  const [, executeAcceptReview] = useMutation(AcceptAgentWorkspaceReviewMutation);
+  const [, executeCancelReview] = useMutation(CancelAgentWorkspaceReviewMutation);
+  const [, executeResumeReview] = useMutation(ResumeAgentWorkspaceRunMutation);
 
   // Continuously poll messages/turns while the screen is mounted. Fast cadence
   // while a turn is running, slower cadence when idle — the idle poll is a
@@ -167,9 +376,11 @@ export default function ThreadDetailRoute() {
       reexecuteTurns({ requestPolicy: "network-only" });
       reexecuteThread({ requestPolicy: "network-only" });
       reexecuteMessages({ requestPolicy: "network-only" });
+      reexecuteReviews({ requestPolicy: "network-only" });
+      refreshReviewDetail();
     }, delay);
     return () => clearInterval(interval);
-  }, [threadId, hasRunningTurn, reexecuteTurns, reexecuteThread, reexecuteMessages]);
+  }, [threadId, hasRunningTurn, reexecuteTurns, reexecuteThread, reexecuteMessages, reexecuteReviews, refreshReviewDetail]);
 
   // Refresh whenever the screen gains focus — covers returning to the thread
   // from info/details and app foregrounding.
@@ -179,7 +390,9 @@ export default function ThreadDetailRoute() {
       reexecuteThread({ requestPolicy: "network-only" });
       reexecuteMessages({ requestPolicy: "network-only" });
       reexecuteTurns({ requestPolicy: "network-only" });
-    }, [threadId, reexecuteThread, reexecuteMessages, reexecuteTurns]),
+      reexecuteReviews({ requestPolicy: "network-only" });
+      refreshReviewDetail();
+    }, [threadId, reexecuteThread, reexecuteMessages, reexecuteTurns, reexecuteReviews, refreshReviewDetail]),
   );
 
   // ── Subscriptions (deferred to avoid setState-during-render warnings) ──
@@ -190,9 +403,11 @@ export default function ThreadDetailRoute() {
         reexecuteThread({ requestPolicy: "network-only" });
         reexecuteTurns({ requestPolicy: "network-only" });
         reexecuteMessages({ requestPolicy: "network-only" });
+        reexecuteReviews({ requestPolicy: "network-only" });
+        refreshReviewDetail();
       }, 0);
     }
-  }, [threadEvent?.onThreadUpdated?.updatedAt]);
+  }, [threadEvent?.onThreadUpdated?.updatedAt, reexecuteThread, reexecuteTurns, reexecuteMessages, reexecuteReviews, refreshReviewDetail]);
 
   const [{ data: msgEvent }] = useNewMessageSubscription(threadId);
   useEffect(() => {
@@ -268,9 +483,8 @@ export default function ThreadDetailRoute() {
   }, [executeCreateRecipe]);
 
   // Quick Actions (per-user, from DB) — defer until mounted to avoid setState-during-render
-  const [{ data: qaData }, reexecuteQA] = useQuickActions(mounted ? tenantId : undefined);
+  const [{ data: qaData }] = useQuickActions(mounted ? tenantId : undefined);
   const quickActions: QuickAction[] = (qaData?.userQuickActions ?? []) as QuickAction[];
-  const [, executeDeleteQA] = useDeleteQuickAction();
 
   const handleLinkPress = useCallback((url: string) => {
     if (webViewSheetRef.current) {
@@ -288,12 +502,67 @@ export default function ThreadDetailRoute() {
     reexecuteThread({ requestPolicy: "network-only" });
     reexecuteMessages({ requestPolicy: "network-only" });
     reexecuteTurns({ requestPolicy: "network-only" });
-  }, [threadId, reexecuteThread, reexecuteMessages, reexecuteTurns]);
+    reexecuteReviews({ requestPolicy: "network-only" });
+    refreshReviewDetail();
+  }, [threadId, reexecuteThread, reexecuteMessages, reexecuteTurns, reexecuteReviews, refreshReviewDetail]);
   useEffect(() => {
     if (pullRefreshing && !fetchingThread && !fetchingMessages && !fetchingTurns) {
       setPullRefreshing(false);
     }
-  }, [pullRefreshing, fetchingThread, fetchingMessages, fetchingTurns]);
+  }, [pullRefreshing, fetchingThread, fetchingMessages, fetchingTurns, fetchingReviews, fetchingReviewDetail]);
+
+  const handleReviewDecision = useCallback(
+    async (decision: WorkspaceReviewDecision) => {
+      if (!pendingReviewRunId) return;
+      setPendingDecision(decision);
+      try {
+        const input = {
+          idempotencyKey: `mobile-${pendingReviewRunId}-${decision}-${Date.now()}`,
+          expectedReviewEtag: reviewDetail?.reviewEtag ?? pendingReview?.reviewEtag ?? null,
+          responseMarkdown: reviewResponse.trim() || null,
+        };
+        const result =
+          decision === "accept"
+            ? await executeAcceptReview({ runId: pendingReviewRunId, input })
+            : decision === "cancel"
+              ? await executeCancelReview({ runId: pendingReviewRunId, input })
+              : await executeResumeReview({ runId: pendingReviewRunId, input });
+
+        if (result.error) throw result.error;
+        setReviewResponse("");
+        if (decision !== "cancel" && threadId) markThreadActive(threadId);
+        reexecuteReviews({ requestPolicy: "network-only" });
+        refreshReviewDetail();
+        reexecuteThread({ requestPolicy: "network-only" });
+        reexecuteTurns({ requestPolicy: "network-only" });
+        reexecuteMessages({ requestPolicy: "network-only" });
+        Alert.alert("Done", workspaceReviewDecisionToast(decision));
+      } catch (error: any) {
+        Alert.alert(
+          "Could not update review",
+          workspaceReviewErrorMessage(error?.message ?? String(error)),
+        );
+      } finally {
+        setPendingDecision(null);
+      }
+    },
+    [
+      pendingReviewRunId,
+      reviewDetail?.reviewEtag,
+      pendingReview?.reviewEtag,
+      reviewResponse,
+      executeAcceptReview,
+      executeCancelReview,
+      executeResumeReview,
+      threadId,
+      markThreadActive,
+      reexecuteReviews,
+      refreshReviewDetail,
+      reexecuteThread,
+      reexecuteTurns,
+      reexecuteMessages,
+    ],
+  );
 
   // ── Send message ──
   const [messageText, setMessageText] = useState("");
@@ -412,6 +681,20 @@ export default function ThreadDetailRoute() {
             isAgentRunning={!!threadId && isThreadActive(threadId)}
             onLinkPress={handleLinkPress}
             onSaveRecipe={handleSaveRecipe}
+            listHeaderComponent={
+              reviewDetail ? (
+                <ThreadHitlPrompt
+                  review={reviewDetail}
+                  fetching={fetchingReviewDetail}
+                  response={reviewResponse}
+                  onChangeResponse={setReviewResponse}
+                  onDecide={handleReviewDecision}
+                  pendingDecision={pendingDecision}
+                  colors={colors}
+                  isDark={isDark}
+                />
+              ) : null
+            }
             refreshing={pullRefreshing}
             onRefresh={handleRefresh}
             currentUserId={currentUser?.id}
@@ -470,9 +753,6 @@ export default function ThreadDetailRoute() {
         onLongPress={(action) => {
           quickActionsRef.current?.dismiss();
           setMessageText(action.prompt);
-        }}
-        onDelete={(id) => {
-          executeDeleteQA({ id }).then(() => reexecuteQA({ requestPolicy: "network-only" }));
         }}
         onAdd={() => {
           quickActionsRef.current?.dismiss();

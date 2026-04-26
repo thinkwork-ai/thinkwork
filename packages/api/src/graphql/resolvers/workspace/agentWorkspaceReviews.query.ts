@@ -7,8 +7,9 @@ import {
   desc,
   eq,
   snakeToCamel,
+  threadTurns,
 } from "../../utils.js";
-import { requireTenantAdmin } from "../core/authz.js";
+import { requireTenantMember } from "../core/authz.js";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
@@ -23,7 +24,7 @@ export async function agentWorkspaceReviews(
   },
   ctx: GraphQLContext,
 ): Promise<Record<string, unknown>[]> {
-  await requireTenantAdmin(ctx, args.tenantId);
+  await requireTenantMember(ctx, args.tenantId);
 
   const conditions = [
     eq(agentWorkspaceRuns.tenant_id, args.tenantId),
@@ -65,15 +66,36 @@ export async function agentWorkspaceReviews(
       string,
       unknown
     > | null;
+    let threadId: string | null = null;
+    if (run.current_thread_turn_id) {
+      const [turn] = await db
+        .select({ threadId: threadTurns.thread_id })
+        .from(threadTurns)
+        .where(
+          and(
+            eq(threadTurns.tenant_id, run.tenant_id),
+            eq(threadTurns.id, run.current_thread_turn_id),
+          ),
+        )
+        .limit(1);
+      threadId = turn?.threadId ?? null;
+    }
 
     reviews.push({
       run: snakeToCamel(run as Record<string, unknown>),
       latestEvent: event,
+      threadId,
       reviewObjectKey: latestEvent?.source_object_key ?? null,
       targetPath: run.target_path,
       requestedAt: run.last_event_at.toISOString(),
       reason: latestEvent?.reason ?? null,
       payload: eventPayload ? JSON.stringify(eventPayload) : null,
+      reviewBody: null,
+      reviewEtag: latestEvent?.object_etag ?? null,
+      reviewMissing: null,
+      proposedChanges: [],
+      events: [],
+      decisionEvents: [],
     });
   }
 
