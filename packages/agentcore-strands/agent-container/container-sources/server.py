@@ -402,6 +402,26 @@ def _register_delegate_to_workspace_tool(
     )
     _dw_tenant = os.environ.get("TENANT_ID", "")
     _dw_agent = os.environ.get("AGENT_ID", "") or os.environ.get("_ASSISTANT_ID", "")
+    _hs_endpoint = os.environ.get("HINDSIGHT_ENDPOINT", "")
+    _hs_user = os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", "")
+    _hs_bank = f"user_{_hs_user}" if _hs_user else ""
+    _hs_owner_id = _hs_user
+    _hs_tenant = os.environ.get("TENANT_ID", "") or os.environ.get("_MCP_TENANT_ID", "")
+    _hs_stage = os.environ.get("STAGE", "") or "unknown"
+    _memory_tool_context = {
+        "hs_endpoint": _hs_endpoint,
+        "hs_bank": _hs_bank,
+        "hs_tenant": _hs_tenant,
+        "hs_owner_id": _hs_owner_id,
+        "hs_tags": [
+            f"agent_id:{_dw_agent}",
+            f"user_id:{_hs_user}",
+            f"tenant_id:{_hs_tenant}",
+            f"env:{_hs_stage or 'unknown'}",
+        ],
+        "wiki_tenant_id": _hs_tenant,
+        "wiki_owner_id": _hs_owner_id,
+    }
 
     missing: list[str] = []
     if not _dw_api_url:
@@ -466,6 +486,7 @@ def _register_delegate_to_workspace_tool(
         platform_catalog_manifest=_dw_platform_manifest,
         cfg_model=effective_model,
         usage_acc=sub_agent_usage,
+        tool_context=_memory_tool_context,
     )
     tools.append(tool_decorator(_dw_fn))
     logger.info(
@@ -897,340 +918,52 @@ def _call_strands_agent(system_prompt: str, messages: list,
     _hindsight_enabled = bool(os.environ.get("HINDSIGHT_ENDPOINT"))
     if _hindsight_enabled:
         # Hindsight memory: retain/recall/reflect tools backed by the
-        # Hindsight ECS service (semantic + BM25 + entity graph + temporal
-        # retrieval with cross-encoder reranking).
-        #
-        # Add Hindsight memory tools (hindsight_retain/recall/reflect) via the
-        # native hindsight-strands package (PRD-41B Phase 7, item 1). Replaces
-        # the old custom `remember`/`recall`/`forget` wrappers that sat on top of
-        # a stdlib urllib client. The native package gives us the @tool-decorated
-        # functions, a proper client, and — crucially — a `tags` parameter that
-        # is attached to every retain call, which we use in item 2 to attribute
-        # Hindsight's Bedrock spend back to the originating agent/tenant.
+        # Hindsight ECS service. The reusable factory keeps root-agent and
+        # delegated sub-agent registration on the same async lifecycle.
         try:
-            from hindsight_strands import create_hindsight_tools
-            from hindsight_client import Hindsight
-            # PRD-41B Phase 7 item 2: install both monkey-patches once per process.
-            # - install(): wraps Hindsight.retain_batch / .reflect to capture
-            #   token usage so _call_strands_agent can drain it and ship it
-            #   back to chat-agent-invoke as `hindsight_usage: [...]`.
-            # - install_loop_fix(): replaces hindsight_client._run_async with
-            #   a fresh-event-loop variant. The stock 0.4.22 _run_async reuses
-            #   loops via asyncio.get_event_loop() which interacts badly with
-            #   hindsight-strands' ThreadPoolExecutor reuse, causing
-            #   intermittent "Timeout context manager should be used inside a
-            #   task" errors mid-request. Same root cause as upstream
-            #   vectorize-io/hindsight#677/#880 (closed but only fixed in
-            #   hindsight-hermes, not hindsight-client/hindsight-strands).
             try:
                 import hindsight_usage_capture
+
                 hindsight_usage_capture.install_loop_fix()
                 hindsight_usage_capture.install()
                 hindsight_usage_capture.reset()
             except Exception as ucap_err:
                 logger.warning("hindsight_usage_capture install failed: %s", ucap_err)
+
+            from hindsight_tools import make_hindsight_tools
+            from strands import tool as _strands_tool
+
             hs_endpoint = os.environ.get("HINDSIGHT_ENDPOINT", "")
             hs_user = os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", "")
             hs_bank = f"user_{hs_user}" if hs_user else ""
             hs_tenant = os.environ.get("TENANT_ID", "") or os.environ.get("_MCP_TENANT_ID", "")
             hs_assistant = os.environ.get("_ASSISTANT_ID", "")
             hs_stage = os.environ.get("STAGE", "") or "unknown"
-            if hs_endpoint and hs_bank:
-                hs_tags = [
-                    f"agent_id:{hs_assistant}",
-                    f"user_id:{hs_user}",
-                    f"tenant_id:{hs_tenant}",
-                    f"env:{hs_stage or 'unknown'}",
-                ]
-                # PRD-41B Phase 7 item 2 followup: build the Hindsight client
-                # ourselves with a 5-minute timeout instead of letting
-                # hindsight-strands construct one with its hardcoded 30-second
-                # default (tools.py:54). Retain on long content can legitimately
-                # exceed 30s — we kept seeing "Retain failed: ..." for big
-                # extractions until the timeout was raised.
-                hs_client = Hindsight(base_url=hs_endpoint, timeout=300.0)
-                # PRD-41B Phase 7 item 3 followup (2026-04-08): the vendor docstrings on
-                # `hindsight_recall` and `hindsight_reflect` from hindsight-strands==0.1.1
-                # are too generic ("Search long-term memory for relevant information")
-                # for smaller models to recognize them as the right tool for questions
-                # like "Where does Cedric work?". Cross-model test on prod:
-                #   * Sonnet 4.6 — picks hindsight_recall ✅
-                #   * Haiku 4.5  — picks tools=[] and gives up ❌
-                #   * Kimi K2.5  — picks search_users + 4 CRM tools (46k input tokens) ❌
-                # We disable the vendor recall + reflect via enable_*=False and supply
-                # our own thin @tool wrappers below with model-independent docstrings
-                # that name-drop the kinds of questions they should be used for. retain
-                # stays on the vendor since it's user-prompted ("remember X") and
-                # rarely needs heuristic tool selection.
-                from strands import tool as _strands_tool
-                hs_tools = create_hindsight_tools(
-                    client=hs_client,
-                    bank_id=hs_bank,
-                    tags=hs_tags,
-                    enable_recall=False,
-                    enable_reflect=False,
-                )
+            hs_tags = [
+                f"agent_id:{hs_assistant}",
+                f"user_id:{hs_user}",
+                f"tenant_id:{hs_tenant}",
+                f"env:{hs_stage or 'unknown'}",
+            ]
 
-                # Capture closure variables for the wrappers below. The wrappers
-                # are `async def` so Strands awaits them on the main event loop
-                # (see sdk-python/src/strands/tools/decorator.py stream()) —
-                # this is critical: it means we bypass _run_async entirely and
-                # aiohttp's ClientSession binds to the long-lived main loop
-                # instead of a short-lived per-call loop. Sync tools would run
-                # in asyncio.to_thread, which reuses worker threads with stale
-                # thread-local loops — the root cause of the "Event loop is
-                # closed" failures we hit on the first-ever hindsight_reflect
-                # invocation. Upstream hindsight-client 0.5.1 still ships the
-                # same _run_async (asyncio.get_event_loop) implementation, but
-                # exposes arecall/areflect as native async variants. Use those.
-                #
-                # We build a FRESH Hindsight instance inside each tool call and
-                # `await client.aclose()` in finally so aiohttp's ClientSession
-                # + TCPConnector are released explicitly. Caching the client
-                # across calls leaks "Unclosed client session" warnings on
-                # every warm invocation because the session is never torn down
-                # until GC, and GC-at-process-shutdown in Lambda is
-                # unreliable. The fresh-client cost is ~10ms of TCP setup,
-                # negligible vs. the Hindsight ECS call itself.
-                _hs_endpoint_ref = hs_endpoint
-                _hs_bank_ref = hs_bank
-
-                @_strands_tool
-                async def hindsight_recall(query: str) -> str:
-                    """Search your long-term memory for facts about people, companies, projects, places, and prior conversations.
-
-                    THIS IS YOUR PRIMARY TOOL for any factual question about
-                    someone or something the user mentions, even if the name
-                    is unfamiliar to you. Your long-term memory contains many
-                    facts that are NOT in the current conversation context —
-                    always check here BEFORE saying "I don't know" or asking
-                    the user to clarify who someone is.
-
-                    Use this tool when the user asks ANY of:
-                      * "Where does <person> work?"
-                      * "Who is <person>?"
-                      * "What do I know about <person/company/project>?"
-                      * "Tell me about <X>"
-                      * "Have we talked about <X> before?"
-                      * "What's the contact info for <X>?"
-                      * Any factual recall question naming a person, company,
-                        customer, product, location, or event.
-
-                    DO NOT use `search_users` for these — that tool only finds
-                    Thinkwork platform teammates (people with login accounts on
-                    this app), not people you have learned about in
-                    conversations.
-
-                    DO NOT use CRM tools (`accounts`, `contacts`, `leads`,
-                    `opportunities`) as the FIRST step for general "who is X"
-                    or "where does X work" questions. Always try
-                    hindsight_recall FIRST. Only fall back to CRM tools if
-                    hindsight_recall returns "No relevant memories found."
-                    AND you have a specific reason to believe the person is
-                    a CRM record.
-
-                    The query is matched via multi-strategy retrieval
-                    (semantic + BM25 + entity graph + temporal) and reranked
-                    by a cross-encoder. Phrase the query as the question you
-                    want answered, not just keywords. Returns a numbered list
-                    of matching memory facts.
-
-                    REQUIRED FOLLOW-UP: For any "tell me about X", "what do
-                    you know about Y", "summarize Z", "brief me on W", or
-                    similar open-ended question about a person / company /
-                    customer / project / topic, you MUST call
-                    `hindsight_reflect` in the SAME turn after this tool
-                    returns. Recall surfaces the raw facts; reflect runs a
-                    larger LLM over those facts to produce a coherent
-                    narrative answer with reasoning across multiple
-                    memories. Skipping reflect for these question shapes
-                    leaves the user with a flat list instead of a
-                    synthesized briefing.
-
-                    The ONLY case where you may skip the reflect follow-up
-                    is a narrowly scoped factual lookup with a single
-                    expected answer, e.g. "what is X's email address?",
-                    "where does Y work?", "when did we last talk about Z?".
-                    For anything broader, run BOTH tools.
-
-                    Args:
-                        query: The factual question or topic to search for.
-
-                    Returns:
-                        A numbered list of matching memories, or
-                        "No relevant memories found." if nothing matches.
-                    """
-                    # Fresh client per attempt — see the closure-capture
-                    # comment above for why we don't share across calls.
-                    # Explicit aclose() in finally to prevent aiohttp session
-                    # leaks. Retry on transient upstream errors (HTTP 5xx,
-                    # BedrockException, "Try your request again"): Bedrock
-                    # flaps intermittently and Hindsight surfaces those as
-                    # 500s to us — we saw one in production on 2026-04-14
-                    # that left the agent with "Memory reflect failed" when
-                    # the next attempt would have succeeded. 2 retries with
-                    # 1s/2s backoffs caps worst-case added latency at ~3s.
-                    import asyncio as _asyncio
-                    last_exc = None
-                    for _attempt in range(3):
-                        _client = Hindsight(base_url=_hs_endpoint_ref, timeout=300.0)
-                        try:
-                            # PRD-42 follow-up: drop budget mid→low (less graph fanout
-                            # for our bank shapes) and max_tokens 4096→1500 (smaller
-                            # raw pool to filter). Hindsight 0.5.0's proof_count boost
-                            # (PR #821) plus our post-filter carries the weight now.
-                            # Note: arecall (native async) — not recall — to avoid
-                            # _run_async's stale-loop reuse.
-                            response = await _client.arecall(
-                                bank_id=_hs_bank_ref,
-                                query=query,
-                                budget="low",
-                                max_tokens=1500,
-                            )
-                            raw = getattr(response, "results", None) or []
-                            if not raw:
-                                return "No relevant memories found."
-                            # Post-filter: top-N pre-cap, entity-aware relevance filter,
-                            # observation-preferred dedup, hard cap. See
-                            # hindsight_recall_filter.py for the full pipeline and the
-                            # Phase 0 Marco bank data that drove the thresholds.
-                            from hindsight_recall_filter import (
-                                filter_recall_results,
-                                format_results_for_agent,
-                            )
-                            filtered = filter_recall_results(raw, query)
-                            return format_results_for_agent(filtered)
-                        except Exception as e:
-                            last_exc = e
-                            _msg = str(e)
-                            _transient = (
-                                "(500)" in _msg or "(502)" in _msg
-                                or "(503)" in _msg or "(504)" in _msg
-                                or "BedrockException" in _msg
-                                or "ServiceUnavailableError" in _msg
-                                or "Try your request again" in _msg
-                                or "throttl" in _msg.lower()
-                            )
-                            if _attempt < 2 and _transient:
-                                _backoff = 1.0 * (2 ** _attempt)
-                                logger.warning(
-                                    "hindsight_recall attempt %d/3 transient failure, retrying in %.1fs: %s",
-                                    _attempt + 1, _backoff, _msg[:200],
-                                )
-                                await _asyncio.sleep(_backoff)
-                                continue
-                            logger.error(
-                                "hindsight_recall failed (attempt %d/3): %s",
-                                _attempt + 1, e,
-                            )
-                            return f"Memory recall failed: {e}"
-                        finally:
-                            try:
-                                await _client.aclose()
-                            except Exception as _close_err:
-                                logger.warning("hindsight_recall aclose failed: %s", _close_err)
-                    return f"Memory recall failed: {last_exc}"
-
-                @_strands_tool
-                async def hindsight_reflect(query: str) -> str:
-                    """Synthesize a narrative answer over many long-term memory facts at once.
-
-                    PAIRING WITH hindsight_recall: This tool is the second
-                    half of a two-step flow. The correct order is:
-
-                      1. `hindsight_recall(query)` → returns the raw matching facts
-                      2. `hindsight_reflect(query)` → returns a synthesized
-                          narrative answer over those facts
-
-                    You should call BOTH tools in the same turn for ANY
-                    open-ended memory question:
-
-                      * "What do you know about <X>?"
-                      * "Tell me about <person/company/project>"
-                      * "Summarize what we know about <X>"
-                      * "Brief me on <account>"
-                      * "What are the key relationships between <A> and <B>?"
-
-                    Reflect runs a larger LLM behind the scenes (more
-                    expensive than recall), so the only case where you may
-                    SKIP reflect is a narrowly scoped factual lookup with a
-                    single expected answer ("what is X's email address?",
-                    "where does Y work?"). For anything broader — anything
-                    that asks for context, summary, briefing, narrative, or
-                    synthesis — run reflect after recall.
-
-                    Same scope rules as hindsight_recall: people, companies,
-                    customers, projects you have stored facts about. Do NOT
-                    route synthesis questions to CRM tools as a first step.
-
-                    Args:
-                        query: The synthesis question to answer from memory.
-
-                    Returns:
-                        A natural-language answer grounded in stored
-                        memories, or "No relevant memories found." if there
-                        is nothing to draw from.
-                    """
-                    # Fresh client per attempt + retry on transient upstream
-                    # errors — see hindsight_recall for the rationale.
-                    import asyncio as _asyncio
-                    last_exc = None
-                    for _attempt in range(3):
-                        _client = Hindsight(base_url=_hs_endpoint_ref, timeout=300.0)
-                        try:
-                            # areflect (native async) — not reflect — to avoid
-                            # _run_async's stale-loop reuse.
-                            response = await _client.areflect(
-                                bank_id=_hs_bank_ref,
-                                query=query,
-                                budget="mid",
-                            )
-                            return getattr(response, "text", None) or "No relevant memories found."
-                        except Exception as e:
-                            last_exc = e
-                            _msg = str(e)
-                            _transient = (
-                                "(500)" in _msg or "(502)" in _msg
-                                or "(503)" in _msg or "(504)" in _msg
-                                or "BedrockException" in _msg
-                                or "ServiceUnavailableError" in _msg
-                                or "Try your request again" in _msg
-                                or "throttl" in _msg.lower()
-                            )
-                            if _attempt < 2 and _transient:
-                                _backoff = 1.0 * (2 ** _attempt)
-                                logger.warning(
-                                    "hindsight_reflect attempt %d/3 transient failure, retrying in %.1fs: %s",
-                                    _attempt + 1, _backoff, _msg[:200],
-                                )
-                                await _asyncio.sleep(_backoff)
-                                continue
-                            logger.error(
-                                "hindsight_reflect failed (attempt %d/3): %s",
-                                _attempt + 1, e,
-                            )
-                            return f"Memory reflect failed: {e}"
-                        finally:
-                            try:
-                                await _client.aclose()
-                            except Exception as _close_err:
-                                logger.warning("hindsight_reflect aclose failed: %s", _close_err)
-                    return f"Memory reflect failed: {last_exc}"
-
+            hs_tools = make_hindsight_tools(
+                _strands_tool,
+                hs_endpoint=hs_endpoint,
+                hs_bank=hs_bank,
+                hs_tags=hs_tags,
+            )
+            if hs_tools:
                 tools.extend(hs_tools)
-                tools.append(hindsight_recall)
-                tools.append(hindsight_reflect)
-                logger.info("Hindsight tools registered: retain (vendor) + custom hindsight_recall/reflect bank=%s tags=%s timeout=300s",
-                            hs_bank, hs_tags)
 
-                # Compounding Memory (wiki) tools — same user scope as hindsight.
+                # Compounding Memory (wiki) tools — same user scope as Hindsight.
                 # Owner id is captured in the closure so the model can never
-                # address a different user's wiki. Tools
-                # return a graceful "not enabled" string if the graphql-http
-                # URL/secret env vars aren't set on this deployment.
+                # address a different user's wiki. Tools return a graceful
+                # "not enabled" string if the graphql-http URL/secret env vars
+                # aren't set on this deployment.
                 if hs_tenant and hs_user:
                     try:
                         from wiki_tools import make_wiki_tools
+
                         search_wiki, read_wiki_page = make_wiki_tools(
                             _strands_tool,
                             tenant_id=hs_tenant,
@@ -1247,8 +980,11 @@ def _call_strands_agent(system_prompt: str, messages: list,
                             "Wiki tools registration failed: %s", _wiki_err,
                         )
             else:
-                logger.warning("Hindsight tools not registered: missing endpoint or bank_id (endpoint=%s bank=%s)",
-                               "set" if hs_endpoint else "MISSING", hs_bank or "MISSING")
+                logger.warning(
+                    "Hindsight tools not registered: missing endpoint or bank_id (endpoint=%s bank=%s)",
+                    "set" if hs_endpoint else "MISSING",
+                    hs_bank or "MISSING",
+                )
         except Exception as e:
             logger.warning("Hindsight tools registration failed: %s", e)
 

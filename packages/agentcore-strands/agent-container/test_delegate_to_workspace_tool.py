@@ -673,6 +673,7 @@ def _build_live_factory(
     accumulated_usage: dict[str, int] | None = None,
     raise_on_call: Exception | None = None,
     usage_acc: list | None = None,
+    tool_context: dict[str, Any] | None = None,
 ):
     """Helper: build a factory with Strands stubs in place of the real
     BedrockModel + Agent so the *live* default spawn path runs end-to-end
@@ -708,6 +709,7 @@ def _build_live_factory(
         model_factory=model_factory,
         agent_factory=agent_factory,
         tool_decorator=tool_decorator,
+        tool_context=tool_context,
         # spawn_fn deliberately omitted → live default engages.
     )
     captured["composer_mock"] = composer_mock
@@ -777,6 +779,97 @@ class TestLiveSpawnLocalSkill:
         assert tools[0].__name__ == "approve_receipt"
         # The tool returns the SKILL.md body so the LLM can read it.
         assert tools[0]() == LOCAL_SKILL_MD
+
+
+def _fake_hindsight_factory(tool_decorator, *, hs_endpoint, hs_bank, hs_tags):
+    @tool_decorator
+    async def hindsight_recall(query: str) -> str:
+        return f"{hs_bank}:{query}"
+
+    @tool_decorator
+    async def hindsight_reflect(query: str) -> str:
+        return f"reflect:{hs_bank}:{query}"
+
+    @tool_decorator
+    async def retain(content: str) -> str:
+        return f"retain:{hs_bank}:{content}"
+
+    return (retain, hindsight_recall, hindsight_reflect)
+
+
+def _fake_wiki_factory(tool_decorator, *, tenant_id, owner_id):
+    @tool_decorator
+    async def search_wiki(query: str, limit: int = 10) -> str:
+        return f"{tenant_id}:{owner_id}:{query}:{limit}"
+
+    @tool_decorator
+    async def read_wiki_page(slug: str, type: str = "entity") -> str:
+        return f"{tenant_id}:{owner_id}:{type}:{slug}"
+
+    return search_wiki, read_wiki_page
+
+
+class TestLiveSpawnMemoryReachability:
+    def test_sub_agent_tool_list_includes_hindsight_and_wiki_tools(self):
+        tool_fn, captured = _build_live_factory(
+            composer_files=_expenses_tree(),
+            tool_context={
+                "hs_endpoint": "https://hindsight.example.test",
+                "hs_bank": "agent-xyz",
+                "hs_tags": ["tenant_id:tenant-abc"],
+                "wiki_tenant_id": "tenant-abc",
+                "wiki_owner_id": "agent-xyz",
+                "hindsight_tool_factory": _fake_hindsight_factory,
+                "wiki_tool_factory": _fake_wiki_factory,
+            },
+        )
+
+        tool_fn(path="expenses", task="approve")
+
+        names = {tool.__name__ for tool in captured["agent_kwargs"]["tools"]}
+        assert "approve_receipt" in names
+        assert "retain" in names
+        assert "hindsight_recall" in names
+        assert "hindsight_reflect" in names
+        assert "search_wiki" in names
+        assert "read_wiki_page" in names
+
+    @pytest.mark.asyncio
+    async def test_sub_agent_tools_use_snapshotted_scope(self):
+        tool_context = {
+            "hs_endpoint": "https://hindsight.example.test",
+            "hs_bank": "agent-before",
+            "hs_tags": ["tenant_id:tenant-before"],
+            "wiki_tenant_id": "tenant-before",
+            "wiki_owner_id": "agent-before",
+            "hindsight_tool_factory": _fake_hindsight_factory,
+            "wiki_tool_factory": _fake_wiki_factory,
+        }
+        tool_fn, captured = _build_live_factory(
+            composer_files=_expenses_tree(),
+            tool_context=tool_context,
+        )
+        tool_context["hs_bank"] = "agent-after"
+        tool_context["wiki_owner_id"] = "agent-after"
+
+        tool_fn(path="expenses", task="approve")
+
+        tools = {tool.__name__: tool for tool in captured["agent_kwargs"]["tools"]}
+        assert await tools["hindsight_recall"]("where") == "agent-before:where"
+        assert await tools["search_wiki"]("topic") == "tenant-before:agent-before:topic:10"
+
+    def test_sub_agent_tool_list_gracefully_skips_optional_context(self):
+        tool_fn, captured = _build_live_factory(
+            composer_files=_expenses_tree(),
+            tool_context={},
+        )
+
+        tool_fn(path="expenses", task="approve")
+
+        names = {tool.__name__ for tool in captured["agent_kwargs"]["tools"]}
+        assert "approve_receipt" in names
+        assert "hindsight_recall" not in names
+        assert "search_wiki" not in names
 
 
 class TestLiveSpawnBodySwapSafety:

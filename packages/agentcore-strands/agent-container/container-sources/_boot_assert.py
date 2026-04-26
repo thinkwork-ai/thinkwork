@@ -40,6 +40,7 @@ EXPECTED_CONTAINER_SOURCES: tuple[str, ...] = (
     "eval_span_attrs",
     "external_task_context",
     "hindsight_recall_filter",
+    "hindsight_tools",
     "hindsight_usage_capture",
     "invocation_env",
     "memory_tools",
