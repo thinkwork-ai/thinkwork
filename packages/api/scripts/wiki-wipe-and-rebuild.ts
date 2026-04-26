@@ -2,23 +2,23 @@
 /**
  * wiki-wipe-and-rebuild.ts
  *
- * Purge the compiled wiki for a single (tenant, owner) scope, then
- * (optionally) rebuild from canonical memory by invoking the existing
- * journal-import path. Canonical memory in Hindsight is NEVER touched —
- * we only delete compiled rows.
+ * Purge the compiled wiki for a single (tenant, user/owner) scope, then
+ * optionally enqueue and drain the existing compile pipeline from canonical
+ * memory. Canonical memory in Hindsight is NEVER touched — we only delete
+ * compiled wiki rows/cursors/jobs.
  *
  * Usage:
  *   DATABASE_URL=... tsx packages/api/scripts/wiki-wipe-and-rebuild.ts \
- *     --tenant <uuid> --owner <uuid> [--dry-run] \
- *     [--rebuild --account <uuid> [--limit N]]
+ *     --tenant <uuid> --owner <uuid> [--dry-run] [--rebuild] [--drain]
  *
  * Flags:
  *   --tenant    (required) tenant_id
- *   --owner     (required) owner/agent_id
+ *   --owner     (required) owner/user_id
  *   --dry-run   print row counts without deleting
- *   --rebuild   after wipe, run bootstrapJournalImport inline (requires --account)
- *   --account   accountId passed to bootstrapJournalImport
- *   --limit     optional ingest cap (matches the Lambda's limit field)
+ *   --rebuild   wipe, then enqueue a bootstrap wiki compile for this user
+ *   --drain     with --rebuild: drain the rebuilt scope; without --rebuild:
+ *               drain existing pending jobs without wiping
+ *   --max-jobs  max jobs to run while draining (default 50)
  *
  * Safety rails:
  *   - refuses to run without BOTH --tenant and --owner
@@ -28,15 +28,15 @@
  */
 
 import { wipeWikiScope, countWikiScope } from "../src/lib/wiki/repository.js";
-import { runJournalImport } from "../src/lib/wiki/journal-import.js";
+import { drainWikiCompileScope, enqueueAndDrainWikiRebuild } from "../src/lib/wiki/rebuild-runner.js";
 
 interface CliArgs {
 	tenantId: string | null;
 	userId: string | null;
 	dryRun: boolean;
 	rebuild: boolean;
-	accountId: string | null;
-	limit: number | null;
+	drain: boolean;
+	maxJobs: number;
 }
 
 function parseArgs(argv: string[]): CliArgs {
@@ -45,8 +45,8 @@ function parseArgs(argv: string[]): CliArgs {
 		userId: null,
 		dryRun: false,
 		rebuild: false,
-		accountId: null,
-		limit: null,
+		drain: false,
+		maxJobs: 50,
 	};
 	for (let i = 0; i < argv.length; i++) {
 		const a = argv[i];
@@ -63,12 +63,12 @@ function parseArgs(argv: string[]): CliArgs {
 			case "--rebuild":
 				out.rebuild = true;
 				break;
-			case "--account":
-				out.accountId = argv[++i] ?? null;
+			case "--drain":
+				out.drain = true;
 				break;
-			case "--limit": {
+			case "--max-jobs": {
 				const n = Number(argv[++i]);
-				out.limit = Number.isFinite(n) ? n : null;
+				out.maxJobs = Number.isFinite(n) && n > 0 ? Math.floor(n) : 50;
 				break;
 			}
 			case "--help":
@@ -83,7 +83,7 @@ function parseArgs(argv: string[]): CliArgs {
 function printHelp(): void {
 	console.log(
 		`Usage: wiki-wipe-and-rebuild --tenant <uuid> --owner <uuid> [--dry-run]
-                             [--rebuild --account <uuid> [--limit N]]`,
+                             [--rebuild] [--drain] [--max-jobs N]`,
 	);
 }
 
@@ -111,13 +111,8 @@ async function main(): Promise<void> {
 		printHelp();
 		process.exit(2);
 	}
-	if (args.rebuild && !args.accountId) {
-		console.error("error: --rebuild requires --account <uuid>");
-		process.exit(2);
-	}
-
 	console.log(
-		`[wiki-wipe-and-rebuild] scope tenant=${args.tenantId} owner=${args.userId} dryRun=${args.dryRun} rebuild=${args.rebuild}`,
+		`[wiki-wipe-and-rebuild] scope tenant=${args.tenantId} owner=${args.userId} dryRun=${args.dryRun} rebuild=${args.rebuild} drain=${args.drain}`,
 	);
 
 	if (args.dryRun) {
@@ -130,30 +125,49 @@ async function main(): Promise<void> {
 		return;
 	}
 
-	const { before, after } = await wipeWikiScope({
-		tenantId: args.tenantId,
-		ownerId: args.userId,
-	});
-	formatCounts("before wipe", before);
-	formatCounts("after wipe", after);
+	if (args.rebuild || !args.drain) {
+		const { before, after } = await wipeWikiScope({
+			tenantId: args.tenantId,
+			ownerId: args.userId,
+		});
+		formatCounts("before wipe", before);
+		formatCounts("after wipe", after);
+	}
 
 	if (args.rebuild) {
-		console.log(
-			`\n[wiki-wipe-and-rebuild] triggering bootstrap import account=${args.accountId} tenant=${args.tenantId} agent=${args.userId} limit=${args.limit ?? "none"}`,
-		);
-		const result = await runJournalImport({
-			accountId: args.accountId!,
+		console.log(`\n[wiki-wipe-and-rebuild] enqueueing bootstrap compile`);
+		const result = await enqueueAndDrainWikiRebuild({
 			tenantId: args.tenantId,
-			userId: args.userId,
-			limit: args.limit ?? undefined,
+			ownerId: args.userId,
+			maxJobs: args.drain ? args.maxJobs : 1,
 		});
 		console.log(
-			`[wiki-wipe-and-rebuild] import done ingested=${result.recordsIngested} skipped=${result.recordsSkipped} errors=${result.errors} compileJobId=${result.compileJobId ?? "null"}`,
+			`[wiki-wipe-and-rebuild] rebuild enqueued=${result.enqueuedJobId ?? "null"} jobsRun=${result.jobsRun} pending=${result.pendingJobs} running=${result.runningJobs} failed=${result.failedJobId ?? "null"}`,
 		);
+		if (result.failedJobId || (args.drain && (result.pendingJobs > 0 || result.runningJobs > 0))) {
+			process.exitCode = 1;
+		}
+	} else if (args.drain) {
+		console.log(`\n[wiki-wipe-and-rebuild] draining existing compile jobs`);
+		const result = await drainWikiCompileScope({
+			tenantId: args.tenantId,
+			ownerId: args.userId,
+			maxJobs: args.maxJobs,
+		});
+		console.log(
+			`[wiki-wipe-and-rebuild] drain jobsRun=${result.jobsRun} pending=${result.pendingJobs} running=${result.runningJobs} failed=${result.failedJobId ?? "null"}`,
+		);
+		if (result.failedJobId || result.pendingJobs > 0 || result.runningJobs > 0) {
+			process.exitCode = 1;
+		}
 	}
 }
 
-main().catch((err) => {
-	console.error(`[wiki-wipe-and-rebuild] fatal: ${(err as Error).stack ?? err}`);
-	process.exit(1);
-});
+main()
+	.then(() => {
+		process.exit(process.exitCode ?? 0);
+	})
+	.catch((err) => {
+		console.error(`[wiki-wipe-and-rebuild] fatal: ${(err as Error).stack ?? err}`);
+		process.exit(1);
+	});

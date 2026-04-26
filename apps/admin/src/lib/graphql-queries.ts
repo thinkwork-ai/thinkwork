@@ -1560,8 +1560,8 @@ export const ArtifactDetailQuery = gql`
 // ---------------------------------------------------------------------------
 
 export const MemoryRecordsQuery = graphql(`
-  query MemoryRecords($assistantId: ID!, $namespace: String!) {
-    memoryRecords(assistantId: $assistantId, namespace: $namespace) {
+  query MemoryRecords($userId: ID!, $namespace: String!) {
+    memoryRecords(userId: $userId, namespace: $namespace) {
       memoryRecordId
       content {
         text
@@ -1571,6 +1571,7 @@ export const MemoryRecordsQuery = graphql(`
       namespace
       strategyId
       strategy
+      userSlug
       agentSlug
       factType
       confidence
@@ -1588,26 +1589,26 @@ export const MemoryRecordsQuery = graphql(`
 `);
 
 export const DeleteMemoryRecordMutation = graphql(`
-  mutation DeleteMemoryRecord($memoryRecordId: ID!) {
-    deleteMemoryRecord(memoryRecordId: $memoryRecordId)
+  mutation DeleteMemoryRecord($userId: ID!, $memoryRecordId: ID!) {
+    deleteMemoryRecord(userId: $userId, memoryRecordId: $memoryRecordId)
   }
 `);
 
 export const UpdateMemoryRecordMutation = graphql(`
-  mutation UpdateMemoryRecord($memoryRecordId: ID!, $content: String!) {
-    updateMemoryRecord(memoryRecordId: $memoryRecordId, content: $content)
+  mutation UpdateMemoryRecord($userId: ID!, $memoryRecordId: ID!, $content: String!) {
+    updateMemoryRecord(userId: $userId, memoryRecordId: $memoryRecordId, content: $content)
   }
 `);
 
 export const MemorySearchQuery = graphql(`
   query MemorySearch(
-    $assistantId: ID!
+    $userId: ID!
     $query: String!
     $strategy: MemoryStrategy
     $limit: Int
   ) {
     memorySearch(
-      assistantId: $assistantId
+      userId: $userId
       query: $query
       strategy: $strategy
       limit: $limit
@@ -1838,8 +1839,8 @@ export const RollbackAgentVersionMutation = graphql(`
 `);
 
 export const MemoryGraphQuery = graphql(`
-  query MemoryGraph($assistantId: ID!) {
-    memoryGraph(assistantId: $assistantId) {
+  query MemoryGraph($userId: ID!) {
+    memoryGraph(userId: $userId) {
       nodes {
         id
         label
@@ -1861,8 +1862,8 @@ export const MemoryGraphQuery = graphql(`
 `);
 
 export const WikiGraphQuery = graphql(`
-  query WikiGraph($tenantId: ID!, $ownerId: ID!) {
-    wikiGraph(tenantId: $tenantId, ownerId: $ownerId) {
+  query WikiGraph($tenantId: ID!, $userId: ID!) {
+    wikiGraph(tenantId: $tenantId, userId: $userId) {
       nodes {
         id
         label
@@ -1886,11 +1887,11 @@ export const WikiGraphQuery = graphql(`
 export const WikiPageQuery = graphql(`
   query AdminWikiPage(
     $tenantId: ID!
-    $ownerId: ID!
+    $userId: ID!
     $type: WikiPageType!
     $slug: String!
   ) {
-    wikiPage(tenantId: $tenantId, ownerId: $ownerId, type: $type, slug: $slug) {
+    wikiPage(tenantId: $tenantId, userId: $userId, type: $type, slug: $slug) {
       id
       type
       slug
@@ -1926,8 +1927,8 @@ export const WikiBacklinksQuery = graphql(`
 `);
 
 export const RecentWikiPagesQuery = graphql(`
-  query AdminRecentWikiPages($agentId: ID!, $limit: Int) {
-    recentWikiPages(agentId: $agentId, limit: $limit) {
+  query AdminRecentWikiPages($userId: ID!, $limit: Int) {
+    recentWikiPages(userId: $userId, limit: $limit) {
       id
       type
       slug
@@ -1942,13 +1943,13 @@ export const RecentWikiPagesQuery = graphql(`
 export const WikiSearchQuery = graphql(`
   query AdminWikiSearch(
     $tenantId: ID!
-    $ownerId: ID!
+    $userId: ID!
     $query: String!
     $limit: Int
   ) {
     wikiSearch(
       tenantId: $tenantId
-      ownerId: $ownerId
+      userId: $userId
       query: $query
       limit: $limit
     ) {

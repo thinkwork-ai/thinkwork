@@ -913,17 +913,17 @@ export default function ThreadsScreen() {
             />
           ) : wikiViewMode === "graph" &&
             tenantId &&
-            activeAgent?.id &&
+            currentUser?.id &&
             wikiFontsLoaded ? (
             <WikiGraphView
               tenantId={tenantId}
-              agentId={activeAgent.id}
+              userId={currentUser.id}
               searchQuery={wikiQuery}
               showLabels={wikiShowLabels}
             />
           ) : (
             <WikiList
-              agentId={activeAgent?.id}
+              userId={currentUser?.id}
               colors={colors}
               searchQuery={wikiQuery}
             />
@@ -957,6 +957,7 @@ export default function ThreadsScreen() {
         ) : activeTab === "wiki" ? (
           <CaptureFooter
             agentId={activeAgent?.id}
+            userId={currentUser?.id}
             agentName={activeAgent?.name}
             tenantId={tenantId}
             colors={colors}

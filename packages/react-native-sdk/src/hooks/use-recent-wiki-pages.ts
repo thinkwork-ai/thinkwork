@@ -3,7 +3,9 @@ import { RecentWikiPagesQuery } from "../graphql/queries";
 import type { WikiPageType, WikiSearchHit } from "../types";
 
 interface UseRecentWikiPagesArgs {
-  agentId: string | null | undefined;
+  userId?: string | null | undefined;
+  /** @deprecated Use userId. Kept only for legacy callers during rollout. */
+  agentId?: string | null | undefined;
   limit?: number;
 }
 
@@ -22,15 +24,16 @@ type ServerResponse = {
 };
 
 /**
- * Newest compiled wiki pages for a given agent. Intended as the
+ * Newest compiled wiki pages for a given user. Intended as the
  * Memories-tab's default feed so the user sees fresh pages before
- * they search. Paused until agentId is present.
+ * they search. Paused until userId is present.
  */
-export function useRecentWikiPages({ agentId, limit }: UseRecentWikiPagesArgs) {
+export function useRecentWikiPages({ userId, agentId, limit }: UseRecentWikiPagesArgs) {
+  const scopeUserId = userId ?? agentId;
   const [{ data, fetching, error }, refetch] = useQuery<ServerResponse>({
     query: RecentWikiPagesQuery,
-    variables: { agentId, limit },
-    pause: !agentId,
+    variables: { userId: scopeUserId, limit },
+    pause: !scopeUserId,
     requestPolicy: "cache-and-network",
   });
 

@@ -14,18 +14,21 @@ import { COLORS } from "@/lib/theme";
 import { WikiResultRow } from "./WikiResultRow";
 
 interface WikiListProps {
-	agentId: string | null | undefined;
+	userId: string | null | undefined;
+	/** @deprecated Use userId. */
+	agentId?: string | null | undefined;
 	colors: (typeof COLORS)["dark"];
 	searchQuery?: string;
 }
 
-export function WikiList({ agentId, colors, searchQuery }: WikiListProps) {
+export function WikiList({ userId, agentId, colors, searchQuery }: WikiListProps) {
 	const router = useRouter();
+	const scopeUserId = userId ?? agentId;
 	const trimmedQuery = (searchQuery || "").trim();
 	const isSearching = trimmedQuery.length > 0;
 
-	const search = useMobileMemorySearch({ agentId, query: trimmedQuery });
-	const recent = useRecentWikiPages({ agentId, limit: 50 });
+	const search = useMobileMemorySearch({ userId: scopeUserId, agentId, query: trimmedQuery });
+	const recent = useRecentWikiPages({ userId: scopeUserId, agentId, limit: 50 });
 
 	const { results, loading, error, refetch } = isSearching ? search : recent;
 
@@ -38,20 +41,29 @@ export function WikiList({ agentId, colors, searchQuery }: WikiListProps) {
 	useEffect(() => {
 		if (!error) return;
 		console.warn(
-			`[WikiList] ${isSearching ? "search" : "recent"} error query=${JSON.stringify(trimmedQuery)} agentId=${agentId} error=${error.message}`,
+			`[WikiList] ${isSearching ? "search" : "recent"} error query=${JSON.stringify(trimmedQuery)} userId=${scopeUserId} error=${error.message}`,
 			error,
 		);
-	}, [error, isSearching, trimmedQuery, agentId]);
+	}, [error, isSearching, trimmedQuery, scopeUserId]);
 
 	const handlePress = useCallback(
 		(hit: WikiSearchHit) => {
 			const path = `/wiki/${encodeURIComponent(hit.type)}/${encodeURIComponent(hit.slug)}`;
-			router.push(agentId ? `${path}?agentId=${encodeURIComponent(agentId)}` : path);
+			router.push(scopeUserId ? `${path}?userId=${encodeURIComponent(scopeUserId)}` : path);
 		},
-		[router, agentId],
+		[router, scopeUserId],
 	);
 
 	const showSearchOverlay = isSearching && loading;
+
+	if (!scopeUserId) {
+		return (
+			<View className="flex-1 items-center justify-center px-6 gap-2">
+				<ActivityIndicator size="large" color={colors.primary} />
+				<Muted>Loading wiki…</Muted>
+			</View>
+		);
+	}
 
 	if (results.length === 0) {
 		if (isSearching) {

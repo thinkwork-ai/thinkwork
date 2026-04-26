@@ -21,7 +21,7 @@ export interface NodeDetailModalTarget {
 
 interface NodeDetailModalProps {
   tenantId: string | null;
-  ownerId: string | null;
+  userId: string | null;
   node: NodeDetailModalTarget | null;
   onClose: () => void;
   onOpenFullPage: (node: NodeDetailModalTarget) => void;
@@ -35,14 +35,14 @@ interface NodeDetailModalProps {
  */
 export function NodeDetailModal({
   tenantId,
-  ownerId,
+  userId,
   node,
   onClose,
   onOpenFullPage,
 }: NodeDetailModalProps) {
   const { page, loading } = useWikiPage({
     tenantId,
-    ownerId,
+    userId,
     type: (node?.type as WikiPageType | undefined) ?? null,
     slug: node?.slug ?? null,
   });

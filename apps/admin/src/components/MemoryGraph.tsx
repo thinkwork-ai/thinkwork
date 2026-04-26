@@ -45,7 +45,11 @@ export interface MemoryGraphHandle {
 }
 
 interface MemoryGraphProps {
+  userId?: string;
+  userIds?: string[];
+  /** @deprecated Use userId. */
   agentId?: string;
+  /** @deprecated Use userIds. */
   agentIds?: string[];
   agentNames?: Record<string, string>;
   onNodeClick?: (node: MemoryGraphNode, connectedEdges: { label: string; targetLabel: string; targetType: string; targetId: string }[]) => void;
@@ -56,7 +60,7 @@ interface MemoryGraphProps {
 }
 
 export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
-  function MemoryGraph({ agentId, agentIds, agentNames, onNodeClick, onTypesLoaded, typeFilter, searchQuery, hideFiltered = false }, ref) {
+  function MemoryGraph({ userId, userIds, agentId, agentIds, agentNames, onNodeClick, onTypesLoaded, typeFilter, searchQuery, hideFiltered = false }, ref) {
     // Callback ref: re-measures whenever the mounted DOM element changes.
     // A plain useRef + empty-deps effect misses the case where the
     // "Loading graph..." branch mounts first (no ref attached), then swaps
@@ -66,14 +70,16 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
     const fgRef = useRef<any>(null);
     const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
 
-    const isMultiAgent = !!agentIds && agentIds.length > 1;
+    const effectiveUserIds = userIds ?? agentIds;
+    const effectiveUserId = userId ?? agentId ?? (effectiveUserIds?.length === 1 ? effectiveUserIds[0] : undefined);
+    const isMultiAgent = !!effectiveUserIds && effectiveUserIds.length > 1;
     const client = useClient();
 
     // Single-agent query (only when not multi-agent)
     const [singleResult, singleReexecute] = useQuery({
       query: MemoryGraphQuery,
-      variables: { assistantId: agentId ?? "" },
-      pause: isMultiAgent || !agentId,
+      variables: { userId: effectiveUserId ?? "" },
+      pause: isMultiAgent || !effectiveUserId,
     });
 
     // Multi-agent: fetch all graphs manually
@@ -81,7 +87,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
     const [multiFetching, setMultiFetching] = useState(false);
 
     const fetchAllAgents = useCallback(async () => {
-      if (!agentIds || agentIds.length === 0) {
+      if (!effectiveUserIds || effectiveUserIds.length === 0) {
         setMultiFetching(false);
         return;
       }
@@ -89,9 +95,9 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       try {
         const results: Record<string, any> = {};
         await Promise.all(
-          agentIds.map(async (id) => {
+          effectiveUserIds.map(async (id) => {
             try {
-              const res = await client.query(MemoryGraphQuery, { assistantId: id }).toPromise();
+              const res = await client.query(MemoryGraphQuery, { userId: id }).toPromise();
               results[id] = res.data?.memoryGraph;
             } catch {
               results[id] = { nodes: [], edges: [] };
@@ -104,7 +110,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
       } finally {
         setMultiFetching(false);
       }
-    }, [agentIds, client]);
+    }, [effectiveUserIds, client]);
 
     useEffect(() => {
       if (isMultiAgent) fetchAllAgents();
@@ -169,7 +175,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         }
       }
       return nodes;
-    }, [isMultiAgent, multiResults, singleResult.data, agentIds, agentNames]);
+    }, [isMultiAgent, multiResults, singleResult.data, effectiveUserIds, agentNames]);
 
     // Report unique entity types to parent (only when types actually change)
     const prevTypesRef = useRef<string>("");

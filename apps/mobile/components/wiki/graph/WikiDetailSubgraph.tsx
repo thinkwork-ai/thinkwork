@@ -23,7 +23,7 @@ import type {
 
 interface WikiDetailSubgraphProps {
   tenantId: string;
-  ownerId: string;
+  userId: string;
   pageId: string;
 }
 
@@ -34,11 +34,11 @@ interface WikiDetailSubgraphProps {
  */
 export function WikiDetailSubgraph({
   tenantId,
-  ownerId,
+  userId,
   pageId,
 }: WikiDetailSubgraphProps) {
   const router = useRouter();
-  const { graph, error } = useWikiGraph({ tenantId, ownerId });
+  const { graph, error } = useWikiGraph({ tenantId, userId });
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
@@ -77,9 +77,9 @@ export function WikiDetailSubgraph({
     (target: NodeDetailModalTarget) => {
       setSelectedNodeId(null);
       const base = `/wiki/${encodeURIComponent(target.type)}/${encodeURIComponent(target.slug)}`;
-      router.push(`${base}?agentId=${encodeURIComponent(ownerId)}`);
+      router.push(`${base}?userId=${encodeURIComponent(userId)}`);
     },
-    [router, ownerId],
+    [router, userId],
   );
 
   if (error) {
@@ -119,7 +119,7 @@ export function WikiDetailSubgraph({
       />
       <NodeDetailModal
         tenantId={tenantId}
-        ownerId={ownerId}
+        userId={userId}
         node={selectedTarget}
         onClose={() => setSelectedNodeId(null)}
         onOpenFullPage={handleOpenFullPage}

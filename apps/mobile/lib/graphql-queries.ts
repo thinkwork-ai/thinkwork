@@ -1350,8 +1350,8 @@ export const ArtifactDetailQuery = graphql(`
 // ---------------------------------------------------------------------------
 
 export const MemoryRecordsQuery = graphql(`
-  query MemoryRecords($assistantId: ID!, $namespace: String!) {
-    memoryRecords(assistantId: $assistantId, namespace: $namespace) {
+  query MemoryRecords($userId: ID!, $namespace: String!) {
+    memoryRecords(userId: $userId, namespace: $namespace) {
       memoryRecordId
       content {
         text
@@ -1375,14 +1375,14 @@ export const MemoryRecordsQuery = graphql(`
 `);
 
 export const DeleteMemoryRecordMutation = graphql(`
-  mutation DeleteMemoryRecord($memoryRecordId: ID!) {
-    deleteMemoryRecord(memoryRecordId: $memoryRecordId)
+  mutation DeleteMemoryRecord($userId: ID!, $memoryRecordId: ID!) {
+    deleteMemoryRecord(userId: $userId, memoryRecordId: $memoryRecordId)
   }
 `);
 
 export const UpdateMemoryRecordMutation = graphql(`
-  mutation UpdateMemoryRecord($memoryRecordId: ID!, $content: String!) {
-    updateMemoryRecord(memoryRecordId: $memoryRecordId, content: $content)
+  mutation UpdateMemoryRecord($userId: ID!, $memoryRecordId: ID!, $content: String!) {
+    updateMemoryRecord(userId: $userId, memoryRecordId: $memoryRecordId, content: $content)
   }
 `);
 

@@ -1,0 +1,122 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const executeMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@thinkwork/database-pg", () => ({
+	getDb: () => ({
+		execute: executeMock,
+	}),
+}));
+
+import { HindsightAdapter } from "./hindsight-adapter.js";
+
+const USER_ID = "4dee701a-c17b-46fe-9f38-a333d4c3fad0";
+const TENANT_ID = "0015953e-aa13-4cab-8398-2e70f73dda63";
+
+describe("HindsightAdapter legacy user bank reads", () => {
+	beforeEach(() => {
+		executeMock.mockReset();
+	});
+
+	it("lists memories from the new user bank and paired legacy agent bank", async () => {
+		executeMock
+			.mockResolvedValueOnce({
+				rows: [
+					{
+						id: "c1e4434f-fa28-4ba2-bdd5-5d47f9d92e2c",
+						slug: "fleet-caterpillar-456",
+						name: "Marco",
+					},
+				],
+			})
+			.mockResolvedValueOnce({
+				rows: [
+					row({
+						id: "00000000-0000-0000-0000-000000000001",
+						bank_id: `user_${USER_ID}`,
+						text: "new-bank memory",
+						created_at: "2026-04-26T10:00:00.000Z",
+					}),
+					row({
+						id: "00000000-0000-0000-0000-000000000002",
+						bank_id: "fleet-caterpillar-456",
+						text: "legacy-bank memory",
+						created_at: "2026-04-25T10:00:00.000Z",
+					}),
+				],
+			});
+
+		const adapter = new HindsightAdapter({ endpoint: "https://hindsight.example" });
+		const records = await adapter.inspect({
+			tenantId: TENANT_ID,
+			ownerType: "user",
+			ownerId: USER_ID,
+		});
+
+		expect(records.map((r) => r.content.text)).toEqual([
+			"new-bank memory",
+			"legacy-bank memory",
+		]);
+		expect(records.map((r) => r.metadata?.bankId)).toEqual([
+			`user_${USER_ID}`,
+			"fleet-caterpillar-456",
+		]);
+	});
+
+	it("feeds legacy bank rows into the wiki compile cursor", async () => {
+		executeMock
+			.mockResolvedValueOnce({
+				rows: [
+					{
+						id: "c1e4434f-fa28-4ba2-bdd5-5d47f9d92e2c",
+						slug: "fleet-caterpillar-456",
+						name: "Marco",
+					},
+				],
+			})
+			.mockResolvedValueOnce({
+				rows: [
+					row({
+						id: "00000000-0000-0000-0000-000000000003",
+						bank_id: "fleet-caterpillar-456",
+						text: "compile me",
+						created_at: "2026-04-24T10:00:00.000Z",
+						updated_at: "2026-04-24T10:00:00.000Z",
+						cursor_ts: "2026-04-24T10:00:00.000Z",
+					}),
+				],
+			});
+
+		const adapter = new HindsightAdapter({ endpoint: "https://hindsight.example" });
+		const result = await adapter.listRecordsUpdatedSince?.({
+			tenantId: TENANT_ID,
+			ownerId: USER_ID,
+			limit: 100,
+		});
+
+		expect(result?.records).toHaveLength(1);
+		expect(result?.records[0]?.metadata?.bankId).toBe("fleet-caterpillar-456");
+		expect(result?.nextCursor?.recordId).toBe("00000000-0000-0000-0000-000000000003");
+	});
+});
+
+function row(overrides: Record<string, unknown>) {
+	return {
+		id: "00000000-0000-0000-0000-000000000000",
+		bank_id: `user_${USER_ID}`,
+		text: "memory",
+		context: "thinkwork_thread",
+		fact_type: "world",
+		event_date: null,
+		occurred_start: null,
+		occurred_end: null,
+		mentioned_at: null,
+		tags: [],
+		access_count: 0,
+		proof_count: 0,
+		metadata: {},
+		created_at: "2026-04-26T10:00:00.000Z",
+		updated_at: null,
+		...overrides,
+	};
+}

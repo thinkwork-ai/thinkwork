@@ -30,7 +30,7 @@ export interface WikiPageSheetEdge {
 
 interface WikiPageSheetProps {
 	tenantId: string;
-	ownerId: string;
+	userId: string;
 	type: WikiPageType;
 	slug: string;
 	/** Title used in the sheet header until the full page loads. */
@@ -43,7 +43,7 @@ interface WikiPageSheetProps {
 
 export function WikiPageSheet({
 	tenantId,
-	ownerId,
+	userId,
 	type,
 	slug,
 	title,
@@ -57,8 +57,8 @@ export function WikiPageSheet({
 		// `type` is the same three-value enum as gql's generated
 		// WikiPageType; the codegen'd nominal type just doesn't union
 		// with our literal string type directly.
-		variables: { tenantId, ownerId, type: type as any, slug },
-		pause: !tenantId || !ownerId || !slug,
+		variables: { tenantId, userId, type: type as any, slug },
+		pause: !tenantId || !userId || !slug,
 	});
 
 	const page = pageResult.data?.wikiPage;

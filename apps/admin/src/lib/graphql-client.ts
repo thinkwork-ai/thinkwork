@@ -10,9 +10,14 @@ const GRAPHQL_API_KEY = import.meta.env.VITE_GRAPHQL_API_KEY || "";
 // AuthContext sets this to auth.getIdToken after sign-in.
 let tokenProvider: (() => Promise<string | null>) | null = null;
 let cachedToken: string | null = null;
+let currentTenantId: string | null = null;
 
 export function setAuthToken(token: string | null) {
   cachedToken = token;
+}
+
+export function setGraphqlTenantId(tenantId: string | null) {
+  currentTenantId = tenantId;
 }
 
 export function setTokenProvider(provider: (() => Promise<string | null>) | null) {
@@ -42,10 +47,31 @@ export function stopTokenRefresh() {
 }
 
 function authHeaders(): Record<string, string> {
-  if (cachedToken) {
-    return { Authorization: cachedToken };
+  const headers: Record<string, string> = {};
+  if (currentTenantId) {
+    headers["x-tenant-id"] = currentTenantId;
   }
-  return { "x-api-key": GRAPHQL_API_KEY };
+  if (GRAPHQL_API_KEY) {
+    headers["x-api-key"] = GRAPHQL_API_KEY;
+  }
+  if (cachedToken && !isExpiredJwt(cachedToken)) {
+    headers.Authorization = cachedToken;
+    return headers;
+  }
+  return headers;
+}
+
+function isExpiredJwt(token: string): boolean {
+  const [, payload] = token.split(".");
+  if (!payload) return false;
+  try {
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const decoded = JSON.parse(atob(padded)) as { exp?: number };
+    return typeof decoded.exp === "number" && decoded.exp * 1000 <= Date.now() + 30_000;
+  } catch {
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------

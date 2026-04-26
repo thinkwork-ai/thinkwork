@@ -16,6 +16,7 @@ export function useCaptureMobileMemory() {
       }
       const result = await capture({
         agentId: input.agentId,
+        userId: input.userId,
         content: input.content,
         factType: input.factType ?? "FACT",
         metadata: input.metadata ? JSON.stringify(input.metadata) : undefined,

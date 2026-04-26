@@ -1474,14 +1474,52 @@ export async function markUnresolvedPromoted(
 ): Promise<void> {
 	// Guard against hallucinated mention ids from the planner.
 	if (!isValidUuid(args.mentionId) || !isValidUuid(args.pageId)) return;
-	await db
-		.update(wikiUnresolvedMentions)
-		.set({
-			status: "promoted",
-			promoted_page_id: args.pageId,
-			updated_at: sql`now()` as any,
-		})
-		.where(eq(wikiUnresolvedMentions.id, args.mentionId));
+	const result = await db.execute(sql`
+		WITH target AS (
+			SELECT id, tenant_id, owner_id, alias_normalized
+			FROM wiki_unresolved_mentions
+			WHERE id = ${args.mentionId}
+		),
+		updated AS (
+			UPDATE wiki_unresolved_mentions mention
+			SET status = 'promoted',
+				promoted_page_id = ${args.pageId},
+				updated_at = now()
+			FROM target
+			WHERE mention.id = target.id
+			  AND NOT EXISTS (
+				SELECT 1
+				FROM wiki_unresolved_mentions other
+				WHERE other.tenant_id = target.tenant_id
+				  AND other.owner_id = target.owner_id
+				  AND other.alias_normalized = target.alias_normalized
+				  AND other.status = 'promoted'
+				  AND other.id <> target.id
+			  )
+			RETURNING mention.id
+		)
+		SELECT id FROM updated
+	`);
+
+	if (((result as any).rows?.length ?? 0) > 0) return;
+
+	// Retry/idempotency path: the same alias is already represented by a
+	// promoted mention in this scope. Remove the stale open mention so future
+	// planner passes do not keep trying to promote it into the same unique key.
+	await db.execute(sql`
+		DELETE FROM wiki_unresolved_mentions mention
+		WHERE mention.id = ${args.mentionId}
+		  AND mention.status = 'open'
+		  AND EXISTS (
+			SELECT 1
+			FROM wiki_unresolved_mentions other
+			WHERE other.tenant_id = mention.tenant_id
+			  AND other.owner_id = mention.owner_id
+			  AND other.alias_normalized = mention.alias_normalized
+			  AND other.status = 'promoted'
+			  AND other.id <> mention.id
+		  )
+	`);
 }
 
 /**

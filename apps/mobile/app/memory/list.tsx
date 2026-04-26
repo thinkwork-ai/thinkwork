@@ -7,6 +7,7 @@ import { DetailLayout } from "@/components/layout/detail-layout";
 import { Text, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
 import { useMemoryRecords, useDeleteMemoryRecord, useUpdateMemoryRecord } from "@/lib/hooks/use-memory";
+import { useMe } from "@/lib/hooks/use-users";
 
 type WikiPageChip = {
   id: string;
@@ -66,13 +67,13 @@ const STRATEGY_META: Record<string, { title: string; emptyMessage: string }> = {
 
 function MemoryCard({
   record,
-  assistantId,
+  userId,
   onDelete,
   onUpdate,
   colors,
 }: {
   record: MemoryRecord;
-  assistantId: string | undefined;
+  userId: string | undefined;
   onDelete: () => void;
   onUpdate: (content: string) => void;
   colors: typeof COLORS.light;
@@ -148,8 +149,8 @@ function MemoryCard({
                   event.stopPropagation?.();
                   const path = `/wiki/${encodeURIComponent(page.type)}/${encodeURIComponent(page.slug)}`;
                   router.push(
-                    assistantId
-                      ? `${path}?agentId=${encodeURIComponent(assistantId)}`
+                    userId
+                      ? `${path}?userId=${encodeURIComponent(userId)}`
                       : path,
                   );
                 }}
@@ -197,19 +198,22 @@ function MemoryCard({
 }
 
 export default function MemoryListScreen() {
-  const { strategy, assistantId, sessionId } = useLocalSearchParams<{
+  const { strategy, userId: userIdParam, sessionId } = useLocalSearchParams<{
     strategy: "semantic" | "summary";
-    assistantId: string;
+    userId?: string;
     sessionId?: string;
   }>();
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
+  const [{ data: meData }] = useMe();
+  const currentUserId = meData?.me?.id;
 
+  const userId = userIdParam ? decodeURIComponent(userIdParam) : currentUserId;
   const namespace = strategy === "summary"
     ? (sessionId ? `session_${sessionId}` : undefined)
-    : (assistantId ? `assistant_${assistantId}` : undefined);
+    : "all";
 
-  const [{ data, fetching, error }, reexecute] = useMemoryRecords(assistantId, namespace);
+  const [{ data, fetching, error }, reexecute] = useMemoryRecords(userId, namespace);
   const [, executeDelete] = useDeleteMemoryRecord();
   const [, executeUpdate] = useUpdateMemoryRecord();
 
@@ -238,9 +242,10 @@ export default function MemoryListScreen() {
   }, [reexecute]);
 
   const handleDelete = async (recordId: string) => {
+    if (!userId) return;
     setDeletedIds((prev) => new Set(prev).add(recordId));
     try {
-      const result = await executeDelete({ memoryRecordId: recordId });
+      const result = await executeDelete({ userId, memoryRecordId: recordId });
       if (result.error) {
         console.warn("Failed to delete memory record:", result.error);
         setDeletedIds((prev) => { const next = new Set(prev); next.delete(recordId); return next; });
@@ -252,9 +257,10 @@ export default function MemoryListScreen() {
   };
 
   const handleUpdate = async (recordId: string, content: string) => {
+    if (!userId) return;
     setLocalUpdates((prev) => ({ ...prev, [recordId]: content }));
     try {
-      const result = await executeUpdate({ memoryRecordId: recordId, content });
+      const result = await executeUpdate({ userId, memoryRecordId: recordId, content });
       if (result.error) {
         console.warn("Failed to update memory record:", result.error);
         setLocalUpdates((prev) => { const { [recordId]: _, ...rest } = prev; return rest; });
@@ -277,7 +283,7 @@ export default function MemoryListScreen() {
 
   return (
     <DetailLayout title={meta.title} headerRight={refreshButton}>
-      {fetching && !data ? (
+      {!userId || (fetching && !data) ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color={colors.mutedForeground} />
         </View>
@@ -298,7 +304,7 @@ export default function MemoryListScreen() {
             <MemoryCard
               key={record.memoryRecordId}
               record={record}
-              assistantId={assistantId}
+              userId={userId}
               onDelete={() => handleDelete(record.memoryRecordId)}
               onUpdate={(content) => handleUpdate(record.memoryRecordId, content)}
               colors={colors}

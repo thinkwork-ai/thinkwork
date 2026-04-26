@@ -168,25 +168,26 @@ function AgentMemoryPage() {
   });
 
   const agent = agentResult.data?.agent;
-  const namespace = agent?.slug ? `assistant_${agent.slug}` : `assistant_${agentId}`;
+  const userId = agent?.humanPairId ?? agent?.humanPair?.id;
+  const namespace = "all";
 
   // Default: list records from namespace
   const [memoryResult, refetchMemory] = useQuery({
     query: MemoryRecordsQuery,
-    variables: { assistantId: agentId, namespace },
-    pause: !!activeSearch,
+    variables: { userId: userId ?? "", namespace },
+    pause: !!activeSearch || !userId,
   });
 
   // Search mode: semantic search
   const [searchResult] = useQuery({
     query: MemorySearchQuery,
     variables: {
-      assistantId: agentId,
+      userId: userId ?? "",
       query: activeSearch,
-      strategy: strategyFilter || undefined,
+      strategy: (strategyFilter || undefined) as any,
       limit: 50,
     },
-    pause: !activeSearch,
+    pause: !activeSearch || !userId,
   });
 
   const [, deleteMemory] = useMutation(DeleteMemoryRecordMutation);
@@ -252,10 +253,11 @@ function AgentMemoryPage() {
   };
 
   const handleSave = async () => {
-    if (!selectedRecord) return;
+    if (!selectedRecord || !userId) return;
     setSaving(true);
     try {
       await updateMemory({
+        userId,
         memoryRecordId: selectedRecord.memoryRecordId,
         content: editValue,
       });
@@ -268,10 +270,10 @@ function AgentMemoryPage() {
   };
 
   const handleDelete = async () => {
-    if (!selectedRecord) return;
+    if (!selectedRecord || !userId) return;
     setDeleting(true);
     try {
-      await deleteMemory({ memoryRecordId: selectedRecord.memoryRecordId });
+      await deleteMemory({ userId, memoryRecordId: selectedRecord.memoryRecordId });
       setSheetOpen(false);
       setSelectedRecord(null);
       refetchMemory({ requestPolicy: "network-only" });
@@ -404,7 +406,7 @@ function AgentMemoryPage() {
         <div className="flex-1 min-h-0 relative border border-muted rounded-lg overflow-hidden">
           <MemoryGraph
             ref={graphRef}
-            agentId={agentId}
+            userId={userId}
             onNodeClick={(node, edges) => {
               setGraphNode(node);
               setGraphNodeEdges(edges);

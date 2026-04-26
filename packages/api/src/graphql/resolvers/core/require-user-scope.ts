@@ -34,6 +34,7 @@ export async function requireMemoryUserScope(
 		agentId?: string | null;
 		assistantId?: string | null;
 		ownerId?: string | null;
+		allowTenantAdmin?: boolean | null;
 	},
 ): Promise<{ tenantId: string; userId: string }> {
 	const caller = await resolveCaller(ctx);
@@ -44,7 +45,12 @@ export async function requireMemoryUserScope(
 		if (caller.tenantId && caller.tenantId !== tenantId) {
 			throw new UserScopeAuthError("Access denied: tenant mismatch");
 		}
-		if (ctx.auth.authType !== "apikey" && caller.userId && caller.userId !== args.userId) {
+		if (
+			ctx.auth.authType !== "apikey" &&
+			caller.userId &&
+			caller.userId !== args.userId &&
+			!(args.allowTenantAdmin && (await isTenantAdmin(caller.userId, tenantId)))
+		) {
 			throw new UserScopeAuthError("Access denied: user mismatch");
 		}
 		if (!caller.userId && ctx.auth.authType !== "apikey") {
@@ -74,11 +80,29 @@ export async function requireMemoryUserScope(
 	if (!agent?.human_pair_id) {
 		throw new UserScopeAuthError("Agent is not paired to a user");
 	}
-	if (caller.userId && caller.userId !== agent.human_pair_id) {
+	if (
+		caller.userId &&
+		caller.userId !== agent.human_pair_id &&
+		!(args.allowTenantAdmin && (await isTenantAdmin(caller.userId, tenantId)))
+	) {
 		throw new UserScopeAuthError("Access denied: user mismatch");
 	}
 	if (caller.tenantId && caller.tenantId !== tenantId) {
 		throw new UserScopeAuthError("Access denied: tenant mismatch");
 	}
 	return { tenantId, userId: agent.human_pair_id };
+}
+
+async function isTenantAdmin(userId: string, tenantId: string): Promise<boolean> {
+	const result = await db.execute(sql`
+		SELECT role
+		FROM tenant_members
+		WHERE tenant_id = ${tenantId}
+		  AND principal_type = 'user'
+		  AND principal_id = ${userId}
+		  AND status = 'active'
+		LIMIT 1
+	`);
+	const [row] = ((result as unknown as { rows?: Array<{ role: string }> }).rows ?? []);
+	return row?.role === "owner" || row?.role === "admin";
 }
