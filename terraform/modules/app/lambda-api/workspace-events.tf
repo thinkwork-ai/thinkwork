@@ -1,37 +1,10 @@
 locals {
   workspace_event_enabled = var.enable_workspace_orchestration && local.use_local_zips
+  # EventBridge rejects the more precise per-folder S3 wildcard rules as too
+  # complex. Route every workspace object mutation through one queue and let the
+  # dispatcher keep the canonical allowlist in code.
   workspace_event_patterns = {
-    inbox = [
-      "tenants/*/agents/*/workspace/work/inbox/*.md",
-      "tenants/*/agents/*/workspace/*/work/inbox/*.md",
-    ]
-    run_events = [
-      "tenants/*/agents/*/workspace/work/runs/*/events/*.json",
-      "tenants/*/agents/*/workspace/*/work/runs/*/events/*.json",
-    ]
-    outbox = [
-      "tenants/*/agents/*/workspace/work/outbox/*",
-      "tenants/*/agents/*/workspace/*/work/outbox/*",
-    ]
-    memory = [
-      "tenants/*/agents/*/workspace/memory/*",
-      "tenants/*/agents/*/workspace/*/memory/*",
-    ]
-    review = [
-      "tenants/*/agents/*/workspace/review/*",
-      "tenants/*/agents/*/workspace/*/review/*",
-    ]
-    errors = [
-      "tenants/*/agents/*/workspace/errors/*",
-      "tenants/*/agents/*/workspace/*/errors/*",
-    ]
-    intents = [
-      "tenants/*/agents/*/workspace/events/intents/*.json",
-      "tenants/*/agents/*/workspace/*/events/intents/*.json",
-    ]
-    audit = [
-      "tenants/*/agents/*/workspace/events/audit/*",
-    ]
+    workspace = ["tenants/*/agents/*/workspace/*"]
   }
 }
 
@@ -46,8 +19,9 @@ resource "aws_sqs_queue" "workspace_event_dlq" {
 resource "aws_sqs_queue" "workspace_event" {
   for_each = local.workspace_event_enabled ? local.workspace_event_patterns : {}
 
-  name                    = "thinkwork-${var.stage}-workspace-events-${each.key}"
-  sqs_managed_sse_enabled = true
+  name                       = "thinkwork-${var.stage}-workspace-events-${each.key}"
+  visibility_timeout_seconds = 180
+  sqs_managed_sse_enabled    = true
 
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.workspace_event_dlq[each.key].arn
@@ -63,7 +37,7 @@ resource "aws_cloudwatch_event_rule" "workspace_event" {
 
   event_pattern = jsonencode({
     source        = ["aws.s3"]
-    "detail-type" = each.key == "review" ? ["Object Created", "Object Deleted"] : ["Object Created"]
+    "detail-type" = ["Object Created", "Object Deleted"]
     detail = {
       bucket = {
         name = [var.bucket_name]
