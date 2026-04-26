@@ -5,18 +5,11 @@
  * `wikiPages` joins each recalled/searched/inspected memory record back to
  * the Compounding Memory pipeline's `wiki_section_sources` table so the UI
  * can show "this memory is also distilled into page X." One query per
- * MemoryRecord in a result set is fine for typical memorySearch sizes (≤25);
- * swap in a DataLoader when we start bulk-annotating large result sets.
+ * Batched through a request-scoped DataLoader because the mobile memory list
+ * asks for wiki chips across hundreds of Hindsight records at once.
  */
 
-import { and, eq, inArray, sql } from "drizzle-orm";
-import {
-	wikiPageSections,
-	wikiPages,
-	wikiSectionSources,
-} from "@thinkwork/database-pg/schema";
-import { db } from "../../utils.js";
-import { toGraphQLPage } from "../wiki/mappers.js";
+import type { GraphQLContext } from "../../context.js";
 
 /**
  * Given a MemoryRecord parent (already resolved from Hindsight / AgentCore
@@ -30,40 +23,15 @@ import { toGraphQLPage } from "../wiki/mappers.js";
  * The caller's access to the MemoryRecord itself was already validated
  * upstream by memoryRecords/memorySearch/etc.
  */
-async function resolveWikiPagesForMemory(parent: any): Promise<unknown[]> {
+async function resolveWikiPagesForMemory(
+	parent: any,
+	_args: unknown,
+	ctx: GraphQLContext,
+): Promise<unknown[]> {
 	const memoryRecordId =
 		parent?.memoryRecordId ?? parent?.id ?? parent?.memory_unit_id;
 	if (!memoryRecordId || typeof memoryRecordId !== "string") return [];
-
-	// Find the distinct page IDs that have at least one section citing this
-	// memory unit. The INDEX on (source_kind, source_ref) makes this cheap.
-	const sectionRows = await db
-		.select({ page_id: wikiPageSections.page_id })
-		.from(wikiSectionSources)
-		.innerJoin(
-			wikiPageSections,
-			eq(wikiPageSections.id, wikiSectionSources.section_id),
-		)
-		.where(
-			and(
-				eq(wikiSectionSources.source_kind, "memory_unit"),
-				eq(wikiSectionSources.source_ref, memoryRecordId),
-			),
-		);
-	const pageIds = Array.from(new Set(sectionRows.map((r) => r.page_id)));
-	if (pageIds.length === 0) return [];
-
-	const pageRows = await db
-		.select()
-		.from(wikiPages)
-		.where(and(inArray(wikiPages.id, pageIds), eq(wikiPages.status, "active")))
-		.orderBy(sql`${wikiPages.type}, ${wikiPages.slug}`);
-
-	// Empty sections/aliases — this is a preview response. Mobile can fetch
-	// the full page via wikiPage(..., type, slug) if the user clicks through.
-	return pageRows.map((row) =>
-		toGraphQLPage(row as any, { sections: [], aliases: [] }),
-	);
+	return ctx.loaders.wikiPagesByMemoryRecord.load(memoryRecordId);
 }
 
 export const memoryRecordTypeResolvers = {

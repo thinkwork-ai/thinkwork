@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch, NotReadyError } from "@/lib/api-fetch";
+import { setGraphqlTenantId } from "@/lib/graphql-client";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -55,6 +56,11 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   const bootstrapAttempted = useRef(false);
 
   const tenantId = user?.tenantId ?? null;
+
+  useEffect(() => {
+    setGraphqlTenantId(tenantId || tenant?.id || null);
+    return () => setGraphqlTenantId(null);
+  }, [tenantId, tenant?.id]);
 
   async function fetchTenant() {
     if (!tenantId || !API_URL) {

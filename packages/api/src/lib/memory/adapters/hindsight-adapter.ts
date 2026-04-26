@@ -76,9 +76,8 @@ export class HindsightAdapter implements MemoryAdapter {
 	}
 
 	async recall(req: RecallRequest): Promise<RecallResult[]> {
-		const bankId = await this.resolveBankId(req.ownerId);
+		const bankIds = await this.resolveReadBankIds(req.ownerId, req.tenantId);
 		const limit = req.limit ?? 10;
-		const url = `${this.endpoint}/v1/default/banks/${encodeURIComponent(bankId)}/memories/recall`;
 		// Per the Hindsight recall API, `types` filters which fact-types to
 		// search. Without it the service may default to a subset (we've seen
 		// observation-typed rows go missing). Explicitly ask for all three
@@ -89,48 +88,56 @@ export class HindsightAdapter implements MemoryAdapter {
 			types: ["world", "experience", "observation"] as const,
 		};
 
-		let data: any;
-		try {
-			const resp = await fetch(url, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(body),
-				signal: AbortSignal.timeout(this.timeoutMs),
-			});
-			if (!resp.ok) {
-				const errText = await resp.text().catch(() => "");
-				console.warn(
-					`[hindsight-adapter] recall ${resp.status} url=${url} body=${errText.slice(0, 400)}`,
-				);
-				return [];
-			}
-			data = await resp.json();
-		} catch (err) {
-			console.warn(
-				`[hindsight-adapter] recall threw url=${url} message=${(err as Error)?.message}`,
-			);
-			return [];
-		}
+		const batches = await Promise.all(
+			bankIds.map(async (bankId) => {
+				const url = `${this.endpoint}/v1/default/banks/${encodeURIComponent(bankId)}/memories/recall`;
+				let data: any;
+				try {
+					const resp = await fetch(url, {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify(body),
+						signal: AbortSignal.timeout(this.timeoutMs),
+					});
+					if (!resp.ok) {
+						const errText = await resp.text().catch(() => "");
+						console.warn(
+							`[hindsight-adapter] recall ${resp.status} url=${url} body=${errText.slice(0, 400)}`,
+						);
+						return [];
+					}
+					data = await resp.json();
+				} catch (err) {
+					console.warn(
+						`[hindsight-adapter] recall threw url=${url} message=${(err as Error)?.message}`,
+					);
+					return [];
+				}
 
-		const memories: any[] = data?.memory_units || data?.memories || data?.results || [];
-		if (memories.length === 0) {
-			console.log(
-				`[hindsight-adapter] recall returned 0 hits bank=${bankId} query=${JSON.stringify(req.query).slice(0, 200)} keys=${Object.keys(data || {}).join(",")}`,
-			);
-		}
-		return memories.map((m, idx): RecallResult => {
-			const score = typeof m.relevance_score === "number"
-				? m.relevance_score
-				: typeof m.score === "number"
-					? m.score
-					: Math.max(0, 1 - idx * 0.05);
-			return {
-				record: this.mapUnit(m, req, bankId),
-				score,
-				whyRecalled: m.why || undefined,
-				backend: "hindsight",
-			};
-		});
+				const memories: any[] = data?.memory_units || data?.memories || data?.results || [];
+				if (memories.length === 0) {
+					console.log(
+						`[hindsight-adapter] recall returned 0 hits bank=${bankId} query=${JSON.stringify(req.query).slice(0, 200)} keys=${Object.keys(data || {}).join(",")}`,
+					);
+				}
+				return memories.map((m, idx): RecallResult => {
+					const score = typeof m.relevance_score === "number"
+						? m.relevance_score
+						: typeof m.score === "number"
+							? m.score
+							: Math.max(0, 1 - idx * 0.05);
+					return {
+						record: this.mapUnit(m, req, bankId),
+						score,
+						whyRecalled: m.why || undefined,
+						backend: "hindsight",
+					};
+				});
+			}),
+		);
+		return dedupeRecordsById(batches.flat(), (r) => r.record.id)
+			.sort((a, b) => b.score - a.score)
+			.slice(0, limit);
 	}
 
 	async retain(req: RetainRequest): Promise<RetainResult> {
@@ -264,7 +271,7 @@ export class HindsightAdapter implements MemoryAdapter {
 	}
 
 	async inspect(req: InspectRequest): Promise<ThinkWorkMemoryRecord[]> {
-		const bankId = await this.resolveBankId(req.ownerId);
+		const bankIds = await this.resolveReadBankIds(req.ownerId, req.tenantId);
 		const limit = Math.min(req.limit ?? this.inspectLimit, this.inspectLimit);
 
 		let result: any;
@@ -276,7 +283,7 @@ export class HindsightAdapter implements MemoryAdapter {
 					mentioned_at, tags, access_count, proof_count,
 					metadata, created_at, updated_at
 				FROM hindsight.memory_units
-				WHERE bank_id = ${bankId}
+				WHERE bank_id IN (${sql.join(bankIds.map((bankId) => sql`${bankId}`), sql`, `)})
 				ORDER BY created_at DESC
 				LIMIT ${limit}
 			`);
@@ -284,11 +291,11 @@ export class HindsightAdapter implements MemoryAdapter {
 			return [];
 		}
 
-		return (result.rows || []).map((row: any) => this.mapRow(row, req, bankId));
+		return (result.rows || []).map((row: any) => this.mapRow(row, req, row.bank_id));
 	}
 
 	async export(req: ExportRequest): Promise<MemoryExportBundle> {
-		const bankId = await this.resolveBankId(req.ownerId);
+		const bankIds = await this.resolveReadBankIds(req.ownerId, req.tenantId);
 		let result: any;
 		try {
 			result = await this.db.execute(sql`
@@ -298,7 +305,7 @@ export class HindsightAdapter implements MemoryAdapter {
 					mentioned_at, tags, access_count, proof_count,
 					metadata, created_at, updated_at
 				FROM hindsight.memory_units
-				WHERE bank_id = ${bankId}
+				WHERE bank_id IN (${sql.join(bankIds.map((bankId) => sql`${bankId}`), sql`, `)})
 				ORDER BY created_at ASC
 			`);
 		} catch (err) {
@@ -306,7 +313,7 @@ export class HindsightAdapter implements MemoryAdapter {
 			result = { rows: [] };
 		}
 
-		const records = (result.rows || []).map((row: any) => this.mapRow(row, req, bankId));
+		const records = (result.rows || []).map((row: any) => this.mapRow(row, req, row.bank_id));
 		return {
 			version: "v1",
 			exportedAt: new Date().toISOString(),
@@ -347,7 +354,7 @@ export class HindsightAdapter implements MemoryAdapter {
 	async listRecordsUpdatedSince(
 		req: ListRecordsUpdatedSinceRequest,
 	): Promise<ListRecordsUpdatedSinceResult> {
-		const bankId = await this.resolveBankId(req.ownerId);
+		const bankIds = await this.resolveReadBankIds(req.ownerId, req.tenantId);
 		const limit = Math.max(1, Math.min(req.limit, 500));
 		const sinceTs = req.sinceUpdatedAt ?? new Date(0);
 		const sinceId = req.sinceRecordId ?? "00000000-0000-0000-0000-000000000000";
@@ -365,7 +372,7 @@ export class HindsightAdapter implements MemoryAdapter {
 					metadata, created_at, updated_at,
 					date_trunc('milliseconds', COALESCE(updated_at, created_at)) AS cursor_ts
 				FROM hindsight.memory_units
-				WHERE bank_id = ${bankId}
+				WHERE bank_id IN (${sql.join(bankIds.map((bankId) => sql`${bankId}`), sql`, `)})
 				  AND (
 					date_trunc('milliseconds', COALESCE(updated_at, created_at)) > ${sinceTs.toISOString()}::timestamptz
 					OR (
@@ -393,13 +400,48 @@ export class HindsightAdapter implements MemoryAdapter {
 			ownerType: "user" as const,
 			ownerId: req.ownerId,
 		};
-		const records = rows.map((row) => this.mapRow(row, ownerRef, bankId));
+		const records = rows.map((row) => this.mapRow(row, ownerRef, row.bank_id));
 		const last = rows[rows.length - 1];
 		const nextCursor = {
 			updatedAt: new Date(last.cursor_ts ?? last.updated_at ?? last.created_at),
 			recordId: String(last.id),
 		};
 		return { records, nextCursor };
+	}
+
+	private async resolveReadBankIds(ownerId: string, tenantId?: string): Promise<string[]> {
+		const primaryBankId = await this.resolveBankId(ownerId);
+		const legacyBankIds = await this.resolveLegacyBankIds(ownerId, tenantId);
+		return uniqueStrings([primaryBankId, ...legacyBankIds]);
+	}
+
+	private async resolveLegacyBankIds(ownerId: string, tenantId?: string): Promise<string[]> {
+		try {
+			const tenantFilter = tenantId ? sql`AND tenant_id = ${tenantId}` : sql``;
+			const result = await this.db.execute(sql`
+				SELECT id, slug, name
+				FROM agents
+				WHERE human_pair_id = ${ownerId}
+				  AND source = 'user'
+				  ${tenantFilter}
+			`);
+			const rows = (result.rows || []) as Array<{
+				id: string;
+				slug: string | null;
+				name: string | null;
+			}>;
+			return rows.flatMap((row) => [
+				row.slug || null,
+				row.name ? slugifyLegacyBankName(row.name) : null,
+				row.id,
+				`user_${row.id}`,
+			]).filter((v): v is string => Boolean(v));
+		} catch (err) {
+			console.warn(
+				`[hindsight-adapter] legacy bank lookup failed: ${(err as Error)?.message}`,
+			);
+			return [];
+		}
 	}
 
 	private async resolveBankId(ownerId: string): Promise<string> {
@@ -496,6 +538,26 @@ export class HindsightAdapter implements MemoryAdapter {
 		}
 		return this.mapUnit({ ...row, metadata: meta }, owner, bankId);
 	}
+}
+
+function uniqueStrings(values: string[]): string[] {
+	return [...new Set(values.filter(Boolean))];
+}
+
+function slugifyLegacyBankName(value: string): string {
+	return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function dedupeRecordsById<T>(records: T[], getId: (record: T) => string): T[] {
+	const seen = new Set<string>();
+	const out: T[] = [];
+	for (const record of records) {
+		const id = getId(record);
+		if (seen.has(id)) continue;
+		seen.add(id);
+		out.push(record);
+	}
+	return out;
 }
 
 function toISO(value: any): string | null {

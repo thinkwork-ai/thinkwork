@@ -5,6 +5,7 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { Loader2, Search, X, Sparkles } from "lucide-react";
 import {
   AgentsListQuery,
+  TenantMembersListQuery,
   RecentWikiPagesQuery,
   WikiSearchQuery,
 } from "@/lib/graphql-queries";
@@ -136,6 +137,11 @@ function WikiPage() {
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId,
   });
+  const [membersResult] = useQuery({
+    query: TenantMembersListQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
 
   const agents = useMemo(
     () =>
@@ -145,8 +151,23 @@ function WikiPage() {
     [agentsResult.data],
   );
 
+  const memberScopes = useMemo<UserScope[]>(() => {
+    const members = membersResult.data?.tenantMembers ?? [];
+    return members
+      .filter((m) => m.principalType.toLowerCase() === "user" && m.user)
+      .map((m) => ({
+        userId: m.user!.id,
+        label: m.user!.name ?? m.user!.email,
+        agentIds: [],
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [membersResult.data]);
+
   const userScopes = useMemo<UserScope[]>(() => {
     const map = new Map<string, UserScope>();
+    for (const scope of memberScopes) {
+      map.set(scope.userId, { ...scope, agentIds: [...scope.agentIds] });
+    }
     for (const a of agents) {
       const userId = agentUserId(a);
       if (!userId) continue;
@@ -162,7 +183,7 @@ function WikiPage() {
       });
     }
     return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
-  }, [agents]);
+  }, [agents, memberScopes]);
   const userLabels = useMemo(() => {
     const map: Record<string, string> = {};
     for (const scope of userScopes) map[scope.userId] = scope.label;
