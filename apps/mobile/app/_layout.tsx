@@ -9,9 +9,17 @@ if (typeof globalThis.crypto === "undefined") {
 
 import { useEffect, useState, useRef } from "react";
 import { LogBox } from "react-native";
-LogBox.ignoreLogs(["Cannot update a component", "[AppSync WS] Subscription error"]);
+LogBox.ignoreLogs([
+  "Cannot update a component",
+  "[AppSync WS] Subscription error",
+]);
 import { View, Platform, AppState, AppStateStatus, Alert } from "react-native";
-import { Stack, useRouter, useSegments, useRootNavigationState } from "expo-router";
+import {
+  Stack,
+  useRouter,
+  useSegments,
+  useRootNavigationState,
+} from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ThemeProvider } from "@react-navigation/native";
@@ -30,7 +38,16 @@ import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import "../global.css";
 
 function RootLayoutNav() {
-  const { isLoading, isAuthenticated, user, signOut, didActiveLogin, getToken, hasStoredSession, retryBootstrap } = useAuth();
+  const {
+    isLoading,
+    isAuthenticated,
+    user,
+    signOut,
+    didActiveLogin,
+    getToken,
+    hasStoredSession,
+    retryBootstrap,
+  } = useAuth();
   const {
     isEnabled: biometricEnabled,
     isSupported: biometricSupported,
@@ -56,7 +73,8 @@ function RootLayoutNav() {
   const agents = agentsData?.agents;
 
   // Push notifications — registers token after auth
-  const { unregisterToken: unregisterPushToken } = usePushNotifications(isAuthenticated);
+  const { unregisterToken: unregisterPushToken } =
+    usePushNotifications(isAuthenticated);
 
   // Biometric lock state
   const [isUnlocked, setIsUnlocked] = useState(false);
@@ -66,16 +84,19 @@ function RootLayoutNav() {
   useEffect(() => {
     if (Platform.OS === "web") return;
 
-    const subscription = AppState.addEventListener("change", (nextAppState: AppStateStatus) => {
-      if (
-        (nextAppState === "inactive" || nextAppState === "background") &&
-        biometricEnabled &&
-        isAuthenticated &&
-        !isAuthenticating.current
-      ) {
-        setIsUnlocked(false);
-      }
-    });
+    const subscription = AppState.addEventListener(
+      "change",
+      (nextAppState: AppStateStatus) => {
+        if (
+          (nextAppState === "inactive" || nextAppState === "background") &&
+          biometricEnabled &&
+          isAuthenticated &&
+          !isAuthenticating.current
+        ) {
+          setIsUnlocked(false);
+        }
+      },
+    );
 
     return () => subscription.remove();
   }, [biometricEnabled, isAuthenticated]);
@@ -97,7 +118,8 @@ function RootLayoutNav() {
 
   // Once both auth and biometric state are resolved, decide unlock
   useEffect(() => {
-    if (!isAuthenticated || biometricLoading || didInitialUnlockCheck.current) return;
+    if (!isAuthenticated || biometricLoading || didInitialUnlockCheck.current)
+      return;
     didInitialUnlockCheck.current = true;
 
     if (!biometricEnabled || didActiveLogin) {
@@ -120,33 +142,50 @@ function RootLayoutNav() {
       !biometricSupported ||
       didPromptBiometric.current ||
       Platform.OS === "web"
-    ) return;
+    )
+      return;
 
     didPromptBiometric.current = true;
     const name = getBiometricName(biometricType);
 
-    Alert.alert(
-      `Enable ${name}?`,
-      `Sign in faster next time using ${name}.`,
-      [
-        {
-          text: "Not Now",
-          style: "cancel",
-          onPress: () => { clearStoredCredentials(); },
+    Alert.alert(`Enable ${name}?`, `Sign in faster next time using ${name}.`, [
+      {
+        text: "Not Now",
+        style: "cancel",
+        onPress: () => {
+          clearStoredCredentials();
         },
-        {
-          text: `Enable ${name}`,
-          onPress: () => { enableBiometricFlag(); },
+      },
+      {
+        text: `Enable ${name}`,
+        onPress: () => {
+          enableBiometricFlag();
         },
-      ]
-    );
-  }, [didActiveLogin, isAuthenticated, hasTenant, biometricLoading, biometricEnabled, biometricSupported]);
+      },
+    ]);
+  }, [
+    didActiveLogin,
+    isAuthenticated,
+    hasTenant,
+    biometricLoading,
+    biometricEnabled,
+    biometricSupported,
+  ]);
 
   // Routing guard
   useEffect(() => {
     if (isLoading || !navigationReady) return;
 
-    const publicRoutes = ["sign-in", "sign-up", "verify", "demo", "onboarding", "invite", "forgot-password", "auth"];
+    const publicRoutes = [
+      "sign-in",
+      "sign-up",
+      "verify",
+      "demo",
+      "onboarding",
+      "invite",
+      "forgot-password",
+      "auth",
+    ];
     const isPublicRoute = publicRoutes.includes(segments[0] as string);
 
     // Soft-auth: if SecureStore holds a refresh_token, consider the user
@@ -177,14 +216,23 @@ function RootLayoutNav() {
       }
     } else if (isAuthenticated && hasTenant) {
       const beacon = agents?.find((a: any) => a.role === "team");
-      const isProvisioning = beacon && (beacon.status as string) === "provisioning";
+      const isProvisioning =
+        beacon && (beacon.status as string) === "provisioning";
       const isOnComplete = segments.join("/").includes("onboarding/complete");
 
       if (isProvisioning && !isOnComplete && !isPublicRoute) {
         router.replace("/onboarding/complete");
       }
     }
-  }, [isLoading, isAuthenticated, segments, hasTenant, hasStoredSession, navigationReady, agents]);
+  }, [
+    isLoading,
+    isAuthenticated,
+    segments,
+    hasTenant,
+    hasStoredSession,
+    navigationReady,
+    agents,
+  ]);
 
   const handleBiometricUnlock = async () => {
     // Force a token refresh before dropping the lock screen. For OAuth users
@@ -202,7 +250,9 @@ function RootLayoutNav() {
       if (!isAuthenticated && hasStoredSession) {
         const ok = await retryBootstrap();
         if (!ok) {
-          console.warn("[_layout] bootstrap retry failed during unlock; staying locked");
+          console.warn(
+            "[_layout] bootstrap retry failed during unlock; staying locked",
+          );
           isAuthenticating.current = false;
           return;
         }
@@ -237,7 +287,8 @@ function RootLayoutNav() {
   //      biometric unlock can re-run bootstrap and refresh tokens — this is
   //      the "never bounce to /sign-in after a reload" guarantee.
   const needsBiometricUnlock =
-    ((isAuthenticated && hasTenant) || (!isAuthenticated && hasStoredSession)) &&
+    ((isAuthenticated && hasTenant) ||
+      (!isAuthenticated && hasStoredSession)) &&
     !isUnlocked &&
     biometricEnabled &&
     !biometricLoading &&
@@ -249,66 +300,105 @@ function RootLayoutNav() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-    <BottomSheetModalProvider>
-    <TurnCompletionProvider tenantId={tenantId}>
-    <ThemeProvider value={NAV_THEME[colorScheme === "dark" ? "dark" : "light"]}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="sign-in" options={{ animationTypeForReplace: "pop" }} />
-        <Stack.Screen name="forgot-password" />
-        <Stack.Screen name="sign-up" />
-        <Stack.Screen name="verify" />
-        <Stack.Screen name="onboarding/verify-email" />
-        <Stack.Screen name="onboarding/verify-code" />
-        <Stack.Screen name="onboarding/payment" />
-        <Stack.Screen name="onboarding/complete" />
-        <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
-        <Stack.Screen name="demo" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="thread/[threadId]" options={{ headerShown: false }} />
-        <Stack.Screen name="chat/index" options={{ headerShown: false }} />
-        <Stack.Screen name="threads" />
-        <Stack.Screen name="routines/[id]/index" />
-        <Stack.Screen name="routines/[id]/runs" />
-        <Stack.Screen name="settings/index" options={{ headerShown: false }} />
-        <Stack.Screen name="settings/account" />
-        <Stack.Screen name="settings/team" />
-        <Stack.Screen name="settings/profile" />
-        <Stack.Screen name="settings/credentials" />
-        <Stack.Screen name="settings/integration-detail" />
-        <Stack.Screen name="settings/usage" />
-        <Stack.Screen name="settings/billing" options={{ headerShown: false }} />
-        <Stack.Screen name="invite/[token]" />
-        <Stack.Screen name="team/[id]" />
-        <Stack.Screen name="team/add-users" />
-        <Stack.Screen name="team/edit-member" />
-        <Stack.Screen name="team/pick-user" />
-        <Stack.Screen name="agents/[id]/files" />
-        <Stack.Screen name="agents/[id]/file-view" />
-        <Stack.Screen name="agents/[id]/skills" />
-        <Stack.Screen name="agents/[id]/model" />
-        <Stack.Screen name="artifacts/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="memory/index" options={{ headerShown: false }} />
-        <Stack.Screen name="memory/list" options={{ headerShown: false }} />
-        <Stack.Screen name="memory/[file]" options={{ headerShown: false }} />
-        <Stack.Screen name="memory/edit-file" options={{ headerShown: false }} />
-        <Stack.Screen name="heartbeats/new" />
-        <Stack.Screen name="heartbeats/[id]" />
-        <Stack.Screen name="routines/new" />
-        <Stack.Screen name="routines/builder" />
-        <Stack.Screen name="routines/builder-chat" />
-      </Stack>
+      <BottomSheetModalProvider>
+        <TurnCompletionProvider tenantId={tenantId}>
+          <ThemeProvider
+            value={NAV_THEME[colorScheme === "dark" ? "dark" : "light"]}
+          >
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen
+                name="sign-in"
+                options={{ animationTypeForReplace: "pop" }}
+              />
+              <Stack.Screen name="forgot-password" />
+              <Stack.Screen name="sign-up" />
+              <Stack.Screen name="verify" />
+              <Stack.Screen name="onboarding/verify-email" />
+              <Stack.Screen name="onboarding/verify-code" />
+              <Stack.Screen name="onboarding/payment" />
+              <Stack.Screen name="onboarding/complete" />
+              <Stack.Screen
+                name="auth/callback"
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen name="demo" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen
+                name="thread/[threadId]"
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="chat/index"
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="activation/index"
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen name="threads" />
+              <Stack.Screen name="routines/[id]/index" />
+              <Stack.Screen name="routines/[id]/runs" />
+              <Stack.Screen
+                name="settings/index"
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen name="settings/account" />
+              <Stack.Screen name="settings/team" />
+              <Stack.Screen name="settings/profile" />
+              <Stack.Screen name="settings/credentials" />
+              <Stack.Screen name="settings/integration-detail" />
+              <Stack.Screen name="settings/usage" />
+              <Stack.Screen
+                name="settings/billing"
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen name="invite/[token]" />
+              <Stack.Screen name="team/[id]" />
+              <Stack.Screen name="team/add-users" />
+              <Stack.Screen name="team/edit-member" />
+              <Stack.Screen name="team/pick-user" />
+              <Stack.Screen name="agents/[id]/files" />
+              <Stack.Screen name="agents/[id]/file-view" />
+              <Stack.Screen name="agents/[id]/skills" />
+              <Stack.Screen name="agents/[id]/model" />
+              <Stack.Screen
+                name="artifacts/[id]"
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="memory/index"
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="memory/list"
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="memory/[file]"
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="memory/edit-file"
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen name="heartbeats/new" />
+              <Stack.Screen name="heartbeats/[id]" />
+              <Stack.Screen name="routines/new" />
+              <Stack.Screen name="routines/builder" />
+              <Stack.Screen name="routines/builder-chat" />
+            </Stack>
 
-      {needsBiometricUnlock && (
-        <BiometricLockScreen
-          onUnlock={handleBiometricUnlock}
-          onLoginScreen={handleLoginScreen}
-          onStartAuth={handleStartAuth}
-          onEndAuth={handleEndAuth}
-        />
-      )}
-    </ThemeProvider>
-    </TurnCompletionProvider>
-    </BottomSheetModalProvider>
+            {needsBiometricUnlock && (
+              <BiometricLockScreen
+                onUnlock={handleBiometricUnlock}
+                onLoginScreen={handleLoginScreen}
+                onStartAuth={handleStartAuth}
+                onEndAuth={handleEndAuth}
+              />
+            )}
+          </ThemeProvider>
+        </TurnCompletionProvider>
+      </BottomSheetModalProvider>
     </GestureHandlerRootView>
   );
 }
@@ -331,7 +421,11 @@ export default function RootLayout() {
       <AuthProvider>
         <GraphQLProvider>
           <View
-            style={{ flex: 1, backgroundColor: NAV_THEME[isDark ? "dark" : "light"].colors.background }}
+            style={{
+              flex: 1,
+              backgroundColor:
+                NAV_THEME[isDark ? "dark" : "light"].colors.background,
+            }}
           >
             <RootLayoutNav />
           </View>

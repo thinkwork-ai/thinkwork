@@ -89,6 +89,8 @@ type UserProfile {
   displayName: String
   theme: String
   notificationPreferences: AWSJSON
+  operatingModel: AWSJSON
+  operatingModelHistory: [AWSJSON!]!
   title: String
   timezone: String
   pronouns: String
@@ -193,6 +195,8 @@ input UpdateUserProfileInput {
   displayName: String
   theme: String
   notificationPreferences: AWSJSON
+  operatingModel: AWSJSON
+  operatingModelHistory: [AWSJSON!]
   title: String
   timezone: String
   pronouns: String

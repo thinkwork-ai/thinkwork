@@ -47,3 +47,4 @@ export * from "./sandbox-quota-counters";
 export * from "./tenant-policy-events";
 export * from "./billing";
 export * from "./agent-workspace-events";
+export * from "./activation";

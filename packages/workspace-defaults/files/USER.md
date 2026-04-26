@@ -14,3 +14,21 @@
 ## Context
 
 {{HUMAN_CONTEXT}}
+
+## How I work
+
+### Rhythms
+
+{{OPERATING_MODEL_RHYTHMS}}
+
+### Decisions
+
+{{OPERATING_MODEL_DECISIONS}}
+
+### Dependencies
+
+{{OPERATING_MODEL_DEPENDENCIES}}
+
+### Knowledge
+
+{{OPERATING_MODEL_KNOWLEDGE}}
