@@ -1,27 +1,34 @@
 import { View } from "react-native";
 import { useState } from "react";
 import { useRouter } from "expo-router";
-import { useMutation } from "urql";
+import { useMutation, useQuery } from "urql";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BrainCircuit, RotateCcw } from "lucide-react-native";
 import { Button } from "@/components/ui/button";
 import { Text, Muted } from "@/components/ui/typography";
 import { useAuth } from "@/lib/auth-context";
-import { StartActivationMutation } from "@/lib/graphql-queries";
+import { MeQuery, StartActivationMutation } from "@/lib/graphql-queries";
 
 export default function ActivationIndex() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { isAuthenticated } = useAuth();
+  const [{ data: meData, fetching: isMeFetching, error: meError }] = useQuery({
+    query: MeQuery,
+    pause: !isAuthenticated,
+  });
   const [, startActivation] = useMutation(StartActivationMutation);
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const userId = meData?.me?.id;
 
   const start = async (
     mode: "full" | "refresh" = "full",
     focusLayer?: string,
   ) => {
-    const userId = user?.sub;
-    if (!userId || isStarting) return;
+    if (!userId || isStarting) {
+      if (meError) setError(meError.message);
+      return;
+    }
     setIsStarting(true);
     setError(null);
     try {
@@ -60,11 +67,11 @@ export default function ActivationIndex() {
           </View>
         </View>
         <View className="gap-3">
-          {error && <Muted>{error}</Muted>}
+          {(error || meError) && <Muted>{error ?? meError?.message}</Muted>}
           <Button
             onPress={() => start("full")}
-            loading={isStarting}
-            disabled={!user?.sub}
+            loading={isStarting || isMeFetching}
+            disabled={!userId || isMeFetching}
           >
             Start activation
           </Button>
