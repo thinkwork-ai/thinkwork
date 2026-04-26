@@ -31,6 +31,7 @@ import {
   tenants,
   users,
   costEvents,
+  agentWorkspaceRuns,
 } from "@thinkwork/database-pg/schema";
 import {
   extractUsage,
@@ -891,6 +892,19 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     .update(agentWakeupRequests)
     .set({ run_id: run.id })
     .where(eq(agentWakeupRequests.id, wakeup.id));
+
+  if (wakeup.source === "workspace_event" && payload?.workspaceRunId) {
+    await db
+      .update(agentWorkspaceRuns)
+      .set({ current_thread_turn_id: run.id, updated_at: now })
+      .where(
+        and(
+          eq(agentWorkspaceRuns.id, String(payload.workspaceRunId)),
+          eq(agentWorkspaceRuns.tenant_id, wakeup.tenant_id),
+          eq(agentWorkspaceRuns.agent_id, wakeup.agent_id),
+        ),
+      );
+  }
 
   // Notify subscribers that a run started
   await notifyThreadTurnUpdate({

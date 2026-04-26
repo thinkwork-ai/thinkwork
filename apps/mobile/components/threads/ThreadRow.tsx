@@ -77,12 +77,15 @@ interface ThreadRowProps {
     status: string;
     channel?: string;
     agentId?: string;
+    createdAt: string;
     updatedAt: string;
     lastActivityAt?: string | null;
     lastTurnCompletedAt?: string | null;
   };
   agentName?: string;
   isUnread?: boolean;
+  needsHitl?: boolean;
+  hitlPreview?: string | null;
   isActive?: boolean;
   turnStatus?: "succeeded" | "failed" | null;
   onArchive?: (threadId: string) => Promise<boolean>;
@@ -100,7 +103,17 @@ function formatRelativeTime(dateStr: string): string {
   return `${days}d ago`;
 }
 
-export function ThreadRow({ thread, agentName, isUnread, isActive, turnStatus, onArchive, onPress }: ThreadRowProps) {
+export function ThreadRow({
+  thread,
+  agentName,
+  isUnread,
+  needsHitl,
+  hitlPreview,
+  isActive,
+  turnStatus,
+  onArchive,
+  onPress,
+}: ThreadRowProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? COLORS.dark : COLORS.light;
@@ -188,7 +201,12 @@ export function ThreadRow({ thread, agentName, isUnread, isActive, turnStatus, o
       {/* Dot + icon row — dot vertically centered on the icon */}
       <View style={{ flexDirection: "row", alignItems: "center", width: 56 }}>
         <View style={{ width: 16, alignItems: "center", justifyContent: "center" }}>
-          {isUnread && <View className="w-2 h-2 rounded-full" style={{ backgroundColor: "#3b82f6" }} />}
+          {(needsHitl || isUnread) && (
+            <View
+              className="w-2 h-2 rounded-full"
+              style={{ backgroundColor: needsHitl ? "#f59e0b" : "#3b82f6" }}
+            />
+          )}
         </View>
         <View
           style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: chan.bg, borderWidth: 0.25, borderColor: chan.fg, alignItems: "center", justifyContent: "center" }}
@@ -218,6 +236,13 @@ export function ThreadRow({ thread, agentName, isUnread, isActive, turnStatus, o
                 <Text className="text-[10px]" style={{ color: isDark ? "#f87171" : "#dc2626" }}>Failed</Text>
               </View>
             )}
+            {needsHitl && (
+              <View className="flex-row items-center rounded-full px-1.5 py-0.5" style={{ backgroundColor: isDark ? "rgba(245,158,11,0.18)" : "rgba(245,158,11,0.14)" }}>
+                <Text className="text-[10px] font-semibold" style={{ color: isDark ? "#fbbf24" : "#b45309" }}>
+                  Needs answer
+                </Text>
+              </View>
+            )}
           </View>
           <View className="flex-row items-center gap-1">
             <Muted className="text-xs">{formatRelativeTime(thread.lastTurnCompletedAt || thread.createdAt)}</Muted>
@@ -227,7 +252,11 @@ export function ThreadRow({ thread, agentName, isUnread, isActive, turnStatus, o
         <Text className={`text-base ${isUnread ? "font-semibold" : ""}`} style={{ lineHeight: 20, marginTop: -1, marginBottom: 2 }} numberOfLines={1}>
           {thread.title || "Untitled"}
         </Text>
-        {isActive ? (
+        {needsHitl ? (
+          <Muted style={{ fontSize: 14, lineHeight: 18 }} numberOfLines={2}>
+            {hitlPreview || "Waiting for your confirmation"}
+          </Muted>
+        ) : isActive ? (
           <ShimmerProcessing />
         ) : thread.lastResponsePreview ? (
           <Muted style={{ fontSize: 14, lineHeight: 18 }} numberOfLines={2}>{thread.lastResponsePreview}</Muted>

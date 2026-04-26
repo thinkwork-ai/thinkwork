@@ -31,6 +31,7 @@ import {
 import { resolveCallerUserId } from "./resolve-auth-user.js";
 
 export type TenantAdminRole = "owner" | "admin";
+export type TenantMemberRole = TenantAdminRole | "member";
 
 /**
  * Minimal duck-type that covers both the module-level `db` and a Drizzle
@@ -88,6 +89,39 @@ export async function requireTenantAdmin(
     return role;
   }
   throw forbidden("Tenant admin role required");
+}
+
+/**
+ * Ensures the caller belongs to `tenantId`, regardless of role. This is for
+ * user-facing collaboration surfaces where any tenant member may respond to
+ * an agent request, while cross-tenant access must still fail closed.
+ */
+export async function requireTenantMember(
+  ctx: GraphQLContext,
+  tenantId: string,
+  dbOrTx: DbOrTx = defaultDb,
+): Promise<TenantMemberRole> {
+  if (ctx.auth.authType !== "cognito") {
+    throw forbidden("Tenant membership required");
+  }
+  const callerUserId = await resolveCallerUserId(ctx);
+  if (!callerUserId) {
+    throw forbidden("Tenant membership required");
+  }
+  const [member] = await dbOrTx
+    .select({ role: tenantMembers.role })
+    .from(tenantMembers)
+    .where(
+      and(
+        eq(tenantMembers.tenant_id, tenantId),
+        eq(tenantMembers.principal_id, callerUserId),
+      ),
+    );
+  const role = member?.role;
+  if (role === "owner" || role === "admin" || role === "member") {
+    return role;
+  }
+  throw forbidden("Tenant membership required");
 }
 
 /**

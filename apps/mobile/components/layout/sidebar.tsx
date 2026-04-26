@@ -5,7 +5,7 @@ import { useColorScheme } from "nativewind";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/lib/auth-context";
 import { useTenant } from "@/lib/hooks/use-tenants";
-import { ListTodo, CheckSquare } from "lucide-react-native";
+import { ListTodo } from "lucide-react-native";
 import { IconSettings } from "@tabler/icons-react-native";
 import { cn } from "@/lib/utils";
 import { COLORS } from "@/lib/theme";
@@ -67,7 +67,6 @@ export function Sidebar() {
   const colors = isDark ? COLORS.dark : COLORS.light;
   const navItems: NavItem[] = [
     { title: "Threads", href: "/(tabs)", icon: ListTodo },
-    { title: "Tasks", href: "/(tabs)/tasks", icon: CheckSquare },
     { title: "Settings", href: "/(tabs)/settings", icon: IconSettings },
   ];
 
