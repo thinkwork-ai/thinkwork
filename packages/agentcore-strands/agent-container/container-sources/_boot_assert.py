@@ -60,6 +60,8 @@ EXPECTED_CONTAINER_SOURCES: tuple[str, ...] = (
     "wiki_tools",
     "workflow_skill_context",
     "workspace_composer_client",
+    "workspace_target",
+    "wake_workspace_tool",
     "write_memory_tool",
 )
 

@@ -630,6 +630,35 @@ describe("pinned-file write guard", () => {
     expect(res.statusCode).toBe(200);
   });
 
+  it.each([
+    "work/inbox/foo.md",
+    "review/run_123.needs-human.md",
+    "work/runs/run_123/events/completed.json",
+    "events/intents/run-completed.json",
+    "events/audit/2026-04-25/event.json",
+  ])("PUT to protected orchestration path %s returns 403", async (path) => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          agentId: AGENT_ID,
+          path,
+          content: "nope",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body.error).toBe("use orchestration writer");
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+  });
+
   it("PUT for a Google-federated admin queries tenantMembers by users.id, not Cognito sub", async () => {
     // Regression: PR #565's U31 admin gate passed `auth.principalId`
     // (the Cognito sub) into `callerIsTenantAdmin`, but

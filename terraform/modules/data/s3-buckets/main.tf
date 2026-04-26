@@ -47,6 +47,11 @@ resource "aws_s3_bucket_cors_configuration" "main" {
   }
 }
 
+resource "aws_s3_bucket_notification" "eventbridge" {
+  bucket      = aws_s3_bucket.main.id
+  eventbridge = true
+}
+
 resource "aws_s3_bucket_policy" "https_only" {
   bucket = aws_s3_bucket.main.id
 

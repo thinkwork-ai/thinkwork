@@ -28,6 +28,11 @@ and template defaults through the workspace overlay.
 sub-agent writes memory, paths are relative to the agent root, for example
 `expenses/memory/lessons.md`.
 
+Async work is folder-native too. Use `wake_workspace(target, request_md, ...)`
+when a specialist can run later, wait for human review, or resume this agent
+after completion. The platform turns eventful file writes into canonical events;
+agents should not write orchestration files directly.
+
 ## Routing
 
 | Task                                       | Go to                | Read                              | Skills                       |
@@ -42,4 +47,4 @@ Add one row per sub-agent. For example, an `expenses/` sub-agent would point
 - Reserved folder names — `memory/` and `skills/` — are never sub-agents at any depth.
 - Skill slugs reference platform skills or local skills under `<folder>/skills/<slug>/SKILL.md`.
 - Local skills resolve nearest-folder-first; the platform catalog is the fallback.
-- Recursion depth is capped at 5 levels of sub-agents (soft warning at depth 4).
+- Recursion depth is capped at 4 levels of sub-agents.

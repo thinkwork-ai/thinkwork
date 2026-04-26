@@ -122,6 +122,8 @@ The Workspace tab is an agent's composed file view — `SOUL.md`, `IDENTITY.md`,
 
 File operations go through `POST /api/workspaces/files`, which fronts the [composer](/concepts/agents/workspace-overlay/#implementation). Pinned-file writes without the accept flag return 403 — the Review button is the canonical path.
 
+The generic file API intentionally rejects direct writes to workspace orchestration paths such as `work/inbox/`, `review/`, `work/runs/*/events/`, `events/intents/`, and `events/audit/`. Those paths go through [workspace orchestration](/concepts/agents/workspace-orchestration/) writers so the platform can validate the target folder, create canonical events, and preserve audit ordering.
+
 ### Workspaces (sub-agents)
 
 **Route:** `/agents/:agentId/workspaces`  
@@ -192,4 +194,5 @@ Type is a separate axis: `WORKSPACE_AGENT` (scoped to a workspace under a parent
 - [Tenant MCP Servers](/applications/admin/mcp-servers/) — MCP tool assignment source
 - [Memory](/applications/admin/memory/) — tenant-wide memory view
 - [Workspace Overlay (concept)](/concepts/agents/workspace-overlay/) — inheritance, pinning, accept-update flow
+- [Workspace Orchestration (concept)](/concepts/agents/workspace-orchestration/) — async folder-native work and protected orchestration prefixes
 - [Agents (concept)](/concepts/agents/) — the underlying agent model

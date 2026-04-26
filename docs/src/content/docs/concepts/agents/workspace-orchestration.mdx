@@ -1,0 +1,250 @@
+---
+title: Workspace Orchestration
+description: Configure and use ThinkWork's S3-backed workspace event system for async, folder-native agent work.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Workspace orchestration turns an agent workspace into an eventful operating surface. Agents and platform code still write ordinary files to S3, but a small set of prefixes have meaning: a markdown request under `work/inbox/` wakes a folder-addressed agent, a lifecycle JSON file under `work/runs/*/events/` advances a run, a `review/` file asks a human to step in, and memory writes can trigger follow-up processing.
+
+The important idea is that the **folder is the routing boundary**. The root agent is addressed as `.`, and specialist folders like `expenses/` or `customer-support/escalations/` are addressed by their relative path. That keeps async work aligned with the same workspace model used by the [workspace overlay](/concepts/agents/workspace-overlay/) and [Folder Is the Agent](/agent-design/folder-is-the-agent/).
+
+<Aside type="note">
+Workspace orchestration is not a general DAG engine. It is a durable event primitive for agent work: write a request, record a canonical event, wake the right runtime, and let the agent manage its own plan, fan-out, and completion files.
+</Aside>
+
+## What it enables
+
+Use workspace orchestration when work should outlive the current turn, needs a specialist folder, may wait on a person, or should resume another run later.
+
+Common patterns:
+
+- **Async specialist work** — a parent asks `legal/` or `expenses/` to handle work without blocking the current turn.
+- **Human-in-the-loop review** — an agent writes a review request, then resumes when the review is accepted or cancelled.
+- **Parent-managed fan-out** — a parent wakes multiple specialist folders and tracks their completion in its own `status.json` or run notes.
+- **Long-running background work** — scheduled jobs and connector events can write requests into the workspace instead of inventing a parallel queue.
+- **Memory and wiki follow-up** — `memory/*.md` changes can become canonical events that downstream compilers inspect.
+
+## Mental model
+
+There are three layers:
+
+| Layer | Purpose |
+|---|---|
+| S3 workspace files | The inspectable source files agents and operators can reason about. |
+| Canonical database events | The source of truth for ordering, idempotency, status, and audit. |
+| Wakeup requests | The bridge from a canonical event to an AgentCore invocation. |
+
+S3 object events are at-least-once and can arrive out of order, so the dispatcher does not treat raw S3 events as the source of truth. It validates the key, checks suppression metadata, derives a canonical event, and records idempotency by tenant plus source key plus S3 sequencer.
+
+The database tables are:
+
+| Table | Purpose |
+|---|---|
+| `agent_workspace_runs` | One logical run for a target folder and request. |
+| `agent_workspace_events` | Canonical event log with source object key, sequencer, reason, payload, and mirror status. |
+| `agent_workspace_waits` | Relationships where one run is waiting on another run or target path. |
+
+Run statuses are `pending`, `claimed`, `processing`, `completed`, `failed`, `awaiting_review`, `awaiting_subrun`, `cancelled`, and `expired`.
+
+## Eventful prefixes
+
+Only these prefixes are eventful. Everything else in the workspace remains a normal file.
+
+| Workspace path | Canonical event | Notes |
+|---|---|---|
+| `work/inbox/*.md` | `work.requested` | Root-agent async request. |
+| `<target>/work/inbox/*.md` | `work.requested` | Specialist-folder async request. |
+| `work/runs/{runId}/events/*.json` | `run.started`, `run.blocked`, `run.completed`, `run.failed`, `review.requested` | Lifecycle intent files for a run. |
+| `<target>/work/runs/{runId}/events/*.json` | Same lifecycle events | Folder-scoped run lifecycle. |
+| `review/*` | `review.requested` or `event.rejected` | Review files request human action; direct S3 deletion is recorded as a rejected event. |
+| `<target>/review/*` | Same review behavior | Folder-scoped review. |
+| `memory/*` | `memory.changed` | Used by memory and wiki follow-up processors. |
+| `<target>/memory/*` | `memory.changed` | Folder-scoped memory. |
+| `work/outbox/*` | `run.completed` | Output files can complete the current run. |
+| `<target>/work/outbox/*` | `run.completed` | Folder-scoped output completion. |
+| `errors/*` | `run.failed` | Runtime or dispatcher error reporting. |
+| `<target>/errors/*` | `run.failed` | Folder-scoped error reporting. |
+| `events/intents/*.json` | `event.rejected` | Platform intent files must be written by orchestration writers. |
+| `<target>/events/intents/*.json` | `event.rejected` | Folder-scoped intent files must be written by orchestration writers. |
+| `events/audit/*` | `event.rejected` | Inspectable audit mirror files must be written by the platform. |
+
+The generic workspace file API rejects direct writes to protected orchestration paths:
+
+- `work/inbox/`
+- `review/`
+- `work/runs/*/events/`
+- `events/intents/`
+- `events/audit/`
+
+Use orchestration writers and tools instead. They validate the target, order parent-blocked writes before child inbox writes, and preserve audit metadata.
+
+## Configure it
+
+Workspace orchestration has two gates: an infrastructure gate and a tenant gate. Both must be enabled before workspace events wake agents.
+
+### 1. Enable the Terraform resources
+
+Set the root module flag:
+
+```hcl
+module "thinkwork" {
+  source = "thinkwork-ai/thinkwork/aws"
+
+  # ...
+  enable_workspace_orchestration = true
+}
+```
+
+This wires the primary workspace bucket to EventBridge, creates SQS queues and DLQs for workspace events, and enables the `workspace-event-dispatcher` Lambda event source mapping.
+
+<Aside type="caution">
+In local-zip Terraform mode, the dispatcher resources only become active when `lambda_zips_dir` points at built Lambda artifacts. Build with `bash scripts/build-lambdas.sh workspace-event-dispatcher` before applying a stack that should process workspace events.
+</Aside>
+
+### 2. Apply the database migration
+
+The migration `packages/database-pg/drizzle/0034_agent_workspace_events.sql` adds:
+
+- `tenants.workspace_orchestration_enabled`
+- `agent_workspace_runs`
+- `agent_workspace_events`
+- `agent_workspace_waits`
+
+The normal deploy pipeline applies this with the rest of the database changes. For a manually managed environment, apply the migration before turning on the tenant flag.
+
+### 3. Enable a tenant
+
+Enable the feature for one tenant after the infrastructure and schema are present:
+
+```sql
+UPDATE tenants
+SET workspace_orchestration_enabled = true
+WHERE slug = 'acme';
+```
+
+Use a staged rollout: enable one tenant, confirm events land in `agent_workspace_events`, then expand.
+
+### 4. Publish routeable folders
+
+Targets are validated against the routing table in `AGENTS.md`. A target is valid only when it is listed in the `Go to` column or is the root target `.`.
+
+```md
+## Routing
+
+| Task | Go to | Read | Skills |
+| --- | --- | --- | --- |
+| Expense policy questions | expenses/ | expenses/CONTEXT.md | expense-review |
+| Legal review | legal/contracts/ | legal/contracts/CONTEXT.md | contract-review |
+```
+
+Target rules:
+
+| Rule | Meaning |
+|---|---|
+| `.` | The root agent. |
+| Lowercase, numbers, hyphens, slash separators | Valid folder syntax. |
+| Max depth 4 | `a/b/c/d` is valid; deeper paths are rejected. |
+| No `memory` or `skills` segment | Those names are reserved at every depth. |
+| No absolute paths, `..`, backslashes, `?`, or `#` | Prevents path traversal and ambiguous S3 keys. |
+
+### 5. Deploy a runtime with `wake_workspace`
+
+Managed AgentCore runtimes register the `wake_workspace` Strands tool when the environment has:
+
+| Environment variable | Purpose |
+|---|---|
+| `TENANT_ID` or `_MCP_TENANT_ID` | Tenant identity for the write API. |
+| `AGENT_ID` or `_MCP_AGENT_ID` | Calling agent identity. |
+| `THINKWORK_API_URL` | Base URL for the API Gateway HTTP API. |
+| `API_AUTH_SECRET` or `THINKWORK_API_SECRET` | Service-auth secret for the orchestration write endpoint. |
+| `WORKSPACE_ROUTE_TARGETS` | Optional comma-separated routes. If absent, the runtime parses `/tmp/workspace/AGENTS.md`. |
+
+## Use it from an agent
+
+Agents should call `wake_workspace` for async folder-scoped work:
+
+```text
+wake_workspace(
+  target="expenses",
+  request_md="# Expense policy review\n\nPlease compare the attached reimbursement note against the current travel policy.\n\nReturn findings in work/outbox/summary.md.",
+  reason="expense-review",
+  idempotency_key="thread-123:expense-note-456",
+  wait_for_result=true
+)
+```
+
+Arguments:
+
+| Argument | Required | Purpose |
+|---|---|---|
+| `target` | Yes | `.` for root or a route from `AGENTS.md` without a trailing slash. |
+| `request_md` | Yes | Markdown request body written to the target's `work/inbox/`. |
+| `reason` | No | Human-readable reason for audit and debugging. |
+| `idempotency_key` | No | Caller-provided dedupe key for repeated attempts. |
+| `wait_for_result` | No | When true, the writer records the parent run as blocked before writing the child inbox request. |
+
+The tool returns the S3 key that was queued. The dispatcher turns that object into a `work.requested` event and the wakeup processor invokes the target agent with `source = "workspace_event"` and the run context.
+
+### Request markdown guidance
+
+Good requests are concrete and file-oriented:
+
+```md
+# Review the vendor contract
+
+Source files:
+- docs/contracts/acme-master-services.md
+- docs/policy/vendor-risk.md
+
+Please:
+1. Identify clauses that conflict with the vendor-risk policy.
+2. Write findings to work/outbox/contract-review.md.
+3. If legal approval is required, create a review request instead of guessing.
+```
+
+Prefer file paths, expected output paths, and the definition of done. Avoid prompts that depend on chat history the specialist folder may not have.
+
+## Operator and audit flow
+
+When a request is written:
+
+1. The object lands in S3 under a target folder's `work/inbox/`.
+2. S3 emits an EventBridge object event.
+3. EventBridge sends matching keys to the workspace orchestration queue.
+4. SQS invokes `workspace-event-dispatcher`.
+5. The dispatcher validates the key, suppresses intentional bulk writes, and canonicalizes the event.
+6. Canonical event handling records the event and creates or updates the run.
+7. The wakeup processor creates an agent wakeup request with `source = "workspace_event"`.
+8. The AgentCore runtime receives the wakeup, reads the workspace, does the work, and writes lifecycle or output files.
+
+The audit trail lives in `agent_workspace_events`. The optional S3 audit mirror is there for inspection; `mirror_status` tells you whether the mirror write succeeded. The database event remains canonical even if an audit mirror write fails.
+
+## Safety model
+
+- **Canonical DB events win** — S3 files are the operating surface, but the database event log is the ordering and audit source.
+- **Idempotency is required** — duplicate S3 events dedupe by tenant and idempotency key.
+- **Out-of-order delivery is expected** — processors should tolerate late or duplicate lifecycle files.
+- **Protected paths require writers** — direct generic PUTs into orchestration paths return `403` with `use orchestration writer`.
+- **Bulk writes can suppress events** — platform maintenance jobs may set S3 metadata `thinkwork-suppress-event: true`.
+- **Targets are route-validated** — a folder must be in `AGENTS.md` routing before another agent can wake it.
+- **Parent fan-out is agent-owned** — v1 does not provide platform-level DAG fan-in. Agents should write their own status files when coordinating many subruns.
+
+## Troubleshooting
+
+| Symptom | Checks |
+|---|---|
+| No agent wakes after writing `work/inbox/*.md` | Confirm `enable_workspace_orchestration = true`, the tenant row has `workspace_orchestration_enabled = true`, the object key matches an eventful prefix, and the dispatcher Lambda has a live event source mapping. |
+| Events are in SQS but not processed | Check the dispatcher logs, the workspace event DLQ, and whether the Lambda zip was built before Terraform apply in local-zip mode. |
+| `wake_workspace` says the target is invalid | Add the folder to the `AGENTS.md` routing table, remove reserved segments like `memory` or `skills`, and keep depth at four segments or fewer. |
+| Generic file save returns `use orchestration writer` | The path is protected. Use `wake_workspace` or the orchestration write endpoint rather than `POST /api/workspaces/files`. |
+| Duplicate requests appear | Check the caller's `idempotency_key`, S3 sequencer values, and `agent_workspace_events.idempotency_key`. Duplicate raw S3 delivery should not create duplicate canonical events. |
+| Review deletion does not resume a run | Direct S3 deletion is recorded as `event.rejected`. Use the admin review accept or cancel flow when available so the platform can write the intended lifecycle event. |
+
+## Related pages
+
+- [Workspace Overlay](/concepts/agents/workspace-overlay/) — how workspace files compose from agent, template, and defaults.
+- [Folder Is the Agent](/agent-design/folder-is-the-agent/) — why folder paths are the unit of specialization.
+- [Managed Agents](/concepts/agents/managed-agents/) — the AgentCore runtime that receives workspace wakeups.
+- [Scheduled and Event-driven Automations](/concepts/automations/scheduled-and-event-driven/) — other ways work enters the system.
+- [Compounding Memory Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — downstream processing for memory and wiki updates.

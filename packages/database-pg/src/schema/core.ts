@@ -94,6 +94,12 @@ export const tenants = pgTable(
     disabled_builtin_tools: jsonb("disabled_builtin_tools")
       .notNull()
       .default([]),
+    // Canary flag for S3-backed workspace orchestration. Candidate S3 writes
+    // may still be canonicalized for audit when false, but dispatcher wakeup
+    // enqueue remains disabled until a tenant is explicitly opted in.
+    workspace_orchestration_enabled: boolean("workspace_orchestration_enabled")
+      .notNull()
+      .default(false),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
