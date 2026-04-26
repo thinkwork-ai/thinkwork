@@ -820,6 +820,9 @@ export async function listPagesForScope(
 		slug: string;
 		title: string;
 		summary: string | null;
+		body_md: string | null;
+		last_compiled_at: Date | null;
+		backlink_count: number;
 		aliases: string[];
 	}>
 > {
@@ -831,6 +834,8 @@ export async function listPagesForScope(
 			slug: wikiPages.slug,
 			title: wikiPages.title,
 			summary: wikiPages.summary,
+			body_md: wikiPages.body_md,
+			last_compiled_at: wikiPages.last_compiled_at,
 		})
 		.from(wikiPages)
 		.where(
@@ -855,12 +860,26 @@ export async function listPagesForScope(
 		.select({ page_id: wikiPageAliases.page_id, alias: wikiPageAliases.alias })
 		.from(wikiPageAliases)
 		.where(inArray(wikiPageAliases.page_id, ids));
+	const linkRows = await db
+		.select({
+			from_page_id: wikiPageLinks.from_page_id,
+			to_page_id: wikiPageLinks.to_page_id,
+		})
+		.from(wikiPageLinks)
+		.where(inArray(wikiPageLinks.to_page_id, ids));
 
 	const aliasesByPage = new Map<string, string[]>();
 	for (const a of aliasRows) {
 		const list = aliasesByPage.get(a.page_id) || [];
 		list.push(a.alias);
 		aliasesByPage.set(a.page_id, list);
+	}
+	const backlinksByPage = new Map<string, number>();
+	for (const link of linkRows) {
+		backlinksByPage.set(
+			link.to_page_id,
+			(backlinksByPage.get(link.to_page_id) ?? 0) + 1,
+		);
 	}
 
 	return pageRows.map((p) => ({
@@ -869,6 +888,9 @@ export async function listPagesForScope(
 		slug: p.slug,
 		title: p.title,
 		summary: p.summary,
+		body_md: p.body_md,
+		last_compiled_at: p.last_compiled_at,
+		backlink_count: backlinksByPage.get(p.id) ?? 0,
 		aliases: aliasesByPage.get(p.id) ?? [],
 	}));
 }
