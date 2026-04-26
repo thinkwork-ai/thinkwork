@@ -332,7 +332,7 @@ function RootLayoutNav() {
                 options={{ headerShown: false }}
               />
               <Stack.Screen
-                name="activation"
+                name="activation/index"
                 options={{ headerShown: false }}
               />
               <Stack.Screen name="threads" />

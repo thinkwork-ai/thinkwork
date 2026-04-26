@@ -20,7 +20,7 @@ export default function ActivationRefresh() {
   const { user } = useAuth();
   const [, startActivation] = useMutation(StartActivationMutation);
   const start = async (layer: string) => {
-    const userId = (user as any)?.id;
+    const userId = user?.sub;
     if (!userId) return;
     const result = await startActivation({
       input: { userId, mode: "refresh", focusLayer: layer },

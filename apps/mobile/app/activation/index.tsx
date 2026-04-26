@@ -1,4 +1,5 @@
 import { View } from "react-native";
+import { useState } from "react";
 import { useRouter } from "expo-router";
 import { useMutation } from "urql";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -12,22 +13,36 @@ export default function ActivationIndex() {
   const router = useRouter();
   const { user } = useAuth();
   const [, startActivation] = useMutation(StartActivationMutation);
+  const [isStarting, setIsStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const start = async (
     mode: "full" | "refresh" = "full",
     focusLayer?: string,
   ) => {
-    const userId = (user as any)?.id;
-    if (!userId) return;
-    const result = await startActivation({
-      input: { userId, mode, focusLayer },
-    });
-    const session = result.data?.startActivation;
-    if (session?.id) {
-      router.push({
-        pathname: "/activation/interview/[layerId]",
-        params: { layerId: session.currentLayer, sessionId: session.id },
+    const userId = user?.sub;
+    if (!userId || isStarting) return;
+    setIsStarting(true);
+    setError(null);
+    try {
+      const result = await startActivation({
+        input: { userId, mode, focusLayer },
       });
+      if (result.error) {
+        setError(result.error.message);
+        return;
+      }
+      const session = result.data?.startActivation;
+      if (session?.id) {
+        router.push({
+          pathname: "/activation/interview/[layerId]",
+          params: { layerId: session.currentLayer, sessionId: session.id },
+        });
+        return;
+      }
+      setError("Activation did not return a session.");
+    } finally {
+      setIsStarting(false);
     }
   };
 
@@ -45,7 +60,14 @@ export default function ActivationIndex() {
           </View>
         </View>
         <View className="gap-3">
-          <Button onPress={() => start("full")}>Start activation</Button>
+          {error && <Muted>{error}</Muted>}
+          <Button
+            onPress={() => start("full")}
+            loading={isStarting}
+            disabled={!user?.sub}
+          >
+            Start activation
+          </Button>
           <Button
             variant="outline"
             onPress={() => router.push("/activation/refresh")}
