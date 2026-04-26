@@ -854,6 +854,25 @@ export const ActivationSessionQuery = gql`
   }
 `;
 
+export const GenerateActivationAutomationCandidatesMutation = gql`
+  mutation GenerateActivationAutomationCandidates($sessionId: ID!) {
+    generateActivationAutomationCandidates(sessionId: $sessionId) {
+      id
+      title
+      summary
+      whySuggested
+      targetAgentId
+      scheduleType
+      scheduleExpression
+      timezone
+      prompt
+      status
+      costEstimate
+      disclosureVersion
+    }
+  }
+`;
+
 export const StartActivationMutation = gql`
   mutation StartActivation($input: StartActivationInput!) {
     startActivation(input: $input) {

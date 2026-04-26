@@ -11,6 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { tenants, users } from "./core";
+import { agents } from "./agents";
 
 export const ACTIVATION_LAYERS = [
   "rhythms",
@@ -41,6 +42,14 @@ export const ACTIVATION_OUTBOX_STATUSES = [
 ] as const;
 export type ActivationOutboxStatus =
   (typeof ACTIVATION_OUTBOX_STATUSES)[number];
+
+export const ACTIVATION_AUTOMATION_CANDIDATE_STATUSES = [
+  "generated",
+  "deferred",
+  "dismissed",
+] as const;
+export type ActivationAutomationCandidateStatus =
+  (typeof ACTIVATION_AUTOMATION_CANDIDATE_STATUSES)[number];
 
 export const activationSessions = pgTable(
   "activation_sessions",
@@ -166,6 +175,71 @@ export const activationApplyOutbox = pgTable(
   ],
 );
 
+export const activationAutomationCandidates = pgTable(
+  "activation_automation_candidates",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    session_id: uuid("session_id")
+      .notNull()
+      .references(() => activationSessions.id, { onDelete: "cascade" }),
+    tenant_id: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    user_id: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    source_layer: text("source_layer").notNull(),
+    title: text("title").notNull(),
+    summary: text("summary").notNull(),
+    why_suggested: text("why_suggested"),
+    target_type: text("target_type").notNull().default("agent"),
+    target_agent_id: uuid("target_agent_id").references(() => agents.id),
+    trigger_type: text("trigger_type").notNull().default("agent_scheduled"),
+    schedule_type: text("schedule_type").notNull().default("cron"),
+    schedule_expression: text("schedule_expression").notNull(),
+    timezone: text("timezone").notNull().default("UTC"),
+    prompt: text("prompt"),
+    config: jsonb("config")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    status: text("status").notNull().default("generated"),
+    cost_estimate: jsonb("cost_estimate")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    disclosure_version: text("disclosure_version")
+      .notNull()
+      .default("activation-automation-v1"),
+    duplicate_key: text("duplicate_key").notNull(),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    index("idx_activation_automation_candidates_session").on(table.session_id),
+    index("idx_activation_automation_candidates_user_status").on(
+      table.tenant_id,
+      table.user_id,
+      table.status,
+    ),
+    uniqueIndex("uq_activation_automation_candidates_active_duplicate")
+      .on(table.tenant_id, table.user_id, table.duplicate_key)
+      .where(sql`status = 'generated'`),
+    check(
+      "activation_automation_candidates_status_allowed",
+      sql`status IN ('generated','deferred','dismissed')`,
+    ),
+    check(
+      "activation_automation_candidates_target_allowed",
+      sql`target_type = 'agent'`,
+    ),
+  ],
+);
+
 export const activationSessionsRelations = relations(
   activationSessions,
   ({ one, many }) => ({
@@ -179,6 +253,7 @@ export const activationSessionsRelations = relations(
     }),
     turns: many(activationSessionTurns),
     outboxItems: many(activationApplyOutbox),
+    automationCandidates: many(activationAutomationCandidates),
   }),
 );
 
@@ -198,6 +273,28 @@ export const activationApplyOutboxRelations = relations(
     session: one(activationSessions, {
       fields: [activationApplyOutbox.session_id],
       references: [activationSessions.id],
+    }),
+  }),
+);
+
+export const activationAutomationCandidatesRelations = relations(
+  activationAutomationCandidates,
+  ({ one }) => ({
+    session: one(activationSessions, {
+      fields: [activationAutomationCandidates.session_id],
+      references: [activationSessions.id],
+    }),
+    user: one(users, {
+      fields: [activationAutomationCandidates.user_id],
+      references: [users.id],
+    }),
+    tenant: one(tenants, {
+      fields: [activationAutomationCandidates.tenant_id],
+      references: [tenants.id],
+    }),
+    targetAgent: one(agents, {
+      fields: [activationAutomationCandidates.target_agent_id],
+      references: [agents.id],
     }),
   }),
 );

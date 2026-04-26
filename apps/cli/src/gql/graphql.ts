@@ -33,6 +33,99 @@ export type AcceptTemplateUpdateBulkResultEntry = {
   success: Scalars['Boolean']['output'];
 };
 
+export type ActivationAutomationCandidate = {
+  __typename?: 'ActivationAutomationCandidate';
+  config: Scalars['AWSJSON']['output'];
+  costEstimate: Scalars['AWSJSON']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  disclosureVersion: Scalars['String']['output'];
+  duplicateKey: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  prompt?: Maybe<Scalars['String']['output']>;
+  scheduleExpression: Scalars['String']['output'];
+  scheduleType: Scalars['String']['output'];
+  sessionId: Scalars['ID']['output'];
+  sourceLayer: ActivationLayer;
+  status: ActivationAutomationCandidateStatus;
+  summary: Scalars['String']['output'];
+  targetAgentId?: Maybe<Scalars['ID']['output']>;
+  targetType: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  timezone: Scalars['String']['output'];
+  title: Scalars['String']['output'];
+  triggerType: Scalars['String']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+  userId: Scalars['ID']['output'];
+  whySuggested?: Maybe<Scalars['String']['output']>;
+};
+
+export enum ActivationAutomationCandidateStatus {
+  Deferred = 'deferred',
+  Dismissed = 'dismissed',
+  Generated = 'generated'
+}
+
+export enum ActivationLayer {
+  Decisions = 'decisions',
+  Dependencies = 'dependencies',
+  Friction = 'friction',
+  Knowledge = 'knowledge',
+  Rhythms = 'rhythms'
+}
+
+export enum ActivationMode {
+  Full = 'full',
+  Refresh = 'refresh'
+}
+
+export type ActivationSession = {
+  __typename?: 'ActivationSession';
+  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  currentLayer: ActivationLayer;
+  focusLayer?: Maybe<ActivationLayer>;
+  id: Scalars['ID']['output'];
+  lastActiveAt: Scalars['AWSDateTime']['output'];
+  lastAgentMessage?: Maybe<Scalars['String']['output']>;
+  layerStates: Scalars['AWSJSON']['output'];
+  mode: ActivationMode;
+  status: ActivationStatus;
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+  userId: Scalars['ID']['output'];
+};
+
+export type ActivationSessionEvent = {
+  __typename?: 'ActivationSessionEvent';
+  currentLayer: ActivationLayer;
+  eventType: Scalars['String']['output'];
+  lastAgentMessage?: Maybe<Scalars['String']['output']>;
+  layerStates: Scalars['AWSJSON']['output'];
+  sessionId: Scalars['ID']['output'];
+  status: ActivationStatus;
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+  userId: Scalars['ID']['output'];
+};
+
+export type ActivationSessionTurn = {
+  __typename?: 'ActivationSessionTurn';
+  content: Scalars['String']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  layerId: ActivationLayer;
+  role: Scalars['String']['output'];
+  sessionId: Scalars['ID']['output'];
+  turnIndex: Scalars['Int']['output'];
+};
+
+export enum ActivationStatus {
+  Abandoned = 'abandoned',
+  Applied = 'applied',
+  InProgress = 'in_progress',
+  ReadyForReview = 'ready_for_review'
+}
+
 export type ActivityLogEntry = {
   __typename?: 'ActivityLogEntry';
   action: Scalars['String']['output'];
@@ -472,6 +565,12 @@ export type AgentWorkspaceWait = {
   waitingRunId: Scalars['ID']['output'];
 };
 
+export type ApplyActivationBundleInput = {
+  applyId: Scalars['ID']['input'];
+  approvals: Array<BundleItemApprovalInput>;
+  sessionId: Scalars['ID']['input'];
+};
+
 export type ApproveInboxItemInput = {
   reviewNotes?: InputMaybe<Scalars['String']['input']>;
 };
@@ -539,8 +638,29 @@ export type BudgetStatus = {
   status: Scalars['String']['output'];
 };
 
+export enum BundleItemAction {
+  Apply = 'apply',
+  Defer = 'defer',
+  Dismiss = 'dismiss'
+}
+
+export type BundleItemApprovalInput = {
+  action: BundleItemAction;
+  itemId: Scalars['ID']['input'];
+  layer: ActivationLayer;
+  payload: Scalars['AWSJSON']['input'];
+  target?: InputMaybe<Scalars['String']['input']>;
+};
+
 export type CheckoutThreadInput = {
   runId: Scalars['String']['input'];
+};
+
+export type CheckpointActivationLayerInput = {
+  layerId: ActivationLayer;
+  layerState: Scalars['AWSJSON']['input'];
+  nextLayer?: InputMaybe<ActivationLayer>;
+  sessionId: Scalars['ID']['input'];
 };
 
 export type CompositionFeedbackSummary = {
@@ -878,6 +998,11 @@ export type DeploymentStatus = {
   region: Scalars['String']['output'];
   source: Scalars['String']['output'];
   stage: Scalars['String']['output'];
+};
+
+export type DismissActivationRecommendationInput = {
+  itemId: Scalars['ID']['input'];
+  sessionId: Scalars['ID']['input'];
 };
 
 export type EscalateThreadInput = {
@@ -1356,6 +1481,7 @@ export type Mutation = {
   addTeamUser: TeamUser;
   addTenantMember: TenantMember;
   addThreadDependency: ThreadDependency;
+  applyActivationBundle: ActivationSession;
   approveInboxItem: InboxItem;
   assignThreadLabel: ThreadLabelAssignment;
   /**
@@ -1374,6 +1500,7 @@ export type Mutation = {
   cancelThreadTurn: ThreadTurn;
   captureMobileMemory: MobileMemoryCapture;
   checkoutThread: Thread;
+  checkpointActivationLayer: ActivationSession;
   claimVanityEmailAddress: AgentCapability;
   /**
    * Admin-only: enqueue an ad-hoc compile job for a specific (tenant, user).
@@ -1426,8 +1553,11 @@ export type Mutation = {
   deleteThread: Scalars['Boolean']['output'];
   deleteThreadLabel: Scalars['Boolean']['output'];
   deleteWebhook: Scalars['Boolean']['output'];
+  dismissActivationRecommendation: ActivationSession;
   escalateThread: Thread;
+  generateActivationAutomationCandidates: Array<ActivationAutomationCandidate>;
   inviteMember: TenantMember;
+  notifyActivationSessionUpdate?: Maybe<ActivationSessionEvent>;
   notifyAgentStatus?: Maybe<AgentStatusEvent>;
   notifyCostRecorded?: Maybe<CostRecordedEvent>;
   notifyEvalRunUpdate?: Maybe<EvalRunUpdateEvent>;
@@ -1471,8 +1601,10 @@ export type Mutation = {
   /** Replace an agent's skills. idempotencyKey optional — see CreateAgentInput.idempotencyKey. */
   setAgentSkills: Array<AgentSkill>;
   setRoutineTrigger: RoutineTrigger;
+  startActivation: ActivationSession;
   startEvalRun: EvalRun;
   startSkillRun: SkillRun;
+  submitActivationTurn: ActivationSession;
   submitRunFeedback: SkillRun;
   syncKnowledgeBase: KnowledgeBase;
   /** Sync template config + workspace files to a linked agent. idempotencyKey optional. */
@@ -1567,6 +1699,11 @@ export type MutationAddThreadDependencyArgs = {
 };
 
 
+export type MutationApplyActivationBundleArgs = {
+  input: ApplyActivationBundleInput;
+};
+
+
 export type MutationApproveInboxItemArgs = {
   id: Scalars['ID']['input'];
   input?: InputMaybe<ApproveInboxItemInput>;
@@ -1628,6 +1765,11 @@ export type MutationCaptureMobileMemoryArgs = {
 export type MutationCheckoutThreadArgs = {
   id: Scalars['ID']['input'];
   input: CheckoutThreadInput;
+};
+
+
+export type MutationCheckpointActivationLayerArgs = {
+  input: CheckpointActivationLayerInput;
 };
 
 
@@ -1853,14 +1995,36 @@ export type MutationDeleteWebhookArgs = {
 };
 
 
+export type MutationDismissActivationRecommendationArgs = {
+  input: DismissActivationRecommendationInput;
+};
+
+
 export type MutationEscalateThreadArgs = {
   input: EscalateThreadInput;
+};
+
+
+export type MutationGenerateActivationAutomationCandidatesArgs = {
+  sessionId: Scalars['ID']['input'];
 };
 
 
 export type MutationInviteMemberArgs = {
   input: InviteMemberInput;
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type MutationNotifyActivationSessionUpdateArgs = {
+  currentLayer: ActivationLayer;
+  eventType: Scalars['String']['input'];
+  lastAgentMessage?: InputMaybe<Scalars['String']['input']>;
+  layerStates: Scalars['AWSJSON']['input'];
+  sessionId: Scalars['ID']['input'];
+  status: ActivationStatus;
+  tenantId: Scalars['ID']['input'];
+  userId: Scalars['ID']['input'];
 };
 
 
@@ -2102,6 +2266,11 @@ export type MutationSetRoutineTriggerArgs = {
 };
 
 
+export type MutationStartActivationArgs = {
+  input: StartActivationInput;
+};
+
+
 export type MutationStartEvalRunArgs = {
   input: StartEvalRunInput;
   tenantId: Scalars['ID']['input'];
@@ -2110,6 +2279,11 @@ export type MutationStartEvalRunArgs = {
 
 export type MutationStartSkillRunArgs = {
   input: StartSkillRunInput;
+};
+
+
+export type MutationSubmitActivationTurnArgs = {
+  input: SubmitActivationTurnInput;
 };
 
 
@@ -2342,6 +2516,9 @@ export type PinStatusFile = {
 export type Query = {
   __typename?: 'Query';
   _empty?: Maybe<Scalars['String']['output']>;
+  activationAutomationCandidates: Array<ActivationAutomationCandidate>;
+  activationSession?: Maybe<ActivationSession>;
+  activationSessionTurns: Array<ActivationSessionTurn>;
   activityLog: Array<ActivityLogEntry>;
   /**
    * Returns the caller's own role on the caller's own tenant.
@@ -2502,6 +2679,21 @@ export type Query = {
    * scope. Also matches exact aliases. Ranked by ts_rank + alias-hit boost.
    */
   wikiSearch: Array<WikiSearchResult>;
+};
+
+
+export type QueryActivationAutomationCandidatesArgs = {
+  sessionId: Scalars['ID']['input'];
+};
+
+
+export type QueryActivationSessionArgs = {
+  sessionId: Scalars['ID']['input'];
+};
+
+
+export type QueryActivationSessionTurnsArgs = {
+  sessionId: Scalars['ID']['input'];
 };
 
 
@@ -3335,6 +3527,12 @@ export type SkillRun = {
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
+export type StartActivationInput = {
+  focusLayer?: InputMaybe<ActivationLayer>;
+  mode?: InputMaybe<ActivationMode>;
+  userId: Scalars['ID']['input'];
+};
+
 export type StartEvalRunInput = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
   agentTemplateId?: InputMaybe<Scalars['ID']['input']>;
@@ -3359,6 +3557,12 @@ export type StatusCount = {
   status: Scalars['String']['output'];
 };
 
+export type SubmitActivationTurnInput = {
+  layerId: ActivationLayer;
+  message: Scalars['String']['input'];
+  sessionId: Scalars['ID']['input'];
+};
+
 export type SubmitRunFeedbackInput = {
   note?: InputMaybe<Scalars['String']['input']>;
   runId: Scalars['ID']['input'];
@@ -3368,6 +3572,7 @@ export type SubmitRunFeedbackInput = {
 export type Subscription = {
   __typename?: 'Subscription';
   _empty?: Maybe<Scalars['String']['output']>;
+  onActivationSessionUpdated?: Maybe<ActivationSessionEvent>;
   onAgentStatusChanged?: Maybe<AgentStatusEvent>;
   onCostRecorded?: Maybe<CostRecordedEvent>;
   onEvalRunUpdated?: Maybe<EvalRunUpdateEvent>;
@@ -3377,6 +3582,11 @@ export type Subscription = {
   onOrgUpdated?: Maybe<OrgUpdateEvent>;
   onThreadTurnUpdated?: Maybe<ThreadTurnUpdateEvent>;
   onThreadUpdated?: Maybe<ThreadUpdateEvent>;
+};
+
+
+export type SubscriptionOnActivationSessionUpdatedArgs = {
+  sessionId: Scalars['ID']['input'];
 };
 
 
@@ -3958,6 +4168,8 @@ export type UpdateUserProfileInput = {
   /** Free-form notes about the human's preferences + communication style. */
   notes?: InputMaybe<Scalars['String']['input']>;
   notificationPreferences?: InputMaybe<Scalars['AWSJSON']['input']>;
+  operatingModel?: InputMaybe<Scalars['AWSJSON']['input']>;
+  operatingModelHistory?: InputMaybe<Array<Scalars['AWSJSON']['input']>>;
   pronouns?: InputMaybe<Scalars['String']['input']>;
   theme?: InputMaybe<Scalars['String']['input']>;
   timezone?: InputMaybe<Scalars['String']['input']>;
@@ -4011,6 +4223,8 @@ export type UserProfile = {
   /** Free-form notes the agent maintains about this human's preferences + style. */
   notes?: Maybe<Scalars['String']['output']>;
   notificationPreferences?: Maybe<Scalars['AWSJSON']['output']>;
+  operatingModel?: Maybe<Scalars['AWSJSON']['output']>;
+  operatingModelHistory: Array<Scalars['AWSJSON']['output']>;
   pronouns?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
   theme?: Maybe<Scalars['String']['output']>;

@@ -2,6 +2,7 @@ import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import {
   activationApplyOutbox,
+  activationAutomationCandidates,
   activationSessions,
   activationSessionTurns,
   agents,
@@ -84,6 +85,41 @@ export function activationTurnToGraphql(row: Record<string, unknown>) {
   };
 }
 
+export function activationAutomationCandidateToGraphql(
+  row: Record<string, unknown>,
+) {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    userId: row.user_id,
+    tenantId: row.tenant_id,
+    sourceLayer: row.source_layer,
+    title: row.title,
+    summary: row.summary,
+    whySuggested: row.why_suggested,
+    targetType: row.target_type,
+    targetAgentId: row.target_agent_id,
+    triggerType: row.trigger_type,
+    scheduleType: row.schedule_type,
+    scheduleExpression: row.schedule_expression,
+    timezone: row.timezone,
+    prompt: row.prompt,
+    config: JSON.stringify(row.config ?? {}),
+    status: row.status,
+    costEstimate: JSON.stringify(row.cost_estimate ?? {}),
+    disclosureVersion: row.disclosure_version,
+    duplicateKey: row.duplicate_key,
+    createdAt:
+      row.created_at instanceof Date
+        ? row.created_at.toISOString()
+        : row.created_at,
+    updatedAt:
+      row.updated_at instanceof Date
+        ? row.updated_at.toISOString()
+        : row.updated_at,
+  };
+}
+
 export function activationEventFromSession(
   row: Record<string, unknown>,
   eventType: string,
@@ -150,6 +186,25 @@ export async function assertActivationAccess(
   const caller = await resolveCaller(ctx);
   if (caller.userId === session.user_id) return;
   await requireTenantAdmin(ctx, session.tenant_id);
+}
+
+export async function assertActivationAutomationOwner(
+  ctx: GraphQLContext,
+  session: { user_id: string; tenant_id: string },
+): Promise<{ userId: string; tenantId: string }> {
+  if (ctx.auth.authType === "apikey") {
+    throw new GraphQLError("User identity required", {
+      extensions: { code: "FORBIDDEN" },
+    });
+  }
+
+  const caller = await resolveCaller(ctx);
+  if (caller.userId !== session.user_id) {
+    throw new GraphQLError("Activation automation is user-owned", {
+      extensions: { code: "FORBIDDEN" },
+    });
+  }
+  return { userId: caller.userId, tenantId: session.tenant_id };
 }
 
 export async function assertUserAccess(
@@ -379,4 +434,10 @@ export async function applyOperatingModel(
   });
 }
 
-export { activationSessions, activationSessionTurns, randomUUID, sql };
+export {
+  activationAutomationCandidates,
+  activationSessions,
+  activationSessionTurns,
+  randomUUID,
+  sql,
+};
