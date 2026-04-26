@@ -44,5 +44,12 @@ describe("parseWorkspaceEventKey", () => {
       parseWorkspaceEventKey("tenants/acme/agents/marco/workspace/IDENTITY.md"),
     ).toBeNull();
   });
-});
 
+  it("drops internal audit mirror paths", () => {
+    expect(
+      parseWorkspaceEventKey(
+        "tenants/acme/agents/marco/workspace/events/audit/2026-04-26/42.json",
+      ),
+    ).toBeNull();
+  });
+});

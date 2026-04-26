@@ -84,7 +84,6 @@ export function canonicalizeWorkspaceEvent(
         runId: parsed.runId,
         payload: basePayload,
       };
-    case "audit":
     case "intent":
       return {
         eventType: "event.rejected",
