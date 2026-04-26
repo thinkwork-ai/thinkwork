@@ -20,11 +20,18 @@ import {
   BookOpen,
   LayoutTemplate,
   ShieldCheck,
+  GitPullRequestDraft,
 } from "lucide-react";
 import { useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
 import { apiFetch, NotReadyError } from "@/lib/api-fetch";
-import { InboxItemsListQuery, AgentsListQuery, ThreadsListQuery, ThreadsPagedQuery, RoutinesListQuery } from "@/lib/graphql-queries";
+import {
+  InboxItemsListQuery,
+  AgentsListQuery,
+  ThreadsListQuery,
+  ThreadsPagedQuery,
+  RoutinesListQuery,
+} from "@/lib/graphql-queries";
 import { InboxItemStatus } from "@/gql/graphql";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -67,11 +74,7 @@ function NavItems({ items }: { items: NavItem[] }) {
 
         return (
           <SidebarMenuItem key={item.to}>
-            <SidebarMenuButton
-              asChild
-              isActive={isActive}
-              tooltip={item.label}
-            >
+            <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
               <Link
                 to={item.to}
                 onClick={() => isMobile && setOpenMobile(false)}
@@ -82,7 +85,10 @@ function NavItems({ items }: { items: NavItem[] }) {
             </SidebarMenuButton>
             {item.badge != null && item.badge !== 0 && (
               <SidebarMenuBadge>
-                <Badge variant="outline" className="h-5 min-w-5 px-1.5 text-[10px] font-medium tabular-nums border-zinc-400 dark:border-zinc-500">
+                <Badge
+                  variant="outline"
+                  className="h-5 min-w-5 px-1.5 text-[10px] font-medium tabular-nums border-zinc-400 dark:border-zinc-500"
+                >
                   {item.badge}
                 </Badge>
               </SidebarMenuBadge>
@@ -110,7 +116,6 @@ export function AppSidebar() {
   });
   const agentCount = agentsResult.data?.agents?.length ?? 0;
 
-
   const [threadsResult] = useQuery({
     query: ThreadsPagedQuery,
     variables: {
@@ -119,7 +124,8 @@ export function AppSidebar() {
     },
     pause: !tenantId,
   });
-  const threadCount = (threadsResult.data as any)?.threadsPaged?.totalCount ?? 0;
+  const threadCount =
+    (threadsResult.data as any)?.threadsPaged?.totalCount ?? 0;
 
   // REST-based active counts for Manage section. Highest-traffic REST call
   // site in the admin — fires on every tenant-scoped page load. If the auth
@@ -136,7 +142,9 @@ export function AppSidebar() {
     const extraHeaders = { "x-tenant-id": tenantId };
     try {
       const [jobs, webhooks] = await Promise.all([
-        apiFetch<{ enabled: boolean }[]>("/api/scheduled-jobs", { extraHeaders }),
+        apiFetch<{ enabled: boolean }[]>("/api/scheduled-jobs", {
+          extraHeaders,
+        }),
         apiFetch<{ enabled: boolean }[]>("/api/webhooks", { extraHeaders }),
       ]);
       setActiveScheduledJobs(jobs.filter((j) => j.enabled).length);
@@ -151,7 +159,9 @@ export function AppSidebar() {
     }
   }, [tenantId]);
 
-  useEffect(() => { fetchManageCounts(); }, [fetchManageCounts, authRetryTick]);
+  useEffect(() => {
+    fetchManageCounts();
+  }, [fetchManageCounts, authRetryTick]);
 
   // Routines active count from GraphQL
   const [routinesResult] = useQuery({
@@ -191,8 +201,18 @@ export function AppSidebar() {
 
   const workItems: NavItem[] = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { to: "/threads", icon: MessagesSquare, label: "Threads", badge: threadCount ? formatCount(threadCount) : undefined },
+    {
+      to: "/threads",
+      icon: MessagesSquare,
+      label: "Threads",
+      badge: threadCount ? formatCount(threadCount) : undefined,
+    },
     { to: "/inbox", icon: Inbox, label: "Inbox", badge: pendingInboxCount },
+    {
+      to: "/workspace-reviews",
+      icon: GitPullRequestDraft,
+      label: "Workspace Reviews",
+    },
   ];
 
   const agentsItems: NavItem[] = [

@@ -45,6 +45,10 @@ import {
   routines,
   // Wakeup queue
   agentWakeupRequests,
+  // Workspace orchestration
+  agentWorkspaceEvents,
+  agentWorkspaceRuns,
+  agentWorkspaceWaits,
   // Scheduled Jobs (unified)
   scheduledJobs,
   threadTurns,
@@ -128,6 +132,9 @@ export {
   teamUsers,
   routines,
   agentWakeupRequests,
+  agentWorkspaceEvents,
+  agentWorkspaceRuns,
+  agentWorkspaceWaits,
   scheduledJobs,
   threadTurns,
   threadTurnEvents,
@@ -477,9 +484,7 @@ export type SkillRunInvokePayload = {
   completionHmacSecret: string;
 };
 
-export type SkillRunInvokeResult =
-  | { ok: true }
-  | { ok: false; error: string };
+export type SkillRunInvokeResult = { ok: true } | { ok: false; error: string };
 
 /**
  * Invoke the unified skill dispatcher inside the AgentCore container.

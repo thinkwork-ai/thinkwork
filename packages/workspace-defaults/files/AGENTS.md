@@ -47,4 +47,4 @@ Add one row per sub-agent. For example, an `expenses/` sub-agent would point
 - Reserved folder names — `memory/` and `skills/` — are never sub-agents at any depth.
 - Skill slugs reference platform skills or local skills under `<folder>/skills/<slug>/SKILL.md`.
 - Local skills resolve nearest-folder-first; the platform catalog is the fallback.
-- Recursion depth is capped at 4 levels of sub-agents.
+- Recursion depth is capped at 5 levels of sub-agents.
