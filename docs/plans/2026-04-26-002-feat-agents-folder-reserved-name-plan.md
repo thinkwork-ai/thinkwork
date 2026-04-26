@@ -1,7 +1,7 @@
 ---
 title: "feat: Agent-builder `agents/` section grouping and Add Sub-agent affordance"
 type: feat
-status: active
+status: completed
 date: 2026-04-26
 origin: docs/brainstorms/2026-04-26-agents-folder-reserved-name-requirements.md
 supersedes: docs/plans/2026-04-26-002-feat-agents-folder-reserved-name-plan.md (prior storage-rewrite draft, rejected via document review)
@@ -24,7 +24,7 @@ When inspecting a real workspace (Marco's), two affordances were missing in the 
 1. **No visible "where sub-agents go" location.** The mental model needs an anchor — even when empty — so an operator looking at a workspace can answer "where would a sub-agent go?" without reading the routing table.
 2. **No Add Sub-agent action in the builder.** The flagship authoring surface lacked the most common sub-agent creation move.
 
-Both gaps are UI surfaces. Plan 008's storage layout (sub-agents at top level, enumerated by `AGENTS.md`) is correct for distribution and runtime — the gap is that the builder doesn't *render* the routing-table enumeration as a visible group, and doesn't expose a button for the create action. The fix is: read the parent's `AGENTS.md` routing rows, group every top-folder whose slug is a `Go to` target under a synthetic `agents/` section header in the tree, and add a creation affordance in the section's empty state and toolbar.
+Both gaps are UI surfaces. Plan 008's storage layout (sub-agents at top level, enumerated by `AGENTS.md`) is correct for distribution and runtime — the gap is that the builder doesn't _render_ the routing-table enumeration as a visible group, and doesn't expose a button for the create action. The fix is: read the parent's `AGENTS.md` routing rows, group every top-folder whose slug is a `Go to` target under a synthetic `agents/` section header in the tree, and add a creation affordance in the section's empty state and toolbar.
 
 (See origin: `docs/brainstorms/2026-04-26-agents-folder-reserved-name-requirements.md`. Origin's R1–R12, R16–R22 — which described a storage rewrite — are superseded; only origin R7 and R8 — the operator-facing affordance requirements — carry forward.)
 
@@ -66,6 +66,7 @@ Both gaps are UI surfaces. Plan 008's storage layout (sub-agents at top level, e
 ### Relevant Code and Patterns
 
 **Agent builder UI (the only modified surface):**
+
 - `apps/admin/src/components/agent-builder/AgentBuilderShell.tsx` — `FOLDER_TEMPLATES` (lines ~138-144), `handleAddFolder` (lines ~369-376), the "+" dropdown menu (lines ~600-640). New `handleAddSubAgent(slug, snippetId)` lands here.
 - `apps/admin/src/components/agent-builder/FolderTree.tsx` — `buildWorkspaceTree(files)` (lines 21-63) is purely file-path-driven today. New signature accepts the parent's `AGENTS.md` routing rows; routed top-folder slugs are grouped under a synthetic `agents/` parent node before render.
 - `apps/admin/src/components/agent-builder/snippets.ts` — `STARTER_AGENT_TEMPLATES` (lines 38-53) already uses FOG-pure semantic paths (`support/`, `operations/`); content unchanged.
@@ -73,11 +74,13 @@ Both gaps are UI surfaces. Plan 008's storage layout (sub-agents at top level, e
 - `apps/admin/src/lib/workspace-tree-actions.ts` — slug-validation helper extends the existing reserved-name check (currently `memory`, `skills`) with a top-folder collision check.
 
 **Existing infrastructure leveraged unchanged:**
+
 - `packages/api/src/lib/agents-md-parser.ts` — already extracts `RoutingRow { task, goTo, ... }` from `AGENTS.md`. The builder consumes this output via `composeFile` to identify routed slugs.
 - `packages/api/src/lib/workspace-map-generator.ts` — `appendRoutingRowIfMissing` already exists for inserting routing rows; reused by the new `createSubAgent` mutation.
 - `packages/api/workspace-files.ts` — POST/PATCH handlers unchanged; no new endpoints.
 
 **Plan 008 in-flight coordination:**
+
 - Plan 008 U19 (drag-create with `AGENTS.md` auto-sync) — codebase scan confirms not shipped (`apps/admin/src/components/agent-builder/DragDropCoordinator.tsx` absent, no `createSubAgent` mutation in `agent-builder-api.ts`). Plan 008 U19 and this plan's U2 land overlapping mutations; sequencing decided in Open Questions below.
 
 ### Institutional Learnings
@@ -132,21 +135,25 @@ None required — this plan operates entirely inside the existing builder, parse
 **Dependencies:** None.
 
 **Files:**
+
 - Modify: `apps/admin/src/components/agent-builder/FolderTree.tsx` (extend `buildWorkspaceTree(files, routingRows?)`; introduce `SyntheticFolderNode` type or a `synthetic: true` flag on `TreeNode`)
 - Modify: `apps/admin/src/components/agent-builder/AgentBuilderShell.tsx` (parse the agent's root `AGENTS.md` once via existing `composeFile` + `parseAgentsMd`, pass routing rows to FolderTree)
 - Test: `apps/admin/src/components/agent-builder/__tests__/FolderTree.test.tsx`
 
 **Approach:**
+
 - `buildWorkspaceTree` becomes `(files, routingRows?) => TreeNode[]`. When `routingRows` is supplied, top-folder slugs that appear as `Go to` targets become children of a synthetic `agents/` parent node (label: "Sub-agents", `synthetic: true`). When no rows or empty rows, the synthetic parent is still present with zero children — its `EmptyState` child renders the Add Sub-agent affordance (delivered in U2).
 - Non-routed top-folders (e.g., `attachments/`, `archive/`) render at root level as today.
 - Reserved folders `memory/` and `skills/` continue to render at their existing positions; they are never under the synthetic group regardless of routing-row content.
 - The synthetic node is purely render-time; it never round-trips into the file list, never appears in `path` strings passed back to the API, and never writes to S3.
 
 **Patterns to follow:**
+
 - Existing `FolderTree` state-rendering pattern; extend, don't rewrite.
 - Existing `expandedFolders` pattern for collapse-by-default; the synthetic node defaults to expanded for discoverability.
 
 **Test scenarios:**
+
 - Happy path: agent with `expenses/CONTEXT.md`, `recruiting/CONTEXT.md` and a root `AGENTS.md` routing both — both render as children of the synthetic `Sub-agents` node. `attachments/file.pdf` (no routing row) renders outside the group.
 - Happy path: agent with no routing rows — synthetic node renders with zero children and an empty-state placeholder.
 - Happy path: agent with one routing row pointing to `expenses/` but no `expenses/` files yet — synthetic node renders an "expenses (no files)" entry that links into the section.
@@ -157,6 +164,7 @@ None required — this plan operates entirely inside the existing builder, parse
 - Integration: change `AGENTS.md` (add a row) → next render groups the matching folder under the synthetic node without page reload (existing React Query invalidation flow).
 
 **Verification:**
+
 - `pnpm --filter @thinkwork/admin test FolderTree` green.
 - Manual: open Marco's workspace; the synthetic `Sub-agents` section is visible at the top of the tree, populated with whatever routing rows exist (likely zero, given his current state).
 
@@ -171,6 +179,7 @@ None required — this plan operates entirely inside the existing builder, parse
 **Dependencies:** U1 (the synthetic section is the affordance's host).
 
 **Files:**
+
 - Modify: `apps/admin/src/components/agent-builder/AgentBuilderShell.tsx` (add `handleAddSubAgent`; new menu item in "+" dropdown; new dialog component)
 - Create: `apps/admin/src/components/agent-builder/AddSubAgentDialog.tsx` (form, validation, submission; reuse existing dialog primitives)
 - Modify: `apps/admin/src/lib/agent-builder-api.ts` (`createSubAgent(agentId, slug, contextContent)` mutation)
@@ -180,6 +189,7 @@ None required — this plan operates entirely inside the existing builder, parse
 - Test: `packages/api/__tests__/workspace-files-handler.test.ts` (extend to cover the composite create-sub-agent path)
 
 **Approach:**
+
 - "+" dropdown gains an "Add Sub-agent" entry, available only when the active context is the agent root (not a sub-folder, not memory/, not skills/).
 - AddSubAgentDialog form fields: Slug (text, validated on keystroke), Snippet (dropdown — defaults to a minimal `# {slug}` CONTEXT.md, options pull from existing `STARTER_AGENT_TEMPLATES` snippet library where applicable).
 - Slug validation rules (inline error on keystroke):
@@ -197,11 +207,13 @@ None required — this plan operates entirely inside the existing builder, parse
 - On error: form keeps the slug entered, surfaces the server error inline (e.g., "slug already taken at storage path").
 
 **Patterns to follow:**
+
 - Existing dialog primitives in `AgentBuilderShell` for file-create and folder-create flows.
 - `appendRoutingRowIfMissing` in `packages/api/src/lib/workspace-map-generator.ts` is the canonical row-insertion helper.
 - `requireTenantAdmin(ctx, tenantId)` per `docs/solutions/best-practices/every-admin-mutation-requires-requiretenantadmin-2026-04-22.md` on the new server handler.
 
 **Test scenarios:**
+
 - Happy path: operator opens form, types `support`, picks the minimal snippet, submits → POST 200; tree refreshes; "support" appears under the synthetic group; `AGENTS.md` has a new routing row for it.
 - Happy path: operator with no `AGENTS.md` at root yet — handler renders one via `workspace-map-generator.renderAgentsMap` and includes the new routing row in the rendered content.
 - Edge case: operator types `memory` → inline error: "`memory` is a reserved folder name"; submit button disabled.
@@ -214,6 +226,7 @@ None required — this plan operates entirely inside the existing builder, parse
 - **Covers AE1 (origin).** Empty workspace shows the affordance from second zero.
 
 **Verification:**
+
 - `pnpm --filter @thinkwork/admin test AddSubAgentDialog` green.
 - `pnpm --filter @thinkwork/api test workspace-files-handler` green.
 - Manual: brand-new agent in dev → builder shows synthetic section with Add button → click → create `support` → routing row appears in `AGENTS.md` → delegate from a chat session works.
@@ -233,13 +246,13 @@ None required — this plan operates entirely inside the existing builder, parse
 
 ## Risks & Dependencies
 
-| Risk | Mitigation |
-|------|------------|
-| Plan 008 U19 (drag-create) ships its own `createSubAgent` mutation in parallel, leading to two overlapping mutations | This plan ships `createSubAgent` as the canonical mutation. U2's pre-implementation survey (`git grep -l createSubAgent apps/admin/src/lib/`) determines whether to define or import. Either way, single mutation across both surfaces. |
-| The synthetic `agents/` section visually conflates "routed sub-agent with no files" and "files exist at this slug but not in routing" | U1 surfaces drift visually (missing-files indicator + orphan-folder rendering outside the group). Operator has tools to resolve via existing tree actions. |
-| Operator names a sub-agent `agents`, which then renders under the synthetic section labeled "Sub-agents > agents" | Visually slightly confusing but not broken. Plan acknowledges this is acceptable v1 behavior; if it becomes a real complaint, a future PR can add `agents` to the reserved-name set as a UI-only convention (no storage impact). |
-| Add Sub-agent's two-write composite is not transactional in S3 | Idempotent retry in the form on partial failure; orphan `CONTEXT.md` renders outside the synthetic group, so the operator sees the partial state and can retry. No silent corruption. |
-| Plan 008 U19 has already shipped before this plan starts and chose a different mutation shape | U2's survey detects this; U2 then adopts U19's mutation rather than defining its own. Coordination through code, not through plans. |
+| Risk                                                                                                                                  | Mitigation                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Plan 008 U19 (drag-create) ships its own `createSubAgent` mutation in parallel, leading to two overlapping mutations                  | This plan ships `createSubAgent` as the canonical mutation. U2's pre-implementation survey (`git grep -l createSubAgent apps/admin/src/lib/`) determines whether to define or import. Either way, single mutation across both surfaces. |
+| The synthetic `agents/` section visually conflates "routed sub-agent with no files" and "files exist at this slug but not in routing" | U1 surfaces drift visually (missing-files indicator + orphan-folder rendering outside the group). Operator has tools to resolve via existing tree actions.                                                                              |
+| Operator names a sub-agent `agents`, which then renders under the synthetic section labeled "Sub-agents > agents"                     | Visually slightly confusing but not broken. Plan acknowledges this is acceptable v1 behavior; if it becomes a real complaint, a future PR can add `agents` to the reserved-name set as a UI-only convention (no storage impact).        |
+| Add Sub-agent's two-write composite is not transactional in S3                                                                        | Idempotent retry in the form on partial failure; orphan `CONTEXT.md` renders outside the synthetic group, so the operator sees the partial state and can retry. No silent corruption.                                                   |
+| Plan 008 U19 has already shipped before this plan starts and chose a different mutation shape                                         | U2's survey detects this; U2 then adopts U19's mutation rather than defining its own. Coordination through code, not through plans.                                                                                                     |
 
 ---
 
