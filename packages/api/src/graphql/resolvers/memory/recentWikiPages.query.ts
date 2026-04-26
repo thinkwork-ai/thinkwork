@@ -27,7 +27,10 @@ export const recentWikiPages = async (
 	ctx: GraphQLContext,
 ) => {
 	const { limit = DEFAULT_LIMIT } = args;
-	const { tenantId, userId } = await requireMemoryUserScope(ctx, args);
+	const { tenantId, userId } = await requireMemoryUserScope(ctx, {
+		...args,
+		allowTenantAdmin: true,
+	});
 
 	const cappedLimit = Math.max(1, Math.min(limit, MAX_LIMIT));
 

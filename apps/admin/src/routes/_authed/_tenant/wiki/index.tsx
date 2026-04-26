@@ -5,6 +5,7 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { Loader2, Search, X, Sparkles } from "lucide-react";
 import {
   AgentsListQuery,
+  TenantMembersListQuery,
   RecentWikiPagesQuery,
   WikiSearchQuery,
 } from "@/lib/graphql-queries";
@@ -55,9 +56,24 @@ type WikiRow = {
   summary: string | null;
   lastCompiledAt: string | null;
   updatedAt: string | null;
+  userId: string;
   agentId: string;
   agentName: string;
 };
+
+type UserScope = {
+  userId: string;
+  label: string;
+  agentIds: string[];
+};
+
+function agentUserId(agent: any): string | null {
+  return agent.humanPairId ?? agent.humanPair?.id ?? null;
+}
+
+function agentUserLabel(agent: any): string {
+  return agent.humanPair?.name ?? agent.humanPair?.email ?? agent.name;
+}
 
 function PageTypeBadge({ type }: { type: WikiPageType }) {
   return (
@@ -121,6 +137,11 @@ function WikiPage() {
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId,
   });
+  const [membersResult] = useQuery({
+    query: TenantMembersListQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
 
   const agents = useMemo(
     () =>
@@ -130,44 +151,82 @@ function WikiPage() {
     [agentsResult.data],
   );
 
-  const agentNames = useMemo(() => {
+  const memberScopes = useMemo<UserScope[]>(() => {
+    const members = membersResult.data?.tenantMembers ?? [];
+    return members
+      .filter((m) => m.principalType.toLowerCase() === "user" && m.user)
+      .map((m) => ({
+        userId: m.user!.id,
+        label: m.user!.name ?? m.user!.email,
+        agentIds: [],
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [membersResult.data]);
+
+  const userScopes = useMemo<UserScope[]>(() => {
+    const map = new Map<string, UserScope>();
+    for (const scope of memberScopes) {
+      map.set(scope.userId, { ...scope, agentIds: [...scope.agentIds] });
+    }
+    for (const a of agents) {
+      const userId = agentUserId(a);
+      if (!userId) continue;
+      const existing = map.get(userId);
+      if (existing) {
+        existing.agentIds.push(a.id);
+        continue;
+      }
+      map.set(userId, {
+        userId,
+        label: agentUserLabel(a),
+        agentIds: [a.id],
+      });
+    }
+    return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
+  }, [agents, memberScopes]);
+  const userLabels = useMemo(() => {
     const map: Record<string, string> = {};
-    for (const a of agents) map[a.id] = a.name;
+    for (const scope of userScopes) map[scope.userId] = scope.label;
     return map;
-  }, [agents]);
+  }, [userScopes]);
 
   const isAllAgents = selectedAgentId === "all";
-  const effectiveAgentIds = useMemo(
-    () => (isAllAgents ? agents.map((a) => a.id) : []),
-    [isAllAgents, agents],
+  const selectedScope = userScopes.find(
+    (scope) => scope.userId === selectedAgentId || scope.agentIds.includes(selectedAgentId),
+  );
+  const selectedScopeId = isAllAgents ? "all" : (selectedScope?.userId ?? selectedAgentId);
+  const effectiveUserId = isAllAgents ? userScopes[0]?.userId : selectedScope?.userId;
+  const effectiveUserIds = useMemo(
+    () => (isAllAgents ? userScopes.map((scope) => scope.userId) : []),
+    [isAllAgents, userScopes],
   );
 
-  // Single-agent list
+  // Single-user list
   const [listResult, refetchList] = useQuery({
     query: RecentWikiPagesQuery,
-    variables: { agentId: selectedAgentId, limit: 100 },
-    pause: !!activeSearch || isAllAgents || !selectedAgentId,
+    variables: { userId: effectiveUserId ?? "", limit: 100 },
+    pause: !!activeSearch || isAllAgents || !effectiveUserId,
   });
 
-  // Multi-agent list fan-out — same per-agent client.query pattern Memories
-  // uses to dodge the resolver's "all" branch and to give each agent its
+  // Multi-user list fan-out — same client.query pattern Memories
+  // uses to dodge the resolver's "all" branch and to give each user their
   // own owner scope.
   const client = useClient();
   const [multiPages, setMultiPages] = useState<WikiRow[] | null>(null);
   const [multiFetching, setMultiFetching] = useState(false);
 
   const fetchAllAgentPages = useCallback(async () => {
-    if (!isAllAgents || agents.length === 0 || activeSearch) return;
+    if (!isAllAgents || userScopes.length === 0 || activeSearch) return;
     setMultiFetching(true);
     try {
       const perAgent = await Promise.all(
-        agents.map(async (a) => {
+        userScopes.map(async (scope) => {
           try {
             const res = await client
-              .query(RecentWikiPagesQuery, { agentId: a.id, limit: 100 })
+              .query(RecentWikiPagesQuery, { userId: scope.userId, limit: 100 })
               .toPromise();
             const pages = res.data?.recentWikiPages ?? [];
-            return pages.map((p: any) => toRow(p, a.id, a.name));
+            return pages.map((p: any) => toRow(p, scope.userId, scope.label));
           } catch {
             return [] as WikiRow[];
           }
@@ -177,7 +236,7 @@ function WikiPage() {
     } finally {
       setMultiFetching(false);
     }
-  }, [isAllAgents, agents, activeSearch, client]);
+  }, [isAllAgents, userScopes, activeSearch, client]);
 
   useEffect(() => {
     if (isAllAgents && !activeSearch) {
@@ -187,24 +246,24 @@ function WikiPage() {
     }
   }, [isAllAgents, activeSearch, fetchAllAgentPages]);
 
-  // Search — single agent in v1. All-Agents + search is deferred; we
-  // fall back to the first agent's scope so the user sees *something*
+  // Search — single user in v1. All-Users + search is deferred; we
+  // fall back to the first user's scope so the user sees *something*
   // rather than an empty panel.
-  const searchAgentId = isAllAgents ? (agents[0]?.id ?? "") : selectedAgentId;
+  const searchUserId = isAllAgents ? (userScopes[0]?.userId ?? "") : (effectiveUserId ?? "");
   const [searchResult] = useQuery({
     query: WikiSearchQuery,
     variables: {
       tenantId: tenantId ?? "",
-      ownerId: searchAgentId,
+      userId: searchUserId,
       query: activeSearch,
       limit: 50,
     },
-    pause: !activeSearch || !tenantId || !searchAgentId,
+    pause: !activeSearch || !tenantId || !searchUserId,
   });
 
   useBreadcrumbs([{ label: "Wiki Pages" }]);
 
-  const toRow = (p: any, agentId: string, agentName: string): WikiRow => ({
+  const toRow = (p: any, userId: string, userName: string): WikiRow => ({
     id: p.id,
     type: p.type as WikiPageType,
     slug: p.slug,
@@ -212,15 +271,16 @@ function WikiPage() {
     summary: p.summary ?? null,
     lastCompiledAt: p.lastCompiledAt ?? null,
     updatedAt: p.updatedAt ?? null,
-    agentId,
-    agentName,
+    userId,
+    agentId: userId,
+    agentName: userName,
   });
 
   const rows: WikiRow[] = useMemo(() => {
     if (activeSearch) {
       const hits = searchResult.data?.wikiSearch ?? [];
       return hits.map((h: any) =>
-        toRow(h.page, searchAgentId, agentNames[searchAgentId] ?? ""),
+        toRow(h.page, searchUserId, userLabels[searchUserId] ?? ""),
       );
     }
     if (isAllAgents) {
@@ -232,7 +292,7 @@ function WikiPage() {
     }
     const pages = listResult.data?.recentWikiPages ?? [];
     return pages.map((p: any) =>
-      toRow(p, selectedAgentId, agentNames[selectedAgentId] ?? ""),
+      toRow(p, effectiveUserId ?? "", userLabels[effectiveUserId ?? ""] ?? ""),
     );
   }, [
     activeSearch,
@@ -240,9 +300,9 @@ function WikiPage() {
     isAllAgents,
     multiPages,
     listResult.data,
-    selectedAgentId,
-    searchAgentId,
-    agentNames,
+    effectiveUserId,
+    searchUserId,
+    userLabels,
   ]);
 
   const columns: ColumnDef<WikiRow>[] = [
@@ -264,7 +324,7 @@ function WikiPage() {
     },
     {
       accessorKey: "agentName",
-      header: "Agent",
+      header: "User",
       size: 120,
       cell: ({ row }) => (
         <span className="text-muted-foreground text-xs">{row.original.agentName}</span>
@@ -303,7 +363,7 @@ function WikiPage() {
       : listResult.fetching && !listResult.data;
 
   const headerCount = isAllAgents
-    ? `${agents.length} agent${agents.length === 1 ? "" : "s"}`
+    ? `${userScopes.length} user${userScopes.length === 1 ? "" : "s"}`
     : `${rows.length} page${rows.length !== 1 ? "s" : ""}`;
 
   return (
@@ -324,14 +384,14 @@ function WikiPage() {
               <ToggleGroupItem value="pages" className="px-3 text-xs">Table</ToggleGroupItem>
               <ToggleGroupItem value="graph" className="px-3 text-xs">Graph</ToggleGroupItem>
             </ToggleGroup>
-            <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
+            <Select value={selectedScopeId} onValueChange={setSelectedAgentId}>
               <SelectTrigger className="w-44">
-                <SelectValue placeholder="Select agent" />
+                <SelectValue placeholder="Select user" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Agents</SelectItem>
-                {agents.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                <SelectItem value="all">All Users</SelectItem>
+                {userScopes.map((scope) => (
+                  <SelectItem key={scope.userId} value={scope.userId}>{scope.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -369,8 +429,8 @@ function WikiPage() {
             <WikiGraph
               ref={graphRef}
               tenantId={tenantId ?? ""}
-              agentId={isAllAgents ? undefined : selectedAgentId}
-              agentIds={isAllAgents ? effectiveAgentIds : undefined}
+              userId={isAllAgents ? undefined : effectiveUserId}
+              userIds={isAllAgents ? effectiveUserIds : undefined}
               searchQuery={searchQuery || undefined}
               onNodeClick={(node, edges) => {
                 setGraphNode(node);
@@ -411,7 +471,7 @@ function WikiPage() {
           {selectedRow && (
             <WikiPageSheet
               tenantId={tenantId ?? ""}
-              ownerId={selectedRow.agentId}
+              userId={selectedRow.userId}
               type={selectedRow.type}
               slug={selectedRow.slug}
               title={selectedRow.title}
@@ -426,7 +486,7 @@ function WikiPage() {
           {graphNode && (
             <WikiPageSheet
               tenantId={tenantId ?? ""}
-              ownerId={graphNode.agentId}
+              userId={graphNode.agentId}
               type={graphNode.entityType}
               slug={graphNode.slug}
               title={graphNode.label}

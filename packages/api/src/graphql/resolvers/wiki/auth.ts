@@ -16,7 +16,10 @@ export async function assertCanReadWikiScope(
 	args: { tenantId?: string | null; userId?: string | null; ownerId?: string | null },
 ): Promise<{ tenantId: string; userId: string }> {
 	try {
-		return await requireMemoryUserScope(ctx, args);
+		return await requireMemoryUserScope(ctx, {
+			...args,
+			allowTenantAdmin: true,
+		});
 	} catch (err) {
 		if (err instanceof UserScopeAuthError) {
 			throw new WikiAuthError(err.message);

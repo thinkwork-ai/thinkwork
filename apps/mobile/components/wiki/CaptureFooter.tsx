@@ -26,6 +26,7 @@ export type CaptureFooterMode = "search" | "add";
 
 interface CaptureFooterProps {
 	agentId: string | null | undefined;
+	userId: string | null | undefined;
 	agentName: string | null | undefined;
 	tenantId: string | null | undefined;
 	colors: (typeof COLORS)["dark"];
@@ -40,6 +41,7 @@ interface CaptureFooterProps {
 
 export function CaptureFooter({
 	agentId,
+	userId,
 	agentName,
 	tenantId,
 	colors,
@@ -131,6 +133,7 @@ export function CaptureFooter({
 				((Constants as unknown as { nativeAppVersion?: string }).nativeAppVersion ?? "unknown");
 			await captureMobileMemory({
 				agentId,
+				userId: userId ?? undefined,
 				content: trimmed,
 				factType,
 				metadata: {
@@ -159,7 +162,7 @@ export function CaptureFooter({
 		} finally {
 			setSubmitting(false);
 		}
-	}, [text, submitting, atHardLimit, agentId, tenantId, factType, agentName, captureMobileMemory]);
+	}, [text, submitting, atHardLimit, agentId, userId, tenantId, factType, agentName, captureMobileMemory]);
 
 	const handleSubmit = useCallback(() => {
 		if (mode === "add") {

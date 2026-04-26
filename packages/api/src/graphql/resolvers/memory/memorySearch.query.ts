@@ -37,7 +37,10 @@ export const memorySearch = async (
 	ctx: GraphQLContext,
 ) => {
 	const { query, limit = 10 } = args;
-	const { tenantId, userId } = await requireMemoryUserScope(ctx, args);
+	const { tenantId, userId } = await requireMemoryUserScope(ctx, {
+		...args,
+		allowTenantAdmin: true,
+	});
 
 	const { recall: recallService } = getMemoryServices();
 	const hits = await recallService.recall({

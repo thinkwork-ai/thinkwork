@@ -47,7 +47,9 @@ const LABEL_MODE_SIM_CONFIG: SimConfig = {
 
 interface WikiGraphViewProps {
   tenantId: string;
-  agentId: string;
+  userId: string;
+  /** @deprecated Use userId. */
+  agentId?: string;
   /**
    * Optional: route param kept for backwards compat with existing callers,
    * but the default view is "show all pages for this agent".
@@ -80,14 +82,16 @@ interface WikiGraphViewProps {
  */
 export function WikiGraphView({
   tenantId,
+  userId,
   agentId,
   searchQuery,
   showLabels = false,
 }: WikiGraphViewProps) {
   const router = useRouter();
+  const scopeUserId = userId ?? agentId;
   const { graph, loading, error, refetch } = useWikiGraph({
     tenantId,
-    ownerId: agentId,
+    userId: scopeUserId,
   });
 
   // Background refresh every time the graph view mounts (i.e. toggled
@@ -103,7 +107,7 @@ export function WikiGraphView({
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
-  const cacheKey = `${tenantId}:${agentId}`;
+  const cacheKey = `${tenantId}:${scopeUserId}`;
 
   // When urql re-emits the query (even with identical content) we get a
   // new `graph` ref and `toInternalSubgraph` produces brand-new node
@@ -188,9 +192,9 @@ export function WikiGraphView({
       // Route's `isWikiPageType` check is case-sensitive (ENTITY/TOPIC/
       // DECISION). Lowercasing yields "Not found"; keep uppercase.
       const base = `/wiki/${encodeURIComponent(node.type)}/${encodeURIComponent(node.slug)}`;
-      router.push(`${base}?agentId=${encodeURIComponent(agentId)}`);
+      router.push(`${base}?userId=${encodeURIComponent(scopeUserId)}`);
     },
-    [router, agentId],
+    [router, scopeUserId],
   );
 
   return (
@@ -230,7 +234,7 @@ export function WikiGraphView({
 
       <NodeDetailModal
         tenantId={tenantId}
-        ownerId={agentId}
+        userId={scopeUserId}
         node={selectedTarget}
         onClose={() => setSelectedNodeId(null)}
         onOpenFullPage={handleOpenFullPage}

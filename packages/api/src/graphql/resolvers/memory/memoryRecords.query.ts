@@ -45,7 +45,10 @@ interface MemoryRow {
 }
 
 export const memoryRecords = async (_parent: any, args: any, ctx: GraphQLContext) => {
-	const { tenantId, userId } = await requireMemoryUserScope(ctx, args);
+	const { tenantId, userId } = await requireMemoryUserScope(ctx, {
+		...args,
+		allowTenantAdmin: true,
+	});
 
 	const { inspect: inspectService } = getMemoryServices();
 	const records = await inspectService.inspect({

@@ -96,8 +96,16 @@ const MAX_RECORDS_PER_JOB = 500;
  * that feeds the whole agent history through the planner. Paired with
  * continuation chaining so a 5,000-record bootstrap still self-completes. */
 const MAX_RECORDS_PER_BOOTSTRAP_JOB = 1000;
-const MAX_NEW_PAGES_PER_JOB = 25;
-const MAX_SECTIONS_REWRITTEN_PER_JOB = 100;
+const MAX_NEW_PAGES_PER_JOB = positiveIntEnv("WIKI_MAX_NEW_PAGES_PER_JOB", 25);
+const MAX_SECTIONS_REWRITTEN_PER_JOB = positiveIntEnv(
+	"WIKI_MAX_SECTIONS_REWRITTEN_PER_JOB",
+	100,
+);
+
+function positiveIntEnv(name: string, fallback: number): number {
+	const value = Number(process.env[name]);
+	return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
 
 // Rough cost numbers for metrics only — not billing. Claude Haiku 4.5 pricing
 // (subject to change); update if the model is swapped.

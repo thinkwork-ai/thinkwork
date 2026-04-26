@@ -24,24 +24,27 @@ export interface WikiGraphPayload {
 
 interface UseWikiGraphArgs {
   tenantId: string | null | undefined;
-  ownerId: string | null | undefined;
+  userId?: string | null | undefined;
+  /** @deprecated Use userId. Kept only for legacy callers during rollout. */
+  ownerId?: string | null | undefined;
 }
 
 /**
- * Fetches the agent-scoped force-graph payload — every active wiki page
- * + every page-to-page link in the `(tenant, owner)` scope, in one
+ * Fetches the user-scoped force-graph payload — every active wiki page
+ * + every page-to-page link in the `(tenant, user)` scope, in one
  * round-trip. Powers the mobile graph view's default "show everything"
  * mode (admin's `/wiki` route uses the same resolver).
  *
- * Paused until both `tenantId` and `ownerId` are present.
+ * Paused until both `tenantId` and `userId` are present.
  */
-export function useWikiGraph({ tenantId, ownerId }: UseWikiGraphArgs) {
+export function useWikiGraph({ tenantId, userId, ownerId }: UseWikiGraphArgs) {
+  const scopeUserId = userId ?? ownerId;
   const [{ data, fetching, error }, refetch] = useQuery<{
     wikiGraph: WikiGraphPayload | null;
   }>({
     query: WikiGraphQuery,
-    variables: { tenantId, ownerId },
-    pause: !tenantId || !ownerId,
+    variables: { tenantId, userId: scopeUserId },
+    pause: !tenantId || !scopeUserId,
     requestPolicy: "cache-and-network",
   });
 

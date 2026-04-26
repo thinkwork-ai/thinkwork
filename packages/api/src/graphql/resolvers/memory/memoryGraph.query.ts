@@ -17,7 +17,10 @@ export const memoryGraph = async (
 	args: { tenantId?: string; userId?: string; assistantId?: string },
 	ctx: GraphQLContext,
 ) => {
-	const { userId } = await requireMemoryUserScope(ctx, args);
+	const { userId } = await requireMemoryUserScope(ctx, {
+		...args,
+		allowTenantAdmin: true,
+	});
 
 	const { inspect: inspectService } = getMemoryServices();
 	const capabilities = await inspectService.capabilities();

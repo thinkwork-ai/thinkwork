@@ -40,8 +40,8 @@ export default function MemoryScreen() {
     );
   }
 
-  if (activeAgent?.id) {
-    return <Redirect href={`/memory/list?strategy=semantic&assistantId=${activeAgent.id}`} />;
+  if (activeAgent?.id && currentUser?.id) {
+    return <Redirect href={`/memory/list?strategy=semantic&userId=${currentUser.id}&assistantId=${activeAgent.id}`} />;
   }
 
   return (

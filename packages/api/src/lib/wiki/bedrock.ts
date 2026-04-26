@@ -25,6 +25,10 @@ import {
 const REGION = process.env.AWS_REGION || "us-east-1";
 const DEFAULT_MODEL_ID =
 	process.env.BEDROCK_MODEL_ID || "openai.gpt-oss-120b-1:0";
+const DEFAULT_CALL_TIMEOUT_MS = positiveIntEnv(
+	"WIKI_BEDROCK_CALL_TIMEOUT_MS",
+	120_000,
+);
 
 /**
  * Known per-model hard caps for the Bedrock Converse `maxTokens` input.
@@ -99,33 +103,50 @@ export async function invokeClaude(
 	];
 
 	const client = getClient();
-	const resp = await client.send(
-		new ConverseCommand({
+	const timeout = args.signal ? null : new AbortController();
+	const timeoutId = timeout
+		? setTimeout(() => timeout.abort(), DEFAULT_CALL_TIMEOUT_MS)
+		: null;
+	try {
+		const resp = await client.send(
+			new ConverseCommand({
+				modelId,
+				messages,
+				system: args.system
+					? [{ text: args.system } as SystemContentBlock]
+					: undefined,
+				inferenceConfig: {
+					maxTokens,
+					temperature: args.temperature ?? 0,
+				},
+			}),
+			{ abortSignal: args.signal ?? timeout?.signal },
+		);
+
+		const blocks = resp.output?.message?.content ?? [];
+		const text = blocks
+			.map((b) => (typeof b.text === "string" ? b.text : ""))
+			.join("");
+
+		return {
+			text,
+			inputTokens: resp.usage?.inputTokens ?? 0,
+			outputTokens: resp.usage?.outputTokens ?? 0,
 			modelId,
-			messages,
-			system: args.system
-				? [{ text: args.system } as SystemContentBlock]
-				: undefined,
-			inferenceConfig: {
-				maxTokens,
-				temperature: args.temperature ?? 0,
-			},
-		}),
-		{ abortSignal: args.signal },
-	);
-
-	const blocks = resp.output?.message?.content ?? [];
-	const text = blocks
-		.map((b) => (typeof b.text === "string" ? b.text : ""))
-		.join("");
-
-	return {
-		text,
-		inputTokens: resp.usage?.inputTokens ?? 0,
-		outputTokens: resp.usage?.outputTokens ?? 0,
-		modelId,
-		stopReason: resp.stopReason ?? null,
-	};
+			stopReason: resp.stopReason ?? null,
+		};
+	} catch (err) {
+		if (timeout?.signal.aborted && isAbortLikeError(err)) {
+			const timeoutErr = new Error(
+				`Bedrock converse timed out after ${DEFAULT_CALL_TIMEOUT_MS}ms`,
+			);
+			timeoutErr.name = "TimeoutError";
+			throw timeoutErr;
+		}
+		throw err;
+	} finally {
+		if (timeoutId) clearTimeout(timeoutId);
+	}
 }
 
 /**
@@ -180,6 +201,20 @@ export function parseJsonResponse<T>(text: string): T {
 
 function truncate(s: string, n: number): string {
 	return s.length <= n ? s : `${s.slice(0, n)}…`;
+}
+
+function positiveIntEnv(name: string, fallback: number): number {
+	const value = Number(process.env[name]);
+	return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+function isAbortLikeError(err: unknown): boolean {
+	if (!(err instanceof Error)) return false;
+	return (
+		err.name === "AbortError" ||
+		err.name === "TimeoutError" ||
+		err.name === "RequestAbortedError"
+	);
 }
 
 // ---------------------------------------------------------------------------

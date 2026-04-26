@@ -3,7 +3,9 @@ import { MobileMemorySearchQuery } from "../graphql/queries";
 import type { WikiPageType, WikiSearchHit } from "../types";
 
 interface UseMobileMemorySearchArgs {
-  agentId: string | null | undefined;
+  userId?: string | null | undefined;
+  /** @deprecated Use userId. Kept only for legacy callers during rollout. */
+  agentId?: string | null | undefined;
   query: string;
   limit?: number;
 }
@@ -27,17 +29,18 @@ type ServerResponse = {
 };
 
 /**
- * Searches the agent's memory bank via Hindsight recall and returns
+ * Searches the user's memory bank via Hindsight recall and returns
  * compiled wiki pages ranked by the aggregate recall score of their
  * source memory units. One GraphQL round-trip — server handles recall,
- * dedup, and scoring. Paused until agentId + non-empty query are set.
+ * dedup, and scoring. Paused until userId + non-empty query are set.
  */
-export function useMobileMemorySearch({ agentId, query, limit }: UseMobileMemorySearchArgs) {
+export function useMobileMemorySearch({ userId, agentId, query, limit }: UseMobileMemorySearchArgs) {
+  const scopeUserId = userId ?? agentId;
   const trimmed = (query || "").trim();
   const [{ data, fetching, error }, refetch] = useQuery<ServerResponse>({
     query: MobileMemorySearchQuery,
-    variables: { agentId, query: trimmed, limit },
-    pause: !agentId || trimmed.length === 0,
+    variables: { userId: scopeUserId, query: trimmed, limit },
+    pause: !scopeUserId || trimmed.length === 0,
     requestPolicy: "cache-and-network",
   });
 

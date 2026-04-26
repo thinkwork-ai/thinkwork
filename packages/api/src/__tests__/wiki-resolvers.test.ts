@@ -17,6 +17,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const {
 	mockDb,
 	mockAgentsRow,
+	mockAdminRows,
 	mockResolveCaller,
 	mockEnqueue,
 	mockLambdaSend,
@@ -24,6 +25,7 @@ const {
 	InvokeCommandMock,
 } = vi.hoisted(() => {
 	const mockAgentsRow = vi.fn();
+	const mockAdminRows = vi.fn();
 	const mockResolveCaller = vi.fn();
 	const mockEnqueue = vi.fn();
 	const mockListCompileJobs = vi.fn();
@@ -43,10 +45,12 @@ const {
 	});
 	const mockDb = {
 		select: vi.fn(() => chain(mockAgentsRow() as unknown[])),
+		execute: vi.fn().mockImplementation(() => Promise.resolve({ rows: mockAdminRows() })),
 	};
 	return {
 		mockDb,
 		mockAgentsRow,
+		mockAdminRows,
 		mockResolveCaller,
 		mockEnqueue,
 		mockLambdaSend,
@@ -58,6 +62,7 @@ const {
 vi.mock("../graphql/utils.js", () => ({
 	db: mockDb,
 	eq: (a: unknown, b: unknown) => ({ __eq: [a, b] }),
+	sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values }),
 	agents: { id: "agents.id", tenant_id: "agents.tenant_id" },
 	users: { id: "users.id", tenant_id: "users.tenant_id", email: "users.email" },
 }));
@@ -109,6 +114,8 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	mockResolveCaller.mockReset();
 	mockResolveCaller.mockResolvedValue({ userId: "a1", tenantId: "t1" });
+	mockAdminRows.mockReset();
+	mockAdminRows.mockReturnValue([]);
 	mockLambdaSend.mockResolvedValue({});
 	delete process.env.WIKI_COMPILE_FN;
 	delete process.env.STAGE;
@@ -180,6 +187,17 @@ describe("assertCanReadWikiScope", () => {
 				userId: "a-missing",
 			}),
 		).rejects.toThrow(/user mismatch/);
+	});
+
+	it("allows tenant admins to read another tenant member's wiki scope", async () => {
+		mockResolveCaller.mockResolvedValueOnce({ userId: "admin-user", tenantId: "t1" });
+		mockAdminRows.mockReturnValueOnce([{ role: "admin" }]);
+		await expect(
+			assertCanReadWikiScope(makeCtx({}), {
+				tenantId: "t1",
+				userId: "a1",
+			}),
+		).resolves.toEqual({ tenantId: "t1", userId: "a1" });
 	});
 
 	it("rejects missing caller user context", async () => {
