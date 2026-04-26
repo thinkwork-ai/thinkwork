@@ -10,6 +10,7 @@
 --   - validate user-owned threads can be backfilled from agents.human_pair_id
 --   - add threads.user_id while keeping threads.agent_id
 --   - truncate rebuildable wiki data before switching owner_id FKs
+--   - skip that truncate on re-run once the old agent-owned FKs are gone
 --   - add per-user external compile opt-in
 --
 -- creates-column: public.threads.user_id
@@ -70,6 +71,35 @@ CREATE INDEX IF NOT EXISTS idx_threads_tenant_user
 ALTER TABLE public.users
   ADD COLUMN IF NOT EXISTS wiki_compile_external_enabled boolean NOT NULL DEFAULT false;
 
+DO $$
+DECLARE
+  old_wiki_owner_fk_count integer;
+BEGIN
+  SELECT COUNT(*)
+    INTO old_wiki_owner_fk_count
+  FROM pg_catalog.pg_constraint c
+  JOIN pg_catalog.pg_class r ON r.oid = c.conrelid
+  JOIN pg_catalog.pg_namespace n ON n.oid = r.relnamespace
+  WHERE n.nspname = 'public'
+    AND c.conname IN (
+      'wiki_pages_owner_id_agents_id_fk',
+      'wiki_unresolved_mentions_owner_id_agents_id_fk',
+      'wiki_compile_jobs_owner_id_agents_id_fk',
+      'wiki_compile_cursors_owner_id_agents_id_fk',
+      'wiki_places_owner_id_agents_id_fk'
+    );
+
+  IF old_wiki_owner_fk_count > 0 THEN
+    TRUNCATE TABLE
+      public.wiki_pages,
+      public.wiki_unresolved_mentions,
+      public.wiki_compile_jobs,
+      public.wiki_compile_cursors,
+      public.wiki_places
+    CASCADE;
+  END IF;
+END $$;
+
 ALTER TABLE public.wiki_pages
   DROP CONSTRAINT IF EXISTS wiki_pages_owner_id_agents_id_fk;
 ALTER TABLE public.wiki_unresolved_mentions
@@ -81,13 +111,16 @@ ALTER TABLE public.wiki_compile_cursors
 ALTER TABLE public.wiki_places
   DROP CONSTRAINT IF EXISTS wiki_places_owner_id_agents_id_fk;
 
-TRUNCATE TABLE
-  public.wiki_pages,
-  public.wiki_unresolved_mentions,
-  public.wiki_compile_jobs,
-  public.wiki_compile_cursors,
-  public.wiki_places
-CASCADE;
+ALTER TABLE public.wiki_pages
+  DROP CONSTRAINT IF EXISTS wiki_pages_owner_id_users_id_fk;
+ALTER TABLE public.wiki_unresolved_mentions
+  DROP CONSTRAINT IF EXISTS wiki_unresolved_mentions_owner_id_users_id_fk;
+ALTER TABLE public.wiki_compile_jobs
+  DROP CONSTRAINT IF EXISTS wiki_compile_jobs_owner_id_users_id_fk;
+ALTER TABLE public.wiki_compile_cursors
+  DROP CONSTRAINT IF EXISTS wiki_compile_cursors_owner_id_users_id_fk;
+ALTER TABLE public.wiki_places
+  DROP CONSTRAINT IF EXISTS wiki_places_owner_id_users_id_fk;
 
 ALTER TABLE public.wiki_pages
   ADD CONSTRAINT wiki_pages_owner_id_users_id_fk
