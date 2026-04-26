@@ -2,6 +2,7 @@ import { gql, useQuery } from "urql";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FilePlus,
+  Bot,
   Folder,
   FolderPlus,
   Loader2,
@@ -64,8 +65,14 @@ import {
   type SkillTemplateKey,
 } from "@/lib/skill-authoring-templates";
 import { FileEditorPane } from "./FileEditorPane";
-import { FolderTree, buildWorkspaceTree } from "./FolderTree";
+import {
+  FolderTree,
+  buildWorkspaceTree,
+  subAgentsNodePath,
+} from "./FolderTree";
 import { ImportDropzone } from "./ImportDropzone";
+import { AddSubAgentDialog } from "./AddSubAgentDialog";
+import { parseRoutingTable, type RoutingRow } from "./routing-table";
 
 const AgentPinStatusQuery = gql`
   query AgentPinStatus($agentId: ID!) {
@@ -194,6 +201,12 @@ export function AgentBuilderShell({
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
   const [newFilePath, setNewFilePath] = useState("");
   const [creatingFile, setCreatingFile] = useState(false);
+  const [showAddSubAgentDialog, setShowAddSubAgentDialog] = useState(false);
+  const [creatingSubAgent, setCreatingSubAgent] = useState(false);
+  const [subAgentCreateError, setSubAgentCreateError] = useState<string | null>(
+    null,
+  );
+  const [routingRows, setRoutingRows] = useState<RoutingRow[]>([]);
   const [showNewSkillDialog, setShowNewSkillDialog] = useState(false);
   const [creatingSkill, setCreatingSkill] = useState(false);
   const [newSkillTemplate, setNewSkillTemplate] =
@@ -244,6 +257,29 @@ export function AgentBuilderShell({
   }, [fetchFiles]);
 
   useEffect(() => {
+    if (!files.includes("AGENTS.md")) {
+      setRoutingRows([]);
+      return;
+    }
+    let cancelled = false;
+    agentBuilderApi
+      .getFile(target, "AGENTS.md")
+      .then((data) => {
+        if (cancelled) return;
+        const parsed = parseRoutingTable(data.content ?? "");
+        setRoutingRows(parsed.warning ? [] : parsed.rows);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("Failed to parse AGENTS.md routing rows:", err);
+        setRoutingRows([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [files, target]);
+
+  useEffect(() => {
     loadRequestId.current += 1;
     fileListRequestId.current += 1;
     lastHandledInitialFolder.current = undefined;
@@ -256,17 +292,22 @@ export function AgentBuilderShell({
     setLoadingContent(false);
     setLoadingFiles(true);
     setLoadedFilesOnce(false);
+    setRoutingRows([]);
+    setShowAddSubAgentDialog(false);
+    setSubAgentCreateError(null);
   }, [agentId]);
 
   useEffect(() => {
     fetchFiles({ showLoading: true });
   }, [fetchFiles]);
 
-  const tree = useMemo(() => buildWorkspaceTree(files), [files]);
+  const tree = useMemo(
+    () => buildWorkspaceTree(files, routingRows),
+    [files, routingRows],
+  );
 
   useEffect(() => {
-    if (files.length === 0) return;
-    const folders = new Set<string>();
+    const folders = new Set<string>([subAgentsNodePath()]);
     for (const file of files) {
       const parts = file.split("/");
       for (let i = 1; i < parts.length; i++) {
@@ -397,6 +438,39 @@ export function AgentBuilderShell({
       console.error("Failed to create file:", err);
     } finally {
       setCreatingFile(false);
+    }
+  };
+
+  const handleAddSubAgent = async (input: {
+    slug: string;
+    contextContent: string;
+  }) => {
+    setCreatingSubAgent(true);
+    setSubAgentCreateError(null);
+    try {
+      await agentBuilderApi.createSubAgent(
+        agentId,
+        input.slug,
+        input.contextContent,
+      );
+      await fetchFiles();
+      setExpandedFolders((prev) => {
+        const next = new Set(prev);
+        next.add(subAgentsNodePath());
+        next.add(input.slug);
+        return next;
+      });
+      setShowAddSubAgentDialog(false);
+      toast.success(`Created sub-agent ${input.slug}`);
+      await openWorkspaceFile(`${input.slug}/CONTEXT.md`);
+    } catch (err) {
+      console.error("Failed to create sub-agent:", err);
+      const message =
+        err instanceof Error ? err.message : "Failed to create sub-agent";
+      setSubAgentCreateError(message);
+      toast.error(message);
+    } finally {
+      setCreatingSubAgent(false);
     }
   };
 
@@ -601,6 +675,16 @@ export function AgentBuilderShell({
               <DropdownMenuContent align="end" className="min-w-56">
                 <DropdownMenuItem
                   className="whitespace-nowrap"
+                  onClick={() => {
+                    setSubAgentCreateError(null);
+                    setShowAddSubAgentDialog(true);
+                  }}
+                >
+                  <Bot className="mr-2 h-4 w-4" />
+                  Add Sub-agent
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="whitespace-nowrap"
                   onClick={() => setShowNewSkillDialog(true)}
                 >
                   <Plus className="mr-2 h-4 w-4" />
@@ -653,26 +737,6 @@ export function AgentBuilderShell({
         <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading...
         </div>
-      ) : files.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 py-16 text-center">
-          <Folder className="h-12 w-12 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">
-            No workspace files yet.
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleGenerate}
-            disabled={generating || loadingFiles}
-          >
-            {generating ? (
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Wand2 className="mr-1.5 h-3.5 w-3.5" />
-            )}
-            Create Default Files
-          </Button>
-        </div>
       ) : (
         <div className="flex h-[calc(100vh-8rem)] min-h-[400px] rounded-md border">
           <div className="flex w-64 shrink-0 flex-col border-r">
@@ -722,30 +786,70 @@ export function AgentBuilderShell({
                 onDelete={handleDeletePath}
                 onConfirmDelete={handleConfirmDelete}
                 onCancelDeleteConfirm={handleCancelDeleteConfirm}
+                onAddSubAgent={() => {
+                  setSubAgentCreateError(null);
+                  setShowAddSubAgentDialog(true);
+                }}
               />
             </div>
           </div>
           <div className="flex min-w-0 flex-1 flex-col">
-            <FileEditorPane
-              openFile={openFile}
-              content={content}
-              value={editValue}
-              loading={loadingContent}
-              saving={saving}
-              deleting={deletingPath === openFile}
-              confirmingDelete={confirmingDeletePath === openFile}
-              onChange={setEditValue}
-              onSave={handleSave}
-              onDiscard={() => setEditValue(content)}
-              onDelete={handleDelete}
-              onConfirmDelete={() => openFile && handleConfirmDelete(openFile)}
-              onCancelDeleteConfirm={() =>
-                openFile && handleCancelDeleteConfirm(openFile)
-              }
-            />
+            {files.length === 0 ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+                <Folder className="h-12 w-12 text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">
+                  No workspace files yet.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerate}
+                  disabled={generating || loadingFiles}
+                >
+                  {generating ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Wand2 className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  Create Default Files
+                </Button>
+              </div>
+            ) : (
+              <FileEditorPane
+                openFile={openFile}
+                content={content}
+                value={editValue}
+                loading={loadingContent}
+                saving={saving}
+                deleting={deletingPath === openFile}
+                confirmingDelete={confirmingDeletePath === openFile}
+                onChange={setEditValue}
+                onSave={handleSave}
+                onDiscard={() => setEditValue(content)}
+                onDelete={handleDelete}
+                onConfirmDelete={() =>
+                  openFile && handleConfirmDelete(openFile)
+                }
+                onCancelDeleteConfirm={() =>
+                  openFile && handleCancelDeleteConfirm(openFile)
+                }
+              />
+            )}
           </div>
         </div>
       )}
+
+      <AddSubAgentDialog
+        open={showAddSubAgentDialog}
+        files={files}
+        creating={creatingSubAgent}
+        serverError={subAgentCreateError}
+        onOpenChange={(open) => {
+          setShowAddSubAgentDialog(open);
+          if (open) setSubAgentCreateError(null);
+        }}
+        onSubmit={handleAddSubAgent}
+      />
 
       <Dialog open={showNewFileDialog} onOpenChange={setShowNewFileDialog}>
         <DialogContent style={{ maxWidth: 440 }}>

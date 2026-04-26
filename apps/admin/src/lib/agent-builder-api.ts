@@ -1,5 +1,6 @@
 import {
   deleteWorkspaceFile,
+  createSubAgentWorkspaceFiles,
   getWorkspaceFile,
   listWorkspaceFiles,
   putWorkspaceFile,
@@ -10,6 +11,14 @@ import {
 import { getIdToken } from "@/lib/auth";
 
 export type { ComposeSource, Target, WorkspaceFileMeta };
+
+export async function createSubAgent(
+  agentId: string,
+  slug: string,
+  contextContent: string,
+): Promise<void> {
+  await createSubAgentWorkspaceFiles(agentId, slug, contextContent);
+}
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
@@ -263,5 +272,6 @@ export const agentBuilderApi = {
   getFile: getWorkspaceFile,
   putFile: putWorkspaceFile,
   deleteFile: deleteWorkspaceFile,
+  createSubAgent,
   importBundle,
 };

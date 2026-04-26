@@ -52,6 +52,8 @@ import {
   type ComposeContext,
   type ComposeResult,
 } from "./src/lib/workspace-overlay.js";
+import { isReservedFolderSegment } from "./src/lib/reserved-folder-names.js";
+import { appendRoutingRowIfMissing } from "./src/lib/workspace-map-generator.js";
 import { PINNED_FILES } from "@thinkwork/workspace-defaults";
 import {
   isPinnedWorkspacePath,
@@ -277,6 +279,7 @@ async function resolveDefaultsTarget(
 const WRITE_ACTIONS = new Set([
   "put",
   "delete",
+  "create-sub-agent",
   "regenerate-map",
   "update-identity-field",
 ]);
@@ -512,6 +515,103 @@ async function handlePut(
   return json(200, { ok: true });
 }
 
+const SUB_AGENT_SLUG_RE = /^[a-z][a-z0-9-]{0,31}$/;
+
+async function handleCreateSubAgent(
+  deps: HandlerDeps,
+  slug: string,
+  contextContent: string,
+): Promise<APIGatewayProxyResult> {
+  const { target, tenantId } = deps;
+  if (target.kind !== "agent") {
+    return json(400, { ok: false, error: "create-sub-agent requires agentId" });
+  }
+
+  const cleanSlug = slug.trim();
+  if (!SUB_AGENT_SLUG_RE.test(cleanSlug)) {
+    return json(400, {
+      ok: false,
+      error:
+        "Slug must start with lowercase letter and contain only a-z, 0-9, and hyphens.",
+    });
+  }
+  if (isReservedFolderSegment(cleanSlug)) {
+    return json(400, {
+      ok: false,
+      error: `\`${cleanSlug}\` is a reserved folder name.`,
+    });
+  }
+  const existingTopFolders = new Set(
+    (await listPrefix(target.prefix))
+      .filter((path) => path.includes("/"))
+      .map((path) => path.split("/")[0])
+      .filter((segment): segment is string => Boolean(segment)),
+  );
+  if (existingTopFolders.has(cleanSlug)) {
+    return json(409, {
+      ok: false,
+      error: `A folder named \`${cleanSlug}\` already exists at this agent's root.`,
+    });
+  }
+
+  const ctx: ComposeContext = { tenantId };
+  let agentsMd = defaultAgentsMd();
+  try {
+    const result = await composeFile(ctx, target.agentId, "AGENTS.md");
+    agentsMd = result.content ?? agentsMd;
+  } catch (err) {
+    if ((err as { code?: string } | null)?.code !== "FILE_NOT_FOUND") {
+      throw err;
+    }
+  }
+
+  const nextAgentsMd = appendRoutingRowIfMissing(agentsMd, {
+    task: `${cleanSlug} specialist`,
+    goTo: `${cleanSlug}/`,
+    read: `${cleanSlug}/CONTEXT.md`,
+    skills: [],
+  });
+
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucket(),
+      Key: target.key(`${cleanSlug}/CONTEXT.md`),
+      Body: contextContent,
+      ContentType: "text/plain; charset=utf-8",
+    }),
+  );
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucket(),
+      Key: target.key("AGENTS.md"),
+      Body: nextAgentsMd,
+      ContentType: "text/plain; charset=utf-8",
+    }),
+  );
+
+  await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
+  invalidateComposerCache({ tenantId, agentId: target.agentId });
+
+  try {
+    const result = await deriveAgentSkills({ tenantId }, target.agentId);
+    if (result.warnings.length > 0) {
+      return json(200, {
+        ok: true,
+        deriveWarnings: result.warnings,
+      });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[derive-agent-skills] failed: ${message}`);
+    return json(500, {
+      ok: false,
+      error: "AGENTS.md persisted but agent_skills derive failed: " + message,
+    });
+  }
+
+  return json(200, { ok: true });
+}
+
 async function handleDelete(
   deps: HandlerDeps,
   path: string,
@@ -675,6 +775,10 @@ interface RequestBody {
   field?: string;
   /** For `update-identity-field`: the new line content. */
   value?: string;
+  /** For `create-sub-agent`: top-level sub-agent folder slug. */
+  slug?: string;
+  /** For `create-sub-agent`: seeded {slug}/CONTEXT.md content. */
+  contextContent?: string;
   // Legacy shape — rejected loudly so buggy clients surface.
   tenantSlug?: string;
   instanceId?: string;
@@ -793,6 +897,15 @@ export async function handler(
           body.acceptTemplateUpdate === true,
         );
       }
+      case "create-sub-agent": {
+        if (!body.slug || body.contextContent === undefined) {
+          return json(400, {
+            ok: false,
+            error: "slug and contextContent are required for create-sub-agent",
+          });
+        }
+        return await handleCreateSubAgent(deps, body.slug, body.contextContent);
+      }
       case "delete": {
         if (!body.path)
           return json(400, { ok: false, error: "path is required for delete" });
@@ -877,6 +990,16 @@ function errorMessage(err: unknown): string {
   const name = (err as { name?: string }).name || "Error";
   const message = (err as { message?: string }).message || "";
   return message ? `${name}: ${message}` : name;
+}
+
+function defaultAgentsMd(): string {
+  return `# AGENTS.md
+
+## Routing
+
+| Task | Go to | Read | Skills |
+| --- | --- | --- | --- |
+`;
 }
 
 // PINNED_FILES is re-exported for callers/tests that want to assert on

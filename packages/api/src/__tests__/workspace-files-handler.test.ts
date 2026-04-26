@@ -732,6 +732,115 @@ describe("agent DELETE", () => {
   });
 });
 
+// ─── 7b. Composite create-sub-agent ─────────────────────────────────────────
+
+describe("agent create-sub-agent", () => {
+  it("creates CONTEXT.md and appends a parent AGENTS.md routing row", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([templateRowTenantA()]);
+
+    s3Mock.on(ListObjectsV2Command).resolves({ Contents: [] });
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/agents/marco/workspace/AGENTS.md",
+      })
+      .resolves(
+        body(`# Agent Map
+
+## Routing
+
+| Task | Go to | Read | Skills |
+| --- | --- | --- | --- |
+`),
+      );
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "create-sub-agent",
+          agentId: AGENT_ID,
+          slug: "support",
+          contextContent: "# Support\n\n",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    const puts = s3Mock.commandCalls(PutObjectCommand);
+    expect(puts.map((call) => call.args[0].input.Key)).toEqual([
+      "tenants/acme/agents/marco/workspace/support/CONTEXT.md",
+      "tenants/acme/agents/marco/workspace/AGENTS.md",
+    ]);
+    expect(String(puts[1].args[0].input.Body)).toContain(
+      "| support specialist | support/ | support/CONTEXT.md |  |",
+    );
+    expect(deriveMockImpl).toHaveBeenCalledWith(
+      { tenantId: TENANT_A },
+      AGENT_ID,
+    );
+  });
+
+  it("rejects reserved sub-agent slugs before writing", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "create-sub-agent",
+          agentId: AGENT_ID,
+          slug: "memory",
+          contextContent: "# Memory\n",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toMatch(/reserved folder name/);
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+  });
+
+  it("returns 409 when the sub-agent slug collides with an existing top folder", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+    s3Mock.on(ListObjectsV2Command).resolves({
+      Contents: [
+        {
+          Key: "tenants/acme/agents/marco/workspace/expenses/CONTEXT.md",
+        },
+      ],
+    });
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "create-sub-agent",
+          agentId: AGENT_ID,
+          slug: "expenses",
+          contextContent: "# Expenses\n",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body.error).toMatch(/already exists/);
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
+  });
+});
+
 // ─── 8. Template target ──────────────────────────────────────────────────────
 
 describe("template target", () => {
