@@ -1,11 +1,11 @@
 import { ScrollView, View } from "react-native";
 import { useRouter } from "expo-router";
-import { useMutation } from "urql";
+import { useMutation, useQuery } from "urql";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { Button } from "@/components/ui/button";
 import { Text, Muted } from "@/components/ui/typography";
 import { useAuth } from "@/lib/auth-context";
-import { StartActivationMutation } from "@/lib/graphql-queries";
+import { MeQuery, StartActivationMutation } from "@/lib/graphql-queries";
 
 const LAYERS = [
   "rhythms",
@@ -17,10 +17,15 @@ const LAYERS = [
 
 export default function ActivationRefresh() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { isAuthenticated } = useAuth();
+  const [{ data: meData, fetching: isMeFetching, error }] = useQuery({
+    query: MeQuery,
+    pause: !isAuthenticated,
+  });
   const [, startActivation] = useMutation(StartActivationMutation);
+  const userId = meData?.me?.id;
+
   const start = async (layer: string) => {
-    const userId = user?.sub;
     if (!userId) return;
     const result = await startActivation({
       input: { userId, mode: "refresh", focusLayer: layer },
@@ -36,6 +41,7 @@ export default function ActivationRefresh() {
   return (
     <DetailLayout title="Refresh activation">
       <ScrollView className="flex-1" contentContainerClassName="gap-3 p-4">
+        {error && <Muted>{error.message}</Muted>}
         {LAYERS.map((layer) => (
           <View
             key={layer}
@@ -45,7 +51,12 @@ export default function ActivationRefresh() {
             <Muted>
               Re-check this layer and stage only the changes you approve.
             </Muted>
-            <Button variant="outline" onPress={() => start(layer)}>
+            <Button
+              variant="outline"
+              onPress={() => start(layer)}
+              disabled={!userId || isMeFetching}
+              loading={isMeFetching}
+            >
               Refresh
             </Button>
           </View>

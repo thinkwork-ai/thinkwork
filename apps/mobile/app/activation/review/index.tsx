@@ -76,10 +76,11 @@ export default function ActivationReview() {
   );
 }
 
-function extractItems(layerStates?: string): BundleItem[] {
+function extractItems(layerStates?: unknown): BundleItem[] {
   if (!layerStates) return [];
   try {
-    const parsed = JSON.parse(layerStates);
+    const parsed =
+      typeof layerStates === "string" ? JSON.parse(layerStates) : layerStates;
     return Object.entries(parsed).flatMap(([layer, state]: [string, any]) =>
       Array.isArray(state?.entries)
         ? state.entries.map((entry: any, index: number) => ({
