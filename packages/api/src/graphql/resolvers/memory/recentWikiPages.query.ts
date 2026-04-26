@@ -18,23 +18,17 @@ import { db } from "../../utils.js";
 import { toGraphQLPage } from "../wiki/mappers.js";
 import { requireMemoryUserScope } from "../core/require-user-scope.js";
 
-const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 100;
-
 export const recentWikiPages = async (
 	_parent: unknown,
 	args: { tenantId?: string; userId?: string; agentId?: string; limit?: number },
 	ctx: GraphQLContext,
 ) => {
-	const { limit = DEFAULT_LIMIT } = args;
 	const { tenantId, userId } = await requireMemoryUserScope(ctx, {
 		...args,
 		allowTenantAdmin: true,
 	});
 
-	const cappedLimit = Math.max(1, Math.min(limit, MAX_LIMIT));
-
-	const rows = await db
+	const query = db
 		.select()
 		.from(wikiPages)
 		.where(
@@ -47,7 +41,12 @@ export const recentWikiPages = async (
 		.orderBy(
 			desc(sql`COALESCE(${wikiPages.last_compiled_at}, ${wikiPages.updated_at})`),
 		)
-		.limit(cappedLimit);
+		.$dynamic();
+
+	const rows =
+		typeof args.limit === "number"
+			? await query.limit(Math.max(1, Math.floor(args.limit)))
+			: await query;
 
 	// recentWikiPages is a listing surface — sections/aliases aren't
 	// needed in the mobile card; fetch the single page via
