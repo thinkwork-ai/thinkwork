@@ -200,6 +200,12 @@ build_handler "invites" \
 build_handler "skills" \
   "$REPO_ROOT/packages/api/src/handlers/skills.ts"
 
+build_handler "mcp-oauth" \
+  "$REPO_ROOT/packages/api/src/handlers/mcp-oauth.ts"
+
+build_handler "mcp-user-memory" \
+  "$REPO_ROOT/packages/api/src/handlers/mcp-user-memory.ts"
+
 # Service-auth REST endpoint the Strands agent container calls during
 # kind=run_skill dispatch to fetch the agent's runtime config (template,
 # skills, MCP, memory, guardrail). Plan 2026-04-24-008 §U1 added the

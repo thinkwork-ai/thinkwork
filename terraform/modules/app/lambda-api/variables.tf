@@ -86,6 +86,12 @@ variable "mobile_client_id" {
   type        = string
 }
 
+variable "cognito_auth_domain" {
+  description = "Cognito hosted UI domain prefix, e.g. thinkwork-dev. Empty disables MCP OAuth login."
+  type        = string
+  default     = ""
+}
+
 variable "appsync_api_url" {
   description = "AppSync subscriptions endpoint URL"
   type        = string

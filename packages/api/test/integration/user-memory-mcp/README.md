@@ -42,6 +42,24 @@ This scenario is blocked until
 `docs/plans/2026-04-20-008-feat-memory-wiki-mcp-server-plan.md` ships a real
 inbound User Memory/Wiki MCP endpoint.
 
+Interactive Codex OAuth uses the deployed MCP OAuth shim:
+
+```bash
+codex mcp add thinkwork-user-memory-dev \
+  --url https://<api-host>/mcp/user-memory
+
+codex mcp login thinkwork-user-memory-dev
+```
+
+The login command requires the deployed API to expose:
+
+- `GET /.well-known/oauth-protected-resource/mcp/user-memory`
+- `GET /.well-known/oauth-authorization-server`
+- `POST /mcp/oauth/register`
+- `GET /mcp/oauth/authorize`
+- `GET /mcp/oauth/callback`
+- `POST /mcp/oauth/token`
+
 | Variable | What |
 |---|---|
 | `USER_MEMORY_MCP_URL` | Streamable-HTTP MCP endpoint for the user's ThinkWork Memory/Wiki MCP server. |

@@ -188,10 +188,11 @@ module "api" {
   bucket_name = module.s3.bucket_name
   bucket_arn  = module.s3.bucket_arn
 
-  user_pool_id     = module.cognito.user_pool_id
-  user_pool_arn    = module.cognito.user_pool_arn
-  admin_client_id  = module.cognito.admin_client_id
-  mobile_client_id = module.cognito.mobile_client_id
+  user_pool_id        = module.cognito.user_pool_id
+  user_pool_arn       = module.cognito.user_pool_arn
+  admin_client_id     = module.cognito.admin_client_id
+  mobile_client_id    = module.cognito.mobile_client_id
+  cognito_auth_domain = module.cognito.auth_domain
 
   appsync_api_url = module.appsync.graphql_api_url
   appsync_api_key = module.appsync.graphql_api_key
@@ -230,6 +231,8 @@ module "api" {
 
   mcp_custom_domain       = var.mcp_custom_domain
   mcp_custom_domain_ready = var.mcp_custom_domain_ready
+
+  depends_on = [module.cognito]
 }
 
 ################################################################################
