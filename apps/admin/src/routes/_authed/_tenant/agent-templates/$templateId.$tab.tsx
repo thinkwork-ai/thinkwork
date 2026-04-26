@@ -1,22 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation } from "urql";
-import CodeMirror from "@uiw/react-codemirror";
-import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { languages } from "@codemirror/language-data";
-import { vscodeDark } from "@uiw/codemirror-theme-vscode";
-import { EditorView } from "@codemirror/view";
 import {
   Save,
   Loader2,
   Plus,
   Trash2,
-  File,
-  Folder,
-  FolderOpen,
-  FilePlus,
-  ChevronRight,
-  ChevronDown,
   Cable,
   XCircle,
   Shield,
@@ -76,6 +65,7 @@ import {
   type McpKeyStatus,
 } from "@/lib/mcp-api";
 import { ApiKeyDialog } from "@/components/mcp/ApiKeyDialog";
+import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
 import { TemplateSyncDialog } from "./-components/TemplateSyncDialog";
 
 const VALID_TABS = [
@@ -100,156 +90,6 @@ const CATEGORIES = [
   { value: "operations", label: "Operations" },
   { value: "custom", label: "Custom" },
 ];
-
-// ---------------------------------------------------------------------------
-// Workspace API (shared client — see apps/admin/src/lib/workspace-files-api.ts)
-// ---------------------------------------------------------------------------
-
-import {
-  deleteWorkspaceFile,
-  getWorkspaceFile,
-  listWorkspaceFiles,
-  putWorkspaceFile,
-} from "@/lib/workspace-files-api";
-
-// ---------------------------------------------------------------------------
-// Tree
-// ---------------------------------------------------------------------------
-
-type TreeNode = {
-  name: string;
-  path: string;
-  isFolder: boolean;
-  children: TreeNode[];
-};
-
-function buildTree(files: string[]): TreeNode[] {
-  const root: TreeNode[] = [];
-  for (const filePath of files.sort()) {
-    const parts = filePath.split("/");
-    let current = root;
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-      const isLast = i === parts.length - 1;
-      const pathSoFar = parts.slice(0, i + 1).join("/");
-      let node = current.find((n) => n.name === part && n.isFolder === !isLast);
-      if (!node) {
-        node = {
-          name: part,
-          path: isLast ? pathSoFar : pathSoFar + "/",
-          isFolder: !isLast,
-          children: [],
-        };
-        current.push(node);
-      }
-      current = node.children;
-    }
-  }
-  return root;
-}
-
-function WsTreeItem({
-  node,
-  selectedFile,
-  deletingPath,
-  confirmingDeletePath,
-  onSelect,
-  onDelete,
-  onConfirmDelete,
-  onCancelDeleteConfirm,
-  depth = 0,
-}: {
-  node: TreeNode;
-  selectedFile: string | null;
-  deletingPath: string | null;
-  confirmingDeletePath: string | null;
-  onSelect: (path: string) => void;
-  onDelete: (path: string) => void;
-  onConfirmDelete: (path: string) => void;
-  onCancelDeleteConfirm: (path: string) => void;
-  depth?: number;
-}) {
-  const [expanded, setExpanded] = useState(true);
-  const isActive = selectedFile === node.path;
-  const isDeleting = deletingPath === node.path;
-  const isConfirmingDelete = confirmingDeletePath === node.path;
-
-  if (node.isFolder) {
-    return (
-      <div>
-        <button
-          className="w-full flex items-center gap-1.5 px-2 py-1.5 text-sm hover:bg-accent rounded"
-          style={{ paddingLeft: `${depth * 12 + 8}px` }}
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? (
-            <ChevronDown className="h-3 w-3" />
-          ) : (
-            <ChevronRight className="h-3 w-3" />
-          )}
-          {expanded ? (
-            <FolderOpen className="h-3 w-3 text-muted-foreground" />
-          ) : (
-            <Folder className="h-3 w-3 text-muted-foreground" />
-          )}
-          <span>{node.name}</span>
-        </button>
-        {expanded &&
-          node.children.map((child) => (
-            <WsTreeItem
-              key={child.path}
-              node={child}
-              selectedFile={selectedFile}
-              deletingPath={deletingPath}
-              confirmingDeletePath={confirmingDeletePath}
-              onSelect={onSelect}
-              onDelete={onDelete}
-              onConfirmDelete={onConfirmDelete}
-              onCancelDeleteConfirm={onCancelDeleteConfirm}
-              depth={depth + 1}
-            />
-          ))}
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={`flex items-center justify-between group rounded cursor-pointer text-sm hover:bg-accent ${isActive ? "bg-accent" : ""}`}
-      style={{ paddingLeft: `${depth * 12 + 8}px` }}
-      onClick={() => onSelect(node.path)}
-      onMouseLeave={() => onCancelDeleteConfirm(node.path)}
-    >
-      <div className="flex items-center gap-1.5 py-1 truncate">
-        <File className="h-3 w-3 shrink-0 text-muted-foreground" />
-        <span className="truncate">{node.name}</span>
-      </div>
-      <Button
-        variant="ghost"
-        size="icon"
-        className={`h-5 mr-1 text-muted-foreground hover:text-destructive ${
-          isConfirmingDelete ? "w-14 px-1.5 text-[11px] text-destructive opacity-100" : "w-5"
-        } ${
-          isDeleting || isConfirmingDelete ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-        }`}
-        disabled={isDeleting}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (isConfirmingDelete) onDelete(node.path);
-          else onConfirmDelete(node.path);
-        }}
-      >
-        {isDeleting ? (
-          <Loader2 className="h-3 w-3 animate-spin" />
-        ) : isConfirmingDelete ? (
-          "Confirm"
-        ) : (
-          <Trash2 className="h-3 w-3" />
-        )}
-      </Button>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -376,18 +216,6 @@ function TemplateEditorPage() {
   >({});
   const [apiKeyDialogServer, setApiKeyDialogServer] =
     useState<McpServer | null>(null);
-
-  // State -- workspace
-  const [wsFiles, setWsFiles] = useState<string[]>([]);
-  const [wsSelectedFile, setWsSelectedFile] = useState<string | null>(null);
-  const [wsContent, setWsContent] = useState("");
-  const [wsOriginalContent, setWsOriginalContent] = useState("");
-  const [wsLoadingFiles, setWsLoadingFiles] = useState(false);
-  const [wsSavingFile, setWsSavingFile] = useState(false);
-  const [wsDeletingPath, setWsDeletingPath] = useState<string | null>(null);
-  const [wsConfirmingDeletePath, setWsConfirmingDeletePath] = useState<string | null>(null);
-  const [wsNewFileName, setWsNewFileName] = useState("");
-  const [wsNewFileDialogOpen, setWsNewFileDialogOpen] = useState(false);
 
   // Fetch existing template
   const [result, reexecute] = useQuery({
@@ -629,95 +457,6 @@ function TemplateEditorPage() {
         .catch(console.error);
     }
   }, [templateId, isNew]);
-
-  // Load workspace files when switching to workspace tab
-  const loadWorkspaceFiles = useCallback(async () => {
-    if (isNew || !templateId) return;
-    setWsLoadingFiles(true);
-    try {
-      const res = await listWorkspaceFiles({ templateId });
-      setWsFiles(res.files.map((f) => f.path));
-    } catch (err) {
-      console.error("Failed to load workspace files:", err);
-      setWsFiles([]);
-    } finally {
-      setWsLoadingFiles(false);
-    }
-  }, [templateId, isNew]);
-
-  useEffect(() => {
-    if (tab === "workspace" && !isNew) {
-      loadWorkspaceFiles();
-    }
-  }, [tab, loadWorkspaceFiles, isNew]);
-
-  const loadFileContent = async (path: string) => {
-    if (!templateId) return;
-    setWsSelectedFile(path);
-    try {
-      const res = await getWorkspaceFile({ templateId }, path);
-      const c = res.content || "";
-      setWsContent(c);
-      setWsOriginalContent(c);
-    } catch (err) {
-      console.error("Failed to load file:", err);
-      setWsContent("");
-      setWsOriginalContent("");
-    }
-  };
-
-  const saveFileContent = async () => {
-    if (!templateId || !wsSelectedFile) return;
-    setWsSavingFile(true);
-    try {
-      await putWorkspaceFile({ templateId }, wsSelectedFile, wsContent);
-      setWsOriginalContent(wsContent);
-    } catch (err) {
-      console.error("Failed to save file:", err);
-    } finally {
-      setWsSavingFile(false);
-    }
-  };
-
-  const createNewFile = async () => {
-    if (!templateId || !wsNewFileName) return;
-    try {
-      await putWorkspaceFile({ templateId }, wsNewFileName, "");
-      setWsNewFileDialogOpen(false);
-      setWsNewFileName("");
-      await loadWorkspaceFiles();
-      await loadFileContent(wsNewFileName);
-    } catch (err) {
-      console.error("Failed to create file:", err);
-    }
-  };
-
-  const deleteFile = async (path: string) => {
-    if (!templateId) return;
-    setWsConfirmingDeletePath(null);
-    setWsDeletingPath(path);
-    try {
-      await deleteWorkspaceFile({ templateId }, path);
-      setWsFiles((current) => current.filter((file) => file !== path));
-      if (wsSelectedFile === path) {
-        setWsSelectedFile(null);
-        setWsContent("");
-      }
-      await loadWorkspaceFiles();
-    } catch (err) {
-      console.error("Failed to delete file:", err);
-    } finally {
-      setWsDeletingPath(null);
-    }
-  };
-
-  const confirmWorkspaceDelete = (path: string) => {
-    setWsConfirmingDeletePath(path);
-  };
-
-  const cancelWorkspaceDeleteConfirm = (path: string) => {
-    setWsConfirmingDeletePath((current) => (current === path ? null : current));
-  };
 
   const refreshTemplateMcp = useCallback(() => {
     if (!isNew && templateId) {
@@ -1380,177 +1119,13 @@ function TemplateEditorPage() {
         )}
 
         {/* Workspace Tab */}
-        {tab === "workspace" &&
-          !isNew &&
-          (() => {
-            const wsTree = buildTree(wsFiles);
-            const wsIsDirty = wsContent !== wsOriginalContent;
-            return (
-              <div className="h-full flex flex-col min-h-0">
-                <div className="flex flex-1 min-h-0 border rounded-md overflow-hidden">
-                  {/* File Tree */}
-                  <div className="w-[250px] shrink-0 border-r bg-background flex flex-col">
-                    <div className="flex items-center justify-between px-3 py-2 border-b shrink-0">
-                      <span className="text-sm text-muted-foreground">
-                        {wsFiles.length} file{wsFiles.length !== 1 ? "s" : ""}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={() => {
-                          setWsNewFileName("");
-                          setWsNewFileDialogOpen(true);
-                        }}
-                      >
-                        <FilePlus className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                    {wsLoadingFiles && wsFiles.length === 0 ? (
-                      <div className="flex justify-center py-8">
-                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                      </div>
-                    ) : (
-                      <div className="flex-1 overflow-y-auto py-1">
-                        {wsTree.map((node) => (
-                          <WsTreeItem
-                            key={node.path}
-                            node={node}
-                            selectedFile={wsSelectedFile}
-                            deletingPath={wsDeletingPath}
-                            confirmingDeletePath={wsConfirmingDeletePath}
-                            onSelect={loadFileContent}
-                            onDelete={deleteFile}
-                            onConfirmDelete={confirmWorkspaceDelete}
-                            onCancelDeleteConfirm={cancelWorkspaceDeleteConfirm}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Editor */}
-                  <div className="flex-1 flex flex-col min-w-0 bg-background">
-                    {wsSelectedFile ? (
-                      <>
-                        <div className="flex items-center justify-between px-3 py-1.5 border-b">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <File className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                            <span className="text-xs font-medium truncate">
-                              {wsSelectedFile}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {wsIsDirty && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 text-[11px] px-2 text-muted-foreground"
-                                onClick={() => setWsContent(wsOriginalContent)}
-                              >
-                                Discard
-                              </Button>
-                            )}
-                            <Button
-                              size="sm"
-                              className="h-6 text-[11px] px-2"
-                              onClick={saveFileContent}
-                              disabled={wsSavingFile || !wsIsDirty}
-                            >
-                              {wsSavingFile ? (
-                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                              ) : null}
-                              Save
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className={`h-6 p-0 text-muted-foreground ${
-                                wsConfirmingDeletePath === wsSelectedFile
-                                  ? "w-16 px-2 text-[11px] text-destructive"
-                                  : "w-6"
-                              }`}
-                              disabled={wsDeletingPath === wsSelectedFile}
-                              onMouseLeave={() => cancelWorkspaceDeleteConfirm(wsSelectedFile)}
-                              onClick={() => {
-                                if (wsConfirmingDeletePath === wsSelectedFile) deleteFile(wsSelectedFile);
-                                else confirmWorkspaceDelete(wsSelectedFile);
-                              }}
-                            >
-                              {wsDeletingPath === wsSelectedFile ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : wsConfirmingDeletePath === wsSelectedFile ? (
-                                "Confirm"
-                              ) : (
-                                <Trash2 className="h-3 w-3" />
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="flex-1 min-h-0 overflow-hidden bg-black [&>div]:h-full">
-                          <CodeMirror
-                            value={wsContent}
-                            onChange={setWsContent}
-                            theme={vscodeDark}
-                            extensions={[
-                              markdown({
-                                base: markdownLanguage,
-                                codeLanguages: languages,
-                              }),
-                              EditorView.lineWrapping,
-                            ]}
-                            height="100%"
-                            style={{
-                              fontSize: "12px",
-                              backgroundColor: "black",
-                            }}
-                            className="[&_.cm-editor]:!bg-black [&_.cm-gutters]:!bg-black [&_.cm-activeLine]:!bg-transparent [&_.cm-activeLineGutter]:!bg-transparent"
-                            basicSetup={{ highlightActiveLine: false }}
-                          />
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-                        Select a file to edit
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* New File Dialog */}
-                <Dialog
-                  open={wsNewFileDialogOpen}
-                  onOpenChange={setWsNewFileDialogOpen}
-                >
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Create File</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 py-2">
-                      <div className="space-y-2">
-                        <Label>File Path</Label>
-                        <Input
-                          value={wsNewFileName}
-                          onChange={(e) => setWsNewFileName(e.target.value)}
-                          placeholder="SOUL.md"
-                          onKeyDown={(e) =>
-                            e.key === "Enter" && createNewFile()
-                          }
-                        />
-                      </div>
-                      <Button
-                        onClick={createNewFile}
-                        disabled={!wsNewFileName}
-                        className="w-full"
-                      >
-                        Create
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            );
-          })()}
+        {tab === "workspace" && !isNew && (
+          <WorkspaceEditor
+            target={{ templateId }}
+            mode="template"
+            className="h-[calc(100vh-14rem)] min-h-[400px]"
+          />
+        )}
       </div>
 
       {/* Template → Agent sync prompt (shown after Save when agents are linked) */}

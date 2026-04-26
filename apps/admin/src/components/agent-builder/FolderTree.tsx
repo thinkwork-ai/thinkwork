@@ -5,7 +5,6 @@ import {
   Folder,
   FolderOpen,
   Loader2,
-  Plus,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,6 +14,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import { InheritanceIndicator } from "./InheritanceIndicator";
 import type { ComposeSource } from "@/lib/agent-builder-api";
 import type { RoutingRow } from "./routing-table";
@@ -96,13 +96,17 @@ export function buildWorkspaceTree(
   }
 
   return [
-    {
-      name: "agents",
-      path: SUB_AGENTS_NODE_PATH,
-      isFolder: true,
-      children: sortNodes(subAgentChildren),
-      synthetic: true,
-    },
+    ...(subAgentChildren.length > 0
+      ? [
+          {
+            name: "agents",
+            path: SUB_AGENTS_NODE_PATH,
+            isFolder: true,
+            children: sortNodes(subAgentChildren),
+            synthetic: true,
+          },
+        ]
+      : []),
     ...sortNodes(remainingRoot),
   ];
 }
@@ -132,7 +136,6 @@ export interface FolderTreeProps {
   onDelete: (path: string, isFolder: boolean) => void;
   onConfirmDelete: (path: string) => void;
   onCancelDeleteConfirm: (path: string) => void;
-  onAddSubAgent?: () => void;
 }
 
 export function FolderTree(props: FolderTreeProps) {
@@ -170,7 +173,6 @@ function FolderTreeItem({
   onDelete,
   onConfirmDelete,
   onCancelDeleteConfirm,
-  onAddSubAgent,
 }: FolderTreeProps & { node: TreeNode; depth: number }) {
   const isExpanded = expandedFolders.has(node.path);
   const isSelected = selectedPath === node.path;
@@ -180,9 +182,10 @@ function FolderTreeItem({
   return (
     <>
       <div
-        className={`group/tree-row mx-1 flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-sm hover:bg-accent ${
-          isSelected ? "bg-accent" : ""
-        }`}
+        className={cn(
+          "group/tree-row mx-1 flex cursor-pointer items-center gap-1 rounded-md border-[0.5px] border-transparent px-2 py-0.5 text-sm transition-colors hover:bg-accent",
+          isSelected && "border-sky-500 bg-accent dark:border-sky-400",
+        )}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
         onClick={() => {
           if (node.isFolder) onToggle(node.path);
@@ -219,19 +222,6 @@ function FolderTreeItem({
           className="ml-auto flex items-center gap-1"
           onClick={(event) => event.stopPropagation()}
         >
-          {node.synthetic && onAddSubAgent ? (
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              aria-label="Add sub-agent"
-              onClick={(event) => {
-                event.stopPropagation();
-                onAddSubAgent();
-              }}
-            >
-              <Plus className="h-3.5 w-3.5 text-muted-foreground" />
-            </Button>
-          ) : null}
           {!node.isFolder && updateAvailableFor(node.path) && (
             <>
               <InheritanceIndicator
@@ -322,27 +312,15 @@ function FolderTreeItem({
               onDelete={onDelete}
               onConfirmDelete={onConfirmDelete}
               onCancelDeleteConfirm={onCancelDeleteConfirm}
-              onAddSubAgent={onAddSubAgent}
               nodes={[]}
             />
           ))}
-          {node.synthetic && node.children.length === 0 && onAddSubAgent ? (
+          {node.synthetic && node.children.length === 0 ? (
             <div
-              className="flex items-center justify-between gap-2 px-2 py-2 text-xs text-muted-foreground"
+              className="px-2 py-2 text-xs text-muted-foreground"
               style={{ paddingLeft: `${(depth + 1) * 16 + 8}px` }}
             >
-              <span className="min-w-0">
-                Route specialist folders from AGENTS.md.
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-6 shrink-0 px-2 text-[11px]"
-                onClick={onAddSubAgent}
-              >
-                <Plus className="mr-1 h-3 w-3" />
-                Add
-              </Button>
+              Route specialist folders from AGENTS.md.
             </div>
           ) : node.children.length === 0 ? (
             <div
