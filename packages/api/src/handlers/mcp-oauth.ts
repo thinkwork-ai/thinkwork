@@ -161,7 +161,7 @@ async function registerClient(event: APIGatewayProxyEventV2) {
 	if (body.token_endpoint_auth_method && body.token_endpoint_auth_method !== "none") {
 		return oauthError("invalid_client_metadata", "Only public clients are supported", 400);
 	}
-	if (body.grant_types && !body.grant_types.every((grantType) => grantType === "authorization_code")) {
+	if (body.grant_types && !body.grant_types.includes("authorization_code")) {
 		return oauthError("invalid_client_metadata", "Only authorization_code grant is supported", 400);
 	}
 	if (body.response_types && !body.response_types.every((responseType) => responseType === "code")) {
