@@ -541,8 +541,11 @@ async function handleCreateSubAgent(
       error: `\`${cleanSlug}\` is a reserved folder name.`,
     });
   }
+  const ctx: ComposeContext = { tenantId };
+  const composedFiles = await composeList(ctx, target.agentId);
   const existingTopFolders = new Set(
-    (await listPrefix(target.prefix))
+    composedFiles
+      .map((file) => file.path)
       .filter((path) => path.includes("/"))
       .map((path) => path.split("/")[0])
       .filter((segment): segment is string => Boolean(segment)),
@@ -554,7 +557,6 @@ async function handleCreateSubAgent(
     });
   }
 
-  const ctx: ComposeContext = { tenantId };
   let agentsMd = defaultAgentsMd();
   try {
     const result = await composeFile(ctx, target.agentId, "AGENTS.md");

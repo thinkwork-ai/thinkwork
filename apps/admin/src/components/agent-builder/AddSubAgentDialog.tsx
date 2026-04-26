@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -76,6 +76,12 @@ export function AddSubAgentDialog({
   const template =
     SUB_AGENT_TEMPLATES.find((candidate) => candidate.id === templateId) ??
     SUB_AGENT_TEMPLATES[0]!;
+
+  useEffect(() => {
+    if (open) return;
+    setSlugInput("");
+    setTemplateId("minimal");
+  }, [open]);
 
   const submit = () => {
     if (!validation.valid) return;

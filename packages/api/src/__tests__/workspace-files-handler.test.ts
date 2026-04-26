@@ -744,8 +744,15 @@ describe("agent create-sub-agent", () => {
     pushDbRows([agentRow()]);
     pushDbRows([tenantRow()]);
     pushDbRows([templateRowTenantA()]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([templateRowTenantA()]);
 
     s3Mock.on(ListObjectsV2Command).resolves({ Contents: [] });
+    s3Mock.on(HeadObjectCommand).rejects({
+      name: "NotFound",
+      $metadata: { httpStatusCode: 404 },
+    } as never);
     s3Mock
       .on(GetObjectCommand, {
         Key: "tenants/acme/agents/marco/workspace/AGENTS.md",
@@ -816,13 +823,39 @@ describe("agent create-sub-agent", () => {
     pushDbRows([agentRow()]);
     pushDbRows([tenantRow()]);
     pushDbRows([{ role: "admin" }]);
-    s3Mock.on(ListObjectsV2Command).resolves({
-      Contents: [
-        {
-          Key: "tenants/acme/agents/marco/workspace/expenses/CONTEXT.md",
-        },
-      ],
-    });
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([templateRowTenantA()]);
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/marco/workspace/",
+      })
+      .resolves({
+        Contents: [
+          {
+            Key: "tenants/acme/agents/marco/workspace/expenses/CONTEXT.md",
+          },
+        ],
+      });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/_catalog/exec-assistant/workspace/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/agents/_catalog/defaults/workspace/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(HeadObjectCommand).rejects({
+      name: "NotFound",
+      $metadata: { httpStatusCode: 404 },
+    } as never);
+    s3Mock
+      .on(HeadObjectCommand, {
+        Key: "tenants/acme/agents/marco/workspace/expenses/CONTEXT.md",
+      })
+      .resolves({});
 
     const res = await parse(
       await handler(
