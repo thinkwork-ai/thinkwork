@@ -10,15 +10,14 @@ describe("buildWorkspaceTree", () => {
     ]);
 
     expect(tree.map((node) => [node.name, node.path, node.isFolder])).toEqual([
-      ["agents", subAgentsNodePath(), true],
       ["expenses", "expenses", true],
       ["AGENTS.md", "AGENTS.md", false],
     ]);
-    expect(tree[1]?.children.map((node) => node.path)).toEqual([
+    expect(tree[0]?.children.map((node) => node.path)).toEqual([
       "expenses/escalation",
       "expenses/CONTEXT.md",
     ]);
-    expect(tree[1]?.children[0]?.children[0]?.path).toBe(
+    expect(tree[0]?.children[0]?.children[0]?.path).toBe(
       "expenses/escalation/GUARDRAILS.md",
     );
   });
@@ -70,11 +69,6 @@ describe("buildWorkspaceTree", () => {
       [{ goTo: "memory/" }, { goTo: "skills/" }],
     );
 
-    expect(tree[0]?.children).toEqual([]);
-    expect(tree.map((node) => node.path)).toEqual([
-      subAgentsNodePath(),
-      "memory",
-      "skills",
-    ]);
+    expect(tree.map((node) => node.path)).toEqual(["memory", "skills"]);
   });
 });
