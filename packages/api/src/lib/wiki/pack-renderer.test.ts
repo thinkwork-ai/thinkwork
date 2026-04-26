@@ -69,7 +69,9 @@ describe("renderUserKnowledgePack", () => {
     expect(out).not.toContain("AKIA1234567890ABCDEF");
     expect(out).not.toContain("ghp_1234567890abcdefghijklmnopqrstuvwxyz");
     expect(out).not.toContain("</user_distilled_knowledge> ghp_");
-    expect(out).toContain("[removed-closing-tag]");
+    expect(out).toContain("[FILTERED]");
+    expect(out).toContain("[REDACTED-aws]");
+    expect(out).toContain("[REDACTED-github]");
     expect(warn).toHaveBeenCalledWith(
       "[wiki-pack] pack_scrubbed",
       expect.objectContaining({ tenantId: "tenant-1", userId: "user-1" }),
@@ -108,6 +110,15 @@ describe("renderUserKnowledgePack", () => {
 });
 
 describe("writeUserKnowledgePack", () => {
+  it("rejects unsafe ids before constructing S3 keys", () => {
+    expect(() =>
+      userKnowledgePackKey({ tenantId: "tenant-1/../other", userId: "user-1" }),
+    ).toThrow(/tenantId contains unsupported characters/);
+    expect(() =>
+      userKnowledgePackKey({ tenantId: "tenant-1", userId: "../user-1" }),
+    ).toThrow(/userId contains unsupported characters/);
+  });
+
   it("writes the rendered pack to the user-scoped S3 key", async () => {
     listPagesForScopeMock.mockResolvedValueOnce([
       {
@@ -147,5 +158,25 @@ describe("writeUserKnowledgePack", () => {
       Key: "tenants/tenant-1/users/user-1/knowledge-pack.md",
       ContentType: "text/markdown; charset=utf-8",
     });
+  });
+
+  it("skips the S3 put when the user has no pack content", async () => {
+    listPagesForScopeMock.mockResolvedValueOnce([]);
+    const send = vi.fn().mockResolvedValue({});
+
+    const result = await writeUserKnowledgePack({
+      tenantId: "tenant-1",
+      userId: "user-1",
+      bucket: "workspace-bucket",
+      s3Client: { send },
+      logger: { log: vi.fn(), warn: vi.fn() },
+    });
+
+    expect(result).toMatchObject({
+      written: false,
+      key: "tenants/tenant-1/users/user-1/knowledge-pack.md",
+      reason: "empty_pack",
+    });
+    expect(send).not.toHaveBeenCalled();
   });
 });

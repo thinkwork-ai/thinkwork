@@ -26,13 +26,14 @@ export interface RenderUserKnowledgePackArgs {
 
 const DEFAULT_TOKEN_BUDGET = 2_000;
 const CHARS_PER_TOKEN = 4;
+const SAFE_ID_RE = /^[A-Za-z0-9_-]+$/;
 const SECRET_PATTERNS: Array<[RegExp, string]> = [
-  [/AKIA[0-9A-Z]{16}/g, "[redacted-aws-key]"],
-  [/ghp_[0-9A-Za-z]{36}/g, "[redacted-github-token]"],
-  [/sk-[0-9A-Za-z]{32,}/g, "[redacted-api-key]"],
+  [/AKIA[0-9A-Z]{16}/g, "[REDACTED-aws]"],
+  [/ghp_[0-9A-Za-z]{36}/g, "[REDACTED-github]"],
+  [/sk-[0-9A-Za-z]{32,}/g, "[REDACTED-openai]"],
   [
     /eyJ[A-Za-z0-9_=-]{8,}\.[A-Za-z0-9_=-]{8,}\.[A-Za-z0-9_=-]{8,}/g,
-    "[redacted-jwt]",
+    "[REDACTED-jwt]",
   ],
 ];
 const CLOSING_TAG_PATTERN =
@@ -42,6 +43,8 @@ export function userKnowledgePackKey(args: {
   tenantId: string;
   userId: string;
 }): string {
+  assertSafeId("tenantId", args.tenantId);
+  assertSafeId("userId", args.userId);
   return `tenants/${args.tenantId}/users/${args.userId}/knowledge-pack.md`;
 }
 
@@ -126,6 +129,10 @@ export async function writeUserKnowledgePack(args: {
 }> {
   const logger = args.logger ?? console;
   const bucket = args.bucket || process.env.WORKSPACE_BUCKET || "";
+  const key = userKnowledgePackKey({
+    tenantId: args.tenantId,
+    userId: args.userId,
+  });
   if (!bucket) {
     logger.warn("[wiki-pack] pack_s3_put_failed", {
       reason: "missing_workspace_bucket",
@@ -140,17 +147,32 @@ export async function writeUserKnowledgePack(args: {
     ownerId: args.userId,
     limit: 200,
   });
-  const body = renderUserKnowledgePack({
-    tenantId: args.tenantId,
-    userId: args.userId,
-    pages,
-    tokenBudget: args.tokenBudget,
-    logger,
-  });
-  const key = userKnowledgePackKey({
-    tenantId: args.tenantId,
-    userId: args.userId,
-  });
+  let body: string;
+  try {
+    body = renderUserKnowledgePack({
+      tenantId: args.tenantId,
+      userId: args.userId,
+      pages,
+      tokenBudget: args.tokenBudget,
+      logger,
+    });
+  } catch (err) {
+    logger.warn("[wiki-pack] pack_render_failed", {
+      tenantId: args.tenantId,
+      userId: args.userId,
+      error: (err as Error)?.message ?? String(err),
+    });
+    return { written: false, key, reason: "render_failed" };
+  }
+  if (!body.trim()) {
+    logger.log("[wiki-pack] pack_s3_put_skipped", {
+      tenantId: args.tenantId,
+      userId: args.userId,
+      key,
+      reason: "empty_pack",
+    });
+    return { written: false, key, reason: "empty_pack" };
+  }
   await args.s3Client.send(
     new PutObjectCommand({
       Bucket: bucket,
@@ -205,8 +227,11 @@ function scorePage(page: PackPage, now: Date, maxBacklinks: number): number {
 }
 
 function sanitizeText(raw: string, onScrub: (count: number) => void): string {
-  let out = raw.replace(CLOSING_TAG_PATTERN, "[removed-closing-tag]");
-  let count = out === raw ? 0 : 1;
+  let count = 0;
+  let out = raw.replace(CLOSING_TAG_PATTERN, () => {
+    count += 1;
+    return "[FILTERED]";
+  });
   for (const [pattern, replacement] of SECRET_PATTERNS) {
     out = out.replace(pattern, () => {
       count += 1;
@@ -217,6 +242,12 @@ function sanitizeText(raw: string, onScrub: (count: number) => void): string {
   return out
     .replace(/[<>]/g, (char) => (char === "<" ? "&lt;" : "&gt;"))
     .trim();
+}
+
+function assertSafeId(label: string, value: string): void {
+  if (!SAFE_ID_RE.test(value || "")) {
+    throw new Error(`${label} contains unsupported characters`);
+  }
 }
 
 function escapeAttribute(raw: string): string {
