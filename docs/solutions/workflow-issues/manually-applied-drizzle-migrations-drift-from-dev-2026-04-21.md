@@ -1,7 +1,7 @@
 ---
 module: packages/database-pg/drizzle
 date: 2026-04-21
-last_updated: 2026-04-25
+last_updated: 2026-04-26
 category: workflow-issues
 problem_type: workflow_issue
 component: database
@@ -91,6 +91,17 @@ This is the **third** drift incident in five days:
   dev and got `ERROR: relation "skill_runs" does not exist` — because
   `0018_skill_runs.sql` (PR #334, Unit 4) had silently never been applied.
   Both ran cleanly once applied in order.
+- **2026-04-26, migrations 0036 through 0039.** A main deploy failed its
+  `Migration Drift Check` after `0036_user_scoped_memory_wiki.sql` had already
+  been applied to dev because the migration declared FK constraints with
+  `-- creates:` markers. The reporter treats `-- creates:` as a relation lookup
+  for tables/indexes, so it reported the constraints as missing. The source fix
+  changed those rows to `-- creates-constraint: public.<table>.<constraint>`,
+  hardened the migration for re-runs, and passed deploy. The next main deploy
+  then failed on newer unapplied manual migrations
+  `0037_user_profile_operating_model.sql`, `0038_activation_sessions.sql`, and
+  `0039_activation_apply_outbox.sql`; applying those additive migrations to dev
+  and rerunning the failed jobs cleared the deploy.
 
 Three incidents, same root, same named-but-unshipped fix. The compound-
 engineering failure mode: the April 17 learning wasn't captured in
@@ -115,9 +126,38 @@ should be required for every unindexed `.sql` file:
 - Pre-flight invariant expressed in SQL — one `SELECT to_regclass(...)` (or
   `pg_get_indexdef`, `information_schema.columns` lookup) per object the
   migration creates or requires, with the expected result.
+- Drift markers using the correct marker kind for each object:
+  - `-- creates: public.<table_or_index_name>` for tables and indexes probed
+    through `to_regclass`.
+  - `-- creates-column: public.<table>.<column>` for columns.
+  - `-- creates-constraint: public.<table>.<constraint>` for CHECK, FK, and
+    other table constraints.
+  - `-- creates-extension: <extension>` for extensions.
 
 `0012_eval_seed_unique.sql` violates this (no header at all), which is why
 it could escape both the journal and any mental model of the manual track.
+
+#### 2026-04-26 update: constraints are not `creates`
+
+The drift reporter has distinct marker probes. Use them literally. A foreign
+key named `public.threads_user_id_users_id_fk` is not a relation, so declaring
+it as `-- creates: public.threads_user_id_users_id_fk` will always look missing
+even when the FK exists. The correct marker includes both the table and
+constraint:
+
+```sql
+-- creates-constraint: public.threads.threads_user_id_users_id_fk
+```
+
+The same applies to CHECK constraints. `0035_workspace_review_decisions.sql` is
+the local example to copy:
+
+```sql
+-- creates-constraint: public.agent_workspace_events.agent_workspace_events_type_check
+```
+
+When a drift failure reports only constraint-looking names as missing, inspect
+the marker kind before assuming the DB object is absent.
 
 ### 2. PR checklist item: apply to dev before merging
 
@@ -127,6 +167,9 @@ that isn't referenced by `meta/_journal.json` requires:
 - [ ] An `Apply manually:` header comment with the exact psql command.
 - [ ] A `to_regclass` (or equivalent) pre-flight check naming every object
       the migration creates or depends on.
+- [ ] Correct drift marker kinds: tables/indexes use `creates`, columns use
+      `creates-column`, constraints use `creates-constraint`, extensions use
+      `creates-extension`.
 - [ ] Application against dev **before merging** — paste the resulting
       `\d+ <table>` or equivalent into the PR description.
 - [ ] Confirmation that `bash scripts/db-migrate-manual.sh` against dev
@@ -160,11 +203,37 @@ intended fail-closed behavior: the gate caught that the database had not caught
 up to `main`, but it also means the best operator flow is still apply manual
 migrations to dev before merging when the PR introduces unindexed SQL.
 
+#### 2026-04-26 update: chained manual migrations after a green deploy
+
+A deploy can pass the drift gate for one source revision and the next deploy can
+fail minutes later if a newer PR adds additional hand-rolled migrations without
+applying them to dev. This happened after the `0036` marker fix deployed
+successfully: the following deploy failed because `0037`, `0038`, and `0039`
+were present on `main` but their objects were still missing in dev.
+
+The recovery runbook was:
+
+```bash
+source scripts/smoke/_env.sh >/dev/null
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0037_user_profile_operating_model.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0038_activation_sessions.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0039_activation_apply_outbox.sql
+pnpm db:migrate-manual
+gh run rerun <deploy-run-id> --failed
+```
+
+If `gh run rerun --failed` says the workflow is already running, check the run
+attempt: GitHub may already have started the failed-job rerun. Keep watching
+until `Migration Drift Check` and `Deploy Summary` both complete successfully.
+
 ### 3. Ship a drift reporter: `scripts/db-migrate-manual.sh`
 
 A small read-only script that walks `drizzle/*.sql`, excludes files in
-`meta/_journal.json`, and probes each file's declared `to_regclass(...)`
-invariants against `$DATABASE_URL`, reporting APPLIED / MISSING per object.
+`meta/_journal.json`, and probes each file's declared object markers against
+`$DATABASE_URL`, reporting APPLIED / MISSING per object. It should understand
+different object families rather than treating every marker like a relation:
+tables/indexes via `to_regclass`, columns via `information_schema.columns`,
+constraints via `pg_constraint`, and extensions via `pg_extension`.
 
 See Examples below for a minimal implementation. A fancier variant adds a
 `_manual_migrations(filename, applied_at, sha256)` bookkeeping table and
