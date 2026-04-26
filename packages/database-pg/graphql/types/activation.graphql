@@ -64,6 +64,37 @@ type ActivationSessionEvent {
   updatedAt: AWSDateTime!
 }
 
+enum ActivationAutomationCandidateStatus {
+  generated
+  deferred
+  dismissed
+}
+
+type ActivationAutomationCandidate {
+  id: ID!
+  sessionId: ID!
+  userId: ID!
+  tenantId: ID!
+  sourceLayer: ActivationLayer!
+  title: String!
+  summary: String!
+  whySuggested: String
+  targetType: String!
+  targetAgentId: ID
+  triggerType: String!
+  scheduleType: String!
+  scheduleExpression: String!
+  timezone: String!
+  prompt: String
+  config: AWSJSON!
+  status: ActivationAutomationCandidateStatus!
+  costEstimate: AWSJSON!
+  disclosureVersion: String!
+  duplicateKey: String!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
 input StartActivationInput {
   userId: ID!
   mode: ActivationMode = full
@@ -105,6 +136,7 @@ input DismissActivationRecommendationInput {
 extend type Query {
   activationSession(sessionId: ID!): ActivationSession
   activationSessionTurns(sessionId: ID!): [ActivationSessionTurn!]!
+  activationAutomationCandidates(sessionId: ID!): [ActivationAutomationCandidate!]!
 }
 
 extend type Mutation {
@@ -113,6 +145,7 @@ extend type Mutation {
   checkpointActivationLayer(input: CheckpointActivationLayerInput!): ActivationSession!
   applyActivationBundle(input: ApplyActivationBundleInput!): ActivationSession!
   dismissActivationRecommendation(input: DismissActivationRecommendationInput!): ActivationSession!
+  generateActivationAutomationCandidates(sessionId: ID!): [ActivationAutomationCandidate!]!
   notifyActivationSessionUpdate(
     sessionId: ID!
     userId: ID!
