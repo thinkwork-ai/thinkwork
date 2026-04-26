@@ -204,7 +204,7 @@ function WikiPage() {
   // Single-user list
   const [listResult, refetchList] = useQuery({
     query: RecentWikiPagesQuery,
-    variables: { userId: effectiveUserId ?? "", limit: 100 },
+    variables: { userId: effectiveUserId ?? "" },
     pause: !!activeSearch || isAllAgents || !effectiveUserId,
   });
 
@@ -223,7 +223,7 @@ function WikiPage() {
         userScopes.map(async (scope) => {
           try {
             const res = await client
-              .query(RecentWikiPagesQuery, { userId: scope.userId, limit: 100 })
+              .query(RecentWikiPagesQuery, { userId: scope.userId })
               .toPromise();
             const pages = res.data?.recentWikiPages ?? [];
             return pages.map((p: any) => toRow(p, scope.userId, scope.label));
