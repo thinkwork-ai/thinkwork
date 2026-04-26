@@ -166,6 +166,7 @@ export const SendMessageMutation = gql`
 export const CaptureMobileMemoryMutation = gql`
   mutation CaptureMobileMemory(
     $agentId: ID!
+    $userId: ID
     $content: String!
     $factType: MobileCaptureFactType
     $metadata: AWSJSON
@@ -173,6 +174,7 @@ export const CaptureMobileMemoryMutation = gql`
   ) {
     captureMobileMemory(
       agentId: $agentId
+      userId: $userId
       content: $content
       factType: $factType
       metadata: $metadata
@@ -214,11 +216,11 @@ export const DeleteMobileMemoryCaptureMutation = gql`
 export const WikiPageQuery = gql`
   query WikiPage(
     $tenantId: ID!
-    $ownerId: ID!
+    $userId: ID!
     $type: WikiPageType!
     $slug: String!
   ) {
-    wikiPage(tenantId: $tenantId, ownerId: $ownerId, type: $type, slug: $slug) {
+    wikiPage(tenantId: $tenantId, userId: $userId, type: $type, slug: $slug) {
       id
       type
       slug
@@ -271,12 +273,12 @@ export const WikiPageQuery = gql`
 export const WikiPageSourceMemoryIdsQuery = gql`
   query WikiPageSourceMemoryIds(
     $tenantId: ID!
-    $ownerId: ID!
+    $userId: ID!
     $type: WikiPageType!
     $slug: String!
     $limit: Int
   ) {
-    wikiPage(tenantId: $tenantId, ownerId: $ownerId, type: $type, slug: $slug) {
+    wikiPage(tenantId: $tenantId, userId: $userId, type: $type, slug: $slug) {
       id
       sourceMemoryIds(limit: $limit)
     }
@@ -286,12 +288,12 @@ export const WikiPageSourceMemoryIdsQuery = gql`
 export const WikiPageSectionChildrenQuery = gql`
   query WikiPageSectionChildren(
     $tenantId: ID!
-    $ownerId: ID!
+    $userId: ID!
     $type: WikiPageType!
     $slug: String!
     $sectionSlug: String!
   ) {
-    wikiPage(tenantId: $tenantId, ownerId: $ownerId, type: $type, slug: $slug) {
+    wikiPage(tenantId: $tenantId, userId: $userId, type: $type, slug: $slug) {
       id
       sectionChildren(sectionSlug: $sectionSlug) {
         id
@@ -329,8 +331,8 @@ export const WikiConnectedPagesQuery = gql`
 `;
 
 export const WikiGraphQuery = gql`
-  query WikiGraph($tenantId: ID!, $ownerId: ID!) {
-    wikiGraph(tenantId: $tenantId, ownerId: $ownerId) {
+  query WikiGraph($tenantId: ID!, $userId: ID!) {
+    wikiGraph(tenantId: $tenantId, userId: $userId) {
       nodes {
         id
         label
@@ -349,8 +351,8 @@ export const WikiGraphQuery = gql`
 `;
 
 export const MobileMemorySearchQuery = gql`
-  query MobileMemorySearch($agentId: ID!, $query: String!, $limit: Int) {
-    mobileWikiSearch(agentId: $agentId, query: $query, limit: $limit) {
+  query MobileMemorySearch($userId: ID!, $query: String!, $limit: Int) {
+    mobileWikiSearch(userId: $userId, query: $query, limit: $limit) {
       score
       matchingMemoryIds
       page {
@@ -367,8 +369,8 @@ export const MobileMemorySearchQuery = gql`
 `;
 
 export const RecentWikiPagesQuery = gql`
-  query RecentWikiPages($agentId: ID!, $limit: Int) {
-    recentWikiPages(agentId: $agentId, limit: $limit) {
+  query RecentWikiPages($userId: ID!, $limit: Int) {
+    recentWikiPages(userId: $userId, limit: $limit) {
       id
       type
       slug

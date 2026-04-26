@@ -38,13 +38,13 @@ import { WikiDetailSubgraph } from "@/components/wiki/graph";
  */
 function buildWikiLinkHandler(
 	router: Router,
-	ownerId: string | undefined,
+	userId: string | undefined,
 ): (url: string) => boolean {
 	return (url: string): boolean => {
 		const path = extractWikiPath(url);
 		if (!path) return true; // not a wiki link; let Linking handle it
 		const route = `/wiki/${encodeURIComponent(path.type)}/${encodeURIComponent(path.slug)}`;
-		router.push(ownerId ? `${route}?agentId=${encodeURIComponent(ownerId)}` : route);
+		router.push(userId ? `${route}?userId=${encodeURIComponent(userId)}` : route);
 		return false;
 	};
 }
@@ -90,19 +90,23 @@ function isWikiPageType(v: string | undefined): v is WikiPageType {
 
 export default function WikiPageScreen() {
 	const router = useRouter();
-	const params = useLocalSearchParams<{ type?: string; slug?: string; agentId?: string }>();
+	const params = useLocalSearchParams<{ type?: string; slug?: string; userId?: string; agentId?: string }>();
 	const type = isWikiPageType(params.type) ? params.type : undefined;
 	const slug = params.slug ? decodeURIComponent(params.slug) : undefined;
 
 	const { user } = useAuth();
 	const tenantId = user?.tenantId;
-	const ownerId = params.agentId ? decodeURIComponent(params.agentId) : undefined;
+	const userId = params.userId
+		? decodeURIComponent(params.userId)
+		: params.agentId
+			? decodeURIComponent(params.agentId)
+			: undefined;
 
 	const { colorScheme } = useColorScheme();
 	const isDark = colorScheme === "dark";
 	const colors = isDark ? COLORS.dark : COLORS.light;
 
-	const { page, loading } = useWikiPage({ tenantId, ownerId, type, slug });
+	const { page, loading } = useWikiPage({ tenantId, userId, type, slug });
 	const { backlinks } = useWikiBacklinks(page?.id);
 	const { connectedPages } = useWikiConnectedPages(page?.id);
 	const [viewMode, setViewMode] = useState<"wiki" | "split" | "graph">(
@@ -115,13 +119,13 @@ export default function WikiPageScreen() {
 	);
 
 	const onLinkPress = useCallback(
-		(url: string) => buildWikiLinkHandler(router, ownerId)(url),
-		[router, ownerId],
+		(url: string) => buildWikiLinkHandler(router, userId)(url),
+		[router, userId],
 	);
 
 	const headerTitle = page?.title || (loading ? "Loading..." : "Not found");
 
-	const canToggleGraph = !!page && !!tenantId && !!ownerId;
+	const canToggleGraph = !!page && !!tenantId && !!userId;
 	const cycleView = () =>
 		setViewMode((m) =>
 			m === "wiki" ? "split" : m === "split" ? "graph" : "wiki",
@@ -158,7 +162,7 @@ export default function WikiPageScreen() {
 		(viewMode === "split" || viewMode === "graph") &&
 		page &&
 		tenantId &&
-		ownerId;
+		userId;
 	const graphFullscreen = viewMode === "graph";
 
 	return (
@@ -175,7 +179,7 @@ export default function WikiPageScreen() {
 				>
 					<WikiDetailSubgraph
 						tenantId={tenantId as string}
-						ownerId={ownerId as string}
+						userId={userId as string}
 						pageId={page.id}
 					/>
 				</View>
@@ -204,8 +208,8 @@ export default function WikiPageScreen() {
 									const parent = page.promotedFromSection!.parentPage;
 									const path = `/wiki/${encodeURIComponent(parent.type)}/${encodeURIComponent(parent.slug)}`;
 									router.push(
-										ownerId
-											? `${path}?agentId=${encodeURIComponent(ownerId)}`
+										userId
+											? `${path}?userId=${encodeURIComponent(userId)}`
 											: path,
 									);
 								}}
@@ -232,8 +236,8 @@ export default function WikiPageScreen() {
 									const parent = page.parent!;
 									const path = `/wiki/${encodeURIComponent(parent.type)}/${encodeURIComponent(parent.slug)}`;
 									router.push(
-										ownerId
-											? `${path}?agentId=${encodeURIComponent(ownerId)}`
+										userId
+											? `${path}?userId=${encodeURIComponent(userId)}`
 											: path,
 									);
 								}}
@@ -343,7 +347,7 @@ export default function WikiPageScreen() {
 										onPress={() => {
 											const bp = `/wiki/${encodeURIComponent(child.type)}/${encodeURIComponent(child.slug)}`;
 											router.push(
-												ownerId ? `${bp}?agentId=${encodeURIComponent(ownerId)}` : bp,
+												userId ? `${bp}?userId=${encodeURIComponent(userId)}` : bp,
 											);
 										}}
 										style={({ pressed }) => ({
@@ -397,7 +401,7 @@ export default function WikiPageScreen() {
 										key={c.id}
 										onPress={() => {
 											const bp = `/wiki/${encodeURIComponent(c.type)}/${encodeURIComponent(c.slug)}`;
-											router.push(ownerId ? `${bp}?agentId=${encodeURIComponent(ownerId)}` : bp);
+											router.push(userId ? `${bp}?userId=${encodeURIComponent(userId)}` : bp);
 										}}
 										style={({ pressed }) => ({
 											paddingHorizontal: 12,
@@ -450,7 +454,7 @@ export default function WikiPageScreen() {
 										key={b.id}
 										onPress={() => {
 											const bp = `/wiki/${encodeURIComponent(b.type)}/${encodeURIComponent(b.slug)}`;
-											router.push(ownerId ? `${bp}?agentId=${encodeURIComponent(ownerId)}` : bp);
+											router.push(userId ? `${bp}?userId=${encodeURIComponent(userId)}` : bp);
 										}}
 										style={({ pressed }) => ({
 											paddingHorizontal: 12,

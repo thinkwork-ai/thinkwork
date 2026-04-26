@@ -108,6 +108,7 @@ function MemoryContent({ text }: { text: string }) {
 
 type MemoryRow = {
   memoryRecordId: string;
+  userId: string;
   text: string;
   createdAt: string | null;
   updatedAt: string | null;
@@ -129,6 +130,20 @@ type MemoryRow = {
   context: string | null;
   threadId: string | null;
 };
+
+type UserScope = {
+  userId: string;
+  label: string;
+  agentIds: string[];
+};
+
+function agentUserId(agent: any): string | null {
+  return agent.humanPairId ?? agent.humanPair?.id ?? null;
+}
+
+function agentUserLabel(agent: any): string {
+  return agent.humanPair?.name ?? agent.humanPair?.email ?? agent.name;
+}
 
 const STRATEGY_COLORS: Record<string, string> = {
   semantic: "bg-blue-500/20 text-blue-400",
@@ -207,60 +222,86 @@ function MemoryPage() {
 
   const [agentsResult] = useQuery({
     query: AgentsListQuery,
-    variables: { tenantId },
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
   });
 
   const agents = useMemo(
     () => [...(agentsResult.data?.agents ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
     [agentsResult.data]
   );
-  const agentNames = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const a of agents) map[a.id] = a.name;
-    return map;
+  const userScopes = useMemo<UserScope[]>(() => {
+    const map = new Map<string, UserScope>();
+    for (const a of agents) {
+      const userId = agentUserId(a);
+      if (!userId) continue;
+      const existing = map.get(userId);
+      if (existing) {
+        existing.agentIds.push(a.id);
+        continue;
+      }
+      map.set(userId, {
+        userId,
+        label: agentUserLabel(a),
+        agentIds: [a.id],
+      });
+    }
+    return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
   }, [agents]);
-  const agentNamesBySlug = useMemo(() => {
+  const userLabels = useMemo(() => {
     const map: Record<string, string> = {};
-    for (const a of agents) if (a.slug) map[a.slug] = a.name;
+    for (const scope of userScopes) map[scope.userId] = scope.label;
     return map;
-  }, [agents]);
+  }, [userScopes]);
+  const userLabelsBySlug = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const scope of userScopes) map[`user_${scope.userId}`] = scope.label;
+    return map;
+  }, [userScopes]);
 
   const isAllAgents = selectedAgentId === "all";
-  const effectiveAgentId = isAllAgents ? agents[0]?.id : selectedAgentId;
-  const effectiveAgentIds = useMemo(
-    () => isAllAgents ? agents.map((a) => a.id) : [],
-    [isAllAgents, agents]
+  const selectedScope = userScopes.find(
+    (scope) => scope.userId === selectedAgentId || scope.agentIds.includes(selectedAgentId),
+  );
+  const selectedScopeId = isAllAgents ? "all" : (selectedScope?.userId ?? selectedAgentId);
+  const effectiveUserId = isAllAgents ? userScopes[0]?.userId : selectedScope?.userId;
+  const effectiveUserIds = useMemo(
+    () => isAllAgents ? userScopes.map((scope) => scope.userId) : [],
+    [isAllAgents, userScopes]
   );
 
-  const selectedAgent = agents.find((a) => a.id === selectedAgentId);
-  const namespace = selectedAgent?.slug ? `assistant_${selectedAgent.slug}` : effectiveAgentId ? `assistant_${effectiveAgentId}` : "";
+  const namespace = "all";
 
-  // Single-agent path uses urql normally. All-agents fans out per-agent
+  // Single-user path uses urql normally. All-users fans out per user
   // below (mirroring MemoryGraph) to avoid the resolver's "all" branch,
   // which requires a tenant claim in the JWT that Google OAuth users
   // don't always have populated yet.
   const [memoryResult, refetchMemory] = useQuery({
     query: MemoryRecordsQuery,
-    variables: { assistantId: selectedAgentId, namespace: namespace || "all" },
-    pause: !!activeSearch || isAllAgents || !selectedAgentId,
+    variables: { userId: effectiveUserId ?? "", namespace },
+    pause: !!activeSearch || isAllAgents || !effectiveUserId,
   });
 
-  // Multi-agent fan-out
+  // Multi-user fan-out
   const client = useClient();
   const [multiRecords, setMultiRecords] = useState<any[] | null>(null);
   const [multiFetching, setMultiFetching] = useState(false);
 
   const fetchAllAgentRecords = useCallback(async () => {
-    if (!isAllAgents || agents.length === 0 || activeSearch) return;
+    if (!isAllAgents || userScopes.length === 0 || activeSearch) return;
     setMultiFetching(true);
     try {
       const perAgent = await Promise.all(
-        agents.map(async (a) => {
+        userScopes.map(async (scope) => {
           try {
             const res = await client
-              .query(MemoryRecordsQuery, { assistantId: a.id, namespace: "all" })
+              .query(MemoryRecordsQuery, { userId: scope.userId, namespace })
               .toPromise();
-            return (res.data?.memoryRecords ?? []) as any[];
+            return ((res.data?.memoryRecords ?? []) as any[]).map((r) => ({
+              ...r,
+              __userId: scope.userId,
+              __userLabel: scope.label,
+            }));
           } catch {
             return [];
           }
@@ -270,7 +311,7 @@ function MemoryPage() {
     } finally {
       setMultiFetching(false);
     }
-  }, [isAllAgents, agents, activeSearch, client]);
+  }, [isAllAgents, userScopes, activeSearch, client, namespace]);
 
   useEffect(() => {
     if (isAllAgents && !activeSearch) {
@@ -281,14 +322,15 @@ function MemoryPage() {
   }, [isAllAgents, activeSearch, fetchAllAgentRecords]);
 
   // Search mode
+  const searchUserId = isAllAgents ? (userScopes[0]?.userId ?? "") : (effectiveUserId ?? "");
   const [searchResult] = useQuery({
     query: MemorySearchQuery,
     variables: {
-      assistantId: isAllAgents ? (agents[0]?.id ?? "") : selectedAgentId,
+      userId: searchUserId,
       query: activeSearch,
       limit: 50,
     },
-    pause: !activeSearch || (!isAllAgents && !selectedAgentId),
+    pause: !activeSearch || !searchUserId,
   });
 
   const [, deleteMemory] = useMutation(DeleteMemoryRecordMutation);
@@ -304,6 +346,7 @@ function MemoryPage() {
 
   const mapRecord = (r: any): MemoryRow => ({
     memoryRecordId: r.memoryRecordId,
+    userId: r.__userId ?? effectiveUserId ?? searchUserId ?? selectedAgentId,
     text: r.content?.text ?? "",
     createdAt: r.createdAt ?? null,
     updatedAt: r.updatedAt ?? null,
@@ -311,8 +354,8 @@ function MemoryPage() {
     namespace: r.namespace ?? null,
     strategy: r.strategy ?? inferStrategy(r.strategyId ?? "", r.namespace ?? ""),
     score: r.score ?? null,
-    agentSlug: r.agentSlug ?? r.namespace ?? null,
-    agentName: agentNamesBySlug[r.agentSlug ?? r.namespace ?? ""] ?? r.agentSlug ?? "",
+    agentSlug: r.userSlug ?? r.agentSlug ?? r.namespace ?? null,
+    agentName: r.__userLabel ?? userLabelsBySlug[r.userSlug ?? r.agentSlug ?? r.namespace ?? ""] ?? r.userSlug ?? r.agentSlug ?? "",
     factType: r.factType ?? null,
     confidence: r.confidence ?? null,
     eventDate: r.eventDate ?? null,
@@ -353,7 +396,7 @@ function MemoryPage() {
     },
     {
       accessorKey: "agentName",
-      header: "Agent",
+      header: "User",
       size: 100,
       cell: ({ row }) => <span className="text-muted-foreground text-xs">{row.original.agentName}</span>,
     },
@@ -388,6 +431,7 @@ function MemoryPage() {
     setSaving(true);
     try {
       await updateMemory({
+        userId: selectedRecord.userId,
         memoryRecordId: selectedRecord.memoryRecordId,
         content: editValue,
       });
@@ -404,7 +448,7 @@ function MemoryPage() {
     if (!selectedRecord) return;
     setDeleting(true);
     try {
-      await deleteMemory({ memoryRecordId: selectedRecord.memoryRecordId });
+      await deleteMemory({ userId: selectedRecord.userId, memoryRecordId: selectedRecord.memoryRecordId });
       setSheetOpen(false);
       setSelectedRecord(null);
       if (isAllAgents) fetchAllAgentRecords();
@@ -422,7 +466,7 @@ function MemoryPage() {
       ? multiFetching && multiRecords === null
       : memoryResult.fetching && !memoryResult.data;
 
-  const memoryCount = isAllAgents ? agents.length + " agents" : `${rows.length} memor${rows.length !== 1 ? "ies" : "y"}`;
+  const memoryCount = isAllAgents ? userScopes.length + " users" : `${rows.length} memor${rows.length !== 1 ? "ies" : "y"}`;
 
   return (
     <div className="flex flex-col -m-6 h-[calc(100%+48px)] min-w-0">
@@ -439,14 +483,14 @@ function MemoryPage() {
                 <ToggleGroupItem value="graph" className="px-3 text-xs">Graph</ToggleGroupItem>
               </ToggleGroup>
             )}
-            <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
+            <Select value={selectedScopeId} onValueChange={setSelectedAgentId}>
               <SelectTrigger className="w-44">
-                <SelectValue placeholder="Select agent" />
+                <SelectValue placeholder="Select user" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Agents</SelectItem>
-                {agents.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                <SelectItem value="all">All Users</SelectItem>
+                {userScopes.map((scope) => (
+                  <SelectItem key={scope.userId} value={scope.userId}>{scope.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -480,9 +524,9 @@ function MemoryPage() {
           <div className="h-full relative border border-border rounded-lg overflow-hidden">
             <MemoryGraph
               ref={graphRef}
-              agentId={isAllAgents ? undefined : selectedAgentId}
-              agentIds={isAllAgents ? effectiveAgentIds : undefined}
-              agentNames={agentNames}
+              userId={isAllAgents ? undefined : effectiveUserId}
+              userIds={isAllAgents ? effectiveUserIds : undefined}
+              agentNames={userLabels}
               searchQuery={searchQuery || undefined}
               onNodeClick={(node, edges) => {
                 setGraphNode(node);
@@ -805,4 +849,3 @@ function inferStrategy(strategyId: string, namespace: string): string {
   if (namespace.startsWith("episodes_")) return "episodes";
   return "semantic";
 }
-

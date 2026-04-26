@@ -65,10 +65,10 @@ export interface WikiGraphNode {
   entityType: WikiPageType;
   slug: string;
   edgeCount: number;
-  /** In multi-agent mode the node id is prefixed with `${agentId}:`; the
-   *  unprefixed `pageId` and the owning `agentId` are exposed separately so
+  /** In multi-user mode the node id is prefixed with `${userId}:`; the
+   *  unprefixed `pageId` and the owning `userId` are exposed separately so
    *  the detail sheet can fetch the page without re-parsing the compound
-   *  id. In single-agent mode `agentId` matches the parent-provided id. */
+   *  id. `agentId` is retained as a legacy property name for callers. */
   pageId: string;
   agentId: string;
 }
@@ -88,7 +88,11 @@ export interface WikiGraphHandle {
 
 interface WikiGraphProps {
   tenantId: string;
+  userId?: string;
+  userIds?: string[];
+  /** @deprecated Use userId. */
   agentId?: string;
+  /** @deprecated Use userIds. */
   agentIds?: string[];
   onNodeClick?: (
     node: WikiGraphNode,
@@ -106,7 +110,7 @@ interface WikiGraphProps {
 
 export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
   function WikiGraph(
-    { tenantId, agentId, agentIds, onNodeClick, onTypesLoaded, typeFilter, searchQuery },
+    { tenantId, userId, userIds, agentId, agentIds, onNodeClick, onTypesLoaded, typeFilter, searchQuery },
     ref,
   ) {
     // Callback ref: re-measures whenever the mounted DOM element changes.
@@ -118,14 +122,16 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     const fgRef = useRef<any>(null);
     const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
 
-    const isMultiAgent = !!agentIds && agentIds.length > 1;
+    const effectiveUserIds = userIds ?? agentIds;
+    const effectiveUserId = userId ?? agentId ?? (effectiveUserIds?.length === 1 ? effectiveUserIds[0] : undefined);
+    const isMultiAgent = !!effectiveUserIds && effectiveUserIds.length > 1;
     const client = useClient();
 
     // Single-agent path: urql subscription-style query.
     const [singleResult, singleReexecute] = useQuery({
       query: WikiGraphQuery,
-      variables: { tenantId, ownerId: agentId ?? "" },
-      pause: isMultiAgent || !agentId || !tenantId,
+      variables: { tenantId, userId: effectiveUserId ?? "" },
+      pause: isMultiAgent || !effectiveUserId || !tenantId,
     });
 
     // Multi-agent: fan out per-agent, same shape as MemoryGraph does. One
@@ -135,7 +141,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
     const [multiFetching, setMultiFetching] = useState(false);
 
     const fetchAllAgents = useCallback(async () => {
-      if (!agentIds || agentIds.length === 0 || !tenantId) {
+      if (!effectiveUserIds || effectiveUserIds.length === 0 || !tenantId) {
         setMultiFetching(false);
         return;
       }
@@ -143,17 +149,17 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       try {
         const results: Record<string, any> = {};
         await Promise.all(
-          agentIds.map(async (id) => {
+          effectiveUserIds.map(async (id) => {
             try {
               const res = await client
-                .query(WikiGraphQuery, { tenantId, ownerId: id })
+                .query(WikiGraphQuery, { tenantId, userId: id })
                 .toPromise();
               if (res.error) {
-                console.warn(`[WikiGraph] wikiGraph failed for agent ${id}:`, res.error.message);
+                console.warn(`[WikiGraph] wikiGraph failed for user ${id}:`, res.error.message);
               }
               results[id] = res.data?.wikiGraph;
             } catch (err) {
-              console.warn(`[WikiGraph] wikiGraph threw for agent ${id}:`, err);
+              console.warn(`[WikiGraph] wikiGraph threw for user ${id}:`, err);
               results[id] = { nodes: [], edges: [] };
             }
           }),
@@ -162,7 +168,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
       } finally {
         setMultiFetching(false);
       }
-    }, [agentIds, client, tenantId]);
+    }, [effectiveUserIds, client, tenantId]);
 
     useEffect(() => {
       if (isMultiAgent) fetchAllAgents();
@@ -214,12 +220,12 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
         }
       } else {
         const graph = singleResult.data?.wikiGraph;
-        if (graph && agentId) {
+        if (graph && effectiveUserId) {
           for (const n of graph.nodes ?? []) {
             nodes.push({
               id: n.id,
               pageId: n.id,
-              agentId,
+              agentId: effectiveUserId,
               label: n.label ?? n.id,
               nodeType: "page",
               entityType: (n.entityType as WikiPageType) ?? "ENTITY",
@@ -230,7 +236,7 @@ export const WikiGraph = forwardRef<WikiGraphHandle, WikiGraphProps>(
         }
       }
       return nodes;
-    }, [isMultiAgent, multiResults, singleResult.data, agentId]);
+    }, [isMultiAgent, multiResults, singleResult.data, effectiveUserId]);
 
     // Surface the present type set to the parent (for a future filter UI).
     const prevTypesRef = useRef<string>("");

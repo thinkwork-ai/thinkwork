@@ -137,6 +137,7 @@ export interface MobileMemoryCapture {
 
 export interface CaptureMobileMemoryInput {
   agentId: string;
+  userId?: string;
   content: string;
   factType?: MobileCaptureFactType;
   metadata?: Record<string, unknown>;

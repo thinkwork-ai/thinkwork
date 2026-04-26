@@ -58,22 +58,25 @@ export interface WikiBacklink {
 
 interface UseWikiPageArgs {
   tenantId: string | null | undefined;
-  ownerId: string | null | undefined;
+  userId?: string | null | undefined;
+  /** @deprecated Use userId. Kept only for legacy callers during rollout. */
+  ownerId?: string | null | undefined;
   type: WikiPageType | null | undefined;
   slug: string | null | undefined;
 }
 
 /**
- * Fetches a compiled wiki page by (tenant, owner, type, slug) with all
+ * Fetches a compiled wiki page by (tenant, user, type, slug) with all
  * its sections. Paused until all four args are present.
  */
-export function useWikiPage({ tenantId, ownerId, type, slug }: UseWikiPageArgs) {
+export function useWikiPage({ tenantId, userId, ownerId, type, slug }: UseWikiPageArgs) {
+  const scopeUserId = userId ?? ownerId;
   const [{ data, fetching, error }, refetch] = useQuery<{
     wikiPage: WikiPageDetail | null;
   }>({
     query: WikiPageQuery,
-    variables: { tenantId, ownerId, type, slug },
-    pause: !tenantId || !ownerId || !type || !slug,
+    variables: { tenantId, userId: scopeUserId, type, slug },
+    pause: !tenantId || !scopeUserId || !type || !slug,
     requestPolicy: "cache-and-network",
   });
 
