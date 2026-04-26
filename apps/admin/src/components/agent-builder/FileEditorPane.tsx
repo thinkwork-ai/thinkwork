@@ -1,13 +1,14 @@
+import { useEffect, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
 import { EditorView } from "@codemirror/view";
-import { File, Loader2, Trash2 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { Eye, File, Loader2, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RoutingTableEditor } from "./RoutingTableEditor";
-import { SnippetLibrary } from "./SnippetLibrary";
-import type { SnippetDefinition } from "./snippets";
 import { parseRoutingTable } from "./routing-table";
 
 export interface FileEditorPaneProps {
@@ -41,6 +42,12 @@ export function FileEditorPane({
   onConfirmDelete,
   onCancelDeleteConfirm,
 }: FileEditorPaneProps) {
+  const [editingMarkdown, setEditingMarkdown] = useState(false);
+
+  useEffect(() => {
+    setEditingMarkdown(false);
+  }, [openFile]);
+
   if (!openFile) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -50,22 +57,10 @@ export function FileEditorPane({
   }
 
   const fileName = openFile.split("/").pop() ?? openFile;
+  const isMarkdown = openFile.endsWith(".md");
+  const showMarkdownPreview = isMarkdown && !editingMarkdown;
   const isAgentsMd = openFile.endsWith("AGENTS.md");
   const routingState = isAgentsMd ? parseRoutingTable(value) : null;
-
-  const insertSnippet = (snippet: SnippetDefinition) => {
-    onChange(`${value}${value.endsWith("\n") ? "" : "\n"}${snippet.content}`);
-  };
-
-  const applyStarter = (snippet: SnippetDefinition) => {
-    if (
-      value.trim().length > 0 &&
-      !confirm(`Replace the current editor buffer with "${snippet.name}"?`)
-    ) {
-      return;
-    }
-    onChange(snippet.content);
-  };
 
   return (
     <>
@@ -82,10 +77,26 @@ export function FileEditorPane({
         <div className="flex shrink-0 items-center gap-1.5">
           {!loading && (
             <>
-              <SnippetLibrary
-                onInsert={insertSnippet}
-                onApplyStarter={applyStarter}
-              />
+              {isMarkdown && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-[11px] text-muted-foreground"
+                  onClick={() => setEditingMarkdown((current) => !current)}
+                >
+                  {showMarkdownPreview ? (
+                    <>
+                      <Pencil className="mr-1 h-3 w-3" />
+                      Edit
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="mr-1 h-3 w-3" />
+                      Preview
+                    </>
+                  )}
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -133,13 +144,19 @@ export function FileEditorPane({
           )}
         </div>
       </div>
-      {isAgentsMd && !loading && (
+      {isAgentsMd && !loading && !showMarkdownPreview && (
         <RoutingTableEditor value={value} onChange={onChange} />
       )}
       <div className="min-h-0 flex-1 overflow-hidden bg-black [&>div]:h-full">
         {loading ? (
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+          </div>
+        ) : showMarkdownPreview ? (
+          <div className="h-full overflow-y-auto bg-background p-5">
+            <div className="prose prose-sm prose-invert max-w-none [&_code]:break-words [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_table]:w-full [&_table]:table-fixed">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
+            </div>
           </div>
         ) : (
           <CodeMirror
