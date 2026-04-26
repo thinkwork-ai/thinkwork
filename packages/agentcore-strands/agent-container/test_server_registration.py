@@ -26,9 +26,11 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from user_storage import PackResult
 
 # server.py runs `_boot_assert.check` at import time; the test environment
 # has only container-sources/ on sys.path (not the flattened /app layout the
@@ -38,12 +40,19 @@ import pytest
 # implementation.
 import _boot_assert
 
+_original_boto3 = sys.modules.get("boto3")
+sys.modules["boto3"] = SimpleNamespace(client=lambda *_a, **_kw: None)
+
 _original_check = _boot_assert.check
 _boot_assert.check = lambda *a, **kw: None
 try:
     import server
 finally:
     _boot_assert.check = _original_check
+    if _original_boto3 is None:
+        sys.modules.pop("boto3", None)
+    else:
+        sys.modules["boto3"] = _original_boto3
 
 
 _BASE_ENV = {
@@ -61,6 +70,11 @@ _DW_ENV_KEYS = (
     "TENANT_ID",
     "AGENT_ID",
     "_ASSISTANT_ID",
+    "USER_ID",
+    "CURRENT_USER_ID",
+    "_MCP_USER_ID",
+    "HINDSIGHT_ENDPOINT",
+    "STAGE",
 )
 
 
@@ -182,6 +196,64 @@ class TestRegistrationHappyPath:
 
         assert spy.call_count == 1
         assert spy.call_args.kwargs["parent_agent_id"] == "assistant-fallback"
+
+    def test_memory_tool_context_is_user_scoped_not_agent_scoped(self, all_env_present):
+        all_env_present.setenv("USER_ID", "user-eric")
+        all_env_present.setenv("CURRENT_USER_ID", "user-current")
+        all_env_present.setenv("HINDSIGHT_ENDPOINT", "https://hindsight.example.test")
+        all_env_present.setenv("STAGE", "dev")
+        server._PACK_CACHE = PackResult(
+            body=(
+                "<user_distilled_knowledge_test>"
+                "User pack"
+                "</user_distilled_knowledge_test>"
+            ),
+            etag="pack-etag",
+        )
+
+        try:
+            spy = _capture_factory(all_env_present)
+            server._register_delegate_to_workspace_tool(
+                tools=[],
+                tool_decorator=lambda fn: fn,
+                skill_meta={},
+                effective_model="m",
+                sub_agent_usage=[],
+            )
+        finally:
+            server._PACK_CACHE = None
+
+        tool_context = spy.call_args.kwargs["tool_context"]
+        assert tool_context["hs_endpoint"] == "https://hindsight.example.test"
+        assert tool_context["hs_bank"] == "user_user-eric"
+        assert tool_context["hs_owner_id"] == "user-eric"
+        assert tool_context["wiki_owner_id"] == "user-eric"
+        assert tool_context["wiki_tenant_id"] == "tenant-a"
+        assert "user_id:user-eric" in tool_context["hs_tags"]
+        assert "agent_id:agent-marco" in tool_context["hs_tags"]
+        assert tool_context["hs_bank"] != "agent-marco"
+        assert tool_context["wiki_owner_id"] != "agent-marco"
+        assert tool_context["knowledge_pack_body"].startswith(
+            "<user_distilled_knowledge_test>"
+        )
+        assert tool_context["knowledge_pack_etag"] == "pack-etag"
+
+    def test_memory_tool_context_falls_back_to_current_user_id(self, all_env_present):
+        all_env_present.delenv("USER_ID", raising=False)
+        all_env_present.setenv("CURRENT_USER_ID", "user-current")
+
+        spy = _capture_factory(all_env_present)
+        server._register_delegate_to_workspace_tool(
+            tools=[],
+            tool_decorator=lambda fn: fn,
+            skill_meta={},
+            effective_model="m",
+            sub_agent_usage=[],
+        )
+
+        tool_context = spy.call_args.kwargs["tool_context"]
+        assert tool_context["hs_bank"] == "user_user-current"
+        assert tool_context["wiki_owner_id"] == "user-current"
 
 
 # ────────────────────────────────────────────────────────────────────────────

@@ -259,11 +259,62 @@ def _build_system_prompt(skills_config: list | None = None, kb_config: list | No
     if _PACK_CACHE and _PACK_CACHE.body.strip():
         insert_at = 1 + len(system_parts)
         parts.insert(insert_at, _PACK_CACHE.body.strip())
+        user_id = (
+            os.environ.get("USER_ID", "")
+            or os.environ.get("CURRENT_USER_ID", "")
+        )
+        tenant_id = (
+            os.environ.get("TENANT_ID", "")
+            or os.environ.get("_MCP_TENANT_ID", "")
+        )
+        token_count = max(1, len(_PACK_CACHE.body) // 4)
         logger.info(
-            "user_knowledge_pack injected chars=%d etag=%s",
+            "pack_injected tenant_id=%s user_id=%s scope=user "
+            "token_count=%d chars=%d etag=%s",
+            tenant_id,
+            user_id,
+            token_count,
             len(_PACK_CACHE.body),
             (_PACK_CACHE.etag or "")[:12],
+            extra={
+                "event_type": "pack_injected",
+                "tenant_id": tenant_id,
+                "user_id": user_id,
+                "scope": "user",
+                "token_count": token_count,
+            },
         )
+        if _PACK_CACHE.last_modified is not None:
+            try:
+                from datetime import datetime, timezone
+
+                last_modified = _PACK_CACHE.last_modified
+                if last_modified.tzinfo is None:
+                    last_modified = last_modified.replace(tzinfo=timezone.utc)
+                age_seconds = max(
+                    0,
+                    int(
+                        (
+                            datetime.now(timezone.utc) - last_modified
+                        ).total_seconds()
+                    ),
+                )
+                logger.info(
+                    "pack_age_at_load_seconds tenant_id=%s user_id=%s "
+                    "scope=user age_seconds=%d",
+                    tenant_id,
+                    user_id,
+                    age_seconds,
+                    extra={
+                        "event_type": "pack_age_at_load_seconds",
+                        "tenant_id": tenant_id,
+                        "user_id": user_id,
+                        "scope": "user",
+                        "age_seconds": age_seconds,
+                    },
+                )
+            except Exception as exc:
+                logger.debug("pack age calculation skipped: %s", exc)
 
     if len(parts) > 0:
         logger.info("System prompt built from %d parts, total chars=%d", len(parts), sum(len(p) for p in parts))
@@ -333,11 +384,29 @@ def _ensure_workspace_ready(workspace_tenant_id: str, assistant_id: str,
         return
 
     user_id = os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", "")
-    _PACK_CACHE = get_user_knowledge_pack(
-        workspace_tenant_id,
-        user_id,
-        bucket=os.environ.get("WORKSPACE_BUCKET") or os.environ.get("AGENTCORE_FILES_BUCKET"),
-    )
+    if user_id:
+        _PACK_CACHE = get_user_knowledge_pack(
+            workspace_tenant_id,
+            user_id,
+            bucket=(
+                os.environ.get("WORKSPACE_BUCKET")
+                or os.environ.get("AGENTCORE_FILES_BUCKET")
+            ),
+        )
+    else:
+        _PACK_CACHE = None
+        logger.info(
+            "pack_skipped reason=no_user_id tenant_id=%s agent_id=%s",
+            workspace_tenant_id,
+            assistant_id,
+            extra={
+                "event_type": "pack_skipped",
+                "reason": "no_user_id",
+                "tenant_id": workspace_tenant_id,
+                "agent_id": assistant_id,
+                "scope": "user",
+            },
+        )
     pack_etag = _PACK_CACHE.etag if _PACK_CACHE else "none"
 
     # Client-side fingerprint skip: if composer returns the same set of
@@ -523,6 +592,50 @@ def _register_delegate_to_workspace_tool(
             "platform_manifest_entries": len(_dw_platform_manifest),
         },
     )
+
+
+def _build_mcp_clients(mcp_configs: list | None) -> list:
+    """Build Strands MCP clients from runtime config.
+
+    Kept as a helper so tests can verify auth-header propagation without
+    constructing a Bedrock-backed Agent.
+    """
+    mcp_clients = []
+    logger.info("MCP configs received: %d servers, raw=%s",
+                len(mcp_configs or []),
+                json.dumps([{k: ("***" if k == "auth" else v)
+                             for k, v in cfg.items()} for cfg in (mcp_configs or [])], default=str))
+    for cfg in (mcp_configs or []):
+        url = cfg.get("url", "")
+        if not url:
+            logger.warning("MCP config has no url, skipping: %s", cfg)
+            continue
+        server_name = cfg.get("name", url)
+        headers = {}
+        auth = cfg.get("auth") or {}
+        has_token = bool(auth.get("token"))
+        logger.info("MCP connecting: name=%s url=%s has_auth=%s auth_type=%s",
+                    server_name, url, has_token, auth.get("type", "none"))
+        if auth.get("token"):
+            auth_type = auth.get("type", "bearer")
+            if auth_type == "bearer":
+                headers["Authorization"] = f"Bearer {auth['token']}"
+            elif auth_type == "api-key":
+                headers["x-api-key"] = auth["token"]
+        try:
+            from strands.tools.mcp import MCPClient
+            from mcp.client.streamable_http import streamablehttp_client
+            logger.info("MCP creating client for %s with %d headers", server_name, len(headers))
+            client = MCPClient(lambda u=url, h=headers: streamablehttp_client(url=u, headers=h))
+            # Don't call start() — the Agent will start the client and load tools automatically.
+            # Just register the client as a tool provider.
+            mcp_clients.append(client)
+            logger.info("MCP client registered: %s url=%s (tools will be discovered by Agent)", server_name, url)
+        except Exception as e:
+            import traceback
+            logger.error("MCP connection FAILED for %s (%s): %s\n%s", server_name, url, e, traceback.format_exc())
+
+    return mcp_clients
 
 
 def _call_strands_agent(system_prompt: str, messages: list,
@@ -1285,46 +1398,12 @@ def _call_strands_agent(system_prompt: str, messages: list,
     # Connect to HTTP streaming MCP servers passed in the invocation payload.
     # Each config: {name, url, transport?, auth?: {type, token}, tools?: [...]}
     # Clients are context-managed: __enter__ discovers tools, __exit__ cleans up.
-    mcp_clients = []
     _mcp_tool_to_server: dict[str, str] = {}  # tool_name → server name (for tracking)
-    logger.info("MCP configs received: %d servers, raw=%s",
-                len(mcp_configs or []),
-                json.dumps([{k: ("***" if k == "auth" else v)
-                             for k, v in cfg.items()} for cfg in (mcp_configs or [])], default=str))
-    for cfg in (mcp_configs or []):
-        url = cfg.get("url", "")
-        if not url:
-            logger.warning("MCP config has no url, skipping: %s", cfg)
-            continue
-        server_name = cfg.get("name", url)
-        headers = {}
-        auth = cfg.get("auth") or {}
-        has_token = bool(auth.get("token"))
-        logger.info("MCP connecting: name=%s url=%s has_auth=%s auth_type=%s",
-                     server_name, url, has_token, auth.get("type", "none"))
-        if auth.get("token"):
-            auth_type = auth.get("type", "bearer")
-            if auth_type == "bearer":
-                headers["Authorization"] = f"Bearer {auth['token']}"
-            elif auth_type == "api-key":
-                headers["x-api-key"] = auth["token"]
-        try:
-            from strands.tools.mcp import MCPClient
-            from mcp.client.streamable_http import streamablehttp_client
-            logger.info("MCP creating client for %s with %d headers", server_name, len(headers))
-            client = MCPClient(lambda u=url, h=headers: streamablehttp_client(url=u, headers=h))
-            # Don't call start() — the Agent will start the client and load tools automatically.
-            # Just register the client as a tool provider.
-            mcp_clients.append(client)
-            logger.info("MCP client registered: %s url=%s (tools will be discovered by Agent)", server_name, url)
-        except Exception as e:
-            import traceback
-            logger.error("MCP connection FAILED for %s (%s): %s\n%s", server_name, url, e, traceback.format_exc())
+    mcp_clients = _build_mcp_clients(mcp_configs)
 
     if mcp_clients:
         tools.extend(mcp_clients)
-        logger.info("MCP clients added to tool list: %d servers, %d tools mapped",
-                     len(mcp_clients), len(_mcp_tool_to_server))
+        logger.info("MCP clients added to tool list: %d servers", len(mcp_clients))
 
     # U12 tenant kill-switch + template-block filter. Applies tenant-wide
     # disables (disabled_builtin_tools) ∪ template-level blocks

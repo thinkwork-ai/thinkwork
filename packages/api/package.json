@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "sandbox:e2e": "vitest run --config vitest.sandbox-e2e.config.ts"
+    "sandbox:e2e": "vitest run --config vitest.sandbox-e2e.config.ts",
+    "user-memory-mcp:e2e": "vitest run --config vitest.user-memory-mcp-e2e.config.ts"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock": "^3.1024.0",
