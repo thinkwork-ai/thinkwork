@@ -97,7 +97,7 @@ export function buildWorkspaceTree(
 
   return [
     {
-      name: "Sub-agents",
+      name: "agents",
       path: SUB_AGENTS_NODE_PATH,
       isFolder: true,
       children: sortNodes(subAgentChildren),

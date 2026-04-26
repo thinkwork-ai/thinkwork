@@ -10,7 +10,7 @@ describe("buildWorkspaceTree", () => {
     ]);
 
     expect(tree.map((node) => [node.name, node.path, node.isFolder])).toEqual([
-      ["Sub-agents", subAgentsNodePath(), true],
+      ["agents", subAgentsNodePath(), true],
       ["expenses", "expenses", true],
       ["AGENTS.md", "AGENTS.md", false],
     ]);
@@ -35,7 +35,7 @@ describe("buildWorkspaceTree", () => {
     );
 
     expect(tree[0]).toMatchObject({
-      name: "Sub-agents",
+      name: "agents",
       path: subAgentsNodePath(),
       synthetic: true,
     });
