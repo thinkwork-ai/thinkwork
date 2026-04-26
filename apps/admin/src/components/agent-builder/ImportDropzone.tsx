@@ -20,11 +20,13 @@ interface ImportDropzoneProps {
 }
 
 type ImportStage = "idle" | "upload" | "validate" | "commit";
+type ImportMode = "zip" | "git";
 
 export function ImportDropzone({ agentId, onImported }: ImportDropzoneProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [dragging, setDragging] = useState(false);
   const [stage, setStage] = useState<ImportStage>("idle");
+  const [mode, setMode] = useState<ImportMode>("zip");
   const [gitUrl, setGitUrl] = useState("");
   const [gitRef, setGitRef] = useState("");
   const [gitPat, setGitPat] = useState("");
@@ -115,101 +117,132 @@ export function ImportDropzone({ agentId, onImported }: ImportDropzoneProps) {
 
   return (
     <div className="p-3">
-      <div
-        className={`rounded-md border border-dashed p-3 transition-colors ${
-          dragging ? "border-primary bg-primary/5" : "border-border"
-        }`}
-        onDragOver={(event) => {
-          event.preventDefault();
-          setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(event) => {
-          event.preventDefault();
-          setDragging(false);
-          importZip(event.dataTransfer.files[0]);
-        }}
-      >
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Upload className="h-4 w-4" />
-              Import bundle
+      {mode === "zip" ? (
+        <>
+          <div
+            className={`rounded-md border border-dashed p-3 transition-colors ${
+              dragging ? "border-primary bg-primary/5" : "border-border"
+            }`}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragging(false);
+              importZip(event.dataTransfer.files[0]);
+            }}
+          >
+            <div className="grid gap-2">
+              <div className="flex min-w-0 items-center gap-2 whitespace-nowrap text-sm font-medium">
+                <Upload className="h-4 w-4" />
+                Import bundle
+              </div>
+              <p className="text-xs leading-5 text-muted-foreground">
+                Drop a .zip archive here. Tar support is coming later.
+              </p>
+              <div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Choose Zip
+                </Button>
+              </div>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Drop a .zip or import a git ref. Tar support is coming later.
-            </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
+          <button
+            type="button"
+            className="mt-2 text-xs font-medium text-muted-foreground hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
             disabled={busy}
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => {
+              setDragging(false);
+              setMode("git");
+            }}
           >
-            Zip
-          </Button>
-        </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".zip,application/zip,application/x-zip-compressed"
-          className="hidden"
-          onChange={(event) => {
-            importZip(event.target.files?.[0]);
-            event.currentTarget.value = "";
-          }}
-        />
-      </div>
+            Switch to GitHub
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="rounded-md border p-3">
+            <div className="mb-3 flex items-center gap-2 text-sm font-medium">
+              <GitBranch className="h-4 w-4" />
+              Import GitHub ref
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="agent-builder-git-url" className="text-xs">
+                Git repository
+              </Label>
+              <Input
+                id="agent-builder-git-url"
+                placeholder="https://github.com/org/repo"
+                value={gitUrl}
+                onChange={(event) => setGitUrl(event.target.value)}
+                disabled={busy}
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  placeholder="branch, tag, or commit"
+                  value={gitRef}
+                  onChange={(event) => setGitRef(event.target.value)}
+                  disabled={busy}
+                />
+                <Input
+                  placeholder="PAT (optional)"
+                  type="password"
+                  value={gitPat}
+                  onChange={(event) => setGitPat(event.target.value)}
+                  disabled={busy}
+                />
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="justify-self-start"
+                disabled={busy || !gitUrl.trim()}
+                onClick={importGit}
+              >
+                {busy ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <GitBranch className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Import Git Ref
+              </Button>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="mt-2 text-xs font-medium text-muted-foreground hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+            disabled={busy}
+            onClick={() => setMode("zip")}
+          >
+            Switch to Zip
+          </button>
+        </>
+      )}
 
-      <div className="mt-3 grid gap-2">
-        <Label htmlFor="agent-builder-git-url" className="text-xs">
-          Git repository
-        </Label>
-        <div className="grid gap-2">
-          <Input
-            id="agent-builder-git-url"
-            placeholder="https://github.com/org/repo"
-            value={gitUrl}
-            onChange={(event) => setGitUrl(event.target.value)}
-            disabled={busy}
-          />
-          <div className="grid grid-cols-2 gap-2">
-            <Input
-              placeholder="branch, tag, or commit"
-              value={gitRef}
-              onChange={(event) => setGitRef(event.target.value)}
-              disabled={busy}
-            />
-            <Input
-              placeholder="PAT (optional)"
-              type="password"
-              value={gitPat}
-              onChange={(event) => setGitPat(event.target.value)}
-              disabled={busy}
-            />
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="justify-self-start"
-            disabled={busy || !gitUrl.trim()}
-            onClick={importGit}
-          >
-            {busy ? (
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <GitBranch className="mr-1.5 h-3.5 w-3.5" />
-            )}
-            Import Git Ref
-          </Button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".zip,application/zip,application/x-zip-compressed"
+        className="hidden"
+        onChange={(event) => {
+          importZip(event.target.files?.[0]);
+          event.currentTarget.value = "";
+        }}
+      />
+
+      {busy ? (
+        <div className="mt-3 grid gap-1 text-xs text-muted-foreground">
+          <Progress value={progress} />
+          <span>{stageLabel(stage)}</span>
         </div>
-        {busy ? (
-          <div className="grid gap-1 text-xs text-muted-foreground">
-            <Progress value={progress} />
-            <span>{stageLabel(stage)}</span>
-          </div>
-        ) : null}
-      </div>
+      ) : null}
 
       <ImportErrorDialog error={error} onClose={() => setError(null)} />
       <ImportRootReservedDialog

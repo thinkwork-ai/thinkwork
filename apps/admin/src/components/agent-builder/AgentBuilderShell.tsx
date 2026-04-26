@@ -1,12 +1,12 @@
 import { gql, useQuery } from "urql";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Download,
   FilePlus,
   Folder,
   FolderPlus,
   Loader2,
   Plus,
+  Upload,
   Wand2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -42,6 +42,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { AgentDetailQuery } from "@/lib/graphql-queries";
 import {
   agentBuilderApi,
@@ -677,16 +683,25 @@ export function AgentBuilderShell({
             >
               <div className="flex h-9 items-center justify-between bg-muted/50 px-3 text-xs font-medium text-muted-foreground">
                 <span>{files.length} files</span>
-                <CollapsibleTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label="Import bundle"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                  </Button>
-                </CollapsibleTrigger>
+                <TooltipProvider delayDuration={2000} skipDelayDuration={0}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <CollapsibleTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label="Import bundle"
+                        >
+                          <Upload className="h-3.5 w-3.5" />
+                        </Button>
+                      </CollapsibleTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" sideOffset={6}>
+                      Import bundle
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
               <CollapsibleContent>
                 <ImportDropzone agentId={agentId} onImported={fetchFiles} />
