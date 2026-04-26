@@ -5,13 +5,15 @@
 
 import type { GraphQLContext } from "../../context.js";
 import { getMemoryServices } from "../../../lib/memory/index.js";
+import { requireMemoryUserScope } from "../core/require-user-scope.js";
 
 export const deleteMemoryRecord = async (
 	_parent: any,
 	args: any,
-	_ctx: GraphQLContext,
+	ctx: GraphQLContext,
 ) => {
 	const { memoryRecordId } = args as { memoryRecordId: string };
+	await requireMemoryUserScope(ctx, args);
 
 	const { adapter, config } = getMemoryServices();
 	if (!adapter.forget) {

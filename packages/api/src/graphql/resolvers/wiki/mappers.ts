@@ -18,7 +18,8 @@ export interface GraphQLWikiSection {
 export interface GraphQLWikiPage {
 	id: string;
 	tenantId: string;
-	ownerId: string;
+	userId: string;
+	ownerId?: string;
 	type: string;
 	slug: string;
 	title: string;
@@ -67,6 +68,7 @@ export function toGraphQLPage(
 	return {
 		id: row.id,
 		tenantId: row.tenant_id,
+		userId: row.owner_id,
 		ownerId: row.owner_id,
 		type: toGraphQLType(row.type),
 		slug: row.slug,

@@ -1,8 +1,8 @@
 /**
  * wikiBacklinks — list pages that link to the given page.
  *
- * The target page's owner scope drives visibility: caller must be able to
- * read `(target.tenantId, target.ownerId)`. Since v1 never creates cross-
+ * The target page's user scope drives visibility: caller must be able to
+ * read `(target.tenantId, target.userId)`. Since v1 never creates cross-
  * agent page links, backlink rows always live inside the same scope as
  * their target.
  */
@@ -35,7 +35,7 @@ export const wikiBacklinks = async (
 
 	await assertCanReadWikiScope(ctx, {
 		tenantId: target.tenant_id,
-		ownerId: target.owner_id,
+		userId: target.owner_id,
 	});
 
 	// Two-step dedup: first pull the set of distinct source page ids

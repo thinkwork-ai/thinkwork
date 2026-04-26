@@ -8,7 +8,8 @@ type MemoryRecord {
   strategyId: String
   strategy: String
   score: Float
-  agentSlug: String
+  userSlug: String
+  agentSlug: String @deprecated(reason: "Use userSlug")
   factType: String
   confidence: Float
   eventDate: AWSDateTime
@@ -23,9 +24,9 @@ type MemoryRecord {
   """
   Compiled wiki pages (Compounding Memory) that cite this memory unit as
   a source. Populated from wiki_section_sources.source_ref. Returns pages
-  scoped to the same agent as this memory (there is no cross-agent
+  scoped to the same user as this memory (there is no cross-user
   citation in v1). Returned pages have empty `sections`/`aliases` — fetch
-  `wikiPage(tenantId, ownerId, type, slug)` for full detail.
+  `wikiPage(tenantId, userId, type, slug)` for full detail.
   """
   wikiPages: [WikiPage!]!
 }
@@ -90,17 +91,19 @@ type MemorySystemConfig {
 }
 
 extend type Query {
-  memoryRecords(assistantId: ID!, namespace: String!): [MemoryRecord!]!
-  memorySearch(assistantId: ID!, query: String!, strategy: MemoryStrategy, limit: Int): MemorySearchResult!
-  memoryGraph(assistantId: ID!): MemoryGraph!
+  memoryRecords(tenantId: ID, userId: ID, assistantId: ID, namespace: String!): [MemoryRecord!]!
+  memorySearch(tenantId: ID, userId: ID, assistantId: ID, query: String!, strategy: MemoryStrategy, limit: Int): MemorySearchResult!
+  memoryGraph(tenantId: ID, userId: ID, assistantId: ID): MemoryGraph!
   memorySystemConfig: MemorySystemConfig!
 }
 
 extend type Mutation {
-  deleteMemoryRecord(memoryRecordId: ID!): Boolean!
-  updateMemoryRecord(memoryRecordId: ID!, content: String!): Boolean!
+  deleteMemoryRecord(tenantId: ID, userId: ID, assistantId: ID, memoryRecordId: ID!): Boolean!
+  updateMemoryRecord(tenantId: ID, userId: ID, assistantId: ID, memoryRecordId: ID!, content: String!): Boolean!
   captureMobileMemory(
-    agentId: ID!
+    tenantId: ID
+    userId: ID
+    agentId: ID
     content: String!
     factType: MobileCaptureFactType = FACT
     metadata: AWSJSON
@@ -123,7 +126,8 @@ enum MobileCaptureFactType {
 type MobileMemoryCapture {
   id: ID!
   tenantId: ID!
-  agentId: ID!
+  userId: ID!
+  agentId: ID @deprecated(reason: "Use userId")
   content: String!
   factType: MobileCaptureFactType!
   capturedAt: AWSDateTime!
@@ -132,22 +136,22 @@ type MobileMemoryCapture {
 }
 
 extend type Query {
-  mobileMemoryCaptures(agentId: ID!, limit: Int = 50): [MobileMemoryCapture!]!
+  mobileMemoryCaptures(tenantId: ID, userId: ID, agentId: ID, limit: Int = 50): [MobileMemoryCapture!]!
   """
-  Free-text search across the full Hindsight bank for the given agent.
+  Free-text search across the full Hindsight bank for the given user.
   Hits Hindsight's recall endpoint (semantic + rerank) and normalizes results
   back to MobileMemoryCapture so the Memories list can render search results
   with the same rows it uses for captures. Not filtered by capture_source —
-  search is meant to answer "what does this agent know?", including chat-
+  search is meant to answer "what does this user know?", including chat-
   derived observations.
   """
-  mobileMemorySearch(agentId: ID!, query: String!, limit: Int = 20): [MobileMemoryCapture!]!
+  mobileMemorySearch(tenantId: ID, userId: ID, agentId: ID, query: String!, limit: Int = 20): [MobileMemoryCapture!]!
 
   """
   Ranked wiki-page search for mobile. Runs a Postgres full-text query
   (`plainto_tsquery('english', …)` + `ts_rank`) against the GIN-indexed
   `search_tsv` generated column on `wiki_pages` (title || summary ||
-  body_md), scoped to one (tenant, agent) pair. Returns results in
+  body_md), scoped to one (tenant, user) pair. Returns results in
   `ts_rank` DESC order, tie-broken by `last_compiled_at` DESC.
 
   Previously routed through Hindsight semantic recall; on the compiled
@@ -156,15 +160,15 @@ extend type Query {
   retained for wire-format compatibility and is always [] on this path —
   pages match their own compiled text, not source memory units.
   """
-  mobileWikiSearch(agentId: ID!, query: String!, limit: Int = 20): [MobileWikiSearchResult!]!
+  mobileWikiSearch(tenantId: ID, userId: ID, agentId: ID, query: String!, limit: Int = 20): [MobileWikiSearchResult!]!
 
   """
-  Newest compiled wiki pages for the given agent, ordered by
+  Newest compiled wiki pages for the given user, ordered by
   last_compiled_at DESC (falling back to updated_at when the page hasn't
   been recompiled yet). Intended as the default Memories-tab feed so
   the user sees fresh pages before they type a search query.
   """
-  recentWikiPages(agentId: ID!, limit: Int = 50): [WikiPage!]!
+  recentWikiPages(tenantId: ID, userId: ID, agentId: ID, limit: Int = 50): [WikiPage!]!
 }
 
 type MobileWikiSearchResult {
@@ -184,5 +188,5 @@ type MobileWikiSearchResult {
 }
 
 extend type Mutation {
-  deleteMobileMemoryCapture(agentId: ID!, captureId: ID!): Boolean!
+  deleteMobileMemoryCapture(tenantId: ID, userId: ID, agentId: ID, captureId: ID!): Boolean!
 }

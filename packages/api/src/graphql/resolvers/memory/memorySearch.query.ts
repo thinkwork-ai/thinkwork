@@ -9,9 +9,9 @@
  */
 
 import type { GraphQLContext } from "../../context.js";
-import { db, eq, agents } from "../../utils.js";
 import { getMemoryServices } from "../../../lib/memory/index.js";
 import type { RecallResult } from "../../../lib/memory/index.js";
+import { requireMemoryUserScope } from "../core/require-user-scope.js";
 
 type SearchRow = {
 	memoryRecordId: string;
@@ -26,30 +26,29 @@ type SearchRow = {
 
 export const memorySearch = async (
 	_parent: unknown,
-	args: { assistantId: string; query: string; strategy?: string; limit?: number },
+	args: {
+		tenantId?: string;
+		userId?: string;
+		assistantId?: string;
+		query: string;
+		strategy?: string;
+		limit?: number;
+	},
 	ctx: GraphQLContext,
 ) => {
-	const { assistantId, query, limit = 10 } = args;
-
-	const [agent] = await db
-		.select({ id: agents.id, slug: agents.slug, tenant_id: agents.tenant_id })
-		.from(agents)
-		.where(eq(agents.id, assistantId));
-
-	if (!agent || (ctx.auth.tenantId && agent.tenant_id !== ctx.auth.tenantId)) {
-		throw new Error("Agent not found or access denied");
-	}
+	const { query, limit = 10 } = args;
+	const { tenantId, userId } = await requireMemoryUserScope(ctx, args);
 
 	const { recall: recallService } = getMemoryServices();
 	const hits = await recallService.recall({
-		tenantId: ctx.auth.tenantId || "",
-		ownerType: "agent",
-		ownerId: agent.id as string,
+		tenantId,
+		ownerType: "user",
+		ownerId: userId,
 		query,
 		limit,
 	});
 
-	const rows = hits.map((h) => toSearchRow(h, (agent.slug as string) || (agent.id as string)));
+	const rows = hits.map((h) => toSearchRow(h, `user_${userId}`));
 	const sorted = rows.sort((a, b) => b.score - a.score).slice(0, limit);
 
 	return {

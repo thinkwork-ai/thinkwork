@@ -1,8 +1,8 @@
 /**
  * Hindsight memory adapter.
  *
- * Maps ThinkWork owner refs (tenant + agent UUID) to Hindsight bank IDs
- * (agent slug) and normalizes Hindsight memory units / recall hits into
+ * Maps ThinkWork owner refs (tenant + user UUID) to Hindsight bank IDs
+ * (`user_${userId}`) and normalizes Hindsight memory units / recall hits into
  * {@link ThinkWorkMemoryRecord}. Hindsight-specific fields (fact_type,
  * tags, confidence, occurred_start/end) land under `metadata`.
  *
@@ -11,9 +11,8 @@
  * - packages/api/src/graphql/resolvers/memory/memorySearch.query.ts:158-201
  */
 
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
-import { agents } from "@thinkwork/database-pg/schema";
 import type {
 	ListRecordsUpdatedSinceRequest,
 	ListRecordsUpdatedSinceResult,
@@ -29,6 +28,8 @@ import type {
 	RecallResult,
 	RetainRequest,
 	RetainResult,
+	RetainConversationRequest,
+	RetainDailyMemoryRequest,
 	RetainTurnRequest,
 	ThinkWorkMemoryRecord,
 } from "../types.js";
@@ -60,7 +61,6 @@ export class HindsightAdapter implements MemoryAdapter {
 	private readonly timeoutMs: number;
 	private readonly inspectLimit: number;
 	private readonly db = getDb();
-	private readonly slugCache = new Map<string, string>();
 
 	constructor(opts: HindsightAdapterOptions) {
 		if (!opts.endpoint) {
@@ -176,6 +176,9 @@ export class HindsightAdapter implements MemoryAdapter {
 	}
 
 	async retainTurn(req: RetainTurnRequest): Promise<void> {
+		// Deprecated compatibility path. New callers should use
+		// retainConversation so Hindsight receives one replaceable item per
+		// conversation rather than one item per message.
 		const bankId = await this.resolveBankId(req.ownerId);
 		const items = req.messages
 			.filter((m) => m.content && m.content.trim().length > 0)
@@ -206,6 +209,58 @@ export class HindsightAdapter implements MemoryAdapter {
 		} catch (err) {
 			throw new Error(`[hindsight-adapter] retainTurn failed: ${(err as Error)?.message}`);
 		}
+	}
+
+	async retainConversation(req: RetainConversationRequest): Promise<void> {
+		const bankId = await this.resolveBankId(req.ownerId);
+		const lines = req.messages
+			.filter((m) => m.content && m.content.trim().length > 0)
+			.map((m) => `${m.role} (${new Date(m.timestamp).toISOString()}): ${m.content.trim()}`);
+		if (lines.length === 0) return;
+
+		const content = lines.join("\n");
+		const item = {
+			content,
+			document_id: req.threadId,
+			update_mode: "replace",
+			context: "thinkwork_thread",
+			metadata: {
+				...(req.metadata || {}),
+				tenantId: req.tenantId,
+				userId: req.ownerId,
+				threadId: req.threadId,
+				turnCount: lines.length,
+				source: "thinkwork",
+			},
+		};
+		await this.postItems(bankId, [item], "retainConversation");
+		console.log(
+			`[hindsight-adapter] retainConversation ok bank=${bankId.slice(0, 18)} thread=${req.threadId.slice(0, 12)} turns=${lines.length} bytes=${content.length}`,
+		);
+	}
+
+	async retainDailyMemory(req: RetainDailyMemoryRequest): Promise<void> {
+		const content = req.content.trim();
+		if (!content) return;
+
+		const bankId = await this.resolveBankId(req.ownerId);
+		const item = {
+			content,
+			document_id: `workspace_daily:${req.ownerId}:${req.date}`,
+			update_mode: "replace",
+			context: "thinkwork_workspace_daily",
+			metadata: {
+				...(req.metadata || {}),
+				tenantId: req.tenantId,
+				userId: req.ownerId,
+				date: req.date,
+				source: "thinkwork",
+			},
+		};
+		await this.postItems(bankId, [item], "retainDailyMemory");
+		console.log(
+			`[hindsight-adapter] retainDailyMemory ok bank=${bankId.slice(0, 18)} date=${req.date} bytes=${content.length}`,
+		);
 	}
 
 	async inspect(req: InspectRequest): Promise<ThinkWorkMemoryRecord[]> {
@@ -335,7 +390,7 @@ export class HindsightAdapter implements MemoryAdapter {
 
 		const ownerRef = {
 			tenantId: req.tenantId,
-			ownerType: "agent" as const,
+			ownerType: "user" as const,
 			ownerId: req.ownerId,
 		};
 		const records = rows.map((row) => this.mapRow(row, ownerRef, bankId));
@@ -348,32 +403,40 @@ export class HindsightAdapter implements MemoryAdapter {
 	}
 
 	private async resolveBankId(ownerId: string): Promise<string> {
-		const cached = this.slugCache.get(ownerId);
-		if (cached) return cached;
-
 		const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 		if (!uuidRe.test(ownerId)) {
-			this.slugCache.set(ownerId, ownerId);
-			return ownerId;
+			throw new Error("[hindsight-adapter] user-scoped bank requires a UUID userId");
 		}
+		return `user_${ownerId}`;
+	}
 
+	private async postItems(
+		bankId: string,
+		items: Array<Record<string, unknown>>,
+		action: string,
+	): Promise<void> {
 		try {
-			const [row] = await this.db
-				.select({ slug: agents.slug })
-				.from(agents)
-				.where(eq(agents.id, ownerId))
-				.limit(1);
-			const slug = (row?.slug as string) || ownerId;
-			this.slugCache.set(ownerId, slug);
-			return slug;
-		} catch {
-			return ownerId;
+			const resp = await fetch(
+				`${this.endpoint}/v1/default/banks/${encodeURIComponent(bankId)}/memories`,
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ items }),
+					signal: AbortSignal.timeout(this.timeoutMs),
+				},
+			);
+			if (!resp.ok) {
+				const body = await resp.text().catch(() => "");
+				throw new Error(`hindsight ${action} ${resp.status}: ${body.slice(0, 300)}`);
+			}
+		} catch (err) {
+			throw new Error(`[hindsight-adapter] ${action} failed: ${(err as Error)?.message}`);
 		}
 	}
 
 	private mapUnit(
 		unit: any,
-		owner: { tenantId: string; ownerType: "agent"; ownerId: string; threadId?: string },
+		owner: { tenantId: string; ownerType: "user" | "agent"; ownerId: string; threadId?: string },
 		bankId: string,
 	): ThinkWorkMemoryRecord {
 		const createdAt = toISO(unit.created_at) || new Date().toISOString();
@@ -389,7 +452,7 @@ export class HindsightAdapter implements MemoryAdapter {
 		return {
 			id: String(unit.id || `hindsight-${bankId}-${createdAt}`),
 			tenantId: owner.tenantId,
-			ownerType: "agent",
+			ownerType: owner.ownerType,
 			ownerId: owner.ownerId,
 			threadId: owner.threadId,
 			kind: "unit",
@@ -422,7 +485,7 @@ export class HindsightAdapter implements MemoryAdapter {
 
 	private mapRow(
 		row: any,
-		owner: { tenantId: string; ownerType: "agent"; ownerId: string; threadId?: string },
+		owner: { tenantId: string; ownerType: "user" | "agent"; ownerId: string; threadId?: string },
 		bankId: string,
 	): ThinkWorkMemoryRecord {
 		let meta: any = {};

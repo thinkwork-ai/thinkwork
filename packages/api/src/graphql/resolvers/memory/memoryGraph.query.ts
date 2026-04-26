@@ -8,24 +8,16 @@
  */
 
 import type { GraphQLContext } from "../../context.js";
-import { db, eq, sql, agents } from "../../utils.js";
+import { db, sql } from "../../utils.js";
 import { getMemoryServices } from "../../../lib/memory/index.js";
+import { requireMemoryUserScope } from "../core/require-user-scope.js";
 
 export const memoryGraph = async (
 	_parent: unknown,
-	args: { assistantId: string },
+	args: { tenantId?: string; userId?: string; assistantId?: string },
 	ctx: GraphQLContext,
 ) => {
-	const { assistantId } = args;
-
-	const [agent] = await db
-		.select({ id: agents.id, tenant_id: agents.tenant_id, slug: agents.slug })
-		.from(agents)
-		.where(eq(agents.id, assistantId));
-
-	if (!agent || (ctx.auth.tenantId && agent.tenant_id !== ctx.auth.tenantId)) {
-		throw new Error("Agent not found or access denied");
-	}
+	const { userId } = await requireMemoryUserScope(ctx, args);
 
 	const { inspect: inspectService } = getMemoryServices();
 	const capabilities = await inspectService.capabilities();
@@ -33,10 +25,7 @@ export const memoryGraph = async (
 		return { nodes: [], edges: [] };
 	}
 
-	const bankId = agent.slug;
-	if (!bankId) {
-		return { nodes: [], edges: [] };
-	}
+	const bankId = `user_${userId}`;
 
 	let entityRows: any;
 	try {

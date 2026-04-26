@@ -6,7 +6,7 @@
  * (status, trigger, timestamps, metrics, error) to render a job-history
  * table without polling `wiki_compile_jobs` directly.
  *
- * When `ownerId` is supplied the response is scoped to that agent; when
+ * When `userId` is supplied the response is scoped to that user; when
  * null/absent the response spans the whole tenant and is intended for
  * operator use.
  */
@@ -18,6 +18,7 @@ import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
 
 interface WikiCompileJobsArgs {
 	tenantId: string;
+	userId?: string | null;
 	ownerId?: string | null;
 	limit?: number | null;
 }
@@ -27,11 +28,15 @@ export const wikiCompileJobs = async (
 	args: WikiCompileJobsArgs,
 	ctx: GraphQLContext,
 ) => {
-	if (args.ownerId) {
-		await assertCanAdminWikiScope(ctx, {
+	const requestedUserId = args.userId ?? args.ownerId ?? null;
+	let scopedUserId: string | null = null;
+	if (requestedUserId) {
+		const scope = await assertCanAdminWikiScope(ctx, {
 			tenantId: args.tenantId,
+			userId: args.userId,
 			ownerId: args.ownerId,
 		});
+		scopedUserId = scope.userId;
 	} else {
 		// Tenant-wide variant: require api-key credential + matching tenant,
 		// but skip the per-agent existence check since there's no owner to
@@ -53,13 +58,14 @@ export const wikiCompileJobs = async (
 
 	const jobs = await listCompileJobsForScope({
 		tenantId: args.tenantId,
-		ownerId: args.ownerId ?? null,
+		ownerId: scopedUserId,
 		limit: args.limit ?? 10,
 	});
 
 	return jobs.map((job) => ({
 		id: job.id,
 		tenantId: job.tenant_id,
+		userId: job.owner_id,
 		ownerId: job.owner_id,
 		status: job.status,
 		trigger: job.trigger,

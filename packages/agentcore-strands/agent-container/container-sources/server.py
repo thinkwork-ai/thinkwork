@@ -930,13 +930,15 @@ def _call_strands_agent(system_prompt: str, messages: list,
             except Exception as ucap_err:
                 logger.warning("hindsight_usage_capture install failed: %s", ucap_err)
             hs_endpoint = os.environ.get("HINDSIGHT_ENDPOINT", "")
-            hs_bank = os.environ.get("_INSTANCE_ID", "") or os.environ.get("_ASSISTANT_ID", "")
+            hs_user = os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", "")
+            hs_bank = f"user_{hs_user}" if hs_user else ""
             hs_tenant = os.environ.get("TENANT_ID", "") or os.environ.get("_MCP_TENANT_ID", "")
             hs_assistant = os.environ.get("_ASSISTANT_ID", "")
             hs_stage = os.environ.get("STAGE", "") or "unknown"
             if hs_endpoint and hs_bank:
                 hs_tags = [
                     f"agent_id:{hs_assistant}",
+                    f"user_id:{hs_user}",
                     f"tenant_id:{hs_tenant}",
                     f"env:{hs_stage or 'unknown'}",
                 ]
@@ -1221,24 +1223,24 @@ def _call_strands_agent(system_prompt: str, messages: list,
                 logger.info("Hindsight tools registered: retain (vendor) + custom hindsight_recall/reflect bank=%s tags=%s timeout=300s",
                             hs_bank, hs_tags)
 
-                # Compounding Memory (wiki) tools — same scope as hindsight
-                # (tenant + agent). Owner id is captured in the closure so the
-                # model can never address a different agent's wiki. Tools
+                # Compounding Memory (wiki) tools — same user scope as hindsight.
+                # Owner id is captured in the closure so the model can never
+                # address a different user's wiki. Tools
                 # return a graceful "not enabled" string if the graphql-http
                 # URL/secret env vars aren't set on this deployment.
-                if hs_tenant and hs_assistant:
+                if hs_tenant and hs_user:
                     try:
                         from wiki_tools import make_wiki_tools
                         search_wiki, read_wiki_page = make_wiki_tools(
                             _strands_tool,
                             tenant_id=hs_tenant,
-                            owner_id=hs_assistant,
+                            owner_id=hs_user,
                         )
                         tools.append(search_wiki)
                         tools.append(read_wiki_page)
                         logger.info(
                             "Wiki tools registered: search_wiki + read_wiki_page "
-                            "tenant=%s agent=%s", hs_tenant, hs_assistant,
+                            "tenant=%s user=%s", hs_tenant, hs_user,
                         )
                     except Exception as _wiki_err:
                         logger.warning(

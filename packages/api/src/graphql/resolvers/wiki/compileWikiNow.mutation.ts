@@ -1,6 +1,6 @@
 /**
  * compileWikiNow — admin-only: ad-hoc enqueue of a compile job for a
- * specific (tenant, agent). Returns the job row so the admin UI can poll.
+ * specific (tenant, user). Returns the job row so the admin UI can poll.
  *
  * Semantics match the post-turn enqueue path: dedupe on the 5-minute
  * bucket, fire-and-forget invoke of `wiki-compile` Lambda, never fail.
@@ -19,7 +19,8 @@ import { assertCanAdminWikiScope } from "./auth.js";
 
 interface CompileWikiNowArgs {
 	tenantId: string;
-	ownerId: string;
+	userId?: string | null;
+	ownerId?: string | null;
 	modelId?: string | null;
 }
 
@@ -28,11 +29,11 @@ export const compileWikiNow = async (
 	args: CompileWikiNowArgs,
 	ctx: GraphQLContext,
 ) => {
-	await assertCanAdminWikiScope(ctx, args);
+	const { tenantId, userId } = await assertCanAdminWikiScope(ctx, args);
 
 	const { job } = await enqueueCompileJob({
-		tenantId: args.tenantId,
-		ownerId: args.ownerId,
+		tenantId,
+		ownerId: userId,
 		trigger: "admin",
 	});
 
@@ -55,6 +56,7 @@ export const compileWikiNow = async (
 	return {
 		id: job.id,
 		tenantId: job.tenant_id,
+		userId: job.owner_id,
 		ownerId: job.owner_id,
 		status: job.status,
 		trigger: job.trigger,

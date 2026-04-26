@@ -33,6 +33,7 @@ export const threads = pgTable(
 			.references(() => tenants.id)
 			.notNull(),
 		agent_id: uuid("agent_id").references(() => agents.id),
+		user_id: uuid("user_id").references(() => users.id),
 		number: integer("number").notNull(),
 		identifier: text("identifier"),
 		title: text("title").notNull(),
@@ -85,6 +86,7 @@ export const threads = pgTable(
 		),
 		index("idx_threads_checkout_run_id").on(table.checkout_run_id),
 		index("idx_threads_tenant_channel").on(table.tenant_id, table.channel),
+		index("idx_threads_tenant_user").on(table.tenant_id, table.user_id),
 	],
 );
 
@@ -188,6 +190,10 @@ export const threadsRelations = relations(threads, ({ one, many }) => ({
 	agent: one(agents, {
 		fields: [threads.agent_id],
 		references: [agents.id],
+	}),
+	user: one(users, {
+		fields: [threads.user_id],
+		references: [users.id],
 	}),
 	reporter: one(users, {
 		fields: [threads.reporter_id],

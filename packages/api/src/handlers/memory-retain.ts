@@ -1,33 +1,33 @@
 /**
- * Internal Lambda handler — receives a conversational turn from the
- * Strands runtime container and routes it through the normalized memory
- * layer's retainTurn() path. Auth is IAM-only: only the agentcore-runtime
- * Lambda is granted lambda:InvokeFunction on this function.
+ * Internal Lambda handler — receives memory retain requests from the Strands
+ * runtime container and routes them through the normalized memory layer.
  *
- * Invoked asynchronously (InvocationType=Event) so chat turns don't block
- * on memory retention. Errors are logged and swallowed; memory is
- * best-effort and must never break the chat path.
- *
- * Payload shape:
- *   {
- *     tenantId: string,
- *     agentId: string,
- *     threadId: string,
- *     messages: [{ role: "user"|"assistant"|"system", content: string }],
- *   }
+ * Cutover compatibility accepts both the new user-scoped payloads and the old
+ * agent-scoped turn-pair payload while containers roll forward.
  */
 
+import { and, eq } from "drizzle-orm";
+import { getDb } from "@thinkwork/database-pg";
+import { agents } from "@thinkwork/database-pg/schema";
 import { getMemoryServices } from "../lib/memory/index.js";
 import { maybeEnqueuePostTurnCompile } from "../lib/wiki/enqueue.js";
 
+type RetainMessage = {
+	role?: string;
+	content?: string;
+	timestamp?: string;
+};
+
 type MemoryRetainEvent = {
 	tenantId?: string;
+	userId?: string;
 	agentId?: string;
 	threadId?: string;
-	messages?: Array<{
-		role?: string;
-		content?: string;
-	}>;
+	messages?: RetainMessage[];
+	transcript?: RetainMessage[];
+	kind?: string;
+	date?: string;
+	content?: string;
 	metadata?: Record<string, unknown>;
 };
 
@@ -38,50 +38,94 @@ type MemoryRetainResult = {
 };
 
 export async function handler(event: MemoryRetainEvent): Promise<MemoryRetainResult> {
-	if (!event?.tenantId || !event?.agentId || !event?.threadId) {
-		console.warn("[memory-retain] missing required fields", {
-			hasTenantId: !!event?.tenantId,
-			hasAgentId: !!event?.agentId,
-			hasThreadId: !!event?.threadId,
-		});
-		return { ok: false, error: "missing tenantId, agentId, or threadId" };
-	}
-
-	const messages = (event.messages || [])
-		.filter((m) => m && typeof m.content === "string" && m.content.length > 0)
-		.map((m) => ({
-			role: (m.role === "assistant" || m.role === "system" ? m.role : "user") as
-				| "user"
-				| "assistant"
-				| "system",
-			content: m.content as string,
-		}));
-
-	if (messages.length === 0) {
-		return { ok: true, engine: "skipped" };
+	if (!event?.tenantId) {
+		console.warn("[memory-retain] MISSING_USER_CONTEXT missing tenantId");
+		return { ok: false, error: "MISSING_USER_CONTEXT" };
 	}
 
 	try {
+		const userId = event.userId || await resolveUserIdFromAgent(event.tenantId, event.agentId);
+		if (!userId) {
+			console.warn("[memory-retain] MISSING_USER_CONTEXT", {
+				hasUserId: !!event.userId,
+				hasAgentId: !!event.agentId,
+			});
+			return { ok: false, error: "MISSING_USER_CONTEXT" };
+		}
+		if (!event.userId && event.agentId) {
+			console.warn("[memory-retain] legacy agentId payload resolved to userId", {
+				tenantId: event.tenantId,
+				agentId: event.agentId,
+				userId,
+			});
+		}
+
 		const { adapter, config } = getMemoryServices();
-		await adapter.retainTurn({
+		const owner = {
 			tenantId: event.tenantId,
-			ownerType: "agent",
-			ownerId: event.agentId,
-			threadId: event.threadId,
-			messages,
-			metadata: event.metadata,
-		});
+			ownerType: "user" as const,
+			ownerId: userId,
+		};
+
+		if (event.kind === "daily" || event.date || event.content) {
+			if (!event.date || typeof event.content !== "string") {
+				console.warn("[memory-retain] MISSING_DOCUMENT_ID daily payload missing date/content");
+				return { ok: false, error: "MISSING_DOCUMENT_ID" };
+			}
+			if (!adapter.retainDailyMemory) {
+				return { ok: false, error: "retainDailyMemory not supported" };
+			}
+			await adapter.retainDailyMemory({
+				...owner,
+				date: event.date,
+				content: event.content,
+				metadata: event.metadata,
+			});
+			return { ok: true, engine: config.engine };
+		}
+
+		if (!event.threadId) {
+			console.warn("[memory-retain] MISSING_DOCUMENT_ID missing threadId");
+			return { ok: false, error: "MISSING_DOCUMENT_ID" };
+		}
+
+		const messages = normalizeMessages(event.transcript || event.messages || []);
+		if (messages.length === 0) {
+			return { ok: true, engine: "skipped" };
+		}
+
+		if (event.messages && !event.transcript) {
+			console.warn("[memory-retain] legacy messages payload converted to conversation retain", {
+				tenantId: event.tenantId,
+				userId,
+				threadId: event.threadId,
+			});
+		}
+
+		if (adapter.retainConversation) {
+			await adapter.retainConversation({
+				...owner,
+				threadId: event.threadId,
+				messages,
+				metadata: event.metadata,
+			});
+		} else {
+			await adapter.retainTurn({
+				...owner,
+				threadId: event.threadId,
+				messages,
+				metadata: event.metadata,
+			});
+		}
+
 		console.log(
 			`[memory-retain] engine=${config.engine} tenant=${event.tenantId} ` +
-				`agent=${event.agentId} thread=${event.threadId} messages=${messages.length}`,
+				`user=${userId} thread=${event.threadId} messages=${messages.length}`,
 		);
 
-		// Best-effort: trigger the Compounding Memory compile pipeline for this
-		// (tenant, agent) scope. Gated by tenants.wiki_compile_enabled + adapter
-		// kind. Failures here must not affect the retain response.
 		const compileOutcome = await maybeEnqueuePostTurnCompile({
 			tenantId: event.tenantId,
-			ownerId: event.agentId,
+			ownerId: userId,
 			adapterKind: adapter.kind,
 		});
 		if (
@@ -102,4 +146,35 @@ export async function handler(event: MemoryRetainEvent): Promise<MemoryRetainRes
 		console.error(`[memory-retain] failed: ${msg}`);
 		return { ok: false, error: msg };
 	}
+}
+
+async function resolveUserIdFromAgent(
+	tenantId: string,
+	agentId?: string,
+): Promise<string | null> {
+	if (!agentId) return null;
+	const db = getDb();
+	const [row] = await db
+		.select({ userId: agents.human_pair_id })
+		.from(agents)
+		.where(and(eq(agents.id, agentId), eq(agents.tenant_id, tenantId)))
+		.limit(1);
+	if (!row?.userId) {
+		throw new Error("MISSING_USER_CONTEXT");
+	}
+	return row.userId;
+}
+
+function normalizeMessages(messages: RetainMessage[]) {
+	const now = new Date().toISOString();
+	return messages
+		.filter((m) => typeof m.content === "string" && m.content.trim().length > 0)
+		.map((m) => ({
+			role: (m.role === "assistant" || m.role === "system" ? m.role : "user") as
+				| "user"
+				| "assistant"
+				| "system",
+			content: m.content!.trim(),
+			timestamp: m.timestamp || now,
+		}));
 }

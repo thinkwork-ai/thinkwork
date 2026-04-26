@@ -1,5 +1,5 @@
 /**
- * wikiGraph — agent-scoped graph of compiled wiki pages and their [[...]]
+ * wikiGraph — user-scoped graph of compiled wiki pages and their [[...]]
  * links.
  *
  * Returns one round-trip payload shaped like the legacy `memoryGraph`
@@ -7,7 +7,7 @@
  * minimal code churn. Nodes are `wiki_pages` rows; edges are
  * `wiki_page_links` rows filtered to active-page endpoints.
  *
- * `(tenantId, ownerId)` scoping matches the rest of the v1 wiki read
+ * `(tenantId, userId)` scoping matches the rest of the v1 wiki read
  * surface (see `assertCanReadWikiScope` and
  * `recentWikiPages.query.ts`). Archived pages and links that dangle into
  * archived pages are excluded.
@@ -56,13 +56,10 @@ export interface GraphQLWikiGraph {
 
 export const wikiGraph = async (
 	_parent: unknown,
-	args: { tenantId: string; ownerId: string },
+	args: { tenantId: string; userId?: string | null; ownerId?: string | null },
 	ctx: GraphQLContext,
 ): Promise<GraphQLWikiGraph> => {
-	await assertCanReadWikiScope(ctx, {
-		tenantId: args.tenantId,
-		ownerId: args.ownerId,
-	});
+	const { userId } = await assertCanReadWikiScope(ctx, args);
 
 	// Pages + degree in one query. Degree counts distinct connected pages,
 	// NOT link rows — wiki_page_links can carry multiple rows per (from,
@@ -74,7 +71,7 @@ export const wikiGraph = async (
 			SELECT id, type, slug, title
 			FROM wiki_pages
 			WHERE tenant_id = ${args.tenantId}
-			  AND owner_id = ${args.ownerId}
+			  AND owner_id = ${userId}
 			  AND status = 'active'
 		),
 		scope_links AS (
@@ -109,10 +106,10 @@ export const wikiGraph = async (
 		JOIN wiki_pages p1 ON p1.id = l.from_page_id
 		JOIN wiki_pages p2 ON p2.id = l.to_page_id
 		WHERE p1.tenant_id = ${args.tenantId}
-		  AND p1.owner_id = ${args.ownerId}
+		  AND p1.owner_id = ${userId}
 		  AND p1.status = 'active'
 		  AND p2.tenant_id = ${args.tenantId}
-		  AND p2.owner_id = ${args.ownerId}
+		  AND p2.owner_id = ${userId}
 		  AND p2.status = 'active'
 	`);
 

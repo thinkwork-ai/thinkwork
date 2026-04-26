@@ -32,7 +32,7 @@ import { enqueueCompileJob } from "../src/lib/wiki/repository.js";
 interface CliArgs {
 	accountId: string | null;
 	tenantId: string | null;
-	agentId: string | null;
+	userId: string | null;
 	startAfterId: string;
 	limit: number;
 	enqueueCompile: boolean;
@@ -42,7 +42,7 @@ function parseArgs(argv: string[]): CliArgs {
 	const out: CliArgs = {
 		accountId: null,
 		tenantId: null,
-		agentId: null,
+		userId: null,
 		startAfterId: "",
 		limit: Number.POSITIVE_INFINITY,
 		enqueueCompile: false,
@@ -52,7 +52,7 @@ function parseArgs(argv: string[]): CliArgs {
 		switch (a) {
 			case "--account": out.accountId = argv[++i] ?? null; break;
 			case "--tenant":  out.tenantId  = argv[++i] ?? null; break;
-			case "--agent":   out.agentId   = argv[++i] ?? null; break;
+			case "--agent":   out.userId   = argv[++i] ?? null; break;
 			case "--start-after-id": out.startAfterId = argv[++i] ?? ""; break;
 			case "--limit": {
 				const n = Number(argv[++i]);
@@ -133,13 +133,13 @@ async function fetchPage(
 
 async function main(): Promise<void> {
 	const args = parseArgs(process.argv.slice(2));
-	if (!args.accountId || !args.tenantId || !args.agentId) {
+	if (!args.accountId || !args.tenantId || !args.userId) {
 		console.error("error: --account, --tenant, --agent all required");
 		process.exit(2);
 	}
 
 	console.log(
-		`[journal-import-resume] account=${args.accountId} tenant=${args.tenantId} agent=${args.agentId} start-after=${args.startAfterId || "(beginning)"} limit=${args.limit === Number.POSITIVE_INFINITY ? "none" : args.limit}`,
+		`[journal-import-resume] account=${args.accountId} tenant=${args.tenantId} agent=${args.userId} start-after=${args.startAfterId || "(beginning)"} limit=${args.limit === Number.POSITIVE_INFINITY ? "none" : args.limit}`,
 	);
 
 	const { adapter } = getMemoryServices();
@@ -160,7 +160,7 @@ async function main(): Promise<void> {
 			try {
 				const payload = buildRetainPayload(row as any, {
 					tenantId: args.tenantId!,
-					agentId: args.agentId!,
+					userId: args.userId!,
 				});
 				if (!payload) { skipped += 1; continue; }
 				await adapter.retain(payload);
@@ -190,7 +190,7 @@ async function main(): Promise<void> {
 	if (args.enqueueCompile && ingested > 0) {
 		const { inserted, job } = await enqueueCompileJob({
 			tenantId: args.tenantId!,
-			ownerId: args.agentId!,
+			ownerId: args.userId!,
 			trigger: "bootstrap_import",
 		});
 		console.log(
