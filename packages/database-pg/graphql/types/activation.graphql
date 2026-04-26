@@ -1,0 +1,131 @@
+# Activation Agent — operating-model interview domain
+
+enum ActivationMode {
+  full
+  refresh
+}
+
+enum ActivationStatus {
+  in_progress
+  ready_for_review
+  applied
+  abandoned
+}
+
+enum ActivationLayer {
+  rhythms
+  decisions
+  dependencies
+  knowledge
+  friction
+}
+
+enum BundleItemAction {
+  apply
+  defer
+  dismiss
+}
+
+type ActivationSession {
+  id: ID!
+  userId: ID!
+  tenantId: ID!
+  mode: ActivationMode!
+  focusLayer: ActivationLayer
+  currentLayer: ActivationLayer!
+  status: ActivationStatus!
+  layerStates: AWSJSON!
+  lastAgentMessage: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  lastActiveAt: AWSDateTime!
+  completedAt: AWSDateTime
+}
+
+type ActivationSessionTurn {
+  id: ID!
+  sessionId: ID!
+  layerId: ActivationLayer!
+  turnIndex: Int!
+  role: String!
+  content: String!
+  createdAt: AWSDateTime!
+}
+
+type ActivationSessionEvent {
+  sessionId: ID!
+  userId: ID!
+  tenantId: ID!
+  status: ActivationStatus!
+  currentLayer: ActivationLayer!
+  layerStates: AWSJSON!
+  lastAgentMessage: String
+  eventType: String!
+  updatedAt: AWSDateTime!
+}
+
+input StartActivationInput {
+  userId: ID!
+  mode: ActivationMode = full
+  focusLayer: ActivationLayer
+}
+
+input SubmitActivationTurnInput {
+  sessionId: ID!
+  layerId: ActivationLayer!
+  message: String!
+}
+
+input CheckpointActivationLayerInput {
+  sessionId: ID!
+  layerId: ActivationLayer!
+  layerState: AWSJSON!
+  nextLayer: ActivationLayer
+}
+
+input BundleItemApprovalInput {
+  itemId: ID!
+  layer: ActivationLayer!
+  action: BundleItemAction!
+  target: String
+  payload: AWSJSON!
+}
+
+input ApplyActivationBundleInput {
+  sessionId: ID!
+  applyId: ID!
+  approvals: [BundleItemApprovalInput!]!
+}
+
+input DismissActivationRecommendationInput {
+  sessionId: ID!
+  itemId: ID!
+}
+
+extend type Query {
+  activationSession(sessionId: ID!): ActivationSession
+  activationSessionTurns(sessionId: ID!): [ActivationSessionTurn!]!
+}
+
+extend type Mutation {
+  startActivation(input: StartActivationInput!): ActivationSession!
+  submitActivationTurn(input: SubmitActivationTurnInput!): ActivationSession!
+  checkpointActivationLayer(input: CheckpointActivationLayerInput!): ActivationSession!
+  applyActivationBundle(input: ApplyActivationBundleInput!): ActivationSession!
+  dismissActivationRecommendation(input: DismissActivationRecommendationInput!): ActivationSession!
+  notifyActivationSessionUpdate(
+    sessionId: ID!
+    userId: ID!
+    tenantId: ID!
+    status: ActivationStatus!
+    currentLayer: ActivationLayer!
+    layerStates: AWSJSON!
+    lastAgentMessage: String
+    eventType: String!
+  ): ActivationSessionEvent
+}
+
+extend type Subscription {
+  onActivationSessionUpdated(sessionId: ID!): ActivationSessionEvent
+    @aws_subscribe(mutations: ["notifyActivationSessionUpdate"])
+}

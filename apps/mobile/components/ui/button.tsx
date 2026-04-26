@@ -18,7 +18,8 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary",
-        outline: "border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 active:bg-neutral-100 dark:active:bg-neutral-800",
+        outline:
+          "border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 active:bg-neutral-100 dark:active:bg-neutral-800",
         secondary: "bg-secondary active:bg-secondary/80",
         ghost: "active:bg-muted",
         destructive: "bg-destructive/10 active:bg-destructive/20",
@@ -39,16 +40,16 @@ const buttonVariants = cva(
       variant: "default",
       size: "default",
     },
-  }
+  },
 );
 
 const buttonTextVariants = cva("font-semibold", {
   variants: {
     variant: {
       default: "text-primary-foreground",
-      outline: "text-foreground",
-      secondary: "text-secondary-foreground",
-      ghost: "text-foreground",
+      outline: "text-neutral-950 dark:text-neutral-50",
+      secondary: "text-neutral-950 dark:text-neutral-50",
+      ghost: "text-neutral-950 dark:text-neutral-50",
       destructive: "text-destructive",
       link: "text-primary underline",
     },
@@ -78,7 +79,10 @@ export interface ButtonProps
   children?: React.ReactNode;
 }
 
-const Button = React.forwardRef<React.ElementRef<typeof Pressable>, ButtonProps>(
+const Button = React.forwardRef<
+  React.ElementRef<typeof Pressable>,
+  ButtonProps
+>(
   (
     {
       className,
@@ -90,7 +94,7 @@ const Button = React.forwardRef<React.ElementRef<typeof Pressable>, ButtonProps>
       children,
       ...props
     },
-    ref
+    ref,
   ) => {
     const getIndicatorColor = () => {
       if (variant === "default") return "var(--primary-foreground)";
@@ -98,29 +102,38 @@ const Button = React.forwardRef<React.ElementRef<typeof Pressable>, ButtonProps>
       return "var(--foreground)";
     };
 
+    const renderChildren = () =>
+      React.Children.map(children, (child) =>
+        typeof child === "string" || typeof child === "number" ? (
+          <Text
+            className={cn(buttonTextVariants({ variant, size }), textClassName)}
+          >
+            {child}
+          </Text>
+        ) : (
+          child
+        ),
+      );
+
     return (
       <Pressable
         ref={ref}
         className={cn(
           buttonVariants({ variant, size }),
           disabled && "opacity-50",
-          className
+          className,
         )}
         disabled={disabled || loading}
         {...props}
       >
         {loading ? (
           <ActivityIndicator size="small" color={getIndicatorColor()} />
-        ) : typeof children === "string" ? (
-          <Text className={cn(buttonTextVariants({ variant, size }), textClassName)}>
-            {children}
-          </Text>
         ) : (
-          children
+          renderChildren()
         )}
       </Pressable>
     );
-  }
+  },
 );
 
 Button.displayName = "Button";

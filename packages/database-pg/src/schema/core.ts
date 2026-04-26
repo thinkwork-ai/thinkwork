@@ -180,6 +180,18 @@ export const userProfiles = pgTable("user_profiles", {
   theme: text("theme").default("system"),
   notification_preferences: jsonb("notification_preferences"),
   /**
+   * Durable operating model captured by the Activation Agent. Stored as
+   * layer-keyed JSON so V1 can evolve entry metadata without schema churn.
+   */
+  operating_model: jsonb("operating_model"),
+  /**
+   * Prior operating-model snapshots appended before each apply/refresh.
+   */
+  operating_model_history: jsonb("operating_model_history")
+    .array()
+    .notNull()
+    .default(sql`'{}'::jsonb[]`),
+  /**
    * Profession / role label (e.g., "Founder", "VP Engineering"). Rendered into
    * agent USER.md as {{HUMAN_TITLE}} at assignment time. Null → renders as "—".
    */
