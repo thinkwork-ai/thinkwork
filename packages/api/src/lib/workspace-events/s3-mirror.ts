@@ -24,7 +24,9 @@ export async function writeWorkspaceAuditMirror(
       Key: input.key,
       Body: JSON.stringify(input.body, null, 2),
       ContentType: "application/json",
+      Metadata: {
+        "thinkwork-suppress-event": "true",
+      },
     }),
   );
 }
-
