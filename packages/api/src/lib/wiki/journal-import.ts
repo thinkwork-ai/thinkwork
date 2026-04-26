@@ -1,9 +1,9 @@
 /**
  * Bulk import of an external "journal" dataset into Hindsight as normalized
- * memory records, scoped to one (tenant, agent) pair.
+ * memory records, scoped to one (tenant, user) pair.
  *
- * v1 use case: seed the Compounding Memory pipeline for agent GiGi with
- * Amy's historical restaurant notes. One source row (`journal.idea`)
+ * v1 use case: seed the Compounding Memory pipeline with a user's
+ * historical notes. One source row (`journal.idea`)
  * becomes one memory record, with the joined place + journal context
  * carried in `metadata` so the compile pipeline has everything it needs
  * to build compounded pages (see .prds/compounding-memory-v1-build-plan.md
@@ -30,7 +30,7 @@ import { enqueueCompileJob } from "./repository.js";
 export interface JournalImportArgs {
 	accountId: string;
 	tenantId: string;
-	agentId: string;
+	userId: string;
 	/** Optional cap for smoke-tests (e.g. 50). Unset = ingest everything. */
 	limit?: number;
 	/** Injected for tests; defaults to the process memory adapter. */
@@ -40,7 +40,7 @@ export interface JournalImportArgs {
 export interface JournalImportResult {
 	accountId: string;
 	tenantId: string;
-	agentId: string;
+	userId: string;
 	recordsIngested: number;
 	recordsSkipped: number;
 	errors: number;
@@ -112,7 +112,7 @@ export async function runJournalImport(
 			try {
 				const payload = buildRetainPayload(row, {
 					tenantId: args.tenantId,
-					agentId: args.agentId,
+					userId: args.userId,
 				});
 				if (!payload) {
 					recordsSkipped += 1;
@@ -140,7 +140,7 @@ export async function runJournalImport(
 		try {
 			const { inserted, job } = await enqueueCompileJob({
 				tenantId: args.tenantId,
-				ownerId: args.agentId,
+				ownerId: args.userId,
 				trigger: "bootstrap_import",
 			});
 			compileJobId = job.id;
@@ -155,7 +155,7 @@ export async function runJournalImport(
 	return {
 		accountId: args.accountId,
 		tenantId: args.tenantId,
-		agentId: args.agentId,
+		userId: args.userId,
 		recordsIngested,
 		recordsSkipped,
 		errors,
@@ -207,7 +207,7 @@ async function fetchPage(
 
 export interface BuildPayloadOwner {
 	tenantId: string;
-	agentId: string;
+	userId: string;
 }
 
 export function buildRetainPayload(
@@ -226,8 +226,8 @@ export function buildRetainPayload(
 
 	return {
 		tenantId: owner.tenantId,
-		ownerType: "agent" as const,
-		ownerId: owner.agentId,
+		ownerType: "user" as const,
+		ownerId: owner.userId,
 		sourceType: "import" as const,
 		content: text,
 		metadata,

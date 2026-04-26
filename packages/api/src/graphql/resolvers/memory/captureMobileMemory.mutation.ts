@@ -1,7 +1,7 @@
 /**
  * captureMobileMemory — Mobile quick-capture footer writes a user-authored
- * fact directly into the selected agent's Hindsight bank. Not a chat turn;
- * the agent is not invoked. The captured unit will surface on the agent's
+ * fact directly into the user's Hindsight bank. Not a chat turn;
+ * the agent is not invoked. The captured unit will surface on the user's
  * next recall because it lives in the same bank the agent reads from.
  *
  * Factor:
@@ -16,8 +16,8 @@
  */
 
 import type { GraphQLContext } from "../../context.js";
-import { db, eq, agents } from "../../utils.js";
 import { getMemoryServices } from "../../../lib/memory/index.js";
+import { requireMemoryUserScope } from "../core/require-user-scope.js";
 
 const MAX_CONTENT_LENGTH = 2000;
 const CAPTURE_SOURCE = "mobile_quick_capture";
@@ -37,13 +37,14 @@ export const captureMobileMemory = async (
 	ctx: GraphQLContext,
 ) => {
 	const {
-		agentId,
 		content,
 		factType = "FACT",
 		metadata: callerMetadata,
 		clientCaptureId,
 	} = args as {
-		agentId: string;
+		tenantId?: string;
+		userId?: string;
+		agentId?: string;
 		content: string;
 		factType?: MobileCaptureFactType;
 		metadata?: Record<string, unknown> | string | null;
@@ -58,17 +59,7 @@ export const captureMobileMemory = async (
 		throw new Error(`Capture content exceeds ${MAX_CONTENT_LENGTH} characters`);
 	}
 
-	if (!ctx.auth.tenantId) {
-		throw new Error("Tenant context required");
-	}
-
-	const [agent] = await db
-		.select({ id: agents.id, tenant_id: agents.tenant_id, slug: agents.slug })
-		.from(agents)
-		.where(eq(agents.id, agentId));
-	if (!agent || agent.tenant_id !== ctx.auth.tenantId) {
-		throw new Error("Agent not found or access denied");
-	}
+	const { tenantId, userId } = await requireMemoryUserScope(ctx, args);
 
 	const parsedCallerMetadata = parseMetadata(callerMetadata);
 	const factTypeOverride = FACT_TYPE_OVERRIDES[factType];
@@ -89,9 +80,9 @@ export const captureMobileMemory = async (
 	}
 
 	const result = await adapter.retain({
-		tenantId: ctx.auth.tenantId,
-		ownerType: "agent",
-		ownerId: agent.id as string,
+		tenantId,
+		ownerType: "user",
+		ownerId: userId as string,
 		sourceType: "explicit_remember",
 		content: trimmed,
 		role: "user",
@@ -100,8 +91,9 @@ export const captureMobileMemory = async (
 
 	return {
 		id: result.record.id,
-		tenantId: ctx.auth.tenantId,
-		agentId: agent.id,
+		tenantId,
+		userId: userId,
+		agentId: args.agentId ?? null,
 		content: trimmed,
 		factType,
 		capturedAt,

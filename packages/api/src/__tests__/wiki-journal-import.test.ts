@@ -116,7 +116,7 @@ function makeRow(overrides: Record<string, unknown> = {}) {
 }
 
 describe("buildRetainPayload", () => {
-	const owner = { tenantId: "t1", agentId: "a1" };
+	const owner = { tenantId: "t1", userId: "a1" };
 
 	it("skips records with neither body nor place anchor", () => {
 		const out = buildRetainPayload(makeRow({ body: " " }), owner);
@@ -276,7 +276,7 @@ describe("runJournalImport", () => {
 		const result = await runJournalImport({
 			accountId: "acct_1",
 			tenantId: "t1",
-			agentId: "a1",
+			userId: "a1",
 			adapter: mockAdapter as any,
 		});
 
@@ -301,7 +301,7 @@ describe("runJournalImport", () => {
 		const result = await runJournalImport({
 			accountId: "acct_1",
 			tenantId: "t1",
-			agentId: "a1",
+			userId: "a1",
 			adapter: mockAdapter as any,
 		});
 
@@ -328,7 +328,7 @@ describe("runJournalImport", () => {
 		const result = await runJournalImport({
 			accountId: "acct_1",
 			tenantId: "t1",
-			agentId: "a1",
+			userId: "a1",
 			limit: 2,
 			adapter: mockAdapter as any,
 		});
@@ -356,7 +356,7 @@ describe("runJournalImport", () => {
 		const result = await runJournalImport({
 			accountId: "acct_1",
 			tenantId: "t1",
-			agentId: "a1",
+			userId: "a1",
 			adapter: mockAdapter as any,
 		});
 		expect(result.errors).toBe(1);
@@ -382,7 +382,7 @@ describe("bootstrapJournalImport", () => {
 		await expect(
 			bootstrapJournalImport(
 				{},
-				{ accountId: "acct_1", tenantId: "t1", agentId: "a1" },
+				{ accountId: "acct_1", tenantId: "t1", userId: "a1" },
 				makeCtx("cognito"),
 			),
 		).rejects.toThrow(/Admin-only/);
@@ -395,12 +395,12 @@ describe("bootstrapJournalImport", () => {
 		// instead of throwing, which is the shape the admin UI renders.
 		const res = await bootstrapJournalImport(
 			{},
-			{ accountId: "acct_1", tenantId: "t1", agentId: "a1" },
+			{ accountId: "acct_1", tenantId: "t1", userId: "a1" },
 			makeCtx("apikey"),
 		);
 		expect(res.accountId).toBe("acct_1");
 		expect(res.tenantId).toBe("t1");
-		expect(res.agentId).toBe("a1");
+		expect(res.userId).toBe("a1");
 		expect(typeof res.dispatched).toBe("boolean");
 		expect(typeof res.dispatchedAt).toBe("string");
 	});

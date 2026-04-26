@@ -7,7 +7,7 @@
  * Parent-level authorization was enforced when the page was fetched
  * through `wikiPage` / `recentWikiPages` / `wikiSearch`, so field
  * resolvers here trust the parent object and skip re-checking
- * (tenantId, ownerId). Cross-tenant access cannot reach these resolvers
+ * (tenantId, userId). Cross-tenant access cannot reach these resolvers
  * because the parent query would have thrown first.
  */
 

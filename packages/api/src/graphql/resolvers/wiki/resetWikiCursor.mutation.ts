@@ -19,7 +19,8 @@ import { assertCanAdminWikiScope } from "./auth.js";
 
 interface ResetWikiCursorArgs {
 	tenantId: string;
-	ownerId: string;
+	userId?: string | null;
+	ownerId?: string | null;
 	force?: boolean | null;
 }
 
@@ -28,12 +29,9 @@ export const resetWikiCursor = async (
 	args: ResetWikiCursorArgs,
 	ctx: GraphQLContext,
 ) => {
-	await assertCanAdminWikiScope(ctx, {
-		tenantId: args.tenantId,
-		ownerId: args.ownerId,
-	});
+	const { tenantId, userId } = await assertCanAdminWikiScope(ctx, args);
 
-	await resetCursor({ tenantId: args.tenantId, ownerId: args.ownerId });
+	await resetCursor({ tenantId, ownerId: userId });
 
 	let pagesArchived = 0;
 	if (args.force) {
@@ -43,7 +41,7 @@ export const resetWikiCursor = async (
 			.where(
 				and(
 					eq(wikiPages.tenant_id, args.tenantId),
-					eq(wikiPages.owner_id, args.ownerId),
+					eq(wikiPages.owner_id, userId),
 					eq(wikiPages.status, "active"),
 				),
 			)
@@ -53,7 +51,8 @@ export const resetWikiCursor = async (
 
 	return {
 		tenantId: args.tenantId,
-		ownerId: args.ownerId,
+		userId,
+		ownerId: args.ownerId ?? userId,
 		cursorCleared: true,
 		pagesArchived,
 	};

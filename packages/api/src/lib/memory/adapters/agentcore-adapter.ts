@@ -1,8 +1,8 @@
 /**
  * AgentCore Memory adapter.
  *
- * Maps ThinkWork owner refs to AgentCore namespaces keyed on the agent
- * UUID (which the agent container sets as `actorId` via `_ASSISTANT_ID`)
+ * Maps ThinkWork owner refs to AgentCore namespaces keyed on the user
+ * UUID (which the agent container sets as `actorId` via `USER_ID`)
  * and normalizes AgentCore `MemoryRecordSummary` shapes into
  * {@link ThinkWorkMemoryRecord}. Honest about capability gaps: no graph
  * inspection, no reflect, no compact, no forget (AgentCore Memory has
@@ -54,8 +54,8 @@ const NAMESPACE_PREFIXES: Array<{
 	prefix: (actorId: string) => string;
 	strategy: MemoryStrategy;
 }> = [
-	{ prefix: (actorId) => `assistant_${actorId}`, strategy: "semantic" },
-	{ prefix: (actorId) => `preferences_${actorId}`, strategy: "preferences" },
+	{ prefix: (actorId) => `user_${actorId}`, strategy: "semantic" },
+	{ prefix: (actorId) => `preferences_user_${actorId}`, strategy: "preferences" },
 ];
 
 const AGENTCORE_CAPABILITIES: MemoryCapabilities = {
@@ -127,7 +127,7 @@ export class AgentCoreAdapter implements MemoryAdapter {
 	async retain(req: RetainRequest): Promise<RetainResult> {
 		const client = this.getClient();
 		const actorId = req.ownerId;
-		const namespace = `assistant_${actorId}`;
+		const namespace = `user_${actorId}`;
 		const requestIdentifier = randomUUID().replace(/-/g, "").slice(0, 16);
 		const timestamp = new Date();
 
@@ -157,7 +157,7 @@ export class AgentCoreAdapter implements MemoryAdapter {
 		const record: ThinkWorkMemoryRecord = {
 			id: ref,
 			tenantId: req.tenantId,
-			ownerType: "agent",
+			ownerType: req.ownerType,
 			ownerId: req.ownerId,
 			threadId: req.threadId,
 			kind: "unit",
@@ -299,7 +299,7 @@ export class AgentCoreAdapter implements MemoryAdapter {
 
 	private mapSummary(
 		r: MemoryRecordSummary,
-		owner: { tenantId: string; ownerType: "agent"; ownerId: string; threadId?: string },
+		owner: { tenantId: string; ownerType: "user" | "agent"; ownerId: string; threadId?: string },
 		strategy: MemoryStrategy,
 		fallbackNamespace: string,
 	): ThinkWorkMemoryRecord {
@@ -312,7 +312,7 @@ export class AgentCoreAdapter implements MemoryAdapter {
 		return {
 			id: r.memoryRecordId || `agentcore-${ns}-${createdAt}`,
 			tenantId: owner.tenantId,
-			ownerType: "agent",
+			ownerType: owner.ownerType,
 			ownerId: owner.ownerId,
 			threadId: owner.threadId,
 			kind: "unit",

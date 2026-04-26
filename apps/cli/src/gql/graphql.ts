@@ -1142,6 +1142,7 @@ export type MemoryGraphNode = {
 export type MemoryRecord = {
   __typename?: 'MemoryRecord';
   accessCount?: Maybe<Scalars['Int']['output']>;
+  /** @deprecated Use userSlug */
   agentSlug?: Maybe<Scalars['String']['output']>;
   confidence?: Maybe<Scalars['Float']['output']>;
   content?: Maybe<MemoryContent>;
@@ -1162,12 +1163,13 @@ export type MemoryRecord = {
   tags?: Maybe<Array<Scalars['String']['output']>>;
   threadId?: Maybe<Scalars['String']['output']>;
   updatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  userSlug?: Maybe<Scalars['String']['output']>;
   /**
    * Compiled wiki pages (Compounding Memory) that cite this memory unit as
    * a source. Populated from wiki_section_sources.source_ref. Returns pages
-   * scoped to the same agent as this memory (there is no cross-agent
+   * scoped to the same user as this memory (there is no cross-user
    * citation in v1). Returned pages have empty `sections`/`aliases` — fetch
-   * `wikiPage(tenantId, ownerId, type, slug)` for full detail.
+   * `wikiPage(tenantId, userId, type, slug)` for full detail.
    */
   wikiPages: Array<WikiPage>;
 };
@@ -1273,7 +1275,8 @@ export enum MobileCaptureFactType {
 
 export type MobileMemoryCapture = {
   __typename?: 'MobileMemoryCapture';
-  agentId: Scalars['ID']['output'];
+  /** @deprecated Use userId */
+  agentId?: Maybe<Scalars['ID']['output']>;
   capturedAt: Scalars['AWSDateTime']['output'];
   content: Scalars['String']['output'];
   factType: MobileCaptureFactType;
@@ -1281,6 +1284,7 @@ export type MobileMemoryCapture = {
   metadata?: Maybe<Scalars['AWSJSON']['output']>;
   syncedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   tenantId: Scalars['ID']['output'];
+  userId: Scalars['ID']['output'];
 };
 
 export type MobileWikiSearchResult = {
@@ -1372,7 +1376,7 @@ export type Mutation = {
   checkoutThread: Thread;
   claimVanityEmailAddress: AgentCapability;
   /**
-   * Admin-only: enqueue an ad-hoc compile job for a specific (tenant, agent).
+   * Admin-only: enqueue an ad-hoc compile job for a specific (tenant, user).
    * Returns the job row (newly inserted or the in-flight dedupe hit).
    *
    * When `modelId` is supplied, it is forwarded to the compile Lambda event
@@ -1449,7 +1453,7 @@ export type Mutation = {
   reorderQuickActions: Array<UserQuickAction>;
   requestRevision: InboxItem;
   /**
-   * Admin-only replay: clear the compile cursor for (tenant, owner). If
+   * Admin-only replay: clear the compile cursor for (tenant, user). If
    * `force` is true, also archives every active page in the scope so the
    * next compile rebuilds from scratch. Destructive when force=true.
    */
@@ -1577,9 +1581,10 @@ export type MutationAssignThreadLabelArgs = {
 
 export type MutationBootstrapJournalImportArgs = {
   accountId: Scalars['ID']['input'];
-  agentId: Scalars['ID']['input'];
+  agentId?: InputMaybe<Scalars['ID']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   tenantId: Scalars['ID']['input'];
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -1610,11 +1615,13 @@ export type MutationCancelThreadTurnArgs = {
 
 
 export type MutationCaptureMobileMemoryArgs = {
-  agentId: Scalars['ID']['input'];
+  agentId?: InputMaybe<Scalars['ID']['input']>;
   clientCaptureId?: InputMaybe<Scalars['ID']['input']>;
   content: Scalars['String']['input'];
   factType?: InputMaybe<MobileCaptureFactType>;
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -1632,8 +1639,9 @@ export type MutationClaimVanityEmailAddressArgs = {
 
 export type MutationCompileWikiNowArgs = {
   modelId?: InputMaybe<Scalars['String']['input']>;
-  ownerId: Scalars['ID']['input'];
+  ownerId?: InputMaybe<Scalars['ID']['input']>;
   tenantId: Scalars['ID']['input'];
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -1780,7 +1788,10 @@ export type MutationDeleteKnowledgeBaseArgs = {
 
 
 export type MutationDeleteMemoryRecordArgs = {
+  assistantId?: InputMaybe<Scalars['ID']['input']>;
   memoryRecordId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -1790,8 +1801,10 @@ export type MutationDeleteMessageArgs = {
 
 
 export type MutationDeleteMobileMemoryCaptureArgs = {
-  agentId: Scalars['ID']['input'];
+  agentId?: InputMaybe<Scalars['ID']['input']>;
   captureId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -2017,8 +2030,9 @@ export type MutationRequestRevisionArgs = {
 
 export type MutationResetWikiCursorArgs = {
   force?: InputMaybe<Scalars['Boolean']['input']>;
-  ownerId: Scalars['ID']['input'];
+  ownerId?: InputMaybe<Scalars['ID']['input']>;
   tenantId: Scalars['ID']['input'];
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -2186,8 +2200,11 @@ export type MutationUpdateKnowledgeBaseArgs = {
 
 
 export type MutationUpdateMemoryRecordArgs = {
+  assistantId?: InputMaybe<Scalars['ID']['input']>;
   content: Scalars['String']['input'];
   memoryRecordId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -2386,11 +2403,11 @@ export type Query = {
   messages: MessageConnection;
   mobileMemoryCaptures: Array<MobileMemoryCapture>;
   /**
-   * Free-text search across the full Hindsight bank for the given agent.
+   * Free-text search across the full Hindsight bank for the given user.
    * Hits Hindsight's recall endpoint (semantic + rerank) and normalizes results
    * back to MobileMemoryCapture so the Memories list can render search results
    * with the same rows it uses for captures. Not filtered by capture_source —
-   * search is meant to answer "what does this agent know?", including chat-
+   * search is meant to answer "what does this user know?", including chat-
    * derived observations.
    */
   mobileMemorySearch: Array<MobileMemoryCapture>;
@@ -2398,7 +2415,7 @@ export type Query = {
    * Ranked wiki-page search for mobile. Runs a Postgres full-text query
    * (`plainto_tsquery('english', …)` + `ts_rank`) against the GIN-indexed
    * `search_tsv` generated column on `wiki_pages` (title || summary ||
-   * body_md), scoped to one (tenant, agent) pair. Returns results in
+   * body_md), scoped to one (tenant, user) pair. Returns results in
    * `ts_rank` DESC order, tie-broken by `last_compiled_at` DESC.
    *
    * Previously routed through Hindsight semantic recall; on the compiled
@@ -2412,7 +2429,7 @@ export type Query = {
   performanceTimeSeries: Array<PerformanceTimeSeries>;
   queuedWakeups: Array<AgentWakeupRequest>;
   /**
-   * Newest compiled wiki pages for the given agent, ordered by
+   * Newest compiled wiki pages for the given user, ordered by
    * last_compiled_at DESC (falling back to updated_at when the page hasn't
    * been recompiled yet). Intended as the default Memories-tab feed so
    * the user sees fresh pages before they type a search query.
@@ -2458,9 +2475,9 @@ export type Query = {
    */
   wikiBacklinks: Array<WikiPage>;
   /**
-   * Admin-only: list recent compile jobs for a tenant. When `ownerId` is
-   * provided, restricts to that agent's jobs; when null/absent, returns
-   * jobs across every agent in the tenant. Ordered newest-first.
+   * Admin-only: list recent compile jobs for a tenant. When `userId` is
+   * provided, restricts to that user's jobs; when null/absent, returns
+   * jobs across every user in the tenant. Ordered newest-first.
    *
    * Powers the `thinkwork wiki status` CLI command.
    */
@@ -2473,15 +2490,15 @@ export type Query = {
    */
   wikiConnectedPages: Array<WikiPage>;
   /**
-   * Agent-scoped force-graph: every active wiki page + every page-to-page
-   * link whose endpoints are both active in the same `(tenant, owner)`
+   * User-scoped force-graph: every active wiki page + every page-to-page
+   * link whose endpoints are both active in the same `(tenant, user)`
    * scope. Links that reference archived pages are excluded. One round-trip.
    */
   wikiGraph: WikiGraph;
-  /** Read one compiled page by slug. `ownerId` is required. */
+  /** Read one compiled page by slug. `userId` is required. */
   wikiPage?: Maybe<WikiPage>;
   /**
-   * Postgres full-text search over compiled pages in a single (tenant, owner)
+   * Postgres full-text search over compiled pages in a single (tenant, user)
    * scope. Also matches exact aliases. Ranked by ts_rank + alias-hit boost.
    */
   wikiSearch: Array<WikiSearchResult>;
@@ -2746,21 +2763,27 @@ export type QueryLinkedAgentsForTemplateArgs = {
 
 
 export type QueryMemoryGraphArgs = {
-  assistantId: Scalars['ID']['input'];
+  assistantId?: InputMaybe<Scalars['ID']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
 export type QueryMemoryRecordsArgs = {
-  assistantId: Scalars['ID']['input'];
+  assistantId?: InputMaybe<Scalars['ID']['input']>;
   namespace: Scalars['String']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
 export type QueryMemorySearchArgs = {
-  assistantId: Scalars['ID']['input'];
+  assistantId?: InputMaybe<Scalars['ID']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   query: Scalars['String']['input'];
   strategy?: InputMaybe<MemoryStrategy>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -2772,22 +2795,28 @@ export type QueryMessagesArgs = {
 
 
 export type QueryMobileMemoryCapturesArgs = {
-  agentId: Scalars['ID']['input'];
+  agentId?: InputMaybe<Scalars['ID']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
 export type QueryMobileMemorySearchArgs = {
-  agentId: Scalars['ID']['input'];
+  agentId?: InputMaybe<Scalars['ID']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   query: Scalars['String']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
 export type QueryMobileWikiSearchArgs = {
-  agentId: Scalars['ID']['input'];
+  agentId?: InputMaybe<Scalars['ID']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   query: Scalars['String']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -2804,8 +2833,10 @@ export type QueryQueuedWakeupsArgs = {
 
 
 export type QueryRecentWikiPagesArgs = {
-  agentId: Scalars['ID']['input'];
+  agentId?: InputMaybe<Scalars['ID']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -3042,6 +3073,7 @@ export type QueryWikiCompileJobsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   ownerId?: InputMaybe<Scalars['ID']['input']>;
   tenantId: Scalars['ID']['input'];
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -3051,24 +3083,27 @@ export type QueryWikiConnectedPagesArgs = {
 
 
 export type QueryWikiGraphArgs = {
-  ownerId: Scalars['ID']['input'];
+  ownerId?: InputMaybe<Scalars['ID']['input']>;
   tenantId: Scalars['ID']['input'];
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
 export type QueryWikiPageArgs = {
-  ownerId: Scalars['ID']['input'];
+  ownerId?: InputMaybe<Scalars['ID']['input']>;
   slug: Scalars['String']['input'];
   tenantId: Scalars['ID']['input'];
   type: WikiPageType;
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
 export type QueryWikiSearchArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
-  ownerId: Scalars['ID']['input'];
+  ownerId?: InputMaybe<Scalars['ID']['input']>;
   query: Scalars['String']['input'];
   tenantId: Scalars['ID']['input'];
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 export enum QuickActionScope {
@@ -4041,11 +4076,13 @@ export type WikiCompileJob = {
   finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   id: Scalars['ID']['output'];
   metrics?: Maybe<Scalars['AWSJSON']['output']>;
+  /** @deprecated Use userId */
   ownerId: Scalars['ID']['output'];
   startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   status: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
   trigger: Scalars['String']['output'];
+  userId: Scalars['ID']['output'];
 };
 
 export type WikiGraph = {
@@ -4063,8 +4100,8 @@ export type WikiGraphEdge = {
 };
 
 /**
- * Agent-scoped force-graph payload: all active pages and their [[...]] links
- * for one `(tenant, owner)` scope. Shaped to match the legacy `memoryGraph`
+ * User-scoped force-graph payload: all active pages and their [[...]] links
+ *   for one `(tenant, user)` scope. Shaped to match the legacy `memoryGraph`
  * wire contract so the admin force-graph component can swap data sources
  * with minimal client changes. `type` is always `"page"` on nodes; the
  * Wiki page type (`ENTITY`/`TOPIC`/`DECISION`) lives in `entityType`.
@@ -4091,11 +4128,13 @@ export type WikiGraphNode = {
 export type WikiJournalImportDispatch = {
   __typename?: 'WikiJournalImportDispatch';
   accountId: Scalars['ID']['output'];
-  agentId: Scalars['ID']['output'];
+  /** @deprecated Use userId */
+  agentId?: Maybe<Scalars['ID']['output']>;
   dispatched: Scalars['Boolean']['output'];
   dispatchedAt: Scalars['AWSDateTime']['output'];
   error?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
+  userId: Scalars['ID']['output'];
 };
 
 export type WikiPage = {
@@ -4110,6 +4149,7 @@ export type WikiPage = {
   createdAt: Scalars['AWSDateTime']['output'];
   id: Scalars['ID']['output'];
   lastCompiledAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  /** @deprecated Use userId */
   ownerId: Scalars['ID']['output'];
   /**
    * Parent hub when this page was promoted from a section on another page.
@@ -4149,6 +4189,7 @@ export type WikiPage = {
   title: Scalars['String']['output'];
   type: WikiPageType;
   updatedAt: Scalars['AWSDateTime']['output'];
+  userId: Scalars['ID']['output'];
 };
 
 
@@ -4174,8 +4215,8 @@ export type WikiPageSection = {
 /**
  * Compounding Memory (wiki) read path.
  *
- * v1 is strictly agent-scoped: every read requires both `tenantId` and
- * `ownerId`. See .prds/compounding-memory-scoping.md.
+ * v1 is strictly user-scoped: every read requires both `tenantId` and
+ * `userId`. See .prds/compounding-memory-scoping.md.
  */
 export enum WikiPageType {
   Decision = 'DECISION',
@@ -4198,9 +4239,11 @@ export type WikiPromotedFromSection = {
 export type WikiResetCursorResult = {
   __typename?: 'WikiResetCursorResult';
   cursorCleared: Scalars['Boolean']['output'];
+  /** @deprecated Use userId */
   ownerId: Scalars['ID']['output'];
   pagesArchived: Scalars['Int']['output'];
   tenantId: Scalars['ID']['output'];
+  userId: Scalars['ID']['output'];
 };
 
 export type WikiSearchResult = {

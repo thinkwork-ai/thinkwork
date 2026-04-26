@@ -2,10 +2,9 @@
 
 Exposes `search_wiki` and `read_wiki_page` to Strands. Both tools call the
 internal graphql-http Lambda (via API Gateway + x-api-key auth). Scope is
-strictly owner-scoped per .prds/compounding-memory-scoping.md — the owner id
-is ALWAYS derived from the calling agent's identity at registration time, never
-a model-supplied argument, so the model cannot read another agent's wiki even
-within the same tenant.
+strictly user-scoped — the user id is ALWAYS derived from the calling
+runtime's identity at registration time, never a model-supplied argument, so
+the model cannot read another user's wiki even within the same tenant.
 
 Lifecycle mirrors the hindsight_recall/hindsight_reflect pattern:
 
@@ -36,8 +35,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _WIKI_QUERY_SEARCH = """
-query WikiSearch($tenantId: ID!, $ownerId: ID!, $query: String!, $limit: Int) {
-  wikiSearch(tenantId: $tenantId, ownerId: $ownerId, query: $query, limit: $limit) {
+query WikiSearch($tenantId: ID!, $userId: ID!, $query: String!, $limit: Int) {
+  wikiSearch(tenantId: $tenantId, userId: $userId, query: $query, limit: $limit) {
     score
     matchedAlias
     page {
@@ -53,8 +52,8 @@ query WikiSearch($tenantId: ID!, $ownerId: ID!, $query: String!, $limit: Int) {
 """.strip()
 
 _WIKI_QUERY_PAGE = """
-query WikiPage($tenantId: ID!, $ownerId: ID!, $type: WikiPageType!, $slug: String!) {
-  wikiPage(tenantId: $tenantId, ownerId: $ownerId, type: $type, slug: $slug) {
+query WikiPage($tenantId: ID!, $userId: ID!, $type: WikiPageType!, $slug: String!) {
+  wikiPage(tenantId: $tenantId, userId: $userId, type: $type, slug: $slug) {
     id
     type
     slug
@@ -138,8 +137,8 @@ async def _graphql(
 
 
 # ---------------------------------------------------------------------------
-# Tool factories — closures capture (tenant_id, owner_id) so the model can
-# never address another agent's wiki.
+# Tool factories — closures capture (tenant_id, owner_id-as-user-id) so the
+# model can never address another user's wiki.
 # ---------------------------------------------------------------------------
 
 
@@ -149,7 +148,7 @@ def make_wiki_tools(
     tenant_id: str,
     owner_id: str,
 ) -> tuple[Callable[..., Any], Callable[..., Any]]:
-    """Build the two wiki tools bound to a fixed (tenant, agent) scope.
+    """Build the two wiki tools bound to a fixed (tenant, user) scope.
 
     Parameters
     ----------
@@ -159,13 +158,13 @@ def make_wiki_tools(
         without the Strands import side-effects.
     tenant_id, owner_id:
         Caller's scope. Both are captured by closure. The tools expose NO
-        arguments for these so the model cannot pass a different agent's id.
+        arguments for these so the model cannot pass a different user's id.
     """
 
     @strands_tool
     async def search_wiki(query: str, limit: int = 10) -> str:
-        """Search this agent's compiled-memory wiki pages (entities, topics,
-        decisions the agent has accumulated) by free-text query.
+        """Search this user's compiled-memory wiki pages (entities, topics,
+        decisions the user has accumulated) by free-text query.
 
         Use this when the user asks about something the agent should "already
         know" — a place, person, topic, or past decision — and you want a
@@ -175,7 +174,7 @@ def make_wiki_tools(
 
         Prefer this over `hindsight_recall` when the user asks about a named
         subject (restaurant, person, project) that the wiki may already have
-        compiled — wiki pages carry the agent's distilled knowledge. Use
+        compiled — wiki pages carry the user's distilled knowledge. Use
         `hindsight_recall` for raw facts or freshly-remembered details that
         may not yet be compiled.
         """
@@ -183,7 +182,7 @@ def make_wiki_tools(
             _WIKI_QUERY_SEARCH,
             {
                 "tenantId": tenant_id,
-                "ownerId": owner_id,
+                "userId": owner_id,
                 "query": query,
                 "limit": max(1, min(limit, 25)),
             },
@@ -210,7 +209,7 @@ def make_wiki_tools(
     @strands_tool
     async def read_wiki_page(slug: str, type: str = "entity") -> str:
         """Fetch the full body of one compiled-memory wiki page owned by this
-        agent, by slug and type.
+        user, by slug and type.
 
         `type` must be one of: entity, topic, decision. Use this when you
         have a specific slug from `search_wiki` and want the full compiled
@@ -227,7 +226,7 @@ def make_wiki_tools(
             _WIKI_QUERY_PAGE,
             {
                 "tenantId": tenant_id,
-                "ownerId": owner_id,
+                "userId": owner_id,
                 "type": gql_type,
                 "slug": slug,
             },

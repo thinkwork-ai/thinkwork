@@ -20,7 +20,7 @@ import { assertCanAdminWikiScope } from "./auth.js";
 interface BootstrapJournalImportArgs {
 	accountId: string;
 	tenantId: string;
-	agentId: string;
+	userId: string;
 	limit?: number | null;
 }
 
@@ -31,7 +31,7 @@ export const bootstrapJournalImport = async (
 ) => {
 	await assertCanAdminWikiScope(ctx, {
 		tenantId: args.tenantId,
-		ownerId: args.agentId,
+		userId: args.userId,
 	});
 
 	const fnName = resolveBootstrapFunctionName();
@@ -39,7 +39,7 @@ export const bootstrapJournalImport = async (
 		return {
 			accountId: args.accountId,
 			tenantId: args.tenantId,
-			agentId: args.agentId,
+			userId: args.userId,
 			dispatched: false,
 			error:
 				"wiki-bootstrap-import function name unresolved (STAGE/WIKI_BOOTSTRAP_IMPORT_FN env)",
@@ -60,7 +60,7 @@ export const bootstrapJournalImport = async (
 					JSON.stringify({
 						accountId: args.accountId,
 						tenantId: args.tenantId,
-						agentId: args.agentId,
+						userId: args.userId,
 						limit: args.limit ?? null,
 					}),
 				),
@@ -69,7 +69,7 @@ export const bootstrapJournalImport = async (
 		return {
 			accountId: args.accountId,
 			tenantId: args.tenantId,
-			agentId: args.agentId,
+			userId: args.userId,
 			dispatched: true,
 			error: null,
 			dispatchedAt: new Date().toISOString(),
@@ -78,7 +78,7 @@ export const bootstrapJournalImport = async (
 		return {
 			accountId: args.accountId,
 			tenantId: args.tenantId,
-			agentId: args.agentId,
+			userId: args.userId,
 			dispatched: false,
 			error: (err as Error)?.message ?? String(err),
 			dispatchedAt: new Date().toISOString(),

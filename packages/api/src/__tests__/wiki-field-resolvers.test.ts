@@ -36,7 +36,7 @@ function page(over: Partial<GraphQLWikiPage> = {}): GraphQLWikiPage {
 	return {
 		id: "page-1",
 		tenantId: "t1",
-		ownerId: "o1",
+		userId: "o1",
 		type: "ENTITY",
 		slug: "demo",
 		title: "Demo",

@@ -145,6 +145,12 @@ export const users = pgTable(
       withTimezone: true,
     }),
     expo_push_token: text("expo_push_token"),
+    // User-level opt-in for compiling externally-originated memory into the
+    // wiki. Admin owns infrastructure; the user owns whether external memory
+    // becomes part of their personal compiled knowledge.
+    wiki_compile_external_enabled: boolean("wiki_compile_external_enabled")
+      .notNull()
+      .default(false),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),

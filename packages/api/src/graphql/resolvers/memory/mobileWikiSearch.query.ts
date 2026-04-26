@@ -19,15 +19,15 @@
  * field is always [] on this path — pages are matched against their own
  * compiled text, not against source memory units.
  *
- * v1 scope rule: every wiki page is agent-scoped. The WHERE clause pins
- * `tenant_id` and `owner_id` so cross-agent visibility is impossible.
+ * v1 scope rule: every wiki page is user-scoped. The WHERE clause pins
+ * `tenant_id` and `owner_id` so cross-user visibility is impossible.
  */
 
 import { eq, sql } from "drizzle-orm";
 import type { GraphQLContext } from "../../context.js";
-import { db, agents } from "../../utils.js";
+import { db } from "../../utils.js";
 import { toGraphQLPage } from "../wiki/mappers.js";
-import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
+import { requireMemoryUserScope } from "../core/require-user-scope.js";
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
@@ -50,24 +50,15 @@ interface MobileWikiSearchRow {
 
 export const mobileWikiSearch = async (
 	_parent: unknown,
-	args: { agentId: string; query: string; limit?: number },
+	args: { tenantId?: string; userId?: string; agentId?: string; query: string; limit?: number },
 	ctx: GraphQLContext,
 ) => {
-	const { agentId, query, limit = DEFAULT_LIMIT } = args;
+	const { query, limit = DEFAULT_LIMIT } = args;
 	const trimmed = (query || "").trim();
 	if (!trimmed) return [];
-	const tenantId = ctx.auth.tenantId ?? (await resolveCallerTenantId(ctx));
-	if (!tenantId) throw new Error("Tenant context required");
+	const { tenantId, userId } = await requireMemoryUserScope(ctx, args);
 
-	const [agent] = await db
-		.select({ id: agents.id, tenant_id: agents.tenant_id, slug: agents.slug })
-		.from(agents)
-		.where(eq(agents.id, agentId));
-	if (!agent || agent.tenant_id !== tenantId) {
-		throw new Error("Agent not found or access denied");
-	}
-
-	const ownerId = agent.id as string;
+	const ownerId = userId as string;
 	const cappedLimit = Math.max(1, Math.min(limit, MAX_LIMIT));
 
 	const result = await db.execute(sql`
@@ -89,7 +80,7 @@ export const mobileWikiSearch = async (
 		[]) as MobileWikiSearchRow[];
 
 	console.log(
-		`[mobileWikiSearch] agent=${agent.slug ?? agent.id} query=${JSON.stringify(trimmed)} pages=${rows.length}`,
+		`[mobileWikiSearch] user=${userId} query=${JSON.stringify(trimmed)} pages=${rows.length}`,
 	);
 
 	return rows.map((r) => ({

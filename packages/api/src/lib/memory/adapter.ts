@@ -20,6 +20,8 @@ import type {
 	RecallResult,
 	RetainRequest,
 	RetainResult,
+	RetainConversationRequest,
+	RetainDailyMemoryRequest,
 	RetainTurnRequest,
 	ThinkWorkMemoryRecord,
 } from "./types.js";
@@ -43,6 +45,10 @@ export interface MemoryAdapter {
 	 */
 	retainTurn(request: RetainTurnRequest): Promise<void>;
 
+	retainConversation?(request: RetainConversationRequest): Promise<void>;
+
+	retainDailyMemory?(request: RetainDailyMemoryRequest): Promise<void>;
+
 	inspect(request: InspectRequest): Promise<ThinkWorkMemoryRecord[]>;
 
 	export(request: ExportRequest): Promise<MemoryExportBundle>;
@@ -61,8 +67,8 @@ export interface MemoryAdapter {
 	 * ordered by `(updated_at, id)` ascending. The tiebreaker is required to
 	 * handle same-timestamp records without missing or double-reading.
 	 *
-	 * v1 is strictly agent-scoped (see .prds/compounding-memory-scoping.md);
-	 * `ownerId` is required and corresponds to one agent's Hindsight bank.
+	 * v1 is strictly user-scoped; `ownerId` is the user id and corresponds to
+	 * one user's Hindsight bank.
 	 * Engines that can't produce monotonic change records (AgentCore) should
 	 * throw a clear "not implemented" error so the compile enqueue path can
 	 * skip them explicitly.

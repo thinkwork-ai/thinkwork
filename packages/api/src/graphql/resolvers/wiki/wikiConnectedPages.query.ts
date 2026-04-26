@@ -9,7 +9,7 @@
  *
  * Scope check is driven by the source page (the one whose outbound
  * links we're reading). v1 never crosses scopes, so every target row
- * lives under the same `(tenantId, ownerId)` anyway; checking source
+ * lives under the same `(tenantId, userId)` anyway; checking source
  * matches the existing backlinks semantics.
  */
 
@@ -41,7 +41,7 @@ export const wikiConnectedPages = async (
 
 	await assertCanReadWikiScope(ctx, {
 		tenantId: source.tenant_id,
-		ownerId: source.owner_id,
+		userId: source.owner_id,
 	});
 
 	const rows = await db

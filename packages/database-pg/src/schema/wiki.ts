@@ -10,7 +10,7 @@
  *   - Every compiled object is strictly owner-scoped.
  *   - `owner_id` is NOT NULL on every compiled-memory table.
  *   - Type (`entity` | `topic` | `decision`) describes page *shape* (sections,
- *     semantics), NOT sharing. All three types belong to exactly one agent.
+ *     semantics), NOT sharing. All three types belong to exactly one user.
  *   - No tenant-shared pages, no `owner_id IS NULL` escape hatch.
  *   - Team/company scope is deferred to a future explicit `scope_type` model.
  *
@@ -36,8 +36,7 @@ import {
 	type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
-import { tenants } from "./core";
-import { agents } from "./agents";
+import { tenants, users } from "./core";
 
 // ---------------------------------------------------------------------------
 // Custom tsvector column helper
@@ -68,8 +67,8 @@ export const wikiPages = pgTable(
 			.references(() => tenants.id)
 			.notNull(),
 		owner_id: uuid("owner_id")
-			.references(() => agents.id)
-			.notNull(), // v1: every page is agent-scoped
+			.references(() => users.id)
+			.notNull(), // v1: every page is user-scoped
 		type: text("type").notNull(), // 'entity' | 'topic' | 'decision' — shape, not scope
 		slug: text("slug").notNull(),
 		title: text("title").notNull(),
@@ -281,8 +280,8 @@ export const wikiUnresolvedMentions = pgTable(
 			.references(() => tenants.id)
 			.notNull(),
 		owner_id: uuid("owner_id")
-			.references(() => agents.id)
-			.notNull(), // v1: mentions live inside one agent scope
+			.references(() => users.id)
+			.notNull(), // v1: mentions live inside one user scope
 		alias: text("alias").notNull(),
 		alias_normalized: text("alias_normalized").notNull(),
 		mention_count: integer("mention_count").notNull().default(1),
@@ -365,8 +364,8 @@ export const wikiCompileJobs = pgTable(
 			.references(() => tenants.id)
 			.notNull(),
 		owner_id: uuid("owner_id")
-			.references(() => agents.id)
-			.notNull(), // v1: one compile job per (tenant, agent) scope
+			.references(() => users.id)
+			.notNull(), // v1: one compile job per (tenant, user) scope
 		// `${tenant}:${owner}:${floor(created_epoch_s/300)}` — collapses post-turn storms
 		dedupe_key: text("dedupe_key").notNull().unique(),
 		status: text("status").notNull().default("pending"), // 'pending'|'running'|'succeeded'|'failed'|'skipped'
@@ -406,7 +405,7 @@ export const wikiCompileCursors = pgTable(
 			.references(() => tenants.id)
 			.notNull(),
 		owner_id: uuid("owner_id")
-			.references(() => agents.id)
+			.references(() => users.id)
 			.notNull(),
 		last_record_updated_at: timestamp("last_record_updated_at", {
 			withTimezone: true,
@@ -448,7 +447,7 @@ export const wikiPlaces = pgTable(
 			.references(() => tenants.id)
 			.notNull(),
 		owner_id: uuid("owner_id")
-			.references(() => agents.id)
+			.references(() => users.id)
 			.notNull(),
 		name: text("name").notNull(),
 		// Google's identifier, when known. Non-null rows in a (tenant, owner)
@@ -516,9 +515,9 @@ export const wikiPagesRelations = relations(wikiPages, ({ one, many }) => ({
 		fields: [wikiPages.tenant_id],
 		references: [tenants.id],
 	}),
-	owner: one(agents, {
+	owner: one(users, {
 		fields: [wikiPages.owner_id],
-		references: [agents.id],
+		references: [users.id],
 	}),
 	parentPage: one(wikiPages, {
 		relationName: "parent_page",
@@ -577,9 +576,9 @@ export const wikiUnresolvedMentionsRelations = relations(
 			fields: [wikiUnresolvedMentions.tenant_id],
 			references: [tenants.id],
 		}),
-		owner: one(agents, {
+		owner: one(users, {
 			fields: [wikiUnresolvedMentions.owner_id],
-			references: [agents.id],
+			references: [users.id],
 		}),
 		promotedPage: one(wikiPages, {
 			fields: [wikiUnresolvedMentions.promoted_page_id],
@@ -605,9 +604,9 @@ export const wikiCompileJobsRelations = relations(
 			fields: [wikiCompileJobs.tenant_id],
 			references: [tenants.id],
 		}),
-		owner: one(agents, {
+		owner: one(users, {
 			fields: [wikiCompileJobs.owner_id],
-			references: [agents.id],
+			references: [users.id],
 		}),
 	}),
 );
@@ -619,9 +618,9 @@ export const wikiCompileCursorsRelations = relations(
 			fields: [wikiCompileCursors.tenant_id],
 			references: [tenants.id],
 		}),
-		owner: one(agents, {
+		owner: one(users, {
 			fields: [wikiCompileCursors.owner_id],
-			references: [agents.id],
+			references: [users.id],
 		}),
 	}),
 );
@@ -631,9 +630,9 @@ export const wikiPlacesRelations = relations(wikiPlaces, ({ one, many }) => ({
 		fields: [wikiPlaces.tenant_id],
 		references: [tenants.id],
 	}),
-	owner: one(agents, {
+	owner: one(users, {
 		fields: [wikiPlaces.owner_id],
-		references: [agents.id],
+		references: [users.id],
 	}),
 	parentPlace: one(wikiPlaces, {
 		relationName: "parent_place",

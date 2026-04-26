@@ -1,15 +1,9 @@
 """Bridge from the Strands runtime container into the API's normalized
 memory layer.
 
-After every chat turn the runtime calls :func:`retain_turn_pair` to push
-the user + assistant messages into long-term memory via the
-``memory-retain`` Lambda. That Lambda runs ``adapter.retainTurn()`` on
-whichever engine is active (Hindsight or AgentCore), so the runtime stays
-engine-agnostic.
-
-The invoke is fire-and-forget (``InvocationType=Event``) — chat turns
-must never block on memory retention, and any failure is logged and
-swallowed.
+The runtime pushes user-scoped conversation and daily-memory retain
+requests into the ``memory-retain`` Lambda. The Lambda owns engine-specific
+dispatch, so the runtime stays engine-agnostic.
 """
 
 from __future__ import annotations
@@ -17,7 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -89,4 +83,76 @@ def retain_turn_pair(
 		return True
 	except Exception as e:
 		logger.warning("api_memory_client.retain_turn_pair failed thread=%s: %s", thread_id, e)
+		return False
+
+
+def retain_conversation(
+	thread_id: str,
+	transcript: Sequence[dict],
+	tenant_id: Optional[str] = None,
+	user_id: Optional[str] = None,
+) -> bool:
+	"""Invoke memory-retain with one replaceable conversation document."""
+	fn_name = os.environ.get("MEMORY_RETAIN_FN_NAME", "")
+	if not fn_name or not thread_id:
+		return False
+	tenant = tenant_id or os.environ.get("TENANT_ID") or os.environ.get("_MCP_TENANT_ID") or ""
+	user = user_id or os.environ.get("USER_ID") or os.environ.get("CURRENT_USER_ID") or ""
+	if not tenant or not user:
+		logger.warning("retain_conversation skipped: tenant/user unset")
+		return False
+
+	payload = {
+		"tenantId": tenant,
+		"userId": user,
+		"threadId": thread_id,
+		"transcript": list(transcript),
+	}
+	return _invoke_request_response(fn_name, payload, "retain_conversation", thread_id)
+
+
+def retain_daily(
+	date: str,
+	content: str,
+	tenant_id: Optional[str] = None,
+	user_id: Optional[str] = None,
+) -> bool:
+	"""Invoke memory-retain with one replaceable daily-memory document."""
+	fn_name = os.environ.get("MEMORY_RETAIN_FN_NAME", "")
+	if not fn_name or not date or not content.strip():
+		return False
+	tenant = tenant_id or os.environ.get("TENANT_ID") or os.environ.get("_MCP_TENANT_ID") or ""
+	user = user_id or os.environ.get("USER_ID") or os.environ.get("CURRENT_USER_ID") or ""
+	if not tenant or not user:
+		logger.warning("retain_daily skipped: tenant/user unset")
+		return False
+
+	payload = {
+		"tenantId": tenant,
+		"userId": user,
+		"kind": "daily",
+		"date": date,
+		"content": content,
+	}
+	return _invoke_request_response(fn_name, payload, "retain_daily", date)
+
+
+def _invoke_request_response(fn_name: str, payload: dict, action: str, ref: str) -> bool:
+	try:
+		client = _get_client()
+		resp = client.invoke(
+			FunctionName=fn_name,
+			InvocationType="RequestResponse",
+			Payload=json.dumps(payload).encode("utf-8"),
+		)
+		body = resp.get("Payload").read().decode("utf-8") if resp.get("Payload") else "{}"
+		parsed = json.loads(body) if body else {}
+		ok = bool(parsed.get("ok"))
+		if not ok:
+			logger.warning("api_memory_client.%s failed ref=%s response=%s", action, ref, parsed)
+			return False
+		logger.info("api_memory_client.%s ok ref=%s", action, ref)
+		return True
+	except Exception as e:
+		logger.warning("api_memory_client.%s failed ref=%s: %s", action, ref, e)
 		return False

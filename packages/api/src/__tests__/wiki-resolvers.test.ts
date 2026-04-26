@@ -17,12 +17,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const {
 	mockDb,
 	mockAgentsRow,
+	mockResolveCaller,
 	mockEnqueue,
 	mockLambdaSend,
 	mockListCompileJobs,
 	InvokeCommandMock,
 } = vi.hoisted(() => {
 	const mockAgentsRow = vi.fn();
+	const mockResolveCaller = vi.fn();
 	const mockEnqueue = vi.fn();
 	const mockListCompileJobs = vi.fn();
 	const mockLambdaSend = vi.fn().mockResolvedValue({});
@@ -45,6 +47,7 @@ const {
 	return {
 		mockDb,
 		mockAgentsRow,
+		mockResolveCaller,
 		mockEnqueue,
 		mockLambdaSend,
 		mockListCompileJobs,
@@ -61,7 +64,7 @@ vi.mock("../graphql/utils.js", () => ({
 
 vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
 	resolveCallerTenantId: vi.fn().mockResolvedValue(null),
-	resolveCaller: vi.fn().mockResolvedValue({ userId: null, tenantId: null }),
+	resolveCaller: mockResolveCaller,
 	resolveCallerUserId: vi.fn().mockResolvedValue(null),
 }));
 
@@ -104,6 +107,8 @@ import type { GraphQLContext } from "../graphql/context.js";
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	mockResolveCaller.mockReset();
+	mockResolveCaller.mockResolvedValue({ userId: "a1", tenantId: "t1" });
 	mockLambdaSend.mockResolvedValue({});
 	delete process.env.WIKI_COMPILE_FN;
 	delete process.env.STAGE;
@@ -137,53 +142,54 @@ function makeCtx(auth: Partial<GraphQLContext["auth"]>): GraphQLContext {
 // ─── assertCanReadWikiScope ──────────────────────────────────────────────────
 
 describe("assertCanReadWikiScope", () => {
-	it("allows when caller tenant matches and agent lives in tenant", async () => {
+	it("allows when caller tenant and user match", async () => {
 		mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
 		await expect(
 			assertCanReadWikiScope(makeCtx({}), {
 				tenantId: "t1",
-				ownerId: "a1",
+				userId: "a1",
 			}),
-		).resolves.toBeUndefined();
+		).resolves.toEqual({ tenantId: "t1", userId: "a1" });
 	});
 
 	it("rejects when tenant context missing", async () => {
 		mockAgentsRow.mockReturnValue([]);
+		mockResolveCaller.mockResolvedValueOnce({ userId: "a1", tenantId: null });
 		await expect(
 			assertCanReadWikiScope(makeCtx({ tenantId: null }), {
-				tenantId: "t1",
-				ownerId: "a1",
+				userId: "a1",
 			}),
 		).rejects.toThrow(WikiAuthError);
 	});
 
 	it("rejects tenant mismatch before querying agents", async () => {
+		mockResolveCaller.mockResolvedValueOnce({ userId: "a1", tenantId: "t-other" });
 		await expect(
 			assertCanReadWikiScope(makeCtx({ tenantId: "t-other" }), {
 				tenantId: "t1",
-				ownerId: "a1",
+				userId: "a1",
 			}),
 		).rejects.toThrow(/tenant mismatch/);
 	});
 
-	it("rejects missing agent", async () => {
-		mockAgentsRow.mockReturnValue([]);
+	it("rejects caller/user mismatch", async () => {
+		mockResolveCaller.mockResolvedValueOnce({ userId: "a1", tenantId: "t1" });
 		await expect(
 			assertCanReadWikiScope(makeCtx({}), {
 				tenantId: "t1",
-				ownerId: "a-missing",
+				userId: "a-missing",
 			}),
-		).rejects.toThrow(/Agent not found/);
+		).rejects.toThrow(/user mismatch/);
 	});
 
-	it("rejects cross-tenant agent", async () => {
-		mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t-other" }]);
+	it("rejects missing caller user context", async () => {
+		mockResolveCaller.mockResolvedValueOnce({ userId: null, tenantId: "t1" });
 		await expect(
 			assertCanReadWikiScope(makeCtx({}), {
 				tenantId: "t1",
-				ownerId: "a1",
+				userId: "a1",
 			}),
-		).rejects.toThrow(/outside tenant/);
+		).rejects.toThrow(/User context required/);
 	});
 });
 
@@ -195,9 +201,9 @@ describe("assertCanAdminWikiScope", () => {
 		await expect(
 			assertCanAdminWikiScope(makeCtx({ authType: "apikey" }), {
 				tenantId: "t1",
-				ownerId: "a1",
+				userId: "a1",
 			}),
-		).resolves.toBeUndefined();
+		).resolves.toEqual({ tenantId: "t1", userId: "a1" });
 	});
 
 	it("rejects cognito (end-user) caller even when tenant matches", async () => {
@@ -205,7 +211,7 @@ describe("assertCanAdminWikiScope", () => {
 		await expect(
 			assertCanAdminWikiScope(makeCtx({ authType: "cognito" }), {
 				tenantId: "t1",
-				ownerId: "a1",
+				userId: "a1",
 			}),
 		).rejects.toThrow(/Admin-only/);
 	});
@@ -236,7 +242,7 @@ describe("compileWikiNow", () => {
 		});
 		const out = await compileWikiNow(
 			{},
-			{ tenantId: "t1", ownerId: "a1" },
+			{ tenantId: "t1", userId: "a1" },
 			makeCtx({ authType: "apikey" }),
 		);
 		expect(out.id).toBe("job-1");
@@ -254,7 +260,7 @@ describe("compileWikiNow", () => {
 		await expect(
 			compileWikiNow(
 				{},
-				{ tenantId: "t1", ownerId: "a1" },
+				{ tenantId: "t1", userId: "a1" },
 				makeCtx({ authType: "cognito" }),
 			),
 		).rejects.toThrow(/Admin-only/);
@@ -284,7 +290,7 @@ describe("compileWikiNow", () => {
 		});
 		await compileWikiNow(
 			{},
-			{ tenantId: "t1", ownerId: "a1", modelId: "anthropic.claude-sonnet-4-6-v1:0" },
+			{ tenantId: "t1", userId: "a1", modelId: "anthropic.claude-sonnet-4-6-v1:0" },
 			makeCtx({ authType: "apikey" }),
 		);
 		await waitForLambdaSend();
@@ -319,7 +325,7 @@ describe("compileWikiNow", () => {
 		});
 		await compileWikiNow(
 			{},
-			{ tenantId: "t1", ownerId: "a1" },
+			{ tenantId: "t1", userId: "a1" },
 			makeCtx({ authType: "apikey" }),
 		);
 		await waitForLambdaSend();
@@ -352,7 +358,7 @@ describe("compileWikiNow", () => {
 		});
 		await compileWikiNow(
 			{},
-			{ tenantId: "t1", ownerId: "a1", modelId: "" },
+			{ tenantId: "t1", userId: "a1", modelId: "" },
 			makeCtx({ authType: "apikey" }),
 		);
 		await waitForLambdaSend();
@@ -392,7 +398,7 @@ describe("wikiCompileJobs", () => {
 		]);
 		const out = await wikiCompileJobs(
 			{},
-			{ tenantId: "t1", ownerId: "a1", limit: 5 },
+			{ tenantId: "t1", userId: "a1", limit: 5 },
 			makeCtx({ authType: "apikey" }),
 		);
 		expect(out).toHaveLength(2);
@@ -408,7 +414,7 @@ describe("wikiCompileJobs", () => {
 		});
 	});
 
-	it("returns tenant-wide jobs when ownerId is absent (api-key caller)", async () => {
+	it("returns tenant-wide jobs when userId is absent (api-key caller)", async () => {
 		mockListCompileJobs.mockResolvedValueOnce([makeJobRow({ owner_id: "a1" })]);
 		const out = await wikiCompileJobs(
 			{},
@@ -431,7 +437,7 @@ describe("wikiCompileJobs", () => {
 		mockListCompileJobs.mockResolvedValueOnce([]);
 		const out = await wikiCompileJobs(
 			{},
-			{ tenantId: "t1", ownerId: "a1" },
+			{ tenantId: "t1", userId: "a1" },
 			makeCtx({ authType: "apikey" }),
 		);
 		expect(out).toEqual([]);
@@ -442,7 +448,7 @@ describe("wikiCompileJobs", () => {
 		await expect(
 			wikiCompileJobs(
 				{},
-				{ tenantId: "t1", ownerId: "a1" },
+				{ tenantId: "t1", userId: "a1" },
 				makeCtx({ authType: "cognito" }),
 			),
 		).rejects.toThrow(/Admin-only/);

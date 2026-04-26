@@ -3,7 +3,7 @@
  * (tenant, owner) scope.
  *
  * Uses the `search_tsv` generated column on wiki_pages (GIN indexed). Alias
- * hits are OR'd in so agents can search by a known alternate name and get
+ * hits are OR'd in so users can search by a known alternate name and get
  * an exact match even if the prose doesn't contain the query terms.
  *
  * `plainto_tsquery` handles multi-word input without the caller having to
@@ -39,13 +39,16 @@ const MAX_LIMIT = 50;
 
 export const wikiSearch = async (
 	_parent: unknown,
-	args: { tenantId: string; ownerId: string; query: string; limit?: number },
+	args: {
+		tenantId: string;
+		userId?: string | null;
+		ownerId?: string | null;
+		query: string;
+		limit?: number;
+	},
 	ctx: GraphQLContext,
 ) => {
-	await assertCanReadWikiScope(ctx, {
-		tenantId: args.tenantId,
-		ownerId: args.ownerId,
-	});
+	const { tenantId, userId } = await assertCanReadWikiScope(ctx, args);
 
 	const query = args.query.trim();
 	if (query.length === 0) return [];
@@ -60,7 +63,7 @@ export const wikiSearch = async (
 			FROM wiki_page_aliases a
 			INNER JOIN wiki_pages p ON p.id = a.page_id
 			WHERE p.tenant_id = ${args.tenantId}
-			  AND p.owner_id = ${args.ownerId}
+			  AND p.owner_id = ${userId}
 			  AND p.status = 'active'
 			  AND (a.alias = ${aliasNeedle} OR a.alias ILIKE ${`%${aliasNeedle}%`})
 		)
@@ -76,7 +79,7 @@ export const wikiSearch = async (
 		FROM wiki_pages p
 		LEFT JOIN alias_hits ah ON ah.page_id = p.id
 		WHERE p.tenant_id = ${args.tenantId}
-		  AND p.owner_id = ${args.ownerId}
+		  AND p.owner_id = ${userId}
 		  AND p.status = 'active'
 		  AND (
 		    p.search_tsv @@ plainto_tsquery('english', ${query})

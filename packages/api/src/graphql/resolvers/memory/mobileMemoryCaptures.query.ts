@@ -6,8 +6,8 @@
  */
 
 import type { GraphQLContext } from "../../context.js";
-import { db, eq, agents } from "../../utils.js";
 import { getMemoryServices } from "../../../lib/memory/index.js";
+import { requireMemoryUserScope } from "../core/require-user-scope.js";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -27,29 +27,23 @@ export const mobileMemoryCaptures = async (
 	args: any,
 	ctx: GraphQLContext,
 ) => {
-	const { agentId, limit = DEFAULT_LIMIT } = args as {
-		agentId: string;
+	const { limit = DEFAULT_LIMIT } = args as {
+		tenantId?: string;
+		userId?: string;
+		agentId?: string;
 		limit?: number;
 	};
 
-	if (!ctx.auth.tenantId) throw new Error("Tenant context required");
-
-	const [agent] = await db
-		.select({ id: agents.id, tenant_id: agents.tenant_id, slug: agents.slug })
-		.from(agents)
-		.where(eq(agents.id, agentId));
-	if (!agent || agent.tenant_id !== ctx.auth.tenantId) {
-		throw new Error("Agent not found or access denied");
-	}
+	const { tenantId, userId } = await requireMemoryUserScope(ctx, args);
 
 	const { adapter } = getMemoryServices();
 	if (!adapter.inspect) return [];
 
 	const cappedLimit = Math.min(Math.max(1, limit), MAX_LIMIT);
 	const records = await adapter.inspect({
-		tenantId: ctx.auth.tenantId,
-		ownerType: "agent",
-		ownerId: agent.id as string,
+		tenantId,
+		ownerType: "user",
+		ownerId: userId as string,
 		// inspect pulls the full bank; we filter here so quick-capture entries
 		// aren't drowned out by chat-derived units even when the bank is large.
 		limit: Math.max(cappedLimit * 4, 200),
@@ -58,7 +52,8 @@ export const mobileMemoryCaptures = async (
 	const captures = [] as Array<{
 		id: string;
 		tenantId: string;
-		agentId: string;
+		userId: string;
+		agentId: string | null;
 		content: string;
 		factType: MobileCaptureFactType;
 		capturedAt: string;
@@ -77,7 +72,8 @@ export const mobileMemoryCaptures = async (
 		captures.push({
 			id: r.id,
 			tenantId: r.tenantId,
-			agentId: r.ownerId,
+			userId: r.ownerId,
+			agentId: args.agentId ?? null,
 			content: r.content.text,
 			factType,
 			capturedAt: (typeof raw.captured_at === "string" ? raw.captured_at : r.createdAt) || new Date().toISOString(),

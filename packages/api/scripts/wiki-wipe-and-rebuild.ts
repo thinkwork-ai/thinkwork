@@ -32,7 +32,7 @@ import { runJournalImport } from "../src/lib/wiki/journal-import.js";
 
 interface CliArgs {
 	tenantId: string | null;
-	ownerId: string | null;
+	userId: string | null;
 	dryRun: boolean;
 	rebuild: boolean;
 	accountId: string | null;
@@ -42,7 +42,7 @@ interface CliArgs {
 function parseArgs(argv: string[]): CliArgs {
 	const out: CliArgs = {
 		tenantId: null,
-		ownerId: null,
+		userId: null,
 		dryRun: false,
 		rebuild: false,
 		accountId: null,
@@ -55,7 +55,7 @@ function parseArgs(argv: string[]): CliArgs {
 				out.tenantId = argv[++i] ?? null;
 				break;
 			case "--owner":
-				out.ownerId = argv[++i] ?? null;
+				out.userId = argv[++i] ?? null;
 				break;
 			case "--dry-run":
 				out.dryRun = true;
@@ -104,7 +104,7 @@ function formatCounts(label: string, c: Awaited<ReturnType<typeof countWikiScope
 async function main(): Promise<void> {
 	const args = parseArgs(process.argv.slice(2));
 
-	if (!args.tenantId || !args.ownerId) {
+	if (!args.tenantId || !args.userId) {
 		console.error(
 			"error: --tenant <uuid> and --owner <uuid> are both required",
 		);
@@ -117,13 +117,13 @@ async function main(): Promise<void> {
 	}
 
 	console.log(
-		`[wiki-wipe-and-rebuild] scope tenant=${args.tenantId} owner=${args.ownerId} dryRun=${args.dryRun} rebuild=${args.rebuild}`,
+		`[wiki-wipe-and-rebuild] scope tenant=${args.tenantId} owner=${args.userId} dryRun=${args.dryRun} rebuild=${args.rebuild}`,
 	);
 
 	if (args.dryRun) {
 		const counts = await countWikiScope({
 			tenantId: args.tenantId,
-			ownerId: args.ownerId,
+			ownerId: args.userId,
 		});
 		formatCounts("current state (dry-run)", counts);
 		console.log("\n(dry run — no rows deleted)");
@@ -132,19 +132,19 @@ async function main(): Promise<void> {
 
 	const { before, after } = await wipeWikiScope({
 		tenantId: args.tenantId,
-		ownerId: args.ownerId,
+		ownerId: args.userId,
 	});
 	formatCounts("before wipe", before);
 	formatCounts("after wipe", after);
 
 	if (args.rebuild) {
 		console.log(
-			`\n[wiki-wipe-and-rebuild] triggering bootstrap import account=${args.accountId} tenant=${args.tenantId} agent=${args.ownerId} limit=${args.limit ?? "none"}`,
+			`\n[wiki-wipe-and-rebuild] triggering bootstrap import account=${args.accountId} tenant=${args.tenantId} agent=${args.userId} limit=${args.limit ?? "none"}`,
 		);
 		const result = await runJournalImport({
 			accountId: args.accountId!,
 			tenantId: args.tenantId,
-			agentId: args.ownerId,
+			userId: args.userId,
 			limit: args.limit ?? undefined,
 		});
 		console.log(
