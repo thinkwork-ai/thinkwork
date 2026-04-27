@@ -60,6 +60,7 @@ type AuthorizationCode = {
 	sub: string;
 	email?: string;
 	tenant_id?: string;
+	user_id?: string;
 };
 
 type CognitoTokenResponse = {
@@ -95,7 +96,7 @@ export async function handler(
 		) {
 			return authorizationServerMetadata(event);
 		}
-	if (method === "GET" && path === "/mcp/oauth/jwks") {
+		if (method === "GET" && path === "/mcp/oauth/jwks") {
 			return json({ keys: [] });
 		}
 		if (method === "POST" && path === "/mcp/oauth/register") {
@@ -265,18 +266,20 @@ async function callback(event: APIGatewayProxyEventV2) {
 	const sub = stringClaim(claims.sub, "sub");
 	const email = typeof claims.email === "string" ? claims.email : undefined;
 	const tenantId = typeof claims["custom:tenant_id"] === "string" ? claims["custom:tenant_id"] : undefined;
+	const userId = stringClaimOptional(claims.user_id) ?? stringClaimOptional(claims["custom:user_id"]);
 	const code = await createAuthorizationCode({
-			kind: "authorization_code",
-			client_id: state.client_id,
-			redirect_uri: state.redirect_uri,
-			code_challenge: state.code_challenge,
-			code_challenge_method: state.code_challenge_method,
-			resource: state.resource,
-			scope: state.scope,
-			sub,
-			...(email ? { email } : {}),
-			...(tenantId ? { tenant_id: tenantId } : {}),
-		});
+		kind: "authorization_code",
+		client_id: state.client_id,
+		redirect_uri: state.redirect_uri,
+		code_challenge: state.code_challenge,
+		code_challenge_method: state.code_challenge_method,
+		resource: state.resource,
+		scope: state.scope,
+		sub,
+		...(email ? { email } : {}),
+		...(tenantId ? { tenant_id: tenantId } : {}),
+		...(userId ? { user_id: userId } : {}),
+	});
 	redirect.searchParams.set("code", code);
 	if (state.state) redirect.searchParams.set("state", state.state);
 	return redirectResponse(redirect.toString());
@@ -312,6 +315,7 @@ async function token(event: APIGatewayProxyEventV2) {
 			sub: code.sub,
 			email: code.email,
 			tenant_id: code.tenant_id,
+			user_id: code.user_id,
 			client_id: clientId,
 			scope: code.scope,
 		},
@@ -496,6 +500,10 @@ function required(value: string | undefined, name: string): string {
 function stringClaim(value: unknown, name: string): string {
 	if (typeof value !== "string" || !value) throw new McpOAuthStateError(`${name} claim missing`);
 	return value;
+}
+
+function stringClaimOptional(value: unknown): string | undefined {
+	return typeof value === "string" && value ? value : undefined;
 }
 
 function sameResource(left: string, right: string): boolean {

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { handler } from "./mcp-oauth.js";
-import { sha256Base64Url } from "../lib/mcp-oauth/state.js";
+import { sha256Base64Url, verifyJwt } from "../lib/mcp-oauth/state.js";
 
 const host = "api.test";
 const resource = `https://${host}/mcp/user-memory`;
@@ -196,7 +196,12 @@ describe("mcp-oauth handler", () => {
 			}),
 		);
 		const cognitoRedirect = new URL(String(authorize.headers?.Location));
-		const idToken = unsignedJwt({ sub: "user-sub", email: "eric@example.com", "custom:tenant_id": "tenant-a" });
+		const idToken = unsignedJwt({
+			sub: "user-sub",
+			email: "eric@example.com",
+			"custom:tenant_id": "tenant-a",
+			user_id: "db-user-a",
+		});
 		vi.stubGlobal(
 			"fetch",
 			vi.fn(async () => ({
@@ -237,6 +242,9 @@ describe("mcp-oauth handler", () => {
 		const tokenBody = JSON.parse(token.body || "{}");
 		expect(tokenBody.token_type).toBe("Bearer");
 		expect(tokenBody.access_token).toEqual(expect.any(String));
+		const claims = verifyJwt(tokenBody.access_token, "test-secret");
+		expect(claims.user_id).toBe("db-user-a");
+		expect(claims.tenant_id).toBe("tenant-a");
 
 		const replay = await handler(
 			event(
