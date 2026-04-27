@@ -21,9 +21,6 @@ COPY packages/agentcore-pi/agent-container/src/ packages/agentcore-pi/agent-cont
 RUN corepack enable && pnpm install --filter @thinkwork/agentcore-pi --prod=false --frozen-lockfile
 RUN pnpm --filter @thinkwork/agentcore-pi build
 
-RUN mkdir -p /app/runtime && \
-    cp -R packages/agentcore-pi/dist/agent-container/src/* /app/runtime/
-
 ENV PORT=8080
 ENV AWS_REGION=us-east-1
 ENV NODE_ENV=production
@@ -40,4 +37,4 @@ COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt
 ENV AWS_LWA_PORT=8080
 ENV AWS_LWA_READINESS_CHECK_PATH=/ping
 
-CMD ["node", "/app/runtime/server.js"]
+CMD ["node", "/app/packages/agentcore-pi/dist/agent-container/src/server.js"]
