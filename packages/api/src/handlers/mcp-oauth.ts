@@ -201,7 +201,7 @@ function authorize(event: APIGatewayProxyEventV2) {
 	const responseType = required(qs.response_type, "response_type");
 	const codeChallenge = required(qs.code_challenge, "code_challenge");
 	const codeChallengeMethod = required(qs.code_challenge_method, "code_challenge_method");
-	const resource = required(qs.resource, "resource");
+	const resource = qs.resource || resourceUrl(event);
 
 	if (responseType !== "code") return oauthError("unsupported_response_type", "response_type must be code", 400);
 	if (codeChallengeMethod !== "S256") {
