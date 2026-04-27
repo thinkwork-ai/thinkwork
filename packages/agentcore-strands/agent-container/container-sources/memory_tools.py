@@ -5,14 +5,18 @@ Strands-native Python tools for explicit agent memory management.
 Uses AgentCore Memory API (L2) and optionally Bedrock Knowledge Bases (L3).
 
 - remember() routes through CreateEvent for Bedrock consolidation/dedup
-- recall() defaults to L2 memory only; agent opts into L3 with scope="all"
+- recall() defaults to managed memory + Hindsight + compiled wiki lookup
 - forget() soft-deletes to /archived/ namespace (Dream purges after 30 days)
 """
 
+import asyncio
 import logging
 import os
+import re
+import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
 
 from strands import tool
 
@@ -22,6 +26,7 @@ logger = logging.getLogger(__name__)
 def _get_memory_config():
     """Get memory configuration from environment."""
     import boto3
+
     memory_id = os.environ.get("AGENTCORE_MEMORY_ID", "")
     region = os.environ.get("AWS_REGION", "us-east-1")
     actor_id = _get_user_actor_id()
@@ -46,6 +51,223 @@ def _get_user_actor_id() -> str:
     )
 
 
+def _get_tenant_id() -> str:
+    """Return the current tenant id for user-scoped wiki lookup."""
+    return (
+        os.environ.get("TENANT_ID", "")
+        or os.environ.get("CURRENT_TENANT_ID", "")
+        or os.environ.get("_MCP_TENANT_ID", "")
+    )
+
+
+def _run_async(coro):
+    """Run an async helper from this sync Strands tool."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    result: dict[str, Any] = {}
+
+    def runner() -> None:
+        try:
+            result["value"] = asyncio.run(coro)
+        except Exception as err:
+            result["error"] = err
+
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+    thread.join()
+    if "error" in result:
+        raise result["error"]
+    return result.get("value")
+
+
+def _memory_text(record: dict[str, Any]) -> str:
+    return _extract_memory_text(record)
+
+
+def _extract_memory_text(value: Any) -> str:
+    """Extract text from AgentCore and Hindsight record shapes."""
+    if isinstance(value, str):
+        return value.strip()
+    if not isinstance(value, dict):
+        return ""
+
+    for key in ("text", "content", "memoryRecordContent", "summary", "value"):
+        nested = value.get(key)
+        if isinstance(nested, str) and nested.strip():
+            return nested.strip()
+        if isinstance(nested, dict):
+            text = _extract_memory_text(nested)
+            if text:
+                return text
+    return ""
+
+
+def _query_terms(query: str) -> set[str]:
+    return {term for term in re.findall(r"[a-z0-9]+", query.lower()) if len(term) > 2}
+
+
+def _score_text_match(text: str, query: str) -> float:
+    terms = _query_terms(query)
+    if not terms:
+        return 1.0
+    text_lower = text.lower()
+    score = sum(1 for term in terms if term in text_lower)
+    if query.strip().lower() in text_lower:
+        score += len(terms)
+    return float(score)
+
+
+def _normalize_managed_record(
+    record: dict[str, Any],
+    query: str,
+    *,
+    require_match: bool,
+) -> dict[str, Any] | None:
+    text = _extract_memory_text(record)
+    if not text:
+        return None
+    local_score = _score_text_match(text, query)
+    if require_match and local_score <= 0:
+        return None
+    score = record.get("score")
+    if not isinstance(score, int | float):
+        score = local_score or 0.5
+    return {
+        "text": text,
+        "score": score,
+        "strategy": record.get("strategy") or "managed",
+        "memoryRecordId": record.get("memoryRecordId") or record.get("id") or "",
+    }
+
+
+def _search_managed_memory(query: str, actor_id: str, top_k: int = 10) -> list[dict[str, Any]]:
+    """Search AgentCore managed memory in the user-scoped namespace."""
+    client, memory_id, configured_actor_id = _get_memory_config()
+    if not client or not memory_id:
+        return []
+
+    actor_id = actor_id or configured_actor_id
+    if not actor_id:
+        return []
+
+    namespace = f"user_{actor_id}"
+    top_k = max(1, min(top_k, 10))
+
+    try:
+        if hasattr(client, "retrieve_memories"):
+            response = client.retrieve_memories(
+                memoryId=memory_id,
+                namespace=namespace,
+                searchCriteria={
+                    "searchQuery": query,
+                    "topK": top_k,
+                },
+            )
+            records = response.get("memoryRecordSummaries", [])
+            results = [
+                normalized
+                for record in records
+                if (
+                    normalized := _normalize_managed_record(
+                        record,
+                        query,
+                        require_match=False,
+                    )
+                )
+            ]
+            if results:
+                return results[:top_k]
+    except Exception as err:
+        logger.debug("Managed memory semantic recall failed; falling back to list: %s", err)
+
+    try:
+        response = client.list_memory_records(memoryId=memory_id, namespace=namespace)
+    except Exception as err:
+        logger.warning("Managed memory recall failed namespace=%s: %s", namespace, err)
+        return []
+
+    results = [
+        normalized
+        for record in response.get("memoryRecordSummaries", [])
+        if (
+            normalized := _normalize_managed_record(
+                record,
+                query,
+                require_match=True,
+            )
+        )
+    ]
+    results.sort(key=lambda record: float(record.get("score") or 0), reverse=True)
+    return results[:top_k]
+
+
+def _format_record_section(title: str, records: list[dict[str, Any]]) -> str:
+    lines = [title]
+    for index, record in enumerate(records[:10], 1):
+        text = _memory_text(record)
+        if not text:
+            continue
+        strategy = record.get("strategy")
+        label = f"[{strategy}] " if strategy else ""
+        lines.append(f"{index}. {label}{text}")
+    return "\n".join(lines)
+
+
+def _format_wiki_section(hits: list[dict[str, Any]], error: str | None = None) -> str:
+    lines = ["Wiki"]
+    if error:
+        lines.append(f"Wiki search failed: {error}")
+        return "\n".join(lines)
+    for index, hit in enumerate(hits[:10], 1):
+        page = hit.get("page") or {}
+        title = page.get("title") or "(untitled)"
+        page_type = str(page.get("type") or "?").lower()
+        slug = page.get("slug") or "?"
+        alias = hit.get("matchedAlias")
+        score = hit.get("score")
+        suffix = f" (alias: {alias})" if alias else ""
+        score_suffix = f", score={score:.3g}" if isinstance(score, int | float) else ""
+        lines.append(f"{index}. [{page_type}] {title} - slug={slug}{suffix}{score_suffix}")
+        summary = str(page.get("summary") or "").strip()
+        if summary:
+            lines.append(f"   {summary}")
+    return "\n".join(lines)
+
+
+def _search_wiki_for_recall(
+    actor_id: str,
+    query: str,
+    limit: int = 5,
+) -> tuple[list[dict[str, Any]], str | None]:
+    tenant_id = _get_tenant_id()
+    if not tenant_id:
+        return [], None
+
+    try:
+        from wiki_tools import search_wiki_for_user
+
+        hits = _run_async(
+            search_wiki_for_user(
+                tenant_id=tenant_id,
+                owner_id=actor_id,
+                query=query,
+                limit=max(1, min(limit, 10)),
+            )
+        )
+        if isinstance(hits, str):
+            if "not enabled" in hits:
+                logger.debug("Wiki recall skipped: %s", hits)
+                return [], None
+            return [], hits
+        return [hit for hit in hits if isinstance(hit, dict)], None
+    except Exception as err:
+        logger.warning("Wiki recall failed (non-fatal): %s", err)
+        return [], str(err)
+
+
 @tool
 def remember(fact: str, category: str = "general") -> str:
     """Store an important fact about the user or conversation to long-term memory.
@@ -67,15 +289,17 @@ def remember(fact: str, category: str = "general") -> str:
     try:
         # 1. Write directly to the semantic namespace for immediate searchability.
         request_id = uuid.uuid4().hex[:16]
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         response = client.batch_create_memory_records(
             memoryId=memory_id,
-            records=[{
-                "requestIdentifier": request_id,
-                "content": {"text": f"[{category}] {fact}"},
-                "namespaces": [f"user_{actor_id}"],
-                "timestamp": now,
-            }],
+            records=[
+                {
+                    "requestIdentifier": request_id,
+                    "content": {"text": f"[{category}] {fact}"},
+                    "namespaces": [f"user_{actor_id}"],
+                    "timestamp": now,
+                }
+            ],
         )
         # Check for failures
         failed = response.get("failedRecords", [])
@@ -90,19 +314,23 @@ def remember(fact: str, category: str = "general") -> str:
             actorId=actor_id,
             sessionId=session_id,
             eventTimestamp=now,
-            payload=[{
-                "conversational": {
-                    "content": {"text": f"The user asked me to remember: {fact}"},
-                    "role": "USER",
+            payload=[
+                {
+                    "conversational": {
+                        "content": {"text": f"The user asked me to remember: {fact}"},
+                        "role": "USER",
+                    }
                 }
-            }],
+            ],
         )
 
-        logger.info("memory_tools.remember actor=%s category=%s fact=%s",
-                     actor_id, category, fact[:80])
+        logger.info(
+            "memory_tools.remember actor=%s category=%s fact=%s", actor_id, category, fact[:80]
+        )
 
         # Parallel: also retain in Hindsight (PRD-41B spike)
         import hs_urllib_client as hindsight_client
+
         if hindsight_client.is_available():
             try:
                 hs_bank = f"user_{actor_id}"
@@ -125,43 +353,42 @@ def recall(query: str, scope: str = "memory", strategy: str = "") -> str:
     """Search long-term memory for relevant information.
 
     Use this when you need to check if you know something about the user,
-    remember past conversations, or find previously stored knowledge.
+    remember past conversations, or find previously stored knowledge. Default
+    recall fans out across managed memory, Hindsight, and compiled wiki pages,
+    then returns one grouped result.
 
     Args:
-        query: What to search for in memory.
-        scope: "memory" (default, your memory only), "all" (memory + knowledge bases + knowledge graph),
+        query: What to search for.
+        scope: "memory" (default, managed memory + Hindsight + wiki),
+               "all" (memory + knowledge bases + knowledge graph + wiki),
                "knowledge" (knowledge bases only), "graph" (knowledge graph entities only).
         strategy: Optional filter — "semantic", "preferences", "episodes", or empty for all.
 
     Returns:
         Matching memories as formatted text, or message if nothing found.
     """
-    from memory import search_memories
-
     actor_id = _get_user_actor_id()
     if not actor_id:
         return "Memory system not configured — unable to search."
-    session_id = os.environ.get("CURRENT_THREAD_ID", "")
-    results = []
+    managed_results: list[dict[str, Any]] = []
+    graph_results: list[dict[str, Any]] = []
+    knowledge_results: list[dict[str, Any]] = []
+    hindsight_results: list[dict[str, Any]] = []
+    wiki_results: list[dict[str, Any]] = []
+    wiki_error: str | None = None
 
     # L2: AgentCore Memory — semantic search across strategy namespaces
     if scope in ("memory", "all"):
-        strategies = [strategy] if strategy else None
-        l2_results = search_memories(
-            query=query,
-            actor_id=actor_id,
-            session_id=session_id,
-            strategies=strategies,
-            top_k=10,
-        )
-        results.extend(l2_results)
+        if strategy and strategy != "managed":
+            logger.debug("Ignoring unsupported managed-memory strategy filter: %s", strategy)
+        managed_results.extend(_search_managed_memory(query=query, actor_id=actor_id, top_k=10))
 
     # Knowledge Graph (Neptune entity relationships)
     if scope in ("graph", "all"):
         try:
             from memory import graph_search
-            graph_results = graph_search(query=query, actor_id=actor_id)
-            results.extend(graph_results)
+
+            graph_results.extend(graph_search(query=query, actor_id=actor_id))
         except Exception as e:
             logger.debug("Graph search in recall failed: %s", e)
 
@@ -169,22 +396,27 @@ def recall(query: str, scope: str = "memory", strategy: str = "") -> str:
     if scope in ("knowledge", "all"):
         try:
             from server import _retrieve_kb_context
+
             kb_config_str = os.environ.get("_KB_CONFIG", "")
             if kb_config_str:
                 import json
+
                 kb_config = json.loads(kb_config_str)
                 kb_context = _retrieve_kb_context(kb_config, query)
                 if kb_context:
-                    results.append({
-                        "text": kb_context,
-                        "score": 0.5,
-                        "strategy": "knowledge_base",
-                    })
+                    knowledge_results.append(
+                        {
+                            "text": kb_context,
+                            "score": 0.5,
+                            "strategy": "knowledge_base",
+                        }
+                    )
         except Exception as e:
             logger.debug("KB retrieval in recall failed: %s", e)
 
     # Parallel: also recall from Hindsight (PRD-41B spike)
     import hs_urllib_client as hindsight_client
+
     if hindsight_client.is_available() and scope in ("all", "graph", "memory"):
         try:
             hs_bank = f"user_{actor_id}"
@@ -193,22 +425,48 @@ def recall(query: str, scope: str = "memory", strategy: str = "") -> str:
                 for fact in hs_results["results"]:
                     text = fact.get("text", fact.get("content", ""))
                     if text:
-                        results.append({"text": text, "score": 0.5, "strategy": "hindsight"})
+                        hindsight_results.append({"text": text, "score": 0.5})
         except Exception as he:
             logger.warning("Hindsight recall failed (non-fatal): %s", he)
 
-    if not results:
+    if scope in ("memory", "all"):
+        wiki_results, wiki_error = _search_wiki_for_recall(actor_id, query, limit=5)
+
+    sections = []
+    if managed_results:
+        sections.append(_format_record_section("Managed Memory", managed_results))
+    if hindsight_results:
+        sections.append(_format_record_section("Hindsight", hindsight_results))
+    if wiki_results or wiki_error:
+        sections.append(_format_wiki_section(wiki_results, wiki_error))
+    if graph_results:
+        sections.append(_format_record_section("Knowledge Graph", graph_results))
+    if knowledge_results:
+        sections.append(_format_record_section("Knowledge Base", knowledge_results))
+
+    if not sections:
         return f"No memories found for: {query}"
 
-    # Format results
-    lines = []
-    for r in results[:10]:
-        strategy_label = r.get("strategy", "unknown")
-        lines.append(f"[{strategy_label}] {r['text']}")
-
-    logger.info("memory_tools.recall query=%s scope=%s results=%d",
-                query[:50], scope, len(results))
-    return "\n\n".join(lines)
+    total_results = (
+        len(managed_results)
+        + len(hindsight_results)
+        + len(wiki_results)
+        + len(graph_results)
+        + len(knowledge_results)
+    )
+    logger.info(
+        "memory_tools.recall query=%s scope=%s managed=%d hindsight=%d wiki=%d graph=%d kb=%d",
+        query[:50],
+        scope,
+        len(managed_results),
+        len(hindsight_results),
+        len(wiki_results),
+        len(graph_results),
+        len(knowledge_results),
+    )
+    if total_results == 0 and wiki_error:
+        logger.warning("memory_tools.recall returned only a wiki error: %s", wiki_error)
+    return "\n\n".join(sections)
 
 
 @tool
@@ -252,10 +510,12 @@ def forget(query: str) -> str:
         # Move to archived namespace via batch update
         client.batch_update_memory_records(
             memoryId=memory_id,
-            memoryRecords=[{
-                "memoryRecordId": record_id,
-                "namespace": f"/archived/users/{actor_id}/",
-            }],
+            memoryRecords=[
+                {
+                    "memoryRecordId": record_id,
+                    "namespace": f"/archived/users/{actor_id}/",
+                }
+            ],
         )
         logger.info("memory_tools.forget actor=%s record=%s archived", actor_id, record_id)
         return f"Archived memory: {top['text'][:100]}..."
