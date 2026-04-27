@@ -96,6 +96,25 @@ describe("mcp-oauth handler", () => {
 		expect(authorize.headers?.Location).toContain("client_id=cognito-mcp-client");
 	});
 
+	it("defaults missing authorize resource to the user-memory MCP resource", async () => {
+		const registration = await handler(
+			event("POST", "/mcp/oauth/register", {
+				redirect_uris: ["http://127.0.0.1:43210/callback"],
+			}),
+		);
+		const { client_id } = JSON.parse(registration.body || "{}") as { client_id: string };
+		const authorize = await handler(
+			event("GET", "/mcp/oauth/authorize", undefined, {
+				client_id,
+				redirect_uri: "http://127.0.0.1:43210/callback",
+				response_type: "code",
+				code_challenge: sha256Base64Url("verifier"),
+				code_challenge_method: "S256",
+			}),
+		);
+		expect(authorize.statusCode).toBe(302);
+	});
+
 	it("rejects unsupported scopes before redirecting to Cognito", async () => {
 		const registration = await handler(
 			event("POST", "/mcp/oauth/register", {
