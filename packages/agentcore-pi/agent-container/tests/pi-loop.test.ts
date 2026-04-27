@@ -82,4 +82,34 @@ describe("runPiAgent", () => {
     });
     expect(result.response.tool_invocations).toEqual(result.tool_invocations);
   });
+
+  it("does not auto-retain every turn in Hindsight", async () => {
+    subscribers.length = 0;
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ retained: true })));
+
+    const result = await runPiAgent(
+      {
+        message: "remember cobalt",
+        model: "anthropic.test-model",
+        use_memory: true,
+        hindsight_endpoint: "https://hindsight.test",
+        thread_id: "thread-1",
+        user_id: "user-1",
+      },
+      { awsRegion: "us-east-1", gitSha: "sha", buildTime: "now" },
+    );
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.tools_called).toEqual(["web_search"]);
+    expect(result.hindsight_usage).toEqual([]);
+    expect(result.tool_invocations).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "hindsight_retain" }),
+      ]),
+    );
+
+    fetchMock.mockRestore();
+  });
 });

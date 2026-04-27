@@ -14,7 +14,6 @@ import {
   type PiToolInvocation,
   type ToolRuntimeState,
 } from "./tools/types.js";
-import { retainHindsightTurn } from "./tools/hindsight.js";
 
 export interface PiRuntimeResult {
   response: {
@@ -161,22 +160,6 @@ export async function runPiAgent(
         (message): message is AssistantMessage => message.role === "assistant",
       );
     content = textFromAssistant(assistant);
-
-    const retainResult = await retainHindsightTurn(payload, content);
-    if (retainResult.usage) toolState.hindsightUsage.push(retainResult.usage);
-    if (retainResult.retained !== undefined || retainResult.error) {
-      toolState.toolInvocations.push({
-        id: `hindsight-retain-${Date.now()}`,
-        name: "hindsight_retain",
-        tool_name: "hindsight_retain",
-        result: retainResult,
-        is_error: Boolean(retainResult.error),
-        started_at: new Date().toISOString(),
-        finished_at: new Date().toISOString(),
-        runtime: "pi",
-        source: "hindsight",
-      });
-    }
   } finally {
     for (const cleanup of toolState.cleanup.reverse()) {
       await cleanup();
