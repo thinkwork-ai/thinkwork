@@ -54,8 +54,6 @@ import {
   eq,
   and,
   tenants,
-  userProfiles,
-  users,
 } from "../graphql/utils.js";
 import {
   type PlaceholderValues,
@@ -203,14 +201,6 @@ type AgentRow = {
 
 type TenantRow = { id: string; slug: string; name: string };
 type TemplateRow = { id: string; slug: string };
-type HumanRow = {
-  user_id: string;
-  user_email: string | null;
-  user_name: string | null;
-  profile_title: string | null;
-  profile_timezone: string | null;
-  profile_pronouns: string | null;
-};
 
 async function loadAgentContext(
   tenantId: string,
@@ -259,55 +249,16 @@ async function loadAgentContext(
     throw new Error(`Template ${agent.template_id} has no slug`);
   }
 
-  // 4) Human + profile (only when assigned).
-  let human: HumanRow | null = null;
-  if (agent.human_pair_id) {
-    const userRows = (await db
-      .select({
-        user_id: users.id,
-        user_email: users.email,
-        user_name: users.name,
-      })
-      .from(users)
-      .where(eq(users.id, agent.human_pair_id))
-      .limit(1)) as Array<
-      Omit<HumanRow, "profile_title" | "profile_timezone" | "profile_pronouns">
-    >;
-    const user = userRows[0];
-    if (user) {
-      const profileRows = (await db
-        .select({
-          profile_title: userProfiles.title,
-          profile_timezone: userProfiles.timezone,
-          profile_pronouns: userProfiles.pronouns,
-        })
-        .from(userProfiles)
-        .where(eq(userProfiles.user_id, user.user_id))
-        .limit(1)) as Array<
-        Pick<
-          HumanRow,
-          "profile_title" | "profile_timezone" | "profile_pronouns"
-        >
-      >;
-      const profile = profileRows[0] ?? {
-        profile_title: null,
-        profile_timezone: null,
-        profile_pronouns: null,
-      };
-      human = { ...user, ...profile };
-    }
-  }
-
+  // 4) Pinned versions for the safety files (GUARDRAILS / PLATFORM /
+  //    CAPABILITIES). The HUMAN_* placeholder values are NOT fetched here —
+  //    they live exclusively on the USER.md write-at-assignment path
+  //    (see user-md-writer.ts). The materializer never substitutes
+  //    {{HUMAN_*}}, so loading user / userProfiles rows would be dead work.
   const pinnedVersions = normalizePinnedVersions(agent.agent_pinned_versions);
 
   const placeholderValues: PlaceholderValues = {
     AGENT_NAME: agent.name,
     TENANT_NAME: tenant.name,
-    HUMAN_NAME: human?.user_name ?? null,
-    HUMAN_EMAIL: human?.user_email ?? null,
-    HUMAN_TITLE: human?.profile_title ?? null,
-    HUMAN_TIMEZONE: human?.profile_timezone ?? null,
-    HUMAN_PRONOUNS: human?.profile_pronouns ?? null,
   };
 
   return {

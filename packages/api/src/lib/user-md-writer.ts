@@ -35,7 +35,9 @@ import {
 } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "../graphql/utils.js";
 import {
+  type HumanPlaceholderValues,
   type PlaceholderValues,
+  substituteHumans,
   substituteStructured,
   type StructuredPlaceholderValues,
   type SanitizationViolation,
@@ -162,7 +164,10 @@ interface ResolvedAssignment {
   agentSlug: string;
   agentName: string;
   templateSlug: string;
+  /** AGENT_NAME / TENANT_NAME — substituted by substituteStructured. */
   values: PlaceholderValues;
+  /** HUMAN_* — substituted by substituteHumans (USER.md only). */
+  humanValues: HumanPlaceholderValues;
   structuredValues: StructuredPlaceholderValues;
 }
 
@@ -208,6 +213,8 @@ async function resolveAssignment(
   const values: PlaceholderValues = {
     AGENT_NAME: agent.name,
     TENANT_NAME: tenant.name,
+  };
+  const humanValues: HumanPlaceholderValues = {
     HUMAN_NAME: null,
     HUMAN_EMAIL: null,
     HUMAN_TITLE: null,
@@ -237,11 +244,11 @@ async function resolveAssignment(
       .from(users)
       .where(eq(users.id, humanPairId));
     if (user) {
-      values.HUMAN_NAME = user.name;
-      values.HUMAN_EMAIL = user.email;
+      humanValues.HUMAN_NAME = user.name;
+      humanValues.HUMAN_EMAIL = user.email;
       // HUMAN_PHONE reads from users.phone (account-level contact info)
       // rather than user_profiles — we don't duplicate it across tables.
-      values.HUMAN_PHONE = user.phone;
+      humanValues.HUMAN_PHONE = user.phone;
       const [profile] = await tx
         .select({
           title: userProfiles.title,
@@ -256,13 +263,13 @@ async function resolveAssignment(
         .from(userProfiles)
         .where(eq(userProfiles.user_id, user.id));
       if (profile) {
-        values.HUMAN_TITLE = profile.title;
-        values.HUMAN_TIMEZONE = profile.timezone;
-        values.HUMAN_PRONOUNS = profile.pronouns;
-        values.HUMAN_CALL_BY = profile.call_by;
-        values.HUMAN_NOTES = profile.notes;
-        values.HUMAN_FAMILY = profile.family;
-        values.HUMAN_CONTEXT = profile.context;
+        humanValues.HUMAN_TITLE = profile.title;
+        humanValues.HUMAN_TIMEZONE = profile.timezone;
+        humanValues.HUMAN_PRONOUNS = profile.pronouns;
+        humanValues.HUMAN_CALL_BY = profile.call_by;
+        humanValues.HUMAN_NOTES = profile.notes;
+        humanValues.HUMAN_FAMILY = profile.family;
+        humanValues.HUMAN_CONTEXT = profile.context;
         Object.assign(
           structuredValues,
           renderOperatingModelPlaceholders(profile.operating_model),
@@ -279,6 +286,7 @@ async function resolveAssignment(
     agentName: agent.name,
     templateSlug: template.slug,
     values,
+    humanValues,
     structuredValues,
   };
 }
@@ -392,7 +400,12 @@ export async function writeUserMdForAssignment(
     return;
   }
 
-  const rendered = substituteStructured(
+  // Two-pass substitution:
+  //   1. AGENT_NAME / TENANT_NAME / OPERATING_MODEL_* via the canonical
+  //      materializer pipeline.
+  //   2. {{HUMAN_*}} via the USER.md-only sibling. The materializer never
+  //      touches HUMAN_* — they live exclusively here.
+  const afterStructured = substituteStructured(
     resolved.values,
     resolved.structuredValues,
     templateBytes,
@@ -400,6 +413,9 @@ export async function writeUserMdForAssignment(
       onViolation: opts.onViolation,
     },
   );
+  const rendered = substituteHumans(resolved.humanValues, afterStructured, {
+    onViolation: opts.onViolation,
+  });
 
   await putWithOneRetry(
     agentKey(resolved.tenantSlug, resolved.agentSlug, "USER.md"),
