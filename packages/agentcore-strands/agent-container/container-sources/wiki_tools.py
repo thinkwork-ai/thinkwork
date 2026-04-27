@@ -20,10 +20,10 @@ Lifecycle mirrors the hindsight_recall/hindsight_reflect pattern:
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import httpx
 
@@ -76,11 +76,7 @@ def _resolve_api_endpoint() -> tuple[str | None, str | None]:
     """Look up the internal GraphQL URL + API key from env. Returns (url, key)
     with None for either if unset."""
     url = os.environ.get("THINKWORK_API_URL") or ""
-    secret = (
-        os.environ.get("THINKWORK_API_SECRET")
-        or os.environ.get("API_AUTH_SECRET")
-        or ""
-    )
+    secret = os.environ.get("THINKWORK_API_SECRET") or os.environ.get("API_AUTH_SECRET") or ""
     if not url or not secret:
         return None, None
     return url.rstrip("/") + "/graphql", secret
@@ -114,9 +110,7 @@ async def _graphql(
                     },
                 )
             if resp.status_code >= 500:
-                last_err = RuntimeError(
-                    f"graphql {resp.status_code}: {resp.text[:200]}"
-                )
+                last_err = RuntimeError(f"graphql {resp.status_code}: {resp.text[:200]}")
             else:
                 payload = resp.json()
                 errors = payload.get("errors")
@@ -130,16 +124,35 @@ async def _graphql(
         if attempt < 2:
             await asyncio.sleep(1.0 * (2**attempt))  # 1 s, 2 s
     logger.warning("wiki_tools transient failure: %s", last_err)
-    return (
-        f"Wiki call failed after 3 attempts: "
-        f"{getattr(last_err, 'args', [str(last_err)])[0]}"
-    )
+    return f"Wiki call failed after 3 attempts: {getattr(last_err, 'args', [str(last_err)])[0]}"
 
 
 # ---------------------------------------------------------------------------
 # Tool factories — closures capture (tenant_id, owner_id-as-user-id) so the
 # model can never address another user's wiki.
 # ---------------------------------------------------------------------------
+
+
+async def search_wiki_for_user(
+    *,
+    tenant_id: str,
+    owner_id: str,
+    query: str,
+    limit: int = 10,
+) -> list[dict[str, Any]] | str:
+    """Search compiled wiki pages for a fixed tenant/user scope."""
+    data = await _graphql(
+        _WIKI_QUERY_SEARCH,
+        {
+            "tenantId": tenant_id,
+            "userId": owner_id,
+            "query": query,
+            "limit": max(1, min(limit, 25)),
+        },
+    )
+    if isinstance(data, str):
+        return data
+    return (data.get("wikiSearch") or []) if isinstance(data, dict) else []
 
 
 def make_wiki_tools(
@@ -178,18 +191,14 @@ def make_wiki_tools(
         `hindsight_recall` for raw facts or freshly-remembered details that
         may not yet be compiled.
         """
-        data = await _graphql(
-            _WIKI_QUERY_SEARCH,
-            {
-                "tenantId": tenant_id,
-                "userId": owner_id,
-                "query": query,
-                "limit": max(1, min(limit, 25)),
-            },
+        hits = await search_wiki_for_user(
+            tenant_id=tenant_id,
+            owner_id=owner_id,
+            query=query,
+            limit=limit,
         )
-        if isinstance(data, str):
-            return data
-        hits = (data.get("wikiSearch") or []) if isinstance(data, dict) else []
+        if isinstance(hits, str):
+            return hits
         if not hits:
             return f"No wiki pages matched {query!r}."
         lines = [f"Wiki search results for {query!r}:"]
@@ -200,8 +209,8 @@ def make_wiki_tools(
             summary = (page.get("summary") or "").strip()
             summary_line = f"\n  {summary}" if summary else ""
             lines.append(
-                f"{i}. [{page.get('type','?').lower()}] "
-                f"{page.get('title','(untitled)')} — slug={page.get('slug','?')}"
+                f"{i}. [{page.get('type', '?').lower()}] "
+                f"{page.get('title', '(untitled)')} — slug={page.get('slug', '?')}"
                 f"{alias_note}{summary_line}"
             )
         return "\n".join(lines)
@@ -218,10 +227,7 @@ def make_wiki_tools(
         """
         gql_type = type.strip().upper()
         if gql_type not in ("ENTITY", "TOPIC", "DECISION"):
-            return (
-                f"Unknown page type {type!r}. "
-                "Use one of: entity, topic, decision."
-            )
+            return f"Unknown page type {type!r}. Use one of: entity, topic, decision."
         data = await _graphql(
             _WIKI_QUERY_PAGE,
             {
@@ -236,12 +242,12 @@ def make_wiki_tools(
         page = data.get("wikiPage") if isinstance(data, dict) else None
         if not page:
             return f"No wiki page found for {gql_type.lower()}/{slug}."
-        parts = [f"# {page.get('title','(untitled)')}"]
+        parts = [f"# {page.get('title', '(untitled)')}"]
         if page.get("summary"):
             parts.append(f"_{page['summary'].strip()}_")
         for section in page.get("sections") or []:
             parts.append(
-                f"\n## {section.get('heading','(no heading)')}\n"
+                f"\n## {section.get('heading', '(no heading)')}\n"
                 f"{(section.get('bodyMd') or '').strip()}"
             )
         aliases = page.get("aliases") or []
@@ -253,4 +259,4 @@ def make_wiki_tools(
 
 
 # Test-only surface
-__all__ = ["make_wiki_tools"]
+__all__ = ["make_wiki_tools", "search_wiki_for_user"]
