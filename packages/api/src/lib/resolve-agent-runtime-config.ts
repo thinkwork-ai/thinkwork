@@ -83,6 +83,11 @@ export interface McpConfig {
   tools?: string[];
 }
 
+export interface WebSearchConfig {
+  provider: "exa" | "serpapi";
+  apiKey: string;
+}
+
 export interface GuardrailPayload {
   guardrailIdentifier: string;
   guardrailVersion: string;
@@ -111,6 +116,7 @@ export interface AgentRuntimeConfig {
   guardrailConfig: GuardrailPayload | undefined;
   runtimeType: AgentRuntimeType;
   skillsConfig: SkillConfig[];
+  webSearchConfig?: WebSearchConfig;
   knowledgeBasesConfig: KnowledgeBaseConfig[] | undefined;
   mcpConfigs: McpConfig[];
 }
@@ -471,6 +477,24 @@ export async function resolveAgentRuntimeConfig(
     }
   }
 
+  const webSearchSkill = skillsConfig.find((s) => s.skillId === "web-search");
+  const webSearchProvider = webSearchSkill?.envOverrides?.WEB_SEARCH_PROVIDER;
+  let webSearchConfig: WebSearchConfig | undefined;
+  if (
+    webSearchProvider === "serpapi" &&
+    webSearchSkill?.envOverrides?.SERPAPI_KEY
+  ) {
+    webSearchConfig = {
+      provider: "serpapi",
+      apiKey: webSearchSkill.envOverrides.SERPAPI_KEY,
+    };
+  } else if (webSearchSkill?.envOverrides?.EXA_API_KEY) {
+    webSearchConfig = {
+      provider: "exa",
+      apiKey: webSearchSkill.envOverrides.EXA_API_KEY,
+    };
+  }
+
   // --- Knowledge bases -----------------------------------------------------
 
   const kbRowsRaw = await db
@@ -555,6 +579,7 @@ export async function resolveAgentRuntimeConfig(
       agent.runtime ?? agentTemplate.runtime,
     ),
     skillsConfig,
+    webSearchConfig,
     knowledgeBasesConfig,
     mcpConfigs,
   };
