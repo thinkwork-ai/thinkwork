@@ -12,6 +12,7 @@ Uses AgentCore Memory API (L2) and optionally Bedrock Knowledge Bases (L3).
 import asyncio
 import logging
 import os
+import re
 import threading
 import uuid
 from datetime import UTC, datetime
@@ -83,7 +84,124 @@ def _run_async(coro):
 
 
 def _memory_text(record: dict[str, Any]) -> str:
-    return str(record.get("text") or record.get("content") or "").strip()
+    return _extract_memory_text(record)
+
+
+def _extract_memory_text(value: Any) -> str:
+    """Extract text from AgentCore and Hindsight record shapes."""
+    if isinstance(value, str):
+        return value.strip()
+    if not isinstance(value, dict):
+        return ""
+
+    for key in ("text", "content", "memoryRecordContent", "summary", "value"):
+        nested = value.get(key)
+        if isinstance(nested, str) and nested.strip():
+            return nested.strip()
+        if isinstance(nested, dict):
+            text = _extract_memory_text(nested)
+            if text:
+                return text
+    return ""
+
+
+def _query_terms(query: str) -> set[str]:
+    return {term for term in re.findall(r"[a-z0-9]+", query.lower()) if len(term) > 2}
+
+
+def _score_text_match(text: str, query: str) -> float:
+    terms = _query_terms(query)
+    if not terms:
+        return 1.0
+    text_lower = text.lower()
+    score = sum(1 for term in terms if term in text_lower)
+    if query.strip().lower() in text_lower:
+        score += len(terms)
+    return float(score)
+
+
+def _normalize_managed_record(
+    record: dict[str, Any],
+    query: str,
+    *,
+    require_match: bool,
+) -> dict[str, Any] | None:
+    text = _extract_memory_text(record)
+    if not text:
+        return None
+    local_score = _score_text_match(text, query)
+    if require_match and local_score <= 0:
+        return None
+    score = record.get("score")
+    if not isinstance(score, int | float):
+        score = local_score or 0.5
+    return {
+        "text": text,
+        "score": score,
+        "strategy": record.get("strategy") or "managed",
+        "memoryRecordId": record.get("memoryRecordId") or record.get("id") or "",
+    }
+
+
+def _search_managed_memory(query: str, actor_id: str, top_k: int = 10) -> list[dict[str, Any]]:
+    """Search AgentCore managed memory in the user-scoped namespace."""
+    client, memory_id, configured_actor_id = _get_memory_config()
+    if not client or not memory_id:
+        return []
+
+    actor_id = actor_id or configured_actor_id
+    if not actor_id:
+        return []
+
+    namespace = f"user_{actor_id}"
+    top_k = max(1, min(top_k, 10))
+
+    try:
+        if hasattr(client, "retrieve_memories"):
+            response = client.retrieve_memories(
+                memoryId=memory_id,
+                namespace=namespace,
+                searchCriteria={
+                    "searchQuery": query,
+                    "topK": top_k,
+                },
+            )
+            records = response.get("memoryRecordSummaries", [])
+            results = [
+                normalized
+                for record in records
+                if (
+                    normalized := _normalize_managed_record(
+                        record,
+                        query,
+                        require_match=False,
+                    )
+                )
+            ]
+            if results:
+                return results[:top_k]
+    except Exception as err:
+        logger.debug("Managed memory semantic recall failed; falling back to list: %s", err)
+
+    try:
+        response = client.list_memory_records(memoryId=memory_id, namespace=namespace)
+    except Exception as err:
+        logger.warning("Managed memory recall failed namespace=%s: %s", namespace, err)
+        return []
+
+    results = [
+        normalized
+        for record in response.get("memoryRecordSummaries", [])
+        if (
+            normalized := _normalize_managed_record(
+                record,
+                query,
+                require_match=True,
+            )
+        )
+    ]
+    results.sort(key=lambda record: float(record.get("score") or 0), reverse=True)
+    return results[:top_k]
 
 
 def _format_record_section(title: str, records: list[dict[str, Any]]) -> str:
@@ -249,12 +367,9 @@ def recall(query: str, scope: str = "memory", strategy: str = "") -> str:
     Returns:
         Matching memories as formatted text, or message if nothing found.
     """
-    from memory import search_memories
-
     actor_id = _get_user_actor_id()
     if not actor_id:
         return "Memory system not configured — unable to search."
-    session_id = os.environ.get("CURRENT_THREAD_ID", "")
     managed_results: list[dict[str, Any]] = []
     graph_results: list[dict[str, Any]] = []
     knowledge_results: list[dict[str, Any]] = []
@@ -264,15 +379,9 @@ def recall(query: str, scope: str = "memory", strategy: str = "") -> str:
 
     # L2: AgentCore Memory — semantic search across strategy namespaces
     if scope in ("memory", "all"):
-        strategies = [strategy] if strategy else None
-        l2_results = search_memories(
-            query=query,
-            actor_id=actor_id,
-            session_id=session_id,
-            strategies=strategies,
-            top_k=10,
-        )
-        managed_results.extend(l2_results)
+        if strategy and strategy != "managed":
+            logger.debug("Ignoring unsupported managed-memory strategy filter: %s", strategy)
+        managed_results.extend(_search_managed_memory(query=query, actor_id=actor_id, top_k=10))
 
     # Knowledge Graph (Neptune entity relationships)
     if scope in ("graph", "all"):
