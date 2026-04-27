@@ -436,6 +436,14 @@ function classifyFileByBasename(path: string) {
  * each layer (deepest first) before stepping to the next layer — see
  * Plan §008 U5 illustration. Reserved folder segments terminate the walk.
  */
+/**
+ * @deprecated U15 of docs/plans/2026-04-27-003 deletes this. Read-time
+ * composition is being replaced by write-time materialization
+ * (workspace-materializer.ts). New call sites should not use this; the
+ * remaining read-time consumers (`agentPinStatus`, `agent-snapshot`,
+ * `derive-agent-skills`, `workspace-files` GET/LIST handlers) migrate
+ * during U14 of that plan.
+ */
 export async function composeFile(
   ctx: ComposeContext,
   agentId: string,
@@ -590,10 +598,12 @@ async function composeFileForAgent(
 }
 
 /**
- * List every composed workspace path for this agent, labeled with the
- * layer it resolves from. When `includeContent` is true, content is
- * returned in the same call — used by Strands cold-start to avoid N
- * round-trips per agent.
+ * @deprecated U15 of docs/plans/2026-04-27-003 deletes this. The
+ * workspace-materializer's write-time pipeline produces the same
+ * concrete bytes at the agent prefix; new readers should sync from
+ * there. Remaining call sites (`agentPinStatus`, `agent-snapshot`,
+ * `derive-agent-skills`, `workspace-files` LIST handler) migrate
+ * during U14.
  */
 export async function composeList(
   ctx: ComposeContext,
@@ -796,9 +806,10 @@ function pruneCache(): void {
 }
 
 /**
- * Cached wrapper around composeFile. Callers who need strict read-after-
- * write consistency can invalidate first; the TTL keeps drift bounded in
- * the common case.
+ * @deprecated U15 of docs/plans/2026-04-27-003 deletes this. The
+ * read-time cache + invalidation choreography goes away once
+ * materialization moves to write time — runtimes ETag-sync against the
+ * agent prefix directly.
  */
 export async function composeFileCached(
   ctx: ComposeContext,
