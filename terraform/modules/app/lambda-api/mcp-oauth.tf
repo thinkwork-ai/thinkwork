@@ -62,23 +62,12 @@ resource "aws_cognito_user_pool_ui_customization" "mcp_oauth" {
       padding: 32px 0 18px;
     }
 
-    .logo-customizable {
-      max-height: 64px;
+    .label-customizable {
+      color: #f5f5f5;
     }
 
-    .label-customizable,
-    .textDescription-customizable,
     .legalText-customizable {
       color: #f5f5f5;
-    }
-
-    .panel-customizable {
-      background-color: #191919;
-      border: 1px solid #333333;
-      border-radius: 8px;
-      box-shadow: none;
-      color: #f5f5f5;
-      padding: 32px;
     }
 
     .inputField-customizable {
@@ -105,16 +94,6 @@ resource "aws_cognito_user_pool_ui_customization" "mcp_oauth" {
 
     .submitButton-customizable:hover {
       background-color: #ffffff;
-    }
-
-    .redirect-customizable,
-    .forgotPassword-customizable {
-      opacity: 0.35;
-    }
-
-    .redirect-customizable a,
-    .forgotPassword-customizable a {
-      color: #f5f5f5;
     }
   CSS
 }
