@@ -1,9 +1,13 @@
 ---
 date: 2026-04-24
 topic: hindsight-retain-reshape-and-daily-memory
+status: superseded
+superseded-by: docs/brainstorms/2026-04-27-hindsight-ingest-and-runtime-cleanup-requirements.md
 ---
 
 # Reshape Hindsight Ingest: Conversation-Level Thread Retain + Daily Workspace Memory Source
+
+> **SUPERSEDED 2026-04-27.** Merged into `docs/brainstorms/2026-04-27-hindsight-ingest-and-runtime-cleanup-requirements.md`, which consolidates this brainstorm (thread reshape + daily memory + user-scope flip) with the same-day Strands-integration cleanup brainstorm. The boundary-flush trigger model defined here (idle ≥ 15 min OR ≥ 20 turns) is **dropped** in the merged document in favor of per-turn idempotent upsert. Daily-memory and user-scope decisions are preserved.
 
 ## Problem Frame
 
