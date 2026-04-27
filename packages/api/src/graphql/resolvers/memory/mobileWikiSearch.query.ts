@@ -1,11 +1,11 @@
 /**
  * mobileWikiSearch — Postgres FTS over compiled wiki pages in one
- * (tenant, agent) scope.
+ * (tenant, user) scope.
  *
- * Ranks compiled pages by `ts_rank(search_tsv, plainto_tsquery('english',
- * query))` against the GIN-indexed `search_tsv` generated column on
- * `wiki_pages` (title || summary || body_md). On the target corpus
- * (~hundreds of pages per agent) this returns in <50ms end-to-end.
+ * Ranks compiled pages through the shared wiki FTS helper against the
+ * GIN-indexed `search_tsv` generated column on `wiki_pages` (title ||
+ * summary || body_md). The helper also applies alias boost and prefix
+ * matching for mobile-friendly partial input.
  *
  * History: this resolver previously routed through Hindsight semantic
  * recall + a `wiki_section_sources` reverse-join. That path dominated
@@ -23,34 +23,22 @@
  * `tenant_id` and `owner_id` so cross-user visibility is impossible.
  */
 
-import { eq, sql } from "drizzle-orm";
 import type { GraphQLContext } from "../../context.js";
-import { db } from "../../utils.js";
-import { toGraphQLPage } from "../wiki/mappers.js";
 import { requireMemoryUserScope } from "../core/require-user-scope.js";
+import { searchWikiForUser } from "../../../lib/wiki/search.js";
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
 
-interface MobileWikiSearchRow {
-	id: string;
-	tenant_id: string;
-	owner_id: string;
-	type: string;
-	slug: string;
-	title: string;
-	summary: string | null;
-	body_md: string | null;
-	status: string;
-	last_compiled_at: Date | null;
-	created_at: Date;
-	updated_at: Date;
-	score: number;
-}
-
 export const mobileWikiSearch = async (
 	_parent: unknown,
-	args: { tenantId?: string; userId?: string; agentId?: string; query: string; limit?: number },
+	args: {
+		tenantId?: string;
+		userId?: string;
+		agentId?: string;
+		query: string;
+		limit?: number;
+	},
 	ctx: GraphQLContext,
 ) => {
 	const { query, limit = DEFAULT_LIMIT } = args;
@@ -61,46 +49,19 @@ export const mobileWikiSearch = async (
 	const ownerId = userId as string;
 	const cappedLimit = Math.max(1, Math.min(limit, MAX_LIMIT));
 
-	const result = await db.execute(sql`
-		SELECT
-			p.id, p.tenant_id, p.owner_id, p.type, p.slug,
-			p.title, p.summary, p.body_md, p.status,
-			p.last_compiled_at, p.created_at, p.updated_at,
-			COALESCE(ts_rank(p.search_tsv, plainto_tsquery('english', ${trimmed})), 0)::float AS score
-		FROM wiki_pages p
-		WHERE p.tenant_id = ${tenantId}
-		  AND p.owner_id = ${ownerId}
-		  AND p.status = 'active'
-		  AND p.search_tsv @@ plainto_tsquery('english', ${trimmed})
-		ORDER BY score DESC, p.last_compiled_at DESC NULLS LAST
-		LIMIT ${cappedLimit}
-	`);
-
-	const rows = ((result as unknown as { rows?: MobileWikiSearchRow[] }).rows ??
-		[]) as MobileWikiSearchRow[];
+	const rows = await searchWikiForUser({
+		tenantId,
+		userId: ownerId,
+		query: trimmed,
+		limit: cappedLimit,
+	});
 
 	console.log(
 		`[mobileWikiSearch] user=${userId} query=${JSON.stringify(trimmed)} pages=${rows.length}`,
 	);
 
 	return rows.map((r) => ({
-		page: toGraphQLPage(
-			{
-				id: r.id,
-				tenant_id: r.tenant_id,
-				owner_id: r.owner_id,
-				type: r.type,
-				slug: r.slug,
-				title: r.title,
-				summary: r.summary,
-				body_md: r.body_md,
-				status: r.status,
-				last_compiled_at: r.last_compiled_at,
-				created_at: r.created_at,
-				updated_at: r.updated_at,
-			},
-			{ sections: [], aliases: [] },
-		),
+		page: r.page,
 		score: r.score,
 		matchingMemoryIds: [] as string[],
 	}));

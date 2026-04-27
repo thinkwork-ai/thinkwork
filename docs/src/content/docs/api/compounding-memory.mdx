@@ -15,7 +15,7 @@ Start here if you're building a client (the mobile app, an SDK, another service)
 
 **Search an agent's wiki** with a free-text query. Two flavors:
 - Lexical search — looks for your query in titles, summaries, and body text.
-- Ranked wiki search for mobile — runs the same semantic recall your agent uses, then shows you the pages those memories feed into.
+- Ranked wiki search for mobile — uses the same compiled-page FTS path, with prefix matching for partial mobile input.
 
 **Find what links to a page.** Given a page id, get the list of pages that link to it.
 
@@ -80,8 +80,8 @@ This is Postgres full-text search over the page's title, summary, and body, with
 ### Ranked search (mobile)
 
 ```graphql
-query MobileSearch($agentId: ID!, $query: String!, $limit: Int = 20) {
-  mobileWikiSearch(agentId: $agentId, query: $query, limit: $limit) {
+query MobileSearch($userId: ID!, $query: String!, $limit: Int = 20) {
+  mobileWikiSearch(userId: $userId, query: $query, limit: $limit) {
     score
     matchingMemoryIds
     page {
@@ -96,14 +96,14 @@ query MobileSearch($agentId: ID!, $query: String!, $limit: Int = 20) {
 }
 ```
 
-This is different. It doesn't do its own search over the wiki pages — it asks the memory engine (Hindsight) to find the most relevant memories for the query, then returns the pages those memories cite.
+Mobile search runs through the shared compiled-page FTS helper. It matches active `wiki_pages` rows with `search_tsv`, adds normalized prefix matching for partial input like `empan`, includes alias hits, and returns the same page card shape the mobile app already consumes.
 
-**The ranking trusts Hindsight's order.** If Hindsight's #1 hit cites page A, page A wins. If Hindsight's #5 hit cites page B, page B ranks lower. The `score` is a reciprocal-rank value (higher is better, not comparable across queries).
+**The ranking comes from Postgres FTS plus alias boost.** Higher is better, but scores are not comparable across queries.
 
-`matchingMemoryIds` tells you which memories caused each page to surface, in Hindsight's rank order. You can use this to render a "why this matched" explanation in the UI.
+`matchingMemoryIds` is preserved for mobile wire compatibility and is currently always `[]` on this FTS path.
 
 <Aside type="tip">
-If you're building a user-facing search, this is probably what you want. The lexical search is better for exact title lookups; this one is better when users ask in natural language.
+If you're building a user-facing wiki browser, use `mobileWikiSearch`. It keeps the mobile response shape while sharing the same compiled-page search behavior as `wikiSearch`.
 </Aside>
 
 ## Jumping from a memory to its pages
@@ -234,13 +234,13 @@ For a truly clean rebuild (including deleting provenance rows), see [the operati
 
 ```ts
 // packages/api/src/graphql/resolvers/memory/mobileWikiSearch.query.ts
-// 1. Hindsight recall returns memories in rank order (rank 0 = best).
-// 2. Reverse-join through wiki_section_sources to candidate pages.
-// 3. For each page:
-//    bestRank  = min(rank of any memory citing the page)
-//    matchCount = count of distinct hits citing the page
-// 4. Sort by bestRank ASC, then matchCount DESC, then lastCompiledAt DESC.
-// 5. Return score = 1 / (bestRank + 60)  (reciprocal rank surfacing score)
+// 1. Resolve the caller's user-scoped wiki scope.
+// 2. Delegate to the shared wiki FTS helper.
+// 3. Match active wiki_pages rows with search_tsv @@ plainto_tsquery(...)
+//    or the normalized prefix tsquery used for mobile-friendly partial input.
+// 4. Include alias hits through wiki_page_aliases and boost those matches.
+// 5. Sort by score DESC, then lastCompiledAt DESC.
+// 6. Preserve the mobile wire shape with matchingMemoryIds = [].
 ```
 
 ### Resolver paths

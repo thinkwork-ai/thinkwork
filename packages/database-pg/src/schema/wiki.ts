@@ -75,7 +75,7 @@ export const wikiPages = pgTable(
 		summary: text("summary"),
 		body_md: text("body_md"),
 		search_tsv: tsvector("search_tsv").generatedAlwaysAs(
-			sql`to_tsvector('english'::regconfig, coalesce(title,'') || ' ' || coalesce(summary,'') || ' ' || coalesce(body_md,''))`,
+			sql`to_tsvector('english'::regconfig, regexp_replace(coalesce(title,'') || ' ' || coalesce(summary,'') || ' ' || coalesce(body_md,''), '[^[:alnum:]]+', ' ', 'g'))`,
 		),
 		status: text("status").notNull().default("active"), // 'active' | 'archived'
 		// Hierarchical aggregation: set when a page was promoted from a section
