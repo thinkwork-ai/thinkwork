@@ -4,9 +4,7 @@ import type {
 } from "aws-lambda";
 import { verifyMcpAccessToken } from "./mcp-oauth.js";
 import { handleCors, json } from "../lib/response.js";
-import { getMemoryServices } from "../lib/memory/index.js";
 import type { RecallResult, ThinkWorkMemoryRecord } from "../lib/memory/types.js";
-import { resolveCallerFromAuth } from "../graphql/resolvers/core/resolve-auth-user.js";
 
 const MAX_LIMIT = 50;
 
@@ -137,7 +135,8 @@ async function handleToolCall(
 			const query = stringArg(args.query);
 			if (!query) return jsonRpcError(request.id, -32602, "query is required");
 			const limit = limitArg(args.limit);
-			const results = await getMemoryServices().recall.recall({
+			const memory = await getMemoryServices();
+			const results = await memory.recall.recall({
 				...owner,
 				query,
 				...(limit ? { limit } : {}),
@@ -151,7 +150,8 @@ async function handleToolCall(
 		}
 		case "memory_list": {
 			const limit = limitArg(args.limit);
-			const records = await getMemoryServices().inspect.inspect({
+			const memory = await getMemoryServices();
+			const records = await memory.inspect.inspect({
 				...owner,
 				...(limit ? { limit } : {}),
 			});
@@ -178,6 +178,7 @@ async function resolveUserMemoryOwner(
 
 	const sub = stringClaim(claims.sub);
 	if (!sub) return null;
+	const { resolveCallerFromAuth } = await import("../graphql/resolvers/core/resolve-auth-user.js");
 	const resolved = await resolveCallerFromAuth({
 		authType: "cognito",
 		principalId: sub,
@@ -189,6 +190,11 @@ async function resolveUserMemoryOwner(
 	const tenantId = claimedTenantId ?? resolved.tenantId;
 	if (!userId || !tenantId) return null;
 	return { tenantId, ownerType: "user", ownerId: userId };
+}
+
+async function getMemoryServices() {
+	const memory = await import("../lib/memory/index.js");
+	return memory.getMemoryServices();
 }
 
 function formatRecallResults(results: RecallResult[]): string {
