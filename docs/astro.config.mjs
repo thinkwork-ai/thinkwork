@@ -66,6 +66,10 @@ export default defineConfig({
                   label: "Managed Agents",
                   slug: "concepts/agents/managed-agents",
                 },
+                {
+                  label: "Runtime Selection",
+                  slug: "concepts/agents/runtime-selection",
+                },
                 { label: "Templates", slug: "concepts/agents/templates" },
                 {
                   label: "Workspace Overlay",
