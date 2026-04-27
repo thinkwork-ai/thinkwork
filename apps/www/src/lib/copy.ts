@@ -35,7 +35,7 @@ export const meta = {
 
 export const hero = {
   eyebrow: "Agent Harness for Business",
-  headlinePart1: "The runtime",
+  headlinePart1: "The platform",
   headlinePart2: "for",
   headlineAccentPart1: "AI agents",
   headlineAccentPart2: "at work.",
