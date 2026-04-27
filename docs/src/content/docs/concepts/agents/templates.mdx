@@ -29,6 +29,12 @@ Templates are the specific answer. Model, guardrail, budget, tool config, memory
 
 Categorically — not field-by-field — a template bundles:
 
+### Default runtime
+
+The managed runtime newly-created agents should use by default. Strands is the default and stable path; Pi is the parallel managed runtime for canaries and Pi-backed agents. Existing agents can still override the runtime per agent, so use the template runtime when a whole class of new agents should start on Pi.
+
+See [Runtime Selection](/concepts/agents/runtime-selection/) for the runtime model.
+
 ### Model configuration
 
 The model id, max output tokens, temperature, and any other Bedrock inference parameters the agent should use. Changing the model id on a template swaps models for every agent on it on the next invocation. No redeploy.
@@ -73,6 +79,7 @@ The rule: **live fields come from the template on every turn; seed fields are co
 
 | Axis | Source at runtime | Editable per-agent |
 |---|---|---|
+| Runtime | Agent, falling back to template | Yes |
 | Model id | Template | No |
 | Guardrail | Template | No |
 | Inference params (max tokens, temperature, …) | Template | No |
@@ -136,7 +143,7 @@ If a template originally seeded agents with `[crm, tone]` and you change the def
 
 For this case there's an explicit **sync flow** in the admin UI: the template owner reviews a diff of what would change, chooses which agents to apply it to, and triggers the propagation. This is explicit on purpose. Propagating skill/KB changes silently would break agents that legitimately diverged — a support agent who had `escalation` removed on purpose would have it silently re-added.
 
-Live fields (model, guardrail, budget) don't need sync because agents never had their own copy.
+Live fields (runtime, model, guardrail, budget) don't need sync because agents either read them directly from the template or carry an explicit per-agent override.
 
 See [Admin: Agent Templates](/applications/admin/agent-templates/) for the sync flow UI.
 
@@ -149,6 +156,7 @@ Tenants typically grow to a dozen-plus templates. Organizing them matters.
 Templates diverge along a handful of real axes:
 
 - **Model tier.** Haiku for cheap/fast, Sonnet for balanced, Opus for hard reasoning.
+- **Runtime substrate.** Strands for the stable default path, Pi for canary agents or templates validating the Pi loop.
 - **Guardrail strictness.** Customer-facing needs strict PII; internal tools tolerate more.
 - **Tool surface.** An eval agent needs no connectors; a support agent needs Slack + email + CRM.
 - **Budget class.** Internal tools on $10/month; customer-facing on $200/month.

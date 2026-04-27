@@ -5,7 +5,7 @@ description: Reusable agent configuration bundles — skills, knowledge, MCP ser
 
 import { Aside } from '@astrojs/starlight/components';
 
-Agent templates are reusable configuration bundles that multiple agents can share. A template defines the model, default skill assignments, default knowledge bases, MCP server assignments, guardrail attachments, system prompt, budget caps, and a workspace file set.
+Agent templates are reusable configuration bundles that multiple agents can share. A template defines the default runtime, model, default skill assignments, default knowledge bases, MCP server assignments, guardrail attachments, system prompt, budget caps, and a workspace file set.
 
 Templates propagate to linked agents via two distinct mechanisms depending on what changed:
 
@@ -26,6 +26,7 @@ The list is a searchable table showing every template in the tenant:
 | Name | Display name |
 | Description | Short summary |
 | Category | Author-chosen category tag |
+| Runtime | Default managed runtime for agents created from the template (`Strands` or `Pi`) |
 | Model | The default model this template uses (Claude Haiku, Sonnet, Nova, etc.) |
 | Source | Where the template came from (built-in, tenant-created, imported) |
 | Skill count | How many skills are attached |
@@ -44,6 +45,7 @@ The detail page is a split layout: form fields on the left, a CodeMirror editor 
 ### Left pane — form and assignments
 
 - **Identity** — name, slug, description, category, publish toggle
+- **Runtime selector** — default managed runtime for new agents created from this template: Strands or Pi
 - **Model select** — dropdown backed by the tenant's configured model catalog
 - **Skills table** — add/remove skills from the tenant-installed catalog
 - **MCP Servers table** — link/unlink tenant-registered MCP servers (sourced via the REST `listMcpServers` / `assignMcpToTemplate` / `unassignMcpFromTemplate` API module)
@@ -69,6 +71,15 @@ The Configuration tab carries a **Code Sandbox** card that controls the template
 The toggle persists to the template's `sandbox` field as JSON: `{ "environment": "default-public" | "internal-only" }` when opted in, `null` when the template doesn't use the sandbox. The shape is validated server-side by `packages/api/src/lib/templates/sandbox-config.ts`.
 
 The `execute_code` tool only registers on a turn when **both** the template is opted in on this card **and** the tenant has `sandbox_enabled` set in tenant policy. Template opt-in without tenant policy is a no-op. See [Admin → Built-in Tools](/applications/admin/builtin-tools/#code-sandbox-policy-gated) for the tenant-policy side of the gate and the [Code Sandbox concept page](/concepts/agents/code-sandbox/) for how the opt-in flows through to the agent runtime.
+
+### Runtime selector
+
+The Configuration tab includes the template's runtime selector:
+
+- **Strands** — the stable default managed runtime.
+- **Pi** — the parallel managed runtime substrate for Pi-backed canaries and agents.
+
+The template runtime is the default for agents created from the template. Existing agents can carry their own runtime value, so changing a template's runtime is primarily a future-agent default unless a sync or per-agent edit changes linked agents. See [Runtime Selection](/concepts/agents/runtime-selection/) for the invocation-time routing model.
 
 ## The Workspace tab
 
@@ -134,12 +145,13 @@ Until an operator clicks Sync, linked agents continue running with the pre-edit 
 
 1. Install the new skill via [Skills Catalog](/applications/admin/skills-catalog/)
 2. Open the template at `/agent-templates/:templateId`
-3. Add the skill to the Skills table
-4. Save the template
-5. Click **Sync** and land on the review page
-6. Confirm the diffs look right
-7. Click **Sync All** — or sync one agent first as a canary, then sync the rest
-8. Watch the linked agent list for sync status and agent heartbeats to confirm no regressions
+3. Confirm the Runtime selector is set to the runtime that supports the skill
+4. Add the skill to the Skills table
+5. Save the template
+6. Click **Sync** and land on the review page
+7. Confirm the diffs look right
+8. Click **Sync All** — or sync one agent first as a canary, then sync the rest
+9. Watch the linked agent list for sync status and agent heartbeats to confirm no regressions
 
 ### Tune a system prompt across the fleet
 
@@ -167,10 +179,12 @@ Template history is not currently versioned — rollback means editing forward. 
 - **No template versioning.** Rollback is edit-forward. Per-agent rollback is available through the agent detail page, but the template itself has no git-like history.
 - **No template diff preview on the template detail page.** The diff only renders on the sync review page, after the operator has already saved changes and clicked Sync.
 - **No dry-run.** "Sync All" is an all-or-nothing mutation; there's no simulate-sync-and-show-what-would-happen mode separate from the review page.
+- **Runtime changes are not retroactive to in-flight turns.** If an agent is already running, that turn completes on the previous runtime. The next turn uses the new selector.
 
 ## Related pages
 
 - [Agents](/applications/admin/agents/) — the per-agent detail pages that inherit from templates
+- [Runtime Selection](/concepts/agents/runtime-selection/) — Strands/Pi runtime routing
 - [Agent Invites](/applications/admin/agent-invites/) — BYOB agent registration
 - [Skills Catalog](/applications/admin/skills-catalog/) — the skills added to templates
 - [Tenant MCP Servers](/applications/admin/mcp-servers/) — the MCP servers assigned to templates
