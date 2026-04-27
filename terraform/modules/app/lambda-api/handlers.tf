@@ -643,6 +643,24 @@ resource "aws_scheduler_schedule" "skill_runs_reconciler" {
 # Compounding Memory — nightly hygiene + export
 # ---------------------------------------------------------------------------
 
+resource "aws_scheduler_schedule" "wiki_compile_drainer" {
+  count = local.use_local_zips ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-wiki-compile-drainer"
+  group_name          = "default"
+  schedule_expression = "rate(1 minutes)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["wiki-compile"].arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
 resource "aws_scheduler_schedule" "wiki_lint" {
   count = local.use_local_zips ? 1 : 0
 

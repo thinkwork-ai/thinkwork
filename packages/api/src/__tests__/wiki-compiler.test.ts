@@ -686,6 +686,15 @@ describe("runCompileJob", () => {
 		mockRepo.bumpSectionLastSeen.mockResolvedValue(0);
 		mockRepo.findMemoryUnitPageSources.mockResolvedValue([]);
 		mockRepo.countDuplicateTitleCandidates.mockResolvedValue(0);
+		mockRepo.enqueueCompileJob.mockResolvedValue({
+			inserted: false,
+			job: {
+				id: "chained-job",
+				tenant_id: "t1",
+				owner_id: "a1",
+				trigger: "bootstrap_import",
+			},
+		});
 		// No alias collisions by default; individual tests override when
 		// exercising the dedup path.
 		mockRepo.findAliasMatches.mockResolvedValue([]);
@@ -745,6 +754,67 @@ describe("runCompileJob", () => {
 		);
 		expect(mockRepo.completeCompileJob).toHaveBeenCalledWith(
 			expect.objectContaining({ jobId: "job-1", status: "succeeded" }),
+		);
+	});
+
+	it("queues continuation jobs for scheduler drain instead of invoking itself", async () => {
+		scriptAdapter([
+			{
+				records: [makeRecord("r1")],
+				nextCursor: {
+					updatedAt: new Date("2026-04-18T00:00:00Z"),
+					recordId: "r1",
+				},
+			},
+			{ records: [], nextCursor: null },
+		]);
+		mockPlanner.runPlanner.mockResolvedValueOnce({
+			pageUpdates: [],
+			newPages: Array.from({ length: 26 }, (_, i) => ({
+				type: "entity" as const,
+				slug: `page-${i}`,
+				title: `Page ${i}`,
+				sections: [
+					{
+						slug: "overview",
+						heading: "Overview",
+						body_md: `Page ${i} from r1.`,
+					},
+				],
+				source_refs: ["r1"],
+			})),
+			unresolvedMentions: [],
+			promotions: [],
+			usage: { inputTokens: 100, outputTokens: 40 },
+		});
+		mockRepo.enqueueCompileJob.mockResolvedValueOnce({
+			inserted: true,
+			job: {
+				id: "chained-job",
+				tenant_id: "t1",
+				owner_id: "a1",
+				trigger: "memory_retain",
+			},
+		});
+
+		const result = await runCompileJob(sampleJob);
+
+		expect(result.status).toBe("succeeded");
+		expect(result.metrics.cap_hit).toBe("max_new_pages");
+		expect(result.metrics.continuation_enqueued).toBe(1);
+		expect(mockRepo.enqueueCompileJob).toHaveBeenCalledWith({
+			tenantId: "t1",
+			ownerId: "a1",
+			trigger: "memory_retain",
+			nowEpochSeconds: 600,
+		});
+		expect(mockRepo.completeCompileJob).toHaveBeenCalledWith(
+			expect.objectContaining({
+				metrics: expect.objectContaining({
+					cap_hit: "max_new_pages",
+					continuation_enqueued: 1,
+				}),
+			}),
 		);
 	});
 
