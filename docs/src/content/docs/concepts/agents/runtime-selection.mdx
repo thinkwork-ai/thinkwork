@@ -1,0 +1,97 @@
+---
+title: Runtime Selection
+description: How ThinkWork chooses between the Strands and Pi AgentCore runtimes for managed agents, and how operators should use the selector.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Runtime selection is the managed-agent switch that chooses which AgentCore container executes a turn. ThinkWork currently supports two managed runtimes:
+
+| Runtime | Status | Use when |
+|---|---|---|
+| **Strands** | Default, stable | You want the proven production path with the full current tool surface. Existing agents stay here unless changed. |
+| **Pi** | Parallel runtime substrate | You want to test ThinkWork's Pi-based agent loop on real agents while keeping the same threads, memory, tools, audit, and deployment boundary. |
+
+Both runtimes are **managed** in the ThinkWork sense: they run inside your AWS account on Bedrock AgentCore, use your Bedrock access, read the same Aurora records, publish through the same thread pipeline, and write the same audit/cost surfaces. Pi is not a connected-agent webhook and it is not vendor-hosted.
+
+## Why there are two runtimes
+
+Strands is the original ThinkWork managed runtime. It is mature, Python-based, and already integrated with the ThinkWork tool surface.
+
+Pi is a second AgentCore runtime substrate. It exists so ThinkWork can evaluate a more customizable agent loop without replacing the stable runtime or forcing every agent to migrate. The point is parallel production learning: operators can route a canary agent to Pi, observe behavior under real traffic, and move it back to Strands if needed.
+
+<Aside type="note">
+Strands remains the default. Existing agents and templates continue to run on Strands unless their runtime selector is changed explicitly.
+</Aside>
+
+## Where the selector lives
+
+The selector is stored on both records that define managed-agent behavior:
+
+- **Agent** — `agents.runtime`, the per-agent runtime override.
+- **Template** — `agent_templates.runtime`, the default runtime for agents created from that template.
+
+At invocation time, the dispatcher resolves the agent and template, normalizes the runtime value, and chooses the matching AgentCore function:
+
+```
+agent.runtime ?? template.runtime ?? "strands"
+        |
+        v
+runtime = "strands" | "pi"
+        |
+        v
+AGENTCORE_FUNCTION_NAME or AGENTCORE_PI_FUNCTION_NAME
+        |
+        v
+Bedrock AgentCore runtime invocation
+```
+
+This means the runtime switch is an invocation-time decision, not a deployment-time decision. Changing an agent from Strands to Pi affects the next turn; an in-flight turn finishes on the runtime that was selected when it started.
+
+## What stays the same
+
+Switching a managed agent from Strands to Pi does not create a new agent identity. These surfaces stay stable:
+
+- Thread history and thread ids.
+- Agent id, slug, template link, and workspace overlay.
+- Knowledge-base assignments.
+- Memory and compounding-memory context.
+- MCP server configuration and connector credentials resolved by the dispatcher.
+- AppSync response delivery, audit records, and cost/evaluation surfaces.
+
+The runtime is only the loop that executes the turn. The harness state remains ThinkWork-owned.
+
+## What can differ
+
+The implementation language and loop internals differ:
+
+- **Strands runtime** lives in `packages/agentcore-strands/agent-container/` and uses Python + Strands.
+- **Pi runtime** lives in `packages/agentcore-pi/agent-container/` and uses Node.js + Pi.
+
+Tool parity is the goal, but new tools should be evaluated per runtime. When a tool only exists in one runtime, the selector should keep affected agents on the supported runtime until the other implementation lands.
+
+## Operator workflow
+
+Use runtime selection like a canary control:
+
+1. Keep the production fleet on Strands.
+2. Create or choose one low-risk agent for Pi validation.
+3. Set that agent's runtime to Pi.
+4. Send real but controlled traffic through the agent.
+5. Compare success rate, latency, tool behavior, memory recall, and answer quality against a Strands reference.
+6. Move the agent back to Strands if the Pi runtime misbehaves.
+
+For templates, set the runtime when you want newly-created agents from that template to start on Pi. For one-off validation, prefer changing a single agent first.
+
+## Failure modes
+
+If an agent is set to `pi` in a stage where the Pi runtime function is not provisioned, the dispatcher returns a structured "Pi runtime not yet provisioned in this stage" error. It does not silently fall back to Strands, because silent fallback would make runtime tests impossible to trust.
+
+If the runtime value is missing or unrecognized, ThinkWork normalizes to Strands. This protects older records created before runtime selection existed.
+
+## Related pages
+
+- [Managed Agents](/concepts/agents/managed-agents/) — how managed invocations run
+- [Templates](/concepts/agents/templates/) — the default configuration layer for agent fleets
+- [Admin: Agents](/applications/admin/agents/) — where operators manage individual agents
+- [Admin: Agent Templates](/applications/admin/agent-templates/) — where operators manage template defaults

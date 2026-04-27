@@ -31,7 +31,14 @@ The list is driven by `AgentsListQuery`. An `OnAgentStatusChangedSubscription` r
 
 **Route:** `/agents/new` (redirect only)
 
-The `/agents/new` route is a stub: its `beforeLoad` hook throws `redirect({ to: "/agents" })` and the actual creation happens inside the **`NewAgentDialog`** that lives at the `_authed/_tenant` layout and is opened via `useDialog().openNewAgent()`. The dialog captures the name, slug, model, and optionally a template source, then fires `CreateAgentMutation` and navigates to the new detail page on success.
+The `/agents/new` route is a stub: its `beforeLoad` hook throws `redirect({ to: "/agents" })` and the actual creation happens inside the **New Agent** dialog opened via `useDialog().openNewAgent()`. The dialog captures the agent name, template, runtime, and optional budget metadata, then fires `CreateAgentMutation` and navigates to the new detail page on success.
+
+The runtime selector controls which managed AgentCore runtime executes the agent's turns:
+
+- **Strands** — stable default.
+- **Pi** — parallel Pi runtime substrate.
+
+When the operator chooses a template, the dialog uses that template's default runtime as the starting value. Operators can still override it per agent. See [Runtime Selection](/concepts/agents/runtime-selection/) for the model.
 
 Most operators create agents from templates rather than from scratch — see [Agent Templates](/applications/admin/agent-templates/).
 
@@ -47,7 +54,7 @@ The detail page hosts the agent's overview metrics plus a nested tab router for 
 - **Smart breadcrumbs** — if the agent is a sub-agent (has `parentAgentId`), the breadcrumb trail includes the parent name and a "Workspaces" link back to the parent's Workspaces tab. If the agent is top-level, the trail is just Agents → (this agent).
 - **`AgentMetrics`** — a card grid with API call count, threads, spend, and other derived stats
 - **`AgentActivity`** — a filtered activity feed showing runs and threads belonging to this agent. The tenant-wide queries are re-used and filtered client-side to this agent id.
-- **`AgentHeaderBadges`** — status, type, template link, budget, heartbeat
+- **`AgentHeaderBadges`** — status, type, runtime, template link, budget, heartbeat
 - **Action buttons** — edit agent (opens `AgentFormDialog`), rollback (opens `AgentRollbackButton`'s dropdown of prior configurations to restore)
 
 Directly under the overview sits a **`TabsPanel`** that routes into six sub-pages, each a separate file under `agents/$agentId_.<tab>.tsx`.
@@ -168,7 +175,7 @@ Type is a separate axis: `WORKSPACE_AGENT` (scoped to a workspace under a parent
 ### Iterate on an existing agent
 
 1. Open `/agents` and click into the agent
-2. Edit fields via `AgentFormDialog`, or change configuration per-tab (add a skill, attach a KB, tune memory)
+2. Edit fields via `AgentFormDialog`, including the runtime selector, or change configuration per-tab (add a skill, attach a KB, tune memory)
 3. Changes persist via per-tab mutations; the subscription keeps other connected admin clients in sync
 4. Use the Rollback button to revert to a prior configuration if the changes break something
 
@@ -182,6 +189,7 @@ Type is a separate axis: `WORKSPACE_AGENT` (scoped to a workspace under a parent
 ## Known limits
 
 - **Agent creation redirects** — the `/agents/new` route is a stub; the dialog is the real entry point.
+- **Runtime flips apply to new turns** — an in-flight turn finishes on the runtime selected when it started. The next turn uses the newly selected runtime.
 - **`/workspace` and `/workspaces` are different features** — singular is the overlay file tree, plural is the sub-agent delegation surface. Linked from different places in the UI.
 - **Memory edits depend on backend** — AgentCore records are read-only; Hindsight records are editable.
 - **Activity feed is client-filtered** — the agent detail page filters the tenant-wide queries rather than issuing agent-scoped ones, which is fine for small tenants but can be slow at scale.
@@ -189,6 +197,7 @@ Type is a separate axis: `WORKSPACE_AGENT` (scoped to a workspace under a parent
 ## Related pages
 
 - [Agent Templates](/applications/admin/agent-templates/) — reusable bundles + explicit sync flow
+- [Runtime Selection](/concepts/agents/runtime-selection/) — Strands/Pi managed-runtime routing
 - [Agent Invites](/applications/admin/agent-invites/) — BYOB runtime registration
 - [Skills Catalog](/applications/admin/skills-catalog/) — where the skills installed here come from
 - [Tenant MCP Servers](/applications/admin/mcp-servers/) — MCP tool assignment source

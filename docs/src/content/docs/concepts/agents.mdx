@@ -7,11 +7,11 @@ import { Aside } from '@astrojs/starlight/components';
 
 An agent in ThinkWork is the harness's decision-making layer — a named entity that receives messages in a thread and produces responses. Agents read assembled context (the harness's [Perception phase](/architecture/#the-ppaf-agent-loop)), decide what to do (Planning), call tools (Action), and write back into the thread, where the turn's outcome becomes the Feedback the next turn perceives. Reliability and Security operating guarantees land here: templates pin model + guardrail behavior so two agents on the same template produce reproducible work, and capability grants determine which tools a given agent can ever fire.
 
-ThinkWork supports two kinds of agents — **managed** and **connected** — and the difference is about *where the inference runtime lives*, not about what capabilities the agent has.
+ThinkWork supports two kinds of agents — **managed** and **connected** — and the difference is about *who owns the inference runtime*, not about what capabilities the agent has.
 
 ## Managed vs. connected
 
-**Managed agents** are the default. ThinkWork runs them on **AgentCore**, a Python Lambda container built on the [Strands](https://strandsagents.com) framework, inside *your* AWS account. You get a consistent execution model, thread integration, streaming, auditability, and cost tracking without building your own orchestration.
+**Managed agents** are the default. ThinkWork runs them on **Bedrock AgentCore** inside *your* AWS account. Strands is the default managed runtime; Pi is a second managed runtime substrate for agents that you explicitly route to it. You get a consistent execution model, thread integration, streaming, auditability, and cost tracking without building your own orchestration.
 
 The important distinction: managed does not mean vendor-hosted. ThinkWork makes running an agent easy; the harness, state, memory, guardrails, audit, and data still live inside your deployment boundary. Your tenants' data never leaves your AWS account.
 
@@ -24,6 +24,17 @@ A connected agent registers a webhook. When a message arrives in a thread assign
 </Aside>
 
 Both kinds of agents show up identically in the admin app, the mobile app, the thread list, and the audit log. An operator sees "Agent X replied in thread Y" the same way regardless of where the inference ran.
+
+## Managed runtime choices
+
+Managed agents can run on either runtime:
+
+- **Strands** — the stable default runtime and the path existing agents use unless changed.
+- **Pi** — a parallel AgentCore runtime for testing and operating Pi-backed agents without leaving the ThinkWork harness.
+
+The selected runtime is stored on the agent and template records. The dispatcher reads that selector at invocation time and routes the turn to the matching AgentCore runtime. Threads, memory, workspace files, connectors, audit, and client delivery stay the same across both runtimes.
+
+See [Runtime Selection](/concepts/agents/runtime-selection/) for the operator model.
 
 ## What a managed agent has
 
@@ -50,10 +61,13 @@ See [Templates](/concepts/agents/templates/) for the live-configuration layer an
 When a message arrives in a thread assigned to a managed agent:
 
 ```
-Thread message → API Gateway → AgentCore runtime
+Thread message → API Gateway → runtime dispatcher
                                         │
                                         ▼
                               Load agent + template
+                                        │
+                                        ▼
+                              Choose Strands or Pi
                                         │
                                         ▼
                               Assemble context
@@ -63,7 +77,7 @@ Thread message → API Gateway → AgentCore runtime
                               Bedrock Converse (guardrail applied)
                                         │
                                         ▼
-                              Strands loop: tool calls, reasoning, response
+                              Runtime loop: tool calls, reasoning, response
                                         │
                                         ▼
                               Write turn + messages back to thread
@@ -72,7 +86,7 @@ Thread message → API Gateway → AgentCore runtime
                               AppSync subscription → client
 ```
 
-Strands runs the inner agent loop — tool calling, multi-step reasoning, streaming. ThinkWork provides everything surrounding it: thread state, memory access, template-driven model config, guardrail enforcement, cost capture, connector-provided tools.
+The selected runtime runs the inner agent loop — tool calling, multi-step reasoning, and response generation. ThinkWork provides everything surrounding it: thread state, memory access, template-driven model config, guardrail enforcement, cost capture, connector-provided tools.
 
 See [Managed Agents](/concepts/agents/managed-agents/) for the runtime model in depth.
 
@@ -106,7 +120,8 @@ Agents don't own threads, memory, or connectors — they *use* them. Every conce
 
 ## Related pages
 
-- [Managed Agents](/concepts/agents/managed-agents/) — the AgentCore + Strands runtime in detail
+- [Managed Agents](/concepts/agents/managed-agents/) — the AgentCore managed-runtime model in detail
+- [Runtime Selection](/concepts/agents/runtime-selection/) — choosing Strands or Pi per agent/template
 - [Templates](/concepts/agents/templates/) — fleet-wide configuration (model, guardrail, budget, tool surface)
 - [Workspace Overlay](/concepts/agents/workspace-overlay/) — how agent, template, and tenant workspace files compose
 - [Workspace Orchestration](/concepts/agents/workspace-orchestration/) — async folder-native work through S3 workspace events
