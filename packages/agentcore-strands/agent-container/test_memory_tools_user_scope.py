@@ -71,9 +71,7 @@ def test_remember_writes_user_namespace_and_user_hindsight_bank(monkeypatch):
         ),
     )
 
-    assert memory_tools.remember("prefers concise plans", "preference").startswith(
-        "Remembered:"
-    )
+    assert memory_tools.remember("prefers concise plans", "preference").startswith("Remembered:")
 
     record = client.batch_create_calls[0]["records"][0]
     assert record["namespaces"] == ["user_user-1"]
@@ -101,8 +99,9 @@ def test_recall_uses_current_user_for_managed_memory_and_hindsight(monkeypatch):
         sys.modules,
         "memory",
         SimpleNamespace(
-            search_memories=lambda **kwargs: search_calls.append(kwargs)
-            or [{"text": "managed fact", "strategy": "semantic"}],
+            search_memories=lambda **kwargs: (
+                search_calls.append(kwargs) or [{"text": "managed fact", "strategy": "semantic"}]
+            ),
         ),
     )
     monkeypatch.setitem(
@@ -110,14 +109,17 @@ def test_recall_uses_current_user_for_managed_memory_and_hindsight(monkeypatch):
         "hs_urllib_client",
         SimpleNamespace(
             is_available=lambda: True,
-            recall=lambda **kwargs: hindsight_calls.append(kwargs)
-            or {"results": [{"text": "hindsight fact"}]},
+            recall=lambda **kwargs: (
+                hindsight_calls.append(kwargs) or {"results": [{"text": "hindsight fact"}]}
+            ),
         ),
     )
 
     result = memory_tools.recall("what do I know?")
 
+    assert "Managed Memory" in result
     assert "managed fact" in result
+    assert "Hindsight" in result
     assert "hindsight fact" in result
     assert search_calls[0]["actor_id"] == "user-current"
     assert search_calls[0]["session_id"] == "thread-1"
@@ -126,5 +128,80 @@ def test_recall_uses_current_user_for_managed_memory_and_hindsight(monkeypatch):
             "bank_id": "user_user-current",
             "query": "what do I know?",
             "max_tokens": 2000,
+        }
+    ]
+
+
+def test_recall_fans_out_to_user_scoped_wiki(monkeypatch):
+    memory_tools = _load_memory_tools(monkeypatch)
+    search_calls = []
+    hindsight_calls = []
+    wiki_calls = []
+
+    async def search_wiki_for_user(**kwargs):
+        wiki_calls.append(kwargs)
+        return [
+            {
+                "score": 0.87,
+                "matchedAlias": "Paris",
+                "page": {
+                    "id": "wiki-1",
+                    "type": "ENTITY",
+                    "slug": "le-jules-verne",
+                    "title": "Le Jules Verne",
+                    "summary": "User-liked restaurant in Paris.",
+                    "lastCompiledAt": "2026-04-26T00:00:00Z",
+                },
+            }
+        ]
+
+    monkeypatch.setenv("CURRENT_USER_ID", "user-current")
+    monkeypatch.setenv("TENANT_ID", "tenant-1")
+    monkeypatch.setenv("_ASSISTANT_ID", "agent-1")
+    monkeypatch.setenv("CURRENT_THREAD_ID", "thread-1")
+    monkeypatch.setitem(
+        sys.modules,
+        "memory",
+        SimpleNamespace(
+            search_memories=lambda **kwargs: (
+                search_calls.append(kwargs)
+                or [{"text": "managed favorite is Le Jules Verne", "strategy": "semantic"}]
+            ),
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "hs_urllib_client",
+        SimpleNamespace(
+            is_available=lambda: True,
+            recall=lambda **kwargs: (
+                hindsight_calls.append(kwargs)
+                or {"results": [{"text": "hindsight favorite is Le Jules Verne"}]}
+            ),
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "wiki_tools",
+        SimpleNamespace(search_wiki_for_user=search_wiki_for_user),
+    )
+
+    result = memory_tools.recall("favorite restaurant in Paris")
+
+    assert "Managed Memory" in result
+    assert "managed favorite is Le Jules Verne" in result
+    assert "Hindsight" in result
+    assert "hindsight favorite is Le Jules Verne" in result
+    assert "Wiki" in result
+    assert "Le Jules Verne" in result
+    assert "User-liked restaurant in Paris." in result
+    assert search_calls[0]["actor_id"] == "user-current"
+    assert hindsight_calls[0]["bank_id"] == "user_user-current"
+    assert wiki_calls == [
+        {
+            "tenant_id": "tenant-1",
+            "owner_id": "user-current",
+            "query": "favorite restaurant in Paris",
+            "limit": 5,
         }
     ]
