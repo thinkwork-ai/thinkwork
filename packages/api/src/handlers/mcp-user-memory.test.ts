@@ -3,6 +3,7 @@ import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { handler } from "./mcp-user-memory.js";
 import { encodeJwt } from "../lib/mcp-oauth/state.js";
 import { getMemoryServices } from "../lib/memory/index.js";
+import { searchWikiForUser } from "../lib/wiki/search.js";
 import { resolveCallerFromAuth } from "../graphql/resolvers/core/resolve-auth-user.js";
 
 vi.mock("../lib/memory/index.js", () => ({
@@ -13,10 +14,15 @@ vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
 	resolveCallerFromAuth: vi.fn(),
 }));
 
+vi.mock("../lib/wiki/search.js", () => ({
+	searchWikiForUser: vi.fn(),
+}));
+
 const host = "api.test";
 const resource = `https://${host}/mcp/user-memory`;
 const getMemoryServicesMock = vi.mocked(getMemoryServices);
 const resolveCallerFromAuthMock = vi.mocked(resolveCallerFromAuth);
+const searchWikiForUserMock = vi.mocked(searchWikiForUser);
 
 describe("mcp-user-memory handler", () => {
 	const recallMock = vi.fn();
@@ -26,6 +32,8 @@ describe("mcp-user-memory handler", () => {
 		process.env.API_AUTH_SECRET = "test-secret";
 		recallMock.mockReset();
 		inspectMock.mockReset();
+		searchWikiForUserMock.mockReset();
+		searchWikiForUserMock.mockResolvedValue([]);
 		getMemoryServicesMock.mockReturnValue({
 			recall: { recall: recallMock },
 			inspect: { inspect: inspectMock },
@@ -70,7 +78,9 @@ describe("mcp-user-memory handler", () => {
 		const body = JSON.parse(response.body || "{}");
 		expect(body.result.tools.map((tool: { name: string }) => tool.name)).toEqual([
 			"memory_recall",
+			"recall",
 			"memory_list",
+			"list_memories",
 		]);
 	});
 
@@ -112,6 +122,145 @@ describe("mcp-user-memory handler", () => {
 			text: "Eric prefers concise launch notes.",
 			score: 0.91,
 		});
+	});
+
+	it("returns identical results through Hindsight-compatible aliases", async () => {
+		const memory = {
+			record: memoryRecord({ id: "mem-alias", content: { text: "Alias remembered fact." } }),
+			score: 0.8,
+			whyRecalled: "alias match",
+			backend: "hindsight",
+		};
+		recallMock.mockResolvedValue([memory]);
+		inspectMock.mockResolvedValue([memory.record]);
+
+		const recallAlias = await handler(
+			event(
+				"POST",
+				"/mcp/user-memory",
+				{
+					jsonrpc: "2.0",
+					id: 10,
+					method: "tools/call",
+					params: { name: "recall", arguments: { query: "remembered fact", limit: 2 } },
+				},
+				`Bearer ${mcpToken({ scope: "openid email profile memory:read" })}`,
+			),
+		);
+		const listAlias = await handler(
+			event(
+				"POST",
+				"/mcp/user-memory",
+				{
+					jsonrpc: "2.0",
+					id: 11,
+					method: "tools/call",
+					params: { name: "list_memories", arguments: { limit: 2 } },
+				},
+				`Bearer ${mcpToken({ scope: "openid email profile memory:read" })}`,
+			),
+		);
+
+		expect(JSON.parse(recallAlias.body || "{}").result.structuredContent.memories[0].id).toBe("mem-alias");
+		expect(JSON.parse(listAlias.body || "{}").result.structuredContent.memories[0].id).toBe("mem-alias");
+		expect(recallMock).toHaveBeenCalledWith({
+			tenantId: "tenant-a",
+			ownerType: "user",
+			ownerId: "user-a",
+			query: "remembered fact",
+			limit: 2,
+		});
+		expect(inspectMock).toHaveBeenCalledWith({
+			tenantId: "tenant-a",
+			ownerType: "user",
+			ownerId: "user-a",
+			limit: 2,
+		});
+	});
+
+	it("enriches recall with user-scoped wiki results when wiki:read is granted", async () => {
+		recallMock.mockResolvedValue([
+			{
+				record: memoryRecord({ id: "mem-3", content: { text: "Paris favorite is Septime." } }),
+				score: 0.94,
+				whyRecalled: "restaurant preference",
+				backend: "hindsight",
+			},
+		]);
+		searchWikiForUserMock.mockResolvedValue([
+			wikiResult({
+				page: {
+					id: "wiki-1",
+					title: "Paris Restaurants",
+					summary: "Favorite meals and reservations.",
+				},
+				score: 1.2,
+				matchedAlias: "septime",
+			}),
+		]);
+
+		const response = await handler(
+			event(
+				"POST",
+				"/mcp/user-memory",
+				{
+					jsonrpc: "2.0",
+					id: 12,
+					method: "tools/call",
+					params: { name: "memory_recall", arguments: { query: "favorite restaurant in Paris", limit: 50 } },
+				},
+				`Bearer ${mcpToken({ sub: "cognito-sub", user_id: "user-a", tenant_id: "tenant-a" })}`,
+			),
+		);
+
+		const body = JSON.parse(response.body || "{}");
+		expect(searchWikiForUserMock).toHaveBeenCalledWith({
+			tenantId: "tenant-a",
+			userId: "user-a",
+			query: "favorite restaurant in Paris",
+			limit: 10,
+		});
+		expect(body.result.structuredContent.wikiResults[0]).toMatchObject({
+			page: { id: "wiki-1", title: "Paris Restaurants" },
+			score: 1.2,
+			matchedAlias: "septime",
+		});
+		expect(body.result.structuredContent.results).toEqual([
+			expect.objectContaining({ type: "memory", memory: expect.objectContaining({ id: "mem-3" }) }),
+			expect.objectContaining({ type: "wiki", page: expect.objectContaining({ id: "wiki-1" }) }),
+		]);
+		expect(body.result.content[0].text).toContain("Wiki");
+	});
+
+	it("keeps recall memory-only when wiki:read is not granted", async () => {
+		recallMock.mockResolvedValue([
+			{
+				record: memoryRecord({ id: "mem-4" }),
+				score: 0.7,
+				whyRecalled: null,
+				backend: "hindsight",
+			},
+		]);
+		const response = await handler(
+			event(
+				"POST",
+				"/mcp/user-memory",
+				{
+					jsonrpc: "2.0",
+					id: 13,
+					method: "tools/call",
+					params: { name: "memory_recall", arguments: { query: "remembered fact" } },
+				},
+				`Bearer ${mcpToken({ scope: "openid email profile memory:read" })}`,
+			),
+		);
+
+		const body = JSON.parse(response.body || "{}");
+		expect(searchWikiForUserMock).not.toHaveBeenCalled();
+		expect(body.result.structuredContent.wikiResults).toBeUndefined();
+		expect(body.result.structuredContent.results).toEqual([
+			expect.objectContaining({ type: "memory", memory: expect.objectContaining({ id: "mem-4" }) }),
+		]);
 	});
 
 	it("falls back to resolving users.id from Cognito sub and email for older tokens", async () => {
@@ -201,6 +350,34 @@ function memoryRecord(overrides: Record<string, unknown> = {}) {
 		backendRefs: [{ backend: "hindsight", ref: "fact-1" }],
 		createdAt: "2026-04-27T00:00:00.000Z",
 		...overrides,
+	};
+}
+
+function wikiResult(overrides: Record<string, unknown> = {}) {
+	const { page: pageOverrides, ...rest } = overrides;
+	const page = {
+		id: "wiki-1",
+		tenantId: "tenant-a",
+		userId: "user-a",
+		ownerId: "user-a",
+		type: "TOPIC",
+		slug: "paris-restaurants",
+		title: "Paris Restaurants",
+		summary: "Favorite meals.",
+		bodyMd: null,
+		status: "active",
+		lastCompiledAt: "2026-04-27T00:00:00.000Z",
+		createdAt: "2026-04-27T00:00:00.000Z",
+		updatedAt: "2026-04-27T00:00:00.000Z",
+		sections: [],
+		aliases: [],
+		...((pageOverrides as Record<string, unknown> | undefined) ?? {}),
+	};
+	return {
+		page,
+		score: 1,
+		matchedAlias: null,
+		...rest,
 	};
 }
 

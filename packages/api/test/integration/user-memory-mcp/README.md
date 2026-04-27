@@ -55,10 +55,27 @@ The login command requires the deployed API to expose:
 
 - `GET /.well-known/oauth-protected-resource/mcp/user-memory`
 - `GET /.well-known/oauth-authorization-server`
+- `POST /mcp/oauth/revoke`
 - `POST /mcp/oauth/register`
 - `GET /mcp/oauth/authorize`
 - `GET /mcp/oauth/callback`
 - `POST /mcp/oauth/token`
+
+After login, a direct smoke test can call the Hindsight-compatible alias:
+
+```bash
+codex exec "Use the thinkwork-user-memory-dev MCP server to recall favorite restaurant in Paris"
+```
+
+`codex mcp logout thinkwork-user-memory-dev` removes Codex's local credential.
+Server-side invalidation is a direct revocation call with the active access
+token:
+
+```bash
+curl -X POST https://<api-host>/mcp/oauth/revoke \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data-urlencode "token=<access-token>"
+```
 
 | Variable | What |
 |---|---|
@@ -71,5 +88,5 @@ The login command requires the deployed API to expose:
 - The agent outbound test proves the deployed agent runtime can use a
   user-scoped MCP credential selected by `user_mcp_tokens.user_id`.
 - The Codex direct test proves this workspace can call the real user-facing
-  `retain`, `memory_recall`, and `wiki_search` tools once the inbound server
-  exists.
+  `memory_recall` / `recall` tools and receive user-scoped memory plus wiki
+  results once the inbound server exists.
