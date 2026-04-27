@@ -63,7 +63,6 @@ import {
 } from "./places-service.js";
 import type { GooglePlacesClient } from "./google-places-client.js";
 import { BedrockRetryExhaustedError } from "./bedrock.js";
-import { invokeWikiCompile } from "./enqueue.js";
 import { runPlanner, type PlannerResult } from "./planner.js";
 import {
 	isMeaningfulChange,
@@ -456,9 +455,11 @@ export async function runCompileJob(
 			);
 		}
 		// Continuation chaining — when we drained the cap but not the
-		// cursor, enqueue a follow-up job into the next dedupe bucket so
-		// bootstrap-scale imports self-complete. Preserves the parent's
-		// trigger so the chained job inherits the higher bootstrap cap.
+		// cursor, enqueue a follow-up job into the next dedupe bucket.
+		// A scheduler-driven drainer invokes wiki-compile with no jobId and
+		// claims these pending jobs. Do not invoke this Lambda from here:
+		// Lambda treats long same-function chains as recursive loops and
+		// auto-terminates after roughly 16 invocations.
 		//
 		// Original Unit 3c trigger was
 		// `records_read >= maxRecordsThisJob` — but `applyPlan` can also
@@ -495,14 +496,11 @@ export async function runCompileJob(
 					nowEpochSeconds: nextBucketSeconds,
 				});
 				if (inserted) {
-					await invokeWikiCompile(chained.id).catch((err) => {
-						console.warn(
-							`[wiki-compiler] continuation invoke failed for parent=${job.id} chained=${chained.id}:`,
-							(err as Error)?.message ?? err,
-						);
-					});
 					metrics.continuation_enqueued =
 						(metrics.continuation_enqueued ?? 0) + 1;
+					console.info(
+						`[wiki-compiler] continuation job queued for scheduler drain parent=${job.id} chained=${chained.id}`,
+					);
 				}
 			} catch (chainErr) {
 				console.warn(
