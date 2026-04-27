@@ -12,27 +12,28 @@ locals {
 
   # Common environment variables shared by all API handlers
   common_env = {
-    STAGE                  = var.stage
-    DATABASE_URL           = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
-    DATABASE_SECRET_ARN    = var.graphql_db_secret_arn
-    DATABASE_HOST          = var.db_cluster_endpoint
-    DATABASE_NAME          = var.database_name
-    BUCKET_NAME            = var.bucket_name
-    USER_POOL_ID           = var.user_pool_id
-    COGNITO_USER_POOL_ID   = var.user_pool_id
-    ADMIN_CLIENT_ID        = var.admin_client_id
-    MOBILE_CLIENT_ID       = var.mobile_client_id
-    COGNITO_MCP_CLIENT_ID  = aws_cognito_user_pool_client.mcp_oauth.id
-    COGNITO_AUTH_BASE_URL  = local.mcp_oauth_cognito_base_url
-    MCP_OAUTH_CALLBACK_URL = "${local.mcp_oauth_api_base_url}/mcp/oauth/callback"
-    COGNITO_APP_CLIENT_IDS = "${var.admin_client_id},${var.mobile_client_id}"
-    APPSYNC_ENDPOINT       = var.appsync_api_url
-    APPSYNC_API_KEY        = var.appsync_api_key
-    GRAPHQL_API_KEY        = var.appsync_api_key
-    API_AUTH_SECRET        = var.api_auth_secret
-    THINKWORK_API_SECRET   = var.api_auth_secret
-    EMAIL_HMAC_SECRET      = var.api_auth_secret
-    THINKWORK_API_URL      = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com"
+    STAGE                       = var.stage
+    DATABASE_URL                = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
+    DATABASE_SECRET_ARN         = var.graphql_db_secret_arn
+    DATABASE_HOST               = var.db_cluster_endpoint
+    DATABASE_NAME               = var.database_name
+    BUCKET_NAME                 = var.bucket_name
+    USER_POOL_ID                = var.user_pool_id
+    COGNITO_USER_POOL_ID        = var.user_pool_id
+    ADMIN_CLIENT_ID             = var.admin_client_id
+    MOBILE_CLIENT_ID            = var.mobile_client_id
+    COGNITO_MCP_CLIENT_ID       = aws_cognito_user_pool_client.mcp_oauth.id
+    COGNITO_AUTH_BASE_URL       = local.mcp_oauth_cognito_base_url
+    MCP_OAUTH_CALLBACK_URL      = "${local.mcp_oauth_api_base_url}/mcp/oauth/callback"
+    MCP_OAUTH_REVOCATIONS_TABLE = aws_dynamodb_table.mcp_oauth_revocations.name
+    COGNITO_APP_CLIENT_IDS      = "${var.admin_client_id},${var.mobile_client_id}"
+    APPSYNC_ENDPOINT            = var.appsync_api_url
+    APPSYNC_API_KEY             = var.appsync_api_key
+    GRAPHQL_API_KEY             = var.appsync_api_key
+    API_AUTH_SECRET             = var.api_auth_secret
+    THINKWORK_API_SECRET        = var.api_auth_secret
+    EMAIL_HMAC_SECRET           = var.api_auth_secret
+    THINKWORK_API_URL           = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com"
     # Comma-separated allowlist of caller emails permitted to invoke
     # operator-gated mutations (updateTenantPolicy, sandbox fixture
     # setup, etc.). Resolved against ctx.auth.email, which is pulled
@@ -327,6 +328,7 @@ locals {
     "GET /mcp/oauth/authorize"                           = "mcp-oauth"
     "GET /mcp/oauth/callback"                            = "mcp-oauth"
     "POST /mcp/oauth/token"                              = "mcp-oauth"
+    "POST /mcp/oauth/revoke"                             = "mcp-oauth"
     "ANY /mcp/user-memory"                               = "mcp-user-memory"
 
     # Activity

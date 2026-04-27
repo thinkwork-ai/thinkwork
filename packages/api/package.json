@@ -16,6 +16,7 @@
     "@aws-sdk/client-bedrock-agentcore": "^3.1024.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1024.0",
     "@aws-sdk/client-cloudwatch-logs": "^3.917.0",
+    "@aws-sdk/client-dynamodb": "^3.1024.0",
     "@aws-sdk/client-lambda": "^3.917.0",
     "@aws-sdk/client-s3": "^3.1018.0",
     "@aws-sdk/client-secrets-manager": "^3.917.0",
