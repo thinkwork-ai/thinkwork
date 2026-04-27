@@ -22,7 +22,7 @@ function assertTransition(from: string, to: string): void {
 	}
 }
 
-const ENUM_FIELDS = new Set(["status"]);
+const ENUM_FIELDS = new Set(["status", "channel"]);
 
 function snakeToCamel(obj: Record<string, unknown>): Record<string, unknown> {
 	const result: Record<string, unknown> = {};
@@ -129,6 +129,14 @@ describe("threadToCamel", () => {
 		});
 		expect(result.status).toBe("IN_PROGRESS");
 		expect(result.title).toBe("Fix something"); // not uppercased
+	});
+
+	it("uppercases the channel enum field", () => {
+		const result = threadToCamel({
+			id: "123",
+			channel: "task",
+		});
+		expect(result.channel).toBe("TASK");
 	});
 
 	it("handles all 7 statuses", () => {
