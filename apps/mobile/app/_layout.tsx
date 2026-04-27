@@ -14,6 +14,8 @@ LogBox.ignoreLogs([
   "[AppSync WS] Subscription error",
 ]);
 import { View, Platform, AppState, AppStateStatus, Alert } from "react-native";
+import * as SplashScreen from "expo-splash-screen";
+import * as SystemUI from "expo-system-ui";
 import {
   Stack,
   useRouter,
@@ -37,6 +39,17 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import "../global.css";
 
+const DARK_BACKGROUND = "#070a0f";
+
+SplashScreen.setOptions({ duration: 200, fade: true });
+SplashScreen.preventAutoHideAsync().catch(() => {
+  // Expo Go may already have hidden its own loading view.
+});
+
+SystemUI.setBackgroundColorAsync(DARK_BACKGROUND).catch(() => {
+  // Native root background is best-effort during Expo Go reloads.
+});
+
 function RootLayoutNav() {
   const {
     isLoading,
@@ -57,11 +70,16 @@ function RootLayoutNav() {
     enableBiometricFlag,
     clearStoredCredentials,
   } = useBiometricAuth();
-  const { colorScheme } = useColorScheme();
   const segments = useSegments();
   const router = useRouter();
   const navigationState = useRootNavigationState();
   const navigationReady = !!navigationState?.key;
+
+  useEffect(() => {
+    if (navigationReady) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [navigationReady]);
 
   const tenantId = user?.tenantId;
   const hasTenant = !!tenantId;
@@ -302,9 +320,7 @@ function RootLayoutNav() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <BottomSheetModalProvider>
         <TurnCompletionProvider tenantId={tenantId}>
-          <ThemeProvider
-            value={NAV_THEME[colorScheme === "dark" ? "dark" : "light"]}
-          >
+          <ThemeProvider value={NAV_THEME.dark}>
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen
                 name="sign-in"
@@ -413,18 +429,15 @@ export default function RootLayout() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const isDark = colorScheme === "dark";
-
   return (
     <SafeAreaProvider>
-      <StatusBar style={isDark ? "light" : "dark"} />
+      <StatusBar style="light" />
       <AuthProvider>
         <GraphQLProvider>
           <View
             style={{
               flex: 1,
-              backgroundColor:
-                NAV_THEME[isDark ? "dark" : "light"].colors.background,
+              backgroundColor: DARK_BACKGROUND,
             }}
           >
             <RootLayoutNav />
