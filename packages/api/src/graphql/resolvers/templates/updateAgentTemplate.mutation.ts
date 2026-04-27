@@ -4,6 +4,10 @@ import { db, eq, agentTemplates, snakeToCamel, sql } from "../../utils.js";
 import { validateTemplateBrowser } from "../../../lib/templates/browser-config.js";
 import { validateTemplateSandbox } from "../../../lib/templates/sandbox-config.js";
 import { requireTenantAdmin } from "../core/authz.js";
+import {
+  parseAgentRuntimeInput,
+  withGraphqlAgentRuntime,
+} from "../agents/runtime.js";
 
 export async function updateAgentTemplate(
   _parent: any,
@@ -33,6 +37,7 @@ export async function updateAgentTemplate(
   if (i.description !== undefined) set.description = i.description;
   if (i.category !== undefined) set.category = i.category;
   if (i.icon !== undefined) set.icon = i.icon;
+  if (i.runtime !== undefined) set.runtime = parseAgentRuntimeInput(i.runtime);
   if (i.model !== undefined) set.model = i.model;
   if (i.guardrailId !== undefined) set.guardrail_id = i.guardrailId;
   if (i.isPublished !== undefined) set.is_published = i.isPublished;
@@ -77,5 +82,5 @@ export async function updateAgentTemplate(
     .returning();
 
   if (!row) throw new Error("Agent template not found");
-  return snakeToCamel(row);
+  return withGraphqlAgentRuntime(snakeToCamel(row));
 }

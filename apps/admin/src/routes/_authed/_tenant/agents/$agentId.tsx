@@ -29,6 +29,7 @@ import { AgentRollbackButton } from "@/components/agents/AgentRollbackButton";
 import { Badge } from "@/components/ui/badge";
 import { CalendarDays, FolderOpen } from "lucide-react";
 import { apiFetch } from "@/lib/api-fetch";
+import { AgentRuntime } from "@/gql/graphql";
 
 export const Route = createFileRoute("/_authed/_tenant/agents/$agentId")({
   component: AgentDetailPage,
@@ -209,6 +210,13 @@ function AgentDetailPage() {
       ),
     [agentActivityItems],
   );
+  const hasRecentActivity = useMemo(
+    () =>
+      agentActivityItems.some(
+        (item) => Date.now() - item.timestamp < 5 * 60 * 1000,
+      ),
+    [agentActivityItems],
+  );
 
   // --- Mutation callbacks ---
   const refresh = useCallback(() => {
@@ -356,7 +364,9 @@ function AgentDetailPage() {
           id: agentId,
           name: agent.name,
           templateId: (agent as any).templateId ?? "",
+          runtime: (agent as any).runtime ?? AgentRuntime.Strands,
         }}
+        hasRecentActivity={hasRecentActivity}
         onSaved={refresh}
         onDelete={handleDelete}
       />

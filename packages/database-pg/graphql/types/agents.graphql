@@ -14,6 +14,11 @@ enum AgentStatus {
   ERROR
 }
 
+enum AgentRuntime {
+  STRANDS
+  PI
+}
+
 type Agent {
   id: ID!
   tenantId: ID!
@@ -30,6 +35,7 @@ type Agent {
   humanPair: User
   parentAgentId: ID
   subAgents: [Agent!]
+  runtime: AgentRuntime!
   adapterType: String
   adapterConfig: AWSJSON
   runtimeConfig: AWSJSON
@@ -126,6 +132,7 @@ input CreateAgentInput {
   reportsTo: ID
   humanPairId: ID
   parentAgentId: ID
+  runtime: AgentRuntime
   adapterType: String
   adapterConfig: AWSJSON
   runtimeConfig: AWSJSON
@@ -202,10 +209,19 @@ type AgentWorkspace {
 }
 
 extend type Query {
-  agents(tenantId: ID!, status: AgentStatus, type: AgentType, includeSystem: Boolean): [Agent!]!
+  agents(
+    tenantId: ID!
+    status: AgentStatus
+    type: AgentType
+    includeSystem: Boolean
+  ): [Agent!]!
   # Workspace-wide agent list for tenant owners/admins (admin app). Fails closed
   # to an empty list when the caller is not an owner/admin of `tenantId`.
-  allTenantAgents(tenantId: ID!, includeSystem: Boolean, includeSubAgents: Boolean): [Agent!]!
+  allTenantAgents(
+    tenantId: ID!
+    includeSystem: Boolean
+    includeSubAgents: Boolean
+  ): [Agent!]!
   agent(id: ID!): Agent
   agentWorkspaces(agentId: ID!): [AgentWorkspace!]!
   agentApiKeys(agentId: ID!): [AgentApiKey!]!
@@ -216,20 +232,35 @@ extend type Query {
 extend type Mutation {
   createAgent(input: CreateAgentInput!): Agent!
   updateAgent(id: ID!, input: UpdateAgentInput!): Agent!
+  updateAgentRuntime(id: ID!, runtime: AgentRuntime!): Agent!
   deleteAgent(id: ID!): Boolean!
   updateAgentStatus(id: ID!, status: AgentStatus!): Agent!
 
   "Replace an agent's capabilities. idempotencyKey optional — see CreateAgentInput.idempotencyKey."
-  setAgentCapabilities(agentId: ID!, capabilities: [AgentCapabilityInput!]!, idempotencyKey: String): [AgentCapability!]!
+  setAgentCapabilities(
+    agentId: ID!
+    capabilities: [AgentCapabilityInput!]!
+    idempotencyKey: String
+  ): [AgentCapability!]!
   "Replace an agent's skills. idempotencyKey optional — see CreateAgentInput.idempotencyKey."
-  setAgentSkills(agentId: ID!, skills: [AgentSkillInput!]!, idempotencyKey: String): [AgentSkill!]!
-  setAgentBudgetPolicy(agentId: ID!, input: AgentBudgetPolicyInput!): AgentBudgetPolicy!
+  setAgentSkills(
+    agentId: ID!
+    skills: [AgentSkillInput!]!
+    idempotencyKey: String
+  ): [AgentSkill!]!
+  setAgentBudgetPolicy(
+    agentId: ID!
+    input: AgentBudgetPolicyInput!
+  ): AgentBudgetPolicy!
   deleteAgentBudgetPolicy(agentId: ID!): Boolean!
 
   createAgentApiKey(input: CreateAgentApiKeyInput!): CreateAgentApiKeyResult!
   revokeAgentApiKey(id: ID!): AgentApiKey!
 
-  updateAgentEmailAllowlist(agentId: ID!, allowedSenders: [String!]!): AgentCapability!
+  updateAgentEmailAllowlist(
+    agentId: ID!
+    allowedSenders: [String!]!
+  ): AgentCapability!
   toggleAgentEmailChannel(agentId: ID!, enabled: Boolean!): AgentCapability!
   claimVanityEmailAddress(agentId: ID!, localPart: String!): AgentCapability!
   releaseVanityEmailAddress(agentId: ID!): AgentCapability!

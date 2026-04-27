@@ -7,6 +7,7 @@ import { z } from "zod";
 import { useTenant } from "@/context/TenantContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogBody,
@@ -31,12 +32,18 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Loader2, Trash2 } from "lucide-react";
-import { CreateAgentMutation, UpdateAgentMutation, AgentTemplatesListQuery } from "@/lib/graphql-queries";
-import { AgentType } from "@/gql/graphql";
+import {
+  CreateAgentMutation,
+  UpdateAgentMutation,
+  UpdateAgentRuntimeMutation,
+  AgentTemplatesListQuery,
+} from "@/lib/graphql-queries";
+import { AgentRuntime, AgentType } from "@/gql/graphql";
 
 const agentSchema = z.object({
   name: z.string().min(1, "Agent name is required").trim(),
   templateId: z.string().min(1, "Agent template is required"),
+  runtime: z.nativeEnum(AgentRuntime),
   budgetDollars: z.string().optional(),
 });
 
@@ -45,6 +52,7 @@ type AgentFormValues = z.infer<typeof agentSchema>;
 const DEFAULT_VALUES: AgentFormValues = {
   name: "",
   templateId: "",
+  runtime: AgentRuntime.Strands,
   budgetDollars: "",
 };
 
@@ -53,6 +61,7 @@ interface AgentFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: Partial<AgentFormValues> & { id?: string; agentName?: string };
+  hasRecentActivity?: boolean;
   onSaved?: () => void;
   onDelete?: () => Promise<void>;
 }
@@ -62,15 +71,21 @@ export function AgentFormDialog({
   open,
   onOpenChange,
   initial,
+  hasRecentActivity = false,
   onSaved,
   onDelete,
 }: AgentFormDialogProps) {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
 
-  const [{ fetching: creating }, createAgent] = useMutation(CreateAgentMutation);
-  const [{ fetching: updating }, updateAgent] = useMutation(UpdateAgentMutation);
-  const fetching = mode === "create" ? creating : updating;
+  const [{ fetching: creating }, createAgent] =
+    useMutation(CreateAgentMutation);
+  const [{ fetching: updating }, updateAgent] =
+    useMutation(UpdateAgentMutation);
+  const [{ fetching: updatingRuntime }, updateAgentRuntime] = useMutation(
+    UpdateAgentRuntimeMutation,
+  );
+  const fetching = mode === "create" ? creating : updating || updatingRuntime;
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -81,7 +96,13 @@ export function AgentFormDialog({
     variables: { tenantId: tenantId! },
     pause: !tenantId || !open,
   });
-  const agentTemplates = (templatesResult.data?.agentTemplates ?? []) as Array<{ id: string; name: string; slug: string; model?: string | null }>;
+  const agentTemplates = (templatesResult.data?.agentTemplates ?? []) as Array<{
+    id: string;
+    name: string;
+    slug: string;
+    model?: string | null;
+    runtime?: AgentRuntime | null;
+  }>;
 
   const form = useForm<AgentFormValues>({
     resolver: zodResolver(agentSchema),
@@ -108,6 +129,7 @@ export function AgentFormDialog({
           name: values.name.trim(),
           type: AgentType.Agent,
           templateId: values.templateId,
+          runtime: values.runtime,
         },
       });
 
@@ -128,6 +150,14 @@ export function AgentFormDialog({
       });
 
       if (!result.error) {
+        const runtimeResult = await updateAgentRuntime({
+          id: initial?.id!,
+          runtime: values.runtime,
+        });
+        if (runtimeResult.error) {
+          form.setError("runtime", { message: runtimeResult.error.message });
+          return;
+        }
         onOpenChange(false);
         onSaved?.();
       }
@@ -138,7 +168,9 @@ export function AgentFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{mode === "create" ? "New Agent" : "Edit Agent"}</DialogTitle>
+          <DialogTitle>
+            {mode === "create" ? "New Agent" : "Edit Agent"}
+          </DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
@@ -149,7 +181,9 @@ export function AgentFormDialog({
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-xs text-muted-foreground">Name</FormLabel>
+                    <FormLabel className="text-xs text-muted-foreground">
+                      Name
+                    </FormLabel>
                     <FormControl>
                       <Input
                         placeholder="Agent name"
@@ -163,14 +197,31 @@ export function AgentFormDialog({
                 )}
               />
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <FormField
                   control={form.control}
                   name="templateId"
                   render={({ field }) => (
                     <FormItem className="space-y-1.5">
-                      <FormLabel className="text-xs text-muted-foreground">Agent Template</FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
+                      <FormLabel className="text-xs text-muted-foreground">
+                        Agent Template
+                      </FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          if (mode === "create") {
+                            const template = agentTemplates.find(
+                              (candidate) => candidate.id === value,
+                            );
+                            if (template?.runtime) {
+                              form.setValue("runtime", template.runtime, {
+                                shouldDirty: true,
+                              });
+                            }
+                          }
+                        }}
+                      >
                         <FormControl>
                           <SelectTrigger className="text-sm">
                             <SelectValue placeholder="Select template..." />
@@ -178,7 +229,11 @@ export function AgentFormDialog({
                         </FormControl>
                         <SelectContent>
                           {agentTemplates.map((c) => (
-                            <SelectItem key={c.id} value={c.id} className="text-sm">
+                            <SelectItem
+                              key={c.id}
+                              value={c.id}
+                              className="text-sm"
+                            >
                               {c.name}
                             </SelectItem>
                           ))}
@@ -190,12 +245,69 @@ export function AgentFormDialog({
                 />
                 <FormField
                   control={form.control}
+                  name="runtime"
+                  render={({ field }) => (
+                    <FormItem className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <FormLabel className="text-xs text-muted-foreground">
+                          Runtime
+                        </FormLabel>
+                        {hasRecentActivity && (
+                          <Badge variant="outline" className="text-[10px]">
+                            New chats only
+                          </Badge>
+                        )}
+                      </div>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem
+                            value={AgentRuntime.Strands}
+                            className="text-sm"
+                          >
+                            Strands
+                          </SelectItem>
+                          <SelectItem
+                            value={AgentRuntime.Pi}
+                            className="text-sm"
+                          >
+                            Pi
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {hasRecentActivity && (
+                        <p className="text-[11px] leading-snug text-muted-foreground">
+                          In-flight chat will complete on the previous runtime.
+                        </p>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
                   name="budgetDollars"
                   render={({ field }) => (
                     <FormItem className="space-y-1.5">
-                      <FormLabel className="text-xs text-muted-foreground">Budget</FormLabel>
+                      <FormLabel className="text-xs text-muted-foreground">
+                        Budget
+                      </FormLabel>
                       <FormControl>
-                        <Input type="number" min="0" step="0.01" placeholder="$/mo" className="text-sm" {...field} />
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="$/mo"
+                          className="text-sm"
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -238,7 +350,11 @@ export function AgentFormDialog({
                   )}
                 </div>
               )}
-              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => onOpenChange(false)}
+              >
                 Cancel
               </Button>
               <Button type="submit" disabled={fetching}>
@@ -247,8 +363,10 @@ export function AgentFormDialog({
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     {mode === "create" ? "Creating..." : "Saving..."}
                   </>
+                ) : mode === "create" ? (
+                  "Create Agent"
                 ) : (
-                  mode === "create" ? "Create Agent" : "Save Changes"
+                  "Save Changes"
                 )}
               </Button>
             </DialogFooter>

@@ -11,6 +11,7 @@ import { agentPinStatus } from "./agentPinStatus.query.js";
 // Mutations
 import { createAgent } from "./createAgent.mutation.js";
 import { updateAgent } from "./updateAgent.mutation.js";
+import { updateAgentRuntime } from "./updateAgentRuntime.mutation.js";
 import { deleteAgent } from "./deleteAgent.mutation.js";
 import { updateAgentStatus } from "./updateAgentStatus.mutation.js";
 import { setAgentCapabilities } from "./setAgentCapabilities.mutation.js";
@@ -26,30 +27,31 @@ import { releaseVanityEmailAddress } from "./releaseVanityEmailAddress.mutation.
 import { acceptTemplateUpdate } from "./acceptTemplateUpdate.mutation.js";
 
 export const agentQueries = {
-	agents,
-	allTenantAgents,
-	agent,
-	agentWorkspaces,
-	agentApiKeys,
-	agentEmailCapability,
-	modelCatalog,
-	agentPinStatus,
+  agents,
+  allTenantAgents,
+  agent,
+  agentWorkspaces,
+  agentApiKeys,
+  agentEmailCapability,
+  modelCatalog,
+  agentPinStatus,
 };
 
 export const agentMutations = {
-	createAgent,
-	updateAgent,
-	deleteAgent,
-	updateAgentStatus,
-	setAgentCapabilities,
-	setAgentSkills,
-	setAgentBudgetPolicy,
-	deleteAgentBudgetPolicy,
-	createAgentApiKey,
-	revokeAgentApiKey,
-	updateAgentEmailAllowlist,
-	toggleAgentEmailChannel,
-	claimVanityEmailAddress,
-	releaseVanityEmailAddress,
-	acceptTemplateUpdate,
+  createAgent,
+  updateAgent,
+  updateAgentRuntime,
+  deleteAgent,
+  updateAgentStatus,
+  setAgentCapabilities,
+  setAgentSkills,
+  setAgentBudgetPolicy,
+  deleteAgentBudgetPolicy,
+  createAgentApiKey,
+  revokeAgentApiKey,
+  updateAgentEmailAllowlist,
+  toggleAgentEmailChannel,
+  claimVanityEmailAddress,
+  releaseVanityEmailAddress,
+  acceptTemplateUpdate,
 };

@@ -720,7 +720,7 @@ export function agentToCamel(
   obj: Record<string, unknown>,
 ): Record<string, unknown> {
   const result = snakeToCamel(obj);
-  for (const field of ["status", "type"]) {
+  for (const field of ["status", "type", "runtime"]) {
     if (typeof result[field] === "string") {
       result[field] = (result[field] as string).toUpperCase();
     }
