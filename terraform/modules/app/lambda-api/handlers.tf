@@ -43,6 +43,7 @@ locals {
     # rejects every call, which is the safe default pre-rollout.
     THINKWORK_PLATFORM_OPERATOR_EMAILS = var.platform_operator_emails
     AGENTCORE_FUNCTION_NAME            = var.agentcore_function_name
+    AGENTCORE_PI_FUNCTION_NAME         = var.agentcore_pi_function_name
     WORKSPACE_BUCKET                   = var.bucket_name
     HINDSIGHT_ENDPOINT                 = var.hindsight_endpoint
     AGENTCORE_MEMORY_ID                = var.agentcore_memory_id

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Post-deploy probe for AgentCore Strands runtimes.
+# Post-deploy probe for AgentCore runtimes.
 #
 # Background: after `terraform apply`, AgentCore cycles its warm container
 # pool over the next 15 minutes as old-env containers idle out. During that
@@ -21,7 +21,7 @@
 #   bash scripts/post-deploy.sh --stage <name>          # warn-only (default)
 #   bash scripts/post-deploy.sh --stage dev --strict    # exit 1 on drift
 #   bash scripts/post-deploy.sh --stage dev --region us-east-1 --json
-#   bash scripts/post-deploy.sh --stage dev --min-source-sha <commit>
+#   bash scripts/post-deploy.sh --stage dev --runtime pi --min-source-sha <commit>
 
 set -euo pipefail
 
@@ -30,6 +30,7 @@ STRICT=0
 JSON=0
 REGION="${AWS_REGION:-us-east-1}"
 MIN_SOURCE_SHA=""
+RUNTIME="strands"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -37,6 +38,7 @@ while [[ $# -gt 0 ]]; do
     --strict)   STRICT=1; shift ;;
     --json)     JSON=1; shift ;;
     --region)   REGION="${2:?}"; shift 2 ;;
+    --runtime)  RUNTIME="${2:?}"; shift 2 ;;
     --min-source-sha) MIN_SOURCE_SHA="${2:?}"; shift 2 ;;
     --help|-h)
       sed -n '3,30p' "$0"
@@ -63,10 +65,17 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 2
 fi
 
-# Match any runtime whose name begins with `thinkwork_<stage>_strands`. The
+# Match any runtime whose name begins with `thinkwork_<stage>_<runtime>`. The
 # Terraform module creates one per deployment and the name format has been
 # stable since the maniflow→thinkwork rename.
-NAME_PREFIX="thinkwork_${STAGE}_strands"
+case "$RUNTIME" in
+  strands|pi) ;;
+  *)
+    echo "ERROR: --runtime must be 'strands' or 'pi' (got '$RUNTIME')" >&2
+    exit 2
+    ;;
+esac
+NAME_PREFIX="thinkwork_${STAGE}_${RUNTIME}"
 
 log() {
   if [[ "$JSON" -eq 0 ]]; then
@@ -77,7 +86,7 @@ log() {
 image_sha_from_uri() {
   local image_uri="$1"
   local tag="${image_uri##*:}"
-  if [[ "$tag" =~ ([0-9a-f]{40})(-arm64)?$ ]]; then
+  if [[ "$tag" =~ ([0-9a-f]{40}) ]]; then
     echo "${BASH_REMATCH[1]}"
   fi
 }
@@ -92,7 +101,7 @@ image_contains_source_sha() {
   git merge-base --is-ancestor "$source_sha" "$image_sha"
 }
 
-log "[post-deploy] stage=$STAGE region=$REGION matching runtimes: ${NAME_PREFIX}*"
+log "[post-deploy] stage=$STAGE region=$REGION runtime=$RUNTIME matching runtimes: ${NAME_PREFIX}*"
 
 runtimes_json=$(aws bedrock-agentcore-control list-agent-runtimes \
   --region "$REGION" --output json 2>&1) || {
@@ -101,23 +110,22 @@ runtimes_json=$(aws bedrock-agentcore-control list-agent-runtimes \
   exit 2
 }
 
-# Filter to our stage + strands prefix.
-matched=$(echo "$runtimes_json" \
-  | jq --arg p "$NAME_PREFIX" \
-       '[.agentRuntimes[] | select(.agentRuntimeName | startswith($p))]')
+ACTIVE_RUNTIME_ID=$(aws ssm get-parameter \
+  --name "/thinkwork/${STAGE}/agentcore/runtime-id-${RUNTIME}" \
+  --region "$REGION" \
+  --query Parameter.Value --output text 2>/dev/null || true)
 
-ACTIVE_RUNTIME_ID=""
-if [[ -n "$MIN_SOURCE_SHA" ]]; then
-  ACTIVE_RUNTIME_ID=$(aws ssm get-parameter \
-    --name "/thinkwork/${STAGE}/agentcore/runtime-id-strands" \
-    --region "$REGION" \
-    --query Parameter.Value --output text 2>/dev/null || true)
-fi
+# Filter to our stage + runtime prefix, plus the active SSM runtime when a
+# legacy/manual name does not follow the current prefix convention.
+matched=$(echo "$runtimes_json" \
+  | jq --arg p "$NAME_PREFIX" --arg active "$ACTIVE_RUNTIME_ID" \
+       '[.agentRuntimes[] | select((.agentRuntimeName | startswith($p)) or (.agentRuntimeId == $active))]')
 
 count=$(echo "$matched" | jq 'length')
 if [[ "$count" -eq 0 ]]; then
   echo "WARN: no AgentCore runtimes match ${NAME_PREFIX}* — nothing to probe" >&2
   [[ "$JSON" -eq 1 ]] && echo '{"stage":"'"$STAGE"'","runtimes":[],"drift":0}'
+  [[ "$STRICT" -eq 1 ]] && exit 1
   exit 0
 fi
 

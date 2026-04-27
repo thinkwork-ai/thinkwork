@@ -41,6 +41,8 @@ export const agentTemplates = pgTable(
     icon: text("icon"),
     /** 'system' = platform-provided, 'user' = tenant-created */
     source: text("source").notNull().default("user"),
+    /** Default runtime substrate for agents created from this template. */
+    runtime: text("runtime").notNull().default("strands"),
     /** The Bedrock model agents in this template use */
     model: text("model"),
     /** Guardrail assigned to this template (null = inherit tenant default) */

@@ -38,6 +38,7 @@ import {
   AgentTemplateNotFoundError,
   resolveAgentRuntimeConfig,
 } from "../lib/resolve-agent-runtime-config.js";
+import { resolveRuntimeFunctionName } from "../lib/resolve-runtime-function-name.js";
 // PRD-22: Signal protocol removed — agents use tools for thread state transitions
 
 /**
@@ -56,7 +57,6 @@ function getTraceId(): string {
   return randomBytes(16).toString("hex");
 }
 
-const AGENTCORE_FUNCTION_NAME = process.env.AGENTCORE_FUNCTION_NAME || "";
 const APPSYNC_ENDPOINT = process.env.APPSYNC_ENDPOINT || "";
 const APPSYNC_API_KEY = process.env.APPSYNC_API_KEY || "";
 const THINKWORK_API_SECRET = process.env.THINKWORK_API_SECRET || "";
@@ -319,9 +319,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
       `[chat-agent-invoke] Invoking AgentCore runtime=${runtimeType} model=${agentModel} skills=${skillsConfig.length} mcp=${mcpConfigs.length}`,
     );
 
-    if (!AGENTCORE_FUNCTION_NAME) {
-      throw new Error("AGENTCORE_FUNCTION_NAME env var not set");
-    }
+    const agentcoreFunctionName = resolveRuntimeFunctionName(runtimeType);
 
     let workflowSkill: unknown = undefined;
 
@@ -372,6 +370,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
       tenant_slug: tenantSlug || undefined,
       instance_id: agentSlug || undefined,
       agent_name: agent.name,
+      system_prompt: runtimeConfig.agentSystemPrompt || undefined,
       human_name: humanName || undefined,
       workspace_bucket: WORKSPACE_BUCKET || undefined,
       // Unit 7: container calls /api/workspaces/files at bootstrap via
@@ -421,7 +420,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
 
     const invokeRes = await lambdaClient.send(
       new InvokeCommand({
-        FunctionName: AGENTCORE_FUNCTION_NAME,
+        FunctionName: agentcoreFunctionName,
         InvocationType: "RequestResponse",
         Payload: new TextEncoder().encode(lambdaEventPayload),
       }),
@@ -625,9 +624,8 @@ export async function handler(event: InvokeEvent): Promise<void> {
     }>;
     if (hindsightUsage.length > 0) {
       try {
-        const { recordHindsightCost } = await import(
-          "../lib/hindsight-cost.js"
-        );
+        const { recordHindsightCost } =
+          await import("../lib/hindsight-cost.js");
         for (const entry of hindsightUsage) {
           await recordHindsightCost({
             tenantId,
@@ -834,9 +832,8 @@ export async function handler(event: InvokeEvent): Promise<void> {
 
     // 4c. Send push notification to user devices
     try {
-      const { sendTurnCompletedPush } = await import(
-        "../lib/push-notifications.js"
-      );
+      const { sendTurnCompletedPush } =
+        await import("../lib/push-notifications.js");
       await sendTurnCompletedPush({
         threadId,
         tenantId,

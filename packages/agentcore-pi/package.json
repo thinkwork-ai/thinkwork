@@ -1,0 +1,20 @@
+{
+  "name": "@thinkwork/agentcore-pi",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mariozechner/pi-agent-core": "0.70.2",
+    "@mariozechner/pi-ai": "0.70.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.1"
+  }
+}
