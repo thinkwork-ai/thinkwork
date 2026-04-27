@@ -91,15 +91,16 @@ def make_hindsight_tools(
 
     @strands_tool
     async def hindsight_recall(query: str) -> str:
-        """Search your long-term memory for facts about people, companies, projects, places, and prior conversations.
+        """Search Hindsight-only memory for facts about people, companies, projects, places, and prior conversations.
 
-        THIS IS YOUR PRIMARY TOOL for any factual question about someone or
-        something the user mentions, even if the name is unfamiliar to you.
-        Your long-term memory contains many facts that are NOT in the current
-        conversation context — always check here BEFORE saying "I don't know"
-        or asking the user to clarify who someone is.
+        Prefer `recall()` for normal user-facing memory lookup. `recall()`
+        returns one grouped result from managed memory, Hindsight, and the
+        user's compiled wiki pages, so it is the right first tool for fresh or
+        specific facts. Use `hindsight_recall` only when you specifically need
+        raw Hindsight facts after `recall()` was incomplete, or when the user
+        explicitly asks you to inspect Hindsight.
 
-        Use this tool when the user asks ANY of:
+        Use `recall()` first when the user asks ANY of:
           * "Where does <person> work?"
           * "Who is <person>?"
           * "What do I know about <person/company/project>?"
@@ -115,24 +116,23 @@ def make_hindsight_tools(
 
         DO NOT use CRM tools (`accounts`, `contacts`, `leads`,
         `opportunities`) as the FIRST step for general "who is X" or "where
-        does X work" questions. Always try hindsight_recall FIRST. Only fall
-        back to CRM tools if hindsight_recall returns "No relevant memories
-        found." AND you have a specific reason to believe the person is a CRM
-        record.
+        does X work" questions. Always try `recall()` FIRST. Only fall back to
+        CRM tools if recall returns no relevant memory/wiki facts AND you have
+        a specific reason to believe the person is a CRM record.
 
         The query is matched via multi-strategy retrieval (semantic + BM25 +
         entity graph + temporal) and reranked by a cross-encoder. Phrase the
         query as the question you want answered, not just keywords. Returns a
         numbered list of matching memory facts.
 
-        REQUIRED FOLLOW-UP: For any "tell me about X", "what do you know about
-        Y", "summarize Z", "brief me on W", or similar open-ended question
-        about a person / company / customer / project / topic, you MUST call
+        FOLLOW-UP WHEN USING THIS HINDSIGHT-ONLY TOOL: For any "tell me about
+        X", "what do you know about Y", "summarize Z", "brief me on W", or
+        similar open-ended Hindsight-only investigation, call
         `hindsight_reflect` in the SAME turn after this tool returns. Recall
-        surfaces the raw facts; reflect runs a larger LLM over those facts to
-        produce a coherent narrative answer with reasoning across multiple
-        memories. Skipping reflect for these question shapes leaves the user
-        with a flat list instead of a synthesized briefing.
+        surfaces the raw Hindsight facts; reflect runs a larger LLM over those
+        facts to produce a coherent narrative answer with reasoning across
+        multiple memories. Skipping reflect for these question shapes leaves
+        the user with a flat list instead of a synthesized briefing.
 
         The ONLY case where you may skip the reflect follow-up is a narrowly
         scoped factual lookup with a single expected answer, e.g. "what is X's
