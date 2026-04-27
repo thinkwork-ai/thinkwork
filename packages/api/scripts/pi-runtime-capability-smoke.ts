@@ -7,6 +7,7 @@ type Capability = "plain" | "web_search" | "execute_code" | "hindsight" | "mcp";
 interface Args {
   tenantId: string;
   agentId: string;
+  senderId?: string;
   capabilities: Capability[];
   timeoutMs: number;
   graphqlUrl: string;
@@ -46,6 +47,12 @@ interface ThreadTurn {
   createdAt: string;
 }
 
+interface TenantMember {
+  principalType: string;
+  principalId: string;
+  status: string;
+}
+
 interface SmokeResult {
   capability: Capability;
   status: "PASS" | "FAIL" | "SKIP";
@@ -71,11 +78,13 @@ function usage(exitCode = 2): never {
   pnpm --filter @thinkwork/api pi:capability-smoke -- \\
     --tenant-id <tenant-id> \\
     --agent-id <agent-id> \\
+    [--sender-id <human-user-id>] \\
     [--capability plain,web_search,execute_code,hindsight,mcp] \\
     [--timeout 90000] [--json]
 
 Environment:
   THINKWORK_GRAPHQL_URL / THINKWORK_GRAPHQL_API_KEY
+  THINKWORK_USER_ID or PI_SMOKE_SENDER_ID for sandbox-backed execute_code
   or apps/admin/.env with VITE_GRAPHQL_HTTP_URL / VITE_GRAPHQL_API_KEY`);
   process.exit(exitCode);
 }
@@ -107,6 +116,8 @@ function parseArgs(): Args {
   const args = process.argv.slice(2);
   let tenantId = process.env.THINKWORK_TENANT_ID || "";
   let agentId = process.env.THINKWORK_AGENT_ID || "";
+  let senderId =
+    process.env.PI_SMOKE_SENDER_ID || process.env.THINKWORK_USER_ID || "";
   let capabilityValue = process.env.PI_SMOKE_CAPABILITIES || "plain";
   let timeoutMs = Number(process.env.PI_SMOKE_TIMEOUT_MS || 90_000);
   let json = false;
@@ -117,6 +128,7 @@ function parseArgs(): Args {
     if (arg === "--help" || arg === "-h") usage(0);
     if (arg === "--tenant-id") tenantId = args[++i] || "";
     else if (arg === "--agent-id") agentId = args[++i] || "";
+    else if (arg === "--sender-id") senderId = args[++i] || "";
     else if (arg === "--capability" || arg === "--capabilities") {
       capabilityValue = args[++i] || "";
     } else if (arg === "--timeout") {
@@ -132,7 +144,10 @@ function parseArgs(): Args {
   const capabilities =
     capabilityValue === "all"
       ? ALL_CAPABILITIES
-      : capabilityValue.split(",").map((c) => c.trim()).filter(Boolean);
+      : capabilityValue
+          .split(",")
+          .map((c) => c.trim())
+          .filter(Boolean);
   for (const capability of capabilities) {
     if (!ALL_CAPABILITIES.includes(capability as Capability)) {
       console.error(`Unknown capability: ${capability}`);
@@ -155,6 +170,7 @@ function parseArgs(): Args {
   return {
     tenantId,
     agentId,
+    senderId: senderId || undefined,
     capabilities: capabilities as Capability[],
     timeoutMs,
     graphqlUrl,
@@ -185,7 +201,10 @@ async function gql<T>(
   return body.data as T;
 }
 
-async function createThread(args: Args, capability: Capability): Promise<Thread> {
+async function createThread(
+  args: Args,
+  capability: Capability,
+): Promise<Thread> {
   const stamp = new Date().toISOString();
   const data = await gql<{ createThread: Thread }>(
     args,
@@ -203,10 +222,42 @@ async function createThread(args: Args, capability: Capability): Promise<Thread>
         title: `Pi ${capability} smoke ${stamp}`,
         channel: "CHAT",
         createdByType: "user",
+        createdById: args.senderId,
       },
     },
   );
   return data.createThread;
+}
+
+async function verifySender(args: Args, capability: Capability): Promise<void> {
+  if (capability !== "execute_code" && capability !== "hindsight") return;
+  if (!args.senderId) {
+    throw new Error(
+      `${capability} smoke requires --sender-id for user-scoped sandbox/memory`,
+    );
+  }
+  const data = await gql<{ tenantMembers: TenantMember[] }>(
+    args,
+    `query($tenantId: ID!) {
+      tenantMembers(tenantId: $tenantId) {
+        principalType
+        principalId
+        status
+      }
+    }`,
+    { tenantId: args.tenantId },
+  );
+  const matched = data.tenantMembers.some(
+    (member) =>
+      member.principalType.toLowerCase() === "user" &&
+      member.principalId === args.senderId &&
+      member.status === "active",
+  );
+  if (!matched) {
+    throw new Error(
+      `sender ${args.senderId} is not an active user member of tenant ${args.tenantId}`,
+    );
+  }
 }
 
 async function sendMessage(args: Args, threadId: string, content: string) {
@@ -222,7 +273,8 @@ async function sendMessage(args: Args, threadId: string, content: string) {
         threadId,
         role: "USER",
         content,
-        senderType: "user",
+        senderType: args.senderId ? "human" : "user",
+        senderId: args.senderId,
       },
     },
   );
@@ -284,38 +336,87 @@ async function waitForTurn(args: Args, threadId: string) {
   );
 }
 
-function hasToolEvidence(turn: ThreadTurn, patterns: RegExp[]): boolean {
-  const usage = turn.usageJson ?? {};
-  const values: unknown[] = [];
-  const toolsCalled = usage.tools_called;
-  const invocations = usage.tool_invocations;
+function invocationRecords(turn: ThreadTurn): Array<Record<string, unknown>> {
+  const invocations = turn.usageJson?.tool_invocations;
+  if (!Array.isArray(invocations)) return [];
+  return invocations.filter(
+    (invocation): invocation is Record<string, unknown> =>
+      Boolean(invocation) && typeof invocation === "object",
+  );
+}
 
-  if (Array.isArray(toolsCalled)) values.push(...toolsCalled);
-  if (Array.isArray(invocations)) {
-    for (const invocation of invocations) {
-      if (invocation && typeof invocation === "object") {
-        const record = invocation as Record<string, unknown>;
-        values.push(
-          record.name,
-          record.tool,
-          record.toolName,
-          record.tool_name,
-          record.server,
-          record.serverName,
-          record.server_name,
-        );
-      } else {
-        values.push(invocation);
-      }
-    }
-  }
+function invocationName(invocation: Record<string, unknown>): string {
+  return String(
+    invocation.name ??
+      invocation.tool ??
+      invocation.toolName ??
+      invocation.tool_name ??
+      invocation.server ??
+      invocation.serverName ??
+      invocation.server_name ??
+      "",
+  ).toLowerCase();
+}
 
-  const text = values
-    .filter((value): value is string => typeof value === "string")
-    .join(" ")
-    .toLowerCase();
-  if (!text) return false;
-  return patterns.some((pattern) => pattern.test(text));
+function invocationBlob(invocation: Record<string, unknown>): string {
+  return JSON.stringify(invocation).toLowerCase();
+}
+
+function matchingSuccessfulInvocations(
+  turn: ThreadTurn,
+  patterns: RegExp[],
+): Array<Record<string, unknown>> {
+  return invocationRecords(turn).filter((invocation) => {
+    const text = `${invocationName(invocation)} ${invocationBlob(invocation)}`;
+    return (
+      invocation.is_error !== true &&
+      patterns.some((pattern) => pattern.test(text))
+    );
+  });
+}
+
+function hasResultToken(
+  invocation: Record<string, unknown>,
+  token: string,
+): boolean {
+  return JSON.stringify(invocation).includes(token);
+}
+
+function hasWebSearchResult(invocation: Record<string, unknown>): boolean {
+  const blob = invocationBlob(invocation);
+  return (
+    /"result_count"\s*:\s*[1-9]/.test(blob) ||
+    /"results"\s*:\s*\[\s*\{/.test(blob)
+  );
+}
+
+function hasExecuteCodeResult(invocation: Record<string, unknown>): boolean {
+  const blob = invocationBlob(invocation);
+  return (
+    /"ok"\s*:\s*true/.test(blob) &&
+    (blob.includes("385") || /"exit_code"\s*:\s*0/.test(blob))
+  );
+}
+
+function hasHindsightResult(
+  invocation: Record<string, unknown>,
+  token: string,
+): boolean {
+  const blob = invocationBlob(invocation);
+  return (
+    (blob.includes("hindsight_retain") && /"retained"\s*:\s*true/.test(blob)) ||
+    (/(hindsight_recall|hindsight_reflect)/.test(blob) &&
+      hasResultToken(invocation, token))
+  );
+}
+
+function hasMcpResult(invocation: Record<string, unknown>): boolean {
+  const blob = invocationBlob(invocation);
+  return (
+    blob.includes("mcp_") ||
+    blob.includes('"mcp_server"') ||
+    blob.includes('"mcp_tool_name"')
+  );
 }
 
 function promptFor(capability: Capability, token: string): string {
@@ -348,7 +449,13 @@ function promptFor(capability: Capability, token: string): string {
   }
 }
 
-function evaluate(capability: Capability, token: string, turn: ThreadTurn, assistant: Message): SmokeResult {
+function evaluate(
+  capability: Capability,
+  token: string,
+  turn: ThreadTurn,
+  assistant: Message,
+  opts: { requireTokenInAssistant?: boolean } = {},
+): SmokeResult {
   const base: SmokeResult = {
     capability,
     status: "FAIL",
@@ -363,10 +470,17 @@ function evaluate(capability: Capability, token: string, turn: ThreadTurn, assis
   };
 
   if (turn.status !== "succeeded") {
-    return { ...base, reason: `turn_status_${turn.status}`, evidence: { ...base.evidence, error: turn.error } };
+    return {
+      ...base,
+      reason: `turn_status_${turn.status}`,
+      evidence: { ...base.evidence, error: turn.error },
+    };
   }
 
-  if (!assistant.content?.includes(token)) {
+  if (
+    opts.requireTokenInAssistant !== false &&
+    !assistant.content?.includes(token)
+  ) {
     return { ...base, reason: "assistant_response_missing_expected_token" };
   }
 
@@ -381,17 +495,96 @@ function evaluate(capability: Capability, token: string, turn: ThreadTurn, assis
     mcp: [/mcp/, /server/],
   };
 
-  if (!hasToolEvidence(turn, patterns[capability])) {
-    return { ...base, reason: "no_tool_evidence_in_thread_turn_usage_json" };
+  const invocations = matchingSuccessfulInvocations(turn, patterns[capability]);
+  if (invocations.length === 0) {
+    const failedTool = invocationRecords(turn).find((invocation) =>
+      patterns[capability].some((pattern) =>
+        pattern.test(
+          `${invocationName(invocation)} ${invocationBlob(invocation)}`,
+        ),
+      ),
+    );
+    return {
+      ...base,
+      reason: failedTool
+        ? "matching_tool_invocation_failed"
+        : "no_successful_tool_evidence_in_thread_turn_usage_json",
+      evidence: { ...base.evidence, failedTool },
+    };
   }
 
-  return { ...base, status: "PASS", reason: "tool_evidence_present" };
+  const evidenceOk =
+    capability === "web_search"
+      ? invocations.some(hasWebSearchResult)
+      : capability === "execute_code"
+        ? invocations.some(hasExecuteCodeResult)
+        : capability === "hindsight"
+          ? invocations.some((invocation) =>
+              hasHindsightResult(invocation, token),
+            )
+          : capability === "mcp"
+            ? invocations.some(hasMcpResult)
+            : false;
+
+  if (!evidenceOk) {
+    return { ...base, reason: `${capability}_result_evidence_missing` };
+  }
+
+  return {
+    ...base,
+    status: "PASS",
+    reason: "successful_tool_result_evidence_present",
+  };
 }
 
-async function runCapability(args: Args, capability: Capability): Promise<SmokeResult> {
+async function runCapability(
+  args: Args,
+  capability: Capability,
+): Promise<SmokeResult> {
+  await verifySender(args, capability);
   const thread = await createThread(args, capability);
   const token = `PI-${capability.toUpperCase().replace(/_/g, "-")}-SMOKE-${Date.now()}`;
   try {
+    if (capability === "hindsight") {
+      await sendMessage(args, thread.id, promptFor(capability, token));
+      const first = await waitForTurn(args, thread.id);
+      const retained = evaluate(capability, token, first.turn, first.assistant);
+      if (retained.status !== "PASS") {
+        return {
+          ...retained,
+          threadId: thread.id,
+          threadIdentifier: thread.identifier,
+        };
+      }
+      await sendMessage(
+        args,
+        thread.id,
+        [
+          "Use hindsight_recall and hindsight_reflect to recall the durable smoke fact from the previous turn.",
+          "Do not answer from conversation history alone.",
+          "Reply with the exact remembered PI-HINDSIGHT-SMOKE token.",
+        ].join(" "),
+      );
+      const second = await waitForTurn(args, thread.id);
+      const recalled = evaluate(
+        capability,
+        token,
+        second.turn,
+        second.assistant,
+        {
+          requireTokenInAssistant: true,
+        },
+      );
+      return {
+        ...recalled,
+        threadId: thread.id,
+        threadIdentifier: thread.identifier,
+        evidence: {
+          ...recalled.evidence,
+          retainTurn: retained.evidence,
+        },
+      };
+    }
     await sendMessage(args, thread.id, promptFor(capability, token));
     const { assistant, turn } = await waitForTurn(args, thread.id);
     const result = evaluate(capability, token, turn, assistant);
@@ -427,12 +620,13 @@ async function main() {
   }
 
   const failed = results.filter((result) => result.status === "FAIL");
+  const skipped = results.filter((result) => result.status === "SKIP");
   if (!args.json) {
     console.log(
-      `Pi capability smoke summary: ${results.length - failed.length}/${results.length} passed`,
+      `Pi capability smoke summary: ${results.length - failed.length - skipped.length}/${results.length} passed, ${failed.length} failed, ${skipped.length} skipped`,
     );
   }
-  if (failed.length > 0) process.exit(1);
+  if (failed.length > 0 || skipped.length > 0) process.exit(1);
 }
 
 main().catch((err) => {

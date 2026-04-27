@@ -380,6 +380,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
       thinkwork_api_url: THINKWORK_API_URL || undefined,
       thinkwork_api_secret: THINKWORK_API_SECRET || undefined,
       hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
+      web_search_config: runtimeConfig.webSearchConfig,
       runtime_type: runtimeType,
       model: agentModel,
       skills: skillsConfig.length > 0 ? skillsConfig : undefined,
@@ -397,6 +398,9 @@ export async function handler(event: InvokeEvent): Promise<void> {
     } as Record<string, unknown>;
 
     if (sandboxPreflight && currentUserId) {
+      invokePayload.sandbox_status = sandboxPreflight.status;
+      invokePayload.sandbox_reason =
+        "reason" in sandboxPreflight ? sandboxPreflight.reason : undefined;
       applySandboxPayloadFields(invokePayload, sandboxPreflight);
       if (sandboxPreflight.status !== "ready") {
         console.log(

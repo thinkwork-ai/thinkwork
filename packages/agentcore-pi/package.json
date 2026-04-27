@@ -9,8 +9,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-agentcore": "^3.1028.0",
     "@mariozechner/pi-agent-core": "0.70.2",
-    "@mariozechner/pi-ai": "0.70.2"
+    "@mariozechner/pi-ai": "0.70.2",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "typebox": "^1.1.33"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
