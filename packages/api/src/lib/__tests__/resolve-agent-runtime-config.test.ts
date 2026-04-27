@@ -71,14 +71,22 @@ vi.mock("@thinkwork/database-pg", () => ({
 }));
 
 vi.mock("@thinkwork/database-pg/schema", () => ({
-  agents: { id: "agents.id", tenant_id: "agents.tenant_id" },
+  agents: {
+    id: "agents.id",
+    tenant_id: "agents.tenant_id",
+    runtime: "agents.runtime",
+    system_prompt: "agents.system_prompt",
+  },
   agentCapabilities: {
     agent_id: "agentCapabilities.agent_id",
     tenant_id: "agentCapabilities.tenant_id",
     capability: "agentCapabilities.capability",
     enabled: "agentCapabilities.enabled",
   },
-  agentTemplates: { id: "agentTemplates.id" },
+  agentTemplates: {
+    id: "agentTemplates.id",
+    runtime: "agentTemplates.runtime",
+  },
   agentSkills: {
     agent_id: "agentSkills.agent_id",
     skill_id: "agentSkills.skill_id",
@@ -132,14 +140,17 @@ const TENANT_ID = "11111111-1111-1111-1111-111111111111";
 const AGENT_ID = "22222222-2222-2222-2222-222222222222";
 const TEMPLATE_ID = "33333333-3333-3333-3333-333333333333";
 
-function stageAgentRow() {
+function stageAgentRow(overrides?: Record<string, unknown>) {
   rowsQueue.push([
     {
       id: AGENT_ID,
       name: "Ada",
       slug: "ada",
+      system_prompt: "You are Ada.",
       human_pair_id: null,
       template_id: TEMPLATE_ID,
+      runtime: "strands",
+      ...overrides,
     },
   ]);
 }
@@ -152,6 +163,7 @@ function stageTemplateRow(overrides?: Record<string, unknown>) {
       blocked_tools: null,
       sandbox: null,
       browser: null,
+      runtime: "strands",
       ...overrides,
     },
   ]);
@@ -219,6 +231,7 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.agentId).toBe(AGENT_ID);
     expect(cfg.tenantSlug).toBe("acme");
     expect(cfg.agentName).toBe("Ada");
+    expect(cfg.agentSystemPrompt).toBe("You are Ada.");
     expect(cfg.runtimeType).toBe("strands");
     expect(cfg.templateModel).toBe("us.anthropic.claude-sonnet-4-6");
     expect(cfg.guardrailId).toBeNull();
@@ -232,6 +245,48 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(slugs).toContain("agent-thread-management");
     expect(slugs).toContain("artifacts");
     expect(slugs).toContain("workspace-memory");
+  });
+
+  it("uses the agent runtime selector when present", async () => {
+    stageAgentRow({ runtime: "pi" });
+    stageTemplateRow({ runtime: "strands" });
+    stageTenantSlug("acme");
+    rowsQueue.push([]); // default guardrail lookup
+    rowsQueue.push([]); // skills
+    rowsQueue.push([]); // kbs
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+    expect(cfg.runtimeType).toBe("pi");
+  });
+
+  it("falls back to the template runtime before defaulting to Strands", async () => {
+    stageAgentRow({ runtime: null });
+    stageTemplateRow({ runtime: "pi" });
+    stageTenantSlug("acme");
+    rowsQueue.push([]); // default guardrail lookup
+    rowsQueue.push([]); // skills
+    rowsQueue.push([]); // kbs
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+    expect(cfg.runtimeType).toBe("pi");
+  });
+
+  it("defaults unknown runtime values to Strands", async () => {
+    stageAgentRow({ runtime: "unknown" });
+    stageTemplateRow({ runtime: "pi" });
+    stageTenantSlug("acme");
+    rowsQueue.push([]); // default guardrail lookup
+    rowsQueue.push([]); // skills
+    rowsQueue.push([]); // kbs
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+    expect(cfg.runtimeType).toBe("strands");
   });
 
   it("honors the template blocked_tools filter", async () => {

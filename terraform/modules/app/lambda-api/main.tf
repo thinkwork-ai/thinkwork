@@ -305,10 +305,12 @@ resource "aws_iam_role_policy" "lambda_agentcore_invoke" {
       Action = [
         "lambda:InvokeFunction",
       ]
-      Resource = [
+      Resource = compact([
         var.agentcore_function_arn,
         "${var.agentcore_function_arn}:*",
-      ]
+        var.agentcore_pi_function_arn,
+        var.agentcore_pi_function_arn != "" ? "${var.agentcore_pi_function_arn}:*" : "",
+      ])
     }]
   })
 }
