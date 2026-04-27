@@ -459,6 +459,47 @@ jobs:
             -var "mcp_custom_domain=${{ vars.MCP_CUSTOM_DOMAIN }}" \
             -var "mcp_custom_domain_ready=${{ vars.MCP_CUSTOM_DOMAIN_READY || 'false' }}"
 
+  # ── Refresh AgentCore runtimes after Terraform ──────────────────
+  # Terraform can update Lambda image tags and runtime-adjacent IAM/env
+  # after the container job has already called UpdateAgentRuntime. Make
+  # the final AgentCore image refresh happen after Terraform so the
+  # deploy summary probes the state users will actually hit.
+  update-agentcore-runtimes:
+    name: Update AgentCore Runtimes
+    needs: [build-container, terraform-apply]
+    if: >-
+      always()
+      && needs.build-container.result == 'success'
+      && needs.terraform-apply.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update Strands and Pi AgentCore runtimes
+        run: |
+          set -euo pipefail
+          REPO="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/thinkwork-${{ env.STAGE }}-agentcore"
+          bash scripts/update-agentcore-runtime-image.sh \
+            --stage ${{ env.STAGE }} \
+            --region ${{ env.AWS_REGION }} \
+            --runtime strands \
+            --image "${REPO}:${{ github.sha }}-arm64" \
+            --wait-seconds 900
+          bash scripts/update-agentcore-runtime-image.sh \
+            --stage ${{ env.STAGE }} \
+            --region ${{ env.AWS_REGION }} \
+            --runtime pi \
+            --image "${REPO}:${{ github.sha }}-pi-arm64" \
+            --account-id ${{ secrets.AWS_ACCOUNT_ID }} \
+            --wait-seconds 900
+
   # ── Database migration drift check ──────────────────────────────
   # Runs `scripts/db-migrate-manual.sh` against the dev DB after
   # terraform-apply has ensured the cluster exists. Fails the deploy if
@@ -722,6 +763,7 @@ jobs:
         detect-changes,
         build-container,
         terraform-apply,
+        update-agentcore-runtimes,
         migration-drift-check,
         build-admin,
         build-docs,
@@ -811,6 +853,7 @@ jobs:
           echo "║"
           echo "║ Job Results:"
           echo "║   Terraform Apply:        ${{ needs.terraform-apply.result }}"
+          echo "║   AgentCore Runtime:      ${{ needs.update-agentcore-runtimes.result }}"
           echo "║   Migration Drift Check:  ${{ needs.migration-drift-check.result }}"
           echo "║   Build Admin:            ${{ needs.build-admin.result }}"
           echo "║   Build Docs:             ${{ needs.build-docs.result }}"
