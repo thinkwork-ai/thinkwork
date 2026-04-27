@@ -200,6 +200,7 @@ export type Agent = {
   reportsTo?: Maybe<Agent>;
   reportsToId?: Maybe<Scalars['ID']['output']>;
   role?: Maybe<Scalars['String']['output']>;
+  runtime: AgentRuntime;
   runtimeConfig?: Maybe<Scalars['AWSJSON']['output']>;
   skills: Array<AgentSkill>;
   slug?: Maybe<Scalars['String']['output']>;
@@ -322,6 +323,11 @@ export type AgentPerformance = {
   totalOutputTokens: Scalars['Int']['output'];
 };
 
+export enum AgentRuntime {
+  Pi = 'PI',
+  Strands = 'STRANDS'
+}
+
 export type AgentSkill = {
   __typename?: 'AgentSkill';
   agentId: Scalars['ID']['output'];
@@ -384,6 +390,7 @@ export type AgentTemplate = {
   knowledgeBaseIds?: Maybe<Scalars['AWSJSON']['output']>;
   model?: Maybe<Scalars['String']['output']>;
   name: Scalars['String']['output'];
+  runtime: AgentRuntime;
   /**
    * Sandbox opt-in metadata for the AgentCore Code Interpreter sandbox
    * (plan Unit 3). Shape validated at create/update time by
@@ -756,6 +763,7 @@ export type CreateAgentInput = {
   parentAgentId?: InputMaybe<Scalars['ID']['input']>;
   reportsTo?: InputMaybe<Scalars['ID']['input']>;
   role?: InputMaybe<Scalars['String']['input']>;
+  runtime?: InputMaybe<AgentRuntime>;
   runtimeConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
   systemPrompt?: InputMaybe<Scalars['String']['input']>;
   templateId: Scalars['ID']['input'];
@@ -784,6 +792,7 @@ export type CreateAgentTemplateInput = {
   knowledgeBaseIds?: InputMaybe<Scalars['AWSJSON']['input']>;
   model?: InputMaybe<Scalars['String']['input']>;
   name: Scalars['String']['input'];
+  runtime?: InputMaybe<AgentRuntime>;
   /**
    * Sandbox opt-in metadata; see AgentTemplate.sandbox. Validated at
    * resolver boundary. Omit (or pass null) for templates that do not
@@ -1617,6 +1626,7 @@ export type Mutation = {
   unregisterPushToken: Scalars['Boolean']['output'];
   updateAgent: Agent;
   updateAgentEmailAllowlist: AgentCapability;
+  updateAgentRuntime: Agent;
   updateAgentStatus: Agent;
   updateAgentTemplate: AgentTemplate;
   updateArtifact: Artifact;
@@ -2340,6 +2350,12 @@ export type MutationUpdateAgentArgs = {
 export type MutationUpdateAgentEmailAllowlistArgs = {
   agentId: Scalars['ID']['input'];
   allowedSenders: Array<Scalars['String']['input']>;
+};
+
+
+export type MutationUpdateAgentRuntimeArgs = {
+  id: Scalars['ID']['input'];
+  runtime: AgentRuntime;
 };
 
 
@@ -4018,6 +4034,7 @@ export type UpdateAgentTemplateInput = {
   knowledgeBaseIds?: InputMaybe<Scalars['AWSJSON']['input']>;
   model?: InputMaybe<Scalars['String']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
+  runtime?: InputMaybe<AgentRuntime>;
   /**
    * Sandbox opt-in metadata; see AgentTemplate.sandbox. Pass null to
    * clear; omit to leave unchanged.

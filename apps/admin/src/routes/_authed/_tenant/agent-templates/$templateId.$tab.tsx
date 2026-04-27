@@ -67,6 +67,7 @@ import {
 import { ApiKeyDialog } from "@/components/mcp/ApiKeyDialog";
 import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
 import { TemplateSyncDialog } from "./-components/TemplateSyncDialog";
+import { AgentRuntime } from "@/gql/graphql";
 
 const VALID_TABS = [
   "configuration",
@@ -170,6 +171,7 @@ function TemplateEditorPage() {
   const [category, setCategory] = useState<string>("");
   const [icon, setIcon] = useState("");
   const [model, setModel] = useState("");
+  const [runtime, setRuntime] = useState<AgentRuntime>(AgentRuntime.Strands);
   const [templateConfig, setTemplateConfig] = useState<JsonRecord>({});
   const [blockedTools, setBlockedTools] = useState<string[]>([]);
   const [guardrailId, setGuardrailId] = useState<string | null>(null);
@@ -264,6 +266,7 @@ function TemplateEditorPage() {
         category,
         icon,
         model,
+        runtime,
         blockedTools: [...blockedTools].sort(),
         guardrailId,
         sandboxEnabled,
@@ -278,6 +281,7 @@ function TemplateEditorPage() {
       category,
       icon,
       model,
+      runtime,
       blockedTools,
       guardrailId,
       sandboxEnabled,
@@ -335,6 +339,7 @@ function TemplateEditorPage() {
       setCategory(t.category || "");
       setIcon(t.icon || "");
       setModel(t.model || "");
+      setRuntime(t.runtime ?? AgentRuntime.Strands);
       setTemplateConfig(parsedConfig);
 
       // blocked tools
@@ -382,9 +387,7 @@ function TemplateEditorPage() {
         typeof browserRaw === "string" && browserRaw
           ? JSON.parse(browserRaw)
           : browserRaw;
-      const nextBrowserEnabled = !!(
-        browser && browser.enabled === true
-      );
+      const nextBrowserEnabled = !!(browser && browser.enabled === true);
       setBrowserEnabled(nextBrowserEnabled);
       setInitialSnapshot(
         stableJson({
@@ -394,6 +397,7 @@ function TemplateEditorPage() {
           category: t.category || "",
           icon: t.icon || "",
           model: t.model || "",
+          runtime: t.runtime ?? AgentRuntime.Strands,
           blockedTools: [...parsedBlockedTools].sort(),
           guardrailId: t.guardrailId || null,
           sandboxEnabled: nextSandboxEnabled,
@@ -588,6 +592,7 @@ function TemplateEditorPage() {
             skills: skillsJson,
             sandbox: sandboxJson,
             browser: browserJson,
+            runtime,
 
             model: model || undefined,
             guardrailId: guardrailId || undefined,
@@ -619,6 +624,7 @@ function TemplateEditorPage() {
             skills: skillsJson,
             sandbox: sandboxJson,
             browser: browserJson,
+            runtime,
 
             model: model || undefined,
             guardrailId: guardrailId || undefined,
@@ -762,9 +768,30 @@ function TemplateEditorPage() {
                     placeholder="Customer Support Agent"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>Model</Label>
-                  <ModelSelect value={model} onValueChange={setModel} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Model</Label>
+                    <ModelSelect value={model} onValueChange={setModel} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Runtime</Label>
+                    <Select
+                      value={runtime}
+                      onValueChange={(value) =>
+                        setRuntime(value as AgentRuntime)
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={AgentRuntime.Strands}>
+                          Strands
+                        </SelectItem>
+                        <SelectItem value={AgentRuntime.Pi}>Pi</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="slug">Slug</Label>

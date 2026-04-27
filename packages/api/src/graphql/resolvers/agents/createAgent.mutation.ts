@@ -3,6 +3,7 @@ import {
   db,
   eq,
   agents,
+  agentTemplates,
   agentCapabilities,
   users,
   agentToCamel,
@@ -12,6 +13,7 @@ import {
 import { requireTenantAdmin } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { runWithIdempotency } from "../../../lib/idempotency.js";
+import { parseAgentRuntimeInput } from "./runtime.js";
 
 export async function createAgent(
   _parent: any,
@@ -44,6 +46,16 @@ export async function createAgent(
 async function createAgentCore(
   i: any,
 ): Promise<ReturnType<typeof agentToCamel>> {
+  let runtime = parseAgentRuntimeInput(i.runtime);
+  if (i.runtime == null && i.templateId) {
+    const templateRows = await db
+      .select({ runtime: agentTemplates.runtime })
+      .from(agentTemplates)
+      .where(eq(agentTemplates.id, i.templateId));
+    const [template] = Array.isArray(templateRows) ? templateRows : [];
+    runtime = parseAgentRuntimeInput(template?.runtime);
+  }
+
   // Auto-register heartbeat config for serverless agents
   let runtimeConfig = i.runtimeConfig ? JSON.parse(i.runtimeConfig) : undefined;
   const adapterType = i.adapterType || "strands";
@@ -72,6 +84,7 @@ async function createAgentCore(
       role: i.role,
       type: i.type?.toLowerCase() ?? "agent",
       template_id: i.templateId,
+      runtime,
       system_prompt: i.systemPrompt,
       adapter_type: adapterType,
       adapter_config: i.adapterConfig ? JSON.parse(i.adapterConfig) : undefined,
