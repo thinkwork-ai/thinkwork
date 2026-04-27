@@ -5,7 +5,9 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#070a0f",
+    "primaryColor": "#070a0f",
     "newArchEnabled": true,
     "scheme": "thinkwork",
     "splash": {
@@ -14,18 +16,32 @@
       "backgroundColor": "#070a0f"
     },
     "ios": {
+      "userInterfaceStyle": "dark",
+      "backgroundColor": "#070a0f",
       "supportsTablet": true,
       "bundleIdentifier": "ai.thinkwork.agent",
+      "splash": {
+        "image": "./assets/splash-icon.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#070a0f"
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
+        "UIUserInterfaceStyle": "Dark",
         "NSPhotoLibraryUsageDescription": "Allow ThinkWork to access your photos for attaching images to tickets.",
         "NSMicrophoneUsageDescription": "Allow ThinkWork to use the microphone for voice input.",
         "NSSpeechRecognitionUsageDescription": "Allow ThinkWork to use speech recognition."
       }
     },
     "android": {
+      "userInterfaceStyle": "dark",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#070a0f"
+      },
+      "splash": {
+        "image": "./assets/splash-icon.png",
+        "resizeMode": "contain",
         "backgroundColor": "#070a0f"
       },
       "edgeToEdgeEnabled": true,
@@ -37,11 +53,32 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "bundler": "metro"
+      "bundler": "metro",
+      "splash": {
+        "image": "./assets/splash-icon.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#070a0f"
+      }
     },
     "plugins": [
       "expo-router",
       "expo-web-browser",
+      "expo-system-ui",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#070a0f",
+          "ios": {
+            "backgroundColor": "#070a0f"
+          },
+          "android": {
+            "backgroundColor": "#070a0f"
+          }
+        }
+      ],
       [
         "expo-speech-recognition",
         {

@@ -149,7 +149,7 @@ Two surfaces read from the wiki.
 
 **`wikiSearch`** is Postgres full-text search over pages in one agent's scope. Give it a query, get back pages ranked by how well the page's title + summary + body match the query, with a bonus if any alias matches.
 
-**`mobileWikiSearch`** takes a different approach. It runs the same semantic recall your agent uses (via Hindsight) to find the most relevant memories, then reverse-joins those memories to the pages that cite them. The ranking trusts Hindsight's order: the page cited by the best-ranked memory wins. This gets you results like "a query about 'austin' returns the Austin, Texas page first" even when "austin" isn't the best word to full-text-match against.
+**`mobileWikiSearch`** uses the same compiled-page full-text search path, scoped to the signed-in user's wiki, then preserves the mobile wire shape (`matchingMemoryIds` is currently `[]`). It also supports normalized prefix matching so mobile searches can find pages from partial input like `empan` for "empanada", while still using the GIN-indexed `search_tsv` column rather than slow semantic recall.
 
 ## Archive vs delete
 
@@ -221,14 +221,19 @@ WITH alias_hits AS (
 )
 SELECT p.*,
   COALESCE(ts_rank(p.search_tsv, plainto_tsquery('english', $3)), 0)
+  + (COALESCE(ts_rank(p.search_tsv, to_tsquery('english', $4)), 0) * 0.5)
   + CASE WHEN ah.page_id IS NOT NULL THEN 1.0 ELSE 0.0 END AS score,
   ah.alias AS matched_alias
 FROM wiki_pages p
 LEFT JOIN alias_hits ah ON ah.page_id = p.id
 WHERE p.tenant_id = $1 AND p.owner_id = $2 AND p.status = 'active'
-  AND (p.search_tsv @@ plainto_tsquery('english', $3) OR ah.page_id IS NOT NULL)
+  AND (
+    p.search_tsv @@ plainto_tsquery('english', $3)
+    OR p.search_tsv @@ to_tsquery('english', $4)
+    OR ah.page_id IS NOT NULL
+  )
 ORDER BY score DESC, p.last_compiled_at DESC NULLS LAST
-LIMIT $4
+LIMIT $5
 ```
 
 ### Cascade behavior

@@ -19,14 +19,13 @@ const {
 	mockResolveTenant,
 	mockResolveCaller,
 	mockGetMemoryServices,
-} =
-	vi.hoisted(() => ({
-		mockExecute: vi.fn(),
-		mockAgentRow: vi.fn(),
-		mockResolveTenant: vi.fn(),
-		mockResolveCaller: vi.fn(),
-		mockGetMemoryServices: vi.fn(),
-	}));
+} = vi.hoisted(() => ({
+	mockExecute: vi.fn(),
+	mockAgentRow: vi.fn(),
+	mockResolveTenant: vi.fn(),
+	mockResolveCaller: vi.fn(),
+	mockGetMemoryServices: vi.fn(),
+}));
 
 vi.mock("../graphql/utils.js", () => {
 	const chain = (rows: unknown[]) => ({
@@ -69,7 +68,9 @@ vi.mock("drizzle-orm", async (importOriginal) => {
 import { mobileWikiSearch } from "../graphql/resolvers/memory/mobileWikiSearch.query.js";
 import type { GraphQLContext } from "../graphql/context.js";
 
-function makeCtx(overrides: Partial<GraphQLContext["auth"]> = {}): GraphQLContext {
+function makeCtx(
+	overrides: Partial<GraphQLContext["auth"]> = {},
+): GraphQLContext {
 	return {
 		auth: {
 			principalId: "user-1",
@@ -138,7 +139,10 @@ describe("mobileWikiSearch — empty input", () => {
 
 describe("mobileWikiSearch — auth", () => {
 	it("throws when tenant context is missing", async () => {
-		mockResolveCaller.mockResolvedValueOnce({ userId: "user-1", tenantId: null });
+		mockResolveCaller.mockResolvedValueOnce({
+			userId: "user-1",
+			tenantId: null,
+		});
 		await expect(
 			mobileWikiSearch(
 				{},
@@ -173,7 +177,10 @@ describe("mobileWikiSearch — auth", () => {
 	});
 
 	it("uses resolveCaller tenant when ctx.auth.tenantId is null", async () => {
-		mockResolveCaller.mockResolvedValueOnce({ userId: "user-1", tenantId: "t1" });
+		mockResolveCaller.mockResolvedValueOnce({
+			userId: "user-1",
+			tenantId: "t1",
+		});
 		mockExecute.mockResolvedValueOnce({ rows: [] });
 		const out = await mobileWikiSearch(
 			{},
@@ -285,7 +292,7 @@ describe("mobileWikiSearch — FTS path", () => {
 		expect(allArgs).toContain(1); // clamp of 0
 	});
 
-	it("interpolates the trimmed query into a plainto_tsquery call (not to_tsquery)", async () => {
+	it("interpolates the trimmed query into plain and prefix tsquery calls", async () => {
 		mockExecute.mockResolvedValueOnce({ rows: [] });
 		await mobileWikiSearch(
 			{},
@@ -294,14 +301,30 @@ describe("mobileWikiSearch — FTS path", () => {
 		);
 		// The sql tag is mocked to pass its template chunks + interpolations
 		// through verbatim. Flatten and stringify the whole call so we can
-		// assert both that the trimmed query is bound AND that the query
-		// uses plainto_tsquery — swapping to to_tsquery would crash on raw
-		// user apostrophes ("Dake's"), so this guard has real teeth.
+		// assert both that the trimmed query is bound and that the raw user
+		// apostrophe stays parameterized for plainto_tsquery, while the prefix
+		// query is built only from normalized safe terms.
 		const flattened = JSON.stringify(mockExecute.mock.calls[0].flat(3));
 		expect(flattened).toContain("Dake's Shoppe");
 		expect(flattened).not.toContain("  Dake's Shoppe  ");
 		expect(flattened).toContain("plainto_tsquery");
-		expect(flattened).not.toContain("to_tsquery('english', $");
+		expect(flattened).toContain("to_tsquery");
+		expect(flattened).toContain("dake:* & shoppe:*");
+	});
+
+	it("passes mobile partial input to the shared prefix FTS path", async () => {
+		mockExecute.mockResolvedValueOnce({
+			rows: [makeRow({ title: "Empanadas" })],
+		});
+		const out = await mobileWikiSearch(
+			{},
+			{ tenantId: "t1", userId: "user-1", query: "empan" },
+			makeCtx(),
+		);
+		expect(out).toHaveLength(1);
+		expect(out[0]).toMatchObject({ matchingMemoryIds: [] });
+		const flattened = JSON.stringify(mockExecute.mock.calls[0].flat(3));
+		expect(flattened).toContain("empan:*");
 	});
 
 	it("coerces ISO-string timestamps from raw SQL (postgres-js returns strings for db.execute)", async () => {
