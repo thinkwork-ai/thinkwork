@@ -18,6 +18,16 @@ This is greenfield on the server side — the repo has rich MCP *client* infrast
 
 `docs/plans/2026-04-26-007-test-user-memory-mcp-e2e-plan.md` adds the live validation harness for this work. The direct Codex User Memory MCP test is intentionally blocked until this inbound server exposes a real streamable-HTTP endpoint and user bearer token. Once this plan ships, run `pnpm --filter @thinkwork/api user-memory-mcp:e2e` with `USER_MEMORY_MCP_URL` and `USER_MEMORY_MCP_TOKEN` to prove Codex can call `retain`, `memory_recall`, and `wiki_search` as the current user.
 
+## Current Hosted MCP V0 Slice
+
+The hosted `/mcp/user-memory` endpoint is shipping a narrower MCP-only slice before the full external Memory/Wiki MCP server:
+
+- Tool surface is intentionally read-only: `memory_recall`, `memory_list`, plus Hindsight-compatible aliases `recall` and `list_memories`.
+- Hindsight parity is intentionally partial. `retain`, `reflect`, bank/admin tools, mental models, directives, operations, and Codex hooks remain out of scope for this slice.
+- `memory_recall` / `recall` require `memory:read`; wiki enrichment requires `wiki:read`. A token without `wiki:read` still succeeds with memory-only results.
+- Recall responses preserve `structuredContent.memories`, add `structuredContent.wikiResults` when `wiki:read` is granted, and add a grouped `structuredContent.results` array with memory and wiki entries.
+- Server-side logout is the OAuth revocation endpoint: `POST /mcp/oauth/revoke` with form field `token` and optional `token_type_hint` / `client_id`. `codex mcp logout <name>` should be treated as local credential removal unless the Codex CLI later verifies it calls the server revocation endpoint.
+
 ## Problem Frame
 
 External agents (Claude Code et al.) have rich contextual awareness of a user's current code/conversation but no durable cross-session memory beyond local files. ThinkWork already has the memory + wiki pipeline users want — it's invisible to anything that isn't a ThinkWork agent. A user on mobile should be able to opt in, pick an existing agent, and start retaining from their IDE. See `docs/brainstorms/2026-04-20-thinkwork-memory-wiki-mcp-requirements.md`.

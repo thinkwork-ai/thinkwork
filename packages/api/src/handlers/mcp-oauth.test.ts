@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
-import { handler } from "./mcp-oauth.js";
-import { sha256Base64Url, verifyJwt } from "../lib/mcp-oauth/state.js";
+import { handler, verifyMcpAccessToken } from "./mcp-oauth.js";
+import { encodeJwt, sha256Base64Url, verifyJwt } from "../lib/mcp-oauth/state.js";
 
 const host = "api.test";
 const resource = `https://${host}/mcp/user-memory`;
@@ -28,6 +28,7 @@ describe("mcp-oauth handler", () => {
 		const body = JSON.parse(response.body || "{}");
 		expect(body.authorization_endpoint).toBe(`https://${host}/mcp/oauth/authorize`);
 		expect(body.token_endpoint).toBe(`https://${host}/mcp/oauth/token`);
+		expect(body.revocation_endpoint).toBe(`https://${host}/mcp/oauth/revoke`);
 		expect(body.registration_endpoint).toBe(`https://${host}/mcp/oauth/register`);
 		expect(body.code_challenge_methods_supported).toContain("S256");
 	});
@@ -243,6 +244,7 @@ describe("mcp-oauth handler", () => {
 		expect(tokenBody.token_type).toBe("Bearer");
 		expect(tokenBody.access_token).toEqual(expect.any(String));
 		const claims = verifyJwt(tokenBody.access_token, "test-secret");
+		expect(claims.jti).toEqual(expect.any(String));
 		expect(claims.user_id).toBe("db-user-a");
 		expect(claims.tenant_id).toBe("tenant-a");
 
@@ -264,6 +266,82 @@ describe("mcp-oauth handler", () => {
 		);
 		expect(replay.statusCode).toBe(400);
 		expect(JSON.parse(replay.body || "{}").error_description).toContain("already been used");
+	});
+
+	it("accepts missing, invalid, duplicate, and expired token revocations idempotently", async () => {
+		const missing = await handler(
+			event(
+				"POST",
+				"/mcp/oauth/revoke",
+				new URLSearchParams({}).toString(),
+				undefined,
+				"application/x-www-form-urlencoded",
+			),
+		);
+		const invalid = await handler(
+			event(
+				"POST",
+				"/mcp/oauth/revoke",
+				new URLSearchParams({ token: "not-a-jwt" }).toString(),
+				undefined,
+				"application/x-www-form-urlencoded",
+			),
+		);
+		const expired = await handler(
+			event(
+				"POST",
+				"/mcp/oauth/revoke",
+				new URLSearchParams({ token: signedAccessToken({ jti: "expired" }, -900) }).toString(),
+				undefined,
+				"application/x-www-form-urlencoded",
+			),
+		);
+		const validToken = signedAccessToken({ jti: `valid-${Date.now()}` });
+		const firstValid = await handler(
+			event(
+				"POST",
+				"/mcp/oauth/revoke",
+				new URLSearchParams({ token: validToken, token_type_hint: "access_token" }).toString(),
+				undefined,
+				"application/x-www-form-urlencoded",
+			),
+		);
+		const duplicate = await handler(
+			event(
+				"POST",
+				"/mcp/oauth/revoke",
+				new URLSearchParams({ token: validToken }).toString(),
+				undefined,
+				"application/x-www-form-urlencoded",
+			),
+		);
+
+		expect(missing.statusCode).toBe(200);
+		expect(invalid.statusCode).toBe(200);
+		expect(expired.statusCode).toBe(200);
+		expect(firstValid.statusCode).toBe(200);
+		expect(duplicate.statusCode).toBe(200);
+	});
+
+	it("rejects revoked tokens on subsequent MCP access-token verification", async () => {
+		const accessToken = signedAccessToken({ jti: `revoked-${Date.now()}` });
+		await expect(verifyMcpAccessToken(accessToken, resource, `https://${host}`)).resolves.toMatchObject({
+			aud: resource,
+		});
+
+		const revoke = await handler(
+			event(
+				"POST",
+				"/mcp/oauth/revoke",
+				new URLSearchParams({ token: accessToken }).toString(),
+				undefined,
+				"application/x-www-form-urlencoded",
+			),
+		);
+		expect(revoke.statusCode).toBe(200);
+		await expect(verifyMcpAccessToken(accessToken, resource, `https://${host}`)).rejects.toThrow(
+			"revoked",
+		);
 	});
 });
 
@@ -304,4 +382,20 @@ function unsignedJwt(payload: Record<string, unknown>): string {
 		Buffer.from(JSON.stringify(payload)).toString("base64url"),
 		"",
 	].join(".");
+}
+
+function signedAccessToken(overrides: Record<string, unknown> = {}, ttlSeconds = 900): string {
+	return encodeJwt(
+		{
+			iss: `https://${host}`,
+			aud: resource,
+			jti: `token-${Math.random()}`,
+			sub: "user-sub",
+			client_id: "codex-client",
+			scope: "openid email profile memory:read wiki:read",
+			...overrides,
+		},
+		"test-secret",
+		ttlSeconds,
+	);
 }

@@ -5,8 +5,11 @@ import type {
 import { verifyMcpAccessToken } from "./mcp-oauth.js";
 import { handleCors, json } from "../lib/response.js";
 import type { RecallResult, ThinkWorkMemoryRecord } from "../lib/memory/types.js";
+import { searchWikiForUser, type UserWikiSearchResult } from "../lib/wiki/search.js";
 
 const MAX_LIMIT = 50;
+const DEFAULT_WIKI_LIMIT = 5;
+const MAX_WIKI_LIMIT = 10;
 
 const TOOLS = [
 	{
@@ -31,7 +34,44 @@ const TOOLS = [
 		},
 	},
 	{
+		name: "recall",
+		description: "Search the authenticated user's Thinkwork memory and wiki pages.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				query: {
+					type: "string",
+					description: "Natural-language memory and wiki search query.",
+				},
+				limit: {
+					type: "integer",
+					minimum: 1,
+					maximum: MAX_LIMIT,
+					description: "Maximum number of memories to return.",
+				},
+			},
+			required: ["query"],
+			additionalProperties: false,
+		},
+	},
+	{
 		name: "memory_list",
+		description: "List recent memories for the authenticated Thinkwork user.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				limit: {
+					type: "integer",
+					minimum: 1,
+					maximum: MAX_LIMIT,
+					description: "Maximum number of memories to return.",
+				},
+			},
+			additionalProperties: false,
+		},
+	},
+	{
+		name: "list_memories",
 		description: "List recent memories for the authenticated Thinkwork user.",
 		inputSchema: {
 			type: "object",
@@ -61,7 +101,7 @@ export async function handler(
 
 	let claims: Record<string, unknown>;
 	try {
-		claims = verifyMcpAccessToken(bearer, resource);
+		claims = await verifyMcpAccessToken(bearer, resource, issuerUrl(event));
 	} catch (err) {
 		const reason = err instanceof Error ? err.message : "unknown";
 		console.warn("[mcp-user-memory] bearer verification failed", { reason });
@@ -131,7 +171,8 @@ async function handleToolCall(
 	}
 
 	switch (toolName) {
-		case "memory_recall": {
+		case "memory_recall":
+		case "recall": {
 			const query = stringArg(args.query);
 			if (!query) return jsonRpcError(request.id, -32602, "query is required");
 			const limit = limitArg(args.limit);
@@ -141,14 +182,35 @@ async function handleToolCall(
 				query,
 				...(limit ? { limit } : {}),
 			});
+			const wikiResults = hasScope(claims, "wiki:read")
+				? await searchWikiForUser({
+						tenantId: owner.tenantId,
+						userId: owner.ownerId,
+						query,
+						limit: Math.min(limit ?? DEFAULT_WIKI_LIMIT, MAX_WIKI_LIMIT),
+					})
+				: [];
+			const memories = results.map(formatRecallResult);
+			const wiki = wikiResults.map(formatWikiResult);
 			return jsonRpcResult(request.id, {
-				content: [{ type: "text", text: formatRecallResults(results) }],
+				content: [{ type: "text", text: formatRecallResponse(results, wikiResults) }],
 				structuredContent: {
-					memories: results.map(formatRecallResult),
+					memories,
+					...(hasScope(claims, "wiki:read") ? { wikiResults: wiki } : {}),
+					results: [
+						...memories.map((memory) => ({ type: "memory", memory })),
+						...wiki.map((page) => ({
+							type: "wiki",
+							page: page.page,
+							score: page.score,
+							matchedAlias: page.matchedAlias,
+						})),
+					],
 				},
 			});
 		}
-		case "memory_list": {
+		case "memory_list":
+		case "list_memories": {
 			const limit = limitArg(args.limit);
 			const memory = await getMemoryServices();
 			const records = await memory.inspect.inspect({
@@ -197,9 +259,28 @@ async function getMemoryServices() {
 	return memory.getMemoryServices();
 }
 
-function formatRecallResults(results: RecallResult[]): string {
-	if (results.length === 0) return "No matching memories found.";
-	return JSON.stringify(results.map(formatRecallResult), null, 2);
+function formatRecallResponse(memoryResults: RecallResult[], wikiResults: UserWikiSearchResult[]): string {
+	const sections: string[] = [];
+	sections.push("Memories");
+	if (memoryResults.length === 0) {
+		sections.push("No matching memories found.");
+	} else {
+		for (const [index, result] of memoryResults.entries()) {
+			sections.push(`${index + 1}. ${result.record.content.summary || result.record.content.text}`);
+			if (result.whyRecalled) sections.push(`   Match: ${result.whyRecalled}`);
+		}
+	}
+
+	if (wikiResults.length > 0) {
+		sections.push("", "Wiki");
+		for (const [index, result] of wikiResults.entries()) {
+			const summary = result.page.summary ? ` - ${result.page.summary}` : "";
+			const alias = result.matchedAlias ? ` (alias: ${result.matchedAlias})` : "";
+			sections.push(`${index + 1}. ${result.page.title}${summary}${alias}`);
+		}
+	}
+
+	return sections.join("\n");
 }
 
 function formatMemoryRecords(records: ThinkWorkMemoryRecord[]): string {
@@ -213,6 +294,22 @@ function formatRecallResult(result: RecallResult): Record<string, unknown> {
 		score: result.score,
 		whyRecalled: result.whyRecalled,
 		backend: result.backend,
+	};
+}
+
+function formatWikiResult(result: UserWikiSearchResult): Record<string, unknown> {
+	return {
+		page: {
+			id: result.page.id,
+			type: result.page.type,
+			slug: result.page.slug,
+			title: result.page.title,
+			summary: result.page.summary,
+			lastCompiledAt: result.page.lastCompiledAt,
+			updatedAt: result.page.updatedAt,
+		},
+		score: result.score,
+		matchedAlias: result.matchedAlias,
 	};
 }
 

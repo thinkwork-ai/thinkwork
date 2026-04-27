@@ -10,6 +10,7 @@ import {
 	SecretsManagerClient,
 	UpdateSecretCommand,
 } from "@aws-sdk/client-secrets-manager";
+import { DynamoDBClient, GetItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
 import {
 	McpOAuthStateError,
 	encodeJwt,
@@ -29,7 +30,9 @@ const COGNITO_EXCHANGE_TIMEOUT_MS = 10_000;
 const SUPPORTED_SCOPES = new Set(["openid", "email", "profile", "memory:read", "memory:write", "wiki:read"]);
 
 const secrets = new SecretsManagerClient({ region: process.env.AWS_REGION || "us-east-1" });
+const dynamodb = new DynamoDBClient({ region: process.env.AWS_REGION || "us-east-1" });
 const testAuthorizationCodes = new Map<string, StoredAuthorizationCode>();
+const testRevokedTokenIds = new Map<string, { expiresAt: number; revokedAt: string; clientId?: string }>();
 
 type RegisteredClient = {
 	kind: "mcp_client";
@@ -111,6 +114,9 @@ export async function handler(
 		if (method === "POST" && path === "/mcp/oauth/token") {
 			return await token(event);
 		}
+		if (method === "POST" && path === "/mcp/oauth/revoke") {
+			return await revoke(event);
+		}
 		return error("Not found", 404);
 	} catch (err) {
 		if (err instanceof McpOAuthStateError) {
@@ -138,6 +144,7 @@ function authorizationServerMetadata(event: APIGatewayProxyEventV2) {
 		issuer,
 		authorization_endpoint: `${issuer}/mcp/oauth/authorize`,
 		token_endpoint: `${issuer}/mcp/oauth/token`,
+		revocation_endpoint: `${issuer}/mcp/oauth/revoke`,
 		registration_endpoint: `${issuer}/mcp/oauth/register`,
 		response_types_supported: ["code"],
 		grant_types_supported: ["authorization_code"],
@@ -312,6 +319,7 @@ async function token(event: APIGatewayProxyEventV2) {
 		{
 			iss: issuerUrl(event),
 			aud: code.resource,
+			jti: randomBytes(32).toString("base64url"),
 			sub: code.sub,
 			email: code.email,
 			tenant_id: code.tenant_id,
@@ -330,10 +338,45 @@ async function token(event: APIGatewayProxyEventV2) {
 	});
 }
 
-export function verifyMcpAccessToken(token: string, expectedResource: string): Record<string, unknown> {
+async function revoke(event: APIGatewayProxyEventV2) {
+	const form = parseFormBody(event);
+	const token = form.token;
+	if (!token) return emptyOk();
+
+	let claims: Record<string, unknown>;
+	try {
+		claims = verifyJwt(token, signingSecret());
+	} catch {
+		return emptyOk();
+	}
+
+	const jti = stringClaimOptional(claims.jti);
+	if (!jti) return emptyOk();
+
+	const expiresAt = typeof claims.exp === "number" ? claims.exp : Math.floor(Date.now() / 1000);
+	const clientId = stringClaimOptional(form.client_id) ?? stringClaimOptional(claims.client_id);
+	await revokeTokenId(jti, expiresAt, clientId);
+	return emptyOk();
+}
+
+export async function verifyMcpAccessToken(
+	token: string,
+	expectedResource: string,
+	expectedIssuer?: string,
+): Promise<Record<string, unknown>> {
 	const claims = verifyJwt(token, signingSecret());
+	if (expectedIssuer && !sameResource(String(claims.iss || ""), expectedIssuer)) {
+		throw new McpOAuthStateError("token issuer does not match this authorization server");
+	}
 	if (!sameResource(String(claims.aud || ""), expectedResource)) {
 		throw new McpOAuthStateError("token audience does not match this MCP resource");
+	}
+	if (typeof claims.scope !== "string") {
+		throw new McpOAuthStateError("token scope claim missing");
+	}
+	const jti = stringClaimOptional(claims.jti);
+	if (jti && (await isTokenIdRevoked(jti))) {
+		throw new McpOAuthStateError("token has been revoked");
 	}
 	return claims;
 }
@@ -430,6 +473,54 @@ async function readAuthorizationCode(code: string): Promise<StoredAuthorizationC
 			throw new McpOAuthStateError("authorization code not found");
 		}
 		throw err;
+	}
+}
+
+async function revokeTokenId(jti: string, expiresAt: number, clientId?: string): Promise<void> {
+	const tokenIdHash = sha256Base64Url(jti);
+	const revokedAt = new Date().toISOString();
+	if (isTestRuntime()) {
+		testRevokedTokenIds.set(tokenIdHash, { expiresAt, revokedAt, ...(clientId ? { clientId } : {}) });
+		return;
+	}
+
+	const tableName = requiredEnv("MCP_OAUTH_REVOCATIONS_TABLE");
+	await dynamodb.send(
+		new PutItemCommand({
+			TableName: tableName,
+			Item: {
+				token_id_hash: { S: tokenIdHash },
+				expires_at: { N: String(expiresAt) },
+				revoked_at: { S: revokedAt },
+				...(clientId ? { client_id: { S: clientId } } : {}),
+			},
+		}),
+	);
+}
+
+async function isTokenIdRevoked(jti: string): Promise<boolean> {
+	const tokenIdHash = sha256Base64Url(jti);
+	if (isTestRuntime()) {
+		const revoked = testRevokedTokenIds.get(tokenIdHash);
+		if (!revoked) return false;
+		return revoked.expiresAt >= Math.floor(Date.now() / 1000);
+	}
+
+	const tableName = requiredEnv("MCP_OAUTH_REVOCATIONS_TABLE");
+	try {
+		const response = await dynamodb.send(
+			new GetItemCommand({
+				TableName: tableName,
+				Key: { token_id_hash: { S: tokenIdHash } },
+				ProjectionExpression: "token_id_hash, expires_at",
+				ConsistentRead: true,
+			}),
+		);
+		const expiresAt = Number(response.Item?.expires_at?.N ?? 0);
+		return Boolean(response.Item?.token_id_hash?.S) && expiresAt >= Math.floor(Date.now() / 1000);
+	} catch (err) {
+		console.error("[mcp-oauth] token revocation lookup failed", err);
+		throw new McpOAuthStateError("token revocation status could not be checked");
 	}
 }
 
@@ -534,6 +625,10 @@ function validateScope(scope: string | undefined): string {
 
 function oauthError(errorCode: string, description: string, statusCode: number) {
 	return json({ error: errorCode, error_description: description }, statusCode);
+}
+
+function emptyOk(): APIGatewayProxyStructuredResultV2 {
+	return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: "" };
 }
 
 function redirectResponse(location: string): APIGatewayProxyStructuredResultV2 {
