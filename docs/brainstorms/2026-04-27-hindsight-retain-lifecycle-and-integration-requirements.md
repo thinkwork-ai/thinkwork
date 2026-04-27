@@ -1,9 +1,13 @@
 ---
 date: 2026-04-27
 topic: hindsight-retain-lifecycle-and-integration
+status: superseded
+superseded-by: docs/brainstorms/2026-04-27-hindsight-ingest-and-runtime-cleanup-requirements.md
 ---
 
 # Hindsight Retain Lifecycle and Strands Integration Cleanup
+
+> **SUPERSEDED 2026-04-27.** Merged into `docs/brainstorms/2026-04-27-hindsight-ingest-and-runtime-cleanup-requirements.md`, which consolidates this brainstorm's per-turn upsert + Strands hooks cleanup with the 4/24 brainstorm's daily-memory channel and user-scope flip. The per-turn upsert and monkey-patch removal decisions defined here are preserved verbatim in the merged document.
 
 ## Problem Frame
 

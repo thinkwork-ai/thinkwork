@@ -1,10 +1,13 @@
 ---
 title: "feat: Hindsight retain lifecycle and integration cleanup"
 type: feat
-status: active
+status: superseded
 date: 2026-04-27
 origin: docs/brainstorms/2026-04-27-hindsight-retain-lifecycle-and-integration-requirements.md
+superseded-by: docs/plans/2026-04-27-002-feat-hindsight-ingest-and-runtime-cleanup-plan.md
 ---
+
+> **SUPERSEDED 2026-04-27.** All six units (Lambda full-thread fetch, `retain_full_thread` client, call-site swap, custom retain `@tool` wrapper, reflect usage capture, retire `install()` monkey-patches) are absorbed into `docs/plans/2026-04-27-002-feat-hindsight-ingest-and-runtime-cleanup-plan.md` (Phases A and C). That plan adds the daily-memory channel and wipe-and-reload migration absent from this plan, and applies P0/P1 fixes from the doc-review pass (timestamp-agnostic suffix-merge in U1, atomic U10 vs U8/U9, architectural invariant for Hindsight tool registration, batched wipe with surveyed-on flag).
 
 # feat: Hindsight retain lifecycle and integration cleanup
 
