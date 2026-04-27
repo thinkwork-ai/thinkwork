@@ -1,11 +1,14 @@
 ---
 title: "refactor: User-Scoped Memory + Wiki Migration + Hindsight Conversation Ingest + Daily Workspace Memory"
 type: refactor
-status: active
+status: paused
 date: 2026-04-24
 origin: docs/brainstorms/2026-04-24-hindsight-retain-reshape-and-daily-memory-requirements.md
 supersedes: docs/plans/2026-04-20-010-refactor-user-scoped-memory-wiki-plan.md
+paused-by-plan: docs/plans/2026-04-27-002-feat-hindsight-ingest-and-runtime-cleanup-plan.md
 ---
+
+> **PAUSED 2026-04-27.** The runtime ingest pieces of this plan (Hindsight conversation ingest, daily workspace memory channel, S3 user-scoped tier for daily memory, wipe-and-reload migration — i.e., U8, U10, U11) are absorbed into `docs/plans/2026-04-27-002-feat-hindsight-ingest-and-runtime-cleanup-plan.md`. The **broader user-scope schema cascade** (U1 Postgres migration, U2 memory adapters, U3 handler/compiler, U4 GraphQL, U5 mobile, U6 admin, U7 MCP, U9 boundary-flush — dropped, U9a in-container bank unification) is not absorbed and remains paused here. **Re-evaluation trigger:** revisit when `agents.human_pair_id` fallback (`packages/api/src/lib/memory/adapters/hindsight-adapter.ts:437`) becomes the next refactor target, OR when `wiki_*` tables need a multi-agent overhaul, OR by 2026-Q3, whichever comes first. Do not start units from this plan as written without first reconciling against the 4/27-002 plan and any subsequent schema-cascade plan.
 
 # refactor: User-Scoped Memory + Wiki Migration + Hindsight Conversation Ingest + Daily Workspace Memory
 
