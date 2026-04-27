@@ -45,7 +45,7 @@ export const AgentsListQuery = graphql(`
 `);
 
 export const AgentDetailQuery = gql`
-  query AgentDetail($id: ID!) {
+  query AgentProfileDetail($id: ID!) {
     agent(id: $id) {
       id
       tenantId
@@ -54,12 +54,14 @@ export const AgentDetailQuery = gql`
       role
       type
       status
+      runtime
       templateId
       agentTemplate {
         id
         name
         slug
         model
+        runtime
         guardrailId
         blockedTools
         skills
@@ -119,6 +121,7 @@ export const CreateAgentMutation = graphql(`
       role
       type
       status
+      runtime
       templateId
       createdAt
     }
@@ -152,8 +155,19 @@ export const UpdateAgentMutation = graphql(`
       role
       type
       templateId
+      runtime
       systemPrompt
       adapterType
+      updatedAt
+    }
+  }
+`);
+
+export const UpdateAgentRuntimeMutation = graphql(`
+  mutation UpdateAgentRuntime($id: ID!, $runtime: AgentRuntime!) {
+    updateAgentRuntime(id: $id, runtime: $runtime) {
+      id
+      runtime
       updatedAt
     }
   }
@@ -1595,8 +1609,16 @@ export const DeleteMemoryRecordMutation = graphql(`
 `);
 
 export const UpdateMemoryRecordMutation = graphql(`
-  mutation UpdateMemoryRecord($userId: ID!, $memoryRecordId: ID!, $content: String!) {
-    updateMemoryRecord(userId: $userId, memoryRecordId: $memoryRecordId, content: $content)
+  mutation UpdateMemoryRecord(
+    $userId: ID!
+    $memoryRecordId: ID!
+    $content: String!
+  ) {
+    updateMemoryRecord(
+      userId: $userId
+      memoryRecordId: $memoryRecordId
+      content: $content
+    )
   }
 `);
 
@@ -1677,6 +1699,7 @@ export const AgentTemplateDetailQuery = graphql(`
       category
       icon
       source
+      runtime
       model
       guardrailId
       blockedTools
@@ -1698,6 +1721,7 @@ export const CreateAgentTemplateMutation = graphql(`
       id
       name
       slug
+      runtime
     }
   }
 `);
@@ -1708,6 +1732,7 @@ export const UpdateAgentTemplateMutation = graphql(`
       id
       name
       slug
+      runtime
       model
       guardrailId
       blockedTools

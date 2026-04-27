@@ -5,6 +5,10 @@ import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { runWithIdempotency } from "../../../lib/idempotency.js";
 import { validateTemplateBrowser } from "../../../lib/templates/browser-config.js";
 import { validateTemplateSandbox } from "../../../lib/templates/sandbox-config.js";
+import {
+  parseAgentRuntimeInput,
+  withGraphqlAgentRuntime,
+} from "../agents/runtime.js";
 
 export async function createAgentTemplate(
   _parent: any,
@@ -65,6 +69,7 @@ async function createAgentTemplateCore(i: any) {
       description: i.description,
       category: i.category,
       icon: i.icon,
+      runtime: parseAgentRuntimeInput(i.runtime),
       model: i.model,
       guardrail_id: i.guardrailId,
       blocked_tools: blockedTools,
@@ -79,9 +84,8 @@ async function createAgentTemplateCore(i: any) {
 
   // Copy default workspace files to the new template
   try {
-    const { copyDefaultsToTemplate } = await import(
-      "../../../lib/workspace-copy.js"
-    );
+    const { copyDefaultsToTemplate } =
+      await import("../../../lib/workspace-copy.js");
     await copyDefaultsToTemplate(i.tenantId, i.slug);
   } catch (err) {
     console.warn(
@@ -90,5 +94,5 @@ async function createAgentTemplateCore(i: any) {
     );
   }
 
-  return snakeToCamel(row);
+  return withGraphqlAgentRuntime(snakeToCamel(row));
 }

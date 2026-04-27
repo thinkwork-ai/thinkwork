@@ -11,6 +11,7 @@ type AgentTemplate {
   category: String
   icon: String
   source: String!
+  runtime: AgentRuntime!
   model: String
   guardrailId: ID
   blockedTools: AWSJSON
@@ -112,6 +113,7 @@ input CreateAgentTemplateInput {
   description: String
   category: String
   icon: String
+  runtime: AgentRuntime
   model: String
   guardrailId: ID
   blockedTools: AWSJSON
@@ -144,6 +146,7 @@ input UpdateAgentTemplateInput {
   description: String
   category: String
   icon: String
+  runtime: AgentRuntime
   model: String
   guardrailId: ID
   blockedTools: AWSJSON
