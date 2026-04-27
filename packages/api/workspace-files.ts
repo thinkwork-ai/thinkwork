@@ -45,13 +45,6 @@ import {
 } from "@aws-sdk/client-s3";
 import { authenticate, type AuthResult } from "./src/lib/cognito-auth.js";
 import { resolveCallerFromAuth } from "./src/graphql/resolvers/core/resolve-auth-user.js";
-import {
-  composeFile,
-  composeList,
-  invalidateComposerCache,
-  type ComposeContext,
-  type ComposeResult,
-} from "./src/lib/workspace-overlay.js";
 import { isReservedFolderSegment } from "./src/lib/reserved-folder-names.js";
 import { appendRoutingRowIfMissing } from "./src/lib/workspace-map-generator.js";
 import { PINNED_FILES } from "@thinkwork/workspace-defaults";
@@ -60,6 +53,7 @@ import {
   normalizeWorkspacePath,
 } from "./src/lib/pinned-versions.js";
 import { regenerateManifest } from "./src/lib/workspace-manifest.js";
+import { bootstrapAgentWorkspace } from "./src/lib/workspace-bootstrap.js";
 import { deriveAgentSkills } from "./src/lib/derive-agent-skills.js";
 import {
   agents,
@@ -282,6 +276,7 @@ const WRITE_ACTIONS = new Set([
   "create-sub-agent",
   "regenerate-map",
   "update-identity-field",
+  "rematerialize",
 ]);
 
 async function callerIsTenantAdmin(
@@ -317,30 +312,11 @@ async function handleGet(
   deps: HandlerDeps,
   path: string,
 ): Promise<APIGatewayProxyResult> {
-  const { target, tenantId } = deps;
-  if (target.kind === "agent") {
-    const ctx: ComposeContext = { tenantId };
-    try {
-      const result = await composeFile(ctx, target.agentId, path);
-      return json(200, {
-        ok: true,
-        content: result.content,
-        source: result.source,
-        sha256: result.sha256,
-      });
-    } catch (err) {
-      if ((err as { code?: string } | null)?.code === "FILE_NOT_FOUND") {
-        return json(200, {
-          ok: true,
-          content: null,
-          source: "defaults",
-          sha256: "",
-        });
-      }
-      throw err;
-    }
-  }
-
+  const { target } = deps;
+  // Per docs/plans/2026-04-27-003: every target tier (agent / template /
+  // defaults) reads its own prefix directly. No overlay walk, no
+  // template/defaults fallback for agents — the agent prefix is the
+  // source of truth.
   try {
     const resp = await s3.send(
       new GetObjectCommand({ Bucket: bucket(), Key: target.key(path) }),
@@ -349,7 +325,7 @@ async function handleGet(
     return json(200, {
       ok: true,
       content,
-      source: target.kind === "template" ? "template" : "defaults",
+      source: target.kind,
       sha256: "",
     });
   } catch (err) {
@@ -357,7 +333,7 @@ async function handleGet(
       return json(200, {
         ok: true,
         content: null,
-        source: target.kind === "template" ? "template" : "defaults",
+        source: target.kind,
         sha256: "",
       });
     }
@@ -369,40 +345,65 @@ async function handleList(
   deps: HandlerDeps,
   includeContent: boolean,
 ): Promise<APIGatewayProxyResult> {
-  const { target, tenantId } = deps;
-  if (target.kind === "agent") {
-    const ctx: ComposeContext = { tenantId };
-    // Strands container cold-start (Unit 7) sends includeContent=true
-    // and writes each file.content to /tmp/workspace. If we dropped the
-    // flag, the container would receive metadata-only entries and
-    // silently write nothing — the agent boots with no workspace on
-    // disk.
-    const files = (await composeList(ctx, target.agentId, {
-      includeContent,
-    })) as ComposeResult[];
+  const { target } = deps;
+  // Per docs/plans/2026-04-27-003: every tier reads its own prefix
+  // directly. The agent prefix IS the agent's workspace — no overlay,
+  // no fallback, no `agent-override` vs `template` source labels.
+  // Operational artifacts (manifest.json, _defaults_version) are
+  // filtered so callers don't accidentally treat them as workspace
+  // files.
+  const paths = await listPrefix(target.prefix);
+  const visiblePaths = paths.filter(
+    (p) => p !== "manifest.json" && p !== "_defaults_version",
+  );
+
+  if (!includeContent) {
     return json(200, {
       ok: true,
-      files: files.map((f) => ({
-        path: f.path,
-        source: f.source,
-        sha256: f.sha256,
-        overridden:
-          f.source === "agent-override" || f.source === "agent-override-pinned",
-        ...(includeContent ? { content: f.content } : {}),
+      files: visiblePaths.map((p) => ({
+        path: p,
+        source: target.kind,
+        sha256: "",
+        overridden: false,
       })),
     });
   }
 
-  const paths = await listPrefix(target.prefix);
-  return json(200, {
-    ok: true,
-    files: paths.map((p) => ({
-      path: p,
-      source: target.kind === "template" ? "template" : "defaults",
-      sha256: "",
-      overridden: false,
-    })),
-  });
+  // includeContent: fetch each file. The Strands / Pi runtime cold-start
+  // path sends includeContent=true and writes each file.content to its
+  // local /tmp/workspace (per the runtime bootstrap helpers in U6 / U12
+  // of the plan).
+  const files = await Promise.all(
+    visiblePaths.map(async (p) => {
+      try {
+        const resp = await s3.send(
+          new GetObjectCommand({ Bucket: bucket(), Key: target.key(p) }),
+        );
+        const content = (await resp.Body?.transformToString("utf-8")) ?? "";
+        return {
+          path: p,
+          source: target.kind,
+          sha256: "",
+          overridden: false,
+          content,
+        };
+      } catch (err) {
+        // Object disappeared between list and get — return empty
+        // rather than failing the whole batch.
+        if (isNoSuchKey(err)) {
+          return {
+            path: p,
+            source: target.kind,
+            sha256: "",
+            overridden: false,
+            content: "",
+          };
+        }
+        throw err;
+      }
+    }),
+  );
+  return json(200, { ok: true, files });
 }
 
 function isAgentsMdPath(path: string): boolean {
@@ -465,7 +466,6 @@ async function handlePut(
       }),
     );
     await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
-    invalidateComposerCache({ tenantId, agentId: target.agentId });
 
     // U11: AGENTS.md is the canonical authoring surface for routing
     // and skills. After a successful put we re-derive the agent_skills
@@ -511,7 +511,6 @@ async function handlePut(
       ContentType: "text/plain; charset=utf-8",
     }),
   );
-  invalidateComposerCache({ tenantId, templateScope: true });
   return json(200, { ok: true });
 }
 
@@ -541,11 +540,11 @@ async function handleCreateSubAgent(
       error: `\`${cleanSlug}\` is a reserved folder name.`,
     });
   }
-  const ctx: ComposeContext = { tenantId };
-  const composedFiles = await composeList(ctx, target.agentId);
+  // Read directly from the agent prefix — under the materialize-at-
+  // write-time model, the agent prefix is the source of truth.
+  const existingPaths = await listPrefix(target.prefix);
   const existingTopFolders = new Set(
-    composedFiles
-      .map((file) => file.path)
+    existingPaths
       .filter((path) => path.includes("/"))
       .map((path) => path.split("/")[0])
       .filter((segment): segment is string => Boolean(segment)),
@@ -559,12 +558,15 @@ async function handleCreateSubAgent(
 
   let agentsMd = defaultAgentsMd();
   try {
-    const result = await composeFile(ctx, target.agentId, "AGENTS.md");
-    agentsMd = result.content ?? agentsMd;
+    const resp = await s3.send(
+      new GetObjectCommand({
+        Bucket: bucket(),
+        Key: target.key("AGENTS.md"),
+      }),
+    );
+    agentsMd = (await resp.Body?.transformToString("utf-8")) ?? agentsMd;
   } catch (err) {
-    if ((err as { code?: string } | null)?.code !== "FILE_NOT_FOUND") {
-      throw err;
-    }
+    if (!isNoSuchKey(err)) throw err;
   }
 
   const nextAgentsMd = appendRoutingRowIfMissing(agentsMd, {
@@ -592,7 +594,6 @@ async function handleCreateSubAgent(
   );
 
   await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
-  invalidateComposerCache({ tenantId, agentId: target.agentId });
 
   try {
     const result = await deriveAgentSkills({ tenantId }, target.agentId);
@@ -624,9 +625,7 @@ async function handleDelete(
   );
   if (target.kind === "agent") {
     await regenerateManifest(bucket(), target.tenantSlug, target.agentSlug);
-    invalidateComposerCache({ tenantId, agentId: target.agentId });
   } else {
-    invalidateComposerCache({ tenantId, templateScope: true });
   }
   return json(200, { ok: true });
 }
@@ -738,7 +737,6 @@ async function handleUpdateIdentityField(
       ContentType: "text/plain; charset=utf-8",
     }),
   );
-  invalidateComposerCache({ tenantId, agentId: target.agentId });
   return json(200, { ok: true });
 }
 
@@ -753,6 +751,28 @@ async function handleRegenerateMap(
     await import("./src/lib/workspace-map-generator.js");
   await regenerateWorkspaceMap(target.agentId);
   return json(200, { ok: true });
+}
+
+/**
+ * Re-copy the agent's template + defaults into its S3 prefix in
+ * `overwrite` mode. Operator-triggered: used to refresh an agent after
+ * a template edit, or to recover an agent whose prefix drifted.
+ *
+ * Per docs/plans/2026-04-27-003: this replaces the old "accept template
+ * update" pin-bump dance. Operator chooses per-agent; auto-propagation
+ * is intentionally not a thing.
+ */
+async function handleRematerialize(
+  deps: HandlerDeps,
+): Promise<APIGatewayProxyResult> {
+  const { target } = deps;
+  if (target.kind !== "agent") {
+    return json(400, { ok: false, error: "rematerialize requires agentId" });
+  }
+  const result = await bootstrapAgentWorkspace(target.agentId, {
+    mode: "overwrite",
+  });
+  return json(200, { ok: true, ...result });
 }
 
 // ---------------------------------------------------------------------------
@@ -915,6 +935,8 @@ export async function handler(
       }
       case "regenerate-map":
         return await handleRegenerateMap(deps);
+      case "rematerialize":
+        return await handleRematerialize(deps);
       case "update-identity-field": {
         if (!body.field || body.value === undefined) {
           return json(400, {

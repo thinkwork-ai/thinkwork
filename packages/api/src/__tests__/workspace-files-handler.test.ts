@@ -319,31 +319,21 @@ describe("apikey auth (Strands container path, Unit 7)", () => {
       email: null,
       authType: "apikey",
     });
-    // resolveAgentTarget
+    // resolveAgentTarget — new model only does the agent-target lookup;
+    // no separate composer.loadAgentContext walk.
     pushDbRows([agentRow()]);
     pushDbRows([tenantRow()]);
-    // composer.loadAgentContext
-    pushDbRows([agentRow()]);
-    pushDbRows([tenantRow()]);
-    pushDbRows([templateRowTenantA()]);
 
+    // The agent prefix is the source of truth. Bootstrap-time
+    // substitution baked AGENT_NAME into the bytes, so the handler
+    // returns them verbatim.
     s3Mock
       .on(GetObjectCommand, {
         Key: "tenants/acme/agents/marco/workspace/SOUL.md",
       })
-      .rejects(noSuchKey());
-    s3Mock
-      .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/_catalog/exec-assistant/workspace/SOUL.md",
-      })
-      .rejects(noSuchKey());
-    s3Mock
-      .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/_catalog/defaults/workspace/SOUL.md",
-      })
       .resolves({
         Body: {
-          transformToString: async () => "Hi {{AGENT_NAME}}",
+          transformToString: async () => "Hi Marco",
         } as unknown as never,
       });
 
@@ -440,34 +430,21 @@ describe("cross-tenant isolation", () => {
 // ─── 5. Agent GET / LIST via composer ────────────────────────────────────────
 
 describe("agent GET / LIST", () => {
-  it("GET routes through the composer and returns { content, source, sha256 }", async () => {
+  it("GET reads directly from the agent prefix and returns { content, source, sha256 }", async () => {
     authMockImpl.mockResolvedValue(authOk());
     // resolveCallerFromAuth
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
-    // resolveAgentTarget: agents lookup
-    pushDbRows([agentRow()]);
-    // resolveAgentTarget: tenants lookup
-    pushDbRows([tenantRow()]);
-    // composer.loadAgentContext: agents → tenants → templates
+    // resolveAgentTarget: agents lookup + tenants lookup
     pushDbRows([agentRow()]);
     pushDbRows([tenantRow()]);
-    pushDbRows([templateRowTenantA()]);
 
+    // Under materialize-at-write-time, the agent prefix has the
+    // already-substituted bytes. No template / defaults fallback.
     s3Mock
       .on(GetObjectCommand, {
         Key: "tenants/acme/agents/marco/workspace/IDENTITY.md",
       })
-      .rejects(noSuchKey());
-    s3Mock
-      .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/_catalog/exec-assistant/workspace/IDENTITY.md",
-      })
-      .rejects(noSuchKey());
-    s3Mock
-      .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/_catalog/defaults/workspace/IDENTITY.md",
-      })
-      .resolves(body("Your name is {{AGENT_NAME}}."));
+      .resolves(body("Your name is Marco."));
 
     const res = await parse(
       await handler(
@@ -477,7 +454,7 @@ describe("agent GET / LIST", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body.ok).toBe(true);
-    expect(res.body.source).toBe("defaults");
+    expect(res.body.source).toBe("agent");
     expect(res.body.content).toBe("Your name is Marco.");
     expect(typeof res.body.sha256).toBe("string");
   });
@@ -934,26 +911,22 @@ describe("list action includeContent (Strands container cold-start)", () => {
       email: null,
       authType: "apikey",
     });
-    // resolveAgentTarget
+    // resolveAgentTarget — new model only does the agent-target lookup.
     pushDbRows([agentRow()]);
     pushDbRows([tenantRow()]);
-    // composer.loadAgentContext
-    pushDbRows([agentRow()]);
-    pushDbRows([tenantRow()]);
-    pushDbRows([templateRowTenantA()]);
 
-    // composeList includeContent walks S3 for each canonical path. Stub
-    // every attempt to 404 except defaults for SOUL.md so composeList
-    // produces at least one composed entry with content.
-    s3Mock.on(ListObjectsV2Command).resolves({ Contents: [] });
-    s3Mock.on(GetObjectCommand).rejects(noSuchKey());
+    // The agent prefix has the substituted bytes; the runtime cold-start
+    // bootstrap reads them via list+get on this single prefix.
+    s3Mock.on(ListObjectsV2Command).resolves({
+      Contents: [{ Key: "tenants/acme/agents/marco/workspace/SOUL.md" }],
+    });
     s3Mock
       .on(GetObjectCommand, {
-        Key: "tenants/acme/agents/_catalog/defaults/workspace/SOUL.md",
+        Key: "tenants/acme/agents/marco/workspace/SOUL.md",
       })
       .resolves({
         Body: {
-          transformToString: async () => "Hi {{AGENT_NAME}}",
+          transformToString: async () => "Hi Marco",
         } as unknown as never,
       });
 
