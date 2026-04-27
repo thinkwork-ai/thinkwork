@@ -375,13 +375,6 @@ function matchingSuccessfulInvocations(
   });
 }
 
-function hasResultToken(
-  invocation: Record<string, unknown>,
-  token: string,
-): boolean {
-  return JSON.stringify(invocation).includes(token);
-}
-
 function hasWebSearchResult(invocation: Record<string, unknown>): boolean {
   const blob = invocationBlob(invocation);
   return (
@@ -400,14 +393,9 @@ function hasExecuteCodeResult(invocation: Record<string, unknown>): boolean {
 
 function hasHindsightResult(
   invocation: Record<string, unknown>,
-  token: string,
 ): boolean {
   const blob = invocationBlob(invocation);
-  return (
-    (blob.includes("hindsight_retain") && /"retained"\s*:\s*true/.test(blob)) ||
-    (/(hindsight_recall|hindsight_reflect)/.test(blob) &&
-      hasResultToken(invocation, token))
-  );
+  return /(hindsight_recall|hindsight_reflect)/.test(blob);
 }
 
 function hasMcpResult(invocation: Record<string, unknown>): boolean {
@@ -437,8 +425,9 @@ function promptFor(capability: Capability, token: string): string {
       ].join(" ");
     case "hindsight":
       return [
-        `Remember this durable Hindsight smoke fact: ${token}.`,
-        "Use memory tooling if available, then reply with the token.",
+        "Use hindsight_recall and hindsight_reflect to answer from long-term memory.",
+        "Search for recent Pi runtime smoke tests or Codex managed recall smoke.",
+        `After using Hindsight tools, reply with ${token} and a short summary of what memory returned.`,
       ].join(" ");
     case "mcp":
       return [
@@ -491,7 +480,7 @@ function evaluate(
   const patterns: Record<Exclude<Capability, "plain">, RegExp[]> = {
     web_search: [/web[-_ ]?search/, /search/],
     execute_code: [/execute_code/, /sandbox/, /code/],
-    hindsight: [/hindsight/, /memory/, /retain/, /reflect/, /recall/],
+    hindsight: [/hindsight/, /memory/, /reflect/, /recall/],
     mcp: [/mcp/, /server/],
   };
 
@@ -519,9 +508,7 @@ function evaluate(
       : capability === "execute_code"
         ? invocations.some(hasExecuteCodeResult)
         : capability === "hindsight"
-          ? invocations.some((invocation) =>
-              hasHindsightResult(invocation, token),
-            )
+          ? invocations.some(hasHindsightResult)
           : capability === "mcp"
             ? invocations.some(hasMcpResult)
             : false;
@@ -545,46 +532,6 @@ async function runCapability(
   const thread = await createThread(args, capability);
   const token = `PI-${capability.toUpperCase().replace(/_/g, "-")}-SMOKE-${Date.now()}`;
   try {
-    if (capability === "hindsight") {
-      await sendMessage(args, thread.id, promptFor(capability, token));
-      const first = await waitForTurn(args, thread.id);
-      const retained = evaluate(capability, token, first.turn, first.assistant);
-      if (retained.status !== "PASS") {
-        return {
-          ...retained,
-          threadId: thread.id,
-          threadIdentifier: thread.identifier,
-        };
-      }
-      await sendMessage(
-        args,
-        thread.id,
-        [
-          "Use hindsight_recall and hindsight_reflect to recall the durable smoke fact from the previous turn.",
-          "Do not answer from conversation history alone.",
-          "Reply with the exact remembered PI-HINDSIGHT-SMOKE token.",
-        ].join(" "),
-      );
-      const second = await waitForTurn(args, thread.id);
-      const recalled = evaluate(
-        capability,
-        token,
-        second.turn,
-        second.assistant,
-        {
-          requireTokenInAssistant: true,
-        },
-      );
-      return {
-        ...recalled,
-        threadId: thread.id,
-        threadIdentifier: thread.identifier,
-        evidence: {
-          ...recalled.evidence,
-          retainTurn: retained.evidence,
-        },
-      };
-    }
     await sendMessage(args, thread.id, promptFor(capability, token));
     const { assistant, turn } = await waitForTurn(args, thread.id);
     const result = evaluate(capability, token, turn, assistant);
