@@ -66,10 +66,13 @@ import {
   normalizeWorkspaceWakeupPayload,
   type NormalizedWorkspaceWakeupPayload,
 } from "../lib/workspace-events/wakeup-payload.js";
-import {
-  WORKSPACE_TURN_IN_FLIGHT_STATUSES,
-} from "../lib/workspace-events/run-lifecycle.js";
+import { WORKSPACE_TURN_IN_FLIGHT_STATUSES } from "../lib/workspace-events/run-lifecycle.js";
 import type { PromptTemplateContext } from "../lib/orchestration/index.js";
+import {
+  normalizeAgentRuntimeType,
+  resolveRuntimeFunctionName,
+  type AgentRuntimeType,
+} from "../lib/resolve-runtime-function-name.js";
 
 const AGENTCORE_INVOKE_URL = process.env.AGENTCORE_INVOKE_URL || "";
 const AGENTCORE_FUNCTION_NAME = process.env.AGENTCORE_FUNCTION_NAME || "";
@@ -94,11 +97,27 @@ const BROWSER_AUTOMATION_CAPABILITY = "browser_automation";
  */
 async function invokeAgentCore(
   payload: Record<string, unknown>,
+  runtimeType: AgentRuntimeType = "strands",
 ): Promise<{ ok: boolean; status: number; result: Record<string, unknown> }> {
-  if (AGENTCORE_FUNCTION_NAME) {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+  let functionName = AGENTCORE_FUNCTION_NAME;
+  if (runtimeType === "pi") {
+    try {
+      functionName = resolveRuntimeFunctionName(runtimeType);
+    } catch (err) {
+      return {
+        ok: false,
+        status: 503,
+        result: {
+          error: err instanceof Error ? err.message : String(err),
+          runtime_type: runtimeType,
+        },
+      };
+    }
+  }
+
+  if (functionName) {
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({
       region: process.env.AWS_REGION || "us-east-1",
     });
@@ -111,7 +130,7 @@ async function invokeAgentCore(
     });
     const resp = await lambda.send(
       new InvokeCommand({
-        FunctionName: AGENTCORE_FUNCTION_NAME,
+        FunctionName: functionName,
         InvocationType: "RequestResponse",
         Payload: new TextEncoder().encode(lambdaPayload),
       }),
@@ -257,9 +276,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   const [agent] = await db
     .select({
       adapter_type: agents.adapter_type,
+      runtime: agents.runtime,
+      template_runtime: agentTemplates.runtime,
       model: agentTemplates.model,
       name: agents.name,
       slug: agents.slug,
+      system_prompt: agents.system_prompt,
       human_pair_id: agents.human_pair_id,
       runtime_config: agents.runtime_config,
       budget_paused: agents.budget_paused,
@@ -408,7 +430,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     wakeup.source === "workspace_event"
       ? normalizeWorkspaceWakeupPayload(payload)
       : null;
-  if (wakeup.source === "workspace_event" && !workspacePayload?.workspaceRunId) {
+  if (
+    wakeup.source === "workspace_event" &&
+    !workspacePayload?.workspaceRunId
+  ) {
     throw new Error(
       "workspace_event wakeup payload missing required workspaceRunId",
     );
@@ -610,7 +635,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       ? browserCapability.enabled === true
       : templateBrowserEnabled);
 
-  const runtimeType = "strands"; // All agents use Strands (SDK deprecated)
+  const runtimeType = normalizeAgentRuntimeType(
+    agent.runtime ?? agent.template_runtime,
+  );
 
   // 4. Create trigger_run record
   // Extract trigger_id from trigger_detail if present (e.g. "manual_fire:trigger:UUID" or "schedule:job-XXX")
@@ -795,15 +822,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
       if ((childCount?.count || 0) === 0) {
         try {
-          const { parseProcessTemplate } = await import(
-            "../lib/orchestration/process-parser.js"
-          );
-          const { materializeProcess } = await import(
-            "../lib/orchestration/process-materializer.js"
-          );
-          const { S3Client, GetObjectCommand } = await import(
-            "@aws-sdk/client-s3"
-          );
+          const { parseProcessTemplate } =
+            await import("../lib/orchestration/process-parser.js");
+          const { materializeProcess } =
+            await import("../lib/orchestration/process-materializer.js");
+          const { S3Client, GetObjectCommand } =
+            await import("@aws-sdk/client-s3");
 
           const s3 = new S3Client({});
           const skillCfg = skillRows.find(
@@ -1235,6 +1259,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       tenant_slug: tenantSlug || undefined,
       instance_id: agentSlug || undefined,
       agent_name: agent.name,
+      system_prompt: agent.system_prompt || undefined,
       human_name: humanName || undefined,
       workspace_bucket: WORKSPACE_BUCKET || undefined,
       workspace_prefix: workspacePrefix,
@@ -1281,7 +1306,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       }
     }
 
-    const invokeResponse = await invokeAgentCore(agentCorePayload as any);
+    const invokeResponse = await invokeAgentCore(
+      agentCorePayload as any,
+      runtimeType,
+    );
 
     const durationMs = Date.now() - startMs;
 
@@ -1685,35 +1713,40 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           .set({ last_activity_at: new Date() })
           .where(eq(threadTurns.id, run.id));
 
-        const loopResponse = await invokeAgentCore({
-          tenant_id: wakeup.tenant_id,
-          workspace_tenant_id: wakeup.tenant_id,
-          assistant_id: wakeup.agent_id,
-          thread_id: resolvedThreadId,
-          // R15: same invoker as the primary invocation above.
-          user_id: invokerUserId,
-          message: `Continue working. Previous response:\n${loopMessage.slice(0, 2000)}`,
-          use_memory: true,
-          tenant_slug: tenantSlug || undefined,
-          instance_id: agentSlug || undefined,
-          agent_name: agent.name,
-          human_name: humanName || undefined,
-          workspace_bucket: WORKSPACE_BUCKET || undefined,
-          workspace_prefix: workspacePrefix,
-          hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
-          runtime_type: runtimeType,
-          model: agent.model,
-          skills: skillsConfig.length > 0 ? skillsConfig : undefined,
-          knowledge_bases: knowledgeBasesConfig,
-          guardrail_config: guardrailPayload || undefined,
-          mcp_servers: mcpServers,
-          mcp_base_url: MCP_BASE_URL || undefined,
-          mcp_auth_secret: MCP_AUTH_SECRET || undefined,
-          gateway_url: AGENTCORE_GATEWAY_URL || undefined,
-          mcp_configs: mcpConfigs.length > 0 ? mcpConfigs : undefined,
-          session_key: triggerId || `wakeup-${wakeup.source}`,
-          trigger_channel: threadContext?.channel || wakeup.source || undefined,
-        });
+        const loopResponse = await invokeAgentCore(
+          {
+            tenant_id: wakeup.tenant_id,
+            workspace_tenant_id: wakeup.tenant_id,
+            assistant_id: wakeup.agent_id,
+            thread_id: resolvedThreadId,
+            // R15: same invoker as the primary invocation above.
+            user_id: invokerUserId,
+            message: `Continue working. Previous response:\n${loopMessage.slice(0, 2000)}`,
+            use_memory: true,
+            tenant_slug: tenantSlug || undefined,
+            instance_id: agentSlug || undefined,
+            agent_name: agent.name,
+            system_prompt: agent.system_prompt || undefined,
+            human_name: humanName || undefined,
+            workspace_bucket: WORKSPACE_BUCKET || undefined,
+            workspace_prefix: workspacePrefix,
+            hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
+            runtime_type: runtimeType,
+            model: agent.model,
+            skills: skillsConfig.length > 0 ? skillsConfig : undefined,
+            knowledge_bases: knowledgeBasesConfig,
+            guardrail_config: guardrailPayload || undefined,
+            mcp_servers: mcpServers,
+            mcp_base_url: MCP_BASE_URL || undefined,
+            mcp_auth_secret: MCP_AUTH_SECRET || undefined,
+            gateway_url: AGENTCORE_GATEWAY_URL || undefined,
+            mcp_configs: mcpConfigs.length > 0 ? mcpConfigs : undefined,
+            session_key: triggerId || `wakeup-${wakeup.source}`,
+            trigger_channel:
+              threadContext?.channel || wakeup.source || undefined,
+          },
+          runtimeType,
+        );
 
         if (!loopResponse.ok) {
           console.error(
@@ -1877,9 +1910,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     // Send push notification to user devices
     if (runThreadId) {
       try {
-        const { sendTurnCompletedPush } = await import(
-          "../lib/push-notifications.js"
-        );
+        const { sendTurnCompletedPush } =
+          await import("../lib/push-notifications.js");
         await sendTurnCompletedPush({
           threadId: runThreadId,
           tenantId: wakeup.tenant_id,

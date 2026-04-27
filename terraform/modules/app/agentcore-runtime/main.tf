@@ -275,6 +275,15 @@ resource "aws_cloudwatch_log_group" "agentcore" {
   }
 }
 
+resource "aws_cloudwatch_log_group" "agentcore_pi" {
+  name              = "/thinkwork/${var.stage}/agentcore-pi"
+  retention_in_days = 30
+
+  tags = {
+    Name = "thinkwork-${var.stage}-agentcore-pi-logs"
+  }
+}
+
 ################################################################################
 # Lambda Container Image
 ################################################################################
@@ -309,6 +318,37 @@ resource "aws_lambda_function" "agentcore" {
 
   tags = {
     Name = "thinkwork-${var.stage}-agentcore"
+  }
+}
+
+resource "aws_lambda_function" "agentcore_pi" {
+  function_name = "thinkwork-${var.stage}-agentcore-pi"
+  role          = aws_iam_role.agentcore.arn
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.agentcore.repository_url}:pi-latest"
+  timeout       = 900
+  memory_size   = 2048
+
+  environment {
+    variables = {
+      PORT                   = "8080"
+      AWS_LWA_PORT           = "8080"
+      AGENTCORE_MEMORY_ID    = var.agentcore_memory_id
+      AGENTCORE_FILES_BUCKET = var.bucket_name
+      MEMORY_ENGINE          = var.memory_engine
+      MEMORY_RETAIN_FN_NAME  = local.memory_retain_fn_name
+      THINKWORK_API_URL      = var.api_endpoint
+      API_AUTH_SECRET        = var.api_auth_secret
+    }
+  }
+
+  logging_config {
+    log_group  = aws_cloudwatch_log_group.agentcore_pi.name
+    log_format = "Text"
+  }
+
+  tags = {
+    Name = "thinkwork-${var.stage}-agentcore-pi"
   }
 }
 
@@ -377,6 +417,18 @@ resource "aws_lambda_function_event_invoke_config" "agentcore" {
   }
 }
 
+resource "aws_lambda_function_event_invoke_config" "agentcore_pi" {
+  function_name                = aws_lambda_function.agentcore_pi.function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
+
+  destination_config {
+    on_failure {
+      destination = aws_sqs_queue.agentcore_async_dlq.arn
+    }
+  }
+}
+
 ################################################################################
 # Outputs
 ################################################################################
@@ -399,6 +451,16 @@ output "agentcore_function_name" {
 output "agentcore_function_arn" {
   description = "AgentCore Lambda function ARN (for IAM policy on callers)"
   value       = aws_lambda_function.agentcore.arn
+}
+
+output "agentcore_pi_function_name" {
+  description = "Pi AgentCore Lambda function name (for direct SDK invoke)"
+  value       = aws_lambda_function.agentcore_pi.function_name
+}
+
+output "agentcore_pi_function_arn" {
+  description = "Pi AgentCore Lambda function ARN"
+  value       = aws_lambda_function.agentcore_pi.arn
 }
 
 output "agentcore_async_dlq_arn" {

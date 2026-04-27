@@ -53,6 +53,10 @@ import {
 } from "@thinkwork/database-pg/schema";
 import { buildSkillEnvOverrides } from "./oauth-token.js";
 import { buildMcpConfigs } from "./mcp-configs.js";
+import {
+  normalizeAgentRuntimeType,
+  type AgentRuntimeType,
+} from "./resolve-runtime-function-name.js";
 import { loadTenantBuiltinTools } from "../handlers/skills.js";
 import type { TemplateSandboxConfig } from "./sandbox-preflight.js";
 import { validateTemplateBrowser } from "./templates/browser-config.js";
@@ -90,6 +94,7 @@ export interface AgentRuntimeConfig {
   agentId: string;
   agentName: string;
   agentSlug: string;
+  agentSystemPrompt: string | null;
   humanName: string | undefined;
   humanPairId: string | null;
   templateId: string;
@@ -104,7 +109,7 @@ export interface AgentRuntimeConfig {
    */
   guardrailId: string | null;
   guardrailConfig: GuardrailPayload | undefined;
-  runtimeType: "strands";
+  runtimeType: AgentRuntimeType;
   skillsConfig: SkillConfig[];
   knowledgeBasesConfig: KnowledgeBaseConfig[] | undefined;
   mcpConfigs: McpConfig[];
@@ -193,8 +198,10 @@ export async function resolveAgentRuntimeConfig(
       id: agents.id,
       name: agents.name,
       slug: agents.slug,
+      system_prompt: agents.system_prompt,
       human_pair_id: agents.human_pair_id,
       template_id: agents.template_id,
+      runtime: agents.runtime,
     })
     .from(agents)
     .where(
@@ -209,6 +216,7 @@ export async function resolveAgentRuntimeConfig(
       blocked_tools: agentTemplates.blocked_tools,
       sandbox: agentTemplates.sandbox,
       browser: agentTemplates.browser,
+      runtime: agentTemplates.runtime,
     })
     .from(agentTemplates)
     .where(eq(agentTemplates.id, agent.template_id));
@@ -532,6 +540,7 @@ export async function resolveAgentRuntimeConfig(
     agentId: opts.agentId,
     agentName: agent.name,
     agentSlug,
+    agentSystemPrompt: agent.system_prompt,
     humanName,
     humanPairId: agent.human_pair_id,
     templateId: agent.template_id,
@@ -542,7 +551,9 @@ export async function resolveAgentRuntimeConfig(
     browserAutomationEnabled,
     guardrailId,
     guardrailConfig,
-    runtimeType: "strands",
+    runtimeType: normalizeAgentRuntimeType(
+      agent.runtime ?? agentTemplate.runtime,
+    ),
     skillsConfig,
     knowledgeBasesConfig,
     mcpConfigs,

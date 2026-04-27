@@ -27,6 +27,8 @@ jobs:
       lambdas: ${{ steps.filter.outputs.lambdas }}
       container: ${{ steps.filter.outputs.container }}
       container_source_sha: ${{ steps.container-source.outputs.sha }}
+      strands_container_source_sha: ${{ steps.container-source.outputs.strands_sha }}
+      pi_container_source_sha: ${{ steps.container-source.outputs.pi_sha }}
       runtime_container_stale: ${{ steps.runtime-image.outputs.stale }}
       terraform: ${{ steps.filter.outputs.terraform }}
       skills: ${{ steps.filter.outputs.skills }}
@@ -46,6 +48,7 @@ jobs:
               - 'packages/database-pg/**'
             container:
               - 'packages/agentcore-strands/**'
+              - 'packages/agentcore-pi/**'
               - 'packages/agentcore/**'
               # Build config changes count as container changes — a
               # platform or base-image tweak must rebuild even if no
@@ -67,11 +70,17 @@ jobs:
         id: container-source
         run: |
           set -euo pipefail
-          SHA=$(git log -1 --format=%H -- \
+          STRANDS_SHA=$(git log -1 --format=%H -- \
             packages/agentcore-strands \
             packages/agentcore \
             .github/workflows/deploy.yml)
-          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          PI_SHA=$(git log -1 --format=%H -- \
+            packages/agentcore-pi \
+            packages/agentcore \
+            .github/workflows/deploy.yml)
+          echo "sha=$STRANDS_SHA" >> "$GITHUB_OUTPUT"
+          echo "strands_sha=$STRANDS_SHA" >> "$GITHUB_OUTPUT"
+          echo "pi_sha=$PI_SHA" >> "$GITHUB_OUTPUT"
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -83,34 +92,40 @@ jobs:
         id: runtime-image
         run: |
           set -euo pipefail
-          RUNTIME_ID=$(aws ssm get-parameter \
-            --name /thinkwork/${{ env.STAGE }}/agentcore/runtime-id-strands \
-            --region ${{ env.AWS_REGION }} \
-            --query Parameter.Value --output text 2>/dev/null || echo "")
-          if [ -z "$RUNTIME_ID" ] || [ "$RUNTIME_ID" = "None" ]; then
-            echo "stale=false" >> "$GITHUB_OUTPUT"
-            echo "No Strands runtime ID in SSM yet."
-            exit 0
-          fi
-          IMAGE=$(aws bedrock-agentcore-control get-agent-runtime \
-            --region ${{ env.AWS_REGION }} \
-            --agent-runtime-id "$RUNTIME_ID" \
-            --query 'agentRuntimeArtifact.containerConfiguration.containerUri' \
-            --output text 2>/dev/null || echo "")
-          TAG="${IMAGE##*:}"
-          if [[ "$TAG" =~ ([0-9a-f]{40})(-arm64)?$ ]]; then
-            IMAGE_SHA="${BASH_REMATCH[1]}"
-          else
-            IMAGE_SHA=""
-          fi
-          SOURCE_SHA="${{ steps.container-source.outputs.sha }}"
-          if [ -n "$IMAGE_SHA" ] && git cat-file -e "${IMAGE_SHA}^{commit}" 2>/dev/null && git merge-base --is-ancestor "$SOURCE_SHA" "$IMAGE_SHA"; then
-            echo "stale=false" >> "$GITHUB_OUTPUT"
-            echo "AgentCore runtime image $IMAGE_SHA includes latest container source $SOURCE_SHA."
-          else
-            echo "stale=true" >> "$GITHUB_OUTPUT"
-            echo "AgentCore runtime image ${IMAGE_SHA:-unknown} is stale; latest container source is $SOURCE_SHA."
-          fi
+          stale=false
+          check_runtime() {
+            local runtime="$1"
+            local source_sha="$2"
+            local runtime_id
+            runtime_id=$(aws ssm get-parameter \
+              --name /thinkwork/${{ env.STAGE }}/agentcore/runtime-id-${runtime} \
+              --region ${{ env.AWS_REGION }} \
+              --query Parameter.Value --output text 2>/dev/null || echo "")
+            if [ -z "$runtime_id" ] || [ "$runtime_id" = "None" ]; then
+              echo "No ${runtime} runtime ID in SSM yet."
+              return 0
+            fi
+            local image
+            image=$(aws bedrock-agentcore-control get-agent-runtime \
+              --region ${{ env.AWS_REGION }} \
+              --agent-runtime-id "$runtime_id" \
+              --query 'agentRuntimeArtifact.containerConfiguration.containerUri' \
+              --output text 2>/dev/null || echo "")
+            local tag="${image##*:}"
+            local image_sha=""
+            if [[ "$tag" =~ ([0-9a-f]{40}) ]]; then
+              image_sha="${BASH_REMATCH[1]}"
+            fi
+            if [ -n "$image_sha" ] && git cat-file -e "${image_sha}^{commit}" 2>/dev/null && git merge-base --is-ancestor "$source_sha" "$image_sha"; then
+              echo "${runtime} AgentCore runtime image $image_sha includes latest container source $source_sha."
+            else
+              stale=true
+              echo "${runtime} AgentCore runtime image ${image_sha:-unknown} is stale; latest container source is $source_sha."
+            fi
+          }
+          check_runtime strands "${{ steps.container-source.outputs.strands_sha }}"
+          check_runtime pi "${{ steps.container-source.outputs.pi_sha }}"
+          echo "stale=$stale" >> "$GITHUB_OUTPUT"
 
   # ── Build Lambda zips ────────────────────────────────────────────
   # Always build — TF needs the zips to keep API Gateway routes intact.
@@ -197,6 +212,23 @@ jobs:
           cache-to: type=gha,scope=amd64,mode=max
           provenance: false
 
+      - name: Build and push Pi amd64 (Lambda)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/agentcore-pi/agent-container/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}-pi
+            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:pi-latest
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.build_time.outputs.value }}
+          cache-from: type=gha,scope=pi-amd64
+          cache-to: type=gha,scope=pi-amd64,mode=max
+          provenance: false
+
       - name: Build and push arm64 (AgentCore Runtime)
         uses: docker/build-push-action@v6
         with:
@@ -214,6 +246,23 @@ jobs:
           cache-to: type=gha,scope=arm64,mode=max
           provenance: false
 
+      - name: Build and push Pi arm64 (AgentCore Runtime)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/agentcore-pi/agent-container/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}-pi-arm64
+            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:pi-latest-arm64
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.build_time.outputs.value }}
+          cache-from: type=gha,scope=pi-arm64
+          cache-to: type=gha,scope=pi-arm64,mode=max
+          provenance: false
+
       - name: Update Lambda function code (x86_64)
         run: |
           aws lambda update-function-code \
@@ -223,6 +272,22 @@ jobs:
           aws lambda wait function-updated \
             --function-name thinkwork-${{ env.STAGE }}-agentcore \
             --region ${{ env.AWS_REGION }}
+
+      - name: Update Pi Lambda function code (x86_64)
+        run: |
+          if aws lambda get-function \
+            --function-name thinkwork-${{ env.STAGE }}-agentcore-pi \
+            --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
+            aws lambda update-function-code \
+              --function-name thinkwork-${{ env.STAGE }}-agentcore-pi \
+              --image-uri ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}-pi \
+              --region ${{ env.AWS_REGION }}
+            aws lambda wait function-updated \
+              --function-name thinkwork-${{ env.STAGE }}-agentcore-pi \
+              --region ${{ env.AWS_REGION }}
+          else
+            echo "Pi Lambda function not found yet; terraform apply will create it from pi-latest."
+          fi
 
       - name: Update AgentCore Runtime (arm64 variant)
         # Bedrock AgentCore Runtime doesn't repull on its own — it pins
@@ -264,6 +329,67 @@ jobs:
             --protocol-configuration "serverProtocol=$SERVER_PROTOCOL" \
             --agent-runtime-artifact "containerConfiguration={containerUri=$NEW_IMAGE}" \
             --query '{version:agentRuntimeVersion,status:status,image:agentRuntimeArtifact.containerConfiguration.containerUri}' \
+            --output json
+
+      - name: Create or update Pi AgentCore Runtime (arm64 variant)
+        run: |
+          set -euo pipefail
+          RUNTIME_NAME="thinkwork_${{ env.STAGE }}_pi"
+          SSM_NAME="/thinkwork/${{ env.STAGE }}/agentcore/runtime-id-pi"
+          NEW_IMAGE="${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}-pi-arm64"
+          RUNTIME_ID=$(aws ssm get-parameter \
+            --name "$SSM_NAME" \
+            --region ${{ env.AWS_REGION }} \
+            --query Parameter.Value --output text 2>/dev/null || echo "")
+          if [ -z "$RUNTIME_ID" ] || [ "$RUNTIME_ID" = "None" ]; then
+            RUNTIME_ID=$(aws bedrock-agentcore-control list-agent-runtimes \
+              --region ${{ env.AWS_REGION }} \
+              --query "agentRuntimes[?agentRuntimeName=='${RUNTIME_NAME}'].agentRuntimeId | [0]" \
+              --output text 2>/dev/null || echo "")
+          fi
+          ROLE_ARN="arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/thinkwork-${{ env.STAGE }}-agentcore-role"
+          if [ -z "$RUNTIME_ID" ] || [ "$RUNTIME_ID" = "None" ]; then
+            echo "Creating Pi AgentCore runtime $RUNTIME_NAME with $NEW_IMAGE"
+            RUNTIME_ID=$(aws bedrock-agentcore-control create-agent-runtime \
+              --region ${{ env.AWS_REGION }} \
+              --agent-runtime-name "$RUNTIME_NAME" \
+              --agent-runtime-artifact "containerConfiguration={containerUri=$NEW_IMAGE}" \
+              --role-arn "$ROLE_ARN" \
+              --network-configuration "networkMode=PUBLIC" \
+              --protocol-configuration "serverProtocol=HTTP" \
+              --query agentRuntimeId \
+              --output text)
+            aws ssm put-parameter \
+              --name "$SSM_NAME" \
+              --value "$RUNTIME_ID" \
+              --type String \
+              --overwrite \
+              --region ${{ env.AWS_REGION }}
+          else
+            echo "Updating Pi runtime $RUNTIME_ID to $NEW_IMAGE"
+            CURRENT=$(aws bedrock-agentcore-control get-agent-runtime \
+              --region ${{ env.AWS_REGION }} \
+              --agent-runtime-id "$RUNTIME_ID" \
+              --output json)
+            ROLE_ARN=$(echo "$CURRENT" | jq -r '.roleArn // empty')
+            NETWORK_MODE=$(echo "$CURRENT" | jq -r '.networkConfiguration.networkMode // "PUBLIC"')
+            SERVER_PROTOCOL=$(echo "$CURRENT" | jq -r '.protocolConfiguration.serverProtocol // "HTTP"')
+            aws bedrock-agentcore-control update-agent-runtime \
+              --region ${{ env.AWS_REGION }} \
+              --agent-runtime-id "$RUNTIME_ID" \
+              --role-arn "$ROLE_ARN" \
+              --network-configuration "networkMode=$NETWORK_MODE" \
+              --protocol-configuration "serverProtocol=$SERVER_PROTOCOL" \
+              --agent-runtime-artifact "containerConfiguration={containerUri=$NEW_IMAGE}" \
+              --query '{version:agentRuntimeVersion,status:status,image:agentRuntimeArtifact.containerConfiguration.containerUri}' \
+              --output json
+          fi
+
+          echo "Pi AgentCore runtime visible:"
+          aws bedrock-agentcore-control get-agent-runtime \
+            --region ${{ env.AWS_REGION }} \
+            --agent-runtime-id "$RUNTIME_ID" \
+            --query '{id:agentRuntimeId,name:agentRuntimeName,status:status,image:agentRuntimeArtifact.containerConfiguration.containerUri}' \
             --output json
 
   # ── Terraform apply ──────────────────────────────────────────────
@@ -332,6 +458,47 @@ jobs:
             -var "stripe_price_ids_json=${{ vars.STRIPE_PRICE_IDS_JSON || '{}' }}" \
             -var "mcp_custom_domain=${{ vars.MCP_CUSTOM_DOMAIN }}" \
             -var "mcp_custom_domain_ready=${{ vars.MCP_CUSTOM_DOMAIN_READY || 'false' }}"
+
+  # ── Refresh AgentCore runtimes after Terraform ──────────────────
+  # Terraform can update Lambda image tags and runtime-adjacent IAM/env
+  # after the container job has already called UpdateAgentRuntime. Make
+  # the final AgentCore image refresh happen after Terraform so the
+  # deploy summary probes the state users will actually hit.
+  update-agentcore-runtimes:
+    name: Update AgentCore Runtimes
+    needs: [build-container, terraform-apply]
+    if: >-
+      always()
+      && needs.build-container.result == 'success'
+      && needs.terraform-apply.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update Strands and Pi AgentCore runtimes
+        run: |
+          set -euo pipefail
+          REPO="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/thinkwork-${{ env.STAGE }}-agentcore"
+          bash scripts/update-agentcore-runtime-image.sh \
+            --stage ${{ env.STAGE }} \
+            --region ${{ env.AWS_REGION }} \
+            --runtime strands \
+            --image "${REPO}:${{ github.sha }}-arm64" \
+            --wait-seconds 900
+          bash scripts/update-agentcore-runtime-image.sh \
+            --stage ${{ env.STAGE }} \
+            --region ${{ env.AWS_REGION }} \
+            --runtime pi \
+            --image "${REPO}:${{ github.sha }}-pi-arm64" \
+            --account-id ${{ secrets.AWS_ACCOUNT_ID }} \
+            --wait-seconds 900
 
   # ── Database migration drift check ──────────────────────────────
   # Runs `scripts/db-migrate-manual.sh` against the dev DB after
@@ -596,6 +763,7 @@ jobs:
         detect-changes,
         build-container,
         terraform-apply,
+        update-agentcore-runtimes,
         migration-drift-check,
         build-admin,
         build-docs,
@@ -646,7 +814,14 @@ jobs:
           bash scripts/post-deploy.sh \
             --stage ${{ env.STAGE }} \
             --region ${{ env.AWS_REGION }} \
-            --min-source-sha ${{ needs.detect-changes.outputs.container_source_sha }} \
+            --runtime strands \
+            --min-source-sha ${{ needs.detect-changes.outputs.strands_container_source_sha }} \
+            --strict
+          bash scripts/post-deploy.sh \
+            --stage ${{ env.STAGE }} \
+            --region ${{ env.AWS_REGION }} \
+            --runtime pi \
+            --min-source-sha ${{ needs.detect-changes.outputs.pi_container_source_sha }} \
             --strict
 
       - name: Fat-folder composed-tree smoke
@@ -678,6 +853,7 @@ jobs:
           echo "║"
           echo "║ Job Results:"
           echo "║   Terraform Apply:        ${{ needs.terraform-apply.result }}"
+          echo "║   AgentCore Runtime:      ${{ needs.update-agentcore-runtimes.result }}"
           echo "║   Migration Drift Check:  ${{ needs.migration-drift-check.result }}"
           echo "║   Build Admin:            ${{ needs.build-admin.result }}"
           echo "║   Build Docs:             ${{ needs.build-docs.result }}"
