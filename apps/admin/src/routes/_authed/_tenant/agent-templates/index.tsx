@@ -51,7 +51,7 @@ function AgentTemplatesPage() {
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
   const navigate = useNavigate();
-  useBreadcrumbs([{ label: "Agent Templates" }]);
+  useBreadcrumbs([{ label: "Templates" }]);
 
   const [search, setSearch] = useState("");
   const [useDialogOpen, setUseDialogOpen] = useState(false);
@@ -219,7 +219,7 @@ function AgentTemplatesPage() {
         <>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-lg font-semibold">Agent Templates</h1>
+              <h1 className="text-lg font-semibold">Templates</h1>
               <p className="text-xs text-muted-foreground">Define capability and security boundaries for agents</p>
             </div>
             <div className="flex items-center gap-2">

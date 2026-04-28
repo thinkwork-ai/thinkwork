@@ -362,7 +362,7 @@ function MemoryPage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  useBreadcrumbs([{ label: "Memories" }]);
+  useBreadcrumbs([{ label: "Memory" }]);
 
   const mapRecord = (r: any): MemoryRow => ({
     memoryRecordId: r.memoryRecordId,
@@ -493,7 +493,7 @@ function MemoryPage() {
       <div className="shrink-0 px-4 pt-3 pb-3 relative z-10">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="text-lg font-semibold">Memories</h1>
+            <h1 className="text-lg font-semibold">Memory</h1>
             <p className="text-xs text-muted-foreground">{memoryCount}</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">

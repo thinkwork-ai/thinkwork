@@ -146,7 +146,7 @@ function TemplateEditorPage() {
     : "configuration";
 
   useBreadcrumbs([
-    { label: "Agent Templates", href: "/agent-templates" },
+    { label: "Templates", href: "/agent-templates" },
     { label: isNew ? "New Template" : "Edit Template" },
   ]);
 
