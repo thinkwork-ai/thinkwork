@@ -235,7 +235,6 @@ export default function AgentSkillsScreen() {
   const providerLabel = (provider?: string) => {
     if (provider === "google_productivity") return "Google";
     if (provider === "microsoft_365") return "Microsoft";
-    if (provider === "lastmile") return "LastMile";
     return "Provider";
   };
 

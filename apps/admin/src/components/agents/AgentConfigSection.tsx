@@ -526,7 +526,7 @@ export function SkillsPanel({
                       className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer"
                     >
                       <ExternalLink className="h-4 w-4" />
-                      {`Sign in with ${credDialogMeta?.oauth_provider === "google_productivity" ? "Google" : credDialogMeta?.oauth_provider === "microsoft_365" ? "Microsoft" : credDialogMeta?.oauth_provider === "lastmile" ? "LastMile" : "Provider"}`}
+                      {`Sign in with ${credDialogMeta?.oauth_provider === "google_productivity" ? "Google" : credDialogMeta?.oauth_provider === "microsoft_365" ? "Microsoft" : "Provider"}`}
                     </a>
                 )}
                 {oauthConnecting && (

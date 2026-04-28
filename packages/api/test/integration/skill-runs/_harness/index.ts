@@ -137,7 +137,7 @@ export class StubAgentCoreMemory {
 }
 
 // ---------------------------------------------------------------------------
-// Stub task system — lastmile_tasks_list + lastmile_tasks_create semantics
+// Stub task system — task_system_tasks_list + task_system_tasks_create semantics
 // ---------------------------------------------------------------------------
 
 export class StubTaskSystem {

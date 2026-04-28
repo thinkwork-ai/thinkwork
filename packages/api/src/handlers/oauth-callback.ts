@@ -33,9 +33,6 @@ import {
 const { connections, connectProviders, credentials, agentSkills } = schema;
 
 const STAGE = process.env.STAGE || "dev";
-// LastMile still uses env vars (legacy). Google + Microsoft come from Secrets Manager.
-const LASTMILE_CLIENT_ID = process.env.LASTMILE_CLIENT_ID || "";
-const LASTMILE_CLIENT_SECRET = process.env.LASTMILE_CLIENT_SECRET || "";
 const OAUTH_CALLBACK_URL = process.env.OAUTH_CALLBACK_URL || "";
 const REDIRECT_SUCCESS_URL = process.env.REDIRECT_SUCCESS_URL || "https://app.thinkwork.ai/settings/credentials";
 
@@ -110,7 +107,7 @@ export async function handler(
 
 		const config = provider.config as ProviderConfig;
 
-		// Determine client credentials — Google/Microsoft via Secrets Manager, LastMile via env (legacy).
+		// Determine client credentials — managed OAuth providers use Secrets Manager.
 		let clientId = "";
 		let clientSecret = "";
 		if (isSecretsManagerProvider(provider.name)) {
@@ -122,9 +119,6 @@ export async function handler(
 				console.error(`[oauth-callback] Secret fetch failed for ${provider.name}:`, credErr);
 				return redirectForConn(conn, "error", "reason=client_creds_missing");
 			}
-		} else if (provider.name === "lastmile") {
-			clientId = LASTMILE_CLIENT_ID;
-			clientSecret = LASTMILE_CLIENT_SECRET;
 		}
 
 		// 3. Exchange code for tokens
@@ -223,28 +217,6 @@ export async function handler(
 		};
 		delete metadata.oauth_state;
 
-		// LastMile: persist the provider-native user id under
-		// `metadata.lastmile.userId` so inbound webhooks can route events back
-		// to this connection (webhooks carry the native id, not email).
-		if (provider.name === "lastmile") {
-			const lastmileUserId =
-				(providerUserinfo.id as string | undefined) ||
-				(providerUserinfo.user_id as string | undefined) ||
-				(providerUserinfo.userId as string | undefined) ||
-				(providerUserinfo.sub as string | undefined);
-			const existingLastmileMeta = (metadata.lastmile as Record<string, unknown> | undefined) ?? {};
-			metadata.lastmile = {
-				...existingLastmileMeta,
-				...(lastmileUserId ? { userId: lastmileUserId } : {}),
-				...(providerUserinfo.name ? { name: providerUserinfo.name } : {}),
-			};
-			if (!lastmileUserId) {
-				console.warn(
-					`[oauth-callback] LastMile userinfo missing native user id — webhook ingestion will fail for connection ${conn.id}`,
-				);
-			}
-		}
-
 		if (provider.name === "google_productivity") {
 			// Initialize Gmail historyId
 			try {
@@ -300,24 +272,18 @@ export async function handler(
 					: skillId === "google-calendar" ? "GCAL_ACCESS_TOKEN"
 					: skillId === "microsoft-email" ? "MSGRAPH_ACCESS_TOKEN"
 					: skillId === "microsoft-calendar" ? "MSCAL_ACCESS_TOKEN"
-					: skillId === "lastmile-crm" || skillId === "lastmile-tasks" ? "LASTMILE_ACCESS_TOKEN"
 					: "ACCESS_TOKEN";
 				const connectionIdVar = skillId === "google-email" ? "GMAIL_CONNECTION_ID"
 					: skillId === "google-calendar" ? "GCAL_CONNECTION_ID"
 					: skillId === "microsoft-email" ? "MSGRAPH_CONNECTION_ID"
 					: skillId === "microsoft-calendar" ? "MSCAL_CONNECTION_ID"
-					: skillId === "lastmile-crm" || skillId === "lastmile-tasks" ? "LASTMILE_CONNECTION_ID"
 					: `${skillId.toUpperCase().replace(/-/g, "_")}_CONNECTION_ID`;
-
-				// Determine mcpServer for skills that use MCP routing
-				const mcpServer = skillId.startsWith("lastmile-") ? skillId : undefined;
 
 				// Upsert agent_skill — insert if missing, update config if exists
 				const skillConfig: Record<string, unknown> = {
 					connectionId: conn.id,
 					tokenEnvVar,
 					connectionIdVar,
-					...(mcpServer ? { mcpServer } : {}),
 				};
 
 				const [existingSkill] = await db

@@ -10,8 +10,8 @@ interface Server {
 const SERVERS: Server[] = [
   {
     id: "629dcee1-1e14-4b83-9907-cb529e6035f6",
-    slug: "lastmile-routing",
-    name: "LastMile Routing",
+    slug: "routing-server",
+    name: "Routing Server",
   },
   {
     id: "11111111-2222-3333-4444-555555555555",
@@ -46,7 +46,7 @@ describe("isUuid", () => {
     expect(isUuid("629DCEE1-1E14-4B83-9907-CB529E6035F6")).toBe(true);
   });
   it("rejects slugs", () => {
-    expect(isUuid("lastmile-routing")).toBe(false);
+    expect(isUuid("routing-server")).toBe(false);
   });
   it("rejects UUID-looking strings with wrong hyphen positions", () => {
     expect(isUuid("629dcee1-1e14-4b83-9907cb529e6035f6")).toBe(false);
@@ -61,7 +61,7 @@ describe("resolveIdentifier — UUID path", () => {
       identifier: "629dcee1-1e14-4b83-9907-cb529e6035f6",
       list,
     });
-    expect(result.slug).toBe("lastmile-routing");
+    expect(result.slug).toBe("routing-server");
     expect(list).toHaveBeenCalledTimes(1);
   });
 
@@ -82,7 +82,7 @@ describe("resolveIdentifier — alias path", () => {
   it("matches by slug (case-insensitive)", async () => {
     const result = await resolveIdentifier({
       ...adapter,
-      identifier: "Lastmile-Routing",
+      identifier: "Routing-Server",
       list: makeListFn(SERVERS),
     });
     expect(result.id).toBe("629dcee1-1e14-4b83-9907-cb529e6035f6");
@@ -91,7 +91,7 @@ describe("resolveIdentifier — alias path", () => {
   it("matches by human name", async () => {
     const result = await resolveIdentifier({
       ...adapter,
-      identifier: "LastMile Routing",
+      identifier: "Routing Server",
       list: makeListFn(SERVERS),
     });
     expect(result.id).toBe("629dcee1-1e14-4b83-9907-cb529e6035f6");

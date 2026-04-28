@@ -298,7 +298,7 @@ function AddServerDialog({
         <div className="space-y-4">
           <div className="space-y-1">
             <Label htmlFor="mcp-name">Name</Label>
-            <Input id="mcp-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Lastmile CRM" />
+            <Input id="mcp-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. CRM Tools" />
           </div>
           <div className="space-y-1">
             <Label htmlFor="mcp-url">URL</Label>

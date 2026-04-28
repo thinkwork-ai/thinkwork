@@ -14,8 +14,8 @@ allowed-tools:
   - hindsight_reflect
   - crm_account_summary
   - crm_opportunity_summary
-  - lastmile_tasks_list
-  - lastmile_tasks_create
+  - task_system_tasks_list
+  - task_system_tasks_create
 version: 2
 execution: context
 inputs:
@@ -80,7 +80,7 @@ Fire these concurrently:
 
 **Critical (abort tick if either fails):**
 - `crm_account_summary(customer=customerId)` — customer record: industry, size, contract stage, key contacts.
-- `lastmile_tasks_list(subject_kind="customer", subject_id=customerId, trigger="customer-onboarding-reconciler")` — **all existing tasks this reconciler has created before, regardless of status.**
+- `task_system_tasks_list(subject_kind="customer", subject_id=customerId, trigger="customer-onboarding-reconciler")` — **all existing tasks this reconciler has created before, regardless of status.**
 
 **Nice-to-have:**
 - `crm_opportunity_summary(opportunity=opportunityId)` — deal shape, contract amount, close date. Footer note if missing.
@@ -115,7 +115,7 @@ Keep the gap list internal — don't render it as output. It feeds step 4 only.
 For each entry in the gap, call:
 
 ```
-lastmile_tasks_create(
+task_system_tasks_create(
   subject_kind="customer",
   subject_id=customerId,
   trigger="customer-onboarding-reconciler",
@@ -164,9 +164,9 @@ Webhook-triggered runs don't have an invoker thread, so notifications route to t
 
 - `crm_account_summary` — customer-level CRM adapter.
 - `crm_opportunity_summary` — opportunity-level CRM adapter.
-- `lastmile_tasks_list` / `lastmile_tasks_create` — task-system connectors.
+- `task_system_tasks_list` / `task_system_tasks_create` — task-system connectors.
 
-At launch, failures in `crm_account_summary` or `lastmile_tasks_list` abort the tick. Once the connector surface stabilizes, this skill can relax `crm_opportunity_summary` to footer-only (already nice-to-have) and consider relaxing others post-launch.
+At launch, failures in `crm_account_summary` or `task_system_tasks_list` abort the tick. Once the connector surface stabilizes, this skill can relax `crm_opportunity_summary` to footer-only (already nice-to-have) and consider relaxing others post-launch.
 
 ## Naming note
 

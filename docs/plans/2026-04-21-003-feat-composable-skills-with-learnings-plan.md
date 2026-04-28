@@ -1040,7 +1040,7 @@ Writing the reconciler-shape composition + integration test surfaced two things 
 
 ### What deferred (explicitly, not silently)
 
-- **Real CRM / task-system connectors.** The CRM handler accepts a vendor-neutral envelope; the act sub-skill's `lastmile_tasks_*` tools are stubs in the harness. Real connectors are per-tenant adapter work gated on the first design-partner ask.
+- **Real CRM / task-system connectors.** The CRM handler accepts a vendor-neutral envelope; the act sub-skill's `task_system_tasks_*` tools are stubs in the harness. Real connectors are per-tenant adapter work gated on the first design-partner ask.
 - **Tenant admin-fallback notification routing** when `agent_owner` is null. The plan's mitigation path (emit `notification_pending` metric + fall back to tenant-admin channel if configured) is documented but not implemented — no surface consumes the metric yet, and the integration-test harness covers the happy-path agent_owner case.
 - **Signing-secret rotation UI.** v1 is operator-managed via Secrets Manager directly; the webhook README documents the operator procedure. A self-serve rotation flow is Phase 2.
 - **Reconciler cron fallback.** v1 is event-driven only. If production shows long quiet periods where tasks stall, add a scheduled tick as a safety net — trivial in the existing DSL.

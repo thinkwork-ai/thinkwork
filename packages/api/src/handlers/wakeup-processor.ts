@@ -1137,9 +1137,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
   // Build MCP server list from agent's skills + defaults
   // Thinkwork tools route directly via MCP_BASE_URL.
-  // External tools (LastMile etc.) route through Gateway (single-endpoint pattern).
+  // External tools route through Gateway (single-endpoint pattern).
   // Include all MCP servers — the container routes them appropriately:
-  // Thinkwork tools → MCP_BASE_URL, LastMile tools → mcp.lastmile-tei.com
+  // Thinkwork tools → MCP_BASE_URL; external tools use their configured server.
   const mcpServers = ["web-search", "artifacts"];
   for (const skill of skillsConfig) {
     if (skill.mcpServer && !mcpServers.includes(skill.mcpServer)) {

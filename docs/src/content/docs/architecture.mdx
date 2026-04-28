@@ -252,7 +252,7 @@ Selected AgentCore runtime receives thread + assembled context
 ## Data flow: external task webhook
 
 ```
-External system (LastMile, Linear, etc.)
+External system (Linear, Jira, etc.)
     → POST /integrations/<provider>/webhook (API Gateway)
     → Webhooks Lambda
         └─ Resolves webhook by token (target_type=task, provider id)

@@ -428,7 +428,7 @@ Units are dependency-ordered. Units 1–2 unblock everything. Units 3–9 are th
 **Approach:**
 - Same hub-page treatment as Threads/Memory for all three hubs.
 - `connectors/integrations.mdx`: narrative of the Slack/GitHub/Google integrations — what each gives you, how the OAuth dance works, where secrets live (SSM Parameter Store).
-- `connectors/mcp-tools.mdx`: fold in whatever substance lives in the orphan `concepts/mcp-servers.mdx`. Explain MCP Server vs. MCP Tool distinction (the "two surfaces" we already document internally per memory `project_lastmile_two_surfaces.md`).
+- `connectors/mcp-tools.mdx`: fold in whatever substance lives in the orphan `concepts/mcp-servers.mdx`. Explain MCP Server vs. MCP Tool distinction (the "two surfaces" we already document internally per memory `project_mobile-host_two_surfaces.md`).
 - `control/guardrails.mdx`: Bedrock Guardrails integration, how they're applied per-turn, the `guardrailId` field on templates.
 - `control/budgets-usage-and-audit.mdx`: token + cost tracking, budget enforcement, audit-log S3 layout (NDJSON per invocation).
 - `automations/scheduled-and-event-driven.mdx`: EventBridge + AWS Scheduler (scheduled) vs. webhook-triggered (event-driven). Reference the `project_automations_eb_provisioning.md` shape.
@@ -481,7 +481,7 @@ Units are dependency-ordered. Units 1–2 unblock everything. Units 3–9 are th
 
 **Test scenarios:**
 - Happy path: an operator new to the admin app can read `admin/index.mdx` and know which sub-page to start with.
-- Edge case: pages for features in soft-retirement (e.g. anything LastMile-as-task-connector related — retired per `project_lastmile_two_surfaces.md`) are either removed, or honestly labeled as deprecated.
+- Edge case: pages for features in soft-retirement (e.g. anything external provider-as-task-connector related — retired per `project_mobile-host_two_surfaces.md`) are either removed, or honestly labeled as deprecated.
 - Integration: every route referenced resolves under `apps/admin/src/routes/` in the current checkout.
 
 **Verification:**

@@ -27,7 +27,7 @@ This plan was drafted 2026-04-19 when only PR 1–5 of `.prds/compounding-memory
 | Unit 7 — Continuation + health metrics + admin query | ❌ not started | 🟡 **Partially shipped.** Most metrics exist in `wiki_compile_jobs.metrics` (`links_written_*`, `fuzzy_dedupe_merges`, `alias_dedup_merged`, `duplicate_candidates_count`, `deterministic_linking_flag_suppressed`). Missing: `continuation_enqueued`, cluster-related metrics, and the `wikiCompoundingHealth` admin GraphQL query. | PR #285 (metrics) |
 | Unit 8 — Mobile + GraphQL read surfaces | ❌ not started | ❌ **Mostly missing.** `MemoryRecord.wikiPages` declared but not verified end-to-end. `WikiPage.sourceMemoryCount` / `parent` / `children` / `promotedFromSection` / `sectionChildren` field resolvers do not exist. No "Contributes to:" / "Based on N memories" UI on mobile. The mobile graph viewer (#280, #283) is the one surface that shipped. | PRs #280, #283 |
 
-**New finding from Marco recompile validation on 2026-04-20 (not in original plan):** The aggregation applier creates hub `newPage`s without cross-type dedupe. On Marco, recompile produced 3 new `topic` pages — `Portland, Oregon`, `Tokyo`, `LastMile Data Catalog MCP` — whose titles already belonged to active `entity` pages. The R5 canary (`duplicate_candidates_count`) caught this (went from 1 → 4), but the applier itself should have detected the collision and either reused the existing entity or disambiguated the topic title. See Unit 9 below.
+**New finding from Marco recompile validation on 2026-04-20 (not in original plan):** The aggregation applier creates hub `newPage`s without cross-type dedupe. On Marco, recompile produced 3 new `topic` pages — `Portland, Oregon`, `Tokyo`, `external provider Data Catalog MCP` — whose titles already belonged to active `entity` pages. The R5 canary (`duplicate_candidates_count`) caught this (went from 1 → 4), but the applier itself should have detected the collision and either reused the existing entity or disambiguated the topic title. See Unit 9 below.
 
 **Recompile validation numbers (Marco, 284 active pages):**
 
@@ -716,7 +716,7 @@ These split out the "still pending" pieces of the original Unit 3 and capture th
 
 - [ ] **Unit 9: Aggregation-applier cross-type duplicate guard**
 
-**Goal:** Stop the aggregation applier from creating a new `topic` (or any type) page when an active page of ANY type already exists with the same title in scope. Surfaced on 2026-04-20 Marco recompile — `Portland, Oregon`, `Tokyo`, and `LastMile Data Catalog MCP` got fresh `topic` rows despite active `entity` pages at those titles, tripping the R5 canary (`duplicate_candidates_count` 1 → 4).
+**Goal:** Stop the aggregation applier from creating a new `topic` (or any type) page when an active page of ANY type already exists with the same title in scope. Surfaced on 2026-04-20 Marco recompile — `Portland, Oregon`, `Tokyo`, and `external provider Data Catalog MCP` got fresh `topic` rows despite active `entity` pages at those titles, tripping the R5 canary (`duplicate_candidates_count` 1 → 4).
 
 **Requirements:** R1, R6 — scope isolation plus "no surface-form fragmentation".
 

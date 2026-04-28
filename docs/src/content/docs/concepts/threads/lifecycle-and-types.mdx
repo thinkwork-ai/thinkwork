@@ -60,7 +60,7 @@ Every thread has a `channel` column set at creation time. Channel determines the
 | `SLACK` | `SLACK-` | Slack Events API webhook to the Slack connector Lambda | Slack connector posts the response back to the originating channel/thread |
 | `GITHUB` | `GITHUB-` | GitHub webhook (issue, PR, comment) | GitHub connector posts a comment via the GitHub API |
 | `EMAIL` | `EMAIL-` | SES inbound email rule to the email connector | SES sending domain sends a reply; `inReplyTo` and `References` headers are preserved |
-| `TASK` | `TASK-` | External task system webhook (e.g. LastMile task assignment) | Task connector normalizes state changes back to the external system |
+| `TASK` | `TASK-` | External task system webhook | Task connector normalizes state changes back to the external system |
 
 The prefix is part of the thread id — a thread id is `<CHANNEL>-<ULID>`, e.g. `SLACK-01H8QKPZ4X8M4NXDRM9N8KBJ9P`. The prefix isn't a display-only formatter; it's on the row, indexed, and used to pick the outbound response handler.
 

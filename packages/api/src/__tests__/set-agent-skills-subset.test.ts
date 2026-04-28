@@ -263,7 +263,7 @@ describe("setAgentSkills — subset enforcement (Unit 5)", () => {
   });
 
   it("skips subset enforcement for skills that do not opt into permissions_model: operations", async () => {
-    // lastmile-mcp-style skill: free-form permissions jsonb, no subset check.
+    // MCP-style skill: free-form permissions jsonb, no subset check.
     const NON_OPT_IN_MANIFEST = JSON.stringify({
       slug: "some-mcp-skill",
       scripts: [{ name: "anything", default_enabled: true }],

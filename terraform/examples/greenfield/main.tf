@@ -148,22 +148,6 @@ variable "stripe_price_ids_json" {
   default     = "{}"
 }
 
-variable "lastmile_tasks_api_url" {
-  description = <<-EOT
-    OPTIONAL fallback base URL for the LastMile Tasks REST API.
-
-    Prefer setting the URL per-tenant via the admin Connectors → LastMile
-    page (stored in webhooks.config.baseUrl); that value takes precedence.
-    This variable only fires when the per-tenant config is empty, and is
-    mainly useful for single-tenant dev stacks and bootstrap scenarios.
-
-    Leave blank (default) unless you specifically need the env-var
-    fallback. Example: https://api-dev.lastmile-tei.com.
-  EOT
-  type        = string
-  default     = ""
-}
-
 variable "wiki_compile_model_id" {
   description = <<-EOT
     Bedrock model id the wiki-compile Lambda uses for the leaf planner,
@@ -291,10 +275,6 @@ module "thinkwork" {
 
   # SES inbound email subdomain (delegated Route53 subzone).
   ses_inbound_domain = var.ses_inbound_domain
-
-  # LastMile Tasks REST API base URL — feature-flags the outbound task
-  # sync. Empty string keeps mobile-created tasks in sync_status='local'.
-  lastmile_tasks_api_url = var.lastmile_tasks_api_url
 
   # Wiki compile Lambda config. Pinned so unrelated terraform applies
   # don't wipe the Bedrock model or the aggregation flag back to

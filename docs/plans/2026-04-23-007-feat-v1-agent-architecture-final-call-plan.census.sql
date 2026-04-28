@@ -8,6 +8,6 @@ select
   max(created_at)                  as latest_enabled_at
 from agent_skills
 where enabled = true
-  and skill_id in ('account-health-review', 'agent-email-send', 'agent-thread-management', 'artifacts', 'compound', 'customer-onboarding', 'customer-onboarding-reconciler', 'frame', 'gather', 'google-calendar', 'google-email', 'lastmile-tasks', 'package', 'renewal-prep', 'sales-prep', 'sandbox-pilot', 'skill-dispatcher', 'smoke-package-only', 'synthesize', 'web-search', 'workspace-memory')
+  and skill_id in ('account-health-review', 'agent-email-send', 'agent-thread-management', 'artifacts', 'compound', 'customer-onboarding', 'customer-onboarding-reconciler', 'frame', 'gather', 'google-calendar', 'google-email', 'task-system-tasks', 'package', 'renewal-prep', 'sales-prep', 'sandbox-pilot', 'skill-dispatcher', 'smoke-package-only', 'synthesize', 'web-search', 'workspace-memory')
 group by skill_id
 order by enabled_rows desc, skill_id;

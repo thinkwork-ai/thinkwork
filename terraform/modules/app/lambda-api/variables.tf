@@ -246,12 +246,6 @@ variable "job_scheduler_role_arn" {
   default     = ""
 }
 
-variable "lastmile_tasks_api_url" {
-  description = "Base URL of the LastMile Tasks REST API used by the outbound sync path (POST /tasks, GET /workflows, etc). Leave blank to feature-flag the integration off; mobile-created tasks then land in sync_status='local' until the URL is set."
-  type        = string
-  default     = ""
-}
-
 variable "wiki_compile_model_id" {
   description = "Bedrock model id the wiki-compile Lambda uses for the leaf planner, aggregation planner, and section writer. Any Converse-compatible model works. Override per-env if you want to spike a different model without re-deploying code."
   type        = string

@@ -159,8 +159,6 @@ if (isSecretsManagerProvider(provider.name)) {
   } catch (err) {
     // Handle missing/malformed secret explicitly — don't let it fall through silently.
   }
-} else if (provider.name === "lastmile") {
-  // Legacy env-var path kept until opportunistic migration.
 }
 ```
 
