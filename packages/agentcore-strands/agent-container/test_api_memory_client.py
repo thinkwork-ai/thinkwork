@@ -1,8 +1,7 @@
 """Unit tests for api_memory_client.
 
-Covers retain_full_thread (U2), retain_daily (U7 — Event invocation type),
-and the deprecated retain_turn_pair which is kept until U3's call-site
-swap lands.
+Covers retain_full_thread (U2) and retain_daily (U7 — Event invocation
+type). retain_turn_pair was deleted in U3's cutover.
 """
 
 from __future__ import annotations
@@ -220,22 +219,3 @@ def test_retain_daily_invoke_raises_returns_false(monkeypatch):
 	assert ok is False
 
 
-# ---------------------------------------------------------------------------
-# retain_turn_pair (deprecated; kept for U3 cutover safety)
-# ---------------------------------------------------------------------------
-
-
-def test_retain_turn_pair_still_works_for_pre_u3_cutover(monkeypatch):
-	monkeypatch.setenv("MEMORY_RETAIN_FN_NAME", "memory-retain-dev")
-	monkeypatch.setenv("TENANT_ID", "tenant-A")
-	monkeypatch.setenv("_ASSISTANT_ID", "agent-X")
-	stub = _stub_client(monkeypatch)
-
-	ok = api_memory_client.retain_turn_pair(
-		thread_id="t-1",
-		user_message="hi",
-		assistant_response="hello",
-	)
-	assert ok is True
-	assert stub.invoke.call_count == 1
-	assert stub.invoke.call_args.kwargs["InvocationType"] == "Event"

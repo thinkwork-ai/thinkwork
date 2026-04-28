@@ -31,69 +31,6 @@ def _get_client():
 	return _lambda_client
 
 
-def retain_turn_pair(
-	thread_id: str,
-	user_message: str,
-	assistant_response: str,
-	tenant_id: Optional[str] = None,
-	agent_id: Optional[str] = None,
-) -> bool:
-	"""DEPRECATED: per-message retain — replaced by ``retain_full_thread``.
-
-	Kept until U3's call-site swap lands so the chat handler can fall back
-	if the new path is rolled back. Will be deleted once U3 ships and the
-	dev smoke confirms the new shape.
-
-	Returns False on any failure; never raises.
-	"""
-	fn_name = os.environ.get("MEMORY_RETAIN_FN_NAME", "")
-	if not fn_name:
-		logger.debug("retain_turn_pair skipped: MEMORY_RETAIN_FN_NAME unset")
-		return False
-	if not thread_id:
-		return False
-
-	tenant = tenant_id or os.environ.get("TENANT_ID") or os.environ.get("_MCP_TENANT_ID") or ""
-	agent = agent_id or os.environ.get("_ASSISTANT_ID", "")
-	if not tenant or not agent:
-		logger.debug("retain_turn_pair skipped: tenant/agent unset")
-		return False
-
-	messages: List[dict] = []
-	if user_message and user_message.strip():
-		messages.append({"role": "user", "content": user_message})
-	if assistant_response and assistant_response.strip():
-		messages.append({"role": "assistant", "content": assistant_response})
-	if not messages:
-		return False
-
-	payload = {
-		"tenantId": tenant,
-		"agentId": agent,
-		"threadId": thread_id,
-		"messages": messages,
-	}
-
-	try:
-		client = _get_client()
-		client.invoke(
-			FunctionName=fn_name,
-			InvocationType="Event",
-			Payload=json.dumps(payload).encode("utf-8"),
-		)
-		logger.info(
-			"api_memory_client.retain_turn_pair thread=%s agent=%s user_len=%d asst_len=%d",
-			thread_id,
-			agent,
-			len(user_message or ""),
-			len(assistant_response or ""),
-		)
-		return True
-	except Exception as e:
-		logger.warning("api_memory_client.retain_turn_pair failed thread=%s: %s", thread_id, e)
-		return False
-
-
 def retain_full_thread(
 	thread_id: str,
 	transcript: Sequence[dict],
