@@ -14,11 +14,12 @@ supersedes:
 
 ## Overview
 
-Three coordinated changes to how the AgentCore runtimes (Strands + Pi) feed Hindsight:
+Two coordinated changes to how the AgentCore runtimes (Strands + Pi) feed Hindsight:
 
 1. **Per-turn full-transcript upsert (Strands + Pi)** — replace today's per-message fragmented retain (Strands) and absent auto-retain (Pi) with one full-transcript upsert per root turn, keyed by `document_id=threadId` with `update_mode=replace`. Both runtimes converge on the same `memory-retain` Lambda path so the DB-fetch-and-merge logic is shared. Sub-agent transcripts are not auto-retained.
-2. **Daily workspace memory channel** — agent writes `memory/daily/YYYY-MM-DD.md` via the existing `write_memory` tool; runtime rolls over on the first turn of a new date and posts the prior day's file to Hindsight as a separate document. Strands-only for v1; Pi parity deferred.
-3. **Strands runtime tool cleanup** — replace `hindsight_usage_capture.install()` module-level monkey-patches with custom `@tool` wrappers that capture Bedrock usage in-body via `_push(...)`. Keep `install_loop_fix()` as-is (vendor SDK bug workaround on a separate axis). Pi already has no equivalent monkey-patches; structurally already in the cleaned-up state.
+2. **Strands runtime tool cleanup** — replace `hindsight_usage_capture.install()` module-level monkey-patches with custom `@tool` wrappers that capture Bedrock usage in-body via `_push(...)`. Keep `install_loop_fix()` as-is (vendor SDK bug workaround on a separate axis). Pi already has no equivalent monkey-patches; structurally already in the cleaned-up state.
+
+**Daily workspace memory channel split to a follow-up plan** (Q0 resolved 2026-04-28). The original Phase B (`memory/daily/YYYY-MM-DD.md` convention + activity-triggered rollover) is preserved as design notes in `## Implementation Units` for the follow-up plan to absorb, but does NOT ship in this PR. Premise weakness ("agent has no convention" rather than evidenced incident) and three substantive open questions on the design (write-path bifurcation, timezone plumbing, multi-day rollover semantics) made shipping it in v1 the wrong call.
 
 Plus a one-shot wipe-and-reload migration that drops the legacy fragmented Hindsight items so the new shape is the only shape after deployment.
 
@@ -53,11 +54,11 @@ All R-IDs reference `docs/brainstorms/2026-04-27-hindsight-ingest-and-runtime-cl
 - **R6.** Sub-agent invocations do not trigger thread upsert — addressed by U3 (call site stays in `do_POST`, not `_execute_agent_turn`).
 - **R7.** Upsert failure does not block the agent response — addressed by U2 (fire-and-forget Event invoke), U3.
 - **R8.** Meaningful `context` literals + metadata — addressed by U1 (adapter already does this).
-- **R9.** `memory/daily/YYYY-MM-DD.md` convention via `write_memory` — addressed by U4, U5.
-- **R10.** "Daily working memory" `MEMORY_GUIDE.md` section — addressed by U5.
-- **R11.** Activity-triggered rollover hook against `memory/daily/latest.txt` — addressed by U6, U7.
-- **R12.** Idempotent rollover (replace-in-place, empty no-op, crash-safe) — addressed by U6, U7.
-- **R13.** User-scoped S3 prefix for `memory/daily/*` — addressed by U4 (write path) and U6 (rollover read path).
+- **R9.** `memory/daily/YYYY-MM-DD.md` convention via `write_memory` — **deferred to follow-up plan** (Q0 split decision 2026-04-28). U4/U5 design preserved below for the follow-up to absorb.
+- **R10.** "Daily working memory" `MEMORY_GUIDE.md` section — **deferred to follow-up plan**.
+- **R11.** Activity-triggered rollover hook against `memory/daily/latest.txt` — **deferred to follow-up plan**. U6/U7 design preserved below.
+- **R12.** Idempotent rollover (replace-in-place, empty no-op, crash-safe) — **deferred to follow-up plan**.
+- **R13.** User-scoped S3 prefix for `memory/daily/*` — **deferred to follow-up plan**.
 - **R14.** Bedrock usage from agent-driven retain via Strands hooks (not module-level patch) — addressed by U8 with the in-body wrapper variant chosen over `AfterToolInvocationEvent`. See Key Technical Decisions.
 - **R15.** Bedrock usage from runtime-driven retain captured at the call site — addressed by U2 / U3 (Lambda owns the cost-events sink as today; no per-turn-upsert usage rises into the runtime).
 - **R16.** `hindsight_usage` shape `[{phase, model, input_tokens, output_tokens}]` unchanged — addressed by U8, U9, U10.
@@ -96,6 +97,7 @@ All R-IDs reference `docs/brainstorms/2026-04-27-hindsight-ingest-and-runtime-cl
 
 ### Deferred to Follow-Up Work
 
+- **Daily workspace memory channel** (Phase B — U4, U5, U6, U7) — split to a follow-up plan per Q0 decision on 2026-04-28. Premise weakness (no evidenced incident driving the channel) plus three substantive open design questions (write-path bifurcation between `write_memory`'s API-composer path vs a new direct-S3-PUT path; runtime timezone plumbing for date-boundary computation; single-prior-date vs multi-day-walk rollover semantics for inactive users) made it wrong to ship in v1. The U4/U5/U6/U7 design notes below are preserved verbatim as the starting point for the follow-up; the follow-up plan should resolve the three questions before re-activating these units. R9–R13 carry forward to the follow-up.
 - **Broader user-scope schema cascade** (originally 4/24 plan U1–U7 + U9a): Postgres migration to flip wiki FKs to `users`, dual-key `threads` with `user_id`, add `users.wiki_compile_external_enabled`; GraphQL schema + resolver + clients to user-scope; mobile + admin UI flip; in-container Hindsight bank unification. **Why deferred:** Hindsight bank derivation is already user-scoped via the existing legacy fallback, so the ingest reshape works without it. **What changes for the 4/24 plan:** rather than supersede in full, this plan supersedes only the daily-memory + retain-reshape + wipe pieces. The 4/24 plan's frontmatter flips to `status: paused` (not `superseded`) with a re-evaluation trigger: "revisit when `agents.human_pair_id` fallback is the next refactor target, or when `wiki_*` tables need a multi-agent overhaul, or by 2026-Q3, whichever comes first." This prevents the schema cascade from silently dying. **Concretely:** edit the 4/24 plan's frontmatter to `status: paused`, add a `paused-by-plan: docs/plans/2026-04-27-002-feat-hindsight-ingest-and-runtime-cleanup-plan.md` field, and add the trigger note at the top.
 - **Thread deletion lifecycle in Hindsight** (new — surfaced by adversarial review): Today's per-message Hindsight items had no deletion hook from `threads` deletion (user-initiated delete, retention policy, GDPR request). After this plan ships, a 50-turn thread document hangs around in Hindsight indefinitely keyed by `threadId`. Out of scope here; explicitly listed as a follow-up. Triggered by the first GDPR/retention-policy request that needs Hindsight cleanup.
 - **`hindsight-client` SDK upgrade to retire `install_loop_fix()`.** Separate dependency-upgrade PR (origin R17).
@@ -181,11 +183,15 @@ All R-IDs reference `docs/brainstorms/2026-04-27-hindsight-ingest-and-runtime-cl
 - Whether `retain_turn_pair` is deleted or kept as deprecated (U2). Default: delete after U3 swap is verified.
 - Whether `messages_history`'s 30-turn cap in `chat-agent-invoke.ts` should be lifted or left as-is. Default: leave; the Lambda's full-thread fetch (U1) provides the canonical transcript independently of `messages_history`.
 
-### From 2026-04-28 review — U11 Hindsight delete API surface
+### From 2026-04-28 review — U11 Hindsight delete API surface — RESOLVED 2026-04-28
 
-- **U11 must pick HTTP `/documents` API vs raw SQL on `hindsight.memory_units`.** "Hindsight delete-document API" is referenced in the plan's External References for retain but not for delete; no caller exists in this codebase today. The only existing Hindsight delete pattern in the repo is raw SQL at `packages/api/src/lib/memory/adapters/hindsight-adapter.ts:332-336`. Confirm with the Hindsight platform team before writing the wipe script; the batched-HTTP-with-30s-pause language only makes sense for HTTP. If the answer is SQL, restructure the batched-delete to per-batch transaction commits (not HTTP rate-limiting) and adjust the test scenarios accordingly.
+**Resolution:** Q4 picked **raw SQL on `hindsight.memory_units`**. The U11 design has been updated in place: count phase first, per-bank batched DELETE in transactions (no HTTP rate-limit pause needed), follows the existing pattern at `hindsight-adapter.ts:332-336`. The HTTP `/documents` API path was rejected because no caller exists in the codebase and platform-team confirmation hadn't happened.
 
-### From 2026-04-28 review — Daily memory channel re-evaluation
+### From 2026-04-28 review — Daily memory channel re-evaluation — RESOLVED 2026-04-28
+
+**Resolution:** Q0 picked **split to a follow-up plan**. U4–U7 are deferred; the design notes are preserved in-place in `## Implementation Units → ### Phase B` (with `[DEFERRED]` markers on each unit header) for the follow-up plan to absorb. Before re-activating these units, the follow-up must answer the three open design questions captured in the Phase B header note (write-path bifurcation, timezone plumbing, multi-day rollover semantics). R9–R13 carry forward to the follow-up.
+
+### Original questions (preserved for the follow-up plan to absorb)
 
 Review surfaced that Phase B's premise is hypothetical: the brief states "the agent has no convention for distilling 'what mattered today'" without citing an incident, eval failure, or operator complaint, while Phase A's broken behaviors are file:line evidenced. Three Phase B implementation gaps were also flagged whose concerns dissolve if Phase B is dropped or restructured. Decide before starting Phase B work:
 
@@ -462,9 +468,11 @@ The runtime call site (`do_POST` in `server.py`, line 2185) stays where it is. S
 
 ---
 
-### Phase B — Daily workspace memory channel
+### Phase B — Daily workspace memory channel — DEFERRED TO FOLLOW-UP PLAN (2026-04-28)
 
-- U4. **Extend `write_memory` allowlist + user-scoped routing for `memory/daily/*`**
+> **Status: not shipping in this PR.** Phase B was split to a follow-up plan per the Q0 decision during the 2026-04-28 ce-doc-review walk-through. The four units below (U4, U5, U6, U7) are preserved as design notes for the follow-up plan to absorb. Before re-activating these units, the follow-up must resolve: (a) U4 write-path bifurcation between the existing `write_memory` API-composer flow (PUT `/api/workspaces/files`) and a new direct-S3-PUT flow for user-scoped daily files; (b) U6 runtime timezone plumbing (extend invoke payload, new endpoint, or always-UTC); (c) U6 multi-day rollover semantics (walk all dates between `latest.txt` and today, or single-prior-date with intermediate-day content not promoted). The original Phase B PR boundary collapses into "do not ship".
+
+- U4. **[DEFERRED] Extend `write_memory` allowlist + user-scoped routing for `memory/daily/*`**
 
 **Goal:** Permit the agent to write `memory/daily/YYYY-MM-DD.md` via the existing `write_memory` tool. Route `memory/daily/*` writes to the user-scoped S3 prefix (mirroring the knowledge-pack pattern), keeping other `memory/*.md` writes agent-scoped as today.
 
@@ -502,7 +510,7 @@ The runtime call site (`do_POST` in `server.py`, line 2185) stays where it is. S
 
 ---
 
-- U5. **`MEMORY_GUIDE.md` "Daily working memory" section + TS parity**
+- U5. **[DEFERRED] `MEMORY_GUIDE.md` "Daily working memory" section + TS parity**
 
 **Goal:** Add a new "Daily working memory" section to `MEMORY_GUIDE.md` instructing the agent when to write to `memory/daily/<date>.md` and what NOT to capture there (no per-turn journaling). Update the inlined TS constant to match.
 
@@ -534,7 +542,7 @@ The runtime call site (`do_POST` in `server.py`, line 2185) stays where it is. S
 
 ---
 
-- U6. **Daily-memory rollover hook in Strands runtime**
+- U6. **[DEFERRED] Daily-memory rollover hook in Strands runtime**
 
 **Goal:** On the first turn of a new calendar date (per user timezone), read the prior day's `memory/daily/YYYY-MM-DD.md`, post it to Hindsight via `retain_daily`, and advance `memory/daily/latest.txt`.
 
@@ -580,7 +588,9 @@ The runtime call site (`do_POST` in `server.py`, line 2185) stays where it is. S
 
 ---
 
-- U7. **`retain_daily` Strands client method (or surface existing)**
+- U7. **[DEFERRED] `retain_daily` Strands client method (or surface existing)**
+
+> *Note: the `retain_daily` flip from `RequestResponse` to `Event` invocation that U7 specifies was already landed in U2 (commit `c8882583`). The remaining `retain_daily` work — verifying it from the rollover hook — depends on U6 and is part of the deferred Phase B scope.*
 
 **Goal:** Ensure `api_memory_client.py` exposes `retain_daily(date, content, tenant_id, user_id)` that invokes `memory-retain` with `kind:"daily"` payload. Existing function may already meet this need; verify, adjust if needed.
 
@@ -728,50 +738,51 @@ The runtime call site (`do_POST` in `server.py`, line 2185) stays where it is. S
 
 - U11. **`scripts/wipe-external-memory-stores.ts` for legacy fragmented Hindsight items**
 
-**Goal:** One-shot script that iterates all `bank_id` matching `user_*`, lists Hindsight documents, and deletes those that lack `document_id` or carry the legacy `context="thread_turn"` literal. Runs once during deploy of this plan.
+**Goal:** One-shot script that runs raw SQL on `hindsight.memory_units` to delete legacy fragmented memory units — those whose `bank_id` matches `user_%` AND (`metadata->>'document_id' IS NULL` OR `context = 'thread_turn'`). Runs once during deploy of this plan.
+
+**Storage layer (Q4 resolution 2026-04-28):** raw SQL on `hindsight.memory_units`, NOT the Hindsight HTTP `/documents` API. The HTTP path was deferred during the 2026-04-28 ce-doc-review walk-through because no caller exists in the codebase today and the existence/auth of a delete endpoint was unverified. The SQL path is consistent with the existing pattern at `packages/api/src/lib/memory/adapters/hindsight-adapter.ts:332-336` which already runs raw SQL against `hindsight.memory_units`.
 
 **Requirements:** R19.
 
-**Dependencies:** Phase A and B units shipped (U1–U7) so the new shape is the ONLY shape ingested after wipe.
+**Dependencies:** Phase A units shipped (U1, U2, U3, U2-Pi, U3-Pi) so the new shape is the ONLY shape ingested after wipe. Phase B units (U4–U7) are deferred and do NOT block U11; daily-memory items don't exist in this plan's deploy so the wipe filter only targets thread fragments.
 
 **Files:**
 - Create: `packages/api/scripts/wipe-external-memory-stores.ts`
-- Test: `packages/api/scripts/wipe-external-memory-stores.test.ts` (mock-based — Hindsight HTTP responses faked)
+- Test: `packages/api/scripts/wipe-external-memory-stores.test.ts` (mock-based — Postgres `db.execute` faked via `vi.hoisted` per existing pattern)
 
 **Approach:**
-- CLI args: `--stage <dev|prod>`, `--dry-run` (default true), `--user <userId>` (optional scope; default all), `--surveyed-on <YYYY-MM-DD>` (REQUIRED for live run).
-- **`--surveyed-on` enforcement:** If `--dry-run=false`, the script rejects (exit non-zero, error to stderr) when `--surveyed-on` is missing OR the supplied date is more than 7 days old. This codifies the pre-flight consumer survey as a runtime contract, not a docstring (per `docs/solutions/workflow-issues/survey-before-applying-parent-plan-destructive-work-2026-04-24.md`). Future operators running the script in a new stage MUST re-survey and pass a fresh date.
+- CLI args: `--stage <dev|prod>`, `--dry-run` (default true), `--user <userId>` (optional scope; default all `user_%` banks), `--tenant <tenantId>` (optional scope; default all tenants — see U11 security finding from doc-review), `--surveyed-on <YYYY-MM-DD>` (REQUIRED for live run).
+- **`--surveyed-on` enforcement:** If `--dry-run=false`, the script rejects (exit non-zero, error to stderr) when `--surveyed-on` is missing OR the supplied date is more than 7 days old. Codifies the pre-flight consumer survey as a runtime contract, not a docstring (per `docs/solutions/workflow-issues/survey-before-applying-parent-plan-destructive-work-2026-04-24.md`).
 - **Pre-flight consumer survey:** document the surveyed Hindsight readers (recall callsites, eval harness, mobile/admin renderers, wiki-compile) in the script's docstring AND in the PR body. Confirm none filter by the legacy `context="thread_turn"` literal.
-- For each in-scope `bank_id`:
-  1. Fetch documents via Hindsight `/documents` API.
-  2. Filter: items where `document_id` is null OR `context == "thread_turn"`.
-  3. If `--dry-run`: print summary `bank=<bank> would_delete=<n>`.
-  4. Else: **delete in batches of ≤100 per batch with a 30-second pause + per-batch summary log between batches. Abort the run (non-zero exit) if >1% of attempted deletes in any batch return non-2xx.**
-- Per-bank summary log (count, sample IDs prefix-truncated). Never log full content.
-- Return non-zero exit on any HTTP error (fails the deploy step).
-- **Recovery story:** Hindsight ECS holds its own backups; verify with platform team before live run. A consumer regression triggers Hindsight backup restore + targeted re-ingest from `messages` table (existing data flow once U1–U10 are live).
+- **SQL execution model:**
+  1. **Count phase (always runs first, even on live run).** `SELECT COUNT(*) FROM hindsight.memory_units WHERE bank_id LIKE 'user_%' [AND bank_id = $user_filter] AND (metadata->>'document_id' IS NULL OR context = 'thread_turn')`. Print summary; abort with exit non-zero if the count is implausibly large (>1M default, override via `--max-deletes`).
+  2. **Per-bank batched DELETE in transactions.** Iterate distinct affected `bank_id`s. For each bank, run `BEGIN; DELETE FROM hindsight.memory_units WHERE bank_id = $bank AND (metadata->>'document_id' IS NULL OR context = 'thread_turn') AND id IN (SELECT id FROM ... LIMIT 1000) RETURNING id; COMMIT;` until no rows remain. Each transaction is atomic — the DB rolls back automatically on error. No artificial pause between batches (SQL doesn't need rate limiting; the `LIMIT` keeps lock duration bounded).
+  3. **Failure handling.** Any SQL error aborts the run (non-zero exit). The transaction model means partial state is impossible inside a batch — the only failure mode is "N completed batches, then aborted before batch N+1", which is safe to re-run since the filter only matches legacy items.
+- Per-bank summary log (count deleted, sample IDs prefix-truncated). Never log content/text columns.
+- Return non-zero exit on any SQL error (fails the deploy step).
+- **Recovery story:** Hindsight ECS holds its own Postgres backups; verify with platform team before live run. A consumer regression triggers Postgres backup restore + targeted re-ingest from `messages` table (existing data flow once U1–U3 + U2-Pi/U3-Pi are live). The wipe filter targets only legacy-shape items, so re-ingest of the same `threadId` regenerates a fresh document under `update_mode=replace`.
 
 **Patterns to follow:**
+- `packages/api/src/lib/memory/adapters/hindsight-adapter.ts:332-336` — existing raw-SQL `hindsight.memory_units` pattern.
 - Existing `packages/api/scripts/*.ts` shape (CLI parsing, env resolution).
 - `ce-data-migration-expert` style: dry-run by default, explicit confirmation for destructive run.
 
 **Test scenarios:**
-- Happy path (dry-run): mock Hindsight returns 5 banks with mixed legacy + new items → script prints expected delete counts; no DELETE calls fired. `--surveyed-on` not required for dry-run.
-- Happy path (live, with valid survey): `--dry-run=false --surveyed-on 2026-04-25` (today is 2026-04-27) → expected DELETEs fired in batches of 100 with 30s pause between.
+- Happy path (dry-run): mock `db.execute` returns COUNT=42 for the legacy filter → script prints `would_delete=42`; no DELETE issued. `--surveyed-on` not required for dry-run.
+- Happy path (live with valid survey): `--dry-run=false --surveyed-on 2026-04-26` (today is 2026-04-28) → DELETE issued in batches; summary reports total rows deleted.
 - **Survey enforcement: missing flag** — `--dry-run=false` without `--surveyed-on` → exit non-zero with stderr error.
-- **Survey enforcement: stale date** — `--dry-run=false --surveyed-on 2026-04-15` (12 days old) → exit non-zero with stderr error.
-- **Batch abort threshold:** mock returns 200 documents to delete; 5 of them 5xx → script aborts after first batch (5/100 = 5% > 1%) with exit non-zero; remaining 100 not attempted.
-- **Batch happy path with isolated failures:** mock returns 200 documents; 1 of them 5xx (1/100 = 1%, exactly at threshold) → script continues; final summary shows 199 deleted, 1 failed.
-- **Pause between batches:** test asserts ≥30s between batch invocations (use a fake clock).
-- Edge case: bank with zero legacy items → no DELETEs, summary `would_delete=0`.
-- Edge case: empty bank list → script exits 0.
-- Error path: Hindsight 5xx on list → exit non-zero, partial work surfaces in logs.
-- Error path: DELETE returns 404 → continue (idempotent re-runs), log info.
-- Scoped run: `--user <userId>` → only that user's bank touched.
+- **Survey enforcement: stale date** — `--dry-run=false --surveyed-on 2026-04-15` (13 days old) → exit non-zero with stderr error.
+- **Max-deletes safeguard** — count returns 2,000,000 on dry-run → script aborts with stderr "implausibly large; pass --max-deletes to override".
+- **Per-bank batching** — mock returns 2,500 rows for one bank → script issues 3 DELETE batches (1000 + 1000 + 500); each in its own transaction.
+- Edge case: bank with zero legacy items in count → no DELETE issued, summary `would_delete=0`.
+- Edge case: empty bank list → script exits 0 with summary `bank_count=0`.
+- Error path: SQL error mid-run → exit non-zero, partial-work counts surface in logs (the completed batches stay deleted; the failed batch was rolled back inside its own transaction).
+- Scoped run: `--user <userId>` → WHERE clause includes `bank_id = 'user_<userId>'` (exact match), not `LIKE`.
+- Scoped run: `--tenant <tenantId>` → joins against `agents` / `users` to filter to that tenant's user banks (mirrors the security finding from doc-review on tenant-scope predicate).
 
 **Verification:**
 - `pnpm --filter @thinkwork/api test wipe-external-memory-stores` passes.
-- *Manual dev rehearsal:* dry-run against dev → numbers match expected by-eye inspection of Hindsight data; live run wipes legacy items; subsequent traffic creates only new-shape documents.
+- *Manual dev rehearsal:* dry-run against dev → COUNT matches by-eye inspection of `hindsight.memory_units`; live run wipes legacy items; subsequent traffic creates only new-shape documents.
 
 ---
 
@@ -788,13 +799,14 @@ The runtime call site (`do_POST` in `server.py`, line 2185) stays where it is. S
 - Create: `docs/solutions/workflow-issues/hindsight-ingest-reshape-deploy-<date>.md` (post-deploy)
 
 **Approach:**
-- Runbook entry: when the PR carrying U1–U11 merges and Terraform applies, run `pnpm --filter @thinkwork/api ts-node scripts/wipe-external-memory-stores.ts --stage <stage> --dry-run` first; verify counts; then live run; then verify AgentCore runtime `containerUri` matches merged SHA via `aws bedrock-agentcore-control get-agent-runtime` (per `docs/solutions/workflow-issues/agentcore-runtime-no-auto-repull-requires-explicit-update-2026-04-24.md`).
+- Runbook entry: when the PR carrying U1–U3, U2-Pi, U3-Pi, U8–U11 merges and Terraform applies, run `pnpm --filter @thinkwork/api ts-node scripts/wipe-external-memory-stores.ts --stage <stage> --dry-run` first; verify counts; then live run; then verify both runtime containers' `containerUri` matches merged SHA via `aws bedrock-agentcore-control get-agent-runtime` (per `docs/solutions/workflow-issues/agentcore-runtime-no-auto-repull-requires-explicit-update-2026-04-24.md`). Both Strands and Pi runtimes need the repull check now that U2-Pi/U3-Pi land in the same image cycle.
 - Observability checks:
-  - `SELECT COUNT(*) FROM hindsight.memory_units WHERE bank_id = 'user_<userId>' GROUP BY metadata->>'thread_id'` → one row per thread.
-  - Sample 20 retained items: `context ∈ {"thinkwork_thread", "thinkwork_workspace_daily", <vendor default>}`; never `"thread_turn"`.
-  - Daily files: `aws s3 ls tenants/<tid>/users/<uid>/workspace/memory/daily/` → date-named files for active days.
-  - Cost-events: `cost_events` rows continue to flow with `phase ∈ {retain, reflect}` and the new attribution; no schema change.
-- Write a `docs/solutions/` learning post-deploy capturing: what shipped, what got wiped, observed metrics (item count delta, recall quality if measurable), and whether any consumer surveyed in U11 surfaced an unexpected dependency on legacy shape.
+  - `SELECT COUNT(*) FROM hindsight.memory_units WHERE bank_id = 'user_<userId>' AND metadata->>'document_id' IS NOT NULL GROUP BY metadata->>'document_id'` → one row per thread.
+  - Sample 20 retained items: `context = 'thinkwork_thread'` (never `'thread_turn'` after U11).
+  - Cost-events: `cost_events` rows continue to flow with `phase ∈ {retain, reflect}` and the new attribution from the in-body push pattern; no schema change. Sample one retain + one reflect to confirm tokens are captured.
+  - Pi parity: at least one `bank_id='user_<piUserId>'` document with `metadata->>'runtime' = 'pi'` after a Pi-served thread (verifies U2-Pi/U3-Pi end-to-end).
+  - Daily-memory observability is N/A in this PR (Phase B deferred).
+- Write a `docs/solutions/` learning post-deploy capturing: what shipped, what U11 wiped (row count + sample bank IDs), observed metrics (item count delta, recall quality if measurable), and whether any consumer surveyed in U11 surfaced an unexpected dependency on legacy shape.
 
 **Test scenarios:**
 - *Test expectation: none — runbook + doc writeup, no behavioral code.*
@@ -851,13 +863,9 @@ Outcome: per-turn upsert behavior is live for both runtimes; `retain_turn_pair` 
 
 **Sequencing within Phase A:** U1 lands first (Lambda contract). U2 + U2-Pi can land in parallel (both inert). U3 + U3-Pi land last (call-site swaps); they can ship in the same PR or back-to-back since neither depends on the other once U1 + U2 + U2-Pi are in.
 
-### Phase B (PR 2) — Daily workspace memory channel
-- U4 (write_memory allowlist + user-scoped routing)
-- U5 (MEMORY_GUIDE.md + TS parity)
-- U6 (rollover hook in server.py)
-- U7 (retain_daily client method verified)
+### Phase B — DEFERRED to a follow-up plan (2026-04-28)
 
-Outcome: agent can write `memory/daily/<date>.md`; rollover ingests prior day on first turn of new date. Acceptance: AE6, AE7 green.
+Phase B (U4, U5, U6, U7) is split out per Q0. See `## Scope Boundaries → ### Deferred to Follow-Up Work`.
 
 ### Phase C (PR 3) — Strands runtime tool cleanup
 - U8 (custom retain @tool wrapper)
@@ -867,12 +875,12 @@ Outcome: agent can write `memory/daily/<date>.md`; rollover ingests prior day on
 Outcome: zero monkey-patches on the `Hindsight` integration. Acceptance: AE4 green; cost-events end-to-end unchanged.
 
 ### Phase D (PR 4) — Migration + verification
-- U11 (wipe-external-memory-stores.ts script)
+- U11 (wipe-external-memory-stores.ts script — raw SQL on hindsight.memory_units)
 - U12 (runbook + post-deploy learning doc)
 
 Outcome: legacy fragmented items dropped; observability codified.
 
-PR boundaries are coordination guidance — `/ce-work` may collapse adjacent phases into a single PR if iteration shows that's clearer. Phase D requires Phases A + B + C live.
+PR boundaries are coordination guidance — `/ce-work` may collapse adjacent phases into a single PR if iteration shows that's clearer. **Phase D requires Phases A + C live (Phase B was deferred to a follow-up plan, so it does not gate the wipe).**
 
 ---
 
