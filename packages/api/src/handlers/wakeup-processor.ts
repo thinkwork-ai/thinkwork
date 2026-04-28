@@ -408,10 +408,11 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         );
         return null;
       });
-      const isTenantCustom = s.source === "tenant";
-      const s3Key = isTenantCustom
-        ? `tenants/${tenantSlug}/skills/${s.skill_id}`
-        : `skills/catalog/${s.skill_id}`;
+      const usesCatalogSource =
+        s.source === "catalog" || s.source === "builtin";
+      const s3Key = usesCatalogSource
+        ? `skills/catalog/${s.skill_id}`
+        : `tenants/${tenantSlug}/agents/${agentSlug}/workspace/skills/${s.skill_id}`;
       const merged: Record<string, string> = envOverrides
         ? { ...envOverrides }
         : {};

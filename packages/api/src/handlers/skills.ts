@@ -34,6 +34,9 @@ import {
   connections,
   connectProviders,
   users,
+  agents,
+  agentTemplates,
+  tenants,
 } from "@thinkwork/database-pg/schema";
 import {
   createHash,
@@ -55,6 +58,7 @@ import {
 import { resolveTenantId } from "../lib/tenants.js";
 import { applyMcpServerFieldUpdate } from "../lib/mcp-server-update.js";
 import { computeMcpUrlHash } from "../lib/mcp-server-hash.js";
+import { deriveAgentSkills } from "../lib/derive-agent-skills.js";
 
 const s3 = new S3Client({});
 const sm = new SecretsManagerClient({});
@@ -1681,76 +1685,103 @@ async function installSkillToAgent(
   const catalogPrefix = `${CATALOG_PREFIX}/${skillSlug}/`;
   const files = await listS3Keys(catalogPrefix);
 
-  // Per docs/plans/2026-04-27-004 (skills-as-workspace-folder): catalog
-  // files copy into the agent's workspace prefix at workspace/skills/<slug>/
-  // — no parallel skills/ prefix outside the workspace tree. The runtime
-  // (post-materialize-at-write-time) reads the synced workspace tree, so
-  // skills land where the runtime already looks.
+  const [tenant] = await db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(eq(tenants.slug, tenantSlug));
+  if (!tenant) return notFound("Tenant not found");
+
+  const [agent] = await db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(and(eq(agents.tenant_id, tenant.id), eq(agents.slug, agentSlug)));
+  if (!agent) return notFound("Agent not found");
+
+  // Copy each file to the agent workspace prefix. Existing local skills are
+  // operator-authored state; require delete/reinstall instead of overwriting.
   const agentPrefix = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/skills/${skillSlug}/`;
-  for (const key of files) {
-    const relativePath = key.slice(catalogPrefix.length);
-    await s3.send(
-      new CopyObjectCommand({
-        Bucket: BUCKET,
-        CopySource: `${BUCKET}/${key}`,
-        Key: `${agentPrefix}${relativePath}`,
-      }),
-    );
+  const existingSkillMd = await getS3Text(`${agentPrefix}SKILL.md`);
+  if (existingSkillMd !== null) {
+    return error("Skill already exists in this workspace", 409);
   }
 
-  // Regenerate the manifest so the runtime's per-invocation sync
-  // (`bootstrap_workspace.py` / `bootstrap-workspace.ts`) picks up the
-  // newly-installed files on the next agent turn.
+  await copyCatalogSkillFiles(catalogPrefix, agentPrefix, files);
+
   await regenerateManifest(BUCKET, tenantSlug, agentSlug);
+  await deriveAgentSkills({ tenantId: tenant.id }, agent.id);
 
   return json({ success: true, slug: skillSlug });
 }
-
-// ---------------------------------------------------------------------------
-// Template-level skill install (Plan 004 U1b)
-// ---------------------------------------------------------------------------
 
 async function installSkillToTemplate(
   tenantSlug: string,
   templateSlug: string,
   skillSlug: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-  // Same shape as installSkillToAgent — copy catalog files to a workspace
-  // prefix and let the materialize-at-write-time bootstrap pick them up
-  // on the next invocation. The destination is the template's _catalog
-  // prefix so all agents created from this template inherit the skill at
-  // create time (createAgentFromTemplate already syncs from
-  // _catalog/{templateSlug}/workspace/ via bootstrapAgentWorkspace).
-  //
-  // Per docs/plans/2026-04-27-004 U1b: the agent_templates.skills JSON
-  // column stays as an advisory index — retiring it is separate cleanup
-  // out of scope for this plan.
   const mdText = await getS3Text(`${CATALOG_PREFIX}/${skillSlug}/SKILL.md`);
   if (!mdText) return notFound("Skill not found in catalog");
 
   const catalogPrefix = `${CATALOG_PREFIX}/${skillSlug}/`;
   const files = await listS3Keys(catalogPrefix);
 
-  const templatePrefix = `tenants/${tenantSlug}/agents/_catalog/${templateSlug}/workspace/skills/${skillSlug}/`;
-  for (const key of files) {
-    const relativePath = key.slice(catalogPrefix.length);
-    await s3.send(
-      new CopyObjectCommand({
-        Bucket: BUCKET,
-        CopySource: `${BUCKET}/${key}`,
-        Key: `${templatePrefix}${relativePath}`,
-      }),
+  const [tenant] = await db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(eq(tenants.slug, tenantSlug));
+  if (!tenant) return notFound("Tenant not found");
+
+  const [template] = await db
+    .select({ id: agentTemplates.id })
+    .from(agentTemplates)
+    .where(
+      and(
+        eq(agentTemplates.tenant_id, tenant.id),
+        eq(agentTemplates.slug, templateSlug),
+      ),
     );
+  if (!template) return notFound("Template not found");
+
+  const templateAgentSlug = `_catalog/${templateSlug}`;
+  const templatePrefix = `tenants/${tenantSlug}/agents/${templateAgentSlug}/workspace/skills/${skillSlug}/`;
+  const existingSkillMd = await getS3Text(`${templatePrefix}SKILL.md`);
+  if (existingSkillMd !== null) {
+    return error("Skill already exists in this template workspace", 409);
   }
 
-  // Templates don't have their own per-instance manifest the way agents
-  // do — agents bootstrap from _catalog/{template}/workspace/ at
-  // create-time, so the manifest each agent ETag-checks is regenerated
-  // when the agent's prefix is materialized, not when the template
-  // changes. New installs propagate to agents via createAgentFromTemplate
-  // (or future rematerialize).
+  await copyCatalogSkillFiles(catalogPrefix, templatePrefix, files);
+
+  await regenerateManifest(BUCKET, tenantSlug, templateAgentSlug);
 
   return json({ success: true, slug: skillSlug });
+}
+
+async function copyCatalogSkillFiles(
+  catalogPrefix: string,
+  destinationPrefix: string,
+  files: string[],
+): Promise<void> {
+  const copiedKeys: string[] = [];
+  try {
+    for (const key of files) {
+      const relativePath = key.slice(catalogPrefix.length);
+      const destinationKey = `${destinationPrefix}${relativePath}`;
+      await s3.send(
+        new CopyObjectCommand({
+          Bucket: BUCKET,
+          CopySource: `${BUCKET}/${key}`,
+          Key: destinationKey,
+        }),
+      );
+      copiedKeys.push(destinationKey);
+    }
+  } catch (err) {
+    await Promise.allSettled(
+      copiedKeys.map((key) =>
+        s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key })),
+      ),
+    );
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------
