@@ -968,7 +968,7 @@ function TemplateEditorPage() {
             target={{ templateId }}
             mode="template"
             templateSlug={result.data?.agentTemplate?.slug ?? slug}
-            className="h-[calc(100vh-14rem)] min-h-[400px]"
+            className="min-h-[500px]"
           />
         )}
       </div>

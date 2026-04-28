@@ -14,7 +14,7 @@ function AgentWorkspacesRedirect() {
   const { folder } = Route.useSearch();
   return (
     <Navigate
-      to="/agents/$agentId/workspace"
+      to="/agents/$agentId/editor"
       params={{ agentId }}
       search={{ folder }}
     />
