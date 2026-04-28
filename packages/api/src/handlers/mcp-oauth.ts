@@ -27,7 +27,7 @@ const AUTH_CODE_TTL_SECONDS = 5 * 60;
 const CLIENT_TTL_SECONDS = 90 * 24 * 60 * 60;
 const STATE_TTL_SECONDS = 10 * 60;
 const COGNITO_EXCHANGE_TIMEOUT_MS = 10_000;
-const SUPPORTED_SCOPES = new Set(["openid", "email", "profile", "memory:read", "memory:write", "wiki:read"]);
+const SUPPORTED_SCOPES = new Set(["openid", "email", "profile", "memory:read", "memory:write", "wiki:read", "context:read"]);
 
 const secrets = new SecretsManagerClient({ region: process.env.AWS_REGION || "us-east-1" });
 const dynamodb = new DynamoDBClient({ region: process.env.AWS_REGION || "us-east-1" });
@@ -133,7 +133,7 @@ function protectedResourceMetadata(event: APIGatewayProxyEventV2) {
 		resource,
 		authorization_servers: [issuerUrl(event)],
 		bearer_methods_supported: ["header"],
-		scopes_supported: ["openid", "email", "profile", "memory:read", "memory:write", "wiki:read"],
+		scopes_supported: ["openid", "email", "profile", "memory:read", "memory:write", "wiki:read", "context:read"],
 		resource_documentation: `${issuerUrl(event)}/docs/mcp/user-memory`,
 	});
 }
@@ -150,7 +150,7 @@ function authorizationServerMetadata(event: APIGatewayProxyEventV2) {
 		grant_types_supported: ["authorization_code"],
 		code_challenge_methods_supported: ["S256"],
 		token_endpoint_auth_methods_supported: ["none"],
-		scopes_supported: ["openid", "email", "profile", "memory:read", "memory:write", "wiki:read"],
+		scopes_supported: ["openid", "email", "profile", "memory:read", "memory:write", "wiki:read", "context:read"],
 	});
 }
 
@@ -612,7 +612,7 @@ function isAllowedRedirectUri(value: string): boolean {
 }
 
 function validateScope(scope: string | undefined): string {
-	const requested = (scope ?? "openid email profile memory:read memory:write wiki:read")
+	const requested = (scope ?? "openid email profile memory:read memory:write wiki:read context:read")
 		.split(/\s+/)
 		.map((part) => part.trim())
 		.filter(Boolean);

@@ -159,6 +159,49 @@ export const agentTemplateMcpServers = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// tenant_mcp_context_tools — tool-level Context Engine eligibility
+// ---------------------------------------------------------------------------
+
+export const tenantMcpContextTools = pgTable(
+  "tenant_mcp_context_tools",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id)
+      .notNull(),
+    mcp_server_id: uuid("mcp_server_id")
+      .references(() => tenantMcpServers.id)
+      .notNull(),
+    tool_name: text("tool_name").notNull(),
+    display_name: text("display_name"),
+    declared_read_only: boolean("declared_read_only").notNull().default(false),
+    declared_search_safe: boolean("declared_search_safe").notNull().default(false),
+    approved: boolean("approved").notNull().default(false),
+    default_enabled: boolean("default_enabled").notNull().default(false),
+    approved_by: uuid("approved_by"),
+    approved_at: timestamp("approved_at", { withTimezone: true }),
+    metadata: jsonb("metadata"),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("uq_tenant_mcp_context_tools_tool").on(
+      table.tenant_id,
+      table.mcp_server_id,
+      table.tool_name,
+    ),
+    index("idx_tenant_mcp_context_tools_tenant").on(table.tenant_id),
+    index("idx_tenant_mcp_context_tools_server").on(table.mcp_server_id),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // user_mcp_tokens — per-user OAuth tokens from MCP server auth flows
 // ---------------------------------------------------------------------------
 
@@ -236,6 +279,20 @@ export const agentTemplateMcpServersRelations = relations(
     }),
     mcpServer: one(tenantMcpServers, {
       fields: [agentTemplateMcpServers.mcp_server_id],
+      references: [tenantMcpServers.id],
+    }),
+  }),
+);
+
+export const tenantMcpContextToolsRelations = relations(
+  tenantMcpContextTools,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [tenantMcpContextTools.tenant_id],
+      references: [tenants.id],
+    }),
+    mcpServer: one(tenantMcpServers, {
+      fields: [tenantMcpContextTools.mcp_server_id],
       references: [tenantMcpServers.id],
     }),
   }),
