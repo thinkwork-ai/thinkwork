@@ -5,8 +5,10 @@ import {
   Folder,
   FolderOpen,
   Loader2,
+  Plus,
   Trash2,
 } from "lucide-react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -51,6 +53,7 @@ export function buildWorkspaceTree(
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
       const isLast = i === parts.length - 1;
+      if (part === ".gitkeep" && isLast) continue;
       const pathSoFar = parts.slice(0, i + 1).join("/");
 
       let existing = current.find((node) => node.name === part);
@@ -157,9 +160,28 @@ export interface FolderTreeProps {
   onDelete: (path: string, isFolder: boolean) => void;
   onConfirmDelete: (path: string) => void;
   onCancelDeleteConfirm: (path: string) => void;
+  onCreateSkill?: () => void;
+  onAddSkillFromCatalog?: () => void;
 }
 
 export function FolderTree(props: FolderTreeProps) {
+  const [skillsMenu, setSkillsMenu] = useState<{
+    x: number;
+    y: number;
+    path: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!skillsMenu) return;
+    const close = () => setSkillsMenu(null);
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", close);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("keydown", close);
+    };
+  }, [skillsMenu]);
+
   if (props.nodes.length === 0) {
     return (
       <div className="px-3 py-6 text-center text-xs text-muted-foreground">
@@ -172,8 +194,59 @@ export function FolderTree(props: FolderTreeProps) {
     <TooltipProvider delayDuration={2000} skipDelayDuration={0}>
       <div className="py-1">
         {props.nodes.map((node) => (
-          <FolderTreeItem key={node.path} node={node} depth={0} {...props} />
+          <FolderTreeItem
+            key={node.path}
+            node={node}
+            depth={0}
+            onOpenSkillsMenu={(event, path) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setSkillsMenu({ x: event.clientX, y: event.clientY, path });
+            }}
+            {...props}
+          />
         ))}
+        {skillsMenu ? (
+          <div
+            className="fixed z-50 min-w-44 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+            style={{ left: skillsMenu.x, top: skillsMenu.y }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
+              onClick={() => {
+                setSkillsMenu(null);
+                props.onCreateSkill?.();
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              New Skill
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
+              onClick={() => {
+                setSkillsMenu(null);
+                props.onAddSkillFromCatalog?.();
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              Add from catalog
+            </button>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-destructive hover:bg-accent"
+              onClick={() => {
+                setSkillsMenu(null);
+                props.onConfirmDelete(skillsMenu.path);
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </button>
+          </div>
+        ) : null}
       </div>
     </TooltipProvider>
   );
@@ -194,7 +267,12 @@ function FolderTreeItem({
   onDelete,
   onConfirmDelete,
   onCancelDeleteConfirm,
-}: FolderTreeProps & { node: TreeNode; depth: number }) {
+  onOpenSkillsMenu,
+}: FolderTreeProps & {
+  node: TreeNode;
+  depth: number;
+  onOpenSkillsMenu: (event: MouseEvent, path: string) => void;
+}) {
   const isExpanded = expandedFolders.has(node.path);
   const isSelected = selectedPath === node.path;
   const isDeleting = deletingPath === node.path;
@@ -211,6 +289,11 @@ function FolderTreeItem({
         onClick={() => {
           if (node.isFolder) onToggle(node.path);
           else onSelect(node.path);
+        }}
+        onContextMenu={(event) => {
+          if (node.isFolder && isSkillsFolderPath(node.path)) {
+            onOpenSkillsMenu(event, node.path);
+          }
         }}
         onMouseLeave={() => onCancelDeleteConfirm(node.path)}
       >
@@ -334,6 +417,7 @@ function FolderTreeItem({
               onConfirmDelete={onConfirmDelete}
               onCancelDeleteConfirm={onCancelDeleteConfirm}
               nodes={[]}
+              onOpenSkillsMenu={onOpenSkillsMenu}
             />
           ))}
           {node.synthetic && node.children.length === 0 ? (
@@ -359,6 +443,10 @@ function FolderTreeItem({
 
 export function subAgentsNodePath(): string {
   return SUB_AGENTS_NODE_PATH;
+}
+
+function isSkillsFolderPath(path: string): boolean {
+  return path === "skills" || path.endsWith("/skills");
 }
 
 function routedFolderPaths(routingRows: Pick<RoutingRow, "goTo">[]): string[] {
