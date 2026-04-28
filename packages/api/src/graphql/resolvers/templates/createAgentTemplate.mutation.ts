@@ -5,6 +5,7 @@ import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { runWithIdempotency } from "../../../lib/idempotency.js";
 import { validateTemplateBrowser } from "../../../lib/templates/browser-config.js";
 import { validateTemplateSandbox } from "../../../lib/templates/sandbox-config.js";
+import { validateTemplateSendEmail } from "../../../lib/templates/send-email-config.js";
 import { validateTemplateWebSearch } from "../../../lib/templates/web-search-config.js";
 import {
   parseAgentRuntimeInput,
@@ -64,6 +65,10 @@ async function createAgentTemplateCore(i: any) {
     i.webSearch === undefined ? { enabled: true } : i.webSearch,
   );
   if (!webSearchResult.ok) throw new Error(webSearchResult.error);
+  const sendEmailResult = validateTemplateSendEmail(
+    i.sendEmail === undefined ? { enabled: true } : i.sendEmail,
+  );
+  if (!sendEmailResult.ok) throw new Error(sendEmailResult.error);
 
   const [row] = await db
     .insert(agentTemplates)
@@ -84,6 +89,7 @@ async function createAgentTemplateCore(i: any) {
       sandbox: sandboxResult.value,
       browser: browserResult.value,
       web_search: webSearchResult.value,
+      send_email: sendEmailResult.value,
       is_published: i.isPublished ?? true,
     })
     .returning();

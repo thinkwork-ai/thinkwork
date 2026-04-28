@@ -1135,21 +1135,23 @@ async function getTenantSkills(
     .execute();
 
   return json(
-    rows.map((r) => ({
-      slug: r.skill_id,
-      name: r.name || r.skill_id,
-      description: r.description,
-      category: r.category,
-      version: r.version,
-      icon: r.icon,
-      source: r.source,
-      is_default: r.is_default,
-      catalogVersion: r.catalog_version,
-      oauthProvider: r.oauth_provider,
-      mcpServer: r.mcp_server,
-      triggers: r.triggers || [],
-      installedAt: r.installed_at?.toISOString(),
-    })),
+    rows
+      .filter((r) => !isBuiltinToolSlug(r.skill_id))
+      .map((r) => ({
+        slug: r.skill_id,
+        name: r.name || r.skill_id,
+        description: r.description,
+        category: r.category,
+        version: r.version,
+        icon: r.icon,
+        source: r.source,
+        is_default: r.is_default,
+        catalogVersion: r.catalog_version,
+        oauthProvider: r.oauth_provider,
+        mcpServer: r.mcp_server,
+        triggers: r.triggers || [],
+        installedAt: r.installed_at?.toISOString(),
+      })),
   );
 }
 
@@ -1681,7 +1683,9 @@ async function installSkillToAgent(
 ): Promise<APIGatewayProxyStructuredResultV2> {
   if (isBuiltinToolSlug(skillSlug)) {
     return error(
-      `Built-in tool '${skillSlug}' is configured through /api/skills/builtin-tools, not installed as a workspace skill.`,
+      skillSlug === "agent-email-send"
+        ? "Built-in tool 'agent-email-send' is injected as send_email through agent template configuration, not installed as a workspace skill."
+        : `Built-in tool '${skillSlug}' is configured through /api/skills/builtin-tools, not installed as a workspace skill.`,
       400,
     );
   }
@@ -1730,7 +1734,9 @@ async function installSkillToTemplate(
 ): Promise<APIGatewayProxyStructuredResultV2> {
   if (isBuiltinToolSlug(skillSlug)) {
     return error(
-      `Built-in tool '${skillSlug}' is configured through /api/skills/builtin-tools, not installed as a workspace skill.`,
+      skillSlug === "agent-email-send"
+        ? "Built-in tool 'agent-email-send' is injected as send_email through agent template configuration, not installed as a workspace skill."
+        : `Built-in tool '${skillSlug}' is configured through /api/skills/builtin-tools, not installed as a workspace skill.`,
       400,
     );
   }
@@ -3106,6 +3112,7 @@ async function ensureBuiltinSkills(tenantId: string): Promise<void> {
   const existingSet = new Set(existing.map((r) => r.skill_id));
 
   for (const skill of defaults) {
+    if (isBuiltinToolSlug(skill.slug)) continue;
     if (existingSet.has(skill.slug)) continue;
     await db
       .insert(tenantSkills)

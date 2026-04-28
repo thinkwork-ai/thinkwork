@@ -44,6 +44,14 @@ type AgentTemplate {
   Null means the template does not inject Web Search.
   """
   webSearch: AWSJSON
+  """
+  Send Email opt-in metadata for the platform email-sending built-in tool.
+  Shape validated at create/update time by
+  packages/api/src/lib/templates/send-email-config.ts:
+    { enabled: true }
+  Null means the template does not inject Send Email.
+  """
+  sendEmail: AWSJSON
 
   isPublished: Boolean!
   createdAt: AWSDateTime!
@@ -144,6 +152,11 @@ input CreateAgentTemplateInput {
   (or pass null) for templates that do not opt into Web Search.
   """
   webSearch: AWSJSON
+  """
+  Send Email opt-in metadata; see AgentTemplate.sendEmail. Omit
+  (or pass null) for templates that do not opt into Send Email.
+  """
+  sendEmail: AWSJSON
 
   isPublished: Boolean
   """
@@ -181,6 +194,11 @@ input UpdateAgentTemplateInput {
   null to clear; omit to leave unchanged.
   """
   webSearch: AWSJSON
+  """
+  Send Email opt-in metadata; see AgentTemplate.sendEmail. Pass
+  null to clear; omit to leave unchanged.
+  """
+  sendEmail: AWSJSON
 
   isPublished: Boolean
 }

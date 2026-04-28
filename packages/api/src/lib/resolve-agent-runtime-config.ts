@@ -17,8 +17,8 @@
  *     sandbox template config)
  *   - guardrail (template-assigned, else tenant default)
  *   - `skillsConfig`: the full skill list the container should register,
- *     including catalog defaults (agent-email-send, agent-thread-management,
- *     artifacts, workspace-memory), tenant-configured built-in tools, and
+ *     including catalog defaults (agent-thread-management, artifacts,
+ *     workspace-memory), tenant-configured built-in tools, and
  *     per-skill env overrides (OAuth-resolved tokens, CURRENT_USER_EMAIL when
  *     a human invoker is known) with the template blocked-tools filter
  *     applied last
@@ -60,6 +60,7 @@ import {
 import { loadTenantBuiltinTools } from "../handlers/skills.js";
 import type { TemplateSandboxConfig } from "./sandbox-preflight.js";
 import { validateTemplateBrowser } from "./templates/browser-config.js";
+import { validateTemplateSendEmail } from "./templates/send-email-config.js";
 import { validateTemplateWebSearch } from "./templates/web-search-config.js";
 
 export interface SkillConfig {
@@ -87,6 +88,14 @@ export interface McpConfig {
 export interface WebSearchConfig {
   provider: "exa" | "serpapi";
   apiKey: string;
+}
+
+export interface SendEmailConfig {
+  agentId: string;
+  tenantId: string;
+  agentEmailAddress: string;
+  apiUrl: string;
+  apiSecret: string;
 }
 
 export interface GuardrailPayload {
@@ -118,6 +127,7 @@ export interface AgentRuntimeConfig {
   runtimeType: AgentRuntimeType;
   skillsConfig: SkillConfig[];
   webSearchConfig?: WebSearchConfig;
+  sendEmailConfig?: SendEmailConfig;
   knowledgeBasesConfig: KnowledgeBaseConfig[] | undefined;
   mcpConfigs: McpConfig[];
 }
@@ -224,6 +234,7 @@ export async function resolveAgentRuntimeConfig(
       sandbox: agentTemplates.sandbox,
       browser: agentTemplates.browser,
       web_search: agentTemplates.web_search,
+      send_email: agentTemplates.send_email,
       runtime: agentTemplates.runtime,
     })
     .from(agentTemplates)
@@ -355,6 +366,17 @@ export async function resolveAgentRuntimeConfig(
       `${logPrefix} Invalid template webSearch config ignored for agent ${opts.agentId}: ${templateWebSearchResult.error}`,
     );
   }
+  const templateSendEmailResult = validateTemplateSendEmail(
+    agentTemplate.send_email,
+  );
+  const templateSendEmailEnabled = templateSendEmailResult.ok
+    ? templateSendEmailResult.value?.enabled === true
+    : false;
+  if (!templateSendEmailResult.ok) {
+    console.warn(
+      `${logPrefix} Invalid template sendEmail config ignored for agent ${opts.agentId}: ${templateSendEmailResult.error}`,
+    );
+  }
 
   // --- Skills --------------------------------------------------------------
   // Per-agent installs first, then default skills the container always needs,
@@ -406,25 +428,6 @@ export async function resolveAgentRuntimeConfig(
       },
     ),
   );
-
-  // agent-email-send default.
-  if (!skillsConfig.some((s) => s.skillId === "agent-email-send")) {
-    skillsConfig.push({
-      skillId: "agent-email-send",
-      s3Key: "skills/catalog/agent-email-send",
-      secretRef: undefined,
-      envOverrides: {
-        AGENT_EMAIL_ADDRESS: `${agentSlug}@agents.thinkwork.ai`,
-        AGENT_ID: opts.agentId,
-        THINKWORK_API_URL: thinkworkApiUrl,
-        THINKWORK_API_SECRET: thinkworkApiSecret,
-        INBOUND_MESSAGE_ID: "",
-        INBOUND_SUBJECT: "",
-        INBOUND_FROM: "",
-        INBOUND_BODY: "",
-      },
-    });
-  }
 
   // Other default skills (always-on script skills).
   for (const ds of DEFAULT_SKILLS) {
@@ -546,6 +549,7 @@ export async function resolveAgentRuntimeConfig(
     .select({
       capability: agentCapabilities.capability,
       enabled: agentCapabilities.enabled,
+      config: agentCapabilities.config,
     })
     .from(agentCapabilities)
     .where(
@@ -557,11 +561,36 @@ export async function resolveAgentRuntimeConfig(
   const browserCapability = capabilityRows.find(
     (row) => row.capability === BROWSER_AUTOMATION_CAPABILITY,
   );
+  const emailCapability = capabilityRows.find(
+    (row) => row.capability === "email_channel",
+  );
+  const emailConfig =
+    (emailCapability?.config as Record<string, unknown> | undefined) ?? {};
+  const vanityAddress =
+    typeof emailConfig.vanityAddress === "string" && emailConfig.vanityAddress
+      ? `${emailConfig.vanityAddress}@agents.thinkwork.ai`
+      : null;
+  const agentEmailAddress =
+    vanityAddress ||
+    (typeof emailConfig.emailAddress === "string"
+      ? emailConfig.emailAddress
+      : "") ||
+    `${agentSlug}@agents.thinkwork.ai`;
   const browserAutomationEnabled =
     !blockedTools.includes(BROWSER_AUTOMATION_CAPABILITY) &&
     (browserCapability
       ? browserCapability.enabled === true
       : templateBrowserEnabled);
+  const sendEmailConfig =
+    templateSendEmailEnabled && !blockedTools.includes("send_email")
+      ? {
+          agentId: opts.agentId,
+          tenantId: opts.tenantId,
+          agentEmailAddress,
+          apiUrl: thinkworkApiUrl,
+          apiSecret: thinkworkApiSecret,
+        }
+      : undefined;
 
   // --- MCP configs ---------------------------------------------------------
 
@@ -593,6 +622,7 @@ export async function resolveAgentRuntimeConfig(
     ),
     skillsConfig,
     webSearchConfig,
+    sendEmailConfig,
     knowledgeBasesConfig,
     mcpConfigs,
   };

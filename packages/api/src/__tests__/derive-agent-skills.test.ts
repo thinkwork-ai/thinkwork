@@ -192,6 +192,7 @@ describe("deriveAgentSkills — workspace skill folders", () => {
   it("ignores built-in tool markers because those are configured outside workspace skills", async () => {
     readWorkspaceMock.mockResolvedValue([
       workspaceEntry("skills/web-search/SKILL.md"),
+      workspaceEntry("skills/agent-email-send/SKILL.md"),
     ]);
     pushSelect([]);
 
@@ -200,7 +201,10 @@ describe("deriveAgentSkills — workspace skill folders", () => {
     expect(result.changed).toBe(false);
     expect(result.addedSlugs).toEqual([]);
     expect(result.removedSlugs).toEqual([]);
-    expect(result.agentsMdPathsScanned).toEqual(["skills/web-search/SKILL.md"]);
+    expect(result.agentsMdPathsScanned).toEqual([
+      "skills/agent-email-send/SKILL.md",
+      "skills/web-search/SKILL.md",
+    ]);
     expect(dbState.transactionInvocations).toBe(0);
   });
 
