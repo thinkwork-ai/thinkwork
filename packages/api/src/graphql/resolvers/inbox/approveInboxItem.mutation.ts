@@ -5,15 +5,22 @@ import {
 	inboxItemToCamel, assertInboxItemTransition,
 	recordActivity,
 } from "../../utils.js";
+import { resolveCallerUserId } from "../core/resolve-auth-user.js";
+import {
+	bridgeInboxDecisionToWorkspaceReview,
+	isWorkspaceReviewInboxItem,
+} from "./workspace-review-bridge.js";
 
 export const approveInboxItem = async (_parent: any, args: any, ctx: GraphQLContext) => {
 	const [current] = await db.select().from(inboxItems).where(eq(inboxItems.id, args.id));
 	if (!current) throw new Error("Inbox item not found");
 	assertInboxItemTransition(current.status, "approved");
 	const reviewNotes = args.input?.reviewNotes ?? null;
+	const callerUserId = await resolveCallerUserId(ctx);
 	const [row] = await db.update(inboxItems).set({
 		status: "approved",
 		review_notes: reviewNotes,
+		decided_by: callerUserId ?? null,
 		decided_at: new Date(),
 		updated_at: new Date(),
 	}).where(eq(inboxItems.id, args.id)).returning();
@@ -22,8 +29,20 @@ export const approveInboxItem = async (_parent: any, args: any, ctx: GraphQLCont
 		"inbox_item.approved", "inbox_item", row.id,
 		{ reviewNotes },
 	);
+
+	const isWorkspaceReview = isWorkspaceReviewInboxItem(current);
+	if (isWorkspaceReview) {
+		await bridgeInboxDecisionToWorkspaceReview({
+			inboxItem: current,
+			decision: "accepted",
+			actorId: callerUserId ?? null,
+			values: { notes: reviewNotes },
+		});
+	}
+
 	// Trigger: wake requesting agent on inbox item decision
-	if (current.requester_type === "agent" && current.requester_id) {
+	// Skip for workspace_review type — decideWorkspaceReview handles wakeup.
+	if (!isWorkspaceReview && current.requester_type === "agent" && current.requester_id) {
 		try {
 			const [reqAgent] = await db
 				.select({ runtime_config: agents.runtime_config })

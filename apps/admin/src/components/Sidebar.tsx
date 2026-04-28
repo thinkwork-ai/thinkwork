@@ -208,6 +208,7 @@ export function AppSidebar() {
       badge: threadCount ? formatCount(threadCount) : undefined,
     },
     { to: "/inbox", icon: Inbox, label: "Inbox", badge: pendingInboxCount },
+    { to: "/scheduled-jobs", icon: CalendarClock, label: "Automations" },
     {
       to: "/workspace-reviews",
       icon: GitPullRequestDraft,
@@ -228,7 +229,6 @@ export function AppSidebar() {
 
   const manageItems: NavItem[] = [
     { to: "/analytics", icon: BarChart3, label: "Analytics" },
-    { to: "/scheduled-jobs", icon: CalendarClock, label: "Automations" },
     { to: "/webhooks", icon: Webhook, label: "Webhooks" },
     { to: "/people", icon: Users, label: "People" },
     ...(isOwner
