@@ -1,15 +1,15 @@
 ---
 title: Admin — Agent Templates
-description: Reusable agent configuration bundles — skills, knowledge, MCP servers, guardrails — plus the explicit sync flow that propagates changes out to linked agents.
+description: Reusable agent configuration bundles - runtime, model, built-in tool opt-ins, workspace files, MCP servers, guardrails - plus the explicit sync flow that propagates changes out to linked agents.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Agent templates are reusable configuration bundles that multiple agents can share. A template defines the default runtime, model, default skill assignments, default knowledge bases, MCP server assignments, guardrail attachments, system prompt, budget caps, and a workspace file set.
+Agent templates are reusable configuration bundles that multiple agents can share. A template defines the default runtime, model, built-in tool opt-ins, default knowledge bases, MCP server assignments, guardrail attachments, system prompt, budget caps, and a workspace file set.
 
 Templates propagate to linked agents via two distinct mechanisms depending on what changed:
 
-- **Configuration fields** (skills, KBs, MCP servers, guardrails, model, system prompt, budget) — propagated via the explicit **Sync** flow described later on this page. Operators review per-agent diffs and confirm.
+- **Configuration fields** (built-in tool opt-ins, KBs, MCP servers, guardrails, model, system prompt, budget) — propagated via the explicit **Sync** flow described later on this page. Operators review per-agent diffs and confirm.
 - **Workspace files** (`SOUL.md`, `IDENTITY.md`, `USER.md`, `GUARDRAILS.md`, etc.) — propagated via the [workspace overlay](/concepts/agents/workspace-overlay/). Live-class files update on next invocation with no sync step; guardrail-class files require a per-agent **Accept update** review; `USER.md` is rewritten server-side on human reassignment.
 
 This is how fleet-wide configuration gets managed in ThinkWork without having to touch every agent individually.
@@ -40,20 +40,26 @@ The backing query is `AgentTemplatesListQuery`. The create-agent-from-template f
 **Route:** `/agent-templates/:templateId`  
 **File:** `apps/admin/src/routes/_authed/_tenant/agent-templates/$templateId.tsx`
 
-The detail page is a split layout: form fields on the left, a CodeMirror editor for the system prompt on the right.
+The detail page has three tabs:
 
-### Left pane — form and assignments
+- **Configuration** - identity, model/runtime, system prompt, and built-in tool opt-ins.
+- **Workspace** - template-level workspace files and workspace skills.
+- **MCP Servers** - tenant MCP assignments for agents using the template.
+
+### Configuration tab
 
 - **Identity** — name, slug, description, category, publish toggle
 - **Runtime selector** — default managed runtime for new agents created from this template: Strands or Pi
 - **Model select** — dropdown backed by the tenant's configured model catalog
-- **Skills table** — add/remove skills from the tenant-installed catalog
-- **MCP Servers table** — link/unlink tenant-registered MCP servers (sourced via the REST `listMcpServers` / `assignMcpToTemplate` / `unassignMcpFromTemplate` API module)
-- **Guardrail assignment** — pick a guardrail from the list registered in the [Security Center](/applications/admin/security-center/)
-- **Budget caps** — monthly spend cap; inherited by all child agents unless overridden
-- **Code Sandbox card** — opt this template into the `execute_code` tool and pick a network mode (see below)
+- **System prompt editor** — the prompt inherited by agents created from the template
+- **Code Sandbox card** — opt this template into `execute_code` and pick a network mode
+- **Browser Automation card** — opt this template into `browser_automation`
+- **Web Search card** — opt this template into the tenant-configured `web_search` built-in
+- **Send Email card** — opt this template into the platform `send_email` built-in
 
-### Right pane — system prompt editor
+The older **Skills** tab redirects to the Workspace tab. Operator-editable skills now live as workspace files under `workspace/skills/<slug>/SKILL.md`; built-in tools remain separate template configuration.
+
+### System prompt editor
 
 A full CodeMirror editor in markdown mode, vscodeDark theme. The system prompt is the single most impactful field on the template — it's what most iteration happens against.
 
@@ -61,7 +67,18 @@ A full CodeMirror editor in markdown mode, vscodeDark theme. The system prompt i
 
 Below the main form, the template detail page lists every agent currently linked to this template. For each linked agent, the row shows its name, status, and (after a sync is triggered) its sync status.
 
-### Code Sandbox card
+### Built-in tool cards
+
+The Configuration tab carries compact cards for the built-in tools that are controlled per template. These cards do not install workspace skills; they set JSON configuration fields on the template that the runtime config resolver reads before every turn.
+
+| Card | Template field | Runtime tool | Extra gates |
+|---|---|---|---|
+| Code Sandbox | `sandbox` | `execute_code` | Tenant `sandbox_enabled`; Code Interpreter provisioning |
+| Browser Automation | `browser` | `browser_automation` | Agent-level capability overrides can enable or disable individual agents |
+| Web Search | `webSearch` / `web_search` | `web_search` | Tenant Web Search provider row must be configured and enabled |
+| Send Email | `sendEmail` / `send_email` | `send_email` | Agent email channel controls sending address and delivery policy |
+
+#### Code Sandbox card
 
 The Configuration tab carries a **Code Sandbox** card that controls the template's opt-in to the AgentCore Code Interpreter sandbox. The card has a single toggle — **Enable `execute_code` for agents in this template** — and, when enabled, a **Network mode** dropdown with two options:
 
@@ -70,7 +87,31 @@ The Configuration tab carries a **Code Sandbox** card that controls the template
 
 The toggle persists to the template's `sandbox` field as JSON: `{ "environment": "default-public" | "internal-only" }` when opted in, `null` when the template doesn't use the sandbox. The shape is validated server-side by `packages/api/src/lib/templates/sandbox-config.ts`.
 
-The `execute_code` tool only registers on a turn when **both** the template is opted in on this card **and** the tenant has `sandbox_enabled` set in tenant policy. Template opt-in without tenant policy is a no-op. See [Admin → Built-in Tools](/applications/admin/builtin-tools/#code-sandbox-policy-gated) for the tenant-policy side of the gate and the [Code Sandbox concept page](/concepts/agents/code-sandbox/) for how the opt-in flows through to the agent runtime.
+The `execute_code` tool only registers on a turn when **both** the template is opted in on this card **and** the tenant has `sandbox_enabled` set in tenant policy. Template opt-in without tenant policy is a no-op. See [Admin → Built-in Tools](/applications/admin/builtin-tools/#policy-gated-tools) for the tenant-policy side of the gate and the [Code Sandbox concept page](/concepts/agents/code-sandbox/) for how the opt-in flows through to the agent runtime.
+
+#### Browser Automation card
+
+The **Browser Automation** card controls whether agents using this template can receive the `browser_automation` tool. The runtime registers an AgentCore Browser plus Nova Act tool for dynamic website workflows.
+
+The toggle persists to the template's `browser` field as JSON: `{ "enabled": true }` when opted in, `null` when disabled. The shape is validated server-side by `packages/api/src/lib/templates/browser-config.ts`.
+
+Agent-level capability rows can still override the template default for individual agents.
+
+#### Web Search card
+
+The **Web Search** card controls whether agents using this template can receive the `web_search` built-in. This is separate from configuring the tenant's provider key under [Admin → Built-in Tools](/applications/admin/builtin-tools/).
+
+The toggle persists to the template's `webSearch` GraphQL field / `web_search` database column as JSON: `{ "enabled": true }` when opted in, `null` when disabled. The shape is validated server-side by `packages/api/src/lib/templates/web-search-config.ts`.
+
+`web_search` is injected by runtime configuration. Do not install `web-search` as `workspace/skills/web-search/SKILL.md`.
+
+#### Send Email card
+
+The **Send Email** card controls whether agents using this template can receive the `send_email` platform tool. The agent email channel still controls the sending address, reply tracking, and delivery policy.
+
+The toggle persists to the template's `sendEmail` GraphQL field / `send_email` database column as JSON: `{ "enabled": true }` when opted in, `null` when disabled. The shape is validated server-side by `packages/api/src/lib/templates/send-email-config.ts`.
+
+`send_email` is injected as a direct runtime tool. Do not install `agent-email-send` as `workspace/skills/agent-email-send/SKILL.md`.
 
 ### Runtime selector
 
@@ -83,7 +124,7 @@ The template runtime is the default for agents created from the template. Existi
 
 ## The Workspace tab
 
-The template detail page has a **Workspace** tab alongside **Configuration**, **Skills**, and **MCP Servers**. This is where the template's inheritance base for workspace files lives — `SOUL.md`, `IDENTITY.md`, `GUARDRAILS.md`, and so on.
+The template detail page has a **Workspace** tab alongside **Configuration** and **MCP Servers**. This is where the template's inheritance base for workspace files lives — `SOUL.md`, `IDENTITY.md`, `GUARDRAILS.md`, `skills/<slug>/SKILL.md`, and so on.
 
 Edits to this tab propagate to linked agents through the [workspace overlay](/concepts/agents/workspace-overlay/) at read time, not through the Sync flow. Specifically:
 
@@ -96,6 +137,8 @@ Edits to this tab propagate to linked agents through the [workspace overlay](/co
 - **Edit a template file** — click the file in the tree, edit, save. Live files take effect on next agent invocation.
 - **Add a new file** — use the **+** button in the sidebar. New files automatically flow to linked agents (unless they're ad-hoc names outside the overlay's canonical set, in which case they still inherit normally).
 - **Delete a template-level override** — remove a file here and linked agents will fall through to the tenant defaults layer for that file.
+
+Workspace skills are editable files in this tree. Built-in tools are not workspace files and are configured from the Configuration tab instead.
 
 For the tenant-wide defaults that every template inherits from, see `/agent-templates/defaults` (the **Default Workspace** page).
 
@@ -141,17 +184,25 @@ Until an operator clicks Sync, linked agents continue running with the pre-edit 
 
 ## Workflows
 
-### Ship a new fleet-wide skill
+### Ship a new fleet-wide workspace skill
 
 1. Install the new skill via [Skills Catalog](/applications/admin/skills-catalog/)
 2. Open the template at `/agent-templates/:templateId`
 3. Confirm the Runtime selector is set to the runtime that supports the skill
-4. Add the skill to the Skills table
+4. Go to the Workspace tab and add or edit `skills/<slug>/SKILL.md`
 5. Save the template
 6. Click **Sync** and land on the review page
 7. Confirm the diffs look right
 8. Click **Sync All** — or sync one agent first as a canary, then sync the rest
 9. Watch the linked agent list for sync status and agent heartbeats to confirm no regressions
+
+### Enable a built-in tool across a template
+
+1. Open the template at `/agent-templates/:templateId/configuration`
+2. Toggle the relevant built-in tool card
+3. Save the template
+4. Verify any tenant-level prerequisite on [Built-in Tools](/applications/admin/builtin-tools/), such as the Web Search provider key or Code Sandbox policy
+5. Run one linked agent as a canary before syncing broadly
 
 ### Tune a system prompt across the fleet
 
@@ -173,6 +224,7 @@ Template history is not currently versioned — rollback means editing forward. 
 
 - **Don't edit a linked agent directly when you want a fleet change.** Per-agent edits do not back-propagate to the template. If multiple agents need the same change, edit the template and sync.
 - **Don't skip the sync step.** Editing a template without syncing leaves the linked agents in a divergent state where the template is nominally their source of truth but they're actually running the old config.
+- **Don't install built-ins as skills.** `web_search`, `send_email`, `browser_automation`, and `execute_code` are injected runtime tools controlled by template and tenant policy.
 
 ## Known limits
 
