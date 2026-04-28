@@ -27,7 +27,40 @@ import {
   readTemplateBaseWithFallback,
 } from "../../../lib/pinned-versions.js";
 import { PINNED_FILES } from "@thinkwork/workspace-defaults";
-import { composeList, pinLookupPaths } from "../../../lib/workspace-overlay.js";
+import { pinLookupPaths } from "../../../lib/workspace-overlay.js";
+import { ListObjectsV2Command } from "@aws-sdk/client-s3";
+
+async function _listAgentPrefixPaths(
+  tenantSlug: string,
+  agentSlug: string,
+): Promise<string[]> {
+  const bucket = process.env.WORKSPACE_BUCKET;
+  if (!bucket) return [];
+  const prefix = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/`;
+  const out: string[] = [];
+  let continuationToken: string | undefined;
+  do {
+    const resp = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }),
+    );
+    for (const obj of resp.Contents ?? []) {
+      if (!obj.Key) continue;
+      const rel = obj.Key.slice(prefix.length);
+      if (!rel || rel === "manifest.json" || rel === "_defaults_version") {
+        continue;
+      }
+      out.push(rel);
+    }
+    continuationToken = resp.IsTruncated
+      ? resp.NextContinuationToken
+      : undefined;
+  } while (continuationToken);
+  return out;
+}
 import { GetObjectCommand, NoSuchKey, S3Client } from "@aws-sdk/client-s3";
 
 const REGION =
@@ -168,9 +201,12 @@ export async function agentPinStatus(
     for (const path of Object.keys(pins)) {
       if (parseWorkspacePinPath(path)) candidatePaths.add(path);
     }
-    const composed = await composeList({ tenantId: agent.tenant_id }, agent.id);
-    for (const file of composed) {
-      if (parseWorkspacePinPath(file.path)) candidatePaths.add(file.path);
+    // Read directly from the agent's S3 prefix — the materialize-at-
+    // write-time model makes the prefix the source of truth for what
+    // files exist under this agent, including sub-folder pinned files.
+    const paths = await _listAgentPrefixPaths(tenant.slug, agent.slug);
+    for (const path of paths) {
+      if (parseWorkspacePinPath(path)) candidatePaths.add(path);
     }
   }
 
