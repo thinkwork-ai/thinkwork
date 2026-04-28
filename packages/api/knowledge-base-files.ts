@@ -38,8 +38,15 @@ const BUCKET = process.env.WORKSPACE_BUCKET || "";
 const db = getDb();
 
 const ACCEPTED_EXTENSIONS = new Set([
-  ".txt", ".md", ".html", ".doc", ".docx",
-  ".csv", ".xls", ".xlsx", ".pdf",
+  ".txt",
+  ".md",
+  ".html",
+  ".doc",
+  ".docx",
+  ".csv",
+  ".xls",
+  ".xlsx",
+  ".pdf",
 ]);
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
@@ -57,27 +64,39 @@ function json(statusCode: number, body: unknown): APIGatewayProxyResult {
 function authToken(headers?: Record<string, string | undefined>) {
   const auth = headers?.authorization || headers?.Authorization;
   if (!auth) return null;
-  return auth.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : null;
+  return auth.startsWith("Bearer ")
+    ? auth.slice("Bearer ".length).trim()
+    : null;
 }
 
 function s3Prefix(tenantSlug: string, kbSlug: string): string {
   return `tenants/${tenantSlug}/knowledge-bases/${kbSlug}/documents/`;
 }
 
-async function resolveKb(kbId: string): Promise<{ tenantSlug: string; kbSlug: string } | null> {
-  const [kb] = await db.select({
-    tenant_id: knowledgeBases.tenant_id,
-    slug: knowledgeBases.slug,
-  }).from(knowledgeBases).where(eq(knowledgeBases.id, kbId));
+async function resolveKb(
+  kbId: string,
+): Promise<{ tenantSlug: string; kbSlug: string } | null> {
+  const [kb] = await db
+    .select({
+      tenant_id: knowledgeBases.tenant_id,
+      slug: knowledgeBases.slug,
+    })
+    .from(knowledgeBases)
+    .where(eq(knowledgeBases.id, kbId));
   if (!kb) return null;
 
-  const [tenant] = await db.select({ slug: tenants.slug }).from(tenants).where(eq(tenants.id, kb.tenant_id));
+  const [tenant] = await db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, kb.tenant_id));
   if (!tenant?.slug) return null;
 
   return { tenantSlug: tenant.slug, kbSlug: kb.slug };
 }
 
-export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+export async function handler(
+  event: APIGatewayProxyEvent,
+): Promise<APIGatewayProxyResult> {
   const expectedSecret = process.env.API_AUTH_SECRET;
   const token = authToken(event.headers);
   if (!expectedSecret || !token || token !== expectedSecret) {
@@ -110,11 +129,19 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
   try {
     if (action === "getUploadUrl") {
       if (!filename) {
-        return json(400, { ok: false, error: "filename is required for getUploadUrl" });
+        return json(400, {
+          ok: false,
+          error: "filename is required for getUploadUrl",
+        });
       }
-      const ext = filename.includes(".") ? `.${filename.split(".").pop()!.toLowerCase()}` : "";
+      const ext = filename.includes(".")
+        ? `.${filename.split(".").pop()!.toLowerCase()}`
+        : "";
       if (!ACCEPTED_EXTENSIONS.has(ext)) {
-        return json(400, { ok: false, error: `Unsupported file type: ${ext}. Accepted: ${[...ACCEPTED_EXTENSIONS].join(", ")}` });
+        return json(400, {
+          ok: false,
+          error: `Unsupported file type: ${ext}. Accepted: ${[...ACCEPTED_EXTENSIONS].join(", ")}`,
+        });
       }
       const contentType = body.contentType || "application/octet-stream";
       const key = `${prefix}${filename}`;
@@ -123,28 +150,44 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         Key: key,
         ContentType: contentType as string,
       });
-      const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 300 });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const uploadUrl = await getSignedUrl(s3 as any, command as any, {
+        expiresIn: 300,
+      });
       return json(200, { ok: true, uploadUrl, key });
     }
 
     if (action === "upload") {
       if (!filename || !content) {
-        return json(400, { ok: false, error: "filename and content are required for upload" });
+        return json(400, {
+          ok: false,
+          error: "filename and content are required for upload",
+        });
       }
-      const ext = filename.includes(".") ? `.${filename.split(".").pop()!.toLowerCase()}` : "";
+      const ext = filename.includes(".")
+        ? `.${filename.split(".").pop()!.toLowerCase()}`
+        : "";
       if (!ACCEPTED_EXTENSIONS.has(ext)) {
-        return json(400, { ok: false, error: `Unsupported file type: ${ext}. Accepted: ${[...ACCEPTED_EXTENSIONS].join(", ")}` });
+        return json(400, {
+          ok: false,
+          error: `Unsupported file type: ${ext}. Accepted: ${[...ACCEPTED_EXTENSIONS].join(", ")}`,
+        });
       }
       // content is base64-encoded for binary files
       const buf = Buffer.from(content, "base64");
       if (buf.length > MAX_FILE_SIZE) {
-        return json(400, { ok: false, error: `File exceeds maximum size of ${MAX_FILE_SIZE / 1024 / 1024}MB` });
+        return json(400, {
+          ok: false,
+          error: `File exceeds maximum size of ${MAX_FILE_SIZE / 1024 / 1024}MB`,
+        });
       }
-      await s3.send(new PutObjectCommand({
-        Bucket: BUCKET,
-        Key: `${prefix}${filename}`,
-        Body: buf,
-      }));
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: BUCKET,
+          Key: `${prefix}${filename}`,
+          Body: buf,
+        }),
+      );
       return json(200, { ok: true, key: `${prefix}${filename}` });
     }
 
@@ -152,11 +195,13 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const files: { name: string; size: number; lastModified: string }[] = [];
       let continuationToken: string | undefined;
       do {
-        const result = await s3.send(new ListObjectsV2Command({
-          Bucket: BUCKET,
-          Prefix: prefix,
-          ContinuationToken: continuationToken,
-        }));
+        const result = await s3.send(
+          new ListObjectsV2Command({
+            Bucket: BUCKET,
+            Prefix: prefix,
+            ContinuationToken: continuationToken,
+          }),
+        );
         for (const obj of result.Contents ?? []) {
           if (obj.Key) {
             const name = obj.Key.slice(prefix.length);
@@ -169,25 +214,35 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
             }
           }
         }
-        continuationToken = result.IsTruncated ? result.NextContinuationToken : undefined;
+        continuationToken = result.IsTruncated
+          ? result.NextContinuationToken
+          : undefined;
       } while (continuationToken);
       return json(200, { ok: true, files });
     }
 
     if (action === "delete") {
       if (!filename) {
-        return json(400, { ok: false, error: "filename is required for delete" });
+        return json(400, {
+          ok: false,
+          error: "filename is required for delete",
+        });
       }
-      await s3.send(new DeleteObjectCommand({
-        Bucket: BUCKET,
-        Key: `${prefix}${filename}`,
-      }));
+      await s3.send(
+        new DeleteObjectCommand({
+          Bucket: BUCKET,
+          Key: `${prefix}${filename}`,
+        }),
+      );
       return json(200, { ok: true });
     }
 
     return json(400, { ok: false, error: "Unsupported action" });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    return json(500, { ok: false, error: `KB files operation failed: ${message}` });
+    return json(500, {
+      ok: false,
+      error: `KB files operation failed: ${message}`,
+    });
   }
 }

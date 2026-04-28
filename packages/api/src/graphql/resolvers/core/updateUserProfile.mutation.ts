@@ -9,7 +9,6 @@ import {
   userProfiles,
   users,
 } from "../../utils.js";
-import { invalidateComposerCache } from "../../../lib/workspace-overlay.js";
 import { writeUserMdForAssignment } from "../../../lib/user-md-writer.js";
 import { requireTenantAdmin } from "./authz.js";
 import { resolveCaller } from "./resolve-auth-user.js";
@@ -203,19 +202,12 @@ export const updateUserProfile = async (
     return updated;
   });
 
-  // Wrap each invalidation independently — if one throws, the remaining
-  // agents still get invalidated. A stale composer cache is recoverable
-  // (30s TTL) but silently skipping entries is not.
-  for (const entry of cacheInvalidations) {
-    try {
-      invalidateComposerCache(entry);
-    } catch (err) {
-      console.warn(
-        `[updateUserProfile] cache_invalidation agentId=${entry.agentId} failed:`,
-        err,
-      );
-    }
-  }
+  // Per docs/plans/2026-04-27-003: there is no composer cache to
+  // invalidate. The runtimes pull the agent prefix on every invocation,
+  // so USER.md changes propagate on the next turn without ceremony.
+  // The cacheInvalidations list is kept for the audit-trail value of
+  // knowing which agents were affected.
+  void cacheInvalidations;
 
   return snakeToCamel(row);
 };

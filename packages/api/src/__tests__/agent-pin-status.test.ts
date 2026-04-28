@@ -78,7 +78,6 @@ const s3Mock = mockClient(S3Client);
 process.env.WORKSPACE_BUCKET = "test-bucket";
 
 import { agentPinStatus } from "../graphql/resolvers/agents/agentPinStatus.query.js";
-import { clearComposerCacheForTests } from "../lib/workspace-overlay.js";
 
 const AGENT_ID = "agent-1";
 const TENANT_ID = "tenant-a";
@@ -136,10 +135,12 @@ function versionKey(path: string, hex: string) {
 }
 
 function queueResolverAndComposerContext(agent = agentRow()) {
+  // Per docs/plans/2026-04-27-003: agentPinStatus reads sub-folder pins
+  // directly from the agent's S3 prefix instead of via the composer's
+  // loadAgentContext. The original 3-row "composeList loadAgentContext"
+  // pushes are gone — only the resolver's own agent + tenant + template
+  // queries remain.
   pushDbRows([agent]); // agentPinStatus agent lookup
-  pushDbRows([tenantRow()]);
-  pushDbRows([templateRow()]);
-  pushDbRows([agent]); // composeList loadAgentContext
   pushDbRows([tenantRow()]);
   pushDbRows([templateRow()]);
 }
@@ -147,7 +148,6 @@ function queueResolverAndComposerContext(agent = agentRow()) {
 beforeEach(() => {
   s3Mock.reset();
   resetDbQueue();
-  clearComposerCacheForTests();
   s3Mock.on(HeadObjectCommand).rejects(notFound());
   s3Mock.on(GetObjectCommand).rejects(noSuchKey());
 });
@@ -249,13 +249,15 @@ describe("agentPinStatus", () => {
   it("uses latest content when no pin is recorded for a nested pinned path", async () => {
     const latest = "# Latest";
     queueResolverAndComposerContext(agentRow({ agent_pinned_versions: {} }));
+    // Sub-folder pin paths are now discovered by listing the agent's
+    // own prefix (per docs/plans/2026-04-27-003), not the template's.
     s3Mock.on(ListObjectsV2Command).resolves({
       Contents: [
         {
-          Key: "tenants/acme/agents/_catalog/exec/workspace/expenses/GUARDRAILS.md",
+          Key: "tenants/acme/agents/marco/workspace/expenses/GUARDRAILS.md",
         },
       ],
-    });
+    } as never);
     s3Mock
       .on(GetObjectCommand, { Key: templateKey("GUARDRAILS.md") })
       .rejects(noSuchKey());
@@ -297,10 +299,10 @@ describe("agentPinStatus", () => {
     s3Mock.on(ListObjectsV2Command).resolves({
       Contents: [
         {
-          Key: "tenants/acme/agents/_catalog/exec/workspace/expenses/GUARDRAILS.md",
+          Key: "tenants/acme/agents/marco/workspace/expenses/GUARDRAILS.md",
         },
       ],
-    });
+    } as never);
     s3Mock
       .on(GetObjectCommand, { Key: templateKey("expenses/GUARDRAILS.md") })
       .rejects(noSuchKey());

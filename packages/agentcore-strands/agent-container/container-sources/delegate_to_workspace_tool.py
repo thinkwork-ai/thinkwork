@@ -11,7 +11,7 @@ Pipeline shape (per master plan §008 U9 Approach):
       │
       ├─ validate_path(path)           # ../, abs, reserved-suffix, depth ≤ 5
       │   └─ depth == 4 → logger.warning(soft cap)
-      ├─ composer.fetch_composed_workspace(...)            (full tree)
+      ├─ workspace_reader(WORKSPACE_DIR)                    (local tree)
       ├─ parse_agents_md(target_folder/AGENTS.md content)
       ├─ for slug in row.skills:
       │       resolve_skill(slug, normalized_path, composed_tree, manifest)
@@ -49,7 +49,35 @@ from skill_resolver import (
     SkillNotResolvable,
     resolve_skill,
 )
-from workspace_composer_client import fetch_composed_workspace_cached
+def _read_local_workspace(local_dir: str) -> list[dict]:
+    """Read every file under ``local_dir`` into the composer's payload
+    shape so the rest of this module's logic stays identical to the
+    composer-fed era.
+
+    Skips operational artifacts (``manifest.json``, ``_defaults_version``)
+    so they never appear in routing tables or skill resolution.
+    """
+    import hashlib
+
+    out: list[dict] = []
+    if not os.path.isdir(local_dir):
+        return out
+    for root, _dirs, files in os.walk(local_dir):
+        for name in files:
+            abs_path = os.path.join(root, name)
+            rel = os.path.relpath(abs_path, local_dir).replace(os.sep, "/")
+            if rel in {"manifest.json", "_defaults_version"}:
+                continue
+            try:
+                with open(abs_path, "rb") as fh:
+                    raw = fh.read()
+            except OSError:
+                continue
+            content = raw.decode("utf-8", errors="replace")
+            sha = hashlib.sha256(raw).hexdigest()
+            out.append({"path": rel, "content": content, "sha256": sha})
+    out.sort(key=lambda item: item["path"])
+    return out
 
 logger = logging.getLogger(__name__)
 
@@ -553,7 +581,8 @@ def make_delegate_to_workspace_fn(
     platform_catalog_manifest: Mapping[str, Mapping[str, Any]] | None,
     cfg_model: str,
     usage_acc: list,
-    composer_fetch: Callable[..., list[dict]] = fetch_composed_workspace_cached,
+    workspace_reader: Callable[[str], list[dict]] = _read_local_workspace,
+    workspace_dir: str | None = None,
     spawn_fn: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     aws_region: str | None = None,
     model_factory: Callable[..., Any] | None = None,
@@ -598,7 +627,10 @@ def make_delegate_to_workspace_fn(
     snapshot_api_url = api_url
     snapshot_api_secret = api_secret
     snapshot_cfg_model = cfg_model
-    snapshot_composer = composer_fetch
+    snapshot_workspace_reader = workspace_reader
+    snapshot_workspace_dir = workspace_dir or os.environ.get(
+        "WORKSPACE_DIR", "/tmp/workspace"
+    )
     snapshot_tool_context = deepcopy(dict(tool_context or {}))
     # Snapshot AWS_REGION here so a per-call os.environ.get(...) inside
     # the spawn body cannot drift (feedback_completion_callback_snapshot_pattern).
@@ -642,16 +674,14 @@ def make_delegate_to_workspace_fn(
         normalized_path = validate_path(path)
         depth = len(normalized_path.split("/"))
 
+        # Per docs/plans/2026-04-27-003: the parent's bootstrap has
+        # already synced the agent's S3 prefix to local disk. Read from
+        # there instead of fetching the composer over HTTP.
         try:
-            files = snapshot_composer(
-                tenant_id=snapshot_tenant_id,
-                agent_id=snapshot_agent_id,
-                api_url=snapshot_api_url,
-                api_secret=snapshot_api_secret,
-            )
+            files = snapshot_workspace_reader(snapshot_workspace_dir)
         except Exception as exc:
             raise DelegateToWorkspaceError(
-                f"delegate_to_workspace failed: composer fetch error — {exc}"
+                f"delegate_to_workspace failed: workspace read error — {exc}"
             ) from exc
 
         agents_md = _find_agents_md_content(files, normalized_path)
