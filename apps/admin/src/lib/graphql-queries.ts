@@ -1707,6 +1707,7 @@ export const AgentTemplateDetailQuery = graphql(`
       skills
       sandbox
       browser
+      webSearch
       knowledgeBaseIds
       isPublished
       createdAt
@@ -1740,6 +1741,7 @@ export const UpdateAgentTemplateMutation = graphql(`
       skills
       sandbox
       browser
+      webSearch
       knowledgeBaseIds
       updatedAt
     }

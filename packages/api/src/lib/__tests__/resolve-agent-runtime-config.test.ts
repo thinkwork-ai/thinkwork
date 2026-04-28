@@ -86,6 +86,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
   agentTemplates: {
     id: "agentTemplates.id",
     runtime: "agentTemplates.runtime",
+    web_search: "agentTemplates.web_search",
   },
   agentSkills: {
     agent_id: "agentSkills.agent_id",
@@ -163,6 +164,7 @@ function stageTemplateRow(overrides?: Record<string, unknown>) {
       blocked_tools: null,
       sandbox: null,
       browser: null,
+      web_search: { enabled: true },
       runtime: "strands",
       ...overrides,
     },
@@ -443,9 +445,9 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(threadMgmt?.envOverrides?.CURRENT_USER_EMAIL).toBe("rep@acme.test");
   });
 
-  it("injects tenant built-in tools when loadTenantBuiltinTools returns rows", async () => {
+  it("injects tenant built-in tools when template Web Search is enabled", async () => {
     stageAgentRow();
-    stageTemplateRow();
+    stageTemplateRow({ web_search: { enabled: true } });
     stageTenantSlug();
     rowsQueue.push([]); // guardrail
     rowsQueue.push([]); // skills
@@ -464,6 +466,29 @@ describe("resolveAgentRuntimeConfig", () => {
     const webSearch = cfg.skillsConfig.find((s) => s.skillId === "web-search");
     expect(webSearch).toBeDefined();
     expect(webSearch?.envOverrides).toEqual({ SERPER_API_KEY: "abc" });
+  });
+
+  it("does not inject web-search when the template Web Search opt-in is null", async () => {
+    stageAgentRow();
+    stageTemplateRow({ web_search: null });
+    stageTenantSlug();
+    rowsQueue.push([]); // guardrail
+    rowsQueue.push([]); // skills
+    rowsQueue.push([]); // kbs
+    mockLoadTenantBuiltinTools.mockResolvedValueOnce([
+      {
+        toolSlug: "web-search",
+        provider: "serper",
+        envOverrides: { SERPER_API_KEY: "abc" },
+      },
+    ]);
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+    expect(cfg.skillsConfig.some((s) => s.skillId === "web-search")).toBe(
+      false,
+    );
   });
 
   it("delegates MCP config construction to buildMcpConfigs with the agent + human pair", async () => {
