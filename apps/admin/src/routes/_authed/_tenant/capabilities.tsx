@@ -18,9 +18,7 @@ function CapabilitiesLayout() {
     ? "builtin-tools"
     : pathname.startsWith("/capabilities/mcp-servers")
       ? "mcp-servers"
-      : pathname.startsWith("/capabilities/plugins")
-        ? "plugins"
-        : "skills";
+      : "skills";
 
   return (
     <PageLayout
@@ -35,17 +33,14 @@ function CapabilitiesLayout() {
           <div className="flex justify-center">
             <Tabs value={currentTab}>
               <TabsList>
-                <TabsTrigger value="skills" asChild className="px-2">
-                  <Link to="/capabilities/skills">Skills</Link>
-                </TabsTrigger>
                 <TabsTrigger value="builtin-tools" asChild className="px-2">
                   <Link to="/capabilities/builtin-tools">Built-in Tools</Link>
                 </TabsTrigger>
+                <TabsTrigger value="skills" asChild className="px-2">
+                  <Link to="/capabilities/skills">Skills</Link>
+                </TabsTrigger>
                 <TabsTrigger value="mcp-servers" asChild className="px-2">
                   <Link to="/capabilities/mcp-servers">MCP Servers</Link>
-                </TabsTrigger>
-                <TabsTrigger value="plugins" asChild className="px-2">
-                  <Link to="/capabilities/plugins">Plugins</Link>
                 </TabsTrigger>
               </TabsList>
             </Tabs>

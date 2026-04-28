@@ -1000,7 +1000,7 @@ export function WorkspaceEditor({
       ) : (
         <div
           className={cn(
-            "flex h-[calc(100vh-8rem)] min-h-[400px] rounded-md border",
+            "flex h-full min-h-[400px] rounded-md border",
             className,
           )}
         >

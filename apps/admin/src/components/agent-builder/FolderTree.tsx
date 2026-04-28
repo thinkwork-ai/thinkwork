@@ -32,6 +32,9 @@ export type TreeNode = {
 
 const SUB_AGENTS_NODE_PATH = "__synthetic__/sub-agents";
 const RESERVED_ROUTING_FOLDERS = new Set(["memory", "skills"]);
+const TREE_ROW_INDENT_PX = 16;
+const TREE_ROW_LEFT_PADDING_PX = 8;
+const TREE_ROW_ICON_COLUMN_PX = 38;
 
 // Reserved root folders that should render in the tree even when empty.
 // Per docs/plans/2026-04-27-004 U2 / U8: skills/ should be visible to
@@ -285,7 +288,9 @@ function FolderTreeItem({
           "group/tree-row mx-1 flex cursor-pointer items-center gap-1 rounded-md border-[0.5px] border-transparent px-2 py-0.5 text-sm transition-colors hover:bg-accent",
           isSelected && "border-sky-500 bg-accent dark:border-sky-400",
         )}
-        style={{ paddingLeft: `${depth * 16 + 8}px` }}
+        style={{
+          paddingLeft: `${depth * TREE_ROW_INDENT_PX + TREE_ROW_LEFT_PADDING_PX}px`,
+        }}
         onClick={() => {
           if (node.isFolder) onToggle(node.path);
           else onSelect(node.path);
@@ -423,14 +428,22 @@ function FolderTreeItem({
           {node.synthetic && node.children.length === 0 ? (
             <div
               className="px-2 py-2 text-xs text-muted-foreground"
-              style={{ paddingLeft: `${(depth + 1) * 16 + 8}px` }}
+              style={{
+                paddingLeft: `${(depth + 1) * TREE_ROW_INDENT_PX + TREE_ROW_LEFT_PADDING_PX}px`,
+              }}
             >
               Route specialist folders from AGENTS.md.
             </div>
           ) : node.children.length === 0 ? (
             <div
               className="px-2 py-1 text-xs italic text-muted-foreground"
-              style={{ paddingLeft: `${(depth + 1) * 16 + 8}px` }}
+              style={{
+                paddingLeft: `${
+                  depth * TREE_ROW_INDENT_PX +
+                  TREE_ROW_LEFT_PADDING_PX +
+                  TREE_ROW_ICON_COLUMN_PX
+                }px`,
+              }}
             >
               Empty folder
             </div>
