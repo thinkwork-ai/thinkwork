@@ -50,9 +50,6 @@ AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 WORKSPACE_DIR = os.environ.get("WORKSPACE_DIR", "/tmp/workspace")
 DEFAULT_MODEL = "us.anthropic.claude-sonnet-4-6"
 
-_workspace_loaded_key = None
-
-
 def _apply_workspace_bucket_env(bucket: str) -> None:
     if not bucket:
         return
@@ -87,19 +84,13 @@ _tool_costs: list[dict] = []  # Accumulated per-invocation tool costs
 # The HTTP client lives in workspace_composer_client.py so it can be
 # unit-tested without importing the full Strands runtime.
 
-from workspace_composer_client import (
-    compute_fingerprint,
-    fetch_composed_workspace,
-    write_composed_to_dir,
-)
+from bootstrap_workspace import bootstrap_workspace
 from user_storage import PackResult, get_user_knowledge_pack
 
 
-# Cache the hash of the last composed-list result so we skip rewriting
-# /tmp/workspace on warm reuse when nothing changed. Composer caching +
-# this client-side short-circuit keep mass-wakeup bootstrap cost bounded
-# (see plan's project_enterprise_onboarding_scale memory).
-_composed_fingerprint: str | None = None
+# Per-user knowledge pack — separate prompt-injection concern from the
+# workspace sync. Refreshed at the same per-invocation cadence as the
+# workspace bootstrap.
 _PACK_CACHE: PackResult | None = None
 
 
@@ -328,70 +319,70 @@ def _ensure_workspace_ready(workspace_tenant_id: str, assistant_id: str,
                             skills_config: list | None = None,
                             tenant_slug: str = "", instance_id: str = "",
                             agent_name: str = "", human_name: str = ""):
-    """Fetch the composed workspace from /api/workspaces/files and write it
-    to /tmp/workspace. No S3 reads, no S3 writes, no local substitution.
+    """Sync the agent's S3 prefix to /tmp/workspace.
 
-    Falls back to the legacy direct-S3 sync only when THINKWORK_API_URL /
-    API_AUTH_SECRET aren't set (early boot or misconfigured deploy). Under
-    normal operation every file comes from the composer — that's what
-    closes the "first boot forks every agent's S3 state" regression.
+    Per docs/plans/2026-04-27-003 (materialize-at-write-time): the agent's
+    S3 prefix is the only thing the runtime reads. List the prefix,
+    download every file, delete locals that disappeared upstream. No
+    overlay, no template/defaults fallback, no read-time substitution.
+
+    Runs on every invocation (not cold-start-only). Operator edits land
+    on the next turn without any cache-invalidation choreography.
+
+    Also refreshes the user knowledge pack (separate per-user prompt
+    injection) — same per-invocation cadence.
     """
-    global _workspace_loaded_key, _composed_fingerprint, _PACK_CACHE
+    global _PACK_CACHE
 
-    # tenant_slug / instance_id are the legacy fallback fields; the composer
-    # itself only needs tenant UUID + agent UUID.
     if not workspace_tenant_id or not assistant_id:
         os.makedirs(WORKSPACE_DIR, exist_ok=True)
         return
 
-    api_url = os.environ.get("THINKWORK_API_URL") or ""
-    api_secret = (
-        os.environ.get("API_AUTH_SECRET")
-        or os.environ.get("THINKWORK_API_SECRET")
+    bucket = (
+        os.environ.get("WORKSPACE_BUCKET")
+        or os.environ.get("AGENTCORE_FILES_BUCKET")
         or ""
     )
+    ws_tenant = tenant_slug or workspace_tenant_id
+    ws_instance = instance_id or assistant_id
 
     os.makedirs(WORKSPACE_DIR, exist_ok=True)
 
-    if not api_url or not api_secret:
-        # No composer URL / secret → legacy direct-S3 sync. This path stays
-        # until every deploy env has THINKWORK_API_URL + API_AUTH_SECRET
-        # plumbed through (safety net for transitional deploys).
-        ws_tenant = tenant_slug or workspace_tenant_id
-        ws_instance = instance_id or assistant_id
-        if not ws_tenant or not ws_instance:
-            return
-        try:
-            from install_skills import install_workspace
-            install_workspace(ws_tenant, ws_instance)
-            logger.warning(
-                "workspace_sync action=legacy_s3 (no composer URL/secret)"
-            )
-        except Exception as e:
-            logger.warning("workspace_sync legacy S3 failed: %s", e)
+    if not bucket or not ws_tenant or not ws_instance:
+        logger.warning(
+            "workspace_sync action=skip reason=missing_config bucket=%r tenant=%r instance=%r",
+            bool(bucket), bool(ws_tenant), bool(ws_instance),
+        )
         return
 
     t_sync = time.time()
     try:
-        files = fetch_composed_workspace(
-            tenant_id=workspace_tenant_id,
-            agent_id=assistant_id,
-            api_url=api_url,
-            api_secret=api_secret,
+        s3 = boto3.client("s3", region_name=AWS_REGION)
+        result = bootstrap_workspace(
+            tenant_slug=ws_tenant,
+            agent_slug=ws_instance,
+            local_dir=WORKSPACE_DIR,
+            s3_client=s3,
+            bucket=bucket,
         )
     except Exception as e:
-        logger.warning("workspace_sync composer fetch failed: %s", e)
+        logger.warning("workspace_sync bootstrap failed: %s", e)
         return
 
+    sync_ms = round((time.time() - t_sync) * 1000)
+    logger.info(
+        "workspace_sync action=bootstrap sync_ms=%d synced=%d deleted=%d total=%d",
+        sync_ms, result.synced, result.deleted, result.total,
+    )
+
+    # User knowledge pack — separate per-user prompt injection. Refreshed
+    # at the same cadence as the workspace sync.
     user_id = os.environ.get("USER_ID", "") or os.environ.get("CURRENT_USER_ID", "")
     if user_id:
         _PACK_CACHE = get_user_knowledge_pack(
             workspace_tenant_id,
             user_id,
-            bucket=(
-                os.environ.get("WORKSPACE_BUCKET")
-                or os.environ.get("AGENTCORE_FILES_BUCKET")
-            ),
+            bucket=bucket,
         )
     else:
         _PACK_CACHE = None
@@ -407,27 +398,6 @@ def _ensure_workspace_ready(workspace_tenant_id: str, assistant_id: str,
                 "scope": "user",
             },
         )
-    pack_etag = _PACK_CACHE.etag if _PACK_CACHE else "none"
-
-    # Client-side fingerprint skip: if composer returns the same set of
-    # {path, sha256} and the user knowledge pack ETag has not changed, don't
-    # rewrite /tmp/workspace. The pack is prompt-only, but sharing one
-    # fingerprint keeps warm-container invalidation easy to reason about.
-    fingerprint = f"{compute_fingerprint(files)}:pack:{pack_etag}"
-    if fingerprint == _composed_fingerprint and _workspace_loaded_key:
-        logger.info("workspace_sync action=skip reason=fingerprint_match files=%d",
-                     len(files))
-        return
-
-    files_written = write_composed_to_dir(files, WORKSPACE_DIR)
-
-    sync_ms = round((time.time() - t_sync) * 1000)
-    _workspace_loaded_key = f"{workspace_tenant_id}:{assistant_id}:{fingerprint}"
-    _composed_fingerprint = fingerprint
-    logger.info(
-        "workspace_sync action=composer_fetch sync_ms=%d files=%d fingerprint=%s",
-        sync_ms, files_written, fingerprint[:12],
-    )
 
 
 # Structured-log event_type vocabulary for the delegate_to_workspace
