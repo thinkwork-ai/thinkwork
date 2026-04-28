@@ -2,6 +2,7 @@ import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { buildExecuteCodeTool } from "./execute-code.js";
 import { buildHindsightTools } from "./hindsight.js";
 import { buildMcpTools } from "./mcp.js";
+import { buildSendEmailTool } from "./send-email.js";
 import { buildWebSearchTool } from "./web-search.js";
 import { buildWorkspaceSkillTool } from "./workspace-skills.js";
 import type { PiToolContext } from "./types.js";
@@ -13,6 +14,9 @@ export async function buildPiTools(
 
   const webSearch = buildWebSearchTool(context.payload);
   if (webSearch) tools.push(webSearch);
+
+  const sendEmail = buildSendEmailTool(context.payload);
+  if (sendEmail) tools.push(sendEmail);
 
   const executeCode = buildExecuteCodeTool(
     context.payload,

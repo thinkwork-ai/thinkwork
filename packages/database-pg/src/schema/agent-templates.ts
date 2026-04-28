@@ -86,6 +86,15 @@ export const agentTemplates = pgTable(
      * packages/api/src/lib/templates/web-search-config.ts.
      */
     web_search: jsonb("web_search").default(sql`'{"enabled": true}'::jsonb`),
+    /**
+     * Send Email opt-in metadata for the platform email-sending built-in tool.
+     * Shape: { enabled: true } | null. Null = the template does not register
+     * send_email even when the agent email channel is enabled.
+     *
+     * Shape is validated at create/update mutation time by
+     * packages/api/src/lib/templates/send-email-config.ts.
+     */
+    send_email: jsonb("send_email").default(sql`'{"enabled": true}'::jsonb`),
     is_published: boolean("is_published").notNull().default(true),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()

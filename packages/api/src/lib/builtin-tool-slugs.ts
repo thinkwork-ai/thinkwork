@@ -1,4 +1,4 @@
-export const BUILTIN_TOOL_SLUGS = ["web-search"] as const;
+export const BUILTIN_TOOL_SLUGS = ["web-search", "agent-email-send"] as const;
 
 const BUILTIN_TOOL_SLUG_SET = new Set<string>(BUILTIN_TOOL_SLUGS);
 

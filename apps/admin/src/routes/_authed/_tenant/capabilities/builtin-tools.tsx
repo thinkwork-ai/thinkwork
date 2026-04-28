@@ -10,6 +10,7 @@ import {
   Trash2,
   Wrench,
   Search,
+  Mail,
 } from "lucide-react";
 import { TenantSandboxStatusQuery } from "@/lib/graphql-queries";
 import { useTenant } from "@/context/TenantContext";
@@ -76,7 +77,7 @@ const CATALOG: CatalogEntry[] = [
     description:
       "Lets agents operate dynamic websites with an AgentCore Browser session controlled by Nova Act. Policy-gated at the tenant level; opt-in per agent template or individual agent capability.",
     providers: [],
-    kind: "policy-gated",
+    kind: "policy-gated" as const,
     fixedProvider: "agentcore+nova_act",
   },
   {
@@ -85,8 +86,17 @@ const CATALOG: CatalogEntry[] = [
     description:
       "Lets agents run Python via execute_code against real data in your AWS account. Runs on Bedrock AgentCore Code Interpreter — one per-tenant instance. Policy-gated at the tenant level; opt-in per agent template on the template's Configuration tab.",
     providers: [],
-    kind: "policy-gated",
+    kind: "policy-gated" as const,
     fixedProvider: "agentcore",
+  },
+  {
+    slug: "agent-email-send",
+    name: "Send Email",
+    description:
+      "Lets agents send plain text email from their agent address with reply tracking. Policy-gated by the agent email channel and opt-in per agent template.",
+    providers: [],
+    kind: "policy-gated" as const,
+    fixedProvider: "thinkwork-email",
   },
   {
     slug: "web-search",
@@ -430,7 +440,11 @@ function ConfigureDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Wrench className="h-5 w-5" />
+            {row.slug === "agent-email-send" ? (
+              <Mail className="h-5 w-5" />
+            ) : (
+              <Wrench className="h-5 w-5" />
+            )}
             {row.name}
           </DialogTitle>
           <DialogDescription>{row.description}</DialogDescription>
@@ -595,6 +609,7 @@ function PolicyGatedInfoDialog({
 }) {
   const sb = row.sandbox;
   const isSandbox = row.slug === "code-sandbox";
+  const isEmail = row.slug === "agent-email-send";
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg">
@@ -616,7 +631,9 @@ function PolicyGatedInfoDialog({
             <p className="text-xs text-muted-foreground">
               {isSandbox
                 ? "Bedrock AgentCore Code Interpreter. One public + one internal-only interpreter are provisioned per tenant on first enrollment."
-                : "Bedrock AgentCore Browser sessions are controlled through Nova Act. Cost is recorded as separate Nova Act and AgentCore Browser events."}
+                : isEmail
+                  ? "Thinkwork platform email sending uses the agent email channel and records reply tokens for bidirectional conversations."
+                  : "Bedrock AgentCore Browser sessions are controlled through Nova Act. Cost is recorded as separate Nova Act and AgentCore Browser events."}
             </p>
           </div>
 
@@ -668,8 +685,10 @@ function PolicyGatedInfoDialog({
               ) : (
                 <>
                   Open any <b>Agent Template → Configuration</b> and toggle{" "}
-                  <code>browser_automation</code>. Individual agent capability
-                  rows can override the template default.
+                  <code>{isEmail ? "send_email" : "browser_automation"}</code>.
+                  {isEmail
+                    ? " The agent email channel must also be enabled for the agent."
+                    : " Individual agent capability rows can override the template default."}
                 </>
               )}
             </p>

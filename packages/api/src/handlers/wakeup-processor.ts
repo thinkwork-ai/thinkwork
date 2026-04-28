@@ -52,6 +52,7 @@ import {
   type TemplateSandboxConfig,
 } from "../lib/sandbox-preflight.js";
 import { validateTemplateBrowser } from "../lib/templates/browser-config.js";
+import { validateTemplateSendEmail } from "../lib/templates/send-email-config.js";
 import { validateTemplateWebSearch } from "../lib/templates/web-search-config.js";
 import { ensureThreadForWork } from "../lib/thread-helpers.js";
 import {
@@ -291,6 +292,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       sandbox: agentTemplates.sandbox,
       browser: agentTemplates.browser,
       web_search: agentTemplates.web_search,
+      send_email: agentTemplates.send_email,
     })
     .from(agents)
     .leftJoin(agentTemplates, eq(agents.template_id, agentTemplates.id))
@@ -387,6 +389,15 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       `[wakeup-processor] Invalid template webSearch config ignored for agent ${wakeup.agent_id}: ${templateWebSearchResult.error}`,
     );
   }
+  const templateSendEmailResult = validateTemplateSendEmail(agent.send_email);
+  const templateSendEmailEnabled = templateSendEmailResult.ok
+    ? templateSendEmailResult.value?.enabled === true
+    : false;
+  if (!templateSendEmailResult.ok) {
+    console.warn(
+      `[wakeup-processor] Invalid template sendEmail config ignored for agent ${wakeup.agent_id}: ${templateSendEmailResult.error}`,
+    );
+  }
 
   // Look up agent's installed skills. Runtime activation is now
   // workspace-copy based, so every agent skill points at the agent workspace.
@@ -445,73 +456,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     throw new Error(
       "workspace_event wakeup payload missing required workspaceRunId",
     );
-  }
-
-  // PRD-14: Auto-inject agent-email-send skill for email_received wakeups
-  if (wakeup.source === "email_received") {
-    const [emailCap] = await db
-      .select({ config: agentCapabilities.config })
-      .from(agentCapabilities)
-      .where(
-        and(
-          eq(agentCapabilities.agent_id, wakeup.agent_id),
-          eq(agentCapabilities.capability, "email_channel"),
-        ),
-      );
-    if (emailCap) {
-      const emailConfig = (emailCap.config as Record<string, unknown>) || {};
-      const vanity = emailConfig.vanityAddress
-        ? `${emailConfig.vanityAddress}@agents.thinkwork.ai`
-        : null;
-      const emailAddress =
-        vanity ||
-        (emailConfig.emailAddress as string) ||
-        `${agentSlug}@agents.thinkwork.ai`;
-      const hasEmailSkill = skillsConfig.some(
-        (s) => s.skillId === "agent-email-send",
-      );
-      if (!hasEmailSkill) {
-        skillsConfig.push({
-          skillId: "agent-email-send",
-          s3Key: "skills/catalog/agent-email-send",
-          secretRef: undefined,
-          mcpServer: undefined,
-          envOverrides: {
-            AGENT_EMAIL_ADDRESS: emailAddress,
-            AGENT_ID: wakeup.agent_id,
-            THINKWORK_API_URL: THINKWORK_API_URL,
-            THINKWORK_API_SECRET: THINKWORK_API_SECRET,
-            INBOUND_MESSAGE_ID: (payload?.originalMessageId as string) || "",
-            INBOUND_SUBJECT: (payload?.subject as string) || "",
-            INBOUND_FROM: (payload?.from as string) || "",
-            INBOUND_BODY: (payload?.body as string) || "",
-          },
-        });
-      }
-    }
-  }
-
-  // Default skill: agent-email-send — always available for all agents
-  const hasEmailSendSkill = skillsConfig.some(
-    (s) => s.skillId === "agent-email-send",
-  );
-  if (!hasEmailSendSkill) {
-    skillsConfig.push({
-      skillId: "agent-email-send",
-      s3Key: "skills/catalog/agent-email-send",
-      secretRef: undefined,
-      envOverrides: {
-        AGENT_EMAIL_ADDRESS: `${agentSlug}@agents.thinkwork.ai`,
-        AGENT_ID: wakeup.agent_id,
-        THINKWORK_API_URL: THINKWORK_API_URL,
-        THINKWORK_API_SECRET: THINKWORK_API_SECRET,
-        INBOUND_MESSAGE_ID: "",
-        INBOUND_SUBJECT: "",
-        INBOUND_FROM: "",
-        INBOUND_BODY: "",
-      },
-      mcpServer: undefined,
-    });
   }
 
   // Default skills: always available for all agents (parity with chat-agent-invoke).
@@ -629,6 +573,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     .select({
       capability: agentCapabilities.capability,
       enabled: agentCapabilities.enabled,
+      config: agentCapabilities.config,
     })
     .from(agentCapabilities)
     .where(
@@ -640,11 +585,40 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   const browserCapability = capabilityRows.find(
     (row) => row.capability === BROWSER_AUTOMATION_CAPABILITY,
   );
+  const emailCapability = capabilityRows.find(
+    (row) => row.capability === "email_channel",
+  );
+  const emailConfig =
+    (emailCapability?.config as Record<string, unknown> | undefined) ?? {};
+  const vanityAddress =
+    typeof emailConfig.vanityAddress === "string" && emailConfig.vanityAddress
+      ? `${emailConfig.vanityAddress}@agents.thinkwork.ai`
+      : null;
+  const agentEmailAddress =
+    vanityAddress ||
+    (typeof emailConfig.emailAddress === "string"
+      ? emailConfig.emailAddress
+      : "") ||
+    `${agentSlug}@agents.thinkwork.ai`;
   const browserAutomationEnabled =
     !blockedTools.includes(BROWSER_AUTOMATION_CAPABILITY) &&
     (browserCapability
       ? browserCapability.enabled === true
       : templateBrowserEnabled);
+  const sendEmailConfig =
+    templateSendEmailEnabled && !blockedTools.includes("send_email")
+      ? {
+          agentId: wakeup.agent_id,
+          tenantId: wakeup.tenant_id,
+          agentEmailAddress,
+          apiUrl: THINKWORK_API_URL,
+          apiSecret: THINKWORK_API_SECRET,
+          inboundMessageId: (payload?.originalMessageId as string) || "",
+          inboundSubject: (payload?.subject as string) || "",
+          inboundFrom: (payload?.from as string) || "",
+          inboundBody: (payload?.body as string) || "",
+        }
+      : undefined;
 
   const runtimeType = normalizeAgentRuntimeType(
     agent.runtime ?? agent.template_runtime,
@@ -1066,7 +1040,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         `Body: ${body}`,
         "[EMAIL_CONTENT_END]",
         "",
-        "If you need to reply, use the agent-email-send skill.",
+        "If you need to reply, use the send_email tool with mode='reply'.",
       ].join("\n");
       break;
     }
@@ -1275,6 +1249,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       workspace_bucket: WORKSPACE_BUCKET || undefined,
       workspace_prefix: workspacePrefix,
       hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
+      send_email_config: sendEmailConfig
+        ? { ...sendEmailConfig, threadId: resolvedThreadId }
+        : undefined,
       runtime_type: runtimeType,
       model: agent.model,
       skills: skillsConfig.length > 0 ? skillsConfig : undefined,

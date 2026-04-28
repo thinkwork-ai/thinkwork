@@ -609,6 +609,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
                         disabled_builtin_tools: list | None = None,
                         template_blocked_tools: list | None = None,
                         web_search_config: dict | None = None,
+                        send_email_config: dict | None = None,
                         browser_automation_enabled: bool = False) -> tuple[str, dict]:
     """Invoke Strands Agent SDK.
 
@@ -1112,6 +1113,23 @@ def _call_strands_agent(system_prompt: str, messages: list,
             logger.info("Web Search tool registered (total tools: %d)", len(tools))
         except Exception as e:
             logger.warning("Web Search registration failed: %s", e)
+
+    # Send Email is an injected built-in tool, not a workspace filesystem skill.
+    if send_email_config:
+        try:
+            from strands import tool as _send_email_tool_decorator
+            from send_email_tool import build_send_email_tool
+
+            tools.append(
+                build_send_email_tool(
+                    strands_tool_decorator=_send_email_tool_decorator,
+                    send_email_config=send_email_config,
+                    cost_sink=_tool_costs,
+                )
+            )
+            logger.info("Send Email tool registered (total tools: %d)", len(tools))
+        except Exception as e:
+            logger.warning("Send Email registration failed: %s", e)
 
     # Browser Automation is opt-in per template/agent. When policy enables it,
     # register the tool even if dependencies/key are missing so the agent gets
@@ -1855,6 +1873,7 @@ def _execute_agent_turn(payload: dict) -> dict:
     guardrail_config = payload.get("guardrail_config")
     mcp_configs = payload.get("mcp_configs") or []
     web_search_config = payload.get("web_search_config")
+    send_email_config = payload.get("send_email_config")
     thread_metadata = payload.get("thread_metadata") or {}
     workflow_skill = payload.get("workflow_skill")
     disabled_builtin_tools = payload.get("disabled_builtin_tools") or []
@@ -1974,6 +1993,7 @@ def _execute_agent_turn(payload: dict) -> dict:
             disabled_builtin_tools=disabled_builtin_tools,
             template_blocked_tools=template_blocked_tools,
             web_search_config=web_search_config,
+            send_email_config=send_email_config,
             browser_automation_enabled=browser_automation_enabled,
         )
         duration_ms = int(time.time() * 1000) - start_ms

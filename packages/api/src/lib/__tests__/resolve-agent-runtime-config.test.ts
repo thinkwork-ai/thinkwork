@@ -82,11 +82,13 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     tenant_id: "agentCapabilities.tenant_id",
     capability: "agentCapabilities.capability",
     enabled: "agentCapabilities.enabled",
+    config: "agentCapabilities.config",
   },
   agentTemplates: {
     id: "agentTemplates.id",
     runtime: "agentTemplates.runtime",
     web_search: "agentTemplates.web_search",
+    send_email: "agentTemplates.send_email",
   },
   agentSkills: {
     agent_id: "agentSkills.agent_id",
@@ -165,6 +167,7 @@ function stageTemplateRow(overrides?: Record<string, unknown>) {
       sandbox: null,
       browser: null,
       web_search: { enabled: true },
+      send_email: { enabled: true },
       runtime: "strands",
       ...overrides,
     },
@@ -241,12 +244,17 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.browserAutomationEnabled).toBe(false);
     expect(cfg.knowledgeBasesConfig).toBeUndefined();
     expect(cfg.mcpConfigs).toEqual([]);
-    // Default skills must always be present (agent-email-send + defaults).
+    // Default script skills stay present; send_email is injected as a direct tool.
     const slugs = cfg.skillsConfig.map((s) => s.skillId);
-    expect(slugs).toContain("agent-email-send");
+    expect(slugs).not.toContain("agent-email-send");
     expect(slugs).toContain("agent-thread-management");
     expect(slugs).toContain("artifacts");
     expect(slugs).toContain("workspace-memory");
+    expect(cfg.sendEmailConfig).toMatchObject({
+      agentId: AGENT_ID,
+      tenantId: TENANT_ID,
+      agentEmailAddress: "ada@agents.thinkwork.ai",
+    });
   });
 
   it("uses the agent runtime selector when present", async () => {
@@ -306,7 +314,6 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(slugs).not.toContain("artifacts");
     expect(slugs).not.toContain("workspace-memory");
     // non-blocked defaults stay
-    expect(slugs).toContain("agent-email-send");
     expect(slugs).toContain("agent-thread-management");
   });
 
@@ -370,6 +377,20 @@ describe("resolveAgentRuntimeConfig", () => {
       agentId: AGENT_ID,
     });
     expect(cfg.browserAutomationEnabled).toBe(false);
+  });
+
+  it("does not inject send_email when the template Send Email opt-in is null", async () => {
+    stageAgentRow();
+    stageTemplateRow({ send_email: null });
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    rowsQueue.push([]); // skills
+    rowsQueue.push([]); // kbs
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+    expect(cfg.sendEmailConfig).toBeUndefined();
   });
 
   it("falls back to the tenant default guardrail when the template has none", async () => {

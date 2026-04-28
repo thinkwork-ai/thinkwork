@@ -3,6 +3,7 @@ import type { GraphQLContext } from "../../context.js";
 import { db, eq, agentTemplates, snakeToCamel, sql } from "../../utils.js";
 import { validateTemplateBrowser } from "../../../lib/templates/browser-config.js";
 import { validateTemplateSandbox } from "../../../lib/templates/sandbox-config.js";
+import { validateTemplateSendEmail } from "../../../lib/templates/send-email-config.js";
 import { validateTemplateWebSearch } from "../../../lib/templates/web-search-config.js";
 import { requireTenantAdmin } from "../core/authz.js";
 import {
@@ -79,6 +80,11 @@ export async function updateAgentTemplate(
     const webSearchResult = validateTemplateWebSearch(i.webSearch);
     if (!webSearchResult.ok) throw new Error(webSearchResult.error);
     set.web_search = webSearchResult.value;
+  }
+  if (i.sendEmail !== undefined) {
+    const sendEmailResult = validateTemplateSendEmail(i.sendEmail);
+    if (!sendEmailResult.ok) throw new Error(sendEmailResult.error);
+    set.send_email = sendEmailResult.value;
   }
 
   const [row] = await db

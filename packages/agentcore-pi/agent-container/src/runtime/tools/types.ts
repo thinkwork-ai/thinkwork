@@ -21,6 +21,7 @@ export interface PiInvocationPayload {
   thinkwork_api_secret?: unknown;
   hindsight_endpoint?: unknown;
   web_search_config?: unknown;
+  send_email_config?: unknown;
   sandbox_interpreter_id?: unknown;
   sandbox_environment?: unknown;
   sandbox_status?: unknown;

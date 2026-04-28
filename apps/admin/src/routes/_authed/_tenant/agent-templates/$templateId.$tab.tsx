@@ -13,6 +13,7 @@ import {
   Trash2,
   Cable,
   Search,
+  Mail,
 } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -173,6 +174,7 @@ function TemplateEditorPage() {
   const [sandboxEnv, setSandboxEnv] = useState<SandboxEnv>("default-public");
   const [browserEnabled, setBrowserEnabled] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(true);
+  const [sendEmailEnabled, setSendEmailEnabled] = useState(true);
 
   // State -- MCP servers
   const [templateMcpServers, setTemplateMcpServers] = useState<
@@ -230,6 +232,7 @@ function TemplateEditorPage() {
         sandboxEnv,
         browserEnabled,
         webSearchEnabled,
+        sendEmailEnabled,
       }),
     [
       name,
@@ -245,6 +248,7 @@ function TemplateEditorPage() {
       sandboxEnv,
       browserEnabled,
       webSearchEnabled,
+      sendEmailEnabled,
     ],
   );
   const isDirty = isNew || initialSnapshot !== currentSnapshot;
@@ -312,6 +316,14 @@ function TemplateEditorPage() {
         webSearch && webSearch.enabled === true
       );
       setWebSearchEnabled(nextWebSearchEnabled);
+
+      const sendEmailRaw = (t as any).sendEmail;
+      const sendEmail =
+        typeof sendEmailRaw === "string" && sendEmailRaw
+          ? JSON.parse(sendEmailRaw)
+          : sendEmailRaw;
+      const nextSendEmailEnabled = !!(sendEmail && sendEmail.enabled === true);
+      setSendEmailEnabled(nextSendEmailEnabled);
       setInitialSnapshot(
         stableJson({
           name: t.name,
@@ -327,6 +339,7 @@ function TemplateEditorPage() {
           sandboxEnv: nextSandboxEnv,
           browserEnabled: nextBrowserEnabled,
           webSearchEnabled: nextWebSearchEnabled,
+          sendEmailEnabled: nextSendEmailEnabled,
         }),
       );
     }
@@ -448,6 +461,9 @@ function TemplateEditorPage() {
     const webSearchJson = webSearchEnabled
       ? JSON.stringify({ enabled: true })
       : JSON.stringify(null);
+    const sendEmailJson = sendEmailEnabled
+      ? JSON.stringify({ enabled: true })
+      : JSON.stringify(null);
     const config = JSON.stringify(templateConfig);
 
     try {
@@ -464,6 +480,7 @@ function TemplateEditorPage() {
             sandbox: sandboxJson,
             browser: browserJson,
             webSearch: webSearchJson,
+            sendEmail: sendEmailJson,
             runtime,
 
             model: model || undefined,
@@ -496,6 +513,7 @@ function TemplateEditorPage() {
             sandbox: sandboxJson,
             browser: browserJson,
             webSearch: webSearchJson,
+            sendEmail: sendEmailJson,
             runtime,
 
             model: model || undefined,
@@ -798,6 +816,34 @@ function TemplateEditorPage() {
                       Injects the tenant-configured Web Search built-in tool on
                       agent turns. Configure the provider and API key under
                       Capabilities.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card size="sm">
+                <CardHeader>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-muted-foreground" />
+                      <CardTitle className="text-sm">Send Email</CardTitle>
+                    </div>
+                    <Switch
+                      id="send-email-enabled"
+                      checked={sendEmailEnabled}
+                      onCheckedChange={setSendEmailEnabled}
+                    />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-1">
+                    <Label htmlFor="send-email-enabled" className="font-normal">
+                      Enable <code>send_email</code>
+                    </Label>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Injects the platform email-sending built-in tool on agent
+                      turns. The agent email channel still controls the sending
+                      address and per-agent delivery policy.
                     </p>
                   </div>
                 </CardContent>
