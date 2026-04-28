@@ -98,6 +98,8 @@ class DispatchRunSkillHappyPathTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call_kwargs["agent_id"], "agent-1")
         self.assertEqual(call_kwargs["tenant_id"], "tenant-1")
         self.assertEqual(call_kwargs["current_user_id"], "user-1")
+        self.assertEqual(call_kwargs["api_url"], "https://example.test")
+        self.assertEqual(call_kwargs["api_secret"], "smoke-secret")
 
         # synthetic payload wired the runtime config + envelope per-turn.
         self.assertEqual(captured_payload["assistant_id"], "agent-1")
@@ -108,6 +110,55 @@ class DispatchRunSkillHappyPathTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(captured_payload["trigger_channel"], "run_skill")
         self.assertIn("sales-prep", captured_payload["message"])
         self.assertIn("ABC", captured_payload["message"])
+
+    async def test_envelope_credentials_are_used_when_env_is_empty(self):
+        os.environ.pop("THINKWORK_API_URL", None)
+        os.environ.pop("API_AUTH_SECRET", None)
+        os.environ.pop("THINKWORK_API_SECRET", None)
+        posts: list = []
+        fake_config = {
+            "tenantSlug": "acme",
+            "agentSlug": "ada",
+            "agentName": "Ada",
+            "templateModel": "us.anthropic.claude-sonnet-4-6",
+            "skillsConfig": [],
+            "mcpConfigs": [],
+            "guardrailConfig": None,
+            "knowledgeBasesConfig": None,
+            "blockedTools": [],
+        }
+        fake_fetch = MagicMock(return_value=fake_config)
+        fake_server = MagicMock()
+        fake_server._execute_agent_turn = MagicMock(return_value={
+            "response_text": "done",
+            "strands_usage": {},
+            "duration_ms": 1,
+            "invocation_tool_costs": [],
+        })
+
+        with patch.object(run_skill_dispatch, "post_skill_run_complete",
+                          side_effect=lambda *a, **kw: posts.append((a, kw))), \
+             patch.dict(sys.modules, {
+                 "api_runtime_config": MagicMock(
+                     AgentConfigNotFoundError=type("AgentConfigNotFoundError", (RuntimeError,), {}),
+                     RuntimeConfigFetchError=type("RuntimeConfigFetchError", (RuntimeError,), {}),
+                     fetch=fake_fetch,
+                 ),
+                 "server": fake_server,
+             }):
+            result = await run_skill_dispatch.dispatch_run_skill(
+                _base_envelope(
+                    thinkworkApiUrl="https://payload.example",
+                    apiAuthSecret="payload-secret",
+                ),
+            )
+
+        self.assertEqual(result["status"], "complete")
+        call_kwargs = fake_fetch.call_args.kwargs
+        self.assertEqual(call_kwargs["api_url"], "https://payload.example")
+        self.assertEqual(call_kwargs["api_secret"], "payload-secret")
+        self.assertEqual(posts[0][1]["api_url"], "https://payload.example")
+        self.assertEqual(posts[0][1]["api_secret"], "payload-secret")
 
 
 class DispatchRunSkillFailurePathTests(unittest.IsolatedAsyncioTestCase):
@@ -472,7 +523,7 @@ class UrlopenWithRetryTests(unittest.TestCase):
     def test_socket_timeout_retried_then_raised(self):
         import socket
         def boom(req, timeout=None):
-            raise socket.timeout("slow downstream")
+            raise TimeoutError("slow downstream")
         with patch("urllib.request.urlopen", side_effect=boom) as mock_open:
             with self.assertRaises(socket.timeout):
                 run_skill_dispatch._urlopen_with_retry(
