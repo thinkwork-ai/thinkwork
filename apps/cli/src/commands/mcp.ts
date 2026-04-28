@@ -161,8 +161,8 @@ Examples:
       --auth-type tenant_api_key --api-key sk-abc -s dev -t acme
 
   # OAuth connector (users connect from the mobile app)
-  $ thinkwork mcp add lastmile --url https://dev-mcp.lastmile-tei.com/crm \\
-      --auth-type per_user_oauth --oauth-provider lastmile -s dev -t acme
+  $ thinkwork mcp add crm-tools --url https://mcp.example.com/crm \\
+      --auth-type per_user_oauth --oauth-provider crm_provider -s dev -t acme
 `,
     )
     .action(
@@ -250,13 +250,13 @@ Examples:
       `
 Examples:
   # Change URL in place (preserves agent assignments, unlike remove + re-add)
-  $ thinkwork mcp update lastmile-routing --url https://dev-mcp.lastmile-tei.com/routing
+  $ thinkwork mcp update routing-server --url https://mcp.example.com/routing
 
   # Disable without deleting
-  $ thinkwork mcp update lastmile-routing --disable
+  $ thinkwork mcp update routing-server --disable
 
   # Rename + change transport
-  $ thinkwork mcp update 629dcee1-1e14-4b83-9907-cb529e6035f6 --name "LastMile Routing" --transport sse
+  $ thinkwork mcp update 629dcee1-1e14-4b83-9907-cb529e6035f6 --name "Routing Server" --transport sse
 
   # Interactive — pick the server from a list
   $ thinkwork mcp update
@@ -335,7 +335,7 @@ Examples:
   $ thinkwork mcp remove
 
   # By slug (case-insensitive)
-  $ thinkwork mcp remove lastmile-routing
+  $ thinkwork mcp remove routing-server
 
   # By UUID (from \`mcp list\` or --json)
   $ thinkwork mcp remove 629dcee1-1e14-4b83-9907-cb529e6035f6

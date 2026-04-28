@@ -18,12 +18,12 @@ from external_task_context import format_external_task_context
 def _envelope(**core_overrides):
     core = {
         "id": "task_abc",
-        "provider": "lastmile",
+        "provider": "linear",
         "title": "Deliver groceries",
         "description": "Bring eggs and bread from the corner store",
         "dueAt": "2026-04-20T15:00:00Z",
         "updatedAt": "2026-04-14T10:00:00Z",
-        "url": "https://lastmile.example/tasks/abc",
+        "url": "https://linear.example/tasks/abc",
         "status": {"value": "in_progress", "label": "In progress"},
         "priority": {"value": "high", "label": "High"},
         "assignee": {"id": "u1", "name": "Eric", "email": "eric@example.com"},
@@ -31,7 +31,7 @@ def _envelope(**core_overrides):
     core.update(core_overrides)
     return {
         "external": {
-            "provider": "lastmile",
+            "provider": "linear",
             "externalTaskId": "task_abc",
             "latestEnvelope": {
                 "_type": "external_task",
@@ -54,20 +54,20 @@ class TestFormatExternalTaskContext(unittest.TestCase):
 
     def test_returns_empty_when_no_envelope(self):
         self.assertEqual(
-            format_external_task_context({"external": {"provider": "lastmile"}}),
+            format_external_task_context({"external": {"provider": "linear"}}),
             "",
         )
 
     def test_formats_full_envelope(self):
         block = format_external_task_context(_envelope())
-        self.assertIn("Active External Task (Lastmile)", block)
+        self.assertIn("Active External Task (Linear)", block)
         self.assertIn("**Title:** Deliver groceries", block)
         self.assertIn("**External ID:** task_abc", block)
         self.assertIn("**Status:** In progress", block)
         self.assertIn("**Priority:** High", block)
         self.assertIn("**Assignee:** Eric", block)
         self.assertIn("**Due:** 2026-04-20T15:00:00Z", block)
-        self.assertIn("**URL:** https://lastmile.example/tasks/abc", block)
+        self.assertIn("**URL:** https://linear.example/tasks/abc", block)
         self.assertIn("Bring eggs and bread", block)
 
     def test_handles_missing_status_priority_gracefully(self):

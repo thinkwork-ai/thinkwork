@@ -58,7 +58,7 @@ Every reference agent harness ships code execution default-on. ThinkWork's typed
 - **Per-tenant SSM precedent (application-driven):** `packages/agentcore/agent-container/permissions.py:78` writes per-tenant SSM at `/thinkwork/{stack}/agentcore/tenants/{tenant_id}/permissions`, written by the `agentcore-admin` Lambda. Nearest precedent for per-tenant resource writes.
 - **Tenant creation:** `packages/api/src/graphql/resolvers/core/createTenant.mutation.ts` is 19 lines today; pure DB insert. No async hooks.
 - **Tenants table feature-flag precedent:** `packages/database-pg/src/schema/core.ts:35` — `wiki_compile_enabled: boolean().notNull().default(false)`. `sandbox_enabled` mirrors the type; default flipped to `true` per R3a.
-- **OAuth token plumbing:** `packages/api/src/lib/oauth-token.ts:174` — `resolveOAuthToken(connectionId, tenantId, providerId)` refreshes + writes back to Secrets Manager at `thinkwork/${STAGE}/oauth/${connectionId}`. `buildSkillEnvOverrides` branches on `provider_name` at lines 345–374 (`google_productivity`, `microsoft_365`, `lastmile`). Add `github` + `slack` branches following the `lastmile` shape.
+- **OAuth token plumbing:** `packages/api/src/lib/oauth-token.ts:174` — `resolveOAuthToken(connectionId, tenantId, providerId)` refreshes + writes back to Secrets Manager at `thinkwork/${STAGE}/oauth/${connectionId}`. `buildSkillEnvOverrides` branches on `provider_name` at lines 345–374 (`google_productivity`, `microsoft_365`, `mobile-host`). Add `github` + `slack` branches following the `mobile-host` shape.
 - **Connection-provider seed:** `scripts/seed-dev.sql` — currently seeds `google_productivity` and `microsoft_365`. `github` and `slack` rows land here.
 - **Skill dispatcher pre-flight:** `packages/api/src/handlers/chat-agent-invoke.ts:222` — skill-list build loop; `packages/api/src/handlers/wakeup-processor.ts:42` — parallel path for scheduled jobs; both need the same pre-flight. Also audit newer dispatch paths (composition dispatch per commit c588f15, self-serve tools per commit 0c17fec).
 - **Template → agent skill sync:** `packages/api/src/graphql/resolvers/templates/syncTemplateToAgent.mutation.ts:57` — where `template.sandbox` metadata flows onto `agent_skills`.
@@ -352,7 +352,7 @@ sequenceDiagram
 **Dependencies:** None (parallel to Unit 1).
 
 **Files:**
-- Modify: `packages/api/src/lib/oauth-token.ts` — add `github` and `slack` branches to `buildSkillEnvOverrides` around lines 345–374, following `lastmile` shape (`<PROVIDER>_ACCESS_TOKEN` + `<PROVIDER>_CONNECTION_ID`).
+- Modify: `packages/api/src/lib/oauth-token.ts` — add `github` and `slack` branches to `buildSkillEnvOverrides` around lines 345–374, following `mobile-host` shape (`<PROVIDER>_ACCESS_TOKEN` + `<PROVIDER>_CONNECTION_ID`).
 - Modify: `scripts/seed-dev.sql` — add `INSERT ... ON CONFLICT (name) DO UPDATE` for `github` and `slack` in `connect_providers` with OAuth config populated.
 - Test: `packages/api/test/unit/oauth-token.test.ts`.
 

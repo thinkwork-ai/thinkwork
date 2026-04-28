@@ -140,7 +140,7 @@ export default function BasicCredentialDetailScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View className="mt-4 px-4 gap-4 w-full" style={{ maxWidth: 768 }}>
-          <Input label="Name" value={name} onChangeText={setName} placeholder="Last Mile Production" autoCapitalize="words" />
+          <Input label="Name" value={name} onChangeText={setName} placeholder="Production" autoCapitalize="words" />
           <Input
             label="New Username (optional)"
             value={username}

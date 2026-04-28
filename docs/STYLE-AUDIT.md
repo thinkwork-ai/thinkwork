@@ -104,7 +104,7 @@ These are accuracy drift items for future PRs, not style-guide violations.
 |---|---|---|---|
 | `concepts/connectors.mdx` | 154 | POLISH | Surprisingly solid hub. Has the three-use-case breakdown (integrations / MCP tools / external task connectors). Needs: tighten the "MCP as a connector pattern" section (currently reads like it's making an argument rather than explaining), and the Aside about external task connectors being new is dated — that's live now. |
 | `concepts/connectors/integrations.mdx` | 129 | POLISH | Reasonable. Verify Slack, GitHub, Google Workspace claims against `packages/connectors/` at 2026-04-21. Add OAuth scope table per provider. |
-| `concepts/connectors/mcp-tools.mdx` | 112 | POLISH | Good bones. Fold any orphan `concepts/mcp-servers.mdx` content in here. Clarify the "two surfaces" of LastMile (task connector retired 2026-04-20; MCP-server stays) per the internal distinction the team makes. |
+| `concepts/connectors/mcp-tools.mdx` | 112 | POLISH | Good bones. Fold any orphan `concepts/mcp-servers.mdx` content in here. Clarify the distinction between MCP servers and provider task connectors. |
 | `concepts/mcp-servers.mdx` | 150 | **REWRITE→DELETE** | **Orphan — not in sidebar but in content tree.** Fold substantive content (the HTTP-streaming lifecycle, Strands `MCPClient` flow) into `concepts/connectors/mcp-tools.mdx`, then delete this file. If inbound external links exist, leave a redirect note in git history. |
 
 ### Control (3)

@@ -13,7 +13,7 @@
  *   owner completes T3 →
  *   Tick 4: terminal — zero new tasks.
  *
- * The invariant under test: `lastmile_tasks_create` is called EXACTLY
+ * The invariant under test: `task_system_tasks_create` is called EXACTLY
  * as many times as there are initial gaps, not once per tick. Duplicate
  * task creation is the primary failure mode the reconciler contract
  * guards against (see plan R2 + docs/plans/... reconciler-HITL model).

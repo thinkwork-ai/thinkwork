@@ -1,16 +1,16 @@
-# PRD: Refactor ThinkWork SDK to pure hooks; decouple from LastMile; remove Task concept from ThinkWork
+# PRD: Refactor ThinkWork SDK to pure hooks; decouple from external provider; remove Task concept from ThinkWork
 
 ## Context
 
-We are mid-build on embedding ThinkWork's "Brain" experience into LastMile's mobile app. In doing so, we over-engineered on two fronts:
+We are mid-build on embedding ThinkWork's "Brain" experience into external provider's mobile app. In doing so, we over-engineered on two fronts:
 
-1. **ThinkWork grew a Task concept** (external tasks, sync, webhook ingest, `external_task_id` correlation, dedicated resolvers and Lambda integrations) that exists only because LastMile has tasks. None of it belongs in ThinkWork — ThinkWork's job is to be an agent harness with threads, messages, and turns.
-2. **The embedded SDK grew server-side coupling to LastMile** (`threads.context_linkage_key`, `threads.context_envelope`, `threadByLinkageKey` query, `CreateThreadInput.contextLinkageKey/contextEnvelope`). That's LastMile's correlation state wedged into ThinkWork's schema. The moment a second host integrates, it either collides or spawns a new LastMile-sized wart.
-3. **The SDK is also too opinionated** — today it ships a full modal, sign-in screen, theme system, and a `BrainContextEnvelope` type that reads suspiciously LastMile-shaped (entity types enumerate `task | customer | route | stop | vehicle | loadsheet`).
+1. **ThinkWork grew a Task concept** (external tasks, sync, webhook ingest, `external_task_id` correlation, dedicated resolvers and Lambda integrations) that exists only because external provider has tasks. None of it belongs in ThinkWork — ThinkWork's job is to be an agent harness with threads, messages, and turns.
+2. **The embedded SDK grew server-side coupling to external provider** (`threads.context_linkage_key`, `threads.context_envelope`, `threadByLinkageKey` query, `CreateThreadInput.contextLinkageKey/contextEnvelope`). That's external provider's correlation state wedged into ThinkWork's schema. The moment a second host integrates, it either collides or spawns a new external provider-sized wart.
+3. **The SDK is also too opinionated** — today it ships a full modal, sign-in screen, theme system, and a `BrainContextEnvelope` type that reads suspiciously external provider-shaped (entity types enumerate `task | customer | route | stop | vehicle | loadsheet`).
 
-The fix: ThinkWork stays a clean agent harness. LastMile owns all task state, all task↔thread correlation, and all chat UI. The SDK shrinks to a hooks-only library that any host can consume.
+The fix: ThinkWork stays a clean agent harness. external provider owns all task state, all task↔thread correlation, and all chat UI. The SDK shrinks to a hooks-only library that any host can consume.
 
-This PRD is scoped to the React Native SDK rewrite + the LastMile refactor that consumes it + removing Task functionality from ThinkWork. Web SDK and formalizing the CLI as an SDK consumer are separate PRDs.
+This PRD is scoped to the React Native SDK rewrite + the external provider refactor that consumes it + removing Task functionality from ThinkWork. Web SDK and formalizing the CLI as an SDK consumer are separate PRDs.
 
 ## Target state
 
@@ -21,7 +21,7 @@ ThinkWork
   └─ @thinkwork/react-native-sdk                   (hooks-only, host-agnostic)
        └─ examples/                                (reference chat UI, sign-in UI — not published)
 
-LastMile (owns 100% of task <-> thread coupling)
+external provider (owns 100% of task <-> thread coupling)
   ├─ task.thinkwork_thread_id (new column)
   ├─ chat UI in-tree                               (built from SDK hooks)
   └─ Brain trigger on map + task screens           (team's UX call)
@@ -31,9 +31,9 @@ LastMile (owns 100% of task <-> thread coupling)
 
 - **SDK shape**: single package `@thinkwork/react-native-sdk`, hooks only, no shipping UI. Reference UIs live under `packages/react-native-sdk/examples/` and are not published.
 - **Task cleanup in ThinkWork**: dev-only nuke. No backfill, no deprecation window. Columns, tables, resolvers, integrations — all gone.
-- **Scope**: RN SDK + LastMile refactor only. Web SDK / CLI integration deferred.
+- **Scope**: RN SDK + external provider refactor only. Web SDK / CLI integration deferred.
 - **Existing work in flight**: close branch `eo/embed-thinkwork` on both repos; don't merge. Start fresh branches off the new PRD.
-- **Backend coupling**: reverted. ThinkWork's DB + GraphQL stay oblivious to LastMile.
+- **Backend coupling**: reverted. ThinkWork's DB + GraphQL stay oblivious to external provider.
 
 ## Phase A — Build `@thinkwork/react-native-sdk` (hooks-only)
 
@@ -81,7 +81,7 @@ export function useThinkworkClient(): ThinkworkGraphqlClient     // urql client
 export { setAuthToken, getAuthToken }                             // token access
 ```
 
-Types exposed: `Thread`, `Message`, `ThreadTurn`, `ThinkworkUser`, `CreateThreadInput`. **No** `BrainContextEnvelope`, no entity-type enums, no LastMile vocabulary. `CreateThreadInput` is the slim ThinkWork-native shape: `{ title?, agentId?, tenantId }`.
+Types exposed: `Thread`, `Message`, `ThreadTurn`, `ThinkworkUser`, `CreateThreadInput`. **No** `BrainContextEnvelope`, no entity-type enums, no external provider vocabulary. `CreateThreadInput` is the slim ThinkWork-native shape: `{ title?, agentId?, tenantId }`.
 
 ### What to keep from current packages
 
@@ -139,13 +139,13 @@ Version jumps to `0.2.0-alpha.1` to signal the API break.
 - `thinkwork/packages/react-native-core/` — **delete**
 - `thinkwork/packages/react-native-brain/` — **delete**
 
-## Phase B — LastMile refactor onto the new SDK
+## Phase B — external provider refactor onto the new SDK
 
-Consume `@thinkwork/react-native-sdk` from `lastmile/mobile-apps/apps/mobile`. UX/presentation decisions are up to the LastMile team; PRD only prescribes the integration shape.
+Consume `@thinkwork/react-native-sdk` from `mobile-host/mobile-apps/apps/mobile`. UX/presentation decisions are up to the external provider team; PRD only prescribes the integration shape.
 
-### Task ↔ thread mapping — LastMile-owned
+### Task ↔ thread mapping — external provider-owned
 
-Add column on LastMile's `task` table via its existing schema management (likely a PowerSync schema migration — LastMile team to confirm):
+Add column on external provider's `task` table via its existing schema management (likely a PowerSync schema migration — external provider team to confirm):
 
 ```
 task.thinkwork_thread_id uuid NULL
@@ -155,11 +155,11 @@ Logic flow when user triggers Brain from a task context:
 
 1. Read `task.thinkwork_thread_id`.
 2. If set, `useThread(id)` + show chat.
-3. If null, call `useCreateThread()` (optionally with `title: task.title`), receive new `threadId`, persist it to `task.thinkwork_thread_id` (LastMile backend call), then show chat.
+3. If null, call `useCreateThread()` (optionally with `title: task.title`), receive new `threadId`, persist it to `task.thinkwork_thread_id` (external provider backend call), then show chat.
 
-No `BrainContextEnvelope`, no linkage key, no ThinkWork-side correlation. ThinkWork just has threads; LastMile remembers which thread belongs to which task.
+No `BrainContextEnvelope`, no linkage key, no ThinkWork-side correlation. ThinkWork just has threads; external provider remembers which thread belongs to which task.
 
-### What to remove from LastMile (work we just did)
+### What to remove from external provider (work we just did)
 
 - `src/components/thinkwork/brain-host.tsx` — no mounted modal
 - `src/lib/thinkwork/context.ts` — no envelope builder
@@ -168,22 +168,22 @@ No `BrainContextEnvelope`, no linkage key, no ThinkWork-side correlation. ThinkW
 - `app/(app)/_layout.tsx` — remove `<BrainHost />` mount
 - `app/_layout.tsx` — replace `ThinkworkBrainProvider` with `ThinkworkProvider`
 
-### What to build in LastMile
+### What to build in external provider
 
-- Chat UI (message list, composer, streaming indicator) — built from SDK hooks, styled with LastMile's design system. Can crib from `@thinkwork/react-native-sdk/examples/chat-ui/` as a starting point but lives in LastMile's tree.
-- Sign-in flow — LastMile builds its own sign-in screen using `useThinkworkAuth().signIn` + `signInWithGoogle`. Integrates visually with existing LastMile sign-in affordances.
+- Chat UI (message list, composer, streaming indicator) — built from SDK hooks, styled with external provider's design system. Can crib from `@thinkwork/react-native-sdk/examples/chat-ui/` as a starting point but lives in external provider's tree.
+- Sign-in flow — external provider builds its own sign-in screen using `useThinkworkAuth().signIn` + `signInWithGoogle`. Integrates visually with existing external provider sign-in affordances.
 - Brain trigger on task detail screen + map overlay (team's UX call).
 
 ### Critical files (Phase B)
 
-- `lastmile/mobile-apps/apps/mobile/package.json` — swap `@thinkwork/react-native-brain`/`-core` file refs for a single `@thinkwork/react-native-sdk` tarball
-- `lastmile/mobile-apps/vendor/thinkwork/` — replace tarballs with new SDK
-- `lastmile/mobile-apps/package.json` — update pnpm override name
-- `lastmile/mobile-apps/apps/mobile/app/_layout.tsx` — swap provider
-- `lastmile/mobile-apps/apps/mobile/app/(app)/_layout.tsx` — drop `BrainHost`
-- `lastmile/mobile-apps/apps/mobile/src/components/chat/` (new) — LastMile's chat UI built on SDK hooks
-- `lastmile/mobile-apps/apps/mobile/src/lib/thinkwork/` — shrink to just `config.ts` (env-driven `ThinkworkConfig`)
-- LastMile backend — `task.thinkwork_thread_id` migration (team owns this path)
+- `mobile-host/mobile-apps/apps/mobile/package.json` — swap `@thinkwork/react-native-brain`/`-core` file refs for a single `@thinkwork/react-native-sdk` tarball
+- `mobile-host/mobile-apps/vendor/thinkwork/` — replace tarballs with new SDK
+- `mobile-host/mobile-apps/package.json` — update pnpm override name
+- `mobile-host/mobile-apps/apps/mobile/app/_layout.tsx` — swap provider
+- `mobile-host/mobile-apps/apps/mobile/app/(app)/_layout.tsx` — drop `BrainHost`
+- `mobile-host/mobile-apps/apps/mobile/src/components/chat/` (new) — external provider's chat UI built on SDK hooks
+- `mobile-host/mobile-apps/apps/mobile/src/lib/thinkwork/` — shrink to just `config.ts` (env-driven `ThinkworkConfig`)
+- external provider backend — `task.thinkwork_thread_id` migration (team owns this path)
 
 ## Phase C — Remove Task concept from ThinkWork
 
@@ -192,7 +192,7 @@ Dev-only nuke. No backfill. Drop everything task-shaped.
 ### Schema / migrations
 
 - Drop `threads.external_task_id` column + its unique index (migration 0007) — revert
-- Drop the `sync_status`, `sync_error` columns from `threads` — these exist only for LastMile task sync
+- Drop the `sync_status`, `sync_error` columns from `threads` — these exist only for external provider task sync
 - Drop `thread_dependencies` table if it's only referenced by task flows (verify — it may be more general)
 - Revert my uncommitted migration 0013 columns (`context_linkage_key`, `context_envelope`) before merge
 - Draft new migration that does all the drops in one go
@@ -200,12 +200,12 @@ Dev-only nuke. No backfill. Drop everything task-shaped.
 ### API / resolvers
 
 - Delete `packages/api/src/integrations/external-work-items/` entirely (restClient, mcpClient, verifySignature, ensureExternalTaskThread, syncExternalTaskOnCreate, executeAction, ingestEvent, all providers)
-- Delete Lambda handlers wired for LastMile ingest (webhook ingest path)
+- Delete Lambda handlers wired for external provider ingest (webhook ingest path)
 - Delete resolvers: `retryTaskSync`, anything reading/writing `external_task_id` or `sync_*`
 - Delete `external-tasks.graphql` type file
 - Drop `ThreadChannel.TASK` enum value + all conditional logic that branches on `channel === 'task'` (e.g. identifier prefix `TASK-`, sync pending status, intake form tasks)
-- Delete `bootstrap-workspaces.ts` migration if it's LastMile-derived (verify)
-- Delete tests: `external-task-*.test.ts`, `lastmile-*.test.ts`, any task-sync e2e
+- Delete `bootstrap-workspaces.ts` migration if it's external provider-derived (verify)
+- Delete tests: `external-task-*.test.ts`, `mobile-host-*.test.ts`, any task-sync e2e
 
 ### Revert my recent work
 
@@ -224,8 +224,8 @@ The dev DB already has the new columns applied (you pushed the migration manuall
 
 ### Secrets / infra
 
-- Any SSM params or Secrets Manager entries for LastMile integration (`lastmile-pat`, `oauth-token`, etc.) — delete in a follow-up sweep
-- Terraform modules for LastMile webhook routes — remove or parameterize off
+- Any SSM params or Secrets Manager entries for external provider integration (`mobile-host-pat`, `oauth-token`, etc.) — delete in a follow-up sweep
+- Terraform modules for external provider webhook routes — remove or parameterize off
 
 ### Critical files (Phase C)
 
@@ -235,26 +235,26 @@ The dev DB already has the new columns applied (you pushed the migration manuall
 - `thinkwork/packages/database-pg/graphql/types/external-tasks.graphql` — delete
 - `thinkwork/packages/database-pg/src/schema/threads.ts`
 - `thinkwork/packages/database-pg/drizzle/` — new consolidated drop-column migration
-- `thinkwork/packages/api/src/__tests__/` — delete LastMile-named tests
+- `thinkwork/packages/api/src/__tests__/` — delete external provider-named tests
 
 ## Phase D — Cleanup
 
-- Close `eo/embed-thinkwork` branch in thinkwork repo (don't merge). Same in LastMile.
+- Close `eo/embed-thinkwork` branch in thinkwork repo (don't merge). Same in external provider.
 - Delete `packages/react-native-core/` + `packages/react-native-brain/` from thinkwork repo once `react-native-sdk` is in place.
 - Update `thinkwork/.prds/embedded-mobile-brain-package.md` — mark superseded by this PRD. Or delete it since the new direction is documented here.
 - Update `thinkwork/README.md` to position ThinkWork as "second brain harness for agents" with SDK + CLI as integration surfaces.
-- Revert `terraform/modules/foundation/cognito/variables.tf` — the `myapp://oauth/callback` addition I added earlier. The redirect URI is a LastMile concern; should live in LastMile's own Cognito app client config (if they spin one up) or stay hardcoded here with a note (lesser evil for now given we already registered it live).
+- Revert `terraform/modules/foundation/cognito/variables.tf` — the `myapp://oauth/callback` addition I added earlier. The redirect URI is a external provider concern; should live in external provider's own Cognito app client config (if they spin one up) or stay hardcoded here with a note (lesser evil for now given we already registered it live).
 
 ## Phase ordering / parallelization
 
 - **A and C can run in parallel** — SDK work doesn't touch backend; backend cleanup doesn't touch SDK.
-- **B depends on A** — LastMile can't consume the new SDK until it exists.
+- **B depends on A** — external provider can't consume the new SDK until it exists.
 - **D depends on A + B + C** — final cleanup.
 
 Realistic sequence:
 1. A (SDK rewrite) — 1–2 days
 2. C (nuke Tasks from ThinkWork) — in parallel with A, 1–2 days
-3. B (LastMile refactor) — after A ships as alpha tarball, 2–3 days including team UX decisions
+3. B (external provider refactor) — after A ships as alpha tarball, 2–3 days including team UX decisions
 4. D (cleanup + docs) — 0.5 day
 
 ## Verification
@@ -266,20 +266,20 @@ Realistic sequence:
 3. `pnpm pack` produces a single tarball that, when installed into a throwaway RN app, exposes the declared hooks without extraneous UI exports.
 4. Manual test: a trivial consumer calling `useThinkworkAuth().signIn`, `useCreateThread`, `useSendMessage` against the dev ThinkWork API succeeds.
 
-### Phase B — LastMile
+### Phase B — external provider
 
-1. Fresh `pnpm install` in LastMile resolves the new SDK tarball, no version drift in other deps (save-exact is already in `.npmrc`).
+1. Fresh `pnpm install` in external provider resolves the new SDK tarball, no version drift in other deps (save-exact is already in `.npmrc`).
 2. Metro builds end-to-end (`curl http://localhost:8081/node_modules/expo-router/entry.bundle` returns a valid bundle).
 3. On simulator: sign in via email → land on task list → open a task → trigger Brain → see chat screen (either empty timeline for new thread or prior thread for reopened task).
 4. Close Brain, reopen from the same task: same `threadId` returned, same conversation restored.
-5. Open Brain from a different task: new thread created, LastMile's `task.thinkwork_thread_id` populated.
+5. Open Brain from a different task: new thread created, external provider's `task.thinkwork_thread_id` populated.
 6. Google OAuth flow works (already working via `myapp://oauth/callback`).
 7. Streaming: send a message → observe agent turn stream tokens into the timeline in real time.
 
 ### Phase C — ThinkWork
 
 1. `pnpm --filter @thinkwork/api typecheck` passes after deletes.
-2. All existing tests (non-LastMile) still pass; LastMile-named tests are gone.
+2. All existing tests (non-external provider) still pass; external provider-named tests are gone.
 3. `bash scripts/db-push.sh --stage dev` applies the drop-column migration cleanly (idempotent, no conflicts).
 4. Deploy pipeline (`.github/workflows/deploy.yml`) green against the stripped code.
 5. ThinkWork web admin (`apps/admin`) still works — it doesn't touch Task-channel anything except via `ThreadChannel` enum, so search for `TASK` enum usage and verify no crashes.
@@ -294,6 +294,6 @@ Realistic sequence:
 ## Open questions (to resolve during implementation, not now)
 
 - Does `apps/mobile` (ThinkWork's own mobile app) need task-channel removal too, or does it continue to show generic threads only? This PRD assumes generic-only.
-- Does the LastMile team prefer a single `task.thinkwork_thread_id` column or a separate `task_thread_map` table? Column is simpler; table is normalized if they ever want multiple threads per task. Defer to LastMile team.
+- Does the external provider team prefer a single `task.thinkwork_thread_id` column or a separate `task_thread_map` table? Column is simpler; table is normalized if they ever want multiple threads per task. Defer to external provider team.
 - PowerSync schema changes for the new column — does it sync to mobile? If so, the mapping is offline-readable on device.
 - Should `@thinkwork/react-native-sdk/examples/chat-ui/` be published as a separate `@thinkwork/chat-ui-kit` package at some point? Out of scope for this PRD; noted for later.

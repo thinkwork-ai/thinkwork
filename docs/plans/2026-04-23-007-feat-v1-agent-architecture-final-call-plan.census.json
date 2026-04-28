@@ -465,11 +465,11 @@
       "notes": []
     },
     {
-      "dir": "/Users/ericodom/Projects/thinkwork/packages/skill-catalog/lastmile-tasks",
-      "slug": "lastmile-tasks",
-      "yamlPath": "/Users/ericodom/Projects/thinkwork/packages/skill-catalog/lastmile-tasks/skill.yaml",
+      "dir": "/Users/ericodom/Projects/thinkwork/packages/skill-catalog/task-system-tasks",
+      "slug": "task-system-tasks",
+      "yamlPath": "/Users/ericodom/Projects/thinkwork/packages/skill-catalog/task-system-tasks/skill.yaml",
       "execution": "context",
-      "description": "Collect intake details for a new LastMile task via a Question Card form, then hand off to the LastMile MCP's workflow_task_create tool. Use on user-created task threads where the external task hasn't been minted yet (sync_status='local').",
+      "description": "Collect intake details for a new external provider task via a Question Card form, then hand off to the external provider MCP's workflow_task_create tool. Use on user-created task threads where the external task hasn't been minted yet (sync_status='local').",
       "isDefault": true,
       "scripts": [],
       "hasScriptsDir": false,

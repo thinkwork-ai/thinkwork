@@ -69,8 +69,9 @@ describe("u8-status audit script", () => {
     expect(match).not.toBeNull();
     // Post pure-skill-spec cleanup the 4 composition primitives (frame,
     // synthesize, gather, compound) are gone. Remaining deliverables +
-    // connectors + built-ins still clear 16.
-    expect(Number(match![1])).toBeGreaterThanOrEqual(16);
+    // connectors + built-ins still clear 15 after retiring the external
+    // task-intake skill pack.
+    expect(Number(match![1])).toBeGreaterThanOrEqual(15);
   });
 
   it("has no regressed slugs (composition / declarative / unsupported)", () => {

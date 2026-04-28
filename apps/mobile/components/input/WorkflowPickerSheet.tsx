@@ -105,7 +105,7 @@ export const WorkflowPickerSheet = forwardRef<WorkflowPickerSheetRef, WorkflowPi
                   style={{ backgroundColor: colors.primary }}
                 >
                   <Text className="text-sm font-medium" style={{ color: "#ffffff" }}>
-                    Reconnect LastMile
+                    Reconnect Provider
                   </Text>
                 </Pressable>
               )}

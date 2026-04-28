@@ -15,25 +15,25 @@
 Fourteen PRs landed against this PRD over a single day. The summary below is grouped by theme; full PR bodies are on GitHub (PR # = pull request number on `thinkwork-ai/thinkwork`).
 
 **Webhook → user-visible feedback loop (fixes the "silent webhook" gap from PR #33):**
-- **PR #75** `feat(external-tasks): log webhook updates to the task timeline` — `summarizeWebhookEvent()` in `ingestEvent.ts` produces a human-readable line per LastMile webhook (`task.updated`, `task.assigned`, `task.commented`, etc.) and inserts a system-authored row in `messages` with `metadata.kind = "external_task_event"`. Noise filter drops `task.created` and `updated_at`-only updates.
+- **PR #75** `feat(external-tasks): log webhook updates to the task timeline` — `summarizeWebhookEvent()` in `ingestEvent.ts` produces a human-readable line per external provider webhook (`task.updated`, `task.assigned`, `task.commented`, etc.) and inserts a system-authored row in `messages` with `metadata.kind = "external_task_event"`. Noise filter drops `task.created` and `updated_at`-only updates.
 - **PR #76** `feat(external-tasks): realtime AppSync broadcast on webhook ingest` — fans out `notifyNewMessage` + `notifyThreadUpdate` after the insert so the mobile task detail screen and inbox list refetch without pull-to-refresh.
 - **PR #77** `feat(external-tasks): Expo push notifications on meaningful webhook events` — narrow v1 push policy: `task.assigned`/`task.reassigned` → "Assigned to you"; `task.updated` with `status` or `due_*` → summary line; comments + creates suppressed.
 - **PR #78** `fix(external-tasks): await webhook ingest fan-out (notify + push)` — caught live during E2E: the fire-and-forget `.catch(() => {})` pattern was leaving notify/push as deferred microtasks that the webhooks Lambda froze before flushing. AppSync sockets timed out (`other side closed`) and pushes landed ~36 s late on the next invocation. Wrapped the three fan-out promises in `await Promise.allSettled(...)` so the handler waits for I/O. Cost: +200–500 ms tail latency. Benefit: deterministic realtime + immediate push.
-- **PR #81** `feat(external-tasks): render webhook audit rows on task card` — adds an `activity_list` block to `buildLastmileBlocks` and a new `apps/mobile/components/genui/external-task/blocks/ActivityList.tsx` mobile renderer. PR A's audit rows now surface inside the task card (NOT in the chat timeline, which intentionally stays user/assistant-only). Plumbing: `apps/mobile/app/thread/[threadId]/index.tsx` derives an `activityRows` array alongside the chat-filtered `messages` array.
+- **PR #81** `feat(external-tasks): render webhook audit rows on task card` — adds an `activity_list` block to `buildExternalProviderBlocks` and a new `apps/mobile/components/genui/external-task/blocks/ActivityList.tsx` mobile renderer. PR A's audit rows now surface inside the task card (NOT in the chat timeline, which intentionally stays user/assistant-only). Plumbing: `apps/mobile/app/thread/[threadId]/index.tsx` derives an `activityRows` array alongside the chat-filtered `messages` array.
 
-**LastMile MCP correctness — read path, write path, error handling:**
-- **PR #79** `fix(external-tasks): refresh LastMile task via tasks_get (not task_get)` — sub-agent probed `tools/list` against `mcp-dev.lastmile-tei.com/tasks` with Eric's real token. Ground truth: tools are pluralized (`tasks_get`, `tasks_list`) and `tasks_get` requires `task_id`, not `id`. Renamed `LASTMILE_TOOLS.get`/`list` and updated `refresh.ts` to send `{task_id}`.
-- **PR #80** `fix(external-tasks): LastMile write path, mcp error handling, status unwrap` — **headline finding: every save-edit had been silently no-op'ing for the entire life of the integration.** `executeAction.ts` was sending `{id: externalTaskId}` to every write tool, but the schema requires `task_id`. LastMile returned `{error: "Task not found"}` inside `result.content[0].text` with `isError: true`, and `mcpClient.ts` didn't check `isError` so the error string fell through as a "non-object payload" and `executeLastmileAction` then called `refreshLastmileTask` which returned the unchanged task — the mobile UI interpreted the unchanged envelope as "save succeeded". Verified live with a `description: "probe-A"` round-trip. Fixes: rename `id` → `task_id` everywhere, `task_assign` → `task_update_assignee`, drop the non-existent `task_add_comment` tool, `mcpClient.isError` handling that throws with the text content, status/priority object unwrap (LastMile returns `{id, name, color, icon}`, not strings), `capabilities.commentOnTask = false` so the mobile Comment button hides via the existing capability gate.
-- **PR #83** `fix(external-tasks): resolve task card labels (status, assignee, priority)` — follow-up to PR #80 after live verification: `core.status.label = "Backlog"` was set correctly but the mobile `FieldList.renderValue` did `field.options?.find(o => o.value === field.value)` and the curated `LASTMILE_STATUS_OPTIONS` had no entry for the real LastMile opaque id `status_hfcq...`. Inject the unwrapped option into `field.options` so the lookup matches. Also handle LastMile's `assignee.first_name` + `assignee.last_name` (it doesn't ship `name`, only the parts) and add a `user` branch to `FieldList.renderValue` that reads `core.assignee.name`. Bonus: Save Changes button moved bottom-left → right-justified per follow-up feedback.
+**external provider MCP correctness — read path, write path, error handling:**
+- **PR #79** `fix(external-tasks): refresh external provider task via tasks_get (not task_get)` — sub-agent probed `tools/list` against `mcp-dev.mobile-host-tei.com/tasks` with Eric's real token. Ground truth: tools are pluralized (`tasks_get`, `tasks_list`) and `tasks_get` requires `task_id`, not `id`. Renamed `EXTERNAL_PROVIDER_TOOLS.get`/`list` and updated `refresh.ts` to send `{task_id}`.
+- **PR #80** `fix(external-tasks): external provider write path, mcp error handling, status unwrap` — **headline finding: every save-edit had been silently no-op'ing for the entire life of the integration.** `executeAction.ts` was sending `{id: externalTaskId}` to every write tool, but the schema requires `task_id`. external provider returned `{error: "Task not found"}` inside `result.content[0].text` with `isError: true`, and `mcpClient.ts` didn't check `isError` so the error string fell through as a "non-object payload" and `executeExternalProviderAction` then called `refreshExternalProviderTask` which returned the unchanged task — the mobile UI interpreted the unchanged envelope as "save succeeded". Verified live with a `description: "probe-A"` round-trip. Fixes: rename `id` → `task_id` everywhere, `task_assign` → `task_update_assignee`, drop the non-existent `task_add_comment` tool, `mcpClient.isError` handling that throws with the text content, status/priority object unwrap (external provider returns `{id, name, color, icon}`, not strings), `capabilities.commentOnTask = false` so the mobile Comment button hides via the existing capability gate.
+- **PR #83** `fix(external-tasks): resolve task card labels (status, assignee, priority)` — follow-up to PR #80 after live verification: `core.status.label = "Backlog"` was set correctly but the mobile `FieldList.renderValue` did `field.options?.find(o => o.value === field.value)` and the curated `EXTERNAL_PROVIDER_STATUS_OPTIONS` had no entry for the real external provider opaque id `status_hfcq...`. Inject the unwrapped option into `field.options` so the lookup matches. Also handle external provider's `assignee.first_name` + `assignee.last_name` (it doesn't ship `name`, only the parts) and add a `user` branch to `FieldList.renderValue` that reads `core.assignee.name`. Bonus: Save Changes button moved bottom-left → right-justified per follow-up feedback.
 
 **OAuth + token lifecycle:**
-- **PR #84** `fix(external-tasks): auto-refresh LastMile MCP tokens via WorkOS refresh_token` — caught when the dev environment broke ~25 minutes after a fresh reconnect. WorkOS access tokens have a ~15 min lifetime, but `resolveLastmileUserToken` was returning the stored access_token straight from Secrets Manager with no expiry check. New `refreshLastmileMcpToken()` helper: reads `expires_at` from `user_mcp_tokens`, POSTs `grant_type=refresh_token` to WorkOS's `/oauth2/token` with the rotated `refresh_token` + `client_id` from `tenant_mcp_servers.auth_config`, persists the rotated pair back to SM **before returning** (WorkOS rotates on every use), updates `expires_at`. On 401: marks the row `expired`. On network error: returns null without flipping to expired (transient self-heal). Race-condition decision: accept single-request degradation rather than add SM optimistic locking.
+- **PR #84** `fix(external-tasks): auto-refresh external provider MCP tokens via WorkOS refresh_token` — caught when the dev environment broke ~25 minutes after a fresh reconnect. WorkOS access tokens have a ~15 min lifetime, but `resolveExternalProviderUserToken` was returning the stored access_token straight from Secrets Manager with no expiry check. New `refreshExternalProviderMcpToken()` helper: reads `expires_at` from `user_mcp_tokens`, POSTs `grant_type=refresh_token` to WorkOS's `/oauth2/token` with the rotated `refresh_token` + `client_id` from `tenant_mcp_servers.auth_config`, persists the rotated pair back to SM **before returning** (WorkOS rotates on every use), updates `expires_at`. On 401: marks the row `expired`. On network error: returns null without flipping to expired (transient self-heal). Race-condition decision: accept single-request degradation rather than add SM optimistic locking.
 - **PR #85** `fix(mcp-oauth): send prompt=login on authorize for fresh IdP session` — first attempt at "let users switch accounts on reconnect", per WorkOS support recommendation. One-line `authorizeUrl.searchParams.set("prompt", "login")` in `skills.ts`.
 - **PR #86** `fix(mcp-oauth): also send max_age=0 — prompt=login alone isn't enough` — live test of #85 showed WorkOS AuthKit ignored `prompt=login` and rendered the consent screen with "Logged in as eric@homecareintel.com" intact. Added `max_age=0` as the OIDC companion lever (§3.1.2.1). Standards-compliant, harmless.
 - **PR #88** `fix(mcp-oauth): ephemeral browser session + deep-link callback` — **the actual fix.** PRs #85 and #86 were both ignored by WorkOS; probing `/sessions/logout`, `/oauth2/logout`, and `/logout` on the AuthKit instance all returned 404 and OIDC discovery had no `end_session_endpoint`, killing the logout-redirect approach. Real root cause: the mobile MCP Servers screen used `WebBrowser.openBrowserAsync` which on iOS opens **SFSafariViewController** sharing the system Safari cookie jar — WorkOS session cookies persisted across reconnect attempts indefinitely. Fix: switch both call sites (`mcp-servers.tsx`, `mcp-server-detail.tsx`) to `openAuthSessionAsync` with `preferEphemeralSession: true` (matching the existing Google OAuth flow at `auth-context.tsx:340-355`), and have `mcpOAuthCallback` redirect to `thinkwork://mcp-oauth-complete` so the in-app browser auto-closes via Expo's deep-link match. **Confirmed working on device.**
 
 **Mobile UX polish on the task card:**
-- **PR #82** `feat(external-tasks): task card UI cleanup — two-col fields, header edit, form polish` — definition-list field layout (label left, value right), removed the `action_bar` block from `buildLastmileBlocks` entirely (Change status / Assign / Comment / Edit buttons gone), single Pencil icon in the task header opens the same edit modal, Save Changes button moved out of the modal header chrome to the modal body.
+- **PR #82** `feat(external-tasks): task card UI cleanup — two-col fields, header edit, form polish` — definition-list field layout (label left, value right), removed the `action_bar` block from `buildExternalProviderBlocks` entirely (Change status / Assign / Comment / Edit buttons gone), single Pencil icon in the task header opens the same edit modal, Save Changes button moved out of the modal header chrome to the modal body.
 
 **Other:**
 - **PR #87** — Eric's three local mobile commits (`feat(mobile): polish threads header and thread detail loading`, `wip(mobile): sticky session + shimmer loading placeholder`, `fix(mobile): resolve tenantId on SRP restore path too`) rebased through the worktree-isolation flow and merged via PR (branch protection).
@@ -43,9 +43,9 @@ Fourteen PRs landed against this PRD over a single day. The summary below is gro
 - [x] `pnpm typecheck` (api) — clean
 - [x] `pnpm test` (api) — **367 passed / 8 skipped** (was 257 at last update, +110 cases across PRs A–H)
 - [x] `tsc --noEmit` (mobile) — 122 pre-existing errors unchanged across all PRs (none in touched files)
-- [x] **Live E2E on dev (Eric's real device + LastMile dev tenant)** — webhook → activity row → push within ~2s → mobile card live-updates without pull-to-refresh, all confirmed in CloudWatch + DB queries + on-device observation
+- [x] **Live E2E on dev (Eric's real device + external provider dev tenant)** — webhook → activity row → push within ~2s → mobile card live-updates without pull-to-refresh, all confirmed in CloudWatch + DB queries + on-device observation
 - [x] **Live save-edit round-trip** verified by direct `task_update` MCP probe with `description: "probe-A"` / `description: "probe-B"` and read-back via `tasks_get` (test task description restored before commit)
-- [x] **MCP token auto-refresh** — verified by waiting >15 min idle then firing a webhook; CloudWatch shows `[oauth-token] Refreshed LastMile MCP token ... (expires_in=900s)` followed by successful `tasks_get`
+- [x] **MCP token auto-refresh** — verified by waiting >15 min idle then firing a webhook; CloudWatch shows `[oauth-token] Refreshed external provider MCP token ... (expires_in=900s)` followed by successful `tasks_get`
 - [x] **Account switching on reconnect** (PR #88) — confirmed working on device after merge
 
 ### Resolved gaps (was "Diagnosed gaps blocking mobile E2E" in 2026-04-14 update)
@@ -56,37 +56,37 @@ All five gaps from the previous update are fixed:
 2. **Denormalized columns** — fixed in Phase A.
 3. **Thread detail screen routing** — fixed in Phase C.
 4. **Tasks tab row provider indicator** — fixed in Phase C.
-5. **No way to seed without live webhook** — moot now: the live webhook from LastMile dev tenant is wired and we routinely fire synthetic webhooks via curl during testing.
+5. **No way to seed without live webhook** — moot now: the live webhook from external provider dev tenant is wired and we routinely fire synthetic webhooks via curl during testing.
 
 ### Known follow-ups (not blocking, captured for next sprint)
 
 These are quality / completeness items, not regressions:
 
-1. **PR G-bis: `status_id` mapping for save-edit end-to-end.** `task_update_status` requires a real opaque LastMile status id (e.g. `status_hfcqtycmuaix6pjfnu3mb3ot`); the mobile form's select still uses the curated `LASTMILE_STATUS_OPTIONS` value strings. Status changes from the form will currently fail with a clear MCP error (not silent success — that's PR #80's contribution). Need to source real ids via `tasks_schema()` or per-task workflow metadata.
+1. **PR G-bis: `status_id` mapping for save-edit end-to-end.** `task_update_status` requires a real opaque external provider status id (e.g. `status_hfcqtycmuaix6pjfnu3mb3ot`); the mobile form's select still uses the curated `EXTERNAL_PROVIDER_STATUS_OPTIONS` value strings. Status changes from the form will currently fail with a clear MCP error (not silent success — that's PR #80's contribution). Need to source real ids via `tasks_schema()` or per-task workflow metadata.
 2. **Repo-wide fire-and-forget notify sweep.** PR #78 fixed only the webhooks Lambda. `sendMessage.mutation.ts`, `createThread.mutation.ts`, `updateThread.mutation.ts`, `delegateThread.mutation.ts`, and `escalateThread.mutation.ts` all still use `notify*(...).catch(() => {})`. They appear to work because the graphql-http Lambda stays warmer, but it's the same latent class of bug.
-3. **Assignees other than the current user.** `tasks_get` populates the nested `assignee: {first_name, last_name, email}` only for the task's own assignee/creator. For tasks assigned to someone else, we still show a raw id. LastMile MCP exposes `user_whoami` but **no `users_get` / `users_list` tool** — would need either a new LastMile tool or a cached directory.
-4. **Priority casing.** LastMile returns `priority: "medium"` as a plain string (not an object), and our curated `LASTMILE_PRIORITY_OPTIONS` only has `urgent / high / normal / low` — so "medium" falls through `priorityLabelFor()` as `{value: "medium", label: "medium"}` and renders lowercase in the card. Trivial fix.
+3. **Assignees other than the current user.** `tasks_get` populates the nested `assignee: {first_name, last_name, email}` only for the task's own assignee/creator. For tasks assigned to someone else, we still show a raw id. external provider MCP exposes `user_whoami` but **no `users_get` / `users_list` tool** — would need either a new external provider tool or a cached directory.
+4. **Priority casing.** external provider returns `priority: "medium"` as a plain string (not an object), and our curated `EXTERNAL_PROVIDER_PRIORITY_OPTIONS` only has `urgent / high / normal / low` — so "medium" falls through `priorityLabelFor()` as `{value: "medium", label: "medium"}` and renders lowercase in the card. Trivial fix.
 5. **JWT `exp` decoding in PR #84.** Currently we read `expires_at` from the DB. We could decode the access_token JWT directly and skip the DB lookup. Cleanup, not urgent.
-6. **Comment tool path.** `task_add_comment` doesn't exist on the LastMile MCP server. PR #80 disabled the Comment button via `capabilities.commentOnTask = false`. Either find a different LastMile path (probably needs LastMile to add it) or leave the button hidden permanently.
+6. **Comment tool path.** `task_add_comment` doesn't exist on the external provider MCP server. PR #80 disabled the Comment button via `capabilities.commentOnTask = false`. Either find a different external provider path (probably needs external provider to add it) or leave the button hidden permanently.
 7. **`prompt=login` + `max_age=0` are still in the authorize URL** (PRs #85/#86) — they're standards-compliant and harmless even with the ephemeral-session fix in #88. If WorkOS ever updates AuthKit to honor them, the fixes compose. Not a follow-up so much as a "leaving these in place on purpose" note.
 
 ### Shipped — 2026-04-14 and earlier
 
-- **PR #33 — merged `649df8c` (2026-04-13).** Full MVP end-to-end against LastMile Tasks. Landed:
-  - Adapter seam (`packages/api/src/integrations/external-work-items/`) + LastMile adapter (normalize, form schema, executeAction, refresh, signature, event normalizer)
+- **PR #33 — merged `649df8c` (2026-04-13).** Full MVP end-to-end against external provider Tasks. Landed:
+  - Adapter seam (`packages/api/src/integrations/external-work-items/`) + external provider adapter (normalize, form schema, executeAction, refresh, signature, event normalizer)
   - Shared `mcpClient` extracted from `refreshGenUI`; supports per-user OAuth bearer tokens
   - `executeExternalTaskAction` GraphQL mutation + resolver + orchestrator; direct path, no agent round-trip; writes audit system messages
   - `POST /integrations/:provider/webhook` Lambda (`handlers/integration-webhooks.ts`) + adapter-neutral `ingestEvent` pipeline + `ensureExternalTaskThread` idempotent upsert + reassignment handoff
   - Mobile `ExternalTaskCard` + block renderers (task_header / field_list / badge_row / action_bar / form) + fixture; `PinnedExternalTaskHeader` above thread timelines
-  - Mobile "Connect LastMile Tasks" CTA on Settings → Integrations
-  - `oauth-callback` captures LastMile-native user id into `connections.metadata.lastmile.userId`
+  - Mobile "Connect external provider Tasks" CTA on Settings → Integrations
+  - `oauth-callback` captures external provider-native user id into `connections.metadata.mobile-host.userId`
   - `refreshGenUI` surgically generalized: legacy map extracted to `genui-refresh-legacy.ts`; `external_task` branch routes through the adapter registry; CRM/places untouched
   - Terraform: new Lambda + route registered in `lambda-api/handlers.tf`; `scripts/build-lambdas.sh` builds the new handler
-  - `scripts/seed-lastmile-provider.sql` idempotent seed for the `connect_providers` row
+  - `scripts/seed-mobile-host-provider.sql` idempotent seed for the `connect_providers` row
 
 - **PR #34 — open `99a7c84`, branch `external-tasks-e2e-tests` (2026-04-14).** 44 unit tests across 5 files covering:
-  - `lastmile-signature` (9): HMAC valid/invalid/malformed; `sha256=` prefix; dev fallback open; prod fallback closed
-  - `lastmile-normalize-event` (9): kind mapping, `previousProviderUserId`, fallback `task_id`, error cases
+  - `mobile-host-signature` (9): HMAC valid/invalid/malformed; `sha256=` prefix; dev fallback open; prod fallback closed
+  - `mobile-host-normalize-event` (9): kind mapping, `previousProviderUserId`, fallback `task_id`, error cases
   - `external-task-execute-action` (9): orchestrator guards + happy path + summary phrasing
   - `external-task-ingest-event` (8): pipeline branches + reassignment handoff
   - `integration-webhooks-handler` (9): routing, status mapping, rate limit at 600/min
@@ -100,14 +100,14 @@ These prevent any task — real or seeded — from appearing in the iOS Tasks ta
 2. **Denormalized task columns not populated from the envelope.** `title` is set but `status` / `priority` / `due_at` / `description` are not. The Tasks tab row reads from denormalized columns, not `metadata.external.latestEnvelope`, so rows would render blank even after Gap 1 is fixed.
 3. **Thread detail screen routes `channel=task` to the sub-task FlatList view.** `PinnedExternalTaskHeader` is only rendered on the `!isTask` branch, so external tasks are opened into the wrong layout with no way to reach the form.
 4. **Tasks tab row has no provider indicator.** Cosmetic but useful for E2E verification.
-5. **No way to seed an external task without a live LastMile webhook.** `ingestExternalTaskEvent` is only reachable via HMAC-signed `POST /integrations/lastmile/webhook` from a configured LastMile tenant. No existing dev-only handler pattern in `packages/api/src/handlers/`.
+5. **No way to seed an external task without a live external provider webhook.** `ingestExternalTaskEvent` is only reachable via HMAC-signed `POST /integrations/mobile-host/webhook` from a configured external provider tenant. No existing dev-only handler pattern in `packages/api/src/handlers/`.
 
 ### Planned next phases
 
 - **Phase A** — backend denormalization fixes (Gaps 1 + 2) in `ensureExternalTaskThread.ts`, extend ingest pipeline tests.
-- **Phase B** — dev-only `POST /api/dev/external-tasks/seed` Lambda gated on `STAGE !== "main"`; reuses `normalizeLastmileTask` + `envelopeFromRaw` + `ensureExternalTaskThread`.
-- **Phase C** — mobile: route external-task threads through the timeline-with-pinned-header path (`app/thread/[threadId]/index.tsx`); add "LastMile" pill to Tasks tab rows (`app/(tabs)/tasks/index.tsx`).
-- **Phase D** — live LastMile webhook (outside the repo): configure webhook URL + `LASTMILE_WEBHOOK_SECRET` on the dev Lambda. Zero code changes if A–C are correct.
+- **Phase B** — dev-only `POST /api/dev/external-tasks/seed` Lambda gated on `STAGE !== "main"`; reuses `normalizeExternalProviderTask` + `envelopeFromRaw` + `ensureExternalTaskThread`.
+- **Phase C** — mobile: route external-task threads through the timeline-with-pinned-header path (`app/thread/[threadId]/index.tsx`); add "external provider" pill to Tasks tab rows (`app/(tabs)/tasks/index.tsx`).
+- **Phase D** — live external provider webhook (outside the repo): configure webhook URL + `EXTERNAL_PROVIDER_WEBHOOK_SECRET` on the dev Lambda. Zero code changes if A–C are correct.
 
 ### Verification status
 
@@ -122,7 +122,7 @@ These prevent any task — real or seeded — from appearing in the iOS Tasks ta
 
 ThinkWork should make external tasks feel native without becoming a task system itself.
 
-When a user is assigned work in an external system like LastMile Tasks, Linear, Jira, or Asana, ThinkWork opens a dedicated thread for that work. Inside the thread, the task is rendered as a **mobile-first GenUI experience** made from native cards and forms, not markdown-heavy chat output and not iframe-wrapped remote UIs. Users can review, update, and discuss the task in ThinkWork, while the external system remains the source of truth.
+When a user is assigned work in an external system like external provider Tasks, Linear, Jira, or Asana, ThinkWork opens a dedicated thread for that work. Inside the thread, the task is rendered as a **mobile-first GenUI experience** made from native cards and forms, not markdown-heavy chat output and not iframe-wrapped remote UIs. Users can review, update, and discuss the task in ThinkWork, while the external system remains the source of truth.
 
 **Core product line:** ThinkWork owns the **work experience**. The external provider owns the **work record**.
 
@@ -203,7 +203,7 @@ Explicit UI actions like changing status, assigning a user, or submitting a task
 
 - No new internal `tasks` table for MVP.
 - No iframe-based embedded provider UI.
-- No provider-specific UI forks for LastMile vs Linear vs Jira.
+- No provider-specific UI forks for external provider vs Linear vs Jira.
 - No requirement that every structured UI action goes through a full agent wakeup.
 - No attempt to normalize every exotic provider field in MVP.
 - No internal-only task objects that exist without an external source system.
@@ -235,7 +235,7 @@ Suggested thread metadata shape:
 ```ts
 metadata.external = {
   kind: "task",
-  provider: "lastmile" | "linear" | "jira" | "asana",
+  provider: "mobile-host" | "linear" | "jira" | "asana",
   externalId: "...",
   url: "...",
   version: "...",
@@ -320,7 +320,7 @@ Suggested normalized shape:
 type NormalizedTask = {
   core: {
     id: string
-    provider: "lastmile" | "linear" | "jira" | "asana"
+    provider: "mobile-host" | "linear" | "jira" | "asana"
     title: string
     description?: string
     status?: { value: string; label: string; color?: string }
@@ -389,7 +389,7 @@ Suggested envelope shape:
 {
   _type: "external_task",
   _source: {
-    provider: "lastmile",
+    provider: "mobile-host",
     tool: "task_get",
     params: { id: "task_123" },
   },
@@ -411,7 +411,7 @@ This should not be implemented as a lowest-common-denominator task model. It sho
 Draft interfaces:
 
 ```ts
-type TaskProvider = "lastmile" | "linear" | "jira" | "asana"
+type TaskProvider = "mobile-host" | "linear" | "jira" | "asana"
 
 type TaskActionType =
   | "external_task.update_status"
@@ -657,7 +657,7 @@ Each provider adapter is responsible for:
 Providers may have wildly different response shapes. That complexity should be isolated behind the adapter.
 
 Examples:
-- LastMile might return `status.name`
+- external provider might return `status.name`
 - Linear might return `state.name`
 - Jira might return `fields.status.name`
 
@@ -672,7 +672,7 @@ packages/api/src/integrations/external-work-items/
   executeAction.ts
   normalizeEvent.ts
   providers/
-    lastmile/
+    mobile-host/
       verifySignature.ts
       normalizeEvent.ts
       normalizeItem.ts
@@ -825,7 +825,7 @@ The current GenUI refresh path appears too tied to existing assumptions. It shou
 
 ### 15.2 Integrations surface is incomplete
 
-The repo already appears to know about `lastmile` in some backend paths, but the user-facing integrations surface does not yet fully reflect that. The product seam needs to become end-to-end.
+The repo already appears to know about `mobile-host` in some backend paths, but the user-facing integrations surface does not yet fully reflect that. The product seam needs to become end-to-end.
 
 ### 15.3 Webhook targeting likely needs expansion
 
@@ -835,10 +835,10 @@ If webhook targeting is still centered on `agent | routine`, this design needs a
 
 ## 16. MVP scope
 
-Provider: **LastMile Tasks only**
+Provider: **external provider Tasks only**
 
 Deliver:
-- connect LastMile Tasks
+- connect external provider Tasks
 - receive assignment/update events
 - create/update task-linked threads
 - render native task card in the thread
@@ -858,7 +858,7 @@ Do not deliver in MVP:
 
 ## 17. Verification plan
 
-- Connect a LastMile account and confirm a task assignment opens a ThinkWork thread.
+- Connect a external provider account and confirm a task assignment opens a ThinkWork thread.
 - Confirm the thread renders a native task card, not markdown.
 - Open a form card and update status, assignee, or due date.
 - Confirm the provider changes immediately.

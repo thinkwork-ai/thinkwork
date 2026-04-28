@@ -4,17 +4,15 @@ When `chat-agent-invoke` ships a `workflow_skill` blob alongside
 `thread_metadata`, this module renders a Markdown block that steers the
 agent for the duration of the thread:
 
-- `skill.instructions` — freeform markdown from LastMile describing how
+- `skill.instructions` — freeform markdown from the workflow provider describing how
   to behave on this workflow (tone, guardrails, when to stop, etc.).
   Injected verbatim.
 - `skill.form` — the Question Card schema the agent should pass to
   `present_form`. Rendered as a fenced JSON block so the agent can
   copy it into the tool call.
 
-The `lastmile-tasks` skill looks for this block in its system prompt
-and takes the dynamic path (workflow-specific form) when it appears,
-falling back to the hardcoded static form when it doesn't. See
-`packages/skill-catalog/lastmile-tasks/SKILL.md`.
+Workflow-aware skills look for this block in the system prompt and take
+the dynamic path (workflow-specific form) when it appears.
 
 Mirrors the shape + testability of `external_task_context.py`.
 """
@@ -53,18 +51,18 @@ def format_workflow_skill_context(workflow_skill: Any) -> str:
     lines: list[str] = [
         "## Workflow Skill",
         "",
-        "The LastMile workflow attached to this thread ships its own intake",
+        "The workflow attached to this thread ships its own intake",
         "instructions and/or form. Follow the instructions below and present",
         "the form (if any) as-is. When only the Workflow ID is present,",
-        "fall back to the hardcoded `lastmile-tasks/references/task-intake-form.json`",
-        "via `present_form(form_path=...)` — but still pass the Workflow ID",
+        "fall back to the skill's default form via `present_form(form_path=...)`",
+        "when applicable — but still pass the Workflow ID",
         "verbatim to `workflow_task_create`.",
         "",
     ]
 
     if has_workflow_id:
         # The agent MUST use this exact value as the `workflowId` argument
-        # when calling the LastMile MCP's `workflow_task_create` tool —
+        # when calling the provider MCP's `workflow_task_create` tool —
         # guessing from other identifier-looking strings in context (the
         # agent instance_id, the form's id, etc.) produces "Workflow not
         # found" errors on the MCP side.
@@ -86,7 +84,7 @@ def format_workflow_skill_context(workflow_skill: Any) -> str:
             "Pass this schema verbatim to `present_form`'s `form_json` "
             "argument — do not modify field ids or types. The `form_response` "
             "values come back as an opaque payload that ThinkWork forwards to "
-            "LastMile; you don't need to map them to per-column arguments.",
+            "the provider; you don't need to map them to per-column arguments.",
         )
         lines.append("")
         lines.append("```json")

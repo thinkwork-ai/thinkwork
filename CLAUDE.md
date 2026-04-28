@@ -123,4 +123,3 @@ Concurrent admin vite instances (worktrees) must bind to 5175+. **Each port must
 - This is an **AWS-only** platform. Feature work that assumes Kubernetes, Docker Compose, GCP, or Azure is explicitly out of scope (`CONTRIBUTING.md`).
 - Size for enterprise scale — planning docs should assume on the order of **4 enterprises × 100+ agents × ~5 templates** (400+ agents); "n=4 simplification" reasoning is obsolete.
 - Prefer AWS-native services (AgentCore, Cognito, Bedrock) when comparable to SaaS alternatives; frame external SaaS as contingency, not default.
-- `LastMile` has two surfaces — **LastMile-as-task-connector is retired (2026-04-20)**; LastMile-as-MCP-server stays. Don't conflate them.

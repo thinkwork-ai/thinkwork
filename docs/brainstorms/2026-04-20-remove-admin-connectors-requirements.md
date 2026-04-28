@@ -7,7 +7,7 @@ topic: remove-admin-connectors
 
 ## Problem Frame
 
-The admin app at `apps/admin/src/routes/_authed/_tenant/connectors/` exposes a "Connectors" page that wraps the `connect_providers` + `webhooks` (target_type='task') tables — originally built so a tenant admin could enable an external task provider (LastMile was the only real one), copy a signed webhook URL, and paste it into the provider's dashboard.
+The admin app at `apps/admin/src/routes/_authed/_tenant/connectors/` exposes a "Connectors" page that wraps the `connect_providers` + `webhooks` (target_type='task') tables — originally built so a tenant admin could enable an external task provider (external provider was the only real one), copy a signed webhook URL, and paste it into the provider's dashboard.
 
 Two things have changed:
 
@@ -59,14 +59,14 @@ Continuing to ship the page is strictly negative: tenants see a broken admin sur
 ## Key Decisions
 
 - **No data deletes.** Original draft proposed deleting stale `webhooks` and `connect_providers` rows. Reviewer pass surfaced an FK trap (`connect_providers.id` is referenced by `connections.provider_id`, `webhooks.connect_provider_id`, and `webhook_deliveries.provider_id` with no `onDelete` rule — Postgres default `NO ACTION` would block the DELETE). Combined with the fact that API Gateway already 404s the routes, deleting the rows is cosmetic, not a correctness or security fix. The cosmetic value does not justify running raw DELETEs against tables shared with OAuth + MCP. **Decision: do nothing to the data in this PR.**
-- **External-task ingress is parked, not killed.** The current admin surface is removed because the backend is gone. We are *not* claiming the platform will never accept partner-initiated task ingestion again — if a partner like LastMile re-enters the picture, the right home is mobile self-serve (per `feedback_user_opt_in_over_admin_config`) using the preserved `connect_providers`/`connections`/`credentials` schema, not a re-resurrected admin page. No design work is committed to here, but the door is left open.
+- **External-task ingress is parked, not killed.** The current admin surface is removed because the backend is gone. We are *not* claiming the platform will never accept partner-initiated task ingestion again — if a partner like external provider re-enters the picture, the right home is mobile self-serve (per `feedback_user_opt_in_over_admin_config`) using the preserved `connect_providers`/`connections`/`credentials` schema, not a re-resurrected admin page. No design work is committed to here, but the door is left open.
 - **Drop public docs as well as UI.** The concept is gone, not just the surface; leaving "Connectors" in the public docs site would confuse readers and leak into search results. This is a deliberate positioning move (the external-developer surface is the SDK, not an integration hub), not just hygiene.
 - **No deprecation period.** The endpoints are already deleted; a deprecation banner on a page that already errors is meaningless.
 
 ## Dependencies / Assumptions
 
 - Assumes the admin sidebar entry is statically defined in `Sidebar.tsx` and not dynamically derived from a config — confirmed by file path in repo.
-- Assumes no production tenant is currently relying on a LastMile webhook delivery (memory: dev-only PAT integration). Even if one were, they already get 404s from API Gateway today, so this PR does not change their reality.
+- Assumes no production tenant is currently relying on a external provider webhook delivery (memory: dev-only PAT integration). Even if one were, they already get 404s from API Gateway today, so this PR does not change their reality.
 
 ## Outstanding Questions
 

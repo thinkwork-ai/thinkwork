@@ -1,7 +1,7 @@
 """External-task context formatting for the agent runtime.
 
 When chat-agent-invoke ships `thread.metadata` to the agent container, this
-module turns the embedded `external.latestEnvelope` (LastMile etc.) into a
+module turns the embedded `external.latestEnvelope` into a
 structured Markdown block that gets appended to the system prompt. Without
 this, an agent attached to an external-task thread sees only the user's
 literal message and has no idea what task is being discussed.
