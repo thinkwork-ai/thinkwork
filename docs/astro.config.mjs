@@ -284,6 +284,10 @@ export default defineConfig({
                           slug: "applications/admin/threads",
                         },
                         { label: "Inbox", slug: "applications/admin/inbox" },
+                        {
+                          label: "Automations",
+                          slug: "applications/admin/automations",
+                        },
                       ],
                     },
                     {
@@ -331,16 +335,8 @@ export default defineConfig({
                           slug: "applications/admin/analytics",
                         },
                         {
-                          label: "Scheduled Jobs",
-                          slug: "applications/admin/scheduled-jobs",
-                        },
-                        {
                           label: "Evaluations",
                           slug: "applications/admin/evaluations",
-                        },
-                        {
-                          label: "Routines",
-                          slug: "applications/admin/routines",
                         },
                         {
                           label: "Webhooks",

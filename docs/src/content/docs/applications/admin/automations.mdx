@@ -1,0 +1,86 @@
+---
+title: Admin — Automations
+description: Recurring agent work, scheduled jobs, and routine triggers. Cron, rate, and one-shot schedules backed by EventBridge plus Step Functions for multi-step routines. Lives in the admin Work group, below Inbox.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Automations is the tenant-wide home for recurring agent work — cron heartbeats, rate-based triggers, one-shot reminders, scheduled agent invocations, and routine triggers (multi-step workflows). Behind the UI it's the same surface as the underlying `scheduled-jobs` route; "Automations" is the operator-facing name and IA position.
+
+## Where it lives in the admin sidebar
+
+Automations sits in the **Work** group, below Inbox:
+
+```
+Work
+├── Dashboard
+├── Threads
+├── Inbox
+└── Automations            ← here
+```
+
+It moved out of the Manage group during the workspace-reviews routing refactor (see [Workspace Orchestration → Human review flow](/concepts/agents/workspace-orchestration/#human-review-flow) for the design context). Manage now keeps pure config/infra surfaces — Analytics, Webhooks, People, Billing, Settings.
+
+## What it covers
+
+Four trigger types live behind a single page:
+
+- **Heartbeats** — recurring prompts that run an agent on a timer (e.g. "every 10 minutes, check your inbox").
+- **Reminders** — one-shot or recurring prompts that nudge an agent toward a specific action (e.g. "daily at 08:00, send the morning digest").
+- **Scheduled invocations** — general schedule-based agent runs.
+- **Routine triggers** — schedule or one-time triggers that kick off a multi-step routine (workflow), rather than a single agent turn.
+
+Each type determines how the trigger interacts with the target:
+
+- Heartbeats skip if the agent is busy.
+- Reminders queue if the prior run hasn't finished.
+- Routine triggers fan out to step execution via AWS Step Functions.
+
+## The list
+
+**Route:** `/scheduled-jobs`  
+**File:** `apps/admin/src/routes/_authed/_tenant/scheduled-jobs/index.tsx`
+
+A searchable table with a top-right **New Job** button and a type-filter dropdown.
+
+| Column | Notes |
+|---|---|
+| Name | Display name; description rendered below in smaller type |
+| Type | Icon + badge: **Heartbeat**, **Reminder**, **Scheduled**, **Routine** |
+| Schedule | Cron or rate expression, rendered human-readable ("every 5 minutes", "daily at 09:00 UTC") |
+| Enabled | Toggle — disabling pauses the underlying EventBridge rule, it does not delete it |
+| Last run | Relative time |
+| Next run | Estimated from the schedule expression and `last_run_at` |
+
+## The detail page
+
+**Route:** `/scheduled-jobs/:scheduledJobId`  
+**File:** `apps/admin/src/routes/_authed/_tenant/scheduled-jobs/$scheduledJobId.tsx`
+
+Each automation has its own detail page with:
+
+- **Header** — name + type badge; action buttons for **Edit**, **Run Now** (manual trigger), and **Enable / Disable**; delete with confirmation.
+- **Schedule and target** — the schedule expression, the target agent (or routine), and any payload attached to the trigger.
+- **Run history** — recent invocations with status, duration, and a link into the resulting thread for full audit.
+- **Activity log** — administrative changes to the automation itself (created, enabled, disabled, edited).
+
+## Under the hood
+
+Automations are AWS-native: EventBridge rules drive the schedule, the `job-schedule-manager` Lambda owns the rule lifecycle, and the `job-trigger` Lambda fires the agent wakeup when the rule matches. Routine-type triggers also kick off Step Functions state machines for the multi-step flow.
+
+A note on `rate()` schedules: AWS Scheduler treats `rate()` as **creation-time + interval**, not wall-clock-aligned. A `rate(1 hour)` job created at 09:23 fires at 10:23, 11:23, … rather than on the hour. Use `cron()` if you need wall-clock alignment.
+
+User-initiated create and update operations call the underlying Lambda with `RequestResponse` invocation so errors surface synchronously — no fire-and-forget paths.
+
+## What does *not* live here
+
+- **Workspace HITL reviews** — system-agent workspace reviews surface in **Inbox**, not Automations. See [Admin — Inbox → Workspace reviews (system HITL)](/applications/admin/inbox/#workspace-reviews-system-hitl).
+- **Per-thread agent invocations** — those live in the [Threads](/applications/admin/threads/) tab.
+- **Per-user OAuth or connector credentials** — those live in the mobile app per [user opt-in over admin config](/concepts/agents/) (admin owns infra config; users own integration auth).
+
+## Related pages
+
+- [Inbox](/applications/admin/inbox/) — the operator queue for human-in-the-loop decisions, including system-agent workspace reviews.
+- [Threads](/applications/admin/threads/) — the conversation surface for agent runs, including those triggered by automations.
+- [Workspace Orchestration](/concepts/agents/workspace-orchestration/) — the underlying file-and-event substrate that automations and other entry points feed into.
+- [Scheduled and Event-driven Automations (concept)](/concepts/automations/scheduled-and-event-driven/) — the broader concept doc on how scheduled work fits into the platform.

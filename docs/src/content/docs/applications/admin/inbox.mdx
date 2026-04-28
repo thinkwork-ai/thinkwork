@@ -81,8 +81,46 @@ Different request types have different payload shapes, so the admin app uses `In
 - **Config change requests** render the field-level diff between current and proposed configuration
 - **Knowledge upload requests** render the file list and a preview of the first document
 - **Tool invocation requests** render the tool name, input arguments, and any pre-computed risk assessment
+- **Workspace review requests** (`type='workspace_review'`) render the review file body, target path, and a preview of the first three proposed changes — see the next section
 
 Unknown or unhandled types fall back to a raw JSON view with the same "Raw JSON" toggle as the known-type renderers.
+
+## Workspace reviews (system HITL)
+
+Inbox is also the home for **system-agent workspace reviews** — pauses from agents that have no human pair (eval test runtimes, platform-managed system agents, or runs whose `parent_agent_id` chain didn't terminate at a paired human). These appear automatically as inbox items with `type='workspace_review'` whenever a system run pauses; no operator action is required to populate the queue.
+
+**Paired-human reviews do NOT appear here.** They live on the responsible human's mobile threads. The chain-walk classification happens server-side; the Inbox only sees system and unrouted runs.
+
+### Where the items come from
+
+When the workspace event processor handles a `review.requested` event:
+
+1. It classifies the run by walking `agents.parent_agent_id` from the run's agent.
+2. If the chain resolves to a paired human, nothing is materialized in Inbox — that review surfaces on the human's mobile.
+3. If the chain terminates at `source='system'` (or hits the depth cap / orphan), an `inbox_items` row is inserted with `type='workspace_review'`, `entity_type='agent_workspace_run'`, `entity_id=<run id>`, and `config` carrying the review body, proposed changes, and target path.
+
+The materialization is idempotent: replaying the same `review.requested` event for the same run does not produce duplicate inbox items.
+
+### Action mapping
+
+When an operator decides on a `type='workspace_review'` inbox item, the inbox mutation dispatches the matching workspace review action against the linked run. The inbox item's status updates and the run's lifecycle advances in the same call:
+
+| Inbox action      | Workspace effect                                                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Approve           | `acceptAgentWorkspaceReview` — run resumes with approval; `workspace_event` wakeup is enqueued.                    |
+| Reject            | `cancelAgentWorkspaceReview` — run is marked `cancelled`; no wakeup.                                               |
+| Request revision  | `resumeAgentWorkspaceRun` with the review notes carried as `responseMarkdown` — run resumes; agent reads the notes and addresses them in its next turn. |
+
+Operators only call the inbox mutations; the dispatch happens server-side. The legacy requester-agent wakeup that fires for other inbox types is skipped for `workspace_review` because the workspace review action handles run state directly.
+
+### Unrouted reviews
+
+Reviews whose chain has neither a human pair nor a `source='system'` terminator (orphan agents, cycles, depth-cap hits) materialize as inbox items too, but the title is prefixed `Workspace review (unrouted): …` and the payload renderer shows a warning marker. These usually indicate bad data — a `human_pair_id` that should be set, a `parent_agent_id` cycle, or a chain too deep to walk. Treat them as a signal to investigate the agent record before acting.
+
+### Background and links
+
+- The cutover backfill script (one-shot, idempotent) lives at `packages/api/scripts/backfill-system-reviews-to-inbox.ts` and was used to materialize inbox items for any system runs that pre-dated the routing refactor.
+- The underlying routing model — chain walk, mobile vs Inbox split, sub-agent surfacing — is documented in [Workspace Orchestration → Human review flow](/concepts/agents/workspace-orchestration/#human-review-flow).
 
 ## Workflows
 
