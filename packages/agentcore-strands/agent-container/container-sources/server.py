@@ -508,20 +508,13 @@ def _register_delegate_to_workspace_tool(
         return
 
     # Build the platform-catalog manifest expected by `skill_resolver`
-    # from the registered skills. Shape required:
+    # from the workspace-copied skills. Shape required:
     #   Mapping[str, Mapping[str, Any]] with `skill_md_content` per entry.
-    #
-    # `skill_meta` from `register_skill_tools` is keyed by skill_id but
-    # only contains {mode, model, description, display_name, execution}
-    # — NOT the SKILL.md body. We adapt by re-reading SKILL.md from the
-    # on-disk skills root (`/tmp/skills/<slug>/SKILL.md`), which the
-    # bootstrap step has already populated for every registered skill.
-    # An empty-but-non-None manifest is still useful: it makes the
-    # resolver's platform-fallback branch reachable, which the
-    # resolver's local→platform precedence depends on.
     _dw_platform_manifest: dict[str, dict[str, str]] = {}
-    for _slug in skill_meta.keys():
-        _skill_md = os.path.join("/tmp/skills", _slug, "SKILL.md")
+    for _slug, _meta in skill_meta.items():
+        _skill_md = _meta.get("skill_md_path") or os.path.join(
+            WORKSPACE_DIR, "skills", _slug, "SKILL.md"
+        )
         try:
             with open(_skill_md) as _fh:
                 _content = _fh.read()
@@ -1126,7 +1119,10 @@ def _call_strands_agent(system_prompt: str, messages: list,
     # mode: tool  → scripts registered as direct tools on parent
     # mode: agent → skill invocation spins up a sub-agent with its own reasoning loop
     from skill_runner import register_skill_tools
-    tool_mode_tools, agent_mode_tools, skill_meta = register_skill_tools(skills_config or [])
+    tool_mode_tools, agent_mode_tools, skill_meta = register_skill_tools(
+        skills_config or [],
+        workspace_dir=WORKSPACE_DIR,
+    )
     tools.extend(tool_mode_tools)
     if tool_mode_tools:
         logger.info("mode:tool skill tools registered on parent: %d", len(tool_mode_tools))
@@ -1159,7 +1155,9 @@ def _call_strands_agent(system_prompt: str, messages: list,
                     pass
 
         # SKILL.md content (safety rules, tool docs, workflows)
-        skill_md_path = os.path.join("/tmp/skills", skill_id, "SKILL.md")
+        skill_md_path = skill_meta.get(skill_id, {}).get("skill_md_path") or os.path.join(
+            WORKSPACE_DIR, "skills", skill_id, "SKILL.md"
+        )
         if os.path.isfile(skill_md_path):
             try:
                 with open(skill_md_path) as f:
@@ -1344,25 +1342,20 @@ def _call_strands_agent(system_prompt: str, messages: list,
     # Discovery: injects <available_skills> XML into system prompt
     # Activation: built-in `skills` tool loads SKILL.md on demand
     # Execution: lists resources (scripts/, references/) for file_read
-    # Skip in workspace mode — sub-agents handle their own skills.
     plugins = []
-    has_workspace_map = os.path.isfile(os.path.join(WORKSPACE_DIR, "AGENTS.md"))
-    if not has_workspace_map:
-        try:
-            from strands import AgentSkills
-            skill_dirs = []
-            skills_root = "/tmp/skills"
-            if os.path.isdir(skills_root):
-                for skill in (skills_config or []):
-                    sid = skill.get("skillId", "")
-                    skill_path = os.path.join(skills_root, sid)
-                    if sid and os.path.isdir(skill_path) and os.path.isfile(os.path.join(skill_path, "SKILL.md")):
-                        skill_dirs.append(skill_path)
-            if skill_dirs:
-                plugins.append(AgentSkills(skills=skill_dirs))
-                logger.info("AgentSkills plugin created with %d skills", len(skill_dirs))
-        except ImportError:
-            logger.warning("AgentSkills not available in this strands version")
+    try:
+        from strands import AgentSkills
+        skill_dirs = []
+        for meta in skill_meta.values():
+            skill_path = meta.get("skill_dir")
+            skill_md = meta.get("skill_md_path")
+            if skill_path and skill_md and os.path.isfile(skill_md):
+                skill_dirs.append(skill_path)
+        if skill_dirs:
+            plugins.append(AgentSkills(skills=skill_dirs))
+            logger.info("AgentSkills plugin created with %d workspace skills", len(skill_dirs))
+    except ImportError:
+        logger.warning("AgentSkills not available in this strands version")
 
     # ── MCP client connections ────────────────────────────────────────────
     # Connect to HTTP streaming MCP servers passed in the invocation payload.
@@ -1871,15 +1864,6 @@ def _execute_agent_turn(payload: dict) -> dict:
         os.environ["_INSTANCE_ID"] = instance_id
     if assistant_id:
         os.environ["_ASSISTANT_ID"] = assistant_id
-
-    # Selective skill sync for configured skills.
-    if skills_config:
-        from install_skills import install_skill_from_s3
-        for skill in skills_config:
-            skill_id = skill.get("skillId", "")
-            s3_key = skill.get("s3Key", "")
-            if skill_id and s3_key:
-                install_skill_from_s3(s3_key, skill_id)
 
     # Sync workspace from S3.
     _ensure_workspace_ready(

@@ -26,13 +26,12 @@ from user_storage import PackResult
 
 def _reset_server_pack_state():
     server._PACK_CACHE = None
-    server._composed_fingerprint = None
-    server._workspace_loaded_key = None
 
 
 def test_ensure_workspace_ready_fetches_user_pack_during_bootstrap(monkeypatch, tmp_path):
     _reset_server_pack_state()
     calls = []
+    workspace_calls = []
     pack = PackResult(
         body="<user_distilled_knowledge_test>Le Jules Verne</user_distilled_knowledge_test>",
         etag="etag-1",
@@ -47,11 +46,10 @@ def test_ensure_workspace_ready_fetches_user_pack_during_bootstrap(monkeypatch, 
     monkeypatch.setattr(server, "WORKSPACE_DIR", str(tmp_path))
     monkeypatch.setattr(
         server,
-        "fetch_composed_workspace",
-        lambda **_kwargs: [{"path": "AGENTS.md", "sha256": "sha", "content": "# root"}],
+        "bootstrap_workspace",
+        lambda **kwargs: workspace_calls.append(kwargs)
+        or SimpleNamespace(synced=1, deleted=0, total=1),
     )
-    monkeypatch.setattr(server, "compute_fingerprint", lambda _files: "workspace-etag")
-    monkeypatch.setattr(server, "write_composed_to_dir", lambda _files, _dir: 1)
 
     def fake_get_pack(tenant_id, user_id, *, bucket):
         calls.append((tenant_id, user_id, bucket))
@@ -61,9 +59,11 @@ def test_ensure_workspace_ready_fetches_user_pack_during_bootstrap(monkeypatch, 
 
     server._ensure_workspace_ready("tenant-1", "agent-1")
 
+    assert workspace_calls[0]["tenant_slug"] == "tenant-1"
+    assert workspace_calls[0]["agent_slug"] == "agent-1"
+    assert workspace_calls[0]["bucket"] == "workspace-bucket"
     assert calls == [("tenant-1", "user-1", "workspace-bucket")]
     assert server._PACK_CACHE == pack
-    assert server._composed_fingerprint == "workspace-etag:pack:etag-1"
 
 
 def test_ensure_workspace_ready_logs_no_user_skip(monkeypatch, tmp_path, caplog):
@@ -74,14 +74,13 @@ def test_ensure_workspace_ready_logs_no_user_skip(monkeypatch, tmp_path, caplog)
     monkeypatch.setenv("API_AUTH_SECRET", "secret")
     monkeypatch.delenv("USER_ID", raising=False)
     monkeypatch.delenv("CURRENT_USER_ID", raising=False)
+    monkeypatch.setenv("WORKSPACE_BUCKET", "workspace-bucket")
     monkeypatch.setattr(server, "WORKSPACE_DIR", str(tmp_path))
     monkeypatch.setattr(
         server,
-        "fetch_composed_workspace",
-        lambda **_kwargs: [{"path": "AGENTS.md", "sha256": "sha", "content": "# root"}],
+        "bootstrap_workspace",
+        lambda **_kwargs: SimpleNamespace(synced=1, deleted=0, total=1),
     )
-    monkeypatch.setattr(server, "compute_fingerprint", lambda _files: "workspace-etag")
-    monkeypatch.setattr(server, "write_composed_to_dir", lambda _files, _dir: 1)
 
     server._ensure_workspace_ready("tenant-1", "agent-1")
 

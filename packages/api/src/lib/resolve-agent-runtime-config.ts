@@ -382,11 +382,7 @@ export async function resolveAgentRuntimeConfig(
           );
           return null;
         });
-        const usesCatalogSource =
-          s.source === "catalog" || s.source === "builtin";
-        const s3Key = usesCatalogSource
-          ? `skills/catalog/${s.skill_id}`
-          : `tenants/${tenantSlug}/agents/${agentSlug}/workspace/skills/${s.skill_id}`;
+        const s3Key = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/skills/${s.skill_id}`;
         const merged = envOverrides ? { ...envOverrides } : {};
         return {
           skillId: s.skill_id,
