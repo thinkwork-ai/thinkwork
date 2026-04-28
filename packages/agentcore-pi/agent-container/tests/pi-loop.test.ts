@@ -66,7 +66,13 @@ describe("runPiAgent", () => {
         model: "anthropic.test-model",
         web_search_config: { provider: "exa", apiKey: "key" },
       },
-      { awsRegion: "us-east-1", gitSha: "sha", buildTime: "now" },
+      {
+        awsRegion: "us-east-1",
+        gitSha: "sha",
+        buildTime: "now",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+      },
     );
 
     expect(result.tools_called).toEqual(["web_search"]);
@@ -98,7 +104,13 @@ describe("runPiAgent", () => {
         thread_id: "thread-1",
         user_id: "user-1",
       },
-      { awsRegion: "us-east-1", gitSha: "sha", buildTime: "now" },
+      {
+        awsRegion: "us-east-1",
+        gitSha: "sha",
+        buildTime: "now",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+      },
     );
 
     expect(fetchMock).not.toHaveBeenCalled();
