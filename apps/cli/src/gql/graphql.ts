@@ -399,6 +399,14 @@ export type AgentTemplate = {
    * Null means the template does not use the sandbox.
    */
   sandbox?: Maybe<Scalars['AWSJSON']['output']>;
+  /**
+   * Send Email opt-in metadata for the platform email-sending built-in tool.
+   * Shape validated at create/update time by
+   * packages/api/src/lib/templates/send-email-config.ts:
+   *   { enabled: true }
+   * Null means the template does not inject Send Email.
+   */
+  sendEmail?: Maybe<Scalars['AWSJSON']['output']>;
   skills?: Maybe<Scalars['AWSJSON']['output']>;
   slug: Scalars['String']['output'];
   source: Scalars['String']['output'];
@@ -807,6 +815,11 @@ export type CreateAgentTemplateInput = {
    * opt into the sandbox.
    */
   sandbox?: InputMaybe<Scalars['AWSJSON']['input']>;
+  /**
+   * Send Email opt-in metadata; see AgentTemplate.sendEmail. Omit
+   * (or pass null) for templates that do not opt into Send Email.
+   */
+  sendEmail?: InputMaybe<Scalars['AWSJSON']['input']>;
   skills?: InputMaybe<Scalars['AWSJSON']['input']>;
   slug: Scalars['String']['input'];
   tenantId: Scalars['ID']['input'];
@@ -4054,6 +4067,11 @@ export type UpdateAgentTemplateInput = {
    * clear; omit to leave unchanged.
    */
   sandbox?: InputMaybe<Scalars['AWSJSON']['input']>;
+  /**
+   * Send Email opt-in metadata; see AgentTemplate.sendEmail. Pass
+   * null to clear; omit to leave unchanged.
+   */
+  sendEmail?: InputMaybe<Scalars['AWSJSON']['input']>;
   skills?: InputMaybe<Scalars['AWSJSON']['input']>;
   slug?: InputMaybe<Scalars['String']['input']>;
   /**

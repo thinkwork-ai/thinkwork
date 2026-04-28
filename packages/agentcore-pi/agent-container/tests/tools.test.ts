@@ -74,6 +74,7 @@ import {
   retainHindsightTurn,
 } from "../src/runtime/tools/hindsight.js";
 import { buildMcpTools } from "../src/runtime/tools/mcp.js";
+import { buildSendEmailTool } from "../src/runtime/tools/send-email.js";
 import { buildWebSearchTool } from "../src/runtime/tools/web-search.js";
 import {
   buildWorkspaceSkillTool,
@@ -130,6 +131,53 @@ describe("Pi runtime tools", () => {
 
   it("does not register web_search without tenant-resolved config", () => {
     expect(buildWebSearchTool({})).toBeNull();
+  });
+
+  it("executes send_email through the platform email endpoint", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ messageId: "ses-1", status: "sent" })),
+    );
+    const tool = buildSendEmailTool({
+      send_email_config: {
+        apiUrl: "https://api.test",
+        apiSecret: "secret",
+        agentId: "agent-1",
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+      },
+    });
+    expect(tool).not.toBeNull();
+
+    const result = (await tool?.execute("tool-1", {
+      to: ["user@example.com"],
+      subject: "Subject",
+      body: "Body",
+    })) as { details: { ok: boolean; status: string } };
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.test/api/email/send",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          authorization: "Bearer secret",
+          "x-tenant-id": "tenant-1",
+          "x-agent-id": "agent-1",
+        }),
+        body: JSON.stringify({
+          agentId: "agent-1",
+          to: "user@example.com",
+          subject: "Subject",
+          body: "Body",
+          threadId: "thread-1",
+        }),
+      }),
+    );
+    expect(result.details.ok).toBe(true);
+    expect(result.details.status).toBe("sent");
+  });
+
+  it("does not register send_email without runtime config", () => {
+    expect(buildSendEmailTool({})).toBeNull();
   });
 
   it("returns no execute_code tool when sandbox preflight is absent", () => {

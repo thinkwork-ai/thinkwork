@@ -381,6 +381,9 @@ export async function handler(event: InvokeEvent): Promise<void> {
       thinkwork_api_secret: THINKWORK_API_SECRET || undefined,
       hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
       web_search_config: runtimeConfig.webSearchConfig,
+      send_email_config: runtimeConfig.sendEmailConfig
+        ? { ...runtimeConfig.sendEmailConfig, threadId }
+        : undefined,
       runtime_type: runtimeType,
       model: agentModel,
       skills: skillsConfig.length > 0 ? skillsConfig : undefined,
