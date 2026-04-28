@@ -2,6 +2,7 @@ import { agentWorkspaceEvents_ as agentWorkspaceEvents } from "./agentWorkspaceE
 import { agentWorkspaceReview } from "./agentWorkspaceReview.query.js";
 import { agentWorkspaceReviews } from "./agentWorkspaceReviews.query.js";
 import { agentWorkspaceRuns_ as agentWorkspaceRuns } from "./agentWorkspaceRuns.query.js";
+import { pendingSystemReviewsCount } from "./pendingSystemReviewsCount.query.js";
 import {
   acceptAgentWorkspaceReview,
   cancelAgentWorkspaceReview,
@@ -13,6 +14,7 @@ export const workspaceQueries = {
   agentWorkspaceReview,
   agentWorkspaceReviews,
   agentWorkspaceRuns,
+  pendingSystemReviewsCount,
 };
 
 export const workspaceMutations = {

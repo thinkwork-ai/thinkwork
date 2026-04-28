@@ -9,6 +9,12 @@ import {
   snakeToCamel,
   threadTurns,
 } from "../../graphql/utils.js";
+import {
+  classifyWorkspaceReview,
+  createDrizzleClassifyChainStore,
+  type ClassifyChainStore,
+  type WorkspaceReviewKind,
+} from "./classify-review.js";
 
 const REGION =
   process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
@@ -100,12 +106,19 @@ export interface WorkspaceReviewDetailResult {
   proposedChanges: WorkspaceReviewProposedChange[];
   events: Record<string, unknown>[];
   decisionEvents: Record<string, unknown>[];
+  responsibleUserId: string | null;
+  kind: string;
+}
+
+function kindToGraphQL(kind: WorkspaceReviewKind): string {
+  return kind.toUpperCase();
 }
 
 export async function loadWorkspaceReviewDetail(
   runId: string,
   deps: {
     store?: WorkspaceReviewDetailStore;
+    classifierStore?: ClassifyChainStore;
     authorizeRun?: (run: WorkspaceRunRow) => Promise<void>;
   } = {},
 ): Promise<{
@@ -116,6 +129,13 @@ export async function loadWorkspaceReviewDetail(
   const run = await store.findRunById(runId);
   if (!run) return null;
   await deps.authorizeRun?.(run);
+
+  const classifierStore =
+    deps.classifierStore ?? createDrizzleClassifyChainStore();
+  const classification = await classifyWorkspaceReview(classifierStore, {
+    tenantId: run.tenant_id,
+    agentId: run.agent_id,
+  });
 
   const events = await store.listEvents(run.id, run.tenant_id, 100);
   const latestReviewEvent =
@@ -164,6 +184,8 @@ export async function loadWorkspaceReviewDetail(
         .map((event) =>
           snakeToCamel(event as unknown as Record<string, unknown>),
         ),
+      responsibleUserId: classification.responsibleUserId,
+      kind: kindToGraphQL(classification.kind),
     },
   };
 }
