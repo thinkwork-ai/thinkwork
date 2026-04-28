@@ -651,7 +651,7 @@ function TemplateEditorPage() {
                       <ModelSelect value={model} onValueChange={setModel} />
                     </div>
                     <div className="space-y-2">
-                      <Label>Runtime</Label>
+                      <Label>Harness</Label>
                       <Select
                         value={runtime}
                         onValueChange={(value) =>

@@ -250,7 +250,7 @@ export function AgentFormDialog({
                     <FormItem className="space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
                         <FormLabel className="text-xs text-muted-foreground">
-                          Runtime
+                          Harness
                         </FormLabel>
                         {hasRecentActivity && (
                           <Badge variant="outline" className="text-[10px]">
@@ -284,7 +284,7 @@ export function AgentFormDialog({
                       </Select>
                       {hasRecentActivity && (
                         <p className="text-[11px] leading-snug text-muted-foreground">
-                          In-flight chat will complete on the previous runtime.
+                          In-flight chat will complete on the previous harness.
                         </p>
                       )}
                       <FormMessage />

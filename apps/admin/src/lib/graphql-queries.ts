@@ -14,6 +14,7 @@ export const AgentsListQuery = graphql(`
       role
       type
       status
+      runtime
       templateId
       agentTemplate {
         id
@@ -1675,6 +1676,7 @@ export const AgentTemplatesListQuery = graphql(`
       category
       icon
       source
+      runtime
       model
       guardrailId
       blockedTools
