@@ -146,6 +146,7 @@ beforeEach(() => {
 	// doesn't leak into the next.
 	vi.resetAllMocks();
 	process.env.API_AUTH_SECRET = "api-secret";
+	process.env.THINKWORK_API_URL = "https://api.example.test";
 	process.env.AGENTCORE_FUNCTION_NAME = "thinkwork-dev-api-agentcore-invoke";
 	process.env.WORKSPACE_BUCKET = "test-bucket";
 	mockLambdaSend.mockResolvedValue({ FunctionError: undefined });
@@ -164,6 +165,13 @@ describe("POST /api/skills/start — happy path", () => {
 		expect(body.status).toBe("running");
 		expect(body.deduped).toBe(false);
 		expect(mockLambdaSend).toHaveBeenCalledTimes(1);
+		const invoke = mockLambdaSend.mock.calls[0][0] as {
+			input: { Payload: Uint8Array };
+		};
+		const outer = JSON.parse(new TextDecoder().decode(invoke.input.Payload));
+		const envelope = JSON.parse(outer.body);
+		expect(envelope.thinkworkApiUrl).toBe("https://api.example.test");
+		expect(envelope.apiAuthSecret).toBe("api-secret");
 	});
 });
 

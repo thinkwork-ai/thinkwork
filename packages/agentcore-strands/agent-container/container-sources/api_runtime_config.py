@@ -24,7 +24,6 @@ import json
 import logging
 import os
 import random
-import socket
 import time
 import urllib.error
 import urllib.parse
@@ -70,6 +69,8 @@ def fetch(
     *,
     current_user_id: str | None = None,
     current_user_email: str | None = None,
+    api_url: str | None = None,
+    api_secret: str | None = None,
     timeout: int = 15,
 ) -> dict[str, Any]:
     """GET ``/api/agents/runtime-config`` for ``tenantId=tenant_id`` +
@@ -85,8 +86,8 @@ def fetch(
             ~14s (timeout + 3 retries × mean-5s backoff) which fits well
             inside the 900s AgentCore Lambda ceiling.
     """
-    api_url = os.environ.get("THINKWORK_API_URL") or ""
-    api_secret = (
+    api_url = api_url or os.environ.get("THINKWORK_API_URL") or ""
+    api_secret = api_secret or (
         os.environ.get("API_AUTH_SECRET")
         or os.environ.get("THINKWORK_API_SECRET")
         or ""
@@ -154,7 +155,7 @@ def fetch(
                 attempt_idx, e.code,
             )
             last_exc = e
-        except (urllib.error.URLError, socket.timeout) as e:
+        except (TimeoutError, urllib.error.URLError) as e:
             logger.warning(
                 "runtime-config attempt=%d transport error: %s",
                 attempt_idx, e,

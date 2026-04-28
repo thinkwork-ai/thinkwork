@@ -30,7 +30,6 @@ import json
 import logging
 import os
 import random
-import socket
 import time
 
 logger = logging.getLogger(__name__)
@@ -111,7 +110,7 @@ def _urlopen_with_retry(req, timeout: int, run_id: str):
                 attempt_idx, run_id, e.code,
             )
             last_exc = e
-        except (urllib.error.URLError, socket.timeout) as e:
+        except (TimeoutError, urllib.error.URLError) as e:
             logger.warning(
                 "run_skill: completion POST attempt=%d runId=%s retryable transport error: %s",
                 attempt_idx, run_id, e,
@@ -152,8 +151,8 @@ def post_skill_run_complete(run_id: str, tenant_id: str, status: str,
     not provided, falls back to env reads as a backstop for callers
     that don't snapshot.
     """
-    import hmac as _hmac
     import hashlib as _hashlib
+    import hmac as _hmac
     import urllib.request
 
     api_url = api_url or os.environ.get("THINKWORK_API_URL") or ""
@@ -267,9 +266,20 @@ def _build_synthetic_payload(
         "guardrail_config": _cfg("guardrailConfig", "guardrail_config"),
         "mcp_configs": _cfg("mcpConfigs", "mcp_configs") or [],
         "blocked_tools": _cfg("blockedTools", "blocked_tools") or [],
-        "thinkwork_api_url": os.environ.get("THINKWORK_API_URL") or "",
-        "thinkwork_api_secret": os.environ.get("THINKWORK_API_SECRET")
-            or os.environ.get("API_AUTH_SECRET") or "",
+        "thinkwork_api_url": (
+            envelope.get("thinkworkApiUrl")
+            or envelope.get("thinkwork_api_url")
+            or os.environ.get("THINKWORK_API_URL")
+            or ""
+        ),
+        "thinkwork_api_secret": (
+            envelope.get("apiAuthSecret")
+            or envelope.get("thinkworkApiSecret")
+            or envelope.get("api_auth_secret")
+            or os.environ.get("THINKWORK_API_SECRET")
+            or os.environ.get("API_AUTH_SECRET")
+            or ""
+        ),
         "hindsight_endpoint": os.environ.get("HINDSIGHT_ENDPOINT") or "",
         "workspace_bucket": os.environ.get("AGENTCORE_FILES_BUCKET") or "",
         "message": user_message,
@@ -339,9 +349,17 @@ async def dispatch_run_skill(payload: dict) -> dict:
     # back to ``os.environ`` when these are not provided, preserving
     # backward compatibility for the few internal callers that don't
     # snapshot.
-    api_url_snapshot = os.environ.get("THINKWORK_API_URL") or ""
+    api_url_snapshot = (
+        payload.get("thinkworkApiUrl")
+        or payload.get("thinkwork_api_url")
+        or os.environ.get("THINKWORK_API_URL")
+        or ""
+    )
     api_secret_snapshot = (
-        os.environ.get("API_AUTH_SECRET")
+        payload.get("apiAuthSecret")
+        or payload.get("thinkworkApiSecret")
+        or payload.get("api_auth_secret")
+        or os.environ.get("API_AUTH_SECRET")
         or os.environ.get("THINKWORK_API_SECRET")
         or ""
     )
@@ -388,6 +406,8 @@ async def dispatch_run_skill(payload: dict) -> dict:
     from api_runtime_config import (
         AgentConfigNotFoundError,
         RuntimeConfigFetchError,
+    )
+    from api_runtime_config import (
         fetch as _fetch_runtime_config,
     )
 
@@ -396,6 +416,8 @@ async def dispatch_run_skill(payload: dict) -> dict:
             agent_id=agent_id,
             tenant_id=tenant_id,
             current_user_id=invoker_user_id or None,
+            api_url=api_url_snapshot,
+            api_secret=api_secret_snapshot,
         )
     except AgentConfigNotFoundError as exc:
         logger.error("run_skill: %s", exc.reason)

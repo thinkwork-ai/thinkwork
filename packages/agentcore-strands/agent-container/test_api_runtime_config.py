@@ -8,7 +8,6 @@ Run with:
 from __future__ import annotations
 
 import io
-import json
 import os
 import unittest
 from unittest.mock import MagicMock, patch
@@ -76,6 +75,34 @@ class FetchHappyPathTests(unittest.TestCase):
         req = mock_open.call_args.args[0]
         self.assertIn("currentUserId=user-42", req.full_url)
         self.assertIn("currentUserEmail=rep%40acme.test", req.full_url)
+
+    def test_explicit_credentials_override_env(self):
+        os.environ["THINKWORK_API_URL"] = "https://stale.example.test"
+        os.environ["API_AUTH_SECRET"] = "stale-secret"
+
+        class FakeResp:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def read(self):
+                return b"{}"
+
+        with patch("urllib.request.urlopen", return_value=FakeResp()) as mock_open:
+            api_runtime_config.fetch(
+                agent_id="agent-1",
+                tenant_id="tenant-1",
+                api_url="https://payload.example.test",
+                api_secret="payload-secret",
+            )
+        req = mock_open.call_args.args[0]
+        self.assertTrue(req.full_url.startswith("https://payload.example.test/"))
+        headers = {k.lower(): v for k, v in req.header_items()}
+        self.assertEqual(headers["authorization"], "Bearer payload-secret")
 
 
 class FetchFailureTests(unittest.TestCase):
@@ -177,10 +204,9 @@ class FetchFailureTests(unittest.TestCase):
         self.assertEqual(out["tenantSlug"], "acme")
 
     def test_socket_timeout_retried_then_raised(self):
-        import socket
 
         def boom(req, timeout=None):
-            raise socket.timeout("slow api")
+            raise TimeoutError("slow api")
 
         with patch("urllib.request.urlopen", side_effect=boom) as mock_open:
             with self.assertRaises(api_runtime_config.RuntimeConfigFetchError):
