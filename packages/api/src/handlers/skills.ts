@@ -42,6 +42,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { parseSkillMdInternal } from "../lib/skill-md-parser.js";
+import { regenerateManifest } from "../lib/workspace-manifest.js";
 import { authenticate } from "../lib/cognito-auth.js";
 import { requireTenantMembership } from "../lib/tenant-membership.js";
 import {
@@ -313,6 +314,28 @@ export async function handler(
         tenantSlug,
         agentInstallMatch[1],
         agentInstallMatch[2],
+      );
+    }
+
+    // POST /api/skills/template/:templateSlug/install/:skillSlug
+    // Per docs/plans/2026-04-27-004 U1b: templates need a parallel install
+    // route so the agent-template editor's "Add from catalog" can target
+    // the template's _catalog prefix, mirroring the agent install path.
+    const templateInstallMatch = path.match(
+      /^\/api\/skills\/template\/([^/]+)\/install\/([^/]+)$/,
+    );
+    if (templateInstallMatch && method === "POST") {
+      if (!tenantSlug) return error("x-tenant-slug header required", 400);
+      {
+        const _v = await requireTenantMembership(event, tenantSlug, {
+          requiredRoles: ["owner", "admin"],
+        });
+        if (!_v.ok) return error(_v.reason, _v.status);
+      }
+      return installSkillToTemplate(
+        tenantSlug,
+        templateInstallMatch[1],
+        templateInstallMatch[2],
       );
     }
 
@@ -1658,8 +1681,12 @@ async function installSkillToAgent(
   const catalogPrefix = `${CATALOG_PREFIX}/${skillSlug}/`;
   const files = await listS3Keys(catalogPrefix);
 
-  // Copy each file to agent-level prefix
-  const agentPrefix = `tenants/${tenantSlug}/agents/${agentSlug}/skills/${skillSlug}/`;
+  // Per docs/plans/2026-04-27-004 (skills-as-workspace-folder): catalog
+  // files copy into the agent's workspace prefix at workspace/skills/<slug>/
+  // — no parallel skills/ prefix outside the workspace tree. The runtime
+  // (post-materialize-at-write-time) reads the synced workspace tree, so
+  // skills land where the runtime already looks.
+  const agentPrefix = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/skills/${skillSlug}/`;
   for (const key of files) {
     const relativePath = key.slice(catalogPrefix.length);
     await s3.send(
@@ -1670,6 +1697,58 @@ async function installSkillToAgent(
       }),
     );
   }
+
+  // Regenerate the manifest so the runtime's per-invocation sync
+  // (`bootstrap_workspace.py` / `bootstrap-workspace.ts`) picks up the
+  // newly-installed files on the next agent turn.
+  await regenerateManifest(BUCKET, tenantSlug, agentSlug);
+
+  return json({ success: true, slug: skillSlug });
+}
+
+// ---------------------------------------------------------------------------
+// Template-level skill install (Plan 004 U1b)
+// ---------------------------------------------------------------------------
+
+async function installSkillToTemplate(
+  tenantSlug: string,
+  templateSlug: string,
+  skillSlug: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  // Same shape as installSkillToAgent — copy catalog files to a workspace
+  // prefix and let the materialize-at-write-time bootstrap pick them up
+  // on the next invocation. The destination is the template's _catalog
+  // prefix so all agents created from this template inherit the skill at
+  // create time (createAgentFromTemplate already syncs from
+  // _catalog/{templateSlug}/workspace/ via bootstrapAgentWorkspace).
+  //
+  // Per docs/plans/2026-04-27-004 U1b: the agent_templates.skills JSON
+  // column stays as an advisory index — retiring it is separate cleanup
+  // out of scope for this plan.
+  const mdText = await getS3Text(`${CATALOG_PREFIX}/${skillSlug}/SKILL.md`);
+  if (!mdText) return notFound("Skill not found in catalog");
+
+  const catalogPrefix = `${CATALOG_PREFIX}/${skillSlug}/`;
+  const files = await listS3Keys(catalogPrefix);
+
+  const templatePrefix = `tenants/${tenantSlug}/agents/_catalog/${templateSlug}/workspace/skills/${skillSlug}/`;
+  for (const key of files) {
+    const relativePath = key.slice(catalogPrefix.length);
+    await s3.send(
+      new CopyObjectCommand({
+        Bucket: BUCKET,
+        CopySource: `${BUCKET}/${key}`,
+        Key: `${templatePrefix}${relativePath}`,
+      }),
+    );
+  }
+
+  // Templates don't have their own per-instance manifest the way agents
+  // do — agents bootstrap from _catalog/{template}/workspace/ at
+  // create-time, so the manifest each agent ETag-checks is regenerated
+  // when the agent's prefix is materialized, not when the template
+  // changes. New installs propagate to agents via createAgentFromTemplate
+  // (or future rematerialize).
 
   return json({ success: true, slug: skillSlug });
 }
@@ -2915,9 +2994,7 @@ async function markBuiltinToolTested(
 }
 
 /** Load enabled built-in tools for a tenant, with API keys resolved from Secrets Manager. */
-export async function loadTenantBuiltinTools(
-  tenantId: string,
-): Promise<
+export async function loadTenantBuiltinTools(tenantId: string): Promise<
   Array<{
     toolSlug: string;
     provider: string | null;
