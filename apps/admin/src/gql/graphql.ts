@@ -522,11 +522,13 @@ export type AgentWorkspaceReview = {
   __typename?: 'AgentWorkspaceReview';
   decisionEvents: Array<AgentWorkspaceEvent>;
   events: Array<AgentWorkspaceEvent>;
+  kind: WorkspaceReviewKind;
   latestEvent?: Maybe<AgentWorkspaceEvent>;
   payload?: Maybe<Scalars['AWSJSON']['output']>;
   proposedChanges: Array<AgentWorkspaceProposedChange>;
   reason?: Maybe<Scalars['String']['output']>;
   requestedAt: Scalars['AWSDateTime']['output'];
+  responsibleUserId?: Maybe<Scalars['ID']['output']>;
   reviewBody?: Maybe<Scalars['String']['output']>;
   reviewEtag?: Maybe<Scalars['String']['output']>;
   reviewMissing?: Maybe<Scalars['Boolean']['output']>;
@@ -2645,6 +2647,7 @@ export type Query = {
    */
   mobileWikiSearch: Array<MobileWikiSearchResult>;
   modelCatalog: Array<ModelCatalogEntry>;
+  pendingSystemReviewsCount: Scalars['Int']['output'];
   performanceTimeSeries: Array<PerformanceTimeSeries>;
   queuedWakeups: Array<AgentWakeupRequest>;
   /**
@@ -2822,7 +2825,9 @@ export type QueryAgentWorkspaceReviewArgs = {
 
 export type QueryAgentWorkspaceReviewsArgs = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
+  kind?: InputMaybe<WorkspaceReviewKind>;
   limit?: InputMaybe<Scalars['Int']['input']>;
+  responsibleUserId?: InputMaybe<Scalars['ID']['input']>;
   status?: InputMaybe<Scalars['String']['input']>;
   tenantId: Scalars['ID']['input'];
 };
@@ -3051,6 +3056,11 @@ export type QueryMobileWikiSearchArgs = {
   query: Scalars['String']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
   userId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryPendingSystemReviewsCountArgs = {
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -4520,6 +4530,12 @@ export type WikiSearchResult = {
   page: WikiPage;
   score: Scalars['Float']['output'];
 };
+
+export enum WorkspaceReviewKind {
+  Paired = 'PAIRED',
+  System = 'SYSTEM',
+  Unrouted = 'UNROUTED'
+}
 
 export type AcceptTemplateUpdateMutationVariables = Exact<{
   agentId: Scalars['ID']['input'];
