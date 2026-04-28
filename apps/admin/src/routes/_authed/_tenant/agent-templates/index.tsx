@@ -23,6 +23,7 @@ import {
   AgentTemplatesListQuery,
   CreateAgentFromTemplateMutation,
 } from "@/lib/graphql-queries";
+import { AgentRuntime } from "@/gql/graphql";
 
 export const Route = createFileRoute("/_authed/_tenant/agent-templates/")({
   component: AgentTemplatesPage,
@@ -36,6 +37,7 @@ interface TemplateRow {
   category?: string | null;
   icon?: string | null;
   source: string;
+  runtime?: AgentRuntime | null;
   model?: string | null;
   guardrailId?: string | null;
   blockedTools?: any;
@@ -87,6 +89,11 @@ function AgentTemplatesPage() {
     return Array.isArray(parsed) ? parsed.length : 0;
   };
 
+  const formatHarness = (runtime: AgentRuntime | null | undefined): string => {
+    if (!runtime) return "—";
+    return runtime.charAt(0) + runtime.slice(1).toLowerCase();
+  };
+
   const formatModel = (model: string | null | undefined): string => {
     if (!model) return "—";
     const m = model.toLowerCase();
@@ -134,6 +141,19 @@ function AgentTemplatesPage() {
           {row.original.description}
         </div>
       ),
+    },
+    {
+      id: "harness",
+      header: "Harness",
+      size: 110,
+      cell: ({ row }) =>
+        row.original.runtime ? (
+          <Badge variant="outline" className="text-[10px]">
+            {formatHarness(row.original.runtime)}
+          </Badge>
+        ) : (
+          <span className="text-muted-foreground text-sm">—</span>
+        ),
     },
     {
       id: "model",
