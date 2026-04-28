@@ -414,7 +414,7 @@ The canonical behavior, expressed in product terms. Use the canonical names exac
 
 Map the component to its admin surface (`/applications/admin/<route>/`) or CLI flag. Name the production-grade dimensions that matter: which knobs change what, what's tenant-scoped vs deployment-scoped, what the default is and when to deviate. If the component has no first-class configuration (rare), say so explicitly and link the upstream control that does (e.g., a memory backend may be configured at the deployment level via Terraform).
 
-When a concept page has no admin counterpart yet (`composable-skills/*`, `code-sandbox`, `compounding-memory-pipeline`, etc.), substitute the closest existing surface — a CLI command, a Terraform variable, a connector setup — rather than inventing a configure section.
+When a concept page has no admin counterpart yet (`code-sandbox`, `compounding-memory-pipeline`, etc.), substitute the closest existing surface — a CLI command, a Terraform variable, a connector setup — rather than inventing a configure section.
 
 ### 4. Common patterns *(at least 1 worked-through scenario)*
 
