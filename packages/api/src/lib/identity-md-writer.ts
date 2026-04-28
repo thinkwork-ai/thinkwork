@@ -26,10 +26,10 @@
  */
 
 import {
-	GetObjectCommand,
-	NoSuchKey,
-	PutObjectCommand,
-	S3Client,
+  GetObjectCommand,
+  NoSuchKey,
+  PutObjectCommand,
+  S3Client,
 } from "@aws-sdk/client-s3";
 import { eq } from "drizzle-orm";
 import { agents, tenants } from "@thinkwork/database-pg/schema";
@@ -38,11 +38,11 @@ import { db as defaultDb } from "../graphql/utils.js";
 import { substitute } from "./placeholder-substitution.js";
 
 const REGION =
-	process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
+  process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
 const s3 = new S3Client({ region: REGION });
 
 function bucket(): string {
-	return process.env.WORKSPACE_BUCKET || "";
+  return process.env.WORKSPACE_BUCKET || "";
 }
 
 // Structural subset matching both the root db handle and a tx (same
@@ -50,116 +50,116 @@ function bucket(): string {
 export type DbOrTx = { select: typeof defaultDb.select };
 
 function agentKey(tenantSlug: string, agentSlug: string): string {
-	return `tenants/${tenantSlug}/agents/${agentSlug}/workspace/IDENTITY.md`;
+  return `tenants/${tenantSlug}/agents/${agentSlug}/workspace/IDENTITY.md`;
 }
 
 function isNotFound(err: unknown): boolean {
-	if (err instanceof NoSuchKey) return true;
-	const name = (err as { name?: string } | null)?.name;
-	if (name === "NoSuchKey" || name === "NotFound") return true;
-	const status = (err as { $metadata?: { httpStatusCode?: number } } | null)
-		?.$metadata?.httpStatusCode;
-	return status === 404;
+  if (err instanceof NoSuchKey) return true;
+  const name = (err as { name?: string } | null)?.name;
+  if (name === "NoSuchKey" || name === "NotFound") return true;
+  const status = (err as { $metadata?: { httpStatusCode?: number } } | null)
+    ?.$metadata?.httpStatusCode;
+  return status === 404;
 }
 
 function isTransientS3(err: unknown): boolean {
-	const code = (err as { $metadata?: { httpStatusCode?: number } } | null)
-		?.$metadata?.httpStatusCode;
-	if (code && code >= 500 && code < 600) return true;
-	const name = (err as { name?: string } | null)?.name;
-	return (
-		name === "RequestTimeout" ||
-		name === "SlowDown" ||
-		name === "ServiceUnavailable" ||
-		name === "InternalError"
-	);
+  const code = (err as { $metadata?: { httpStatusCode?: number } } | null)
+    ?.$metadata?.httpStatusCode;
+  if (code && code >= 500 && code < 600) return true;
+  const name = (err as { name?: string } | null)?.name;
+  return (
+    name === "RequestTimeout" ||
+    name === "SlowDown" ||
+    name === "ServiceUnavailable" ||
+    name === "InternalError"
+  );
 }
 
 async function putWithOneRetry(key: string, body: string): Promise<void> {
-	try {
-		await s3.send(
-			new PutObjectCommand({
-				Bucket: bucket(),
-				Key: key,
-				Body: body,
-				ContentType: "text/markdown",
-			}),
-		);
-		return;
-	} catch (err) {
-		if (!isTransientS3(err)) throw err;
-	}
-	await s3.send(
-		new PutObjectCommand({
-			Bucket: bucket(),
-			Key: key,
-			Body: body,
-			ContentType: "text/markdown",
-		}),
-	);
+  try {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket(),
+        Key: key,
+        Body: body,
+        ContentType: "text/markdown",
+      }),
+    );
+    return;
+  } catch (err) {
+    if (!isTransientS3(err)) throw err;
+  }
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucket(),
+      Key: key,
+      Body: body,
+      ContentType: "text/markdown",
+    }),
+  );
 }
 
 async function readAgentOverride(
-	tenantSlug: string,
-	agentSlug: string,
+  tenantSlug: string,
+  agentSlug: string,
 ): Promise<string | null> {
-	try {
-		const resp = await s3.send(
-			new GetObjectCommand({
-				Bucket: bucket(),
-				Key: agentKey(tenantSlug, agentSlug),
-			}),
-		);
-		return (await resp.Body?.transformToString("utf-8")) ?? "";
-	} catch (err) {
-		if (isNotFound(err)) return null;
-		throw err;
-	}
+  try {
+    const resp = await s3.send(
+      new GetObjectCommand({
+        Bucket: bucket(),
+        Key: agentKey(tenantSlug, agentSlug),
+      }),
+    );
+    return (await resp.Body?.transformToString("utf-8")) ?? "";
+  } catch (err) {
+    if (isNotFound(err)) return null;
+    throw err;
+  }
 }
 
 interface ResolvedAgent {
-	tenantId: string;
-	tenantSlug: string;
-	agentSlug: string;
-	agentName: string;
+  tenantId: string;
+  tenantSlug: string;
+  agentSlug: string;
+  agentName: string;
 }
 
 async function resolveAgent(
-	tx: DbOrTx,
-	agentId: string,
+  tx: DbOrTx,
+  agentId: string,
 ): Promise<ResolvedAgent | null> {
-	const [agent] = await tx
-		.select({
-			id: agents.id,
-			slug: agents.slug,
-			name: agents.name,
-			tenant_id: agents.tenant_id,
-		})
-		.from(agents)
-		.where(eq(agents.id, agentId));
-	if (!agent || !agent.slug) return null;
+  const [agent] = await tx
+    .select({
+      id: agents.id,
+      slug: agents.slug,
+      name: agents.name,
+      tenant_id: agents.tenant_id,
+    })
+    .from(agents)
+    .where(eq(agents.id, agentId));
+  if (!agent || !agent.slug) return null;
 
-	const [tenant] = await tx
-		.select({ id: tenants.id, slug: tenants.slug })
-		.from(tenants)
-		.where(eq(tenants.id, agent.tenant_id));
-	if (!tenant?.slug) return null;
+  const [tenant] = await tx
+    .select({ id: tenants.id, slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, agent.tenant_id));
+  if (!tenant?.slug) return null;
 
-	return {
-		tenantId: agent.tenant_id,
-		tenantSlug: tenant.slug,
-		agentSlug: agent.slug,
-		agentName: agent.name,
-	};
+  return {
+    tenantId: agent.tenant_id,
+    tenantSlug: tenant.slug,
+    agentSlug: agent.slug,
+    agentName: agent.name,
+  };
 }
 
 export class IdentityMdWriterError extends Error {
-	readonly code: string;
-	constructor(code: string, message: string) {
-		super(message);
-		this.code = code;
-		this.name = "IdentityMdWriterError";
-	}
+  readonly code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.code = code;
+    this.name = "IdentityMdWriterError";
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -174,30 +174,30 @@ const NEW_ANCHOR_RE = /^- \*\*Name:\*\*.*$/m;
 const LEGACY_ANCHOR_RE = /Your name is \*\*[^*]+\*\*\./;
 
 function surgery(existing: string, newName: string): string | null {
-	// Defensive: strip newlines so a malicious name can't inject extra
-	// markdown lines. Collapse to spaces, trim runs.
-	// Includes U+2028 / U+2029 so a name with line separators can't
-	// inject extra markdown lines past the \r\n guard.
-	const safeName = newName.replace(/[\r\n\u2028\u2029]+/g, " ").trim();
+  // Defensive: strip newlines so a malicious name can't inject extra
+  // markdown lines. Collapse to spaces, trim runs.
+  // Includes U+2028 / U+2029 so a name with line separators can't
+  // inject extra markdown lines past the \r\n guard.
+  const safeName = newName.replace(/[\r\n\u2028\u2029]+/g, " ").trim();
 
-	// Use function-form replacement so `$&`, `$'`, `` $` ``, `$1` in
-	// `safeName` are NOT interpreted as backreferences by String.replace.
-	if (NEW_ANCHOR_RE.test(existing)) {
-		return existing.replace(NEW_ANCHOR_RE, () => `- **Name:** ${safeName}`);
-	}
-	if (LEGACY_ANCHOR_RE.test(existing)) {
-		return existing.replace(
-			LEGACY_ANCHOR_RE,
-			() => `Your name is **${safeName}**.`,
-		);
-	}
-	return null;
+  // Use function-form replacement so `$&`, `$'`, `` $` ``, `$1` in
+  // `safeName` are NOT interpreted as backreferences by String.replace.
+  if (NEW_ANCHOR_RE.test(existing)) {
+    return existing.replace(NEW_ANCHOR_RE, () => `- **Name:** ${safeName}`);
+  }
+  if (LEGACY_ANCHOR_RE.test(existing)) {
+    return existing.replace(
+      LEGACY_ANCHOR_RE,
+      () => `Your name is **${safeName}**.`,
+    );
+  }
+  return null;
 }
 
 function renderTemplate(agentName: string): string {
-	const templates = loadDefaults();
-	const template = templates["IDENTITY.md"];
-	return substitute({ AGENT_NAME: agentName }, template);
+  const templates = loadDefaults();
+  const template = templates["IDENTITY.md"];
+  return substitute({ AGENT_NAME: agentName }, template);
 }
 
 // ---------------------------------------------------------------------------
@@ -214,59 +214,57 @@ function renderTemplate(agentName: string): string {
  * - If no override exists, seed the agent prefix with the template
  *   IDENTITY.md with `{{AGENT_NAME}}` substituted.
  *
- * The caller is responsible for invalidating the composer cache
- * (`invalidateComposerCache({ tenantId, agentId })`) AFTER the DB
- * transaction commits. Invalidating inside this writer would clear the
- * cache prematurely — a subsequent txn rollback would leave the cache
- * miss seeing fresh S3 state that contradicts the rolled-back DB row.
+ * Per docs/plans/2026-04-27-003: there is no composer cache to
+ * invalidate. The runtimes pull the agent prefix on every invocation,
+ * so IDENTITY.md changes propagate on the next turn without ceremony.
  */
 export async function writeIdentityMdForAgent(
-	tx: DbOrTx,
-	agentId: string,
+  tx: DbOrTx,
+  agentId: string,
 ): Promise<void> {
-	const bkt = bucket();
-	if (!bkt) {
-		throw new IdentityMdWriterError(
-			"BUCKET_UNCONFIGURED",
-			"WORKSPACE_BUCKET not configured",
-		);
-	}
+  const bkt = bucket();
+  if (!bkt) {
+    throw new IdentityMdWriterError(
+      "BUCKET_UNCONFIGURED",
+      "WORKSPACE_BUCKET not configured",
+    );
+  }
 
-	const resolved = await resolveAgent(tx, agentId);
-	if (!resolved) {
-		throw new IdentityMdWriterError(
-			"AGENT_UNRESOLVABLE",
-			"Could not resolve agent or tenant for IDENTITY.md write",
-		);
-	}
+  const resolved = await resolveAgent(tx, agentId);
+  if (!resolved) {
+    throw new IdentityMdWriterError(
+      "AGENT_UNRESOLVABLE",
+      "Could not resolve agent or tenant for IDENTITY.md write",
+    );
+  }
 
-	const existing = await readAgentOverride(
-		resolved.tenantSlug,
-		resolved.agentSlug,
-	);
+  const existing = await readAgentOverride(
+    resolved.tenantSlug,
+    resolved.agentSlug,
+  );
 
-	let rendered: string;
-	if (existing === null) {
-		rendered = renderTemplate(resolved.agentName);
-	} else {
-		const mutated = surgery(existing, resolved.agentName);
-		if (mutated !== null) {
-			rendered = mutated;
-		} else {
-			console.warn(
-				`[identity-md-writer] no Name anchor matched for agentId=${agentId}; performing full template rewrite`,
-			);
-			rendered = renderTemplate(resolved.agentName);
-		}
-	}
+  let rendered: string;
+  if (existing === null) {
+    rendered = renderTemplate(resolved.agentName);
+  } else {
+    const mutated = surgery(existing, resolved.agentName);
+    if (mutated !== null) {
+      rendered = mutated;
+    } else {
+      console.warn(
+        `[identity-md-writer] no Name anchor matched for agentId=${agentId}; performing full template rewrite`,
+      );
+      rendered = renderTemplate(resolved.agentName);
+    }
+  }
 
-	await putWithOneRetry(
-		agentKey(resolved.tenantSlug, resolved.agentSlug),
-		rendered,
-	);
+  await putWithOneRetry(
+    agentKey(resolved.tenantSlug, resolved.agentSlug),
+    rendered,
+  );
 
-	// NOTE: Composer cache invalidation is the caller's responsibility,
-	// AFTER the DB transaction commits. Invalidating here would clear the
-	// cache inside the txn — if a subsequent operation rolls back, the
-	// composer would read stale S3 state that no longer matches the DB.
+  // NOTE: Composer cache invalidation is the caller's responsibility,
+  // AFTER the DB transaction commits. Invalidating here would clear the
+  // cache inside the txn — if a subsequent operation rolls back, the
+  // composer would read stale S3 state that no longer matches the DB.
 }

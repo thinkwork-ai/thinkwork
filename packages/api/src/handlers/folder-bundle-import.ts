@@ -29,7 +29,6 @@ import {
   type ImportBundleStorage,
   importFolderBundle,
 } from "../lib/folder-bundle-importer.js";
-import { invalidateComposerCache } from "../lib/workspace-overlay.js";
 
 const s3 = new S3Client({});
 
@@ -106,10 +105,7 @@ export async function handler(
     );
   }
 
-  invalidateComposerCache({
-    tenantId: target.tenantId,
-    agentId: target.agentId,
-  });
+  // Per docs/plans/2026-04-27-003: no composer cache to invalidate.
   return json({
     ok: true,
     importedPaths: result.importedPaths,

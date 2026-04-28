@@ -250,7 +250,7 @@ def _build_factory(
         platform_catalog_manifest=platform_catalog,
         cfg_model=cfg_model,
         usage_acc=usage_acc,
-        composer_fetch=composer_mock,
+        workspace_reader=composer_mock,
         spawn_fn=spawn_fn,
     )
 
@@ -518,45 +518,39 @@ class TestDelegatePlatformManifestPlumbing:
 # ────────────────────────────────────────────────────────────────────────────
 
 
-class TestDelegateUsesCachedComposerByDefault:
-    """Two consecutive same-key calls hit the in-process cache → urlopen
-    is called exactly once. Pins the wiring of
-    ``fetch_composed_workspace_cached`` as the factory's default
-    ``composer_fetch``.
+class TestDelegateReadsFromLocalWorkspace:
+    """Default ``workspace_reader`` reads from local disk (the bootstrap-
+    populated /tmp/workspace), not HTTP — this is the materialize-at-
+    write-time contract from docs/plans/2026-04-27-003.
     """
 
-    def test_two_sequential_calls_share_one_urlopen(self):
-        import io
-        import json
-        from unittest.mock import patch
-
+    def test_default_reader_walks_local_dir(self, tmp_path):
         from delegate_to_workspace_tool import make_delegate_to_workspace_fn
-        from workspace_composer_client import _reset_composed_cache
 
-        _reset_composed_cache()
-
-        captured: list = []
-
-        def fake_opener(req, timeout=None):
-            captured.append(req.full_url)
-            data = json.dumps({
-                "ok": True,
-                "files": _expenses_tree(),
-            }).encode("utf-8")
-            ctx = MagicMock()
-            ctx.__enter__ = MagicMock(return_value=io.BytesIO(data))
-            ctx.__exit__ = MagicMock(return_value=False)
-            return ctx
+        # Pre-populate a local workspace mirror with what the parent's
+        # bootstrap would have left there.
+        (tmp_path / "expenses").mkdir()
+        (tmp_path / "expenses" / "AGENTS.md").write_text(EXPENSES_AGENTS_MD)
+        (tmp_path / "expenses" / "CONTEXT.md").write_text("ctx")
+        (tmp_path / "expenses" / "skills").mkdir()
+        (tmp_path / "expenses" / "skills" / "approve-receipt").mkdir()
+        (tmp_path / "expenses" / "skills" / "approve-receipt" / "SKILL.md").write_text(
+            LOCAL_SKILL_MD,
+        )
 
         spawn_capture: list = []
 
         def spawn_fn(resolved_context):
             spawn_capture.append(resolved_context)
-            return {"ok": False, "reason": "spawn not yet wired",
-                    "resolved_context": resolved_context}
+            return {
+                "ok": True,
+                "sub_agent_response": "ok",
+                "sub_agent_usage": {},
+                "warnings": [],
+                "skipped_rows": [],
+                "resolved_context": resolved_context,
+            }
 
-        # Default `composer_fetch` is `fetch_composed_workspace_cached` —
-        # do NOT inject a mock; we want the real cache to engage.
         tool_fn = make_delegate_to_workspace_fn(
             parent_tenant_id="tenant-abc",
             parent_agent_id="agent-xyz",
@@ -565,19 +559,19 @@ class TestDelegateUsesCachedComposerByDefault:
             platform_catalog_manifest=None,
             cfg_model="anthropic.claude-sonnet-4-v1:0",
             usage_acc=[],
+            workspace_dir=str(tmp_path),
             spawn_fn=spawn_fn,
         )
 
-        with patch("urllib.request.urlopen", side_effect=fake_opener):
-            tool_fn(path="expenses", task="t1")
-            tool_fn(path="expenses", task="t2")
+        result = tool_fn(path="expenses", task="t1")
 
-        # Two delegations, but the underlying urlopen is only invoked once
-        # because both calls share the same (tenant, agent) cache key.
-        assert len(captured) == 1
-        assert len(spawn_capture) == 2
-
-        _reset_composed_cache()
+        assert result["ok"] is True
+        assert len(spawn_capture) == 1
+        # The local tree was passed through as composed_tree, with
+        # AGENTS.md included so the parser can route.
+        composed = spawn_capture[0]["composed_tree"]
+        paths = {entry["path"] for entry in composed}
+        assert "expenses/AGENTS.md" in paths
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -707,7 +701,7 @@ def _build_live_factory(
         platform_catalog_manifest=platform_catalog,
         cfg_model=cfg_model,
         usage_acc=usage_acc,
-        composer_fetch=composer_mock,
+        workspace_reader=composer_mock,
         aws_region=aws_region,
         model_factory=model_factory,
         agent_factory=agent_factory,
@@ -939,7 +933,7 @@ class TestLiveSpawnBodySwapSafety:
             platform_catalog_manifest=None,
             cfg_model="anthropic.claude-sonnet-4-v1:0",
             usage_acc=[],
-            composer_fetch=composer_mock,
+            workspace_reader=composer_mock,
             aws_region="us-east-1",
             model_factory=model_factory,
             agent_factory=agent_factory,
@@ -1194,7 +1188,7 @@ class TestLiveSpawnSnapshotPattern:
                 platform_catalog_manifest=None,
                 cfg_model="m",
                 usage_acc=[],
-                composer_fetch=composer_mock,
+                workspace_reader=composer_mock,
                 aws_region=None,  # → factory reads env once.
                 model_factory=model_factory,
                 agent_factory=agent_factory,
@@ -1231,7 +1225,7 @@ class TestAwsRegionFallbackChain:
                 api_url="https://x", api_secret="s",
                 platform_catalog_manifest=None,
                 cfg_model="m", usage_acc=[],
-                composer_fetch=composer_mock,
+                workspace_reader=composer_mock,
                 aws_region="explicit-region",
                 model_factory=model_factory, agent_factory=agent_factory,
                 tool_decorator=tool_dec,
@@ -1256,7 +1250,7 @@ class TestAwsRegionFallbackChain:
                 api_url="https://x", api_secret="s",
                 platform_catalog_manifest=None,
                 cfg_model="m", usage_acc=[],
-                composer_fetch=composer_mock,
+                workspace_reader=composer_mock,
                 aws_region=None,
                 model_factory=model_factory, agent_factory=agent_factory,
                 tool_decorator=tool_dec,
@@ -1279,7 +1273,7 @@ class TestAwsRegionFallbackChain:
                 api_url="https://x", api_secret="s",
                 platform_catalog_manifest=None,
                 cfg_model="m", usage_acc=[],
-                composer_fetch=composer_mock,
+                workspace_reader=composer_mock,
                 aws_region=None,
                 model_factory=model_factory, agent_factory=agent_factory,
                 tool_decorator=tool_dec,
@@ -1304,7 +1298,7 @@ class TestAwsRegionFallbackChain:
                 api_url="https://x", api_secret="s",
                 platform_catalog_manifest=None,
                 cfg_model="m", usage_acc=[],
-                composer_fetch=composer_mock,
+                workspace_reader=composer_mock,
                 aws_region=None,
                 model_factory=model_factory, agent_factory=agent_factory,
                 tool_decorator=tool_dec,

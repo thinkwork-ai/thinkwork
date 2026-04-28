@@ -6,6 +6,8 @@ import type {
   Usage,
 } from "@mariozechner/pi-ai";
 import { getModel, streamSimple } from "@mariozechner/pi-ai";
+import { S3Client } from "@aws-sdk/client-s3";
+import { bootstrapWorkspace } from "./bootstrap-workspace.js";
 import { composeSystemPrompt } from "./system-prompt.js";
 import type { RuntimeEnv } from "./env-snapshot.js";
 import { buildPiTools } from "./tools/registry.js";
@@ -84,6 +86,31 @@ export async function runPiAgent(
     typeof payload.message === "string" ? payload.message : "";
   if (!userMessage.trim()) {
     throw new Error("Pi runtime invocation requires a non-empty message");
+  }
+
+  // Per docs/plans/2026-04-27-003: sync the agent's S3 prefix to local
+  // disk on every invocation. The agent prefix is the only thing we
+  // read — no overlay, no manifest comparison, just list + GET.
+  const tenantSlug =
+    typeof payload.tenant_slug === "string" ? payload.tenant_slug : "";
+  const agentSlug =
+    typeof payload.instance_id === "string" ? payload.instance_id : "";
+  if (env.workspaceBucket && tenantSlug && agentSlug) {
+    try {
+      const s3 = new S3Client({ region: env.awsRegion });
+      await bootstrapWorkspace(
+        tenantSlug,
+        agentSlug,
+        env.workspaceDir,
+        s3,
+        env.workspaceBucket,
+      );
+    } catch (err) {
+      console.warn(
+        "[agentcore-pi] workspace bootstrap failed (continuing with stale local tree)",
+        err,
+      );
+    }
   }
 
   const toolState: ToolRuntimeState = {

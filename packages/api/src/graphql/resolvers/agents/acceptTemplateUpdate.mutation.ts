@@ -42,10 +42,7 @@ import {
   persistTemplateVersion,
   readTemplateBaseWithFallback,
 } from "../../../lib/pinned-versions.js";
-import {
-  invalidateComposerCache,
-  pinLookupPaths,
-} from "../../../lib/workspace-overlay.js";
+import { pinLookupPaths } from "../../../lib/workspace-overlay.js";
 
 const REGION =
   process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
@@ -146,7 +143,7 @@ export async function applyPinAdvance(
     }
   }
 
-  invalidateComposerCache({ tenantId: input.tenantId, agentId: input.agentId });
+  // Per docs/plans/2026-04-27-003: no composer cache to invalidate.
   return row;
 }
 

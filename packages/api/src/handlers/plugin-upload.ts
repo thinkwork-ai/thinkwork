@@ -199,7 +199,8 @@ async function handlePresign(
     Key: stagingKey,
     ContentType: "application/zip",
   });
-  const uploadUrl = await getSignedUrl(s3, command, {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const uploadUrl = await getSignedUrl(s3 as any, command as any, {
     expiresIn: PRESIGN_EXPIRES_SECONDS,
   });
 

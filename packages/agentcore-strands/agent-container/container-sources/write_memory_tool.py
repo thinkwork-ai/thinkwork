@@ -44,7 +44,27 @@ import urllib.request
 
 from skill_resolver import MAX_FOLDER_DEPTH, RESERVED_FOLDER_NAMES
 from strands import tool
-from workspace_composer_client import invalidate_composed_workspace_cache
+_WORKSPACE_DIR = os.environ.get("WORKSPACE_DIR", "/tmp/workspace")
+
+
+def _mirror_locally(rel_path: str, content: str) -> None:
+    """Write the same bytes to /tmp/workspace so within-turn reads in
+    this same agent loop see the new memory file without re-syncing.
+
+    Best-effort: failures here don't propagate. The server-side write
+    has already succeeded by this point — local mirror is a within-turn
+    optimization, and the next invocation's bootstrap reconciles either
+    way.
+    """
+    try:
+        local_path = os.path.join(_WORKSPACE_DIR, rel_path)
+        parent = os.path.dirname(local_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(local_path, "w", encoding="utf-8") as fh:
+            fh.write(content)
+    except Exception as exc:  # pragma: no cover - best-effort
+        logger.warning("write_memory local mirror failed on %s: %s", rel_path, exc)
 
 logger = logging.getLogger(__name__)
 
@@ -223,7 +243,7 @@ def write_memory(path: str, content: str) -> str:
 
     try:
         _post_put(tenant_id, agent_id, rel_path, content, api_url, api_secret)
-        invalidate_composed_workspace_cache(tenant_id, agent_id)
+        _mirror_locally(rel_path, content)
     except urllib.error.HTTPError as e:
         try:
             detail = json.loads(e.read().decode("utf-8")).get("error") or str(e)

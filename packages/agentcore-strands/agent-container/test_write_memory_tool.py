@@ -320,18 +320,20 @@ class TestWriteMemoryTool(unittest.TestCase):
         self.assertEqual(hdrs.get("x-api-key"), "test-secret")
         self.assertEqual(hdrs.get("x-tenant-id"), "tenant-a")
 
-    def test_successful_write_invalidates_composer_cache(self):
+    def test_successful_write_mirrors_to_local_workspace(self):
+        """Per docs/plans/2026-04-27-003: server-side write succeeds AND
+        the bytes are mirrored to /tmp/workspace so within-turn reads in
+        the same agent loop see the new content without re-syncing.
+        """
         from write_memory_tool import write_memory
         captured = []
         with patch("urllib.request.urlopen", self._fake_urlopen({"ok": True}, captured)):
-            with patch(
-                "write_memory_tool.invalidate_composed_workspace_cache"
-            ) as invalidate:
+            with patch("write_memory_tool._mirror_locally") as mirror:
                 fn = _unwrap(write_memory)
                 result = fn(path="memory/lessons.md", content="# Lessons")
 
         self.assertIn("saved", result)
-        invalidate.assert_called_once_with("tenant-a", "agent-marco")
+        mirror.assert_called_once_with("memory/lessons.md", "# Lessons")
 
     def test_sub_agent_path_posts_verbatim(self):
         """Sub-agent: write_memory("expenses/memory/lessons.md", ...) lands at sub scope."""

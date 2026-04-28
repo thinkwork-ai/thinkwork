@@ -133,7 +133,6 @@ import {
   normalizePins,
 } from "../graphql/resolvers/agents/acceptTemplateUpdate.mutation.js";
 import { acceptTemplateUpdateBulk } from "../graphql/resolvers/templates/acceptTemplateUpdateBulk.mutation.js";
-import { clearComposerCacheForTests } from "../lib/workspace-overlay.js";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -173,7 +172,6 @@ function mockCtx() {
 beforeEach(() => {
   s3Mock.reset();
   resetDbQueue();
-  clearComposerCacheForTests();
 });
 
 // ─── Input validation ────────────────────────────────────────────────────────
