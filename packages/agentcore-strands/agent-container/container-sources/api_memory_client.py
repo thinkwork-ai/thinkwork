@@ -4,6 +4,11 @@ memory layer.
 The runtime pushes user-scoped conversation and daily-memory retain
 requests into the ``memory-retain`` Lambda. The Lambda owns engine-specific
 dispatch, so the runtime stays engine-agnostic.
+
+All retain calls are fire-and-forget (``InvocationType="Event"``) so the
+agent response path is never blocked on Hindsight extraction. Failures
+are logged at WARN level and never raise — memory retention must not
+break the chat path.
 """
 
 from __future__ import annotations
@@ -33,10 +38,13 @@ def retain_turn_pair(
 	tenant_id: Optional[str] = None,
 	agent_id: Optional[str] = None,
 ) -> bool:
-	"""Async-invoke the memory-retain Lambda with one user + assistant pair.
+	"""DEPRECATED: per-message retain — replaced by ``retain_full_thread``.
 
-	Returns False on any failure; never raises. Memory retention must
-	never break the chat path.
+	Kept until U3's call-site swap lands so the chat handler can fall back
+	if the new path is rolled back. Will be deleted once U3 ships and the
+	dev smoke confirms the new shape.
+
+	Returns False on any failure; never raises.
 	"""
 	fn_name = os.environ.get("MEMORY_RETAIN_FN_NAME", "")
 	if not fn_name:
@@ -70,7 +78,7 @@ def retain_turn_pair(
 		client = _get_client()
 		client.invoke(
 			FunctionName=fn_name,
-			InvocationType="Event",  # async, fire-and-forget
+			InvocationType="Event",
 			Payload=json.dumps(payload).encode("utf-8"),
 		)
 		logger.info(
@@ -86,29 +94,67 @@ def retain_turn_pair(
 		return False
 
 
-def retain_conversation(
+def retain_full_thread(
 	thread_id: str,
 	transcript: Sequence[dict],
 	tenant_id: Optional[str] = None,
 	user_id: Optional[str] = None,
 ) -> bool:
-	"""Invoke memory-retain with one replaceable conversation document."""
+	"""Fire-and-forget invoke ``memory-retain`` with a full thread transcript.
+
+	The Lambda will fetch the canonical transcript from the messages table
+	and merge with the supplied tail (longest-suffix-prefix overlap) before
+	calling ``retainConversation`` on the adapter. The resulting Hindsight
+	document is keyed by ``threadId`` with ``update_mode="replace"``.
+
+	Returns False on any precondition or invoke failure; never raises.
+	The chat handler must not block on this — it is a side effect, not
+	the response path.
+	"""
+	# Snapshot env at entry per feedback_completion_callback_snapshot_pattern.
+	# botocore / Strands can transiently shadow these vars mid-turn; the
+	# snapshot is the source of truth from this point forward.
 	fn_name = os.environ.get("MEMORY_RETAIN_FN_NAME", "")
-	if not fn_name or not thread_id:
-		return False
 	tenant = tenant_id or os.environ.get("TENANT_ID") or os.environ.get("_MCP_TENANT_ID") or ""
 	user = user_id or os.environ.get("USER_ID") or os.environ.get("CURRENT_USER_ID") or ""
+
+	if not fn_name:
+		logger.debug("retain_full_thread skipped: MEMORY_RETAIN_FN_NAME unset")
+		return False
+	if not thread_id:
+		return False
 	if not tenant or not user:
-		logger.warning("retain_conversation skipped: tenant/user unset")
+		logger.debug("retain_full_thread skipped: tenant/user unset")
+		return False
+
+	transcript_list = list(transcript)
+	if not transcript_list:
 		return False
 
 	payload = {
 		"tenantId": tenant,
 		"userId": user,
 		"threadId": thread_id,
-		"transcript": list(transcript),
+		"transcript": transcript_list,
 	}
-	return _invoke_request_response(fn_name, payload, "retain_conversation", thread_id)
+
+	try:
+		client = _get_client()
+		client.invoke(
+			FunctionName=fn_name,
+			InvocationType="Event",
+			Payload=json.dumps(payload).encode("utf-8"),
+		)
+		logger.info(
+			"api_memory_client.retain_full_thread thread=%s user=%s entries=%d",
+			thread_id,
+			user[:8] if user else "",
+			len(transcript_list),
+		)
+		return True
+	except Exception as e:
+		logger.warning("api_memory_client.retain_full_thread failed thread=%s: %s", thread_id, e)
+		return False
 
 
 def retain_daily(
@@ -117,12 +163,18 @@ def retain_daily(
 	tenant_id: Optional[str] = None,
 	user_id: Optional[str] = None,
 ) -> bool:
-	"""Invoke memory-retain with one replaceable daily-memory document."""
+	"""Fire-and-forget invoke ``memory-retain`` with a daily-memory document.
+
+	Uses ``InvocationType="Event"`` so the rollover hook never blocks the
+	turn. The Lambda routes to ``retainDailyMemory`` on the adapter, which
+	writes a Hindsight document keyed by ``workspace_daily:<userId>:<date>``.
+	"""
 	fn_name = os.environ.get("MEMORY_RETAIN_FN_NAME", "")
-	if not fn_name or not date or not content.strip():
-		return False
 	tenant = tenant_id or os.environ.get("TENANT_ID") or os.environ.get("_MCP_TENANT_ID") or ""
 	user = user_id or os.environ.get("USER_ID") or os.environ.get("CURRENT_USER_ID") or ""
+
+	if not fn_name or not date or not content.strip():
+		return False
 	if not tenant or not user:
 		logger.warning("retain_daily skipped: tenant/user unset")
 		return False
@@ -134,25 +186,16 @@ def retain_daily(
 		"date": date,
 		"content": content,
 	}
-	return _invoke_request_response(fn_name, payload, "retain_daily", date)
 
-
-def _invoke_request_response(fn_name: str, payload: dict, action: str, ref: str) -> bool:
 	try:
 		client = _get_client()
-		resp = client.invoke(
+		client.invoke(
 			FunctionName=fn_name,
-			InvocationType="RequestResponse",
+			InvocationType="Event",
 			Payload=json.dumps(payload).encode("utf-8"),
 		)
-		body = resp.get("Payload").read().decode("utf-8") if resp.get("Payload") else "{}"
-		parsed = json.loads(body) if body else {}
-		ok = bool(parsed.get("ok"))
-		if not ok:
-			logger.warning("api_memory_client.%s failed ref=%s response=%s", action, ref, parsed)
-			return False
-		logger.info("api_memory_client.%s ok ref=%s", action, ref)
+		logger.info("api_memory_client.retain_daily ok date=%s user=%s", date, user[:8] if user else "")
 		return True
 	except Exception as e:
-		logger.warning("api_memory_client.%s failed ref=%s: %s", action, ref, e)
+		logger.warning("api_memory_client.retain_daily failed date=%s: %s", date, e)
 		return False
