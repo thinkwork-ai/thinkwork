@@ -148,7 +148,6 @@ process.env.COGNITO_APP_CLIENT_IDS = "test-client";
 
 // Import handler AFTER mocks.
 import { handler } from "../../workspace-files.js";
-import { clearComposerCacheForTests } from "../lib/workspace-overlay.js";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -224,7 +223,6 @@ beforeEach(() => {
   s3Mock.reset();
   resetDbQueue();
   resetEqCalls();
-  clearComposerCacheForTests();
   authMockImpl.mockReset();
   deriveMockImpl.mockReset();
   deriveMockImpl.mockResolvedValue({

@@ -358,11 +358,9 @@ export class UserMdWriterError extends Error {
  * (`tx`) — DB reads run inside the same snapshot as the agent mutation, so
  * the caller can safely re-read fields they just wrote.
  *
- * The caller is responsible for invalidating the composer cache
- * (`invalidateComposerCache({ tenantId, agentId })`) AFTER the DB
- * transaction commits. Invalidating inside this writer would clear the
- * cache prematurely — a subsequent txn rollback would leave the cache
- * miss seeing fresh S3 state that contradicts the rolled-back DB row.
+ * Per docs/plans/2026-04-27-003: there is no composer cache to
+ * invalidate. The runtimes pull the agent prefix on every invocation,
+ * so USER.md changes propagate on the next turn without ceremony.
  */
 export async function writeUserMdForAssignment(
   tx: DbOrTx,

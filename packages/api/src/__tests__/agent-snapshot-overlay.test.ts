@@ -89,7 +89,6 @@ const s3Mock = mockClient(S3Client);
 process.env.WORKSPACE_BUCKET = "test-bucket";
 
 import { readWorkspaceFiles } from "../lib/agent-snapshot.js";
-import { clearComposerCacheForTests } from "../lib/workspace-overlay.js";
 
 const TENANT_ID = "tenant-a";
 const AGENT_ID = "agent-marco";
@@ -131,7 +130,6 @@ function templateRow() {
 beforeEach(() => {
   s3Mock.reset();
   resetDbQueue();
-  clearComposerCacheForTests();
 });
 
 describe("readWorkspaceFiles (agent-prefix direct)", () => {

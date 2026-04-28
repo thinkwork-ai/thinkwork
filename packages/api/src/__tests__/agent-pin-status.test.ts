@@ -78,7 +78,6 @@ const s3Mock = mockClient(S3Client);
 process.env.WORKSPACE_BUCKET = "test-bucket";
 
 import { agentPinStatus } from "../graphql/resolvers/agents/agentPinStatus.query.js";
-import { clearComposerCacheForTests } from "../lib/workspace-overlay.js";
 
 const AGENT_ID = "agent-1";
 const TENANT_ID = "tenant-a";
@@ -149,7 +148,6 @@ function queueResolverAndComposerContext(agent = agentRow()) {
 beforeEach(() => {
   s3Mock.reset();
   resetDbQueue();
-  clearComposerCacheForTests();
   s3Mock.on(HeadObjectCommand).rejects(notFound());
   s3Mock.on(GetObjectCommand).rejects(noSuchKey());
 });
