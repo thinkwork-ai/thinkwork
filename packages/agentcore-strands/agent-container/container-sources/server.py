@@ -1026,7 +1026,6 @@ def _call_strands_agent(system_prompt: str, messages: list,
                 import hindsight_usage_capture
 
                 hindsight_usage_capture.install_loop_fix()
-                hindsight_usage_capture.install()
                 hindsight_usage_capture.reset()
             except Exception as ucap_err:
                 logger.warning("hindsight_usage_capture install failed: %s", ucap_err)
