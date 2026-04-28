@@ -93,12 +93,14 @@ Submitting fires `createTenantSkill()` (creates the skill row), then iteratively
 The builder is deliberately small. Serious skill authoring — multi-file packs, tests, dependency management — should happen in your editor of choice and land via ZIP upload or the [Authoring Guide: Skill Packs](/guides/skill-packs/). The builder is for quick prototypes and single-file skills.
 </Aside>
 
-## Distinction: Skills tab on an agent vs the Skills Catalog
+## Distinction: workspace skills vs the Skills Catalog
 
 - **Skills Catalog** (this page) — browse, install, and author skills at the **tenant** level. Skills here exist whether or not any agent uses them.
-- **Skills tab on an agent** — assign one of the tenant-installed skills to a specific agent, possibly configure its credentials. See [Agents → Skills](/applications/admin/agents/#skills).
+- **Agent or template Workspace tab** — materialize an editable skill under `workspace/skills/<slug>/SKILL.md` so it can affect a real invocation. See [Agents → Workspace](/applications/admin/agents/#workspace).
 
-A skill goes through two steps before it affects a real invocation: install to the tenant (here), then assign to an agent (on the agent detail page).
+A workspace skill goes through two steps before it affects a real invocation: install or author it at the tenant/catalog level, then add it to an agent or template workspace.
+
+Built-in tools do not follow this path. Tools such as `web_search` and `send_email` are injected by runtime configuration and should not be copied into `workspace/skills/`.
 
 ## Known limits
 
@@ -109,7 +111,7 @@ A skill goes through two steps before it affects a real invocation: install to t
 
 ## Related pages
 
-- [Agents](/applications/admin/agents/) — where tenant-installed skills are assigned to specific agents
+- [Agents](/applications/admin/agents/) — where agent workspaces and workspace skills are managed
 - [Authoring Guide: Skill Packs](/guides/skill-packs/) — the authoring reference for serious skill development
 - [Tenant MCP Servers](/applications/admin/mcp-servers/) — the other path for exposing external capabilities to agents
-- [Built-in Tools](/applications/admin/builtin-tools/) — provider-scoped tools (Web Search, etc.) that aren't skill packs
+- [Built-in Tools](/applications/admin/builtin-tools/) — platform-owned tools that are injected by runtime configuration instead of installed as skill packs

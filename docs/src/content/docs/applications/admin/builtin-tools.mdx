@@ -1,27 +1,50 @@
 ---
 title: Admin — Built-in Tools
-description: Provider-scoped tools that ship with ThinkWork — currently Web Search via Exa or SerpAPI — with tenant-level API keys stored in the credential vault.
+description: Platform-owned tools that ship with ThinkWork, including credentialed provider tools and policy/template-gated AgentCore tools.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-Built-in tools are provider-scoped capabilities that ship with ThinkWork itself, with credentials stored directly in the credential vault. They are distinct from [MCP servers](/applications/admin/mcp-servers/) — MCP servers are remote endpoints ThinkWork calls at runtime; built-in tools are standard integrations where the tenant only needs to provide an API key.
+Built-in tools are platform-owned capabilities that ship with ThinkWork itself. They are distinct from [MCP servers](/applications/admin/mcp-servers/) and [workspace skills](/applications/admin/skills-catalog/): MCP servers are remote endpoints ThinkWork connects to at runtime, workspace skills are operator-editable files under `workspace/skills/`, and built-in tools are registered by the runtime from tenant and template policy.
 
-**Route:** `/builtin-tools`  
-**File:** `apps/admin/src/routes/_authed/_tenant/builtin-tools.tsx`
+**App route:** `/capabilities/builtin-tools`
+
+**Docs route:** `/applications/admin/builtin-tools/`
+
+**File:** `apps/admin/src/routes/_authed/_tenant/capabilities/builtin-tools.tsx`
 
 ## What's in the catalog
 
-The catalog is deliberately small. Two tools ship in the current release — **Web Search** (credentialed, tenant API key) and **Code Sandbox** (policy-gated, no tenant API key).
+The catalog is deliberately small. Four built-in tools ship in the current release:
 
-| Tool | Kind | Providers |
-|---|---|---|
-| Web Search | Credentialed | Exa, SerpAPI |
-| Code Sandbox | Policy-gated | `agentcore` (fixed) |
+| Tool | Runtime tool | Kind | Provider | Template control |
+|---|---|---|---|---|
+| Browser Automation | `browser_automation` | Policy-gated | `agentcore+nova_act` | Agent Template → Configuration → Browser Automation |
+| Code Sandbox | `execute_code` | Policy-gated | `agentcore` | Agent Template → Configuration → Code Sandbox |
+| Send Email | `send_email` | Policy-gated | `thinkwork-email` | Agent Template → Configuration → Send Email |
+| Web Search | `web_search` | Credentialed | Exa or SerpAPI | Agent Template → Configuration → Web Search |
 
-Rows have two different treatments in the list. **Credentialed** rows open a Configure dialog for provider + API key + test. **Policy-gated** rows open a read-only Info dialog — their configuration lives in tenant policy and per-template opt-in, not on this page.
+Rows have two different treatments in the list:
 
-The catalog is defined in both the admin UI (as a hardcoded array) and the backend (`BUILTIN_TOOL_CATALOG`). Extending the catalog requires code in both places — the UI hardcodes the slug, display name, description, and available provider list so the form can render the right fields.
+- **Credentialed** rows open a Configure dialog for provider + API key + test. Web Search is the current credentialed built-in.
+- **Policy-gated** rows open a read-only Info dialog. Their registration is controlled by tenant policy, template opt-in, and sometimes agent-level capability rows.
+
+The catalog is defined in both the admin UI (as a hardcoded array) and backend capability/runtime code. Extending the catalog requires code in both places so the UI, REST API, runtime config resolver, and runtime tool registration agree on the slug and configuration shape.
+
+## Built-ins vs workspace skills
+
+Do not install built-in tools as workspace skills.
+
+Workspace skills are editable `SKILL.md` files under `workspace/skills/<slug>/`. Built-in tools are platform-owned runtime registrations. The runtime can present them to the model with skill-like names such as `web_search` or `send_email`, but those implementations are injected from API policy and runtime configuration, not copied into the workspace tree.
+
+This boundary matters for repair and backfill work:
+
+- Do not create `workspace/skills/web-search/SKILL.md`.
+- Do not create `workspace/skills/agent-email-send/SKILL.md`.
+- Keep built-in slugs filtered through `packages/api/src/lib/builtin-tool-slugs.ts`.
+- Use Agent Template configuration to opt agents into built-ins.
+
+See `docs/solutions/best-practices/injected-built-in-tools-are-not-workspace-skills-2026-04-28.md` for the engineering pattern.
 
 ## The list view
 
@@ -29,17 +52,17 @@ A `DataTable` showing every built-in tool and its current state:
 
 | Column | Notes |
 |---|---|
-| Tool name | Display name (Web Search) |
-| Provider | Badge showing the selected provider (Exa / SerpAPI), or empty if not configured |
-| Status | Enabled / Disabled / Not Configured |
+| Tool name | Display name, such as Web Search or Send Email |
+| Provider | Badge showing a selected provider, such as Exa, or a fixed platform provider such as `agentcore` |
+| Status | Enabled / Disabled / Not Configured for credentialed rows; policy/template state for policy-gated rows |
 | API Key | "Set" if a credential is stored, "—" otherwise |
-| Last tested | Relative timestamp from the last Test result |
+| Last tested | Relative timestamp from the last Test result, for credentialed rows |
 
-Clicking a row opens the **`ConfigureDialog`**.
+Clicking a credentialed row opens the **`ConfigureDialog`**. Clicking a policy-gated row opens a read-only info dialog that points to the template or policy surface that actually controls the tool.
 
-## Configuring a tool
+## Configuring Web Search
 
-The Configure dialog captures:
+Web Search is the current credentialed built-in. The Configure dialog captures:
 
 - **Provider** — dropdown populated from the tool's available providers list
 - **API Key** — password input; placeholder hides the stored key if one already exists
@@ -47,18 +70,18 @@ The Configure dialog captures:
 - **Test** — button that fires the test endpoint and surfaces the result inline
 - **Delete** — only visible once the tool has been configured
 
-Saving goes through `PUT /api/skills/builtin-tools/:slug` with `{ provider, enabled, apiKey? }`. The backend writes the API key to Secrets Manager and stores a secret reference on the `tenant_builtin_tools` row. The UI gets back a `hasSecret` boolean it uses to decide whether to show the placeholder or the "Set API key" state on subsequent visits.
+Saving goes through `PUT /api/skills/builtin-tools/web-search` with `{ provider, enabled, apiKey? }`. The backend writes the API key to Secrets Manager and stores a secret reference on the `tenant_builtin_tools` row. The UI gets back a `hasSecret` boolean it uses to decide whether to show the placeholder or the "Set API key" state on subsequent visits.
 
 ### REST endpoints
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/skills/builtin-tools` | List tools and their state |
-| `PUT /api/skills/builtin-tools/:slug` | Upsert provider, key, or enabled state |
-| `DELETE /api/skills/builtin-tools/:slug` | Remove the configuration |
-| `POST /api/skills/builtin-tools/:slug/test` | Test the current or provided configuration |
+| `GET /api/skills/builtin-tools` | List credentialed built-in tool configuration rows |
+| `PUT /api/skills/builtin-tools/:slug` | Upsert provider, key, or enabled state for a credentialed built-in |
+| `DELETE /api/skills/builtin-tools/:slug` | Remove a credentialed built-in configuration |
+| `POST /api/skills/builtin-tools/:slug/test` | Test the current or provided credentialed configuration |
 
-All requests carry `x-tenant-slug` in the header.
+All requests carry tenant context in the request headers.
 
 ## Testing
 
@@ -66,49 +89,63 @@ The Test button fires a provider-specific call — for Web Search, it runs a can
 
 Testing does not require saving first — the dialog lets the operator test with a new key before committing it to the vault.
 
-## Code Sandbox (policy-gated)
+## Policy-gated tools
 
-Code Sandbox is the `execute_code` tool backed by Bedrock AgentCore Code Interpreter. Unlike Web Search, there is no tenant API key to configure — the capability is gated by tenant policy and opted into per agent template. Clicking the row opens a read-only **Info dialog**, not the Configure dialog.
+Browser Automation, Code Sandbox, and Send Email are policy-gated rows. Unlike Web Search, there is no provider API key to configure on this page. Clicking one of these rows opens a read-only **Info dialog**, not the Configure dialog.
 
 The dialog shows:
 
-- **Provider** — the fixed `agentcore` badge. One public and one internal-only Code Interpreter are provisioned per tenant on first enrollment.
-- **Status** — `Enabled` (green) when tenant policy is on and both interpreters are provisioned, `Provisioning` (yellow) when policy is on but interpreter IDs haven't landed yet, `Disabled` (muted) when tenant policy is off.
-- **Compliance tier** — outline badge reading `tier: standard` or whichever tier the tenant is on.
-- **Agent template opt-in** — pointer to where this gets turned on per template: any **Agent Template → Configuration** tab, under the **Code Sandbox** card.
-- **Tenant policy toggle** — note that the tenant-level kill switch (`sandbox_enabled`) and compliance tier flow through the `updateTenantPolicy` mutation. A first-class admin toggle on this page is waiting on the platform-operator email allowlist; until then, tenant policy is adjusted by operators with platform-level access.
+- **Provider** - a fixed provider badge, such as `agentcore`, `agentcore+nova_act`, or `thinkwork-email`.
+- **Status** - for Code Sandbox, tenant provisioning state. Browser Automation and Send Email show template opt-in state.
+- **Agent template opt-in** - pointer to **Agent Template → Configuration**, where the actual template-level switch lives.
+- **Tenant or agent policy** - extra gates such as `sandbox_enabled`, the agent email channel, or agent-level Browser Automation overrides.
 
-The `execute_code` tool only registers on a turn when **both** the template is opted in **and** the tenant has `sandbox_enabled` set. Either gate closed means the tool is absent from the turn's tool list. See the [Code Sandbox concept page](/concepts/agents/code-sandbox/) for the full runtime flow.
+Registration rules:
+
+- `execute_code` registers only when the template is opted in and the tenant has `sandbox_enabled` set. Either gate closed means the tool is absent from the turn's tool list.
+- `browser_automation` registers when the template is opted in or an individual agent capability override enables it, unless blocked by template/tool policy.
+- `send_email` registers when the template's Send Email config is enabled and the agent email channel can provide the sending address and delivery policy.
+- `web_search` registers when the tenant has a configured/enabled provider row and the template's Web Search config is enabled.
+
+See the [Code Sandbox concept page](/concepts/agents/code-sandbox/) for the sandbox-specific runtime flow.
 
 ## Assigning to agents
 
-Built-in tools don't need to be assigned in the same way skills or MCP servers do — once configured at the tenant level, every agent that has the tool in its system prompt or tool policy can use it. Disabling the tool at the tenant level immediately cuts off all agents; there is no per-agent opt-in for credentialed built-in tools in the current release.
+Built-in tools do not get assigned like skills or MCP servers. They are injected into an agent turn by the runtime config resolver:
 
-Code Sandbox is the exception: tenant policy is necessary but not sufficient. Each agent template must also opt in from its Configuration tab's Sandbox card (see [Agent Templates](/applications/admin/agent-templates/#code-sandbox-card)).
+- Tenant-level provider or policy enables the tool family.
+- Agent Template configuration opts the template into the specific built-in.
+- Agent-level capability overrides can further narrow or widen where supported, such as Browser Automation.
+- Template `blocked_tools` and tenant disabled built-ins narrow the final toolset.
 
 <Aside type="note">
-This is a simpler model than skills or MCP. It's appropriate for a small set of shared utilities (search, email, calendar) where per-agent configuration would be more friction than value. If you need per-agent control over the same capability, wrap it as a skill or MCP server instead.
+This is intentionally different from workspace skills. If an operator should edit the implementation or instructions, use a workspace skill. If ThinkWork owns the implementation, credentials, callbacks, or per-turn policy context, keep it as an injected built-in.
 </Aside>
 
 ## Data model
 
-- **`tenant_builtin_tools`** — one row per `(tenant_id, tool_slug)` with columns for provider, enabled, and secret_ref
-- **Secrets Manager** — API keys are stored under references like `thinkwork/{stage}/builtin-tools/{tenant_id}/{tool_slug}`
+- **`tenant_builtin_tools`** - one row per `(tenant_id, tool_slug)` for credentialed provider tools such as Web Search.
+- **`agent_templates.web_search`** - template opt-in metadata for the tenant-configured `web_search` built-in.
+- **`agent_templates.send_email`** - template opt-in metadata for the injected `send_email` built-in.
+- **`agent_templates.browser`** - template opt-in metadata for Browser Automation.
+- **`agent_templates.sandbox`** - template opt-in metadata for Code Sandbox, including network mode.
+- **Secrets Manager** - API keys are stored under references like `thinkwork/{stage}/builtin-tools/{tenant_id}/{tool_slug}`.
 
-The admin UI never receives the plaintext API key after the initial save. Subsequent loads see `hasSecret: true` and render a placeholder in the password input.
+The admin UI never receives a plaintext API key after the initial save. Subsequent loads see `hasSecret: true` and render a placeholder in the password input.
 
 ## Workflows
 
 ### Configure Web Search for the first time
 
-1. Open `/builtin-tools`
+1. Open `/capabilities/builtin-tools`
 2. Click the Web Search row → Configure dialog opens
 3. Pick a provider (Exa is recommended for cost and result quality)
 4. Paste the API key
 5. Click Test — verify the result count comes back non-zero
 6. Set Enabled = true
 7. Save
-8. Any agent that includes Web Search in its tool policy now has search available
+8. Open the relevant Agent Template → Configuration tab and enable Web Search
+9. New agent turns using that template can receive `web_search`
 
 ### Switch providers
 
@@ -126,16 +163,28 @@ Switching providers does not flush in-flight agent invocations, but the next inv
 2. Toggle Enabled to false
 3. Save
 
-All agents immediately stop seeing the tool. Re-enabling restores it.
+All agents stop receiving `web_search`, even when their template has Web Search enabled. Re-enabling the tenant row restores it for opted-in templates.
+
+### Enable Send Email for a template
+
+1. Open the relevant Agent Template
+2. Go to the Configuration tab
+3. Toggle **Send Email**
+4. Save
+5. Confirm the agent email channel is configured for agents using that template
+
+The runtime injects `send_email` as a direct platform tool. It does not install `agent-email-send` as a workspace skill.
 
 ## Known limits
 
-- **Single tool in the catalog today.** Only Web Search is shipped; the framework is in place for more tools but the catalog is short.
-- **Tenant-level only.** No per-agent API key or per-agent provider override.
-- **Hardcoded catalog in two places.** Adding a new built-in tool requires code changes in both the admin UI's `CATALOG` array and the backend's `BUILTIN_TOOL_CATALOG`.
-- **No key format validation.** The Test button catches bad keys; there's no pre-submit format check.
+- **CLI only manages Web Search today.** The admin UI shows policy-gated tools, but `thinkwork tools` currently configures only credentialed Web Search.
+- **No per-agent API key or per-agent provider override.** Web Search provider configuration is tenant-level.
+- **Hardcoded catalog in multiple places.** Adding a new built-in tool requires code changes in the admin UI, API/runtime config resolver, and Strands/Pi runtime registration.
+- **No key format validation.** The Test button catches bad keys; there is no pre-submit format check.
+- **Send Email smoke requires care.** A true end-to-end send test emits a real email. Prefer runtime-config checks and explicit user-approved send tests.
 
 ## Related pages
 
 - [Tenant MCP Servers](/applications/admin/mcp-servers/) — the other path for exposing external capabilities
 - [Skills Catalog](/applications/admin/skills-catalog/) — the third path: reusable skill packs with embedded tools
+- [Agent Templates](/applications/admin/agent-templates/) — where template-level built-in tool opt-ins live
