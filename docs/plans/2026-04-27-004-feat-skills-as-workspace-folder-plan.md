@@ -18,6 +18,72 @@ Verified greenfield: `aws s3 ls s3://thinkwork-dev-storage/tenants/ --recursive 
 
 ---
 
+## Implementation Progress
+
+**As of 2026-04-27 evening (resume marker):**
+
+| Unit                                                    | Status                                                       | Where                    |
+| ------------------------------------------------------- | ------------------------------------------------------------ | ------------------------ |
+| U1 — installSkillToAgent → workspace prefix             | ✅ shipped                                                   | PR #660 commit `206e045` |
+| U1b — installSkillToTemplate route (P0-2)               | ✅ shipped                                                   | PR #660 commit `8979c55` |
+| U2 — Workspace UI (Add-from-catalog, retire Skills tab) | ⚠️ **partial** — only FolderTree empty-folder render done    | PR #660 commit `f54c195` |
+| U3 — Mobile mirror                                      | ✅ no-op (server-side U1 covers it)                          | —                        |
+| U4 — derive-agent-skills filesystem walk                | ✅ shipped                                                   | PR #660 commit `2455e82` |
+| U5 — Strands runtime swap                               | ❌ not started                                               | —                        |
+| U6 — Pi runtime skill loader                            | ❌ not started                                               | —                        |
+| U7 — Narrow wakeup-processor scope (P0-3)               | ❌ not started — has architectural subtlety, see notes below | —                        |
+| U8 — `.gitkeep` marker                                  | ✅ replaced by FolderTree solution (U2 partial)              | —                        |
+
+**Branch:** `feat/skills-as-workspace-folder` · **Worktree:** `.claude/worktrees/skills-as-workspace/` · **PR:** [#660](https://github.com/thinkwork-ai/thinkwork/pull/660) (CI green, awaiting human review/merge)
+
+**Foundation deploy:** PR #659 (materialize-at-write-time, plan 003) merged at `b0d70ef` on 2026-04-28. As of last check, the dev deploy was still in `Terraform Apply` phase (build steps green; terraform was running for 15+ min, longer than typical). Need to verify deploy concluded successfully before U5/U6 land — those swap the runtime loader, and a broken materialize on dev would compound the failure surface.
+
+### P0 architectural decisions made by the implementer
+
+The plan-review section "Deferred — unresolved architectural decisions (block ce-work-as-written)" surfaced 3 P0 blockers. Resolutions:
+
+- **P0-1 — Runtime activation targets wrong code path.** Strands' `register_skill_tools` at `server.py:1158` reads `/tmp/skills/<id>/` from the parallel prefix; `AgentSkills` plugin at `server.py:1378` is gated off when AGENTS.md exists. **Decision:** U5 replaces `install_skill_from_s3`'s S3 fetch with a local-tree walk of `/tmp/workspace/skills/` (analogous to how `delegate_to_workspace` was migrated in plan 003 U8). Both `register_skill_tools` (parent-agent loader) and the `AgentSkills` plugin (sub-agent path) are targeted in U5. Pre-condition: materialize-at-write-time deploy live on dev.
+- **P0-2 — `installSkillToTemplate` doesn't exist.** **Decision:** added as U1b (shipped in PR #660). New route `POST /api/skills/template/:templateSlug/install/:skillSlug` writes to `tenants/{slug}/agents/_catalog/{templateSlug}/workspace/skills/{slug}/`. The `agent_templates.skills` JSON column stays as advisory index — retiring is separate cleanup, scope creep otherwise.
+- **P0-3 — U7 bifurcation.** **Decision deferred to U7 implementation.** The existing `isTenantCustom` branch in `wakeup-processor.ts:411-414` covers both (a) agent-installed catalog skills (which U1 retires) AND (b) plugin-uploaded skills (out of scope for this plan). Bifurcating cleanly requires more code reading on `s.source` semantics — held for the next session.
+
+### Apply-set items already incorporated
+
+- **U4 changed from "filesystem-only" to "union with AGENTS.md routing"** — agent_skills now reflects both filesystem-discovered slugs (post-U1 the install handler writes here) and AGENTS.md-routed slugs. This way, an agent declaring a skill via routing — even if no SKILL.md is on disk yet — still surfaces in agent_skills.
+- **U8 changed from `.gitkeep` to FolderTree empty-folder render** — UI-side filter is cleaner than polluting workspace-defaults with non-markdown placeholder files. `RESERVED_ROOT_FOLDERS = ["memory", "skills"]` is added unconditionally to the FolderTree at workspace root in `buildWorkspaceTree()`.
+
+### Resume from here (next session)
+
+**Order of attack (by risk + dependency):**
+
+1. **Verify materialize deploy on dev landed clean.** `gh run view --workflow=Deploy --branch=main --limit 1` for the most recent commit on main. If green, smoke-test agent invocation.
+2. **U2 rest** — pure frontend, no runtime risk:
+   - Add "Add from catalog" item to `WorkspaceEditor.tsx` add-menu (line 739–871, sibling of existing "New Skill" at 772–780). Reuse the catalog dialog from `agent-templates/$templateId.$tab.tsx` (line 194 `addSkillDialogOpen`).
+   - Remove standalone Skills tab from `agent-templates/$templateId.$tab.tsx` route definition.
+   - Add deep-link redirect `/agent-templates/{id}/skills` → `/agent-templates/{id}/workspace`.
+   - Right-click context menu on `skills/` folder in FolderTree (per plan-review P1).
+   - Overwrite-on-install warning when `workspace/skills/<slug>/` already exists (per plan-review P1).
+3. **U5** — Strands runtime swap. Inert→live seam pattern per `docs/solutions/architecture-patterns/inert-to-live-seam-swap-pattern-2026-04-25.md`. Two PRs: (a) introduce filesystem-walk plugin registration behind a callable seam, (b) flip the default with body-swap safety integration test. Targets BOTH `register_skill_tools` (parent) AND `AgentSkills` plugin (sub-agent).
+4. **U6** — Pi runtime skill loader. Greenfield in `packages/agentcore-pi/`. Mirror U5's contract: walk `${WORKSPACE_DIR}/**/skills/<slug>/SKILL.md`, register via Pi's tool surface. Open question (per plan): does Pi have a built-in skill mechanism or does U6 author one?
+5. **U7** — Resolve the `isTenantCustom` bifurcation in `wakeup-processor.ts:411-414`. Need to determine: which `s.source` values exist? (likely `'tenant'` vs `'platform'`). Plugin-uploaded skills must continue to resolve via `tenants/{ts}/skills/{slug}` since U1 only moved the agent-installed catalog path. Then narrow the removal to only the agent-installed branch.
+
+### Plan-review apply-set still to do
+
+These were flagged in the plan-review apply-set but haven't been applied yet:
+
+- **[P1] Hide Capabilities → Skills Install button during the tenant-level deferral** — feature flag or conditional render so operators don't form habits around the soon-to-be-questioned tenant-level install path.
+- **[P1] Mobile screen ruling** — keep `apps/mobile/app/agents/[id]/skills.tsx` as-is. No change needed; verify post-U1.
+- **[P1] Right-click context menu spec** — extend U2: FolderTree gains an `onContextMenu` handler on folder rows whose path matches `^skills/` or `*/skills/`. Menu items: New Skill, Add from catalog, Delete (mirrors inline trash).
+- **[P1] Overwrite-on-install warning** — U2 catalog picker scans the workspace manifest for existing `workspace/skills/<slug>/` paths; if present, dialog shows "Already installed — reinstall will overwrite edits" before confirming.
+- **[P1] Deep-link redirect spec** — TanStack Router redirect `/agent-templates/{id}/skills` → `/agent-templates/{id}/workspace`. Ships with the tab removal in U2.
+- **[P2] Per-stage hard-cut pre-flight gate** — before the legacy install path is removed, run `aws s3 ls s3://thinkwork-{stage}-storage/tenants/ --recursive | grep '/skills/' | grep -v '/workspace/skills/'` against every stage. If non-zero, run an `aws s3 mv` migration script as part of that stage's deploy step.
+- **[P2] Plugin-upload trajectory note** — three storage paths will coexist post-ship (workspace-installed, tenant-installed, plugin-uploaded). Commit to one trajectory; plugin-upload migration becomes a tracked follow-up brainstorm.
+- **[P2] Empty-folder rendering refinement** — current FolderTree solution renders memory/ and skills/ unconditionally. Plan-review wanted a `.gitkeep` filter rule too; that's not strictly needed since the folders show up regardless. Drop or adopt depending on whether ".gitkeep ever appears in S3" becomes a thing.
+- **[P2] AGENTS.md orphan ruling** — U4 currently unions filesystem + AGENTS.md. The plan-review preferred filesystem-only with AGENTS.md routing as documentation. The current behavior is more permissive (declared skills still surface). If we want the stricter version, modify derive to drop AGENTS.md routing entirely and surface the routing-vs-folder mismatch as a workspace lint warning. Deferred until lint surface exists.
+- **[P2] Catalog-picker state machine spec** — U2 catalog picker: closes on success, refreshes file tree after manifest regeneration, stays open with inline error on failure, in-flight state disables Install button.
+- **[P2] Replace U5 body-swap fixture** — single-fixture body-swap test only catches diverging skill IDs, not diverging content. Use two fixtures (catalog version vs `/tmp/workspace/skills/x/SKILL.md` with edited frontmatter); assert seam-live path returns workspace version, registered tool docstring matches workspace SKILL.md.
+
+---
+
 ## Problem Frame
 
 The brainstorm (`docs/brainstorms/2026-04-27-skills-as-workspace-folder-requirements.md`) frames the gap as: skills are conceptually a workspace folder (reserved-folder-names declares it; skill_resolver walks it) but the install path writes to a parallel S3 prefix outside the workspace, so the Workspace tab in admin never shows `skills/`, the Strands install path keeps materializing to `/tmp/skills` instead of using the synced workspace tree, and the Pi runtime would inherit today's split if not corrected before its first ship.
@@ -70,6 +136,7 @@ Layer 3 depends on the in-flight materialize-at-write-time refactor (`docs/plans
 ### Relevant Code and Patterns
 
 **API layer**
+
 - `packages/api/src/handlers/skills.ts` — install router (line 250: `POST /api/skills/agent/:agentSlug/install/:skillSlug`); impl at lines 1432–1460. This is the primary write target to redirect.
 - `packages/api/workspace-files.ts` — handles `put`/`delete` to arbitrary workspace paths (line 880 action dispatch). Writing `workspace/skills/<slug>/SKILL.md` already works through `put`; no new endpoint needed for blank-skill creation.
 - `packages/api/src/lib/workspace-manifest.ts` — `regenerateManifest` must be called after any direct S3 mutation that bypasses workspace-files. Per `docs/solutions/workflow-issues/agent-builder-smoke-cleanup-needs-manifest-regeneration-2026-04-26.md`, the install handler must call this.
@@ -78,6 +145,7 @@ Layer 3 depends on the in-flight materialize-at-write-time refactor (`docs/plans
 - `packages/api/src/lib/resolve-agent-runtime-config.ts` (lines 387–388, 404, 454) and `packages/api/src/handlers/wakeup-processor.ts` (multiple lines) — currently construct `s3Key` payload entries pointing at the legacy install prefix. After Phase C lands, these branches become dead code; delete in cleanup unit.
 
 **Admin SPA**
+
 - `apps/admin/src/components/agent-builder/WorkspaceEditor.tsx` (lines 739–848) — hosts the `addMenu` dropdown. Already has "New Skill" gated on `capabilities.canCreateLocalSkill` (lines 772–780, dialog `showNewSkillDialog`). Need to add "Add from catalog" and verify the gate is on by default.
 - `apps/admin/src/components/agent-builder/FolderTree.tsx` (line 32) — `RESERVED_ROUTING_FOLDERS = new Set(["memory", "skills"])` suppresses `skills/` from the synthetic `agents/` group, which is correct (skills/ should appear at workspace root, not nested under agents/). Verify no separate change is needed for top-level rendering.
 - `apps/admin/src/lib/skill-authoring-templates.ts` — provides `buildLocalSkillPath` and `renderSkillTemplate` for blank-scaffold creation. Verify it constructs `workspace/skills/<slug>/SKILL.md`.
@@ -86,18 +154,22 @@ Layer 3 depends on the in-flight materialize-at-write-time refactor (`docs/plans
 - `apps/admin/src/routes/_authed/_tenant/agent-templates/$templateId.$tab.tsx` — currently exposes a Skills tab (per origin doc image). Remove the tab definition.
 
 **Mobile**
+
 - `apps/mobile/app/agents/[id]/skills.tsx` (lines 34, 137) — calls `installSkillToAgent`. Same server change applies; mobile UI either keeps this screen as a thin wrapper or follows the admin pattern (TBD per device-specific UX).
 - `apps/mobile/lib/skills-api.ts` (line 55) — same wrapper.
 
 **Strands runtime (Phase C)**
+
 - `packages/agentcore-strands/agent-container/container-sources/server.py` — reads `skills_config` (~lines 540–554), calls `install_skill_from_s3` (~615–700), registers AgentSkills plugin (~1120) from `/tmp/skills`.
 - `packages/agentcore-strands/agent-container/container-sources/install_skills.py` — `install_skill_from_s3(s3_key, skill_id)` materializes from S3 to `/tmp/skills/{skillId}/`.
 - `packages/agentcore-strands/agent-container/container-sources/skill_resolver.py` — already walks `{folder}/skills/<slug>/SKILL.md` with local → ancestor → platform-catalog precedence. Used by `delegate_to_workspace_tool.py`. No change needed for resolution; only AgentSkills plugin registration changes.
 
 **Pi runtime (Phase C)**
+
 - `packages/agentcore-pi/agent-container/src/server.ts` and `src/runtime/pi-loop.ts` — exist but contain zero `skill`, `workspace`, or `/tmp/workspace` references. Greenfield skill loader.
 
 **Tests**
+
 - `packages/api/src/__tests__/derive-agent-skills.test.ts` — mocks `composeList` and `db`; update if derive's input set broadens (U4).
 - `packages/api/src/__tests__/workspace-files-handler.test.ts` — covers put/delete; add a `workspace/skills/foo/SKILL.md` put case.
 - `packages/api/src/__tests__/plugin-installer.test.ts` (lines 155, 168) — asserts the plugin prefix; **out of scope** (plugin-upload not moved by this plan; tests stay).
@@ -118,12 +190,12 @@ Layer 3 depends on the in-flight materialize-at-write-time refactor (`docs/plans
 
 ## Key Technical Decisions
 
-- **Hard cut on dev, no dual-read transition.** Verified zero installed skill files on dev. The legacy install path is removed in the same PR that ships the new path. *Rationale*: greenfield state validated empirically; any other stage with installed skills can be one-shot moved at deploy time, but on current evidence none exist.
-- **Inert→live seam for the Strands runtime swap (U5).** Two PRs: introduce filesystem-walk plugin registration behind a callable seam; flip the default with a body-swap safety integration test that asserts the same skills get registered. *Rationale*: matches `docs/solutions/architecture-patterns/inert-to-live-seam-swap-pattern-2026-04-25.md`; prevents a single PR from mutating both the call sites and the body simultaneously.
-- **Reuse the existing Capabilities → Skills tab as the catalog browser.** No new nav item. *Rationale*: the page already exists with Skills | Built-in Tools | MCP Servers | Plugins tabs and full install/upload/create affordances; adding a parallel surface would duplicate without value (corrected during planning per user feedback).
-- **derive-agent-skills.ts unions filesystem-discovered skills with AGENTS.md routing rows (U4).** Filesystem is truth for runtime activation, but `agent_skills` table is a derived admin-query index. After this change, the table reflects both AGENTS.md-routed skills and filesystem-discovered skills, so admin queries see the full picture. *Rationale*: avoids a confusing state where `workspace/skills/foo/` exists, the runtime loads it, but `agent_skills` shows nothing.
-- **Plugin-upload path stays put.** `plugin-installer.ts` continues writing to `tenants/{tid}/skills/{pluginName}`. *Rationale*: plugin upload is a different flow (operator uploads a packaged plugin, not a catalog install); changing both paths in one plan multiplies blast radius.
-- **Phase C waits on materialize-at-write-time U10.** UI/install changes (Phase A/B) ship independently because they are pure storage prefix changes invisible to the runtime. *Rationale*: runtime walking `/tmp/workspace/skills/*` requires the bootstrap to materialize there, which the materialize plan delivers. Decoupling lets the operator UX unblock now without waiting for the longer runtime refactor.
+- **Hard cut on dev, no dual-read transition.** Verified zero installed skill files on dev. The legacy install path is removed in the same PR that ships the new path. _Rationale_: greenfield state validated empirically; any other stage with installed skills can be one-shot moved at deploy time, but on current evidence none exist.
+- **Inert→live seam for the Strands runtime swap (U5).** Two PRs: introduce filesystem-walk plugin registration behind a callable seam; flip the default with a body-swap safety integration test that asserts the same skills get registered. _Rationale_: matches `docs/solutions/architecture-patterns/inert-to-live-seam-swap-pattern-2026-04-25.md`; prevents a single PR from mutating both the call sites and the body simultaneously.
+- **Reuse the existing Capabilities → Skills tab as the catalog browser.** No new nav item. _Rationale_: the page already exists with Skills | Built-in Tools | MCP Servers | Plugins tabs and full install/upload/create affordances; adding a parallel surface would duplicate without value (corrected during planning per user feedback).
+- **derive-agent-skills.ts unions filesystem-discovered skills with AGENTS.md routing rows (U4).** Filesystem is truth for runtime activation, but `agent_skills` table is a derived admin-query index. After this change, the table reflects both AGENTS.md-routed skills and filesystem-discovered skills, so admin queries see the full picture. _Rationale_: avoids a confusing state where `workspace/skills/foo/` exists, the runtime loads it, but `agent_skills` shows nothing.
+- **Plugin-upload path stays put.** `plugin-installer.ts` continues writing to `tenants/{tid}/skills/{pluginName}`. _Rationale_: plugin upload is a different flow (operator uploads a packaged plugin, not a catalog install); changing both paths in one plan multiplies blast radius.
+- **Phase C waits on materialize-at-write-time U10.** UI/install changes (Phase A/B) ship independently because they are pure storage prefix changes invisible to the runtime. _Rationale_: runtime walking `/tmp/workspace/skills/*` requires the bootstrap to materialize there, which the materialize plan delivers. Decoupling lets the operator UX unblock now without waiting for the longer runtime refactor.
 
 ---
 
@@ -141,7 +213,7 @@ ce-doc-review surfaced 19 actionable findings (3 P0, 9 P1, 7 P2). Five mechanica
 
 **Deferred — unresolved architectural decisions (block ce-work-as-written):**
 
-- **[P0] Runtime activation targets wrong code path.** Phase A ships a silent UX regression: install handler writes to `workspace/skills/<slug>/`, but Strands' workspace-mode parent-agent loader (`register_skill_tools` at `server.py:1158`) still reads `/tmp/skills/<id>/` materialized by `install_skill_from_s3` from catalog `s3Key`. U5 targets the `AgentSkills` plugin (`server.py:1378`) which is gated off when AGENTS.md exists. Materialize plan U10 only covers `skill_resolver.py` (sub-agent path), not the parent-agent loader. **Decision needed:** restructure Phase A so it does not ship without (a) a Phase A.5 unit that hot-redirects the runtime to read the agent's S3 prefix at invocation time, or (b) extending materialize U10 to cover `register_skill_tools` + `install_skill_from_s3` removal. *Verified against `server.py:1158, 1378, 1907`, `resolve-agent-runtime-config.ts:386-388`, materialize plan U10 scope.*
+- **[P0] Runtime activation targets wrong code path.** Phase A ships a silent UX regression: install handler writes to `workspace/skills/<slug>/`, but Strands' workspace-mode parent-agent loader (`register_skill_tools` at `server.py:1158`) still reads `/tmp/skills/<id>/` materialized by `install_skill_from_s3` from catalog `s3Key`. U5 targets the `AgentSkills` plugin (`server.py:1378`) which is gated off when AGENTS.md exists. Materialize plan U10 only covers `skill_resolver.py` (sub-agent path), not the parent-agent loader. **Decision needed:** restructure Phase A so it does not ship without (a) a Phase A.5 unit that hot-redirects the runtime to read the agent's S3 prefix at invocation time, or (b) extending materialize U10 to cover `register_skill_tools` + `install_skill_from_s3` removal. _Verified against `server.py:1158, 1378, 1907`, `resolve-agent-runtime-config.ts:386-388`, materialize plan U10 scope._
 - **[P1] Pi AgentSkills equivalent unresolved.** Pi runtime has zero skill-loading code today. Whether Pi has a built-in skill mechanism or U6 must author one from scratch is a research item that materially changes U6 sizing. Resolve before sequencing U6.
 
 **Apply-set — concrete fixes to land in ce-work (annotated changes the plan author selected during walk-through but were not surgically edited into the unit bodies due to volume):**
@@ -186,7 +258,7 @@ ce-doc-review surfaced 19 actionable findings (3 P0, 9 P1, 7 P2). Five mechanica
 
 ### Phase A — Storage and admin/mobile UI (independent of materialize plan)
 
-- U1. **Move `installSkillToAgent` write target to the workspace prefix**
+- U1. **Move `installSkillToAgent` write target to the workspace prefix** — ✅ **shipped** (PR #660)
 
 **Goal:** The install handler copies catalog files to `tenants/{tenantSlug}/agents/{agentSlug}/workspace/skills/{skillSlug}/...` instead of the parallel `tenants/{tenantSlug}/agents/{agentSlug}/skills/{skillSlug}/`. Manifest regeneration runs after the copy.
 
@@ -195,33 +267,55 @@ ce-doc-review surfaced 19 actionable findings (3 P0, 9 P1, 7 P2). Five mechanica
 **Dependencies:** none
 
 **Files:**
+
 - Modify: `packages/api/src/handlers/skills.ts` (impl ~lines 1432–1460; the `agentPrefix` construction)
 - Modify: `packages/api/src/lib/workspace-manifest.ts` only if `regenerateManifest` doesn't already exist as a callable from skills.ts
 - Test: `packages/api/src/__tests__/skills-handler.test.ts` (create if absent — handler-level coverage gap noted in Phase 1 research)
 
 **Approach:**
+
 - Change the destination prefix in `installSkillToAgent`'s S3 copy loop. Source (`skills/catalog/{slug}/`) and copy semantics stay identical.
 - After the copy completes, invoke `regenerateManifest` for the agent's workspace prefix so admin/runtime consumers see the new files in the manifest.
 - Confirm the legacy prefix is no longer written by anyone (Phase 1 research listed `installSkillToAgent` as the sole writer to `tenants/X/agents/Y/skills/`).
 
 **Patterns to follow:**
+
 - Existing CopyObjectCommand loop in the same file (no change to loop body, only the prefix variable).
 - Manifest regeneration after S3 mutation per `docs/solutions/workflow-issues/agent-builder-smoke-cleanup-needs-manifest-regeneration-2026-04-26.md`.
 
 **Test scenarios:**
+
 - Happy path — `installSkillToAgent` for a fresh agent writes every catalog file under `workspace/skills/{slug}/` and writes nothing under the legacy `skills/{slug}/` prefix. Covers AE1.
 - Happy path — manifest is regenerated after install (assert `regenerateManifest` was called with the agent prefix).
 - Error path — install fails partway through copy → no partial state in the workspace prefix (existing rollback semantics; assert no file remains).
 - Edge case — installing a skill that already exists overwrites cleanly (or rejects, depending on existing behavior; preserve current semantics).
 
 **Verification:**
+
 - `aws s3 ls s3://thinkwork-dev-storage/tenants/{slug}/agents/{slug}/workspace/skills/{slug}/` returns the catalog files after install.
 - `aws s3 ls s3://thinkwork-dev-storage/tenants/{slug}/agents/{slug}/skills/` returns nothing post-install.
 - Manifest at `tenants/{slug}/agents/{slug}/workspace/manifest.json` includes the new skill files.
 
 ---
 
-- U2. **WorkspaceEditor: Add-from-catalog action; FolderTree renders skills/ at workspace root; remove standalone Skills tab from agent-template editor**
+- U1b. **Add `installSkillToTemplate` route (P0-2 fix from plan review)** — ✅ **shipped** (PR #660 commit `8979c55`)
+
+**Goal:** Templates need a parallel install path so the agent-template editor's "Add from catalog" can target the template's `_catalog/{templateSlug}/workspace/skills/{slug}/` prefix. New agents created from the template inherit installed skills via `createAgentFromTemplate`'s bootstrap step (plan 003 U3 → bootstrapAgentWorkspace).
+
+**Requirements:** R1, R2 (extends U1)
+
+**Files modified:**
+
+- `packages/api/src/handlers/skills.ts` — new route handler `installSkillToTemplate(tenantSlug, templateSlug, skillSlug)` and route dispatch for `POST /api/skills/template/:templateSlug/install/:skillSlug`.
+
+**Decisions:**
+
+- The `agent_templates.skills` JSON column stays as advisory index — retiring is separate cleanup, scope creep otherwise.
+- Templates don't have their own per-instance manifest the way agents do; new installs propagate via `createAgentFromTemplate`'s bootstrap (or future rematerialize action from plan 003 U4).
+
+---
+
+- U2. **WorkspaceEditor: Add-from-catalog action; FolderTree renders skills/ at workspace root; remove standalone Skills tab from agent-template editor** — ⚠️ **PARTIAL** (FolderTree empty-folder render shipped in PR #660 commit `f54c195`; Add-from-catalog dialog + Skills-tab retirement + deep-link redirect still to do — see "Resume from here" above)
 
 **Goal:** The Workspace tab in both the agent-template editor and the agent builder is the single per-agent surface for skill management. The add-menu exposes "New Skill" (already present) and a new "Add from catalog" action. The skills/ folder appears at workspace root in the file tree. The standalone Skills tab on the agent-template editor route is removed.
 
@@ -230,6 +324,7 @@ ce-doc-review surfaced 19 actionable findings (3 P0, 9 P1, 7 P2). Five mechanica
 **Dependencies:** U1 (install handler must write to workspace prefix before the UI exposes "Add from catalog")
 
 **Files:**
+
 - Modify: `apps/admin/src/components/agent-builder/WorkspaceEditor.tsx` (add-menu structure 739–871; existing New Skill item at 772–780 — add "Add from catalog" item; right-click context menu for the skills/ folder is greenfield in FolderTree)
 - Modify: `apps/admin/src/components/agent-builder/FolderTree.tsx` (verify `buildWorkspaceTree()` renders top-level `skills/` at workspace root; line 32 reserved-set suppression should remain for synthetic `agents/` grouping only)
 - Modify: `apps/admin/src/routes/_authed/_tenant/agent-templates/$templateId.$tab.tsx` (remove the `Skills` tab definition; route to Workspace tab as the default skill-management surface)
@@ -238,16 +333,19 @@ ce-doc-review surfaced 19 actionable findings (3 P0, 9 P1, 7 P2). Five mechanica
 - Test: `apps/admin/src/components/agent-builder/__tests__/WorkspaceEditor.test.tsx` (extend or add) — assert add-menu shows both "New Skill" and "Add from catalog"; assert "Add from catalog" calls `installSkillToAgent` with correct args; assert "New Skill" creates a `workspace/skills/<slug>/SKILL.md` put
 
 **Approach:**
+
 - Reuse the existing catalog dialog component (currently used by `AgentConfigSection.tsx`'s `addSkillDialogOpen`) — extract or import it into WorkspaceEditor.
 - The "New Skill" action already exists (line 772–780) gated on `capabilities.canCreateLocalSkill`; verify the gate is on for both agent and template contexts.
 - `Add from catalog` invokes `installSkillToAgent(tenant.slug, agentSlug, slug)` (or the template equivalent — see U1's open-question note about whether template uses a separate install path).
 - Tab removal is a route-config change; ensure deep links to `/agent-templates/{id}/skills` redirect to `/agent-templates/{id}/workspace`.
 
 **Patterns to follow:**
+
 - Existing add-menu structure in `WorkspaceEditor.tsx` (line 739–848 — the dropdown with `New File`, `Add Sub-agent`, `New Skill`, `Add docs/folder`, etc.).
 - Existing catalog dialog state in `agent-templates/$templateId.$tab.tsx` (line 194 `addSkillDialogOpen` + line 487–509 `addSkill()`).
 
 **Test scenarios:**
+
 - Happy path — clicking "Add from catalog → research-assistant" in WorkspaceEditor calls `installSkillToAgent` and refreshes the file tree to show `workspace/skills/research-assistant/`.
 - Happy path — clicking "New Skill", entering slug `foo`, results in a `put` to `workspace/skills/foo/SKILL.md` with the template-rendered starter content. Covers AE2.
 - Happy path — agent-template editor renders only Configuration / Workspace / MCP Servers tabs (no Skills tab). Covers AE4.
@@ -255,13 +353,14 @@ ce-doc-review surfaced 19 actionable findings (3 P0, 9 P1, 7 P2). Five mechanica
 - Edge case — `workspace/skills/` renders at the workspace root, NOT under the synthetic `agents/` group (verify FolderTree's reserved-set suppression behaves correctly).
 
 **Verification:**
+
 - Admin UI screenshot matches origin doc's Workspace tab showing `skills/`, `memory/`, and the markdown files.
 - No `Skills` tab visible in agent-template editor.
 - E2E: install via UI → file tree refreshes → new folder visible.
 
 ---
 
-- U3. **Mobile: mirror admin install path change**
+- U3. **Mobile: mirror admin install path change** — ✅ **no-op** (server-side U1 covers it; `apps/mobile/app/agents/[id]/skills.tsx` continues to call the same `installSkillToAgent` route which now writes to the workspace prefix)
 
 **Goal:** Mobile clients use the same workspace-prefix install destination. Either the existing skills screen stays as a thin install wrapper, or it is removed in favor of a workspace file browser (defer to mobile UX).
 
@@ -270,27 +369,32 @@ ce-doc-review surfaced 19 actionable findings (3 P0, 9 P1, 7 P2). Five mechanica
 **Dependencies:** U1
 
 **Files:**
+
 - Modify: `apps/mobile/app/agents/[id]/skills.tsx` (lines 34, 137 — `installSkillToAgent` call; no signature change needed since only the server-side write target moves)
 - Modify: `apps/mobile/lib/skills-api.ts` (line 55 — verify wrapper still works)
 
 **Approach:**
+
 - Server-side change in U1 already moves the write target. Mobile client wrappers don't need code changes if they only pass slugs.
 - Decide whether to keep the standalone skills screen on mobile or fold it into a workspace-file browser if one exists. Default: keep the screen as-is for now; mobile workspace browsing is a separate brainstorm.
 
 **Patterns to follow:**
+
 - Existing `apps/mobile/lib/skills-api.ts` wrapper.
 
 **Test scenarios:**
+
 - Happy path — mobile install of a catalog skill writes to the workspace prefix (verified via the server unit test in U1; mobile-side coverage just confirms the call shape is unchanged).
 
 **Verification:**
+
 - TestFlight build still loads the agent skills screen and install completes without error.
 
 ---
 
 ### Phase B — Activation index alignment
 
-- U4. **`derive-agent-skills.ts`: union filesystem-discovered skills with AGENTS.md routing**
+- U4. ✅ **shipped** (PR #660 commit `2455e82`) — **`derive-agent-skills.ts`: union filesystem-discovered skills with AGENTS.md routing**
 
 **Goal:** The `agent_skills` table reflects both AGENTS.md routing rows (existing behavior) and filesystem-discovered skills under `workspace/**/skills/<slug>/SKILL.md`. Admin queries see the same set of skills the runtime will activate.
 
@@ -299,19 +403,23 @@ ce-doc-review surfaced 19 actionable findings (3 P0, 9 P1, 7 P2). Five mechanica
 **Dependencies:** U1 (so workspace prefix has skills to discover); the materialize-at-write-time plan's read-from-prefix behavior for `derive-agent-skills` (origin R8 in materialize plan) should already be in place.
 
 **Files:**
+
 - Modify: `packages/api/src/lib/derive-agent-skills.ts` (the AGENTS.md iteration at lines 96–115 + DB reconciliation at 119–180 — extend the AGENTS.md-row source with a filesystem-walk over `workspace/**/skills/<slug>/SKILL.md` paths; deduplicate by slug)
 - Test: `packages/api/src/__tests__/derive-agent-skills.test.ts` — add cases for filesystem-only skills, AGENTS.md-only skills, and overlap
 
 **Approach:**
+
 - Walk the agent's workspace prefix (or the locally synced manifest) for paths matching `^(workspace/)?(.*/)?skills/([^/]+)/SKILL\.md$`. Capture the slug.
 - Union with the AGENTS.md routing rows. Deduplicate by slug; collapse on first source priority (filesystem wins, since that's what the runtime will load).
 - Existing insert/delete logic stays unchanged — just the input set broadens.
 
 **Patterns to follow:**
+
 - Existing `composeList(...)` pattern in derive-agent-skills.ts.
 - `skill_resolver.py`'s walking precedence (local → ancestor → catalog) — derive should mirror the same path predicate.
 
 **Test scenarios:**
+
 - Happy path — agent with `workspace/skills/foo/SKILL.md` (no AGENTS.md row) produces an `agent_skills` row for `foo`.
 - Happy path — agent with AGENTS.md routing for `bar` (no filesystem folder) produces an `agent_skills` row for `bar` (existing behavior).
 - Happy path — agent with both filesystem and AGENTS.md sources for `baz` produces one row (deduplicated).
@@ -319,6 +427,7 @@ ce-doc-review surfaced 19 actionable findings (3 P0, 9 P1, 7 P2). Five mechanica
 - Edge case — empty `workspace/skills/foo/` (no SKILL.md) does not produce a row.
 
 **Verification:**
+
 - Existing tests pass without modification.
 - New tests pass.
 - Manual: install a skill via U1 path, then query `agent_skills` table; row exists.
@@ -327,7 +436,7 @@ ce-doc-review surfaced 19 actionable findings (3 P0, 9 P1, 7 P2). Five mechanica
 
 ### Phase C — Runtime activation alignment (depends on materialize-at-write-time plan)
 
-- U5. **Strands: replace `install_skill_from_s3` with filesystem-walk via inert→live seam**
+- U5. ❌ **not started** (depends on materialize-at-write-time PR #659 deploy being verified live on dev) — **Strands: replace `install_skill_from_s3` with filesystem-walk via inert→live seam**
 
 **Goal:** The Strands runtime registers `AgentSkills` for every `workspace/**/skills/<slug>/SKILL.md` it finds in the locally synced workspace tree at `/tmp/workspace`. The legacy `install_skill_from_s3` materialization to `/tmp/skills/` is retired. The change ships in two PRs per the inert→live seam pattern.
 
@@ -336,12 +445,14 @@ ce-doc-review surfaced 19 actionable findings (3 P0, 9 P1, 7 P2). Five mechanica
 **Dependencies:** materialize-at-write-time U10 (skill_resolver consumes local synced tree) plus the workspace bootstrap that produces `/tmp/workspace`. **Do not start this unit until those have landed.**
 
 **Files:**
+
 - Modify: `packages/agentcore-strands/agent-container/container-sources/server.py` (~lines 540–554 skills_config consumption; ~615–700 install loop; ~1120 AgentSkills plugin registration)
 - Delete (PR 2): `packages/agentcore/agent-container/install_skills.py` (this is the canonical location — `find packages/agentcore-strands -name 'install_skills*'` returns nothing; Strands' server.py imports from this file at lines 43, 365, 1907)
 - Modify (PR 2): `packages/agentcore-strands/agent-container/container-sources/server.py` — remove `from install_skills import install_skills` (line 43), `from install_skills import install_workspace` (line 365), `from install_skills import install_skill_from_s3` (line 1907)
 - Test: `packages/agentcore-strands/agent-container/test_strands_skill_loader.py` (new) — body-swap safety integration test asserting the same set of skills gets registered when the seam flips
 
 **Approach:**
+
 - **PR 1 (inert):** Introduce a `walk_workspace_skills(workspace_dir: str) -> list[str]` helper that returns absolute paths to every `<workspace>/**/skills/<slug>/SKILL.md`. Wire AgentSkills plugin registration through a callable seam: production passes `seam_fn=None` and falls through to the existing `/tmp/skills` materialization. Add a unit test for the helper and a no-op integration test confirming the seam contract.
 - **PR 2 (live):** Flip the default — `seam_fn` returns `walk_workspace_skills('/tmp/workspace')`. Remove `install_skill_from_s3` and the `skills_config` consumption branch. Body-swap safety integration test asserts the same `AgentSkill` instances get registered as before for a fixture workspace.
 - The `skill_resolver.py` walking precedence stays unchanged (it already does the right thing). Only the AgentSkills plugin registration changes.
@@ -349,10 +460,12 @@ ce-doc-review surfaced 19 actionable findings (3 P0, 9 P1, 7 P2). Five mechanica
 **Execution note:** Apply the inert→live seam swap pattern from `docs/solutions/architecture-patterns/inert-to-live-seam-swap-pattern-2026-04-25.md`. Body-swap safety integration test asserts downstream effects (skills registered with same shape) rather than return shape.
 
 **Patterns to follow:**
+
 - `docs/solutions/architecture-patterns/inert-to-live-seam-swap-pattern-2026-04-25.md` — exact pattern.
 - Existing `skill_resolver.py` walking convention (mirror its path predicate).
 
 **Test scenarios:**
+
 - Happy path — a workspace at `/tmp/workspace` containing `skills/foo/SKILL.md` and `sub-agent/skills/bar/SKILL.md` produces two `AgentSkill` registrations after the seam flips. Covers AE3.
 - Happy path — empty workspace produces zero registrations (no error).
 - Edge case — `workspace/skills/foo/` without SKILL.md is ignored (existing skill_resolver behavior).
@@ -360,13 +473,14 @@ ce-doc-review surfaced 19 actionable findings (3 P0, 9 P1, 7 P2). Five mechanica
 - Error path — workspace sync hasn't run yet (`/tmp/workspace` missing) → log + register zero skills (don't crash; the runtime should still boot).
 
 **Verification:**
+
 - Strands container boots, registers expected skills based on synced workspace, and answers a chat invocation that uses one of them.
 - Old `/tmp/skills` directory is no longer created.
 - `install_skill_from_s3` is no longer referenced anywhere in the runtime.
 
 ---
 
-- U6. **Pi runtime: filesystem-walk skill loader (greenfield)**
+- U6. **Pi runtime: filesystem-walk skill loader (greenfield)** — ❌ **not started** (depends on U5's contract being settled first)
 
 **Goal:** The Pi runtime registers skills by walking `/tmp/workspace/**/skills/<slug>/SKILL.md` and exposing each as an agent-callable skill via the Pi-equivalent of the Strands AgentSkills plugin.
 
@@ -375,32 +489,37 @@ ce-doc-review surfaced 19 actionable findings (3 P0, 9 P1, 7 P2). Five mechanica
 **Dependencies:** materialize-at-write-time U7 or equivalent for Pi (so Pi has `/tmp/workspace`); U5 ideally landed first so the convention is concrete.
 
 **Files:**
+
 - Create: `packages/agentcore-pi/agent-container/src/runtime/skills.ts` (or similar — TypeScript helper that walks the synced workspace and returns skill descriptors)
 - Modify: `packages/agentcore-pi/agent-container/src/server.ts` and/or `src/runtime/pi-loop.ts` (register skills at boot)
 - Test: `packages/agentcore-pi/agent-container/src/runtime/__tests__/skills.test.ts`
 
 **Approach:**
+
 - Mirror `walk_workspace_skills` from U5 in TypeScript: walk the local workspace directory, find every `*/skills/<slug>/SKILL.md`, return descriptors with slug + path + parsed SKILL.md frontmatter.
 - Wire registration into the Pi runtime's startup. If Pi has a built-in skill mechanism (TBD per Open Questions), use it; otherwise expose skills as callable tools.
 - Mirror Strands' `<available_skills>` progressive disclosure if applicable.
 
 **Patterns to follow:**
+
 - The TypeScript equivalent of Strands' `walk_workspace_skills` shape (exact same file predicate).
 - Existing Pi runtime tool registration (see `src/runtime/tools/{web-search,mcp,execute-code,hindsight}.ts`).
 
 **Test scenarios:**
+
 - Happy path — workspace with `skills/foo/SKILL.md` registers `foo` as an available skill.
 - Happy path — sub-agent skill at `sub-agent/skills/bar/SKILL.md` registers correctly within the sub-agent context.
 - Edge case — empty workspace returns zero skills (no error).
 - Error path — missing `/tmp/workspace` → log + register zero skills (boot succeeds).
 
 **Verification:**
+
 - Pi container boots, walks the synced workspace, registers expected skills.
 - A Pi-runtime chat invocation that exercises a workspace skill completes successfully.
 
 ---
 
-- U7. **Cleanup: remove dead skills_config construction; workspace-defaults skills/ marker**
+- U7. ❌ **not started** — **architectural subtlety flagged**: the `isTenantCustom` branch in `wakeup-processor.ts:411-414` covers BOTH agent-installed catalog skills (which U1 retires) AND plugin-uploaded skills (out of scope for this plan). Bifurcating cleanly requires more code reading on `s.source` semantics. Held for next session. — **Cleanup: remove dead skills_config construction; workspace-defaults skills/ marker**
 
 **Goal:** With Phase C live, the `s3Key` construction in `resolve-agent-runtime-config.ts` and `wakeup-processor.ts` becomes dead code. Remove it. Add an empty `skills/` marker to workspace-defaults so the folder renders in fresh workspaces.
 
@@ -409,6 +528,7 @@ ce-doc-review surfaced 19 actionable findings (3 P0, 9 P1, 7 P2). Five mechanica
 **Dependencies:** U5 and U6
 
 **Files:**
+
 - Modify: `packages/api/src/lib/resolve-agent-runtime-config.ts` (lines 387–388, 404, 454 — remove `skills_config` construction; runtime no longer consumes it)
 - Modify: `packages/api/src/handlers/wakeup-processor.ts` (lines 413–414, 468, 493, 514–517, 556, 792, 843–844 — remove the same construction)
 - Modify: `packages/workspace-defaults/files/skills/.gitkeep` (or appropriate marker — TBD per Open Questions)
@@ -416,16 +536,19 @@ ce-doc-review surfaced 19 actionable findings (3 P0, 9 P1, 7 P2). Five mechanica
 - Test: `packages/workspace-defaults/src/__tests__/parity.test.ts` (existing) — should pass without modification
 
 **Approach:**
+
 - Search for any remaining `skills_config` references in TS code; remove.
 - Verify `wakeup-processor.ts` still functions for non-skill payloads after the cleanup.
 - Add the marker file to workspace-defaults; sync the inlined constant; run `pnpm --filter @thinkwork/workspace-defaults test`.
 
 **Test scenarios:**
+
 - Happy path — wakeup-processor still produces correct payload for a non-skill wakeup after the cleanup.
 - Happy path — workspace-defaults parity test passes.
 - Edge case — fresh agent created from defaults shows `skills/` folder in the WorkspaceEditor.
 
 **Verification:**
+
 - `rg 'skills_config' packages/api packages/agentcore-strands packages/agentcore-pi` returns no matches.
 - Fresh agent's WorkspaceEditor shows the empty `skills/` folder.
 - Workspace-defaults parity test passes.
@@ -452,16 +575,16 @@ ce-doc-review surfaced 19 actionable findings (3 P0, 9 P1, 7 P2). Five mechanica
 
 ## Risks & Dependencies
 
-| Risk | Mitigation |
-|------|------------|
-| Other consumers of the legacy install prefix that Phase 1 research missed | Re-grep at execution time per `docs/solutions/workflow-issues/survey-before-applying-parent-plan-destructive-work-2026-04-24.md`: `rg -l 'tenants/.*agents/.*/skills/' packages apps`. |
-| Phase C ordering against materialize-at-write-time | Phase A and Phase B can ship first because they are pure storage prefix changes invisible to the runtime. Phase C is gated explicitly on the materialize plan landing. |
-| `regenerateManifest` not called from the install handler → admin sees stale manifest after install | U1 explicit test asserts the call. |
-| `derive-agent-skills` filesystem walk performance | The walk happens on the agent's manifest, not raw S3 listing. Manifest lookup is O(files). For the 4 enterprises × 100+ agents × ~5 templates scale, this is bounded. |
-| Strands runtime regression when seam flips in U5 | Body-swap safety integration test asserts identical AgentSkill registrations. Inert→live seam pattern allows a one-PR revert. |
-| Pi runtime missing built-in skill loader | U6 authors one if needed; deferred research item already flagged. |
-| Workspace-defaults `.md` byte parity drift | U7 syncs the inlined constant per the existing CI parity test (will fail loudly if missed). |
-| Plugin-upload path also writing to `tenants/X/skills/` continues to confuse the picture | Out of scope per scope boundaries; revisit in a follow-up brainstorm if it becomes a friction point. |
+| Risk                                                                                               | Mitigation                                                                                                                                                                             |
+| -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Other consumers of the legacy install prefix that Phase 1 research missed                          | Re-grep at execution time per `docs/solutions/workflow-issues/survey-before-applying-parent-plan-destructive-work-2026-04-24.md`: `rg -l 'tenants/.*agents/.*/skills/' packages apps`. |
+| Phase C ordering against materialize-at-write-time                                                 | Phase A and Phase B can ship first because they are pure storage prefix changes invisible to the runtime. Phase C is gated explicitly on the materialize plan landing.                 |
+| `regenerateManifest` not called from the install handler → admin sees stale manifest after install | U1 explicit test asserts the call.                                                                                                                                                     |
+| `derive-agent-skills` filesystem walk performance                                                  | The walk happens on the agent's manifest, not raw S3 listing. Manifest lookup is O(files). For the 4 enterprises × 100+ agents × ~5 templates scale, this is bounded.                  |
+| Strands runtime regression when seam flips in U5                                                   | Body-swap safety integration test asserts identical AgentSkill registrations. Inert→live seam pattern allows a one-PR revert.                                                          |
+| Pi runtime missing built-in skill loader                                                           | U6 authors one if needed; deferred research item already flagged.                                                                                                                      |
+| Workspace-defaults `.md` byte parity drift                                                         | U7 syncs the inlined constant per the existing CI parity test (will fail loudly if missed).                                                                                            |
+| Plugin-upload path also writing to `tenants/X/skills/` continues to confuse the picture            | Out of scope per scope boundaries; revisit in a follow-up brainstorm if it becomes a friction point.                                                                                   |
 
 ---
 
