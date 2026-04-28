@@ -1089,6 +1089,15 @@ def _call_strands_agent(system_prompt: str, messages: list,
         except Exception as e:
             logger.warning("Hindsight tools registration failed: %s", e)
 
+    try:
+        from strands import tool as _context_engine_tool_decorator
+        from context_engine_tool import make_context_engine_tool
+
+        tools.append(make_context_engine_tool(_context_engine_tool_decorator))
+        logger.info("Context Engine tool registered: query_context")
+    except Exception as e:
+        logger.warning("Context Engine tool registration failed: %s", e)
+
     # Add file_read tool for skill resource access
     try:
         from strands_tools import file_read as _strands_file_read

@@ -28,7 +28,7 @@ ESBUILD_FLAGS=(
   --external:aws-sdk
 )
 
-# graphql-http, memory-retain, mcp-user-memory, activation-apply-worker,
+# graphql-http, memory-retain, mcp-user-memory, mcp-context-engine, activation-apply-worker,
 # eval-runner, and wiki-compile use AWS Bedrock SDKs
 # (@aws-sdk/client-bedrock-agentcore for memory adapter commands;
 # @aws-sdk/client-bedrock-runtime for eval-runner's Converse judge and
@@ -51,7 +51,6 @@ BUNDLED_AGENTCORE_ESBUILD_FLAGS=(
   --external:@aws-sdk/client-sns
   --external:@aws-sdk/client-ssm
   --external:@aws-sdk/client-bedrock-agent
-  --external:@aws-sdk/client-bedrock-agent-runtime
   --external:@aws-sdk/client-dynamodb
   --external:@aws-sdk/lib-dynamodb
   --external:@aws-sdk/client-sts
@@ -71,7 +70,7 @@ build_handler() {
 
   mkdir -p "$out_dir"
   local flags_ref="ESBUILD_FLAGS[@]"
-  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "activation-apply-worker" ] || [ "$name" = "eval-runner" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "wiki-bootstrap-import" ]; then
+  if [ "$name" = "graphql-http" ] || [ "$name" = "memory-retain" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "activation-apply-worker" ] || [ "$name" = "eval-runner" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "wiki-bootstrap-import" ]; then
     flags_ref="BUNDLED_AGENTCORE_ESBUILD_FLAGS[@]"
   fi
   npx esbuild "$entry" \
@@ -205,6 +204,9 @@ build_handler "mcp-oauth" \
 
 build_handler "mcp-user-memory" \
   "$REPO_ROOT/packages/api/src/handlers/mcp-user-memory.ts"
+
+build_handler "mcp-context-engine" \
+  "$REPO_ROOT/packages/api/src/handlers/mcp-context-engine.ts"
 
 # Service-auth REST endpoint the Strands agent container calls during
 # kind=run_skill dispatch to fetch the agent's runtime config (template,
