@@ -10,11 +10,13 @@ origin: docs/brainstorms/2026-04-28-workspace-reviews-routing-and-removal-requir
 
 ## Overview
 
-Replace the tenant-wide `/workspace-reviews` admin page with responsibility-based routing. Workspace reviews owned by a paired human (directly or via the `parent_agent_id` chain) surface only on that human's mobile Threads. Reviews whose agent chain terminates at `agents.source = 'system'` surface only as a pending-HITL badge plus tab on admin → **Work** → Automations. The standalone admin page is deleted once the new surfaces achieve parity.
+Replace the tenant-wide `/workspace-reviews` admin page with responsibility-based routing. Workspace reviews owned by a paired human (directly or via the `parent_agent_id` chain) surface only on that human's mobile Threads. Reviews whose agent chain terminates at `agents.source = 'system'` surface as items in the existing **Inbox** (the same machinery that originally served the retired tasks system) — they materialize as `inbox_items` rows with `type='workspace_review'`. The standalone admin page is deleted once the new surfaces achieve parity.
 
-As part of this slice, **Automations is promoted from the Manage group to the Work group** in the admin sidebar, taking the slot Workspace Reviews vacates. Rationale: Automations now carries an operator-actionable badge (pending system-agent HITL) and is the new home for "things to act on" alongside Threads and Inbox. Manage retains pure config/infra surfaces (Analytics, Webhooks, People, Billing).
+System-HITL was originally planned to live as a tab on Automations. Routing it through Inbox instead is a better fit: Inbox already has the right shape (Approve / Reject / Request revision actions, comments, activity log, status transitions) and was effectively dead code after tasks were retired. Reusing it avoids building a parallel queue UI and frees Inbox from being a vestigial surface.
 
-This is a routing-and-isolation refactor, not a new feature. The data model already supports it; the resolver, mobile filter, admin badge, queue tab, and sidebar grouping do not. There is no schema change — classification is computed read-time from existing columns (`agents.parent_agent_id`, `agents.human_pair_id`, `agents.source`).
+As part of this slice, **Automations is promoted from the Manage group to the Work group** in the admin sidebar, sitting **below Inbox**. Inbox keeps its existing position and naturally surfaces the new system-review items via its existing pending-count badge. Manage retains pure config/infra surfaces (Analytics, Webhooks, People, Billing).
+
+This is a routing-and-isolation refactor, not a new feature. The data model already supports it; the resolver, mobile filter, inbox materialization hook, inbox→workspace mutation bridge, and sidebar grouping do not. There is no schema change for routing — classification is computed read-time from existing columns (`agents.parent_agent_id`, `agents.human_pair_id`, `agents.source`). Inbox materialization writes to the existing `inbox_items` table.
 
 ---
 
@@ -22,18 +24,20 @@ This is a routing-and-isolation refactor, not a new feature. The data model alre
 
 The admin app's `/workspace-reviews` page lists every `awaiting_review` workspace run for the current tenant, regardless of which human is responsible for resolving it. At enterprise scale (4 enterprises × 100+ agents × ~5 templates) that's a wall of unrelated reviews, and on mobile the same query returns all reviews in the tenant — so paired humans currently see each other's pending HITL pauses. That violates ThinkWork's "user-personal goes to mobile, admin owns infra" stance and creates a real isolation gap.
 
-The brainstorm (origin: `docs/brainstorms/2026-04-28-workspace-reviews-routing-and-removal-requirements.md`) commits to a clean split: paired-human HITL on mobile, system-agent HITL in admin Automations, no standalone page. This plan implements that split.
+The brainstorm (origin: `docs/brainstorms/2026-04-28-workspace-reviews-routing-and-removal-requirements.md`) commits to a clean split: paired-human HITL on mobile, system-agent HITL in admin Inbox, no standalone page. This plan implements that split. The original brainstorm framed the admin home as "Automations"; investigation during U2 surfaced that the Inbox machinery was a much better fit (existing UI, retired-task surface looking for purpose), and that pivot is captured here.
 
 ---
 
 ## Requirements Trace
 
 - R1. Paired-human reviews (direct or via parent chain) surface only on that human's mobile Threads — not in admin.
-- R2. System-agent reviews (chain terminates at `source='system'`, no `human_pair_id` anywhere) surface only on admin Automations.
-- R3. Automations sidebar entry shows numeric badge of pending system-agent review count for current tenant.
-- R4. System HITL queue lives as a tab inside the existing Automations page (`/scheduled-jobs`); no new top-level route.
+- R2. System-agent reviews (chain terminates at `source='system'`, no `human_pair_id` anywhere) surface only in admin Inbox as `inbox_items` rows with `type='workspace_review'`.
+- R3. Inbox sidebar entry's existing pending-count badge naturally includes pending system-agent reviews (since they materialize as inbox items). No new badge surface.
+- R4. System HITL items render in the existing Inbox UI (`/inbox` and `/inbox/$inboxItemId`) with type-aware payload rendering and the existing Approve / Reject / Request revision actions. No new route, no new queue UI.
 - R5. `/workspace-reviews` route, sidebar entry, and component removed once parity verified.
-- R10. Automations sidebar entry moves from the Manage group to the Work group, occupying the slot Workspace Reviews vacates. Manage keeps pure config/infra surfaces.
+- R10. Automations sidebar entry moves from the Manage group to the Work group, positioned **below Inbox**. Final Work order: Dashboard, Threads, Inbox, Automations. Manage keeps pure config/infra surfaces.
+- R11. Inbox decisions on `type='workspace_review'` items dispatch the existing workspace review mutations server-side: Approve → `acceptAgentWorkspaceReview`; Reject → `cancelAgentWorkspaceReview`; Request revision → `resumeAgentWorkspaceRun` with the review notes carried as `responseMarkdown`. Clients keep calling the inbox mutation surface only.
+- R12. Materialization is idempotent: replaying the same `review.requested` event for the same run does not produce duplicate inbox items.
 - R6. Classification is deterministic from the database alone (no S3 reads).
 - R7. Cross-user isolation: no user can see another user's pending review through any surface.
 - R8. Existing review-resolution mutations (`acceptAgentWorkspaceReview`, `cancelAgentWorkspaceReview`, `resumeAgentWorkspaceRun`) work unchanged.
@@ -97,10 +101,14 @@ None required. The pattern is internal: existing `agents.query.ts` user-scoping,
 - **Chain walk implemented as a single recursive Postgres CTE per query**, not N+1 application-level walks. Walk is bounded by `agents.depth` semantics (sub-agent depth ≤ 4 per existing routing limits — verify in CTE termination).
 - **Classification fields exposed on the GraphQL row.** Add `responsibleUserId: ID` and `kind: WorkspaceReviewKind` (`paired | system | unrouted`) to the `AgentWorkspaceReview` type. Mobile and admin filter on these rather than re-deriving client-side.
 - **Mobile auto-scopes to caller.** Mobile passes `responsibleUserId: callerUserId`. The resolver enforces this — passing another user's id is a permission boundary error, not a quiet no-op.
-- **System queue lives as a tab on `/scheduled-jobs`.** No new route. The existing Automations page gains a tab (e.g., `?tab=hitl`). Decision detail (review body, proposed changes, action dialog) reuses logic from the current standalone page so the deletion is purely structural.
-- **Unrouted classification surfaces, doesn't drop.** If chain has neither a `human_pair_id` nor a `source='system'` terminator (orphan or cycle), `kind='unrouted'`. These appear in the admin Automations queue with a warning marker so they're investigated, not silently ignored.
+- **System reviews materialize as inbox items.** When the workspace event processor handles a `review.requested` event AND the run's classification is `system`, it inserts an `inbox_items` row with `type='workspace_review'`, `entity_type='agent_workspace_run'`, `entity_id=run.id`, `status='pending'`, derived title/description, and `config` carrying the review payload (review body, proposed changes, review object key). Rationale: the existing Inbox UI already has the right shape (Approve / Reject / Request revision actions, comments, activity log, status transitions) and was effectively dead code after tasks were retired; reusing it avoids building a parallel queue.
+- **Inbox decisions bridge to workspace review mutations server-side.** `approveInboxItem` / `rejectInboxItem` / `requestRevisionInboxItem` mutations check `item.type === 'workspace_review'` and dispatch `acceptAgentWorkspaceReview` / `cancelAgentWorkspaceReview` / `resumeAgentWorkspaceRun(responseMarkdown=review_notes)` against `entity_id`. Clients call only the inbox mutations; the bridge runs inside the existing inbox resolvers. Existing workspace review mutation contracts unchanged (R8).
+- **Materialization idempotency.** The materialization hook checks for an existing `inbox_items` row with matching `entity_type='agent_workspace_run'` and `entity_id=run.id` before inserting. Replaying a `review.requested` event for the same run does not produce duplicate inbox items.
+- **State synchronization on review resolution.** When a workspace run's review.responded / cancellation events fire, the matching inbox item's `status`, `decided_by`, `decided_at`, and `review_notes` are updated. The workspace run remains the source of truth for the underlying agent state; the inbox row is a projection kept in sync.
+- **Backfill for existing pending system reviews.** A one-shot script materializes inbox items for any current `awaiting_review` runs that classify as `system` and don't already have a linked inbox row. Run before deleting `/workspace-reviews`.
+- **Unrouted classification surfaces, doesn't drop.** If chain has neither a `human_pair_id` nor a `source='system'` terminator (orphan or cycle), `kind='unrouted'`. These materialize as inbox items too (so they're visible to operators) with a clear warning marker in the title/description.
 - **Cycle and depth bound.** Chain walk caps at depth 8 with a hard error if exceeded. Real chains shouldn't exceed 4; the cap exists to surface bad data, not to support deep nesting.
-- **Cutover ordering: new surfaces ship first, page deletion last.** A pre-deletion verification query (one-shot SQL) confirms every current `awaiting_review` row classifies into exactly one of the three kinds, with zero rows that would become invisible.
+- **Cutover ordering: new surfaces ship first, page deletion last.** A pre-deletion verification query (one-shot SQL) confirms every current `awaiting_review` system run has a corresponding inbox item, with zero rows that would become invisible.
 
 ---
 
@@ -109,18 +117,21 @@ None required. The pattern is internal: existing `agents.query.ts` user-scoping,
 ### Resolved During Planning
 
 - **Read-time vs denormalized chain walk** → read-time CTE; denormalize only if proven hot.
-- **Where the system HITL queue lives** → tab on existing `/scheduled-jobs` page (labeled Automations in UI).
+- **Where system HITL lives in admin** → existing Inbox (`/inbox`), as `inbox_items` rows with `type='workspace_review'`. Reuses the existing UI and frees Inbox from being a vestigial post-tasks surface.
+- **Inbox action mapping** → Approve → `acceptAgentWorkspaceReview`; Reject → `cancelAgentWorkspaceReview`; Request revision → `resumeAgentWorkspaceRun` with notes carried as `responseMarkdown`. Resume's existing "wake without approving content" semantics fit revision-with-notes naturally.
+- **Inbox materialization timing** → write-time, in the workspace event processor when `review.requested` is canonicalized AND classification is `system`.
 - **Mobile filter mechanism** → resolver enforces `responsibleUserId = callerUserId` for mobile callers (mobile passes its own id; resolver validates).
-- **What happens to current pending reviews during cutover** → no migration; new surfaces pick them up automatically once shipped. Pre-deletion verification query is the gate.
-- **Unrouted reviews (orphan/cycle)** → classify as `unrouted`; surface in admin Automations with warning marker.
+- **What happens to current pending reviews during cutover** → backfill script materializes inbox items for any pending system run that doesn't have one. Pre-deletion verification query is the gate.
+- **Unrouted reviews (orphan/cycle)** → classify as `unrouted`; materialize as inbox items with a warning marker in the title so operators can investigate.
 - **Sub-agent label in parent's mobile thread** → "Sub-agent {agent.name} needs your input on {target_path}" (override default review title when run.agent_id ≠ responsible-chain origin).
 
 ### Deferred to Implementation
 
-- **Exact recursive CTE shape and Drizzle expression** for the chain walk — depends on what the Drizzle SQL builder cleanly supports vs. raw `sql` template. Worth comparing both during U1.
-- **Whether `apps/admin/src/lib/workspace-review-state.ts` is reused on mobile** — verify during U3 whether mobile already imports it; if so, factor before deleting any of it in U5.
-- **Tab naming on Automations page** — "Pending HITL", "System Reviews", "Needs Approval" — copy decision worth a UI pass during U4.
-- **Whether `/workspace-reviews` returns a 404 or redirects to `/scheduled-jobs?tab=hitl`** — TanStack Router supports both. Lean redirect for muscle memory; decide during U5.
+- **Exact recursive CTE shape and Drizzle expression** for the chain walk — depends on what the Drizzle SQL builder cleanly supports vs. raw `sql` template. Worth comparing both during U1. *(Resolved in #674 — used raw `sql` template; recursive CTE in `classify-review.ts`.)*
+- **Whether `apps/admin/src/lib/workspace-review-state.ts` is reused on mobile** — verify during U3 whether mobile already imports it; if so, factor before deleting any of it in U5. *(Resolved in #677 — mobile has its own equivalent; admin file stays untouched until U5 page-deletion review.)*
+- **Inbox materialization hook location** — `packages/api/src/lib/workspace-events/processor.ts` vs the dispatcher Lambda. Verify during U4; the run-state update path is the natural insertion point.
+- **Inbox row title/description copy** — derive from review file reason + agent slug + target path. Iterate during U4 implementation.
+- **Whether `/workspace-reviews` returns a 404 or redirects to `/inbox`** — TanStack Router supports both. Lean redirect for muscle memory; decide during U5.
 
 ---
 
@@ -157,8 +168,31 @@ GraphQL agentWorkspaceReviews(tenantId, responsibleUserId?, kind?, status?, limi
         ├─ Mobile call: responsibleUserId=ctx.auth.userId, kind not set
         │       └─ rows where chain resolves to caller (paired only)
         │
-        └─ Admin Automations tab: kind='system' (or 'system','unrouted')
-                └─ rows that have no human owner
+        └─ Admin: not used as a list surface anymore — Inbox is the surface.
+                  agentWorkspaceReview(runId) is still used to render
+                  decision detail when an inbox item links to a run.
+
+System review materialization (write-time, in workspace event processor):
+        │
+        review.requested + classification = 'system' / 'unrouted'
+        ├─ check existing inbox_items WHERE entity_id=run.id  (idempotency)
+        └─ INSERT inbox_items {
+             type: 'workspace_review',
+             status: 'pending',
+             entity_type: 'agent_workspace_run',
+             entity_id: run.id,
+             title: derived from agent + target,
+             config: { reviewBody, proposedChanges, reviewObjectKey }
+           }
+
+Inbox decision dispatch (server-side, in inbox mutations):
+        │
+        ├─ approveInboxItem  → acceptAgentWorkspaceReview(entity_id)
+        ├─ rejectInboxItem   → cancelAgentWorkspaceReview(entity_id)
+        └─ requestRevisionInboxItem → resumeAgentWorkspaceRun(
+                                         entity_id,
+                                         responseMarkdown: review_notes
+                                      )
 
 GraphQL pendingSystemReviewsCount(tenantId) → Int
         │
@@ -309,54 +343,63 @@ GraphQL pendingSystemReviewsCount(tenantId) → Int
 
 ---
 
-- U4. **Admin: Automations badge, system HITL queue tab, and Work-group promotion**
+- U4. **Materialize system reviews as inbox items + bridge inbox actions + Automations sidebar move**
 
-**Goal:** Add a pending-HITL count badge to the Automations sidebar entry, add a "Pending HITL" tab on the `/scheduled-jobs` page that lists system-kind reviews and exposes the same Accept/Continue/Reject actions as the current standalone page, and move the Automations entry from `manageItems` to `workItems` (occupying the slot Workspace Reviews vacates in U5).
+**Goal:** When a workspace run becomes `awaiting_review` and classifies as `system` (or `unrouted`), write a corresponding `inbox_items` row with `type='workspace_review'`. When operators decide that inbox item via Approve / Reject / Request revision, dispatch the matching workspace review mutation as a server-side side effect so the underlying run state advances. Add a type-aware Inbox payload renderer so reviewers can see the review body and proposed changes in the existing Inbox detail UI. Move the Automations sidebar entry from Manage to Work, positioned below Inbox.
 
-**Requirements:** R2, R3, R4, R8, R10.
+**Requirements:** R2, R3, R4, R8, R10, R11, R12.
 
 **Dependencies:** U2.
 
 **Files:**
-- Modify: `apps/admin/src/components/Sidebar.tsx` (add badge to Automations item; remove Automations entry from `manageItems` and add it to `workItems` in the Workspace-Reviews slot)
-- Modify: `apps/admin/src/routes/_authed/_tenant/scheduled-jobs/index.tsx` (add tab)
-- Possibly extract shared review-detail UI from `apps/admin/src/routes/_authed/_tenant/workspace-reviews/index.tsx` into:
-  - Create: `apps/admin/src/components/workspace-reviews/SystemReviewQueue.tsx`
-  - Create: `apps/admin/src/components/workspace-reviews/SystemReviewDetail.tsx`
-- Modify: `apps/admin/src/lib/graphql-queries.ts` (add `PendingSystemReviewsCountQuery`, parameterize existing `AgentWorkspaceReviewsQuery` for `kind`)
-- Test: `apps/admin/src/components/workspace-reviews/__tests__/SystemReviewQueue.test.tsx` (or existing test conventions)
-- Test: `apps/admin/src/__tests__/sidebar-automations-badge.test.tsx`
+- Modify: `packages/api/src/lib/workspace-events/processor.ts` (or wherever `review.requested` event handling persists run state — verify) — when a run transitions to `awaiting_review`, run the U1 classifier; if `kind` is `system` or `unrouted`, INSERT inbox row (idempotency-checked).
+- Modify: same processor — when a run resolves (`review.responded`, run cancelled, run failed/completed) and a linked inbox item exists, UPDATE its status + `decided_by` + `decided_at` + `review_notes`.
+- Modify: `packages/api/src/graphql/resolvers/inbox/approveInboxItem.mutation.ts` — when item.type='workspace_review' and entity_type='agent_workspace_run', call the existing `acceptAgentWorkspaceReview` flow against `entity_id` (carry `review_notes` if present).
+- Modify: `packages/api/src/graphql/resolvers/inbox/rejectInboxItem.mutation.ts` — same pattern, dispatch to `cancelAgentWorkspaceReview`.
+- Modify: `packages/api/src/graphql/resolvers/inbox/requestRevisionInboxItem.mutation.ts` (or whichever inbox mutation file holds the revision flow — verify) — same pattern, dispatch to `resumeAgentWorkspaceRun({ responseMarkdown: review_notes, notes: review_notes })`.
+- Modify: `apps/admin/src/components/inbox/InboxItemPayload.tsx` — register a renderer for `type='workspace_review'` that shows review body (markdown) and a proposed-changes preview (count + first 3, with diff snippet).
+- Modify: `apps/admin/src/components/inbox/InboxItemPayload.tsx` — add `typeLabel['workspace_review'] = "Workspace review"` and a sensible `typeIcon`.
+- Modify: `apps/admin/src/components/Sidebar.tsx` — remove `{ to: "/scheduled-jobs", icon: CalendarClock, label: "Automations" }` from `manageItems` and insert it into `workItems` after the Inbox entry. Final `workItems` order: Dashboard, Threads, Inbox, Automations. Final `manageItems` order: Analytics, Webhooks, People, (Billing if owner).
+- Create: `packages/api/scripts/backfill-system-reviews-to-inbox.ts` — one-shot script that selects all `awaiting_review` runs, classifies each, and inserts inbox items for `system`/`unrouted` runs that don't already have a linked row. Idempotent.
+- Test: `packages/api/src/__tests__/workspace-review-inbox-materialization.test.ts` — materialization, idempotency, status sync.
+- Test: `packages/api/src/__tests__/workspace-review-inbox-bridge.test.ts` — Approve/Reject/RequestRevision dispatch correctly to the workspace review mutations.
+- Test: `apps/admin/src/components/inbox/__tests__/InboxItemPayload.workspace-review.test.tsx` — payload renderer.
+- Test: `apps/admin/src/lib/__tests__/sidebar-layout.test.ts` (or existing convention) — Automations is in workItems, position 4; not in manageItems.
 
 **Approach:**
-- Sidebar.tsx: add a count fetch using `PendingSystemReviewsCountQuery` similar to existing `pendingInboxCount`/`threadCount` patterns; wire result into the Automations item's `badge` field.
-- Sidebar.tsx grouping change: remove `{ to: "/scheduled-jobs", icon: CalendarClock, label: "Automations" }` from `manageItems` and insert it into `workItems` in the position currently occupied by Workspace Reviews. Final `workItems` order: Dashboard, Threads, Inbox, Automations. Final `manageItems` order: Analytics, Webhooks, People, (Billing if owner).
-- Coordinate with U5: U4 lands the Automations move into Work, U5 removes the now-redundant Workspace Reviews entry. Land U4 first so the Work group still has four items during the transition; then U5's deletion leaves the group with the intended four (Dashboard, Threads, Inbox, Automations).
-- ScheduledJobs page: add a tab toggle (existing or new) for "Pending HITL". Tab content reuses extracted `SystemReviewQueue` + `SystemReviewDetail` components, parameterized to fetch `kind=SYSTEM` (and optionally `kind=UNROUTED` shown with a warning marker).
-- Action dialog (Accept/Continue/Reject) reuses the existing mutations — same payload shape as the standalone page.
-- Tab state persisted in URL search params (e.g., `?tab=hitl`) so deep links work.
+- **Materialization hook**: extend the workspace-event processor's run-state update path (where `awaiting_review` is set on a run). After the status transition, classify via U1; if `system` or `unrouted`, INSERT inbox row guarded by `WHERE NOT EXISTS (SELECT 1 FROM inbox_items WHERE entity_type='agent_workspace_run' AND entity_id=run.id)`. Title: `"Workspace review: {agent.name} on {target_path}"` (or `"Workspace review (unrouted): ..."` for unrouted). Description: review reason or first ~120 chars of review body. Config: serialize `{ reviewObjectKey, proposedChanges, reviewBody, reviewEtag, reason, agentSlug, targetPath, classification: { kind, responsibleUserId } }`.
+- **Status sync**: in the same processor, on terminal events for runs that have a linked inbox item, UPDATE the inbox item's status (approved/rejected/etc.), set `decided_by` / `decided_at` from the workspace event payload, and copy `review_notes` from the response markdown. Decided-by may be a system actor (when the run resolved itself) or an operator user id (when an operator approved via Inbox).
+- **Bridge in inbox mutations**: each existing approve/reject/requestRevision mutation gets a new branch: if `item.type === 'workspace_review' && item.entity_type === 'agent_workspace_run'`, it imports and calls the existing workspace review action lib (`packages/api/src/lib/workspace-events/review-actions.ts`) against `item.entity_id`, then proceeds with the existing inbox status update. Tenant-isolation auth is already enforced by both layers; preserve `requireTenantMember` checks at the entry point.
+- **Recursion guard**: when the workspace review mutation fires from the bridge, the resulting events (`review.responded`) re-enter the processor's status-sync path. Detect that the inbox item already has the new status (set by the bridge) and skip the redundant UPDATE — or use an `actor_type='inbox_bridge'` marker to short-circuit.
+- **Payload renderer**: a `WorkspaceReviewPayloadRenderer` component reads `payload.reviewBody` (markdown render), `payload.proposedChanges` (badge list with diff preview), `payload.classification.kind` (warning marker if 'unrouted'), and `payload.targetPath` (chip). Falls back to "See full request" disclosure for the full payload like other inbox types.
+- **Sidebar**: pure 5-line edit to `apps/admin/src/components/Sidebar.tsx`. Final order documented inline.
+- **Backfill**: standalone script callable via `pnpm tsx packages/api/scripts/backfill-system-reviews-to-inbox.ts --tenant <id|all>`. SELECT awaiting_review runs, classify, INSERT inbox row for each system/unrouted that doesn't have one. Print summary `created=N skipped=M`. Idempotent.
 
 **Patterns to follow:**
-- `apps/admin/src/components/Sidebar.tsx:135-180` — existing badge-count fetch pattern (`activeScheduledJobs`, `pendingInboxCount`).
-- `apps/admin/src/routes/_authed/_tenant/workspace-reviews/index.tsx` — review queue + detail UI structure to extract.
-- `apps/admin/src/routes/_authed/_tenant/scheduled-jobs/index.tsx` — existing tab/segmented control patterns within that page.
+- `apps/admin/src/components/inbox/InboxItemPayload.tsx` — existing type-keyed renderer pattern (`typeLabel`, `typeIcon`, `InboxItemPayloadRenderer`).
+- `packages/api/src/lib/workspace-events/review-actions.ts` — encapsulated action functions; bridge calls these directly to avoid duplicating auth + audit logic.
+- `packages/api/src/graphql/resolvers/inbox/cancelInboxItem.mutation.ts` — existing inbox mutation shape; mirror it for the new branches.
 
 **Test scenarios:**
-- Happy path: Tenant has 3 system-kind pending reviews; sidebar shows Automations badge `(3)`. *Covers AE3.*
-- Happy path: Automations sidebar entry renders inside the Work group (between Inbox and the now-removed Workspace Reviews slot during transition; final position: fourth item in Work). It does NOT appear in Manage. *Covers R10.*
-- Happy path: Clicking Automations opens `/scheduled-jobs?tab=hitl` and shows the 3 reviews in a queue.
-- Happy path: Selecting a row shows detail (review body, proposed changes, event timeline) and Accept/Continue/Reject buttons.
-- Happy path: Accepting a review enqueues a wakeup and removes the row from the queue. *Covers AE4, R8.*
-- Edge case: Tenant has 0 system reviews; badge is hidden (not shown as `0`).
-- Edge case: Mix of paired and system reviews in tenant; tab shows only system. Paired reviews never appear in admin.
-- Edge case: An `unrouted` review appears in the queue with a clear warning marker (icon + tooltip "Unable to route — investigate").
-- Error path: Mutation fails; existing error toast surfaces via `workspaceReviewErrorMessage`.
-- Integration: Refresh after action — both sidebar badge and tab list reflect the new count without manual reload.
-- Integration: Tab state survives page refresh (URL search param round-trips).
+- Happy path: A workspace run transitions to `awaiting_review` with a system agent. An `inbox_items` row is created with `type='workspace_review'`, `entity_type='agent_workspace_run'`, `entity_id=run.id`, `status='pending'`. *Covers AE3, R2.*
+- Happy path: A paired-human review fires. NO inbox item is created. *Covers AE1.*
+- Edge case: An `unrouted` review fires. Inbox item is created with the warning marker (title prefix "Workspace review (unrouted)").
+- Idempotency: replaying the same `review.requested` event for the same run does NOT create a duplicate inbox item. *Covers R12.*
+- Bridge: `approveInboxItem` on a `type='workspace_review'` item calls `acceptAgentWorkspaceReview(entity_id)` AND updates inbox status to `approved` + sets `decided_by`/`decided_at`. *Covers R11, R8.*
+- Bridge: `rejectInboxItem` on a workspace_review item dispatches to `cancelAgentWorkspaceReview` AND status → `rejected`.
+- Bridge: `requestRevisionInboxItem` with notes dispatches to `resumeAgentWorkspaceRun({ responseMarkdown: notes })` AND status → `revision_requested`. *Covers R11.*
+- Bridge: For non-workspace-review inbox items (e.g., legacy `task_assigned`), the existing mutation behavior is unchanged (no workspace dispatch).
+- Status sync: when `review.responded` fires from outside the bridge (e.g., manual S3 deletion or alternate path), the matching inbox item's status is updated.
+- Recursion guard: a bridge-initiated `review.responded` event does NOT re-trigger the inbox status update (or it's a no-op).
+- Tenant isolation: classification doesn't leak across tenants in materialization; bridge mutations enforce `requireTenantMember`.
+- Payload renderer: `type='workspace_review'` items show review body markdown, proposed-changes preview, target-path chip; "See full request" toggles the raw payload.
+- Sidebar: Automations renders in `workItems` at position 4 (after Inbox); does NOT appear in `manageItems`. *Covers R10.*
 
 **Verification:**
-- Admin tests for badge + tab pass.
-- Manual smoke in dev: trigger a system-agent review, confirm badge increments, queue shows it, accept clears it.
-- Existing admin Threads / Inbox / Dashboard surfaces show no regression in their badge logic.
+- All new tests pass; full api test suite stays green; admin test suite stays green.
+- Manual smoke in dev: trigger a system-agent review, confirm Inbox shows the new item with the right title + payload preview, click Approve, confirm the workspace run resolves AND the inbox item shows `approved`.
+- Trigger a paired-human review; confirm Inbox does NOT gain an item.
+- Backfill script: run against dev with at least one pre-existing pending system review; confirm it creates the inbox row exactly once.
 
 ---
 
@@ -380,26 +423,29 @@ GraphQL pendingSystemReviewsCount(tenantId) → Int
 **Approach:**
 - Run a pre-deletion verification SQL against dev:
   ```sql
-  SELECT
-    count(*) FILTER (WHERE r.kind = 'paired') AS paired,
-    count(*) FILTER (WHERE r.kind = 'system') AS system,
-    count(*) FILTER (WHERE r.kind = 'unrouted') AS unrouted,
-    count(*) AS total
-  FROM (
-    SELECT classify_workspace_review(...) AS kind FROM agent_workspace_runs WHERE status = 'awaiting_review'
-  ) r;
+  -- Every awaiting_review system/unrouted run must have a corresponding inbox item
+  SELECT r.id AS run_id, r.tenant_id, r.agent_id
+  FROM agent_workspace_runs r
+  WHERE r.status = 'awaiting_review'
+    AND NOT EXISTS (
+      SELECT 1 FROM inbox_items i
+      WHERE i.entity_type = 'agent_workspace_run'
+        AND i.entity_id = r.id
+    );
+  -- Result must be empty for every run that classifies as system/unrouted.
+  -- (Paired runs intentionally have no inbox row — they live on mobile.)
   ```
-  Confirm `paired + system + unrouted = total` (no holes), `unrouted` is acceptably small (zero or known orphans).
+  Cross-reference each remaining row's classification (paired/system/unrouted). Paired rows are expected to be in the result set; system/unrouted rows must NOT be. If any system/unrouted row is missing an inbox item, run the U4 backfill script first, then re-run this check.
 - Delete the route file and directory.
 - Remove `Workspace Reviews` from Sidebar.tsx workItems array.
 - Regenerate routeTree.gen.ts via the TanStack Router build step.
-- Add a redirect (lean) or accept a 404 for `/workspace-reviews`.
+- Add a redirect (lean) — `/workspace-reviews` → `/inbox`. Most workspace reviews now land as inbox items, and the user's muscle memory benefits from the redirect.
 
 **Patterns to follow:**
 - TanStack Router redirect pattern — see existing route files for any prior redirects in the repo.
 
 **Test scenarios:**
-- Happy path: After deployment, navigating to `/workspace-reviews` redirects to `/scheduled-jobs?tab=hitl`. *Covers AE5.*
+- Happy path: After deployment, navigating to `/workspace-reviews` redirects to `/inbox`. *Covers AE5.*
 - Happy path: Sidebar Work group has exactly four items in order: Dashboard, Threads, Inbox, Automations. Workspace Reviews entry is gone. *Covers R5, R10.*
 - Happy path: Sidebar Manage group does not contain Automations; final order is Analytics, Webhooks, People, (Billing if owner). *Covers R10.*
 - Edge case: Route tree compiles without dangling references to the deleted route.
@@ -413,25 +459,27 @@ GraphQL pendingSystemReviewsCount(tenantId) → Int
 
 ---
 
-- U6. **Documentation: workspace-orchestration concept update + Automations admin doc**
+- U6. **Documentation: workspace-orchestration concept update + Inbox HITL section + Automations admin doc**
 
-**Goal:** Update the Astro docs site to reflect the new routing model. Replace references to a standalone Workspace Reviews page; add a dedicated Automations admin doc; fix the existing Routines→Automations naming drift in the sidebar config.
+**Goal:** Update the Astro docs site to reflect the new routing model. Replace references to a standalone Workspace Reviews page; add the system-HITL section to the Inbox doc; add a small Automations admin doc covering its IA position and existing functionality; fix the existing Routines→Automations naming drift in the sidebar config.
 
 **Requirements:** R9.
 
 **Dependencies:** U5 (so docs reflect the deployed state).
 
 **Files:**
-- Modify: `docs/src/content/docs/concepts/agents/workspace-orchestration.mdx` — rewrite the "Human review flow" section to describe the routing model (mobile for paired, Automations for system); update the troubleshooting table entries that mention "Workspace Reviews."
+- Modify: `docs/src/content/docs/concepts/agents/workspace-orchestration.mdx` — rewrite the "Human review flow" section to describe the routing model (mobile for paired humans; Inbox for system reviews); update the troubleshooting table entries that mention "Workspace Reviews."
+- Modify: `docs/src/content/docs/applications/admin/inbox.mdx` — add a section explaining that Inbox is the home for system-agent HITL reviews, document the workspace_review type, the action mapping (Approve → accept; Reject → cancel; Request revision → resume with notes), and that materialization happens automatically when a system run pauses.
 - Modify: `docs/src/content/docs/applications/mobile/threads-and-chat.mdx` — add a paragraph clarifying that sub-agent reviews surface to the parent chain's paired human (currently doc'd flow only covers direct-agent reviews per `docs/plans/2026-04-26-005`).
-- Create: `docs/src/content/docs/applications/admin/automations.mdx` — new doc page covering scheduled jobs + the system HITL queue tab.
-- Modify: `docs/astro.config.mjs` — rename the `Routines` sidebar label/slug to `Automations` (currently says "Routines" pointing at `applications/admin/routines` — verify the actual slug; the admin app's UI label is Automations, so the doc must match). Move the Automations entry from the Manage subgroup to the Work subgroup of the admin sidebar (mirror the admin app's IA: Work = Dashboard, Threads, Inbox, Automations; Manage = Analytics, Webhooks, People, etc.). Add the new admin Automations doc entry.
+- Create: `docs/src/content/docs/applications/admin/automations.mdx` — short doc covering Automations' purpose (recurring agent work / scheduled jobs) and noting that it now lives in the Work group below Inbox. No HITL content in this doc — that lives in `inbox.mdx`.
+- Modify: `docs/astro.config.mjs` — rename the `Routines` sidebar label/slug to `Automations` (verify the actual slug; the admin app's UI label is Automations, so the doc must match). Move the Automations entry from the Manage subgroup to the Work subgroup of the admin sidebar (mirror the admin app's IA: Work = Dashboard, Threads, Inbox, Automations; Manage = Analytics, Webhooks, People, etc.). Add the new admin Automations doc entry.
 
 **Approach:**
 - Rewrite the Human Review Flow section to follow the routing tree from the High-Level Technical Design.
 - Use the Mermaid-style diagram or table form already used in `workspace-orchestration.mdx`.
-- New `automations.mdx` mirrors structure of other admin docs (e.g., `inbox.mdx`, `threads.mdx`): brief overview, screenshot if available, walkthrough, "Under the hood" section linking to the orchestration concept doc.
-- Cross-link the new doc from the orchestration concept doc's "Related pages" section.
+- Inbox doc gets a new "Workspace reviews (system HITL)" subsection: explains that system-agent HITL items appear here, lists the three actions and how they map to workspace review semantics, links to the orchestration concept doc.
+- Automations doc mirrors structure of other admin docs (e.g., `threads.mdx`): brief overview, walkthrough of scheduled jobs, IA note that it sits in Work below Inbox.
+- Cross-link the new doc and the Inbox HITL section from the orchestration concept doc's "Related pages" section.
 
 **Patterns to follow:**
 - `docs/src/content/docs/applications/admin/inbox.mdx` and `threads.mdx` — house style for admin app docs.
@@ -443,16 +491,16 @@ Test expectation: none — docs are MDX, no behavior to test. Verification handl
 
 **Verification:**
 - `pnpm --filter @thinkwork/docs build` (or whatever the docs build command is) succeeds with no broken links.
-- Manual review: orchestration concept doc no longer references the standalone admin page; mobile doc explicitly covers sub-agent surfacing; new Automations admin doc matches the deployed UI.
-- Astro sidebar (`docs/astro.config.mjs`) shows "Automations" not "Routines" and includes the new admin doc.
+- Manual review: orchestration concept doc no longer references the standalone admin page; mobile doc explicitly covers sub-agent surfacing; Inbox doc covers the system-HITL section; new Automations admin doc matches the deployed UI.
+- Astro sidebar (`docs/astro.config.mjs`) shows "Automations" not "Routines" under the Work subgroup and includes the new admin doc.
 
 ---
 
 ## System-Wide Impact
 
-- **Interaction graph:** Resolver classification (U1+U2) is read by mobile (U3) and admin (U4); badges in Sidebar.tsx are driven by a new lightweight count query. Mutations (`acceptAgentWorkspaceReview`, `cancelAgentWorkspaceReview`, `resumeAgentWorkspaceRun`) unchanged in contract — only callers shift.
-- **Error propagation:** Classification helper logs structured warnings on cycle/depth-cap; resolver returns `kind='unrouted'` rather than failing the query. Admin Automations queue surfaces unrouted with a warning marker so they're operationally visible.
-- **State lifecycle risks:** None at the data layer — no schema change, no data migration. Cutover risk: if U5 deploys before U3+U4 are verified covering all rows, paired-human reviews could become invisible. Cutover gate (verification SQL) is the mitigation.
+- **Interaction graph:** Resolver classification (U1+U2) is read by mobile (U3) and the workspace event processor (U4); the processor materializes system reviews as inbox items. Inbox mutations (`approveInboxItem`, `rejectInboxItem`, `requestRevisionInboxItem`) gain server-side bridges to the existing workspace review mutations (`acceptAgentWorkspaceReview`, `cancelAgentWorkspaceReview`, `resumeAgentWorkspaceRun`) — which themselves remain unchanged in contract. The Inbox sidebar badge naturally counts system reviews because they're inbox items.
+- **Error propagation:** Classification helper logs structured warnings on cycle/depth-cap; resolver returns `kind='unrouted'` rather than failing the query. Materialization treats unrouted the same as system but marks the inbox row's title with a warning prefix so it's operationally visible. Bridge dispatch errors surface via the existing inbox mutation error path.
+- **State lifecycle risks:** No schema change. Materialization adds a write-time hook in the workspace event processor — recursion guard required so bridge-dispatched `review.responded` events don't redundantly update the inbox row. Cutover risk: if U5 deploys before U4 + backfill confirm coverage, system reviews from before U4 could become invisible. Cutover gate (verification SQL + run backfill if needed) is the mitigation.
 - **API surface parity:** GraphQL `AgentWorkspaceReview` gains two non-breaking fields (`responsibleUserId`, `kind`) and a new enum (`WorkspaceReviewKind`). Existing consumers continue to work without those fields. New query `pendingSystemReviewsCount` is additive. Mobile + admin + CLI consumers regenerate codegen.
 - **Integration coverage:** End-to-end smoke in dev — trigger paired review (verify mobile only), trigger system-agent review (verify admin only), trigger sub-agent review (verify parent's mobile), confirm cross-user isolation between two test users in the same tenant.
 - **Unchanged invariants:**
@@ -470,8 +518,10 @@ Test expectation: none — docs are MDX, no behavior to test. Verification handl
 |---|---|
 | Mobile users currently see other users' reviews; deploying U3 makes them disappear, which could be confusing if not communicated. | Ship U3 with a release note acknowledging the privacy fix; the change is correctness, not a regression. |
 | Recursive CTE walks may surprise on large tenants or deep chains. | Depth cap 8 + `EXPLAIN` review during U1; existing `agents.depth` constraints keep real chains shallow. Add a perf test if needed. |
-| Cutover ordering — deleting `/workspace-reviews` (U5) before U3 and U4 are verified would orphan reviews. | Hard gate: U5 only lands after the verification SQL confirms zero hidden rows in dev. Document the gate in the U5 PR description. |
-| `agents.human_pair_id` may be null on user-source agents in older tenants (pre-pairing). | Treat as `unrouted`; visible in admin Automations queue with warning marker so it's investigated. |
+| Cutover ordering — deleting `/workspace-reviews` (U5) before U3 and U4 are verified would orphan reviews. | Hard gate: U5 only lands after the verification SQL (every system/unrouted run has an inbox item) returns clean in dev, with the U4 backfill script run if necessary. Document the gate in the U5 PR description. |
+| `agents.human_pair_id` may be null on user-source agents in older tenants (pre-pairing). | Treat as `unrouted`; materialize as an inbox item with a warning-prefixed title so it's investigated. |
+| Materialization recursion: bridge-dispatched workspace review mutations re-enter the processor and could double-update the inbox row. | Recursion guard (actor-type check or status-already-set short-circuit) in the processor's status-sync path. Tested explicitly. |
+| Backfill script could double-insert if run twice. | Script INSERTs are guarded by `WHERE NOT EXISTS`; safe to re-run. |
 | GraphQL enum addition (`WorkspaceReviewKind`) requires codegen across four consumers; missing one causes type drift. | U2 verification step explicitly runs codegen across `apps/cli`, `apps/admin`, `apps/mobile`, `packages/api` and commits the regenerated files. |
 | Astro docs sidebar `Routines` label may be referenced elsewhere (cross-links, search index). | Grep the docs tree for `routines` references during U6; update or redirect as needed. |
 
