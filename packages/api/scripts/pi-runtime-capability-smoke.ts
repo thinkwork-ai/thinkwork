@@ -377,10 +377,40 @@ function matchingSuccessfulInvocations(
 
 function hasWebSearchResult(invocation: Record<string, unknown>): boolean {
   const blob = invocationBlob(invocation);
-  return (
+  if (
     /"result_count"\s*:\s*[1-9]/.test(blob) ||
     /"results"\s*:\s*\[\s*\{/.test(blob)
-  );
+  ) {
+    return true;
+  }
+
+  for (const key of ["output", "output_preview", "result", "result_preview"]) {
+    const value = invocation[key];
+    if (typeof value !== "string") continue;
+    try {
+      const parsed = JSON.parse(value) as {
+        result_count?: unknown;
+        results?: unknown;
+      };
+      if (
+        typeof parsed.result_count === "number" &&
+        parsed.result_count > 0
+      ) {
+        return true;
+      }
+      if (Array.isArray(parsed.results) && parsed.results.length > 0) {
+        return true;
+      }
+    } catch {
+      if (
+        /"result_count"\s*:\s*[1-9]/.test(value) ||
+        /"results"\s*:\s*\[\s*\{/.test(value)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function hasExecuteCodeResult(invocation: Record<string, unknown>): boolean {
