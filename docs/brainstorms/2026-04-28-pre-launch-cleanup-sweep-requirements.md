@@ -125,9 +125,9 @@ These items were surfaced by the scan but need a 2-10 min verification before th
 - **`manifest-log` Lambda handler** — registered in `scripts/build-lambdas.sh` but has no Terraform route. Did the U15 part 2 wiring PR ship? If yes, wire the route; if no, is the work still planned?
 - **`enable_workspace_orchestration` Terraform gate** — defined in `terraform/modules/thinkwork/variables.tf` but no obvious runtime read. Leftover gate from an unshipped phase, or live wiring we missed?
 - **AgentCore-managed memory engine branch** — both Hindsight and AgentCore-managed paths are wired behind `memory_engine` / `enable_hindsight`. Memory says we're committed to Hindsight. Decision: fully retire the AgentCore branch, or keep it as a documented fallback gate?
-- **In-flight LastMile working-tree sweep (R2 implementation)** — the current uncommitted ~62 modified + 5 deleted files in the working tree appear to be the runtime/SKILL.md/docs side of R2 (rename `lastmile_tasks_*` → `task_system_tasks_*`, delete `packages/skill-catalog/lastmile-tasks/`, retire prose). Confirm at PR time that this work also covers the terraform `task_system_tasks_api_url` plumbing R2 explicitly names; if not, that's a sibling follow-up PR.
+- **In-flight external task working-tree sweep (R2 implementation)** — the current uncommitted ~62 modified + 5 deleted files in the working tree appear to be the runtime/SKILL.md/docs side of R2 (rename `task_system_tasks_*`, delete the retired task-intake skill pack, retire prose). Confirm at PR time that this work also covers the terraform `task_system_tasks_api_url` plumbing R2 explicitly names; if not, that's a sibling follow-up PR.
 - **Code comments referencing "composable-skills Unit 4"** — `packages/database-pg/src/schema/skill-runs.ts:101`, `packages/api/src/graphql/utils.ts:89`, `apps/admin/src/lib/graphql-queries.ts:2299`. Low value to remove (audit trail), but if R10 plan touches those files anyway, consider rewording to "skill-runs Unit 4".
-- **`docs/STYLE-AUDIT.md` staleness** — the doc is mostly self-correcting (the 2026-04-21 post-rewrite section explicitly handles ongoing drift), and the in-flight LastMile sweep already updates the line 105 reference. No further action needed; flagged for completeness.
+- **`docs/STYLE-AUDIT.md` staleness** — the doc is mostly self-correcting (the 2026-04-21 post-rewrite section explicitly handles ongoing drift), and the in-flight external task sweep already updates the line 105 reference. No further action needed; flagged for completeness.
 
 ---
 
@@ -135,4 +135,4 @@ These items were surfaced by the scan but need a 2-10 min verification before th
 
 -> `/ce-plan` for R8 (delete Composable Skills doc section) — smallest scoped item, no code touched, ships in one PR.
 
-Tier 1 sequencing (any order after R8): R1, R2 (the in-flight LastMile sweep is part of this), R3, R4, R9. Tier 2 sequencing (one at a time): R5, R6, R7, R10. Revisit Tier 3 verification queue once Tier 1 + 2 are clear.
+Tier 1 sequencing (any order after R8): R1, R2 (the in-flight external task sweep is part of this), R3, R4, R9. Tier 2 sequencing (one at a time): R5, R6, R7, R10. Revisit Tier 3 verification queue once Tier 1 + 2 are clear.
