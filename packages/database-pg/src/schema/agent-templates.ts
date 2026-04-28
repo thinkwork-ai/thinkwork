@@ -77,6 +77,15 @@ export const agentTemplates = pgTable(
      * packages/api/src/lib/templates/browser-config.ts.
      */
     browser: jsonb("browser"),
+    /**
+     * Web Search opt-in metadata for the tenant-configured web-search built-in
+     * tool. Shape: { enabled: true } | null. Null = the template does not
+     * inject web-search even when the tenant has a provider/API key configured.
+     *
+     * Shape is validated at create/update mutation time by
+     * packages/api/src/lib/templates/web-search-config.ts.
+     */
+    web_search: jsonb("web_search").default(sql`'{"enabled": true}'::jsonb`),
     is_published: boolean("is_published").notNull().default(true),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()

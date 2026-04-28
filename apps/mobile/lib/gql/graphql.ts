@@ -404,6 +404,14 @@ export type AgentTemplate = {
   source: Scalars['String']['output'];
   tenantId?: Maybe<Scalars['ID']['output']>;
   updatedAt: Scalars['AWSDateTime']['output'];
+  /**
+   * Web Search opt-in metadata for the tenant-configured web-search built-in
+   * tool. Shape validated at create/update time by
+   * packages/api/src/lib/templates/web-search-config.ts:
+   *   { enabled: true }
+   * Null means the template does not inject Web Search.
+   */
+  webSearch?: Maybe<Scalars['AWSJSON']['output']>;
 };
 
 export enum AgentType {
@@ -802,6 +810,11 @@ export type CreateAgentTemplateInput = {
   skills?: InputMaybe<Scalars['AWSJSON']['input']>;
   slug: Scalars['String']['input'];
   tenantId: Scalars['ID']['input'];
+  /**
+   * Web Search opt-in metadata; see AgentTemplate.webSearch. Omit
+   * (or pass null) for templates that do not opt into Web Search.
+   */
+  webSearch?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
 export type CreateArtifactInput = {
@@ -4043,6 +4056,11 @@ export type UpdateAgentTemplateInput = {
   sandbox?: InputMaybe<Scalars['AWSJSON']['input']>;
   skills?: InputMaybe<Scalars['AWSJSON']['input']>;
   slug?: InputMaybe<Scalars['String']['input']>;
+  /**
+   * Web Search opt-in metadata; see AgentTemplate.webSearch. Pass
+   * null to clear; omit to leave unchanged.
+   */
+  webSearch?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
 export type UpdateArtifactInput = {

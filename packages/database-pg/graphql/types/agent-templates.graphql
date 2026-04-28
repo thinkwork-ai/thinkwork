@@ -36,6 +36,14 @@ type AgentTemplate {
   capability override enables it.
   """
   browser: AWSJSON
+  """
+  Web Search opt-in metadata for the tenant-configured web-search built-in
+  tool. Shape validated at create/update time by
+  packages/api/src/lib/templates/web-search-config.ts:
+    { enabled: true }
+  Null means the template does not inject Web Search.
+  """
+  webSearch: AWSJSON
 
   isPublished: Boolean!
   createdAt: AWSDateTime!
@@ -131,6 +139,11 @@ input CreateAgentTemplateInput {
   (or pass null) for templates that do not opt into Browser Automation.
   """
   browser: AWSJSON
+  """
+  Web Search opt-in metadata; see AgentTemplate.webSearch. Omit
+  (or pass null) for templates that do not opt into Web Search.
+  """
+  webSearch: AWSJSON
 
   isPublished: Boolean
   """
@@ -163,6 +176,11 @@ input UpdateAgentTemplateInput {
   null to clear; omit to leave unchanged.
   """
   browser: AWSJSON
+  """
+  Web Search opt-in metadata; see AgentTemplate.webSearch. Pass
+  null to clear; omit to leave unchanged.
+  """
+  webSearch: AWSJSON
 
   isPublished: Boolean
 }
