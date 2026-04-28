@@ -29,6 +29,8 @@ export {
   useDeleteMobileMemoryCapture,
 } from "./hooks/use-mobile-memory-captures";
 export { useMobileMemorySearch } from "./hooks/use-mobile-memory-search";
+export { queryContext, type ContextEngineResponse, type ContextEngineHit } from "./context-engine";
+export { useContextQuery, type UseContextQueryArgs } from "./hooks/use-context-query";
 export { useRecentWikiPages } from "./hooks/use-recent-wiki-pages";
 export {
   useWikiPage,

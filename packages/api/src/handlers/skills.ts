@@ -27,6 +27,7 @@ import {
   skillRuns,
   tenantSkills,
   tenantMcpServers,
+  tenantMcpContextTools,
   tenantMcpAdminKeys,
   agentMcpServers,
   agentTemplateMcpServers,
@@ -2320,14 +2321,15 @@ async function mcpTestConnection(
     }
 
     const result = (await response.json()) as {
-      result?: { tools?: Array<{ name: string; description?: string }> };
+      result?: { tools?: Array<Record<string, unknown> & { name: string; description?: string }> };
       error?: unknown;
     };
     if (result.error) {
       return json({ ok: false, error: result.error }, 502);
     }
 
-    const tools = (result.result?.tools || []).map((t) => ({
+    const discoveredTools = result.result?.tools || [];
+    const tools = discoveredTools.map((t) => ({
       name: t.name,
       description: t.description,
     }));
@@ -2338,10 +2340,67 @@ async function mcpTestConnection(
       .set({ tools, updated_at: new Date() })
       .where(eq(tenantMcpServers.id, serverId));
 
+    await upsertMcpContextToolEligibility(tenantId, serverId, discoveredTools);
+
     return json({ ok: true, tools });
   } catch (err: any) {
     return json({ ok: false, error: err.message || "Connection failed" }, 502);
   }
+}
+
+async function upsertMcpContextToolEligibility(
+  tenantId: string,
+  serverId: string,
+  tools: Array<Record<string, unknown> & { name: string; description?: string }>,
+): Promise<void> {
+  for (const tool of tools) {
+    const context = isRecord(tool.contextEngine)
+      ? tool.contextEngine
+      : isRecord(tool.metadata) && isRecord(tool.metadata.contextEngine)
+        ? tool.metadata.contextEngine
+        : {};
+    const annotations = isRecord(tool.annotations) ? tool.annotations : {};
+    const declaredReadOnly =
+      annotations.readOnlyHint === true || context.readOnly === true;
+    const declaredSearchSafe = context.searchSafe === true;
+    const displayName =
+      typeof tool.title === "string"
+        ? tool.title
+        : typeof tool.description === "string"
+          ? tool.description.slice(0, 80)
+          : tool.name;
+
+    await db
+      .insert(tenantMcpContextTools)
+      .values({
+        tenant_id: tenantId,
+        mcp_server_id: serverId,
+        tool_name: tool.name,
+        display_name: displayName,
+        declared_read_only: declaredReadOnly,
+        declared_search_safe: declaredSearchSafe,
+        metadata: tool,
+        updated_at: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [
+          tenantMcpContextTools.tenant_id,
+          tenantMcpContextTools.mcp_server_id,
+          tenantMcpContextTools.tool_name,
+        ],
+        set: {
+          display_name: displayName,
+          declared_read_only: declaredReadOnly,
+          declared_search_safe: declaredSearchSafe,
+          metadata: tool,
+          updated_at: new Date(),
+        },
+      });
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // ---------------------------------------------------------------------------

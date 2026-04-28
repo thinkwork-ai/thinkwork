@@ -146,6 +146,7 @@ resource "aws_lambda_function" "handler" {
     "skills",
     "mcp-oauth",
     "mcp-user-memory",
+    "mcp-context-engine",
     "activity",
     "routines",
     "budgets",
@@ -325,6 +326,7 @@ locals {
     "POST /mcp/oauth/token"                              = "mcp-oauth"
     "POST /mcp/oauth/revoke"                             = "mcp-oauth"
     "ANY /mcp/user-memory"                               = "mcp-user-memory"
+    "ANY /mcp/context-engine"                            = "mcp-context-engine"
 
     # Activity
     "ANY /api/activity/{proxy+}" = "activity"
