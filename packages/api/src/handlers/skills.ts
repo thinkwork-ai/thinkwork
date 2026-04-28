@@ -3681,6 +3681,14 @@ async function invokeAgentcoreRunSkill(payload: {
       skillVersion: payload.skillVersion,
       invocationSource: payload.invocationSource,
       resolvedInputs: payload.resolvedInputs,
+      // Event invokes can land in AgentCore containers whose env was
+      // bootstrapped before deploy-time API vars were injected. Carry the
+      // service callback credentials in the envelope so the dispatcher can
+      // fetch runtime config and POST /api/skills/complete deterministically.
+      thinkworkApiUrl:
+        process.env.THINKWORK_API_URL || process.env.MCP_BASE_URL || "",
+      apiAuthSecret:
+        process.env.API_AUTH_SECRET || process.env.THINKWORK_API_SECRET || "",
       // snake_case — the container's dispatch reads tenant_id/user_id/
       // skill_id. See change 4 of the hardening plan.
       scope: {
