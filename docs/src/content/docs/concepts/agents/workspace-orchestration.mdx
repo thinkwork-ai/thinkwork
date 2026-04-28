@@ -250,17 +250,39 @@ Review filenames should start with the workspace run id:
 review/3af1c5e8-0d93-4f64-b67d-53c08388a133.needs-human.md
 ```
 
-Operators handle these in the admin app at **Workspace Reviews**. The page lists every `awaiting_review` run for the current tenant and shows the source review object, target folder, agent, and requested time.
+### Routing: who resolves the review
 
-Available decisions:
+Reviews route to the human responsible for the agent. The platform walks the agent's `parent_agent_id` chain to find the first ancestor with a `human_pair_id`; that user is the responsible human. If the chain terminates at a `source='system'` agent (eval test runtimes, platform-managed agents) the review is classified as **system**. If the chain has no human pair and no system terminator (orphan or cycle), the review is classified as **unrouted**.
 
-| Decision | Effect                                                                                                                           |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Accept   | Records `review.responded`, moves the run back to `pending`, and enqueues a `workspace_event` wakeup for the same agent.         |
-| Resume   | Same wakeup behavior as accept, for cases where the operator wants the run to continue without approving the content.            |
-| Cancel   | Records `review.responded` with a cancellation decision and marks the run `cancelled`. It does not enqueue another agent wakeup. |
+```text
+agent_workspace_runs row (status='awaiting_review')
+  │
+  ▼ classify by walking agents.parent_agent_id
+  │
+  ├─ first ancestor with human_pair_id  →  paired   (responsibleUserId set)
+  ├─ chain terminates at source='system' →  system   (no human pair anywhere)
+  └─ orphan / cycle / depth-cap          →  unrouted (with warning marker)
+```
 
-Directly deleting a review object is not a cancellation mechanism. Deletions are recorded as `event.rejected` with `review_deleted_directly`; use the admin cancel action so run state and audit history remain coherent.
+### Where reviews surface
+
+- **Paired** reviews surface only on the responsible human's **mobile** Threads. Sub-agent reviews follow the parent chain — if a sub-agent of your agent pauses for review, it appears in your mobile threads, even though you're not a participant in the sub-agent's thread directly. The mobile thread row carries a `Sub-agent <name> needs your input on <target>` label so the routing is visible.
+- **System** and **unrouted** reviews surface in the admin app's **Inbox** as items with `type='workspace_review'`. They share the same UI as other inbox items: a queue, detail view with review body and proposed-changes preview, and Approve / Reject / Request revision actions. Materialization happens automatically when a system run pauses; no operator action is required to populate the queue.
+- The admin app does **not** show paired-human reviews. They live on mobile only.
+
+### Operator actions (Inbox → workspace run)
+
+When an operator decides on a `workspace_review` inbox item, the inbox mutation dispatches the matching workspace review action against the linked run:
+
+| Inbox action      | Workspace effect                                                                                                                                           |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Approve           | Records `review.responded` (decision=`accepted`), moves the run back to `pending`, and enqueues a `workspace_event` wakeup. The agent resumes with approval. |
+| Reject            | Records `run.failed` (reason=`review_cancelled`) and marks the run `cancelled`. No wakeup.                                                                   |
+| Request revision  | Records `review.responded` (decision=`resumed`) with the operator's notes carried as the response payload, and enqueues a wakeup. The agent reads the notes and addresses them in the next turn. |
+
+The legacy `/workspace-reviews` admin page is retired; navigating there now redirects to `/inbox`.
+
+Directly deleting a review object is not a cancellation mechanism. Deletions are recorded as `event.rejected` with `review_deleted_directly`; use the Inbox actions (or, on mobile for paired reviews, the in-thread confirmation card) so run state and audit history remain coherent.
 
 ## Smoke test
 
@@ -335,8 +357,9 @@ LIMIT 5;
 | `wake_workspace` says the target is invalid          | Add the folder to the `AGENTS.md` routing table, remove reserved segments like `memory` or `skills`, and keep depth at four segments or fewer.                                                                      |
 | Generic file save returns `use orchestration writer` | The path is protected. Use `wake_workspace` or the orchestration write endpoint rather than `POST /api/workspaces/files`.                                                                                           |
 | Duplicate requests appear                            | Check the caller's `idempotency_key`, S3 sequencer values, and `agent_workspace_events.idempotency_key`. Duplicate raw S3 delivery should not create duplicate canonical events.                                    |
-| Review deletion does not resume a run                | Direct S3 deletion is recorded as `event.rejected`. Use Workspace Reviews in admin so the platform can write `review.responded` and update run state.                                                               |
-| A review is not listed in admin                      | Confirm the review filename starts with a UUID run id, the run belongs to the current tenant, and the run status is `awaiting_review`.                                                                              |
+| Review deletion does not resume a run                | Direct S3 deletion is recorded as `event.rejected`. Use Inbox (admin) for system reviews or the mobile in-thread confirmation card for paired reviews so the platform can write `review.responded` and update run state. |
+| A system review is not listed in admin Inbox         | Confirm the run is classified as `system` (chain terminates at `source='system'`), not paired-human (those live on mobile). Confirm the review filename starts with a UUID run id and the run status is `awaiting_review`. If the run pre-dates U4 of the workspace-reviews routing refactor, run the backfill script: `pnpm tsx packages/api/scripts/backfill-system-reviews-to-inbox.ts`. |
+| A paired-human review is not visible on mobile       | Confirm the responsible human is the agent's `human_pair_id` (or, for sub-agent runs, the chain's first paired ancestor). Confirm the user is signed into the right tenant on mobile.                                |
 
 ## Related pages
 

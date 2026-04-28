@@ -35,6 +35,14 @@ When a thread has a pending review request:
 
 This makes the user's next required decision visible without splitting the conversation across different tabs.
 
+### Sub-agent reviews route through the parent chain
+
+If a sub-agent of one of your agents pauses for review, that review surfaces in **your** mobile threads — even though you're not a participant in the sub-agent's thread directly. The platform classifies each pending review by walking `agents.parent_agent_id` from the run's agent until it finds an ancestor with a `human_pair_id` set; that user is the responsible human, and the review appears on their mobile.
+
+Sub-agent rows carry an explicit `Sub-agent <agent name> needs your input on <target path>` label so you can tell whose work the agent is asking about. The thread detail confirmation card that opens from one of these rows is the parent agent's thread, not the sub-agent's — your decision wakes the sub-agent run, and the parent agent continues from there.
+
+Reviews where the chain has no human pair anywhere (system agents like the eval test runtime, or genuinely orphaned configurations) do not appear on mobile at all. They surface in the admin app's Inbox instead. See [Workspace Orchestration → Human review flow](/concepts/agents/workspace-orchestration/#human-review-flow) for the full routing model.
+
 ## Thread detail
 
 **Route:** `/thread/[threadId]`
@@ -88,13 +96,13 @@ After a successful action, the app confirms the decision. For `Approve` and `Con
 
 The mobile HITL surface is backed by the workspace review GraphQL contract:
 
-- `agentWorkspaceReviews` lists pending reviews, filtered by `status: "awaiting_review"` for the Threads tab.
+- `agentWorkspaceReviews` lists pending reviews, filtered by `status: "awaiting_review"` and `responsibleUserId: caller.userId`. The `responsibleUserId` filter is what scopes the list to the signed-in user — the resolver derives it by walking the `parent_agent_id` chain server-side, so the same query naturally captures both direct-agent and sub-agent reviews routed to this user.
 - `agentWorkspaceReview` loads the review body, ETag, event history, and proposed-change summary for the thread detail card.
 - `acceptAgentWorkspaceReview`, `resumeAgentWorkspaceRun`, and `cancelAgentWorkspaceReview` record the user's decision.
 
 Those decisions are auditable workspace events. Approval and resume decisions queue a `workspace_event` wakeup so the agent continues the same thread with the review response in context. Cancellation settles the run without waking the agent.
 
-The mobile app does not hide HITL state locally as a workaround. The list and detail screens derive visibility from `agentWorkspaceReviews(status: "awaiting_review")`; once the backend run leaves that state, the amber row treatment and Threads tab HITL count clear naturally.
+The mobile app does not hide HITL state locally as a workaround. The list and detail screens derive visibility from `agentWorkspaceReviews(status: "awaiting_review", responsibleUserId: caller.userId)`; once the backend run leaves that state — or routes to a different responsible human — the amber row treatment and Threads tab HITL count clear naturally.
 
 Protected orchestration paths are still protected. Review decisions should go through the GraphQL mutations above, not through generic workspace file writes.
 
