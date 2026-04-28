@@ -104,24 +104,6 @@ export default defineConfig({
                 },
                 { label: "Skills", slug: "concepts/agents/skills" },
                 { label: "Code Sandbox", slug: "concepts/agents/code-sandbox" },
-                {
-                  label: "Composable Skills",
-                  collapsed: true,
-                  items: [
-                    {
-                      label: "Overview",
-                      slug: "concepts/agents/composable-skills",
-                    },
-                    {
-                      label: "Authoring",
-                      slug: "concepts/agents/composable-skills/authoring",
-                    },
-                    {
-                      label: "Primitives",
-                      slug: "concepts/agents/composable-skills/primitives",
-                    },
-                  ],
-                },
               ],
             },
             {

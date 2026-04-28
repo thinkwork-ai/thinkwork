@@ -212,5 +212,5 @@ the R13 adoption criterion.
 ## Related
 
 - `packages/api/src/handlers/webhooks/README.md` — pattern doc.
-- `docs/plans/2026-04-21-003-feat-composable-skills-with-learnings-plan.md` — Unit 8 spec.
+- `docs/plans/archived/2026-04-21-003-feat-composable-skills-with-learnings-plan.md` — Unit 8 spec.
 - `docs/solutions/workflow-issues/manually-applied-drizzle-migrations-drift-from-dev-2026-04-21.md` — related operator-tooling gap this kit also backfills.
