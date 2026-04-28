@@ -377,8 +377,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     );
   }
 
-  // Look up agent's installed skills → build S3 keys for runtime
-  // JOIN tenant_skills to determine source: catalog/builtin → skills/catalog/, tenant-custom → tenants/{slug}/skills/
+  // Look up agent's installed skills. Runtime activation is now
+  // workspace-copy based, so every agent skill points at the agent workspace.
   const skillRows = await db
     .select({
       skill_id: agentSkills.skill_id,
@@ -408,11 +408,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         );
         return null;
       });
-      const usesCatalogSource =
-        s.source === "catalog" || s.source === "builtin";
-      const s3Key = usesCatalogSource
-        ? `skills/catalog/${s.skill_id}`
-        : `tenants/${tenantSlug}/agents/${agentSlug}/workspace/skills/${s.skill_id}`;
+      const s3Key = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/skills/${s.skill_id}`;
       const merged: Record<string, string> = envOverrides
         ? { ...envOverrides }
         : {};

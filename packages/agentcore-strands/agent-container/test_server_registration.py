@@ -397,37 +397,28 @@ class TestRegistrationImportFails:
 
 class TestRegistrationManifestBuilding:
     def test_missing_skill_md_files_logged_and_skipped(
-        self, all_env_present, caplog, tmp_path, monkeypatch
+        self, all_env_present, caplog, tmp_path
     ):
         """Per the helper's contract, an OSError reading SKILL.md WARN-skips
         that entry without aborting registration. The dashboard already
         covers the file-level WARN; this test locks in that the registration
         completes despite per-entry failures (i.e. branch parity)."""
         spy = _capture_factory(all_env_present)
-        # Redirect /tmp/skills lookup to an empty tmp dir so every slug
-        # raises OSError on open() — simulating the "manifest entries empty"
-        # operational scenario.
-        empty_skills_root = tmp_path / "no-skills"
-        empty_skills_root.mkdir()
-
-        # Only function-level os.path.join is referenced; the helper opens
-        # `/tmp/skills/<slug>/SKILL.md` directly. We patch open() to raise
-        # OSError unconditionally so the per-slug except path runs.
-        real_open = open
-
-        def _raising_open(path, *a, **kw):
-            if "/tmp/skills/" in str(path):
-                raise OSError("no such file (test stub)")
-            return real_open(path, *a, **kw)
-
-        monkeypatch.setattr("builtins.open", _raising_open)
-
         tools: list = []
         caplog.set_level(logging.WARNING, logger="server")
         server._register_delegate_to_workspace_tool(
             tools=tools,
             tool_decorator=lambda fn: fn,
-            skill_meta={"alpha": {"description": "x"}, "beta": {"description": "y"}},
+            skill_meta={
+                "alpha": {
+                    "description": "x",
+                    "skill_md_path": str(tmp_path / "skills" / "alpha" / "SKILL.md"),
+                },
+                "beta": {
+                    "description": "y",
+                    "skill_md_path": str(tmp_path / "skills" / "beta" / "SKILL.md"),
+                },
+            },
             effective_model="m",
             sub_agent_usage=[],
         )
