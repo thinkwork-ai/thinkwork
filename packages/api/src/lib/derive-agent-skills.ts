@@ -140,6 +140,12 @@ export interface DeriveResult {
 
 const AGENTS_MD_PATH_RE = /(?:^|\/)AGENTS\.md$/;
 
+// Per docs/plans/2026-04-27-004 U4: any `skills/<slug>/SKILL.md` under
+// the workspace tree (root or sub-agent folder) declares the agent has
+// that skill installed. Filesystem is the truth — AGENTS.md `Skills`
+// column rows become documentation only.
+const SKILL_MD_PATH_RE = /(?:^|\/)skills\/([^/]+)\/SKILL\.md$/;
+
 export interface DeriveOptions {
   /**
    * Override the AGENTS.md reader. Defaults to reading from the agent's
@@ -147,6 +153,15 @@ export interface DeriveOptions {
    * avoid spinning S3 + DB for the slug lookup.
    */
   readAgentsMdFiles?: (
+    tenantId: string,
+    agentId: string,
+  ) => Promise<AgentPrefixFile[]>;
+  /**
+   * Override the workspace skills SKILL.md reader (walks
+   * `workspace/.../skills/<slug>/SKILL.md`). Defaults to reading from
+   * the agent's S3 prefix.
+   */
+  readSkillMdFiles?: (
     tenantId: string,
     agentId: string,
   ) => Promise<AgentPrefixFile[]>;
@@ -160,23 +175,46 @@ const _defaultAgentsMdReader = (
     AGENTS_MD_PATH_RE.test(rel),
   );
 
+const _defaultSkillMdReader = (
+  tenantId: string,
+  agentId: string,
+): Promise<AgentPrefixFile[]> =>
+  _readAgentPrefixFiles(tenantId, agentId, (rel) => SKILL_MD_PATH_RE.test(rel));
+
 export async function deriveAgentSkills(
   ctx: ComposeContext,
   agentId: string,
   opts: DeriveOptions = {},
 ): Promise<DeriveResult> {
-  const reader = opts.readAgentsMdFiles ?? _defaultAgentsMdReader;
+  const agentsMdReader = opts.readAgentsMdFiles ?? _defaultAgentsMdReader;
+  const skillMdReader = opts.readSkillMdFiles ?? _defaultSkillMdReader;
   // Filter inside derive so an injected reader that returns the full
   // workspace tree (test fixtures often do) still ends up scanning only
   // AGENTS.md files. The default reader pre-filters; this is a no-op
   // belt-and-suspenders in production.
-  const agentsMdEntries = (await reader(ctx.tenantId, agentId))
+  const agentsMdEntries = (await agentsMdReader(ctx.tenantId, agentId))
     .filter((entry) => AGENTS_MD_PATH_RE.test(entry.path))
+    .sort((a, b) => a.path.localeCompare(b.path));
+
+  // Per docs/plans/2026-04-27-004 U4: walk every
+  // `workspace/.../skills/<slug>/SKILL.md` under the agent prefix and
+  // emit one row per discovered slug. The filesystem is the truth for
+  // runtime activation; AGENTS.md routing rows continue to be unioned
+  // in (below) so an agent declaring a skill via routing — even if no
+  // SKILL.md is on disk yet — still surfaces in agent_skills.
+  const skillMdEntries = (await skillMdReader(ctx.tenantId, agentId))
+    .filter((entry) => SKILL_MD_PATH_RE.test(entry.path))
     .sort((a, b) => a.path.localeCompare(b.path));
 
   const agentsMdPathsScanned = agentsMdEntries.map((e) => e.path);
   const warnings: string[] = [];
   const seen = new Set<string>();
+
+  // Filesystem-discovered skills first.
+  for (const entry of skillMdEntries) {
+    const match = SKILL_MD_PATH_RE.exec(entry.path);
+    if (match?.[1]) seen.add(match[1]);
+  }
 
   for (const entry of agentsMdEntries) {
     let parsed;
