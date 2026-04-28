@@ -18,6 +18,7 @@ import {
   FilterBarSort,
 } from "@/components/ui/data-table-filter-bar";
 import { AgentsListQuery, OnAgentStatusChangedSubscription } from "@/lib/graphql-queries";
+import { AgentRuntime } from "@/gql/graphql";
 import { useDialog } from "@/context/DialogContext";
 import { formatUsd, relativeTime } from "@/lib/utils";
 
@@ -31,6 +32,7 @@ type AgentRow = {
   role: string | null;
   type: string;
   status: string;
+  runtime: AgentRuntime | null;
   agentTemplateName: string | null;
   agentTemplateId: string | null;
   adapterType: string | null;
@@ -41,6 +43,11 @@ type AgentRow = {
 };
 
 const SERVERLESS_ADAPTERS = new Set(["sdk", "strands"]);
+
+const formatHarness = (runtime: AgentRuntime | null | undefined): string => {
+  if (!runtime) return "—";
+  return runtime.charAt(0) + runtime.slice(1).toLowerCase();
+};
 
 const columns: ColumnDef<AgentRow>[] = [
   {
@@ -77,6 +84,19 @@ const columns: ColumnDef<AgentRow>[] = [
         <span className="text-xs text-muted-foreground">—</span>
       ),
     size: 140,
+  },
+  {
+    accessorKey: "runtime",
+    header: "Harness",
+    cell: ({ row }) =>
+      row.original.runtime ? (
+        <Badge variant="outline" className="text-xs whitespace-nowrap">
+          {formatHarness(row.original.runtime)}
+        </Badge>
+      ) : (
+        <span className="text-xs text-muted-foreground">—</span>
+      ),
+    size: 110,
   },
   {
     accessorKey: "humanPairName",
@@ -160,6 +180,7 @@ function AgentsPage() {
       role: a.role ?? null,
       type: a.type,
       status: a.status,
+      runtime: (a as any).runtime ?? null,
       agentTemplateName: (a as any).agentTemplate?.name ?? null,
       agentTemplateId: (a as any).templateId ?? null,
       adapterType: a.adapterType ?? null,
