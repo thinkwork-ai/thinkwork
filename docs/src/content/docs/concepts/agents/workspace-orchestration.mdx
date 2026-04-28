@@ -277,7 +277,7 @@ When an operator decides on a `workspace_review` inbox item, the inbox mutation 
 | Inbox action      | Workspace effect                                                                                                                                           |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Approve           | Records `review.responded` (decision=`accepted`), moves the run back to `pending`, and enqueues a `workspace_event` wakeup. The agent resumes with approval. |
-| Reject            | Records `review.responded` (decision=`cancelled`) and marks the run `cancelled`. No wakeup.                                                                  |
+| Reject            | Records `run.failed` (reason=`review_cancelled`) and marks the run `cancelled`. No wakeup.                                                                   |
 | Request revision  | Records `review.responded` (decision=`resumed`) with the operator's notes carried as the response payload, and enqueues a wakeup. The agent reads the notes and addresses them in the next turn. |
 
 The legacy `/workspace-reviews` admin page is retired; navigating there now redirects to `/inbox`.
