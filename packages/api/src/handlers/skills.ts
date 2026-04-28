@@ -42,6 +42,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { parseSkillMdInternal } from "../lib/skill-md-parser.js";
+import { regenerateManifest } from "../lib/workspace-manifest.js";
 import { authenticate } from "../lib/cognito-auth.js";
 import { requireTenantMembership } from "../lib/tenant-membership.js";
 import {
@@ -1658,8 +1659,12 @@ async function installSkillToAgent(
   const catalogPrefix = `${CATALOG_PREFIX}/${skillSlug}/`;
   const files = await listS3Keys(catalogPrefix);
 
-  // Copy each file to agent-level prefix
-  const agentPrefix = `tenants/${tenantSlug}/agents/${agentSlug}/skills/${skillSlug}/`;
+  // Per docs/plans/2026-04-27-004 (skills-as-workspace-folder): catalog
+  // files copy into the agent's workspace prefix at workspace/skills/<slug>/
+  // — no parallel skills/ prefix outside the workspace tree. The runtime
+  // (post-materialize-at-write-time) reads the synced workspace tree, so
+  // skills land where the runtime already looks.
+  const agentPrefix = `tenants/${tenantSlug}/agents/${agentSlug}/workspace/skills/${skillSlug}/`;
   for (const key of files) {
     const relativePath = key.slice(catalogPrefix.length);
     await s3.send(
@@ -1670,6 +1675,11 @@ async function installSkillToAgent(
       }),
     );
   }
+
+  // Regenerate the manifest so the runtime's per-invocation sync
+  // (`bootstrap_workspace.py` / `bootstrap-workspace.ts`) picks up the
+  // newly-installed files on the next agent turn.
+  await regenerateManifest(BUCKET, tenantSlug, agentSlug);
 
   return json({ success: true, slug: skillSlug });
 }
@@ -2915,9 +2925,7 @@ async function markBuiltinToolTested(
 }
 
 /** Load enabled built-in tools for a tenant, with API keys resolved from Secrets Manager. */
-export async function loadTenantBuiltinTools(
-  tenantId: string,
-): Promise<
+export async function loadTenantBuiltinTools(tenantId: string): Promise<
   Array<{
     toolSlug: string;
     provider: string | null;
