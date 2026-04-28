@@ -17,14 +17,16 @@ as not-present and the walk falls through — operators staging an empty
 file shouldn't accidentally shadow the platform skill they meant to
 keep using.
 
-The resolver is **pure**: no S3, no HTTP, no filesystem. The composed
-tree comes from ``fetch_composed_workspace`` (the parent agent's full
-list of `{path, source, sha256, content}` records) and the catalog
-manifest is whatever the runtime already has in memory.
+The resolver is **pure**: no S3, no HTTP, no filesystem. Per
+docs/plans/2026-04-27-003 (materialize-at-write-time), the composed
+tree is sourced from the parent agent's local /tmp/workspace mirror
+(populated by ``bootstrap_workspace`` at request entry); each record
+keeps the same ``{path, content, sha256}`` shape the resolver originally
+expected from the read-time composer. Catalog manifest is whatever the
+runtime already has in memory.
 
-Ships inert per ``feedback_ship_inert_pattern``; ``delegate_to_workspace``
-(U9) is the first caller. Until then this module is reachable via boot-
-assert and the unit tests below — nothing else imports it yet.
+``delegate_to_workspace`` is the only production caller and feeds it
+the parent's local-disk walk.
 
 Reserved-folder names (``memory``, ``skills``) at any depth in
 ``folder_path`` are rejected up front: they are never sub-agents, so a
@@ -264,8 +266,9 @@ def resolve_skill(
 ) -> ResolvedSkill:
     """Resolve ``slug`` for an agent rooted at ``folder_path``.
 
-    ``composed_tree`` is the ``fetch_composed_workspace`` payload — a list
-    of ``{path, source, sha256, content}`` records. ``platform_catalog_manifest``
+    ``composed_tree`` is the local /tmp/workspace walk produced by
+    ``delegate_to_workspace_tool._read_local_workspace`` — a list of
+    ``{path, content, sha256}`` records. ``platform_catalog_manifest``
     is the in-memory map the dispatcher already maintains; pass ``None``
     when the caller wants to test local-only resolution.
 
