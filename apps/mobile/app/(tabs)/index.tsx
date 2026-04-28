@@ -110,6 +110,7 @@ import {
   hitlThreadPreview,
   pendingHitlByThreadId,
   sortThreadsWithHitlFirst,
+  subAgentReviewPreview,
   threadTabBadgeState,
 } from "@/lib/thread-hitl-state";
 
@@ -200,6 +201,18 @@ export default function ThreadsScreen() {
     return map;
   }, [agents]);
 
+  // Set of agents directly paired to the calling user. Reviews whose
+  // `run.agentId` is NOT in this set surfaced through the parent-chain walk
+  // (i.e. a sub-agent of one of the user's owned agents) and get a
+  // sub-agent-specific label below.
+  const pairedAgentIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const a of agents as any[]) {
+      if (a?.id) ids.add(a.id as string);
+    }
+    return ids;
+  }, [agents]);
+
   // ── Thread filters + query (scoped to active agent) ────────────────────
   const [filters, setFilters] = useState<ThreadFilters>({
     channels: [],
@@ -228,10 +241,21 @@ export default function ThreadsScreen() {
     variables: queryVars,
     pause: !tenantId || !effectiveAgentId,
   });
+  // Scope reviews to the calling user. The resolver chain-walks
+  // `parent_agent_id` so this also surfaces sub-agent reviews routed via the
+  // user's owned-agent chain (covers AE2). Pause until both `tenantId` and
+  // the resolved user id are known — otherwise we'd briefly issue an
+  // unscoped query and leak other users' reviews on first paint.
+  const callerUserId = currentUser?.id ?? null;
   const [{ data: reviewsData }, reexecuteReviews] = useQuery({
     query: AgentWorkspaceReviewsQuery,
-    variables: { tenantId: tenantId!, status: "awaiting_review", limit: 50 },
-    pause: !tenantId,
+    variables: {
+      tenantId: tenantId!,
+      responsibleUserId: callerUserId!,
+      status: "awaiting_review",
+      limit: 50,
+    },
+    pause: !tenantId || !callerUserId,
   });
 
   const pendingReviewsByThreadId = useMemo(
@@ -877,9 +901,13 @@ export default function ThreadsScreen() {
                     item.lastReadAt,
                   )}
                   needsHitl={pendingReviewsByThreadId.has(item.id)}
-                  hitlPreview={hitlThreadPreview(
-                    pendingReviewsByThreadId.get(item.id),
-                  )}
+                  hitlPreview={
+                    subAgentReviewPreview(
+                      pendingReviewsByThreadId.get(item.id),
+                      { pairedAgentIds, agentNames },
+                    ) ??
+                    hitlThreadPreview(pendingReviewsByThreadId.get(item.id))
+                  }
                   isActive={isThreadActive(item.id)}
                   onArchive={handleArchive}
                   onPress={() => handleThreadPress(item)}

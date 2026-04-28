@@ -1394,12 +1394,16 @@ export const AgentWorkspaceReviewsQuery = graphql(`
   query AgentWorkspaceReviews(
     $tenantId: ID!
     $agentId: ID
+    $responsibleUserId: ID
+    $kind: WorkspaceReviewKind
     $status: String
     $limit: Int
   ) {
     agentWorkspaceReviews(
       tenantId: $tenantId
       agentId: $agentId
+      responsibleUserId: $responsibleUserId
+      kind: $kind
       status: $status
       limit: $limit
     ) {
@@ -1410,6 +1414,8 @@ export const AgentWorkspaceReviewsQuery = graphql(`
       reason
       payload
       reviewEtag
+      responsibleUserId
+      kind
       run {
         id
         agentId
@@ -1445,6 +1451,8 @@ export const AgentWorkspaceReviewQuery = graphql(`
       reviewBody
       reviewEtag
       reviewMissing
+      responsibleUserId
+      kind
       proposedChanges {
         path
         kind
