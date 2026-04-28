@@ -117,6 +117,12 @@ Operators only call the inbox mutations; the dispatch happens server-side. The l
 
 Reviews whose chain has neither a human pair nor a `source='system'` terminator (orphan agents, cycles, depth-cap hits) materialize as inbox items too, but the title is prefixed `Workspace review (unrouted): …` and the payload renderer shows a warning marker. These usually indicate bad data — a `human_pair_id` that should be set, a `parent_agent_id` cycle, or a chain too deep to walk. Treat them as a signal to investigate the agent record before acting.
 
+### Programmatic access
+
+Inbox decisions are operator-driven today. The underlying mutations (`approveInboxItem`, `rejectInboxItem`, `requestRevisionInboxItem`) and the workspace review actions they bridge to (`acceptAgentWorkspaceReview`, `cancelAgentWorkspaceReview`, `resumeAgentWorkspaceRun`) live on the GraphQL surface and can be called by trusted services with a tenant API key — but there is no first-class agent tool, MCP server, or skill that wraps them yet. An agent that wants to drain its tenant's system Inbox (a triage agent, for example) does so today by calling the GraphQL surface directly through the same authentication path used for any other tenant-scoped query. A vetted Strands tool for review resolution is plausible follow-up work.
+
+The CLI scaffolds `thinkwork inbox list / get / approve / reject / request-revision` under `apps/cli/src/commands/inbox.ts`, but each subcommand is currently a stub returning `notYetImplemented`. Use the GraphQL surface or the admin UI until the CLI lands.
+
 ### Background and links
 
 - The cutover backfill script (one-shot, idempotent) lives at `packages/api/scripts/backfill-system-reviews-to-inbox.ts` and was used to materialize inbox items for any system runs that pre-dated the routing refactor.

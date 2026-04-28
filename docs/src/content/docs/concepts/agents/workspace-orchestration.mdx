@@ -282,6 +282,8 @@ When an operator decides on a `workspace_review` inbox item, the inbox mutation 
 
 The legacy `/workspace-reviews` admin page is retired; navigating there now redirects to `/inbox`.
 
+These mutations live on the GraphQL surface and can be called by trusted services, but no first-class agent tool wraps them today — review resolution is admin-UI-driven (or mobile-driven for paired-human reviews). A vetted Strands tool for review resolution would let an agent (e.g. a triage agent) drain its tenant's queue programmatically; that's plausible follow-up work, not part of v1.
+
 Directly deleting a review object is not a cancellation mechanism. Deletions are recorded as `event.rejected` with `review_deleted_directly`; use the Inbox actions (or, on mobile for paired reviews, the in-thread confirmation card) so run state and audit history remain coherent.
 
 ## Smoke test
