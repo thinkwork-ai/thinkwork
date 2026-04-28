@@ -12,6 +12,7 @@ const AgentDetailQuery = gql`
     agent(id: $id) {
       id
       name
+      slug
     }
   }
 `;
@@ -53,6 +54,7 @@ export function AgentBuilderShell({
         target={target}
         mode="agent"
         agentId={agentId}
+        agentSlug={agent?.slug ?? undefined}
         initialFolder={initialFolder}
         bootstrapFiles={AGENT_WORKSPACE_DEFAULT_FILES}
         bootstrapLabel="Create Default Files"

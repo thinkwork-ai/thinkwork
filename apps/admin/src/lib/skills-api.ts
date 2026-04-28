@@ -167,6 +167,17 @@ export function installSkillToAgent(
   });
 }
 
+export function installSkillToTemplate(
+  tenantSlug: string,
+  templateSlug: string,
+  skillSlug: string,
+): Promise<{ success: boolean; slug: string }> {
+  return request(`/api/skills/template/${templateSlug}/install/${skillSlug}`, {
+    method: "POST",
+    extraHeaders: { "x-tenant-slug": tenantSlug },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Agent skill credentials
 // ---------------------------------------------------------------------------

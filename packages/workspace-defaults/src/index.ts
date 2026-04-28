@@ -1,7 +1,7 @@
 /**
  * Default workspace file content for Thinkwork agents.
  *
- * This package is the canonical source of the 13 workspace files that every
+ * This package is the canonical source of the 14 workspace files that every
  * agent template inherits from. The live overlay composer (Unit 4) resolves
  * the `_catalog/defaults/workspace/*` S3 layer from this content at tenant
  * creation / re-seed time.
@@ -11,7 +11,8 @@
  * filenames find seeded content on day one):
  *   SOUL.md, IDENTITY.md, USER.md, AGENTS.md, CONTEXT.md, GUARDRAILS.md,
  *   MEMORY_GUIDE.md, CAPABILITIES.md, PLATFORM.md, ROUTER.md,
- *   memory/lessons.md, memory/preferences.md, memory/contacts.md
+ *   memory/lessons.md, memory/preferences.md, memory/contacts.md,
+ *   skills/.gitkeep
  *
  * Content is inlined as TypeScript constants so the Lambda bundle doesn't
  * need to ship an accompanying `files/` directory. All `.md` authoring
@@ -583,14 +584,14 @@ _(empty — add entries as you encounter them)_
  *     `backfill-identity-md.ts` / `backfill-user-md.ts` (or a targeted
  *     accept-template-update flow) to refresh them.
  */
-export const DEFAULTS_VERSION = 6;
+export const DEFAULTS_VERSION = 7;
 
 // ---------------------------------------------------------------------------
 // Aggregator
 // ---------------------------------------------------------------------------
 
 /**
- * Canonical 13-file set. Plan §008 U3 added `AGENTS.md` and `CONTEXT.md`
+ * Canonical 14-file set. Plan §008 U3 added `AGENTS.md` and `CONTEXT.md`
  * (the runtime already loaded both but defaults didn't ship them) — every
  * Fat-folder agent now seeds with the Layer-1 Map and a root scope file.
  * Ordering is not load-bearing but matches the plan's R1 requirement order
@@ -610,6 +611,7 @@ export const CANONICAL_FILE_NAMES = [
   "memory/lessons.md",
   "memory/preferences.md",
   "memory/contacts.md",
+  "skills/.gitkeep",
 ] as const;
 
 export type CanonicalFileName = (typeof CANONICAL_FILE_NAMES)[number];
@@ -628,10 +630,11 @@ const CONTENT: Record<CanonicalFileName, string> = {
   "memory/lessons.md": MEMORY_LESSONS_MD,
   "memory/preferences.md": MEMORY_PREFERENCES_MD,
   "memory/contacts.md": MEMORY_CONTACTS_MD,
+  "skills/.gitkeep": "\n",
 };
 
 /**
- * Return the 11 canonical default workspace files as a Record keyed by
+ * Return the canonical default workspace files as a Record keyed by
  * repo-relative workspace path. Each value is raw markdown with placeholder
  * tokens (`{{AGENT_NAME}}`, `{{HUMAN_NAME}}`, …) unsubstituted.
  *

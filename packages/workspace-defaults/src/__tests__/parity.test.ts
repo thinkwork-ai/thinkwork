@@ -1,7 +1,7 @@
 /**
  * Parity tests for workspace-defaults.
  *
- * The 13 canonical files are exported as inline TypeScript string constants
+ * The 14 canonical files are exported as inline TypeScript string constants
  * from `src/index.ts` (so the Lambda bundle is self-contained). The
  * authoritative content lives as source-controlled `.md` files under this
  * package's own `files/` subdirectory. Plan §008 U2 consolidated the old split
@@ -39,16 +39,17 @@ const AUTHORITATIVE_SOURCES: Record<string, string> = {
 	"memory/lessons.md": join(LOCAL_FILES_DIR, "memory", "lessons.md"),
 	"memory/preferences.md": join(LOCAL_FILES_DIR, "memory", "preferences.md"),
 	"memory/contacts.md": join(LOCAL_FILES_DIR, "memory", "contacts.md"),
+	"skills/.gitkeep": join(LOCAL_FILES_DIR, "skills", ".gitkeep"),
 };
 
 describe("workspace-defaults parity", () => {
-	it("exports exactly the 13 canonical file names", () => {
+	it("exports exactly the 14 canonical file names", () => {
 		expect([...CANONICAL_FILE_NAMES].sort()).toEqual(
 			Object.keys(AUTHORITATIVE_SOURCES).sort(),
 		);
 	});
 
-	it("loadDefaults() returns all 13 canonical files", () => {
+	it("loadDefaults() returns all 14 canonical files", () => {
 		const loaded = loadDefaults();
 		expect(Object.keys(loaded).sort()).toEqual(
 			[...CANONICAL_FILE_NAMES].sort(),
