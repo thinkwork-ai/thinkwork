@@ -14,6 +14,14 @@ import type {
   CanonicalWorkspaceEventDraft,
   CanonicalWorkspaceEventType,
 } from "./canonicalize.js";
+import type { ClassifyChainStore } from "./classify-review.js";
+import {
+  classifyForMaterialization,
+  materializeReviewAsInboxItem,
+  syncInboxStatusForRun,
+  type WorkspaceReviewInboxStore,
+  type WorkspaceRunResolution,
+} from "./inbox-materialization.js";
 import type { ParsedWorkspaceEventKey } from "./key-parser.js";
 import {
   workspaceAuditMirrorKey,
@@ -129,6 +137,8 @@ export interface WorkspaceEventProcessorDeps {
   now?: () => Date;
   newRunId?: () => string;
   logger?: Pick<Console, "log" | "warn" | "error">;
+  inboxStore?: WorkspaceReviewInboxStore;
+  classifierStore?: ClassifyChainStore;
 }
 
 export interface WorkspaceS3EventMetadata {
@@ -248,12 +258,97 @@ export async function persistWorkspaceEvent(
     metadata,
   );
 
+  if (run) {
+    await maybeMaterializeOrSyncInbox(
+      run,
+      draft,
+      metadata,
+      deps,
+      logger,
+    );
+  }
+
   return {
     status: "processed",
     eventId: event.id,
     runId: run?.id,
     wakeupRequestId: wakeup?.id,
   };
+}
+
+async function maybeMaterializeOrSyncInbox(
+  run: WorkspaceRunRecord,
+  draft: CanonicalWorkspaceEventDraft,
+  metadata: WorkspaceS3EventMetadata,
+  deps: WorkspaceEventProcessorDeps,
+  logger: Pick<Console, "warn">,
+): Promise<void> {
+  try {
+    if (draft.eventType === "review.requested") {
+      const classification = await classifyForMaterialization(
+        run.tenant_id,
+        run.agent_id,
+        deps.classifierStore,
+      );
+      await materializeReviewAsInboxItem(
+        {
+          tenantId: run.tenant_id,
+          runId: run.id,
+          agentId: run.agent_id,
+          targetPath: run.target_path,
+          classification,
+          reviewObjectKey: metadata.sourceObjectKey,
+          reviewEtag: metadata.objectEtag ?? null,
+          reason: draft.reason ?? null,
+          payload: draft.payload,
+        },
+        { store: deps.inboxStore },
+      );
+      return;
+    }
+
+    const resolution = workspaceRunResolutionFor(draft);
+    if (!resolution) return;
+
+    await syncInboxStatusForRun(
+      {
+        tenantId: run.tenant_id,
+        runId: run.id,
+        status: resolution,
+        decidedBy: stringValue(draft.payload?.actorId),
+        decidedAt: undefined,
+        reviewNotes: stringValue(draft.payload?.reviewNotes),
+      },
+      { store: deps.inboxStore },
+    );
+  } catch (err) {
+    logger.warn("[workspace-event-processor] inbox_materialization_failed", {
+      runId: run.id,
+      eventType: draft.eventType,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+function workspaceRunResolutionFor(
+  draft: CanonicalWorkspaceEventDraft,
+): WorkspaceRunResolution | null {
+  if (draft.eventType === "review.responded") {
+    const decision = stringValue(draft.payload?.decision);
+    if (decision === "accepted") return "approved";
+    if (decision === "cancelled") return "rejected";
+    if (decision === "resumed") return "revision_requested";
+    // Unknown decision payload — surface as rejected so the inbox row
+    // doesn't sit pending forever; operators can see it from the title.
+    return "rejected";
+  }
+  if (draft.eventType === "run.completed") return "completed";
+  if (draft.eventType === "run.failed") return "failed";
+  return null;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 async function resolveWorkspaceRun(
