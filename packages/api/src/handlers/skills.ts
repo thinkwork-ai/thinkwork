@@ -59,6 +59,7 @@ import { resolveTenantId } from "../lib/tenants.js";
 import { applyMcpServerFieldUpdate } from "../lib/mcp-server-update.js";
 import { computeMcpUrlHash } from "../lib/mcp-server-hash.js";
 import { deriveAgentSkills } from "../lib/derive-agent-skills.js";
+import { isBuiltinToolSlug } from "../lib/builtin-tool-slugs.js";
 
 const s3 = new S3Client({});
 const sm = new SecretsManagerClient({});
@@ -1002,25 +1003,27 @@ async function mcpOAuthCallback(
 async function getCatalogIndex(): Promise<APIGatewayProxyStructuredResultV2> {
   const rows = await db.select().from(skillCatalog).execute();
   return json(
-    rows.map((r) => ({
-      slug: r.slug,
-      name: r.display_name,
-      description: r.description,
-      category: r.category,
-      version: r.version,
-      author: r.author,
-      icon: r.icon,
-      tags: r.tags || [],
-      source: r.source,
-      is_default: r.is_default,
-      requires_env: r.requires_env || [],
-      oauth_provider: r.oauth_provider,
-      oauth_scopes: r.oauth_scopes || [],
-      mcp_server: r.mcp_server,
-      mcp_tools: r.mcp_tools || [],
-      dependencies: r.dependencies || [],
-      triggers: r.triggers || [],
-    })),
+    rows
+      .filter((r) => !isBuiltinToolSlug(r.slug))
+      .map((r) => ({
+        slug: r.slug,
+        name: r.display_name,
+        description: r.description,
+        category: r.category,
+        version: r.version,
+        author: r.author,
+        icon: r.icon,
+        tags: r.tags || [],
+        source: r.source,
+        is_default: r.is_default,
+        requires_env: r.requires_env || [],
+        oauth_provider: r.oauth_provider,
+        oauth_scopes: r.oauth_scopes || [],
+        mcp_server: r.mcp_server,
+        mcp_tools: r.mcp_tools || [],
+        dependencies: r.dependencies || [],
+        triggers: r.triggers || [],
+      })),
   );
 }
 
@@ -1676,6 +1679,13 @@ async function installSkillToAgent(
   agentSlug: string,
   skillSlug: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
+  if (isBuiltinToolSlug(skillSlug)) {
+    return error(
+      `Built-in tool '${skillSlug}' is configured through /api/skills/builtin-tools, not installed as a workspace skill.`,
+      400,
+    );
+  }
+
   // Verify skill exists in catalog. Plan §U3: read SKILL.md frontmatter
   // instead of the retired skill.yaml.
   const mdText = await getS3Text(`${CATALOG_PREFIX}/${skillSlug}/SKILL.md`);
@@ -1718,6 +1728,13 @@ async function installSkillToTemplate(
   templateSlug: string,
   skillSlug: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
+  if (isBuiltinToolSlug(skillSlug)) {
+    return error(
+      `Built-in tool '${skillSlug}' is configured through /api/skills/builtin-tools, not installed as a workspace skill.`,
+      400,
+    );
+  }
+
   const mdText = await getS3Text(`${CATALOG_PREFIX}/${skillSlug}/SKILL.md`);
   if (!mdText) return notFound("Skill not found in catalog");
 
