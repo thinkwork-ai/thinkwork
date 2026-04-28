@@ -31,7 +31,31 @@ from skill_md_parser import SkillMdParseError, parse_skill_md_file
 
 logger = logging.getLogger(__name__)
 
-SKILLS_DIR = "/tmp/skills"
+WORKSPACE_DIR = os.environ.get("WORKSPACE_DIR", "/tmp/workspace")
+
+
+def discover_workspace_skill_dirs(workspace_dir: str | None = None) -> dict[str, str]:
+    """Return skill slug -> local skill directory from the materialized workspace.
+
+    Activation is filesystem-truth: any ``**/skills/<slug>/SKILL.md`` copied
+    into the AgentCore workspace before the turn is available to the runtime.
+    """
+    root = workspace_dir or WORKSPACE_DIR
+    found: dict[str, str] = {}
+    if not os.path.isdir(root):
+        return found
+
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames.sort()
+        if "SKILL.md" not in filenames:
+            continue
+        parent = os.path.basename(os.path.dirname(dirpath))
+        if parent != "skills":
+            continue
+        slug = os.path.basename(dirpath)
+        if slug and slug not in found:
+            found[slug] = dirpath
+    return found
 
 
 def _load_function(script_path: str, func_name: str):
@@ -56,6 +80,7 @@ def _load_function(script_path: str, func_name: str):
 def register_skill_tools(
     skills_config: list[dict],
     env_overrides: dict[str, dict] | None = None,
+    workspace_dir: str | None = None,
 ) -> tuple[list, dict[str, list], dict[str, dict]]:
     """Register script-based skill tools, grouped by mode (PRD-38).
 
@@ -65,6 +90,7 @@ def register_skill_tools(
     Args:
         skills_config: List of skill configs from invocation payload.
         env_overrides: Per-skill environment variable overrides.
+        workspace_dir: Local materialized workspace root.
 
     Returns:
         (tool_mode_tools, agent_mode_tools_by_skill, skill_metadata) where:
@@ -78,13 +104,14 @@ def register_skill_tools(
     agent_mode_tools: dict[str, list] = {}
     skill_metadata: dict[str, dict] = {}
     registered: set[str] = set()
+    config_by_id = {
+        skill.get("skillId", ""): skill
+        for skill in skills_config
+        if isinstance(skill, dict) and skill.get("skillId", "")
+    }
+    skill_dirs = discover_workspace_skill_dirs(workspace_dir)
 
-    for skill in skills_config:
-        skill_id = skill.get("skillId", "")
-        if not skill_id:
-            continue
-
-        skill_dir = os.path.join(SKILLS_DIR, skill_id)
+    for skill_id, skill_dir in skill_dirs.items():
         skill_md_path = os.path.join(skill_dir, "SKILL.md")
         try:
             parsed = parse_skill_md_file(skill_md_path)
@@ -96,35 +123,33 @@ def register_skill_tools(
             continue
 
         if parsed is None:
-            # No SKILL.md on disk — matches legacy `_parse_skill_yaml`
-            # short-circuit semantics so callers can keep skipping
-            # unregistered skills silently.
             continue
         meta = parsed.data
 
+        skill_metadata[skill_id] = {
+            "mode": meta.get("mode", "tool"),
+            "model": meta.get("model", ""),
+            "description": meta.get("description", ""),
+            "display_name": meta.get("display_name", skill_id),
+            "execution": meta.get("execution", "context"),
+            "skill_dir": skill_dir,
+            "skill_md_path": skill_md_path,
+        }
+
         if meta.get("execution") != "script":
             continue
-
         scripts = meta.get("scripts", [])
         if not scripts:
             continue
 
         # Extract mode and model from frontmatter (PRD-38)
         mode = meta.get("mode", "tool")  # default: tool
-        model = meta.get("model", "")
-
-        skill_metadata[skill_id] = {
-            "mode": mode,
-            "model": model,
-            "description": meta.get("description", ""),
-            "display_name": meta.get("display_name", skill_id),
-            "execution": meta.get("execution", ""),
-        }
 
         # Inject per-skill env vars before loading scripts
         skill_env = {}
         if env_overrides and skill_id in env_overrides:
             skill_env = env_overrides[skill_id]
+        skill = config_by_id.get(skill_id, {})
         payload_env = skill.get("envOverrides")
         if payload_env and isinstance(payload_env, dict):
             skill_env.update(payload_env)

@@ -12,6 +12,10 @@ import { composeSystemPrompt } from "./system-prompt.js";
 import type { RuntimeEnv } from "./env-snapshot.js";
 import { buildPiTools } from "./tools/registry.js";
 import {
+  discoverWorkspaceSkills,
+  formatWorkspaceSkills,
+} from "./tools/workspace-skills.js";
+import {
   type PiInvocationPayload,
   type PiToolInvocation,
   type ToolRuntimeState,
@@ -81,7 +85,6 @@ export async function runPiAgent(
   env: RuntimeEnv,
 ): Promise<PiRuntimeResult> {
   const model = resolveModel(payload.model);
-  const systemPrompt = composeSystemPrompt(payload);
   const userMessage =
     typeof payload.message === "string" ? payload.message : "";
   if (!userMessage.trim()) {
@@ -112,13 +115,23 @@ export async function runPiAgent(
       );
     }
   }
+  const workspaceSkills = await discoverWorkspaceSkills(env.workspaceDir);
+  const systemPrompt = composeSystemPrompt(
+    payload,
+    formatWorkspaceSkills(workspaceSkills),
+  );
 
   const toolState: ToolRuntimeState = {
     toolInvocations: [],
     hindsightUsage: [],
     cleanup: [],
   };
-  const tools = await buildPiTools({ payload, env, state: toolState });
+  const tools = await buildPiTools({
+    payload,
+    env,
+    state: toolState,
+    workspaceSkills,
+  });
 
   const agent = new Agent({
     initialState: {

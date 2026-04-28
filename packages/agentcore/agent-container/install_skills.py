@@ -1,12 +1,8 @@
-"""Download skills from S3 to /app/skills/.
+"""Download the agent workspace from S3.
 
-Skills are loaded per-request via the `skills` payload field. Each invocation
-includes a list of {skillId, s3Key} entries pointing to the agent's S3
-prefix (tenants/{tenantSlug}/agents/{agentSlug}/skills/{slug}/). The runtime
-calls install_skill_from_s3() for each skill before building the system prompt.
-
-The startup install_skills() is a no-op — it only creates the local
-directory. The old skills/v1/ global catalog prefix is no longer used.
+Agent skills are ordinary workspace files under ``workspace/skills/<slug>/``.
+Runtime startup and invocation code copy the agent workspace prefix into
+``/tmp/workspace``; there is no separate per-skill S3 materialization path.
 """
 import logging
 import os
@@ -16,13 +12,11 @@ AWS_REGION = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "
 logger = logging.getLogger(__name__)
 
 AGENTCORE_FILES_BUCKET = os.environ.get("AGENTCORE_FILES_BUCKET", "")
-SKILLS_DIR = "/tmp/skills"
 
 
 def install_skills():
-    """Prepare the local skills directory. Skills are loaded per-request."""
-    os.makedirs(SKILLS_DIR, exist_ok=True)
-    logger.info("Skills directory ready: %s (loaded per-request from tenant S3 prefix)", SKILLS_DIR)
+    """Compatibility no-op for older container entrypoints."""
+    logger.info("Skill bootstrap is workspace-copy based; no separate sync needed")
 
 
 WORKSPACE_DIR = "/tmp/workspace"
@@ -193,28 +187,3 @@ def install_system_workspace():
 
     _system_workspace_loaded = True
     logger.info("System workspace synced: %d files from s3://%s/%s", count, bucket, prefix)
-
-
-def install_skill_from_s3(s3_key: str, skill_id: str):
-    """Download a specific skill from S3 to /app/skills/{skill_id}/."""
-    bucket = os.environ.get("AGENTCORE_FILES_BUCKET", "")
-    if not bucket:
-        return
-
-    import boto3
-
-    s3 = boto3.client("s3", region_name=AWS_REGION)
-    prefix = f"{s3_key}/"
-    skill_dir = os.path.join(SKILLS_DIR, skill_id)
-    os.makedirs(skill_dir, exist_ok=True)
-
-    paginator = s3.get_paginator("list_objects_v2")
-    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-        for obj in page.get("Contents", []):
-            key = obj["Key"]
-            rel_path = key[len(prefix):]
-            if not rel_path:
-                continue
-            local_path = os.path.join(skill_dir, rel_path)
-            os.makedirs(os.path.dirname(local_path), exist_ok=True)
-            s3.download_file(bucket, key, local_path)

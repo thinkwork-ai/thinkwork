@@ -3,6 +3,7 @@ import { buildExecuteCodeTool } from "./execute-code.js";
 import { buildHindsightTools } from "./hindsight.js";
 import { buildMcpTools } from "./mcp.js";
 import { buildWebSearchTool } from "./web-search.js";
+import { buildWorkspaceSkillTool } from "./workspace-skills.js";
 import type { PiToolContext } from "./types.js";
 
 export async function buildPiTools(
@@ -24,6 +25,9 @@ export async function buildPiTools(
   );
 
   tools.push(...(await buildMcpTools(context.payload, context.state.cleanup)));
+
+  const workspaceSkill = buildWorkspaceSkillTool(context.workspaceSkills ?? []);
+  if (workspaceSkill) tools.push(workspaceSkill);
 
   return tools;
 }

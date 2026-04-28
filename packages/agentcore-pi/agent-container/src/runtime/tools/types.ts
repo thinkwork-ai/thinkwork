@@ -1,5 +1,6 @@
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import type { RuntimeEnv } from "../env-snapshot.js";
+import type { WorkspaceSkill } from "./workspace-skills.js";
 
 export interface PiInvocationPayload {
   tenant_id?: unknown;
@@ -58,6 +59,7 @@ export interface PiToolContext {
   payload: PiInvocationPayload & Record<string, unknown>;
   env: RuntimeEnv;
   state: ToolRuntimeState;
+  workspaceSkills?: WorkspaceSkill[];
 }
 
 export interface BuiltPiTools {

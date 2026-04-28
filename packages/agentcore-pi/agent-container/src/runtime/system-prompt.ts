@@ -5,12 +5,17 @@ export interface PiInvocationPayload {
   instance_id?: unknown;
 }
 
-export function composeSystemPrompt(payload: PiInvocationPayload): string {
+export function composeSystemPrompt(
+  payload: PiInvocationPayload,
+  workspaceSkillsBlock = "",
+): string {
   const explicit =
     typeof payload.system_prompt === "string"
       ? payload.system_prompt.trim()
       : "";
-  if (explicit) return explicit;
+  if (explicit) {
+    return [explicit, workspaceSkillsBlock].filter(Boolean).join("\n\n---\n\n");
+  }
 
   const name =
     typeof payload.agent_name === "string" && payload.agent_name.trim()
@@ -26,6 +31,7 @@ export function composeSystemPrompt(payload: PiInvocationPayload): string {
     tenant ? `Tenant: ${tenant}.` : "",
     instance ? `Workspace instance: ${instance}.` : "",
     "Answer the user's request directly and concisely. Use only capabilities available in this runtime.",
+    workspaceSkillsBlock,
   ]
     .filter(Boolean)
     .join("\n");

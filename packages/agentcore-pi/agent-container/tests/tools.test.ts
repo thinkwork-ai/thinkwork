@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 const awsSend = vi.hoisted(() => vi.fn());
 const mcpListTools = vi.hoisted(() => vi.fn());
@@ -72,6 +75,10 @@ import {
 } from "../src/runtime/tools/hindsight.js";
 import { buildMcpTools } from "../src/runtime/tools/mcp.js";
 import { buildWebSearchTool } from "../src/runtime/tools/web-search.js";
+import {
+  buildWorkspaceSkillTool,
+  discoverWorkspaceSkills,
+} from "../src/runtime/tools/workspace-skills.js";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -306,5 +313,51 @@ describe("Pi runtime tools", () => {
       mcp_tool_name: "memory_read",
     });
     expect(mcpClose).toHaveBeenCalled();
+  });
+
+  it("discovers workspace skills from the copied local tree", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "tw-pi-skills-"));
+    const skillDir = path.join(dir, "skills", "research");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      [
+        "---",
+        "name: research",
+        'description: "Research carefully"',
+        "---",
+        "",
+        "Use primary sources.",
+      ].join("\n"),
+    );
+
+    const skills = await discoverWorkspaceSkills(dir);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0]).toMatchObject({
+      slug: "research",
+      name: "research",
+      description: "Research carefully",
+    });
+  });
+
+  it("exposes a workspace_skill tool that returns the installed SKILL.md", async () => {
+    const tool = buildWorkspaceSkillTool([
+      {
+        slug: "research",
+        name: "research",
+        description: "Research carefully",
+        skillPath: "/tmp/workspace/skills/research/SKILL.md",
+        content: "Use primary sources.",
+      },
+    ]);
+
+    const result = await tool?.execute("tool-3", { slug: "research" });
+
+    expect(result?.content[0]).toMatchObject({
+      type: "text",
+      text: "Use primary sources.",
+    });
+    expect(result?.details).toMatchObject({ slug: "research" });
   });
 });
