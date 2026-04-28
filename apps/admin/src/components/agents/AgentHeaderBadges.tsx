@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "urql";
-import { User, DollarSign, Mail } from "lucide-react";
+import { User, DollarSign, Mail, Cpu } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   BadgeSelectorText,
@@ -10,7 +10,13 @@ import {
   TenantMembersListQuery,
   AgentEmailCapabilityQuery,
 } from "@/lib/graphql-queries";
+import { AgentRuntime } from "@/gql/graphql";
 import { EmailAllowlistDialog } from "./EmailAllowlistDialog";
+
+const HARNESS_OPTIONS = [
+  { value: AgentRuntime.Strands, label: "Strands" },
+  { value: AgentRuntime.Pi, label: "Pi" },
+];
 
 interface AgentHeaderBadgesProps {
   agent: any;
@@ -22,6 +28,7 @@ interface AgentHeaderBadgesProps {
     actionOnExceed: string;
   }) => Promise<void>;
   onDeleteBudget: () => Promise<void>;
+  onSaveRuntime: (runtime: AgentRuntime) => Promise<void>;
   children?: React.ReactNode;
 }
 
@@ -31,6 +38,7 @@ export function AgentHeaderBadges({
   onSaveHumanPair,
   onSaveBudget,
   onDeleteBudget,
+  onSaveRuntime,
   children,
 }: AgentHeaderBadgesProps) {
   const humanPair = agent.humanPair;
@@ -75,6 +83,17 @@ export function AgentHeaderBadges({
         noneLabel="No human"
         onSelect={async (v) => {
           await onSaveHumanPair(v);
+        }}
+      />
+
+      {/* Harness — overrides the template's harness for this agent */}
+      <BadgeSelectorSelect
+        icon={<Cpu className="h-3 w-3" />}
+        value={agent.runtime ?? null}
+        emptyLabel="No harness"
+        options={HARNESS_OPTIONS}
+        onSelect={async (v) => {
+          if (v) await onSaveRuntime(v as AgentRuntime);
         }}
       />
 
