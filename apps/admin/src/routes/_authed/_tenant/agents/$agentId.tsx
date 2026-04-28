@@ -8,6 +8,7 @@ import {
   AgentDetailQuery,
   AgentsListQuery,
   UpdateAgentMutation,
+  UpdateAgentRuntimeMutation,
   DeleteAgentMutation,
   SetAgentBudgetPolicyMutation,
   DeleteAgentBudgetPolicyMutation,
@@ -48,6 +49,7 @@ function AgentDetailPage() {
   });
 
   const [, updateAgent] = useMutation(UpdateAgentMutation);
+  const [, updateAgentRuntime] = useMutation(UpdateAgentRuntimeMutation);
   const [, deleteAgent] = useMutation(DeleteAgentMutation);
   const [, notifyAgentStatus] = useMutation(`
     mutation NotifyAgentStatus($agentId: ID!, $tenantId: ID!, $status: String!, $name: String!) {
@@ -262,6 +264,14 @@ function AgentDetailPage() {
     [agentId, updateAgent, refresh],
   );
 
+  const handleSaveRuntime = useCallback(
+    async (runtime: AgentRuntime) => {
+      const res = await updateAgentRuntime({ id: agentId, runtime });
+      if (!res.error) refresh();
+    },
+    [agentId, updateAgentRuntime, refresh],
+  );
+
   // --- Edit dialog ---
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
@@ -308,6 +318,7 @@ function AgentDetailPage() {
               onSaveHumanPair={handleSaveHumanPair}
               onSaveBudget={handleSaveBudget}
               onDeleteBudget={handleDeleteBudget}
+              onSaveRuntime={handleSaveRuntime}
             >
               <Link
                 to="/agents/$agentId/workspace"
