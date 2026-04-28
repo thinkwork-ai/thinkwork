@@ -38,6 +38,8 @@ Capabilities:
 - `hindsight` requires persisted memory/retain/recall/reflect evidence.
 - `mcp` requires persisted MCP tool/server evidence.
 
+`send_email` is not part of this smoke yet. A true `send_email` end-to-end test sends a real email, so use it deliberately: first verify runtime config includes `sendEmailConfig`, then run an explicit user-approved send test against a safe recipient. Do not use the old `agent-email-send` workspace skill path for new verification; Send Email is injected as a direct built-in tool.
+
 ## Interpreting Results
 
 `PASS` means the thread turn succeeded and the required persisted evidence was present.
