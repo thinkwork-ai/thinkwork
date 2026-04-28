@@ -1,7 +1,7 @@
 ---
 title: "docs: workspace-reviews routing — concept update + Inbox HITL section + Automations admin doc (U6)"
 type: docs
-status: active
+status: completed
 date: 2026-04-28
 origin: docs/brainstorms/2026-04-28-workspace-reviews-routing-and-removal-requirements.md
 ---
