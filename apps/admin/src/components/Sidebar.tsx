@@ -200,6 +200,7 @@ export function AppSidebar() {
 
   const workItems: NavItem[] = [
     { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/agents", icon: Bot, label: "Agents", badge: agentCount },
     {
       to: "/threads",
       icon: MessagesSquare,
@@ -207,14 +208,18 @@ export function AppSidebar() {
       badge: threadCount ? formatCount(threadCount) : undefined,
     },
     { to: "/inbox", icon: Inbox, label: "Inbox", badge: pendingInboxCount },
-    { to: "/scheduled-jobs", icon: CalendarClock, label: "Automations" },
+    {
+      to: "/scheduled-jobs",
+      icon: CalendarClock,
+      label: "Automations",
+      badge: activeScheduledJobs,
+    },
   ];
 
   const agentsItems: NavItem[] = [
-    { to: "/agents", icon: Bot, label: "Agents", badge: agentCount },
-    { to: "/agent-templates", icon: LayoutTemplate, label: "Agent Templates" },
+    { to: "/agent-templates", icon: LayoutTemplate, label: "Templates" },
     { to: "/capabilities", icon: Puzzle, label: "Capabilities" },
-    { to: "/memory", icon: Brain, label: "Memories" },
+    { to: "/memory", icon: Brain, label: "Memory" },
     { to: "/wiki", icon: Network, label: "Wiki Pages" },
     { to: "/knowledge-bases", icon: BookOpen, label: "Knowledge Bases" },
     { to: "/evaluations", icon: ShieldCheck, label: "Evaluations" },

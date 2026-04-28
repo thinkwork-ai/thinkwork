@@ -30,7 +30,7 @@ function TemplateSyncReviewPage() {
   const navigate = useNavigate();
 
   useBreadcrumbs([
-    { label: "Agent Templates", href: "/agent-templates" },
+    { label: "Templates", href: "/agent-templates" },
     { label: "Sync" },
   ]);
 

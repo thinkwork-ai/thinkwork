@@ -311,7 +311,7 @@ function AgentMemoryPage() {
                 value={view}
                 onValueChange={(val) => { if (val) setView(val); }}
               >
-                <ToggleGroupItem value="memories" className="h-7 text-xs px-3">Memories</ToggleGroupItem>
+                <ToggleGroupItem value="memories" className="h-7 text-xs px-3">Memory</ToggleGroupItem>
                 <ToggleGroupItem value="graph" className="h-7 text-xs px-3">Knowledge Graph</ToggleGroupItem>
               </ToggleGroup>
             )}
@@ -388,7 +388,7 @@ function AgentMemoryPage() {
               <p className="text-sm text-muted-foreground">
                 {activeSearch
                   ? "No memories match your search."
-                  : "No memories yet. Memories are created automatically as the agent interacts with users."}
+                  : "No memories yet. Memory is created automatically as the agent interacts with users."}
               </p>
             </div>
           ) : (
