@@ -1,10 +1,9 @@
 """Tests for `format_workflow_skill_context`.
 
-Exercises the rendering of LastMile workflow-skill blocks into the
-agent's system prompt. The block is what the `lastmile-tasks` skill
-reads to decide between the dynamic (workflow-specific) form path and
-the legacy hardcoded form — so the presence/absence of specific
-markers matters.
+Exercises the rendering of workflow-skill blocks into the agent's system
+prompt. Workflow-aware skills read this block to decide between the
+dynamic form path and any skill default, so the presence/absence of
+specific markers matters.
 
 Run with: python -m unittest packages/agentcore-strands/agent-container/test_workflow_skill_context.py
 """

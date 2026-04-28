@@ -60,12 +60,6 @@ locals {
     ECR_REPOSITORY_URL       = var.ecr_repository_url
     AWS_ACCOUNT_ID           = var.account_id
     NODE_OPTIONS             = "--enable-source-maps"
-    # LastMile Tasks REST API base URL — feature-flags the outbound sync
-    # path. When unset, syncExternalTaskOnCreate writes sync_status='local'
-    # and the workflow picker proxy returns 503. Set to the LMI develop /
-    # staging / prod base URL per stage to enable real cross-system sync.
-    LASTMILE_TASKS_API_URL = var.lastmile_tasks_api_url
-
     # Per-user OAuth wiring (Google Workspace today; Microsoft 365 follow-up).
     # Secret ARNs are the indirection; the actual client_id/client_secret
     # values live in Secrets Manager and are fetched by

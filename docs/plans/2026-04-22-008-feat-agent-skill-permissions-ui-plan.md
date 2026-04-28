@@ -601,7 +601,7 @@ Key shape notes:
 **Test scenarios:**
 - Happy path: open template edit page, Skills tab, row-click `thinkwork-admin`. Permissions sub-panel opens. 29 ops pre-checked (default_enabled), 4 unchecked.
 - Happy path: uncheck `invite_member`, click Save, reload page, reopen. `invite_member` stays unchecked.
-- Happy path: row-click a non-`permissions_model: operations` skill (e.g., `lastmile-mcp`). Dialog opens in its existing mode (credentials/OAuth); no Permissions sub-panel.
+- Happy path: row-click a non-`permissions_model: operations` skill (e.g., `provider-mcp`). Dialog opens in its existing mode (credentials/OAuth); no Permissions sub-panel.
 - Edge case: uncheck all ops, click Save. Inline warning shows on the Skills tab row post-save. No modal, no confirmation.
 - Edge case: manifest has 0 ops (hypothetical; no real skill has this today). Permissions editor shows an empty state: "This skill has no operations declared in its manifest."
 - Edge case: `getCatalogSkill` fetch fails (network). Dialog shows a loading error; Save is disabled.

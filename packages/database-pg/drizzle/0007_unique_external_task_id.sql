@@ -1,6 +1,6 @@
 -- Defensive unique index on external task correlation key.
 --
--- Background: a single LastMile task-create fires 4 webhooks in quick
+-- Background: a single external task-create can fire multiple webhooks in quick
 -- succession (task.created + assigned/status_changed/updated). Each
 -- lambda invocation races to ensure the thread; without a uniqueness
 -- guarantee, concurrent inserts all succeed and we end up with 4

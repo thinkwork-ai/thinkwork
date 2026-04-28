@@ -12,9 +12,6 @@
  *   GOOGLE_PRODUCTIVITY_OAUTH_SECRET_ARN
  *   MICROSOFT_OAUTH_SECRET_ARN
  *
- * LastMile is intentionally excluded — it still uses LASTMILE_CLIENT_ID /
- * LASTMILE_CLIENT_SECRET env vars (legacy; migrate opportunistically).
- *
  * Consumers: oauth-authorize, oauth-callback, oauth-token refresh path.
  */
 

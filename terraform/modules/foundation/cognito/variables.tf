@@ -107,7 +107,7 @@ variable "admin_logout_urls" {
 }
 
 variable "mobile_callback_urls" {
-  description = "OAuth callback URLs for the mobile client. Includes LastMile's `myapp://` scheme (host apps that embed the SDK register their own deep-link here). Proper per-host app client isolation is 0.3.0 work — this is the stopgap capture of the drift from the CLI-applied URIs."
+  description = "OAuth callback URLs for the mobile client. Host apps that embed the SDK register their own deep-link here. Proper per-host app client isolation is 0.3.0 work — this is the stopgap capture of the drift from the CLI-applied URIs."
   type        = list(string)
   default = [
     "exp://localhost:8081",
@@ -119,7 +119,7 @@ variable "mobile_callback_urls" {
 }
 
 variable "mobile_logout_urls" {
-  description = "OAuth logout URLs for the mobile client. Includes LastMile's `myapp://` scheme (see `mobile_callback_urls` for rationale)."
+  description = "OAuth logout URLs for the mobile client. Host apps that embed the SDK register their own deep-link here (see `mobile_callback_urls` for rationale)."
   type        = list(string)
   default = [
     "exp://localhost:8081",

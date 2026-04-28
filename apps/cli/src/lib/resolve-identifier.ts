@@ -9,7 +9,7 @@
  *      over the available resources.
  *
  * The `mcp` commands were the first real case (user pain: `thinkwork mcp remove
- * lastmile-routing` → HTTP 500 because the DELETE handler matches by UUID and
+ * routing-server` → HTTP 500 because the DELETE handler matches by UUID and
  * the CLI only surfaces slugs). Every Phase 1+ command (thread, agent, etc.)
  * will want the same shape, so the helper is generic.
  *

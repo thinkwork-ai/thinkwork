@@ -62,8 +62,8 @@ interface TokenRefreshResult {
 }
 
 /**
- * Resolve an active connection row for a provider-native user id (e.g.
- * LastMile's internal user uuid), given the provider name. Webhooks carry the
+ * Resolve an active connection row for a provider-native user id, given the
+ * provider name. Webhooks carry the
  * native id, not our Cognito sub, so this is the one-stop lookup.
  *
  * Matches on `connections.metadata->{provider}->userId`. The OAuth callback
@@ -364,13 +364,6 @@ export async function buildSkillEnvOverrides(
 			envOverrides.MSGRAPH_ACCESS_TOKEN = accessToken;
 			envOverrides.MSGRAPH_CONNECTION_ID = connectionId;
 		}
-	} else if (conn.provider_name === "lastmile") {
-		envOverrides.LASTMILE_ACCESS_TOKEN = accessToken;
-		envOverrides.LASTMILE_CONNECTION_ID = connectionId;
-		// LastMile GraphQL credentials for direct API calls (script skills)
-		envOverrides.LASTMILE_GRAPHQL_USERNAME = process.env.LASTMILE_GRAPHQL_USERNAME || "";
-		envOverrides.LASTMILE_GRAPHQL_PASSWORD = process.env.LASTMILE_GRAPHQL_PASSWORD || "";
-		envOverrides.LASTMILE_API_URL = process.env.LASTMILE_API_URL || "https://graphql-dev.lastmile-tei.com/graphql";
 	} else if (conn.provider_name === "github") {
 		// GitHub user OAuth token — exposed to the sandbox for `gh` CLI, the
 		// github REST API, and typed GitHub skills. Scope set at authorize time
@@ -497,4 +490,3 @@ export async function notifyConnectionExpired(
 
 	console.log(`[oauth-token] Connection ${connectionId} expired: ${reason}`);
 }
-

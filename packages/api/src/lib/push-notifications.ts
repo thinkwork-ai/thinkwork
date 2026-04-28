@@ -34,9 +34,8 @@ interface SendExternalTaskPushParams {
 
 /**
  * Send a push to a specific ThinkWork user (no agent hop). Used by the
- * external-task webhook pipeline: when LastMile delivers a `task.assigned`
- * (or a `status` / `due_date` change on a task already assigned to the
- * user), we push them a banner so they know something happened without
+ * external-task webhook pipeline: when an external task provider delivers
+ * an assignment or status change, we push users a banner so they know something happened without
  * having to open the app.
  *
  * `data.threadId` is what `use-push-notifications.ts:62-81` reads to deep

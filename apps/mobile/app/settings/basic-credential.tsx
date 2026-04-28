@@ -55,7 +55,7 @@ export default function BasicCredentialScreen() {
             label="Name"
             value={name}
             onChangeText={setName}
-            placeholder="Last Mile Production"
+            placeholder="Production"
             autoCapitalize="words"
           />
           <Input

@@ -9,13 +9,13 @@ date: 2026-04-21
 
 ## Overview
 
-The root `README.md` has drifted in several load-bearing places: Evaluations is listed as "Planned" but has shipped (admin UI lives under `apps/admin/src/routes/_authed/_tenant/evaluations/`), the Mobile app section links to a non-shipped screenshot (`tasks-list.png` lives under `apps/www/assets/reserve/`, not in `public/images/`), and the mobile narrative still leans on a retired LastMile task connector. The README is also silent on the shipped Compounding Memory / Wiki surface that now anchors the mobile story.
+The root `README.md` has drifted in several load-bearing places: Evaluations is listed as "Planned" but has shipped (admin UI lives under `apps/admin/src/routes/_authed/_tenant/evaluations/`), the Mobile app section links to a non-shipped screenshot (`tasks-list.png` lives under `apps/www/assets/reserve/`, not in `public/images/`), and the mobile narrative still leans on a retired external provider task connector. The README is also silent on the shipped Compounding Memory / Wiki surface that now anchors the mobile story.
 
 This plan refreshes the README so that a developer landing on the repo today sees an accurate, helpful picture: what's shipped, what's still ahead, and a quick start that actually matches the CLI that's published to npm.
 
 ## Problem Frame
 
-New contributors and evaluating devs start at the root `README.md`. When it overstates what's planned (Eval UI), links to broken assets (`tasks-list.png`), references retired features (LastMile task connector), or diverges from canonical docs on positioning (Knowledge Graph vs. Compounding Memory Wiki), it:
+New contributors and evaluating devs start at the root `README.md`. When it overstates what's planned (Eval UI), links to broken assets (`tasks-list.png`), references retired features (external provider task connector), or diverges from canonical docs on positioning (Knowledge Graph vs. Compounding Memory Wiki), it:
 
 - Erodes trust — readers assume other claims are also stale.
 - Hides shipped work — Evaluations is a headline v1 capability buried as "Planned".
@@ -28,7 +28,7 @@ The scope is deliberately narrow: accuracy + minor helpfulness improvements in t
 - R1. **Evaluations reflected as shipped** — Move "Eval UI" out of the Roadmap table; surface it in the "What ships in v1" module list.
 - R2. **Mobile Wiki screenshot present** — Replace the broken `tasks-list.png` reference with the shipped `apps/www/public/images/mobile/wiki-graph.png` and update surrounding copy.
 - R3. **README consistent with canonical docs** — Reconcile Knowledge Graph / Ontology Studio wording with `docs/src/content/docs/roadmap.mdx` (which frames KG as forward direction, not shipped).
-- R4. **Retire stale references** — Remove/rewrite language pointing to the LastMile task connector (retired 2026-04-20) and to "Agentic Tasks" / "Question Cards" terminology that no longer appears in any concept doc.
+- R4. **Retire stale references** — Remove/rewrite language pointing to the external provider task connector (retired 2026-04-20) and to "Agentic Tasks" / "Question Cards" terminology that no longer appears in any concept doc.
 - R5. **Quick Start matches the published CLI** — Align the six-step flow with `apps/cli/README.md` so a dev copy-pasting actually gets to a working stack, including `thinkwork plan` and `thinkwork bootstrap`.
 - R6. **Status line truthful** — The "Pre-release. v0.1.0 is in active development" line conflicts with `apps/cli/package.json` (0.9.0). Reconcile to a status line that doesn't require re-editing on every bump.
 
@@ -63,7 +63,7 @@ The scope is deliberately narrow: accuracy + minor helpfulness improvements in t
 ### Institutional Learnings
 
 - Memory note `project_evals_scoring_stack.md` — evals v1 uses AWS Bedrock AgentCore Evaluations (Strands-native built-ins). README shouldn't invent a different scoring stack.
-- Memory note `project_lastmile_two_surfaces.md` — LastMile-as-task-connector is retired (2026-04-20); LastMile-as-MCP-server stays. The README mentions the retired surface twice.
+- Memory note `project_mobile-host_two_surfaces.md` — external provider-as-task-connector is retired (2026-04-20); external provider-as-MCP-server stays. The README mentions the retired surface twice.
 
 ### External References
 
@@ -95,7 +95,7 @@ The scope is deliberately narrow: accuracy + minor helpfulness improvements in t
 
 - [ ] **Unit 1: Fix Mobile app section — swap in shipped Wiki screenshot, rewrite copy around Compounding Memory**
 
-  **Goal:** Replace the broken `tasks-list.png` reference with the shipped Wiki screenshot and rewrite the paragraph so it describes what actually ships on mobile today (threads + compounding memory wiki), not the retired LastMile task intake.
+  **Goal:** Replace the broken `tasks-list.png` reference with the shipped Wiki screenshot and rewrite the paragraph so it describes what actually ships on mobile today (threads + compounding memory wiki), not the retired external provider task intake.
 
   **Requirements:** R2, R4
 
@@ -108,7 +108,7 @@ The scope is deliberately narrow: accuracy + minor helpfulness improvements in t
   - Update the second `<img>` tag: change `src` to `./apps/www/public/images/mobile/wiki-graph.png`; change `alt` to a Wiki-appropriate description (e.g., "Wiki tab — Compounding Memory pages rendered as a knowledge graph in the ThinkWork mobile app").
   - Rewrite the paragraph to:
     - Keep "Expo + React Native client at `apps/mobile`, currently shipping on iOS via TestFlight".
-    - Drop "tasks routed in from systems like LastMile — tasks render as native GenUI cards".
+    - Drop "tasks routed in from systems like external provider — tasks render as native GenUI cards".
     - Replace with a sentence describing the Wiki experience (Compounding Memory pages about people, places, decisions — browseable on device), grounded in `docs/src/content/docs/concepts/knowledge/compounding-memory.mdx`.
     - Keep "mobile app owns per-user OAuth and MCP tokens; tenant configuration stays on the admin side".
   - Keep the trailing docs link (`https://docs.thinkwork.ai/applications/mobile/`).
@@ -122,7 +122,7 @@ The scope is deliberately narrow: accuracy + minor helpfulness improvements in t
 
   **Verification:**
   - Both mobile `<img>` `src` paths point at files that exist under `apps/www/public/images/mobile/`.
-  - The paragraph no longer mentions LastMile or GenUI task cards.
+  - The paragraph no longer mentions external provider or GenUI task cards.
   - The paragraph mentions the Wiki / Compounding Memory surface explicitly.
 
 - [ ] **Unit 2: Promote Evaluations out of Roadmap, into "What ships in v1"**
@@ -176,26 +176,26 @@ The scope is deliberately narrow: accuracy + minor helpfulness improvements in t
   - No capitalized "Knowledge Graph" appears in the README outside of forward-looking/roadmap context.
   - The Ontology Studio row no longer asserts that Knowledge Graph has shipped.
 
-- [ ] **Unit 4: Remove stale terminology — LastMile task connector, Agentic Tasks, Question Cards**
+- [ ] **Unit 4: Remove stale terminology — external provider task connector, Agentic Tasks, Question Cards**
 
   **Goal:** Drop retired feature names that no longer have any backing in `docs/src/content/docs/` or in the admin/mobile UI, so the README doesn't claim surfaces that don't exist.
 
   **Requirements:** R4
 
-  **Dependencies:** Unit 1 (may already remove one LastMile mention).
+  **Dependencies:** Unit 1 (may already remove one external provider mention).
 
   **Files:**
-  - Modify: `README.md` ("What ships in v1" — line ~33 "plus a LastMile task connector for external task intake"; line ~34 "Agentic Tasks and Question Cards for structured task intake and execution")
+  - Modify: `README.md` ("What ships in v1" — line ~33 "plus a external provider task connector for external task intake"; line ~34 "Agentic Tasks and Question Cards for structured task intake and execution")
 
   **Approach:**
-  - Remove "(plus a LastMile task connector for external task intake)" from the Three connectors bullet. The connector list remains Slack, GitHub, Google Workspace — matching `docs/src/content/docs/roadmap.mdx`. Do not replace with LastMile-as-MCP-server: that's not a first-class launch connector and would confuse readers.
+  - Remove "(plus a external provider task connector for external task intake)" from the Three connectors bullet. The connector list remains Slack, GitHub, Google Workspace — matching `docs/src/content/docs/roadmap.mdx`. Do not replace with external provider-as-MCP-server: that's not a first-class launch connector and would confuse readers.
   - Delete the "Agentic Tasks and Question Cards" bullet. No concept doc uses these names. Threads + channels (as framed in `docs/src/content/docs/roadmap.mdx`) already covers the intended idea; if a replacement sentence is warranted, use "Threads with structured channels (CHAT, AUTO, EMAIL, SLACK, GITHUB) for task intake and execution" so it matches canonical docs.
 
   **Patterns to follow:** `docs/src/content/docs/roadmap.mdx` "What's in v1" table — single source of truth for what's shipped.
 
   **Test scenarios:**
-  - Happy path — `grep -i lastmile README.md` returns no matches. `grep -i "question card" README.md` returns no matches. `grep -i "agentic task" README.md` returns no matches.
-  - Edge case — Removing the LastMile mention does not dangle a trailing "(plus …)" fragment in the bullet.
+  - Happy path — `grep -i mobile-host README.md` returns no matches. `grep -i "question card" README.md` returns no matches. `grep -i "agentic task" README.md` returns no matches.
+  - Edge case — Removing the external provider mention does not dangle a trailing "(plus …)" fragment in the bullet.
 
   **Verification:**
   - No retired terminology survives in the README.
@@ -263,7 +263,7 @@ The scope is deliberately narrow: accuracy + minor helpfulness improvements in t
   - Error path — Any doc link that points at a path not present in `docs/src/content/docs/` is corrected to a canonical path or removed.
 
   **Verification:**
-  - Final `grep -n "tasks-list.png\|Eval UI\|LastMile task\|Question Cards\|Agentic Tasks\|v0.1.0" README.md` returns no matches.
+  - Final `grep -n "tasks-list.png\|Eval UI\|external provider task\|Question Cards\|Agentic Tasks\|v0.1.0" README.md` returns no matches.
   - Final `ls` of every referenced image path succeeds.
 
 ## System-Wide Impact
@@ -297,5 +297,5 @@ The scope is deliberately narrow: accuracy + minor helpfulness improvements in t
 - CLI Quick Start source of truth: `apps/cli/README.md`
 - Shipped screenshot inventory: `apps/www/public/images/admin/CAPTURE.md`
 - Evals routes: `apps/admin/src/routes/_authed/_tenant/evaluations/`
-- LastMile retirement memory: `project_lastmile_two_surfaces.md`
+- external provider retirement memory: `project_mobile-host_two_surfaces.md`
 - Evals stack memory: `project_evals_scoring_stack.md`

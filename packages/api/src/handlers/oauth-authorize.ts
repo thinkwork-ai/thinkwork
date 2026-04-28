@@ -24,10 +24,6 @@ import {
 
 const { connectProviders, connections, users } = schema;
 
-// LastMile is still env-var based (legacy surface; migrate opportunistically).
-// Google + Microsoft come from Secrets Manager via getOAuthClientCredentials().
-const LASTMILE_CLIENT_ID = process.env.LASTMILE_CLIENT_ID || "";
-
 // Callback URL — in production this is api.thinkwork.ai, in dev it's the raw API Gateway URL
 const OAUTH_CALLBACK_URL = process.env.OAUTH_CALLBACK_URL || "";
 
@@ -72,8 +68,7 @@ export async function handler(
 		return error("Provider not configured for OAuth");
 	}
 
-	// Determine client ID — Google/Microsoft come from Secrets Manager,
-	// LastMile still reads from env (legacy).
+	// Determine client ID — managed OAuth providers come from Secrets Manager.
 	let clientId = "";
 	if (isSecretsManagerProvider(providerName)) {
 		try {
@@ -82,13 +77,11 @@ export async function handler(
 			const msg = err instanceof Error ? err.message : String(err);
 			return error(`OAuth client not configured for ${providerName}: ${msg}`, 500);
 		}
-	} else if (providerName === "lastmile") {
-		clientId = LASTMILE_CLIENT_ID;
 	}
 	if (!clientId) {
 		const envHint = isSecretsManagerProvider(providerName)
 			? `check the Secrets Manager secret referenced by ${providerName === "google_productivity" ? "GOOGLE_PRODUCTIVITY_OAUTH_SECRET_ARN" : "MICROSOFT_OAUTH_SECRET_ARN"}`
-			: "check LASTMILE_CLIENT_ID env var";
+			: "provider is not configured for managed OAuth";
 		return error(`OAuth client not configured for ${providerName} (${envHint})`, 500);
 	}
 	if (!OAUTH_CALLBACK_URL) {
@@ -98,30 +91,24 @@ export async function handler(
 	// Generate state token
 	const state = randomBytes(32).toString("hex");
 
-	// Build scopes — map requested scope names to full scope URLs
+	// Build scopes — map requested scope names to full scope URLs.
 	const scopeValues: string[] = [];
-	// LastMile (Clerk) — only send standard OIDC scopes; custom permissions
-	// are handled by the LastMile MCP server auth, not Clerk scopes.
-	if (providerName === "lastmile") {
-		scopeValues.push("openid", "email", "profile", "offline_access");
-	} else {
-		for (const scopeName of requestedScopes) {
-			const scopeValue = config.scopes[scopeName];
-			if (scopeValue) scopeValues.push(scopeValue);
-		}
-		// If no specific scopes requested, use all available
-		if (scopeValues.length === 0) {
-			scopeValues.push(...Object.values(config.scopes));
-		}
-		// Google requires openid + email for userinfo
-		if (providerName === "google_productivity") {
-			scopeValues.push("openid", "email", "profile");
-		}
-		// Microsoft requires offline_access for refresh tokens + User.Read for userinfo
-		if (providerName === "microsoft_365") {
-			if (!scopeValues.includes("offline_access")) scopeValues.push("offline_access");
-			if (!scopeValues.includes("User.Read")) scopeValues.push("User.Read");
-		}
+	for (const scopeName of requestedScopes) {
+		const scopeValue = config.scopes[scopeName];
+		if (scopeValue) scopeValues.push(scopeValue);
+	}
+	// If no specific scopes requested, use all available.
+	if (scopeValues.length === 0) {
+		scopeValues.push(...Object.values(config.scopes));
+	}
+	// Google requires openid + email for userinfo.
+	if (providerName === "google_productivity") {
+		scopeValues.push("openid", "email", "profile");
+	}
+	// Microsoft requires offline_access for refresh tokens + User.Read for userinfo.
+	if (providerName === "microsoft_365") {
+		if (!scopeValues.includes("offline_access")) scopeValues.push("offline_access");
+		if (!scopeValues.includes("User.Read")) scopeValues.push("User.Read");
 	}
 
 	// Resolve Thinkwork user ID. The mobile/admin UI passes `meUser.id`
