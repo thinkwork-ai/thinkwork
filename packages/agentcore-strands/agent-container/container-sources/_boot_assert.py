@@ -61,7 +61,7 @@ EXPECTED_CONTAINER_SOURCES: tuple[str, ...] = (
     "user_storage",
     "wiki_tools",
     "workflow_skill_context",
-    "workspace_composer_client",
+    "bootstrap_workspace",
     "workspace_target",
     "wake_workspace_tool",
     "write_memory_tool",
@@ -96,6 +96,14 @@ REQUIRED_EXECUTABLES: tuple[str, ...] = (
     "opentelemetry-instrument",
 )
 
+# Modules that MUST NOT be present under /app — deletion guards against
+# accidental re-introduction. Per docs/plans/2026-04-27-003 the runtime
+# composer was retired in U7-U11; if `workspace_composer_client.py` ever
+# reappears here, something has fallen back to read-time composition.
+RETIRED_MODULES: tuple[str, ...] = (
+    "workspace_composer_client",
+)
+
 
 def _missing(app_dir: str) -> list[str]:
     out: list[str] = []
@@ -106,6 +114,14 @@ def _missing(app_dir: str) -> list[str]:
         if not os.path.isfile(os.path.join(app_dir, rel)):
             out.append(rel)
     return out
+
+
+def _retired_present(app_dir: str) -> list[str]:
+    return [
+        f"{mod}.py"
+        for mod in RETIRED_MODULES
+        if os.path.isfile(os.path.join(app_dir, f"{mod}.py"))
+    ]
 
 
 def _missing_executables() -> list[str]:
@@ -126,6 +142,16 @@ def check(app_dir: str = "/app") -> None:
             f"[_boot_assert] missing {len(missing)} expected module(s) under {app_dir}:\n  "
             + "\n  ".join(missing)
             + "\nSee _boot_assert.py for the expected module list."
+        )
+    retired = _retired_present(app_dir)
+    if retired:
+        raise RuntimeError(
+            f"[_boot_assert] {len(retired)} retired module(s) reappeared under "
+            f"{app_dir}:\n  "
+            + "\n  ".join(retired)
+            + "\nThese modules were deleted in docs/plans/2026-04-27-003. "
+            "Their re-introduction signals a regression to read-time "
+            "composition. See _boot_assert.RETIRED_MODULES."
         )
     missing_executables = _missing_executables()
     if missing_executables:
