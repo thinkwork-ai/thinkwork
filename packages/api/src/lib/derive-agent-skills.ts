@@ -44,6 +44,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { tenants } from "@thinkwork/database-pg/schema";
+import { isBuiltinToolSlug } from "./builtin-tool-slugs.js";
 
 // Replaces the workspace-overlay composer's read-time list+read.
 // Per docs/plans/2026-04-27-003: the agent prefix is the source of
@@ -151,9 +152,7 @@ const _defaultAgentsMdReader = (
   tenantId: string,
   agentId: string,
 ): Promise<AgentPrefixFile[]> =>
-  _readAgentPrefixFiles(tenantId, agentId, (rel) =>
-    SKILL_MD_PATH_RE.test(rel),
-  );
+  _readAgentPrefixFiles(tenantId, agentId, (rel) => SKILL_MD_PATH_RE.test(rel));
 
 export async function deriveAgentSkills(
   ctx: ComposeContext,
@@ -176,7 +175,7 @@ export async function deriveAgentSkills(
   for (const entry of skillEntries) {
     const match = entry.path.match(SKILL_MD_PATH_RE);
     const slug = match?.[1];
-    if (slug) seen.add(slug);
+    if (slug && !isBuiltinToolSlug(slug)) seen.add(slug);
   }
 
   const derivedSlugs = Array.from(seen).sort();

@@ -456,6 +456,35 @@ describe("agent GET / LIST", () => {
     expect(res.body.content).toBe("Your name is Marco.");
     expect(typeof res.body.sha256).toBe("string");
   });
+
+  it("LIST hides built-in tool catalog copies from the editable workspace tree", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+
+    s3Mock.on(ListObjectsV2Command).resolves({
+      Contents: [
+        { Key: "tenants/acme/agents/marco/workspace/SOUL.md" },
+        {
+          Key: "tenants/acme/agents/marco/workspace/skills/web-search/SKILL.md",
+        },
+        {
+          Key: "tenants/acme/agents/marco/workspace/skills/workspace-memory/SKILL.md",
+        },
+      ],
+    });
+
+    const res = await parse(
+      await handler(event({ action: "list", agentId: AGENT_ID })),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.files.map((f: { path: string }) => f.path)).toEqual([
+      "SOUL.md",
+      "skills/workspace-memory/SKILL.md",
+    ]);
+  });
 });
 
 // ─── 6. Pinned-file write guard ──────────────────────────────────────────────
@@ -603,6 +632,29 @@ describe("pinned-file write guard", () => {
     );
 
     expect(res.statusCode).toBe(200);
+  });
+
+  it("rejects writes to built-in tool workspace skill paths", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          agentId: AGENT_ID,
+          path: "skills/web-search/SKILL.md",
+          content: "# Web Search\n",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body.error).toMatch(/Built-in tools/);
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(0);
   });
 
   it.each([
