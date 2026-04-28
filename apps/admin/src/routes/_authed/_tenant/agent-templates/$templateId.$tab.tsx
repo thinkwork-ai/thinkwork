@@ -611,119 +611,127 @@ function TemplateEditorPage() {
       <div className="w-full h-full">
         {/* Configuration Tab */}
         {tab === "configuration" && (
-          <div className="max-w-[750px] space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Basic Information</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Template Name</Label>
-                  <Input
-                    id="name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Customer Support Agent"
-                  />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid w-full max-w-[1024px] gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">Basic Information</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Model</Label>
-                    <ModelSelect value={model} onValueChange={setModel} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Runtime</Label>
-                    <Select
-                      value={runtime}
-                      onValueChange={(value) =>
-                        setRuntime(value as AgentRuntime)
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={AgentRuntime.Strands}>
-                          Strands
-                        </SelectItem>
-                        <SelectItem value={AgentRuntime.Pi}>Pi</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="slug">Slug</Label>
-                  <Input
-                    id="slug"
-                    value={slug}
-                    onChange={(e) => setSlug(e.target.value)}
-                    placeholder="customer-support"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Empathetic support agent with escalation rules"
-                    rows={3}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Category</Label>
-                    <Select value={category} onValueChange={setCategory}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CATEGORIES.map((c) => (
-                          <SelectItem key={c.value} value={c.value}>
-                            {c.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="icon">Icon</Label>
+                    <Label htmlFor="name">Template Name</Label>
                     <Input
-                      id="icon"
-                      value={icon}
-                      onChange={(e) => setIcon(e.target.value)}
-                      placeholder="🤖"
+                      id="name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Customer Support Agent"
                     />
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Model</Label>
+                      <ModelSelect value={model} onValueChange={setModel} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Runtime</Label>
+                      <Select
+                        value={runtime}
+                        onValueChange={(value) =>
+                          setRuntime(value as AgentRuntime)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={AgentRuntime.Strands}>
+                            Strands
+                          </SelectItem>
+                          <SelectItem value={AgentRuntime.Pi}>Pi</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="slug">Slug</Label>
+                    <Input
+                      id="slug"
+                      value={slug}
+                      onChange={(e) => setSlug(e.target.value)}
+                      placeholder="customer-support"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea
+                      id="description"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Empathetic support agent with escalation rules"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Category</Label>
+                      <Select value={category} onValueChange={setCategory}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CATEGORIES.map((c) => (
+                            <SelectItem key={c.value} value={c.value}>
+                              {c.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="icon">Icon</Label>
+                      <Input
+                        id="icon"
+                        value={icon}
+                        onChange={(e) => setIcon(e.target.value)}
+                        placeholder="🤖"
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Code Sandbox</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center gap-4">
-                  <div className="flex-1 space-y-1">
+            <aside className="space-y-3 lg:sticky lg:top-0 lg:self-start">
+              <Card size="sm">
+                <CardHeader>
+                  <div className="flex items-center justify-between gap-3">
+                    <CardTitle className="text-sm">Code Sandbox</CardTitle>
+                    <Switch
+                      id="sandbox-enabled"
+                      checked={sandboxEnabled}
+                      onCheckedChange={setSandboxEnabled}
+                    />
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-1">
                     <Label htmlFor="sandbox-enabled" className="font-normal">
-                      Enable <code>execute_code</code> for agents in this
-                      template
+                      Enable <code>execute_code</code>
                     </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Opts this template into the AgentCore Code Interpreter
-                      sandbox. The tool only registers on a turn if the tenant
-                      also has <code>sandbox_enabled</code> set.
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Opts this template into AgentCore Code Interpreter. The
+                      tool only registers if the tenant also has{" "}
+                      <code>sandbox_enabled</code> set.
                     </p>
                   </div>
                   {sandboxEnabled && (
-                    <div className="w-60 space-y-1">
+                    <div className="space-y-1.5">
                       <Label className="text-xs">Network mode</Label>
                       <Select
                         value={sandboxEnv}
                         onValueChange={(v) => setSandboxEnv(v as SandboxEnv)}
                       >
-                        <SelectTrigger className="h-9">
+                        <SelectTrigger className="h-9 w-full">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -737,67 +745,64 @@ function TemplateEditorPage() {
                       </Select>
                     </div>
                   )}
-                  <Switch
-                    id="sandbox-enabled"
-                    checked={sandboxEnabled}
-                    onCheckedChange={setSandboxEnabled}
-                  />
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Browser Automation</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center gap-4">
-                  <div className="flex-1 space-y-1">
+              <Card size="sm">
+                <CardHeader>
+                  <div className="flex items-center justify-between gap-3">
+                    <CardTitle className="text-sm">
+                      Browser Automation
+                    </CardTitle>
+                    <Switch
+                      id="browser-enabled"
+                      checked={browserEnabled}
+                      onCheckedChange={setBrowserEnabled}
+                    />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-1">
                     <Label htmlFor="browser-enabled" className="font-normal">
-                      Enable <code>browser_automation</code> for agents in this
-                      template
+                      Enable <code>browser_automation</code>
                     </Label>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs leading-relaxed text-muted-foreground">
                       Registers an AgentCore Browser + Nova Act tool for dynamic
                       website workflows. Agent-level capability overrides can
                       still enable or disable it for individual agents.
                     </p>
                   </div>
-                  <Switch
-                    id="browser-enabled"
-                    checked={browserEnabled}
-                    onCheckedChange={setBrowserEnabled}
-                  />
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Web Search</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center gap-4">
-                  <div className="flex-1 space-y-1">
+              <Card size="sm">
+                <CardHeader>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Search className="h-4 w-4 text-muted-foreground" />
+                      <CardTitle className="text-sm">Web Search</CardTitle>
+                    </div>
+                    <Switch
+                      id="web-search-enabled"
+                      checked={webSearchEnabled}
+                      onCheckedChange={setWebSearchEnabled}
+                    />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-1">
                     <Label htmlFor="web-search-enabled" className="font-normal">
-                      Enable <code>web_search</code> for agents in this
-                      template
+                      Enable <code>web_search</code>
                     </Label>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs leading-relaxed text-muted-foreground">
                       Injects the tenant-configured Web Search built-in tool on
                       agent turns. Configure the provider and API key under
                       Capabilities.
                     </p>
                   </div>
-                  <Search className="h-4 w-4 text-muted-foreground" />
-                  <Switch
-                    id="web-search-enabled"
-                    checked={webSearchEnabled}
-                    onCheckedChange={setWebSearchEnabled}
-                  />
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </aside>
           </div>
         )}
 
