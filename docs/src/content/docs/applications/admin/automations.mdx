@@ -41,6 +41,8 @@ Each type determines how the trigger interacts with the target:
 **Route:** `/scheduled-jobs`  
 **File:** `apps/admin/src/routes/_authed/_tenant/scheduled-jobs/index.tsx`
 
+"Automations" is a label-only rename: the route, file paths, GraphQL queries, and underlying database tables (`scheduled_jobs`) all still use `scheduled-jobs` naming. Only the operator-facing UI label and IA position changed.
+
 A searchable table with a top-right **New Job** button and a type-filter dropdown.
 
 | Column | Notes |
@@ -76,7 +78,7 @@ User-initiated create and update operations call the underlying Lambda with `Req
 
 - **Workspace HITL reviews** — system-agent workspace reviews surface in **Inbox**, not Automations. See [Admin — Inbox → Workspace reviews (system HITL)](/applications/admin/inbox/#workspace-reviews-system-hitl).
 - **Per-thread agent invocations** — those live in the [Threads](/applications/admin/threads/) tab.
-- **Per-user OAuth or connector credentials** — those live in the mobile app per [user opt-in over admin config](/concepts/agents/) (admin owns infra config; users own integration auth).
+- **Per-user OAuth or connector credentials** — those live in the mobile app. The platform's stance: admin owns tenant-wide infra and config, users own their own integration auth on mobile. See [Mobile — Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/).
 
 ## Related pages
 

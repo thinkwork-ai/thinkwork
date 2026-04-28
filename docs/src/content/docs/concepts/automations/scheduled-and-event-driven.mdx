@@ -104,7 +104,7 @@ For event-driven automations:
 
 - [Automations (overview)](/concepts/automations/) — the umbrella
 - [Routines and Execution Model](/concepts/automations/routines-and-execution-model/) — what happens after the trigger fires
-- [Admin: Scheduled Jobs](/applications/admin/scheduled-jobs/) — the UI
+- [Admin: Automations](/applications/admin/automations/) — the UI
 - [Threads: Lifecycle and Types](/concepts/threads/lifecycle-and-types/) — where AUTO threads fit
 - [Connectors](/concepts/connectors/) — how connector events become triggers
 
@@ -112,4 +112,4 @@ For event-driven automations:
 
 Schedules and triggers are first-class rows in the operational database, reconciled into AWS Scheduler and EventBridge by the scheduled-jobs handler in `packages/api/src/handlers/scheduled-jobs.ts`. When a schedule fires, AWS Scheduler invokes the trigger target; the trigger resolves the current schedule row at fire time and kicks off the Step Functions state machine.
 
-State machines, rule patterns, and the EventBridge custom bus are provisioned by the ThinkWork Terraform module. For the operator view of schedules, see [Admin: Scheduled Jobs](/applications/admin/scheduled-jobs/).
+State machines, rule patterns, and the EventBridge custom bus are provisioned by the ThinkWork Terraform module. For the operator view of schedules, see [Admin: Automations](/applications/admin/automations/).

@@ -110,7 +110,7 @@ For debugging one bad run, the thread + execution views are enough. For tracking
 
 - [Automations (overview)](/concepts/automations/) — the umbrella
 - [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/) — the entry points that start routines
-- [Admin: Routines](/applications/admin/routines/) — the operator UI
+- [Admin: Automations](/applications/admin/automations/) — the operator UI
 - [Admin: Inbox](/applications/admin/inbox/) — the human-in-the-loop approval surface
 - [Threads: Lifecycle and Types](/concepts/threads/lifecycle-and-types/) — AUTO threads and parent/child threading
 
@@ -120,4 +120,4 @@ Routines are backed by AWS Step Functions state machines provisioned through the
 
 Human-in-the-loop waits use Step Functions task tokens, persisted on the Inbox item. Resolving the inbox item releases the token and resumes the execution.
 
-For the operator view of routines, see [Admin: Routines](/applications/admin/routines/). For the inbox surface that handles human-in-the-loop approvals, see [Admin: Inbox](/applications/admin/inbox/).
+For the operator view of routines, see [Admin: Automations](/applications/admin/automations/). For the inbox surface that handles human-in-the-loop approvals, see [Admin: Inbox](/applications/admin/inbox/).
