@@ -20,7 +20,6 @@ import {
   BookOpen,
   LayoutTemplate,
   ShieldCheck,
-  GitPullRequestDraft,
 } from "lucide-react";
 import { useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
@@ -209,11 +208,6 @@ export function AppSidebar() {
     },
     { to: "/inbox", icon: Inbox, label: "Inbox", badge: pendingInboxCount },
     { to: "/scheduled-jobs", icon: CalendarClock, label: "Automations" },
-    {
-      to: "/workspace-reviews",
-      icon: GitPullRequestDraft,
-      label: "Workspace Reviews",
-    },
   ];
 
   const agentsItems: NavItem[] = [
