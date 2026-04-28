@@ -120,7 +120,14 @@ vi.mock("../graphql/utils.js", () => {
 // eslint-disable-next-line import/first
 import { deriveAgentSkills } from "../lib/derive-agent-skills.js";
 
-const deriveOpts = { readAgentsMdFiles: composeListMock };
+// U4 added a second reader for workspace/.../skills/<slug>/SKILL.md.
+// These tests focus on AGENTS.md routing-derived skills; we inject an
+// empty stub for the skill-md reader so the default S3-walk path
+// doesn't run (it would error without WORKSPACE_BUCKET in test).
+const deriveOpts = {
+  readAgentsMdFiles: composeListMock,
+  readSkillMdFiles: async () => [],
+};
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
