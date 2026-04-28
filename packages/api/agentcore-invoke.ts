@@ -260,6 +260,16 @@ export async function handler(event: LambdaEvent): Promise<LambdaResult> {
     // chat-agent-invoke). Without this the Strands runtime falls back to a
     // single-turn invocation with no session memory.
     if (body.messages_history) payload.messages_history = body.messages_history;
+    if (body.web_search_config) {
+      payload.web_search_config = body.web_search_config;
+    }
+    if (body.send_email_config) {
+      payload.send_email_config = body.send_email_config;
+    }
+    if (body.blocked_tools) payload.blocked_tools = body.blocked_tools;
+    if (body.browser_automation_enabled) {
+      payload.browser_automation_enabled = body.browser_automation_enabled;
+    }
 
     console.log(`AgentCore payload keys: ${Object.keys(payload).join(", ")} hindsight=${payload.hindsight_endpoint ? "YES" : "NO"} instance_id=${payload.instance_id || "EMPTY"} runtime_arn=${runtimeArn.split("/").pop()}`);
     const result = await invokeAgentCore(payload, runtimeArn, sessionId);
