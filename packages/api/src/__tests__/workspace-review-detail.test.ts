@@ -4,13 +4,29 @@ import {
   parseWorkspaceReviewProposedChanges,
   type WorkspaceReviewDetailStore,
 } from "../lib/workspace-events/review-detail.js";
+import type {
+  AgentChainNode,
+  ClassifyChainStore,
+} from "../lib/workspace-events/classify-review.js";
 
 const TENANT_ID = "00000000-0000-4000-8000-000000000001";
 const AGENT_ID = "00000000-0000-4000-8000-000000000002";
 const RUN_ID = "00000000-0000-4000-8000-000000000003";
 const THREAD_ID = "00000000-0000-4000-8000-000000000004";
 const THREAD_TURN_ID = "00000000-0000-4000-8000-000000000005";
+const USER_ID = "00000000-0000-4000-8000-000000000006";
+const PARENT_AGENT_ID = "00000000-0000-4000-8000-000000000007";
 const CREATED_AT = new Date("2026-04-26T12:00:00.000Z");
+
+function fakeClassifierStore(chain: AgentChainNode[] = []): ClassifyChainStore {
+  return {
+    async fetchAgentChain() {
+      return chain;
+    },
+  };
+}
+
+const NOOP_CLASSIFIER = fakeClassifierStore();
 
 function run(overrides: Record<string, unknown> = {}) {
   return {
@@ -112,7 +128,10 @@ describe("workspace review detail", () => {
       },
     };
 
-    const result = await loadWorkspaceReviewDetail(RUN_ID, { store });
+    const result = await loadWorkspaceReviewDetail(RUN_ID, {
+      store,
+      classifierStore: NOOP_CLASSIFIER,
+    });
 
     expect(result?.run.tenant_id).toBe(TENANT_ID);
     expect(result?.detail.threadId).toBe(THREAD_ID);
@@ -153,7 +172,10 @@ describe("workspace review detail", () => {
       },
     };
 
-    const result = await loadWorkspaceReviewDetail(RUN_ID, { store });
+    const result = await loadWorkspaceReviewDetail(RUN_ID, {
+      store,
+      classifierStore: NOOP_CLASSIFIER,
+    });
 
     expect(result?.detail.reviewBody).toBe("Can I continue?");
     expect(result?.detail.proposedChanges).toEqual([]);
@@ -172,13 +194,149 @@ describe("workspace review detail", () => {
       },
     };
 
-    const result = await loadWorkspaceReviewDetail(RUN_ID, { store });
+    const result = await loadWorkspaceReviewDetail(RUN_ID, {
+      store,
+      classifierStore: NOOP_CLASSIFIER,
+    });
 
     expect(result?.detail.reviewMissing).toBe(true);
     expect(result?.detail.reviewBody).toBeNull();
     expect(result?.detail.reviewObjectKey).toContain(
       "review/run.needs-human.md",
     );
+  });
+});
+
+describe("workspace review detail classification", () => {
+  it("classifies the run as paired and surfaces the responsible user (AE1)", async () => {
+    const store: WorkspaceReviewDetailStore = {
+      async findRunById() {
+        return run();
+      },
+      async listEvents() {
+        return [event()];
+      },
+      async readReviewObject() {
+        return { body: "approve me", etag: '"etag-1"', missing: false };
+      },
+    };
+    const classifierStore = fakeClassifierStore([
+      {
+        id: AGENT_ID,
+        parent_agent_id: null,
+        human_pair_id: USER_ID,
+        source: "user",
+        level: 0,
+      },
+    ]);
+
+    const result = await loadWorkspaceReviewDetail(RUN_ID, {
+      store,
+      classifierStore,
+    });
+
+    expect(result?.detail.kind).toBe("PAIRED");
+    expect(result?.detail.responsibleUserId).toBe(USER_ID);
+  });
+
+  it("classifies a sub-agent run as paired via parent chain (AE2)", async () => {
+    const store: WorkspaceReviewDetailStore = {
+      async findRunById() {
+        return run();
+      },
+      async listEvents() {
+        return [event()];
+      },
+      async readReviewObject() {
+        return { body: "sub", etag: '"etag-1"', missing: false };
+      },
+    };
+    const classifierStore = fakeClassifierStore([
+      {
+        id: AGENT_ID,
+        parent_agent_id: PARENT_AGENT_ID,
+        human_pair_id: null,
+        source: "user",
+        level: 0,
+      },
+      {
+        id: PARENT_AGENT_ID,
+        parent_agent_id: null,
+        human_pair_id: USER_ID,
+        source: "user",
+        level: 1,
+      },
+    ]);
+
+    const result = await loadWorkspaceReviewDetail(RUN_ID, {
+      store,
+      classifierStore,
+    });
+
+    expect(result?.detail.kind).toBe("PAIRED");
+    expect(result?.detail.responsibleUserId).toBe(USER_ID);
+  });
+
+  it("classifies a system-agent run as system (AE3)", async () => {
+    const store: WorkspaceReviewDetailStore = {
+      async findRunById() {
+        return run();
+      },
+      async listEvents() {
+        return [event()];
+      },
+      async readReviewObject() {
+        return { body: "sys", etag: '"etag-1"', missing: false };
+      },
+    };
+    const classifierStore = fakeClassifierStore([
+      {
+        id: AGENT_ID,
+        parent_agent_id: null,
+        human_pair_id: null,
+        source: "system",
+        level: 0,
+      },
+    ]);
+
+    const result = await loadWorkspaceReviewDetail(RUN_ID, {
+      store,
+      classifierStore,
+    });
+
+    expect(result?.detail.kind).toBe("SYSTEM");
+    expect(result?.detail.responsibleUserId).toBeNull();
+  });
+
+  it("classifies an orphan run as unrouted", async () => {
+    const store: WorkspaceReviewDetailStore = {
+      async findRunById() {
+        return run();
+      },
+      async listEvents() {
+        return [event()];
+      },
+      async readReviewObject() {
+        return { body: "?", etag: '"etag-1"', missing: false };
+      },
+    };
+    const classifierStore = fakeClassifierStore([
+      {
+        id: AGENT_ID,
+        parent_agent_id: null,
+        human_pair_id: null,
+        source: "user",
+        level: 0,
+      },
+    ]);
+
+    const result = await loadWorkspaceReviewDetail(RUN_ID, {
+      store,
+      classifierStore,
+    });
+
+    expect(result?.detail.kind).toBe("UNROUTED");
+    expect(result?.detail.responsibleUserId).toBeNull();
   });
 });
 

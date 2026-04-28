@@ -22,6 +22,12 @@ enum AgentWorkspaceEventType {
   EVENT_REJECTED
 }
 
+enum WorkspaceReviewKind {
+  PAIRED
+  SYSTEM
+  UNROUTED
+}
+
 type AgentWorkspaceRun {
   id: ID!
   tenantId: ID!
@@ -89,6 +95,8 @@ type AgentWorkspaceReview {
   proposedChanges: [AgentWorkspaceProposedChange!]!
   events: [AgentWorkspaceEvent!]!
   decisionEvents: [AgentWorkspaceEvent!]!
+  responsibleUserId: ID
+  kind: WorkspaceReviewKind!
 }
 
 type AgentWorkspaceProposedChange {
@@ -118,10 +126,13 @@ extend type Query {
   agentWorkspaceReviews(
     tenantId: ID!
     agentId: ID
+    responsibleUserId: ID
+    kind: WorkspaceReviewKind
     status: String = "awaiting_review"
     limit: Int = 50
   ): [AgentWorkspaceReview!]!
   agentWorkspaceReview(runId: ID!): AgentWorkspaceReview
+  pendingSystemReviewsCount(tenantId: ID!): Int!
 }
 
 extend type Mutation {

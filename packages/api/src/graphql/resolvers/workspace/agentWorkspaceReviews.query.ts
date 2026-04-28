@@ -9,22 +9,60 @@ import {
   snakeToCamel,
   threadTurns,
 } from "../../utils.js";
-import { requireTenantMember } from "../core/authz.js";
+import {
+  classifyWorkspaceReview,
+  createDrizzleClassifyChainStore,
+  type ClassifyChainStore,
+  type WorkspaceReviewKind,
+} from "../../../lib/workspace-events/classify-review.js";
+import { requireTenantAdmin, requireTenantMember } from "../core/authz.js";
+import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
+
+const VALID_KINDS = new Set<WorkspaceReviewKind>([
+  "paired",
+  "system",
+  "unrouted",
+]);
+
+function normalizeKindArg(
+  raw: string | null | undefined,
+): WorkspaceReviewKind | null {
+  if (!raw) return null;
+  const lower = raw.toLowerCase() as WorkspaceReviewKind;
+  return VALID_KINDS.has(lower) ? lower : null;
+}
+
+function kindToGraphQL(kind: WorkspaceReviewKind): string {
+  return kind.toUpperCase();
+}
 
 export async function agentWorkspaceReviews(
   _parent: unknown,
   args: {
     tenantId: string;
     agentId?: string | null;
+    responsibleUserId?: string | null;
+    kind?: string | null;
     status?: string | null;
     limit?: number | null;
   },
   ctx: GraphQLContext,
+  deps: { classifierStore?: ClassifyChainStore } = {},
 ): Promise<Record<string, unknown>[]> {
   await requireTenantMember(ctx, args.tenantId);
+
+  // If the caller asks for someone else's reviews, they must be a tenant admin.
+  if (args.responsibleUserId) {
+    const callerUserId = await resolveCallerUserId(ctx);
+    if (args.responsibleUserId !== callerUserId) {
+      await requireTenantAdmin(ctx, args.tenantId);
+    }
+  }
+
+  const kindFilter = normalizeKindArg(args.kind);
 
   const conditions = [
     eq(agentWorkspaceRuns.tenant_id, args.tenantId),
@@ -44,8 +82,24 @@ export async function agentWorkspaceReviews(
     .orderBy(desc(agentWorkspaceRuns.last_event_at))
     .limit(limit);
 
+  const classifierStore =
+    deps.classifierStore ?? createDrizzleClassifyChainStore();
+
   const reviews: Record<string, unknown>[] = [];
   for (const run of runs) {
+    const classification = await classifyWorkspaceReview(classifierStore, {
+      tenantId: run.tenant_id,
+      agentId: run.agent_id,
+    });
+
+    if (kindFilter && classification.kind !== kindFilter) continue;
+    if (
+      args.responsibleUserId &&
+      classification.responsibleUserId !== args.responsibleUserId
+    ) {
+      continue;
+    }
+
     const [latestEvent] = await db
       .select()
       .from(agentWorkspaceEvents)
@@ -96,6 +150,8 @@ export async function agentWorkspaceReviews(
       proposedChanges: [],
       events: [],
       decisionEvents: [],
+      responsibleUserId: classification.responsibleUserId,
+      kind: kindToGraphQL(classification.kind),
     });
   }
 
