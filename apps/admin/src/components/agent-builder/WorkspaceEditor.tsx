@@ -8,11 +8,13 @@ import {
   Loader2,
   MoreHorizontal,
   Plus,
+  Search,
   Upload,
   Wand2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AcceptTemplateUpdateDialog } from "@/components/AcceptTemplateUpdateDialog";
+import { useTenant } from "@/context/TenantContext";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -51,6 +53,12 @@ import {
   type ComposeSource,
   type Target,
 } from "@/lib/agent-builder-api";
+import {
+  installSkillToAgent,
+  installSkillToTemplate,
+  listCatalog,
+  type CatalogSkill,
+} from "@/lib/skills-api";
 import { cn } from "@/lib/utils";
 import {
   SKILL_AUTHORING_TEMPLATES,
@@ -107,6 +115,7 @@ export type WorkspaceEditorMode = "agent" | "template" | "defaults";
 export type WorkspaceEditorAction =
   | "add-sub-agent"
   | "new-skill"
+  | "add-catalog-skill"
   | "new-file"
   | "add-docs-folder"
   | "add-procedures-folder"
@@ -120,6 +129,7 @@ export interface WorkspaceEditorCapabilities {
   canReviewTemplateUpdates: boolean;
   canAddSubAgent: boolean;
   canCreateLocalSkill: boolean;
+  canAddCatalogSkill: boolean;
   canBootstrapDefaults: boolean;
 }
 
@@ -131,6 +141,7 @@ export function workspaceEditorCapabilities(
     canReviewTemplateUpdates: mode === "agent",
     canAddSubAgent: mode !== "defaults",
     canCreateLocalSkill: mode !== "defaults",
+    canAddCatalogSkill: mode !== "defaults",
     canBootstrapDefaults: mode !== "template",
   };
 }
@@ -142,6 +153,9 @@ export function workspaceEditorActions(
   return [
     ...(capabilities.canAddSubAgent ? (["add-sub-agent"] as const) : []),
     ...(capabilities.canCreateLocalSkill ? (["new-skill"] as const) : []),
+    ...(capabilities.canAddCatalogSkill
+      ? (["add-catalog-skill"] as const)
+      : []),
     "new-file",
     "add-docs-folder",
     "add-procedures-folder",
@@ -156,6 +170,8 @@ export interface WorkspaceEditorProps {
   target: Target;
   mode: WorkspaceEditorMode;
   agentId?: string;
+  agentSlug?: string;
+  templateSlug?: string;
   initialFolder?: string;
   bootstrapFiles?: Record<string, string>;
   bootstrapLabel?: string;
@@ -252,11 +268,14 @@ export function WorkspaceEditor({
   target,
   mode,
   agentId,
+  agentSlug,
+  templateSlug,
   initialFolder,
   bootstrapFiles,
   bootstrapLabel = "Create Default Files",
   className,
 }: WorkspaceEditorProps) {
+  const { tenant } = useTenant();
   const capabilities = workspaceEditorCapabilities(mode);
   const key = targetKey(target);
   const [files, setFiles] = useState<string[]>([]);
@@ -289,6 +308,15 @@ export function WorkspaceEditor({
   const [routingRows, setRoutingRows] = useState<RoutingRow[]>([]);
   const [showNewSkillDialog, setShowNewSkillDialog] = useState(false);
   const [creatingSkill, setCreatingSkill] = useState(false);
+  const [showCatalogSkillDialog, setShowCatalogSkillDialog] = useState(false);
+  const [catalogSkills, setCatalogSkills] = useState<CatalogSkill[]>([]);
+  const [loadingCatalogSkills, setLoadingCatalogSkills] = useState(false);
+  const [installingCatalogSkill, setInstallingCatalogSkill] = useState<
+    string | null
+  >(null);
+  const [catalogInstallError, setCatalogInstallError] = useState<string | null>(
+    null,
+  );
   const [newSkillTemplate, setNewSkillTemplate] =
     useState<SkillTemplateKey>("knowledge");
   const [newSkillName, setNewSkillName] = useState("");
@@ -386,6 +414,47 @@ export function WorkspaceEditor({
     () => buildWorkspaceTree(files, routingRows),
     [files, routingRows],
   );
+
+  const installedWorkspaceSkillSlugs = useMemo(
+    () =>
+      new Set(
+        files
+          .map((path) => path.match(/(?:^|\/)skills\/([^/]+)\/SKILL\.md$/)?.[1])
+          .filter((slug): slug is string => Boolean(slug)),
+      ),
+    [files],
+  );
+
+  const availableCatalogSkills = useMemo(
+    () =>
+      catalogSkills.filter(
+        (skill) => !installedWorkspaceSkillSlugs.has(skill.slug),
+      ),
+    [catalogSkills, installedWorkspaceSkillSlugs],
+  );
+
+  useEffect(() => {
+    if (!showCatalogSkillDialog || catalogSkills.length > 0) return;
+    let cancelled = false;
+    setLoadingCatalogSkills(true);
+    listCatalog()
+      .then((items) => {
+        if (!cancelled) setCatalogSkills(items);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("Failed to load skill catalog:", err);
+        setCatalogInstallError(
+          err instanceof Error ? err.message : "Failed to load skill catalog",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingCatalogSkills(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showCatalogSkillDialog, catalogSkills.length]);
 
   const [pinStatusResult, refetchPinStatus] = useQuery({
     query: AgentPinStatusQuery,
@@ -615,6 +684,46 @@ export function WorkspaceEditor({
     }
   };
 
+  const handleInstallCatalogSkill = async (skillSlug: string) => {
+    if (!tenant?.slug) {
+      setCatalogInstallError("Tenant slug is unavailable.");
+      return;
+    }
+    if (files.includes(`skills/${skillSlug}/SKILL.md`)) {
+      setCatalogInstallError(
+        "This skill already exists in the workspace. Delete it before reinstalling.",
+      );
+      return;
+    }
+    setInstallingCatalogSkill(skillSlug);
+    setCatalogInstallError(null);
+    try {
+      if (mode === "agent" && agentSlug) {
+        await installSkillToAgent(tenant.slug, agentSlug, skillSlug);
+      } else if (mode === "template" && templateSlug) {
+        await installSkillToTemplate(tenant.slug, templateSlug, skillSlug);
+      } else {
+        throw new Error("Workspace target slug is unavailable.");
+      }
+      setExpandedFolders((prev) => {
+        const next = new Set(prev);
+        next.add("skills");
+        next.add(`skills/${skillSlug}`);
+        return next;
+      });
+      await fetchFiles();
+      setShowCatalogSkillDialog(false);
+      toast.success(`Installed ${skillSlug}`);
+    } catch (err) {
+      console.error("Failed to install catalog skill:", err);
+      setCatalogInstallError(
+        err instanceof Error ? err.message : "Failed to install skill",
+      );
+    } finally {
+      setInstallingCatalogSkill(null);
+    }
+  };
+
   const handleSave = async () => {
     if (!openFile) return;
     const savedPath = openFile;
@@ -778,9 +887,21 @@ export function WorkspaceEditor({
             New Skill
           </DropdownMenuItem>
         ) : null}
-        {(capabilities.canAddSubAgent || capabilities.canCreateLocalSkill) && (
-          <DropdownMenuSeparator />
-        )}
+        {capabilities.canAddCatalogSkill ? (
+          <DropdownMenuItem
+            className="whitespace-nowrap"
+            onClick={() => {
+              setCatalogInstallError(null);
+              setShowCatalogSkillDialog(true);
+            }}
+          >
+            <Search className="mr-2 h-4 w-4" />
+            Add from catalog
+          </DropdownMenuItem>
+        ) : null}
+        {(capabilities.canAddSubAgent ||
+          capabilities.canCreateLocalSkill ||
+          capabilities.canAddCatalogSkill) && <DropdownMenuSeparator />}
         <DropdownMenuItem
           className="whitespace-nowrap"
           onClick={() => handleAddFolder("docs/")}
@@ -920,6 +1041,11 @@ export function WorkspaceEditor({
                 onDelete={handleDeletePath}
                 onConfirmDelete={handleConfirmDelete}
                 onCancelDeleteConfirm={handleCancelDeleteConfirm}
+                onCreateSkill={() => setShowNewSkillDialog(true)}
+                onAddSkillFromCatalog={() => {
+                  setCatalogInstallError(null);
+                  setShowCatalogSkillDialog(true);
+                }}
               />
             </div>
           </div>
@@ -1022,6 +1148,66 @@ export function WorkspaceEditor({
           </div>
         </DialogContent>
       </Dialog>
+
+      {capabilities.canAddCatalogSkill ? (
+        <Dialog
+          open={showCatalogSkillDialog}
+          onOpenChange={(open) => {
+            setShowCatalogSkillDialog(open);
+            if (open) setCatalogInstallError(null);
+          }}
+        >
+          <DialogContent style={{ maxWidth: 520 }}>
+            <DialogHeader>
+              <DialogTitle>Add from catalog</DialogTitle>
+              <DialogDescription>
+                Install a catalog skill into this workspace.
+              </DialogDescription>
+            </DialogHeader>
+            {catalogInstallError ? (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {catalogInstallError}
+              </div>
+            ) : null}
+            <div className="-mx-2 max-h-[420px] overflow-y-auto">
+              {loadingCatalogSkills ? (
+                <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading catalog...
+                </div>
+              ) : availableCatalogSkills.length === 0 ? (
+                <p className="px-3 py-8 text-center text-sm text-muted-foreground">
+                  All catalog skills are already installed.
+                </p>
+              ) : (
+                availableCatalogSkills.map((skill) => (
+                  <button
+                    key={skill.slug}
+                    type="button"
+                    className="flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left hover:bg-accent disabled:opacity-50"
+                    disabled={Boolean(installingCatalogSkill)}
+                    onClick={() => handleInstallCatalogSkill(skill.slug)}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium">
+                        {skill.name}
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {skill.description}
+                      </span>
+                    </span>
+                    {installingCatalogSkill === skill.slug ? (
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                    ) : (
+                      <Plus className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
 
       {capabilities.canCreateLocalSkill ? (
         <Dialog open={showNewSkillDialog} onOpenChange={setShowNewSkillDialog}>

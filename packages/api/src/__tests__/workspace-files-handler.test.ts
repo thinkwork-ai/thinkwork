@@ -1234,10 +1234,10 @@ describe("U31 role gate (tenant admin/owner required for writes)", () => {
   });
 });
 
-// ─── 9. AGENTS.md derive wiring (U11) ────────────────────────────────────────
+// ─── 9. workspace skill marker derive wiring ────────────────────────────────
 
-describe("AGENTS.md → derive-agent-skills wiring (U11)", () => {
-  it("PUT on root AGENTS.md triggers deriveAgentSkills", async () => {
+describe("workspace skills → derive-agent-skills wiring", () => {
+  it("PUT on root skills/<slug>/SKILL.md triggers deriveAgentSkills", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([agentRow()]);
@@ -1248,7 +1248,7 @@ describe("AGENTS.md → derive-agent-skills wiring (U11)", () => {
       changed: true,
       addedSlugs: ["approve-receipt"],
       removedSlugs: [],
-      agentsMdPathsScanned: ["AGENTS.md"],
+      agentsMdPathsScanned: ["skills/approve-receipt/SKILL.md"],
       warnings: [],
     });
 
@@ -1257,8 +1257,8 @@ describe("AGENTS.md → derive-agent-skills wiring (U11)", () => {
         event({
           action: "put",
           agentId: AGENT_ID,
-          path: "AGENTS.md",
-          content: "## Routing\n",
+          path: "skills/approve-receipt/SKILL.md",
+          content: "# Approve receipt\n",
         }),
       ),
     );
@@ -1272,7 +1272,7 @@ describe("AGENTS.md → derive-agent-skills wiring (U11)", () => {
     );
   });
 
-  it("PUT on a sub-agent folder AGENTS.md (expenses/AGENTS.md) triggers derive", async () => {
+  it("PUT on a sub-agent skill marker triggers derive", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([agentRow()]);
@@ -1285,8 +1285,8 @@ describe("AGENTS.md → derive-agent-skills wiring (U11)", () => {
         event({
           action: "put",
           agentId: AGENT_ID,
-          path: "expenses/AGENTS.md",
-          content: "## Routing\n",
+          path: "expenses/skills/tag-vendor/SKILL.md",
+          content: "# Tag vendor\n",
         }),
       ),
     );
@@ -1348,28 +1348,48 @@ describe("AGENTS.md → derive-agent-skills wiring (U11)", () => {
     pushDbRows([tenantRow()]);
     pushDbRows([{ role: "admin" }]);
     s3Mock.on(PutObjectCommand).resolves({});
-    deriveMockImpl.mockRejectedValue(
-      new Error("AGENTS.md parse failed at AGENTS.md: bad table"),
-    );
+    deriveMockImpl.mockRejectedValue(new Error("database unavailable"));
 
     const res = await parse(
       await handler(
         event({
           action: "put",
           agentId: AGENT_ID,
-          path: "AGENTS.md",
-          content: "garbage",
+          path: "skills/approve-receipt/SKILL.md",
+          content: "# Approve receipt\n",
         }),
       ),
     );
 
     expect(res.statusCode).toBe(500);
     expect(res.body.error).toMatch(/agent_skills derive failed/);
-    expect(res.body.error).toMatch(/parse failed/);
+    expect(res.body.error).toMatch(/database unavailable/);
     expect(s3Mock.commandCalls(PutObjectCommand).length).toBe(1);
   });
 
-  it("PUT on template AGENTS.md does NOT trigger derive (template branch only invalidates tenantScope)", async () => {
+  it("DELETE on a skill marker triggers derive", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+    pushDbRows([agentRow()]);
+    pushDbRows([tenantRow()]);
+    pushDbRows([{ role: "admin" }]);
+    s3Mock.on(DeleteObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "delete",
+          agentId: AGENT_ID,
+          path: "skills/approve-receipt/SKILL.md",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(deriveMockImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("PUT on template skill marker does NOT trigger derive (agent branch only)", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([templateRowTenantA()]);
@@ -1382,7 +1402,7 @@ describe("AGENTS.md → derive-agent-skills wiring (U11)", () => {
         event({
           action: "put",
           templateId: TEMPLATE_ID,
-          path: "AGENTS.md",
+          path: "skills/approve-receipt/SKILL.md",
           content: "ignored",
         }),
       ),
@@ -1392,7 +1412,7 @@ describe("AGENTS.md → derive-agent-skills wiring (U11)", () => {
     expect(deriveMockImpl).not.toHaveBeenCalled();
   });
 
-  it("forwards parser warnings to the success response when derive emits them", async () => {
+  it("forwards derive warnings to the success response when derive emits them", async () => {
     authMockImpl.mockResolvedValue(authOk());
     pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
     pushDbRows([agentRow()]);
@@ -1403,8 +1423,8 @@ describe("AGENTS.md → derive-agent-skills wiring (U11)", () => {
       changed: false,
       addedSlugs: [],
       removedSlugs: [],
-      agentsMdPathsScanned: ["AGENTS.md"],
-      warnings: ["AGENTS.md: row 0 skipped — go_to 'memory/' is reserved"],
+      agentsMdPathsScanned: ["skills/approve-receipt/SKILL.md"],
+      warnings: ["workspace skill warning"],
     });
 
     const res = await parse(
@@ -1412,8 +1432,8 @@ describe("AGENTS.md → derive-agent-skills wiring (U11)", () => {
         event({
           action: "put",
           agentId: AGENT_ID,
-          path: "AGENTS.md",
-          content: "## Routing\n",
+          path: "skills/approve-receipt/SKILL.md",
+          content: "# Approve receipt\n",
         }),
       ),
     );

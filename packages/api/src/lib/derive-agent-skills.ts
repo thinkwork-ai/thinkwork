@@ -1,18 +1,15 @@
 /**
  * derive-agent-skills (Plan §008 U11).
  *
- * Recompute the `agent_skills` set for an agent from its composed workspace
- * tree. The composed-tree AGENTS.md routing rows are the source of truth for
- * which skills the agent can use; this function unions every folder's
- * `Skills` cells, dedups by slug, and reconciles the `agent_skills` table to
- * match.
+ * Recompute the `agent_skills` set for an agent from first-class workspace
+ * skill folders. Presence of any path ending in
+ * `skills/<slug>/SKILL.md` is the activation signal; AGENTS.md skill routing
+ * rows are documentation only.
  *
- * **Direction inversion.** Today `agent_skills` is written by the
- * `setAgentSkills` GraphQL mutation and `regenerateWorkspaceMap` reads it to
- * render root AGENTS.md. The Fat-folder world (master plan §008) inverts
- * this: AGENTS.md is the canonical authoring surface and `agent_skills`
- * becomes a fast lookup derived from it. This module is the file → DB
- * direction.
+ * **Direction inversion.** The Fat-folder world made workspace files the
+ * canonical authoring surface and `agent_skills` a derived lookup. Skills are
+ * now real workspace folders, so the file → DB direction derives directly
+ * from the filesystem rather than from AGENTS.md tables.
  *
  * **What derive owns.** Set membership only — which slugs have rows. The
  * non-skill columns (`config`, `permissions`, `rate_limit_rpm`,
@@ -20,25 +17,24 @@
  * `setAgentSkills` until U21 reroutes them onto AGENTS.md row metadata.
  * Derive uses `onConflictDoNothing` to preserve those fields on rows that
  * already exist; it inserts new rows with schema defaults and deletes rows
- * whose slug no longer appears in any composed AGENTS.md.
+ * whose slug no longer has a `SKILL.md` in the workspace tree.
  *
- * **Trigger.** `workspace-files.ts` `handlePut` (agent branch) calls this
- * function whenever the written path is `AGENTS.md` or
- * `<folder>/AGENTS.md`. The composer cache is invalidated immediately
- * before this call so the composed-tree read sees the just-written content.
+ * **Trigger.** `workspace-files.ts` `handlePut` / `handleDelete` (agent
+ * branch) calls this function whenever a workspace skill `SKILL.md` marker
+ * changes. Catalog installs call it directly because they bypass the
+ * workspace-files Lambda.
  *
  * **No-op detection.** When the derived set already matches the existing
  * set (slugs only — column metadata is out of scope), this function returns
  * `{ changed: false, ... }` without opening a transaction. This breaks the
- * `setAgentSkills` → `regenerateWorkspaceMap` → AGENTS.md put → derive
- * loop: the second derive sees no membership change and exits cleanly.
+ * write → derive loop: the second derive sees no membership change and exits
+ * cleanly.
  *
- * **Failure surface.** Parser errors are re-thrown with the file path
- * prefixed; the caller (handlePut) returns 500 to the client. The S3 put
- * has already succeeded at that point — that's intentional. We don't have
- * S3 versioning + atomic-rename to undo the file write, so the contract is
- * "AGENTS.md is on disk; agent_skills is stale; the next AGENTS.md write
- * retries derive." The handler error message communicates this.
+ * **Failure surface.** DB errors are re-thrown; the caller returns 500 to the
+ * client. The S3 write has already succeeded at that point — that's
+ * intentional. We don't have S3 versioning + atomic-rename to undo the file
+ * write, so the contract is "workspace skill file is on disk; agent_skills is
+ * stale; the next skill-file write retries derive."
  */
 
 import { and, agents, agentSkills, db, eq, inArray } from "../graphql/utils.js";
@@ -48,7 +44,6 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { tenants } from "@thinkwork/database-pg/schema";
-import { parseAgentsMd } from "./agents-md-parser.js";
 
 // Replaces the workspace-overlay composer's read-time list+read.
 // Per docs/plans/2026-04-27-003: the agent prefix is the source of
@@ -132,36 +127,21 @@ export interface DeriveResult {
   addedSlugs: string[];
   /** Slugs removed from the membership set (sorted alphabetically). */
   removedSlugs: string[];
-  /** AGENTS.md paths the composer surfaced, in the order they were scanned. */
+  /** Skill marker paths found in the workspace, in the order scanned. */
   agentsMdPathsScanned: string[];
   /** Per-file parser warnings (skipped reserved/invalid rows). */
   warnings: string[];
 }
 
-const AGENTS_MD_PATH_RE = /(?:^|\/)AGENTS\.md$/;
-
-// Per docs/plans/2026-04-27-004 U4: any `skills/<slug>/SKILL.md` under
-// the workspace tree (root or sub-agent folder) declares the agent has
-// that skill installed. Filesystem is the truth — AGENTS.md `Skills`
-// column rows become documentation only.
 const SKILL_MD_PATH_RE = /(?:^|\/)skills\/([^/]+)\/SKILL\.md$/;
 
 export interface DeriveOptions {
   /**
-   * Override the AGENTS.md reader. Defaults to reading from the agent's
-   * S3 prefix per docs/plans/2026-04-27-003. Tests inject a fake to
-   * avoid spinning S3 + DB for the slug lookup.
+   * Override the workspace reader. Defaults to reading skill `SKILL.md` files
+   * from the agent's S3 prefix. Tests inject a fake to avoid spinning S3 + DB
+   * for the slug lookup.
    */
   readAgentsMdFiles?: (
-    tenantId: string,
-    agentId: string,
-  ) => Promise<AgentPrefixFile[]>;
-  /**
-   * Override the workspace skills SKILL.md reader (walks
-   * `workspace/.../skills/<slug>/SKILL.md`). Defaults to reading from
-   * the agent's S3 prefix.
-   */
-  readSkillMdFiles?: (
     tenantId: string,
     agentId: string,
   ) => Promise<AgentPrefixFile[]>;
@@ -172,69 +152,31 @@ const _defaultAgentsMdReader = (
   agentId: string,
 ): Promise<AgentPrefixFile[]> =>
   _readAgentPrefixFiles(tenantId, agentId, (rel) =>
-    AGENTS_MD_PATH_RE.test(rel),
+    SKILL_MD_PATH_RE.test(rel),
   );
-
-const _defaultSkillMdReader = (
-  tenantId: string,
-  agentId: string,
-): Promise<AgentPrefixFile[]> =>
-  _readAgentPrefixFiles(tenantId, agentId, (rel) => SKILL_MD_PATH_RE.test(rel));
 
 export async function deriveAgentSkills(
   ctx: ComposeContext,
   agentId: string,
   opts: DeriveOptions = {},
 ): Promise<DeriveResult> {
-  const agentsMdReader = opts.readAgentsMdFiles ?? _defaultAgentsMdReader;
-  const skillMdReader = opts.readSkillMdFiles ?? _defaultSkillMdReader;
+  const reader = opts.readAgentsMdFiles ?? _defaultAgentsMdReader;
   // Filter inside derive so an injected reader that returns the full
   // workspace tree (test fixtures often do) still ends up scanning only
-  // AGENTS.md files. The default reader pre-filters; this is a no-op
-  // belt-and-suspenders in production.
-  const agentsMdEntries = (await agentsMdReader(ctx.tenantId, agentId))
-    .filter((entry) => AGENTS_MD_PATH_RE.test(entry.path))
-    .sort((a, b) => a.path.localeCompare(b.path));
-
-  // Per docs/plans/2026-04-27-004 U4: walk every
-  // `workspace/.../skills/<slug>/SKILL.md` under the agent prefix and
-  // emit one row per discovered slug. The filesystem is the truth for
-  // runtime activation; AGENTS.md routing rows continue to be unioned
-  // in (below) so an agent declaring a skill via routing — even if no
-  // SKILL.md is on disk yet — still surfaces in agent_skills.
-  const skillMdEntries = (await skillMdReader(ctx.tenantId, agentId))
+  // workspace skill markers. The default reader pre-filters; this is a
+  // no-op belt-and-suspenders in production.
+  const skillEntries = (await reader(ctx.tenantId, agentId))
     .filter((entry) => SKILL_MD_PATH_RE.test(entry.path))
     .sort((a, b) => a.path.localeCompare(b.path));
 
-  const agentsMdPathsScanned = agentsMdEntries.map((e) => e.path);
+  const agentsMdPathsScanned = skillEntries.map((e) => e.path);
   const warnings: string[] = [];
   const seen = new Set<string>();
 
-  // Filesystem-discovered skills first.
-  for (const entry of skillMdEntries) {
-    const match = SKILL_MD_PATH_RE.exec(entry.path);
-    if (match?.[1]) seen.add(match[1]);
-  }
-
-  for (const entry of agentsMdEntries) {
-    let parsed;
-    try {
-      parsed = parseAgentsMd(entry.content);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      throw new Error(`AGENTS.md parse failed at ${entry.path}: ${msg}`);
-    }
-
-    for (const w of parsed.warnings) {
-      warnings.push(`${entry.path}: ${w}`);
-    }
-
-    for (const row of parsed.routing) {
-      for (const slug of row.skills) {
-        if (slug.length === 0) continue;
-        seen.add(slug);
-      }
-    }
+  for (const entry of skillEntries) {
+    const match = entry.path.match(SKILL_MD_PATH_RE);
+    const slug = match?.[1];
+    if (slug) seen.add(slug);
   }
 
   const derivedSlugs = Array.from(seen).sort();
