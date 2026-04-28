@@ -608,6 +608,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
                         mcp_configs: list | None = None,
                         disabled_builtin_tools: list | None = None,
                         template_blocked_tools: list | None = None,
+                        web_search_config: dict | None = None,
                         browser_automation_enabled: bool = False) -> tuple[str, dict]:
     """Invoke Strands Agent SDK.
 
@@ -1094,6 +1095,23 @@ def _call_strands_agent(system_prompt: str, messages: list,
         logger.info("strands_tools.file_read added for skill resource access")
     except Exception:
         logger.info("strands_tools.file_read not available")
+
+    # Web Search is an injected built-in tool, not a workspace filesystem skill.
+    if web_search_config:
+        try:
+            from strands import tool as _web_search_tool_decorator
+            from web_search_tool import build_web_search_tool
+
+            tools.append(
+                build_web_search_tool(
+                    strands_tool_decorator=_web_search_tool_decorator,
+                    web_search_config=web_search_config,
+                    cost_sink=_tool_costs,
+                )
+            )
+            logger.info("Web Search tool registered (total tools: %d)", len(tools))
+        except Exception as e:
+            logger.warning("Web Search registration failed: %s", e)
 
     # Browser Automation is opt-in per template/agent. When policy enables it,
     # register the tool even if dependencies/key are missing so the agent gets
@@ -1836,6 +1854,7 @@ def _execute_agent_turn(payload: dict) -> dict:
     knowledge_bases_config = payload.get("knowledge_bases")
     guardrail_config = payload.get("guardrail_config")
     mcp_configs = payload.get("mcp_configs") or []
+    web_search_config = payload.get("web_search_config")
     thread_metadata = payload.get("thread_metadata") or {}
     workflow_skill = payload.get("workflow_skill")
     disabled_builtin_tools = payload.get("disabled_builtin_tools") or []
@@ -1954,6 +1973,7 @@ def _execute_agent_turn(payload: dict) -> dict:
             mcp_configs=mcp_configs if mcp_configs else None,
             disabled_builtin_tools=disabled_builtin_tools,
             template_blocked_tools=template_blocked_tools,
+            web_search_config=web_search_config,
             browser_automation_enabled=browser_automation_enabled,
         )
         duration_ms = int(time.time() * 1000) - start_ms
