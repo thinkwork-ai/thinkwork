@@ -139,12 +139,12 @@ const columns: ColumnDef<Row>[] = [
   {
     accessorKey: "provider",
     header: "Provider",
-    size: 120,
+    size: 240,
     cell: ({ row }) => {
       const p = row.original.fixedProvider ?? row.original.state?.provider;
       if (!p) return <span className="text-sm text-muted-foreground">—</span>;
       return (
-        <Badge variant="secondary" className="text-xs font-mono">
+        <Badge variant="secondary" className="whitespace-nowrap text-xs font-mono">
           {p}
         </Badge>
       );

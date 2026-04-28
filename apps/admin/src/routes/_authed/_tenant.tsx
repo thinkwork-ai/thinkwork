@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
-import { Bell, Moon, Search, Sun } from "lucide-react";
+import { Moon, Search, Sun } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { AppSidebar } from "@/components/Sidebar";
@@ -68,13 +68,6 @@ function TenantLayout() {
                 onClick={openSearch}
               >
                 <Search className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                className="text-muted-foreground"
-              >
-                <Bell className="h-4 w-4" />
               </Button>
               <Button
                 variant="ghost"
