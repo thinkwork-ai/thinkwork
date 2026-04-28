@@ -332,11 +332,21 @@ export default function ThreadDetailRoute() {
   });
   const turns = (turnsData?.threadTurns ?? []) as any[];
   const hasRunningTurn = turns.some((t: any) => t.status === "running");
+  // Scope reviews to the calling user — the resolver chain-walks
+  // `parent_agent_id` so a sub-agent review whose chain resolves to this
+  // user surfaces here (in the parent agent's thread). Pause until both
+  // tenantId and the resolved user id are known.
+  const callerUserId = currentUser?.id ?? null;
   const [{ data: reviewListData, fetching: fetchingReviews }, reexecuteReviews] =
     useQuery({
       query: AgentWorkspaceReviewsQuery,
-      variables: { tenantId: tenantId!, status: "awaiting_review", limit: 50 },
-      pause: !threadId || !tenantId,
+      variables: {
+        tenantId: tenantId!,
+        responsibleUserId: callerUserId!,
+        status: "awaiting_review",
+        limit: 50,
+      },
+      pause: !threadId || !tenantId || !callerUserId,
     });
   const pendingReview = useMemo(() => {
     return ((reviewListData?.agentWorkspaceReviews ?? []) as any[]).find(

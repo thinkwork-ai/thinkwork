@@ -3,8 +3,11 @@ export interface ThreadHitlReview {
   requestedAt?: string | null;
   reason?: string | null;
   targetPath?: string | null;
+  responsibleUserId?: string | null;
+  kind?: string | null;
   run?: {
     id?: string | null;
+    agentId?: string | null;
     status?: string | null;
   } | null;
 }
@@ -57,6 +60,50 @@ export function hitlThreadPreview(review?: ThreadHitlReview | null): string {
   const reason = normalizeReason(review?.reason);
   if (reason) return `Waiting for confirmation: ${reason}`;
   return "Waiting for your confirmation";
+}
+
+/**
+ * Pending review whose `run.agentId` is NOT among the user's directly-paired
+ * agents — i.e. it surfaced via the `parent_agent_id` chain walk. Mobile
+ * shows these with a sub-agent-specific label so the operator knows the
+ * action belongs to a child agent rather than the thread's own agent.
+ */
+export function isSubAgentReview(
+  review: ThreadHitlReview | null | undefined,
+  pairedAgentIds: ReadonlySet<string>,
+): boolean {
+  const runAgentId = review?.run?.agentId ?? null;
+  if (!runAgentId) return false;
+  return !pairedAgentIds.has(runAgentId);
+}
+
+/**
+ * Label override for sub-agent reviews surfaced through the parent chain.
+ * When the run's agent isn't directly paired to the caller (i.e. it's a
+ * descendant in the `parent_agent_id` chain), render a label that names
+ * the originating sub-agent and its target path so the operator has
+ * context that the action belongs to a child agent.
+ *
+ * Returns `null` for direct-agent reviews so callers fall through to
+ * `hitlThreadPreview`'s default copy.
+ */
+export function subAgentReviewPreview(
+  review: ThreadHitlReview | null | undefined,
+  options: {
+    pairedAgentIds: ReadonlySet<string>;
+    agentNames: Readonly<Record<string, string>>;
+  },
+): string | null {
+  if (!review) return null;
+  if (!isSubAgentReview(review, options.pairedAgentIds)) return null;
+  const runAgentId = review.run?.agentId ?? "";
+  const subAgentName =
+    (runAgentId && options.agentNames[runAgentId]) || "sub-agent";
+  const target = review.targetPath?.trim();
+  if (target) {
+    return `Sub-agent ${subAgentName} needs your input on ${target}`;
+  }
+  return `Sub-agent ${subAgentName} needs your input`;
 }
 
 function normalizeReason(reason?: string | null): string {
