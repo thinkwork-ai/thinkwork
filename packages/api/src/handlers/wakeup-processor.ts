@@ -52,6 +52,7 @@ import {
   type TemplateSandboxConfig,
 } from "../lib/sandbox-preflight.js";
 import { validateTemplateBrowser } from "../lib/templates/browser-config.js";
+import { validateTemplateWebSearch } from "../lib/templates/web-search-config.js";
 import { ensureThreadForWork } from "../lib/thread-helpers.js";
 import {
   isThreadBlocked,
@@ -289,6 +290,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       blocked_tools: agentTemplates.blocked_tools,
       sandbox: agentTemplates.sandbox,
       browser: agentTemplates.browser,
+      web_search: agentTemplates.web_search,
     })
     .from(agents)
     .leftJoin(agentTemplates, eq(agents.template_id, agentTemplates.id))
@@ -374,6 +376,15 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   if (!templateBrowserResult.ok) {
     console.warn(
       `[wakeup-processor] Invalid template browser config ignored for agent ${wakeup.agent_id}: ${templateBrowserResult.error}`,
+    );
+  }
+  const templateWebSearchResult = validateTemplateWebSearch(agent.web_search);
+  const templateWebSearchEnabled = templateWebSearchResult.ok
+    ? templateWebSearchResult.value?.enabled === true
+    : false;
+  if (!templateWebSearchResult.ok) {
+    console.warn(
+      `[wakeup-processor] Invalid template webSearch config ignored for agent ${wakeup.agent_id}: ${templateWebSearchResult.error}`,
     );
   }
 
@@ -535,6 +546,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   try {
     const builtinTools = await loadTenantBuiltinTools(wakeup.tenant_id);
     for (const bt of builtinTools) {
+      if (bt.toolSlug === "web-search" && !templateWebSearchEnabled) {
+        continue;
+      }
       // If a hand-installed agent_skills row already provided this tool,
       // overlay our env overrides onto it so the provider + key still win.
       const existing = skillsConfig.find((s) => s.skillId === bt.toolSlug);

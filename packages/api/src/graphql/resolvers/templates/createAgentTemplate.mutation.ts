@@ -5,6 +5,7 @@ import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { runWithIdempotency } from "../../../lib/idempotency.js";
 import { validateTemplateBrowser } from "../../../lib/templates/browser-config.js";
 import { validateTemplateSandbox } from "../../../lib/templates/sandbox-config.js";
+import { validateTemplateWebSearch } from "../../../lib/templates/web-search-config.js";
 import {
   parseAgentRuntimeInput,
   withGraphqlAgentRuntime,
@@ -59,6 +60,10 @@ async function createAgentTemplateCore(i: any) {
   if (!sandboxResult.ok) throw new Error(sandboxResult.error);
   const browserResult = validateTemplateBrowser(i.browser);
   if (!browserResult.ok) throw new Error(browserResult.error);
+  const webSearchResult = validateTemplateWebSearch(
+    i.webSearch === undefined ? { enabled: true } : i.webSearch,
+  );
+  if (!webSearchResult.ok) throw new Error(webSearchResult.error);
 
   const [row] = await db
     .insert(agentTemplates)
@@ -78,6 +83,7 @@ async function createAgentTemplateCore(i: any) {
       knowledge_base_ids: knowledgeBaseIds,
       sandbox: sandboxResult.value,
       browser: browserResult.value,
+      web_search: webSearchResult.value,
       is_published: i.isPublished ?? true,
     })
     .returning();

@@ -12,6 +12,7 @@ import {
   Plus,
   Trash2,
   Cable,
+  Search,
 } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -171,6 +172,7 @@ function TemplateEditorPage() {
   const [sandboxEnabled, setSandboxEnabled] = useState(false);
   const [sandboxEnv, setSandboxEnv] = useState<SandboxEnv>("default-public");
   const [browserEnabled, setBrowserEnabled] = useState(false);
+  const [webSearchEnabled, setWebSearchEnabled] = useState(true);
 
   // State -- MCP servers
   const [templateMcpServers, setTemplateMcpServers] = useState<
@@ -227,6 +229,7 @@ function TemplateEditorPage() {
         sandboxEnabled,
         sandboxEnv,
         browserEnabled,
+        webSearchEnabled,
       }),
     [
       name,
@@ -241,6 +244,7 @@ function TemplateEditorPage() {
       sandboxEnabled,
       sandboxEnv,
       browserEnabled,
+      webSearchEnabled,
     ],
   );
   const isDirty = isNew || initialSnapshot !== currentSnapshot;
@@ -298,6 +302,16 @@ function TemplateEditorPage() {
           : browserRaw;
       const nextBrowserEnabled = !!(browser && browser.enabled === true);
       setBrowserEnabled(nextBrowserEnabled);
+
+      const webSearchRaw = (t as any).webSearch;
+      const webSearch =
+        typeof webSearchRaw === "string" && webSearchRaw
+          ? JSON.parse(webSearchRaw)
+          : webSearchRaw;
+      const nextWebSearchEnabled = !!(
+        webSearch && webSearch.enabled === true
+      );
+      setWebSearchEnabled(nextWebSearchEnabled);
       setInitialSnapshot(
         stableJson({
           name: t.name,
@@ -312,6 +326,7 @@ function TemplateEditorPage() {
           sandboxEnabled: nextSandboxEnabled,
           sandboxEnv: nextSandboxEnv,
           browserEnabled: nextBrowserEnabled,
+          webSearchEnabled: nextWebSearchEnabled,
         }),
       );
     }
@@ -430,6 +445,9 @@ function TemplateEditorPage() {
     const browserJson = browserEnabled
       ? JSON.stringify({ enabled: true })
       : JSON.stringify(null);
+    const webSearchJson = webSearchEnabled
+      ? JSON.stringify({ enabled: true })
+      : JSON.stringify(null);
     const config = JSON.stringify(templateConfig);
 
     try {
@@ -445,6 +463,7 @@ function TemplateEditorPage() {
             config,
             sandbox: sandboxJson,
             browser: browserJson,
+            webSearch: webSearchJson,
             runtime,
 
             model: model || undefined,
@@ -476,6 +495,7 @@ function TemplateEditorPage() {
             config,
             sandbox: sandboxJson,
             browser: browserJson,
+            webSearch: webSearchJson,
             runtime,
 
             model: model || undefined,
@@ -747,6 +767,33 @@ function TemplateEditorPage() {
                     id="browser-enabled"
                     checked={browserEnabled}
                     onCheckedChange={setBrowserEnabled}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Web Search</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-4">
+                  <div className="flex-1 space-y-1">
+                    <Label htmlFor="web-search-enabled" className="font-normal">
+                      Enable <code>web_search</code> for agents in this
+                      template
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Injects the tenant-configured Web Search built-in tool on
+                      agent turns. Configure the provider and API key under
+                      Capabilities.
+                    </p>
+                  </div>
+                  <Search className="h-4 w-4 text-muted-foreground" />
+                  <Switch
+                    id="web-search-enabled"
+                    checked={webSearchEnabled}
+                    onCheckedChange={setWebSearchEnabled}
                   />
                 </div>
               </CardContent>

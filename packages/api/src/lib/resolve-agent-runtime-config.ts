@@ -60,6 +60,7 @@ import {
 import { loadTenantBuiltinTools } from "../handlers/skills.js";
 import type { TemplateSandboxConfig } from "./sandbox-preflight.js";
 import { validateTemplateBrowser } from "./templates/browser-config.js";
+import { validateTemplateWebSearch } from "./templates/web-search-config.js";
 
 export interface SkillConfig {
   skillId: string;
@@ -222,6 +223,7 @@ export async function resolveAgentRuntimeConfig(
       blocked_tools: agentTemplates.blocked_tools,
       sandbox: agentTemplates.sandbox,
       browser: agentTemplates.browser,
+      web_search: agentTemplates.web_search,
       runtime: agentTemplates.runtime,
     })
     .from(agentTemplates)
@@ -342,6 +344,17 @@ export async function resolveAgentRuntimeConfig(
       `${logPrefix} Invalid template browser config ignored for agent ${opts.agentId}: ${templateBrowserResult.error}`,
     );
   }
+  const templateWebSearchResult = validateTemplateWebSearch(
+    agentTemplate.web_search,
+  );
+  const templateWebSearchEnabled = templateWebSearchResult.ok
+    ? templateWebSearchResult.value?.enabled === true
+    : false;
+  if (!templateWebSearchResult.ok) {
+    console.warn(
+      `${logPrefix} Invalid template webSearch config ignored for agent ${opts.agentId}: ${templateWebSearchResult.error}`,
+    );
+  }
 
   // --- Skills --------------------------------------------------------------
   // Per-agent installs first, then default skills the container always needs,
@@ -435,6 +448,9 @@ export async function resolveAgentRuntimeConfig(
   try {
     const builtinTools = await loadTenantBuiltinTools(opts.tenantId);
     for (const bt of builtinTools) {
+      if (bt.toolSlug === "web-search" && !templateWebSearchEnabled) {
+        continue;
+      }
       const existing = skillsConfig.find((s) => s.skillId === bt.toolSlug);
       if (existing) {
         existing.envOverrides = {
