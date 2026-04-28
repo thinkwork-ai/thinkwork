@@ -1,7 +1,7 @@
 ---
 title: "refactor: Route workspace reviews by responsibility and remove standalone admin page"
 type: refactor
-status: active
+status: completed
 date: 2026-04-28
 origin: docs/brainstorms/2026-04-28-workspace-reviews-routing-and-removal-requirements.md
 ---
