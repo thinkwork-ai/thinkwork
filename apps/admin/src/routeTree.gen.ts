@@ -76,6 +76,7 @@ import { Route as AuthedTenantAgentsAgentIdSubAgentsRouteImport } from './routes
 import { Route as AuthedTenantAgentsAgentIdSkillsRouteImport } from './routes/_authed/_tenant/agents/$agentId_.skills'
 import { Route as AuthedTenantAgentsAgentIdMemoryRouteImport } from './routes/_authed/_tenant/agents/$agentId_.memory'
 import { Route as AuthedTenantAgentsAgentIdKnowledgeRouteImport } from './routes/_authed/_tenant/agents/$agentId_.knowledge'
+import { Route as AuthedTenantAgentsAgentIdEditorRouteImport } from './routes/_authed/_tenant/agents/$agentId_.editor'
 import { Route as AuthedTenantAgentTemplatesTemplateIdSyncRouteImport } from './routes/_authed/_tenant/agent-templates/$templateId_.sync'
 import { Route as AuthedTenantAgentTemplatesTemplateIdTabRouteImport } from './routes/_authed/_tenant/agent-templates/$templateId.$tab'
 import { Route as AuthedTenantAgentsAgentIdScheduledJobsIndexRouteImport } from './routes/_authed/_tenant/agents/$agentId_.scheduled-jobs.index'
@@ -463,6 +464,12 @@ const AuthedTenantAgentsAgentIdKnowledgeRoute =
     path: '/agents/$agentId/knowledge',
     getParentRoute: () => AuthedTenantRoute,
   } as any)
+const AuthedTenantAgentsAgentIdEditorRoute =
+  AuthedTenantAgentsAgentIdEditorRouteImport.update({
+    id: '/agents/$agentId_/editor',
+    path: '/agents/$agentId/editor',
+    getParentRoute: () => AuthedTenantRoute,
+  } as any)
 const AuthedTenantAgentTemplatesTemplateIdSyncRoute =
   AuthedTenantAgentTemplatesTemplateIdSyncRouteImport.update({
     id: '/agent-templates/$templateId_/sync',
@@ -545,6 +552,7 @@ export interface FileRoutesByFullPath {
   '/workspace-reviews/': typeof AuthedTenantWorkspaceReviewsIndexRoute
   '/agent-templates/$templateId/$tab': typeof AuthedTenantAgentTemplatesTemplateIdTabRoute
   '/agent-templates/$templateId/sync': typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute
+  '/agents/$agentId/editor': typeof AuthedTenantAgentsAgentIdEditorRoute
   '/agents/$agentId/knowledge': typeof AuthedTenantAgentsAgentIdKnowledgeRoute
   '/agents/$agentId/memory': typeof AuthedTenantAgentsAgentIdMemoryRoute
   '/agents/$agentId/skills': typeof AuthedTenantAgentsAgentIdSkillsRoute
@@ -615,6 +623,7 @@ export interface FileRoutesByTo {
   '/workspace-reviews': typeof AuthedTenantWorkspaceReviewsIndexRoute
   '/agent-templates/$templateId/$tab': typeof AuthedTenantAgentTemplatesTemplateIdTabRoute
   '/agent-templates/$templateId/sync': typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute
+  '/agents/$agentId/editor': typeof AuthedTenantAgentsAgentIdEditorRoute
   '/agents/$agentId/knowledge': typeof AuthedTenantAgentsAgentIdKnowledgeRoute
   '/agents/$agentId/memory': typeof AuthedTenantAgentsAgentIdMemoryRoute
   '/agents/$agentId/skills': typeof AuthedTenantAgentsAgentIdSkillsRoute
@@ -690,6 +699,7 @@ export interface FileRoutesById {
   '/_authed/_tenant/workspace-reviews/': typeof AuthedTenantWorkspaceReviewsIndexRoute
   '/_authed/_tenant/agent-templates/$templateId/$tab': typeof AuthedTenantAgentTemplatesTemplateIdTabRoute
   '/_authed/_tenant/agent-templates/$templateId_/sync': typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute
+  '/_authed/_tenant/agents/$agentId_/editor': typeof AuthedTenantAgentsAgentIdEditorRoute
   '/_authed/_tenant/agents/$agentId_/knowledge': typeof AuthedTenantAgentsAgentIdKnowledgeRoute
   '/_authed/_tenant/agents/$agentId_/memory': typeof AuthedTenantAgentsAgentIdMemoryRoute
   '/_authed/_tenant/agents/$agentId_/skills': typeof AuthedTenantAgentsAgentIdSkillsRoute
@@ -764,6 +774,7 @@ export interface FileRouteTypes {
     | '/workspace-reviews/'
     | '/agent-templates/$templateId/$tab'
     | '/agent-templates/$templateId/sync'
+    | '/agents/$agentId/editor'
     | '/agents/$agentId/knowledge'
     | '/agents/$agentId/memory'
     | '/agents/$agentId/skills'
@@ -834,6 +845,7 @@ export interface FileRouteTypes {
     | '/workspace-reviews'
     | '/agent-templates/$templateId/$tab'
     | '/agent-templates/$templateId/sync'
+    | '/agents/$agentId/editor'
     | '/agents/$agentId/knowledge'
     | '/agents/$agentId/memory'
     | '/agents/$agentId/skills'
@@ -908,6 +920,7 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/workspace-reviews/'
     | '/_authed/_tenant/agent-templates/$templateId/$tab'
     | '/_authed/_tenant/agent-templates/$templateId_/sync'
+    | '/_authed/_tenant/agents/$agentId_/editor'
     | '/_authed/_tenant/agents/$agentId_/knowledge'
     | '/_authed/_tenant/agents/$agentId_/memory'
     | '/_authed/_tenant/agents/$agentId_/skills'
@@ -1411,6 +1424,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedTenantAgentsAgentIdKnowledgeRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
+    '/_authed/_tenant/agents/$agentId_/editor': {
+      id: '/_authed/_tenant/agents/$agentId_/editor'
+      path: '/agents/$agentId/editor'
+      fullPath: '/agents/$agentId/editor'
+      preLoaderRoute: typeof AuthedTenantAgentsAgentIdEditorRouteImport
+      parentRoute: typeof AuthedTenantRoute
+    }
     '/_authed/_tenant/agent-templates/$templateId_/sync': {
       id: '/_authed/_tenant/agent-templates/$templateId_/sync'
       path: '/agent-templates/$templateId/sync'
@@ -1547,6 +1567,7 @@ interface AuthedTenantRouteChildren {
   AuthedTenantWorkspaceReviewsIndexRoute: typeof AuthedTenantWorkspaceReviewsIndexRoute
   AuthedTenantAgentTemplatesTemplateIdTabRoute: typeof AuthedTenantAgentTemplatesTemplateIdTabRoute
   AuthedTenantAgentTemplatesTemplateIdSyncRoute: typeof AuthedTenantAgentTemplatesTemplateIdSyncRoute
+  AuthedTenantAgentsAgentIdEditorRoute: typeof AuthedTenantAgentsAgentIdEditorRoute
   AuthedTenantAgentsAgentIdKnowledgeRoute: typeof AuthedTenantAgentsAgentIdKnowledgeRoute
   AuthedTenantAgentsAgentIdMemoryRoute: typeof AuthedTenantAgentsAgentIdMemoryRoute
   AuthedTenantAgentsAgentIdSkillsRoute: typeof AuthedTenantAgentsAgentIdSkillsRoute
@@ -1605,6 +1626,7 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
     AuthedTenantAgentTemplatesTemplateIdTabRoute,
   AuthedTenantAgentTemplatesTemplateIdSyncRoute:
     AuthedTenantAgentTemplatesTemplateIdSyncRoute,
+  AuthedTenantAgentsAgentIdEditorRoute: AuthedTenantAgentsAgentIdEditorRoute,
   AuthedTenantAgentsAgentIdKnowledgeRoute:
     AuthedTenantAgentsAgentIdKnowledgeRoute,
   AuthedTenantAgentsAgentIdMemoryRoute: AuthedTenantAgentsAgentIdMemoryRoute,

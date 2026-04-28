@@ -1,6 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { AgentBuilderShell } from "@/components/agent-builder/AgentBuilderShell";
-import { useBreadcrumbs } from "@/context/BreadcrumbContext";
+import { createFileRoute, Navigate } from "@tanstack/react-router";
 
 export const Route = createFileRoute(
   "/_authed/_tenant/agents/$agentId_/workspace",
@@ -15,11 +13,11 @@ function AgentWorkspacePage() {
   const { agentId } = Route.useParams();
   const { folder } = Route.useSearch();
 
-  useBreadcrumbs([
-    { label: "Agents", href: "/agents" },
-    { label: "Agent", href: `/agents/${agentId}` },
-    { label: "Builder" },
-  ]);
-
-  return <AgentBuilderShell agentId={agentId} initialFolder={folder} />;
+  return (
+    <Navigate
+      to="/agents/$agentId/editor"
+      params={{ agentId }}
+      search={{ folder }}
+    />
+  );
 }
