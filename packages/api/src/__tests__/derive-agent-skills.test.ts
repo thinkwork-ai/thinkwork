@@ -189,6 +189,21 @@ describe("deriveAgentSkills — workspace skill folders", () => {
     expect(dbState.deleteCalls).toHaveLength(0);
   });
 
+  it("ignores built-in tool markers because those are configured outside workspace skills", async () => {
+    readWorkspaceMock.mockResolvedValue([
+      workspaceEntry("skills/web-search/SKILL.md"),
+    ]);
+    pushSelect([]);
+
+    const result = await deriveAgentSkills(ctx(), AGENT_ID, deriveOpts);
+
+    expect(result.changed).toBe(false);
+    expect(result.addedSlugs).toEqual([]);
+    expect(result.removedSlugs).toEqual([]);
+    expect(result.agentsMdPathsScanned).toEqual(["skills/web-search/SKILL.md"]);
+    expect(dbState.transactionInvocations).toBe(0);
+  });
+
   it("deletes rows when a skill marker is removed", async () => {
     readWorkspaceMock.mockResolvedValue([]);
     pushSelect([{ skill_id: "approve-receipt" }, { skill_id: "tag-vendor" }]);

@@ -55,6 +55,7 @@ import {
 import { regenerateManifest } from "./src/lib/workspace-manifest.js";
 import { bootstrapAgentWorkspace } from "./src/lib/workspace-bootstrap.js";
 import { deriveAgentSkills } from "./src/lib/derive-agent-skills.js";
+import { isBuiltinToolWorkspacePath } from "./src/lib/builtin-tool-slugs.js";
 import {
   agents,
   agentTemplates,
@@ -354,7 +355,10 @@ async function handleList(
   // files.
   const paths = await listPrefix(target.prefix);
   const visiblePaths = paths.filter(
-    (p) => p !== "manifest.json" && p !== "_defaults_version",
+    (p) =>
+      p !== "manifest.json" &&
+      p !== "_defaults_version" &&
+      !isBuiltinToolWorkspacePath(p),
   );
 
   if (!includeContent) {
@@ -441,6 +445,14 @@ async function handlePut(
     return json(403, {
       ok: false,
       error: "use orchestration writer",
+    });
+  }
+
+  if (isBuiltinToolWorkspacePath(cleanPath)) {
+    return json(403, {
+      ok: false,
+      error:
+        "Built-in tools are configured through the Built-in Tools API, not workspace skill files.",
     });
   }
 
