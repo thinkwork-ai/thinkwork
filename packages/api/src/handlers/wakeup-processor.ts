@@ -54,6 +54,7 @@ import {
 import { validateTemplateBrowser } from "../lib/templates/browser-config.js";
 import { validateTemplateSendEmail } from "../lib/templates/send-email-config.js";
 import { validateTemplateWebSearch } from "../lib/templates/web-search-config.js";
+import { resolveWebSearchConfigFromSkills } from "../lib/web-search-config.js";
 import { ensureThreadForWork } from "../lib/thread-helpers.js";
 import {
   isThreadBlocked,
@@ -537,6 +538,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       );
     }
   }
+
+  const webSearchConfig = resolveWebSearchConfigFromSkills(skillsConfig);
 
   // Look up agent's assigned knowledge bases (PRD-13)
   const kbRows = await db
@@ -1249,6 +1252,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       workspace_bucket: WORKSPACE_BUCKET || undefined,
       workspace_prefix: workspacePrefix,
       hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
+      web_search_config: webSearchConfig,
       send_email_config: sendEmailConfig
         ? { ...sendEmailConfig, threadId: resolvedThreadId }
         : undefined,
@@ -1719,6 +1723,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             workspace_bucket: WORKSPACE_BUCKET || undefined,
             workspace_prefix: workspacePrefix,
             hindsight_endpoint: HINDSIGHT_ENDPOINT || undefined,
+            web_search_config: webSearchConfig,
+            send_email_config: sendEmailConfig
+              ? { ...sendEmailConfig, threadId: resolvedThreadId }
+              : undefined,
             runtime_type: runtimeType,
             model: agent.model,
             skills: skillsConfig.length > 0 ? skillsConfig : undefined,
@@ -1732,6 +1740,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             session_key: triggerId || `wakeup-${wakeup.source}`,
             trigger_channel:
               threadContext?.channel || wakeup.source || undefined,
+            blocked_tools: blockedTools.length > 0 ? blockedTools : undefined,
+            browser_automation_enabled: browserAutomationEnabled || undefined,
           },
           runtimeType,
         );

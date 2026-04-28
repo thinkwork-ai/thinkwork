@@ -62,6 +62,10 @@ import type { TemplateSandboxConfig } from "./sandbox-preflight.js";
 import { validateTemplateBrowser } from "./templates/browser-config.js";
 import { validateTemplateSendEmail } from "./templates/send-email-config.js";
 import { validateTemplateWebSearch } from "./templates/web-search-config.js";
+import {
+  resolveWebSearchConfigFromSkills,
+  type WebSearchRuntimeConfig,
+} from "./web-search-config.js";
 
 export interface SkillConfig {
   skillId: string;
@@ -85,10 +89,7 @@ export interface McpConfig {
   tools?: string[];
 }
 
-export interface WebSearchConfig {
-  provider: "exa" | "serpapi";
-  apiKey: string;
-}
+export type WebSearchConfig = WebSearchRuntimeConfig;
 
 export interface SendEmailConfig {
   agentId: string;
@@ -493,23 +494,7 @@ export async function resolveAgentRuntimeConfig(
     }
   }
 
-  const webSearchSkill = skillsConfig.find((s) => s.skillId === "web-search");
-  const webSearchProvider = webSearchSkill?.envOverrides?.WEB_SEARCH_PROVIDER;
-  let webSearchConfig: WebSearchConfig | undefined;
-  if (
-    webSearchProvider === "serpapi" &&
-    webSearchSkill?.envOverrides?.SERPAPI_KEY
-  ) {
-    webSearchConfig = {
-      provider: "serpapi",
-      apiKey: webSearchSkill.envOverrides.SERPAPI_KEY,
-    };
-  } else if (webSearchSkill?.envOverrides?.EXA_API_KEY) {
-    webSearchConfig = {
-      provider: "exa",
-      apiKey: webSearchSkill.envOverrides.EXA_API_KEY,
-    };
-  }
+  const webSearchConfig = resolveWebSearchConfigFromSkills(skillsConfig);
 
   // --- Knowledge bases -----------------------------------------------------
 
