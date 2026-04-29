@@ -610,6 +610,7 @@ def _call_strands_agent(system_prompt: str, messages: list,
                         template_blocked_tools: list | None = None,
                         web_search_config: dict | None = None,
                         send_email_config: dict | None = None,
+                        context_engine_enabled: bool = False,
                         browser_automation_enabled: bool = False) -> tuple[str, dict]:
     """Invoke Strands Agent SDK.
 
@@ -1089,14 +1090,15 @@ def _call_strands_agent(system_prompt: str, messages: list,
         except Exception as e:
             logger.warning("Hindsight tools registration failed: %s", e)
 
-    try:
-        from strands import tool as _context_engine_tool_decorator
-        from context_engine_tool import make_context_engine_tool
+    if context_engine_enabled:
+        try:
+            from strands import tool as _context_engine_tool_decorator
+            from context_engine_tool import make_context_engine_tool
 
-        tools.append(make_context_engine_tool(_context_engine_tool_decorator))
-        logger.info("Context Engine tool registered: query_context")
-    except Exception as e:
-        logger.warning("Context Engine tool registration failed: %s", e)
+            tools.append(make_context_engine_tool(_context_engine_tool_decorator))
+            logger.info("Context Engine tool registered: query_context")
+        except Exception as e:
+            logger.warning("Context Engine tool registration failed: %s", e)
 
     # Add file_read tool for skill resource access
     try:
@@ -1883,6 +1885,7 @@ def _execute_agent_turn(payload: dict) -> dict:
     mcp_configs = payload.get("mcp_configs") or []
     web_search_config = payload.get("web_search_config")
     send_email_config = payload.get("send_email_config")
+    context_engine_enabled = bool(payload.get("context_engine_enabled"))
     thread_metadata = payload.get("thread_metadata") or {}
     workflow_skill = payload.get("workflow_skill")
     disabled_builtin_tools = payload.get("disabled_builtin_tools") or []
@@ -2003,6 +2006,7 @@ def _execute_agent_turn(payload: dict) -> dict:
             template_blocked_tools=template_blocked_tools,
             web_search_config=web_search_config,
             send_email_config=send_email_config,
+            context_engine_enabled=context_engine_enabled,
             browser_automation_enabled=browser_automation_enabled,
         )
         duration_ms = int(time.time() * 1000) - start_ms

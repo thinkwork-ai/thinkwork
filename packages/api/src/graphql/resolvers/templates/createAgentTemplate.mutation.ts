@@ -4,6 +4,7 @@ import { requireTenantAdmin } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { runWithIdempotency } from "../../../lib/idempotency.js";
 import { validateTemplateBrowser } from "../../../lib/templates/browser-config.js";
+import { validateTemplateContextEngine } from "../../../lib/templates/context-engine-config.js";
 import { validateTemplateSandbox } from "../../../lib/templates/sandbox-config.js";
 import { validateTemplateSendEmail } from "../../../lib/templates/send-email-config.js";
 import { validateTemplateWebSearch } from "../../../lib/templates/web-search-config.js";
@@ -69,6 +70,10 @@ async function createAgentTemplateCore(i: any) {
     i.sendEmail === undefined ? { enabled: true } : i.sendEmail,
   );
   if (!sendEmailResult.ok) throw new Error(sendEmailResult.error);
+  const contextEngineResult = validateTemplateContextEngine(
+    i.contextEngine === undefined ? { enabled: true } : i.contextEngine,
+  );
+  if (!contextEngineResult.ok) throw new Error(contextEngineResult.error);
 
   const [row] = await db
     .insert(agentTemplates)
@@ -90,14 +95,16 @@ async function createAgentTemplateCore(i: any) {
       browser: browserResult.value,
       web_search: webSearchResult.value,
       send_email: sendEmailResult.value,
+      context_engine: contextEngineResult.value,
       is_published: i.isPublished ?? true,
     })
     .returning();
 
   // Copy default workspace files to the new template
   try {
-    const { copyDefaultsToTemplate } =
-      await import("../../../lib/workspace-copy.js");
+    const { copyDefaultsToTemplate } = await import(
+      "../../../lib/workspace-copy.js"
+    );
     await copyDefaultsToTemplate(i.tenantId, i.slug);
   } catch (err) {
     console.warn(

@@ -167,9 +167,11 @@ export async function runPiAgent(
             ? "builtin"
             : event.toolName === "send_email"
               ? "builtin"
-              : event.toolName === "execute_code"
-                ? "sandbox"
-                : "tool",
+              : event.toolName === "query_context"
+                ? "builtin"
+                : event.toolName === "execute_code"
+                  ? "sandbox"
+                  : "tool",
       });
     }
     if (event.type === "tool_execution_end") {

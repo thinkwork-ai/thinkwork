@@ -1,375 +1,388 @@
 /* eslint-disable */
-import { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-node/core';
+import { TypedDocumentNode as DocumentNode } from "@graphql-typed-document-node/core";
 export type Maybe<T> = T | null;
 export type InputMaybe<T> = Maybe<T>;
-export type Exact<T extends { [key: string]: unknown }> = { [K in keyof T]: T[K] };
-export type MakeOptional<T, K extends keyof T> = Omit<T, K> & { [SubKey in K]?: Maybe<T[SubKey]> };
-export type MakeMaybe<T, K extends keyof T> = Omit<T, K> & { [SubKey in K]: Maybe<T[SubKey]> };
-export type MakeEmpty<T extends { [key: string]: unknown }, K extends keyof T> = { [_ in K]?: never };
-export type Incremental<T> = T | { [P in keyof T]?: P extends ' $fragmentName' | '__typename' ? T[P] : never };
+export type Exact<T extends { [key: string]: unknown }> = {
+  [K in keyof T]: T[K];
+};
+export type MakeOptional<T, K extends keyof T> = Omit<T, K> & {
+  [SubKey in K]?: Maybe<T[SubKey]>;
+};
+export type MakeMaybe<T, K extends keyof T> = Omit<T, K> & {
+  [SubKey in K]: Maybe<T[SubKey]>;
+};
+export type MakeEmpty<
+  T extends { [key: string]: unknown },
+  K extends keyof T,
+> = { [_ in K]?: never };
+export type Incremental<T> =
+  | T
+  | {
+      [P in keyof T]?: P extends " $fragmentName" | "__typename" ? T[P] : never;
+    };
 /** All built-in and custom scalars, mapped to their actual values */
 export type Scalars = {
-  ID: { input: string; output: string; }
-  String: { input: string; output: string; }
-  Boolean: { input: boolean; output: boolean; }
-  Int: { input: number; output: number; }
-  Float: { input: number; output: number; }
-  AWSDateTime: { input: any; output: any; }
-  AWSJSON: { input: any; output: any; }
-  AWSURL: { input: any; output: any; }
+  ID: { input: string; output: string };
+  String: { input: string; output: string };
+  Boolean: { input: boolean; output: boolean };
+  Int: { input: number; output: number };
+  Float: { input: number; output: number };
+  AWSDateTime: { input: any; output: any };
+  AWSJSON: { input: any; output: any };
+  AWSURL: { input: any; output: any };
 };
 
 export type AcceptTemplateUpdateBulkResult = {
-  __typename?: 'AcceptTemplateUpdateBulkResult';
-  accepted: Scalars['Int']['output'];
-  failed: Scalars['Int']['output'];
+  __typename?: "AcceptTemplateUpdateBulkResult";
+  accepted: Scalars["Int"]["output"];
+  failed: Scalars["Int"]["output"];
   results: Array<AcceptTemplateUpdateBulkResultEntry>;
 };
 
 export type AcceptTemplateUpdateBulkResultEntry = {
-  __typename?: 'AcceptTemplateUpdateBulkResultEntry';
-  agentId: Scalars['ID']['output'];
-  error?: Maybe<Scalars['String']['output']>;
-  success: Scalars['Boolean']['output'];
+  __typename?: "AcceptTemplateUpdateBulkResultEntry";
+  agentId: Scalars["ID"]["output"];
+  error?: Maybe<Scalars["String"]["output"]>;
+  success: Scalars["Boolean"]["output"];
 };
 
 export type ActivationAutomationCandidate = {
-  __typename?: 'ActivationAutomationCandidate';
-  config: Scalars['AWSJSON']['output'];
-  costEstimate: Scalars['AWSJSON']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  disclosureVersion: Scalars['String']['output'];
-  duplicateKey: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  prompt?: Maybe<Scalars['String']['output']>;
-  scheduleExpression: Scalars['String']['output'];
-  scheduleType: Scalars['String']['output'];
-  sessionId: Scalars['ID']['output'];
+  __typename?: "ActivationAutomationCandidate";
+  config: Scalars["AWSJSON"]["output"];
+  costEstimate: Scalars["AWSJSON"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  disclosureVersion: Scalars["String"]["output"];
+  duplicateKey: Scalars["String"]["output"];
+  id: Scalars["ID"]["output"];
+  prompt?: Maybe<Scalars["String"]["output"]>;
+  scheduleExpression: Scalars["String"]["output"];
+  scheduleType: Scalars["String"]["output"];
+  sessionId: Scalars["ID"]["output"];
   sourceLayer: ActivationLayer;
   status: ActivationAutomationCandidateStatus;
-  summary: Scalars['String']['output'];
-  targetAgentId?: Maybe<Scalars['ID']['output']>;
-  targetType: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  timezone: Scalars['String']['output'];
-  title: Scalars['String']['output'];
-  triggerType: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-  userId: Scalars['ID']['output'];
-  whySuggested?: Maybe<Scalars['String']['output']>;
+  summary: Scalars["String"]["output"];
+  targetAgentId?: Maybe<Scalars["ID"]["output"]>;
+  targetType: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  timezone: Scalars["String"]["output"];
+  title: Scalars["String"]["output"];
+  triggerType: Scalars["String"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  userId: Scalars["ID"]["output"];
+  whySuggested?: Maybe<Scalars["String"]["output"]>;
 };
 
 export enum ActivationAutomationCandidateStatus {
-  Deferred = 'deferred',
-  Dismissed = 'dismissed',
-  Generated = 'generated'
+  Deferred = "deferred",
+  Dismissed = "dismissed",
+  Generated = "generated",
 }
 
 export enum ActivationLayer {
-  Decisions = 'decisions',
-  Dependencies = 'dependencies',
-  Friction = 'friction',
-  Knowledge = 'knowledge',
-  Rhythms = 'rhythms'
+  Decisions = "decisions",
+  Dependencies = "dependencies",
+  Friction = "friction",
+  Knowledge = "knowledge",
+  Rhythms = "rhythms",
 }
 
 export enum ActivationMode {
-  Full = 'full',
-  Refresh = 'refresh'
+  Full = "full",
+  Refresh = "refresh",
 }
 
 export type ActivationSession = {
-  __typename?: 'ActivationSession';
-  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
+  __typename?: "ActivationSession";
+  completedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
   currentLayer: ActivationLayer;
   focusLayer?: Maybe<ActivationLayer>;
-  id: Scalars['ID']['output'];
-  lastActiveAt: Scalars['AWSDateTime']['output'];
-  lastAgentMessage?: Maybe<Scalars['String']['output']>;
-  layerStates: Scalars['AWSJSON']['output'];
+  id: Scalars["ID"]["output"];
+  lastActiveAt: Scalars["AWSDateTime"]["output"];
+  lastAgentMessage?: Maybe<Scalars["String"]["output"]>;
+  layerStates: Scalars["AWSJSON"]["output"];
   mode: ActivationMode;
   status: ActivationStatus;
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-  userId: Scalars['ID']['output'];
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  userId: Scalars["ID"]["output"];
 };
 
 export type ActivationSessionEvent = {
-  __typename?: 'ActivationSessionEvent';
+  __typename?: "ActivationSessionEvent";
   currentLayer: ActivationLayer;
-  eventType: Scalars['String']['output'];
-  lastAgentMessage?: Maybe<Scalars['String']['output']>;
-  layerStates: Scalars['AWSJSON']['output'];
-  sessionId: Scalars['ID']['output'];
+  eventType: Scalars["String"]["output"];
+  lastAgentMessage?: Maybe<Scalars["String"]["output"]>;
+  layerStates: Scalars["AWSJSON"]["output"];
+  sessionId: Scalars["ID"]["output"];
   status: ActivationStatus;
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-  userId: Scalars['ID']['output'];
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  userId: Scalars["ID"]["output"];
 };
 
 export type ActivationSessionTurn = {
-  __typename?: 'ActivationSessionTurn';
-  content: Scalars['String']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
+  __typename?: "ActivationSessionTurn";
+  content: Scalars["String"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
   layerId: ActivationLayer;
-  role: Scalars['String']['output'];
-  sessionId: Scalars['ID']['output'];
-  turnIndex: Scalars['Int']['output'];
+  role: Scalars["String"]["output"];
+  sessionId: Scalars["ID"]["output"];
+  turnIndex: Scalars["Int"]["output"];
 };
 
 export enum ActivationStatus {
-  Abandoned = 'abandoned',
-  Applied = 'applied',
-  InProgress = 'in_progress',
-  ReadyForReview = 'ready_for_review'
+  Abandoned = "abandoned",
+  Applied = "applied",
+  InProgress = "in_progress",
+  ReadyForReview = "ready_for_review",
 }
 
 export type ActivityLogEntry = {
-  __typename?: 'ActivityLogEntry';
-  action: Scalars['String']['output'];
-  actorId: Scalars['ID']['output'];
-  actorType: Scalars['String']['output'];
-  changes?: Maybe<Scalars['AWSJSON']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  entityId?: Maybe<Scalars['ID']['output']>;
-  entityType?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  metadata?: Maybe<Scalars['AWSJSON']['output']>;
-  tenantId: Scalars['ID']['output'];
+  __typename?: "ActivityLogEntry";
+  action: Scalars["String"]["output"];
+  actorId: Scalars["ID"]["output"];
+  actorType: Scalars["String"]["output"];
+  changes?: Maybe<Scalars["AWSJSON"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  entityId?: Maybe<Scalars["ID"]["output"]>;
+  entityType?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
 };
 
 export type AddInboxItemCommentInput = {
-  authorId?: InputMaybe<Scalars['ID']['input']>;
-  authorType?: InputMaybe<Scalars['String']['input']>;
-  content: Scalars['String']['input'];
-  inboxItemId: Scalars['ID']['input'];
+  authorId?: InputMaybe<Scalars["ID"]["input"]>;
+  authorType?: InputMaybe<Scalars["String"]["input"]>;
+  content: Scalars["String"]["input"];
+  inboxItemId: Scalars["ID"]["input"];
 };
 
 export type AddInboxItemLinkInput = {
-  inboxItemId: Scalars['ID']['input'];
-  linkedId: Scalars['ID']['input'];
-  linkedType: Scalars['String']['input'];
+  inboxItemId: Scalars["ID"]["input"];
+  linkedId: Scalars["ID"]["input"];
+  linkedType: Scalars["String"]["input"];
 };
 
 export type AddTeamAgentInput = {
-  agentId: Scalars['ID']['input'];
+  agentId: Scalars["ID"]["input"];
   /** Optional idempotency key. See CreateTeamInput.idempotencyKey. */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  role?: InputMaybe<Scalars['String']['input']>;
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
+  role?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type AddTeamUserInput = {
   /** Optional idempotency key. See CreateTeamInput.idempotencyKey. */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  role?: InputMaybe<Scalars['String']['input']>;
-  userId: Scalars['ID']['input'];
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
+  role?: InputMaybe<Scalars["String"]["input"]>;
+  userId: Scalars["ID"]["input"];
 };
 
 export type AddTenantMemberInput = {
   /** Optional idempotency key. See UpdateTenantInput.idempotencyKey. */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  principalId: Scalars['ID']['input'];
-  principalType: Scalars['String']['input'];
-  role?: InputMaybe<Scalars['String']['input']>;
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
+  principalId: Scalars["ID"]["input"];
+  principalType: Scalars["String"]["input"];
+  role?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type AdminRoleCheckResult = {
-  __typename?: 'AdminRoleCheckResult';
+  __typename?: "AdminRoleCheckResult";
   /** One of: owner, admin, member, other. */
-  role: Scalars['String']['output'];
+  role: Scalars["String"]["output"];
 };
 
 export type Agent = {
-  __typename?: 'Agent';
-  adapterConfig?: Maybe<Scalars['AWSJSON']['output']>;
-  adapterType?: Maybe<Scalars['String']['output']>;
+  __typename?: "Agent";
+  adapterConfig?: Maybe<Scalars["AWSJSON"]["output"]>;
+  adapterType?: Maybe<Scalars["String"]["output"]>;
   agentTemplate?: Maybe<AgentTemplate>;
-  avatarUrl?: Maybe<Scalars['String']['output']>;
+  avatarUrl?: Maybe<Scalars["String"]["output"]>;
   budgetPolicy?: Maybe<AgentBudgetPolicy>;
   capabilities: Array<AgentCapability>;
-  createdAt: Scalars['AWSDateTime']['output'];
+  createdAt: Scalars["AWSDateTime"]["output"];
   humanPair?: Maybe<User>;
-  humanPairId?: Maybe<Scalars['ID']['output']>;
-  id: Scalars['ID']['output'];
+  humanPairId?: Maybe<Scalars["ID"]["output"]>;
+  id: Scalars["ID"]["output"];
   knowledgeBases: Array<AgentKnowledgeBase>;
-  lastHeartbeatAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  name: Scalars['String']['output'];
-  parentAgentId?: Maybe<Scalars['ID']['output']>;
+  lastHeartbeatAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  name: Scalars["String"]["output"];
+  parentAgentId?: Maybe<Scalars["ID"]["output"]>;
   reportsTo?: Maybe<Agent>;
-  reportsToId?: Maybe<Scalars['ID']['output']>;
-  role?: Maybe<Scalars['String']['output']>;
+  reportsToId?: Maybe<Scalars["ID"]["output"]>;
+  role?: Maybe<Scalars["String"]["output"]>;
   runtime: AgentRuntime;
-  runtimeConfig?: Maybe<Scalars['AWSJSON']['output']>;
+  runtimeConfig?: Maybe<Scalars["AWSJSON"]["output"]>;
   skills: Array<AgentSkill>;
-  slug?: Maybe<Scalars['String']['output']>;
-  source?: Maybe<Scalars['String']['output']>;
+  slug?: Maybe<Scalars["String"]["output"]>;
+  source?: Maybe<Scalars["String"]["output"]>;
   status: AgentStatus;
   subAgents?: Maybe<Array<Agent>>;
-  systemPrompt?: Maybe<Scalars['String']['output']>;
-  templateId: Scalars['ID']['output'];
-  tenantId: Scalars['ID']['output'];
+  systemPrompt?: Maybe<Scalars["String"]["output"]>;
+  templateId: Scalars["ID"]["output"];
+  tenantId: Scalars["ID"]["output"];
   type: AgentType;
-  updatedAt: Scalars['AWSDateTime']['output'];
-  version: Scalars['Int']['output'];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  version: Scalars["Int"]["output"];
 };
 
 export type AgentApiKey = {
-  __typename?: 'AgentApiKey';
-  agentId: Scalars['ID']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  keyPrefix: Scalars['String']['output'];
-  lastUsedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  name?: Maybe<Scalars['String']['output']>;
-  revokedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  tenantId: Scalars['ID']['output'];
+  __typename?: "AgentApiKey";
+  agentId: Scalars["ID"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  keyPrefix: Scalars["String"]["output"];
+  lastUsedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  name?: Maybe<Scalars["String"]["output"]>;
+  revokedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
 };
 
 export type AgentBudgetPolicy = {
-  __typename?: 'AgentBudgetPolicy';
-  actionOnExceed: Scalars['String']['output'];
-  agentId: Scalars['ID']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  limitUsd: Scalars['Float']['output'];
-  period: Scalars['String']['output'];
-  scope: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
+  __typename?: "AgentBudgetPolicy";
+  actionOnExceed: Scalars["String"]["output"];
+  agentId: Scalars["ID"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  enabled: Scalars["Boolean"]["output"];
+  id: Scalars["ID"]["output"];
+  limitUsd: Scalars["Float"]["output"];
+  period: Scalars["String"]["output"];
+  scope: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type AgentBudgetPolicyInput = {
-  actionOnExceed?: InputMaybe<Scalars['String']['input']>;
-  limitUsd: Scalars['Float']['input'];
-  period: Scalars['String']['input'];
+  actionOnExceed?: InputMaybe<Scalars["String"]["input"]>;
+  limitUsd: Scalars["Float"]["input"];
+  period: Scalars["String"]["input"];
 };
 
 export type AgentCapability = {
-  __typename?: 'AgentCapability';
-  agentId: Scalars['ID']['output'];
-  capability: Scalars['String']['output'];
-  config?: Maybe<Scalars['AWSJSON']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  tenantId: Scalars['ID']['output'];
+  __typename?: "AgentCapability";
+  agentId: Scalars["ID"]["output"];
+  capability: Scalars["String"]["output"];
+  config?: Maybe<Scalars["AWSJSON"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  enabled: Scalars["Boolean"]["output"];
+  id: Scalars["ID"]["output"];
+  tenantId: Scalars["ID"]["output"];
 };
 
 export type AgentCapabilityInput = {
-  capability: Scalars['String']['input'];
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
+  capability: Scalars["String"]["input"];
+  config?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
 };
 
 export type AgentCostSummary = {
-  __typename?: 'AgentCostSummary';
-  agentId?: Maybe<Scalars['ID']['output']>;
-  agentName: Scalars['String']['output'];
-  eventCount: Scalars['Int']['output'];
-  totalUsd: Scalars['Float']['output'];
+  __typename?: "AgentCostSummary";
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  agentName: Scalars["String"]["output"];
+  eventCount: Scalars["Int"]["output"];
+  totalUsd: Scalars["Float"]["output"];
 };
 
 export type AgentCount = {
-  __typename?: 'AgentCount';
-  agentId: Scalars['ID']['output'];
-  agentName?: Maybe<Scalars['String']['output']>;
-  count: Scalars['Int']['output'];
+  __typename?: "AgentCount";
+  agentId: Scalars["ID"]["output"];
+  agentName?: Maybe<Scalars["String"]["output"]>;
+  count: Scalars["Int"]["output"];
 };
 
 export type AgentEmailCapability = {
-  __typename?: 'AgentEmailCapability';
-  agentId: Scalars['ID']['output'];
-  allowedSenders: Array<Scalars['String']['output']>;
-  emailAddress?: Maybe<Scalars['String']['output']>;
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  maxReplyTokenAgeDays: Scalars['Int']['output'];
-  maxReplyTokenUses: Scalars['Int']['output'];
-  rateLimitPerHour: Scalars['Int']['output'];
-  replyTokensEnabled: Scalars['Boolean']['output'];
-  vanityAddress?: Maybe<Scalars['String']['output']>;
+  __typename?: "AgentEmailCapability";
+  agentId: Scalars["ID"]["output"];
+  allowedSenders: Array<Scalars["String"]["output"]>;
+  emailAddress?: Maybe<Scalars["String"]["output"]>;
+  enabled: Scalars["Boolean"]["output"];
+  id: Scalars["ID"]["output"];
+  maxReplyTokenAgeDays: Scalars["Int"]["output"];
+  maxReplyTokenUses: Scalars["Int"]["output"];
+  rateLimitPerHour: Scalars["Int"]["output"];
+  replyTokensEnabled: Scalars["Boolean"]["output"];
+  vanityAddress?: Maybe<Scalars["String"]["output"]>;
 };
 
 export type AgentKnowledgeBase = {
-  __typename?: 'AgentKnowledgeBase';
-  agentId: Scalars['ID']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
+  __typename?: "AgentKnowledgeBase";
+  agentId: Scalars["ID"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  enabled: Scalars["Boolean"]["output"];
+  id: Scalars["ID"]["output"];
   knowledgeBase?: Maybe<KnowledgeBase>;
-  knowledgeBaseId: Scalars['ID']['output'];
-  searchConfig?: Maybe<Scalars['AWSJSON']['output']>;
+  knowledgeBaseId: Scalars["ID"]["output"];
+  searchConfig?: Maybe<Scalars["AWSJSON"]["output"]>;
 };
 
 export type AgentKnowledgeBaseInput = {
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  knowledgeBaseId: Scalars['ID']['input'];
-  searchConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
+  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
+  knowledgeBaseId: Scalars["ID"]["input"];
+  searchConfig?: InputMaybe<Scalars["AWSJSON"]["input"]>;
 };
 
 export type AgentPerformance = {
-  __typename?: 'AgentPerformance';
-  agentId: Scalars['ID']['output'];
-  agentName: Scalars['String']['output'];
-  avgDurationMs: Scalars['Float']['output'];
-  errorCount: Scalars['Int']['output'];
-  invocationCount: Scalars['Int']['output'];
-  p95DurationMs: Scalars['Float']['output'];
-  totalCostUsd: Scalars['Float']['output'];
-  totalInputTokens: Scalars['Int']['output'];
-  totalOutputTokens: Scalars['Int']['output'];
+  __typename?: "AgentPerformance";
+  agentId: Scalars["ID"]["output"];
+  agentName: Scalars["String"]["output"];
+  avgDurationMs: Scalars["Float"]["output"];
+  errorCount: Scalars["Int"]["output"];
+  invocationCount: Scalars["Int"]["output"];
+  p95DurationMs: Scalars["Float"]["output"];
+  totalCostUsd: Scalars["Float"]["output"];
+  totalInputTokens: Scalars["Int"]["output"];
+  totalOutputTokens: Scalars["Int"]["output"];
 };
 
 export enum AgentRuntime {
-  Pi = 'PI',
-  Strands = 'STRANDS'
+  Pi = "PI",
+  Strands = "STRANDS",
 }
 
 export type AgentSkill = {
-  __typename?: 'AgentSkill';
-  agentId: Scalars['ID']['output'];
-  config?: Maybe<Scalars['AWSJSON']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  modelOverride?: Maybe<Scalars['String']['output']>;
-  permissions?: Maybe<Scalars['AWSJSON']['output']>;
-  rateLimitRpm?: Maybe<Scalars['Int']['output']>;
-  skillId: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
+  __typename?: "AgentSkill";
+  agentId: Scalars["ID"]["output"];
+  config?: Maybe<Scalars["AWSJSON"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  enabled: Scalars["Boolean"]["output"];
+  id: Scalars["ID"]["output"];
+  modelOverride?: Maybe<Scalars["String"]["output"]>;
+  permissions?: Maybe<Scalars["AWSJSON"]["output"]>;
+  rateLimitRpm?: Maybe<Scalars["Int"]["output"]>;
+  skillId: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
 };
 
 export type AgentSkillInput = {
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  modelOverride?: InputMaybe<Scalars['String']['input']>;
-  permissions?: InputMaybe<Scalars['AWSJSON']['input']>;
-  rateLimitRpm?: InputMaybe<Scalars['Int']['input']>;
-  skillId: Scalars['String']['input'];
+  config?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
+  modelOverride?: InputMaybe<Scalars["String"]["input"]>;
+  permissions?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  rateLimitRpm?: InputMaybe<Scalars["Int"]["input"]>;
+  skillId: Scalars["String"]["input"];
 };
 
 export enum AgentStatus {
-  Busy = 'BUSY',
-  Error = 'ERROR',
-  Idle = 'IDLE',
-  Offline = 'OFFLINE'
+  Busy = "BUSY",
+  Error = "ERROR",
+  Idle = "IDLE",
+  Offline = "OFFLINE",
 }
 
 export type AgentStatusEvent = {
-  __typename?: 'AgentStatusEvent';
-  agentId: Scalars['ID']['output'];
-  name: Scalars['String']['output'];
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
+  __typename?: "AgentStatusEvent";
+  agentId: Scalars["ID"]["output"];
+  name: Scalars["String"]["output"];
+  status: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type AgentTemplate = {
-  __typename?: 'AgentTemplate';
-  blockedTools?: Maybe<Scalars['AWSJSON']['output']>;
+  __typename?: "AgentTemplate";
+  blockedTools?: Maybe<Scalars["AWSJSON"]["output"]>;
   /**
    * Browser Automation opt-in metadata for the AgentCore Browser + Nova Act
    * built-in tool. Shape validated at create/update time by
@@ -378,18 +391,26 @@ export type AgentTemplate = {
    * Null means the template does not use Browser Automation unless an agent-level
    * capability override enables it.
    */
-  browser?: Maybe<Scalars['AWSJSON']['output']>;
-  category?: Maybe<Scalars['String']['output']>;
-  config?: Maybe<Scalars['AWSJSON']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  description?: Maybe<Scalars['String']['output']>;
-  guardrailId?: Maybe<Scalars['ID']['output']>;
-  icon?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  isPublished: Scalars['Boolean']['output'];
-  knowledgeBaseIds?: Maybe<Scalars['AWSJSON']['output']>;
-  model?: Maybe<Scalars['String']['output']>;
-  name: Scalars['String']['output'];
+  browser?: Maybe<Scalars["AWSJSON"]["output"]>;
+  category?: Maybe<Scalars["String"]["output"]>;
+  config?: Maybe<Scalars["AWSJSON"]["output"]>;
+  /**
+   * Context Engine opt-in metadata for the query_context built-in tool.
+   * Shape validated at create/update time by
+   * packages/api/src/lib/templates/context-engine-config.ts:
+   *   { enabled: true }
+   * Null means the template does not inject Context Engine.
+   */
+  contextEngine?: Maybe<Scalars["AWSJSON"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  description?: Maybe<Scalars["String"]["output"]>;
+  guardrailId?: Maybe<Scalars["ID"]["output"]>;
+  icon?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  isPublished: Scalars["Boolean"]["output"];
+  knowledgeBaseIds?: Maybe<Scalars["AWSJSON"]["output"]>;
+  model?: Maybe<Scalars["String"]["output"]>;
+  name: Scalars["String"]["output"];
   runtime: AgentRuntime;
   /**
    * Sandbox opt-in metadata for the AgentCore Code Interpreter sandbox
@@ -398,7 +419,7 @@ export type AgentTemplate = {
    *   { environment: "default-public" | "internal-only" }
    * Null means the template does not use the sandbox.
    */
-  sandbox?: Maybe<Scalars['AWSJSON']['output']>;
+  sandbox?: Maybe<Scalars["AWSJSON"]["output"]>;
   /**
    * Send Email opt-in metadata for the platform email-sending built-in tool.
    * Shape validated at create/update time by
@@ -406,12 +427,12 @@ export type AgentTemplate = {
    *   { enabled: true }
    * Null means the template does not inject Send Email.
    */
-  sendEmail?: Maybe<Scalars['AWSJSON']['output']>;
-  skills?: Maybe<Scalars['AWSJSON']['output']>;
-  slug: Scalars['String']['output'];
-  source: Scalars['String']['output'];
-  tenantId?: Maybe<Scalars['ID']['output']>;
-  updatedAt: Scalars['AWSDateTime']['output'];
+  sendEmail?: Maybe<Scalars["AWSJSON"]["output"]>;
+  skills?: Maybe<Scalars["AWSJSON"]["output"]>;
+  slug: Scalars["String"]["output"];
+  source: Scalars["String"]["output"];
+  tenantId?: Maybe<Scalars["ID"]["output"]>;
+  updatedAt: Scalars["AWSDateTime"]["output"];
   /**
    * Web Search opt-in metadata for the tenant-configured web-search built-in
    * tool. Shape validated at create/update time by
@@ -419,913 +440,918 @@ export type AgentTemplate = {
    *   { enabled: true }
    * Null means the template does not inject Web Search.
    */
-  webSearch?: Maybe<Scalars['AWSJSON']['output']>;
+  webSearch?: Maybe<Scalars["AWSJSON"]["output"]>;
 };
 
 export enum AgentType {
-  Agent = 'AGENT',
-  Gateway = 'GATEWAY',
-  Supervisor = 'SUPERVISOR'
+  Agent = "AGENT",
+  Gateway = "GATEWAY",
+  Supervisor = "SUPERVISOR",
 }
 
 export type AgentVersion = {
-  __typename?: 'AgentVersion';
-  agentId: Scalars['ID']['output'];
-  configSnapshot?: Maybe<Scalars['AWSJSON']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  createdBy?: Maybe<Scalars['ID']['output']>;
-  guardrailSnapshot?: Maybe<Scalars['AWSJSON']['output']>;
-  id: Scalars['ID']['output'];
-  isActive: Scalars['Boolean']['output'];
-  knowledgeBasesSnapshot?: Maybe<Scalars['AWSJSON']['output']>;
-  label?: Maybe<Scalars['String']['output']>;
-  skillsSnapshot?: Maybe<Scalars['AWSJSON']['output']>;
-  tenantId: Scalars['ID']['output'];
-  versionNumber: Scalars['Int']['output'];
-  workspaceSnapshot?: Maybe<Scalars['AWSJSON']['output']>;
+  __typename?: "AgentVersion";
+  agentId: Scalars["ID"]["output"];
+  configSnapshot?: Maybe<Scalars["AWSJSON"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  createdBy?: Maybe<Scalars["ID"]["output"]>;
+  guardrailSnapshot?: Maybe<Scalars["AWSJSON"]["output"]>;
+  id: Scalars["ID"]["output"];
+  isActive: Scalars["Boolean"]["output"];
+  knowledgeBasesSnapshot?: Maybe<Scalars["AWSJSON"]["output"]>;
+  label?: Maybe<Scalars["String"]["output"]>;
+  skillsSnapshot?: Maybe<Scalars["AWSJSON"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  versionNumber: Scalars["Int"]["output"];
+  workspaceSnapshot?: Maybe<Scalars["AWSJSON"]["output"]>;
 };
 
 export type AgentWakeupRequest = {
-  __typename?: 'AgentWakeupRequest';
+  __typename?: "AgentWakeupRequest";
   agent?: Maybe<Agent>;
-  agentId: Scalars['ID']['output'];
-  claimedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  coalescedCount: Scalars['Int']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  id: Scalars['ID']['output'];
-  idempotencyKey?: Maybe<Scalars['String']['output']>;
-  payload?: Maybe<Scalars['AWSJSON']['output']>;
-  reason?: Maybe<Scalars['String']['output']>;
-  requestedAt: Scalars['AWSDateTime']['output'];
-  requestedByActorId?: Maybe<Scalars['String']['output']>;
-  requestedByActorType?: Maybe<Scalars['String']['output']>;
-  runId?: Maybe<Scalars['ID']['output']>;
-  source: Scalars['String']['output'];
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  triggerDetail?: Maybe<Scalars['String']['output']>;
+  agentId: Scalars["ID"]["output"];
+  claimedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  coalescedCount: Scalars["Int"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  finishedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  id: Scalars["ID"]["output"];
+  idempotencyKey?: Maybe<Scalars["String"]["output"]>;
+  payload?: Maybe<Scalars["AWSJSON"]["output"]>;
+  reason?: Maybe<Scalars["String"]["output"]>;
+  requestedAt: Scalars["AWSDateTime"]["output"];
+  requestedByActorId?: Maybe<Scalars["String"]["output"]>;
+  requestedByActorType?: Maybe<Scalars["String"]["output"]>;
+  runId?: Maybe<Scalars["ID"]["output"]>;
+  source: Scalars["String"]["output"];
+  status: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  triggerDetail?: Maybe<Scalars["String"]["output"]>;
 };
 
 export type AgentWorkspace = {
-  __typename?: 'AgentWorkspace';
-  name: Scalars['String']['output'];
-  purpose?: Maybe<Scalars['String']['output']>;
-  slug: Scalars['String']['output'];
+  __typename?: "AgentWorkspace";
+  name: Scalars["String"]["output"];
+  purpose?: Maybe<Scalars["String"]["output"]>;
+  slug: Scalars["String"]["output"];
 };
 
 export type AgentWorkspaceEvent = {
-  __typename?: 'AgentWorkspaceEvent';
-  actorId?: Maybe<Scalars['String']['output']>;
-  actorType?: Maybe<Scalars['String']['output']>;
-  agentId?: Maybe<Scalars['ID']['output']>;
-  auditObjectKey?: Maybe<Scalars['String']['output']>;
-  bucket: Scalars['String']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  eventType: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  mirrorStatus: Scalars['String']['output'];
-  objectEtag?: Maybe<Scalars['String']['output']>;
-  objectVersionId?: Maybe<Scalars['String']['output']>;
-  parentEventId?: Maybe<Scalars['ID']['output']>;
-  payload?: Maybe<Scalars['AWSJSON']['output']>;
-  reason?: Maybe<Scalars['String']['output']>;
-  runId?: Maybe<Scalars['ID']['output']>;
-  sequencer: Scalars['String']['output'];
-  sourceObjectKey: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
+  __typename?: "AgentWorkspaceEvent";
+  actorId?: Maybe<Scalars["String"]["output"]>;
+  actorType?: Maybe<Scalars["String"]["output"]>;
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  auditObjectKey?: Maybe<Scalars["String"]["output"]>;
+  bucket: Scalars["String"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  eventType: Scalars["String"]["output"];
+  id: Scalars["ID"]["output"];
+  mirrorStatus: Scalars["String"]["output"];
+  objectEtag?: Maybe<Scalars["String"]["output"]>;
+  objectVersionId?: Maybe<Scalars["String"]["output"]>;
+  parentEventId?: Maybe<Scalars["ID"]["output"]>;
+  payload?: Maybe<Scalars["AWSJSON"]["output"]>;
+  reason?: Maybe<Scalars["String"]["output"]>;
+  runId?: Maybe<Scalars["ID"]["output"]>;
+  sequencer: Scalars["String"]["output"];
+  sourceObjectKey: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
 };
 
 export enum AgentWorkspaceEventType {
-  EventRejected = 'EVENT_REJECTED',
-  MemoryChanged = 'MEMORY_CHANGED',
-  ReviewRequested = 'REVIEW_REQUESTED',
-  ReviewResponded = 'REVIEW_RESPONDED',
-  RunBlocked = 'RUN_BLOCKED',
-  RunCompleted = 'RUN_COMPLETED',
-  RunFailed = 'RUN_FAILED',
-  RunStarted = 'RUN_STARTED',
-  WorkRequested = 'WORK_REQUESTED'
+  EventRejected = "EVENT_REJECTED",
+  MemoryChanged = "MEMORY_CHANGED",
+  ReviewRequested = "REVIEW_REQUESTED",
+  ReviewResponded = "REVIEW_RESPONDED",
+  RunBlocked = "RUN_BLOCKED",
+  RunCompleted = "RUN_COMPLETED",
+  RunFailed = "RUN_FAILED",
+  RunStarted = "RUN_STARTED",
+  WorkRequested = "WORK_REQUESTED",
 }
 
 export type AgentWorkspaceProposedChange = {
-  __typename?: 'AgentWorkspaceProposedChange';
-  after?: Maybe<Scalars['String']['output']>;
-  before?: Maybe<Scalars['String']['output']>;
-  diff?: Maybe<Scalars['String']['output']>;
-  kind: Scalars['String']['output'];
-  path?: Maybe<Scalars['String']['output']>;
-  summary: Scalars['String']['output'];
+  __typename?: "AgentWorkspaceProposedChange";
+  after?: Maybe<Scalars["String"]["output"]>;
+  before?: Maybe<Scalars["String"]["output"]>;
+  diff?: Maybe<Scalars["String"]["output"]>;
+  kind: Scalars["String"]["output"];
+  path?: Maybe<Scalars["String"]["output"]>;
+  summary: Scalars["String"]["output"];
 };
 
 export type AgentWorkspaceReview = {
-  __typename?: 'AgentWorkspaceReview';
+  __typename?: "AgentWorkspaceReview";
   decisionEvents: Array<AgentWorkspaceEvent>;
   events: Array<AgentWorkspaceEvent>;
   kind: WorkspaceReviewKind;
   latestEvent?: Maybe<AgentWorkspaceEvent>;
-  payload?: Maybe<Scalars['AWSJSON']['output']>;
+  payload?: Maybe<Scalars["AWSJSON"]["output"]>;
   proposedChanges: Array<AgentWorkspaceProposedChange>;
-  reason?: Maybe<Scalars['String']['output']>;
-  requestedAt: Scalars['AWSDateTime']['output'];
-  responsibleUserId?: Maybe<Scalars['ID']['output']>;
-  reviewBody?: Maybe<Scalars['String']['output']>;
-  reviewEtag?: Maybe<Scalars['String']['output']>;
-  reviewMissing?: Maybe<Scalars['Boolean']['output']>;
-  reviewObjectKey?: Maybe<Scalars['String']['output']>;
+  reason?: Maybe<Scalars["String"]["output"]>;
+  requestedAt: Scalars["AWSDateTime"]["output"];
+  responsibleUserId?: Maybe<Scalars["ID"]["output"]>;
+  reviewBody?: Maybe<Scalars["String"]["output"]>;
+  reviewEtag?: Maybe<Scalars["String"]["output"]>;
+  reviewMissing?: Maybe<Scalars["Boolean"]["output"]>;
+  reviewObjectKey?: Maybe<Scalars["String"]["output"]>;
   run: AgentWorkspaceRun;
-  targetPath: Scalars['String']['output'];
-  threadId?: Maybe<Scalars['ID']['output']>;
+  targetPath: Scalars["String"]["output"];
+  threadId?: Maybe<Scalars["ID"]["output"]>;
 };
 
 export type AgentWorkspaceReviewDecisionInput = {
-  expectedReviewEtag?: InputMaybe<Scalars['String']['input']>;
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  notes?: InputMaybe<Scalars['String']['input']>;
-  responseMarkdown?: InputMaybe<Scalars['String']['input']>;
+  expectedReviewEtag?: InputMaybe<Scalars["String"]["input"]>;
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
+  notes?: InputMaybe<Scalars["String"]["input"]>;
+  responseMarkdown?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type AgentWorkspaceRun = {
-  __typename?: 'AgentWorkspaceRun';
-  agentId: Scalars['ID']['output'];
-  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  currentThreadTurnId?: Maybe<Scalars['ID']['output']>;
-  currentWakeupRequestId?: Maybe<Scalars['ID']['output']>;
-  depth: Scalars['Int']['output'];
-  id: Scalars['ID']['output'];
-  inboxWriteCount: Scalars['Int']['output'];
-  lastEventAt: Scalars['AWSDateTime']['output'];
-  parentRunId?: Maybe<Scalars['ID']['output']>;
-  requestObjectKey?: Maybe<Scalars['String']['output']>;
-  sourceObjectKey?: Maybe<Scalars['String']['output']>;
-  status: Scalars['String']['output'];
-  targetPath: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-  wakeupRetryCount: Scalars['Int']['output'];
+  __typename?: "AgentWorkspaceRun";
+  agentId: Scalars["ID"]["output"];
+  completedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  currentThreadTurnId?: Maybe<Scalars["ID"]["output"]>;
+  currentWakeupRequestId?: Maybe<Scalars["ID"]["output"]>;
+  depth: Scalars["Int"]["output"];
+  id: Scalars["ID"]["output"];
+  inboxWriteCount: Scalars["Int"]["output"];
+  lastEventAt: Scalars["AWSDateTime"]["output"];
+  parentRunId?: Maybe<Scalars["ID"]["output"]>;
+  requestObjectKey?: Maybe<Scalars["String"]["output"]>;
+  sourceObjectKey?: Maybe<Scalars["String"]["output"]>;
+  status: Scalars["String"]["output"];
+  targetPath: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  wakeupRetryCount: Scalars["Int"]["output"];
 };
 
 export enum AgentWorkspaceRunStatus {
-  AwaitingReview = 'AWAITING_REVIEW',
-  AwaitingSubrun = 'AWAITING_SUBRUN',
-  Cancelled = 'CANCELLED',
-  Claimed = 'CLAIMED',
-  Completed = 'COMPLETED',
-  Expired = 'EXPIRED',
-  Failed = 'FAILED',
-  Pending = 'PENDING',
-  Processing = 'PROCESSING'
+  AwaitingReview = "AWAITING_REVIEW",
+  AwaitingSubrun = "AWAITING_SUBRUN",
+  Cancelled = "CANCELLED",
+  Claimed = "CLAIMED",
+  Completed = "COMPLETED",
+  Expired = "EXPIRED",
+  Failed = "FAILED",
+  Pending = "PENDING",
+  Processing = "PROCESSING",
 }
 
 export type AgentWorkspaceWait = {
-  __typename?: 'AgentWorkspaceWait';
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  satisfiedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  waitForRunId?: Maybe<Scalars['ID']['output']>;
-  waitForTargetPath?: Maybe<Scalars['String']['output']>;
-  waitingRunId: Scalars['ID']['output'];
+  __typename?: "AgentWorkspaceWait";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  satisfiedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  status: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  waitForRunId?: Maybe<Scalars["ID"]["output"]>;
+  waitForTargetPath?: Maybe<Scalars["String"]["output"]>;
+  waitingRunId: Scalars["ID"]["output"];
 };
 
 export type ApplyActivationBundleInput = {
-  applyId: Scalars['ID']['input'];
+  applyId: Scalars["ID"]["input"];
   approvals: Array<BundleItemApprovalInput>;
-  sessionId: Scalars['ID']['input'];
+  sessionId: Scalars["ID"]["input"];
 };
 
 export type ApproveInboxItemInput = {
-  reviewNotes?: InputMaybe<Scalars['String']['input']>;
+  reviewNotes?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type Artifact = {
-  __typename?: 'Artifact';
-  agentId?: Maybe<Scalars['ID']['output']>;
-  content?: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  metadata?: Maybe<Scalars['AWSJSON']['output']>;
-  s3Key?: Maybe<Scalars['String']['output']>;
-  sourceMessageId?: Maybe<Scalars['ID']['output']>;
+  __typename?: "Artifact";
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  content?: Maybe<Scalars["String"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
+  s3Key?: Maybe<Scalars["String"]["output"]>;
+  sourceMessageId?: Maybe<Scalars["ID"]["output"]>;
   status: ArtifactStatus;
-  summary?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  threadId?: Maybe<Scalars['ID']['output']>;
-  title: Scalars['String']['output'];
+  summary?: Maybe<Scalars["String"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  threadId?: Maybe<Scalars["ID"]["output"]>;
+  title: Scalars["String"]["output"];
   type: ArtifactType;
-  updatedAt: Scalars['AWSDateTime']['output'];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export enum ArtifactStatus {
-  Draft = 'DRAFT',
-  Final = 'FINAL',
-  Superseded = 'SUPERSEDED'
+  Draft = "DRAFT",
+  Final = "FINAL",
+  Superseded = "SUPERSEDED",
 }
 
 export enum ArtifactType {
-  DataView = 'DATA_VIEW',
-  Digest = 'DIGEST',
-  Draft = 'DRAFT',
-  Note = 'NOTE',
-  Plan = 'PLAN',
-  Report = 'REPORT'
+  DataView = "DATA_VIEW",
+  Digest = "DIGEST",
+  Draft = "DRAFT",
+  Note = "NOTE",
+  Plan = "PLAN",
+  Report = "REPORT",
 }
 
 export type BootstrapResult = {
-  __typename?: 'BootstrapResult';
-  isNew: Scalars['Boolean']['output'];
+  __typename?: "BootstrapResult";
+  isNew: Scalars["Boolean"]["output"];
   tenant: Tenant;
   user: User;
 };
 
 export type BudgetPolicy = {
-  __typename?: 'BudgetPolicy';
-  actionOnExceed: Scalars['String']['output'];
-  agentId?: Maybe<Scalars['ID']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  limitUsd: Scalars['Float']['output'];
-  period: Scalars['String']['output'];
-  scope: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
+  __typename?: "BudgetPolicy";
+  actionOnExceed: Scalars["String"]["output"];
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  enabled: Scalars["Boolean"]["output"];
+  id: Scalars["ID"]["output"];
+  limitUsd: Scalars["Float"]["output"];
+  period: Scalars["String"]["output"];
+  scope: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type BudgetStatus = {
-  __typename?: 'BudgetStatus';
-  percentUsed: Scalars['Float']['output'];
+  __typename?: "BudgetStatus";
+  percentUsed: Scalars["Float"]["output"];
   policy: BudgetPolicy;
-  remainingUsd: Scalars['Float']['output'];
-  spentUsd: Scalars['Float']['output'];
-  status: Scalars['String']['output'];
+  remainingUsd: Scalars["Float"]["output"];
+  spentUsd: Scalars["Float"]["output"];
+  status: Scalars["String"]["output"];
 };
 
 export enum BundleItemAction {
-  Apply = 'apply',
-  Defer = 'defer',
-  Dismiss = 'dismiss'
+  Apply = "apply",
+  Defer = "defer",
+  Dismiss = "dismiss",
 }
 
 export type BundleItemApprovalInput = {
   action: BundleItemAction;
-  itemId: Scalars['ID']['input'];
+  itemId: Scalars["ID"]["input"];
   layer: ActivationLayer;
-  payload: Scalars['AWSJSON']['input'];
-  target?: InputMaybe<Scalars['String']['input']>;
+  payload: Scalars["AWSJSON"]["input"];
+  target?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type CheckoutThreadInput = {
-  runId: Scalars['String']['input'];
+  runId: Scalars["String"]["input"];
 };
 
 export type CheckpointActivationLayerInput = {
   layerId: ActivationLayer;
-  layerState: Scalars['AWSJSON']['input'];
+  layerState: Scalars["AWSJSON"]["input"];
   nextLayer?: InputMaybe<ActivationLayer>;
-  sessionId: Scalars['ID']['input'];
+  sessionId: Scalars["ID"]["input"];
 };
 
 export type CompositionFeedbackSummary = {
-  __typename?: 'CompositionFeedbackSummary';
-  negative: Scalars['Int']['output'];
-  positive: Scalars['Int']['output'];
-  skillId: Scalars['String']['output'];
-  total: Scalars['Int']['output'];
+  __typename?: "CompositionFeedbackSummary";
+  negative: Scalars["Int"]["output"];
+  positive: Scalars["Int"]["output"];
+  skillId: Scalars["String"]["output"];
+  total: Scalars["Int"]["output"];
 };
 
 export type ConcurrencySnapshot = {
-  __typename?: 'ConcurrencySnapshot';
+  __typename?: "ConcurrencySnapshot";
   byAgent: Array<AgentCount>;
   byStatus: Array<StatusCount>;
-  totalActive: Scalars['Int']['output'];
+  totalActive: Scalars["Int"]["output"];
 };
 
 export type CostEvent = {
-  __typename?: 'CostEvent';
-  agentId?: Maybe<Scalars['ID']['output']>;
-  amountUsd: Scalars['Float']['output'];
-  cachedReadTokens?: Maybe<Scalars['Int']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  durationMs?: Maybe<Scalars['Int']['output']>;
-  eventType: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  inputTokens?: Maybe<Scalars['Int']['output']>;
-  model?: Maybe<Scalars['String']['output']>;
-  outputTokens?: Maybe<Scalars['Int']['output']>;
-  provider?: Maybe<Scalars['String']['output']>;
-  requestId: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
+  __typename?: "CostEvent";
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  amountUsd: Scalars["Float"]["output"];
+  cachedReadTokens?: Maybe<Scalars["Int"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  durationMs?: Maybe<Scalars["Int"]["output"]>;
+  eventType: Scalars["String"]["output"];
+  id: Scalars["ID"]["output"];
+  inputTokens?: Maybe<Scalars["Int"]["output"]>;
+  model?: Maybe<Scalars["String"]["output"]>;
+  outputTokens?: Maybe<Scalars["Int"]["output"]>;
+  provider?: Maybe<Scalars["String"]["output"]>;
+  requestId: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
 };
 
 export type CostRecordedEvent = {
-  __typename?: 'CostRecordedEvent';
-  agentId?: Maybe<Scalars['ID']['output']>;
-  agentName?: Maybe<Scalars['String']['output']>;
-  amountUsd: Scalars['Float']['output'];
-  eventType: Scalars['String']['output'];
-  model?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
+  __typename?: "CostRecordedEvent";
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  agentName?: Maybe<Scalars["String"]["output"]>;
+  amountUsd: Scalars["Float"]["output"];
+  eventType: Scalars["String"]["output"];
+  model?: Maybe<Scalars["String"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type CostSummary = {
-  __typename?: 'CostSummary';
-  computeUsd: Scalars['Float']['output'];
-  evalUsd?: Maybe<Scalars['Float']['output']>;
-  eventCount: Scalars['Int']['output'];
-  llmUsd: Scalars['Float']['output'];
-  periodEnd: Scalars['AWSDateTime']['output'];
-  periodStart: Scalars['AWSDateTime']['output'];
-  toolsUsd: Scalars['Float']['output'];
-  totalInputTokens: Scalars['Int']['output'];
-  totalOutputTokens: Scalars['Int']['output'];
-  totalUsd: Scalars['Float']['output'];
+  __typename?: "CostSummary";
+  computeUsd: Scalars["Float"]["output"];
+  evalUsd?: Maybe<Scalars["Float"]["output"]>;
+  eventCount: Scalars["Int"]["output"];
+  llmUsd: Scalars["Float"]["output"];
+  periodEnd: Scalars["AWSDateTime"]["output"];
+  periodStart: Scalars["AWSDateTime"]["output"];
+  toolsUsd: Scalars["Float"]["output"];
+  totalInputTokens: Scalars["Int"]["output"];
+  totalOutputTokens: Scalars["Int"]["output"];
+  totalUsd: Scalars["Float"]["output"];
 };
 
 export type CreateAgentApiKeyInput = {
-  agentId: Scalars['ID']['input'];
-  name?: InputMaybe<Scalars['String']['input']>;
+  agentId: Scalars["ID"]["input"];
+  name?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type CreateAgentApiKeyResult = {
-  __typename?: 'CreateAgentApiKeyResult';
+  __typename?: "CreateAgentApiKeyResult";
   apiKey: AgentApiKey;
-  plainTextKey: Scalars['String']['output'];
+  plainTextKey: Scalars["String"]["output"];
 };
 
 export type CreateAgentFromTemplateInput = {
   /** Optional idempotency key. See CreateAgentInput.idempotencyKey. */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  name: Scalars['String']['input'];
-  slug: Scalars['String']['input'];
-  teamId?: InputMaybe<Scalars['ID']['input']>;
-  templateId: Scalars['ID']['input'];
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
+  name: Scalars["String"]["input"];
+  slug: Scalars["String"]["input"];
+  teamId?: InputMaybe<Scalars["ID"]["input"]>;
+  templateId: Scalars["ID"]["input"];
 };
 
 export type CreateAgentInput = {
-  adapterConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
-  adapterType?: InputMaybe<Scalars['String']['input']>;
-  avatarUrl?: InputMaybe<Scalars['String']['input']>;
-  humanPairId?: InputMaybe<Scalars['ID']['input']>;
+  adapterConfig?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  adapterType?: InputMaybe<Scalars["String"]["input"]>;
+  avatarUrl?: InputMaybe<Scalars["String"]["input"]>;
+  humanPairId?: InputMaybe<Scalars["ID"]["input"]>;
   /**
    * Optional client-supplied idempotency key. When provided, a retry with
    * the same key returns the prior call's result without re-executing.
    * Null/absent = server derives a key from canonicalized inputs.
    * See packages/api/src/lib/idempotency.ts.
    */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  name: Scalars['String']['input'];
-  parentAgentId?: InputMaybe<Scalars['ID']['input']>;
-  reportsTo?: InputMaybe<Scalars['ID']['input']>;
-  role?: InputMaybe<Scalars['String']['input']>;
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
+  name: Scalars["String"]["input"];
+  parentAgentId?: InputMaybe<Scalars["ID"]["input"]>;
+  reportsTo?: InputMaybe<Scalars["ID"]["input"]>;
+  role?: InputMaybe<Scalars["String"]["input"]>;
   runtime?: InputMaybe<AgentRuntime>;
-  runtimeConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
-  systemPrompt?: InputMaybe<Scalars['String']['input']>;
-  templateId: Scalars['ID']['input'];
-  tenantId: Scalars['ID']['input'];
+  runtimeConfig?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  systemPrompt?: InputMaybe<Scalars["String"]["input"]>;
+  templateId: Scalars["ID"]["input"];
+  tenantId: Scalars["ID"]["input"];
   type?: InputMaybe<AgentType>;
 };
 
 export type CreateAgentTemplateInput = {
-  blockedTools?: InputMaybe<Scalars['AWSJSON']['input']>;
+  blockedTools?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   /**
    * Browser Automation opt-in metadata; see AgentTemplate.browser. Omit
    * (or pass null) for templates that do not opt into Browser Automation.
    */
-  browser?: InputMaybe<Scalars['AWSJSON']['input']>;
-  category?: InputMaybe<Scalars['String']['input']>;
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  guardrailId?: InputMaybe<Scalars['ID']['input']>;
-  icon?: InputMaybe<Scalars['String']['input']>;
+  browser?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  category?: InputMaybe<Scalars["String"]["input"]>;
+  config?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  /**
+   * Context Engine opt-in metadata; see AgentTemplate.contextEngine. Omit
+   * (or pass null) for templates that do not opt into query_context.
+   */
+  contextEngine?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  guardrailId?: InputMaybe<Scalars["ID"]["input"]>;
+  icon?: InputMaybe<Scalars["String"]["input"]>;
   /**
    * Optional client-supplied idempotency key. See
    * CreateAgentInput.idempotencyKey / packages/api/src/lib/idempotency.ts.
    */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  isPublished?: InputMaybe<Scalars['Boolean']['input']>;
-  knowledgeBaseIds?: InputMaybe<Scalars['AWSJSON']['input']>;
-  model?: InputMaybe<Scalars['String']['input']>;
-  name: Scalars['String']['input'];
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
+  isPublished?: InputMaybe<Scalars["Boolean"]["input"]>;
+  knowledgeBaseIds?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  model?: InputMaybe<Scalars["String"]["input"]>;
+  name: Scalars["String"]["input"];
   runtime?: InputMaybe<AgentRuntime>;
   /**
    * Sandbox opt-in metadata; see AgentTemplate.sandbox. Validated at
    * resolver boundary. Omit (or pass null) for templates that do not
    * opt into the sandbox.
    */
-  sandbox?: InputMaybe<Scalars['AWSJSON']['input']>;
+  sandbox?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   /**
    * Send Email opt-in metadata; see AgentTemplate.sendEmail. Omit
    * (or pass null) for templates that do not opt into Send Email.
    */
-  sendEmail?: InputMaybe<Scalars['AWSJSON']['input']>;
-  skills?: InputMaybe<Scalars['AWSJSON']['input']>;
-  slug: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
+  sendEmail?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  skills?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  slug: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
   /**
    * Web Search opt-in metadata; see AgentTemplate.webSearch. Omit
    * (or pass null) for templates that do not opt into Web Search.
    */
-  webSearch?: InputMaybe<Scalars['AWSJSON']['input']>;
+  webSearch?: InputMaybe<Scalars["AWSJSON"]["input"]>;
 };
 
 export type CreateArtifactInput = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  content?: InputMaybe<Scalars['String']['input']>;
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  s3Key?: InputMaybe<Scalars['String']['input']>;
-  sourceMessageId?: InputMaybe<Scalars['ID']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  content?: InputMaybe<Scalars["String"]["input"]>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  s3Key?: InputMaybe<Scalars["String"]["input"]>;
+  sourceMessageId?: InputMaybe<Scalars["ID"]["input"]>;
   status?: InputMaybe<ArtifactStatus>;
-  summary?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
-  threadId?: InputMaybe<Scalars['ID']['input']>;
-  title: Scalars['String']['input'];
+  summary?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
+  title: Scalars["String"]["input"];
   type: ArtifactType;
 };
 
 export type CreateEvalTestCaseInput = {
-  agentTemplateId?: InputMaybe<Scalars['ID']['input']>;
-  agentcoreEvaluatorIds?: InputMaybe<Array<Scalars['String']['input']>>;
+  agentTemplateId?: InputMaybe<Scalars["ID"]["input"]>;
+  agentcoreEvaluatorIds?: InputMaybe<Array<Scalars["String"]["input"]>>;
   assertions?: InputMaybe<Array<EvalAssertionInput>>;
-  category: Scalars['String']['input'];
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  name: Scalars['String']['input'];
-  query: Scalars['String']['input'];
-  systemPrompt?: InputMaybe<Scalars['String']['input']>;
-  tags?: InputMaybe<Array<Scalars['String']['input']>>;
+  category: Scalars["String"]["input"];
+  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
+  name: Scalars["String"]["input"];
+  query: Scalars["String"]["input"];
+  systemPrompt?: InputMaybe<Scalars["String"]["input"]>;
+  tags?: InputMaybe<Array<Scalars["String"]["input"]>>;
 };
 
 export type CreateInboxItemInput = {
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  entityId?: InputMaybe<Scalars['ID']['input']>;
-  entityType?: InputMaybe<Scalars['String']['input']>;
-  expiresAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  recipientId?: InputMaybe<Scalars['ID']['input']>;
-  requesterId?: InputMaybe<Scalars['ID']['input']>;
-  requesterType?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
-  title?: InputMaybe<Scalars['String']['input']>;
-  type: Scalars['String']['input'];
+  config?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  entityId?: InputMaybe<Scalars["ID"]["input"]>;
+  entityType?: InputMaybe<Scalars["String"]["input"]>;
+  expiresAt?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  recipientId?: InputMaybe<Scalars["ID"]["input"]>;
+  requesterId?: InputMaybe<Scalars["ID"]["input"]>;
+  requesterType?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  title?: InputMaybe<Scalars["String"]["input"]>;
+  type: Scalars["String"]["input"];
 };
 
 export type CreateKnowledgeBaseInput = {
-  chunkOverlapPercent?: InputMaybe<Scalars['Int']['input']>;
-  chunkSizeTokens?: InputMaybe<Scalars['Int']['input']>;
-  chunkingStrategy?: InputMaybe<Scalars['String']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  embeddingModel?: InputMaybe<Scalars['String']['input']>;
-  name: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
+  chunkOverlapPercent?: InputMaybe<Scalars["Int"]["input"]>;
+  chunkSizeTokens?: InputMaybe<Scalars["Int"]["input"]>;
+  chunkingStrategy?: InputMaybe<Scalars["String"]["input"]>;
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  embeddingModel?: InputMaybe<Scalars["String"]["input"]>;
+  name: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type CreateQuickActionInput = {
-  prompt: Scalars['String']['input'];
+  prompt: Scalars["String"]["input"];
   scope?: InputMaybe<QuickActionScope>;
-  sortOrder?: InputMaybe<Scalars['Int']['input']>;
-  tenantId: Scalars['ID']['input'];
-  title: Scalars['String']['input'];
-  workspaceAgentId?: InputMaybe<Scalars['ID']['input']>;
+  sortOrder?: InputMaybe<Scalars["Int"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  title: Scalars["String"]["input"];
+  workspaceAgentId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type CreateRecipeInput = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  genuiType: Scalars['String']['input'];
-  params: Scalars['AWSJSON']['input'];
-  server: Scalars['String']['input'];
-  sourceMessageId?: InputMaybe<Scalars['ID']['input']>;
-  summary?: InputMaybe<Scalars['String']['input']>;
-  templates?: InputMaybe<Scalars['AWSJSON']['input']>;
-  tenantId: Scalars['ID']['input'];
-  threadId?: InputMaybe<Scalars['ID']['input']>;
-  title: Scalars['String']['input'];
-  tool: Scalars['String']['input'];
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  genuiType: Scalars["String"]["input"];
+  params: Scalars["AWSJSON"]["input"];
+  server: Scalars["String"]["input"];
+  sourceMessageId?: InputMaybe<Scalars["ID"]["input"]>;
+  summary?: InputMaybe<Scalars["String"]["input"]>;
+  templates?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
+  title: Scalars["String"]["input"];
+  tool: Scalars["String"]["input"];
 };
 
 export type CreateRoutineInput = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  name: Scalars['String']['input'];
-  schedule?: InputMaybe<Scalars['String']['input']>;
-  teamId?: InputMaybe<Scalars['ID']['input']>;
-  tenantId: Scalars['ID']['input'];
-  type?: InputMaybe<Scalars['String']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  config?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  name: Scalars["String"]["input"];
+  schedule?: InputMaybe<Scalars["String"]["input"]>;
+  teamId?: InputMaybe<Scalars["ID"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  type?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type CreateScheduledJobInput = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
-  createdById?: InputMaybe<Scalars['String']['input']>;
-  createdByType?: InputMaybe<Scalars['String']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  name: Scalars['String']['input'];
-  prompt?: InputMaybe<Scalars['String']['input']>;
-  routineId?: InputMaybe<Scalars['ID']['input']>;
-  scheduleExpression?: InputMaybe<Scalars['String']['input']>;
-  scheduleType?: InputMaybe<Scalars['String']['input']>;
-  teamId?: InputMaybe<Scalars['ID']['input']>;
-  tenantId: Scalars['ID']['input'];
-  timezone?: InputMaybe<Scalars['String']['input']>;
-  triggerType: Scalars['String']['input'];
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  config?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  createdById?: InputMaybe<Scalars["String"]["input"]>;
+  createdByType?: InputMaybe<Scalars["String"]["input"]>;
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  name: Scalars["String"]["input"];
+  prompt?: InputMaybe<Scalars["String"]["input"]>;
+  routineId?: InputMaybe<Scalars["ID"]["input"]>;
+  scheduleExpression?: InputMaybe<Scalars["String"]["input"]>;
+  scheduleType?: InputMaybe<Scalars["String"]["input"]>;
+  teamId?: InputMaybe<Scalars["ID"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  timezone?: InputMaybe<Scalars["String"]["input"]>;
+  triggerType: Scalars["String"]["input"];
 };
 
 export type CreateTeamInput = {
-  budgetMonthlyCents?: InputMaybe<Scalars['Int']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
+  budgetMonthlyCents?: InputMaybe<Scalars["Int"]["input"]>;
+  description?: InputMaybe<Scalars["String"]["input"]>;
   /**
    * Optional client-supplied idempotency key. See
    * CreateAgentInput.idempotencyKey / packages/api/src/lib/idempotency.ts.
    */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  name: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
-  type?: InputMaybe<Scalars['String']['input']>;
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  name: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
+  type?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type CreateTenantInput = {
-  name: Scalars['String']['input'];
-  plan?: InputMaybe<Scalars['String']['input']>;
-  slug: Scalars['String']['input'];
+  name: Scalars["String"]["input"];
+  plan?: InputMaybe<Scalars["String"]["input"]>;
+  slug: Scalars["String"]["input"];
 };
 
 export type CreateThreadInput = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  assigneeId?: InputMaybe<Scalars['ID']['input']>;
-  assigneeType?: InputMaybe<Scalars['String']['input']>;
-  billingCode?: InputMaybe<Scalars['String']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  assigneeId?: InputMaybe<Scalars["ID"]["input"]>;
+  assigneeType?: InputMaybe<Scalars["String"]["input"]>;
+  billingCode?: InputMaybe<Scalars["String"]["input"]>;
   channel?: InputMaybe<ThreadChannel>;
-  createdById?: InputMaybe<Scalars['String']['input']>;
-  createdByType?: InputMaybe<Scalars['String']['input']>;
-  dueAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  firstMessage?: InputMaybe<Scalars['String']['input']>;
-  labels?: InputMaybe<Scalars['AWSJSON']['input']>;
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  tenantId: Scalars['ID']['input'];
-  title: Scalars['String']['input'];
+  createdById?: InputMaybe<Scalars["String"]["input"]>;
+  createdByType?: InputMaybe<Scalars["String"]["input"]>;
+  dueAt?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  firstMessage?: InputMaybe<Scalars["String"]["input"]>;
+  labels?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  title: Scalars["String"]["input"];
 };
 
 export type CreateThreadLabelInput = {
-  color?: InputMaybe<Scalars['String']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  name: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
+  color?: InputMaybe<Scalars["String"]["input"]>;
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  name: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type CreateWakeupRequestInput = {
-  agentId: Scalars['ID']['input'];
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  payload?: InputMaybe<Scalars['AWSJSON']['input']>;
-  reason?: InputMaybe<Scalars['String']['input']>;
-  requestedByActorId?: InputMaybe<Scalars['String']['input']>;
-  requestedByActorType?: InputMaybe<Scalars['String']['input']>;
-  source: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
-  triggerDetail?: InputMaybe<Scalars['String']['input']>;
+  agentId: Scalars["ID"]["input"];
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
+  payload?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  reason?: InputMaybe<Scalars["String"]["input"]>;
+  requestedByActorId?: InputMaybe<Scalars["String"]["input"]>;
+  requestedByActorType?: InputMaybe<Scalars["String"]["input"]>;
+  source: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
+  triggerDetail?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type CreateWebhookInput = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  name: Scalars['String']['input'];
-  prompt?: InputMaybe<Scalars['String']['input']>;
-  rateLimit?: InputMaybe<Scalars['Int']['input']>;
-  routineId?: InputMaybe<Scalars['ID']['input']>;
-  targetType: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  config?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  name: Scalars["String"]["input"];
+  prompt?: InputMaybe<Scalars["String"]["input"]>;
+  rateLimit?: InputMaybe<Scalars["Int"]["input"]>;
+  routineId?: InputMaybe<Scalars["ID"]["input"]>;
+  targetType: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type DailyCostPoint = {
-  __typename?: 'DailyCostPoint';
-  computeUsd: Scalars['Float']['output'];
-  day: Scalars['String']['output'];
-  eventCount: Scalars['Int']['output'];
-  llmUsd: Scalars['Float']['output'];
-  toolsUsd: Scalars['Float']['output'];
-  totalUsd: Scalars['Float']['output'];
+  __typename?: "DailyCostPoint";
+  computeUsd: Scalars["Float"]["output"];
+  day: Scalars["String"]["output"];
+  eventCount: Scalars["Int"]["output"];
+  llmUsd: Scalars["Float"]["output"];
+  toolsUsd: Scalars["Float"]["output"];
+  totalUsd: Scalars["Float"]["output"];
 };
 
 export type DelegateThreadInput = {
-  agentId: Scalars['ID']['input'];
-  assigneeId: Scalars['ID']['input'];
-  reason?: InputMaybe<Scalars['String']['input']>;
-  threadId: Scalars['ID']['input'];
+  agentId: Scalars["ID"]["input"];
+  assigneeId: Scalars["ID"]["input"];
+  reason?: InputMaybe<Scalars["String"]["input"]>;
+  threadId: Scalars["ID"]["input"];
 };
 
 export type DeploymentStatus = {
-  __typename?: 'DeploymentStatus';
-  accountId?: Maybe<Scalars['String']['output']>;
-  adminUrl?: Maybe<Scalars['String']['output']>;
-  agentcoreStatus?: Maybe<Scalars['String']['output']>;
-  apiEndpoint?: Maybe<Scalars['String']['output']>;
-  appsyncRealtimeUrl?: Maybe<Scalars['String']['output']>;
-  appsyncUrl?: Maybe<Scalars['String']['output']>;
-  bucketName?: Maybe<Scalars['String']['output']>;
-  databaseEndpoint?: Maybe<Scalars['String']['output']>;
-  docsUrl?: Maybe<Scalars['String']['output']>;
-  ecrUrl?: Maybe<Scalars['String']['output']>;
-  hindsightEnabled: Scalars['Boolean']['output'];
-  hindsightEndpoint?: Maybe<Scalars['String']['output']>;
-  managedMemoryEnabled: Scalars['Boolean']['output'];
-  region: Scalars['String']['output'];
-  source: Scalars['String']['output'];
-  stage: Scalars['String']['output'];
+  __typename?: "DeploymentStatus";
+  accountId?: Maybe<Scalars["String"]["output"]>;
+  adminUrl?: Maybe<Scalars["String"]["output"]>;
+  agentcoreStatus?: Maybe<Scalars["String"]["output"]>;
+  apiEndpoint?: Maybe<Scalars["String"]["output"]>;
+  appsyncRealtimeUrl?: Maybe<Scalars["String"]["output"]>;
+  appsyncUrl?: Maybe<Scalars["String"]["output"]>;
+  bucketName?: Maybe<Scalars["String"]["output"]>;
+  databaseEndpoint?: Maybe<Scalars["String"]["output"]>;
+  docsUrl?: Maybe<Scalars["String"]["output"]>;
+  ecrUrl?: Maybe<Scalars["String"]["output"]>;
+  hindsightEnabled: Scalars["Boolean"]["output"];
+  hindsightEndpoint?: Maybe<Scalars["String"]["output"]>;
+  managedMemoryEnabled: Scalars["Boolean"]["output"];
+  region: Scalars["String"]["output"];
+  source: Scalars["String"]["output"];
+  stage: Scalars["String"]["output"];
 };
 
 export type DismissActivationRecommendationInput = {
-  itemId: Scalars['ID']['input'];
-  sessionId: Scalars['ID']['input'];
+  itemId: Scalars["ID"]["input"];
+  sessionId: Scalars["ID"]["input"];
 };
 
 export type EscalateThreadInput = {
-  agentId: Scalars['ID']['input'];
-  reason: Scalars['String']['input'];
-  threadId: Scalars['ID']['input'];
+  agentId: Scalars["ID"]["input"];
+  reason: Scalars["String"]["input"];
+  threadId: Scalars["ID"]["input"];
 };
 
 export type EvalAssertionInput = {
-  path?: InputMaybe<Scalars['String']['input']>;
-  type: Scalars['String']['input'];
-  value?: InputMaybe<Scalars['String']['input']>;
+  path?: InputMaybe<Scalars["String"]["input"]>;
+  type: Scalars["String"]["input"];
+  value?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type EvalResult = {
-  __typename?: 'EvalResult';
-  actualOutput?: Maybe<Scalars['String']['output']>;
-  agentSessionId?: Maybe<Scalars['String']['output']>;
-  assertions: Scalars['AWSJSON']['output'];
-  category?: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  durationMs?: Maybe<Scalars['Int']['output']>;
-  errorMessage?: Maybe<Scalars['String']['output']>;
-  evaluatorResults: Scalars['AWSJSON']['output'];
-  expected?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  input?: Maybe<Scalars['String']['output']>;
-  runId: Scalars['ID']['output'];
-  score?: Maybe<Scalars['Float']['output']>;
-  status: Scalars['String']['output'];
-  testCaseId?: Maybe<Scalars['ID']['output']>;
-  testCaseName?: Maybe<Scalars['String']['output']>;
+  __typename?: "EvalResult";
+  actualOutput?: Maybe<Scalars["String"]["output"]>;
+  agentSessionId?: Maybe<Scalars["String"]["output"]>;
+  assertions: Scalars["AWSJSON"]["output"];
+  category?: Maybe<Scalars["String"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  durationMs?: Maybe<Scalars["Int"]["output"]>;
+  errorMessage?: Maybe<Scalars["String"]["output"]>;
+  evaluatorResults: Scalars["AWSJSON"]["output"];
+  expected?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  input?: Maybe<Scalars["String"]["output"]>;
+  runId: Scalars["ID"]["output"];
+  score?: Maybe<Scalars["Float"]["output"]>;
+  status: Scalars["String"]["output"];
+  testCaseId?: Maybe<Scalars["ID"]["output"]>;
+  testCaseName?: Maybe<Scalars["String"]["output"]>;
 };
 
 export type EvalRun = {
-  __typename?: 'EvalRun';
-  agentId?: Maybe<Scalars['ID']['output']>;
-  agentName?: Maybe<Scalars['String']['output']>;
-  agentTemplateId?: Maybe<Scalars['ID']['output']>;
-  agentTemplateName?: Maybe<Scalars['String']['output']>;
-  categories: Array<Scalars['String']['output']>;
-  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  costUsd?: Maybe<Scalars['Float']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  errorMessage?: Maybe<Scalars['String']['output']>;
-  failed: Scalars['Int']['output'];
-  id: Scalars['ID']['output'];
-  model?: Maybe<Scalars['String']['output']>;
-  passRate?: Maybe<Scalars['Float']['output']>;
-  passed: Scalars['Int']['output'];
-  regression: Scalars['Boolean']['output'];
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  totalTests: Scalars['Int']['output'];
+  __typename?: "EvalRun";
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  agentName?: Maybe<Scalars["String"]["output"]>;
+  agentTemplateId?: Maybe<Scalars["ID"]["output"]>;
+  agentTemplateName?: Maybe<Scalars["String"]["output"]>;
+  categories: Array<Scalars["String"]["output"]>;
+  completedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  costUsd?: Maybe<Scalars["Float"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  errorMessage?: Maybe<Scalars["String"]["output"]>;
+  failed: Scalars["Int"]["output"];
+  id: Scalars["ID"]["output"];
+  model?: Maybe<Scalars["String"]["output"]>;
+  passRate?: Maybe<Scalars["Float"]["output"]>;
+  passed: Scalars["Int"]["output"];
+  regression: Scalars["Boolean"]["output"];
+  startedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  status: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  totalTests: Scalars["Int"]["output"];
 };
 
 export type EvalRunUpdateEvent = {
-  __typename?: 'EvalRunUpdateEvent';
-  agentId?: Maybe<Scalars['ID']['output']>;
-  errorMessage?: Maybe<Scalars['String']['output']>;
-  failed?: Maybe<Scalars['Int']['output']>;
-  passRate?: Maybe<Scalars['Float']['output']>;
-  passed?: Maybe<Scalars['Int']['output']>;
-  runId: Scalars['ID']['output'];
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  totalTests?: Maybe<Scalars['Int']['output']>;
-  updatedAt: Scalars['AWSDateTime']['output'];
+  __typename?: "EvalRunUpdateEvent";
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  errorMessage?: Maybe<Scalars["String"]["output"]>;
+  failed?: Maybe<Scalars["Int"]["output"]>;
+  passRate?: Maybe<Scalars["Float"]["output"]>;
+  passed?: Maybe<Scalars["Int"]["output"]>;
+  runId: Scalars["ID"]["output"];
+  status: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  totalTests?: Maybe<Scalars["Int"]["output"]>;
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type EvalRunsPage = {
-  __typename?: 'EvalRunsPage';
+  __typename?: "EvalRunsPage";
   items: Array<EvalRun>;
-  totalCount: Scalars['Int']['output'];
+  totalCount: Scalars["Int"]["output"];
 };
 
 export type EvalSummary = {
-  __typename?: 'EvalSummary';
-  avgPassRate?: Maybe<Scalars['Float']['output']>;
-  latestPassRate?: Maybe<Scalars['Float']['output']>;
-  regressionCount: Scalars['Int']['output'];
-  totalRuns: Scalars['Int']['output'];
+  __typename?: "EvalSummary";
+  avgPassRate?: Maybe<Scalars["Float"]["output"]>;
+  latestPassRate?: Maybe<Scalars["Float"]["output"]>;
+  regressionCount: Scalars["Int"]["output"];
+  totalRuns: Scalars["Int"]["output"];
 };
 
 export type EvalTestCase = {
-  __typename?: 'EvalTestCase';
-  agentTemplateId?: Maybe<Scalars['ID']['output']>;
-  agentTemplateName?: Maybe<Scalars['String']['output']>;
-  agentcoreEvaluatorIds: Array<Scalars['String']['output']>;
-  assertions: Scalars['AWSJSON']['output'];
-  category: Scalars['String']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  name: Scalars['String']['output'];
-  query: Scalars['String']['output'];
-  source: Scalars['String']['output'];
-  systemPrompt?: Maybe<Scalars['String']['output']>;
-  tags: Array<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
+  __typename?: "EvalTestCase";
+  agentTemplateId?: Maybe<Scalars["ID"]["output"]>;
+  agentTemplateName?: Maybe<Scalars["String"]["output"]>;
+  agentcoreEvaluatorIds: Array<Scalars["String"]["output"]>;
+  assertions: Scalars["AWSJSON"]["output"];
+  category: Scalars["String"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  enabled: Scalars["Boolean"]["output"];
+  id: Scalars["ID"]["output"];
+  name: Scalars["String"]["output"];
+  query: Scalars["String"]["output"];
+  source: Scalars["String"]["output"];
+  systemPrompt?: Maybe<Scalars["String"]["output"]>;
+  tags: Array<Scalars["String"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type EvalTimeSeriesPoint = {
-  __typename?: 'EvalTimeSeriesPoint';
-  day: Scalars['String']['output'];
-  failed: Scalars['Int']['output'];
-  passRate?: Maybe<Scalars['Float']['output']>;
-  passed: Scalars['Int']['output'];
-  runCount: Scalars['Int']['output'];
+  __typename?: "EvalTimeSeriesPoint";
+  day: Scalars["String"]["output"];
+  failed: Scalars["Int"]["output"];
+  passRate?: Maybe<Scalars["Float"]["output"]>;
+  passed: Scalars["Int"]["output"];
+  runCount: Scalars["Int"]["output"];
 };
 
 export type HeartbeatActivityEvent = {
-  __typename?: 'HeartbeatActivityEvent';
-  createdAt: Scalars['AWSDateTime']['output'];
-  heartbeatId: Scalars['ID']['output'];
-  message?: Maybe<Scalars['String']['output']>;
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
+  __typename?: "HeartbeatActivityEvent";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  heartbeatId: Scalars["ID"]["output"];
+  message?: Maybe<Scalars["String"]["output"]>;
+  status: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
 };
 
 export type InboxItem = {
-  __typename?: 'InboxItem';
+  __typename?: "InboxItem";
   comments: Array<InboxItemComment>;
-  config?: Maybe<Scalars['AWSJSON']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  decidedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  decidedBy?: Maybe<Scalars['ID']['output']>;
-  description?: Maybe<Scalars['String']['output']>;
-  entityId?: Maybe<Scalars['ID']['output']>;
-  entityType?: Maybe<Scalars['String']['output']>;
-  expiresAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  id: Scalars['ID']['output'];
+  config?: Maybe<Scalars["AWSJSON"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  decidedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  decidedBy?: Maybe<Scalars["ID"]["output"]>;
+  description?: Maybe<Scalars["String"]["output"]>;
+  entityId?: Maybe<Scalars["ID"]["output"]>;
+  entityType?: Maybe<Scalars["String"]["output"]>;
+  expiresAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  id: Scalars["ID"]["output"];
   linkedThreads: Array<LinkedThread>;
   links: Array<InboxItemLink>;
-  recipientId?: Maybe<Scalars['ID']['output']>;
-  requesterId?: Maybe<Scalars['ID']['output']>;
-  requesterType?: Maybe<Scalars['String']['output']>;
-  reviewNotes?: Maybe<Scalars['String']['output']>;
-  revision: Scalars['Int']['output'];
+  recipientId?: Maybe<Scalars["ID"]["output"]>;
+  requesterId?: Maybe<Scalars["ID"]["output"]>;
+  requesterType?: Maybe<Scalars["String"]["output"]>;
+  reviewNotes?: Maybe<Scalars["String"]["output"]>;
+  revision: Scalars["Int"]["output"];
   status: InboxItemStatus;
-  tenantId: Scalars['ID']['output'];
-  title?: Maybe<Scalars['String']['output']>;
-  type: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
+  tenantId: Scalars["ID"]["output"];
+  title?: Maybe<Scalars["String"]["output"]>;
+  type: Scalars["String"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type InboxItemComment = {
-  __typename?: 'InboxItemComment';
-  authorId?: Maybe<Scalars['ID']['output']>;
-  authorType?: Maybe<Scalars['String']['output']>;
-  content: Scalars['String']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  inboxItemId: Scalars['ID']['output'];
-  tenantId: Scalars['ID']['output'];
+  __typename?: "InboxItemComment";
+  authorId?: Maybe<Scalars["ID"]["output"]>;
+  authorType?: Maybe<Scalars["String"]["output"]>;
+  content: Scalars["String"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  inboxItemId: Scalars["ID"]["output"];
+  tenantId: Scalars["ID"]["output"];
 };
 
 export type InboxItemDecisionInput = {
-  comment?: InputMaybe<Scalars['String']['input']>;
+  comment?: InputMaybe<Scalars["String"]["input"]>;
   status: InboxItemStatus;
 };
 
 export type InboxItemLink = {
-  __typename?: 'InboxItemLink';
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  inboxItemId: Scalars['ID']['output'];
-  linkedId?: Maybe<Scalars['ID']['output']>;
-  linkedType?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
+  __typename?: "InboxItemLink";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  inboxItemId: Scalars["ID"]["output"];
+  linkedId?: Maybe<Scalars["ID"]["output"]>;
+  linkedType?: Maybe<Scalars["String"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
 };
 
 export enum InboxItemStatus {
-  Approved = 'APPROVED',
-  Cancelled = 'CANCELLED',
-  Expired = 'EXPIRED',
-  Pending = 'PENDING',
-  Rejected = 'REJECTED',
-  RevisionRequested = 'REVISION_REQUESTED'
+  Approved = "APPROVED",
+  Cancelled = "CANCELLED",
+  Expired = "EXPIRED",
+  Pending = "PENDING",
+  Rejected = "REJECTED",
+  RevisionRequested = "REVISION_REQUESTED",
 }
 
 export type InboxItemStatusEvent = {
-  __typename?: 'InboxItemStatusEvent';
-  inboxItemId: Scalars['ID']['output'];
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  title?: Maybe<Scalars['String']['output']>;
-  updatedAt: Scalars['AWSDateTime']['output'];
+  __typename?: "InboxItemStatusEvent";
+  inboxItemId: Scalars["ID"]["output"];
+  status: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  title?: Maybe<Scalars["String"]["output"]>;
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type InviteMemberInput = {
-  email: Scalars['String']['input'];
+  email: Scalars["String"]["input"];
   /** Optional idempotency key. See UpdateTenantInput.idempotencyKey. */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
-  role?: InputMaybe<Scalars['String']['input']>;
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
+  name?: InputMaybe<Scalars["String"]["input"]>;
+  role?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type KnowledgeBase = {
-  __typename?: 'KnowledgeBase';
-  awsKbId?: Maybe<Scalars['String']['output']>;
-  chunkOverlapPercent?: Maybe<Scalars['Int']['output']>;
-  chunkSizeTokens?: Maybe<Scalars['Int']['output']>;
-  chunkingStrategy: Scalars['String']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  description?: Maybe<Scalars['String']['output']>;
-  documentCount?: Maybe<Scalars['Int']['output']>;
-  embeddingModel: Scalars['String']['output'];
-  errorMessage?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  lastSyncAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  lastSyncStatus?: Maybe<Scalars['String']['output']>;
-  name: Scalars['String']['output'];
-  slug: Scalars['String']['output'];
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
+  __typename?: "KnowledgeBase";
+  awsKbId?: Maybe<Scalars["String"]["output"]>;
+  chunkOverlapPercent?: Maybe<Scalars["Int"]["output"]>;
+  chunkSizeTokens?: Maybe<Scalars["Int"]["output"]>;
+  chunkingStrategy: Scalars["String"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  description?: Maybe<Scalars["String"]["output"]>;
+  documentCount?: Maybe<Scalars["Int"]["output"]>;
+  embeddingModel: Scalars["String"]["output"];
+  errorMessage?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  lastSyncAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  lastSyncStatus?: Maybe<Scalars["String"]["output"]>;
+  name: Scalars["String"]["output"];
+  slug: Scalars["String"]["output"];
+  status: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type LinkedThread = {
-  __typename?: 'LinkedThread';
-  id: Scalars['ID']['output'];
-  identifier?: Maybe<Scalars['String']['output']>;
-  number: Scalars['Int']['output'];
-  status: Scalars['String']['output'];
-  title: Scalars['String']['output'];
+  __typename?: "LinkedThread";
+  id: Scalars["ID"]["output"];
+  identifier?: Maybe<Scalars["String"]["output"]>;
+  number: Scalars["Int"]["output"];
+  status: Scalars["String"]["output"];
+  title: Scalars["String"]["output"];
 };
 
 export type MemoryContent = {
-  __typename?: 'MemoryContent';
-  text?: Maybe<Scalars['String']['output']>;
+  __typename?: "MemoryContent";
+  text?: Maybe<Scalars["String"]["output"]>;
 };
 
 export type MemoryGraph = {
-  __typename?: 'MemoryGraph';
+  __typename?: "MemoryGraph";
   edges: Array<MemoryGraphEdge>;
   nodes: Array<MemoryGraphNode>;
 };
 
 export type MemoryGraphEdge = {
-  __typename?: 'MemoryGraphEdge';
-  label?: Maybe<Scalars['String']['output']>;
-  source: Scalars['String']['output'];
-  target: Scalars['String']['output'];
-  type: Scalars['String']['output'];
-  weight: Scalars['Float']['output'];
+  __typename?: "MemoryGraphEdge";
+  label?: Maybe<Scalars["String"]["output"]>;
+  source: Scalars["String"]["output"];
+  target: Scalars["String"]["output"];
+  type: Scalars["String"]["output"];
+  weight: Scalars["Float"]["output"];
 };
 
 export type MemoryGraphNode = {
-  __typename?: 'MemoryGraphNode';
-  edgeCount: Scalars['Int']['output'];
-  entityType?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  label: Scalars['String']['output'];
-  latestThreadId?: Maybe<Scalars['String']['output']>;
-  strategy?: Maybe<Scalars['String']['output']>;
-  type: Scalars['String']['output'];
+  __typename?: "MemoryGraphNode";
+  edgeCount: Scalars["Int"]["output"];
+  entityType?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  label: Scalars["String"]["output"];
+  latestThreadId?: Maybe<Scalars["String"]["output"]>;
+  strategy?: Maybe<Scalars["String"]["output"]>;
+  type: Scalars["String"]["output"];
 };
 
 export type MemoryRecord = {
-  __typename?: 'MemoryRecord';
-  accessCount?: Maybe<Scalars['Int']['output']>;
+  __typename?: "MemoryRecord";
+  accessCount?: Maybe<Scalars["Int"]["output"]>;
   /** @deprecated Use userSlug */
-  agentSlug?: Maybe<Scalars['String']['output']>;
-  confidence?: Maybe<Scalars['Float']['output']>;
+  agentSlug?: Maybe<Scalars["String"]["output"]>;
+  confidence?: Maybe<Scalars["Float"]["output"]>;
   content?: Maybe<MemoryContent>;
-  context?: Maybe<Scalars['String']['output']>;
-  createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  eventDate?: Maybe<Scalars['AWSDateTime']['output']>;
-  expiresAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  factType?: Maybe<Scalars['String']['output']>;
-  memoryRecordId: Scalars['ID']['output'];
-  mentionedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  namespace?: Maybe<Scalars['String']['output']>;
-  occurredEnd?: Maybe<Scalars['AWSDateTime']['output']>;
-  occurredStart?: Maybe<Scalars['AWSDateTime']['output']>;
-  proofCount?: Maybe<Scalars['Int']['output']>;
-  score?: Maybe<Scalars['Float']['output']>;
-  strategy?: Maybe<Scalars['String']['output']>;
-  strategyId?: Maybe<Scalars['String']['output']>;
-  tags?: Maybe<Array<Scalars['String']['output']>>;
-  threadId?: Maybe<Scalars['String']['output']>;
-  updatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  userSlug?: Maybe<Scalars['String']['output']>;
+  context?: Maybe<Scalars["String"]["output"]>;
+  createdAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  eventDate?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  expiresAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  factType?: Maybe<Scalars["String"]["output"]>;
+  memoryRecordId: Scalars["ID"]["output"];
+  mentionedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  namespace?: Maybe<Scalars["String"]["output"]>;
+  occurredEnd?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  occurredStart?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  proofCount?: Maybe<Scalars["Int"]["output"]>;
+  score?: Maybe<Scalars["Float"]["output"]>;
+  strategy?: Maybe<Scalars["String"]["output"]>;
+  strategyId?: Maybe<Scalars["String"]["output"]>;
+  tags?: Maybe<Array<Scalars["String"]["output"]>>;
+  threadId?: Maybe<Scalars["String"]["output"]>;
+  updatedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  userSlug?: Maybe<Scalars["String"]["output"]>;
   /**
    * Compiled wiki pages (Compounding Memory) that cite this memory unit as
    * a source. Populated from wiki_section_sources.source_ref. Returns pages
@@ -1337,17 +1363,17 @@ export type MemoryRecord = {
 };
 
 export type MemorySearchResult = {
-  __typename?: 'MemorySearchResult';
+  __typename?: "MemorySearchResult";
   records: Array<MemoryRecord>;
-  totalCount: Scalars['Int']['output'];
+  totalCount: Scalars["Int"]["output"];
 };
 
 export enum MemoryStrategy {
-  Episodes = 'EPISODES',
-  Preferences = 'PREFERENCES',
-  Reflections = 'REFLECTIONS',
-  Semantic = 'SEMANTIC',
-  Summaries = 'SUMMARIES'
+  Episodes = "EPISODES",
+  Preferences = "PREFERENCES",
+  Reflections = "REFLECTIONS",
+  Semantic = "SEMANTIC",
+  Summaries = "SUMMARIES",
 }
 
 /**
@@ -1356,71 +1382,71 @@ export enum MemoryStrategy {
  * only meaningful when Hindsight is deployed alongside managed memory).
  */
 export type MemorySystemConfig = {
-  __typename?: 'MemorySystemConfig';
+  __typename?: "MemorySystemConfig";
   /**
    * True when the optional Hindsight add-on is deployed (ECS + ALB). Gates
    * the Knowledge Graph / entity-graph views in the admin UI.
    */
-  hindsightEnabled: Scalars['Boolean']['output'];
+  hindsightEnabled: Scalars["Boolean"]["output"];
   /**
    * True when managed AgentCore Memory is provisioned and wired into the
    * agent container. This is the always-on baseline — when false, memory
    * features may be unavailable.
    */
-  managedMemoryEnabled: Scalars['Boolean']['output'];
+  managedMemoryEnabled: Scalars["Boolean"]["output"];
 };
 
 export type Message = {
-  __typename?: 'Message';
+  __typename?: "Message";
   artifacts: Array<MessageArtifact>;
-  content?: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
+  content?: Maybe<Scalars["String"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
   durableArtifact?: Maybe<Artifact>;
-  id: Scalars['ID']['output'];
-  metadata?: Maybe<Scalars['AWSJSON']['output']>;
+  id: Scalars["ID"]["output"];
+  metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
   role: MessageRole;
-  senderId?: Maybe<Scalars['ID']['output']>;
-  senderType?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  threadId: Scalars['ID']['output'];
-  tokenCount?: Maybe<Scalars['Int']['output']>;
-  toolCalls?: Maybe<Scalars['AWSJSON']['output']>;
-  toolResults?: Maybe<Scalars['AWSJSON']['output']>;
+  senderId?: Maybe<Scalars["ID"]["output"]>;
+  senderType?: Maybe<Scalars["String"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  threadId: Scalars["ID"]["output"];
+  tokenCount?: Maybe<Scalars["Int"]["output"]>;
+  toolCalls?: Maybe<Scalars["AWSJSON"]["output"]>;
+  toolResults?: Maybe<Scalars["AWSJSON"]["output"]>;
 };
 
 export type MessageArtifact = {
-  __typename?: 'MessageArtifact';
-  artifactType: Scalars['String']['output'];
-  content?: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  messageId: Scalars['ID']['output'];
-  metadata?: Maybe<Scalars['AWSJSON']['output']>;
-  mimeType?: Maybe<Scalars['String']['output']>;
-  name?: Maybe<Scalars['String']['output']>;
-  s3Key?: Maybe<Scalars['String']['output']>;
-  sizeBytes?: Maybe<Scalars['Int']['output']>;
-  tenantId: Scalars['ID']['output'];
-  threadId: Scalars['ID']['output'];
+  __typename?: "MessageArtifact";
+  artifactType: Scalars["String"]["output"];
+  content?: Maybe<Scalars["String"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  messageId: Scalars["ID"]["output"];
+  metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
+  mimeType?: Maybe<Scalars["String"]["output"]>;
+  name?: Maybe<Scalars["String"]["output"]>;
+  s3Key?: Maybe<Scalars["String"]["output"]>;
+  sizeBytes?: Maybe<Scalars["Int"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  threadId: Scalars["ID"]["output"];
 };
 
 export type MessageConnection = {
-  __typename?: 'MessageConnection';
+  __typename?: "MessageConnection";
   edges: Array<MessageEdge>;
   pageInfo: PageInfo;
 };
 
 export type MessageEdge = {
-  __typename?: 'MessageEdge';
-  cursor: Scalars['String']['output'];
+  __typename?: "MessageEdge";
+  cursor: Scalars["String"]["output"];
   node: Message;
 };
 
 export enum MessageRole {
-  Assistant = 'ASSISTANT',
-  System = 'SYSTEM',
-  Tool = 'TOOL',
-  User = 'USER'
+  Assistant = "ASSISTANT",
+  System = "SYSTEM",
+  Tool = "TOOL",
+  User = "USER",
 }
 
 /**
@@ -1429,85 +1455,85 @@ export enum MessageRole {
  * user doesn't override.
  */
 export enum MobileCaptureFactType {
-  Experience = 'EXPERIENCE',
-  Fact = 'FACT',
-  Observation = 'OBSERVATION',
-  Preference = 'PREFERENCE'
+  Experience = "EXPERIENCE",
+  Fact = "FACT",
+  Observation = "OBSERVATION",
+  Preference = "PREFERENCE",
 }
 
 export type MobileMemoryCapture = {
-  __typename?: 'MobileMemoryCapture';
+  __typename?: "MobileMemoryCapture";
   /** @deprecated Use userId */
-  agentId?: Maybe<Scalars['ID']['output']>;
-  capturedAt: Scalars['AWSDateTime']['output'];
-  content: Scalars['String']['output'];
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  capturedAt: Scalars["AWSDateTime"]["output"];
+  content: Scalars["String"]["output"];
   factType: MobileCaptureFactType;
-  id: Scalars['ID']['output'];
-  metadata?: Maybe<Scalars['AWSJSON']['output']>;
-  syncedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  tenantId: Scalars['ID']['output'];
-  userId: Scalars['ID']['output'];
+  id: Scalars["ID"]["output"];
+  metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
+  syncedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  userId: Scalars["ID"]["output"];
 };
 
 export type MobileWikiSearchResult = {
-  __typename?: 'MobileWikiSearchResult';
+  __typename?: "MobileWikiSearchResult";
   /**
    * Retained for wire-format compatibility with older mobile clients.
    * Always [] on the FTS path; pages match their own compiled text, not
    * source memory units.
    */
-  matchingMemoryIds: Array<Scalars['ID']['output']>;
+  matchingMemoryIds: Array<Scalars["ID"]["output"]>;
   page: WikiPage;
   /**
    * Postgres `ts_rank(search_tsv, plainto_tsquery('english', query))` on
    * the page's compiled text. Higher is better. Not comparable across
    * queries.
    */
-  score: Scalars['Float']['output'];
+  score: Scalars["Float"]["output"];
 };
 
 export type ModelCatalogEntry = {
-  __typename?: 'ModelCatalogEntry';
-  contextWindow?: Maybe<Scalars['Int']['output']>;
-  displayName: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  inputCostPerMillion?: Maybe<Scalars['Float']['output']>;
-  maxOutputTokens?: Maybe<Scalars['Int']['output']>;
-  modelId: Scalars['String']['output'];
-  outputCostPerMillion?: Maybe<Scalars['Float']['output']>;
-  provider: Scalars['String']['output'];
-  supportsTools?: Maybe<Scalars['Boolean']['output']>;
-  supportsVision?: Maybe<Scalars['Boolean']['output']>;
+  __typename?: "ModelCatalogEntry";
+  contextWindow?: Maybe<Scalars["Int"]["output"]>;
+  displayName: Scalars["String"]["output"];
+  id: Scalars["ID"]["output"];
+  inputCostPerMillion?: Maybe<Scalars["Float"]["output"]>;
+  maxOutputTokens?: Maybe<Scalars["Int"]["output"]>;
+  modelId: Scalars["String"]["output"];
+  outputCostPerMillion?: Maybe<Scalars["Float"]["output"]>;
+  provider: Scalars["String"]["output"];
+  supportsTools?: Maybe<Scalars["Boolean"]["output"]>;
+  supportsVision?: Maybe<Scalars["Boolean"]["output"]>;
 };
 
 export type ModelCostSummary = {
-  __typename?: 'ModelCostSummary';
-  inputTokens: Scalars['Int']['output'];
-  model: Scalars['String']['output'];
-  outputTokens: Scalars['Int']['output'];
-  totalUsd: Scalars['Float']['output'];
+  __typename?: "ModelCostSummary";
+  inputTokens: Scalars["Int"]["output"];
+  model: Scalars["String"]["output"];
+  outputTokens: Scalars["Int"]["output"];
+  totalUsd: Scalars["Float"]["output"];
 };
 
 export type ModelInvocation = {
-  __typename?: 'ModelInvocation';
-  branch?: Maybe<Scalars['String']['output']>;
-  cacheReadTokenCount: Scalars['Int']['output'];
-  costUsd?: Maybe<Scalars['Float']['output']>;
-  hasToolResult?: Maybe<Scalars['Boolean']['output']>;
-  inputPreview?: Maybe<Scalars['String']['output']>;
-  inputTokenCount: Scalars['Int']['output'];
-  modelId: Scalars['String']['output'];
-  outputPreview?: Maybe<Scalars['String']['output']>;
-  outputTokenCount: Scalars['Int']['output'];
-  requestId: Scalars['String']['output'];
-  timestamp: Scalars['AWSDateTime']['output'];
-  toolCount?: Maybe<Scalars['Int']['output']>;
-  toolUses?: Maybe<Array<Scalars['String']['output']>>;
+  __typename?: "ModelInvocation";
+  branch?: Maybe<Scalars["String"]["output"]>;
+  cacheReadTokenCount: Scalars["Int"]["output"];
+  costUsd?: Maybe<Scalars["Float"]["output"]>;
+  hasToolResult?: Maybe<Scalars["Boolean"]["output"]>;
+  inputPreview?: Maybe<Scalars["String"]["output"]>;
+  inputTokenCount: Scalars["Int"]["output"];
+  modelId: Scalars["String"]["output"];
+  outputPreview?: Maybe<Scalars["String"]["output"]>;
+  outputTokenCount: Scalars["Int"]["output"];
+  requestId: Scalars["String"]["output"];
+  timestamp: Scalars["AWSDateTime"]["output"];
+  toolCount?: Maybe<Scalars["Int"]["output"]>;
+  toolUses?: Maybe<Array<Scalars["String"]["output"]>>;
 };
 
 export type Mutation = {
-  __typename?: 'Mutation';
-  _empty?: Maybe<Scalars['String']['output']>;
+  __typename?: "Mutation";
+  _empty?: Maybe<Scalars["String"]["output"]>;
   acceptAgentWorkspaceReview: AgentWorkspaceRun;
   /** Advance an agent's pinned hash for a guardrail-class file. idempotencyKey optional. */
   acceptTemplateUpdate: Agent;
@@ -1570,26 +1596,26 @@ export type Mutation = {
   createWebhook: Webhook;
   decideInboxItem: InboxItem;
   delegateThread: Thread;
-  deleteAgent: Scalars['Boolean']['output'];
-  deleteAgentBudgetPolicy: Scalars['Boolean']['output'];
-  deleteAgentTemplate: Scalars['Boolean']['output'];
-  deleteArtifact: Scalars['Boolean']['output'];
-  deleteBudgetPolicy: Scalars['Boolean']['output'];
-  deleteEvalRun: Scalars['Boolean']['output'];
-  deleteEvalTestCase: Scalars['Boolean']['output'];
-  deleteKnowledgeBase: Scalars['Boolean']['output'];
-  deleteMemoryRecord: Scalars['Boolean']['output'];
-  deleteMessage: Scalars['Boolean']['output'];
-  deleteMobileMemoryCapture: Scalars['Boolean']['output'];
-  deleteQuickAction: Scalars['Boolean']['output'];
-  deleteRecipe: Scalars['Boolean']['output'];
-  deleteRoutine: Scalars['Boolean']['output'];
-  deleteRoutineTrigger: Scalars['Boolean']['output'];
-  deleteRun: Scalars['Boolean']['output'];
-  deleteTeam: Scalars['Boolean']['output'];
-  deleteThread: Scalars['Boolean']['output'];
-  deleteThreadLabel: Scalars['Boolean']['output'];
-  deleteWebhook: Scalars['Boolean']['output'];
+  deleteAgent: Scalars["Boolean"]["output"];
+  deleteAgentBudgetPolicy: Scalars["Boolean"]["output"];
+  deleteAgentTemplate: Scalars["Boolean"]["output"];
+  deleteArtifact: Scalars["Boolean"]["output"];
+  deleteBudgetPolicy: Scalars["Boolean"]["output"];
+  deleteEvalRun: Scalars["Boolean"]["output"];
+  deleteEvalTestCase: Scalars["Boolean"]["output"];
+  deleteKnowledgeBase: Scalars["Boolean"]["output"];
+  deleteMemoryRecord: Scalars["Boolean"]["output"];
+  deleteMessage: Scalars["Boolean"]["output"];
+  deleteMobileMemoryCapture: Scalars["Boolean"]["output"];
+  deleteQuickAction: Scalars["Boolean"]["output"];
+  deleteRecipe: Scalars["Boolean"]["output"];
+  deleteRoutine: Scalars["Boolean"]["output"];
+  deleteRoutineTrigger: Scalars["Boolean"]["output"];
+  deleteRun: Scalars["Boolean"]["output"];
+  deleteTeam: Scalars["Boolean"]["output"];
+  deleteThread: Scalars["Boolean"]["output"];
+  deleteThreadLabel: Scalars["Boolean"]["output"];
+  deleteWebhook: Scalars["Boolean"]["output"];
   dismissActivationRecommendation: ActivationSession;
   escalateThread: Thread;
   generateActivationAutomationCandidates: Array<ActivationAutomationCandidate>;
@@ -1606,17 +1632,17 @@ export type Mutation = {
   notifyThreadUpdate?: Maybe<ThreadUpdateEvent>;
   refreshGenUI?: Maybe<Message>;
   regenerateWebhookToken?: Maybe<Webhook>;
-  registerPushToken: Scalars['Boolean']['output'];
+  registerPushToken: Scalars["Boolean"]["output"];
   rejectInboxItem: InboxItem;
   releaseThread: Thread;
   releaseVanityEmailAddress: AgentCapability;
-  removeInboxItemLink: Scalars['Boolean']['output'];
-  removeTeamAgent: Scalars['Boolean']['output'];
-  removeTeamUser: Scalars['Boolean']['output'];
+  removeInboxItemLink: Scalars["Boolean"]["output"];
+  removeTeamAgent: Scalars["Boolean"]["output"];
+  removeTeamUser: Scalars["Boolean"]["output"];
   /** Remove a tenant member. idempotencyKey optional — see UpdateTenantInput.idempotencyKey. */
-  removeTenantMember: Scalars['Boolean']['output'];
-  removeThreadDependency: Scalars['Boolean']['output'];
-  removeThreadLabel: Scalars['Boolean']['output'];
+  removeTenantMember: Scalars["Boolean"]["output"];
+  removeThreadDependency: Scalars["Boolean"]["output"];
+  removeThreadLabel: Scalars["Boolean"]["output"];
   reorderQuickActions: Array<UserQuickAction>;
   requestRevision: InboxItem;
   /**
@@ -1629,7 +1655,7 @@ export type Mutation = {
   resumeAgentWorkspaceRun: AgentWorkspaceRun;
   revokeAgentApiKey: AgentApiKey;
   rollbackAgentVersion: Agent;
-  seedEvalTestCases: Scalars['Int']['output'];
+  seedEvalTestCases: Scalars["Int"]["output"];
   sendMessage: Message;
   setAgentBudgetPolicy: AgentBudgetPolicy;
   /** Replace an agent's capabilities. idempotencyKey optional — see CreateAgentInput.idempotencyKey. */
@@ -1651,7 +1677,7 @@ export type Mutation = {
   toggleAgentEmailChannel: AgentCapability;
   triggerRoutineRun: RoutineRun;
   unpauseAgent: Agent;
-  unregisterPushToken: Scalars['Boolean']['output'];
+  unregisterPushToken: Scalars["Boolean"]["output"];
   updateAgent: Agent;
   updateAgentEmailAllowlist: AgentCapability;
   updateAgentRuntime: Agent;
@@ -1660,7 +1686,7 @@ export type Mutation = {
   updateArtifact: Artifact;
   updateEvalTestCase: EvalTestCase;
   updateKnowledgeBase: KnowledgeBase;
-  updateMemoryRecord: Scalars['Boolean']['output'];
+  updateMemoryRecord: Scalars["Boolean"]["output"];
   updateQuickAction: UserQuickAction;
   updateRecipe: Recipe;
   updateRoutine: Routine;
@@ -1682,884 +1708,746 @@ export type Mutation = {
   upsertBudgetPolicy: BudgetPolicy;
 };
 
-
 export type MutationAcceptAgentWorkspaceReviewArgs = {
   input?: InputMaybe<AgentWorkspaceReviewDecisionInput>;
-  runId: Scalars['ID']['input'];
+  runId: Scalars["ID"]["input"];
 };
-
 
 export type MutationAcceptTemplateUpdateArgs = {
-  agentId: Scalars['ID']['input'];
-  filename: Scalars['String']['input'];
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  agentId: Scalars["ID"]["input"];
+  filename: Scalars["String"]["input"];
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
 };
-
 
 export type MutationAcceptTemplateUpdateBulkArgs = {
-  filename: Scalars['String']['input'];
-  templateId: Scalars['ID']['input'];
-  tenantId: Scalars['ID']['input'];
+  filename: Scalars["String"]["input"];
+  templateId: Scalars["ID"]["input"];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type MutationAddInboxItemCommentArgs = {
   input: AddInboxItemCommentInput;
 };
 
-
 export type MutationAddInboxItemLinkArgs = {
   input: AddInboxItemLinkInput;
 };
 
-
 export type MutationAddTeamAgentArgs = {
   input: AddTeamAgentInput;
-  teamId: Scalars['ID']['input'];
+  teamId: Scalars["ID"]["input"];
 };
-
 
 export type MutationAddTeamUserArgs = {
   input: AddTeamUserInput;
-  teamId: Scalars['ID']['input'];
+  teamId: Scalars["ID"]["input"];
 };
-
 
 export type MutationAddTenantMemberArgs = {
   input: AddTenantMemberInput;
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type MutationAddThreadDependencyArgs = {
-  blockedByThreadId: Scalars['ID']['input'];
-  threadId: Scalars['ID']['input'];
+  blockedByThreadId: Scalars["ID"]["input"];
+  threadId: Scalars["ID"]["input"];
 };
-
 
 export type MutationApplyActivationBundleArgs = {
   input: ApplyActivationBundleInput;
 };
 
-
 export type MutationApproveInboxItemArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input?: InputMaybe<ApproveInboxItemInput>;
 };
 
-
 export type MutationAssignThreadLabelArgs = {
-  labelId: Scalars['ID']['input'];
-  threadId: Scalars['ID']['input'];
+  labelId: Scalars["ID"]["input"];
+  threadId: Scalars["ID"]["input"];
 };
-
 
 export type MutationBootstrapJournalImportArgs = {
-  accountId: Scalars['ID']['input'];
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  tenantId: Scalars['ID']['input'];
-  userId?: InputMaybe<Scalars['ID']['input']>;
+  accountId: Scalars["ID"]["input"];
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
-
 
 export type MutationCancelAgentWorkspaceReviewArgs = {
   input?: InputMaybe<AgentWorkspaceReviewDecisionInput>;
-  runId: Scalars['ID']['input'];
+  runId: Scalars["ID"]["input"];
 };
-
 
 export type MutationCancelEvalRunArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationCancelInboxItemArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationCancelSkillRunArgs = {
-  runId: Scalars['ID']['input'];
+  runId: Scalars["ID"]["input"];
 };
-
 
 export type MutationCancelThreadTurnArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationCaptureMobileMemoryArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  clientCaptureId?: InputMaybe<Scalars['ID']['input']>;
-  content: Scalars['String']['input'];
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  clientCaptureId?: InputMaybe<Scalars["ID"]["input"]>;
+  content: Scalars["String"]["input"];
   factType?: InputMaybe<MobileCaptureFactType>;
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  userId?: InputMaybe<Scalars['ID']['input']>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
-
 
 export type MutationCheckoutThreadArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input: CheckoutThreadInput;
 };
-
 
 export type MutationCheckpointActivationLayerArgs = {
   input: CheckpointActivationLayerInput;
 };
 
-
 export type MutationClaimVanityEmailAddressArgs = {
-  agentId: Scalars['ID']['input'];
-  localPart: Scalars['String']['input'];
+  agentId: Scalars["ID"]["input"];
+  localPart: Scalars["String"]["input"];
 };
-
 
 export type MutationCompileWikiNowArgs = {
-  modelId?: InputMaybe<Scalars['String']['input']>;
-  ownerId?: InputMaybe<Scalars['ID']['input']>;
-  tenantId: Scalars['ID']['input'];
-  userId?: InputMaybe<Scalars['ID']['input']>;
+  modelId?: InputMaybe<Scalars["String"]["input"]>;
+  ownerId?: InputMaybe<Scalars["ID"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
-
 
 export type MutationCreateAgentArgs = {
   input: CreateAgentInput;
 };
 
-
 export type MutationCreateAgentApiKeyArgs = {
   input: CreateAgentApiKeyInput;
 };
-
 
 export type MutationCreateAgentFromTemplateArgs = {
   input: CreateAgentFromTemplateInput;
 };
 
-
 export type MutationCreateAgentTemplateArgs = {
   input: CreateAgentTemplateInput;
 };
-
 
 export type MutationCreateArtifactArgs = {
   input: CreateArtifactInput;
 };
 
-
 export type MutationCreateEvalTestCaseArgs = {
   input: CreateEvalTestCaseInput;
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type MutationCreateInboxItemArgs = {
   input: CreateInboxItemInput;
 };
 
-
 export type MutationCreateKnowledgeBaseArgs = {
   input: CreateKnowledgeBaseInput;
 };
-
 
 export type MutationCreateQuickActionArgs = {
   input: CreateQuickActionInput;
 };
 
-
 export type MutationCreateRecipeArgs = {
   input: CreateRecipeInput;
 };
-
 
 export type MutationCreateRoutineArgs = {
   input: CreateRoutineInput;
 };
 
-
 export type MutationCreateScheduledJobArgs = {
   input: CreateScheduledJobInput;
 };
-
 
 export type MutationCreateTeamArgs = {
   input: CreateTeamInput;
 };
 
-
 export type MutationCreateTenantArgs = {
   input: CreateTenantInput;
 };
-
 
 export type MutationCreateThreadArgs = {
   input: CreateThreadInput;
 };
 
-
 export type MutationCreateThreadLabelArgs = {
   input: CreateThreadLabelInput;
 };
-
 
 export type MutationCreateWakeupRequestArgs = {
   input: CreateWakeupRequestInput;
 };
 
-
 export type MutationCreateWebhookArgs = {
   input: CreateWebhookInput;
 };
 
-
 export type MutationDecideInboxItemArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input: InboxItemDecisionInput;
 };
-
 
 export type MutationDelegateThreadArgs = {
   input: DelegateThreadInput;
 };
 
-
 export type MutationDeleteAgentArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationDeleteAgentBudgetPolicyArgs = {
-  agentId: Scalars['ID']['input'];
+  agentId: Scalars["ID"]["input"];
 };
-
 
 export type MutationDeleteAgentTemplateArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationDeleteArtifactArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationDeleteBudgetPolicyArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationDeleteEvalRunArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationDeleteEvalTestCaseArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationDeleteKnowledgeBaseArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationDeleteMemoryRecordArgs = {
-  assistantId?: InputMaybe<Scalars['ID']['input']>;
-  memoryRecordId: Scalars['ID']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  userId?: InputMaybe<Scalars['ID']['input']>;
+  assistantId?: InputMaybe<Scalars["ID"]["input"]>;
+  memoryRecordId: Scalars["ID"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
-
 
 export type MutationDeleteMessageArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationDeleteMobileMemoryCaptureArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  captureId: Scalars['ID']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  userId?: InputMaybe<Scalars['ID']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  captureId: Scalars["ID"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
-
 
 export type MutationDeleteQuickActionArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationDeleteRecipeArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationDeleteRoutineArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationDeleteRoutineTriggerArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationDeleteRunArgs = {
-  runId: Scalars['ID']['input'];
+  runId: Scalars["ID"]["input"];
 };
-
 
 export type MutationDeleteTeamArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationDeleteThreadArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationDeleteThreadLabelArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationDeleteWebhookArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationDismissActivationRecommendationArgs = {
   input: DismissActivationRecommendationInput;
 };
 
-
 export type MutationEscalateThreadArgs = {
   input: EscalateThreadInput;
 };
 
-
 export type MutationGenerateActivationAutomationCandidatesArgs = {
-  sessionId: Scalars['ID']['input'];
+  sessionId: Scalars["ID"]["input"];
 };
-
 
 export type MutationInviteMemberArgs = {
   input: InviteMemberInput;
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type MutationNotifyActivationSessionUpdateArgs = {
   currentLayer: ActivationLayer;
-  eventType: Scalars['String']['input'];
-  lastAgentMessage?: InputMaybe<Scalars['String']['input']>;
-  layerStates: Scalars['AWSJSON']['input'];
-  sessionId: Scalars['ID']['input'];
+  eventType: Scalars["String"]["input"];
+  lastAgentMessage?: InputMaybe<Scalars["String"]["input"]>;
+  layerStates: Scalars["AWSJSON"]["input"];
+  sessionId: Scalars["ID"]["input"];
   status: ActivationStatus;
-  tenantId: Scalars['ID']['input'];
-  userId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
+  userId: Scalars["ID"]["input"];
 };
-
 
 export type MutationNotifyAgentStatusArgs = {
-  agentId: Scalars['ID']['input'];
-  name: Scalars['String']['input'];
-  status: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
+  agentId: Scalars["ID"]["input"];
+  name: Scalars["String"]["input"];
+  status: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type MutationNotifyCostRecordedArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  agentName?: InputMaybe<Scalars['String']['input']>;
-  amountUsd: Scalars['Float']['input'];
-  eventType: Scalars['String']['input'];
-  model?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  agentName?: InputMaybe<Scalars["String"]["input"]>;
+  amountUsd: Scalars["Float"]["input"];
+  eventType: Scalars["String"]["input"];
+  model?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type MutationNotifyEvalRunUpdateArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  errorMessage?: InputMaybe<Scalars['String']['input']>;
-  failed?: InputMaybe<Scalars['Int']['input']>;
-  passRate?: InputMaybe<Scalars['Float']['input']>;
-  passed?: InputMaybe<Scalars['Int']['input']>;
-  runId: Scalars['ID']['input'];
-  status: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
-  totalTests?: InputMaybe<Scalars['Int']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  errorMessage?: InputMaybe<Scalars["String"]["input"]>;
+  failed?: InputMaybe<Scalars["Int"]["input"]>;
+  passRate?: InputMaybe<Scalars["Float"]["input"]>;
+  passed?: InputMaybe<Scalars["Int"]["input"]>;
+  runId: Scalars["ID"]["input"];
+  status: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
+  totalTests?: InputMaybe<Scalars["Int"]["input"]>;
 };
-
 
 export type MutationNotifyHeartbeatActivityArgs = {
-  heartbeatId: Scalars['ID']['input'];
-  message?: InputMaybe<Scalars['String']['input']>;
-  status: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
+  heartbeatId: Scalars["ID"]["input"];
+  message?: InputMaybe<Scalars["String"]["input"]>;
+  status: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type MutationNotifyInboxItemUpdateArgs = {
-  inboxItemId: Scalars['ID']['input'];
-  status: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
-  title?: InputMaybe<Scalars['String']['input']>;
+  inboxItemId: Scalars["ID"]["input"];
+  status: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
+  title?: InputMaybe<Scalars["String"]["input"]>;
 };
-
 
 export type MutationNotifyNewMessageArgs = {
-  content?: InputMaybe<Scalars['String']['input']>;
-  messageId: Scalars['ID']['input'];
-  role: Scalars['String']['input'];
-  senderId?: InputMaybe<Scalars['ID']['input']>;
-  senderType?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
-  threadId: Scalars['ID']['input'];
+  content?: InputMaybe<Scalars["String"]["input"]>;
+  messageId: Scalars["ID"]["input"];
+  role: Scalars["String"]["input"];
+  senderId?: InputMaybe<Scalars["ID"]["input"]>;
+  senderType?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  threadId: Scalars["ID"]["input"];
 };
-
 
 export type MutationNotifyOrgUpdateArgs = {
-  changeType: Scalars['String']['input'];
-  entityId?: InputMaybe<Scalars['ID']['input']>;
-  entityType?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
+  changeType: Scalars["String"]["input"];
+  entityId?: InputMaybe<Scalars["ID"]["input"]>;
+  entityType?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type MutationNotifyThreadTurnUpdateArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  runId: Scalars['ID']['input'];
-  status: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
-  threadId?: InputMaybe<Scalars['ID']['input']>;
-  triggerId?: InputMaybe<Scalars['ID']['input']>;
-  triggerName?: InputMaybe<Scalars['String']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  runId: Scalars["ID"]["input"];
+  status: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
+  triggerId?: InputMaybe<Scalars["ID"]["input"]>;
+  triggerName?: InputMaybe<Scalars["String"]["input"]>;
 };
-
 
 export type MutationNotifyThreadUpdateArgs = {
-  status: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
-  threadId: Scalars['ID']['input'];
-  title: Scalars['String']['input'];
+  status: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
+  threadId: Scalars["ID"]["input"];
+  title: Scalars["String"]["input"];
 };
-
 
 export type MutationRefreshGenUiArgs = {
-  messageId: Scalars['ID']['input'];
-  toolIndex: Scalars['Int']['input'];
+  messageId: Scalars["ID"]["input"];
+  toolIndex: Scalars["Int"]["input"];
 };
-
 
 export type MutationRegenerateWebhookTokenArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationRegisterPushTokenArgs = {
   input: RegisterPushTokenInput;
 };
 
-
 export type MutationRejectInboxItemArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input?: InputMaybe<RejectInboxItemInput>;
 };
 
-
 export type MutationReleaseThreadArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input: ReleaseThreadInput;
 };
 
-
 export type MutationReleaseVanityEmailAddressArgs = {
-  agentId: Scalars['ID']['input'];
+  agentId: Scalars["ID"]["input"];
 };
-
 
 export type MutationRemoveInboxItemLinkArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationRemoveTeamAgentArgs = {
-  agentId: Scalars['ID']['input'];
-  teamId: Scalars['ID']['input'];
+  agentId: Scalars["ID"]["input"];
+  teamId: Scalars["ID"]["input"];
 };
-
 
 export type MutationRemoveTeamUserArgs = {
-  teamId: Scalars['ID']['input'];
-  userId: Scalars['ID']['input'];
+  teamId: Scalars["ID"]["input"];
+  userId: Scalars["ID"]["input"];
 };
-
 
 export type MutationRemoveTenantMemberArgs = {
-  id: Scalars['ID']['input'];
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  id: Scalars["ID"]["input"];
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
 };
-
 
 export type MutationRemoveThreadDependencyArgs = {
-  blockedByThreadId: Scalars['ID']['input'];
-  threadId: Scalars['ID']['input'];
+  blockedByThreadId: Scalars["ID"]["input"];
+  threadId: Scalars["ID"]["input"];
 };
-
 
 export type MutationRemoveThreadLabelArgs = {
-  labelId: Scalars['ID']['input'];
-  threadId: Scalars['ID']['input'];
+  labelId: Scalars["ID"]["input"];
+  threadId: Scalars["ID"]["input"];
 };
-
 
 export type MutationReorderQuickActionsArgs = {
   input: ReorderQuickActionsInput;
 };
 
-
 export type MutationRequestRevisionArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input: RequestRevisionInput;
 };
 
-
 export type MutationResetWikiCursorArgs = {
-  force?: InputMaybe<Scalars['Boolean']['input']>;
-  ownerId?: InputMaybe<Scalars['ID']['input']>;
-  tenantId: Scalars['ID']['input'];
-  userId?: InputMaybe<Scalars['ID']['input']>;
+  force?: InputMaybe<Scalars["Boolean"]["input"]>;
+  ownerId?: InputMaybe<Scalars["ID"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
-
 export type MutationResubmitInboxItemArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input?: InputMaybe<ResubmitInboxItemInput>;
 };
 
-
 export type MutationResumeAgentWorkspaceRunArgs = {
   input?: InputMaybe<AgentWorkspaceReviewDecisionInput>;
-  runId: Scalars['ID']['input'];
+  runId: Scalars["ID"]["input"];
 };
-
 
 export type MutationRevokeAgentApiKeyArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationRollbackAgentVersionArgs = {
-  agentId: Scalars['ID']['input'];
-  versionId: Scalars['ID']['input'];
+  agentId: Scalars["ID"]["input"];
+  versionId: Scalars["ID"]["input"];
 };
-
 
 export type MutationSeedEvalTestCasesArgs = {
-  categories?: InputMaybe<Array<Scalars['String']['input']>>;
-  tenantId: Scalars['ID']['input'];
+  categories?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type MutationSendMessageArgs = {
   input: SendMessageInput;
 };
 
-
 export type MutationSetAgentBudgetPolicyArgs = {
-  agentId: Scalars['ID']['input'];
+  agentId: Scalars["ID"]["input"];
   input: AgentBudgetPolicyInput;
 };
 
-
 export type MutationSetAgentCapabilitiesArgs = {
-  agentId: Scalars['ID']['input'];
+  agentId: Scalars["ID"]["input"];
   capabilities: Array<AgentCapabilityInput>;
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
 };
 
-
 export type MutationSetAgentKnowledgeBasesArgs = {
-  agentId: Scalars['ID']['input'];
+  agentId: Scalars["ID"]["input"];
   knowledgeBases: Array<AgentKnowledgeBaseInput>;
 };
 
-
 export type MutationSetAgentSkillsArgs = {
-  agentId: Scalars['ID']['input'];
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  agentId: Scalars["ID"]["input"];
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
   skills: Array<AgentSkillInput>;
 };
 
-
 export type MutationSetRoutineTriggerArgs = {
   input: RoutineTriggerInput;
-  routineId: Scalars['ID']['input'];
+  routineId: Scalars["ID"]["input"];
 };
-
 
 export type MutationStartActivationArgs = {
   input: StartActivationInput;
 };
 
-
 export type MutationStartEvalRunArgs = {
   input: StartEvalRunInput;
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type MutationStartSkillRunArgs = {
   input: StartSkillRunInput;
 };
 
-
 export type MutationSubmitActivationTurnArgs = {
   input: SubmitActivationTurnInput;
 };
-
 
 export type MutationSubmitRunFeedbackArgs = {
   input: SubmitRunFeedbackInput;
 };
 
-
 export type MutationSyncKnowledgeBaseArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type MutationSyncTemplateToAgentArgs = {
-  agentId: Scalars['ID']['input'];
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  templateId: Scalars['ID']['input'];
+  agentId: Scalars["ID"]["input"];
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
+  templateId: Scalars["ID"]["input"];
 };
-
 
 export type MutationSyncTemplateToAllAgentsArgs = {
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  templateId: Scalars['ID']['input'];
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
+  templateId: Scalars["ID"]["input"];
 };
-
 
 export type MutationToggleAgentEmailChannelArgs = {
-  agentId: Scalars['ID']['input'];
-  enabled: Scalars['Boolean']['input'];
+  agentId: Scalars["ID"]["input"];
+  enabled: Scalars["Boolean"]["input"];
 };
-
 
 export type MutationTriggerRoutineRunArgs = {
-  routineId: Scalars['ID']['input'];
+  routineId: Scalars["ID"]["input"];
 };
-
 
 export type MutationUnpauseAgentArgs = {
-  agentId: Scalars['ID']['input'];
+  agentId: Scalars["ID"]["input"];
 };
-
 
 export type MutationUnregisterPushTokenArgs = {
-  token: Scalars['String']['input'];
+  token: Scalars["String"]["input"];
 };
 
-
 export type MutationUpdateAgentArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input: UpdateAgentInput;
 };
 
-
 export type MutationUpdateAgentEmailAllowlistArgs = {
-  agentId: Scalars['ID']['input'];
-  allowedSenders: Array<Scalars['String']['input']>;
+  agentId: Scalars["ID"]["input"];
+  allowedSenders: Array<Scalars["String"]["input"]>;
 };
 
-
 export type MutationUpdateAgentRuntimeArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   runtime: AgentRuntime;
 };
 
-
 export type MutationUpdateAgentStatusArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   status: AgentStatus;
 };
 
-
 export type MutationUpdateAgentTemplateArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input: UpdateAgentTemplateInput;
 };
 
-
 export type MutationUpdateArtifactArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input: UpdateArtifactInput;
 };
 
-
 export type MutationUpdateEvalTestCaseArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input: UpdateEvalTestCaseInput;
 };
 
-
 export type MutationUpdateKnowledgeBaseArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input: UpdateKnowledgeBaseInput;
 };
 
-
 export type MutationUpdateMemoryRecordArgs = {
-  assistantId?: InputMaybe<Scalars['ID']['input']>;
-  content: Scalars['String']['input'];
-  memoryRecordId: Scalars['ID']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  userId?: InputMaybe<Scalars['ID']['input']>;
+  assistantId?: InputMaybe<Scalars["ID"]["input"]>;
+  content: Scalars["String"]["input"];
+  memoryRecordId: Scalars["ID"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
-
 export type MutationUpdateQuickActionArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input: UpdateQuickActionInput;
 };
 
-
 export type MutationUpdateRecipeArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input: UpdateRecipeInput;
 };
 
-
 export type MutationUpdateRoutineArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input: UpdateRoutineInput;
 };
 
-
 export type MutationUpdateTeamArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input: UpdateTeamInput;
 };
 
-
 export type MutationUpdateTenantArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input: UpdateTenantInput;
 };
 
-
 export type MutationUpdateTenantMemberArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input: UpdateTenantMemberInput;
 };
 
-
 export type MutationUpdateTenantPolicyArgs = {
   input: UpdateTenantPolicyInput;
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type MutationUpdateTenantSettingsArgs = {
   input: UpdateTenantSettingsInput;
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
 
-
 export type MutationUpdateThreadArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input: UpdateThreadInput;
 };
 
-
 export type MutationUpdateThreadLabelArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input: UpdateThreadLabelInput;
 };
 
-
 export type MutationUpdateUserArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input: UpdateUserInput;
 };
 
-
 export type MutationUpdateUserProfileArgs = {
   input: UpdateUserProfileInput;
-  userId: Scalars['ID']['input'];
+  userId: Scalars["ID"]["input"];
 };
 
-
 export type MutationUpdateWebhookArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input: UpdateWebhookInput;
 };
 
-
 export type MutationUpsertBudgetPolicyArgs = {
   input: UpsertBudgetPolicyInput;
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type NewMessageEvent = {
-  __typename?: 'NewMessageEvent';
-  content?: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  messageId: Scalars['ID']['output'];
-  role: Scalars['String']['output'];
-  senderId?: Maybe<Scalars['ID']['output']>;
-  senderType?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  threadId: Scalars['ID']['output'];
+  __typename?: "NewMessageEvent";
+  content?: Maybe<Scalars["String"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  messageId: Scalars["ID"]["output"];
+  role: Scalars["String"]["output"];
+  senderId?: Maybe<Scalars["ID"]["output"]>;
+  senderType?: Maybe<Scalars["String"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  threadId: Scalars["ID"]["output"];
 };
 
 export type OrgUpdateEvent = {
-  __typename?: 'OrgUpdateEvent';
-  changeType: Scalars['String']['output'];
-  entityId?: Maybe<Scalars['ID']['output']>;
-  entityType?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
+  __typename?: "OrgUpdateEvent";
+  changeType: Scalars["String"]["output"];
+  entityId?: Maybe<Scalars["ID"]["output"]>;
+  entityType?: Maybe<Scalars["String"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type PageInfo = {
-  __typename?: 'PageInfo';
-  endCursor?: Maybe<Scalars['String']['output']>;
-  hasNextPage: Scalars['Boolean']['output'];
+  __typename?: "PageInfo";
+  endCursor?: Maybe<Scalars["String"]["output"]>;
+  hasNextPage: Scalars["Boolean"]["output"];
 };
 
 export type PerformanceTimeSeries = {
-  __typename?: 'PerformanceTimeSeries';
-  avgDurationMs: Scalars['Float']['output'];
-  day: Scalars['String']['output'];
-  errorCount: Scalars['Int']['output'];
-  invocationCount: Scalars['Int']['output'];
-  totalCostUsd: Scalars['Float']['output'];
+  __typename?: "PerformanceTimeSeries";
+  avgDurationMs: Scalars["Float"]["output"];
+  day: Scalars["String"]["output"];
+  errorCount: Scalars["Int"]["output"];
+  invocationCount: Scalars["Int"]["output"];
+  totalCostUsd: Scalars["Float"]["output"];
 };
 
 export type PinStatusFile = {
-  __typename?: 'PinStatusFile';
-  filename: Scalars['String']['output'];
-  folderPath?: Maybe<Scalars['String']['output']>;
-  latestContent?: Maybe<Scalars['String']['output']>;
-  latestSha?: Maybe<Scalars['String']['output']>;
-  path: Scalars['String']['output'];
-  pinnedContent?: Maybe<Scalars['String']['output']>;
-  pinnedSha?: Maybe<Scalars['String']['output']>;
-  updateAvailable: Scalars['Boolean']['output'];
+  __typename?: "PinStatusFile";
+  filename: Scalars["String"]["output"];
+  folderPath?: Maybe<Scalars["String"]["output"]>;
+  latestContent?: Maybe<Scalars["String"]["output"]>;
+  latestSha?: Maybe<Scalars["String"]["output"]>;
+  path: Scalars["String"]["output"];
+  pinnedContent?: Maybe<Scalars["String"]["output"]>;
+  pinnedSha?: Maybe<Scalars["String"]["output"]>;
+  updateAvailable: Scalars["Boolean"]["output"];
 };
 
 export type Query = {
-  __typename?: 'Query';
-  _empty?: Maybe<Scalars['String']['output']>;
+  __typename?: "Query";
+  _empty?: Maybe<Scalars["String"]["output"]>;
   activationAutomationCandidates: Array<ActivationAutomationCandidate>;
   activationSession?: Maybe<ActivationSession>;
   activationSessionTurns: Array<ActivationSessionTurn>;
@@ -2647,7 +2535,7 @@ export type Query = {
    */
   mobileWikiSearch: Array<MobileWikiSearchResult>;
   modelCatalog: Array<ModelCatalogEntry>;
-  pendingSystemReviewsCount: Scalars['Int']['output'];
+  pendingSystemReviewsCount: Scalars["Int"]["output"];
   performanceTimeSeries: Array<PerformanceTimeSeries>;
   queuedWakeups: Array<AgentWakeupRequest>;
   /**
@@ -2686,7 +2574,7 @@ export type Query = {
   threads: Array<Thread>;
   threadsPaged: ThreadsPage;
   turnInvocationLogs: Array<ModelInvocation>;
-  unreadThreadCount: Scalars['Int']['output'];
+  unreadThreadCount: Scalars["Int"]["output"];
   user?: Maybe<User>;
   userQuickActions: Array<UserQuickAction>;
   webhook?: Maybe<Webhook>;
@@ -2726,904 +2614,809 @@ export type Query = {
   wikiSearch: Array<WikiSearchResult>;
 };
 
-
 export type QueryActivationAutomationCandidatesArgs = {
-  sessionId: Scalars['ID']['input'];
+  sessionId: Scalars["ID"]["input"];
 };
-
 
 export type QueryActivationSessionArgs = {
-  sessionId: Scalars['ID']['input'];
+  sessionId: Scalars["ID"]["input"];
 };
-
 
 export type QueryActivationSessionTurnsArgs = {
-  sessionId: Scalars['ID']['input'];
+  sessionId: Scalars["ID"]["input"];
 };
-
 
 export type QueryActivityLogArgs = {
-  action?: InputMaybe<Scalars['String']['input']>;
-  actorId?: InputMaybe<Scalars['ID']['input']>;
-  actorType?: InputMaybe<Scalars['String']['input']>;
-  after?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  before?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  entityId?: InputMaybe<Scalars['ID']['input']>;
-  entityType?: InputMaybe<Scalars['String']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  tenantId: Scalars['ID']['input'];
+  action?: InputMaybe<Scalars["String"]["input"]>;
+  actorId?: InputMaybe<Scalars["ID"]["input"]>;
+  actorType?: InputMaybe<Scalars["String"]["input"]>;
+  after?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  before?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  entityId?: InputMaybe<Scalars["ID"]["input"]>;
+  entityType?: InputMaybe<Scalars["String"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryAgentArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type QueryAgentApiKeysArgs = {
-  agentId: Scalars['ID']['input'];
+  agentId: Scalars["ID"]["input"];
 };
-
 
 export type QueryAgentBudgetStatusArgs = {
-  agentId: Scalars['ID']['input'];
+  agentId: Scalars["ID"]["input"];
 };
-
 
 export type QueryAgentCostBreakdownArgs = {
-  agentId: Scalars['ID']['input'];
-  from?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  tenantId: Scalars['ID']['input'];
-  to?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  agentId: Scalars["ID"]["input"];
+  from?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  to?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
 };
-
 
 export type QueryAgentEmailCapabilityArgs = {
-  agentId: Scalars['ID']['input'];
+  agentId: Scalars["ID"]["input"];
 };
-
 
 export type QueryAgentPerformanceArgs = {
-  from?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  tenantId: Scalars['ID']['input'];
-  to?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  from?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  to?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
 };
-
 
 export type QueryAgentPinStatusArgs = {
-  agentId: Scalars['ID']['input'];
-  includeNested?: InputMaybe<Scalars['Boolean']['input']>;
+  agentId: Scalars["ID"]["input"];
+  includeNested?: InputMaybe<Scalars["Boolean"]["input"]>;
 };
-
 
 export type QueryAgentTemplateArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type QueryAgentTemplatesArgs = {
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryAgentVersionsArgs = {
-  agentId: Scalars['ID']['input'];
-  limit?: InputMaybe<Scalars['Int']['input']>;
+  agentId: Scalars["ID"]["input"];
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
 };
-
 
 export type QueryAgentWorkspaceEventsArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  runId: Scalars['ID']['input'];
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  runId: Scalars["ID"]["input"];
 };
-
 
 export type QueryAgentWorkspaceReviewArgs = {
-  runId: Scalars['ID']['input'];
+  runId: Scalars["ID"]["input"];
 };
-
 
 export type QueryAgentWorkspaceReviewsArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
   kind?: InputMaybe<WorkspaceReviewKind>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  responsibleUserId?: InputMaybe<Scalars['ID']['input']>;
-  status?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  responsibleUserId?: InputMaybe<Scalars["ID"]["input"]>;
+  status?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryAgentWorkspaceRunsArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  status?: InputMaybe<Scalars['String']['input']>;
-  targetPath?: InputMaybe<Scalars['String']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  status?: InputMaybe<Scalars["String"]["input"]>;
+  targetPath?: InputMaybe<Scalars["String"]["input"]>;
 };
-
 
 export type QueryAgentWorkspacesArgs = {
-  agentId: Scalars['ID']['input'];
+  agentId: Scalars["ID"]["input"];
 };
 
-
 export type QueryAgentsArgs = {
-  includeSystem?: InputMaybe<Scalars['Boolean']['input']>;
+  includeSystem?: InputMaybe<Scalars["Boolean"]["input"]>;
   status?: InputMaybe<AgentStatus>;
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
   type?: InputMaybe<AgentType>;
 };
 
-
 export type QueryAllTenantAgentsArgs = {
-  includeSubAgents?: InputMaybe<Scalars['Boolean']['input']>;
-  includeSystem?: InputMaybe<Scalars['Boolean']['input']>;
-  tenantId: Scalars['ID']['input'];
+  includeSubAgents?: InputMaybe<Scalars["Boolean"]["input"]>;
+  includeSystem?: InputMaybe<Scalars["Boolean"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryArtifactArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
 
-
 export type QueryArtifactsArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  cursor?: InputMaybe<Scalars['String']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  cursor?: InputMaybe<Scalars["String"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
   status?: InputMaybe<ArtifactStatus>;
-  tenantId: Scalars['ID']['input'];
-  threadId?: InputMaybe<Scalars['ID']['input']>;
+  tenantId: Scalars["ID"]["input"];
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
   type?: InputMaybe<ArtifactType>;
 };
 
-
 export type QueryBudgetPoliciesArgs = {
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryBudgetStatusArgs = {
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryCompositionFeedbackSummaryArgs = {
-  skillId?: InputMaybe<Scalars['String']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  skillId?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
-
 
 export type QueryConcurrencySnapshotArgs = {
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryCostByAgentArgs = {
-  from?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  tenantId: Scalars['ID']['input'];
-  to?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  from?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  to?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
 };
-
 
 export type QueryCostByModelArgs = {
-  from?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  tenantId: Scalars['ID']['input'];
-  to?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  from?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  to?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
 };
-
 
 export type QueryCostSummaryArgs = {
-  from?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  tenantId: Scalars['ID']['input'];
-  to?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  from?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  to?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
 };
-
 
 export type QueryCostTimeSeriesArgs = {
-  days?: InputMaybe<Scalars['Int']['input']>;
-  tenantId: Scalars['ID']['input'];
+  days?: InputMaybe<Scalars["Int"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryEvalRunArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type QueryEvalRunResultsArgs = {
-  runId: Scalars['ID']['input'];
+  runId: Scalars["ID"]["input"];
 };
-
 
 export type QueryEvalRunsArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-  tenantId: Scalars['ID']['input'];
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  offset?: InputMaybe<Scalars["Int"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryEvalSummaryArgs = {
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryEvalTestCaseArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type QueryEvalTestCaseHistoryArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  testCaseId: Scalars['ID']['input'];
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  testCaseId: Scalars["ID"]["input"];
 };
-
 
 export type QueryEvalTestCasesArgs = {
-  category?: InputMaybe<Scalars['String']['input']>;
-  search?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
+  category?: InputMaybe<Scalars["String"]["input"]>;
+  search?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryEvalTimeSeriesArgs = {
-  days?: InputMaybe<Scalars['Int']['input']>;
-  tenantId: Scalars['ID']['input'];
+  days?: InputMaybe<Scalars["Int"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryInboxItemArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type QueryInboxItemsArgs = {
-  entityId?: InputMaybe<Scalars['ID']['input']>;
-  entityType?: InputMaybe<Scalars['String']['input']>;
-  recipientId?: InputMaybe<Scalars['ID']['input']>;
+  entityId?: InputMaybe<Scalars["ID"]["input"]>;
+  entityType?: InputMaybe<Scalars["String"]["input"]>;
+  recipientId?: InputMaybe<Scalars["ID"]["input"]>;
   status?: InputMaybe<InboxItemStatus>;
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryKnowledgeBaseArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type QueryKnowledgeBasesArgs = {
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryLinkedAgentsForTemplateArgs = {
-  templateId: Scalars['ID']['input'];
+  templateId: Scalars["ID"]["input"];
 };
-
 
 export type QueryMemoryGraphArgs = {
-  assistantId?: InputMaybe<Scalars['ID']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  userId?: InputMaybe<Scalars['ID']['input']>;
+  assistantId?: InputMaybe<Scalars["ID"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
-
 
 export type QueryMemoryRecordsArgs = {
-  assistantId?: InputMaybe<Scalars['ID']['input']>;
-  namespace: Scalars['String']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  userId?: InputMaybe<Scalars['ID']['input']>;
+  assistantId?: InputMaybe<Scalars["ID"]["input"]>;
+  namespace: Scalars["String"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
-
 
 export type QueryMemorySearchArgs = {
-  assistantId?: InputMaybe<Scalars['ID']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  query: Scalars['String']['input'];
+  assistantId?: InputMaybe<Scalars["ID"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  query: Scalars["String"]["input"];
   strategy?: InputMaybe<MemoryStrategy>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  userId?: InputMaybe<Scalars['ID']['input']>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
-
 
 export type QueryMessagesArgs = {
-  cursor?: InputMaybe<Scalars['String']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  threadId: Scalars['ID']['input'];
+  cursor?: InputMaybe<Scalars["String"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  threadId: Scalars["ID"]["input"];
 };
-
 
 export type QueryMobileMemoryCapturesArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  userId?: InputMaybe<Scalars['ID']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
-
 
 export type QueryMobileMemorySearchArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  query: Scalars['String']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  userId?: InputMaybe<Scalars['ID']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  query: Scalars["String"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
-
 
 export type QueryMobileWikiSearchArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  query: Scalars['String']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  userId?: InputMaybe<Scalars['ID']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  query: Scalars["String"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
-
 
 export type QueryPendingSystemReviewsCountArgs = {
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryPerformanceTimeSeriesArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  days?: InputMaybe<Scalars['Int']['input']>;
-  tenantId: Scalars['ID']['input'];
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  days?: InputMaybe<Scalars["Int"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryQueuedWakeupsArgs = {
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryRecentWikiPagesArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  userId?: InputMaybe<Scalars['ID']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
-
 
 export type QueryRecipeArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type QueryRecipesArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  cursor?: InputMaybe<Scalars['String']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  tenantId: Scalars['ID']['input'];
-  threadId?: InputMaybe<Scalars['ID']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  cursor?: InputMaybe<Scalars["String"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
 };
-
 
 export type QueryRoutineArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type QueryRoutineRunArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type QueryRoutineRunsArgs = {
-  cursor?: InputMaybe<Scalars['String']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  routineId: Scalars['ID']['input'];
+  cursor?: InputMaybe<Scalars["String"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  routineId: Scalars["ID"]["input"];
 };
-
 
 export type QueryRoutinesArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
   status?: InputMaybe<RoutineStatus>;
-  teamId?: InputMaybe<Scalars['ID']['input']>;
-  tenantId: Scalars['ID']['input'];
+  teamId?: InputMaybe<Scalars["ID"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryRuntimeManifestsByAgentArgs = {
-  agentId: Scalars['ID']['input'];
-  limit?: InputMaybe<Scalars['Int']['input']>;
+  agentId: Scalars["ID"]["input"];
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
 };
-
 
 export type QueryRuntimeManifestsByTemplateArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  templateId: Scalars['ID']['input'];
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  templateId: Scalars["ID"]["input"];
 };
-
 
 export type QueryScheduledJobArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type QueryScheduledJobsArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  routineId?: InputMaybe<Scalars['ID']['input']>;
-  tenantId: Scalars['ID']['input'];
-  triggerType?: InputMaybe<Scalars['String']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  routineId?: InputMaybe<Scalars["ID"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  triggerType?: InputMaybe<Scalars["String"]["input"]>;
 };
-
 
 export type QuerySingleAgentPerformanceArgs = {
-  agentId: Scalars['ID']['input'];
-  tenantId: Scalars['ID']['input'];
+  agentId: Scalars["ID"]["input"];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QuerySkillRunArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type QuerySkillRunsArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  invocationSource?: InputMaybe<Scalars['String']['input']>;
-  invokerUserId?: InputMaybe<Scalars['ID']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  skillId?: InputMaybe<Scalars['String']['input']>;
-  status?: InputMaybe<Scalars['String']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  invocationSource?: InputMaybe<Scalars["String"]["input"]>;
+  invokerUserId?: InputMaybe<Scalars["ID"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  skillId?: InputMaybe<Scalars["String"]["input"]>;
+  status?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
-
 
 export type QueryTeamArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type QueryTeamsArgs = {
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryTemplateSyncDiffArgs = {
-  agentId: Scalars['ID']['input'];
-  templateId: Scalars['ID']['input'];
+  agentId: Scalars["ID"]["input"];
+  templateId: Scalars["ID"]["input"];
 };
-
 
 export type QueryTenantArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type QueryTenantBySlugArgs = {
-  slug: Scalars['String']['input'];
+  slug: Scalars["String"]["input"];
 };
-
 
 export type QueryTenantMembersArgs = {
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryThreadArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type QueryThreadByNumberArgs = {
-  number: Scalars['Int']['input'];
-  tenantId: Scalars['ID']['input'];
+  number: Scalars["Int"]["input"];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryThreadLabelsArgs = {
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryThreadTracesArgs = {
-  tenantId: Scalars['ID']['input'];
-  threadId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
+  threadId: Scalars["ID"]["input"];
 };
-
 
 export type QueryThreadTurnArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type QueryThreadTurnEventsArgs = {
-  afterSeq?: InputMaybe<Scalars['Int']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  runId: Scalars['ID']['input'];
+  afterSeq?: InputMaybe<Scalars["Int"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  runId: Scalars["ID"]["input"];
 };
-
 
 export type QueryThreadTurnsArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  routineId?: InputMaybe<Scalars['ID']['input']>;
-  status?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
-  threadId?: InputMaybe<Scalars['ID']['input']>;
-  triggerId?: InputMaybe<Scalars['ID']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  routineId?: InputMaybe<Scalars["ID"]["input"]>;
+  status?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
+  triggerId?: InputMaybe<Scalars["ID"]["input"]>;
 };
-
 
 export type QueryThreadsArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  assigneeId?: InputMaybe<Scalars['ID']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  assigneeId?: InputMaybe<Scalars["ID"]["input"]>;
   channel?: InputMaybe<ThreadChannel>;
-  cursor?: InputMaybe<Scalars['String']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  search?: InputMaybe<Scalars['String']['input']>;
+  cursor?: InputMaybe<Scalars["String"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  search?: InputMaybe<Scalars["String"]["input"]>;
   status?: InputMaybe<ThreadStatus>;
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryThreadsPagedArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-  search?: InputMaybe<Scalars['String']['input']>;
-  showArchived?: InputMaybe<Scalars['Boolean']['input']>;
-  sortDir?: InputMaybe<Scalars['String']['input']>;
-  sortField?: InputMaybe<Scalars['String']['input']>;
-  statuses?: InputMaybe<Array<Scalars['String']['input']>>;
-  tenantId: Scalars['ID']['input'];
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  offset?: InputMaybe<Scalars["Int"]["input"]>;
+  search?: InputMaybe<Scalars["String"]["input"]>;
+  showArchived?: InputMaybe<Scalars["Boolean"]["input"]>;
+  sortDir?: InputMaybe<Scalars["String"]["input"]>;
+  sortField?: InputMaybe<Scalars["String"]["input"]>;
+  statuses?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryTurnInvocationLogsArgs = {
-  tenantId: Scalars['ID']['input'];
-  turnId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
+  turnId: Scalars["ID"]["input"];
 };
-
 
 export type QueryUnreadThreadCountArgs = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  tenantId: Scalars['ID']['input'];
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryUserArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type QueryUserQuickActionsArgs = {
   scope?: InputMaybe<QuickActionScope>;
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryWebhookArgs = {
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 };
-
 
 export type QueryWebhooksArgs = {
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  targetType?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
+  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  targetType?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type QueryWikiBacklinksArgs = {
-  pageId: Scalars['ID']['input'];
+  pageId: Scalars["ID"]["input"];
 };
-
 
 export type QueryWikiCompileJobsArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  ownerId?: InputMaybe<Scalars['ID']['input']>;
-  tenantId: Scalars['ID']['input'];
-  userId?: InputMaybe<Scalars['ID']['input']>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  ownerId?: InputMaybe<Scalars["ID"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
-
 
 export type QueryWikiConnectedPagesArgs = {
-  pageId: Scalars['ID']['input'];
+  pageId: Scalars["ID"]["input"];
 };
-
 
 export type QueryWikiGraphArgs = {
-  ownerId?: InputMaybe<Scalars['ID']['input']>;
-  tenantId: Scalars['ID']['input'];
-  userId?: InputMaybe<Scalars['ID']['input']>;
+  ownerId?: InputMaybe<Scalars["ID"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
-
 
 export type QueryWikiPageArgs = {
-  ownerId?: InputMaybe<Scalars['ID']['input']>;
-  slug: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
+  ownerId?: InputMaybe<Scalars["ID"]["input"]>;
+  slug: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
   type: WikiPageType;
-  userId?: InputMaybe<Scalars['ID']['input']>;
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
-
 export type QueryWikiSearchArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  ownerId?: InputMaybe<Scalars['ID']['input']>;
-  query: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
-  userId?: InputMaybe<Scalars['ID']['input']>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  ownerId?: InputMaybe<Scalars["ID"]["input"]>;
+  query: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
+  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export enum QuickActionScope {
-  Task = 'task',
-  Thread = 'thread'
+  Task = "task",
+  Thread = "thread",
 }
 
 export type Recipe = {
-  __typename?: 'Recipe';
-  agentId?: Maybe<Scalars['ID']['output']>;
-  cachedResult?: Maybe<Scalars['AWSJSON']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  genuiType: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  lastError?: Maybe<Scalars['String']['output']>;
-  lastRefreshed?: Maybe<Scalars['AWSDateTime']['output']>;
-  params: Scalars['AWSJSON']['output'];
-  server: Scalars['String']['output'];
-  sourceMessageId?: Maybe<Scalars['ID']['output']>;
-  summary?: Maybe<Scalars['String']['output']>;
-  templates?: Maybe<Scalars['AWSJSON']['output']>;
-  tenantId: Scalars['ID']['output'];
-  threadId?: Maybe<Scalars['ID']['output']>;
-  title: Scalars['String']['output'];
-  tool: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
+  __typename?: "Recipe";
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  cachedResult?: Maybe<Scalars["AWSJSON"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  genuiType: Scalars["String"]["output"];
+  id: Scalars["ID"]["output"];
+  lastError?: Maybe<Scalars["String"]["output"]>;
+  lastRefreshed?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  params: Scalars["AWSJSON"]["output"];
+  server: Scalars["String"]["output"];
+  sourceMessageId?: Maybe<Scalars["ID"]["output"]>;
+  summary?: Maybe<Scalars["String"]["output"]>;
+  templates?: Maybe<Scalars["AWSJSON"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  threadId?: Maybe<Scalars["ID"]["output"]>;
+  title: Scalars["String"]["output"];
+  tool: Scalars["String"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type RegisterPushTokenInput = {
-  platform: Scalars['String']['input'];
-  token: Scalars['String']['input'];
+  platform: Scalars["String"]["input"];
+  token: Scalars["String"]["input"];
 };
 
 export type RejectInboxItemInput = {
-  reviewNotes?: InputMaybe<Scalars['String']['input']>;
+  reviewNotes?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type ReleaseThreadInput = {
-  runId: Scalars['String']['input'];
+  runId: Scalars["String"]["input"];
   status?: InputMaybe<ThreadStatus>;
 };
 
 export type ReorderQuickActionsInput = {
-  orderedIds: Array<Scalars['ID']['input']>;
+  orderedIds: Array<Scalars["ID"]["input"]>;
   scope?: InputMaybe<QuickActionScope>;
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type RequestRevisionInput = {
-  reviewNotes: Scalars['String']['input'];
+  reviewNotes: Scalars["String"]["input"];
 };
 
 export type ResubmitInboxItemInput = {
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  title?: InputMaybe<Scalars['String']['input']>;
+  config?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  title?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type RoleChange = {
-  __typename?: 'RoleChange';
-  current?: Maybe<Scalars['String']['output']>;
-  target?: Maybe<Scalars['String']['output']>;
+  __typename?: "RoleChange";
+  current?: Maybe<Scalars["String"]["output"]>;
+  target?: Maybe<Scalars["String"]["output"]>;
 };
 
 export type Routine = {
-  __typename?: 'Routine';
+  __typename?: "Routine";
   agent?: Maybe<Agent>;
-  agentId?: Maybe<Scalars['ID']['output']>;
-  config?: Maybe<Scalars['AWSJSON']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  description?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  lastRunAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  name: Scalars['String']['output'];
-  nextRunAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  config?: Maybe<Scalars["AWSJSON"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  description?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  lastRunAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  name: Scalars["String"]["output"];
+  nextRunAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   runs: Array<RoutineRun>;
-  schedule?: Maybe<Scalars['String']['output']>;
-  status: Scalars['String']['output'];
+  schedule?: Maybe<Scalars["String"]["output"]>;
+  status: Scalars["String"]["output"];
   team?: Maybe<Team>;
-  teamId?: Maybe<Scalars['ID']['output']>;
-  tenantId: Scalars['ID']['output'];
+  teamId?: Maybe<Scalars["ID"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
   triggers: Array<RoutineTrigger>;
-  type: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
+  type: Scalars["String"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type RoutineRun = {
-  __typename?: 'RoutineRun';
-  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  error?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  metadata?: Maybe<Scalars['AWSJSON']['output']>;
-  routineId: Scalars['ID']['output'];
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: Scalars['String']['output'];
+  __typename?: "RoutineRun";
+  completedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  error?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
+  routineId: Scalars["ID"]["output"];
+  startedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  status: Scalars["String"]["output"];
   steps: Array<RoutineStep>;
-  tenantId: Scalars['ID']['output'];
+  tenantId: Scalars["ID"]["output"];
 };
 
 export enum RoutineRunStatus {
-  Cancelled = 'CANCELLED',
-  Completed = 'COMPLETED',
-  Failed = 'FAILED',
-  Pending = 'PENDING',
-  Running = 'RUNNING'
+  Cancelled = "CANCELLED",
+  Completed = "COMPLETED",
+  Failed = "FAILED",
+  Pending = "PENDING",
+  Running = "RUNNING",
 }
 
 export enum RoutineStatus {
-  Active = 'ACTIVE',
-  Archived = 'ARCHIVED',
-  Paused = 'PAUSED'
+  Active = "ACTIVE",
+  Archived = "ARCHIVED",
+  Paused = "PAUSED",
 }
 
 export type RoutineStep = {
-  __typename?: 'RoutineStep';
-  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  error?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  input?: Maybe<Scalars['AWSJSON']['output']>;
-  name: Scalars['String']['output'];
-  output?: Maybe<Scalars['AWSJSON']['output']>;
-  routineId: Scalars['ID']['output'];
-  runId: Scalars['ID']['output'];
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: Scalars['String']['output'];
-  stepIndex: Scalars['Int']['output'];
-  tenantId: Scalars['ID']['output'];
+  __typename?: "RoutineStep";
+  completedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  error?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  input?: Maybe<Scalars["AWSJSON"]["output"]>;
+  name: Scalars["String"]["output"];
+  output?: Maybe<Scalars["AWSJSON"]["output"]>;
+  routineId: Scalars["ID"]["output"];
+  runId: Scalars["ID"]["output"];
+  startedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  status: Scalars["String"]["output"];
+  stepIndex: Scalars["Int"]["output"];
+  tenantId: Scalars["ID"]["output"];
 };
 
 export type RoutineTrigger = {
-  __typename?: 'RoutineTrigger';
-  config?: Maybe<Scalars['AWSJSON']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  routineId: Scalars['ID']['output'];
-  tenantId: Scalars['ID']['output'];
-  triggerType: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
+  __typename?: "RoutineTrigger";
+  config?: Maybe<Scalars["AWSJSON"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  enabled: Scalars["Boolean"]["output"];
+  id: Scalars["ID"]["output"];
+  routineId: Scalars["ID"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  triggerType: Scalars["String"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type RoutineTriggerInput = {
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  triggerType: Scalars['String']['input'];
+  config?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
+  triggerType: Scalars["String"]["input"];
 };
 
 export type RuntimeManifest = {
-  __typename?: 'RuntimeManifest';
-  agentId?: Maybe<Scalars['ID']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  manifestJson: Scalars['AWSJSON']['output'];
-  sessionId: Scalars['String']['output'];
-  templateId?: Maybe<Scalars['ID']['output']>;
-  tenantId: Scalars['ID']['output'];
-  userId?: Maybe<Scalars['ID']['output']>;
+  __typename?: "RuntimeManifest";
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  manifestJson: Scalars["AWSJSON"]["output"];
+  sessionId: Scalars["String"]["output"];
+  templateId?: Maybe<Scalars["ID"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  userId?: Maybe<Scalars["ID"]["output"]>;
 };
 
 export type ScheduledJob = {
-  __typename?: 'ScheduledJob';
-  agentId?: Maybe<Scalars['ID']['output']>;
-  config?: Maybe<Scalars['AWSJSON']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  createdById?: Maybe<Scalars['String']['output']>;
-  createdByType?: Maybe<Scalars['String']['output']>;
-  description?: Maybe<Scalars['String']['output']>;
-  ebScheduleName?: Maybe<Scalars['String']['output']>;
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  lastRunAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  name: Scalars['String']['output'];
-  nextRunAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  prompt?: Maybe<Scalars['String']['output']>;
-  routineId?: Maybe<Scalars['ID']['output']>;
-  scheduleExpression?: Maybe<Scalars['String']['output']>;
-  scheduleType?: Maybe<Scalars['String']['output']>;
-  teamId?: Maybe<Scalars['ID']['output']>;
-  tenantId: Scalars['ID']['output'];
-  timezone: Scalars['String']['output'];
-  triggerType: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
+  __typename?: "ScheduledJob";
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  config?: Maybe<Scalars["AWSJSON"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  createdById?: Maybe<Scalars["String"]["output"]>;
+  createdByType?: Maybe<Scalars["String"]["output"]>;
+  description?: Maybe<Scalars["String"]["output"]>;
+  ebScheduleName?: Maybe<Scalars["String"]["output"]>;
+  enabled: Scalars["Boolean"]["output"];
+  id: Scalars["ID"]["output"];
+  lastRunAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  name: Scalars["String"]["output"];
+  nextRunAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  prompt?: Maybe<Scalars["String"]["output"]>;
+  routineId?: Maybe<Scalars["ID"]["output"]>;
+  scheduleExpression?: Maybe<Scalars["String"]["output"]>;
+  scheduleType?: Maybe<Scalars["String"]["output"]>;
+  teamId?: Maybe<Scalars["ID"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  timezone: Scalars["String"]["output"];
+  triggerType: Scalars["String"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type SendMessageInput = {
-  content?: InputMaybe<Scalars['String']['input']>;
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  content?: InputMaybe<Scalars["String"]["input"]>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   role: MessageRole;
-  senderId?: InputMaybe<Scalars['ID']['input']>;
-  senderType?: InputMaybe<Scalars['String']['input']>;
-  threadId: Scalars['ID']['input'];
-  toolCalls?: InputMaybe<Scalars['AWSJSON']['input']>;
-  toolResults?: InputMaybe<Scalars['AWSJSON']['input']>;
+  senderId?: InputMaybe<Scalars["ID"]["input"]>;
+  senderType?: InputMaybe<Scalars["String"]["input"]>;
+  threadId: Scalars["ID"]["input"];
+  toolCalls?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  toolResults?: InputMaybe<Scalars["AWSJSON"]["input"]>;
 };
 
 export type SkillPermissionsDelta = {
-  __typename?: 'SkillPermissionsDelta';
+  __typename?: "SkillPermissionsDelta";
   /** Ops the agent will gain after sync (typically empty — intersection narrows). */
-  added: Array<Scalars['String']['output']>;
+  added: Array<Scalars["String"]["output"]>;
   /** Ops the agent currently has but will lose after sync. */
-  removed: Array<Scalars['String']['output']>;
-  skillId: Scalars['String']['output'];
+  removed: Array<Scalars["String"]["output"]>;
+  skillId: Scalars["String"]["output"];
 };
 
 export type SkillRun = {
-  __typename?: 'SkillRun';
-  agentId?: Maybe<Scalars['ID']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  deleteAt: Scalars['AWSDateTime']['output'];
-  deliveredArtifactRef?: Maybe<Scalars['AWSJSON']['output']>;
-  deliveryChannels?: Maybe<Scalars['AWSJSON']['output']>;
-  failureReason?: Maybe<Scalars['String']['output']>;
-  feedbackNote?: Maybe<Scalars['String']['output']>;
-  feedbackSignal?: Maybe<Scalars['String']['output']>;
-  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  id: Scalars['ID']['output'];
-  inputs?: Maybe<Scalars['AWSJSON']['output']>;
-  invocationSource: Scalars['String']['output'];
-  invokerUserId: Scalars['ID']['output'];
-  resolvedInputs?: Maybe<Scalars['AWSJSON']['output']>;
-  resolvedInputsHash: Scalars['String']['output'];
-  skillId: Scalars['String']['output'];
-  skillVersion: Scalars['Int']['output'];
-  startedAt: Scalars['AWSDateTime']['output'];
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
+  __typename?: "SkillRun";
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  deleteAt: Scalars["AWSDateTime"]["output"];
+  deliveredArtifactRef?: Maybe<Scalars["AWSJSON"]["output"]>;
+  deliveryChannels?: Maybe<Scalars["AWSJSON"]["output"]>;
+  failureReason?: Maybe<Scalars["String"]["output"]>;
+  feedbackNote?: Maybe<Scalars["String"]["output"]>;
+  feedbackSignal?: Maybe<Scalars["String"]["output"]>;
+  finishedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  id: Scalars["ID"]["output"];
+  inputs?: Maybe<Scalars["AWSJSON"]["output"]>;
+  invocationSource: Scalars["String"]["output"];
+  invokerUserId: Scalars["ID"]["output"];
+  resolvedInputs?: Maybe<Scalars["AWSJSON"]["output"]>;
+  resolvedInputsHash: Scalars["String"]["output"];
+  skillId: Scalars["String"]["output"];
+  skillVersion: Scalars["Int"]["output"];
+  startedAt: Scalars["AWSDateTime"]["output"];
+  status: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type StartActivationInput = {
   focusLayer?: InputMaybe<ActivationLayer>;
   mode?: InputMaybe<ActivationMode>;
-  userId: Scalars['ID']['input'];
+  userId: Scalars["ID"]["input"];
 };
 
 export type StartEvalRunInput = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  agentTemplateId?: InputMaybe<Scalars['ID']['input']>;
-  categories?: InputMaybe<Array<Scalars['String']['input']>>;
-  model?: InputMaybe<Scalars['String']['input']>;
-  testCaseIds?: InputMaybe<Array<Scalars['ID']['input']>>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  agentTemplateId?: InputMaybe<Scalars["ID"]["input"]>;
+  categories?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  model?: InputMaybe<Scalars["String"]["input"]>;
+  testCaseIds?: InputMaybe<Array<Scalars["ID"]["input"]>>;
 };
 
 export type StartSkillRunInput = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  deliveryChannels?: InputMaybe<Scalars['AWSJSON']['input']>;
-  inputs?: InputMaybe<Scalars['AWSJSON']['input']>;
-  invocationSource: Scalars['String']['input'];
-  skillId: Scalars['String']['input'];
-  skillVersion?: InputMaybe<Scalars['Int']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  deliveryChannels?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  inputs?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  invocationSource: Scalars["String"]["input"];
+  skillId: Scalars["String"]["input"];
+  skillVersion?: InputMaybe<Scalars["Int"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type StatusCount = {
-  __typename?: 'StatusCount';
-  count: Scalars['Int']['output'];
-  status: Scalars['String']['output'];
+  __typename?: "StatusCount";
+  count: Scalars["Int"]["output"];
+  status: Scalars["String"]["output"];
 };
 
 export type SubmitActivationTurnInput = {
   layerId: ActivationLayer;
-  message: Scalars['String']['input'];
-  sessionId: Scalars['ID']['input'];
+  message: Scalars["String"]["input"];
+  sessionId: Scalars["ID"]["input"];
 };
 
 export type SubmitRunFeedbackInput = {
-  note?: InputMaybe<Scalars['String']['input']>;
-  runId: Scalars['ID']['input'];
-  signal: Scalars['String']['input'];
+  note?: InputMaybe<Scalars["String"]["input"]>;
+  runId: Scalars["ID"]["input"];
+  signal: Scalars["String"]["input"];
 };
 
 export type Subscription = {
-  __typename?: 'Subscription';
-  _empty?: Maybe<Scalars['String']['output']>;
+  __typename?: "Subscription";
+  _empty?: Maybe<Scalars["String"]["output"]>;
   onActivationSessionUpdated?: Maybe<ActivationSessionEvent>;
   onAgentStatusChanged?: Maybe<AgentStatusEvent>;
   onCostRecorded?: Maybe<CostRecordedEvent>;
@@ -3636,111 +3429,101 @@ export type Subscription = {
   onThreadUpdated?: Maybe<ThreadUpdateEvent>;
 };
 
-
 export type SubscriptionOnActivationSessionUpdatedArgs = {
-  sessionId: Scalars['ID']['input'];
+  sessionId: Scalars["ID"]["input"];
 };
-
 
 export type SubscriptionOnAgentStatusChangedArgs = {
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type SubscriptionOnCostRecordedArgs = {
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type SubscriptionOnEvalRunUpdatedArgs = {
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type SubscriptionOnHeartbeatActivityArgs = {
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type SubscriptionOnInboxItemStatusChangedArgs = {
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type SubscriptionOnNewMessageArgs = {
-  threadId: Scalars['ID']['input'];
+  threadId: Scalars["ID"]["input"];
 };
-
 
 export type SubscriptionOnOrgUpdatedArgs = {
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
-
 
 export type SubscriptionOnThreadTurnUpdatedArgs = {
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
 
-
 export type SubscriptionOnThreadUpdatedArgs = {
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type SyncSummary = {
-  __typename?: 'SyncSummary';
-  agentsFailed: Scalars['Int']['output'];
-  agentsSynced: Scalars['Int']['output'];
-  errors: Array<Scalars['String']['output']>;
+  __typename?: "SyncSummary";
+  agentsFailed: Scalars["Int"]["output"];
+  agentsSynced: Scalars["Int"]["output"];
+  errors: Array<Scalars["String"]["output"]>;
 };
 
 export type Team = {
-  __typename?: 'Team';
+  __typename?: "Team";
   agents: Array<TeamAgent>;
-  budgetMonthlyCents?: Maybe<Scalars['Int']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  description?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  metadata?: Maybe<Scalars['AWSJSON']['output']>;
-  name: Scalars['String']['output'];
-  slug?: Maybe<Scalars['String']['output']>;
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  type: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
+  budgetMonthlyCents?: Maybe<Scalars["Int"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  description?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
+  name: Scalars["String"]["output"];
+  slug?: Maybe<Scalars["String"]["output"]>;
+  status: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  type: Scalars["String"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
   users: Array<TeamUser>;
 };
 
 export type TeamAgent = {
-  __typename?: 'TeamAgent';
+  __typename?: "TeamAgent";
   agent?: Maybe<Agent>;
-  agentId: Scalars['ID']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  joinedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  role: Scalars['String']['output'];
-  teamId: Scalars['ID']['output'];
-  tenantId: Scalars['ID']['output'];
+  agentId: Scalars["ID"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  joinedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  role: Scalars["String"]["output"];
+  teamId: Scalars["ID"]["output"];
+  tenantId: Scalars["ID"]["output"];
 };
 
 export type TeamUser = {
-  __typename?: 'TeamUser';
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  joinedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  role: Scalars['String']['output'];
-  teamId: Scalars['ID']['output'];
-  tenantId: Scalars['ID']['output'];
+  __typename?: "TeamUser";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  joinedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  role: Scalars["String"]["output"];
+  teamId: Scalars["ID"]["output"];
+  tenantId: Scalars["ID"]["output"];
   user?: Maybe<User>;
-  userId: Scalars['ID']['output'];
+  userId: Scalars["ID"]["output"];
 };
 
 export type TemplateSyncDiff = {
-  __typename?: 'TemplateSyncDiff';
-  filesAdded: Array<Scalars['String']['output']>;
-  filesModified: Array<Scalars['String']['output']>;
-  filesSame: Array<Scalars['String']['output']>;
-  kbsAdded: Array<Scalars['String']['output']>;
-  kbsRemoved: Array<Scalars['String']['output']>;
+  __typename?: "TemplateSyncDiff";
+  filesAdded: Array<Scalars["String"]["output"]>;
+  filesModified: Array<Scalars["String"]["output"]>;
+  filesSame: Array<Scalars["String"]["output"]>;
+  kbsAdded: Array<Scalars["String"]["output"]>;
+  kbsRemoved: Array<Scalars["String"]["output"]>;
   /**
    * Per-skill preview of the operations the agent will lose (or gain) if
    * Push is applied now. Only includes entries for skills whose manifest
@@ -3751,21 +3534,21 @@ export type TemplateSyncDiff = {
    */
   permissionsChanges: Array<SkillPermissionsDelta>;
   roleChange?: Maybe<RoleChange>;
-  skillsAdded: Array<Scalars['String']['output']>;
-  skillsChanged: Array<Scalars['String']['output']>;
-  skillsRemoved: Array<Scalars['String']['output']>;
+  skillsAdded: Array<Scalars["String"]["output"]>;
+  skillsChanged: Array<Scalars["String"]["output"]>;
+  skillsRemoved: Array<Scalars["String"]["output"]>;
 };
 
 export type Tenant = {
-  __typename?: 'Tenant';
+  __typename?: "Tenant";
   agents: Array<Agent>;
   /**
    * Compliance classification: "standard" | "regulated" | "hipaa". Only
    * standard tenants may enable the sandbox; a compound CHECK on the tenants
    * table enforces this at the schema layer.
    */
-  complianceTier: Scalars['String']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
+  complianceTier: Scalars["String"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
   /**
    * Per-tenant kill switches for built-in tools (plan #007 R6/R7). Array of
    * slug strings (e.g. ["execute_code", "web_search"]). Empty array = all
@@ -3775,382 +3558,386 @@ export type Tenant = {
    * Admin UI for editing this field defers to a follow-up PR; until then
    * operators mutate the column directly.
    */
-  disabledBuiltinTools: Array<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  issueCounter: Scalars['Int']['output'];
-  issuePrefix?: Maybe<Scalars['String']['output']>;
+  disabledBuiltinTools: Array<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  issueCounter: Scalars["Int"]["output"];
+  issuePrefix?: Maybe<Scalars["String"]["output"]>;
   members: Array<TenantMember>;
-  name: Scalars['String']['output'];
-  plan: Scalars['String']['output'];
+  name: Scalars["String"]["output"];
+  plan: Scalars["String"]["output"];
   /**
    * Sandbox kill switch. When false, the dispatcher does not register the
    * execute_code tool regardless of template opt-in. Default-true for new
    * tenants; the migration that added this column flipped every pre-existing
    * tenant to false so Phase 3b enforcement lands before the sandbox runs.
    */
-  sandboxEnabled: Scalars['Boolean']['output'];
-  sandboxInterpreterInternalId?: Maybe<Scalars['String']['output']>;
+  sandboxEnabled: Scalars["Boolean"]["output"];
+  sandboxInterpreterInternalId?: Maybe<Scalars["String"]["output"]>;
   /**
    * Per-tenant AgentCore Code Interpreter IDs, populated asynchronously by
    * the agentcore-admin Lambda (plan Unit 5). Null during the provisioning
    * window.
    */
-  sandboxInterpreterPublicId?: Maybe<Scalars['String']['output']>;
+  sandboxInterpreterPublicId?: Maybe<Scalars["String"]["output"]>;
   settings?: Maybe<TenantSettings>;
-  slug: Scalars['String']['output'];
+  slug: Scalars["String"]["output"];
   teams: Array<Team>;
-  updatedAt: Scalars['AWSDateTime']['output'];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type TenantMember = {
-  __typename?: 'TenantMember';
+  __typename?: "TenantMember";
   agent?: Maybe<Agent>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  principalId: Scalars['ID']['output'];
-  principalType: Scalars['String']['output'];
-  role: Scalars['String']['output'];
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  principalId: Scalars["ID"]["output"];
+  principalType: Scalars["String"]["output"];
+  role: Scalars["String"]["output"];
+  status: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
   user?: Maybe<User>;
 };
 
 export type TenantSettings = {
-  __typename?: 'TenantSettings';
-  autoCloseThreadMinutes?: Maybe<Scalars['Int']['output']>;
-  budgetMonthlyCents?: Maybe<Scalars['Int']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  defaultModel?: Maybe<Scalars['String']['output']>;
-  features?: Maybe<Scalars['AWSJSON']['output']>;
-  id: Scalars['ID']['output'];
-  maxAgents?: Maybe<Scalars['Int']['output']>;
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
+  __typename?: "TenantSettings";
+  autoCloseThreadMinutes?: Maybe<Scalars["Int"]["output"]>;
+  budgetMonthlyCents?: Maybe<Scalars["Int"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  defaultModel?: Maybe<Scalars["String"]["output"]>;
+  features?: Maybe<Scalars["AWSJSON"]["output"]>;
+  id: Scalars["ID"]["output"];
+  maxAgents?: Maybe<Scalars["Int"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type Thread = {
-  __typename?: 'Thread';
+  __typename?: "Thread";
   agent?: Maybe<Agent>;
-  agentId?: Maybe<Scalars['ID']['output']>;
-  archivedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  archivedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   assignee?: Maybe<User>;
-  assigneeId?: Maybe<Scalars['ID']['output']>;
-  assigneeType?: Maybe<Scalars['String']['output']>;
+  assigneeId?: Maybe<Scalars["ID"]["output"]>;
+  assigneeType?: Maybe<Scalars["String"]["output"]>;
   attachments: Array<ThreadAttachment>;
-  billingCode?: Maybe<Scalars['String']['output']>;
+  billingCode?: Maybe<Scalars["String"]["output"]>;
   blockedBy: Array<ThreadDependency>;
   blocks: Array<ThreadDependency>;
-  cancelledAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  cancelledAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   channel: ThreadChannel;
-  checkoutRunId?: Maybe<Scalars['String']['output']>;
-  checkoutVersion: Scalars['Int']['output'];
-  closedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  costSummary?: Maybe<Scalars['Float']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  createdById?: Maybe<Scalars['String']['output']>;
-  createdByType?: Maybe<Scalars['String']['output']>;
-  dueAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  id: Scalars['ID']['output'];
-  identifier?: Maybe<Scalars['String']['output']>;
-  isBlocked: Scalars['Boolean']['output'];
-  labels?: Maybe<Scalars['AWSJSON']['output']>;
-  lastActivityAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  lastReadAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  lastResponsePreview?: Maybe<Scalars['String']['output']>;
-  lastTurnCompletedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  checkoutRunId?: Maybe<Scalars["String"]["output"]>;
+  checkoutVersion: Scalars["Int"]["output"];
+  closedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  completedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  costSummary?: Maybe<Scalars["Float"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  createdById?: Maybe<Scalars["String"]["output"]>;
+  createdByType?: Maybe<Scalars["String"]["output"]>;
+  dueAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  id: Scalars["ID"]["output"];
+  identifier?: Maybe<Scalars["String"]["output"]>;
+  isBlocked: Scalars["Boolean"]["output"];
+  labels?: Maybe<Scalars["AWSJSON"]["output"]>;
+  lastActivityAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  lastReadAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  lastResponsePreview?: Maybe<Scalars["String"]["output"]>;
+  lastTurnCompletedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   lifecycleStatus?: Maybe<ThreadLifecycleStatus>;
   messages: MessageConnection;
-  metadata?: Maybe<Scalars['AWSJSON']['output']>;
-  number: Scalars['Int']['output'];
+  metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
+  number: Scalars["Int"]["output"];
   reporter?: Maybe<User>;
-  reporterId?: Maybe<Scalars['ID']['output']>;
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  reporterId?: Maybe<Scalars["ID"]["output"]>;
+  startedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   status: ThreadStatus;
-  tenantId: Scalars['ID']['output'];
-  title: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
+  tenantId: Scalars["ID"]["output"];
+  title: Scalars["String"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
-
 export type ThreadMessagesArgs = {
-  cursor?: InputMaybe<Scalars['String']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
+  cursor?: InputMaybe<Scalars["String"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
 };
 
 export type ThreadAttachment = {
-  __typename?: 'ThreadAttachment';
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  mimeType?: Maybe<Scalars['String']['output']>;
-  name?: Maybe<Scalars['String']['output']>;
-  s3Key?: Maybe<Scalars['String']['output']>;
-  sizeBytes?: Maybe<Scalars['Int']['output']>;
-  tenantId: Scalars['ID']['output'];
-  threadId: Scalars['ID']['output'];
-  uploadedBy?: Maybe<Scalars['ID']['output']>;
+  __typename?: "ThreadAttachment";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  mimeType?: Maybe<Scalars["String"]["output"]>;
+  name?: Maybe<Scalars["String"]["output"]>;
+  s3Key?: Maybe<Scalars["String"]["output"]>;
+  sizeBytes?: Maybe<Scalars["Int"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  threadId: Scalars["ID"]["output"];
+  uploadedBy?: Maybe<Scalars["ID"]["output"]>;
 };
 
 export enum ThreadChannel {
-  Api = 'API',
-  Chat = 'CHAT',
-  Email = 'EMAIL',
-  Manual = 'MANUAL',
-  Schedule = 'SCHEDULE',
-  Task = 'TASK',
-  Webhook = 'WEBHOOK'
+  Api = "API",
+  Chat = "CHAT",
+  Email = "EMAIL",
+  Manual = "MANUAL",
+  Schedule = "SCHEDULE",
+  Task = "TASK",
+  Webhook = "WEBHOOK",
 }
 
 export type ThreadDependency = {
-  __typename?: 'ThreadDependency';
+  __typename?: "ThreadDependency";
   blockedByThread?: Maybe<Thread>;
-  blockedByThreadId: Scalars['ID']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  tenantId: Scalars['ID']['output'];
-  threadId: Scalars['ID']['output'];
+  blockedByThreadId: Scalars["ID"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  threadId: Scalars["ID"]["output"];
 };
 
 export type ThreadLabel = {
-  __typename?: 'ThreadLabel';
-  color?: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  description?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  name: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
+  __typename?: "ThreadLabel";
+  color?: Maybe<Scalars["String"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  description?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  name: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
 };
 
 export type ThreadLabelAssignment = {
-  __typename?: 'ThreadLabelAssignment';
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
+  __typename?: "ThreadLabelAssignment";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
   label?: Maybe<ThreadLabel>;
-  labelId: Scalars['ID']['output'];
-  tenantId: Scalars['ID']['output'];
-  threadId: Scalars['ID']['output'];
+  labelId: Scalars["ID"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  threadId: Scalars["ID"]["output"];
 };
 
 export enum ThreadLifecycleStatus {
-  AwaitingUser = 'AWAITING_USER',
-  Cancelled = 'CANCELLED',
-  Completed = 'COMPLETED',
-  Failed = 'FAILED',
-  Idle = 'IDLE',
-  Running = 'RUNNING'
+  AwaitingUser = "AWAITING_USER",
+  Cancelled = "CANCELLED",
+  Completed = "COMPLETED",
+  Failed = "FAILED",
+  Idle = "IDLE",
+  Running = "RUNNING",
 }
 
 export enum ThreadStatus {
-  Backlog = 'BACKLOG',
-  Blocked = 'BLOCKED',
-  Cancelled = 'CANCELLED',
-  Done = 'DONE',
-  InProgress = 'IN_PROGRESS',
-  InReview = 'IN_REVIEW',
-  Todo = 'TODO'
+  Backlog = "BACKLOG",
+  Blocked = "BLOCKED",
+  Cancelled = "CANCELLED",
+  Done = "DONE",
+  InProgress = "IN_PROGRESS",
+  InReview = "IN_REVIEW",
+  Todo = "TODO",
 }
 
 export type ThreadTurn = {
-  __typename?: 'ThreadTurn';
-  agentId?: Maybe<Scalars['ID']['output']>;
-  contextSnapshot?: Maybe<Scalars['AWSJSON']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  error?: Maybe<Scalars['String']['output']>;
-  errorCode?: Maybe<Scalars['String']['output']>;
-  externalRunId?: Maybe<Scalars['String']['output']>;
-  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  id: Scalars['ID']['output'];
-  invocationSource: Scalars['String']['output'];
-  lastActivityAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  originTurnId?: Maybe<Scalars['ID']['output']>;
-  resultJson?: Maybe<Scalars['AWSJSON']['output']>;
-  retryAttempt?: Maybe<Scalars['Int']['output']>;
-  routineId?: Maybe<Scalars['ID']['output']>;
-  sessionIdAfter?: Maybe<Scalars['String']['output']>;
-  sessionIdBefore?: Maybe<Scalars['String']['output']>;
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  threadId?: Maybe<Scalars['ID']['output']>;
-  totalCost?: Maybe<Scalars['Float']['output']>;
-  triggerDetail?: Maybe<Scalars['String']['output']>;
-  triggerId?: Maybe<Scalars['ID']['output']>;
-  triggerName?: Maybe<Scalars['String']['output']>;
-  turnNumber?: Maybe<Scalars['Int']['output']>;
-  usageJson?: Maybe<Scalars['AWSJSON']['output']>;
-  wakeupRequestId?: Maybe<Scalars['ID']['output']>;
+  __typename?: "ThreadTurn";
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  contextSnapshot?: Maybe<Scalars["AWSJSON"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  error?: Maybe<Scalars["String"]["output"]>;
+  errorCode?: Maybe<Scalars["String"]["output"]>;
+  externalRunId?: Maybe<Scalars["String"]["output"]>;
+  finishedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  id: Scalars["ID"]["output"];
+  invocationSource: Scalars["String"]["output"];
+  lastActivityAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  originTurnId?: Maybe<Scalars["ID"]["output"]>;
+  resultJson?: Maybe<Scalars["AWSJSON"]["output"]>;
+  retryAttempt?: Maybe<Scalars["Int"]["output"]>;
+  routineId?: Maybe<Scalars["ID"]["output"]>;
+  sessionIdAfter?: Maybe<Scalars["String"]["output"]>;
+  sessionIdBefore?: Maybe<Scalars["String"]["output"]>;
+  startedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  status: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  threadId?: Maybe<Scalars["ID"]["output"]>;
+  totalCost?: Maybe<Scalars["Float"]["output"]>;
+  triggerDetail?: Maybe<Scalars["String"]["output"]>;
+  triggerId?: Maybe<Scalars["ID"]["output"]>;
+  triggerName?: Maybe<Scalars["String"]["output"]>;
+  turnNumber?: Maybe<Scalars["Int"]["output"]>;
+  usageJson?: Maybe<Scalars["AWSJSON"]["output"]>;
+  wakeupRequestId?: Maybe<Scalars["ID"]["output"]>;
 };
 
 export type ThreadTurnEvent = {
-  __typename?: 'ThreadTurnEvent';
-  agentId?: Maybe<Scalars['ID']['output']>;
-  color?: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  eventType: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  level?: Maybe<Scalars['String']['output']>;
-  message?: Maybe<Scalars['String']['output']>;
-  payload?: Maybe<Scalars['AWSJSON']['output']>;
-  runId: Scalars['ID']['output'];
-  seq: Scalars['Int']['output'];
-  stream?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
+  __typename?: "ThreadTurnEvent";
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  color?: Maybe<Scalars["String"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  eventType: Scalars["String"]["output"];
+  id: Scalars["ID"]["output"];
+  level?: Maybe<Scalars["String"]["output"]>;
+  message?: Maybe<Scalars["String"]["output"]>;
+  payload?: Maybe<Scalars["AWSJSON"]["output"]>;
+  runId: Scalars["ID"]["output"];
+  seq: Scalars["Int"]["output"];
+  stream?: Maybe<Scalars["String"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
 };
 
 export type ThreadTurnUpdateEvent = {
-  __typename?: 'ThreadTurnUpdateEvent';
-  agentId?: Maybe<Scalars['ID']['output']>;
-  runId: Scalars['ID']['output'];
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  threadId?: Maybe<Scalars['ID']['output']>;
-  triggerId?: Maybe<Scalars['ID']['output']>;
-  triggerName?: Maybe<Scalars['String']['output']>;
-  updatedAt: Scalars['AWSDateTime']['output'];
+  __typename?: "ThreadTurnUpdateEvent";
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  runId: Scalars["ID"]["output"];
+  status: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  threadId?: Maybe<Scalars["ID"]["output"]>;
+  triggerId?: Maybe<Scalars["ID"]["output"]>;
+  triggerName?: Maybe<Scalars["String"]["output"]>;
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type ThreadUpdateEvent = {
-  __typename?: 'ThreadUpdateEvent';
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  threadId: Scalars['ID']['output'];
-  title: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
+  __typename?: "ThreadUpdateEvent";
+  status: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  threadId: Scalars["ID"]["output"];
+  title: Scalars["String"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type ThreadsPage = {
-  __typename?: 'ThreadsPage';
+  __typename?: "ThreadsPage";
   items: Array<Thread>;
-  totalCount: Scalars['Int']['output'];
+  totalCount: Scalars["Int"]["output"];
 };
 
 export type TraceEvent = {
-  __typename?: 'TraceEvent';
-  agentId?: Maybe<Scalars['ID']['output']>;
-  agentName?: Maybe<Scalars['String']['output']>;
-  costUsd?: Maybe<Scalars['Float']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  durationMs?: Maybe<Scalars['Int']['output']>;
-  estimated?: Maybe<Scalars['Boolean']['output']>;
-  inputTokens?: Maybe<Scalars['Int']['output']>;
-  model?: Maybe<Scalars['String']['output']>;
-  outputTokens?: Maybe<Scalars['Int']['output']>;
-  threadId?: Maybe<Scalars['ID']['output']>;
-  traceId: Scalars['String']['output'];
+  __typename?: "TraceEvent";
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  agentName?: Maybe<Scalars["String"]["output"]>;
+  costUsd?: Maybe<Scalars["Float"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  durationMs?: Maybe<Scalars["Int"]["output"]>;
+  estimated?: Maybe<Scalars["Boolean"]["output"]>;
+  inputTokens?: Maybe<Scalars["Int"]["output"]>;
+  model?: Maybe<Scalars["String"]["output"]>;
+  outputTokens?: Maybe<Scalars["Int"]["output"]>;
+  threadId?: Maybe<Scalars["ID"]["output"]>;
+  traceId: Scalars["String"]["output"];
 };
 
 export type UpdateAgentInput = {
-  adapterConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
-  adapterType?: InputMaybe<Scalars['String']['input']>;
-  avatarUrl?: InputMaybe<Scalars['String']['input']>;
-  humanPairId?: InputMaybe<Scalars['ID']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
-  parentAgentId?: InputMaybe<Scalars['ID']['input']>;
-  reportsTo?: InputMaybe<Scalars['ID']['input']>;
-  role?: InputMaybe<Scalars['String']['input']>;
-  runtimeConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
-  systemPrompt?: InputMaybe<Scalars['String']['input']>;
-  templateId?: InputMaybe<Scalars['ID']['input']>;
+  adapterConfig?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  adapterType?: InputMaybe<Scalars["String"]["input"]>;
+  avatarUrl?: InputMaybe<Scalars["String"]["input"]>;
+  humanPairId?: InputMaybe<Scalars["ID"]["input"]>;
+  name?: InputMaybe<Scalars["String"]["input"]>;
+  parentAgentId?: InputMaybe<Scalars["ID"]["input"]>;
+  reportsTo?: InputMaybe<Scalars["ID"]["input"]>;
+  role?: InputMaybe<Scalars["String"]["input"]>;
+  runtimeConfig?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  systemPrompt?: InputMaybe<Scalars["String"]["input"]>;
+  templateId?: InputMaybe<Scalars["ID"]["input"]>;
   type?: InputMaybe<AgentType>;
 };
 
 export type UpdateAgentTemplateInput = {
-  blockedTools?: InputMaybe<Scalars['AWSJSON']['input']>;
+  blockedTools?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   /**
    * Browser Automation opt-in metadata; see AgentTemplate.browser. Pass
    * null to clear; omit to leave unchanged.
    */
-  browser?: InputMaybe<Scalars['AWSJSON']['input']>;
-  category?: InputMaybe<Scalars['String']['input']>;
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  guardrailId?: InputMaybe<Scalars['ID']['input']>;
-  icon?: InputMaybe<Scalars['String']['input']>;
-  isPublished?: InputMaybe<Scalars['Boolean']['input']>;
-  knowledgeBaseIds?: InputMaybe<Scalars['AWSJSON']['input']>;
-  model?: InputMaybe<Scalars['String']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
+  browser?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  category?: InputMaybe<Scalars["String"]["input"]>;
+  config?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  /**
+   * Context Engine opt-in metadata; see AgentTemplate.contextEngine. Pass
+   * null to clear; omit to leave unchanged.
+   */
+  contextEngine?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  guardrailId?: InputMaybe<Scalars["ID"]["input"]>;
+  icon?: InputMaybe<Scalars["String"]["input"]>;
+  isPublished?: InputMaybe<Scalars["Boolean"]["input"]>;
+  knowledgeBaseIds?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  model?: InputMaybe<Scalars["String"]["input"]>;
+  name?: InputMaybe<Scalars["String"]["input"]>;
   runtime?: InputMaybe<AgentRuntime>;
   /**
    * Sandbox opt-in metadata; see AgentTemplate.sandbox. Pass null to
    * clear; omit to leave unchanged.
    */
-  sandbox?: InputMaybe<Scalars['AWSJSON']['input']>;
+  sandbox?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   /**
    * Send Email opt-in metadata; see AgentTemplate.sendEmail. Pass
    * null to clear; omit to leave unchanged.
    */
-  sendEmail?: InputMaybe<Scalars['AWSJSON']['input']>;
-  skills?: InputMaybe<Scalars['AWSJSON']['input']>;
-  slug?: InputMaybe<Scalars['String']['input']>;
+  sendEmail?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  skills?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  slug?: InputMaybe<Scalars["String"]["input"]>;
   /**
    * Web Search opt-in metadata; see AgentTemplate.webSearch. Pass
    * null to clear; omit to leave unchanged.
    */
-  webSearch?: InputMaybe<Scalars['AWSJSON']['input']>;
+  webSearch?: InputMaybe<Scalars["AWSJSON"]["input"]>;
 };
 
 export type UpdateArtifactInput = {
-  content?: InputMaybe<Scalars['String']['input']>;
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  s3Key?: InputMaybe<Scalars['String']['input']>;
+  content?: InputMaybe<Scalars["String"]["input"]>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  s3Key?: InputMaybe<Scalars["String"]["input"]>;
   status?: InputMaybe<ArtifactStatus>;
-  summary?: InputMaybe<Scalars['String']['input']>;
-  title?: InputMaybe<Scalars['String']['input']>;
+  summary?: InputMaybe<Scalars["String"]["input"]>;
+  title?: InputMaybe<Scalars["String"]["input"]>;
   type?: InputMaybe<ArtifactType>;
 };
 
 export type UpdateEvalTestCaseInput = {
-  agentTemplateId?: InputMaybe<Scalars['ID']['input']>;
-  agentcoreEvaluatorIds?: InputMaybe<Array<Scalars['String']['input']>>;
+  agentTemplateId?: InputMaybe<Scalars["ID"]["input"]>;
+  agentcoreEvaluatorIds?: InputMaybe<Array<Scalars["String"]["input"]>>;
   assertions?: InputMaybe<Array<EvalAssertionInput>>;
-  category?: InputMaybe<Scalars['String']['input']>;
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
-  query?: InputMaybe<Scalars['String']['input']>;
-  systemPrompt?: InputMaybe<Scalars['String']['input']>;
-  tags?: InputMaybe<Array<Scalars['String']['input']>>;
+  category?: InputMaybe<Scalars["String"]["input"]>;
+  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
+  name?: InputMaybe<Scalars["String"]["input"]>;
+  query?: InputMaybe<Scalars["String"]["input"]>;
+  systemPrompt?: InputMaybe<Scalars["String"]["input"]>;
+  tags?: InputMaybe<Array<Scalars["String"]["input"]>>;
 };
 
 export type UpdateKnowledgeBaseInput = {
-  description?: InputMaybe<Scalars['String']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  name?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type UpdateQuickActionInput = {
-  prompt?: InputMaybe<Scalars['String']['input']>;
+  prompt?: InputMaybe<Scalars["String"]["input"]>;
   scope?: InputMaybe<QuickActionScope>;
-  sortOrder?: InputMaybe<Scalars['Int']['input']>;
-  title?: InputMaybe<Scalars['String']['input']>;
-  workspaceAgentId?: InputMaybe<Scalars['ID']['input']>;
+  sortOrder?: InputMaybe<Scalars["Int"]["input"]>;
+  title?: InputMaybe<Scalars["String"]["input"]>;
+  workspaceAgentId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type UpdateRecipeInput = {
-  params?: InputMaybe<Scalars['AWSJSON']['input']>;
-  summary?: InputMaybe<Scalars['String']['input']>;
-  templates?: InputMaybe<Scalars['AWSJSON']['input']>;
-  title?: InputMaybe<Scalars['String']['input']>;
+  params?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  summary?: InputMaybe<Scalars["String"]["input"]>;
+  templates?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  title?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type UpdateRoutineInput = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
-  schedule?: InputMaybe<Scalars['String']['input']>;
-  status?: InputMaybe<Scalars['String']['input']>;
-  teamId?: InputMaybe<Scalars['ID']['input']>;
-  type?: InputMaybe<Scalars['String']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  config?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  name?: InputMaybe<Scalars["String"]["input"]>;
+  schedule?: InputMaybe<Scalars["String"]["input"]>;
+  status?: InputMaybe<Scalars["String"]["input"]>;
+  teamId?: InputMaybe<Scalars["ID"]["input"]>;
+  type?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type UpdateTeamInput = {
-  budgetMonthlyCents?: InputMaybe<Scalars['Int']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
-  status?: InputMaybe<Scalars['String']['input']>;
-  type?: InputMaybe<Scalars['String']['input']>;
+  budgetMonthlyCents?: InputMaybe<Scalars["Int"]["input"]>;
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  name?: InputMaybe<Scalars["String"]["input"]>;
+  status?: InputMaybe<Scalars["String"]["input"]>;
+  type?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type UpdateTenantInput = {
@@ -4160,17 +3947,17 @@ export type UpdateTenantInput = {
    * Null/absent = server derives a key from canonicalized inputs.
    * See packages/api/src/lib/idempotency.ts.
    */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  issuePrefix?: InputMaybe<Scalars['String']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
-  plan?: InputMaybe<Scalars['String']['input']>;
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
+  issuePrefix?: InputMaybe<Scalars["String"]["input"]>;
+  name?: InputMaybe<Scalars["String"]["input"]>;
+  plan?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type UpdateTenantMemberInput = {
   /** Optional idempotency key. See UpdateTenantInput.idempotencyKey. */
-  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  role?: InputMaybe<Scalars['String']['input']>;
-  status?: InputMaybe<Scalars['String']['input']>;
+  idempotencyKey?: InputMaybe<Scalars["String"]["input"]>;
+  role?: InputMaybe<Scalars["String"]["input"]>;
+  status?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 /**
@@ -4182,199 +3969,199 @@ export type UpdateTenantMemberInput = {
  */
 export type UpdateTenantPolicyInput = {
   /** Compliance tier: 'standard' | 'regulated' | 'hipaa'. Non-standard coerces sandboxEnabled = false. */
-  complianceTier?: InputMaybe<Scalars['String']['input']>;
+  complianceTier?: InputMaybe<Scalars["String"]["input"]>;
   /** Sandbox kill switch. Setting true while complianceTier != 'standard' is rejected. */
-  sandboxEnabled?: InputMaybe<Scalars['Boolean']['input']>;
+  sandboxEnabled?: InputMaybe<Scalars["Boolean"]["input"]>;
 };
 
 export type UpdateTenantSettingsInput = {
-  autoCloseThreadMinutes?: InputMaybe<Scalars['Int']['input']>;
-  budgetMonthlyCents?: InputMaybe<Scalars['Int']['input']>;
-  defaultModel?: InputMaybe<Scalars['String']['input']>;
-  features?: InputMaybe<Scalars['AWSJSON']['input']>;
-  maxAgents?: InputMaybe<Scalars['Int']['input']>;
+  autoCloseThreadMinutes?: InputMaybe<Scalars["Int"]["input"]>;
+  budgetMonthlyCents?: InputMaybe<Scalars["Int"]["input"]>;
+  defaultModel?: InputMaybe<Scalars["String"]["input"]>;
+  features?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  maxAgents?: InputMaybe<Scalars["Int"]["input"]>;
 };
 
 export type UpdateThreadInput = {
-  archivedAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  assigneeId?: InputMaybe<Scalars['ID']['input']>;
-  assigneeType?: InputMaybe<Scalars['String']['input']>;
-  billingCode?: InputMaybe<Scalars['String']['input']>;
+  archivedAt?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  assigneeId?: InputMaybe<Scalars["ID"]["input"]>;
+  assigneeType?: InputMaybe<Scalars["String"]["input"]>;
+  billingCode?: InputMaybe<Scalars["String"]["input"]>;
   channel?: InputMaybe<ThreadChannel>;
-  dueAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  labels?: InputMaybe<Scalars['AWSJSON']['input']>;
-  lastReadAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  dueAt?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  labels?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  lastReadAt?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   status?: InputMaybe<ThreadStatus>;
-  title?: InputMaybe<Scalars['String']['input']>;
+  title?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type UpdateThreadLabelInput = {
-  color?: InputMaybe<Scalars['String']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
+  color?: InputMaybe<Scalars["String"]["input"]>;
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  name?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type UpdateUserInput = {
-  image?: InputMaybe<Scalars['String']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
-  phone?: InputMaybe<Scalars['String']['input']>;
+  image?: InputMaybe<Scalars["String"]["input"]>;
+  name?: InputMaybe<Scalars["String"]["input"]>;
+  phone?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type UpdateUserProfileInput = {
   /** Short/preferred name the agent should use in chat. Set via admin UI or agent self-serve tool. */
-  callBy?: InputMaybe<Scalars['String']['input']>;
+  callBy?: InputMaybe<Scalars["String"]["input"]>;
   /** Free-form markdown capturing ongoing context about the human. */
-  context?: InputMaybe<Scalars['String']['input']>;
-  displayName?: InputMaybe<Scalars['String']['input']>;
+  context?: InputMaybe<Scalars["String"]["input"]>;
+  displayName?: InputMaybe<Scalars["String"]["input"]>;
   /** Free-form markdown describing the human's family / close contacts. */
-  family?: InputMaybe<Scalars['String']['input']>;
+  family?: InputMaybe<Scalars["String"]["input"]>;
   /** Free-form notes about the human's preferences + communication style. */
-  notes?: InputMaybe<Scalars['String']['input']>;
-  notificationPreferences?: InputMaybe<Scalars['AWSJSON']['input']>;
-  operatingModel?: InputMaybe<Scalars['AWSJSON']['input']>;
-  operatingModelHistory?: InputMaybe<Array<Scalars['AWSJSON']['input']>>;
-  pronouns?: InputMaybe<Scalars['String']['input']>;
-  theme?: InputMaybe<Scalars['String']['input']>;
-  timezone?: InputMaybe<Scalars['String']['input']>;
-  title?: InputMaybe<Scalars['String']['input']>;
+  notes?: InputMaybe<Scalars["String"]["input"]>;
+  notificationPreferences?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  operatingModel?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  operatingModelHistory?: InputMaybe<Array<Scalars["AWSJSON"]["input"]>>;
+  pronouns?: InputMaybe<Scalars["String"]["input"]>;
+  theme?: InputMaybe<Scalars["String"]["input"]>;
+  timezone?: InputMaybe<Scalars["String"]["input"]>;
+  title?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type UpdateWebhookInput = {
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  config?: InputMaybe<Scalars['AWSJSON']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
-  prompt?: InputMaybe<Scalars['String']['input']>;
-  rateLimit?: InputMaybe<Scalars['Int']['input']>;
-  routineId?: InputMaybe<Scalars['ID']['input']>;
-  targetType?: InputMaybe<Scalars['String']['input']>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  config?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
+  name?: InputMaybe<Scalars["String"]["input"]>;
+  prompt?: InputMaybe<Scalars["String"]["input"]>;
+  rateLimit?: InputMaybe<Scalars["Int"]["input"]>;
+  routineId?: InputMaybe<Scalars["ID"]["input"]>;
+  targetType?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type UpsertBudgetPolicyInput = {
-  actionOnExceed?: InputMaybe<Scalars['String']['input']>;
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  limitUsd: Scalars['Float']['input'];
-  period?: InputMaybe<Scalars['String']['input']>;
-  scope: Scalars['String']['input'];
+  actionOnExceed?: InputMaybe<Scalars["String"]["input"]>;
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  limitUsd: Scalars["Float"]["input"];
+  period?: InputMaybe<Scalars["String"]["input"]>;
+  scope: Scalars["String"]["input"];
 };
 
 export type User = {
-  __typename?: 'User';
-  createdAt: Scalars['AWSDateTime']['output'];
-  email: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  image?: Maybe<Scalars['String']['output']>;
-  name?: Maybe<Scalars['String']['output']>;
-  phone?: Maybe<Scalars['String']['output']>;
+  __typename?: "User";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  email: Scalars["String"]["output"];
+  id: Scalars["ID"]["output"];
+  image?: Maybe<Scalars["String"]["output"]>;
+  name?: Maybe<Scalars["String"]["output"]>;
+  phone?: Maybe<Scalars["String"]["output"]>;
   profile?: Maybe<UserProfile>;
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type UserProfile = {
-  __typename?: 'UserProfile';
+  __typename?: "UserProfile";
   /** Short/preferred name — what the agent should call this human in chat. */
-  callBy?: Maybe<Scalars['String']['output']>;
+  callBy?: Maybe<Scalars["String"]["output"]>;
   /** Free-form markdown capturing ongoing context about the human. */
-  context?: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  displayName?: Maybe<Scalars['String']['output']>;
+  context?: Maybe<Scalars["String"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  displayName?: Maybe<Scalars["String"]["output"]>;
   /** Free-form markdown describing the human's family / close contacts. */
-  family?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
+  family?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
   /** Free-form notes the agent maintains about this human's preferences + style. */
-  notes?: Maybe<Scalars['String']['output']>;
-  notificationPreferences?: Maybe<Scalars['AWSJSON']['output']>;
-  operatingModel?: Maybe<Scalars['AWSJSON']['output']>;
-  operatingModelHistory: Array<Scalars['AWSJSON']['output']>;
-  pronouns?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  theme?: Maybe<Scalars['String']['output']>;
-  timezone?: Maybe<Scalars['String']['output']>;
-  title?: Maybe<Scalars['String']['output']>;
-  updatedAt: Scalars['AWSDateTime']['output'];
-  userId: Scalars['ID']['output'];
+  notes?: Maybe<Scalars["String"]["output"]>;
+  notificationPreferences?: Maybe<Scalars["AWSJSON"]["output"]>;
+  operatingModel?: Maybe<Scalars["AWSJSON"]["output"]>;
+  operatingModelHistory: Array<Scalars["AWSJSON"]["output"]>;
+  pronouns?: Maybe<Scalars["String"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  theme?: Maybe<Scalars["String"]["output"]>;
+  timezone?: Maybe<Scalars["String"]["output"]>;
+  title?: Maybe<Scalars["String"]["output"]>;
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  userId: Scalars["ID"]["output"];
 };
 
 export type UserQuickAction = {
-  __typename?: 'UserQuickAction';
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  prompt: Scalars['String']['output'];
+  __typename?: "UserQuickAction";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  prompt: Scalars["String"]["output"];
   scope: QuickActionScope;
-  sortOrder: Scalars['Int']['output'];
-  tenantId: Scalars['ID']['output'];
-  title: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-  userId: Scalars['ID']['output'];
-  workspaceAgentId?: Maybe<Scalars['ID']['output']>;
+  sortOrder: Scalars["Int"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  title: Scalars["String"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  userId: Scalars["ID"]["output"];
+  workspaceAgentId?: Maybe<Scalars["ID"]["output"]>;
 };
 
 export enum WakeupRequestStatus {
-  Cancelled = 'CANCELLED',
-  Claimed = 'CLAIMED',
-  Coalesced = 'COALESCED',
-  Completed = 'COMPLETED',
-  Failed = 'FAILED',
-  Queued = 'QUEUED',
-  Skipped = 'SKIPPED'
+  Cancelled = "CANCELLED",
+  Claimed = "CLAIMED",
+  Coalesced = "COALESCED",
+  Completed = "COMPLETED",
+  Failed = "FAILED",
+  Queued = "QUEUED",
+  Skipped = "SKIPPED",
 }
 
 export type Webhook = {
-  __typename?: 'Webhook';
-  agentId?: Maybe<Scalars['ID']['output']>;
-  config?: Maybe<Scalars['AWSJSON']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  createdById?: Maybe<Scalars['String']['output']>;
-  createdByType?: Maybe<Scalars['String']['output']>;
-  description?: Maybe<Scalars['String']['output']>;
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  invocationCount: Scalars['Int']['output'];
-  lastInvokedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  name: Scalars['String']['output'];
-  prompt?: Maybe<Scalars['String']['output']>;
-  rateLimit?: Maybe<Scalars['Int']['output']>;
-  routineId?: Maybe<Scalars['ID']['output']>;
-  targetType: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  token: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
+  __typename?: "Webhook";
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  config?: Maybe<Scalars["AWSJSON"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  createdById?: Maybe<Scalars["String"]["output"]>;
+  createdByType?: Maybe<Scalars["String"]["output"]>;
+  description?: Maybe<Scalars["String"]["output"]>;
+  enabled: Scalars["Boolean"]["output"];
+  id: Scalars["ID"]["output"];
+  invocationCount: Scalars["Int"]["output"];
+  lastInvokedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  name: Scalars["String"]["output"];
+  prompt?: Maybe<Scalars["String"]["output"]>;
+  rateLimit?: Maybe<Scalars["Int"]["output"]>;
+  routineId?: Maybe<Scalars["ID"]["output"]>;
+  targetType: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  token: Scalars["String"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export type WikiCompileJob = {
-  __typename?: 'WikiCompileJob';
-  attempt: Scalars['Int']['output'];
-  claimedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  dedupeKey: Scalars['String']['output'];
-  error?: Maybe<Scalars['String']['output']>;
-  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  id: Scalars['ID']['output'];
-  metrics?: Maybe<Scalars['AWSJSON']['output']>;
+  __typename?: "WikiCompileJob";
+  attempt: Scalars["Int"]["output"];
+  claimedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  dedupeKey: Scalars["String"]["output"];
+  error?: Maybe<Scalars["String"]["output"]>;
+  finishedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  id: Scalars["ID"]["output"];
+  metrics?: Maybe<Scalars["AWSJSON"]["output"]>;
   /** @deprecated Use userId */
-  ownerId: Scalars['ID']['output'];
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  trigger: Scalars['String']['output'];
-  userId: Scalars['ID']['output'];
+  ownerId: Scalars["ID"]["output"];
+  startedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  status: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  trigger: Scalars["String"]["output"];
+  userId: Scalars["ID"]["output"];
 };
 
 export type WikiGraph = {
-  __typename?: 'WikiGraph';
+  __typename?: "WikiGraph";
   edges: Array<WikiGraphEdge>;
   nodes: Array<WikiGraphNode>;
 };
 
 export type WikiGraphEdge = {
-  __typename?: 'WikiGraphEdge';
-  label: Scalars['String']['output'];
-  source: Scalars['ID']['output'];
-  target: Scalars['ID']['output'];
-  weight: Scalars['Float']['output'];
+  __typename?: "WikiGraphEdge";
+  label: Scalars["String"]["output"];
+  source: Scalars["ID"]["output"];
+  target: Scalars["ID"]["output"];
+  weight: Scalars["Float"]["output"];
 };
 
 /**
@@ -4385,15 +4172,15 @@ export type WikiGraphEdge = {
  * Wiki page type (`ENTITY`/`TOPIC`/`DECISION`) lives in `entityType`.
  */
 export type WikiGraphNode = {
-  __typename?: 'WikiGraphNode';
-  edgeCount: Scalars['Int']['output'];
+  __typename?: "WikiGraphNode";
+  edgeCount: Scalars["Int"]["output"];
   entityType: WikiPageType;
-  id: Scalars['ID']['output'];
-  label: Scalars['String']['output'];
-  latestThreadId?: Maybe<Scalars['String']['output']>;
-  slug: Scalars['String']['output'];
-  strategy?: Maybe<Scalars['String']['output']>;
-  type: Scalars['String']['output'];
+  id: Scalars["ID"]["output"];
+  label: Scalars["String"]["output"];
+  latestThreadId?: Maybe<Scalars["String"]["output"]>;
+  slug: Scalars["String"]["output"];
+  strategy?: Maybe<Scalars["String"]["output"]>;
+  type: Scalars["String"]["output"];
 };
 
 /**
@@ -4404,31 +4191,31 @@ export type WikiGraphNode = {
  * for the terminal compile the ingest enqueues.
  */
 export type WikiJournalImportDispatch = {
-  __typename?: 'WikiJournalImportDispatch';
-  accountId: Scalars['ID']['output'];
+  __typename?: "WikiJournalImportDispatch";
+  accountId: Scalars["ID"]["output"];
   /** @deprecated Use userId */
-  agentId?: Maybe<Scalars['ID']['output']>;
-  dispatched: Scalars['Boolean']['output'];
-  dispatchedAt: Scalars['AWSDateTime']['output'];
-  error?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  userId: Scalars['ID']['output'];
+  agentId?: Maybe<Scalars["ID"]["output"]>;
+  dispatched: Scalars["Boolean"]["output"];
+  dispatchedAt: Scalars["AWSDateTime"]["output"];
+  error?: Maybe<Scalars["String"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  userId: Scalars["ID"]["output"];
 };
 
 export type WikiPage = {
-  __typename?: 'WikiPage';
-  aliases: Array<Scalars['String']['output']>;
-  bodyMd?: Maybe<Scalars['String']['output']>;
+  __typename?: "WikiPage";
+  aliases: Array<Scalars["String"]["output"]>;
+  bodyMd?: Maybe<Scalars["String"]["output"]>;
   /**
    * Pages that were promoted out of this page's sections — the reverse of
    * `parent`. Empty for pages that have never had a child promoted.
    */
   children: Array<WikiPage>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  lastCompiledAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  lastCompiledAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   /** @deprecated Use userId */
-  ownerId: Scalars['ID']['output'];
+  ownerId: Scalars["ID"]["output"];
   /**
    * Parent hub when this page was promoted from a section on another page.
    * Null for top-level pages. Reads `wiki_pages.parent_page_id`.
@@ -4447,47 +4234,45 @@ export type WikiPage = {
    */
   sectionChildren: Array<WikiPage>;
   sections: Array<WikiPageSection>;
-  slug: Scalars['String']['output'];
+  slug: Scalars["String"]["output"];
   /**
    * Distinct memory_units (Hindsight records) that source at least one section
    * on this page. Counts through `wiki_section_sources`. Hit on detail screens
    * only — list screens must NOT request this (N+1 risk).
    */
-  sourceMemoryCount: Scalars['Int']['output'];
+  sourceMemoryCount: Scalars["Int"]["output"];
   /**
    * Up to `limit` memory_unit ids that source sections on this page, ordered
    * by most recently-cited. Server-side capped at 50. Pairs with
    * `MemoryRecord` drill-in so a page's "Based on N memories" badge can
    * resolve to the actual records.
    */
-  sourceMemoryIds: Array<Scalars['ID']['output']>;
-  status: Scalars['String']['output'];
-  summary?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  title: Scalars['String']['output'];
+  sourceMemoryIds: Array<Scalars["ID"]["output"]>;
+  status: Scalars["String"]["output"];
+  summary?: Maybe<Scalars["String"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  title: Scalars["String"]["output"];
   type: WikiPageType;
-  updatedAt: Scalars['AWSDateTime']['output'];
-  userId: Scalars['ID']['output'];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  userId: Scalars["ID"]["output"];
 };
-
 
 export type WikiPageSectionChildrenArgs = {
-  sectionSlug: Scalars['String']['input'];
+  sectionSlug: Scalars["String"]["input"];
 };
 
-
 export type WikiPageSourceMemoryIdsArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
 };
 
 export type WikiPageSection = {
-  __typename?: 'WikiPageSection';
-  bodyMd: Scalars['String']['output'];
-  heading: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  lastSourceAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  position: Scalars['Int']['output'];
-  sectionSlug: Scalars['String']['output'];
+  __typename?: "WikiPageSection";
+  bodyMd: Scalars["String"]["output"];
+  heading: Scalars["String"]["output"];
+  id: Scalars["ID"]["output"];
+  lastSourceAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  position: Scalars["Int"]["output"];
+  sectionSlug: Scalars["String"]["output"];
 };
 
 /**
@@ -4497,9 +4282,9 @@ export type WikiPageSection = {
  * `userId`. See .prds/compounding-memory-scoping.md.
  */
 export enum WikiPageType {
-  Decision = 'DECISION',
-  Entity = 'ENTITY',
-  Topic = 'TOPIC'
+  Decision = "DECISION",
+  Entity = "ENTITY",
+  Topic = "TOPIC",
 }
 
 /**
@@ -4508,206 +4293,1885 @@ export enum WikiPageType {
  * parent has a section in which `aggregation.promoted_page_id` points back.
  */
 export type WikiPromotedFromSection = {
-  __typename?: 'WikiPromotedFromSection';
+  __typename?: "WikiPromotedFromSection";
   parentPage: WikiPage;
-  sectionHeading: Scalars['String']['output'];
-  sectionSlug: Scalars['String']['output'];
+  sectionHeading: Scalars["String"]["output"];
+  sectionSlug: Scalars["String"]["output"];
 };
 
 export type WikiResetCursorResult = {
-  __typename?: 'WikiResetCursorResult';
-  cursorCleared: Scalars['Boolean']['output'];
+  __typename?: "WikiResetCursorResult";
+  cursorCleared: Scalars["Boolean"]["output"];
   /** @deprecated Use userId */
-  ownerId: Scalars['ID']['output'];
-  pagesArchived: Scalars['Int']['output'];
-  tenantId: Scalars['ID']['output'];
-  userId: Scalars['ID']['output'];
+  ownerId: Scalars["ID"]["output"];
+  pagesArchived: Scalars["Int"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  userId: Scalars["ID"]["output"];
 };
 
 export type WikiSearchResult = {
-  __typename?: 'WikiSearchResult';
-  matchedAlias?: Maybe<Scalars['String']['output']>;
+  __typename?: "WikiSearchResult";
+  matchedAlias?: Maybe<Scalars["String"]["output"]>;
   page: WikiPage;
-  score: Scalars['Float']['output'];
+  score: Scalars["Float"]["output"];
 };
 
 export enum WorkspaceReviewKind {
-  Paired = 'PAIRED',
-  System = 'SYSTEM',
-  Unrouted = 'UNROUTED'
+  Paired = "PAIRED",
+  System = "SYSTEM",
+  Unrouted = "UNROUTED",
 }
 
 export type CliEvalRunsQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-  agentId?: InputMaybe<Scalars['ID']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
+  tenantId: Scalars["ID"]["input"];
+  agentId?: InputMaybe<Scalars["ID"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  offset?: InputMaybe<Scalars["Int"]["input"]>;
 }>;
 
-
-export type CliEvalRunsQuery = { __typename?: 'Query', evalRuns: { __typename?: 'EvalRunsPage', totalCount: number, items: Array<{ __typename?: 'EvalRun', id: string, status: string, model?: string | null, categories: Array<string>, agentId?: string | null, agentName?: string | null, agentTemplateId?: string | null, agentTemplateName?: string | null, totalTests: number, passed: number, failed: number, passRate?: number | null, regression: boolean, costUsd?: number | null, errorMessage?: string | null, startedAt?: any | null, completedAt?: any | null, createdAt: any }> } };
+export type CliEvalRunsQuery = {
+  __typename?: "Query";
+  evalRuns: {
+    __typename?: "EvalRunsPage";
+    totalCount: number;
+    items: Array<{
+      __typename?: "EvalRun";
+      id: string;
+      status: string;
+      model?: string | null;
+      categories: Array<string>;
+      agentId?: string | null;
+      agentName?: string | null;
+      agentTemplateId?: string | null;
+      agentTemplateName?: string | null;
+      totalTests: number;
+      passed: number;
+      failed: number;
+      passRate?: number | null;
+      regression: boolean;
+      costUsd?: number | null;
+      errorMessage?: string | null;
+      startedAt?: any | null;
+      completedAt?: any | null;
+      createdAt: any;
+    }>;
+  };
+};
 
 export type CliEvalRunQueryVariables = Exact<{
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 }>;
 
-
-export type CliEvalRunQuery = { __typename?: 'Query', evalRun?: { __typename?: 'EvalRun', id: string, status: string, model?: string | null, categories: Array<string>, agentId?: string | null, agentName?: string | null, agentTemplateId?: string | null, agentTemplateName?: string | null, totalTests: number, passed: number, failed: number, passRate?: number | null, regression: boolean, costUsd?: number | null, errorMessage?: string | null, startedAt?: any | null, completedAt?: any | null, createdAt: any } | null };
+export type CliEvalRunQuery = {
+  __typename?: "Query";
+  evalRun?: {
+    __typename?: "EvalRun";
+    id: string;
+    status: string;
+    model?: string | null;
+    categories: Array<string>;
+    agentId?: string | null;
+    agentName?: string | null;
+    agentTemplateId?: string | null;
+    agentTemplateName?: string | null;
+    totalTests: number;
+    passed: number;
+    failed: number;
+    passRate?: number | null;
+    regression: boolean;
+    costUsd?: number | null;
+    errorMessage?: string | null;
+    startedAt?: any | null;
+    completedAt?: any | null;
+    createdAt: any;
+  } | null;
+};
 
 export type CliEvalRunResultsQueryVariables = Exact<{
-  runId: Scalars['ID']['input'];
+  runId: Scalars["ID"]["input"];
 }>;
 
-
-export type CliEvalRunResultsQuery = { __typename?: 'Query', evalRunResults: Array<{ __typename?: 'EvalResult', id: string, testCaseId?: string | null, testCaseName?: string | null, category?: string | null, status: string, score?: number | null, durationMs?: number | null, agentSessionId?: string | null, input?: string | null, expected?: string | null, actualOutput?: string | null, evaluatorResults: any, assertions: any, errorMessage?: string | null, createdAt: any }> };
+export type CliEvalRunResultsQuery = {
+  __typename?: "Query";
+  evalRunResults: Array<{
+    __typename?: "EvalResult";
+    id: string;
+    testCaseId?: string | null;
+    testCaseName?: string | null;
+    category?: string | null;
+    status: string;
+    score?: number | null;
+    durationMs?: number | null;
+    agentSessionId?: string | null;
+    input?: string | null;
+    expected?: string | null;
+    actualOutput?: string | null;
+    evaluatorResults: any;
+    assertions: any;
+    errorMessage?: string | null;
+    createdAt: any;
+  }>;
+};
 
 export type CliEvalTestCasesQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-  category?: InputMaybe<Scalars['String']['input']>;
-  search?: InputMaybe<Scalars['String']['input']>;
+  tenantId: Scalars["ID"]["input"];
+  category?: InputMaybe<Scalars["String"]["input"]>;
+  search?: InputMaybe<Scalars["String"]["input"]>;
 }>;
 
-
-export type CliEvalTestCasesQuery = { __typename?: 'Query', evalTestCases: Array<{ __typename?: 'EvalTestCase', id: string, name: string, category: string, query: string, systemPrompt?: string | null, agentTemplateId?: string | null, agentTemplateName?: string | null, agentcoreEvaluatorIds: Array<string>, tags: Array<string>, enabled: boolean, source: string, createdAt: any, updatedAt: any }> };
+export type CliEvalTestCasesQuery = {
+  __typename?: "Query";
+  evalTestCases: Array<{
+    __typename?: "EvalTestCase";
+    id: string;
+    name: string;
+    category: string;
+    query: string;
+    systemPrompt?: string | null;
+    agentTemplateId?: string | null;
+    agentTemplateName?: string | null;
+    agentcoreEvaluatorIds: Array<string>;
+    tags: Array<string>;
+    enabled: boolean;
+    source: string;
+    createdAt: any;
+    updatedAt: any;
+  }>;
+};
 
 export type CliEvalTestCaseQueryVariables = Exact<{
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 }>;
 
-
-export type CliEvalTestCaseQuery = { __typename?: 'Query', evalTestCase?: { __typename?: 'EvalTestCase', id: string, tenantId: string, name: string, category: string, query: string, systemPrompt?: string | null, agentTemplateId?: string | null, agentTemplateName?: string | null, assertions: any, agentcoreEvaluatorIds: Array<string>, tags: Array<string>, enabled: boolean, source: string, createdAt: any, updatedAt: any } | null };
+export type CliEvalTestCaseQuery = {
+  __typename?: "Query";
+  evalTestCase?: {
+    __typename?: "EvalTestCase";
+    id: string;
+    tenantId: string;
+    name: string;
+    category: string;
+    query: string;
+    systemPrompt?: string | null;
+    agentTemplateId?: string | null;
+    agentTemplateName?: string | null;
+    assertions: any;
+    agentcoreEvaluatorIds: Array<string>;
+    tags: Array<string>;
+    enabled: boolean;
+    source: string;
+    createdAt: any;
+    updatedAt: any;
+  } | null;
+};
 
 export type CliAgentTemplatesForEvalQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 }>;
 
-
-export type CliAgentTemplatesForEvalQuery = { __typename?: 'Query', agentTemplates: Array<{ __typename?: 'AgentTemplate', id: string, name: string, slug: string, model?: string | null, isPublished: boolean }> };
+export type CliAgentTemplatesForEvalQuery = {
+  __typename?: "Query";
+  agentTemplates: Array<{
+    __typename?: "AgentTemplate";
+    id: string;
+    name: string;
+    slug: string;
+    model?: string | null;
+    isPublished: boolean;
+  }>;
+};
 
 export type CliTenantBySlugQueryVariables = Exact<{
-  slug: Scalars['String']['input'];
+  slug: Scalars["String"]["input"];
 }>;
 
-
-export type CliTenantBySlugQuery = { __typename?: 'Query', tenantBySlug?: { __typename?: 'Tenant', id: string, slug: string, name: string } | null };
+export type CliTenantBySlugQuery = {
+  __typename?: "Query";
+  tenantBySlug?: {
+    __typename?: "Tenant";
+    id: string;
+    slug: string;
+    name: string;
+  } | null;
+};
 
 export type CliStartEvalRunMutationVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
   input: StartEvalRunInput;
 }>;
 
-
-export type CliStartEvalRunMutation = { __typename?: 'Mutation', startEvalRun: { __typename?: 'EvalRun', id: string, status: string, model?: string | null, categories: Array<string>, agentTemplateId?: string | null, agentTemplateName?: string | null, totalTests: number, createdAt: any } };
+export type CliStartEvalRunMutation = {
+  __typename?: "Mutation";
+  startEvalRun: {
+    __typename?: "EvalRun";
+    id: string;
+    status: string;
+    model?: string | null;
+    categories: Array<string>;
+    agentTemplateId?: string | null;
+    agentTemplateName?: string | null;
+    totalTests: number;
+    createdAt: any;
+  };
+};
 
 export type CliCancelEvalRunMutationVariables = Exact<{
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 }>;
 
-
-export type CliCancelEvalRunMutation = { __typename?: 'Mutation', cancelEvalRun: { __typename?: 'EvalRun', id: string, status: string, completedAt?: any | null } };
+export type CliCancelEvalRunMutation = {
+  __typename?: "Mutation";
+  cancelEvalRun: {
+    __typename?: "EvalRun";
+    id: string;
+    status: string;
+    completedAt?: any | null;
+  };
+};
 
 export type CliDeleteEvalRunMutationVariables = Exact<{
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 }>;
 
-
-export type CliDeleteEvalRunMutation = { __typename?: 'Mutation', deleteEvalRun: boolean };
+export type CliDeleteEvalRunMutation = {
+  __typename?: "Mutation";
+  deleteEvalRun: boolean;
+};
 
 export type CliCreateEvalTestCaseMutationVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
   input: CreateEvalTestCaseInput;
 }>;
 
-
-export type CliCreateEvalTestCaseMutation = { __typename?: 'Mutation', createEvalTestCase: { __typename?: 'EvalTestCase', id: string, name: string, category: string } };
+export type CliCreateEvalTestCaseMutation = {
+  __typename?: "Mutation";
+  createEvalTestCase: {
+    __typename?: "EvalTestCase";
+    id: string;
+    name: string;
+    category: string;
+  };
+};
 
 export type CliUpdateEvalTestCaseMutationVariables = Exact<{
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
   input: UpdateEvalTestCaseInput;
 }>;
 
-
-export type CliUpdateEvalTestCaseMutation = { __typename?: 'Mutation', updateEvalTestCase: { __typename?: 'EvalTestCase', id: string, name: string, category: string, enabled: boolean } };
+export type CliUpdateEvalTestCaseMutation = {
+  __typename?: "Mutation";
+  updateEvalTestCase: {
+    __typename?: "EvalTestCase";
+    id: string;
+    name: string;
+    category: string;
+    enabled: boolean;
+  };
+};
 
 export type CliDeleteEvalTestCaseMutationVariables = Exact<{
-  id: Scalars['ID']['input'];
+  id: Scalars["ID"]["input"];
 }>;
 
-
-export type CliDeleteEvalTestCaseMutation = { __typename?: 'Mutation', deleteEvalTestCase: boolean };
+export type CliDeleteEvalTestCaseMutation = {
+  __typename?: "Mutation";
+  deleteEvalTestCase: boolean;
+};
 
 export type CliSeedEvalTestCasesMutationVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-  categories?: InputMaybe<Array<Scalars['String']['input']> | Scalars['String']['input']>;
+  tenantId: Scalars["ID"]["input"];
+  categories?: InputMaybe<
+    Array<Scalars["String"]["input"]> | Scalars["String"]["input"]
+  >;
 }>;
 
+export type CliSeedEvalTestCasesMutation = {
+  __typename?: "Mutation";
+  seedEvalTestCases: number;
+};
 
-export type CliSeedEvalTestCasesMutation = { __typename?: 'Mutation', seedEvalTestCases: number };
+export type CliMeQueryVariables = Exact<{ [key: string]: never }>;
 
-export type CliMeQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type CliMeQuery = { __typename?: 'Query', me?: { __typename?: 'User', id: string, email: string, name?: string | null, tenantId: string } | null };
+export type CliMeQuery = {
+  __typename?: "Query";
+  me?: {
+    __typename?: "User";
+    id: string;
+    email: string;
+    name?: string | null;
+    tenantId: string;
+  } | null;
+};
 
 export type CliWikiTenantBySlugQueryVariables = Exact<{
-  slug: Scalars['String']['input'];
+  slug: Scalars["String"]["input"];
 }>;
 
-
-export type CliWikiTenantBySlugQuery = { __typename?: 'Query', tenantBySlug?: { __typename?: 'Tenant', id: string, slug: string, name: string } | null };
+export type CliWikiTenantBySlugQuery = {
+  __typename?: "Query";
+  tenantBySlug?: {
+    __typename?: "Tenant";
+    id: string;
+    slug: string;
+    name: string;
+  } | null;
+};
 
 export type CliAllTenantAgentsForWikiQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
+  tenantId: Scalars["ID"]["input"];
 }>;
 
-
-export type CliAllTenantAgentsForWikiQuery = { __typename?: 'Query', allTenantAgents: Array<{ __typename?: 'Agent', id: string, name: string, slug?: string | null, type: AgentType, status: AgentStatus }> };
+export type CliAllTenantAgentsForWikiQuery = {
+  __typename?: "Query";
+  allTenantAgents: Array<{
+    __typename?: "Agent";
+    id: string;
+    name: string;
+    slug?: string | null;
+    type: AgentType;
+    status: AgentStatus;
+  }>;
+};
 
 export type CliCompileWikiNowMutationVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-  ownerId: Scalars['ID']['input'];
-  modelId?: InputMaybe<Scalars['String']['input']>;
+  tenantId: Scalars["ID"]["input"];
+  ownerId: Scalars["ID"]["input"];
+  modelId?: InputMaybe<Scalars["String"]["input"]>;
 }>;
 
-
-export type CliCompileWikiNowMutation = { __typename?: 'Mutation', compileWikiNow: { __typename?: 'WikiCompileJob', id: string, tenantId: string, ownerId: string, status: string, trigger: string, dedupeKey: string, attempt: number, createdAt: any } };
+export type CliCompileWikiNowMutation = {
+  __typename?: "Mutation";
+  compileWikiNow: {
+    __typename?: "WikiCompileJob";
+    id: string;
+    tenantId: string;
+    ownerId: string;
+    status: string;
+    trigger: string;
+    dedupeKey: string;
+    attempt: number;
+    createdAt: any;
+  };
+};
 
 export type CliResetWikiCursorMutationVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-  ownerId: Scalars['ID']['input'];
-  force?: InputMaybe<Scalars['Boolean']['input']>;
+  tenantId: Scalars["ID"]["input"];
+  ownerId: Scalars["ID"]["input"];
+  force?: InputMaybe<Scalars["Boolean"]["input"]>;
 }>;
 
-
-export type CliResetWikiCursorMutation = { __typename?: 'Mutation', resetWikiCursor: { __typename?: 'WikiResetCursorResult', tenantId: string, ownerId: string, cursorCleared: boolean, pagesArchived: number } };
+export type CliResetWikiCursorMutation = {
+  __typename?: "Mutation";
+  resetWikiCursor: {
+    __typename?: "WikiResetCursorResult";
+    tenantId: string;
+    ownerId: string;
+    cursorCleared: boolean;
+    pagesArchived: number;
+  };
+};
 
 export type CliWikiCompileJobsQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-  ownerId?: InputMaybe<Scalars['ID']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
+  tenantId: Scalars["ID"]["input"];
+  ownerId?: InputMaybe<Scalars["ID"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
 }>;
 
+export type CliWikiCompileJobsQuery = {
+  __typename?: "Query";
+  wikiCompileJobs: Array<{
+    __typename?: "WikiCompileJob";
+    id: string;
+    tenantId: string;
+    ownerId: string;
+    status: string;
+    trigger: string;
+    dedupeKey: string;
+    attempt: number;
+    claimedAt?: any | null;
+    startedAt?: any | null;
+    finishedAt?: any | null;
+    error?: string | null;
+    metrics?: any | null;
+    createdAt: any;
+  }>;
+};
 
-export type CliWikiCompileJobsQuery = { __typename?: 'Query', wikiCompileJobs: Array<{ __typename?: 'WikiCompileJob', id: string, tenantId: string, ownerId: string, status: string, trigger: string, dedupeKey: string, attempt: number, claimedAt?: any | null, startedAt?: any | null, finishedAt?: any | null, error?: string | null, metrics?: any | null, createdAt: any }> };
-
-
-export const CliEvalRunsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliEvalRuns"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"offset"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalRuns"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}},{"kind":"Argument","name":{"kind":"Name","value":"offset"},"value":{"kind":"Variable","name":{"kind":"Name","value":"offset"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"totalCount"}},{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"categories"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"agentName"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateId"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateName"}},{"kind":"Field","name":{"kind":"Name","value":"totalTests"}},{"kind":"Field","name":{"kind":"Name","value":"passed"}},{"kind":"Field","name":{"kind":"Name","value":"failed"}},{"kind":"Field","name":{"kind":"Name","value":"passRate"}},{"kind":"Field","name":{"kind":"Name","value":"regression"}},{"kind":"Field","name":{"kind":"Name","value":"costUsd"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<CliEvalRunsQuery, CliEvalRunsQueryVariables>;
-export const CliEvalRunDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliEvalRun"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"categories"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"agentName"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateId"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateName"}},{"kind":"Field","name":{"kind":"Name","value":"totalTests"}},{"kind":"Field","name":{"kind":"Name","value":"passed"}},{"kind":"Field","name":{"kind":"Name","value":"failed"}},{"kind":"Field","name":{"kind":"Name","value":"passRate"}},{"kind":"Field","name":{"kind":"Name","value":"regression"}},{"kind":"Field","name":{"kind":"Name","value":"costUsd"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliEvalRunQuery, CliEvalRunQueryVariables>;
-export const CliEvalRunResultsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliEvalRunResults"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"runId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalRunResults"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"runId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"runId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"testCaseId"}},{"kind":"Field","name":{"kind":"Name","value":"testCaseName"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"score"}},{"kind":"Field","name":{"kind":"Name","value":"durationMs"}},{"kind":"Field","name":{"kind":"Name","value":"agentSessionId"}},{"kind":"Field","name":{"kind":"Name","value":"input"}},{"kind":"Field","name":{"kind":"Name","value":"expected"}},{"kind":"Field","name":{"kind":"Name","value":"actualOutput"}},{"kind":"Field","name":{"kind":"Name","value":"evaluatorResults"}},{"kind":"Field","name":{"kind":"Name","value":"assertions"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliEvalRunResultsQuery, CliEvalRunResultsQueryVariables>;
-export const CliEvalTestCasesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliEvalTestCases"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"category"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"search"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalTestCases"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"category"},"value":{"kind":"Variable","name":{"kind":"Name","value":"category"}}},{"kind":"Argument","name":{"kind":"Name","value":"search"},"value":{"kind":"Variable","name":{"kind":"Name","value":"search"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"query"}},{"kind":"Field","name":{"kind":"Name","value":"systemPrompt"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateId"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateName"}},{"kind":"Field","name":{"kind":"Name","value":"agentcoreEvaluatorIds"}},{"kind":"Field","name":{"kind":"Name","value":"tags"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CliEvalTestCasesQuery, CliEvalTestCasesQueryVariables>;
-export const CliEvalTestCaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliEvalTestCase"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"evalTestCase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"query"}},{"kind":"Field","name":{"kind":"Name","value":"systemPrompt"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateId"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateName"}},{"kind":"Field","name":{"kind":"Name","value":"assertions"}},{"kind":"Field","name":{"kind":"Name","value":"agentcoreEvaluatorIds"}},{"kind":"Field","name":{"kind":"Name","value":"tags"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CliEvalTestCaseQuery, CliEvalTestCaseQueryVariables>;
-export const CliAgentTemplatesForEvalDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliAgentTemplatesForEval"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"agentTemplates"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"isPublished"}}]}}]}}]} as unknown as DocumentNode<CliAgentTemplatesForEvalQuery, CliAgentTemplatesForEvalQueryVariables>;
-export const CliTenantBySlugDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliTenantBySlug"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantBySlug"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]} as unknown as DocumentNode<CliTenantBySlugQuery, CliTenantBySlugQueryVariables>;
-export const CliStartEvalRunDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliStartEvalRun"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"StartEvalRunInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"startEvalRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"categories"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateId"}},{"kind":"Field","name":{"kind":"Name","value":"agentTemplateName"}},{"kind":"Field","name":{"kind":"Name","value":"totalTests"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliStartEvalRunMutation, CliStartEvalRunMutationVariables>;
-export const CliCancelEvalRunDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliCancelEvalRun"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cancelEvalRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"completedAt"}}]}}]}}]} as unknown as DocumentNode<CliCancelEvalRunMutation, CliCancelEvalRunMutationVariables>;
-export const CliDeleteEvalRunDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliDeleteEvalRun"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteEvalRun"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<CliDeleteEvalRunMutation, CliDeleteEvalRunMutationVariables>;
-export const CliCreateEvalTestCaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliCreateEvalTestCase"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateEvalTestCaseInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createEvalTestCase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"category"}}]}}]}}]} as unknown as DocumentNode<CliCreateEvalTestCaseMutation, CliCreateEvalTestCaseMutationVariables>;
-export const CliUpdateEvalTestCaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliUpdateEvalTestCase"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateEvalTestCaseInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateEvalTestCase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}}]}}]}}]} as unknown as DocumentNode<CliUpdateEvalTestCaseMutation, CliUpdateEvalTestCaseMutationVariables>;
-export const CliDeleteEvalTestCaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliDeleteEvalTestCase"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteEvalTestCase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<CliDeleteEvalTestCaseMutation, CliDeleteEvalTestCaseMutationVariables>;
-export const CliSeedEvalTestCasesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliSeedEvalTestCases"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"categories"}},"type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"seedEvalTestCases"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"categories"},"value":{"kind":"Variable","name":{"kind":"Name","value":"categories"}}}]}]}}]} as unknown as DocumentNode<CliSeedEvalTestCasesMutation, CliSeedEvalTestCasesMutationVariables>;
-export const CliMeDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliMe"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"me"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"email"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}}]}}]}}]} as unknown as DocumentNode<CliMeQuery, CliMeQueryVariables>;
-export const CliWikiTenantBySlugDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliWikiTenantBySlug"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantBySlug"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]} as unknown as DocumentNode<CliWikiTenantBySlugQuery, CliWikiTenantBySlugQueryVariables>;
-export const CliAllTenantAgentsForWikiDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliAllTenantAgentsForWiki"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"allTenantAgents"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"includeSystem"},"value":{"kind":"BooleanValue","value":false}},{"kind":"Argument","name":{"kind":"Name","value":"includeSubAgents"},"value":{"kind":"BooleanValue","value":false}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}}]}}]} as unknown as DocumentNode<CliAllTenantAgentsForWikiQuery, CliAllTenantAgentsForWikiQueryVariables>;
-export const CliCompileWikiNowDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliCompileWikiNow"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"ownerId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"modelId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"compileWikiNow"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"ownerId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"ownerId"}}},{"kind":"Argument","name":{"kind":"Name","value":"modelId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"modelId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"trigger"}},{"kind":"Field","name":{"kind":"Name","value":"dedupeKey"}},{"kind":"Field","name":{"kind":"Name","value":"attempt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliCompileWikiNowMutation, CliCompileWikiNowMutationVariables>;
-export const CliResetWikiCursorDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliResetWikiCursor"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"ownerId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"force"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"resetWikiCursor"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"ownerId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"ownerId"}}},{"kind":"Argument","name":{"kind":"Name","value":"force"},"value":{"kind":"Variable","name":{"kind":"Name","value":"force"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerId"}},{"kind":"Field","name":{"kind":"Name","value":"cursorCleared"}},{"kind":"Field","name":{"kind":"Name","value":"pagesArchived"}}]}}]}}]} as unknown as DocumentNode<CliResetWikiCursorMutation, CliResetWikiCursorMutationVariables>;
-export const CliWikiCompileJobsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliWikiCompileJobs"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"ownerId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"wikiCompileJobs"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"ownerId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"ownerId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"ownerId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"trigger"}},{"kind":"Field","name":{"kind":"Name","value":"dedupeKey"}},{"kind":"Field","name":{"kind":"Name","value":"attempt"}},{"kind":"Field","name":{"kind":"Name","value":"claimedAt"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"metrics"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliWikiCompileJobsQuery, CliWikiCompileJobsQueryVariables>;
+export const CliEvalRunsDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "CliEvalRuns" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "agentId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "limit" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "offset" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "evalRuns" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "agentId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "agentId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "limit" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "limit" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "offset" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "offset" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "totalCount" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "items" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "status" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "model" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "categories" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "agentId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "agentName" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "agentTemplateId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "agentTemplateName" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "totalTests" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "passed" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "failed" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "passRate" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "regression" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "costUsd" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "errorMessage" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "startedAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "completedAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "createdAt" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<CliEvalRunsQuery, CliEvalRunsQueryVariables>;
+export const CliEvalRunDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "CliEvalRun" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "evalRun" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "model" } },
+                { kind: "Field", name: { kind: "Name", value: "categories" } },
+                { kind: "Field", name: { kind: "Name", value: "agentId" } },
+                { kind: "Field", name: { kind: "Name", value: "agentName" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "agentTemplateId" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "agentTemplateName" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "totalTests" } },
+                { kind: "Field", name: { kind: "Name", value: "passed" } },
+                { kind: "Field", name: { kind: "Name", value: "failed" } },
+                { kind: "Field", name: { kind: "Name", value: "passRate" } },
+                { kind: "Field", name: { kind: "Name", value: "regression" } },
+                { kind: "Field", name: { kind: "Name", value: "costUsd" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "errorMessage" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "startedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "completedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<CliEvalRunQuery, CliEvalRunQueryVariables>;
+export const CliEvalRunResultsDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "CliEvalRunResults" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "runId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "evalRunResults" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "runId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "runId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "testCaseId" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "testCaseName" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "category" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "score" } },
+                { kind: "Field", name: { kind: "Name", value: "durationMs" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "agentSessionId" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "input" } },
+                { kind: "Field", name: { kind: "Name", value: "expected" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "actualOutput" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "evaluatorResults" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "assertions" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "errorMessage" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CliEvalRunResultsQuery,
+  CliEvalRunResultsQueryVariables
+>;
+export const CliEvalTestCasesDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "CliEvalTestCases" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "category" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "search" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "evalTestCases" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "category" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "category" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "search" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "search" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "category" } },
+                { kind: "Field", name: { kind: "Name", value: "query" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "systemPrompt" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "agentTemplateId" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "agentTemplateName" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "agentcoreEvaluatorIds" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "tags" } },
+                { kind: "Field", name: { kind: "Name", value: "enabled" } },
+                { kind: "Field", name: { kind: "Name", value: "source" } },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CliEvalTestCasesQuery,
+  CliEvalTestCasesQueryVariables
+>;
+export const CliEvalTestCaseDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "CliEvalTestCase" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "evalTestCase" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "tenantId" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "category" } },
+                { kind: "Field", name: { kind: "Name", value: "query" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "systemPrompt" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "agentTemplateId" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "agentTemplateName" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "assertions" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "agentcoreEvaluatorIds" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "tags" } },
+                { kind: "Field", name: { kind: "Name", value: "enabled" } },
+                { kind: "Field", name: { kind: "Name", value: "source" } },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CliEvalTestCaseQuery,
+  CliEvalTestCaseQueryVariables
+>;
+export const CliAgentTemplatesForEvalDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "CliAgentTemplatesForEval" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "agentTemplates" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "model" } },
+                { kind: "Field", name: { kind: "Name", value: "isPublished" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CliAgentTemplatesForEvalQuery,
+  CliAgentTemplatesForEvalQueryVariables
+>;
+export const CliTenantBySlugDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "CliTenantBySlug" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "slug" } },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "String" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "tenantBySlug" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "slug" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "slug" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CliTenantBySlugQuery,
+  CliTenantBySlugQueryVariables
+>;
+export const CliStartEvalRunDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "CliStartEvalRun" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "StartEvalRunInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "startEvalRun" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "model" } },
+                { kind: "Field", name: { kind: "Name", value: "categories" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "agentTemplateId" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "agentTemplateName" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "totalTests" } },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CliStartEvalRunMutation,
+  CliStartEvalRunMutationVariables
+>;
+export const CliCancelEvalRunDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "CliCancelEvalRun" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "cancelEvalRun" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "completedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CliCancelEvalRunMutation,
+  CliCancelEvalRunMutationVariables
+>;
+export const CliDeleteEvalRunDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "CliDeleteEvalRun" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "deleteEvalRun" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CliDeleteEvalRunMutation,
+  CliDeleteEvalRunMutationVariables
+>;
+export const CliCreateEvalTestCaseDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "CliCreateEvalTestCase" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "CreateEvalTestCaseInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "createEvalTestCase" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "category" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CliCreateEvalTestCaseMutation,
+  CliCreateEvalTestCaseMutationVariables
+>;
+export const CliUpdateEvalTestCaseDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "CliUpdateEvalTestCase" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "UpdateEvalTestCaseInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "updateEvalTestCase" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "category" } },
+                { kind: "Field", name: { kind: "Name", value: "enabled" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CliUpdateEvalTestCaseMutation,
+  CliUpdateEvalTestCaseMutationVariables
+>;
+export const CliDeleteEvalTestCaseDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "CliDeleteEvalTestCase" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "deleteEvalTestCase" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CliDeleteEvalTestCaseMutation,
+  CliDeleteEvalTestCaseMutationVariables
+>;
+export const CliSeedEvalTestCasesDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "CliSeedEvalTestCases" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "categories" },
+          },
+          type: {
+            kind: "ListType",
+            type: {
+              kind: "NonNullType",
+              type: {
+                kind: "NamedType",
+                name: { kind: "Name", value: "String" },
+              },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "seedEvalTestCases" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "categories" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "categories" },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CliSeedEvalTestCasesMutation,
+  CliSeedEvalTestCasesMutationVariables
+>;
+export const CliMeDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "CliMe" },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "me" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "email" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "tenantId" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<CliMeQuery, CliMeQueryVariables>;
+export const CliWikiTenantBySlugDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "CliWikiTenantBySlug" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "slug" } },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "String" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "tenantBySlug" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "slug" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "slug" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CliWikiTenantBySlugQuery,
+  CliWikiTenantBySlugQueryVariables
+>;
+export const CliAllTenantAgentsForWikiDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "CliAllTenantAgentsForWiki" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "allTenantAgents" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "includeSystem" },
+                value: { kind: "BooleanValue", value: false },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "includeSubAgents" },
+                value: { kind: "BooleanValue", value: false },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "type" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CliAllTenantAgentsForWikiQuery,
+  CliAllTenantAgentsForWikiQueryVariables
+>;
+export const CliCompileWikiNowDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "CliCompileWikiNow" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "ownerId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "modelId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "compileWikiNow" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "ownerId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "ownerId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "modelId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "modelId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "tenantId" } },
+                { kind: "Field", name: { kind: "Name", value: "ownerId" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "trigger" } },
+                { kind: "Field", name: { kind: "Name", value: "dedupeKey" } },
+                { kind: "Field", name: { kind: "Name", value: "attempt" } },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CliCompileWikiNowMutation,
+  CliCompileWikiNowMutationVariables
+>;
+export const CliResetWikiCursorDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "CliResetWikiCursor" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "ownerId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "force" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Boolean" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "resetWikiCursor" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "ownerId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "ownerId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "force" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "force" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "tenantId" } },
+                { kind: "Field", name: { kind: "Name", value: "ownerId" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "cursorCleared" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "pagesArchived" },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CliResetWikiCursorMutation,
+  CliResetWikiCursorMutationVariables
+>;
+export const CliWikiCompileJobsDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "CliWikiCompileJobs" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "ownerId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "limit" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Int" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "wikiCompileJobs" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "ownerId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "ownerId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "limit" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "limit" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "tenantId" } },
+                { kind: "Field", name: { kind: "Name", value: "ownerId" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "trigger" } },
+                { kind: "Field", name: { kind: "Name", value: "dedupeKey" } },
+                { kind: "Field", name: { kind: "Name", value: "attempt" } },
+                { kind: "Field", name: { kind: "Name", value: "claimedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "startedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "finishedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "error" } },
+                { kind: "Field", name: { kind: "Name", value: "metrics" } },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CliWikiCompileJobsQuery,
+  CliWikiCompileJobsQueryVariables
+>;

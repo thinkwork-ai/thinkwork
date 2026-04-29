@@ -95,6 +95,17 @@ export const agentTemplates = pgTable(
      * packages/api/src/lib/templates/send-email-config.ts.
      */
     send_email: jsonb("send_email").default(sql`'{"enabled": true}'::jsonb`),
+    /**
+     * Context Engine opt-in metadata for the query_context built-in tool.
+     * Shape: { enabled: true } | null. Null = the template does not register
+     * query_context for Strands/PI turns.
+     *
+     * Shape is validated at create/update mutation time by
+     * packages/api/src/lib/templates/context-engine-config.ts.
+     */
+    context_engine: jsonb("context_engine").default(
+      sql`'{"enabled": true}'::jsonb`,
+    ),
     is_published: boolean("is_published").notNull().default(true),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
