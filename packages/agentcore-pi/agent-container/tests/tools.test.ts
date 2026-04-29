@@ -69,7 +69,10 @@ vi.mock("@modelcontextprotocol/sdk/client/sse.js", () => ({
 }));
 
 import { buildExecuteCodeTool } from "../src/runtime/tools/execute-code.js";
-import { buildContextEngineTool } from "../src/runtime/tools/context-engine.js";
+import {
+  buildContextEngineTool,
+  buildContextEngineTools,
+} from "../src/runtime/tools/context-engine.js";
 import {
   buildHindsightTools,
   retainHindsightTurn,
@@ -222,6 +225,62 @@ describe("Pi runtime tools", () => {
       }),
     );
     expect(result.content[0]?.text).toBe("Found context");
+  });
+
+  it("registers split Context Engine tools for memory and wiki", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          result: {
+            content: [{ type: "text", text: "Memory reflection text" }],
+            structuredContent: { hits: [{ providerId: "memory" }] },
+          },
+        }),
+      ),
+    );
+    const tools = buildContextEngineTools({
+      context_engine_enabled: true,
+      thinkwork_api_url: "https://api.test",
+      thinkwork_api_secret: "secret",
+      tenant_id: "tenant-1",
+      user_id: "user-1",
+      assistant_id: "agent-1",
+    });
+
+    expect(tools.map((tool) => tool.name)).toEqual([
+      "query_context",
+      "query_memory_context",
+      "query_wiki_context",
+    ]);
+
+    const memoryTool = tools.find(
+      (tool) => tool.name === "query_memory_context",
+    );
+    const result = (await memoryTool?.execute("tool-1", {
+      query: "Smoke Tests 27 April 2026",
+    })) as { content: Array<{ text: string }>; details: unknown };
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.test/mcp/context-engine",
+      expect.objectContaining({
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "pi-query_memory_context",
+          method: "tools/call",
+          params: {
+            name: "query_memory_context",
+            arguments: {
+              query: "Smoke Tests 27 April 2026",
+              mode: "results",
+              scope: "auto",
+              depth: "quick",
+              limit: 10,
+            },
+          },
+        }),
+      }),
+    );
+    expect(result.content[0]?.text).toBe("Memory reflection text");
   });
 
   it("does not register query_context without the template runtime flag", () => {
