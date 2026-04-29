@@ -22,7 +22,11 @@ function enumValue<T extends string>(
     : fallback;
 }
 
-async function callContextEngine(payload: PiInvocationPayload, args: unknown) {
+async function callContextEngine(
+  payload: PiInvocationPayload,
+  toolName: "query_context" | "query_memory_context" | "query_wiki_context",
+  args: unknown,
+) {
   const endpoint = optionalString(payload.thinkwork_api_url);
   const secret = optionalString(payload.thinkwork_api_secret);
   const tenantId =
@@ -56,10 +60,10 @@ async function callContextEngine(payload: PiInvocationPayload, args: unknown) {
       },
       body: JSON.stringify({
         jsonrpc: "2.0",
-        id: "pi-query-context",
+        id: `pi-${toolName}`,
         method: "tools/call",
         params: {
-          name: "query_context",
+          name: toolName,
           arguments: args,
         },
       }),
@@ -90,6 +94,41 @@ function resultText(result: any): string {
 export function buildContextEngineTool(
   payload: PiInvocationPayload,
 ): AgentTool<any> | undefined {
+  return buildContextEngineToolByName(
+    payload,
+    "query_context",
+    "Query Context",
+    "Search Thinkwork Context Engine across fast default providers: wiki, workspace files, knowledge bases, and approved search-safe MCP tools. Use this first for ordinary context lookup; use query_memory_context only when the user explicitly asks for Hindsight Memory.",
+  );
+}
+
+export function buildContextEngineTools(
+  payload: PiInvocationPayload,
+): AgentTool<any>[] {
+  const tools = [
+    buildContextEngineTool(payload),
+    buildContextEngineToolByName(
+      payload,
+      "query_memory_context",
+      "Query Memory Context",
+      "Search only Thinkwork Hindsight Memory through Context Engine. Use this when the user specifically asks for long-term memory, Hindsight Memory, or a reflect-style memory synthesis.",
+    ),
+    buildContextEngineToolByName(
+      payload,
+      "query_wiki_context",
+      "Query Wiki Context",
+      "Search only Thinkwork Compounding Wiki pages through Context Engine. Use this for fast page, entity, topic, and decision lookup without waiting on Hindsight Memory.",
+    ),
+  ].filter((tool): tool is AgentTool<any> => Boolean(tool));
+  return tools;
+}
+
+function buildContextEngineToolByName(
+  payload: PiInvocationPayload,
+  name: "query_context" | "query_memory_context" | "query_wiki_context",
+  label: string,
+  description: string,
+): AgentTool<any> | undefined {
   if (!optionalBoolean(payload.context_engine_enabled)) return undefined;
 
   const endpoint = optionalString(payload.thinkwork_api_url);
@@ -97,10 +136,9 @@ export function buildContextEngineTool(
   if (!endpoint || !secret) return undefined;
 
   return {
-    name: "query_context",
-    label: "Query Context",
-    description:
-      "Search Thinkwork Context Engine across fast default providers: wiki, workspace files, knowledge bases, and approved search-safe MCP tools. Use this first for ordinary context lookup; use raw Hindsight Memory only when needed.",
+    name,
+    label,
+    description,
     parameters: Type.Object({
       query: Type.String({ description: "Question or topic to search for." }),
       mode: Type.Optional(
@@ -121,7 +159,7 @@ export function buildContextEngineTool(
     execute: async (_toolCallId, params) => {
       const input = paramsRecord(params);
       const query = String(input.query || "").trim();
-      if (!query) throw new Error("query_context requires query");
+      if (!query) throw new Error(`${name} requires query`);
       const args = {
         query,
         mode: enumValue(input.mode, ["results", "answer"] as const, "results"),
@@ -133,7 +171,7 @@ export function buildContextEngineTool(
         depth: enumValue(input.depth, ["quick", "deep"] as const, "quick"),
         limit: Math.max(1, Math.min(Number(input.limit ?? 10), 50)),
       };
-      const result = await callContextEngine(payload, args);
+      const result = await callContextEngine(payload, name, args);
       return {
         content: [{ type: "text", text: resultText(result) }],
         details: result.structuredContent ?? result,
