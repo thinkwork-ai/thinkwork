@@ -11,6 +11,7 @@ import {
   Wrench,
   Search,
   Mail,
+  BrainCircuit,
 } from "lucide-react";
 import { TenantSandboxStatusQuery } from "@/lib/graphql-queries";
 import { useTenant } from "@/context/TenantContext";
@@ -99,6 +100,15 @@ const CATALOG: CatalogEntry[] = [
     fixedProvider: "thinkwork-email",
   },
   {
+    slug: "context-engine",
+    name: "Context Engine",
+    description:
+      "Lets agents query Thinkwork Context Engine across memory, wiki, workspace files, knowledge bases, and approved search-safe MCP tools. Opt-in per agent template.",
+    providers: [],
+    kind: "policy-gated" as const,
+    fixedProvider: "thinkwork-context",
+  },
+  {
     slug: "web-search",
     name: "Web Search",
     description:
@@ -144,7 +154,10 @@ const columns: ColumnDef<Row>[] = [
       const p = row.original.fixedProvider ?? row.original.state?.provider;
       if (!p) return <span className="text-sm text-muted-foreground">—</span>;
       return (
-        <Badge variant="secondary" className="whitespace-nowrap text-xs font-mono">
+        <Badge
+          variant="secondary"
+          className="whitespace-nowrap text-xs font-mono"
+        >
           {p}
         </Badge>
       );
@@ -159,7 +172,7 @@ const columns: ColumnDef<Row>[] = [
       // from tenant policy + provisioning state, not from the
       // builtin-tools handler's per-provider row.
       if (row.original.kind === "policy-gated") {
-        if (row.original.slug === "browser_automation") {
+        if (row.original.slug !== "code-sandbox") {
           return (
             <div className="flex justify-center">
               <Badge variant="secondary" className="text-xs">
@@ -440,7 +453,9 @@ function ConfigureDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {row.slug === "agent-email-send" ? (
+            {row.slug === "context-engine" ? (
+              <BrainCircuit className="h-5 w-5" />
+            ) : row.slug === "agent-email-send" ? (
               <Mail className="h-5 w-5" />
             ) : (
               <Wrench className="h-5 w-5" />
@@ -610,6 +625,7 @@ function PolicyGatedInfoDialog({
   const sb = row.sandbox;
   const isSandbox = row.slug === "code-sandbox";
   const isEmail = row.slug === "agent-email-send";
+  const isContextEngine = row.slug === "context-engine";
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg">
@@ -631,9 +647,11 @@ function PolicyGatedInfoDialog({
             <p className="text-xs text-muted-foreground">
               {isSandbox
                 ? "Bedrock AgentCore Code Interpreter. One public + one internal-only interpreter are provisioned per tenant on first enrollment."
-                : isEmail
-                  ? "Thinkwork platform email sending uses the agent email channel and records reply tokens for bidirectional conversations."
-                  : "Bedrock AgentCore Browser sessions are controlled through Nova Act. Cost is recorded as separate Nova Act and AgentCore Browser events."}
+                : isContextEngine
+                  ? "Context Engine is provided by Thinkwork and resolves provider status for memory, wiki, workspace, knowledge bases, and approved MCP context tools at query time."
+                  : isEmail
+                    ? "Thinkwork platform email sending uses the agent email channel and records reply tokens for bidirectional conversations."
+                    : "Bedrock AgentCore Browser sessions are controlled through Nova Act. Cost is recorded as separate Nova Act and AgentCore Browser events."}
             </p>
           </div>
 
@@ -685,10 +703,19 @@ function PolicyGatedInfoDialog({
               ) : (
                 <>
                   Open any <b>Agent Template → Configuration</b> and toggle{" "}
-                  <code>{isEmail ? "send_email" : "browser_automation"}</code>.
-                  {isEmail
-                    ? " The agent email channel must also be enabled for the agent."
-                    : " Individual agent capability rows can override the template default."}
+                  <code>
+                    {isContextEngine
+                      ? "query_context"
+                      : isEmail
+                        ? "send_email"
+                        : "browser_automation"}
+                  </code>
+                  .
+                  {isContextEngine
+                    ? " Approved MCP context providers are managed from MCP Servers."
+                    : isEmail
+                      ? " The agent email channel must also be enabled for the agent."
+                      : " Individual agent capability rows can override the template default."}
                 </>
               )}
             </p>

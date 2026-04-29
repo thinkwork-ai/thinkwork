@@ -52,6 +52,7 @@ import {
   type TemplateSandboxConfig,
 } from "../lib/sandbox-preflight.js";
 import { validateTemplateBrowser } from "../lib/templates/browser-config.js";
+import { validateTemplateContextEngine } from "../lib/templates/context-engine-config.js";
 import { validateTemplateSendEmail } from "../lib/templates/send-email-config.js";
 import { validateTemplateWebSearch } from "../lib/templates/web-search-config.js";
 import { resolveWebSearchConfigFromSkills } from "../lib/web-search-config.js";
@@ -119,8 +120,9 @@ async function invokeAgentCore(
   }
 
   if (functionName) {
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({
       region: process.env.AWS_REGION || "us-east-1",
     });
@@ -294,6 +296,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       browser: agentTemplates.browser,
       web_search: agentTemplates.web_search,
       send_email: agentTemplates.send_email,
+      context_engine: agentTemplates.context_engine,
     })
     .from(agents)
     .leftJoin(agentTemplates, eq(agents.template_id, agentTemplates.id))
@@ -397,6 +400,17 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   if (!templateSendEmailResult.ok) {
     console.warn(
       `[wakeup-processor] Invalid template sendEmail config ignored for agent ${wakeup.agent_id}: ${templateSendEmailResult.error}`,
+    );
+  }
+  const templateContextEngineResult = validateTemplateContextEngine(
+    agent.context_engine,
+  );
+  const templateContextEngineEnabled = templateContextEngineResult.ok
+    ? templateContextEngineResult.value?.enabled === true
+    : false;
+  if (!templateContextEngineResult.ok) {
+    console.warn(
+      `[wakeup-processor] Invalid template contextEngine config ignored for agent ${wakeup.agent_id}: ${templateContextEngineResult.error}`,
     );
   }
 
@@ -622,6 +636,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           inboundBody: (payload?.body as string) || "",
         }
       : undefined;
+  const contextEngineEnabled =
+    templateContextEngineEnabled &&
+    !blockedTools.includes("query_context") &&
+    !blockedTools.includes("context_engine");
 
   const runtimeType = normalizeAgentRuntimeType(
     agent.runtime ?? agent.template_runtime,
@@ -810,12 +828,15 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
       if ((childCount?.count || 0) === 0) {
         try {
-          const { parseProcessTemplate } =
-            await import("../lib/orchestration/process-parser.js");
-          const { materializeProcess } =
-            await import("../lib/orchestration/process-materializer.js");
-          const { S3Client, GetObjectCommand } =
-            await import("@aws-sdk/client-s3");
+          const { parseProcessTemplate } = await import(
+            "../lib/orchestration/process-parser.js"
+          );
+          const { materializeProcess } = await import(
+            "../lib/orchestration/process-materializer.js"
+          );
+          const { S3Client, GetObjectCommand } = await import(
+            "@aws-sdk/client-s3"
+          );
 
           const s3 = new S3Client({});
           const skillCfg = skillRows.find(
@@ -1256,6 +1277,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       send_email_config: sendEmailConfig
         ? { ...sendEmailConfig, threadId: resolvedThreadId }
         : undefined,
+      context_engine_enabled: contextEngineEnabled || undefined,
       runtime_type: runtimeType,
       model: agent.model,
       skills: skillsConfig.length > 0 ? skillsConfig : undefined,
@@ -1727,6 +1749,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             send_email_config: sendEmailConfig
               ? { ...sendEmailConfig, threadId: resolvedThreadId }
               : undefined,
+            context_engine_enabled: contextEngineEnabled || undefined,
             runtime_type: runtimeType,
             model: agent.model,
             skills: skillsConfig.length > 0 ? skillsConfig : undefined,
@@ -1908,8 +1931,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     // Send push notification to user devices
     if (runThreadId) {
       try {
-        const { sendTurnCompletedPush } =
-          await import("../lib/push-notifications.js");
+        const { sendTurnCompletedPush } = await import(
+          "../lib/push-notifications.js"
+        );
         await sendTurnCompletedPush({
           threadId: runThreadId,
           tenantId: wakeup.tenant_id,

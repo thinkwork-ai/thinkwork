@@ -60,6 +60,7 @@ import {
 import { loadTenantBuiltinTools } from "../handlers/skills.js";
 import type { TemplateSandboxConfig } from "./sandbox-preflight.js";
 import { validateTemplateBrowser } from "./templates/browser-config.js";
+import { validateTemplateContextEngine } from "./templates/context-engine-config.js";
 import { validateTemplateSendEmail } from "./templates/send-email-config.js";
 import { validateTemplateWebSearch } from "./templates/web-search-config.js";
 import {
@@ -118,6 +119,7 @@ export interface AgentRuntimeConfig {
   blockedTools: string[];
   sandboxTemplate: TemplateSandboxConfig | null;
   browserAutomationEnabled: boolean;
+  contextEngineEnabled: boolean;
   /**
    * Internal `guardrails.id` of the resolved guardrail (template or
    * tenant-default) — used by callers that record `guardrail_blocks`
@@ -236,6 +238,7 @@ export async function resolveAgentRuntimeConfig(
       browser: agentTemplates.browser,
       web_search: agentTemplates.web_search,
       send_email: agentTemplates.send_email,
+      context_engine: agentTemplates.context_engine,
       runtime: agentTemplates.runtime,
     })
     .from(agentTemplates)
@@ -376,6 +379,17 @@ export async function resolveAgentRuntimeConfig(
   if (!templateSendEmailResult.ok) {
     console.warn(
       `${logPrefix} Invalid template sendEmail config ignored for agent ${opts.agentId}: ${templateSendEmailResult.error}`,
+    );
+  }
+  const templateContextEngineResult = validateTemplateContextEngine(
+    agentTemplate.context_engine,
+  );
+  const templateContextEngineEnabled = templateContextEngineResult.ok
+    ? templateContextEngineResult.value?.enabled === true
+    : false;
+  if (!templateContextEngineResult.ok) {
+    console.warn(
+      `${logPrefix} Invalid template contextEngine config ignored for agent ${opts.agentId}: ${templateContextEngineResult.error}`,
     );
   }
 
@@ -576,6 +590,10 @@ export async function resolveAgentRuntimeConfig(
           apiSecret: thinkworkApiSecret,
         }
       : undefined;
+  const contextEngineEnabled =
+    templateContextEngineEnabled &&
+    !blockedTools.includes("query_context") &&
+    !blockedTools.includes("context_engine");
 
   // --- MCP configs ---------------------------------------------------------
 
@@ -600,6 +618,7 @@ export async function resolveAgentRuntimeConfig(
     sandboxTemplate:
       (agentTemplate.sandbox as TemplateSandboxConfig | null) ?? null,
     browserAutomationEnabled,
+    contextEngineEnabled,
     guardrailId,
     guardrailConfig,
     runtimeType: normalizeAgentRuntimeType(
