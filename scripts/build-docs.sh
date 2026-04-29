@@ -18,12 +18,10 @@ REGION="${AWS_REGION:-us-east-1}"
 echo "▸ Reading Terraform outputs for stage=$STAGE ..."
 cd "$TF_DIR"
 
-tf_out() {
-  terraform output -raw "$1" 2>/dev/null || echo ""
-}
+source "$REPO_ROOT/scripts/lib/terraform-output.sh"
 
-DOCS_BUCKET="$(tf_out docs_bucket_name)"
-DOCS_CF_ID="$(tf_out docs_distribution_id)"
+DOCS_BUCKET="$(tf_output_raw docs_bucket_name)"
+DOCS_CF_ID="$(tf_output_raw docs_distribution_id)"
 
 echo "▸ Building docs site ..."
 cd "$REPO_ROOT"
@@ -41,6 +39,6 @@ aws cloudfront create-invalidation \
   --region "$REGION" \
   --output text > /dev/null
 
-DOCS_URL="$(cd "$TF_DIR" && tf_out docs_url)"
+DOCS_URL="$(cd "$TF_DIR" && tf_output_raw docs_url)"
 echo ""
 echo "✓ Docs deployed: ${DOCS_URL:-https://<pending>}"
