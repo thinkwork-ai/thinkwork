@@ -14,6 +14,8 @@ Context Engine is Thinkwork's read-only enterprise context primitive. It exposes
 - `scope`: `personal`, `team`, or `auto`.
 - `depth`: `quick` or `deep`.
 - `providers`: optional provider ids or families.
+- `agentId`: optional target agent id when the caller needs agent-scoped workspace files or agent-specific knowledge-base attachments.
+- provider options: optional adapter-specific settings. The first supported option is Hindsight `recall` vs `reflect`.
 
 Every response includes normalized hits plus provider statuses. Provider failures are local to that source; successful sources still return.
 
@@ -24,6 +26,15 @@ Every response includes normalized hits plus provider statuses. Provider failure
 - `workspace`: permissioned workspace files for the active target.
 - `knowledge-base`: tenant/agent Bedrock Knowledge Bases.
 - `mcp`: tenant-approved, read-only, search-safe MCP tools.
+
+## Hindsight Strategy
+
+The memory provider can use Hindsight in two modes:
+
+- `recall`: returns matching memory records directly.
+- `reflect`: asks Hindsight to synthesize a higher-level reflection over matching memories.
+
+The Admin test harness exposes this as the Hindsight strategy dropdown. For agent-facing use, `reflect` is the preferred default when the caller wants a concise answer-like memory result; `recall` is useful for diagnostics and record-level inspection.
 
 ## ThinkWork Brain MCP
 
@@ -36,5 +47,19 @@ MCP server approval is necessary but not sufficient. A tool must also have a row
 ## Runtime Tools
 
 Strands and Pi register `query_context` as a platform-owned built-in tool. The tool calls the API-owned Context Engine service through ThinkWork Brain, keeping provider routing and result normalization aligned with mobile and external MCP callers.
+
+When Context Engine is enabled for an agent template, runtimes may also expose specialized split tools such as `query_memory_context` and `query_wiki_context`. These are still Context Engine tools: Hindsight and Wiki remain adapters behind the Context Engine boundary rather than separate peer tools in normal agent configuration.
+
+## Admin Verification
+
+Admin operators verify Context Engine from **Knowledge → Context Engine**. The test harness lets an operator:
+
+- choose participating adapters with the Adapters dropdown;
+- select an agent target so workspace files and agent-specific attachments are considered;
+- choose Hindsight `recall` or `reflect`;
+- run a query against the same backend Context Engine path used by runtimes;
+- inspect provider statuses, latency, partial failures, top hits, and the full structured response.
+
+Provider failures are expected to be partial. A Hindsight timeout, skipped Bedrock KB, or unavailable MCP adapter should appear as provider-local status while successful providers still return hits.
 
 `act_on_context` is reserved for future mutation support and is not callable in v0.

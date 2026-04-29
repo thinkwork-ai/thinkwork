@@ -81,14 +81,14 @@ The Knowledge tab is where knowledge bases are attached to or detached from this
 
 The table lists every knowledge base currently attached with a status badge and an enable checkbox. An "Add Knowledge Base" button opens a side panel (`KnowledgeBasesPanel`) that shows the tenant's full KB list so the operator can pick additional bases to attach. Changes persist via `SetAgentKnowledgeBasesMutation`.
 
-Knowledge base creation, document upload, and sync status live on the [Knowledge Bases](/applications/admin/knowledge-bases/) page.
+Knowledge base creation, document upload, and sync status live on the [Knowledge](/applications/admin/knowledge/) page's Knowledge Bases tab.
 
 ### Memory
 
 **Route:** `/agents/:agentId/memory`  
 **File:** `apps/admin/src/routes/_authed/_tenant/agents/$agentId_.memory.tsx`
 
-The Memory tab is a per-agent version of the tenant-wide [Memory](/applications/admin/memory/) page, scoped to this agent's namespace. Two view modes:
+The Memory tab is a per-agent version of the tenant-wide [Knowledge](/applications/admin/knowledge/) page's Memory tab, scoped to this agent's namespace. Two view modes:
 
 - **Table** — searchable, editable list of memory records with columns for topic, content, updated time, and row-level actions
 - **Graph** — a force-graph visualization of memory records and their topic relationships, useful for finding clusters and orphans
@@ -201,7 +201,7 @@ Type is a separate axis: `WORKSPACE_AGENT` (scoped to a workspace under a parent
 - [Agent Invites](/applications/admin/agent-invites/) — BYOB runtime registration
 - [Skills Catalog](/applications/admin/skills-catalog/) — where the skills installed here come from
 - [Tenant MCP Servers](/applications/admin/mcp-servers/) — MCP tool assignment source
-- [Memory](/applications/admin/memory/) — tenant-wide memory view
+- [Knowledge](/applications/admin/knowledge/) — tenant-wide Memory, Wiki, Knowledge Bases, and Context Engine view
 - [Workspace Overlay (concept)](/concepts/agents/workspace-overlay/) — inheritance, pinning, accept-update flow
 - [Workspace Orchestration (concept)](/concepts/agents/workspace-orchestration/) — async folder-native work and protected orchestration prefixes
 - [Agents (concept)](/concepts/agents/) — the underlying agent model
