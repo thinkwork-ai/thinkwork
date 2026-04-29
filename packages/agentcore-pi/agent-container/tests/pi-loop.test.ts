@@ -93,14 +93,17 @@ describe("runPiAgent", () => {
 
   describe("U3-Pi auto-retain wiring", () => {
     let mockLambda: LambdaClient;
-    let lambdaSendSpy: ReturnType<typeof vi.spyOn>;
+    // `send` is overloaded on the AWS SDK client; vi.spyOn's generic
+    // constraint on M doesn't model overloaded callable signatures.
+    // Type the spy loosely; runtime assertions pin the contract.
+    let lambdaSendSpy: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
       subscribers.length = 0;
       mockLambda = new LambdaClient({ region: "us-east-1" });
       lambdaSendSpy = vi
-        .spyOn(mockLambda, "send")
-        .mockResolvedValue({} as never);
+        .spyOn(mockLambda, "send" as never)
+        .mockResolvedValue({} as never) as unknown as ReturnType<typeof vi.fn>;
       __setLambdaClientForTest(mockLambda);
       process.env.MEMORY_RETAIN_FN_NAME = "memory-retain-dev";
     });

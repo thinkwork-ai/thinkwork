@@ -85,11 +85,15 @@ describe("buildRetainTranscript", () => {
 
 describe("retainFullThread", () => {
   let mockClient: LambdaClient;
-  let sendSpy: ReturnType<typeof vi.spyOn>;
+  // `send` is overloaded on the AWS SDK client; vi.spyOn's generic
+  // constraint on M doesn't model overloaded callable signatures, so we
+  // type the spy loosely. The runtime contract is still pinned by the
+  // explicit `as never` on mockResolvedValue and the call-site assertions.
+  let sendSpy: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     mockClient = new LambdaClient({ region: "us-east-1" });
-    sendSpy = vi.spyOn(mockClient, "send").mockResolvedValue({} as never);
+    sendSpy = vi.spyOn(mockClient, "send" as never).mockResolvedValue({} as never) as unknown as ReturnType<typeof vi.fn>;
     __setLambdaClientForTest(mockClient);
   });
 
