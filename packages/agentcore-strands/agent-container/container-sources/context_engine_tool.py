@@ -64,7 +64,26 @@ async def _json_rpc(method: str, params: dict[str, Any]) -> dict[str, Any] | str
     return await loop.run_in_executor(None, _post)
 
 
-def make_context_engine_tool(strands_tool: Callable[[Any], Any]):
+def _context_engine_config(config: dict[str, Any] | None) -> dict[str, Any]:
+    return config if isinstance(config, dict) else {}
+
+
+def _provider_defaults(config: dict[str, Any]) -> dict[str, Any]:
+    providers = config.get("providers")
+    return providers if isinstance(providers, dict) else {}
+
+
+def _provider_options(config: dict[str, Any]) -> dict[str, Any]:
+    provider_options = config.get("providerOptions")
+    return provider_options if isinstance(provider_options, dict) else {}
+
+
+def make_context_engine_tool(
+    strands_tool: Callable[[Any], Any],
+    context_engine_config: dict[str, Any] | None = None,
+):
+    config = _context_engine_config(context_engine_config)
+
     @strands_tool
     async def query_context(
         query: str,
@@ -90,6 +109,9 @@ def make_context_engine_tool(strands_tool: Callable[[Any], Any]):
             providers["ids"] = provider_ids
         if provider_families:
             providers["families"] = provider_families
+        if not providers:
+            providers.update(_provider_defaults(config))
+        provider_options = _provider_options(config)
 
         result = await _json_rpc(
             "tools/call",
@@ -102,6 +124,11 @@ def make_context_engine_tool(strands_tool: Callable[[Any], Any]):
                     "depth": depth if depth in ("quick", "deep") else "quick",
                     "limit": max(1, min(int(limit or 10), 50)),
                     **({"providers": providers} if providers else {}),
+                    **(
+                        {"providerOptions": provider_options}
+                        if provider_options
+                        else {}
+                    ),
                 },
             },
         )
@@ -118,8 +145,12 @@ def make_context_engine_tool(strands_tool: Callable[[Any], Any]):
     return query_context
 
 
-def make_context_engine_tools(strands_tool: Callable[[Any], Any]):
-    query_context = make_context_engine_tool(strands_tool)
+def make_context_engine_tools(
+    strands_tool: Callable[[Any], Any],
+    context_engine_config: dict[str, Any] | None = None,
+):
+    config = _context_engine_config(context_engine_config)
+    query_context = make_context_engine_tool(strands_tool, config)
 
     @strands_tool
     async def query_memory_context(
@@ -139,6 +170,7 @@ def make_context_engine_tools(strands_tool: Callable[[Any], Any]):
         clean_query = (query or "").strip()
         if not clean_query:
             return "query_memory_context requires a non-empty query."
+        provider_options = _provider_options(config)
         result = await _json_rpc(
             "tools/call",
             {
@@ -149,6 +181,7 @@ def make_context_engine_tools(strands_tool: Callable[[Any], Any]):
                     "scope": scope if scope in ("personal", "team", "auto") else "auto",
                     "depth": depth if depth in ("quick", "deep") else "quick",
                     "limit": max(1, min(int(limit or 10), 50)),
+                    **({"providerOptions": provider_options} if provider_options else {}),
                 },
             },
         )

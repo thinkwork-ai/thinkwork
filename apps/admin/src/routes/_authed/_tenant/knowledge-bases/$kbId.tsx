@@ -1,4 +1,9 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  redirect,
+  useNavigate,
+  useParams,
+} from "@tanstack/react-router";
 import { useQuery, useMutation } from "urql";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -37,6 +42,13 @@ import { relativeTime } from "@/lib/utils";
 export const Route = createFileRoute(
   "/_authed/_tenant/knowledge-bases/$kbId",
 )({
+  beforeLoad: ({ params }) => {
+    throw redirect({
+      to: "/knowledge/knowledge-bases/$kbId",
+      params,
+      replace: true,
+    });
+  },
   component: KnowledgeBaseDetailPage,
 });
 
@@ -48,8 +60,16 @@ function formatBytes(bytes: number): string {
   return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
 }
 
-function KnowledgeBaseDetailPage() {
-  const { kbId } = Route.useParams();
+type KnowledgeBaseDetailPageProps = {
+  embedded?: boolean;
+  listHref?: "/knowledge-bases" | "/knowledge/knowledge-bases";
+};
+
+export function KnowledgeBaseDetailPage({
+  embedded = false,
+  listHref = "/knowledge-bases",
+}: KnowledgeBaseDetailPageProps = {}) {
+  const { kbId } = useParams({ strict: false }) as { kbId: string };
   const navigate = useNavigate();
 
   const [result, reexecute] = useQuery({
@@ -64,7 +84,8 @@ function KnowledgeBaseDetailPage() {
   const kb = (result.data as any)?.knowledgeBase;
 
   useBreadcrumbs([
-    { label: "Knowledge Bases", href: "/knowledge-bases" },
+    { label: "Knowledge", href: "/knowledge/memory" },
+    { label: "Knowledge Bases", href: listHref },
     { label: kb?.name ?? "Loading..." },
   ]);
 
@@ -134,7 +155,7 @@ function KnowledgeBaseDetailPage() {
   const handleDelete = async () => {
     const res = await deleteKb({ id: kbId });
     if (!res.error) {
-      navigate({ to: "/knowledge-bases" });
+      navigate({ to: listHref });
     }
   };
 
@@ -149,10 +170,8 @@ function KnowledgeBaseDetailPage() {
 
   if ((result.fetching && !result.data) || !kb) return <PageSkeleton />;
 
-  return (
-    <PageLayout
-      header={
-        <div className="space-y-2">
+  const header = (
+    <div className="space-y-2">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight leading-tight text-foreground">
               {kb.name}
@@ -187,8 +206,9 @@ function KnowledgeBaseDetailPage() {
             )}
           </div>
         </div>
-      }
-    >
+  );
+
+  const content = (
       <div className="space-y-6">
         {/* Description */}
         {kb.description && (
@@ -331,6 +351,20 @@ function KnowledgeBaseDetailPage() {
           </Card>
         </div>
       </div>
+  );
+
+  if (embedded) {
+    return (
+      <div className="flex h-full min-w-0 flex-col">
+        <div className="shrink-0 pb-4">{header}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto">{content}</div>
+      </div>
+    );
+  }
+
+  return (
+    <PageLayout header={header}>
+      {content}
     </PageLayout>
   );
 }

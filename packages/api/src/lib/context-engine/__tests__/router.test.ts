@@ -102,6 +102,36 @@ describe("Context Engine router", () => {
     ]);
   });
 
+  it("rejects explicitly selected providers disabled by tenant policy", async () => {
+    const router = createContextEngineRouter({
+      providers: [
+        provider({
+          id: "memory",
+          family: "memory",
+          enabled: false,
+          defaultEnabled: false,
+        }),
+        provider({ id: "wiki", family: "wiki" }),
+      ],
+    });
+
+    const defaultResult = await router.query({
+      query: "roadmap",
+      caller: { tenantId: "tenant-1", userId: "user-1" },
+    });
+    expect(defaultResult.providers.map((status) => status.providerId)).toEqual([
+      "wiki",
+    ]);
+
+    await expect(
+      router.query({
+        query: "roadmap",
+        providers: { ids: ["memory"] },
+        caller: { tenantId: "tenant-1", userId: "user-1" },
+      }),
+    ).rejects.toThrow("Disabled context provider id: memory");
+  });
+
   it("rejects empty queries before invoking providers", async () => {
     let called = false;
     const router = createContextEngineRouter({

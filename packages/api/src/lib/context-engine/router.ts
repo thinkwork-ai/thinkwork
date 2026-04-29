@@ -1,17 +1,17 @@
 import {
-	ContextEngineValidationError,
-	type ContextEngineAnswer,
-	type ContextEngineDepth,
-	type ContextEngineMode,
-	type ContextEngineProviderRequest,
-	type ContextEngineRequest,
-	type ContextEngineResponse,
-	type ContextHit,
-	type ContextProviderDescriptor,
-	type ContextProviderFamily,
-	type ContextProviderResult,
-	type ContextProviderStatus,
-	type ContextEngineScope,
+  ContextEngineValidationError,
+  type ContextEngineAnswer,
+  type ContextEngineDepth,
+  type ContextEngineMode,
+  type ContextEngineProviderRequest,
+  type ContextEngineRequest,
+  type ContextEngineResponse,
+  type ContextHit,
+  type ContextProviderDescriptor,
+  type ContextProviderFamily,
+  type ContextProviderResult,
+  type ContextProviderStatus,
+  type ContextEngineScope,
 } from "./types.js";
 
 const DEFAULT_LIMIT = 20;
@@ -20,227 +20,239 @@ const DEFAULT_QUICK_TIMEOUT_MS = 2_500;
 const DEFAULT_DEEP_TIMEOUT_MS = 8_000;
 
 const FAMILY_ORDER: ContextProviderFamily[] = [
-	"memory",
-	"wiki",
-	"workspace",
-	"knowledge-base",
-	"mcp",
+  "memory",
+  "wiki",
+  "workspace",
+  "knowledge-base",
+  "mcp",
 ];
 
 export interface ContextEngineRouter {
-	query(request: ContextEngineRequest): Promise<ContextEngineResponse>;
-	listProviders(): ContextProviderDescriptor[];
+  query(request: ContextEngineRequest): Promise<ContextEngineResponse>;
+  listProviders(): ContextProviderDescriptor[];
 }
 
 export function createContextEngineRouter(args: {
-	providers: ContextProviderDescriptor[];
-	synthesize?: (
-		request: ContextEngineProviderRequest,
-		hits: ContextHit[],
-	) => Promise<ContextEngineAnswer | undefined>;
+  providers: ContextProviderDescriptor[];
+  synthesize?: (
+    request: ContextEngineProviderRequest,
+    hits: ContextHit[],
+  ) => Promise<ContextEngineAnswer | undefined>;
 }): ContextEngineRouter {
-	const providers = [...args.providers];
-	return {
-		listProviders: () => [...providers],
-		query: async (request) => {
-			const normalized = normalizeRequest(request);
-			const selected = selectProviders(providers, normalized);
-			const statuses: ContextProviderStatus[] = [];
-			const results = await Promise.all(
-				selected.map((provider) => runProvider(provider, normalized)),
-			);
+  const providers = [...args.providers];
+  return {
+    listProviders: () => [...providers],
+    query: async (request) => {
+      const normalized = normalizeRequest(request);
+      const selected = selectProviders(providers, normalized);
+      const statuses: ContextProviderStatus[] = [];
+      const results = await Promise.all(
+        selected.map((provider) => runProvider(provider, normalized)),
+      );
 
-			for (const result of results) statuses.push(result.status);
-			const hits = rankAndDedupe(results.flatMap((result) => result.hits)).slice(
-				0,
-				normalized.limit,
-			);
-			const answer =
-				normalized.mode === "answer"
-					? await args.synthesize?.(normalized, hits)
-					: undefined;
+      for (const result of results) statuses.push(result.status);
+      const hits = rankAndDedupe(
+        results.flatMap((result) => result.hits),
+      ).slice(0, normalized.limit);
+      const answer =
+        normalized.mode === "answer"
+          ? await args.synthesize?.(normalized, hits)
+          : undefined;
 
-			return {
-				query: normalized.query,
-				mode: normalized.mode,
-				scope: normalized.scope,
-				depth: normalized.depth,
-				hits,
-				providers: statuses,
-				...(answer ? { answer } : {}),
-				traceId: normalized.caller.traceId ?? null,
-			};
-		},
-	};
+      return {
+        query: normalized.query,
+        mode: normalized.mode,
+        scope: normalized.scope,
+        depth: normalized.depth,
+        hits,
+        providers: statuses,
+        ...(answer ? { answer } : {}),
+        traceId: normalized.caller.traceId ?? null,
+      };
+    },
+  };
 }
 
 export function normalizeRequest(
-	request: ContextEngineRequest,
+  request: ContextEngineRequest,
 ): ContextEngineProviderRequest {
-	const query = request.query.trim();
-	if (!query) {
-		throw new ContextEngineValidationError("query is required");
-	}
-	if (!request.caller?.tenantId) {
-		throw new ContextEngineValidationError("caller.tenantId is required");
-	}
-	return {
-		...request,
-		query,
-		mode: request.mode ?? "results",
-		scope: request.scope ?? "auto",
-		depth: request.depth ?? "quick",
-		limit: clampLimit(request.limit),
-	};
+  const query = request.query.trim();
+  if (!query) {
+    throw new ContextEngineValidationError("query is required");
+  }
+  if (!request.caller?.tenantId) {
+    throw new ContextEngineValidationError("caller.tenantId is required");
+  }
+  return {
+    ...request,
+    query,
+    mode: request.mode ?? "results",
+    scope: request.scope ?? "auto",
+    depth: request.depth ?? "quick",
+    limit: clampLimit(request.limit),
+  };
 }
 
 function selectProviders(
-	providers: ContextProviderDescriptor[],
-	request: ContextEngineRequest,
+  providers: ContextProviderDescriptor[],
+  request: ContextEngineRequest,
 ): ContextProviderDescriptor[] {
-	const ids = new Set(request.providers?.ids ?? []);
-	const families = new Set(request.providers?.families ?? []);
+  const ids = new Set(request.providers?.ids ?? []);
+  const families = new Set(request.providers?.families ?? []);
+  const hasExplicitIds = Array.isArray(request.providers?.ids);
 
-	if (ids.size > 0) {
-		const knownIds = new Set(providers.map((provider) => provider.id));
-		const unknown = [...ids].filter((id) => !knownIds.has(id));
-		if (unknown.length > 0) {
-			throw new ContextEngineValidationError(
-				`Unknown context provider id: ${unknown.join(", ")}`,
-			);
-		}
-	}
+  if (hasExplicitIds) {
+    const knownIds = new Set(providers.map((provider) => provider.id));
+    const unknown = [...ids].filter((id) => !knownIds.has(id));
+    if (unknown.length > 0) {
+      throw new ContextEngineValidationError(
+        `Unknown context provider id: ${unknown.join(", ")}`,
+      );
+    }
+    const disabled = providers
+      .filter((provider) => ids.has(provider.id) && provider.enabled === false)
+      .map((provider) => provider.id);
+    if (disabled.length > 0) {
+      throw new ContextEngineValidationError(
+        `Disabled context provider id: ${disabled.join(", ")}`,
+      );
+    }
+  }
 
-	return providers.filter((provider) => {
-		if (!scopeIsSupported(provider, request.scope ?? "auto")) return true;
-		if (ids.size > 0) return ids.has(provider.id);
-		if (families.size > 0) return families.has(provider.family);
-		return provider.defaultEnabled;
-	});
+  return providers.filter((provider) => {
+    if (provider.enabled === false) return false;
+    if (!scopeIsSupported(provider, request.scope ?? "auto")) return true;
+    if (hasExplicitIds) return ids.has(provider.id);
+    if (families.size > 0) return families.has(provider.family);
+    return provider.defaultEnabled;
+  });
 }
 
 async function runProvider(
-	provider: ContextProviderDescriptor,
-	request: ContextEngineProviderRequest,
+  provider: ContextProviderDescriptor,
+  request: ContextEngineProviderRequest,
 ): Promise<{ hits: ContextHit[]; status: ContextProviderStatus }> {
-	const started = Date.now();
-	const baseStatus: ContextProviderStatus = {
-		providerId: provider.id,
-		family: provider.family,
-		displayName: provider.displayName,
-		state: "ok",
-		scope: request.scope,
-		defaultEnabled: provider.defaultEnabled,
-	};
+  const started = Date.now();
+  const baseStatus: ContextProviderStatus = {
+    providerId: provider.id,
+    family: provider.family,
+    displayName: provider.displayName,
+    state: "ok",
+    scope: request.scope,
+    defaultEnabled: provider.defaultEnabled,
+  };
 
-	if (!scopeIsSupported(provider, request.scope)) {
-		return {
-			hits: [],
-			status: {
-				...baseStatus,
-				state: "skipped",
-				reason: `scope ${request.scope} is not supported`,
-				durationMs: 0,
-				hitCount: 0,
-			},
-		};
-	}
+  if (!scopeIsSupported(provider, request.scope)) {
+    return {
+      hits: [],
+      status: {
+        ...baseStatus,
+        state: "skipped",
+        reason: `scope ${request.scope} is not supported`,
+        durationMs: 0,
+        hitCount: 0,
+      },
+    };
+  }
 
-	try {
-		const timeoutMs =
-			provider.timeoutMs ??
-			(request.depth === "deep"
-				? DEFAULT_DEEP_TIMEOUT_MS
-				: DEFAULT_QUICK_TIMEOUT_MS);
-		const result = await withTimeout(provider.query(request), timeoutMs);
-		const durationMs = Date.now() - started;
-		return {
-			hits: result.hits,
-			status: {
-				...baseStatus,
-				...result.status,
-				state: result.status?.state ?? "ok",
-				durationMs,
-				hitCount: result.hits.length,
-			},
-		};
-	} catch (err) {
-		const durationMs = Date.now() - started;
-		const timedOut = err instanceof Error && err.name === "TimeoutError";
-		return {
-			hits: [],
-			status: {
-				...baseStatus,
-				state: timedOut ? "timeout" : "error",
-				durationMs,
-				hitCount: 0,
-				error: err instanceof Error ? err.message : String(err),
-			},
-		};
-	}
+  try {
+    const timeoutMs =
+      provider.timeoutMs ??
+      (request.depth === "deep"
+        ? DEFAULT_DEEP_TIMEOUT_MS
+        : DEFAULT_QUICK_TIMEOUT_MS);
+    const result = await withTimeout(provider.query(request), timeoutMs);
+    const durationMs = Date.now() - started;
+    return {
+      hits: result.hits,
+      status: {
+        ...baseStatus,
+        ...result.status,
+        state: result.status?.state ?? "ok",
+        durationMs,
+        hitCount: result.hits.length,
+      },
+    };
+  } catch (err) {
+    const durationMs = Date.now() - started;
+    const timedOut = err instanceof Error && err.name === "TimeoutError";
+    return {
+      hits: [],
+      status: {
+        ...baseStatus,
+        state: timedOut ? "timeout" : "error",
+        durationMs,
+        hitCount: 0,
+        error: err instanceof Error ? err.message : String(err),
+      },
+    };
+  }
 }
 
 export function rankAndDedupe(hits: ContextHit[]): ContextHit[] {
-	const byKey = new Map<string, ContextHit>();
-	for (const hit of hits) {
-		const key =
-			hit.provenance.sourceId ??
-			`${hit.family}:${hit.title.toLowerCase()}:${hit.snippet.slice(0, 80)}`;
-		const existing = byKey.get(key);
-		if (!existing || normalizedScore(hit) > normalizedScore(existing)) {
-			byKey.set(key, hit);
-		}
-	}
+  const byKey = new Map<string, ContextHit>();
+  for (const hit of hits) {
+    const key =
+      hit.provenance.sourceId ??
+      `${hit.family}:${hit.title.toLowerCase()}:${hit.snippet.slice(0, 80)}`;
+    const existing = byKey.get(key);
+    if (!existing || normalizedScore(hit) > normalizedScore(existing)) {
+      byKey.set(key, hit);
+    }
+  }
 
-	return [...byKey.values()]
-		.sort((a, b) => {
-			const scoreDiff = normalizedScore(b) - normalizedScore(a);
-			if (scoreDiff !== 0) return scoreDiff;
-			const familyDiff =
-				FAMILY_ORDER.indexOf(a.family) - FAMILY_ORDER.indexOf(b.family);
-			if (familyDiff !== 0) return familyDiff;
-			return a.title.localeCompare(b.title);
-		})
-		.map((hit, index) => ({ ...hit, rank: index + 1 }));
+  return [...byKey.values()]
+    .sort((a, b) => {
+      const scoreDiff = normalizedScore(b) - normalizedScore(a);
+      if (scoreDiff !== 0) return scoreDiff;
+      const familyDiff =
+        FAMILY_ORDER.indexOf(a.family) - FAMILY_ORDER.indexOf(b.family);
+      if (familyDiff !== 0) return familyDiff;
+      return a.title.localeCompare(b.title);
+    })
+    .map((hit, index) => ({ ...hit, rank: index + 1 }));
 }
 
 function scopeIsSupported(
-	provider: ContextProviderDescriptor,
-	scope: ContextEngineScope,
+  provider: ContextProviderDescriptor,
+  scope: ContextEngineScope,
 ): boolean {
-	const supported = provider.supportedScopes ?? ["personal", "team", "auto"];
-	return supported.includes(scope) || scope === "auto";
+  const supported = provider.supportedScopes ?? ["personal", "team", "auto"];
+  return supported.includes(scope) || scope === "auto";
 }
 
 function clampLimit(limit: number | undefined): number {
-	if (!Number.isFinite(limit)) return DEFAULT_LIMIT;
-	return Math.max(1, Math.min(MAX_LIMIT, Math.floor(limit ?? DEFAULT_LIMIT)));
+  if (!Number.isFinite(limit)) return DEFAULT_LIMIT;
+  return Math.max(1, Math.min(MAX_LIMIT, Math.floor(limit ?? DEFAULT_LIMIT)));
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-	let timeout: NodeJS.Timeout | null = null;
-	try {
-		return await Promise.race([
-			promise,
-			new Promise<never>((_, reject) => {
-				timeout = setTimeout(() => {
-					const err = new Error(`provider timed out after ${timeoutMs}ms`);
-					err.name = "TimeoutError";
-					reject(err);
-				}, timeoutMs);
-			}),
-		]);
-	} finally {
-		if (timeout) clearTimeout(timeout);
-	}
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  let timeout: NodeJS.Timeout | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          const err = new Error(`provider timed out after ${timeoutMs}ms`);
+          err.name = "TimeoutError";
+          reject(err);
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 function normalizedScore(hit: Pick<ContextHit, "score" | "rank">): number {
-	if (typeof hit.score === "number" && Number.isFinite(hit.score)) {
-		return hit.score;
-	}
-	if (typeof hit.rank === "number" && hit.rank > 0) {
-		return 1 / hit.rank;
-	}
-	return 0;
+  if (typeof hit.score === "number" && Number.isFinite(hit.score)) {
+    return hit.score;
+  }
+  if (typeof hit.rank === "number" && hit.rank > 0) {
+    return 1 / hit.rank;
+  }
+  return 0;
 }

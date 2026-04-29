@@ -23,6 +23,7 @@ export interface PiInvocationPayload {
   web_search_config?: unknown;
   send_email_config?: unknown;
   context_engine_enabled?: unknown;
+  context_engine_config?: unknown;
   sandbox_interpreter_id?: unknown;
   sandbox_environment?: unknown;
   sandbox_status?: unknown;

@@ -1,7 +1,7 @@
 ---
 title: "feat: Context Engine operator configuration follow-up"
 type: feat
-status: active
+status: completed
 date: 2026-04-29
 origin: docs/plans/2026-04-29-001-feat-admin-memory-knowledge-center-plan.md
 ---

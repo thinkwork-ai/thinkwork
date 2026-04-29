@@ -4,6 +4,12 @@ import {
   tenantMcpContextTools,
   tenantMcpServers,
 } from "@thinkwork/database-pg/schema";
+import {
+  applyTenantContextProviderSettings,
+  loadTenantContextProviderSettings,
+  memoryProviderConfig,
+  type TenantContextProviderSetting,
+} from "../admin-config.js";
 import type { ContextProviderDescriptor } from "../types.js";
 import { createBedrockKnowledgeBaseContextProvider } from "./bedrock-knowledge-base.js";
 import { createMemoryContextProvider } from "./memory.js";
@@ -11,13 +17,17 @@ import { createMcpToolContextProvider } from "./mcp-tool.js";
 import { createWorkspaceFilesContextProvider } from "./workspace-files.js";
 import { createWikiContextProvider } from "./wiki.js";
 
-export function createCoreContextProviders(): ContextProviderDescriptor[] {
-  return [
-    createMemoryContextProvider(),
+export function createCoreContextProviders(
+  settings: TenantContextProviderSetting[] = [],
+): ContextProviderDescriptor[] {
+  const memoryConfig = memoryProviderConfig(settings);
+  const providers = [
+    createMemoryContextProvider(memoryConfig),
     createWikiContextProvider(),
     createWorkspaceFilesContextProvider(),
     createBedrockKnowledgeBaseContextProvider(),
   ];
+  return applyTenantContextProviderSettings(providers, settings);
 }
 
 export async function createContextProvidersForCaller(caller?: {
@@ -25,7 +35,11 @@ export async function createContextProvidersForCaller(caller?: {
   userId?: string | null;
   agentId?: string | null;
 }): Promise<ContextProviderDescriptor[]> {
-  const providers = createCoreContextProviders();
+  const providers = caller?.tenantId
+    ? createCoreContextProviders(
+        await loadTenantContextProviderSettings(caller.tenantId),
+      )
+    : createCoreContextProviders();
   if (!caller?.tenantId) return providers;
   return [...providers, ...(await createTenantMcpContextProviders(caller))];
 }

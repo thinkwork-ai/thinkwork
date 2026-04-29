@@ -640,6 +640,11 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     templateContextEngineEnabled &&
     !blockedTools.includes("query_context") &&
     !blockedTools.includes("context_engine");
+  const contextEngineConfig = contextEngineEnabled
+    ? (templateContextEngineResult.ok
+        ? (templateContextEngineResult.value ?? undefined)
+        : undefined)
+    : undefined;
 
   const runtimeType = normalizeAgentRuntimeType(
     agent.runtime ?? agent.template_runtime,
@@ -1278,6 +1283,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         ? { ...sendEmailConfig, threadId: resolvedThreadId }
         : undefined,
       context_engine_enabled: contextEngineEnabled || undefined,
+      context_engine_config: contextEngineConfig,
       runtime_type: runtimeType,
       model: agent.model,
       skills: skillsConfig.length > 0 ? skillsConfig : undefined,
@@ -1750,6 +1756,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
               ? { ...sendEmailConfig, threadId: resolvedThreadId }
               : undefined,
             context_engine_enabled: contextEngineEnabled || undefined,
+            context_engine_config: contextEngineConfig,
             runtime_type: runtimeType,
             model: agent.model,
             skills: skillsConfig.length > 0 ? skillsConfig : undefined,

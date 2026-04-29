@@ -22,6 +22,24 @@ function enumValue<T extends string>(
     : fallback;
 }
 
+function contextEngineConfig(payload: PiInvocationPayload): Record<string, unknown> {
+  return payload.context_engine_config && typeof payload.context_engine_config === "object"
+    ? (payload.context_engine_config as Record<string, unknown>)
+    : {};
+}
+
+function providerDefaults(config: Record<string, unknown>): Record<string, unknown> | undefined {
+  return config.providers && typeof config.providers === "object"
+    ? (config.providers as Record<string, unknown>)
+    : undefined;
+}
+
+function providerOptions(config: Record<string, unknown>): Record<string, unknown> | undefined {
+  return config.providerOptions && typeof config.providerOptions === "object"
+    ? (config.providerOptions as Record<string, unknown>)
+    : undefined;
+}
+
 async function callContextEngine(
   payload: PiInvocationPayload,
   toolName: "query_context" | "query_memory_context" | "query_wiki_context",
@@ -160,6 +178,8 @@ function buildContextEngineToolByName(
       const input = paramsRecord(params);
       const query = String(input.query || "").trim();
       if (!query) throw new Error(`${name} requires query`);
+      const config = contextEngineConfig(payload);
+      const options = providerOptions(config);
       const args = {
         query,
         mode: enumValue(input.mode, ["results", "answer"] as const, "results"),
@@ -170,6 +190,12 @@ function buildContextEngineToolByName(
         ),
         depth: enumValue(input.depth, ["quick", "deep"] as const, "quick"),
         limit: Math.max(1, Math.min(Number(input.limit ?? 10), 50)),
+        ...(name === "query_context" && providerDefaults(config)
+          ? { providers: providerDefaults(config) }
+          : {}),
+        ...(options && (name === "query_context" || name === "query_memory_context")
+          ? { providerOptions: options }
+          : {}),
       };
       const result = await callContextEngine(payload, name, args);
       return {

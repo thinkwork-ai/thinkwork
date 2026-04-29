@@ -61,8 +61,13 @@ import { loadTenantBuiltinTools } from "../handlers/skills.js";
 import type { TemplateSandboxConfig } from "./sandbox-preflight.js";
 import { validateTemplateBrowser } from "./templates/browser-config.js";
 import { validateTemplateContextEngine } from "./templates/context-engine-config.js";
+import type { TemplateContextEngineConfig } from "./templates/context-engine-config.js";
 import { validateTemplateSendEmail } from "./templates/send-email-config.js";
 import { validateTemplateWebSearch } from "./templates/web-search-config.js";
+import {
+  constrainTemplateContextEngineConfig,
+  loadTenantContextProviderSettings,
+} from "./context-engine/admin-config.js";
 import {
   resolveWebSearchConfigFromSkills,
   type WebSearchRuntimeConfig,
@@ -120,6 +125,7 @@ export interface AgentRuntimeConfig {
   sandboxTemplate: TemplateSandboxConfig | null;
   browserAutomationEnabled: boolean;
   contextEngineEnabled: boolean;
+  contextEngineConfig?: TemplateContextEngineConfig;
   /**
    * Internal `guardrails.id` of the resolved guardrail (template or
    * tenant-default) — used by callers that record `guardrail_blocks`
@@ -594,6 +600,23 @@ export async function resolveAgentRuntimeConfig(
     templateContextEngineEnabled &&
     !blockedTools.includes("query_context") &&
     !blockedTools.includes("context_engine");
+  let contextEngineConfig = contextEngineEnabled
+    ? templateContextEngineResult.ok
+      ? (templateContextEngineResult.value ?? undefined)
+      : undefined
+    : undefined;
+  if (contextEngineConfig?.providers?.ids) {
+    const constrained = constrainTemplateContextEngineConfig(
+      contextEngineConfig,
+      await loadTenantContextProviderSettings(opts.tenantId),
+    );
+    contextEngineConfig = constrained.config;
+    if (constrained.removedProviderIds.length > 0) {
+      console.warn(
+        `${logPrefix} Removed tenant-disabled Context Engine provider(s) from agent ${opts.agentId}: ${constrained.removedProviderIds.join(", ")}`,
+      );
+    }
+  }
 
   // --- MCP configs ---------------------------------------------------------
 
@@ -619,6 +642,7 @@ export async function resolveAgentRuntimeConfig(
       (agentTemplate.sandbox as TemplateSandboxConfig | null) ?? null,
     browserAutomationEnabled,
     contextEngineEnabled,
+    contextEngineConfig,
     guardrailId,
     guardrailConfig,
     runtimeType: normalizeAgentRuntimeType(
