@@ -12,7 +12,11 @@ const API_URL = import.meta.env.VITE_API_URL || "";
 // surfaces the best-effort error body; we just re-throw as a plain Error.
 async function request<T>(
   path: string,
-  options: { method?: string; body?: string; extraHeaders?: Record<string, string> } = {},
+  options: {
+    method?: string;
+    body?: string;
+    extraHeaders?: Record<string, string>;
+  } = {},
 ): Promise<T> {
   try {
     return await apiFetch<T>(path, options);
@@ -85,6 +89,23 @@ export type AgentMcpServer = McpServer & {
   config?: Record<string, unknown>;
 };
 
+export type McpContextTool = {
+  id: string;
+  tenantId: string;
+  mcpServerId: string;
+  toolName: string;
+  displayName: string | null;
+  declaredReadOnly: boolean;
+  declaredSearchSafe: boolean;
+  approved: boolean;
+  defaultEnabled: boolean;
+  approvedBy?: string | null;
+  approvedAt?: string | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 // ---------------------------------------------------------------------------
 // Tenant-level MCP registry
 // ---------------------------------------------------------------------------
@@ -133,10 +154,35 @@ export function deleteMcpServer(
 export function testMcpServer(
   tenantSlug: string,
   serverId: string,
-): Promise<{ ok: boolean; tools?: Array<{ name: string; description?: string }>; error?: string }> {
+): Promise<{
+  ok: boolean;
+  tools?: Array<{ name: string; description?: string }>;
+  error?: string;
+}> {
   return request(`/api/skills/mcp-servers/${serverId}/test`, {
     method: "POST",
     extraHeaders: { "x-tenant-slug": tenantSlug },
+  });
+}
+
+export function listMcpContextTools(
+  tenantSlug: string,
+  serverId: string,
+): Promise<{ tools: McpContextTool[] }> {
+  return request(`/api/skills/mcp-servers/${serverId}/context-tools`, {
+    extraHeaders: { "x-tenant-slug": tenantSlug },
+  });
+}
+
+export function updateMcpContextTool(
+  tenantSlug: string,
+  toolId: string,
+  updates: { approved?: boolean; defaultEnabled?: boolean },
+): Promise<{ tool: McpContextTool }> {
+  return request(`/api/skills/mcp-context-tools/${toolId}`, {
+    method: "PUT",
+    extraHeaders: { "x-tenant-slug": tenantSlug },
+    body: JSON.stringify(updates),
   });
 }
 
@@ -185,7 +231,15 @@ export function setMcpApiKey(
 
 export function getTemplateMcpServers(
   templateId: string,
-): Promise<{ mcpServers: Array<{ mcp_server_id: string; enabled: boolean; name?: string; url?: string; authType?: string }> }> {
+): Promise<{
+  mcpServers: Array<{
+    mcp_server_id: string;
+    enabled: boolean;
+    name?: string;
+    url?: string;
+    authType?: string;
+  }>;
+}> {
   return request(`/api/skills/templates/${templateId}/mcp-servers`);
 }
 
@@ -203,9 +257,12 @@ export function unassignMcpFromTemplate(
   templateId: string,
   mcpServerId: string,
 ): Promise<{ ok: boolean }> {
-  return request(`/api/skills/templates/${templateId}/mcp-servers/${mcpServerId}`, {
-    method: "DELETE",
-  });
+  return request(
+    `/api/skills/templates/${templateId}/mcp-servers/${mcpServerId}`,
+    {
+      method: "DELETE",
+    },
+  );
 }
 
 // ---------------------------------------------------------------------------
