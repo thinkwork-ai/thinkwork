@@ -469,6 +469,41 @@ export async function handler(
       return mcpTestConnection(tenantSlug, mcpTestMatch[1]);
     }
 
+    // GET /api/skills/mcp-servers/:id/context-tools — list discovered
+    // context-safe tool candidates for one MCP server.
+    const mcpContextToolsMatch = path.match(
+      /^\/api\/skills\/mcp-servers\/([^/]+)\/context-tools$/,
+    );
+    if (mcpContextToolsMatch && method === "GET") {
+      if (!tenantSlug) return error("x-tenant-slug header required", 400);
+      {
+        const _v = await requireTenantMembership(event, tenantSlug, {
+          requiredRoles: ["owner", "admin", "member"],
+        });
+        if (!_v.ok) return error(_v.reason, _v.status);
+      }
+      return mcpListContextTools(tenantSlug, mcpContextToolsMatch[1]);
+    }
+
+    // PUT /api/skills/mcp-context-tools/:id — operator approval/default
+    // state for one discovered MCP context provider.
+    const mcpContextToolUpdateMatch = path.match(
+      /^\/api\/skills\/mcp-context-tools\/([^/]+)$/,
+    );
+    if (mcpContextToolUpdateMatch && method === "PUT") {
+      if (!tenantSlug) return error("x-tenant-slug header required", 400);
+      const _v = await requireTenantMembership(event, tenantSlug, {
+        requiredRoles: ["owner", "admin"],
+      });
+      if (!_v.ok) return error(_v.reason, _v.status);
+      return mcpUpdateContextTool(
+        tenantSlug,
+        mcpContextToolUpdateMatch[1],
+        event,
+        _v.userId,
+      );
+    }
+
     // --- Built-in Tools (per-tenant config for catalog skills like web-search) ---
 
     if (path === "/api/skills/builtin-tools" && method === "GET") {
@@ -2321,7 +2356,11 @@ async function mcpTestConnection(
     }
 
     const result = (await response.json()) as {
-      result?: { tools?: Array<Record<string, unknown> & { name: string; description?: string }> };
+      result?: {
+        tools?: Array<
+          Record<string, unknown> & { name: string; description?: string }
+        >;
+      };
       error?: unknown;
     };
     if (result.error) {
@@ -2348,10 +2387,126 @@ async function mcpTestConnection(
   }
 }
 
+async function mcpListContextTools(
+  tenantSlug: string,
+  serverId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const badUuid = requireUuid(serverId);
+  if (badUuid) return badUuid;
+  const tenantId = await resolveTenantId(tenantSlug);
+  if (!tenantId) return error("Tenant not found", 404);
+
+  const [server] = await db
+    .select({ id: tenantMcpServers.id })
+    .from(tenantMcpServers)
+    .where(
+      and(
+        eq(tenantMcpServers.id, serverId),
+        eq(tenantMcpServers.tenant_id, tenantId),
+      ),
+    )
+    .limit(1);
+  if (!server) return notFound("MCP server not found");
+
+  const rows = await db
+    .select()
+    .from(tenantMcpContextTools)
+    .where(
+      and(
+        eq(tenantMcpContextTools.tenant_id, tenantId),
+        eq(tenantMcpContextTools.mcp_server_id, serverId),
+      ),
+    );
+
+  return json({ tools: rows.map(formatMcpContextTool) });
+}
+
+async function mcpUpdateContextTool(
+  tenantSlug: string,
+  toolId: string,
+  event: APIGatewayProxyEventV2,
+  userId: string | null,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  if (!UUID_RE.test(toolId)) return notFound("MCP context tool not found");
+  const tenantId = await resolveTenantId(tenantSlug);
+  if (!tenantId) return error("Tenant not found", 404);
+
+  const body = JSON.parse(event.body || "{}") as {
+    approved?: unknown;
+    defaultEnabled?: unknown;
+  };
+  const [existing] = await db
+    .select()
+    .from(tenantMcpContextTools)
+    .where(
+      and(
+        eq(tenantMcpContextTools.id, toolId),
+        eq(tenantMcpContextTools.tenant_id, tenantId),
+      ),
+    )
+    .limit(1);
+  if (!existing) return notFound("MCP context tool not found");
+
+  const updates: Partial<typeof tenantMcpContextTools.$inferInsert> = {
+    updated_at: new Date(),
+  };
+  let approved = existing.approved;
+  if (body.approved !== undefined) {
+    if (typeof body.approved !== "boolean")
+      return error("approved must be a boolean", 400);
+    approved = body.approved;
+    updates.approved = approved;
+    updates.approved_by = approved ? userId : null;
+    updates.approved_at = approved ? new Date() : null;
+    if (!approved) updates.default_enabled = false;
+  }
+  if (body.defaultEnabled !== undefined) {
+    if (typeof body.defaultEnabled !== "boolean") {
+      return error("defaultEnabled must be a boolean", 400);
+    }
+    if (body.defaultEnabled && !approved) {
+      return error(
+        "Approve the context tool before enabling it by default",
+        400,
+      );
+    }
+    updates.default_enabled = body.defaultEnabled;
+  }
+
+  const [updated] = await db
+    .update(tenantMcpContextTools)
+    .set(updates)
+    .where(eq(tenantMcpContextTools.id, toolId))
+    .returning();
+
+  return json({ tool: formatMcpContextTool(updated) });
+}
+
+function formatMcpContextTool(row: typeof tenantMcpContextTools.$inferSelect) {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    mcpServerId: row.mcp_server_id,
+    toolName: row.tool_name,
+    displayName: row.display_name,
+    declaredReadOnly: row.declared_read_only,
+    declaredSearchSafe: row.declared_search_safe,
+    approved: row.approved,
+    defaultEnabled: row.default_enabled,
+    approvedBy: row.approved_by,
+    approvedAt: row.approved_at,
+    metadata: row.metadata,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 async function upsertMcpContextToolEligibility(
   tenantId: string,
   serverId: string,
-  tools: Array<Record<string, unknown> & { name: string; description?: string }>,
+  tools: Array<
+    Record<string, unknown> & { name: string; description?: string }
+  >,
 ): Promise<void> {
   for (const tool of tools) {
     const context = isRecord(tool.contextEngine)
