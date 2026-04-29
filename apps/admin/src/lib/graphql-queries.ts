@@ -1578,6 +1578,7 @@ export const AgentTemplateDetailQuery = graphql(`
       browser
       webSearch
       sendEmail
+      contextEngine
       knowledgeBaseIds
       isPublished
       createdAt
@@ -1613,6 +1614,7 @@ export const UpdateAgentTemplateMutation = graphql(`
       browser
       webSearch
       sendEmail
+      contextEngine
       knowledgeBaseIds
       updatedAt
     }

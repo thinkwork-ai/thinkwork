@@ -1,5 +1,6 @@
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { buildExecuteCodeTool } from "./execute-code.js";
+import { buildContextEngineTools } from "./context-engine.js";
 import { buildHindsightTools } from "./hindsight.js";
 import { buildMcpTools } from "./mcp.js";
 import { buildSendEmailTool } from "./send-email.js";
@@ -23,6 +24,8 @@ export async function buildPiTools(
     context.state.cleanup,
   );
   if (executeCode) tools.push(executeCode);
+
+  tools.push(...buildContextEngineTools(context.payload));
 
   tools.push(
     ...buildHindsightTools(context.payload, context.state.hindsightUsage),

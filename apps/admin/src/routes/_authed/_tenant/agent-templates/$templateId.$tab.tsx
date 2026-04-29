@@ -14,6 +14,7 @@ import {
   Cable,
   Search,
   Mail,
+  BrainCircuit,
 } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -64,11 +65,7 @@ import { WorkspaceEditor } from "@/components/agent-builder/WorkspaceEditor";
 import { TemplateSyncDialog } from "./-components/TemplateSyncDialog";
 import { AgentRuntime } from "@/gql/graphql";
 
-const VALID_TABS = [
-  "configuration",
-  "workspace",
-  "mcp-servers",
-] as const;
+const VALID_TABS = ["configuration", "workspace", "mcp-servers"] as const;
 type TabSlug = (typeof VALID_TABS)[number];
 
 export const Route = createFileRoute(
@@ -175,6 +172,7 @@ function TemplateEditorPage() {
   const [browserEnabled, setBrowserEnabled] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(true);
   const [sendEmailEnabled, setSendEmailEnabled] = useState(true);
+  const [contextEngineEnabled, setContextEngineEnabled] = useState(true);
 
   // State -- MCP servers
   const [templateMcpServers, setTemplateMcpServers] = useState<
@@ -233,6 +231,7 @@ function TemplateEditorPage() {
         browserEnabled,
         webSearchEnabled,
         sendEmailEnabled,
+        contextEngineEnabled,
       }),
     [
       name,
@@ -249,6 +248,7 @@ function TemplateEditorPage() {
       browserEnabled,
       webSearchEnabled,
       sendEmailEnabled,
+      contextEngineEnabled,
     ],
   );
   const isDirty = isNew || initialSnapshot !== currentSnapshot;
@@ -312,9 +312,7 @@ function TemplateEditorPage() {
         typeof webSearchRaw === "string" && webSearchRaw
           ? JSON.parse(webSearchRaw)
           : webSearchRaw;
-      const nextWebSearchEnabled = !!(
-        webSearch && webSearch.enabled === true
-      );
+      const nextWebSearchEnabled = !!(webSearch && webSearch.enabled === true);
       setWebSearchEnabled(nextWebSearchEnabled);
 
       const sendEmailRaw = (t as any).sendEmail;
@@ -324,6 +322,16 @@ function TemplateEditorPage() {
           : sendEmailRaw;
       const nextSendEmailEnabled = !!(sendEmail && sendEmail.enabled === true);
       setSendEmailEnabled(nextSendEmailEnabled);
+
+      const contextEngineRaw = (t as any).contextEngine;
+      const contextEngine =
+        typeof contextEngineRaw === "string" && contextEngineRaw
+          ? JSON.parse(contextEngineRaw)
+          : contextEngineRaw;
+      const nextContextEngineEnabled = !!(
+        contextEngine && contextEngine.enabled === true
+      );
+      setContextEngineEnabled(nextContextEngineEnabled);
       setInitialSnapshot(
         stableJson({
           name: t.name,
@@ -340,6 +348,7 @@ function TemplateEditorPage() {
           browserEnabled: nextBrowserEnabled,
           webSearchEnabled: nextWebSearchEnabled,
           sendEmailEnabled: nextSendEmailEnabled,
+          contextEngineEnabled: nextContextEngineEnabled,
         }),
       );
     }
@@ -464,6 +473,9 @@ function TemplateEditorPage() {
     const sendEmailJson = sendEmailEnabled
       ? JSON.stringify({ enabled: true })
       : JSON.stringify(null);
+    const contextEngineJson = contextEngineEnabled
+      ? JSON.stringify({ enabled: true })
+      : JSON.stringify(null);
     const config = JSON.stringify(templateConfig);
 
     try {
@@ -481,6 +493,7 @@ function TemplateEditorPage() {
             browser: browserJson,
             webSearch: webSearchJson,
             sendEmail: sendEmailJson,
+            contextEngine: contextEngineJson,
             runtime,
 
             model: model || undefined,
@@ -514,6 +527,7 @@ function TemplateEditorPage() {
             browser: browserJson,
             webSearch: webSearchJson,
             sendEmail: sendEmailJson,
+            contextEngine: contextEngineJson,
             runtime,
 
             model: model || undefined,
@@ -763,6 +777,37 @@ function TemplateEditorPage() {
                       </Select>
                     </div>
                   )}
+                </CardContent>
+              </Card>
+
+              <Card size="sm">
+                <CardHeader>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <BrainCircuit className="h-4 w-4 text-muted-foreground" />
+                      <CardTitle className="text-sm">Context Engine</CardTitle>
+                    </div>
+                    <Switch
+                      id="context-engine-enabled"
+                      checked={contextEngineEnabled}
+                      onCheckedChange={setContextEngineEnabled}
+                    />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor="context-engine-enabled"
+                      className="font-normal"
+                    >
+                      Enable <code>query_context</code>
+                    </Label>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Injects Context Engine into agent turns for memory, wiki,
+                      workspace, knowledge base, and approved MCP context
+                      search.
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
 

@@ -1,14 +1,21 @@
 export { ThinkworkProvider } from "./provider";
 export { useThinkworkAuth } from "./auth/provider";
 export { useThinkworkClient } from "./graphql/provider";
-export { createThinkworkClient, type ThinkworkGraphqlClient } from "./graphql/client";
+export {
+  createThinkworkClient,
+  type ThinkworkGraphqlClient,
+} from "./graphql/client";
 export { setAuthToken, getAuthToken, onAuthTokenChange } from "./graphql/token";
 export { defaultLogger } from "./logger";
 
 export { useAgents } from "./hooks/use-agents";
 export { useThreads, type UseThreadsArgs } from "./hooks/use-threads";
 export { useUnreadThreadCount } from "./hooks/use-unread-count";
-export { useThread, useCreateThread, useUpdateThread } from "./hooks/use-thread";
+export {
+  useThread,
+  useCreateThread,
+  useUpdateThread,
+} from "./hooks/use-thread";
 export {
   useMessages,
   useSendMessage,
@@ -29,6 +36,16 @@ export {
   useDeleteMobileMemoryCapture,
 } from "./hooks/use-mobile-memory-captures";
 export { useMobileMemorySearch } from "./hooks/use-mobile-memory-search";
+export {
+  queryContext,
+  type ContextEngineResponse,
+  type ContextEngineHit,
+  type ContextProviderStatus,
+} from "./context-engine";
+export {
+  useContextQuery,
+  type UseContextQueryArgs,
+} from "./hooks/use-context-query";
 export { useRecentWikiPages } from "./hooks/use-recent-wiki-pages";
 export {
   useWikiPage,

@@ -130,7 +130,10 @@ export async function handler(event: InvokeEvent): Promise<void> {
         })
         .from(messages)
         .where(eq(messages.id, event.messageId));
-      if (msg?.sender_type === "human" && msg.sender_id) {
+      if (
+        (msg?.sender_type === "human" || msg?.sender_type === "user") &&
+        msg.sender_id
+      ) {
         currentUserId = msg.sender_id;
         const [u] = await db
           .select({ email: users.email })
@@ -384,6 +387,7 @@ export async function handler(event: InvokeEvent): Promise<void> {
       send_email_config: runtimeConfig.sendEmailConfig
         ? { ...runtimeConfig.sendEmailConfig, threadId }
         : undefined,
+      context_engine_enabled: runtimeConfig.contextEngineEnabled || undefined,
       runtime_type: runtimeType,
       model: agentModel,
       skills: skillsConfig.length > 0 ? skillsConfig : undefined,
@@ -631,8 +635,9 @@ export async function handler(event: InvokeEvent): Promise<void> {
     }>;
     if (hindsightUsage.length > 0) {
       try {
-        const { recordHindsightCost } =
-          await import("../lib/hindsight-cost.js");
+        const { recordHindsightCost } = await import(
+          "../lib/hindsight-cost.js"
+        );
         for (const entry of hindsightUsage) {
           await recordHindsightCost({
             tenantId,
@@ -839,8 +844,9 @@ export async function handler(event: InvokeEvent): Promise<void> {
 
     // 4c. Send push notification to user devices
     try {
-      const { sendTurnCompletedPush } =
-        await import("../lib/push-notifications.js");
+      const { sendTurnCompletedPush } = await import(
+        "../lib/push-notifications.js"
+      );
       await sendTurnCompletedPush({
         threadId,
         tenantId,

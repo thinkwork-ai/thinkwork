@@ -90,7 +90,7 @@ export function buildHindsightTools(
     name: "hindsight_recall",
     label: "Hindsight Recall",
     description:
-      "Search long-term Hindsight memory for facts from prior conversations. Use for memory lookup.",
+      "Direct raw Hindsight recall for diagnostics or explicit raw-memory requests. Prefer query_memory_context for normal long-term memory lookup so provider status and partial failures are captured through Context Engine.",
     parameters: Type.Object({
       query: Type.String({ description: "Question or topic to recall." }),
     }),
@@ -103,7 +103,9 @@ export function buildHindsightTools(
         `/v1/default/banks/${encodeURIComponent(bankId)}/memories/recall`,
         {
           query,
-          max_results: 10,
+          budget: "low",
+          max_tokens: 1_500,
+          include: { entities: null },
           types: ["world", "experience", "observation"],
         },
       );
@@ -118,7 +120,7 @@ export function buildHindsightTools(
     name: "hindsight_reflect",
     label: "Hindsight Reflect",
     description:
-      "Synthesize a narrative answer over Hindsight memory. Use after recall for broad memory questions.",
+      "Direct raw Hindsight reflection for diagnostics or explicit raw-reflect requests. Prefer query_memory_context for normal reflect-style memory synthesis so provider status and partial failures are captured through Context Engine.",
     parameters: Type.Object({
       query: Type.String({ description: "Question or topic to synthesize." }),
     }),

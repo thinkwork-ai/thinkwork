@@ -22,6 +22,12 @@ import {
   type ToolRuntimeState,
 } from "./tools/types.js";
 
+const CONTEXT_ENGINE_TOOL_NAMES = new Set([
+  "query_context",
+  "query_memory_context",
+  "query_wiki_context",
+]);
+
 export interface PiRuntimeResult {
   response: {
     role: "assistant";
@@ -168,9 +174,11 @@ export async function runPiAgent(
             ? "builtin"
             : event.toolName === "send_email"
               ? "builtin"
-              : event.toolName === "execute_code"
-                ? "sandbox"
-                : "tool",
+              : CONTEXT_ENGINE_TOOL_NAMES.has(event.toolName)
+                ? "builtin"
+                : event.toolName === "execute_code"
+                  ? "sandbox"
+                  : "tool",
       });
     }
     if (event.type === "tool_execution_end") {

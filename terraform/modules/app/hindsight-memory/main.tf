@@ -267,6 +267,12 @@ resource "aws_ecs_task_definition" "hindsight" {
       { name = "HINDSIGHT_API_EMBEDDINGS_PROVIDER", value = "local" },
       { name = "HINDSIGHT_API_EMBEDDINGS_LOCAL_MODEL", value = "BAAI/bge-small-en-v1.5" },
       { name = "HINDSIGHT_API_RERANKER_PROVIDER", value = "local" },
+      { name = "HINDSIGHT_API_RERANKER_MAX_CANDIDATES", value = "20" },
+      { name = "HINDSIGHT_API_RERANKER_LOCAL_BUCKET_BATCHING", value = "true" },
+      { name = "HINDSIGHT_API_RERANKER_LOCAL_MAX_CONCURRENT", value = "1" },
+      { name = "HINDSIGHT_API_RECALL_BUDGET_FUNCTION", value = "adaptive" },
+      { name = "HINDSIGHT_API_RECALL_BUDGET_MIN", value = "5" },
+      { name = "HINDSIGHT_API_RECALL_BUDGET_MAX", value = "300" },
     ]
 
     logConfiguration = {

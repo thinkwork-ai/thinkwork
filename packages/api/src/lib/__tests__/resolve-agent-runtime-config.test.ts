@@ -89,6 +89,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     runtime: "agentTemplates.runtime",
     web_search: "agentTemplates.web_search",
     send_email: "agentTemplates.send_email",
+    context_engine: "agentTemplates.context_engine",
   },
   agentSkills: {
     agent_id: "agentSkills.agent_id",
@@ -168,6 +169,7 @@ function stageTemplateRow(overrides?: Record<string, unknown>) {
       browser: null,
       web_search: { enabled: true },
       send_email: { enabled: true },
+      context_engine: { enabled: true },
       runtime: "strands",
       ...overrides,
     },
@@ -242,6 +244,7 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.guardrailId).toBeNull();
     expect(cfg.guardrailConfig).toBeUndefined();
     expect(cfg.browserAutomationEnabled).toBe(false);
+    expect(cfg.contextEngineEnabled).toBe(true);
     expect(cfg.knowledgeBasesConfig).toBeUndefined();
     expect(cfg.mcpConfigs).toEqual([]);
     // Default script skills stay present; send_email is injected as a direct tool.
@@ -391,6 +394,37 @@ describe("resolveAgentRuntimeConfig", () => {
       agentId: AGENT_ID,
     });
     expect(cfg.sendEmailConfig).toBeUndefined();
+  });
+
+  it("does not register Context Engine when the template opt-in is null", async () => {
+    stageAgentRow();
+    stageTemplateRow({ context_engine: null });
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    rowsQueue.push([]); // skills
+    rowsQueue.push([]); // kbs
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+    expect(cfg.contextEngineEnabled).toBe(false);
+  });
+
+  it("does not register Context Engine when blocked_tools includes query_context", async () => {
+    stageAgentRow();
+    stageTemplateRow({
+      context_engine: { enabled: true },
+      blocked_tools: ["query_context"],
+    });
+    stageTenantSlug();
+    rowsQueue.push([]); // default guardrail
+    rowsQueue.push([]); // skills
+    rowsQueue.push([]); // kbs
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+    expect(cfg.contextEngineEnabled).toBe(false);
   });
 
   it("falls back to the tenant default guardrail when the template has none", async () => {

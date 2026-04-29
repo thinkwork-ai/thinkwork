@@ -43,10 +43,15 @@ import {
   updateMcpServer,
   approveMcpServer,
   rejectMcpServer,
+  listMcpContextTools,
+  updateMcpContextTool,
   type McpServer,
+  type McpContextTool,
 } from "@/lib/mcp-api";
 
-export const Route = createFileRoute("/_authed/_tenant/capabilities/mcp-servers")({
+export const Route = createFileRoute(
+  "/_authed/_tenant/capabilities/mcp-servers",
+)({
   component: McpServersPage,
 });
 
@@ -83,7 +88,11 @@ const columns: ColumnDef<McpServer>[] = [
       const t = row.original.authType;
       return (
         <span className="text-sm text-muted-foreground">
-          {t === "oauth" ? "OAuth" : t === "tenant_api_key" ? "API Key" : "None"}
+          {t === "oauth"
+            ? "OAuth"
+            : t === "tenant_api_key"
+              ? "API Key"
+              : "None"}
         </span>
       );
     },
@@ -114,7 +123,10 @@ const columns: ColumnDef<McpServer>[] = [
       };
       return (
         <div className="flex justify-center">
-          <Badge variant="secondary" className={`text-xs ${styles[status] ?? ""}`}>
+          <Badge
+            variant="secondary"
+            className={`text-xs ${styles[status] ?? ""}`}
+          >
             {status}
           </Badge>
         </div>
@@ -166,7 +178,9 @@ function McpServersPage() {
       .finally(() => setLoading(false));
   }, [tenantSlug]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   if (!tenantSlug) return <PageSkeleton />;
   if (loading && servers.length === 0) return <PageSkeleton />;
@@ -185,7 +199,11 @@ function McpServersPage() {
             />
           </div>
           <div className="ml-auto">
-            <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAddOpen(true)}
+            >
               <Plus className="h-3.5 w-3.5 mr-1.5" />
               Register Server
             </Button>
@@ -196,7 +214,8 @@ function McpServersPage() {
             <div className="text-center py-12">
               <Cable className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
-                No MCP servers registered. Add one to connect external tools to your agents.
+                No MCP servers registered. Add one to connect external tools to
+                your agents.
               </p>
             </div>
           ) : (
@@ -258,13 +277,18 @@ function AddServerDialog({
   const [err, setErr] = useState("");
 
   const reset = () => {
-    setName(""); setUrl(""); setTransport("streamable-http");
-    setAuthType("none"); setApiKey(""); setErr("");
+    setName("");
+    setUrl("");
+    setTransport("streamable-http");
+    setAuthType("none");
+    setApiKey("");
+    setErr("");
   };
 
   const handleSave = async () => {
     if (!name || !url) return;
-    setSaving(true); setErr("");
+    setSaving(true);
+    setErr("");
     try {
       await registerMcpServer(tenantSlug, {
         name,
@@ -283,34 +307,57 @@ function AddServerDialog({
     }
   };
 
-  const isValid = name.trim() && url.trim() &&
+  const isValid =
+    name.trim() &&
+    url.trim() &&
     (authType === "none" || authType === "oauth" ? true : apiKey.trim());
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) reset();
+        onOpenChange(o);
+      }}
+    >
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Register MCP Server</DialogTitle>
           <DialogDescription>
-            Add an external MCP server to your tenant. Once registered, you can assign it to agent templates.
+            Add an external MCP server to your tenant. Once registered, you can
+            assign it to agent templates.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1">
             <Label htmlFor="mcp-name">Name</Label>
-            <Input id="mcp-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. CRM Tools" />
+            <Input
+              id="mcp-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. CRM Tools"
+            />
           </div>
           <div className="space-y-1">
             <Label htmlFor="mcp-url">URL</Label>
-            <Input id="mcp-url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://mcp.example.com/sse" />
+            <Input
+              id="mcp-url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://mcp.example.com/sse"
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label>Transport</Label>
               <Select value={transport} onValueChange={setTransport}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="streamable-http">Streamable HTTP</SelectItem>
+                  <SelectItem value="streamable-http">
+                    Streamable HTTP
+                  </SelectItem>
                   <SelectItem value="sse">SSE</SelectItem>
                 </SelectContent>
               </Select>
@@ -318,7 +365,9 @@ function AddServerDialog({
             <div className="space-y-1">
               <Label>Authentication</Label>
               <Select value={authType} onValueChange={setAuthType}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
                   <SelectItem value="tenant_api_key">Tenant API Key</SelectItem>
@@ -330,21 +379,47 @@ function AddServerDialog({
           {authType === "tenant_api_key" && (
             <div className="space-y-1">
               <Label htmlFor="mcp-apikey">API Key</Label>
-              <Input id="mcp-apikey" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="API key or bearer token" />
+              <Input
+                id="mcp-apikey"
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="API key or bearer token"
+              />
             </div>
           )}
           {authType === "oauth" && (
-            <p className="text-xs text-muted-foreground px-1">Each user will need to connect their own account from the mobile app before the agent can use this server.</p>
+            <p className="text-xs text-muted-foreground px-1">
+              Each user will need to connect their own account from the mobile
+              app before the agent can use this server.
+            </p>
           )}
           {err && (
             <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
-              <AlertCircle className="h-4 w-4 shrink-0" />{err}
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {err}
             </div>
           )}
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" size="sm" onClick={() => { reset(); onOpenChange(false); }} disabled={saving}>Cancel</Button>
-            <Button size="sm" onClick={handleSave} disabled={!isValid || saving}>
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                reset();
+                onOpenChange(false);
+              }}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={!isValid || saving}
+            >
+              {saving ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+              ) : null}
               Register
             </Button>
           </div>
@@ -372,7 +447,11 @@ function ServerDetailDialog({
   onChanged: () => void;
 }) {
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; tools?: Array<{ name: string; description?: string }>; error?: string } | null>(null);
+  const [testResult, setTestResult] = useState<{
+    ok: boolean;
+    tools?: Array<{ name: string; description?: string }>;
+    error?: string;
+  } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [toggling, setToggling] = useState(false);
@@ -381,13 +460,39 @@ function ServerDetailDialog({
   const [approving, setApproving] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectInput, setShowRejectInput] = useState(false);
+  const [contextTools, setContextTools] = useState<McpContextTool[]>([]);
+  const [contextToolsLoading, setContextToolsLoading] = useState(false);
+  const [contextToolSaving, setContextToolSaving] = useState<string | null>(
+    null,
+  );
+
+  const loadContextTools = useCallback(async () => {
+    if (!tenantSlug) return;
+    setContextToolsLoading(true);
+    try {
+      const result = await listMcpContextTools(tenantSlug, server.id);
+      setContextTools(result.tools);
+    } catch (e) {
+      console.warn("[MCP] Failed to load context tools", e);
+    } finally {
+      setContextToolsLoading(false);
+    }
+  }, [tenantSlug, server.id]);
+
+  useEffect(() => {
+    void loadContextTools();
+  }, [loadContextTools]);
 
   const handleTest = async () => {
-    setTesting(true); setTestResult(null);
+    setTesting(true);
+    setTestResult(null);
     try {
       const result = await testMcpServer(tenantSlug, server.id);
       setTestResult(result);
-      if (result.ok) toast.success(`Connected — ${result.tools?.length || 0} tools`);
+      if (result.ok) {
+        toast.success(`Connected — ${result.tools?.length || 0} tools`);
+        await loadContextTools();
+      }
     } catch (e: any) {
       setTestResult({ ok: false, error: e.message });
       toast.error("Connection failed");
@@ -449,7 +554,11 @@ function ServerDetailDialog({
     }
     setApproving(true);
     try {
-      await rejectMcpServer(tenantId, server.id, rejectReason.trim() || undefined);
+      await rejectMcpServer(
+        tenantId,
+        server.id,
+        rejectReason.trim() || undefined,
+      );
       toast.success("Server rejected");
       onClose();
       onChanged();
@@ -466,12 +575,41 @@ function ServerDetailDialog({
     window.open(authUrl, "_blank", "width=600,height=700");
   };
 
-  const isConnected = testResult?.ok === true || (server.tools && server.tools.length > 0);
+  const handleContextToolUpdate = async (
+    tool: McpContextTool,
+    updates: { approved?: boolean; defaultEnabled?: boolean },
+  ) => {
+    setContextToolSaving(tool.id);
+    try {
+      const result = await updateMcpContextTool(tenantSlug, tool.id, updates);
+      setContextTools((tools) =>
+        tools.map((item) => (item.id === result.tool.id ? result.tool : item)),
+      );
+      toast.success("Context provider updated");
+    } catch (e) {
+      toast.error((e as Error).message || "Failed to update context provider");
+    } finally {
+      setContextToolSaving(null);
+    }
+  };
+
+  const isConnected =
+    testResult?.ok === true || (server.tools && server.tools.length > 0);
   const toolCount = testResult?.tools?.length ?? server.tools?.length ?? 0;
-  const authLabel = server.authType === "oauth" ? "OAuth" : server.authType === "tenant_api_key" ? "API Key" : "None";
+  const authLabel =
+    server.authType === "oauth"
+      ? "OAuth"
+      : server.authType === "tenant_api_key"
+        ? "API Key"
+        : "None";
 
   return (
-    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (!o) onClose();
+      }}
+    >
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -485,9 +623,17 @@ function ServerDetailDialog({
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Status</span>
               <div className="flex items-center gap-1.5">
-                {isConnected
-                  ? <><CheckCircle2 className="h-3.5 w-3.5 text-green-500" /><span className="text-green-500">connected</span></>
-                  : <><AlertCircle className="h-3.5 w-3.5 text-muted-foreground" /><span className="text-muted-foreground">unknown</span></>}
+                {isConnected ? (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                    <span className="text-green-500">connected</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-muted-foreground">unknown</span>
+                  </>
+                )}
               </div>
             </div>
             <div className="flex items-center justify-between">
@@ -496,7 +642,9 @@ function ServerDetailDialog({
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">URL</span>
-              <span className="font-mono text-xs truncate max-w-[280px]">{server.url}</span>
+              <span className="font-mono text-xs truncate max-w-[280px]">
+                {server.url}
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Transport</span>
@@ -504,18 +652,30 @@ function ServerDetailDialog({
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Tools</span>
-              <span>{toolCount} tool{toolCount !== 1 ? "s" : ""}</span>
+              <span>
+                {toolCount} tool{toolCount !== 1 ? "s" : ""}
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Enabled</span>
-              <Switch checked={enabled} onCheckedChange={handleToggle} disabled={toggling} />
+              <Switch
+                checked={enabled}
+                onCheckedChange={handleToggle}
+                disabled={toggling}
+              />
             </div>
           </div>
 
           {/* Test result */}
           {testResult && (
-            <div className={`flex items-start gap-2 p-3 rounded-md text-sm ${testResult.ok ? "bg-green-500/10 text-green-600 dark:text-green-400" : "bg-destructive/10 text-destructive"}`}>
-              {testResult.ok ? <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" /> : <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />}
+            <div
+              className={`flex items-start gap-2 p-3 rounded-md text-sm ${testResult.ok ? "bg-green-500/10 text-green-600 dark:text-green-400" : "bg-destructive/10 text-destructive"}`}
+            >
+              {testResult.ok ? (
+                <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+              ) : (
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              )}
               <div>
                 {testResult.ok
                   ? `Connected. ${testResult.tools?.length || 0} tools discovered.`
@@ -536,9 +696,16 @@ function ServerDetailDialog({
               {showTools && (
                 <div className="max-h-48 overflow-y-auto space-y-1 mt-2">
                   {(testResult?.tools ?? server.tools ?? []).map((t) => (
-                    <div key={t.name} className="text-xs px-2 py-1.5 bg-muted rounded">
+                    <div
+                      key={t.name}
+                      className="text-xs px-2 py-1.5 bg-muted rounded"
+                    >
                       <span className="font-mono font-medium">{t.name}</span>
-                      {t.description && <p className="text-muted-foreground mt-0.5">{t.description}</p>}
+                      {t.description && (
+                        <p className="text-muted-foreground mt-0.5">
+                          {t.description}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -546,22 +713,121 @@ function ServerDetailDialog({
             </div>
           )}
 
+          <div className="border-t pt-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium">Context Engine</div>
+              {contextToolsLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+              ) : null}
+            </div>
+            {contextTools.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No context providers discovered for this server.
+              </p>
+            ) : (
+              <div className="max-h-56 overflow-y-auto space-y-2">
+                {contextTools.map((tool) => {
+                  const saving = contextToolSaving === tool.id;
+                  return (
+                    <div
+                      key={tool.id}
+                      className="rounded-md border p-2.5 space-y-2"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium">
+                            {tool.displayName || tool.toolName}
+                          </div>
+                          <div className="truncate text-xs font-mono text-muted-foreground">
+                            {tool.toolName}
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap justify-end gap-1">
+                          <Badge
+                            variant={
+                              tool.declaredReadOnly ? "secondary" : "outline"
+                            }
+                            className="text-[10px]"
+                          >
+                            read-only
+                          </Badge>
+                          <Badge
+                            variant={
+                              tool.declaredSearchSafe ? "secondary" : "outline"
+                            }
+                            className="text-[10px]"
+                          >
+                            search-safe
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <label className="flex items-center justify-between gap-2 rounded bg-muted/40 px-2 py-1.5">
+                          <span>Approved</span>
+                          <Switch
+                            checked={tool.approved}
+                            disabled={saving}
+                            onCheckedChange={(checked) =>
+                              handleContextToolUpdate(tool, {
+                                approved: checked,
+                                defaultEnabled: checked
+                                  ? tool.defaultEnabled
+                                  : false,
+                              })
+                            }
+                          />
+                        </label>
+                        <label className="flex items-center justify-between gap-2 rounded bg-muted/40 px-2 py-1.5">
+                          <span>Default</span>
+                          <Switch
+                            checked={tool.defaultEnabled}
+                            disabled={saving || !tool.approved}
+                            onCheckedChange={(checked) =>
+                              handleContextToolUpdate(tool, {
+                                defaultEnabled: checked,
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Approval controls (plan §U11) — only render when status is set. */}
           {server.status === "pending" && (
             <div className="border-t pt-3 space-y-2">
               <div className="text-sm font-medium">Admin approval</div>
               <p className="text-xs text-muted-foreground">
-                This MCP server was installed by a plugin and requires approval before
-                any agent can invoke it. Approving pins the current URL and auth config
-                — any later change reverts the row back to pending.
+                This MCP server was installed by a plugin and requires approval
+                before any agent can invoke it. Approving pins the current URL
+                and auth config — any later change reverts the row back to
+                pending.
               </p>
               <div className="flex flex-wrap gap-2">
-                <Button variant="default" size="sm" onClick={handleApprove} disabled={approving}>
-                  {approving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleApprove}
+                  disabled={approving}
+                >
+                  {approving ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                  ) : (
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                  )}
                   Approve
                 </Button>
                 {!showRejectInput ? (
-                  <Button variant="outline" size="sm" onClick={() => setShowRejectInput(true)} disabled={approving}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowRejectInput(true)}
+                    disabled={approving}
+                  >
                     Reject…
                   </Button>
                 ) : (
@@ -569,13 +835,27 @@ function ServerDetailDialog({
                     <Input
                       placeholder="Reason (optional, ≤500 chars)"
                       value={rejectReason}
-                      onChange={(e) => setRejectReason(e.target.value.slice(0, 500))}
+                      onChange={(e) =>
+                        setRejectReason(e.target.value.slice(0, 500))
+                      }
                       className="flex-1"
                     />
-                    <Button variant="destructive" size="sm" onClick={handleReject} disabled={approving}>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleReject}
+                      disabled={approving}
+                    >
                       Confirm reject
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => { setShowRejectInput(false); setRejectReason(""); }}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setShowRejectInput(false);
+                        setRejectReason("");
+                      }}
+                    >
                       Cancel
                     </Button>
                   </div>
@@ -585,8 +865,17 @@ function ServerDetailDialog({
           )}
           {server.status === "rejected" && (
             <div className="border-t pt-3">
-              <Button variant="outline" size="sm" onClick={handleApprove} disabled={approving}>
-                {approving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleApprove}
+                disabled={approving}
+              >
+                {approving ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                )}
                 Re-approve
               </Button>
             </div>
@@ -595,12 +884,25 @@ function ServerDetailDialog({
           {/* Actions */}
           <div className="border-t pt-3 space-y-2">
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={handleTest} disabled={testing}>
-                {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <TestTube className="h-3.5 w-3.5 mr-1.5" />}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleTest}
+                disabled={testing}
+              >
+                {testing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                ) : (
+                  <TestTube className="h-3.5 w-3.5 mr-1.5" />
+                )}
                 Test Connection
               </Button>
               {server.authType === "oauth" && (
-                <Button variant="outline" size="sm" onClick={handleAuthenticate}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAuthenticate}
+                >
                   Authenticate
                 </Button>
               )}
@@ -608,15 +910,38 @@ function ServerDetailDialog({
             <div className="flex items-center gap-2">
               {confirmDelete ? (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Are you sure?</span>
-                  <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting}>
-                    {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Delete"}
+                  <span className="text-sm text-muted-foreground">
+                    Are you sure?
+                  </span>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleDelete}
+                    disabled={deleting}
+                  >
+                    {deleting ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      "Delete"
+                    )}
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setConfirmDelete(false)}
+                  >
+                    Cancel
+                  </Button>
                 </div>
               ) : (
-                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setConfirmDelete(true)}>
-                  <Trash2 className="h-3.5 w-3.5 mr-1.5" />Delete Server
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                  Delete Server
                 </Button>
               )}
             </div>

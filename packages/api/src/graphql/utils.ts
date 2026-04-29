@@ -99,6 +99,7 @@ import {
   activationSessionTurns,
   activationApplyOutbox,
   activationAutomationCandidates,
+  tenantMcpContextTools,
 } from "@thinkwork/database-pg/schema";
 import { checkAndFireUnblockWakeups } from "../lib/orchestration/thread-release.js";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
@@ -176,6 +177,7 @@ export {
   activationSessionTurns,
   activationApplyOutbox,
   activationAutomationCandidates,
+  tenantMcpContextTools,
   checkAndFireUnblockWakeups,
   generateSlug,
 };

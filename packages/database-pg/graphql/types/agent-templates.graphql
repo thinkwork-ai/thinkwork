@@ -52,6 +52,14 @@ type AgentTemplate {
   Null means the template does not inject Send Email.
   """
   sendEmail: AWSJSON
+  """
+  Context Engine opt-in metadata for the query_context built-in tool.
+  Shape validated at create/update time by
+  packages/api/src/lib/templates/context-engine-config.ts:
+    { enabled: true }
+  Null means the template does not inject Context Engine.
+  """
+  contextEngine: AWSJSON
 
   isPublished: Boolean!
   createdAt: AWSDateTime!
@@ -157,6 +165,11 @@ input CreateAgentTemplateInput {
   (or pass null) for templates that do not opt into Send Email.
   """
   sendEmail: AWSJSON
+  """
+  Context Engine opt-in metadata; see AgentTemplate.contextEngine. Omit
+  (or pass null) for templates that do not opt into query_context.
+  """
+  contextEngine: AWSJSON
 
   isPublished: Boolean
   """
@@ -199,6 +212,11 @@ input UpdateAgentTemplateInput {
   null to clear; omit to leave unchanged.
   """
   sendEmail: AWSJSON
+  """
+  Context Engine opt-in metadata; see AgentTemplate.contextEngine. Pass
+  null to clear; omit to leave unchanged.
+  """
+  contextEngine: AWSJSON
 
   isPublished: Boolean
 }

@@ -1,0 +1,40 @@
+---
+title: Context Engine
+description: Shared Thinkwork context search for mobile, agents, and MCP clients.
+---
+
+Context Engine is Thinkwork's read-only enterprise context primitive. It exposes one `query_context` contract over provider families instead of asking callers to choose between memory, wiki, workspace files, Bedrock Knowledge Bases, and approved MCP search tools.
+
+## Contract
+
+`query_context` accepts:
+
+- `query`: natural-language search text.
+- `mode`: `results` or `answer`. `results` is citation-first and remains the default.
+- `scope`: `personal`, `team`, or `auto`.
+- `depth`: `quick` or `deep`.
+- `providers`: optional provider ids or families.
+
+Every response includes normalized hits plus provider statuses. Provider failures are local to that source; successful sources still return.
+
+## Provider Families
+
+- `memory`: user-scoped Hindsight/managed memory recall.
+- `wiki`: compiled Compounding Memory pages.
+- `workspace`: permissioned workspace files for the active target.
+- `knowledge-base`: tenant/agent Bedrock Knowledge Bases.
+- `mcp`: tenant-approved, read-only, search-safe MCP tools.
+
+## ThinkWork Brain MCP
+
+External MCP-capable agents connect to ThinkWork Brain at `/mcp/context-engine`. The MCP server exposes `query_context` and `list_context_providers` only. It does not expose mutation tools or `act_on_context`.
+
+## MCP Tool Eligibility
+
+MCP server approval is necessary but not sufficient. A tool must also have a row in `tenant_mcp_context_tools`, declare read-only and search-safe metadata, and be admin-approved before Context Engine can query it by default. Missing declarations are treated as ineligible.
+
+## Runtime Tools
+
+Strands and Pi register `query_context` as a platform-owned built-in tool. The tool calls the API-owned Context Engine service through ThinkWork Brain, keeping provider routing and result normalization aligned with mobile and external MCP callers.
+
+`act_on_context` is reserved for future mutation support and is not callable in v0.

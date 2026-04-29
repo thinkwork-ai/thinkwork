@@ -69,6 +69,10 @@ vi.mock("@modelcontextprotocol/sdk/client/sse.js", () => ({
 }));
 
 import { buildExecuteCodeTool } from "../src/runtime/tools/execute-code.js";
+import {
+  buildContextEngineTool,
+  buildContextEngineTools,
+} from "../src/runtime/tools/context-engine.js";
 import { buildHindsightTools } from "../src/runtime/tools/hindsight.js";
 import { buildMcpTools } from "../src/runtime/tools/mcp.js";
 import { buildSendEmailTool } from "../src/runtime/tools/send-email.js";
@@ -131,9 +135,11 @@ describe("Pi runtime tools", () => {
   });
 
   it("executes send_email through the platform email endpoint", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ messageId: "ses-1", status: "sent" })),
-    );
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ messageId: "ses-1", status: "sent" })),
+      );
     const tool = buildSendEmailTool({
       send_email_config: {
         apiUrl: "https://api.test",
@@ -175,6 +181,112 @@ describe("Pi runtime tools", () => {
 
   it("does not register send_email without runtime config", () => {
     expect(buildSendEmailTool({})).toBeNull();
+  });
+
+  it("executes query_context through the platform Context Engine endpoint", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          result: {
+            content: [{ type: "text", text: "Found context" }],
+            structuredContent: { provider_statuses: [] },
+          },
+        }),
+      ),
+    );
+    const tool = buildContextEngineTool({
+      context_engine_enabled: true,
+      thinkwork_api_url: "https://api.test",
+      thinkwork_api_secret: "secret",
+      tenant_id: "tenant-1",
+      user_id: "user-1",
+      assistant_id: "agent-1",
+    });
+    expect(tool).not.toBeNull();
+
+    const result = (await tool?.execute("tool-1", {
+      query: "deployment status",
+      limit: 3,
+    })) as { content: Array<{ text: string }>; details: unknown };
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.test/mcp/context-engine",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          authorization: "Bearer secret",
+          "x-tenant-id": "tenant-1",
+          "x-user-id": "user-1",
+          "x-agent-id": "agent-1",
+        }),
+      }),
+    );
+    expect(result.content[0]?.text).toBe("Found context");
+  });
+
+  it("registers split Context Engine tools for memory and wiki", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          result: {
+            content: [{ type: "text", text: "Memory reflection text" }],
+            structuredContent: { hits: [{ providerId: "memory" }] },
+          },
+        }),
+      ),
+    );
+    const tools = buildContextEngineTools({
+      context_engine_enabled: true,
+      thinkwork_api_url: "https://api.test",
+      thinkwork_api_secret: "secret",
+      tenant_id: "tenant-1",
+      user_id: "user-1",
+      assistant_id: "agent-1",
+    });
+
+    expect(tools.map((tool) => tool.name)).toEqual([
+      "query_context",
+      "query_memory_context",
+      "query_wiki_context",
+    ]);
+
+    const memoryTool = tools.find(
+      (tool) => tool.name === "query_memory_context",
+    );
+    const result = (await memoryTool?.execute("tool-1", {
+      query: "Smoke Tests 27 April 2026",
+    })) as { content: Array<{ text: string }>; details: unknown };
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.test/mcp/context-engine",
+      expect.objectContaining({
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "pi-query_memory_context",
+          method: "tools/call",
+          params: {
+            name: "query_memory_context",
+            arguments: {
+              query: "Smoke Tests 27 April 2026",
+              mode: "results",
+              scope: "auto",
+              depth: "quick",
+              limit: 10,
+            },
+          },
+        }),
+      }),
+    );
+    expect(result.content[0]?.text).toBe("Memory reflection text");
+  });
+
+  it("does not register query_context without the template runtime flag", () => {
+    expect(
+      buildContextEngineTool({
+        thinkwork_api_url: "https://api.test",
+        thinkwork_api_secret: "secret",
+      }),
+    ).toBeUndefined();
   });
 
   it("returns no execute_code tool when sandbox preflight is absent", () => {

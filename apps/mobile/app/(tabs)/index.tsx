@@ -952,6 +952,7 @@ export default function ThreadsScreen() {
           ) : (
             <WikiList
               userId={currentUser?.id}
+              agentId={activeAgent?.id}
               colors={colors}
               searchQuery={wikiQuery}
             />
