@@ -14,8 +14,10 @@ import {
   Cable,
   Search,
   Mail,
+  MousePointerClick,
   BrainCircuit,
   Settings2,
+  SquareTerminal,
 } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -756,10 +758,10 @@ function TemplateEditorPage() {
         </div>
       }
     >
-      <div className="w-full h-full">
+      <div className="w-full min-h-full">
         {/* Configuration Tab */}
         {tab === "configuration" && (
-          <div className="grid w-full max-w-[1024px] gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="grid w-full gap-6 pb-16 lg:grid-cols-2">
             <div className="space-y-6">
               <Card>
                 <CardHeader>
@@ -853,7 +855,40 @@ function TemplateEditorPage() {
               <Card size="sm">
                 <CardHeader>
                   <div className="flex items-center justify-between gap-3">
-                    <CardTitle className="text-sm">Code Sandbox</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <MousePointerClick className="h-4 w-4 text-muted-foreground" />
+                      <CardTitle className="text-sm">
+                        Browser Automation
+                      </CardTitle>
+                    </div>
+                    <Switch
+                      id="browser-enabled"
+                      checked={browserEnabled}
+                      onCheckedChange={setBrowserEnabled}
+                    />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-1">
+                    <Label htmlFor="browser-enabled" className="font-normal">
+                      Enable <code>browser_automation</code>
+                    </Label>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Registers an AgentCore Browser + Nova Act tool for dynamic
+                      website workflows. Agent-level capability overrides can
+                      still enable or disable it for individual agents.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card size="sm">
+                <CardHeader>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <SquareTerminal className="h-4 w-4 text-muted-foreground" />
+                      <CardTitle className="text-sm">Code Sandbox</CardTitle>
+                    </div>
                     <Switch
                       id="sandbox-enabled"
                       checked={sandboxEnabled}
@@ -972,25 +1007,26 @@ function TemplateEditorPage() {
               <Card size="sm">
                 <CardHeader>
                   <div className="flex items-center justify-between gap-3">
-                    <CardTitle className="text-sm">
-                      Browser Automation
-                    </CardTitle>
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-muted-foreground" />
+                      <CardTitle className="text-sm">Send Email</CardTitle>
+                    </div>
                     <Switch
-                      id="browser-enabled"
-                      checked={browserEnabled}
-                      onCheckedChange={setBrowserEnabled}
+                      id="send-email-enabled"
+                      checked={sendEmailEnabled}
+                      onCheckedChange={setSendEmailEnabled}
                     />
                   </div>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-1">
-                    <Label htmlFor="browser-enabled" className="font-normal">
-                      Enable <code>browser_automation</code>
+                    <Label htmlFor="send-email-enabled" className="font-normal">
+                      Enable <code>send_email</code>
                     </Label>
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                      Registers an AgentCore Browser + Nova Act tool for dynamic
-                      website workflows. Agent-level capability overrides can
-                      still enable or disable it for individual agents.
+                      Injects the platform email-sending built-in tool on agent
+                      turns. The agent email channel still controls the sending
+                      address and per-agent delivery policy.
                     </p>
                   </div>
                 </CardContent>
@@ -1019,34 +1055,6 @@ function TemplateEditorPage() {
                       Injects the tenant-configured Web Search built-in tool on
                       agent turns. Configure the provider and API key under
                       Capabilities.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card size="sm">
-                <CardHeader>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <CardTitle className="text-sm">Send Email</CardTitle>
-                    </div>
-                    <Switch
-                      id="send-email-enabled"
-                      checked={sendEmailEnabled}
-                      onCheckedChange={setSendEmailEnabled}
-                    />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-1">
-                    <Label htmlFor="send-email-enabled" className="font-normal">
-                      Enable <code>send_email</code>
-                    </Label>
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      Injects the platform email-sending built-in tool on agent
-                      turns. The agent email channel still controls the sending
-                      address and per-agent delivery policy.
                     </p>
                   </div>
                 </CardContent>
