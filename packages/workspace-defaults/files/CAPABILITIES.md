@@ -21,7 +21,7 @@ procedures, or reference material.
 If `query_context` is available, use it first for ordinary context lookup across wiki pages,
 workspace files, knowledge bases, and approved search-safe MCP tools. It is read-only and
 returns cited results plus provider status. Use `query_memory_context` only when you need
-raw Hindsight Memory; it can be much slower than the default context search path.
+Hindsight Memory synthesis; it can be slower than the default context search path.
 
 ## Web Search
 
