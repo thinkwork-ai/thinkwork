@@ -1,5 +1,6 @@
 import pytest
 
+import context_engine_tool as cet
 from context_engine_tool import make_context_engine_tool, make_context_engine_tools
 
 
@@ -38,3 +39,28 @@ def test_context_engine_registers_split_tools():
         "query_memory_context",
         "query_wiki_context",
     ]
+
+
+@pytest.mark.asyncio
+async def test_query_context_applies_template_provider_config(monkeypatch):
+    calls = []
+
+    async def fake_json_rpc(method, params):
+        calls.append((method, params))
+        return {"content": [{"text": "ok"}]}
+
+    monkeypatch.setattr(cet, "_json_rpc", fake_json_rpc)
+    tool = make_context_engine_tool(
+        identity_tool,
+        {
+            "providers": {"ids": ["memory", "wiki"]},
+            "providerOptions": {"memory": {"queryMode": "reflect"}},
+        },
+    )
+
+    result = await tool("Paris")
+
+    assert result == "ok"
+    arguments = calls[0][1]["arguments"]
+    assert arguments["providers"] == {"ids": ["memory", "wiki"]}
+    assert arguments["providerOptions"] == {"memory": {"queryMode": "reflect"}}

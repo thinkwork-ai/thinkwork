@@ -10,19 +10,35 @@ const MEMORY_TIMEOUT_MS = Number(
   process.env.CONTEXT_ENGINE_MEMORY_TIMEOUT_MS || 15_000,
 );
 const MEMORY_DEFAULT_ENABLED =
-  process.env.CONTEXT_ENGINE_MEMORY_DEFAULT_ENABLED === "true";
+  process.env.CONTEXT_ENGINE_MEMORY_DEFAULT_ENABLED !== "false";
 const MEMORY_QUERY_MODE =
   process.env.CONTEXT_ENGINE_MEMORY_QUERY_MODE === "reflect"
     ? "reflect"
     : "recall";
 
-export function createMemoryContextProvider(): ContextProviderDescriptor {
+export type MemoryContextProviderOptions = {
+  defaultEnabled?: boolean;
+  timeoutMs?: number;
+  queryMode?: "recall" | "reflect";
+  includeLegacyBanks?: boolean;
+};
+
+export function createMemoryContextProvider(
+  options: MemoryContextProviderOptions = {},
+): ContextProviderDescriptor {
+  const timeoutMs = options.timeoutMs ?? MEMORY_TIMEOUT_MS;
+  const queryMode = options.queryMode ?? MEMORY_QUERY_MODE;
   return {
     id: "memory",
     family: "memory",
     displayName: "Hindsight Memory",
-    defaultEnabled: MEMORY_DEFAULT_ENABLED,
-    timeoutMs: Number.isFinite(MEMORY_TIMEOUT_MS) ? MEMORY_TIMEOUT_MS : 15_000,
+    defaultEnabled: options.defaultEnabled ?? MEMORY_DEFAULT_ENABLED,
+    timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 15_000,
+    config: {
+      queryMode,
+      timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 15_000,
+      includeLegacyBanks: options.includeLegacyBanks ?? false,
+    },
     supportedScopes: ["personal", "auto"],
     async query(request): Promise<ContextProviderResult> {
       if (!request.caller.userId) {
@@ -47,10 +63,18 @@ export function createMemoryContextProvider(): ContextProviderDescriptor {
           budget: request.depth === "deep" ? "mid" : "low",
           maxTokens: request.depth === "deep" ? 2_000 : 500,
           includeEntities: false,
+          includeLegacyBanks:
+            request.providerOptions?.memory?.includeLegacyBanks ??
+            options.includeLegacyBanks ??
+            false,
         },
       } as const;
+      const queryMode =
+        request.providerOptions?.memory?.queryMode ??
+        options.queryMode ??
+        MEMORY_QUERY_MODE;
       const hits =
-        MEMORY_QUERY_MODE === "reflect" && services.adapter.reflect
+        queryMode === "reflect" && services.adapter.reflect
           ? await services.adapter.reflect(recallRequest)
           : await services.recall.recall(recallRequest);
 
@@ -75,7 +99,7 @@ export function createMemoryContextProvider(): ContextProviderDescriptor {
                 backend: hit.backend,
                 whyRecalled: hit.whyRecalled,
                 createdAt: hit.record.createdAt,
-                mode: MEMORY_QUERY_MODE,
+                mode: queryMode,
               },
             },
             metadata: {

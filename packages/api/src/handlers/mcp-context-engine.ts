@@ -7,10 +7,13 @@ import { getContextEngineService } from "../lib/context-engine/service.js";
 import type {
   ContextEngineDepth,
   ContextEngineMode,
+  ContextProviderOptions,
   ContextEngineScope,
   ContextProviderFamily,
   ContextProviderSelection,
 } from "../lib/context-engine/types.js";
+import { upsertTenantContextProviderSetting } from "../lib/context-engine/admin-config.js";
+import { resolveAgentRuntimeConfig } from "../lib/resolve-agent-runtime-config.js";
 import { verifyMcpAccessToken } from "./mcp-oauth.js";
 
 const MAX_LIMIT = 50;
@@ -28,6 +31,11 @@ const TOOLS = [
         scope: { type: "string", enum: ["personal", "team", "auto"] },
         depth: { type: "string", enum: ["quick", "deep"] },
         limit: { type: "integer", minimum: 1, maximum: MAX_LIMIT },
+        agentId: {
+          type: "string",
+          description:
+            "Optional Thinkwork agent id whose workspace files should be searched.",
+        },
         providers: {
           type: "object",
           properties: {
@@ -38,6 +46,20 @@ const TOOLS = [
                 type: "string",
                 enum: ["memory", "wiki", "workspace", "knowledge-base", "mcp"],
               },
+            },
+          },
+          additionalProperties: false,
+        },
+        providerOptions: {
+          type: "object",
+          properties: {
+            memory: {
+              type: "object",
+              properties: {
+                queryMode: { type: "string", enum: ["recall", "reflect"] },
+                includeLegacyBanks: { type: "boolean" },
+              },
+              additionalProperties: false,
             },
           },
           additionalProperties: false,
@@ -59,6 +81,25 @@ const TOOLS = [
         scope: { type: "string", enum: ["personal", "auto"] },
         depth: { type: "string", enum: ["quick", "deep"] },
         limit: { type: "integer", minimum: 1, maximum: MAX_LIMIT },
+        agentId: {
+          type: "string",
+          description:
+            "Optional Thinkwork agent id whose workspace files should be searched.",
+        },
+        providerOptions: {
+          type: "object",
+          properties: {
+            memory: {
+              type: "object",
+              properties: {
+                queryMode: { type: "string", enum: ["recall", "reflect"] },
+                includeLegacyBanks: { type: "boolean" },
+              },
+              additionalProperties: false,
+            },
+          },
+          additionalProperties: false,
+        },
       },
       required: ["query"],
       additionalProperties: false,
@@ -91,6 +132,35 @@ const TOOLS = [
       additionalProperties: false,
     },
   },
+  {
+    name: "get_agent_context_policy",
+    description:
+      "Admin-only read model explaining the effective Context Engine policy for one Thinkwork agent.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agentId: { type: "string" },
+      },
+      required: ["agentId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "update_context_provider_setting",
+    description:
+      "Admin-only update for tenant built-in Context Engine provider eligibility, defaults, and provider-specific config.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        providerId: { type: "string" },
+        enabled: { type: "boolean" },
+        defaultEnabled: { type: "boolean" },
+        config: { type: "object" },
+      },
+      required: ["providerId", "enabled", "defaultEnabled"],
+      additionalProperties: false,
+    },
+  },
 ] as const;
 
 export async function handler(
@@ -106,6 +176,7 @@ export async function handler(
   let claims: Record<string, unknown>;
   if (isServiceBearer(bearer)) {
     claims = {
+      "tw:auth_kind": "service",
       scope: "context:read",
       "custom:tenant_id": event.headers["x-tenant-id"],
       "custom:user_id":
@@ -119,6 +190,7 @@ export async function handler(
         resourceUrl(event),
         issuerUrl(event),
       );
+      claims["tw:auth_kind"] = "oauth";
     } catch (err) {
       const auth = await tryFirstPartyAuth(event);
       if (!auth) {
@@ -128,6 +200,7 @@ export async function handler(
         return unauthorized(metadataUrl);
       }
       claims = {
+        "tw:auth_kind": "first-party",
         scope: "context:read",
         sub: auth.principalId,
         email: auth.email,
@@ -205,22 +278,30 @@ async function handleToolCall(
   }
 
   const service = getContextEngineService();
+  const callerWithTarget = callerWithTargetArgs(caller, args);
   switch (toolName) {
     case "query_context": {
       return await queryContextTool(
         request.id,
         args,
-        caller,
+        callerWithTarget,
         providersArg(args.providers),
+        providerOptionsArg(args.providerOptions),
       );
     }
     case "query_memory_context": {
-      return await queryContextTool(request.id, args, caller, {
-        families: ["memory"],
-      });
+      return await queryContextTool(
+        request.id,
+        args,
+        callerWithTarget,
+        {
+          families: ["memory"],
+        },
+        providerOptionsArg(args.providerOptions),
+      );
     }
     case "query_wiki_context": {
-      return await queryContextTool(request.id, args, caller, {
+      return await queryContextTool(request.id, args, callerWithTarget, {
         families: ["wiki"],
       });
     }
@@ -240,14 +321,167 @@ async function handleToolCall(
             id: provider.id,
             family: provider.family,
             displayName: provider.displayName,
+            enabled: provider.enabled !== false,
             defaultEnabled: provider.defaultEnabled,
+            config: provider.config ?? {},
           })),
         },
       });
     }
+    case "get_agent_context_policy": {
+      if (!(await canManageProviderSettings(claims, caller.tenantId))) {
+        return jsonRpcError(
+          request.id,
+          -32003,
+          "first-party admin authentication is required",
+        );
+      }
+      const agentId = stringArg(args.agentId);
+      if (!agentId)
+        return jsonRpcError(request.id, -32602, "agentId is required");
+      const policy = await buildAgentContextPolicy(caller, agentId);
+      return jsonRpcResult(request.id, {
+        structuredContent: policy,
+        content: [
+          {
+            type: "text",
+            text: policy.enabled
+              ? `Context Engine uses ${policy.finalProviders.length} provider(s).`
+              : "Context Engine is disabled for this agent.",
+          },
+        ],
+      });
+    }
+    case "update_context_provider_setting": {
+      if (!(await canManageProviderSettings(claims, caller.tenantId))) {
+        return jsonRpcError(
+          request.id,
+          -32003,
+          "first-party admin authentication is required",
+        );
+      }
+      const providerId = stringArg(args.providerId);
+      if (!providerId) {
+        return jsonRpcError(request.id, -32602, "providerId is required");
+      }
+      const enabled = booleanArg(args.enabled);
+      const defaultEnabled = booleanArg(args.defaultEnabled);
+      if (enabled === null || defaultEnabled === null) {
+        return jsonRpcError(
+          request.id,
+          -32602,
+          "enabled and defaultEnabled booleans are required",
+        );
+      }
+      try {
+        const setting = await upsertTenantContextProviderSetting({
+          tenantId: caller.tenantId,
+          providerId,
+          enabled,
+          defaultEnabled,
+          config: isRecord(args.config) ? args.config : {},
+        });
+        return jsonRpcResult(request.id, {
+          structuredContent: {
+            setting: {
+              id: setting.providerId,
+              family: setting.family,
+              enabled: setting.enabled,
+              defaultEnabled: setting.defaultEnabled,
+              config: setting.config,
+              lastTestedAt: setting.lastTestedAt,
+              lastTestState: setting.lastTestState,
+              lastTestLatencyMs: setting.lastTestLatencyMs,
+              lastTestError: setting.lastTestError,
+            },
+          },
+          content: [
+            {
+              type: "text",
+              text: `${providerId} saved`,
+            },
+          ],
+        });
+      } catch (err) {
+        return jsonRpcError(
+          request.id,
+          -32602,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
     default:
       return jsonRpcError(request.id, -32601, `Unknown tool: ${toolName}`);
   }
+}
+
+async function buildAgentContextPolicy(
+  caller: NonNullable<Awaited<ReturnType<typeof resolveCaller>>>,
+  agentId: string,
+) {
+  const runtime = await resolveAgentRuntimeConfig({
+    tenantId: caller.tenantId,
+    agentId,
+    currentUserId: caller.userId ?? undefined,
+    logPrefix: "[mcp-context-engine]",
+  });
+  const service = getContextEngineService();
+  const providers = await service.listProviders({
+    caller: { ...caller, agentId },
+  });
+  const summaries = providers.map(providerSummary);
+  const byId = new Map(summaries.map((provider) => [provider.id, provider]));
+  const tenantDefaults = summaries.filter(
+    (provider) => provider.enabled !== false && provider.defaultEnabled,
+  );
+  const overrideIds = runtime.contextEngineConfig?.providers?.ids;
+  const finalProviderIds = runtime.contextEngineEnabled
+    ? (overrideIds ?? tenantDefaults.map((provider) => provider.id))
+    : [];
+  const finalProviders = finalProviderIds
+    .map((id) => byId.get(id))
+    .filter((provider): provider is ReturnType<typeof providerSummary> =>
+      Boolean(provider),
+    );
+
+  return {
+    agentId,
+    enabled: runtime.contextEngineEnabled,
+    tenantDefaults,
+    templateOverride: {
+      mode: overrideIds ? "override" : "inherit",
+      providerIds: overrideIds ?? [],
+    },
+    finalProviders,
+    providerOptions: runtime.contextEngineConfig?.providerOptions ?? {},
+    agentDrift: [],
+  };
+}
+
+function providerSummary(provider: {
+  id: string;
+  family: string;
+  displayName: string;
+  enabled?: boolean;
+  defaultEnabled: boolean;
+  config?: Record<string, unknown>;
+}) {
+  return {
+    id: provider.id,
+    family: provider.family,
+    displayName: provider.displayName,
+    enabled: provider.enabled !== false,
+    defaultEnabled: provider.defaultEnabled,
+    config: provider.config ?? {},
+  };
+}
+
+function callerWithTargetArgs<T extends { agentId?: string | null }>(
+  caller: T,
+  args: Record<string, unknown>,
+): T {
+  const agentId = stringArg(args.agentId);
+  return agentId ? { ...caller, agentId } : caller;
 }
 
 async function queryContextTool(
@@ -255,6 +489,7 @@ async function queryContextTool(
   args: Record<string, unknown>,
   caller: NonNullable<Awaited<ReturnType<typeof resolveCaller>>>,
   providers: ContextProviderSelection | undefined,
+  providerOptions?: ContextProviderOptions,
 ): Promise<APIGatewayProxyStructuredResultV2> {
   const query = stringArg(args.query);
   if (!query) return jsonRpcError(id, -32602, "query is required");
@@ -270,6 +505,7 @@ async function queryContextTool(
       enumArg<ContextEngineDepth>(args.depth, ["quick", "deep"]) ?? "quick",
     limit: limitArg(args.limit),
     providers,
+    providerOptions,
     caller,
   });
   return jsonRpcResult(id, {
@@ -293,8 +529,9 @@ async function resolveCaller(claims: Record<string, unknown>) {
 
   const sub = stringClaim(claims.sub);
   if (!sub) return null;
-  const { resolveCallerFromAuth } =
-    await import("../graphql/resolvers/core/resolve-auth-user.js");
+  const { resolveCallerFromAuth } = await import(
+    "../graphql/resolvers/core/resolve-auth-user.js"
+  );
   const resolved = await resolveCallerFromAuth({
     authType: "cognito",
     principalId: sub,
@@ -468,6 +705,57 @@ function providersArg(value: unknown): ContextProviderSelection | undefined {
         )
       : undefined,
   };
+}
+
+function providerOptionsArg(
+  value: unknown,
+): ContextProviderOptions | undefined {
+  if (!isRecord(value)) return undefined;
+  const memory = isRecord(value.memory) ? value.memory : null;
+  const queryMode =
+    memory?.queryMode === "recall" || memory?.queryMode === "reflect"
+      ? memory.queryMode
+      : undefined;
+  const includeLegacyBanks =
+    typeof memory?.includeLegacyBanks === "boolean"
+      ? memory.includeLegacyBanks
+      : undefined;
+  return queryMode || includeLegacyBanks !== undefined
+    ? { memory: { queryMode, includeLegacyBanks } }
+    : undefined;
+}
+
+function booleanArg(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+async function canManageProviderSettings(
+  claims: Record<string, unknown>,
+  tenantId: string,
+): Promise<boolean> {
+  if (claims["tw:auth_kind"] !== "first-party") return false;
+  const principalId = stringClaim(claims.sub);
+  if (!principalId) return false;
+  try {
+    const { requireTenantAdmin } = await import(
+      "../graphql/resolvers/core/authz.js"
+    );
+    await requireTenantAdmin(
+      {
+        auth: {
+          authType: "cognito",
+          principalId,
+          email: stringClaim(claims.email) ?? null,
+          tenantId,
+          agentId: null,
+        },
+      } as any,
+      tenantId,
+    );
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

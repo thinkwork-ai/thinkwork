@@ -66,13 +66,14 @@ export function createWorkspaceFilesContextProvider(): ContextProviderDescriptor
 			}
 
 			const paths = await listPrefix(bucket, target.prefix);
-			const query = request.query.toLowerCase();
+			const searchablePaths = paths.filter(isSearchablePath);
+			const query = normalizedQuery(request.query);
+			const terms = queryTerms(query);
 			const hits: ContextHit[] = [];
-			for (const path of paths) {
+			for (const path of searchablePaths) {
 				if (hits.length >= request.limit) break;
-				if (!isSearchablePath(path)) continue;
 				const content = await readObject(bucket, target.key(path));
-				const matchIndex = content.toLowerCase().indexOf(query);
+				const matchIndex = findMatchIndex(content, path, query, terms);
 				if (matchIndex < 0) continue;
 				const snippet = excerpt(content, matchIndex);
 				hits.push({
@@ -84,22 +85,28 @@ export function createWorkspaceFilesContextProvider(): ContextProviderDescriptor
 					score: scorePath(path, matchIndex),
 					scope: request.scope,
 					provenance: {
-						label: `${target.kind} workspace`,
+						label: target.label,
 						sourceId: target.key(path),
 						uri: `thinkwork://workspace/${target.kind}/${path}`,
-						metadata: { targetKind: target.kind },
+						metadata: { targetKind: target.kind, targetLabel: target.label },
 					},
-					metadata: { path, targetKind: target.kind },
+					metadata: { path, targetKind: target.kind, targetLabel: target.label },
 				});
 			}
 
-			return { hits };
+			return {
+				hits,
+				status: {
+					reason: describeSearch(target, paths.length, searchablePaths.length),
+				},
+			};
 		},
 	};
 }
 
 type WorkspaceTarget = {
 	kind: "agent" | "template" | "defaults";
+	label: string;
 	prefix: string;
 	key(path: string): string;
 };
@@ -124,6 +131,7 @@ async function resolveTarget(caller: {
 		const prefix = `tenants/${tenant.slug}/agents/${agent.slug}/workspace/`;
 		return {
 			kind: "agent",
+			label: `agent workspace ${agent.slug}`,
 			prefix,
 			key: (path) => `${prefix}${path.replace(/^\/+/, "")}`,
 		};
@@ -143,6 +151,7 @@ async function resolveTarget(caller: {
 		const prefix = `tenants/${tenant.slug}/agents/_catalog/${template.slug}/workspace/`;
 		return {
 			kind: "template",
+			label: `template workspace ${template.slug}`,
 			prefix,
 			key: (path) => `${prefix}${path.replace(/^\/+/, "")}`,
 		};
@@ -151,6 +160,7 @@ async function resolveTarget(caller: {
 	const prefix = `tenants/${tenant.slug}/agents/_catalog/defaults/workspace/`;
 	return {
 		kind: "defaults",
+		label: "tenant default workspace",
 		prefix,
 		key: (path) => `${prefix}${path.replace(/^\/+/, "")}`,
 	};
@@ -204,6 +214,64 @@ function excerpt(content: string, index: number): string {
 	const start = Math.max(0, index - 80);
 	const end = Math.min(content.length, index + 220);
 	return content.slice(start, end).replace(/\s+/g, " ").trim();
+}
+
+function normalizedQuery(query: string): string {
+	return query.trim().toLowerCase();
+}
+
+const QUERY_STOPWORDS = new Set([
+	"a",
+	"an",
+	"and",
+	"are",
+	"for",
+	"from",
+	"in",
+	"is",
+	"of",
+	"on",
+	"the",
+	"to",
+	"with",
+]);
+
+function queryTerms(query: string): string[] {
+	const terms = query.match(/[a-z0-9][a-z0-9_-]*/g) ?? [];
+	return terms.filter((term) => term.length > 1 && !QUERY_STOPWORDS.has(term));
+}
+
+function findMatchIndex(
+	content: string,
+	path: string,
+	query: string,
+	terms: string[],
+): number {
+	const contentLower = content.toLowerCase();
+	const exact = contentLower.indexOf(query);
+	if (exact >= 0) return exact;
+
+	const pathLower = path.toLowerCase();
+	if (pathLower.includes(query)) return 0;
+	if (terms.length === 0) return -1;
+
+	const matchesAllTerms = terms.every(
+		(term) => contentLower.includes(term) || pathLower.includes(term),
+	);
+	if (!matchesAllTerms) return -1;
+
+	const contentTermIndexes = terms
+		.map((term) => contentLower.indexOf(term))
+		.filter((index) => index >= 0);
+	return contentTermIndexes.length > 0 ? Math.min(...contentTermIndexes) : 0;
+}
+
+function describeSearch(
+	target: WorkspaceTarget,
+	totalFiles: number,
+	searchableFiles: number,
+): string {
+	return `searched ${searchableFiles}/${totalFiles} files in ${target.label}`;
 }
 
 function scorePath(path: string, index: number): number {

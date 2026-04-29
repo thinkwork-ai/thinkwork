@@ -19,6 +19,7 @@ import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 import { Route as AuthedTenantRouteImport } from './routes/_authed/_tenant'
 import { Route as AuthedTenantSettingsRouteImport } from './routes/_authed/_tenant/settings'
 import { Route as AuthedTenantOrgRouteImport } from './routes/_authed/_tenant/org'
+import { Route as AuthedTenantKnowledgeRouteImport } from './routes/_authed/_tenant/knowledge'
 import { Route as AuthedTenantDashboardRouteImport } from './routes/_authed/_tenant/dashboard'
 import { Route as AuthedTenantCapabilitiesRouteImport } from './routes/_authed/_tenant/capabilities'
 import { Route as AuthedTenantBillingRouteImport } from './routes/_authed/_tenant/billing'
@@ -33,6 +34,7 @@ import { Route as AuthedTenantScheduledJobsIndexRouteImport } from './routes/_au
 import { Route as AuthedTenantRoutinesIndexRouteImport } from './routes/_authed/_tenant/routines/index'
 import { Route as AuthedTenantPeopleIndexRouteImport } from './routes/_authed/_tenant/people/index'
 import { Route as AuthedTenantMemoryIndexRouteImport } from './routes/_authed/_tenant/memory/index'
+import { Route as AuthedTenantKnowledgeIndexRouteImport } from './routes/_authed/_tenant/knowledge/index'
 import { Route as AuthedTenantKnowledgeBasesIndexRouteImport } from './routes/_authed/_tenant/knowledge-bases/index'
 import { Route as AuthedTenantInboxIndexRouteImport } from './routes/_authed/_tenant/inbox/index'
 import { Route as AuthedTenantEvaluationsIndexRouteImport } from './routes/_authed/_tenant/evaluations/index'
@@ -47,6 +49,10 @@ import { Route as AuthedTenantSkillRunsRunIdRouteImport } from './routes/_authed
 import { Route as AuthedTenantScheduledJobsScheduledJobIdRouteImport } from './routes/_authed/_tenant/scheduled-jobs/$scheduledJobId'
 import { Route as AuthedTenantRoutinesRoutineIdRouteImport } from './routes/_authed/_tenant/routines/$routineId'
 import { Route as AuthedTenantPeopleHumanIdRouteImport } from './routes/_authed/_tenant/people/$humanId'
+import { Route as AuthedTenantKnowledgeWikiRouteImport } from './routes/_authed/_tenant/knowledge/wiki'
+import { Route as AuthedTenantKnowledgeMemoryRouteImport } from './routes/_authed/_tenant/knowledge/memory'
+import { Route as AuthedTenantKnowledgeKnowledgeBasesRouteImport } from './routes/_authed/_tenant/knowledge/knowledge-bases'
+import { Route as AuthedTenantKnowledgeContextEngineRouteImport } from './routes/_authed/_tenant/knowledge/context-engine'
 import { Route as AuthedTenantKnowledgeBasesKbIdRouteImport } from './routes/_authed/_tenant/knowledge-bases/$kbId'
 import { Route as AuthedTenantInboxInboxItemIdRouteImport } from './routes/_authed/_tenant/inbox/$inboxItemId'
 import { Route as AuthedTenantEvaluationsRunIdRouteImport } from './routes/_authed/_tenant/evaluations/$runId'
@@ -64,6 +70,7 @@ import { Route as AuthedTenantCapabilitiesSkillsIndexRouteImport } from './route
 import { Route as AuthedTenantCapabilitiesPluginsIndexRouteImport } from './routes/_authed/_tenant/capabilities/plugins/index'
 import { Route as AuthedTenantAnalyticsSkillRunsIndexRouteImport } from './routes/_authed/_tenant/analytics/skill-runs/index'
 import { Route as AuthedTenantAgentTemplatesTemplateIdIndexRouteImport } from './routes/_authed/_tenant/agent-templates/$templateId.index'
+import { Route as AuthedTenantKnowledgeKnowledgeBasesKbIdRouteImport } from './routes/_authed/_tenant/knowledge/knowledge-bases/$kbId'
 import { Route as AuthedTenantEvaluationsStudioNewRouteImport } from './routes/_authed/_tenant/evaluations/studio/new'
 import { Route as AuthedTenantEvaluationsStudioTestCaseIdRouteImport } from './routes/_authed/_tenant/evaluations/studio/$testCaseId'
 import { Route as AuthedTenantCapabilitiesSkillsBuilderRouteImport } from './routes/_authed/_tenant/capabilities/skills/builder'
@@ -129,6 +136,11 @@ const AuthedTenantSettingsRoute = AuthedTenantSettingsRouteImport.update({
 const AuthedTenantOrgRoute = AuthedTenantOrgRouteImport.update({
   id: '/org',
   path: '/org',
+  getParentRoute: () => AuthedTenantRoute,
+} as any)
+const AuthedTenantKnowledgeRoute = AuthedTenantKnowledgeRouteImport.update({
+  id: '/knowledge',
+  path: '/knowledge',
   getParentRoute: () => AuthedTenantRoute,
 } as any)
 const AuthedTenantDashboardRoute = AuthedTenantDashboardRouteImport.update({
@@ -209,6 +221,12 @@ const AuthedTenantMemoryIndexRoute = AuthedTenantMemoryIndexRouteImport.update({
   path: '/memory/',
   getParentRoute: () => AuthedTenantRoute,
 } as any)
+const AuthedTenantKnowledgeIndexRoute =
+  AuthedTenantKnowledgeIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthedTenantKnowledgeRoute,
+  } as any)
 const AuthedTenantKnowledgeBasesIndexRoute =
   AuthedTenantKnowledgeBasesIndexRouteImport.update({
     id: '/knowledge-bases/',
@@ -290,6 +308,30 @@ const AuthedTenantPeopleHumanIdRoute =
     id: '/people/$humanId',
     path: '/people/$humanId',
     getParentRoute: () => AuthedTenantRoute,
+  } as any)
+const AuthedTenantKnowledgeWikiRoute =
+  AuthedTenantKnowledgeWikiRouteImport.update({
+    id: '/wiki',
+    path: '/wiki',
+    getParentRoute: () => AuthedTenantKnowledgeRoute,
+  } as any)
+const AuthedTenantKnowledgeMemoryRoute =
+  AuthedTenantKnowledgeMemoryRouteImport.update({
+    id: '/memory',
+    path: '/memory',
+    getParentRoute: () => AuthedTenantKnowledgeRoute,
+  } as any)
+const AuthedTenantKnowledgeKnowledgeBasesRoute =
+  AuthedTenantKnowledgeKnowledgeBasesRouteImport.update({
+    id: '/knowledge-bases',
+    path: '/knowledge-bases',
+    getParentRoute: () => AuthedTenantKnowledgeRoute,
+  } as any)
+const AuthedTenantKnowledgeContextEngineRoute =
+  AuthedTenantKnowledgeContextEngineRouteImport.update({
+    id: '/context-engine',
+    path: '/context-engine',
+    getParentRoute: () => AuthedTenantKnowledgeRoute,
   } as any)
 const AuthedTenantKnowledgeBasesKbIdRoute =
   AuthedTenantKnowledgeBasesKbIdRouteImport.update({
@@ -391,6 +433,12 @@ const AuthedTenantAgentTemplatesTemplateIdIndexRoute =
     id: '/agent-templates/$templateId/',
     path: '/agent-templates/$templateId/',
     getParentRoute: () => AuthedTenantRoute,
+  } as any)
+const AuthedTenantKnowledgeKnowledgeBasesKbIdRoute =
+  AuthedTenantKnowledgeKnowledgeBasesKbIdRouteImport.update({
+    id: '/$kbId',
+    path: '/$kbId',
+    getParentRoute: () => AuthedTenantKnowledgeKnowledgeBasesRoute,
   } as any)
 const AuthedTenantEvaluationsStudioNewRoute =
   AuthedTenantEvaluationsStudioNewRouteImport.update({
@@ -512,6 +560,7 @@ export interface FileRoutesByFullPath {
   '/billing': typeof AuthedTenantBillingRoute
   '/capabilities': typeof AuthedTenantCapabilitiesRouteWithChildren
   '/dashboard': typeof AuthedTenantDashboardRoute
+  '/knowledge': typeof AuthedTenantKnowledgeRouteWithChildren
   '/org': typeof AuthedTenantOrgRoute
   '/settings': typeof AuthedTenantSettingsRoute
   '/agent-templates/defaults': typeof AuthedTenantAgentTemplatesDefaultsRoute
@@ -526,6 +575,10 @@ export interface FileRoutesByFullPath {
   '/evaluations/$runId': typeof AuthedTenantEvaluationsRunIdRoute
   '/inbox/$inboxItemId': typeof AuthedTenantInboxInboxItemIdRoute
   '/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeBasesKbIdRoute
+  '/knowledge/context-engine': typeof AuthedTenantKnowledgeContextEngineRoute
+  '/knowledge/knowledge-bases': typeof AuthedTenantKnowledgeKnowledgeBasesRouteWithChildren
+  '/knowledge/memory': typeof AuthedTenantKnowledgeMemoryRoute
+  '/knowledge/wiki': typeof AuthedTenantKnowledgeWikiRoute
   '/people/$humanId': typeof AuthedTenantPeopleHumanIdRoute
   '/routines/$routineId': typeof AuthedTenantRoutinesRoutineIdRoute
   '/scheduled-jobs/$scheduledJobId': typeof AuthedTenantScheduledJobsScheduledJobIdRoute
@@ -540,6 +593,7 @@ export interface FileRoutesByFullPath {
   '/evaluations/': typeof AuthedTenantEvaluationsIndexRoute
   '/inbox/': typeof AuthedTenantInboxIndexRoute
   '/knowledge-bases/': typeof AuthedTenantKnowledgeBasesIndexRoute
+  '/knowledge/': typeof AuthedTenantKnowledgeIndexRoute
   '/memory/': typeof AuthedTenantMemoryIndexRoute
   '/people/': typeof AuthedTenantPeopleIndexRoute
   '/routines/': typeof AuthedTenantRoutinesIndexRoute
@@ -565,6 +619,7 @@ export interface FileRoutesByFullPath {
   '/capabilities/skills/builder': typeof AuthedTenantCapabilitiesSkillsBuilderRoute
   '/evaluations/studio/$testCaseId': typeof AuthedTenantEvaluationsStudioTestCaseIdRoute
   '/evaluations/studio/new': typeof AuthedTenantEvaluationsStudioNewRoute
+  '/knowledge/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute
   '/agent-templates/$templateId/': typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute
   '/analytics/skill-runs/': typeof AuthedTenantAnalyticsSkillRunsIndexRoute
   '/capabilities/plugins/': typeof AuthedTenantCapabilitiesPluginsIndexRoute
@@ -597,6 +652,10 @@ export interface FileRoutesByTo {
   '/evaluations/$runId': typeof AuthedTenantEvaluationsRunIdRoute
   '/inbox/$inboxItemId': typeof AuthedTenantInboxInboxItemIdRoute
   '/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeBasesKbIdRoute
+  '/knowledge/context-engine': typeof AuthedTenantKnowledgeContextEngineRoute
+  '/knowledge/knowledge-bases': typeof AuthedTenantKnowledgeKnowledgeBasesRouteWithChildren
+  '/knowledge/memory': typeof AuthedTenantKnowledgeMemoryRoute
+  '/knowledge/wiki': typeof AuthedTenantKnowledgeWikiRoute
   '/people/$humanId': typeof AuthedTenantPeopleHumanIdRoute
   '/routines/$routineId': typeof AuthedTenantRoutinesRoutineIdRoute
   '/scheduled-jobs/$scheduledJobId': typeof AuthedTenantScheduledJobsScheduledJobIdRoute
@@ -611,6 +670,7 @@ export interface FileRoutesByTo {
   '/evaluations': typeof AuthedTenantEvaluationsIndexRoute
   '/inbox': typeof AuthedTenantInboxIndexRoute
   '/knowledge-bases': typeof AuthedTenantKnowledgeBasesIndexRoute
+  '/knowledge': typeof AuthedTenantKnowledgeIndexRoute
   '/memory': typeof AuthedTenantMemoryIndexRoute
   '/people': typeof AuthedTenantPeopleIndexRoute
   '/routines': typeof AuthedTenantRoutinesIndexRoute
@@ -636,6 +696,7 @@ export interface FileRoutesByTo {
   '/capabilities/skills/builder': typeof AuthedTenantCapabilitiesSkillsBuilderRoute
   '/evaluations/studio/$testCaseId': typeof AuthedTenantEvaluationsStudioTestCaseIdRoute
   '/evaluations/studio/new': typeof AuthedTenantEvaluationsStudioNewRoute
+  '/knowledge/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute
   '/agent-templates/$templateId': typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute
   '/analytics/skill-runs': typeof AuthedTenantAnalyticsSkillRunsIndexRoute
   '/capabilities/plugins': typeof AuthedTenantCapabilitiesPluginsIndexRoute
@@ -659,6 +720,7 @@ export interface FileRoutesById {
   '/_authed/_tenant/billing': typeof AuthedTenantBillingRoute
   '/_authed/_tenant/capabilities': typeof AuthedTenantCapabilitiesRouteWithChildren
   '/_authed/_tenant/dashboard': typeof AuthedTenantDashboardRoute
+  '/_authed/_tenant/knowledge': typeof AuthedTenantKnowledgeRouteWithChildren
   '/_authed/_tenant/org': typeof AuthedTenantOrgRoute
   '/_authed/_tenant/settings': typeof AuthedTenantSettingsRoute
   '/_authed/_tenant/agent-templates/defaults': typeof AuthedTenantAgentTemplatesDefaultsRoute
@@ -673,6 +735,10 @@ export interface FileRoutesById {
   '/_authed/_tenant/evaluations/$runId': typeof AuthedTenantEvaluationsRunIdRoute
   '/_authed/_tenant/inbox/$inboxItemId': typeof AuthedTenantInboxInboxItemIdRoute
   '/_authed/_tenant/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeBasesKbIdRoute
+  '/_authed/_tenant/knowledge/context-engine': typeof AuthedTenantKnowledgeContextEngineRoute
+  '/_authed/_tenant/knowledge/knowledge-bases': typeof AuthedTenantKnowledgeKnowledgeBasesRouteWithChildren
+  '/_authed/_tenant/knowledge/memory': typeof AuthedTenantKnowledgeMemoryRoute
+  '/_authed/_tenant/knowledge/wiki': typeof AuthedTenantKnowledgeWikiRoute
   '/_authed/_tenant/people/$humanId': typeof AuthedTenantPeopleHumanIdRoute
   '/_authed/_tenant/routines/$routineId': typeof AuthedTenantRoutinesRoutineIdRoute
   '/_authed/_tenant/scheduled-jobs/$scheduledJobId': typeof AuthedTenantScheduledJobsScheduledJobIdRoute
@@ -687,6 +753,7 @@ export interface FileRoutesById {
   '/_authed/_tenant/evaluations/': typeof AuthedTenantEvaluationsIndexRoute
   '/_authed/_tenant/inbox/': typeof AuthedTenantInboxIndexRoute
   '/_authed/_tenant/knowledge-bases/': typeof AuthedTenantKnowledgeBasesIndexRoute
+  '/_authed/_tenant/knowledge/': typeof AuthedTenantKnowledgeIndexRoute
   '/_authed/_tenant/memory/': typeof AuthedTenantMemoryIndexRoute
   '/_authed/_tenant/people/': typeof AuthedTenantPeopleIndexRoute
   '/_authed/_tenant/routines/': typeof AuthedTenantRoutinesIndexRoute
@@ -712,6 +779,7 @@ export interface FileRoutesById {
   '/_authed/_tenant/capabilities/skills/builder': typeof AuthedTenantCapabilitiesSkillsBuilderRoute
   '/_authed/_tenant/evaluations/studio/$testCaseId': typeof AuthedTenantEvaluationsStudioTestCaseIdRoute
   '/_authed/_tenant/evaluations/studio/new': typeof AuthedTenantEvaluationsStudioNewRoute
+  '/_authed/_tenant/knowledge/knowledge-bases/$kbId': typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute
   '/_authed/_tenant/agent-templates/$templateId/': typeof AuthedTenantAgentTemplatesTemplateIdIndexRoute
   '/_authed/_tenant/analytics/skill-runs/': typeof AuthedTenantAnalyticsSkillRunsIndexRoute
   '/_authed/_tenant/capabilities/plugins/': typeof AuthedTenantCapabilitiesPluginsIndexRoute
@@ -734,6 +802,7 @@ export interface FileRouteTypes {
     | '/billing'
     | '/capabilities'
     | '/dashboard'
+    | '/knowledge'
     | '/org'
     | '/settings'
     | '/agent-templates/defaults'
@@ -748,6 +817,10 @@ export interface FileRouteTypes {
     | '/evaluations/$runId'
     | '/inbox/$inboxItemId'
     | '/knowledge-bases/$kbId'
+    | '/knowledge/context-engine'
+    | '/knowledge/knowledge-bases'
+    | '/knowledge/memory'
+    | '/knowledge/wiki'
     | '/people/$humanId'
     | '/routines/$routineId'
     | '/scheduled-jobs/$scheduledJobId'
@@ -762,6 +835,7 @@ export interface FileRouteTypes {
     | '/evaluations/'
     | '/inbox/'
     | '/knowledge-bases/'
+    | '/knowledge/'
     | '/memory/'
     | '/people/'
     | '/routines/'
@@ -787,6 +861,7 @@ export interface FileRouteTypes {
     | '/capabilities/skills/builder'
     | '/evaluations/studio/$testCaseId'
     | '/evaluations/studio/new'
+    | '/knowledge/knowledge-bases/$kbId'
     | '/agent-templates/$templateId/'
     | '/analytics/skill-runs/'
     | '/capabilities/plugins/'
@@ -819,6 +894,10 @@ export interface FileRouteTypes {
     | '/evaluations/$runId'
     | '/inbox/$inboxItemId'
     | '/knowledge-bases/$kbId'
+    | '/knowledge/context-engine'
+    | '/knowledge/knowledge-bases'
+    | '/knowledge/memory'
+    | '/knowledge/wiki'
     | '/people/$humanId'
     | '/routines/$routineId'
     | '/scheduled-jobs/$scheduledJobId'
@@ -833,6 +912,7 @@ export interface FileRouteTypes {
     | '/evaluations'
     | '/inbox'
     | '/knowledge-bases'
+    | '/knowledge'
     | '/memory'
     | '/people'
     | '/routines'
@@ -858,6 +938,7 @@ export interface FileRouteTypes {
     | '/capabilities/skills/builder'
     | '/evaluations/studio/$testCaseId'
     | '/evaluations/studio/new'
+    | '/knowledge/knowledge-bases/$kbId'
     | '/agent-templates/$templateId'
     | '/analytics/skill-runs'
     | '/capabilities/plugins'
@@ -880,6 +961,7 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/billing'
     | '/_authed/_tenant/capabilities'
     | '/_authed/_tenant/dashboard'
+    | '/_authed/_tenant/knowledge'
     | '/_authed/_tenant/org'
     | '/_authed/_tenant/settings'
     | '/_authed/_tenant/agent-templates/defaults'
@@ -894,6 +976,10 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/evaluations/$runId'
     | '/_authed/_tenant/inbox/$inboxItemId'
     | '/_authed/_tenant/knowledge-bases/$kbId'
+    | '/_authed/_tenant/knowledge/context-engine'
+    | '/_authed/_tenant/knowledge/knowledge-bases'
+    | '/_authed/_tenant/knowledge/memory'
+    | '/_authed/_tenant/knowledge/wiki'
     | '/_authed/_tenant/people/$humanId'
     | '/_authed/_tenant/routines/$routineId'
     | '/_authed/_tenant/scheduled-jobs/$scheduledJobId'
@@ -908,6 +994,7 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/evaluations/'
     | '/_authed/_tenant/inbox/'
     | '/_authed/_tenant/knowledge-bases/'
+    | '/_authed/_tenant/knowledge/'
     | '/_authed/_tenant/memory/'
     | '/_authed/_tenant/people/'
     | '/_authed/_tenant/routines/'
@@ -933,6 +1020,7 @@ export interface FileRouteTypes {
     | '/_authed/_tenant/capabilities/skills/builder'
     | '/_authed/_tenant/evaluations/studio/$testCaseId'
     | '/_authed/_tenant/evaluations/studio/new'
+    | '/_authed/_tenant/knowledge/knowledge-bases/$kbId'
     | '/_authed/_tenant/agent-templates/$templateId/'
     | '/_authed/_tenant/analytics/skill-runs/'
     | '/_authed/_tenant/capabilities/plugins/'
@@ -1023,6 +1111,13 @@ declare module '@tanstack/react-router' {
       path: '/org'
       fullPath: '/org'
       preLoaderRoute: typeof AuthedTenantOrgRouteImport
+      parentRoute: typeof AuthedTenantRoute
+    }
+    '/_authed/_tenant/knowledge': {
+      id: '/_authed/_tenant/knowledge'
+      path: '/knowledge'
+      fullPath: '/knowledge'
+      preLoaderRoute: typeof AuthedTenantKnowledgeRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
     '/_authed/_tenant/dashboard': {
@@ -1123,6 +1218,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedTenantMemoryIndexRouteImport
       parentRoute: typeof AuthedTenantRoute
     }
+    '/_authed/_tenant/knowledge/': {
+      id: '/_authed/_tenant/knowledge/'
+      path: '/'
+      fullPath: '/knowledge/'
+      preLoaderRoute: typeof AuthedTenantKnowledgeIndexRouteImport
+      parentRoute: typeof AuthedTenantKnowledgeRoute
+    }
     '/_authed/_tenant/knowledge-bases/': {
       id: '/_authed/_tenant/knowledge-bases/'
       path: '/knowledge-bases'
@@ -1220,6 +1322,34 @@ declare module '@tanstack/react-router' {
       fullPath: '/people/$humanId'
       preLoaderRoute: typeof AuthedTenantPeopleHumanIdRouteImport
       parentRoute: typeof AuthedTenantRoute
+    }
+    '/_authed/_tenant/knowledge/wiki': {
+      id: '/_authed/_tenant/knowledge/wiki'
+      path: '/wiki'
+      fullPath: '/knowledge/wiki'
+      preLoaderRoute: typeof AuthedTenantKnowledgeWikiRouteImport
+      parentRoute: typeof AuthedTenantKnowledgeRoute
+    }
+    '/_authed/_tenant/knowledge/memory': {
+      id: '/_authed/_tenant/knowledge/memory'
+      path: '/memory'
+      fullPath: '/knowledge/memory'
+      preLoaderRoute: typeof AuthedTenantKnowledgeMemoryRouteImport
+      parentRoute: typeof AuthedTenantKnowledgeRoute
+    }
+    '/_authed/_tenant/knowledge/knowledge-bases': {
+      id: '/_authed/_tenant/knowledge/knowledge-bases'
+      path: '/knowledge-bases'
+      fullPath: '/knowledge/knowledge-bases'
+      preLoaderRoute: typeof AuthedTenantKnowledgeKnowledgeBasesRouteImport
+      parentRoute: typeof AuthedTenantKnowledgeRoute
+    }
+    '/_authed/_tenant/knowledge/context-engine': {
+      id: '/_authed/_tenant/knowledge/context-engine'
+      path: '/context-engine'
+      fullPath: '/knowledge/context-engine'
+      preLoaderRoute: typeof AuthedTenantKnowledgeContextEngineRouteImport
+      parentRoute: typeof AuthedTenantKnowledgeRoute
     }
     '/_authed/_tenant/knowledge-bases/$kbId': {
       id: '/_authed/_tenant/knowledge-bases/$kbId'
@@ -1339,6 +1469,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/agent-templates/$templateId/'
       preLoaderRoute: typeof AuthedTenantAgentTemplatesTemplateIdIndexRouteImport
       parentRoute: typeof AuthedTenantRoute
+    }
+    '/_authed/_tenant/knowledge/knowledge-bases/$kbId': {
+      id: '/_authed/_tenant/knowledge/knowledge-bases/$kbId'
+      path: '/$kbId'
+      fullPath: '/knowledge/knowledge-bases/$kbId'
+      preLoaderRoute: typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRouteImport
+      parentRoute: typeof AuthedTenantKnowledgeKnowledgeBasesRoute
     }
     '/_authed/_tenant/evaluations/studio/new': {
       id: '/_authed/_tenant/evaluations/studio/new'
@@ -1529,11 +1666,50 @@ const AuthedTenantCapabilitiesRouteWithChildren =
     AuthedTenantCapabilitiesRouteChildren,
   )
 
+interface AuthedTenantKnowledgeKnowledgeBasesRouteChildren {
+  AuthedTenantKnowledgeKnowledgeBasesKbIdRoute: typeof AuthedTenantKnowledgeKnowledgeBasesKbIdRoute
+}
+
+const AuthedTenantKnowledgeKnowledgeBasesRouteChildren: AuthedTenantKnowledgeKnowledgeBasesRouteChildren =
+  {
+    AuthedTenantKnowledgeKnowledgeBasesKbIdRoute:
+      AuthedTenantKnowledgeKnowledgeBasesKbIdRoute,
+  }
+
+const AuthedTenantKnowledgeKnowledgeBasesRouteWithChildren =
+  AuthedTenantKnowledgeKnowledgeBasesRoute._addFileChildren(
+    AuthedTenantKnowledgeKnowledgeBasesRouteChildren,
+  )
+
+interface AuthedTenantKnowledgeRouteChildren {
+  AuthedTenantKnowledgeContextEngineRoute: typeof AuthedTenantKnowledgeContextEngineRoute
+  AuthedTenantKnowledgeKnowledgeBasesRoute: typeof AuthedTenantKnowledgeKnowledgeBasesRouteWithChildren
+  AuthedTenantKnowledgeMemoryRoute: typeof AuthedTenantKnowledgeMemoryRoute
+  AuthedTenantKnowledgeWikiRoute: typeof AuthedTenantKnowledgeWikiRoute
+  AuthedTenantKnowledgeIndexRoute: typeof AuthedTenantKnowledgeIndexRoute
+}
+
+const AuthedTenantKnowledgeRouteChildren: AuthedTenantKnowledgeRouteChildren = {
+  AuthedTenantKnowledgeContextEngineRoute:
+    AuthedTenantKnowledgeContextEngineRoute,
+  AuthedTenantKnowledgeKnowledgeBasesRoute:
+    AuthedTenantKnowledgeKnowledgeBasesRouteWithChildren,
+  AuthedTenantKnowledgeMemoryRoute: AuthedTenantKnowledgeMemoryRoute,
+  AuthedTenantKnowledgeWikiRoute: AuthedTenantKnowledgeWikiRoute,
+  AuthedTenantKnowledgeIndexRoute: AuthedTenantKnowledgeIndexRoute,
+}
+
+const AuthedTenantKnowledgeRouteWithChildren =
+  AuthedTenantKnowledgeRoute._addFileChildren(
+    AuthedTenantKnowledgeRouteChildren,
+  )
+
 interface AuthedTenantRouteChildren {
   AuthedTenantAnalyticsRoute: typeof AuthedTenantAnalyticsRouteWithChildren
   AuthedTenantBillingRoute: typeof AuthedTenantBillingRoute
   AuthedTenantCapabilitiesRoute: typeof AuthedTenantCapabilitiesRouteWithChildren
   AuthedTenantDashboardRoute: typeof AuthedTenantDashboardRoute
+  AuthedTenantKnowledgeRoute: typeof AuthedTenantKnowledgeRouteWithChildren
   AuthedTenantOrgRoute: typeof AuthedTenantOrgRoute
   AuthedTenantSettingsRoute: typeof AuthedTenantSettingsRoute
   AuthedTenantAgentTemplatesDefaultsRoute: typeof AuthedTenantAgentTemplatesDefaultsRoute
@@ -1588,6 +1764,7 @@ const AuthedTenantRouteChildren: AuthedTenantRouteChildren = {
   AuthedTenantBillingRoute: AuthedTenantBillingRoute,
   AuthedTenantCapabilitiesRoute: AuthedTenantCapabilitiesRouteWithChildren,
   AuthedTenantDashboardRoute: AuthedTenantDashboardRoute,
+  AuthedTenantKnowledgeRoute: AuthedTenantKnowledgeRouteWithChildren,
   AuthedTenantOrgRoute: AuthedTenantOrgRoute,
   AuthedTenantSettingsRoute: AuthedTenantSettingsRoute,
   AuthedTenantAgentTemplatesDefaultsRoute:
