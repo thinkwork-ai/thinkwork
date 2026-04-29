@@ -955,7 +955,6 @@ export default function ThreadsScreen() {
               agentId={activeAgent?.id}
               colors={colors}
               searchQuery={wikiQuery}
-              apiBaseUrl={resolveApiUrl()}
             />
           )}
         </WebContent>

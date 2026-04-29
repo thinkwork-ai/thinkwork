@@ -101,7 +101,9 @@ export function buildHindsightTools(
         `/v1/default/banks/${encodeURIComponent(bankId)}/memories/recall`,
         {
           query,
-          max_results: 10,
+          budget: "low",
+          max_tokens: 1_500,
+          include: { entities: null },
           types: ["world", "experience", "observation"],
         },
       );

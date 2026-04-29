@@ -280,11 +280,10 @@ information from uploaded documents before answering questions about company pol
 procedures, or reference material.
 
 ## Context Engine
-If \`query_context\` is available, use it first for ordinary context lookup across memory,
-wiki pages, workspace files, knowledge bases, and approved search-safe MCP tools. It is
-read-only and returns cited results plus provider status. Use specialized tools only when
-you need a focused drill-in after Context Engine is incomplete or when the user explicitly
-asks for a specific source.
+If \`query_context\` is available, use it first for ordinary context lookup across wiki pages,
+workspace files, knowledge bases, and approved search-safe MCP tools. It is read-only and
+returns cited results plus provider status. Use \`query_memory_context\` only when you need
+raw Hindsight Memory; it can be much slower than the default context search path.
 
 ## Web Search
 If web search is available, use it to find current information when your training data

@@ -1,8 +1,8 @@
 """Thinkwork Context Engine built-in tool.
 
 Calls the API-owned ThinkWork Brain MCP facade with service credentials so
-Strands uses the same provider router and normalized result shape as mobile,
-Pi, and external MCP clients.
+Strands uses the same provider router and normalized result shape as Pi and
+external MCP clients.
 """
 
 from __future__ import annotations
@@ -75,11 +75,11 @@ def make_context_engine_tool(strands_tool: Callable[[Any], Any]):
         provider_ids: list[str] | None = None,
         provider_families: list[str] | None = None,
     ) -> str:
-        """Search Thinkwork Context Engine across memory, wiki, workspace files, knowledge bases, and approved search-safe MCP tools.
+        """Search Thinkwork Context Engine across fast default providers.
 
-        Use this first for ordinary context lookup before choosing specialized
-        memory, wiki, knowledge-base, filesystem, or MCP search tools. It is
-        read-only and returns cited results with provider status details.
+        Use this first for ordinary agent context lookup across wiki,
+        workspace files, knowledge bases, and approved search-safe MCP tools.
+        Use query_memory_context only when raw Hindsight Memory is needed.
         """
 
         clean_query = (query or "").strip()
@@ -132,8 +132,8 @@ def make_context_engine_tools(strands_tool: Callable[[Any], Any]):
         """Search only Thinkwork Hindsight Memory.
 
         Use this when the user specifically asks for raw long-term memory
-        recall. This can be slower than wiki search because Hindsight may scan
-        a large personal memory bank.
+        recall. This can be much slower than query_context because Hindsight
+        may rerank a large personal memory bank.
         """
 
         clean_query = (query or "").strip()

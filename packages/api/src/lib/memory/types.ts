@@ -13,85 +13,99 @@
 export type MemoryEngineType = "hindsight" | "agentcore";
 
 export type MemoryOwnerRef = {
-	tenantId: string;
-	ownerType: "user" | "agent";
-	ownerId: string;
-	threadId?: string;
+  tenantId: string;
+  ownerType: "user" | "agent";
+  ownerId: string;
+  threadId?: string;
 };
 
 export type MemoryRecordKind = "event" | "unit" | "reflection";
 
 export type MemoryStrategy =
-	| "semantic"
-	| "preferences"
-	| "summaries"
-	| "episodes"
-	| "graph"
-	| "custom";
+  | "semantic"
+  | "preferences"
+  | "summaries"
+  | "episodes"
+  | "graph"
+  | "custom";
 
 export type MemorySourceType =
-	| "thread_turn"
-	| "explicit_remember"
-	| "connector_event"
-	| "system_reflection"
-	| "import";
+  | "thread_turn"
+  | "explicit_remember"
+  | "connector_event"
+  | "system_reflection"
+  | "import";
 
 export type MemoryStatus = "active" | "archived" | "deleted" | "superseded";
 
 export type MemoryBackendRef = {
-	backend: MemoryEngineType | string;
-	ref: string;
+  backend: MemoryEngineType | string;
+  ref: string;
+};
+
+export type RecallDepth = "quick" | "deep";
+export type HindsightRecallBudget = "low" | "mid" | "high";
+export type HindsightRecallFactType = "world" | "experience" | "observation";
+
+export type HindsightRecallOptions = {
+  budget?: HindsightRecallBudget;
+  maxTokens?: number;
+  types?: HindsightRecallFactType[];
+  includeEntities?: boolean;
+  trace?: boolean;
 };
 
 export type ThinkWorkMemoryRecord = {
-	id: string;
-	tenantId: string;
-	ownerType: "user" | "agent";
-	ownerId: string;
-	threadId?: string;
-	kind: MemoryRecordKind;
-	sourceType: MemorySourceType;
-	strategy?: MemoryStrategy;
-	status: MemoryStatus;
-	content: {
-		text: string;
-		summary?: string;
-	};
-	provenance?: {
-		threadMessageIds?: string[];
-		turnIds?: string[];
-		sourceEventIds?: string[];
-	};
-	backendRefs: MemoryBackendRef[];
-	createdAt: string;
-	updatedAt?: string;
-	metadata?: Record<string, unknown>;
+  id: string;
+  tenantId: string;
+  ownerType: "user" | "agent";
+  ownerId: string;
+  threadId?: string;
+  kind: MemoryRecordKind;
+  sourceType: MemorySourceType;
+  strategy?: MemoryStrategy;
+  status: MemoryStatus;
+  content: {
+    text: string;
+    summary?: string;
+  };
+  provenance?: {
+    threadMessageIds?: string[];
+    turnIds?: string[];
+    sourceEventIds?: string[];
+  };
+  backendRefs: MemoryBackendRef[];
+  createdAt: string;
+  updatedAt?: string;
+  metadata?: Record<string, unknown>;
 };
 
 export type RecallRequest = MemoryOwnerRef & {
-	query: string;
-	limit?: number;
-	tokenBudget?: number;
-	strategies?: MemoryStrategy[];
+  query: string;
+  limit?: number;
+  tokenBudget?: number;
+  strategies?: MemoryStrategy[];
+  depth?: RecallDepth;
+  hindsight?: HindsightRecallOptions;
 };
 
 export type RecallResult = {
-	record: ThinkWorkMemoryRecord;
-	score: number;
-	whyRecalled?: string;
-	backend: MemoryEngineType | string;
+  record: ThinkWorkMemoryRecord;
+  score: number;
+  whyRecalled?: string;
+  backend: MemoryEngineType | string;
 };
 
 export type RetainRequest = MemoryOwnerRef & {
-	sourceType: MemorySourceType;
-	content: string;
-	role?: "user" | "assistant" | "system";
-	metadata?: Record<string, unknown>;
+  sourceType: MemorySourceType;
+  content: string;
+  role?: "user" | "assistant" | "system";
+  metadata?: Record<string, unknown>;
 };
 
 export type RetainResult = {
-	record: ThinkWorkMemoryRecord;
-	backend: MemoryEngineType | string;
+  record: ThinkWorkMemoryRecord;
+  backend: MemoryEngineType | string;
 };
 
 /**
@@ -105,56 +119,56 @@ export type RetainResult = {
  * the runtime out of the extraction business.
  */
 export type RetainTurnRequest = MemoryOwnerRef & {
-	messages: Array<{
-		role: "user" | "assistant" | "system";
-		content: string;
-		timestamp?: string;
-	}>;
-	metadata?: Record<string, unknown>;
+  messages: Array<{
+    role: "user" | "assistant" | "system";
+    content: string;
+    timestamp?: string;
+  }>;
+  metadata?: Record<string, unknown>;
 };
 
 export type RetainConversationRequest = MemoryOwnerRef & {
-	threadId: string;
-	messages: Array<{
-		role: "user" | "assistant" | "system" | string;
-		content: string;
-		timestamp: string;
-	}>;
-	metadata?: Record<string, unknown>;
+  threadId: string;
+  messages: Array<{
+    role: "user" | "assistant" | "system" | string;
+    content: string;
+    timestamp: string;
+  }>;
+  metadata?: Record<string, unknown>;
 };
 
 export type RetainDailyMemoryRequest = MemoryOwnerRef & {
-	date: string;
-	content: string;
-	metadata?: Record<string, unknown>;
+  date: string;
+  content: string;
+  metadata?: Record<string, unknown>;
 };
 
 export type InspectRequest = MemoryOwnerRef & {
-	kinds?: MemoryRecordKind[];
-	cursor?: string;
-	limit?: number;
+  kinds?: MemoryRecordKind[];
+  cursor?: string;
+  limit?: number;
 };
 
 export type ExportRequest = MemoryOwnerRef & {
-	includeArchived?: boolean;
+  includeArchived?: boolean;
 };
 
 export type MemoryCapabilities = {
-	retain: boolean;
-	recall: boolean;
-	inspectRecords: boolean;
-	inspectGraph: boolean;
-	export: boolean;
-	reflect: boolean;
-	compact: boolean;
-	forget: boolean;
+  retain: boolean;
+  recall: boolean;
+  inspectRecords: boolean;
+  inspectGraph: boolean;
+  export: boolean;
+  reflect: boolean;
+  compact: boolean;
+  forget: boolean;
 };
 
 export type MemoryExportBundle = {
-	version: "v1";
-	exportedAt: string;
-	engine: MemoryEngineType | string;
-	owner: MemoryOwnerRef;
-	capabilities: MemoryCapabilities;
-	records: ThinkWorkMemoryRecord[];
+  version: "v1";
+  exportedAt: string;
+  engine: MemoryEngineType | string;
+  owner: MemoryOwnerRef;
+  capabilities: MemoryCapabilities;
+  records: ThinkWorkMemoryRecord[];
 };
