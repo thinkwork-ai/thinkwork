@@ -742,7 +742,7 @@ function ServerDetailDialog({
                 No context providers discovered for this server.
               </div>
             ) : (
-              <div className="max-h-72 overflow-y-auto rounded-md border">
+              <div className="rounded-md border">
                 <div className="sticky top-0 z-10 hidden grid-cols-[minmax(0,1fr)_150px_112px_132px] gap-3 border-b bg-background/95 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground backdrop-blur sm:grid">
                   <div>Provider</div>
                   <div>Eligibility</div>
@@ -927,8 +927,8 @@ function ServerDetailDialog({
           )}
 
           {/* Actions */}
-          <div className="border-t pt-3 space-y-2">
-            <div className="flex flex-wrap gap-2">
+          <div className="border-t pt-3">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -951,10 +951,8 @@ function ServerDetailDialog({
                   Authenticate
                 </Button>
               )}
-            </div>
-            <div className="flex items-center gap-2">
               {confirmDelete ? (
-                <div className="flex items-center gap-2">
+                <>
                   <span className="text-sm text-muted-foreground">
                     Are you sure?
                   </span>
@@ -977,7 +975,7 @@ function ServerDetailDialog({
                   >
                     Cancel
                   </Button>
-                </div>
+                </>
               ) : (
                 <Button
                   variant="ghost"
