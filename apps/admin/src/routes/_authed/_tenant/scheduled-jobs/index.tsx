@@ -1,11 +1,25 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { type ColumnDef } from "@tanstack/react-table";
-import { Search, Play, Pause, Bot, Repeat, Clock, CalendarClock, Plus, Loader2 } from "lucide-react";
+import {
+  Search,
+  Play,
+  Pause,
+  Bot,
+  Repeat,
+  Clock,
+  CalendarClock,
+  Plus,
+  Loader2,
+} from "lucide-react";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useSubscription, useQuery } from "urql";
 import { useTenant } from "@/context/TenantContext";
-import { OnThreadTurnUpdatedSubscription, AgentsListQuery } from "@/lib/graphql-queries";
+import {
+  OnThreadTurnUpdatedSubscription,
+  AgentsListQuery,
+} from "@/lib/graphql-queries";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
+import { PageLayout } from "@/components/PageLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { DataTable } from "@/components/ui/data-table";
@@ -13,14 +27,22 @@ import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ScheduledJobFormDialog } from "@/components/scheduled-jobs/ScheduledJobFormDialog";
 import { relativeTime } from "@/lib/utils";
 import { apiFetch as authedApiFetch } from "@/lib/api-fetch";
 
 export const Route = createFileRoute("/_authed/_tenant/scheduled-jobs/")({
   component: ScheduledJobsPage,
-  validateSearch: (search: Record<string, unknown>): { type?: string; agentId?: string } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { type?: string; agentId?: string } => ({
     ...(search.type ? { type: search.type as string } : {}),
     ...(search.agentId ? { agentId: search.agentId as string } : {}),
   }),
@@ -67,11 +89,18 @@ type ThreadTurnRow = {
 // REST helpers
 // ---------------------------------------------------------------------------
 
-async function apiFetch<T>(path: string, tenantId: string, options: RequestInit = {}): Promise<T> {
+async function apiFetch<T>(
+  path: string,
+  tenantId: string,
+  options: RequestInit = {},
+): Promise<T> {
   const { headers, ...rest } = options;
   return authedApiFetch<T>(path, {
     ...rest,
-    extraHeaders: { "x-tenant-id": tenantId, ...(headers as Record<string, string> | undefined) },
+    extraHeaders: {
+      "x-tenant-id": tenantId,
+      ...(headers as Record<string, string> | undefined),
+    },
   });
 }
 
@@ -105,13 +134,20 @@ function formatSchedule(expr: string | null): string {
   if (expr.startsWith("rate(")) return expr.slice(5, -1);
   if (expr.startsWith("at(")) {
     const dt = expr.slice(3, -1);
-    try { return new Date(dt).toLocaleString(); } catch { return dt; }
+    try {
+      return new Date(dt).toLocaleString();
+    } catch {
+      return dt;
+    }
   }
   return expr;
 }
 
 /** Estimate next run from schedule expression + last run. Returns null if can't compute. */
-function estimateNextRun(scheduleExpr: string | null, lastRunAt: string | null): Date | null {
+function estimateNextRun(
+  scheduleExpr: string | null,
+  lastRunAt: string | null,
+): Date | null {
   if (!scheduleExpr) return null;
 
   // at(...) — one-time schedule
@@ -120,7 +156,9 @@ function estimateNextRun(scheduleExpr: string | null, lastRunAt: string | null):
     try {
       const d = new Date(dt);
       return d > new Date() ? d : null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }
 
   // rate(...) — e.g. rate(5 minutes), rate(1 hour)
@@ -130,7 +168,15 @@ function estimateNextRun(scheduleExpr: string | null, lastRunAt: string | null):
     if (!match) return null;
     const value = parseInt(match[1], 10);
     const unit = match[2].toLowerCase();
-    const ms = value * (unit === "second" ? 1000 : unit === "minute" ? 60000 : unit === "hour" ? 3600000 : 86400000);
+    const ms =
+      value *
+      (unit === "second"
+        ? 1000
+        : unit === "minute"
+          ? 60000
+          : unit === "hour"
+            ? 3600000
+            : 86400000);
     const base = lastRunAt ? new Date(lastRunAt).getTime() : Date.now();
     const next = new Date(base + ms);
     // If computed next is in the past (stale last_run_at), step forward
@@ -149,16 +195,30 @@ function estimateNextRun(scheduleExpr: string | null, lastRunAt: string | null):
 // Columns — Jobs
 // ---------------------------------------------------------------------------
 
-function ownerLabel(job: ScheduledJobRow, agentNames: Map<string, string>): { icon: React.ReactNode; label: string; color: string } {
+function ownerLabel(
+  job: ScheduledJobRow,
+  agentNames: Map<string, string>,
+): { icon: React.ReactNode; label: string; color: string } {
   if (job.trigger_type.startsWith("routine_")) {
-    return { icon: <Repeat className="h-3.5 w-3.5" />, label: "Routine", color: "bg-green-500/15 text-green-600 dark:text-green-400" };
+    return {
+      icon: <Repeat className="h-3.5 w-3.5" />,
+      label: "Routine",
+      color: "bg-green-500/15 text-green-600 dark:text-green-400",
+    };
   }
   // Agent jobs — show agent name
   const name = job.agent_id ? agentNames.get(job.agent_id) : null;
-  return { icon: <Bot className="h-3.5 w-3.5" />, label: name || "Agent", color: "bg-purple-500/15 text-purple-600 dark:text-purple-400" };
+  return {
+    icon: <Bot className="h-3.5 w-3.5" />,
+    label: name || "Agent",
+    color: "bg-purple-500/15 text-purple-600 dark:text-purple-400",
+  };
 }
 
-function jobColumns(runningIds: Set<string>, agentNames: Map<string, string>): ColumnDef<ScheduledJobRow>[] {
+function jobColumns(
+  runningIds: Set<string>,
+  agentNames: Map<string, string>,
+): ColumnDef<ScheduledJobRow>[] {
   return [
     {
       accessorKey: "name",
@@ -167,7 +227,9 @@ function jobColumns(runningIds: Set<string>, agentNames: Map<string, string>): C
         <div className="flex flex-col gap-0.5">
           <span className="font-medium">{row.original.name}</span>
           {row.original.description && (
-            <span className="text-xs text-muted-foreground line-clamp-1">{row.original.description}</span>
+            <span className="text-xs text-muted-foreground line-clamp-1">
+              {row.original.description}
+            </span>
           )}
         </div>
       ),
@@ -192,7 +254,9 @@ function jobColumns(runningIds: Set<string>, agentNames: Map<string, string>): C
       cell: ({ row }) => (
         <div className="flex items-center gap-1.5">
           <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-xs">{formatSchedule(row.original.schedule_expression)}</span>
+          <span className="text-xs">
+            {formatSchedule(row.original.schedule_expression)}
+          </span>
         </div>
       ),
       size: 180,
@@ -204,20 +268,29 @@ function jobColumns(runningIds: Set<string>, agentNames: Map<string, string>): C
         const isRunning = runningIds.has(row.original.id);
         if (!row.original.enabled) {
           return (
-            <Badge variant="secondary" className="text-xs gap-1 bg-muted text-muted-foreground">
+            <Badge
+              variant="secondary"
+              className="text-xs gap-1 bg-muted text-muted-foreground"
+            >
               <Pause className="h-3 w-3" /> Disabled
             </Badge>
           );
         }
         if (isRunning) {
           return (
-            <Badge variant="secondary" className="text-xs gap-1 bg-blue-500/15 text-blue-600 dark:text-blue-400">
+            <Badge
+              variant="secondary"
+              className="text-xs gap-1 bg-blue-500/15 text-blue-600 dark:text-blue-400"
+            >
               <Loader2 className="h-3 w-3 animate-spin" /> Running
             </Badge>
           );
         }
         return (
-          <Badge variant="secondary" className="text-xs gap-1 bg-green-500/15 text-green-600 dark:text-green-400">
+          <Badge
+            variant="secondary"
+            className="text-xs gap-1 bg-green-500/15 text-green-600 dark:text-green-400"
+          >
             <Play className="h-3 w-3 fill-current" /> Idle
           </Badge>
         );
@@ -229,7 +302,9 @@ function jobColumns(runningIds: Set<string>, agentNames: Map<string, string>): C
       header: "Last Run",
       cell: ({ row }) => (
         <span className="text-xs text-muted-foreground">
-          {row.original.last_run_at ? relativeTime(row.original.last_run_at) : "Never"}
+          {row.original.last_run_at
+            ? relativeTime(row.original.last_run_at)
+            : "Never"}
         </span>
       ),
       size: 120,
@@ -238,11 +313,16 @@ function jobColumns(runningIds: Set<string>, agentNames: Map<string, string>): C
       accessorKey: "next_run_at",
       header: "Next Run",
       cell: ({ row }) => {
-        if (!row.original.enabled) return <span className="text-xs text-muted-foreground">—</span>;
+        if (!row.original.enabled)
+          return <span className="text-xs text-muted-foreground">—</span>;
         const nextDb = row.original.next_run_at;
-        const estimated = estimateNextRun(row.original.schedule_expression, row.original.last_run_at);
+        const estimated = estimateNextRun(
+          row.original.schedule_expression,
+          row.original.last_run_at,
+        );
         const nextDate = nextDb ? new Date(nextDb) : estimated;
-        if (!nextDate) return <span className="text-xs text-muted-foreground">—</span>;
+        if (!nextDate)
+          return <span className="text-xs text-muted-foreground">—</span>;
         return (
           <span className="text-xs text-muted-foreground">
             {relativeTime(nextDate.toISOString())}
@@ -271,7 +351,12 @@ function CreateScheduledJobButton({
 
   return (
     <>
-      <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setAgentDialogOpen(true)}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-muted-foreground"
+        onClick={() => setAgentDialogOpen(true)}
+      >
         <Plus className="h-4 w-4 mr-1" /> Add Job
       </Button>
       <ScheduledJobFormDialog
@@ -290,7 +375,6 @@ function CreateScheduledJobButton({
     </>
   );
 }
-
 
 // ---------------------------------------------------------------------------
 // Page
@@ -314,15 +398,21 @@ function ScheduledJobsPage() {
   });
   const agentNames = useMemo(() => {
     const map = new Map<string, string>();
-    for (const a of (agentsResult.data?.agents ?? []) as { id: string; name: string }[]) {
+    for (const a of (agentsResult.data?.agents ?? []) as {
+      id: string;
+      name: string;
+    }[]) {
       map.set(a.id, a.name);
     }
     return map;
   }, [agentsResult.data]);
 
-  const filterTitle = type === "agent" ? "Schedules: Agents"
-    : type === "routine" ? "Schedules: Routines"
-    : "Automations";
+  const filterTitle =
+    type === "agent"
+      ? "Schedules: Agents"
+      : type === "routine"
+        ? "Schedules: Routines"
+        : "Automations";
 
   const agentName = agentId ? agentNames.get(agentId) : null;
 
@@ -369,7 +459,9 @@ function ScheduledJobsPage() {
     }
   }, [tenantId]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   // Refetch when subscription delivers a run update
   useEffect(() => {
@@ -391,14 +483,22 @@ function ScheduledJobsPage() {
   // Apply contextual filtering based on search params
   const contextJobs = useMemo(() => {
     let filtered = jobs;
-    if (type === "agent") filtered = filtered.filter((j) => j.trigger_type.startsWith("agent_"));
-    else if (type === "routine") filtered = filtered.filter((j) => j.trigger_type.startsWith("routine_"));
+    if (type === "agent")
+      filtered = filtered.filter((j) => j.trigger_type.startsWith("agent_"));
+    else if (type === "routine")
+      filtered = filtered.filter((j) => j.trigger_type.startsWith("routine_"));
     if (agentId) filtered = filtered.filter((j) => j.agent_id === agentId);
     return filtered;
   }, [jobs, type, agentId]);
 
-  const enabledJobs = useMemo(() => contextJobs.filter((j) => j.enabled), [contextJobs]);
-  const disabledJobs = useMemo(() => contextJobs.filter((j) => !j.enabled), [contextJobs]);
+  const enabledJobs = useMemo(
+    () => contextJobs.filter((j) => j.enabled),
+    [contextJobs],
+  );
+  const disabledJobs = useMemo(
+    () => contextJobs.filter((j) => !j.enabled),
+    [contextJobs],
+  );
 
   const filteredJobs = useMemo(() => {
     if (!search) return contextJobs;
@@ -414,25 +514,38 @@ function ScheduledJobsPage() {
   if (!tenantId || loading) return <PageSkeleton />;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-6.5rem)]">
-      {/* Header — fixed */}
-      <div className="shrink-0 space-y-4 pb-4">
+    <PageLayout
+      header={
         <PageHeader
           title={filterTitle}
           description={`${enabledJobs.length} active, ${disabledJobs.length} disabled`}
           actions={
-            <CreateScheduledJobButton tenantId={tenantId} filterType={type} onCreated={fetchData} />
+            <CreateScheduledJobButton
+              tenantId={tenantId}
+              filterType={type}
+              onCreated={fetchData}
+            />
           }
         >
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex items-center gap-2">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search jobs..." className="pl-9" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search jobs..."
+                className="pl-9"
+              />
             </div>
             <Select
               value={type || "all"}
-              onValueChange={(v) => navigate({ to: "/scheduled-jobs", search: v === "all" ? {} : { type: v } })}
+              onValueChange={(v) =>
+                navigate({
+                  to: "/scheduled-jobs",
+                  search: v === "all" ? {} : { type: v },
+                })
+              }
             >
               <SelectTrigger className="w-[140px] h-8 text-xs">
                 <SelectValue />
@@ -445,19 +558,21 @@ function ScheduledJobsPage() {
             </Select>
           </div>
         </PageHeader>
-      </div>
-
-      {/* Table — scrollable body, fixed pagination */}
-      <div className="flex-1 min-h-0">
-        <DataTable
-          columns={jobColumns(runningJobIds, agentNames)}
-          data={filteredJobs}
-          filterValue={search}
-          filterColumn="name"
-          scrollable
-          onRowClick={(row) => navigate({ to: "/scheduled-jobs/$scheduledJobId", params: { scheduledJobId: row.id } })}
-        />
-      </div>
-    </div>
+      }
+    >
+      <DataTable
+        columns={jobColumns(runningJobIds, agentNames)}
+        data={filteredJobs}
+        filterValue={search}
+        filterColumn="name"
+        scrollable
+        onRowClick={(row) =>
+          navigate({
+            to: "/scheduled-jobs/$scheduledJobId",
+            params: { scheduledJobId: row.id },
+          })
+        }
+      />
+    </PageLayout>
   );
 }
